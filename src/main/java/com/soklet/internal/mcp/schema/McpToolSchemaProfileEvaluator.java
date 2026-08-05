@@ -21,7 +21,10 @@ import com.soklet.internal.mcp.protocol.McpJsonBoolean;
 import com.soklet.internal.mcp.protocol.McpJsonNumber;
 import com.soklet.internal.mcp.protocol.McpJsonObject;
 import com.soklet.internal.mcp.protocol.McpJsonValue;
+import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.NotThreadSafe;
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
@@ -34,27 +37,41 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Stateless bounded evaluator for Soklet MCP Tool Schema Profile 1.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 final class McpToolSchemaProfileEvaluator {
+	@NonNull
 	private static final String FALSE_SCHEMA_MESSAGE =
 			"The instance is rejected by a false schema.";
+	@NonNull
 	private static final String TYPE_MESSAGE =
 			"The instance does not match the required JSON type.";
+	@NonNull
 	private static final String CONST_MESSAGE =
 			"The instance does not equal the const value.";
+	@NonNull
 	private static final String ENUM_MESSAGE =
 			"The instance does not equal any enum value.";
+	@NonNull
 	private static final String REQUIRED_MESSAGE =
 			"A required object property is absent.";
+	@NonNull
 	private static final String MINIMUM_MESSAGE =
 			"The number is less than the inclusive minimum.";
+	@NonNull
 	private static final String MAXIMUM_MESSAGE =
 			"The number is greater than the inclusive maximum.";
+	@NonNull
 	private static final String ANY_OF_MESSAGE =
 			"The instance does not satisfy any anyOf branch.";
 
-	McpSchemaValidationOutcome evaluate(McpToolSchemaProfileProgram program,
-			McpJsonValue instance, McpSchemaEvaluationLimits limits) {
+	@NonNull
+	McpSchemaValidationOutcome evaluate(
+			@NonNull McpToolSchemaProfileProgram program,
+			@NonNull McpJsonValue instance,
+			@NonNull McpSchemaEvaluationLimits limits) {
 		requireNonNull(program);
 		requireNonNull(instance);
 		Evaluation evaluation = new Evaluation(program, requireNonNull(limits));
@@ -74,16 +91,22 @@ final class McpToolSchemaProfileEvaluator {
 		}
 	}
 
+	@NotThreadSafe
 	private static final class Evaluation {
+		@NonNull
 		private final McpToolSchemaProfileProgram program;
+		@NonNull
 		private final McpSchemaEvaluationLimits limits;
+		@NonNull
 		private final McpSchemaEvaluationContext context;
+		@NonNull
 		private final McpSchemaJsonEquality equality;
-		private final IdentityHashMap<McpJsonValue, Set<Integer>> activePairs;
+		@NonNull
+		private final IdentityHashMap<@NonNull McpJsonValue, @NonNull Set<@NonNull Integer>> activePairs;
 		private int activeCallCount;
 
-		private Evaluation(McpToolSchemaProfileProgram program,
-				McpSchemaEvaluationLimits limits) {
+		private Evaluation(@NonNull McpToolSchemaProfileProgram program,
+				@NonNull McpSchemaEvaluationLimits limits) {
 			this.program = program;
 			this.limits = limits;
 			this.context = new McpSchemaEvaluationContext(limits);
@@ -91,8 +114,9 @@ final class McpToolSchemaProfileEvaluator {
 			this.activePairs = new IdentityHashMap<>();
 		}
 
-		private boolean evaluateNode(McpSchemaNodeId nodeId,
-				McpJsonValue instance, List<String> instancePointer,
+		private boolean evaluateNode(@NonNull McpSchemaNodeId nodeId,
+				@NonNull McpJsonValue instance,
+				@NonNull List<@NonNull String> instancePointer,
 				boolean reportDiagnostics) {
 			if (activeCallCount >= limits.maximumPendingTaskCount())
 				throw new LimitReached(McpSchemaEvaluationLimit.PENDING_TASKS);
@@ -113,8 +137,10 @@ final class McpToolSchemaProfileEvaluator {
 			}
 		}
 
-		private boolean evaluateActiveNode(McpToolSchemaProfileNode node,
-				McpJsonValue instance, List<String> instancePointer,
+		private boolean evaluateActiveNode(
+				@NonNull McpToolSchemaProfileNode node,
+				@NonNull McpJsonValue instance,
+				@NonNull List<@NonNull String> instancePointer,
 				boolean reportDiagnostics) {
 			chargeOperation();
 			if (node.booleanSchema().isPresent()) {
@@ -251,8 +277,9 @@ final class McpToolSchemaProfileEvaluator {
 			return valid;
 		}
 
-		private boolean evaluateRequired(McpToolSchemaProfileNode node,
-				McpJsonObject object, List<String> instancePointer,
+		private boolean evaluateRequired(@NonNull McpToolSchemaProfileNode node,
+				@NonNull McpJsonObject object,
+				@NonNull List<@NonNull String> instancePointer,
 				boolean reportDiagnostics) {
 			boolean valid = true;
 			for (String property : node.requiredProperties()) {
@@ -269,8 +296,10 @@ final class McpToolSchemaProfileEvaluator {
 			return valid;
 		}
 
-		private boolean evaluateObjectChildren(McpToolSchemaProfileNode node,
-				McpJsonObject object, List<String> instancePointer,
+		private boolean evaluateObjectChildren(
+				@NonNull McpToolSchemaProfileNode node,
+				@NonNull McpJsonObject object,
+				@NonNull List<@NonNull String> instancePointer,
 				boolean reportDiagnostics) {
 			boolean valid = true;
 			chargeOperations(node.propertySchemas().size());
@@ -302,8 +331,8 @@ final class McpToolSchemaProfileEvaluator {
 			return valid;
 		}
 
-		private boolean equalsJson(McpJsonValue expected,
-				McpJsonValue actual) {
+		private boolean equalsJson(@NonNull McpJsonValue expected,
+				@NonNull McpJsonValue actual) {
 			chargeOperation();
 			McpSchemaJsonEquality.Result result = equality.compare(expected, actual,
 					context);
@@ -331,15 +360,20 @@ final class McpToolSchemaProfileEvaluator {
 			return (long) size * passes;
 		}
 
-		private void addDiagnostic(McpToolSchemaProfileNode node,
-				McpSchemaDiagnostic.Code code, Optional<String> keyword,
-				Optional<String> missingPropertyName,
-				List<String> instancePointer, String message) {
+		private void addDiagnostic(@NonNull McpToolSchemaProfileNode node,
+				McpSchemaDiagnostic.@NonNull Code code,
+				@NonNull Optional<@NonNull String> keyword,
+				@NonNull Optional<@NonNull String> missingPropertyName,
+				@NonNull List<@NonNull String> instancePointer,
+				@NonNull String message) {
 			context.addDiagnostic(code, node.location(), keyword,
 					missingPropertyName, instancePointer, message);
 		}
 
-		private List<String> append(List<String> source, String segment) {
+		@NonNull
+		private List<@NonNull String> append(
+				@NonNull List<@NonNull String> source,
+				@NonNull String segment) {
 			chargeOperations((long) source.size() + 1);
 			List<String> result = new ArrayList<>(source.size() + 1);
 			result.addAll(source);
@@ -348,10 +382,12 @@ final class McpToolSchemaProfileEvaluator {
 		}
 	}
 
+	@NotThreadSafe
 	private static final class LimitReached extends RuntimeException {
+		@NonNull
 		private final McpSchemaEvaluationLimit limit;
 
-		private LimitReached(McpSchemaEvaluationLimit limit) {
+		private LimitReached(@NonNull McpSchemaEvaluationLimit limit) {
 			super(null, null, false, false);
 			this.limit = requireNonNull(limit);
 		}

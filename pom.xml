@@ -121,7 +121,24 @@
                     <encoding>UTF-8</encoding>
                     <docencoding>UTF-8</docencoding>
                     <charset>UTF-8</charset>
-                    <excludePackageNames>com.soklet.internal.mcp.*:com.soklet.internal.microhttp:com.soklet.internal.spring:com.soklet.internal.util</excludePackageNames>
+                    <!--
+                        Document public sources explicitly and resolve internal implementation
+                        symbols from the just-built artifact. Package-mode patch-module loading
+                        can trip a JDK Javadoc annotation-entry assertion when a lazily loaded
+                        internal source declares multiple annotated top-level types.
+                    -->
+                    <sourceFileExcludes>
+                        <sourceFileExclude>**/internal/**/*.java</sourceFileExclude>
+                    </sourceFileExcludes>
+                    <disableSourcepathUsage>true</disableSourcepathUsage>
+                    <legacyMode>true</legacyMode>
+                    <additionalDependencies>
+                        <additionalDependency>
+                            <groupId>${project.groupId}</groupId>
+                            <artifactId>${project.artifactId}</artifactId>
+                            <version>${project.version}</version>
+                        </additionalDependency>
+                    </additionalDependencies>
                     <additionalOptions>
                         <additionalOption>-XDignore.symbol.file</additionalOption>
                         <additionalOption>-Xdoclint:-html</additionalOption>
@@ -331,11 +348,12 @@
         </profile>
 
         <!--
-            Phase 0 compares the complete public/protected API with the
-            released 3.5.1 artifact. The repository-owned verifier,
+            The compatibility gate compares the complete public/protected API
+            with the released 3.5.1 artifact. The repository-owned verifier,
             rather than japicmp's coarse break/no-break switches, adjudicates
-            the generated XML against the exact reviewed MCP removal and
-            incompatibility set.
+            the generated XML against the exact reviewed current MCP removal
+            and incompatibility set. The immutable Phase 0 set remains
+            separate historical evidence.
         -->
         <profile>
             <id>api-diff</id>

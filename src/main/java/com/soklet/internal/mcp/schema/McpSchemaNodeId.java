@@ -16,9 +16,14 @@
 
 package com.soklet.internal.mcp.schema;
 
+import javax.annotation.concurrent.ThreadSafe;
+
 /**
  * Stable index into an immutable compiled schema catalog.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 record McpSchemaNodeId(int value) {
 	McpSchemaNodeId {
 		if (value < 0)

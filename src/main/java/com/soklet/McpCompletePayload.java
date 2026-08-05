@@ -14,8 +14,16 @@
  * limitations under the License.
  */
 
-/**
- * Provisional, package-private MCP 2026-07-28 protocol-contract sketches.
- */
-package com.soklet.internal.mcp.protocol;
+package com.soklet;
 
+import javax.annotation.concurrent.ThreadSafe;
+
+/**
+ * Operation-specific immutable data carried by a complete MCP result.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+public sealed interface McpCompletePayload permits McpPromptOutput,
+		McpResourceOutput, McpToolOutput {
+}

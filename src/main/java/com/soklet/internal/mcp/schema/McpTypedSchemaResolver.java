@@ -16,6 +16,9 @@
 
 package com.soklet.internal.mcp.schema;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.NotThreadSafe;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -25,24 +28,33 @@ import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
 
-/** One traversal and policy implementation shared by all Java type adapters. */
+/**
+ * One traversal and policy implementation shared by all Java type adapters.
+ * Its type-model collaborator does not carry a general concurrency contract.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@NotThreadSafe
 final class McpTypedSchemaResolver<T> {
+	@NonNull
 	private final McpTypedTypeModel<T> typeModel;
+	@NonNull
 	private final McpSchemaCompilationLimits limits;
 
-	McpTypedSchemaResolver(McpTypedTypeModel<T> typeModel,
-			McpSchemaCompilationLimits limits) {
+	McpTypedSchemaResolver(@NonNull McpTypedTypeModel<T> typeModel,
+			@NonNull McpSchemaCompilationLimits limits) {
 		this.typeModel = requireNonNull(typeModel);
 		this.limits = requireNonNull(limits);
 	}
 
-	McpTypedSchemaShape resolveSchema(T type) {
+	@NonNull
+	McpTypedSchemaShape resolveSchema(@NonNull T type) {
 		return new Resolution().resolve(requireNonNull(type),
 				McpTypedSchemaPath.root(), 1);
 	}
 
-	McpTypedSchemaShape.RecordValue resolveToolInputProperties(
-			List<McpTypedTypeDescriptor.RecordComponent<T>> properties) {
+	McpTypedSchemaShape.@NonNull RecordValue resolveToolInputProperties(
+			@NonNull List<McpTypedTypeDescriptor.@NonNull RecordComponent<@NonNull T>> properties) {
 		McpTypedTypeDescriptor.RecordValue<T> descriptor =
 				new McpTypedTypeDescriptor.RecordValue<>(
 						"\u0000soklet-annotated-tool-input",
@@ -51,7 +63,8 @@ final class McpTypedSchemaResolver<T> {
 				descriptor, McpTypedSchemaPath.root(), 1);
 	}
 
-	McpTypedSchemaShape resolveToolInput(T type) {
+	@NonNull
+	McpTypedSchemaShape resolveToolInput(@NonNull T type) {
 		requireNonNull(type);
 		McpTypedTypeDescriptor<T> descriptor = describe(type,
 				McpTypedSchemaPath.root());
@@ -66,7 +79,8 @@ final class McpTypedSchemaResolver<T> {
 				McpTypedSchemaPath.root(), 1);
 	}
 
-	McpTypedSchemaShape resolveToolOutput(T type) {
+	@NonNull
+	McpTypedSchemaShape resolveToolOutput(@NonNull T type) {
 		requireNonNull(type);
 		McpTypedTypeDescriptor<T> descriptor = describe(type,
 				McpTypedSchemaPath.root());
@@ -79,8 +93,9 @@ final class McpTypedSchemaResolver<T> {
 				McpTypedSchemaPath.root(), 1);
 	}
 
-	private McpTypedTypeDescriptor<T> describe(T type,
-			McpTypedSchemaPath path) {
+	@NonNull
+	private McpTypedTypeDescriptor<T> describe(@NonNull T type,
+			@NonNull McpTypedSchemaPath path) {
 		McpTypedTypeDescriptor<T> descriptor;
 		try {
 			descriptor = typeModel.describe(requireNonNull(type));
@@ -101,30 +116,38 @@ final class McpTypedSchemaResolver<T> {
 		return descriptor;
 	}
 
+	@NonNull
 	private McpTypedSchemaException failure(
-			McpTypedSchemaException.Reason reason, String message,
-			McpTypedSchemaPath path) {
+			McpTypedSchemaException.@NonNull Reason reason,
+			@NonNull String message, @NonNull McpTypedSchemaPath path) {
 		return new McpTypedSchemaException(reason, message, path);
 	}
 
+	@NonNull
 	private McpTypedSchemaException limit(
-			McpSchemaCompilationException.Limit limit, String message,
-			McpTypedSchemaPath path) {
+			McpSchemaCompilationException.@NonNull Limit limit,
+			@NonNull String message, @NonNull McpTypedSchemaPath path) {
 		return new McpTypedSchemaException(limit, message, path);
 	}
 
+	@NotThreadSafe
 	private final class Resolution {
-		private final Map<String, Integer> activeRecordComplexities =
+		@NonNull
+		private final Map<@NonNull String, @NonNull Integer> activeRecordComplexities =
 				new LinkedHashMap<>();
 		private int nodeCount;
 
-		private McpTypedSchemaShape resolve(T type, McpTypedSchemaPath path,
+		@NonNull
+		private McpTypedSchemaShape resolve(@NonNull T type,
+				@NonNull McpTypedSchemaPath path,
 				int depth) {
 			return resolve(describe(type, path), path, depth);
 		}
 
+		@NonNull
 		private McpTypedSchemaShape resolve(
-				McpTypedTypeDescriptor<T> descriptor, McpTypedSchemaPath path,
+				@NonNull McpTypedTypeDescriptor<T> descriptor,
+				@NonNull McpTypedSchemaPath path,
 				int depth) {
 			checkDepth(depth, path);
 			if (descriptor instanceof McpTypedTypeDescriptor.Unsupported<T> unsupported)
@@ -155,9 +178,10 @@ final class McpTypedSchemaResolver<T> {
 					"The Java type adapter returned an unknown descriptor.", path);
 		}
 
+		@NonNull
 		private McpTypedSchemaShape resolveEnumeration(
-				McpTypedTypeDescriptor.Enumeration<T> enumeration,
-				McpTypedSchemaPath path) {
+				McpTypedTypeDescriptor.@NonNull Enumeration<T> enumeration,
+				@NonNull McpTypedSchemaPath path) {
 			checkCollectionSize(enumeration.constants().size(), path);
 			Set<String> constants = new LinkedHashSet<>();
 			for (String constant : enumeration.constants()) {
@@ -168,8 +192,10 @@ final class McpTypedSchemaResolver<T> {
 			return new McpTypedSchemaShape.Enumeration(enumeration.constants());
 		}
 
+		@NonNull
 		private McpTypedSchemaShape resolveMap(
-				McpTypedTypeDescriptor.MapValue<T> map, McpTypedSchemaPath path,
+				McpTypedTypeDescriptor.@NonNull MapValue<T> map,
+				@NonNull McpTypedSchemaPath path,
 				int depth) {
 			McpTypedTypeDescriptor<T> keyDescriptor = describe(map.keyType(), path);
 			if (!(keyDescriptor instanceof McpTypedTypeDescriptor.Scalar<T> scalar)
@@ -180,9 +206,10 @@ final class McpTypedSchemaResolver<T> {
 					path.mapValue(), depth + 1));
 		}
 
+		@NonNull
 		private McpTypedSchemaShape resolveRecord(
-				McpTypedTypeDescriptor.RecordValue<T> record,
-				McpTypedSchemaPath path, int depth) {
+				McpTypedTypeDescriptor.@NonNull RecordValue<T> record,
+				@NonNull McpTypedSchemaPath path, int depth) {
 			if (record.declarationIdentity().isEmpty())
 				throw failure(McpTypedSchemaException.Reason.INVALID_DESCRIPTOR,
 						"A record descriptor must have a declaration identity.", path);
@@ -258,20 +285,21 @@ final class McpTypedSchemaResolver<T> {
 			}
 		}
 
-		private void chargeNode(McpTypedSchemaPath path) {
+		private void chargeNode(@NonNull McpTypedSchemaPath path) {
 			if (nodeCount >= limits.maximumSchemaNodeCount())
 				throw limit(McpSchemaCompilationException.Limit.SCHEMA_NODE_COUNT,
 						"Typed schema node count exceeds its configured limit.", path);
 			nodeCount++;
 		}
 
-		private void checkDepth(int depth, McpTypedSchemaPath path) {
+		private void checkDepth(int depth, @NonNull McpTypedSchemaPath path) {
 			if (depth > limits.maximumSchemaDepth())
 				throw limit(McpSchemaCompilationException.Limit.SCHEMA_DEPTH,
 						"Typed schema depth exceeds its configured limit.", path);
 		}
 
-		private void checkCollectionSize(int size, McpTypedSchemaPath path) {
+		private void checkCollectionSize(int size,
+				@NonNull McpTypedSchemaPath path) {
 			if (size > limits.maximumCollectionEntryCount())
 				throw limit(
 						McpSchemaCompilationException.Limit.COLLECTION_ENTRY_COUNT,
@@ -279,7 +307,8 @@ final class McpTypedSchemaResolver<T> {
 						path);
 		}
 
-		private void checkName(String name, McpTypedSchemaPath path) {
+		private void checkName(@NonNull String name,
+				@NonNull McpTypedSchemaPath path) {
 			if (name.isEmpty())
 				throw failure(McpTypedSchemaException.Reason.INVALID_DESCRIPTOR,
 						"A typed schema property name must not be empty.", path);
@@ -289,7 +318,9 @@ final class McpTypedSchemaResolver<T> {
 		}
 	}
 
-	private static String messageFor(McpTypedSchemaException.Reason reason) {
+	@NonNull
+	private static String messageFor(
+			McpTypedSchemaException.@NonNull Reason reason) {
 		return switch (reason) {
 			case RAW_GENERIC -> "Raw generic Java types are not supported.";
 			case WILDCARD -> "Wildcard Java types are not supported.";

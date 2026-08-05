@@ -18,6 +18,8 @@ package com.soklet.internal.mcp.schema;
 
 /**
  * A hard evaluator budget whose exhaustion prevents a validity decision.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 enum McpSchemaEvaluationLimit {
 	EVALUATION_OPERATIONS,

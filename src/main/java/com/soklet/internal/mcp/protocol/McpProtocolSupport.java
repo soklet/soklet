@@ -16,6 +16,9 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -27,11 +30,16 @@ import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
 
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 final class McpProtocolSupport {
 	private McpProtocolSupport() {
 	}
 
-	static String requireNonBlank(String value, String description) {
+	@NonNull
+	static String requireNonBlank(@NonNull String value, @NonNull String description) {
 		requireNonNull(value);
 
 		if (value.isBlank())
@@ -40,7 +48,8 @@ final class McpProtocolSupport {
 		return value;
 	}
 
-	static URI requireAbsoluteUri(URI uri, String description) {
+	@NonNull
+	static URI requireAbsoluteUri(@NonNull URI uri, @NonNull String description) {
 		requireNonNull(uri);
 		requireNonNull(description);
 
@@ -50,7 +59,9 @@ final class McpProtocolSupport {
 		return uri;
 	}
 
-	static McpJsonObject requireExtensionFields(McpJsonObject fields, Set<String> reservedNames) {
+	@NonNull
+	static McpJsonObject requireExtensionFields(@NonNull McpJsonObject fields,
+			@NonNull Set<@NonNull String> reservedNames) {
 		requireNonNull(fields);
 		requireNonNull(reservedNames);
 
@@ -62,8 +73,10 @@ final class McpProtocolSupport {
 		return fields;
 	}
 
+	@NonNull
 	static McpJsonObject requireInboundMetadataFields(
-			McpJsonObject fields, Set<String> reservedNames) {
+			@NonNull McpJsonObject fields,
+			@NonNull Set<@NonNull String> reservedNames) {
 		requireExtensionFields(fields, reservedNames);
 
 		for (String name : fields.members().keySet())
@@ -72,8 +85,10 @@ final class McpProtocolSupport {
 		return fields;
 	}
 
+	@NonNull
 	static McpJsonObject requireApplicationMetadataFields(
-			McpJsonObject fields, Set<String> reservedNames) {
+			@NonNull McpJsonObject fields,
+			@NonNull Set<@NonNull String> reservedNames) {
 		requireInboundMetadataFields(fields, reservedNames);
 
 		for (String name : fields.members().keySet()) {
@@ -85,11 +100,14 @@ final class McpProtocolSupport {
 		return fields;
 	}
 
-	static String requireExtensionIdentifier(String identifier) {
+	@NonNull
+	static String requireExtensionIdentifier(@NonNull String identifier) {
 		return requireMetadataKey(identifier, true);
 	}
 
-	private static String requireMetadataKey(String key, boolean prefixRequired) {
+	@NonNull
+	private static String requireMetadataKey(@NonNull String key,
+			boolean prefixRequired) {
 		requireNonNull(key);
 		int slashIndex = key.indexOf('/');
 
@@ -117,7 +135,7 @@ final class McpProtocolSupport {
 		return key;
 	}
 
-	private static boolean validMetadataLabel(String label) {
+	private static boolean validMetadataLabel(@NonNull String label) {
 		if (label.isEmpty() || !asciiLetter(label.charAt(0)))
 			return false;
 
@@ -134,7 +152,7 @@ final class McpProtocolSupport {
 		return true;
 	}
 
-	private static boolean validMetadataName(String name) {
+	private static boolean validMetadataName(@NonNull String name) {
 		if (name.isEmpty())
 			return true;
 
@@ -155,7 +173,7 @@ final class McpProtocolSupport {
 		return true;
 	}
 
-	private static boolean hasReservedMetadataPrefix(String key) {
+	private static boolean hasReservedMetadataPrefix(@NonNull String key) {
 		int slashIndex = key.indexOf('/');
 
 		if (slashIndex < 0)
@@ -183,10 +201,12 @@ final class McpProtocolSupport {
 		return asciiLetter(character) || (character >= '0' && character <= '9');
 	}
 
-	static List<String> immutableUniqueNames(List<String> names, String description) {
+	@NonNull
+	static List<@NonNull String> immutableUniqueNames(
+			@NonNull List<@NonNull String> names, @NonNull String description) {
 		requireNonNull(names);
-		List<String> copiedNames = new ArrayList<>(names.size());
-		Set<String> uniqueNames = new LinkedHashSet<>();
+		List<@NonNull String> copiedNames = new ArrayList<>(names.size());
+		Set<@NonNull String> uniqueNames = new LinkedHashSet<>();
 
 		for (String name : names) {
 			String normalizedName = requireNonBlank(name, description);
@@ -200,11 +220,13 @@ final class McpProtocolSupport {
 		return List.copyOf(copiedNames);
 	}
 
-	static <T> Map<String, T> immutableOpenObjectMap(Map<String, T> values) {
+	@NonNull
+	static <T extends @NonNull Object> Map<@NonNull String, @NonNull T> immutableOpenObjectMap(
+			@NonNull Map<@NonNull String, @NonNull T> values) {
 		requireNonNull(values);
-		Map<String, T> copiedValues = new LinkedHashMap<>(values.size());
+		Map<@NonNull String, @NonNull T> copiedValues = new LinkedHashMap<>(values.size());
 
-		for (Map.Entry<String, T> entry : values.entrySet())
+		for (Map.Entry<@NonNull String, @NonNull T> entry : values.entrySet())
 			copiedValues.put(requireNonNull(entry.getKey()), requireNonNull(entry.getValue()));
 
 		return Collections.unmodifiableMap(copiedValues);

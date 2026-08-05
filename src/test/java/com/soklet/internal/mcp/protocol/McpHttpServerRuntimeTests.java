@@ -36,6 +36,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
@@ -57,6 +58,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 @NotThreadSafe
 public class McpHttpServerRuntimeTests {
@@ -177,6 +179,135 @@ public class McpHttpServerRuntimeTests {
 
 			int secondPort = runtime.start().getPort();
 			Assertions.assertEquals(200, discover(secondPort, "2").status());
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
+	public void omitted_cors_authorizer_emits_fixed_diagnostic_once_per_successful_generation()
+			throws Exception {
+		List<String> diagnostics = new ArrayList<>();
+		McpHttpEndpointPolicy policy =
+				McpHttpEndpointPolicy.forDiscoveryWithDefaultCorsAuthorizer(
+						request -> McpRequestAdmissionDecision.ACCEPT);
+
+		try (ServerSocket occupied = new ServerSocket()) {
+			occupied.setReuseAddress(false);
+			occupied.bind(new InetSocketAddress(LOOPBACK, 0));
+			int port = occupied.getLocalPort();
+			McpHttpServerRuntime runtime = runtime(
+					configuration(port), policy, diagnostics::add);
+
+			try {
+				Assertions.assertTrue(diagnostics.isEmpty());
+				Assertions.assertThrows(IOException.class, runtime::start);
+				Assertions.assertTrue(diagnostics.isEmpty(),
+						"A failed listener generation must not emit a startup diagnostic.");
+
+				occupied.close();
+				Assertions.assertEquals(port, runtime.start().getPort());
+				assertOmittedCorsDiagnostics(diagnostics, 1);
+
+				RawResponse rejectedOrigin = send(port, "POST", "/mcp",
+						append(standardHeaders(port, DISCOVER_METHOD),
+								new HeaderLine("Origin", "https://attacker-one.example")),
+						discoverBody("1", DISCOVER_METHOD, PROTOCOL_VERSION));
+				Assertions.assertEquals(403, rejectedOrigin.status());
+				RawResponse rejectedHost = send(port, "POST", "/mcp",
+						replaceHeader(append(standardHeaders(port, DISCOVER_METHOD),
+								new HeaderLine("Origin", "https://attacker-two.example")),
+								"Host", "attacker-two.example:" + port),
+						discoverBody("2", DISCOVER_METHOD, PROTOCOL_VERSION));
+				Assertions.assertEquals(421, rejectedHost.status());
+				assertOmittedCorsDiagnostics(diagnostics, 1);
+
+				Assertions.assertThrows(IllegalStateException.class, runtime::start);
+				assertOmittedCorsDiagnostics(diagnostics, 1);
+				runtime.stop();
+				runtime.stop();
+				assertOmittedCorsDiagnostics(diagnostics, 1);
+
+				Assertions.assertEquals(port, runtime.start().getPort());
+				assertOmittedCorsDiagnostics(diagnostics, 2);
+			} finally {
+				runtime.close();
+			}
+		}
+	}
+
+	@Test
+	public void explicit_cors_authorizer_suppresses_omitted_authorizer_diagnostic()
+			throws Exception {
+		for (CorsAuthorizer authorizer : List.of(
+				CorsAuthorizer.rejectAllInstance(), CorsAuthorizer.acceptAllInstance())) {
+			List<String> diagnostics = new ArrayList<>();
+			McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
+					authorizer, request -> McpRequestAdmissionDecision.ACCEPT);
+			McpHttpServerRuntime runtime = runtime(
+					configuration(0), policy, diagnostics::add);
+
+			try {
+				runtime.start();
+				runtime.stop();
+				runtime.start();
+				Assertions.assertTrue(diagnostics.isEmpty(),
+						"An explicitly configured authorizer must suppress the omitted-only "
+								+ "diagnostic.");
+			} finally {
+				runtime.close();
+			}
+		}
+	}
+
+	@Test
+	public void omitted_cors_authorizer_uses_the_default_diagnostic_delivery()
+			throws Exception {
+		McpHttpEndpointPolicy policy =
+				McpHttpEndpointPolicy.forDiscoveryWithDefaultCorsAuthorizer(
+						request -> McpRequestAdmissionDecision.ACCEPT);
+		McpHttpServerRuntime runtime = runtime(configuration(0), policy);
+		ByteArrayOutputStream diagnosticBytes = new ByteArrayOutputStream();
+		PrintStream originalStandardError = System.err;
+
+		try (PrintStream capturedStandardError = new PrintStream(
+				diagnosticBytes, true, StandardCharsets.UTF_8)) {
+			System.setErr(capturedStandardError);
+			try {
+				runtime.start();
+			} finally {
+				try {
+					runtime.close();
+				} finally {
+					System.setErr(originalStandardError);
+				}
+			}
+		}
+
+		Assertions.assertEquals(
+				McpHttpServerRuntime.OMITTED_CORS_AUTHORIZER_DIAGNOSTIC
+						+ System.lineSeparator(),
+				diagnosticBytes.toString(StandardCharsets.UTF_8));
+	}
+
+	@Test
+	public void diagnostic_sink_failure_does_not_fail_listener_start() throws Exception {
+		AtomicInteger attempts = new AtomicInteger();
+		McpHttpEndpointPolicy policy =
+				McpHttpEndpointPolicy.forDiscoveryWithDefaultCorsAuthorizer(
+						request -> McpRequestAdmissionDecision.ACCEPT);
+		McpHttpServerRuntime runtime = runtime(configuration(0), policy, message -> {
+			attempts.incrementAndGet();
+			throw new AssertionError("diagnostic sink failure");
+		});
+
+		try {
+			int port = runtime.start().getPort();
+			Assertions.assertEquals(1, attempts.get());
+			Assertions.assertEquals(200, discover(port, "1").status());
+			runtime.stop();
+			runtime.start();
+			Assertions.assertEquals(2, attempts.get());
 		} finally {
 			runtime.close();
 		}
@@ -304,6 +435,51 @@ public class McpHttpServerRuntimeTests {
 			runtime.close();
 			if (client != null)
 				client.join(2_000L);
+		}
+	}
+
+	@Test
+	public void residual_transport_is_a_stop_failure_and_blocks_restart_until_exit()
+			throws Exception {
+		McpHttpServerRuntime runtime = runtime(
+				configurationWithShutdownTimeout(0, Duration.ofMillis(25)),
+				defaultPolicy());
+		HeldTerminationEventLoop heldEventLoop = new HeldTerminationEventLoop();
+
+		try {
+			runtime.start();
+			replaceEventLoop(runtime, heldEventLoop);
+
+			long stopStartedAt = System.nanoTime();
+			IllegalStateException stopFailure = Assertions.assertThrows(
+					IllegalStateException.class, runtime::stop);
+			Duration stopDuration = Duration.ofNanos(
+					System.nanoTime() - stopStartedAt);
+			Assertions.assertEquals(
+					McpHttpServerRuntime.RESIDUAL_TRANSPORT_DIAGNOSTIC,
+					stopFailure.getMessage());
+			Assertions.assertTrue(stopDuration.compareTo(Duration.ofSeconds(1)) < 0,
+					"Transport stop failure exceeded its bounded deadline: "
+							+ stopDuration);
+
+			McpHttpServerLifecycleSnapshot stopped = runtime.lifecycleSnapshot();
+			Assertions.assertFalse(stopped.started());
+			Assertions.assertTrue(stopped.stopRequired());
+			Assertions.assertTrue(stopped.boundAddress().isEmpty());
+			Assertions.assertFalse(stopped.residualApplicationExecutions());
+			IllegalStateException restartFailure = Assertions.assertThrows(
+					IllegalStateException.class, runtime::start);
+			Assertions.assertEquals(
+					"Cannot start MCP server while residual transport threads remain",
+					restartFailure.getMessage());
+
+			heldEventLoop.releaseTermination();
+			int restartedPort = runtime.start().getPort();
+			Assertions.assertEquals(200,
+					discover(restartedPort, "\"after-residual-transport\"").status());
+		} finally {
+			heldEventLoop.releaseTermination();
+			runtime.close();
 		}
 	}
 
@@ -824,6 +1000,23 @@ public class McpHttpServerRuntimeTests {
 		return new McpHttpServerRuntime(configuration, policy, endpoint);
 	}
 
+	private static McpHttpServerRuntime runtime(McpHttpTransportConfiguration configuration,
+			McpHttpEndpointPolicy policy, Consumer<String> startupDiagnosticConsumer) {
+		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
+				McpImplementationMetadata.withNameAndVersion(
+						"test-server", "3.6.0-SNAPSHOT"))
+				.build();
+		return new McpHttpServerRuntime(
+				configuration, policy, endpoint, startupDiagnosticConsumer);
+	}
+
+	private static void assertOmittedCorsDiagnostics(List<String> diagnostics,
+			int expectedCount) {
+		Assertions.assertEquals(expectedCount, diagnostics.size());
+		Assertions.assertTrue(diagnostics.stream().allMatch(
+				McpHttpServerRuntime.OMITTED_CORS_AUTHORIZER_DIAGNOSTIC::equals));
+	}
+
 	private static McpHttpEndpointPolicy defaultPolicy() {
 		return McpHttpEndpointPolicy.forDiscovery(CorsAuthorizer.rejectAllInstance(),
 				request -> McpRequestAdmissionDecision.ACCEPT);
@@ -1081,6 +1274,17 @@ public class McpHttpServerRuntimeTests {
 		}, name);
 	}
 
+	private static void replaceEventLoop(McpHttpServerRuntime runtime,
+			EventLoop replacement) throws Exception {
+		Field eventLoopField = McpHttpServerRuntime.class.getDeclaredField("eventLoop");
+		eventLoopField.setAccessible(true);
+		EventLoop original = (EventLoop) eventLoopField.get(runtime);
+		original.stop();
+		Assertions.assertTrue(original.join(Duration.ofSeconds(2)),
+				"The original MCP event loop did not terminate before replacement.");
+		eventLoopField.set(runtime, replacement);
+	}
+
 	private static void assertDiscoveryResponse(RawResponse response, String idJson) {
 		Assertions.assertEquals(200, response.status(), response.bodyText());
 		Assertions.assertEquals(JSON_MEDIA_TYPE, response.singleHeader("Content-Type"));
@@ -1106,6 +1310,36 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	private static final String JSON_MEDIA_TYPE = "application/json";
+
+	private static final class HeldTerminationEventLoop extends EventLoop {
+		private final CountDownLatch releaseTermination;
+
+		private HeldTerminationEventLoop() throws IOException {
+			super(Options.builder()
+					.withHost(LOOPBACK)
+					.withPort(0)
+					.withConcurrency(1)
+					.build(), (request, callback) -> {});
+			this.releaseTermination = new CountDownLatch(1);
+		}
+
+		@Override
+		public boolean join(Duration timeout) throws InterruptedException {
+			if (!this.releaseTermination.await(
+					timeout.toNanos(), TimeUnit.NANOSECONDS))
+				return false;
+			return super.join(Duration.ZERO);
+		}
+
+		@Override
+		public boolean isTerminated() {
+			return this.releaseTermination.getCount() == 0 && super.isTerminated();
+		}
+
+		private void releaseTermination() {
+			this.releaseTermination.countDown();
+		}
+	}
 
 	private record HeaderLine(String name, String value) {
 	}

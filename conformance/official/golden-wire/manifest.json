@@ -1,0 +1,67 @@
+{
+  "formatVersion": 1,
+  "specificationCommit": "5f5440bb26a62e2cf3440b92da5a667efa03b267",
+  "schemaSha256": "ef70b61f99b6d2e5e3b46863822eab08dff6a45bedc7a08914e0e5b133f40203",
+  "fixtures": [
+    {
+      "name": "phase-3-discover-request",
+      "phase": 3,
+      "source": "production",
+      "path": "phase-3/discover-request.json",
+      "sha256": "99f1cbf031402d7f3b80fbf08bed8543875b789d4dc012195af2474715db3bf0",
+      "schemaRef": "#/$defs/DiscoverRequest",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_3_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-3-discover-response",
+      "phase": 3,
+      "source": "production",
+      "path": "phase-3/discover-response.json",
+      "sha256": "ddf2c9da0496dcb0656f3ecab98420d3723934fbe23bbfe856e3ec792b1b9a98",
+      "schemaRef": "#/$defs/DiscoverResultResponse",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_3_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-3-header-mismatch-error",
+      "phase": 3,
+      "source": "production",
+      "path": "phase-3/header-mismatch-error.json",
+      "sha256": "01c8d9900e0b817865297fa1054342fb62f42fde9fd1f7573e61502560b2ff46",
+      "schemaRef": "#/$defs/HeaderMismatchError",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_3_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-3-unsupported-version-error",
+      "phase": 3,
+      "source": "production",
+      "path": "phase-3/unsupported-version-error.json",
+      "sha256": "7073c7d9be72b0b6824299c2dd36385963679ff8861d1a5213a44b2840b78c77",
+      "schemaRef": "#/$defs/UnsupportedProtocolVersionError",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_3_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-3-unsupported-version-request",
+      "phase": 3,
+      "source": "production",
+      "path": "phase-3/unsupported-version-request.json",
+      "sha256": "749eeb15d6d692282fb2de4514f08caff3dc73d0481aa930e201063af2963238",
+      "schemaRef": "#/$defs/DiscoverRequest",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_3_messages_match_the_production_listener"
+    },
+    {
+      "name": "final-schema-subscription-terminal-canary",
+      "phase": 5,
+      "source": "schema-canary",
+      "path": "schema-canaries/subscription-listen-terminal.json",
+      "sha256": "07a08499aed44bfae0bbcb537667be0a6f9b1d6dbfa0688584c3d62dfcdc4841",
+      "schemaRef": "#/$defs/SubscriptionsListenResultResponse",
+      "transportForm": "sse-data-json-canary",
+      "owningTest": "self-test.mjs"
+    }
+  ]
+}

@@ -16,6 +16,9 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.LinkedHashMap;
@@ -27,15 +30,20 @@ import static java.util.Objects.requireNonNull;
 /**
  * Bounded byte-to-envelope bridge. This layer classifies JSON-RPC shape only;
  * MCP request metadata and operation parameters are validated later.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 final class McpJsonRpcEnvelopeCodec {
+	@NonNull
 	private final McpJsonCodec jsonCodec;
 
-	McpJsonRpcEnvelopeCodec(McpJsonCodec jsonCodec) {
+	McpJsonRpcEnvelopeCodec(@NonNull McpJsonCodec jsonCodec) {
 		this.jsonCodec = requireNonNull(jsonCodec);
 	}
 
-	McpJsonRpcEnvelope decode(byte[] utf8) {
+	@NonNull
+	McpJsonRpcEnvelope decode(byte @NonNull [] utf8) {
 		requireNonNull(utf8);
 
 		try {
@@ -47,7 +55,8 @@ final class McpJsonRpcEnvelopeCodec {
 		}
 	}
 
-	McpJsonRpcEnvelope decode(String json) {
+	@NonNull
+	McpJsonRpcEnvelope decode(@NonNull String json) {
 		requireNonNull(json);
 
 		try {
@@ -59,28 +68,31 @@ final class McpJsonRpcEnvelopeCodec {
 		}
 	}
 
-	byte[] encode(McpJsonRpcEnvelope envelope) {
+	byte @NonNull [] encode(@NonNull McpJsonRpcEnvelope envelope) {
 		return jsonCodec.toUtf8Bytes(requireNonNull(envelope).toJsonObject());
 	}
 
-	byte[] encode(McpJsonRpcMessage message) {
+	byte @NonNull [] encode(@NonNull McpJsonRpcMessage message) {
 		return jsonCodec.toUtf8Bytes(requireNonNull(message).toJsonObject());
 	}
 
-	String encodeToString(McpJsonRpcEnvelope envelope) {
+	@NonNull
+	String encodeToString(@NonNull McpJsonRpcEnvelope envelope) {
 		return jsonCodec.toJson(requireNonNull(envelope).toJsonObject());
 	}
 
-	String encodeToString(McpJsonRpcMessage message) {
+	@NonNull
+	String encodeToString(@NonNull McpJsonRpcMessage message) {
 		return jsonCodec.toJson(requireNonNull(message).toJsonObject());
 	}
 
-	private McpJsonRpcEnvelope decodeValue(McpJsonValue value) {
+	@NonNull
+	private McpJsonRpcEnvelope decodeValue(@NonNull McpJsonValue value) {
 		if (!(value instanceof McpJsonObject object))
 			throw invalidEnvelope("The JSON-RPC message must be an object.", Optional.empty());
 
-		Map<String, McpJsonValue> members = object.members();
-		Optional<McpJsonRpcId> readableId = readableId(members);
+		Map<@NonNull String, @NonNull McpJsonValue> members = object.members();
+		Optional<@NonNull McpJsonRpcId> readableId = readableId(members);
 		McpJsonValue versionValue = members.get("jsonrpc");
 
 		if (!(versionValue instanceof McpJsonString version)
@@ -99,15 +111,17 @@ final class McpJsonRpcEnvelopeCodec {
 		throw invalidEnvelope("The JSON-RPC message has no classifiable payload.", readableId);
 	}
 
-	private McpJsonRpcEnvelope decodeMethodEnvelope(Map<String, McpJsonValue> members,
-			Optional<McpJsonRpcId> readableId) {
+	@NonNull
+	private McpJsonRpcEnvelope decodeMethodEnvelope(
+			@NonNull Map<@NonNull String, @NonNull McpJsonValue> members,
+			@NonNull Optional<@NonNull McpJsonRpcId> readableId) {
 		rejectFields(members, readableId, "method envelope", "result", "error");
 		McpJsonValue methodValue = members.get("method");
 
 		if (!(methodValue instanceof McpJsonString method))
 			throw invalidEnvelope("The method field must be a string.", readableId);
 
-		Optional<McpJsonValue> params = optionalField(members, "params");
+		Optional<@NonNull McpJsonValue> params = optionalField(members, "params");
 		McpJsonObject extensionFields = extensionFields(members);
 
 		if (!members.containsKey("id"))
@@ -118,8 +132,10 @@ final class McpJsonRpcEnvelopeCodec {
 				method.value(), params, extensionFields);
 	}
 
-	private McpJsonRpcEnvelope decodeResultEnvelope(Map<String, McpJsonValue> members,
-			Optional<McpJsonRpcId> readableId) {
+	@NonNull
+	private McpJsonRpcEnvelope decodeResultEnvelope(
+			@NonNull Map<@NonNull String, @NonNull McpJsonValue> members,
+			@NonNull Optional<@NonNull McpJsonRpcId> readableId) {
 		rejectFields(members, readableId, "result response", "method", "params", "error");
 
 		if (!members.containsKey("id"))
@@ -130,17 +146,20 @@ final class McpJsonRpcEnvelopeCodec {
 				requireNonNull(members.get("result")), extensionFields(members));
 	}
 
-	private McpJsonRpcEnvelope decodeErrorEnvelope(Map<String, McpJsonValue> members,
-			Optional<McpJsonRpcId> readableId) {
+	@NonNull
+	private McpJsonRpcEnvelope decodeErrorEnvelope(
+			@NonNull Map<@NonNull String, @NonNull McpJsonValue> members,
+			@NonNull Optional<@NonNull McpJsonRpcId> readableId) {
 		rejectFields(members, readableId, "error response", "method", "params", "result");
-		Optional<McpJsonRpcId> id = members.containsKey("id")
+		Optional<@NonNull McpJsonRpcId> id = members.containsKey("id")
 				? Optional.of(parseId(requireNonNull(members.get("id"))))
 				: Optional.empty();
 		return new McpJsonRpcEnvelope.ErrorResponse(
 				id, requireNonNull(members.get("error")), extensionFields(members));
 	}
 
-	private McpJsonRpcId parseId(McpJsonValue value) {
+	@NonNull
+	private McpJsonRpcId parseId(@NonNull McpJsonValue value) {
 		McpJsonRpcId id;
 
 		if (value instanceof McpJsonString string) {
@@ -168,7 +187,7 @@ final class McpJsonRpcEnvelopeCodec {
 		throw invalidEnvelope("The id field must be a string or integer.", Optional.empty());
 	}
 
-	private void requireResponseSafeId(McpJsonRpcId id) {
+	private void requireResponseSafeId(@NonNull McpJsonRpcId id) {
 		McpJsonRpcMessage.ErrorResponse fallback = new McpJsonRpcMessage.ErrorResponse(
 				Optional.of(id),
 				new McpJsonRpcError(McpJsonRpcError.INTERNAL_ERROR,
@@ -183,7 +202,9 @@ final class McpJsonRpcEnvelopeCodec {
 		}
 	}
 
-	private Optional<McpJsonRpcId> readableId(Map<String, McpJsonValue> members) {
+	@NonNull
+	private Optional<@NonNull McpJsonRpcId> readableId(
+			@NonNull Map<@NonNull String, @NonNull McpJsonValue> members) {
 		if (!members.containsKey("id"))
 			return Optional.empty();
 
@@ -194,17 +215,21 @@ final class McpJsonRpcEnvelopeCodec {
 		}
 	}
 
-	private Optional<McpJsonValue> optionalField(
-			Map<String, McpJsonValue> members, String fieldName) {
+	@NonNull
+	private Optional<@NonNull McpJsonValue> optionalField(
+			@NonNull Map<@NonNull String, @NonNull McpJsonValue> members,
+			@NonNull String fieldName) {
 		return members.containsKey(fieldName)
 				? Optional.of(members.get(fieldName))
 				: Optional.empty();
 	}
 
-	private McpJsonObject extensionFields(Map<String, McpJsonValue> members) {
-		Map<String, McpJsonValue> extensions = new LinkedHashMap<>();
+	@NonNull
+	private McpJsonObject extensionFields(
+			@NonNull Map<@NonNull String, @NonNull McpJsonValue> members) {
+		Map<@NonNull String, @NonNull McpJsonValue> extensions = new LinkedHashMap<>();
 
-		for (Map.Entry<String, McpJsonValue> entry : members.entrySet()) {
+		for (Map.Entry<@NonNull String, @NonNull McpJsonValue> entry : members.entrySet()) {
 			if (!McpJsonRpcMessage.RESERVED_BASE_FIELDS.contains(entry.getKey()))
 				extensions.put(entry.getKey(), entry.getValue());
 		}
@@ -212,9 +237,10 @@ final class McpJsonRpcEnvelopeCodec {
 		return new McpJsonObject(extensions);
 	}
 
-	private void rejectFields(Map<String, McpJsonValue> members,
-			Optional<McpJsonRpcId> readableId, String envelopeDescription,
-			String... fieldNames) {
+	private void rejectFields(
+			@NonNull Map<@NonNull String, @NonNull McpJsonValue> members,
+			@NonNull Optional<@NonNull McpJsonRpcId> readableId,
+			@NonNull String envelopeDescription, @NonNull String... fieldNames) {
 		for (String fieldName : fieldNames) {
 			if (members.containsKey(fieldName))
 				throw invalidEnvelope("A " + envelopeDescription
@@ -222,8 +248,9 @@ final class McpJsonRpcEnvelopeCodec {
 		}
 	}
 
-	private McpWireDecodingException invalidEnvelope(String message,
-			Optional<McpJsonRpcId> readableId) {
+	@NonNull
+	private McpWireDecodingException invalidEnvelope(@NonNull String message,
+			@NonNull Optional<@NonNull McpJsonRpcId> readableId) {
 		return McpWireDecodingException.invalidRequest(message, readableId);
 	}
 }

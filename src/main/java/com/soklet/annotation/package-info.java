@@ -15,9 +15,12 @@
  */
 
 /**
- * Annotations applicable to <em>Resource Methods</em> and their parameters.
+ * Annotations applicable to HTTP <em>Resource Methods</em> and their
+ * parameters, as well as MCP server endpoints, tool handler methods, and tool
+ * arguments.
  * <p>
- * These are documented in detail at <a href="https://www.soklet.com/docs/request-handling">https://www.soklet.com/docs/request-handling</a>.
+ * HTTP request-handling annotations are documented in detail at
+ * <a href="https://www.soklet.com/docs/request-handling">https://www.soklet.com/docs/request-handling</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

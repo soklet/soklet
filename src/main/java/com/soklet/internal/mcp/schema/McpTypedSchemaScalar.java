@@ -16,6 +16,7 @@
 
 package com.soklet.internal.mcp.schema;
 
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.math.BigDecimal;
@@ -23,7 +24,11 @@ import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
-/** Scalar entries in the closed typed-Java derivation table. */
+/**
+ * Scalar entries in the closed typed-Java derivation table.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
 enum McpTypedSchemaScalar {
 	BOOLEAN("boolean"),
 	BYTE("integer", BigDecimal.valueOf(Byte.MIN_VALUE),
@@ -40,15 +45,19 @@ enum McpTypedSchemaScalar {
 	BIG_DECIMAL("number"),
 	STRING("string");
 
+	@NonNull
 	private final String jsonType;
-	private final Optional<BigDecimal> minimum;
-	private final Optional<BigDecimal> maximum;
+	@NonNull
+	private final Optional<@NonNull BigDecimal> minimum;
+	@NonNull
+	private final Optional<@NonNull BigDecimal> maximum;
 
-	McpTypedSchemaScalar(String jsonType) {
+	McpTypedSchemaScalar(@NonNull String jsonType) {
 		this(jsonType, null, null);
 	}
 
-	McpTypedSchemaScalar(String jsonType, @Nullable BigDecimal minimum,
+	McpTypedSchemaScalar(@NonNull String jsonType,
+			@Nullable BigDecimal minimum,
 			@Nullable BigDecimal maximum) {
 		this.jsonType = requireNonNull(jsonType);
 		this.minimum = Optional.ofNullable(minimum);
@@ -58,15 +67,18 @@ enum McpTypedSchemaScalar {
 					"Scalar numeric bounds must be both present or both absent.");
 	}
 
+	@NonNull
 	String jsonType() {
 		return jsonType;
 	}
 
-	Optional<BigDecimal> minimum() {
+	@NonNull
+	Optional<@NonNull BigDecimal> minimum() {
 		return minimum;
 	}
 
-	Optional<BigDecimal> maximum() {
+	@NonNull
+	Optional<@NonNull BigDecimal> maximum() {
 		return maximum;
 	}
 }

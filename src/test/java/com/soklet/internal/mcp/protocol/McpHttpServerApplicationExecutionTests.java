@@ -1026,10 +1026,14 @@ public class McpHttpServerApplicationExecutionTests {
 			Assertions.assertTrue(firstEntered.await(5, TimeUnit.SECONDS),
 					"The residual handler did not enter.");
 
-			runtime.stop();
+			Assertions.assertTrue(
+					runtime.stopAndReportResidualApplicationExecutions(),
+					"The stop outcome must retain residual work present at its boundary.");
 			Assertions.assertTrue(firstInterrupted.await(5, TimeUnit.SECONDS),
 					"Shutdown did not interrupt the residual handler.");
 			Assertions.assertFalse(runtime.isStarted());
+			Assertions.assertTrue(runtime.hasResidualApplicationExecutions(),
+					"A still-running handler must be reported as residual work.");
 			McpApplicationExecutionSnapshot residual =
 					runtime.applicationExecutionSnapshot().orElseThrow();
 			Assertions.assertEquals(1, residual.activeHandlerSlots());
@@ -1047,6 +1051,8 @@ public class McpHttpServerApplicationExecutionTests {
 			releaseFirst.countDown();
 			awaitSnapshot(runtime, snapshot -> snapshot.activeHandlerSlots() == 0
 					&& snapshot.retainedExchanges() == 0 && snapshot.terminated());
+			Assertions.assertFalse(runtime.hasResidualApplicationExecutions(),
+					"Residual-work diagnostics must clear after the held handler exits.");
 
 			int restartedPort = runtime.start().getPort();
 			assertSuccessfulResult(send(restartedPort, "\"after-residual\""),

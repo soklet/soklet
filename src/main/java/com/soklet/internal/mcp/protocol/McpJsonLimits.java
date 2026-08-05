@@ -16,6 +16,10 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
+
 /**
  * Explicit resource bounds for the internal JSON codec.
  *
@@ -23,7 +27,10 @@ package com.soklet.internal.mcp.protocol;
  * from pinned-corpus, adversarial-boundary, and cross-JDK evidence. Public
  * callers may construct a stricter profile, but cannot raise a field beyond
  * the implementation's reviewed hard ceiling.</p>
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 public record McpJsonLimits(int maximumInputBytes, int maximumNestingDepth,
 		int maximumTokenLengthInCharacters, int maximumStringLengthInCharacters,
 		int maximumNumberLengthInCharacters, int maximumExponentMagnitude,
@@ -85,7 +92,13 @@ public record McpJsonLimits(int maximumInputBytes, int maximumNestingDepth,
 				"maximumOutputBytes");
 	}
 
-	static McpJsonLimits productionDefaults() {
+	/**
+	 * Returns the reviewed production JSON limits.
+	 *
+	 * @return the production limit profile
+	 */
+	@NonNull
+	public static McpJsonLimits productionDefaults() {
 		return new McpJsonLimits(DEFAULT_MAXIMUM_INPUT_BYTES,
 				DEFAULT_MAXIMUM_NESTING_DEPTH,
 				DEFAULT_MAXIMUM_TOKEN_LENGTH_IN_CHARACTERS,
@@ -95,6 +108,7 @@ public record McpJsonLimits(int maximumInputBytes, int maximumNestingDepth,
 				DEFAULT_MAXIMUM_NODE_COUNT, DEFAULT_MAXIMUM_OUTPUT_BYTES);
 	}
 
+	@NonNull
 	static McpJsonLimits maximumSupported() {
 		return new McpJsonLimits(MAXIMUM_SUPPORTED_INPUT_BYTES,
 				MAXIMUM_SUPPORTED_NESTING_DEPTH,
@@ -105,17 +119,17 @@ public record McpJsonLimits(int maximumInputBytes, int maximumNestingDepth,
 				MAXIMUM_SUPPORTED_NODE_COUNT, MAXIMUM_SUPPORTED_OUTPUT_BYTES);
 	}
 
-	private static void requirePositive(int value, String name) {
+	private static void requirePositive(int value, @NonNull String name) {
 		if (value <= 0)
 			throw new IllegalArgumentException(name + " must be positive.");
 	}
 
-	private static void requireNonNegative(int value, String name) {
+	private static void requireNonNegative(int value, @NonNull String name) {
 		if (value < 0)
 			throw new IllegalArgumentException(name + " must not be negative.");
 	}
 
-	private static void requireAtMost(int value, int maximum, String name) {
+	private static void requireAtMost(int value, int maximum, @NonNull String name) {
 		if (value > maximum)
 			throw new IllegalArgumentException(name + " must not exceed "
 					+ maximum + ".");

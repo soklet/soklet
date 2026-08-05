@@ -16,8 +16,12 @@
 
 package com.soklet.internal.mcp.schema;
 
+import com.soklet.annotation.McpToolArgument;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.NotThreadSafe;
+import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.GenericArrayType;
@@ -46,16 +50,24 @@ import static java.util.Objects.requireNonNull;
  * <p>This class does not select supported schema types. It walks a supplied
  * {@link McpTypedSchemaShape} and its declared Java {@link Type} in lockstep;
  * disagreement is an internal invariant failure.</p>
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 final class McpRuntimeTypedJsonBindingCompiler {
+	@NonNull
 	private final McpSchemaCompilationLimits limits;
-	private final ClassValue<Set<String>> enumConstantNamesByClass;
+	@NonNull
+	private final ClassValue<@NonNull Set<@NonNull String>> enumConstantNamesByClass;
 
-	McpRuntimeTypedJsonBindingCompiler(McpSchemaCompilationLimits limits) {
+	McpRuntimeTypedJsonBindingCompiler(
+			@NonNull McpSchemaCompilationLimits limits) {
 		this.limits = requireNonNull(limits);
 		this.enumConstantNamesByClass = new ClassValue<>() {
 			@Override
-			protected Set<String> computeValue(Class<?> type) {
+			@NonNull
+			protected Set<@NonNull String> computeValue(
+					@NonNull Class<?> type) {
 				Set<String> names = new LinkedHashSet<>();
 				for (java.lang.reflect.Field field : type.getDeclaredFields()) {
 					if (field.isEnumConstant())
@@ -66,8 +78,9 @@ final class McpRuntimeTypedJsonBindingCompiler {
 		};
 	}
 
-	<T> McpTypedJsonBinding<T> compile(Type declaredType,
-			McpTypedSchemaShape shape) {
+	@NonNull
+	<T> McpTypedJsonBinding<T> compile(@NonNull Type declaredType,
+			@NonNull McpTypedSchemaShape shape) {
 		requireNonNull(declaredType);
 		requireNonNull(shape);
 		McpTypedJsonBindingNode rootNode = compileNode(declaredType, shape,
@@ -75,8 +88,10 @@ final class McpRuntimeTypedJsonBindingCompiler {
 		return new McpTypedJsonBinding<>(declaredType, shape, rootNode);
 	}
 
-	private McpTypedJsonBindingNode compileNode(Type type,
-			McpTypedSchemaShape shape, McpTypedSchemaPath path) {
+	@NonNull
+	private McpTypedJsonBindingNode compileNode(@NonNull Type type,
+			@NonNull McpTypedSchemaShape shape,
+			@NonNull McpTypedSchemaPath path) {
 		try {
 			if (shape instanceof McpTypedSchemaShape.Scalar scalar)
 				return compileScalar(type, scalar, path);
@@ -98,8 +113,10 @@ final class McpRuntimeTypedJsonBindingCompiler {
 				path);
 	}
 
-	private McpTypedJsonBindingNode compileScalar(Type type,
-			McpTypedSchemaShape.Scalar shape, McpTypedSchemaPath path) {
+	@NonNull
+	private McpTypedJsonBindingNode compileScalar(@NonNull Type type,
+			McpTypedSchemaShape.@NonNull Scalar shape,
+			@NonNull McpTypedSchemaPath path) {
 		Class<?> javaType = classType(type, path);
 		if (scalar(javaType) != shape.scalar())
 			throw failure(McpTypedJsonBindingException.Reason.SHAPE_MISMATCH,
@@ -109,8 +126,10 @@ final class McpRuntimeTypedJsonBindingCompiler {
 	}
 
 	@SuppressWarnings("unchecked")
-	private McpTypedJsonBindingNode compileEnumeration(Type type,
-			McpTypedSchemaShape.Enumeration shape, McpTypedSchemaPath path) {
+	@NonNull
+	private McpTypedJsonBindingNode compileEnumeration(@NonNull Type type,
+			McpTypedSchemaShape.@NonNull Enumeration shape,
+			@NonNull McpTypedSchemaPath path) {
 		Class<?> enumType = classType(type, path);
 		if (!enumType.isEnum())
 			throw failure(McpTypedJsonBindingException.Reason.SHAPE_MISMATCH,
@@ -124,8 +143,10 @@ final class McpRuntimeTypedJsonBindingCompiler {
 				new LinkedHashSet<>(shape.constants()));
 	}
 
-	private McpTypedJsonBindingNode compileArrayOrList(Type type,
-			McpTypedSchemaShape.ArrayValue shape, McpTypedSchemaPath path) {
+	@NonNull
+	private McpTypedJsonBindingNode compileArrayOrList(@NonNull Type type,
+			McpTypedSchemaShape.@NonNull ArrayValue shape,
+			@NonNull McpTypedSchemaPath path) {
 		if (type instanceof Class<?> typeClass && typeClass.isArray()) {
 			Type elementType = requireNonNull(typeClass.getComponentType());
 			return new McpTypedJsonBindingNode.ArrayValue(typeClass,
@@ -155,8 +176,10 @@ final class McpRuntimeTypedJsonBindingCompiler {
 				path);
 	}
 
-	private McpTypedJsonBindingNode compileMap(Type type,
-			McpTypedSchemaShape.MapValue shape, McpTypedSchemaPath path) {
+	@NonNull
+	private McpTypedJsonBindingNode compileMap(@NonNull Type type,
+			McpTypedSchemaShape.@NonNull MapValue shape,
+			@NonNull McpTypedSchemaPath path) {
 		if (!(type instanceof ParameterizedType parameterized)
 				|| parameterized.getRawType() != Map.class)
 			throw failure(McpTypedJsonBindingException.Reason.SHAPE_MISMATCH,
@@ -169,8 +192,10 @@ final class McpRuntimeTypedJsonBindingCompiler {
 				requireNonNull(arguments[1]), shape.valueShape(), path.mapValue()));
 	}
 
-	private McpTypedJsonBindingNode compileRecord(Type type,
-			McpTypedSchemaShape.RecordValue shape, McpTypedSchemaPath path) {
+	@NonNull
+	private McpTypedJsonBindingNode compileRecord(@NonNull Type type,
+			McpTypedSchemaShape.@NonNull RecordValue shape,
+			@NonNull McpTypedSchemaPath path) {
 		Class<?> recordType = rawClass(type, path);
 		if (!recordType.isRecord())
 			throw failure(McpTypedJsonBindingException.Reason.SHAPE_MISMATCH,
@@ -193,7 +218,19 @@ final class McpRuntimeTypedJsonBindingCompiler {
 			McpTypedSchemaShape.Property property =
 					shape.properties().get(index);
 			McpTypedSchemaPath propertyPath = path.property(property.name());
-			if (!component.getName().equals(property.name())
+			@Nullable McpToolArgument argument = component.getAnnotation(
+					McpToolArgument.class);
+			String configuredName = argument == null ? ""
+					: requireNonNull(argument.name());
+			String publishedName = configuredName.isBlank()
+					? component.getName() : configuredName;
+			Optional<String> title = argument == null ? Optional.empty()
+					: optionalMetadata(requireNonNull(argument.title()));
+			Optional<String> description = argument == null ? Optional.empty()
+					: optionalMetadata(requireNonNull(argument.description()));
+			if (!publishedName.equals(property.name())
+					|| !title.equals(property.title())
+					|| !description.equals(property.description())
 					|| !propertyNames.add(property.name()))
 				throw failure(
 						McpTypedJsonBindingException.Reason.SHAPE_MISMATCH,
@@ -234,8 +271,17 @@ final class McpRuntimeTypedJsonBindingCompiler {
 				properties, propertyNames);
 	}
 
-	private Map<TypeVariable<?>, Type> substitutions(Type type,
-			Class<?> rawType, McpTypedSchemaPath path) {
+	@NonNull
+	private Optional<@NonNull String> optionalMetadata(
+			@NonNull String value) {
+		requireNonNull(value);
+		return value.isBlank() ? Optional.empty() : Optional.of(value);
+	}
+
+	@NonNull
+	private Map<@NonNull TypeVariable<?>, @NonNull Type> substitutions(
+			@NonNull Type type, @NonNull Class<?> rawType,
+			@NonNull McpTypedSchemaPath path) {
 		TypeVariable<?>[] parameters = rawType.getTypeParameters();
 		if (parameters.length == 0)
 			return Map.of();
@@ -252,8 +298,9 @@ final class McpRuntimeTypedJsonBindingCompiler {
 		return substitutions;
 	}
 
-	private Optional<Type> optionalValueType(Type type,
-			McpTypedSchemaPath path) {
+	@NonNull
+	private Optional<@NonNull Type> optionalValueType(@NonNull Type type,
+			@NonNull McpTypedSchemaPath path) {
 		if (!(type instanceof ParameterizedType parameterized)
 				|| parameterized.getRawType() != Optional.class)
 			return Optional.empty();
@@ -263,8 +310,9 @@ final class McpRuntimeTypedJsonBindingCompiler {
 		return Optional.of(requireNonNull(arguments[0]));
 	}
 
-	private Type[] typeArguments(ParameterizedType type,
-			McpTypedSchemaPath path) {
+	private Type @NonNull [] typeArguments(
+			@NonNull ParameterizedType type,
+			@NonNull McpTypedSchemaPath path) {
 		Type[] arguments;
 		try {
 			arguments = requireNonNull(type.getActualTypeArguments()).clone();
@@ -281,7 +329,9 @@ final class McpRuntimeTypedJsonBindingCompiler {
 		return arguments;
 	}
 
-	private Class<?> rawClass(Type type, McpTypedSchemaPath path) {
+	@NonNull
+	private Class<?> rawClass(@NonNull Type type,
+			@NonNull McpTypedSchemaPath path) {
 		if (type instanceof Class<?> typeClass)
 			return typeClass;
 		if (type instanceof ParameterizedType parameterized
@@ -291,14 +341,18 @@ final class McpRuntimeTypedJsonBindingCompiler {
 				path);
 	}
 
-	private Class<?> classType(Type type, McpTypedSchemaPath path) {
+	@NonNull
+	private Class<?> classType(@NonNull Type type,
+			@NonNull McpTypedSchemaPath path) {
 		if (type instanceof Class<?> typeClass)
 			return typeClass;
 		throw failure(McpTypedJsonBindingException.Reason.SHAPE_MISMATCH,
 				path);
 	}
 
-	private Class<?> erasedClass(Type type, McpTypedSchemaPath path) {
+	@NonNull
+	private Class<?> erasedClass(@NonNull Type type,
+			@NonNull McpTypedSchemaPath path) {
 		if (type instanceof Class<?> typeClass)
 			return typeClass;
 		if (type instanceof ParameterizedType parameterized
@@ -312,8 +366,8 @@ final class McpRuntimeTypedJsonBindingCompiler {
 				path);
 	}
 
-	private void makeAccessible(Constructor<?> constructor,
-			McpTypedSchemaPath path) {
+	private void makeAccessible(@NonNull Constructor<?> constructor,
+			@NonNull McpTypedSchemaPath path) {
 		try {
 			if (!constructor.trySetAccessible())
 				throw failure(
@@ -327,7 +381,8 @@ final class McpRuntimeTypedJsonBindingCompiler {
 		}
 	}
 
-	private void makeAccessible(Method method, McpTypedSchemaPath path) {
+	private void makeAccessible(@NonNull Method method,
+			@NonNull McpTypedSchemaPath path) {
 		try {
 			if (!method.trySetAccessible())
 				throw failure(
@@ -341,7 +396,7 @@ final class McpRuntimeTypedJsonBindingCompiler {
 		}
 	}
 
-	private @Nullable McpTypedSchemaScalar scalar(Class<?> type) {
+	private @Nullable McpTypedSchemaScalar scalar(@NonNull Class<?> type) {
 		if (type == boolean.class || type == Boolean.class)
 			return McpTypedSchemaScalar.BOOLEAN;
 		if (type == byte.class || type == Byte.class)
@@ -365,7 +420,8 @@ final class McpRuntimeTypedJsonBindingCompiler {
 		return null;
 	}
 
-	private Class<?> boxed(Class<?> type) {
+	@NonNull
+	private Class<?> boxed(@NonNull Class<?> type) {
 		if (type == boolean.class)
 			return Boolean.class;
 		if (type == byte.class)
@@ -383,34 +439,40 @@ final class McpRuntimeTypedJsonBindingCompiler {
 		return type;
 	}
 
+	@NonNull
 	private McpTypedJsonBindingException failure(
-			McpTypedJsonBindingException.Reason reason,
-			McpTypedSchemaPath path) {
+			McpTypedJsonBindingException.@NonNull Reason reason,
+			@NonNull McpTypedSchemaPath path) {
 		return new McpTypedJsonBindingException(
 				McpTypedJsonBindingException.Operation.COMPILE, reason, path);
 	}
 
+	@NonNull
 	private McpTypedJsonBindingException failure(
-			McpTypedJsonBindingException.Limit limit,
-			McpTypedSchemaPath path) {
+			McpTypedJsonBindingException.@NonNull Limit limit,
+			@NonNull McpTypedSchemaPath path) {
 		return new McpTypedJsonBindingException(
 				McpTypedJsonBindingException.Operation.COMPILE, limit, path);
 	}
 
+	@NotThreadSafe
 	private final class TypeSubstitution {
-		private final Set<Type> activeTypes = Collections.newSetFromMap(
+		@NonNull
+		private final Set<@NonNull Type> activeTypes = Collections.newSetFromMap(
 				new IdentityHashMap<>());
 		private int visitedNodeCount;
 
-		private Type substitute(Type type,
-				Map<TypeVariable<?>, Type> substitutions,
-				McpTypedSchemaPath path) {
+		@NonNull
+		private Type substitute(@NonNull Type type,
+				@NonNull Map<@NonNull TypeVariable<?>, @NonNull Type> substitutions,
+				@NonNull McpTypedSchemaPath path) {
 			return substitute(type, substitutions, path, 1);
 		}
 
-		private Type substitute(Type type,
-				Map<TypeVariable<?>, Type> substitutions,
-				McpTypedSchemaPath path, int depth) {
+		@NonNull
+		private Type substitute(@NonNull Type type,
+				@NonNull Map<@NonNull TypeVariable<?>, @NonNull Type> substitutions,
+				@NonNull McpTypedSchemaPath path, int depth) {
 			enter(type, path, depth);
 			try {
 				if (type instanceof TypeVariable<?> variable)
@@ -437,7 +499,8 @@ final class McpRuntimeTypedJsonBindingCompiler {
 			}
 		}
 
-		private void enter(Type type, McpTypedSchemaPath path, int depth) {
+		private void enter(@NonNull Type type,
+				@NonNull McpTypedSchemaPath path, int depth) {
 			requireNonNull(type);
 			if (depth > limits.maximumSchemaDepth())
 				throw failure(McpTypedJsonBindingException.Limit.NESTING_DEPTH,
@@ -452,21 +515,22 @@ final class McpRuntimeTypedJsonBindingCompiler {
 		}
 	}
 
-	private record ResolvedGenericArrayType(Type genericComponentType)
+	private record ResolvedGenericArrayType(@NonNull Type genericComponentType)
 			implements GenericArrayType {
 		private ResolvedGenericArrayType {
 			requireNonNull(genericComponentType);
 		}
 
 		@Override
+		@NonNull
 		public Type getGenericComponentType() {
 			return genericComponentType;
 		}
 	}
 
-	private record ResolvedParameterizedType(Type rawType,
+	private record ResolvedParameterizedType(@NonNull Type rawType,
 			@Nullable Type ownerType,
-			List<Type> arguments) implements ParameterizedType {
+			@NonNull List<@NonNull Type> arguments) implements ParameterizedType {
 		private ResolvedParameterizedType {
 			requireNonNull(rawType);
 			arguments = List.copyOf(requireNonNull(arguments));
@@ -475,11 +539,12 @@ final class McpRuntimeTypedJsonBindingCompiler {
 		}
 
 		@Override
-		public Type[] getActualTypeArguments() {
+		public Type @NonNull [] getActualTypeArguments() {
 			return arguments.toArray(Type[]::new);
 		}
 
 		@Override
+		@NonNull
 		public Type getRawType() {
 			return rawType;
 		}

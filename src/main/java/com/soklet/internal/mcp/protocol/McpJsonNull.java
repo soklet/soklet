@@ -16,6 +16,12 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import javax.annotation.concurrent.ThreadSafe;
+
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 public enum McpJsonNull implements McpJsonValue {
 	INSTANCE
 }

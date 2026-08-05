@@ -21,5 +21,7 @@
  * <p>This package deliberately implements a closed, single-document subset of
  * JSON Schema Draft 2020-12 for MCP tool input and output schemas. It is not a
  * general-purpose JSON Schema engine.</p>
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 package com.soklet.internal.mcp.schema;

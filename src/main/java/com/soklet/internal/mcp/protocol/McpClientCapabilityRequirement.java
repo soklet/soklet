@@ -16,6 +16,9 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -23,9 +26,17 @@ import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
 
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 sealed interface McpClientCapabilityRequirement permits McpCoreClientCapability {
 }
 
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 enum McpCoreClientCapability implements McpClientCapabilityRequirement {
 	ELICITATION_FORM,
 	ELICITATION_URL,
@@ -35,15 +46,24 @@ enum McpCoreClientCapability implements McpClientCapabilityRequirement {
 	ROOTS
 }
 
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 enum McpInputRequirement {
 	REQUIRED,
 	CONDITIONAL
 }
 
-record McpInputRequestDeclaration(String method,
-		Set<McpClientCapabilityRequirement> capabilities,
-		McpInputRequirement requirement) {
-	private static final Set<String> CORE_METHODS =
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpInputRequestDeclaration(@NonNull String method,
+		@NonNull Set<@NonNull McpClientCapabilityRequirement> capabilities,
+		@NonNull McpInputRequirement requirement) {
+	@NonNull
+	private static final Set<@NonNull String> CORE_METHODS =
 			Set.of("elicitation/create", "sampling/createMessage", "roots/list");
 
 	McpInputRequestDeclaration {
@@ -90,19 +110,24 @@ record McpInputRequestDeclaration(String method,
 					"Roots declarations require exactly the ROOTS capability.");
 	}
 
-	static McpInputRequestDeclaration elicitationForm(McpInputRequirement requirement) {
+	@NonNull
+	static McpInputRequestDeclaration elicitationForm(
+			@NonNull McpInputRequirement requirement) {
 		return new McpInputRequestDeclaration("elicitation/create",
 				Set.of(McpCoreClientCapability.ELICITATION_FORM), requirement);
 	}
 
-	static McpInputRequestDeclaration elicitationUrl(McpInputRequirement requirement) {
+	@NonNull
+	static McpInputRequestDeclaration elicitationUrl(
+			@NonNull McpInputRequirement requirement) {
 		return new McpInputRequestDeclaration("elicitation/create",
 				Set.of(McpCoreClientCapability.ELICITATION_URL), requirement);
 	}
 
+	@NonNull
 	static McpInputRequestDeclaration sampling(
-			Set<McpCoreClientCapability> optionalCapabilities,
-			McpInputRequirement requirement) {
+			@NonNull Set<@NonNull McpCoreClientCapability> optionalCapabilities,
+			@NonNull McpInputRequirement requirement) {
 		requireNonNull(optionalCapabilities);
 		Set<McpClientCapabilityRequirement> capabilities = new LinkedHashSet<>();
 		capabilities.add(McpCoreClientCapability.SAMPLING);
@@ -111,14 +136,20 @@ record McpInputRequestDeclaration(String method,
 				"sampling/createMessage", capabilities, requirement);
 	}
 
-	static McpInputRequestDeclaration roots(McpInputRequirement requirement) {
+	@NonNull
+	static McpInputRequestDeclaration roots(@NonNull McpInputRequirement requirement) {
 		return new McpInputRequestDeclaration("roots/list",
 				Set.of(McpCoreClientCapability.ROOTS), requirement);
 	}
 
 }
 
-record McpInputRequestPlan(List<McpInputRequestDeclaration> declarations) {
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpInputRequestPlan(
+		@NonNull List<@NonNull McpInputRequestDeclaration> declarations) {
 	McpInputRequestPlan {
 		declarations = List.copyOf(requireNonNull(declarations));
 
@@ -126,12 +157,14 @@ record McpInputRequestPlan(List<McpInputRequestDeclaration> declarations) {
 			requireNonNull(declaration);
 	}
 
+	@NonNull
 	static McpInputRequestPlan empty() {
 		return new McpInputRequestPlan(List.of());
 	}
 
-	Set<McpClientCapabilityRequirement> missingAtAdmission(
-			McpClientCapabilities clientCapabilities) {
+	@NonNull
+	Set<@NonNull McpClientCapabilityRequirement> missingAtAdmission(
+			@NonNull McpClientCapabilities clientCapabilities) {
 		requireNonNull(clientCapabilities);
 		Set<McpClientCapabilityRequirement> missingCapabilities = new LinkedHashSet<>();
 
@@ -143,7 +176,8 @@ record McpInputRequestPlan(List<McpInputRequestDeclaration> declarations) {
 		return Collections.unmodifiableSet(missingCapabilities);
 	}
 
-	boolean requiresUncommittedResponse(McpClientCapabilities clientCapabilities) {
+	boolean requiresUncommittedResponse(
+			@NonNull McpClientCapabilities clientCapabilities) {
 		requireNonNull(clientCapabilities);
 
 		for (McpInputRequestDeclaration declaration : declarations) {
@@ -155,9 +189,10 @@ record McpInputRequestPlan(List<McpInputRequestDeclaration> declarations) {
 		return false;
 	}
 
-	Set<McpClientCapabilityRequirement> missingForEmission(
-			McpInputRequestDeclaration declaration,
-			McpClientCapabilities clientCapabilities) {
+	@NonNull
+	Set<@NonNull McpClientCapabilityRequirement> missingForEmission(
+			@NonNull McpInputRequestDeclaration declaration,
+			@NonNull McpClientCapabilities clientCapabilities) {
 		requireNonNull(declaration);
 		requireNonNull(clientCapabilities);
 
@@ -170,9 +205,9 @@ record McpInputRequestPlan(List<McpInputRequestDeclaration> declarations) {
 		return Collections.unmodifiableSet(missingCapabilities);
 	}
 
-	private static void addMissing(McpInputRequestDeclaration declaration,
-			McpClientCapabilities clientCapabilities,
-			Set<McpClientCapabilityRequirement> missingCapabilities) {
+	private static void addMissing(@NonNull McpInputRequestDeclaration declaration,
+			@NonNull McpClientCapabilities clientCapabilities,
+			@NonNull Set<@NonNull McpClientCapabilityRequirement> missingCapabilities) {
 		for (McpClientCapabilityRequirement capability : declaration.capabilities()) {
 			if (!clientCapabilities.supports(capability))
 				missingCapabilities.add(capability);
@@ -183,13 +218,16 @@ record McpInputRequestPlan(List<McpInputRequestDeclaration> declarations) {
 /**
  * Phase 1 contract for the prior-ID evidence stored in framework-protected
  * request state. Phase 5 adds the authenticated envelope and context binding.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-record McpRetryIdentity(McpJsonRpcId originatingRequestId) {
+@ThreadSafe
+record McpRetryIdentity(@NonNull McpJsonRpcId originatingRequestId) {
 	McpRetryIdentity {
 		requireNonNull(originatingRequestId);
 	}
 
-	void requireFreshRequestId(McpJsonRpcId retryRequestId) {
+	void requireFreshRequestId(@NonNull McpJsonRpcId retryRequestId) {
 		requireNonNull(retryRequestId);
 
 		if (originatingRequestId.equals(retryRequestId))

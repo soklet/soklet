@@ -16,6 +16,9 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
 import java.math.BigInteger;
 import java.net.URI;
 import java.util.ArrayList;
@@ -30,27 +33,36 @@ import static java.util.Objects.requireNonNull;
 /**
  * Maps the universal MCP request spine after JSON-RPC classification. Method-
  * specific parameter validation deliberately remains in operation mappers.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 final class McpRequestWireMapper {
-	private static final Set<String> REQUEST_METADATA_FIELDS = Set.of(
+	@NonNull
+	private static final Set<@NonNull String> REQUEST_METADATA_FIELDS = Set.of(
 			McpRequestMetadata.PROTOCOL_VERSION_KEY,
 			McpRequestMetadata.CLIENT_CAPABILITIES_KEY,
 			McpRequestMetadata.CLIENT_INFORMATION_KEY,
 			McpRequestMetadata.LOG_LEVEL_KEY,
 			McpRequestMetadata.PROGRESS_TOKEN_KEY);
-	private static final Set<String> CLIENT_CAPABILITY_FIELDS = Set.of(
+	@NonNull
+	private static final Set<@NonNull String> CLIENT_CAPABILITY_FIELDS = Set.of(
 			"elicitation", "roots", "sampling", "extensions", "experimental");
-	private static final Set<String> IMPLEMENTATION_FIELDS = Set.of(
+	@NonNull
+	private static final Set<@NonNull String> IMPLEMENTATION_FIELDS = Set.of(
 			"name", "version", "title", "description", "websiteUrl", "icons");
-	private static final Set<String> ICON_FIELDS = Set.of(
+	@NonNull
+	private static final Set<@NonNull String> ICON_FIELDS = Set.of(
 			"src", "mimeType", "sizes", "theme");
+	@NonNull
 	private final McpJsonLimits jsonLimits;
 
-	McpRequestWireMapper(McpJsonLimits jsonLimits) {
+	McpRequestWireMapper(@NonNull McpJsonLimits jsonLimits) {
 		this.jsonLimits = requireNonNull(jsonLimits);
 	}
 
-	McpJsonRpcMessage.Request map(McpJsonRpcEnvelope.Request request) {
+	McpJsonRpcMessage.@NonNull Request map(
+			McpJsonRpcEnvelope.@NonNull Request request) {
 		requireNonNull(request);
 		McpJsonRpcId requestId = request.id();
 
@@ -72,7 +84,8 @@ final class McpRequestWireMapper {
 		}
 	}
 
-	private McpRequestMetadata parseMetadata(McpJsonObject metadataObject) {
+	@NonNull
+	private McpRequestMetadata parseMetadata(@NonNull McpJsonObject metadataObject) {
 		Map<String, McpJsonValue> members = metadataObject.members();
 		String protocolVersion = requireString(requiredField(
 				members, McpRequestMetadata.PROTOCOL_VERSION_KEY),
@@ -103,7 +116,8 @@ final class McpRequestWireMapper {
 		}
 	}
 
-	private McpClientCapabilities parseClientCapabilities(McpJsonObject object) {
+	@NonNull
+	private McpClientCapabilities parseClientCapabilities(@NonNull McpJsonObject object) {
 		Map<String, McpJsonValue> members = object.members();
 		Optional<McpJsonObject> elicitation = optionalObject(members, "elicitation",
 				"Elicitation capability");
@@ -127,7 +141,8 @@ final class McpRequestWireMapper {
 		}
 	}
 
-	private McpImplementationMetadata parseImplementation(McpJsonObject object) {
+	@NonNull
+	private McpImplementationMetadata parseImplementation(@NonNull McpJsonObject object) {
 		Map<String, McpJsonValue> members = object.members();
 		String name = requireString(requiredField(members, "name"),
 				"Implementation name");
@@ -146,7 +161,9 @@ final class McpRequestWireMapper {
 				websiteUrl, icons, fieldsExcept(object, IMPLEMENTATION_FIELDS));
 	}
 
-	private List<McpImplementationMetadata.Icon> parseIcons(McpJsonArray array) {
+	@NonNull
+	private List<McpImplementationMetadata.@NonNull Icon> parseIcons(
+			@NonNull McpJsonArray array) {
 		List<McpImplementationMetadata.Icon> icons = new ArrayList<>(array.values().size());
 
 		for (McpJsonValue value : array.values()) {
@@ -167,7 +184,9 @@ final class McpRequestWireMapper {
 		return List.copyOf(icons);
 	}
 
-	private List<String> parseStringArray(McpJsonArray array, String description) {
+	@NonNull
+	private List<@NonNull String> parseStringArray(@NonNull McpJsonArray array,
+			@NonNull String description) {
 		List<String> strings = new ArrayList<>(array.values().size());
 
 		for (McpJsonValue value : array.values())
@@ -176,7 +195,8 @@ final class McpRequestWireMapper {
 		return List.copyOf(strings);
 	}
 
-	private McpRequestLogLevel parseLogLevel(String wireValue) {
+	@NonNull
+	private McpRequestLogLevel parseLogLevel(@NonNull String wireValue) {
 		for (McpRequestLogLevel level : McpRequestLogLevel.values()) {
 			if (level.wireValue().equals(wireValue))
 				return level;
@@ -185,7 +205,8 @@ final class McpRequestWireMapper {
 		throw new IllegalArgumentException("Deprecated log level is invalid.");
 	}
 
-	private McpImplementationMetadata.Theme parseTheme(String wireValue) {
+	private McpImplementationMetadata.@NonNull Theme parseTheme(
+			@NonNull String wireValue) {
 		return switch (wireValue) {
 			case "light" -> McpImplementationMetadata.Theme.LIGHT;
 			case "dark" -> McpImplementationMetadata.Theme.DARK;
@@ -193,7 +214,8 @@ final class McpRequestWireMapper {
 		};
 	}
 
-	private McpProgressToken parseProgressToken(McpJsonValue value) {
+	@NonNull
+	private McpProgressToken parseProgressToken(@NonNull McpJsonValue value) {
 		if (value instanceof McpJsonString string)
 			return new McpProgressToken.StringToken(string.value());
 
@@ -210,18 +232,23 @@ final class McpRequestWireMapper {
 		throw new IllegalArgumentException("Progress token must be a string or integer.");
 	}
 
-	private URI parseAbsoluteUri(String value, String description) {
+	@NonNull
+	private URI parseAbsoluteUri(@NonNull String value,
+			@NonNull String description) {
 		return McpProtocolSupport.requireAbsoluteUri(URI.create(value), description);
 	}
 
-	private Optional<McpJsonObject> optionalObject(Map<String, McpJsonValue> members,
-			String fieldName, String description) {
+	@NonNull
+	private Optional<@NonNull McpJsonObject> optionalObject(
+			@NonNull Map<@NonNull String, @NonNull McpJsonValue> members,
+			@NonNull String fieldName, @NonNull String description) {
 		return optionalField(members, fieldName)
 				.map(value -> requireObject(value, description));
 	}
 
-	private Map<String, McpJsonObject> objectValues(McpJsonObject object,
-			String description) {
+	@NonNull
+	private Map<@NonNull String, @NonNull McpJsonObject> objectValues(
+			@NonNull McpJsonObject object, @NonNull String description) {
 		Map<String, McpJsonObject> objects = new LinkedHashMap<>(object.members().size());
 
 		for (Map.Entry<String, McpJsonValue> entry : object.members().entrySet())
@@ -230,56 +257,73 @@ final class McpRequestWireMapper {
 		return objects;
 	}
 
-	private Optional<String> optionalString(Map<String, McpJsonValue> members,
-			String fieldName, String description) {
+	@NonNull
+	private Optional<@NonNull String> optionalString(
+			@NonNull Map<@NonNull String, @NonNull McpJsonValue> members,
+			@NonNull String fieldName, @NonNull String description) {
 		return optionalField(members, fieldName)
 				.map(value -> requireString(value, description));
 	}
 
-	private Optional<McpJsonValue> optionalField(
-			Map<String, McpJsonValue> members, String fieldName) {
+	@NonNull
+	private Optional<@NonNull McpJsonValue> optionalField(
+			@NonNull Map<@NonNull String, @NonNull McpJsonValue> members,
+			@NonNull String fieldName) {
 		return members.containsKey(fieldName)
 				? Optional.of(members.get(fieldName))
 				: Optional.empty();
 	}
 
-	private McpJsonValue requiredField(Map<String, McpJsonValue> members, String fieldName) {
+	@NonNull
+	private McpJsonValue requiredField(
+			@NonNull Map<@NonNull String, @NonNull McpJsonValue> members,
+			@NonNull String fieldName) {
 		if (!members.containsKey(fieldName))
 			throw new IllegalArgumentException("A required request field is absent.");
 
 		return members.get(fieldName);
 	}
 
-	private McpJsonObject requireObject(Optional<McpJsonValue> optionalValue,
-			String description) {
+	@NonNull
+	private McpJsonObject requireObject(
+			@NonNull Optional<@NonNull McpJsonValue> optionalValue,
+			@NonNull String description) {
 		if (optionalValue.isEmpty())
 			throw new IllegalArgumentException(description + " is required.");
 
 		return requireObject(optionalValue.orElseThrow(), description);
 	}
 
-	private McpJsonObject requireObject(McpJsonValue value, String description) {
+	@NonNull
+	private McpJsonObject requireObject(@NonNull McpJsonValue value,
+			@NonNull String description) {
 		if (!(value instanceof McpJsonObject object))
 			throw new IllegalArgumentException(description + " must be an object.");
 
 		return object;
 	}
 
-	private McpJsonArray requireArray(McpJsonValue value, String description) {
+	@NonNull
+	private McpJsonArray requireArray(@NonNull McpJsonValue value,
+			@NonNull String description) {
 		if (!(value instanceof McpJsonArray array))
 			throw new IllegalArgumentException(description + " must be an array.");
 
 		return array;
 	}
 
-	private String requireString(McpJsonValue value, String description) {
+	@NonNull
+	private String requireString(@NonNull McpJsonValue value,
+			@NonNull String description) {
 		if (!(value instanceof McpJsonString string))
 			throw new IllegalArgumentException(description + " must be a string.");
 
 		return string.value();
 	}
 
-	private McpJsonObject fieldsExcept(McpJsonObject object, Set<String> excludedFields) {
+	@NonNull
+	private McpJsonObject fieldsExcept(@NonNull McpJsonObject object,
+			@NonNull Set<@NonNull String> excludedFields) {
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
 
 		for (Map.Entry<String, McpJsonValue> entry : object.members().entrySet()) {
@@ -290,8 +334,9 @@ final class McpRequestWireMapper {
 		return new McpJsonObject(fields);
 	}
 
+	@NonNull
 	private McpWireDecodingException invalidParams(
-			McpJsonRpcId requestId, String message) {
+			@NonNull McpJsonRpcId requestId, @NonNull String message) {
 		return McpWireDecodingException.invalidParams(message, requestId);
 	}
 }

@@ -18,7 +18,9 @@ package com.soklet.internal.mcp.schema;
 
 import com.soklet.internal.mcp.protocol.McpJsonBoolean;
 import com.soklet.internal.mcp.protocol.McpJsonValue;
+import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.math.BigDecimal;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -32,23 +34,29 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Immutable executable form of one Soklet MCP Tool Schema Profile 1 node.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-record McpToolSchemaProfileNode(McpSchemaNodeId id,
-		McpSchemaLocation location, Optional<McpJsonBoolean> booleanSchema,
-		Set<McpSchemaType> acceptedTypes, Optional<McpSchemaType> directType,
-		Optional<McpJsonValue> constant,
-		Optional<List<McpJsonValue>> enumeration,
-		Map<String, McpSchemaNodeId> propertySchemas,
-		List<String> requiredProperties,
-		Optional<McpSchemaNodeId> additionalPropertiesSchema,
-		Optional<McpSchemaNodeId> itemSchema,
-		List<McpSchemaNodeId> allOfSchemas,
-		List<McpSchemaNodeId> anyOfSchemas,
-		Optional<McpSchemaNodeId> ifSchema,
-		Optional<McpSchemaNodeId> thenSchema,
-		Optional<McpSchemaNodeId> elseSchema,
-		Optional<BigDecimal> minimum, Optional<BigDecimal> maximum,
-		Optional<McpSchemaNodeId> referenceTarget) {
+@ThreadSafe
+record McpToolSchemaProfileNode(@NonNull McpSchemaNodeId id,
+		@NonNull McpSchemaLocation location,
+		@NonNull Optional<@NonNull McpJsonBoolean> booleanSchema,
+		@NonNull Set<@NonNull McpSchemaType> acceptedTypes,
+		@NonNull Optional<@NonNull McpSchemaType> directType,
+		@NonNull Optional<@NonNull McpJsonValue> constant,
+		@NonNull Optional<@NonNull List<@NonNull McpJsonValue>> enumeration,
+		@NonNull Map<@NonNull String, @NonNull McpSchemaNodeId> propertySchemas,
+		@NonNull List<@NonNull String> requiredProperties,
+		@NonNull Optional<@NonNull McpSchemaNodeId> additionalPropertiesSchema,
+		@NonNull Optional<@NonNull McpSchemaNodeId> itemSchema,
+		@NonNull List<@NonNull McpSchemaNodeId> allOfSchemas,
+		@NonNull List<@NonNull McpSchemaNodeId> anyOfSchemas,
+		@NonNull Optional<@NonNull McpSchemaNodeId> ifSchema,
+		@NonNull Optional<@NonNull McpSchemaNodeId> thenSchema,
+		@NonNull Optional<@NonNull McpSchemaNodeId> elseSchema,
+		@NonNull Optional<@NonNull BigDecimal> minimum,
+		@NonNull Optional<@NonNull BigDecimal> maximum,
+		@NonNull Optional<@NonNull McpSchemaNodeId> referenceTarget) {
 	McpToolSchemaProfileNode {
 		requireNonNull(id);
 		requireNonNull(location);

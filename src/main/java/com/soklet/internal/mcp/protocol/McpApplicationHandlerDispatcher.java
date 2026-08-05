@@ -16,8 +16,10 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
@@ -31,7 +33,10 @@ import static java.util.Objects.requireNonNull;
  * Owns the application-handler concurrency slots independently of the HTTP
  * request-processing pool. A dispatched ticket retains its slot until its
  * work actually exits, including when interruption has been requested.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 final class McpApplicationHandlerDispatcher {
 	enum Admission {
 		DISPATCHED,
@@ -60,21 +65,28 @@ final class McpApplicationHandlerDispatcher {
 			int maximumObservedQueueDepth, boolean accepting) {
 	}
 
+	@ThreadSafe
 	final class Ticket {
+		@NonNull
 		private final Work work;
-		private final Consumer<Throwable> failureObserver;
+		@NonNull
+		private final Consumer<@NonNull Throwable> failureObserver;
+		@NonNull
 		private final Object interruptLock;
 		private volatile @Nullable Thread handlerThread;
 		private boolean interruptRequested;
+		@NonNull
 		private volatile TicketState state;
 
-		private Ticket(Work work, Consumer<Throwable> failureObserver) {
+		private Ticket(@NonNull Work work,
+				@NonNull Consumer<@NonNull Throwable> failureObserver) {
 			this.work = requireNonNull(work);
 			this.failureObserver = requireNonNull(failureObserver);
 			this.interruptLock = new Object();
 			this.state = TicketState.NEW;
 		}
 
+		@NonNull
 		TicketState state() {
 			return state;
 		}
@@ -93,26 +105,31 @@ final class McpApplicationHandlerDispatcher {
 			}
 		}
 
+		@NonNull
 		private McpApplicationHandlerDispatcher owner() {
 			return McpApplicationHandlerDispatcher.this;
 		}
 	}
 
-	private record SubmissionFailure(Ticket ticket, RuntimeException exception) {
+	private record SubmissionFailure(@NonNull Ticket ticket,
+			@NonNull RuntimeException exception) {
 	}
 
+	@NonNull
 	private final Object lock;
 	private final int concurrency;
 	private final int queueCapacity;
+	@NonNull
 	private final ExecutorService executorService;
-	private final Queue<Ticket> queue;
+	@NonNull
+	private final Queue<@NonNull Ticket> queue;
 	private int activeSlots;
 	private int maximumObservedActiveSlots;
 	private int maximumObservedQueueDepth;
 	private boolean accepting;
 
 	McpApplicationHandlerDispatcher(int concurrency, int queueCapacity,
-			ExecutorService executorService) {
+			@NonNull ExecutorService executorService) {
 		if (concurrency < 1)
 			throw new IllegalArgumentException("Handler concurrency must be positive.");
 
@@ -127,11 +144,14 @@ final class McpApplicationHandlerDispatcher {
 		this.accepting = true;
 	}
 
-	Ticket newTicket(Work work, Consumer<Throwable> failureObserver) {
+	@NonNull
+	Ticket newTicket(@NonNull Work work,
+			@NonNull Consumer<@NonNull Throwable> failureObserver) {
 		return new Ticket(requireNonNull(work), requireNonNull(failureObserver));
 	}
 
-	Admission admit(Ticket ticket) {
+	@NonNull
+	Admission admit(@NonNull Ticket ticket) {
 		requireOwnedTicket(ticket);
 		boolean dispatch = false;
 		Admission admission;
@@ -171,7 +191,7 @@ final class McpApplicationHandlerDispatcher {
 		return admission;
 	}
 
-	boolean cancelBeforeDispatch(Ticket ticket) {
+	boolean cancelBeforeDispatch(@NonNull Ticket ticket) {
 		requireOwnedTicket(ticket);
 
 		synchronized (lock) {
@@ -191,7 +211,8 @@ final class McpApplicationHandlerDispatcher {
 		}
 	}
 
-	List<Ticket> stopAccepting() {
+	@NonNull
+	List<@NonNull Ticket> stopAccepting() {
 		List<Ticket> canceledTickets;
 
 		synchronized (lock) {
@@ -209,6 +230,7 @@ final class McpApplicationHandlerDispatcher {
 		return List.copyOf(canceledTickets);
 	}
 
+	@NonNull
 	Snapshot snapshot() {
 		synchronized (lock) {
 			return new Snapshot(
@@ -222,7 +244,7 @@ final class McpApplicationHandlerDispatcher {
 		}
 	}
 
-	private void dispatch(Ticket ticket) {
+	private void dispatch(@NonNull Ticket ticket) {
 		List<SubmissionFailure> submissionFailures = new ArrayList<>();
 		Ticket ticketToSubmit = ticket;
 
@@ -242,7 +264,7 @@ final class McpApplicationHandlerDispatcher {
 			notifyFailure(submissionFailure.ticket(), submissionFailure.exception());
 	}
 
-	private void run(Ticket ticket) {
+	private void run(@NonNull Ticket ticket) {
 		Thread.interrupted();
 
 		synchronized (ticket.interruptLock) {
@@ -269,7 +291,7 @@ final class McpApplicationHandlerDispatcher {
 		}
 	}
 
-	private void onHandlerExited(Ticket ticket) {
+	private void onHandlerExited(@NonNull Ticket ticket) {
 		Ticket next;
 
 		synchronized (lock) {
@@ -286,7 +308,7 @@ final class McpApplicationHandlerDispatcher {
 			dispatch(next);
 	}
 
-	private @Nullable Ticket onSubmissionFailure(Ticket ticket) {
+	private @Nullable Ticket onSubmissionFailure(@NonNull Ticket ticket) {
 		synchronized (lock) {
 			if (ticket.state != TicketState.DISPATCHED)
 				throw new IllegalStateException(
@@ -309,7 +331,7 @@ final class McpApplicationHandlerDispatcher {
 		return next;
 	}
 
-	private void notifyFailure(Ticket ticket, Throwable throwable) {
+	private void notifyFailure(@NonNull Ticket ticket, @NonNull Throwable throwable) {
 		try {
 			ticket.failureObserver.accept(throwable);
 		} catch (Throwable ignored) {
@@ -317,7 +339,8 @@ final class McpApplicationHandlerDispatcher {
 		}
 	}
 
-	private Ticket requireOwnedTicket(Ticket ticket) {
+	@NonNull
+	private Ticket requireOwnedTicket(@NonNull Ticket ticket) {
 		requireNonNull(ticket);
 
 		if (ticket.owner() != this)

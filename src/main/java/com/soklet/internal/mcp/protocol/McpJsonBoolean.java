@@ -16,10 +16,19 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
+
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 public enum McpJsonBoolean implements McpJsonValue {
 	TRUE,
 	FALSE;
 
+	@NonNull
 	public static McpJsonBoolean fromBoolean(boolean value) {
 		return value ? TRUE : FALSE;
 	}

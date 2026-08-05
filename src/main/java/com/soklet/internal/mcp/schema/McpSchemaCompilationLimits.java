@@ -16,13 +16,20 @@
 
 package com.soklet.internal.mcp.schema;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
+
 /**
  * Explicit bounds for compiling one Profile 1 schema document.
  *
  * <p>The production and maximum-supported profiles are fixed from the pinned
  * corpus, adversarial cases, and cross-JDK evidence. A stricter internal
  * profile remains useful for exact-boundary tests.</p>
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 record McpSchemaCompilationLimits(int maximumSchemaNodeCount,
 		int maximumSchemaDepth, int maximumKeywordCount,
 		int maximumAnchorCount, int maximumReferenceCount,
@@ -42,9 +49,11 @@ record McpSchemaCompilationLimits(int maximumSchemaNodeCount,
 	private static final int MAXIMUM_SUPPORTED_COLLECTION_ENTRY_COUNT = 65_536;
 	private static final int MAXIMUM_SUPPORTED_NAME_LENGTH = 16_384;
 	private static final int MAXIMUM_SUPPORTED_POINTER_SEGMENT_LENGTH = 16_384;
+	@NonNull
 	private static final McpSchemaCompilationLimits PRODUCTION_DEFAULTS =
 			new McpSchemaCompilationLimits(4_096, 64, 32_768, 1_024,
 					4_096, 256, 4_096, 128, 4_096, 1_024, 1_024);
+	@NonNull
 	private static final McpSchemaCompilationLimits MAXIMUM_SUPPORTED =
 			new McpSchemaCompilationLimits(MAXIMUM_SUPPORTED_SCHEMA_NODE_COUNT,
 					MAXIMUM_SUPPORTED_SCHEMA_DEPTH,
@@ -112,20 +121,23 @@ record McpSchemaCompilationLimits(int maximumSchemaNodeCount,
 				"maximumPointerSegmentLengthInCharacters");
 	}
 
+	@NonNull
 	static McpSchemaCompilationLimits productionDefaults() {
 		return PRODUCTION_DEFAULTS;
 	}
 
+	@NonNull
 	static McpSchemaCompilationLimits maximumSupported() {
 		return MAXIMUM_SUPPORTED;
 	}
 
-	private static void requirePositive(int value, String name) {
+	private static void requirePositive(int value, @NonNull String name) {
 		if (value <= 0)
 			throw new IllegalArgumentException(name + " must be positive.");
 	}
 
-	private static void requireAtMost(int value, int maximum, String name) {
+	private static void requireAtMost(int value, int maximum,
+			@NonNull String name) {
 		if (value > maximum)
 			throw new IllegalArgumentException(name + " must not exceed "
 					+ maximum + ".");

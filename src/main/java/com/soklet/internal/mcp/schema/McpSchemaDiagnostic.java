@@ -16,6 +16,9 @@
 
 package com.soklet.internal.mcp.schema;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.List;
 import java.util.Optional;
 
@@ -23,10 +26,16 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Bounded validation diagnostic that never includes an instance value.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-record McpSchemaDiagnostic(Code code, McpSchemaLocation schemaLocation,
-		Optional<String> keyword, Optional<String> missingPropertyName,
-		List<String> instancePointerSegments, String message) {
+@ThreadSafe
+record McpSchemaDiagnostic(@NonNull Code code,
+		@NonNull McpSchemaLocation schemaLocation,
+		@NonNull Optional<@NonNull String> keyword,
+		@NonNull Optional<@NonNull String> missingPropertyName,
+		@NonNull List<@NonNull String> instancePointerSegments,
+		@NonNull String message) {
 	enum Code {
 		FALSE_SCHEMA,
 		TYPE_MISMATCH,
@@ -70,10 +79,12 @@ record McpSchemaDiagnostic(Code code, McpSchemaLocation schemaLocation,
 				missingPropertyName, instancePointerSegments, message, maximum);
 	}
 
-	static long utf8ByteCountUpTo(Code code,
-			McpSchemaLocation schemaLocation, Optional<String> keyword,
-			Optional<String> missingPropertyName,
-			List<String> instancePointerSegments, String message, long maximum) {
+	static long utf8ByteCountUpTo(@NonNull Code code,
+			@NonNull McpSchemaLocation schemaLocation,
+			@NonNull Optional<@NonNull String> keyword,
+			@NonNull Optional<@NonNull String> missingPropertyName,
+			@NonNull List<@NonNull String> instancePointerSegments,
+			@NonNull String message, long maximum) {
 		requireNonNull(code);
 		requireNonNull(schemaLocation);
 		requireNonNull(keyword);
@@ -107,12 +118,14 @@ record McpSchemaDiagnostic(Code code, McpSchemaLocation schemaLocation,
 		return bytes;
 	}
 
-	private static long addField(String value, long bytes, long maximum) {
+	private static long addField(@NonNull String value, long bytes,
+			long maximum) {
 		bytes = addUtf8Bytes(value, bytes, maximum);
 		return bytes > maximum ? bytes : addBytes(bytes, 1, maximum);
 	}
 
-	private static long addJsonPointerField(List<String> segments, long bytes,
+	private static long addJsonPointerField(
+			@NonNull List<@NonNull String> segments, long bytes,
 			long maximum) {
 		for (String segment : segments) {
 			bytes = addBytes(bytes, 1, maximum);
@@ -151,7 +164,8 @@ record McpSchemaDiagnostic(Code code, McpSchemaLocation schemaLocation,
 		return addBytes(bytes, 1, maximum);
 	}
 
-	private static long addUtf8Bytes(String value, long bytes, long maximum) {
+	private static long addUtf8Bytes(@NonNull String value, long bytes,
+			long maximum) {
 		for (int index = 0; index < value.length(); ++index) {
 			char character = value.charAt(index);
 			int encodedBytes;

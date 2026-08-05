@@ -16,6 +16,9 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -23,21 +26,30 @@ import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
 
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 sealed interface McpJsonRpcMessage permits McpJsonRpcMessage.Request,
 		McpJsonRpcMessage.Notification, McpJsonRpcMessage.ResultResponse,
 		McpJsonRpcMessage.ErrorResponse {
+	@NonNull
 	String JSON_RPC_VERSION = "2.0";
-	Set<String> RESERVED_BASE_FIELDS =
+	@NonNull
+	Set<@NonNull String> RESERVED_BASE_FIELDS =
 			Set.of("jsonrpc", "id", "method", "params", "result", "error");
 
+	@NonNull
 	default String jsonRpcVersion() {
 		return JSON_RPC_VERSION;
 	}
 
+	@NonNull
 	McpJsonObject toJsonObject();
 
-	record Request(McpJsonRpcId id, String method, McpRequestParameters params,
-			McpJsonObject extensionFields) implements McpJsonRpcMessage {
+	record Request(@NonNull McpJsonRpcId id, @NonNull String method,
+			@NonNull McpRequestParameters params,
+			@NonNull McpJsonObject extensionFields) implements McpJsonRpcMessage {
 		public Request {
 			requireNonNull(id);
 			requireNonNull(method);
@@ -47,8 +59,10 @@ sealed interface McpJsonRpcMessage permits McpJsonRpcMessage.Request,
 		}
 
 		@Override
+		@NonNull
 		public McpJsonObject toJsonObject() {
-			Map<String, McpJsonValue> values = new LinkedHashMap<>(extensionFields.members());
+			Map<@NonNull String, @NonNull McpJsonValue> values =
+					new LinkedHashMap<>(extensionFields.members());
 			values.put("jsonrpc", new McpJsonString(JSON_RPC_VERSION));
 			values.put("id", id.toJsonValue());
 			values.put("method", new McpJsonString(method));
@@ -57,8 +71,9 @@ sealed interface McpJsonRpcMessage permits McpJsonRpcMessage.Request,
 		}
 	}
 
-	record Notification(String method, Optional<McpJsonObject> params,
-			McpJsonObject extensionFields) implements McpJsonRpcMessage {
+	record Notification(@NonNull String method,
+			@NonNull Optional<@NonNull McpJsonObject> params,
+			@NonNull McpJsonObject extensionFields) implements McpJsonRpcMessage {
 		public Notification {
 			requireNonNull(method);
 			requireNonNull(params);
@@ -67,8 +82,10 @@ sealed interface McpJsonRpcMessage permits McpJsonRpcMessage.Request,
 		}
 
 		@Override
+		@NonNull
 		public McpJsonObject toJsonObject() {
-			Map<String, McpJsonValue> values = new LinkedHashMap<>(extensionFields.members());
+			Map<@NonNull String, @NonNull McpJsonValue> values =
+					new LinkedHashMap<>(extensionFields.members());
 			values.put("jsonrpc", new McpJsonString(JSON_RPC_VERSION));
 			values.put("method", new McpJsonString(method));
 			params.ifPresent(value -> values.put("params", value));
@@ -76,8 +93,8 @@ sealed interface McpJsonRpcMessage permits McpJsonRpcMessage.Request,
 		}
 	}
 
-	record ResultResponse(McpJsonRpcId id, McpWireResult result,
-			McpJsonObject extensionFields) implements McpJsonRpcMessage {
+	record ResultResponse(@NonNull McpJsonRpcId id, @NonNull McpWireResult result,
+			@NonNull McpJsonObject extensionFields) implements McpJsonRpcMessage {
 		public ResultResponse {
 			requireNonNull(id);
 			requireNonNull(result);
@@ -86,8 +103,10 @@ sealed interface McpJsonRpcMessage permits McpJsonRpcMessage.Request,
 		}
 
 		@Override
+		@NonNull
 		public McpJsonObject toJsonObject() {
-			Map<String, McpJsonValue> values = new LinkedHashMap<>(extensionFields.members());
+			Map<@NonNull String, @NonNull McpJsonValue> values =
+					new LinkedHashMap<>(extensionFields.members());
 			values.put("jsonrpc", new McpJsonString(JSON_RPC_VERSION));
 			values.put("id", id.toJsonValue());
 			values.put("result", result.toJsonObject());
@@ -95,8 +114,9 @@ sealed interface McpJsonRpcMessage permits McpJsonRpcMessage.Request,
 		}
 	}
 
-	record ErrorResponse(Optional<McpJsonRpcId> id, McpJsonRpcError error,
-			McpJsonObject extensionFields) implements McpJsonRpcMessage {
+	record ErrorResponse(@NonNull Optional<@NonNull McpJsonRpcId> id,
+			@NonNull McpJsonRpcError error, @NonNull McpJsonObject extensionFields)
+			implements McpJsonRpcMessage {
 		public ErrorResponse {
 			requireNonNull(id);
 			requireNonNull(error);
@@ -105,8 +125,10 @@ sealed interface McpJsonRpcMessage permits McpJsonRpcMessage.Request,
 		}
 
 		@Override
+		@NonNull
 		public McpJsonObject toJsonObject() {
-			Map<String, McpJsonValue> values = new LinkedHashMap<>(extensionFields.members());
+			Map<@NonNull String, @NonNull McpJsonValue> values =
+					new LinkedHashMap<>(extensionFields.members());
 			values.put("jsonrpc", new McpJsonString(JSON_RPC_VERSION));
 			id.ifPresent(value -> values.put("id", value.toJsonValue()));
 			values.put("error", error.toJsonObject());

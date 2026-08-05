@@ -16,12 +16,21 @@
 
 package com.soklet.internal.mcp.schema;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.NotThreadSafe;
 import java.util.List;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
-/** Type-system-neutral description consumed by the one policy resolver. */
+/**
+ * Type-system-neutral description consumed by the one policy resolver.
+ *
+ * @param <T> the Java type representation
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@NotThreadSafe
 sealed interface McpTypedTypeDescriptor<T>
 		permits McpTypedTypeDescriptor.Scalar,
 		McpTypedTypeDescriptor.Enumeration,
@@ -31,14 +40,15 @@ sealed interface McpTypedTypeDescriptor<T>
 		McpTypedTypeDescriptor.OptionalValue,
 		McpTypedTypeDescriptor.RecordValue,
 		McpTypedTypeDescriptor.Unsupported {
-	record Scalar<T>(McpTypedSchemaScalar scalar)
+	record Scalar<T>(@NonNull McpTypedSchemaScalar scalar)
 			implements McpTypedTypeDescriptor<T> {
 		public Scalar {
 			requireNonNull(scalar);
 		}
 	}
 
-	record Enumeration<T>(String declarationIdentity, List<String> constants)
+	record Enumeration<T>(@NonNull String declarationIdentity,
+			@NonNull List<@NonNull String> constants)
 			implements McpTypedTypeDescriptor<T> {
 		public Enumeration {
 			requireNonNull(declarationIdentity);
@@ -48,21 +58,21 @@ sealed interface McpTypedTypeDescriptor<T>
 		}
 	}
 
-	record ArrayValue<T>(T elementType)
+	record ArrayValue<T>(@NonNull T elementType)
 			implements McpTypedTypeDescriptor<T> {
 		public ArrayValue {
 			requireNonNull(elementType);
 		}
 	}
 
-	record ListValue<T>(T elementType)
+	record ListValue<T>(@NonNull T elementType)
 			implements McpTypedTypeDescriptor<T> {
 		public ListValue {
 			requireNonNull(elementType);
 		}
 	}
 
-	record MapValue<T>(T keyType, T valueType)
+	record MapValue<T>(@NonNull T keyType, @NonNull T valueType)
 			implements McpTypedTypeDescriptor<T> {
 		public MapValue {
 			requireNonNull(keyType);
@@ -70,17 +80,17 @@ sealed interface McpTypedTypeDescriptor<T>
 		}
 	}
 
-	record OptionalValue<T>(T valueType)
+	record OptionalValue<T>(@NonNull T valueType)
 			implements McpTypedTypeDescriptor<T> {
 		public OptionalValue {
 			requireNonNull(valueType);
 		}
 	}
 
-	record RecordValue<T>(String declarationIdentity,
-			List<RecordComponent<T>> components,
+	record RecordValue<T>(@NonNull String declarationIdentity,
+			@NonNull List<@NonNull RecordComponent<@NonNull T>> components,
 			int genericArgumentStructuralComplexity,
-			List<T> screeningOnlyGenericArguments)
+			@NonNull List<@NonNull T> screeningOnlyGenericArguments)
 			implements McpTypedTypeDescriptor<T> {
 		public RecordValue {
 			requireNonNull(declarationIdentity);
@@ -104,20 +114,20 @@ sealed interface McpTypedTypeDescriptor<T>
 						"Generic-argument structural complexity must cover every screening-only argument.");
 		}
 
-		RecordValue(String declarationIdentity,
-				List<RecordComponent<T>> components) {
+		RecordValue(@NonNull String declarationIdentity,
+				@NonNull List<@NonNull RecordComponent<@NonNull T>> components) {
 			this(declarationIdentity, components, 0, List.of());
 		}
 
-		RecordValue(String declarationIdentity,
-				List<RecordComponent<T>> components,
+		RecordValue(@NonNull String declarationIdentity,
+				@NonNull List<@NonNull RecordComponent<@NonNull T>> components,
 				int genericArgumentStructuralComplexity) {
 			this(declarationIdentity, components,
 					genericArgumentStructuralComplexity, List.of());
 		}
 	}
 
-	record Unsupported<T>(McpTypedSchemaException.Reason reason)
+	record Unsupported<T>(McpTypedSchemaException.@NonNull Reason reason)
 			implements McpTypedTypeDescriptor<T> {
 		public Unsupported {
 			requireNonNull(reason);
@@ -129,19 +139,46 @@ sealed interface McpTypedTypeDescriptor<T>
 		}
 	}
 
-	record RecordComponent<T>(String name, T type, Optional<String> title,
-			Optional<String> description, Optional<String> headerName) {
+	record RecordComponent<T>(@NonNull String name, @NonNull T type,
+			@NonNull Optional<@NonNull String> title,
+			@NonNull Optional<@NonNull String> description,
+			@NonNull Optional<@NonNull String> headerName) {
 		public RecordComponent {
 			requireNonNull(name);
 			requireNonNull(type);
-			requireNonNull(title);
-			requireNonNull(description);
+			title = nonBlankMetadata(title);
+			description = nonBlankMetadata(description);
 			requireNonNull(headerName);
 		}
 
-		static <T> RecordComponent<T> fromNameAndType(String name, T type) {
+		@NonNull
+		static <T> RecordComponent<@NonNull T> fromNameAndType(
+				@NonNull String name, @NonNull T type) {
 			return new RecordComponent<>(name, type, Optional.empty(),
 					Optional.empty(), Optional.empty());
+		}
+
+		@NonNull
+		static <T> RecordComponent<@NonNull T> fromNameAndType(
+				@NonNull String name, @NonNull T type,
+				@NonNull String title, @NonNull String description) {
+			return new RecordComponent<>(name, type,
+					optionalMetadata(title), optionalMetadata(description),
+					Optional.empty());
+		}
+
+		@NonNull
+		private static Optional<@NonNull String> optionalMetadata(
+				@NonNull String value) {
+			requireNonNull(value);
+			return value.isBlank() ? Optional.empty() : Optional.of(value);
+		}
+
+		@NonNull
+		private static Optional<@NonNull String> nonBlankMetadata(
+				@NonNull Optional<@NonNull String> value) {
+			requireNonNull(value);
+			return value.filter(metadata -> !metadata.isBlank());
 		}
 	}
 }

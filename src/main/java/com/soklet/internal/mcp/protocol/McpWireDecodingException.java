@@ -16,13 +16,19 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.NotThreadSafe;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
 /**
  * Typed protocol-decoding failure for later deterministic transport mapping.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@NotThreadSafe
 final class McpWireDecodingException extends IllegalArgumentException {
 	enum Kind {
 		PARSE_ERROR,
@@ -30,46 +36,54 @@ final class McpWireDecodingException extends IllegalArgumentException {
 		INVALID_PARAMS
 	}
 
+	@NonNull
 	private final Kind kind;
-	private final Optional<McpJsonRpcId> readableRequestId;
+	@NonNull
+	private final Optional<@NonNull McpJsonRpcId> readableRequestId;
 
-	private McpWireDecodingException(Kind kind, String message,
-			Optional<McpJsonRpcId> readableRequestId) {
+	private McpWireDecodingException(@NonNull Kind kind, @NonNull String message,
+			@NonNull Optional<@NonNull McpJsonRpcId> readableRequestId) {
 		super(requireNonNull(message));
 		this.kind = requireNonNull(kind);
 		this.readableRequestId = requireNonNull(readableRequestId);
 	}
 
-	private McpWireDecodingException(Kind kind, String message,
-			Optional<McpJsonRpcId> readableRequestId, Throwable cause) {
+	private McpWireDecodingException(@NonNull Kind kind, @NonNull String message,
+			@NonNull Optional<@NonNull McpJsonRpcId> readableRequestId,
+			@NonNull Throwable cause) {
 		super(requireNonNull(message), requireNonNull(cause));
 		this.kind = requireNonNull(kind);
 		this.readableRequestId = requireNonNull(readableRequestId);
 	}
 
-	static McpWireDecodingException parseError(Throwable cause) {
+	@NonNull
+	static McpWireDecodingException parseError(@NonNull Throwable cause) {
 		return new McpWireDecodingException(Kind.PARSE_ERROR,
 				"The request body is not valid JSON.", Optional.empty(),
 				requireNonNull(cause));
 	}
 
-	static McpWireDecodingException invalidRequest(String message,
-			Optional<McpJsonRpcId> readableRequestId) {
+	@NonNull
+	static McpWireDecodingException invalidRequest(@NonNull String message,
+			@NonNull Optional<@NonNull McpJsonRpcId> readableRequestId) {
 		return new McpWireDecodingException(Kind.INVALID_REQUEST, message,
 				readableRequestId);
 	}
 
-	static McpWireDecodingException invalidParams(String message,
-			McpJsonRpcId readableRequestId) {
+	@NonNull
+	static McpWireDecodingException invalidParams(@NonNull String message,
+			@NonNull McpJsonRpcId readableRequestId) {
 		return new McpWireDecodingException(Kind.INVALID_PARAMS, message,
 				Optional.of(requireNonNull(readableRequestId)));
 	}
 
+	@NonNull
 	Kind kind() {
 		return kind;
 	}
 
-	Optional<McpJsonRpcId> readableRequestId() {
+	@NonNull
+	Optional<@NonNull McpJsonRpcId> readableRequestId() {
 		return readableRequestId;
 	}
 }

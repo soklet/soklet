@@ -413,6 +413,27 @@ class McpTypedSchemaCoreTests {
 		assertEquals("$/properties/a~1b~0c/items",
 				McpTypedSchemaPath.root().property("a/b~c").arrayElement()
 						.toString());
+
+		String unsafeName = "line\ncolumn\t"
+				+ (char) 0x0000 + (char) 0x007F + (char) 0x0085
+				+ (char) 0x2028 + (char) 0x2029 + (char) 0x202E
+				+ (char) 0x2066 + (char) 0x2069 + (char) 0x061C
+				+ (char) 0x200E + (char) 0x200F + "/~\uD83D\uDE00";
+		String safePath = McpTypedSchemaPath.root().property(unsafeName)
+				.toString();
+		assertEquals(
+				"$/properties/line\\u000Acolumn\\u0009\\u0000\\u007F"
+						+ "\\u0085\\u2028\\u2029\\u202E\\u2066\\u2069"
+						+ "\\u061C\\u200E\\u200F~1~0\uD83D\uDE00",
+				safePath);
+		assertFalse(safePath.contains("\n"));
+		assertFalse(safePath.contains("\t"));
+		assertFalse(safePath.indexOf((char) 0x202E) >= 0);
+
+		String boundedPath = McpTypedSchemaPath.root()
+				.property("x".repeat(10_000)).toString();
+		assertTrue(boundedPath.endsWith("..."), boundedPath);
+		assertTrue(boundedPath.length() <= 272, boundedPath);
 	}
 
 	private static FakeTypeModel standardModel() {

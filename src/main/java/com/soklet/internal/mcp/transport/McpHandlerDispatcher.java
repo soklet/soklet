@@ -16,8 +16,10 @@
 
 package com.soklet.internal.mcp.transport;
 
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,6 +31,12 @@ import java.util.function.Consumer;
 
 import static java.util.Objects.requireNonNull;
 
+/**
+ * Thread-safe bounded admission and dispatch for MCP application handlers.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 final class McpHandlerDispatcher {
 	enum Admission {
 		DISPATCHED,
@@ -54,14 +62,21 @@ final class McpHandlerDispatcher {
 			int maximumObservedActiveSlots, int maximumObservedQueueDepth, boolean accepting) {
 	}
 
+	@ThreadSafe
 	final class Ticket {
+		@NonNull
 		private final Work work;
+		@NonNull
 		private final Consumer<Throwable> submissionFailureConsumer;
-		private final AtomicReference<Thread> handlerThread;
+		@NonNull
+		private final AtomicReference<@Nullable Thread> handlerThread;
+		@NonNull
 		private final AtomicBoolean interruptRequested;
+		@NonNull
 		private volatile TicketState state;
 
-		private Ticket(Work work, Consumer<Throwable> submissionFailureConsumer) {
+		private Ticket(@NonNull Work work,
+				@NonNull Consumer<@NonNull Throwable> submissionFailureConsumer) {
 			this.work = requireNonNull(work);
 			this.submissionFailureConsumer = requireNonNull(submissionFailureConsumer);
 			this.handlerThread = new AtomicReference<>();
@@ -69,6 +84,7 @@ final class McpHandlerDispatcher {
 			this.state = TicketState.NEW;
 		}
 
+		@NonNull
 		TicketState state() {
 			return state;
 		}
@@ -87,17 +103,21 @@ final class McpHandlerDispatcher {
 		}
 	}
 
+	@NonNull
 	private final Object lock;
 	private final int concurrency;
 	private final int queueCapacity;
+	@NonNull
 	private final ExecutorService executorService;
-	private final Queue<Ticket> queue;
+	@NonNull
+	private final Queue<@NonNull Ticket> queue;
 	private int activeSlots;
 	private int maximumObservedActiveSlots;
 	private int maximumObservedQueueDepth;
 	private boolean accepting;
 
-	McpHandlerDispatcher(int concurrency, int queueCapacity, ExecutorService executorService) {
+	McpHandlerDispatcher(int concurrency, int queueCapacity,
+			@NonNull ExecutorService executorService) {
 		if (concurrency < 1)
 			throw new IllegalArgumentException("Handler concurrency must be > 0.");
 
@@ -112,11 +132,14 @@ final class McpHandlerDispatcher {
 		this.accepting = true;
 	}
 
-	Ticket newTicket(Work work, Consumer<Throwable> submissionFailureConsumer) {
+	@NonNull
+	Ticket newTicket(@NonNull Work work,
+			@NonNull Consumer<@NonNull Throwable> submissionFailureConsumer) {
 		return new Ticket(work, submissionFailureConsumer);
 	}
 
-	Admission admit(Ticket ticket) {
+	@NonNull
+	Admission admit(@NonNull Ticket ticket) {
 		requireNonNull(ticket);
 		boolean dispatch = false;
 		Admission admission;
@@ -151,7 +174,7 @@ final class McpHandlerDispatcher {
 		return admission;
 	}
 
-	boolean cancelQueued(Ticket ticket) {
+	boolean cancelQueued(@NonNull Ticket ticket) {
 		requireNonNull(ticket);
 
 		synchronized (lock) {
@@ -163,8 +186,9 @@ final class McpHandlerDispatcher {
 		}
 	}
 
-	List<Ticket> stopAccepting() {
-		List<Ticket> canceledTickets;
+	@NonNull
+	List<@NonNull Ticket> stopAccepting() {
+		List<@NonNull Ticket> canceledTickets;
 
 		synchronized (lock) {
 			if (!accepting)
@@ -181,6 +205,7 @@ final class McpHandlerDispatcher {
 		return List.copyOf(canceledTickets);
 	}
 
+	@NonNull
 	Snapshot snapshot() {
 		synchronized (lock) {
 			return new Snapshot(
@@ -194,7 +219,7 @@ final class McpHandlerDispatcher {
 		}
 	}
 
-	private void dispatch(Ticket ticket) {
+	private void dispatch(@NonNull Ticket ticket) {
 		try {
 			executorService.execute(() -> run(ticket));
 		} catch (RuntimeException exception) {
@@ -202,7 +227,7 @@ final class McpHandlerDispatcher {
 		}
 	}
 
-	private void run(Ticket ticket) {
+	private void run(@NonNull Ticket ticket) {
 		Thread.interrupted();
 		ticket.handlerThread.set(Thread.currentThread());
 
@@ -223,8 +248,8 @@ final class McpHandlerDispatcher {
 		}
 	}
 
-	private void onHandlerExited(Ticket ticket) {
-		Ticket next = null;
+	private void onHandlerExited(@NonNull Ticket ticket) {
+		@Nullable Ticket next = null;
 
 		synchronized (lock) {
 			if (ticket.state != TicketState.DISPATCHED)
@@ -245,8 +270,9 @@ final class McpHandlerDispatcher {
 			dispatch(next);
 	}
 
-	private void onSubmissionFailure(Ticket ticket, RuntimeException exception) {
-		Ticket next = null;
+	private void onSubmissionFailure(@NonNull Ticket ticket,
+			@NonNull RuntimeException exception) {
+		@Nullable Ticket next = null;
 
 		synchronized (lock) {
 			if (ticket.state == TicketState.DISPATCHED) {
@@ -268,7 +294,8 @@ final class McpHandlerDispatcher {
 			dispatch(next);
 	}
 
-	private void notifyFailure(Ticket ticket, Throwable throwable) {
+	private void notifyFailure(@NonNull Ticket ticket,
+			@NonNull Throwable throwable) {
 		try {
 			ticket.submissionFailureConsumer.accept(throwable);
 		} catch (Throwable ignored) {

@@ -19,6 +19,7 @@ package com.soklet.internal.mcp.schema;
 import com.google.testing.compile.Compilation;
 import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
+import com.soklet.annotation.McpToolArgument;
 import com.soklet.internal.mcp.protocol.McpJsonCodec;
 import com.soklet.internal.mcp.protocol.McpJsonLimits;
 import com.soklet.internal.mcp.protocol.McpJsonObject;
@@ -71,7 +72,7 @@ class McpTypedSchemaFrontendParityTests {
 			"primitiveLong", "boxedLong", "bigInteger", "primitiveFloat",
 			"boxedFloat", "primitiveDouble", "boxedDouble", "bigDecimal",
 			"string", "status", "primitiveInts", "strings", "stringList",
-			"longsByName", "box", "nestedBox", "input");
+			"longsByName", "box", "nestedBox", "input", "annotated");
 	private static final Set<String> INPUT_FIELDS = Set.of("longsByName",
 			"input");
 	private static final Map<String, ExpectedFailure> EXPECTED_FAILURES =
@@ -161,6 +162,24 @@ class McpTypedSchemaFrontendParityTests {
 		}
 	}
 
+	@Test
+	void recordComponentMetadataUsesPublishedNamesAndOmitsBlankText() {
+		Inspection inspection = inspect();
+		McpTypedSchemaShape.RecordValue record = assertInstanceOf(
+				McpTypedSchemaShape.RecordValue.class,
+				inspection.shapes.get("annotated"));
+
+		assertEquals("externalName", record.properties().get(0).name());
+		assertEquals(Optional.of(" External title "),
+				record.properties().get(0).title());
+		assertEquals(Optional.of("External description"),
+				record.properties().get(0).description());
+		assertEquals("ordinary", record.properties().get(1).name());
+		assertEquals(Optional.empty(), record.properties().get(1).title());
+		assertEquals(Optional.empty(),
+				record.properties().get(1).description());
+	}
+
 	private static void compileAndValidate(byte[] json, boolean toolInput) {
 		McpJsonObject document = assertInstanceOf(McpJsonObject.class,
 				JSON_CODEC.parse(json));
@@ -194,6 +213,7 @@ class McpTypedSchemaFrontendParityTests {
 				package parity;
 
 				import com.soklet.internal.mcp.protocol.McpJsonValue;
+				import com.soklet.annotation.McpToolArgument;
 				import java.math.BigDecimal;
 				import java.math.BigInteger;
 				import java.util.List;
@@ -228,6 +248,7 @@ class McpTypedSchemaFrontendParityTests {
 				  ParityBox<String> box;
 				  ParityBox<ParityBox<String>> nestedBox;
 				  ParityInput input;
+				  ParityAnnotated annotated;
 				  List rawList;
 				  List<?> wildcardList;
 				  Map<Integer, String> badMap;
@@ -249,6 +270,12 @@ class McpTypedSchemaFrontendParityTests {
 				    String[] names, List<Long> totals,
 				    Map<String, BigDecimal> prices, ParityBox<String> box,
 				    Optional<Double> ratio) {}
+				record ParityAnnotated(
+				    @McpToolArgument(name = "externalName",
+				        title = " External title ",
+				        description = "External description") String internalName,
+				    @McpToolArgument(title = "   ", description = "   ")
+				        Optional<Integer> ordinary) {}
 				record Expanding<T>(Expanding<List<T>> next) {}
 				record Phantom<T>(String value) {}
 				enum ParityStatus { SECOND, FIRST, THIRD }
@@ -272,6 +299,13 @@ class McpTypedSchemaFrontendParityTests {
 	private record ParityInput(boolean enabled, int count, ParityStatus status,
 			String[] names, List<Long> totals, Map<String, BigDecimal> prices,
 			ParityBox<String> box, Optional<Double> ratio) {
+	}
+
+	private record ParityAnnotated(
+			@McpToolArgument(name = "externalName", title = " External title ",
+					description = "External description") String internalName,
+			@McpToolArgument(title = "   ", description = "   ")
+			Optional<Integer> ordinary) {
 	}
 
 	private record Expanding<T>(Expanding<List<T>> next) {
@@ -323,6 +357,7 @@ class McpTypedSchemaFrontendParityTests {
 		private ParityBox<String> box;
 		private ParityBox<ParityBox<String>> nestedBox;
 		private ParityInput input;
+		private ParityAnnotated annotated;
 		private List rawList;
 		private List<?> wildcardList;
 		private Map<Integer, String> badMap;

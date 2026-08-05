@@ -19,11 +19,16 @@ package com.soklet;
 import com.soklet.annotation.DELETE;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.HEAD;
+import com.soklet.annotation.McpServerEndpoint;
+import com.soklet.annotation.McpTool;
+import com.soklet.annotation.McpToolArgument;
 import com.soklet.annotation.OPTIONS;
 import com.soklet.annotation.PATCH;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.PUT;
 import com.soklet.annotation.SseEventSource;
+import com.soklet.internal.mcp.generated.McpGeneratedEndpointProviderIndex;
+import com.soklet.internal.mcp.schema.McpTypeMirrorTypedSchemaBridge;
 import com.google.errorprone.annotations.FormatMethod;
 import org.jspecify.annotations.NonNull;
 
@@ -41,13 +46,21 @@ import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
+import javax.lang.model.element.RecordComponentElement;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
+import javax.lang.model.type.ArrayType;
+import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.ExecutableType;
+import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
+import javax.lang.model.type.TypeVariable;
+import javax.lang.model.type.WildcardType;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 import javax.tools.FileObject;
+import javax.tools.JavaFileObject;
 import javax.tools.StandardLocation;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -79,7 +92,10 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Soklet's standard Annotation Processor which is used to generate lookup tables of <em>Resource Method</em> definitions at compile time as well as prevent usage errors that are detectable by static analysis.
+ * Soklet's standard annotation processor. It generates lookup tables for
+ * <em>Resource Method</em> definitions, generated public-API-only MCP endpoint
+ * adapters and their classpath index, and reports usage errors detectable by
+ * static analysis.
  * <p>
  * This Annotation Processor ensures <em>Resource Methods</em> annotated with {@link SseEventSource} are declared as returning an instance of {@link SseHandshakeResult}.
  * <p>
@@ -103,7 +119,7 @@ import java.util.stream.Collectors;
  *     </configuration>
  * </plugin>}</pre>
  * Using <a href="https://gradle.org" target="_blank">Gradle</a>:
- * <pre>{@code def sokletVersion = "3.3.0" // (use your actual version)
+ * <pre>{@code def sokletVersion = "3.6.0" // (use your actual version)
  *
  * dependencies {
  *   // Soklet used by your code at compile/run time
@@ -120,6 +136,7 @@ import java.util.stream.Collectors;
  * <ul>
  *   <li>Never rebuilds the global index from only the currently-compiled sources. It always merges with the prior index.</li>
  *   <li>Only removes stale entries for top-level types compiled in the current compiler invocation (touched types).</li>
+ *   <li>Declares wildcard annotation support, while claiming no annotations, so a compiler still invokes it when a touched type removes its final Soklet annotation.</li>
  *   <li>Skips writing the index entirely if compilation errors are present, preventing clobbering a good index.</li>
  *   <li>Writes with originating elements (best-effort) so incremental build tools can track dependencies.</li>
  * </ul>
@@ -147,6 +164,8 @@ public final class SokletProcessor extends AbstractProcessor {
 	private static final String PROCESSOR_OPTION_DEBUG = "soklet.debug";
 
 	private static final String PERSISTENT_CACHE_INDEX_DIR = "resource-methods";
+	private static final String MCP_PERSISTENT_CACHE_INDEX_DIR =
+			"mcp-endpoints";
 
 	// ---- Index paths ---------------------------------------------------------
 
@@ -155,6 +174,13 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	private static final String SIDE_CAR_DIR_NAME = "soklet";
 	private static final String SIDE_CAR_INDEX_FILENAME = "resource-method-lookup-table";
+	private static final String MCP_SIDE_CAR_INDEX_FILENAME =
+			"mcp-endpoint-descriptor-providers";
+	// Keep the unresolved-type preflight inside the production typed-schema
+	// traversal envelope. Crossing either bound delegates to the schema compiler,
+	// which emits the stable LIMIT_EXCEEDED diagnostic.
+	private static final int MCP_SCHEMA_PREFLIGHT_MAXIMUM_DEPTH = 64;
+	private static final int MCP_SCHEMA_PREFLIGHT_MAXIMUM_NODE_COUNT = 4_096;
 
 	// ---- JSR-269 services ----------------------------------------------------
 
@@ -170,11 +196,29 @@ public final class SokletProcessor extends AbstractProcessor {
 	// Cached mirrors resolved in init()
 	private TypeMirror sseHandshakeResultType;   // com.soklet.SseHandshakeResult
 	private TypeElement pathParameterElement;    // com.soklet.annotation.PathParameter
+	private TypeMirror mcpRequestContextType;
+	private TypeMirror mcpInvocationFeaturesType;
+	private TypeMirror exceptionType;
+	private TypeMirror errorType;
 
 	// Collected during this compilation invocation
 	private final List<ResourceMethodDeclaration> collected = new ArrayList<>();
 	private final Set<String> touchedTopLevelBinaries = new LinkedHashSet<>();
 	private boolean resourceMethodAmbiguityDetected;
+	private final List<McpEndpointProviderDeclaration> collectedMcpEndpoints =
+			new ArrayList<>();
+	private final Set<String> touchedMcpTopLevelBinaries =
+			new LinkedHashSet<>();
+	private final Set<String> generatedMcpProviderBinaries =
+			new LinkedHashSet<>();
+	private final Set<String> processedMcpEndpointBinaries =
+			new LinkedHashSet<>();
+	private final Map<String, TypeElement> pendingMcpEndpoints =
+			new LinkedHashMap<>();
+	private final Map<String, String> mcpEndpointBinaryByPath =
+			new LinkedHashMap<>();
+	private boolean mcpProcessingErrorDetected;
+	private int mcpProcessingErrorCount;
 
 	// ---- Supported annotations ----------------------------------------------
 
@@ -205,6 +249,18 @@ public final class SokletProcessor extends AbstractProcessor {
 		TypeElement hr = elements.getTypeElement("com.soklet.SseHandshakeResult");
 		this.sseHandshakeResultType = (hr == null ? null : hr.asType());
 		this.pathParameterElement = elements.getTypeElement("com.soklet.annotation.PathParameter");
+		TypeElement mcpRequestContext =
+				elements.getTypeElement("com.soklet.McpRequestContext");
+		this.mcpRequestContextType = mcpRequestContext == null
+				? null : mcpRequestContext.asType();
+		TypeElement mcpInvocationFeatures =
+				elements.getTypeElement("com.soklet.McpInvocationFeatures");
+		this.mcpInvocationFeaturesType = mcpInvocationFeatures == null
+				? null : mcpInvocationFeatures.asType();
+		TypeElement exception = elements.getTypeElement("java.lang.Exception");
+		this.exceptionType = exception == null ? null : exception.asType();
+		TypeElement error = elements.getTypeElement("java.lang.Error");
+		this.errorType = error == null ? null : error.asType();
 
 		// If persistent mode was requested but cacheDir isn't configured, downgrade to SIDECAR.
 		if (this.cacheMode == CacheMode.PERSISTENT && persistentCacheRoot() == null) {
@@ -222,6 +278,12 @@ public final class SokletProcessor extends AbstractProcessor {
 			Class<? extends Annotation> container = findRepeatableContainer(c);
 			if (container != null) out.add(container.getCanonicalName());
 		}
+		out.add(McpServerEndpoint.class.getCanonicalName());
+		out.add(McpTool.class.getCanonicalName());
+		out.add(McpToolArgument.class.getCanonicalName());
+		// Keep the processor active when a touched type removes its final Soklet
+		// annotation so stale generated index rows can still be pruned.
+		out.add("*");
 		return out;
 	}
 
@@ -247,6 +309,8 @@ public final class SokletProcessor extends AbstractProcessor {
 			if (root instanceof TypeElement te) {
 				String bin = elements.getBinaryName(te).toString();
 				touchedTopLevelBinaries.add(bin);
+				if (!generatedMcpProviderBinaries.contains(bin))
+					touchedMcpTopLevelBinaries.add(bin);
 			}
 		}
 
@@ -263,13 +327,18 @@ public final class SokletProcessor extends AbstractProcessor {
 		collect(roundEnv, HttpMethod.OPTIONS, OPTIONS.class, false);
 		collect(roundEnv, HttpMethod.GET, SseEventSource.class, true); // SSE as GET + flag
 
+		collectAndGenerateMcpEndpoints(roundEnv);
+
 		if (roundEnv.processingOver()) {
 			// Critical: don't overwrite a good index with a partial/failed compile.
-			if (roundEnv.errorRaised() || resourceMethodAmbiguityDetected) {
+			if (roundEnv.errorRaised() || resourceMethodAmbiguityDetected
+					|| mcpProcessingErrorDetected) {
 				debug("SokletProcessor: compilation has errors; skipping index write to avoid clobbering.");
 				return false;
 			}
 			mergeAndWriteIndex(collected, touchedTopLevelBinaries);
+			mergeAndWriteMcpEndpointIndex(collectedMcpEndpoints,
+					touchedMcpTopLevelBinaries);
 		}
 
 		return false;
@@ -354,6 +423,834 @@ public final class SokletProcessor extends AbstractProcessor {
 				}
 			}
 		}
+	}
+
+	// --- MCP endpoint generation ---------------------------------------------
+
+	private void collectAndGenerateMcpEndpoints(
+			@NonNull RoundEnvironment roundEnv) {
+		TypeElement endpointAnnotation = elements.getTypeElement(
+				McpServerEndpoint.class.getCanonicalName());
+		TypeElement toolAnnotation =
+				elements.getTypeElement(McpTool.class.getCanonicalName());
+		TypeElement argumentAnnotation = elements.getTypeElement(
+				McpToolArgument.class.getCanonicalName());
+		if (endpointAnnotation == null || toolAnnotation == null
+				|| argumentAnnotation == null)
+			return;
+
+		validateMcpAnnotationPlacement(roundEnv, endpointAnnotation,
+				toolAnnotation, argumentAnnotation);
+
+		for (Element element : roundEnv.getElementsAnnotatedWith(
+				endpointAnnotation)) {
+			if (element instanceof TypeElement type) {
+				pendingMcpEndpoints.put(
+						elements.getBinaryName(type).toString(),
+						type);
+			} else {
+				mcpError(element,
+						"Soklet: @McpServerEndpoint can only be applied to classes.");
+			}
+		}
+		List<TypeElement> endpointTypes = new ArrayList<>();
+		for (Map.Entry<String, TypeElement> pending
+				: pendingMcpEndpoints.entrySet()) {
+			if (processedMcpEndpointBinaries.contains(pending.getKey()))
+				continue;
+			TypeElement originalType = pending.getValue();
+			TypeElement type = elements.getTypeElement(
+					originalType.getQualifiedName());
+			if (type != null)
+				endpointTypes.add(type);
+			else if (roundEnv.processingOver())
+				endpointTypes.add(originalType);
+		}
+		endpointTypes.sort(Comparator.comparing(
+				type -> elements.getBinaryName(type).toString()));
+
+		for (TypeElement endpointType : endpointTypes) {
+			String endpointBinaryName =
+					elements.getBinaryName(endpointType).toString();
+			if (processedMcpEndpointBinaries.contains(endpointBinaryName))
+				continue;
+			if (hasUnresolvedMcpToolType(endpointType, toolAnnotation)) {
+				if (roundEnv.processingOver()) {
+					mcpError(endpointType,
+							"Soklet: @McpServerEndpoint contains an unresolved MCP tool parameter or return type after annotation processing completed.");
+					processedMcpEndpointBinaries.add(endpointBinaryName);
+					pendingMcpEndpoints.remove(endpointBinaryName);
+				}
+				continue;
+			}
+			processedMcpEndpointBinaries.add(endpointBinaryName);
+			pendingMcpEndpoints.remove(endpointBinaryName);
+
+			McpEndpointModel endpoint = validateMcpEndpoint(endpointType,
+					toolAnnotation, argumentAnnotation);
+			if (endpoint == null)
+				continue;
+
+			String previousEndpoint = mcpEndpointBinaryByPath.putIfAbsent(
+					endpoint.path(), endpoint.endpointBinaryName());
+			if (previousEndpoint != null
+					&& !previousEndpoint.equals(endpoint.endpointBinaryName())) {
+				mcpError(endpointType,
+						"Soklet: Duplicate annotated MCP endpoint path is also declared by %s.",
+						previousEndpoint);
+				continue;
+			}
+
+			if (generateMcpEndpointProvider(endpoint, endpointType)) {
+				generatedMcpProviderBinaries.add(endpoint.providerBinaryName());
+				collectedMcpEndpoints.add(new McpEndpointProviderDeclaration(
+						endpoint.endpointBinaryName(), endpoint.providerBinaryName(),
+						topLevelBinaryName(endpointType), endpoint.path()));
+			}
+		}
+	}
+
+	private boolean hasUnresolvedMcpToolType(@NonNull TypeElement endpointType,
+			@NonNull TypeElement toolAnnotation) {
+		for (Element enclosed : endpointType.getEnclosedElements()) {
+			if (enclosed.getKind() != ElementKind.METHOD
+					|| findAnnotation(enclosed, toolAnnotation) == null)
+				continue;
+			ExecutableElement method = (ExecutableElement) enclosed;
+			if (containsErrorType(method.getReturnType()))
+				return true;
+			for (VariableElement parameter : method.getParameters())
+				if (containsErrorType(parameter.asType()))
+					return true;
+			for (TypeMirror thrownType : method.getThrownTypes())
+				if (containsErrorType(thrownType))
+					return true;
+		}
+		return false;
+	}
+
+	private boolean containsErrorType(@NonNull TypeMirror type) {
+		return containsErrorType(type, new LinkedHashSet<>(), 1,
+				new int[] { 0 });
+	}
+
+	private boolean containsErrorType(@NonNull TypeMirror type,
+			@NonNull Set<@NonNull TypeElement> activeRecords, int depth,
+			int @NonNull [] visitedNodeCount) {
+		if (depth > MCP_SCHEMA_PREFLIGHT_MAXIMUM_DEPTH
+				|| visitedNodeCount[0]
+				>= MCP_SCHEMA_PREFLIGHT_MAXIMUM_NODE_COUNT)
+			return false;
+		visitedNodeCount[0]++;
+		if (type.getKind() == TypeKind.ERROR)
+			return true;
+		if (type instanceof ArrayType array)
+			return containsErrorType(array.getComponentType(), activeRecords,
+					depth + 1, visitedNodeCount);
+		if (type instanceof DeclaredType declared) {
+			TypeMirror enclosing = declared.getEnclosingType();
+			if (enclosing.getKind() != TypeKind.NONE
+					&& containsErrorType(enclosing, activeRecords, depth + 1,
+							visitedNodeCount))
+				return true;
+			for (TypeMirror argument : declared.getTypeArguments())
+				if (containsErrorType(argument, activeRecords, depth + 1,
+						visitedNodeCount))
+					return true;
+			if (!(declared.asElement() instanceof TypeElement declaration)
+					|| declaration.getKind() != ElementKind.RECORD
+					|| !activeRecords.add(declaration))
+				return false;
+			try {
+				for (RecordComponentElement component
+						: declaration.getRecordComponents()) {
+					TypeMirror accessorType = types.asMemberOf(declared,
+							component.getAccessor());
+					if (accessorType instanceof ExecutableType accessor
+							&& containsErrorType(accessor.getReturnType(),
+									activeRecords, depth + 1,
+									visitedNodeCount))
+						return true;
+				}
+			} finally {
+				activeRecords.remove(declaration);
+			}
+			return false;
+		}
+		// Tool type variables are rejected later by the typed-schema/signature
+		// policies. Avoid traversing self-referential generic bounds while looking
+		// only for compiler ERROR placeholders that another processor may resolve.
+		if (type instanceof TypeVariable)
+			return false;
+		if (type instanceof WildcardType wildcard) {
+			TypeMirror extendsBound = wildcard.getExtendsBound();
+			TypeMirror superBound = wildcard.getSuperBound();
+			return (extendsBound != null
+					&& containsErrorType(extendsBound, activeRecords, depth + 1,
+							visitedNodeCount))
+					|| (superBound != null
+					&& containsErrorType(superBound, activeRecords, depth + 1,
+							visitedNodeCount));
+		}
+		return false;
+	}
+
+	private void validateMcpAnnotationPlacement(
+			@NonNull RoundEnvironment roundEnv,
+			@NonNull TypeElement endpointAnnotation,
+			@NonNull TypeElement toolAnnotation,
+			@NonNull TypeElement argumentAnnotation) {
+		for (Element element : roundEnv.getElementsAnnotatedWith(toolAnnotation)) {
+			if (element.getKind() != ElementKind.METHOD) {
+				mcpError(element,
+						"Soklet: @McpTool can only be applied to methods.");
+				continue;
+			}
+			Element owner = element.getEnclosingElement();
+			if (findAnnotation(owner, endpointAnnotation) == null)
+				mcpError(element,
+						"Soklet: @McpTool methods must be declared directly by an @McpServerEndpoint class.");
+		}
+
+		for (Element element : roundEnv.getElementsAnnotatedWith(
+				argumentAnnotation)) {
+			if (element.getKind() == ElementKind.RECORD_COMPONENT)
+				continue;
+			if (element.getKind() != ElementKind.PARAMETER) {
+				mcpError(element,
+						"Soklet: @McpToolArgument can only be applied to parameters or record components.");
+				continue;
+			}
+			Element method = element.getEnclosingElement();
+			Element owner = method.getEnclosingElement();
+			// A record-component annotation whose target also includes PARAMETER
+			// is propagated by javac to the canonical constructor parameter.
+			if (method.getKind() == ElementKind.CONSTRUCTOR
+					&& owner instanceof TypeElement recordType
+					&& owner.getKind() == ElementKind.RECORD) {
+				boolean propagatedFromComponent = recordType.getRecordComponents()
+						.stream()
+						.anyMatch(component -> component.getSimpleName().contentEquals(
+								element.getSimpleName())
+								&& findAnnotation(component,
+										argumentAnnotation) != null);
+				if (propagatedFromComponent)
+					continue;
+			}
+			if (findAnnotation(method, toolAnnotation) == null
+					|| findAnnotation(owner, endpointAnnotation) == null)
+				mcpError(element,
+						"Soklet: @McpToolArgument parameters must belong to an @McpTool method on an @McpServerEndpoint class.");
+		}
+	}
+
+	private McpEndpointModel validateMcpEndpoint(
+			@NonNull TypeElement endpointType,
+			@NonNull TypeElement toolAnnotation,
+			@NonNull TypeElement argumentAnnotation) {
+		int errorsBefore = mcpProcessingErrorCount;
+		AnnotationMirror annotation = findAnnotation(endpointType,
+				McpServerEndpoint.class.getCanonicalName());
+		if (annotation == null)
+			return null;
+
+		if (endpointType.getKind() != ElementKind.CLASS)
+			mcpError(endpointType,
+					"Soklet: @McpServerEndpoint must annotate a concrete class.");
+		if (!endpointType.getModifiers().contains(Modifier.PUBLIC))
+			mcpError(endpointType,
+					"Soklet: @McpServerEndpoint class must be public.");
+		if (endpointType.getModifiers().contains(Modifier.ABSTRACT))
+			mcpError(endpointType,
+					"Soklet: @McpServerEndpoint class must be concrete.");
+		if (!endpointType.getTypeParameters().isEmpty())
+			mcpError(endpointType,
+					"Soklet: @McpServerEndpoint class must not declare type parameters.");
+		if (endpointType.getEnclosingElement() instanceof TypeElement
+				&& !endpointType.getModifiers().contains(Modifier.STATIC))
+			mcpError(endpointType,
+					"Soklet: A nested @McpServerEndpoint class must be static.");
+		for (Element enclosing = endpointType.getEnclosingElement();
+				enclosing instanceof TypeElement enclosingType;
+				enclosing = enclosing.getEnclosingElement()) {
+			if (!enclosingType.getModifiers().contains(Modifier.PUBLIC))
+				mcpError(endpointType,
+						"Soklet: Every enclosing class of an @McpServerEndpoint must be public.");
+		}
+
+		String path = annotationString(annotation, "path").strip();
+		if (!path.startsWith("/") || path.length() == 1
+				|| path.contains("?") || path.contains("#")) {
+			mcpError(endpointType,
+					"Soklet: MCP endpoint path must be a non-root absolute path without a query or fragment.");
+		} else if (path.indexOf('{') >= 0 || path.indexOf('}') >= 0) {
+			mcpError(endpointType,
+					"Soklet: MCP endpoint path parameters are not supported by the initial annotated-tool processor vertical; use a fixed path.");
+		} else {
+			path = ResourcePathDeclaration.normalizePath(path);
+			if (path.length() == 1)
+				mcpError(endpointType,
+						"Soklet: MCP endpoint path must not normalize to the root path.");
+		}
+
+		String name = annotationString(annotation, "name");
+		String version = annotationString(annotation, "version");
+		String title = annotationString(annotation, "title");
+		String description = annotationString(annotation, "description");
+		String websiteUrl = annotationString(annotation, "websiteUrl");
+		String instructions = annotationString(annotation, "instructions");
+		String toolRateLimiter = annotationString(annotation, "toolRateLimiter");
+		if (name.isBlank())
+			mcpError(endpointType,
+					"Soklet: MCP implementation name must not be blank.");
+		if (version.isBlank())
+			mcpError(endpointType,
+					"Soklet: MCP implementation version must not be blank.");
+		if (!toolRateLimiter.isEmpty() && toolRateLimiter.isBlank())
+			mcpError(endpointType,
+					"Soklet: MCP endpoint tool rate-limiter name must not be blank.");
+		if (!websiteUrl.isBlank()) {
+			try {
+				URI uri = URI.create(websiteUrl);
+				if (!uri.isAbsolute())
+					throw new IllegalArgumentException();
+			} catch (IllegalArgumentException exception) {
+				mcpError(endpointType,
+						"Soklet: MCP implementation websiteUrl must be an absolute URI.");
+			}
+		}
+
+		String endpointBinaryName =
+				elements.getBinaryName(endpointType).toString();
+		String packageName = elements.getPackageOf(endpointType)
+				.getQualifiedName().toString();
+		String providerSimpleName = "SokletMcpEndpointProvider_"
+				+ hashPath(endpointBinaryName);
+		String providerBinaryName = packageName.isEmpty()
+				? providerSimpleName : packageName + "." + providerSimpleName;
+
+		List<McpToolModel> tools = new ArrayList<>();
+		for (Element enclosed : endpointType.getEnclosedElements()) {
+			if (enclosed.getKind() != ElementKind.METHOD
+					|| findAnnotation(enclosed, toolAnnotation) == null)
+				continue;
+			McpToolModel tool = validateMcpTool((ExecutableElement) enclosed,
+					argumentAnnotation);
+			if (tool != null)
+				tools.add(tool);
+		}
+		tools.sort(Comparator.comparing(McpToolModel::name)
+				.thenComparing(tool -> tool.method().getSimpleName().toString())
+				.thenComparing(tool -> tool.method().getParameters().stream()
+						.map(parameter -> parameter.asType().toString())
+						.collect(Collectors.joining(","))));
+		Set<String> toolNames = new LinkedHashSet<>();
+		for (McpToolModel tool : tools) {
+			if (!toolNames.add(tool.name()))
+				mcpError(tool.method(),
+						"Soklet: Duplicate MCP tool name '%s' in endpoint %s.",
+						tool.name(), endpointBinaryName);
+		}
+
+		if (mcpProcessingErrorCount != errorsBefore)
+			return null;
+		return new McpEndpointModel(packageName,
+				endpointType.getQualifiedName().toString(), endpointBinaryName,
+				providerSimpleName, providerBinaryName, path, name, version,
+				title, description, websiteUrl, instructions, toolRateLimiter,
+				List.copyOf(tools));
+	}
+
+	private McpToolModel validateMcpTool(@NonNull ExecutableElement method,
+			@NonNull TypeElement argumentAnnotation) {
+		int errorsBefore = mcpProcessingErrorCount;
+		AnnotationMirror annotation =
+				findAnnotation(method, McpTool.class.getCanonicalName());
+		if (annotation == null)
+			return null;
+
+		if (!method.getModifiers().contains(Modifier.PUBLIC))
+			mcpError(method, "Soklet: @McpTool method must be public.");
+		if (method.getModifiers().contains(Modifier.STATIC))
+			mcpError(method, "Soklet: @McpTool method must not be static.");
+		if (method.getModifiers().contains(Modifier.ABSTRACT)
+				|| method.getModifiers().contains(Modifier.NATIVE))
+			mcpError(method,
+					"Soklet: @McpTool method must have a concrete Java implementation.");
+		if (!method.getTypeParameters().isEmpty())
+			mcpError(method,
+					"Soklet: @McpTool method must not declare type parameters.");
+		for (TypeMirror thrownType : method.getThrownTypes()) {
+			if (!isSubtypeOf(thrownType, exceptionType)
+					&& !isSubtypeOf(thrownType, errorType))
+				mcpError(method,
+						"Soklet: @McpTool method throws types must extend Exception or Error so the generated handler can invoke them.");
+		}
+		if (method.getReturnType().getKind() == TypeKind.VOID)
+			mcpError(method,
+					"Soklet: @McpTool method must declare a typed completion return value.");
+		String providerPackage = elements.getPackageOf(method)
+				.getQualifiedName().toString();
+		if (method.getReturnType().getKind() != TypeKind.VOID
+				&& !isTypeAccessibleFromGeneratedProvider(
+						method.getReturnType(), providerPackage))
+			mcpError(method,
+					"Soklet: The @McpTool return type must be accessible to the generated MCP endpoint provider.");
+
+		String name = annotationString(annotation, "name");
+		String title = annotationString(annotation, "title");
+		String description = annotationString(annotation, "description");
+		String rateLimiter = annotationString(annotation, "rateLimiter");
+		boolean mirrorStructuredContentAsText =
+				annotationBoolean(annotation, "mirrorStructuredContentAsText");
+		if (name.length() < 1 || name.length() > 128
+				|| !name.matches("[A-Za-z0-9_.-]+"))
+			mcpError(method,
+					"Soklet: MCP tool names must contain 1-128 characters from [A-Za-z0-9_.-].");
+		if (!rateLimiter.isEmpty() && rateLimiter.isBlank())
+			mcpError(method,
+					"Soklet: MCP tool rate-limiter name must not be blank.");
+
+		List<McpParameterBinding> bindings = new ArrayList<>();
+		List<McpTypeMirrorTypedSchemaBridge.ToolArgument> schemaArguments =
+				new ArrayList<>();
+		Set<String> publishedNames = new LinkedHashSet<>();
+		boolean requestContextSeen = false;
+		boolean invocationFeaturesSeen = false;
+		int toolArgumentIndex = 0;
+		for (VariableElement parameter : method.getParameters()) {
+			AnnotationMirror argument = findAnnotation(parameter,
+					argumentAnnotation);
+			boolean requestContext = isExactType(parameter.asType(),
+					mcpRequestContextType);
+			boolean invocationFeatures = isExactType(parameter.asType(),
+					mcpInvocationFeaturesType);
+			if (!requestContext && !invocationFeatures
+					&& !isTypeAccessibleFromGeneratedProvider(parameter.asType(),
+							providerPackage))
+				mcpError(parameter,
+						"Soklet: An @McpTool argument type must be accessible to the generated MCP endpoint provider.");
+			if (requestContext || invocationFeatures) {
+				if (argument != null)
+					mcpError(parameter,
+							"Soklet: Injectable MCP context parameters must not also be annotated with @McpToolArgument.");
+				if (requestContext) {
+					if (requestContextSeen)
+						mcpError(parameter,
+								"Soklet: An @McpTool method may inject McpRequestContext at most once.");
+					requestContextSeen = true;
+					bindings.add(new McpParameterBinding(
+							McpParameterBindingKind.REQUEST_CONTEXT, null, null,
+							parameter.asType(), "", ""));
+				} else {
+					if (invocationFeaturesSeen)
+						mcpError(parameter,
+								"Soklet: An @McpTool method may inject McpInvocationFeatures at most once.");
+					invocationFeaturesSeen = true;
+					bindings.add(new McpParameterBinding(
+							McpParameterBindingKind.INVOCATION_FEATURES, null, null,
+							parameter.asType(), "", ""));
+				}
+				continue;
+			}
+
+			if (argument == null) {
+				mcpError(parameter,
+						"Soklet: Every non-context @McpTool parameter must be annotated with @McpToolArgument.");
+				continue;
+			}
+
+			String explicitName = annotationString(argument, "name");
+			String javaName = parameter.getSimpleName().toString();
+			String publishedName = explicitName.isBlank()
+					? javaName : explicitName;
+			if (!publishedNames.add(publishedName))
+				mcpError(parameter,
+						"Soklet: Duplicate MCP tool argument name.");
+			String argumentTitle = annotationString(argument, "title");
+			String argumentDescription = annotationString(argument,
+					"description");
+
+			bindings.add(new McpParameterBinding(
+					McpParameterBindingKind.TOOL_ARGUMENT, publishedName,
+					"argument" + toolArgumentIndex++,
+					parameter.asType(), argumentTitle, argumentDescription));
+			schemaArguments.add(new McpTypeMirrorTypedSchemaBridge.ToolArgument(
+					publishedName, parameter.asType(), argumentTitle,
+					argumentDescription));
+		}
+
+		McpTypeMirrorTypedSchemaBridge.CompiledSchemas compiledSchemas = null;
+		if (mcpProcessingErrorCount == errorsBefore) {
+			McpTypeMirrorTypedSchemaBridge.Result result;
+			try {
+				result = McpTypeMirrorTypedSchemaBridge.compileToolSchemas(types,
+						elements, schemaArguments, method.getReturnType());
+			} catch (RuntimeException exception) {
+				mcpError(method,
+						"Soklet: Unable to derive deterministic typed schemas for MCP tool '%s'.",
+						name);
+				result = null;
+			}
+			if (result instanceof McpTypeMirrorTypedSchemaBridge.RejectedSchemas rejected) {
+				McpTypeMirrorTypedSchemaBridge.Diagnostic diagnostic =
+						rejected.diagnostic();
+				mcpError(method,
+						"Soklet: MCP tool '%s' %s schema is unsupported at %s (%s).",
+						name,
+						diagnostic.direction() == McpTypeMirrorTypedSchemaBridge.Direction.TOOL_INPUT
+								? "input" : "output",
+						diagnostic.path(), diagnostic.reason());
+			} else if (result instanceof McpTypeMirrorTypedSchemaBridge.CompiledSchemas compiled) {
+				compiledSchemas = compiled;
+			}
+		}
+
+		if (mcpProcessingErrorCount != errorsBefore || compiledSchemas == null)
+			return null;
+		return new McpToolModel(method, name, title, description, rateLimiter,
+				mirrorStructuredContentAsText, List.copyOf(bindings),
+				sha256Hex(compiledSchemas.getInputSchemaBytes()),
+				sha256Hex(compiledSchemas.getOutputSchemaBytes()));
+	}
+
+	private boolean isTypeAccessibleFromGeneratedProvider(
+			@NonNull TypeMirror type, @NonNull String providerPackage) {
+		if (type.getKind().isPrimitive() || type.getKind() == TypeKind.VOID
+				|| type.getKind() == TypeKind.ERROR
+				|| type.getKind() == TypeKind.TYPEVAR
+				|| type.getKind() == TypeKind.WILDCARD)
+			return true;
+		if (type instanceof ArrayType array)
+			return isTypeAccessibleFromGeneratedProvider(array.getComponentType(),
+					providerPackage);
+		if (!(type instanceof DeclaredType declared)
+				|| !(declared.asElement() instanceof TypeElement declaration))
+			return false;
+
+		boolean samePackage = elements.getPackageOf(declaration)
+				.getQualifiedName().contentEquals(providerPackage);
+		for (Element current = declaration;
+				current instanceof TypeElement currentType;
+				current = current.getEnclosingElement()) {
+			Set<Modifier> modifiers = currentType.getModifiers();
+			if (modifiers.contains(Modifier.PRIVATE)
+					|| !samePackage && !modifiers.contains(Modifier.PUBLIC))
+				return false;
+		}
+		TypeMirror enclosing = declared.getEnclosingType();
+		if (enclosing.getKind() != TypeKind.NONE
+				&& !isTypeAccessibleFromGeneratedProvider(enclosing,
+						providerPackage))
+			return false;
+		for (TypeMirror argument : declared.getTypeArguments())
+			if (!isTypeAccessibleFromGeneratedProvider(argument,
+					providerPackage))
+				return false;
+		return true;
+	}
+
+	private boolean generateMcpEndpointProvider(
+			@NonNull McpEndpointModel endpoint,
+			@NonNull TypeElement originatingElement) {
+		StringBuilder source = new StringBuilder(8192);
+		if (!endpoint.packageName().isEmpty())
+			source.append("package ").append(endpoint.packageName())
+					.append(";\n\n");
+		source.append("/** Generated by SokletProcessor. */\n")
+				.append("public final class ")
+				.append(endpoint.providerSimpleName()).append(" {\n")
+				.append("\tpublic ").append(endpoint.providerSimpleName())
+				.append("() {\n\t}\n\n")
+				.append("\tpublic Class<?> endpointClass() {\n")
+				.append("\t\treturn ").append(endpoint.endpointQualifiedName())
+				.append(".class;\n\t}\n\n")
+				.append("\tpublic String[] schemaDigests() {\n")
+				.append("\t\treturn new String[] {");
+		for (int index = 0; index < endpoint.tools().size(); ++index) {
+			McpToolModel tool = endpoint.tools().get(index);
+			if (index > 0)
+				source.append(", ");
+			source.append(javaStringLiteral(tool.name())).append(", ")
+					.append(javaStringLiteral(tool.inputSchemaDigest()))
+					.append(", ")
+					.append(javaStringLiteral(tool.outputSchemaDigest()));
+		}
+		source.append("};\n\t}\n\n")
+				.append("\tpublic com.soklet.McpEndpoint endpoint(\n")
+				.append("\t\t\tcom.soklet.InstanceProvider instanceProvider) {\n")
+				.append("\t\tjava.util.Objects.requireNonNull(instanceProvider);\n")
+				.append("\t\tvar implementationBuilder = ")
+				.append("com.soklet.McpImplementation.withNameAndVersion(")
+				.append(javaStringLiteral(endpoint.name())).append(", ")
+				.append(javaStringLiteral(endpoint.version())).append(");\n");
+		appendOptionalBuilderCall(source, "implementationBuilder", "title",
+				endpoint.title());
+		appendOptionalBuilderCall(source, "implementationBuilder",
+				"description", endpoint.description());
+		if (!endpoint.websiteUrl().isBlank())
+			source.append("\t\timplementationBuilder.websiteUrl(java.net.URI.create(")
+					.append(javaStringLiteral(endpoint.websiteUrl()))
+					.append("));\n");
+		source.append("\t\tvar endpointBuilder = com.soklet.McpEndpoint.withPath(")
+				.append(javaStringLiteral(endpoint.path()))
+				.append(").serverInformation(implementationBuilder.build());\n");
+		appendOptionalBuilderCall(source, "endpointBuilder", "instructions",
+				endpoint.instructions());
+		appendOptionalBuilderCall(source, "endpointBuilder", "toolRateLimiter",
+				endpoint.toolRateLimiter());
+
+		for (int index = 0; index < endpoint.tools().size(); ++index) {
+			McpToolModel tool = endpoint.tools().get(index);
+			String carrierName = "Tool" + index + "Arguments";
+			source.append("\t\tvar toolBuilder").append(index)
+					.append(" = com.soklet.McpToolRegistration.withName(")
+					.append(javaStringLiteral(tool.name())).append(")\n")
+					.append("\t\t\t\t.types(").append(carrierName)
+					.append(".class, ")
+					.append(resultTypeExpression(tool.method().getReturnType()))
+					.append(")\n")
+					.append("\t\t\t\t.handler((request, call, features) -> ")
+					.append("instanceProvider.provide(")
+					.append(endpoint.endpointQualifiedName()).append(".class).")
+					.append(tool.method().getSimpleName()).append('(')
+					.append(invocationArguments(tool.bindings()))
+					.append("));\n");
+			appendOptionalBuilderCall(source, "toolBuilder" + index, "title",
+					tool.title());
+			appendOptionalBuilderCall(source, "toolBuilder" + index,
+					"description", tool.description());
+			appendOptionalBuilderCall(source, "toolBuilder" + index,
+					"rateLimiter", tool.rateLimiter());
+			source.append("\t\ttoolBuilder").append(index)
+					.append(".mirrorStructuredContentAsText(")
+					.append(tool.mirrorStructuredContentAsText()).append(");\n")
+					.append("\t\tendpointBuilder.tool(toolBuilder")
+					.append(index).append(".build());\n");
+		}
+		source.append("\t\treturn endpointBuilder.build();\n\t}\n");
+
+		for (int index = 0; index < endpoint.tools().size(); ++index) {
+			McpToolModel tool = endpoint.tools().get(index);
+			source.append("\n\tpublic record Tool").append(index)
+					.append("Arguments(");
+			boolean first = true;
+			for (McpParameterBinding binding : tool.bindings()) {
+				if (binding.kind() != McpParameterBindingKind.TOOL_ARGUMENT)
+					continue;
+				if (!first)
+					source.append(", ");
+				first = false;
+				source.append("@com.soklet.annotation.McpToolArgument(name = ")
+						.append(javaStringLiteral(binding.publishedName()))
+						.append(", title = ")
+						.append(javaStringLiteral(binding.title()))
+						.append(", description = ")
+						.append(javaStringLiteral(binding.description()))
+						.append(") ")
+						.append(mcpSourceType(binding.type())).append(' ')
+						.append(binding.carrierName());
+			}
+			source.append(") {\n\t}\n");
+		}
+		source.append("}\n");
+
+		try {
+			JavaFileObject sourceFile = filer.createSourceFile(
+					endpoint.providerBinaryName(), originatingElement);
+			try (Writer writer = sourceFile.openWriter()) {
+				writer.write(source.toString());
+			}
+			return true;
+		} catch (IOException exception) {
+			mcpError(originatingElement,
+					"Soklet: Unable to generate MCP endpoint provider %s (%s).",
+					endpoint.providerBinaryName(),
+					exception.getClass().getSimpleName());
+			return false;
+		}
+	}
+
+	private static void appendOptionalBuilderCall(@NonNull StringBuilder source,
+			@NonNull String builder, @NonNull String method,
+			@NonNull String value) {
+		if (!value.isBlank())
+			source.append("\t\t").append(builder).append('.').append(method)
+					.append('(').append(javaStringLiteral(value))
+					.append(");\n");
+	}
+
+	@NonNull
+	private static String invocationArguments(
+			@NonNull List<McpParameterBinding> bindings) {
+		List<String> arguments = new ArrayList<>(bindings.size());
+		for (McpParameterBinding binding : bindings) {
+			arguments.add(switch (binding.kind()) {
+				case REQUEST_CONTEXT -> "request";
+				case INVOCATION_FEATURES -> "features";
+				case TOOL_ARGUMENT -> "call.getArguments()."
+						+ binding.carrierName() + "()";
+			});
+		}
+		return String.join(", ", arguments);
+	}
+
+	@NonNull
+	private static String resultTypeExpression(@NonNull TypeMirror type) {
+		if (type.getKind().isPrimitive())
+			return mcpSourceType(type) + ".class";
+		return "new com.soklet.converter.TypeReference<" + mcpSourceType(type)
+				+ ">() {}";
+	}
+
+	@NonNull
+	private static String mcpSourceType(@NonNull TypeMirror type) {
+		if (type instanceof ArrayType array)
+			return mcpSourceType(array.getComponentType()) + "[]";
+		if (type instanceof DeclaredType declared
+				&& declared.asElement() instanceof TypeElement declaration) {
+			StringBuilder sourceType = new StringBuilder(
+					declaration.getQualifiedName());
+			if (!declared.getTypeArguments().isEmpty()) {
+				sourceType.append('<');
+				for (int index = 0;
+						index < declared.getTypeArguments().size(); ++index) {
+					if (index > 0)
+						sourceType.append(", ");
+					sourceType.append(mcpSourceType(
+							declared.getTypeArguments().get(index)));
+				}
+				sourceType.append('>');
+			}
+			return sourceType.toString();
+		}
+		return switch (type.getKind()) {
+			case BOOLEAN -> "boolean";
+			case BYTE -> "byte";
+			case SHORT -> "short";
+			case INT -> "int";
+			case LONG -> "long";
+			case CHAR -> "char";
+			case FLOAT -> "float";
+			case DOUBLE -> "double";
+			case VOID -> "void";
+			default -> type.toString();
+		};
+	}
+
+	private boolean isExactType(@NonNull TypeMirror candidate,
+			TypeMirror expected) {
+		return expected != null && types.isSameType(types.erasure(candidate),
+				types.erasure(expected));
+	}
+
+	@NonNull
+	private String topLevelBinaryName(@NonNull TypeElement type) {
+		TypeElement topLevel = type;
+		for (Element enclosing = type.getEnclosingElement();
+				enclosing instanceof TypeElement enclosingType;
+				enclosing = enclosing.getEnclosingElement())
+			topLevel = enclosingType;
+		return elements.getBinaryName(topLevel).toString();
+	}
+
+	private boolean isSubtypeOf(@NonNull TypeMirror candidate,
+			TypeMirror expected) {
+		return expected != null && types.isSubtype(types.erasure(candidate),
+				types.erasure(expected));
+	}
+
+	private AnnotationMirror findAnnotation(@NonNull Element element,
+			@NonNull String annotationTypeName) {
+		for (AnnotationMirror annotation : element.getAnnotationMirrors()) {
+			Element annotationElement = annotation.getAnnotationType().asElement();
+			if (annotationElement instanceof TypeElement annotationType
+					&& annotationType.getQualifiedName().contentEquals(
+							annotationTypeName))
+				return annotation;
+		}
+		return null;
+	}
+
+	private AnnotationMirror findAnnotation(@NonNull Element element,
+			@NonNull TypeElement annotationType) {
+		for (AnnotationMirror annotation : element.getAnnotationMirrors())
+			if (isAnnotationType(annotation, annotationType))
+				return annotation;
+		return null;
+	}
+
+	@NonNull
+	private String annotationString(@NonNull AnnotationMirror annotation,
+			@NonNull String member) {
+		Object value = annotationMemberWithDefaults(annotation, member);
+		return value == null ? "" : value.toString();
+	}
+
+	private boolean annotationBoolean(@NonNull AnnotationMirror annotation,
+			@NonNull String member) {
+		Object value = annotationMemberWithDefaults(annotation, member);
+		return value instanceof Boolean bool && bool;
+	}
+
+	private Object annotationMemberWithDefaults(
+			@NonNull AnnotationMirror annotation, @NonNull String member) {
+		for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue>
+				entry : elements.getElementValuesWithDefaults(annotation).entrySet())
+			if (entry.getKey().getSimpleName().contentEquals(member))
+				return entry.getValue().getValue();
+		return null;
+	}
+
+	@NonNull
+	private static String javaStringLiteral(@NonNull String value) {
+		StringBuilder literal = new StringBuilder(value.length() + 16);
+		literal.append('"');
+		for (int index = 0; index < value.length(); ++index) {
+			char character = value.charAt(index);
+			switch (character) {
+				case '\\' -> literal.append("\\\\");
+				case '"' -> literal.append("\\\"");
+				case '\b' -> literal.append("\\b");
+				case '\t' -> literal.append("\\t");
+				case '\n' -> literal.append("\\n");
+				case '\f' -> literal.append("\\f");
+				case '\r' -> literal.append("\\r");
+				default -> {
+					int characterType = Character.getType(character);
+					if (characterType == Character.FORMAT
+							|| characterType == Character.LINE_SEPARATOR
+							|| characterType == Character.PARAGRAPH_SEPARATOR
+							|| characterType == Character.SURROGATE)
+						literal.append(String.format(Locale.ROOT, "\\u%04X",
+								(int) character));
+					else if (character < 32
+							|| character >= 127 && character <= 159)
+						literal.append('\\').append(String.format("%03o",
+								(int) character));
+					else
+						literal.append(character);
+				}
+			}
+		}
+		return literal.append('"').toString();
+	}
+
+	@NonNull
+	private static String sha256Hex(byte @NonNull [] bytes) {
+		try {
+			return toHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+		} catch (NoSuchAlgorithmException exception) {
+			throw new IllegalStateException("SHA-256 must be available.", exception);
+		}
+	}
+
+	@FormatMethod
+	private void mcpError(@NonNull Element element, @NonNull String format,
+			Object... arguments) {
+		mcpProcessingErrorDetected = true;
+		mcpProcessingErrorCount++;
+		error(element, format, arguments);
 	}
 
 	private List<AnnotationMirror> extractOccurrences(ExecutableElement method, TypeElement base, TypeElement container) {
@@ -807,6 +1704,321 @@ public final class SokletProcessor extends AbstractProcessor {
 		debug("SokletProcessor: wroteIndexSize=%d", toWrite.size());
 	}
 
+	private void mergeAndWriteMcpEndpointIndex(
+			@NonNull List<McpEndpointProviderDeclaration> newlyCollected,
+			@NonNull Set<String> touchedTopLevelBinaries) {
+		Path classOutputRoot = findClassOutputRoot();
+		Path classOutputIndexPath = classOutputRoot == null ? null
+				: classOutputRoot.resolve(
+						McpGeneratedEndpointProviderIndex.RESOURCE_PATH);
+		Path sideCarIndexPath = cacheMode == CacheMode.NONE ? null
+				: mcpSideCarIndexPath(classOutputRoot);
+		Path persistentIndexPath = cacheMode == CacheMode.PERSISTENT
+				? mcpPersistentIndexPath(classOutputRoot) : null;
+
+		debug("SokletProcessor: MCP classOutputIndexPath=%s",
+				classOutputIndexPath);
+		debug("SokletProcessor: MCP sidecarIndexPath=%s",
+				sideCarIndexPath);
+		debug("SokletProcessor: MCP persistentIndexPath=%s",
+				persistentIndexPath);
+		debug("SokletProcessor: MCP touchedTopLevels=%s",
+				touchedTopLevelBinaries);
+
+		Map<String, McpEndpointProviderDeclaration> merged =
+				new LinkedHashMap<>();
+		// Every index is a complete snapshot. Prefer the current compiler output;
+		// only fall back to a cache when that output is absent. Unioning snapshots
+		// would let an older cache resurrect a row deliberately removed by a newer
+		// compilation.
+		boolean existingSnapshotRead = classOutputIndexPath != null
+				&& readMcpEndpointIndexFromPath(classOutputIndexPath, merged);
+		if (!existingSnapshotRead)
+			existingSnapshotRead = readMcpEndpointIndexFromLocation(merged);
+		if (!existingSnapshotRead && sideCarIndexPath != null)
+			existingSnapshotRead = readMcpEndpointIndexFromPath(
+					sideCarIndexPath, merged);
+		if (!existingSnapshotRead && persistentIndexPath != null)
+			readMcpEndpointIndexFromPath(persistentIndexPath, merged);
+		if (mcpProcessingErrorDetected)
+			return;
+
+		merged.values().removeIf(declaration -> touchedTopLevelBinaries
+				.contains(declaration.topLevelBinaryName()));
+		for (McpEndpointProviderDeclaration declaration : newlyCollected)
+			merged.put(declaration.endpointBinaryName(), declaration);
+
+		if (pruneDeletedEnabled && classOutputRoot != null) {
+			Set<String> currentEndpointBinaries = newlyCollected.stream()
+					.map(McpEndpointProviderDeclaration::endpointBinaryName)
+					.collect(Collectors.toSet());
+			merged.values().removeIf(declaration ->
+					!currentEndpointBinaries.contains(
+							declaration.endpointBinaryName())
+							&& (!classFileExistsInOutputRoot(classOutputRoot,
+									declaration.endpointBinaryName())
+							|| !classFileExistsInOutputRoot(classOutputRoot,
+									declaration.providerBinaryName())));
+			debug("SokletProcessor: MCP afterPruneDeleted=%d",
+					merged.size());
+		}
+
+		Map<String, String> endpointByPath = new LinkedHashMap<>();
+		for (McpEndpointProviderDeclaration declaration : merged.values()) {
+			String previous = endpointByPath.putIfAbsent(declaration.endpointPath(),
+					declaration.endpointBinaryName());
+			if (previous != null
+					&& !previous.equals(declaration.endpointBinaryName())) {
+				mcpError("Soklet: Duplicate annotated MCP endpoint path is declared by %s and %s.",
+						previous,
+						declaration.endpointBinaryName());
+				return;
+			}
+		}
+
+		Map<String, String> endpointByProvider = new LinkedHashMap<>();
+		for (McpEndpointProviderDeclaration declaration : merged.values()) {
+			String previous = endpointByProvider.putIfAbsent(
+					declaration.providerBinaryName(),
+					declaration.endpointBinaryName());
+			if (previous != null
+					&& !previous.equals(declaration.endpointBinaryName())) {
+				mcpError("Soklet: Generated MCP provider %s is assigned to multiple endpoint classes.",
+						declaration.providerBinaryName());
+				return;
+			}
+		}
+
+		List<McpEndpointProviderDeclaration> ordered =
+				new ArrayList<>(merged.values());
+		ordered.sort(Comparator
+				.comparing(McpEndpointProviderDeclaration::endpointBinaryName)
+				.thenComparing(
+						McpEndpointProviderDeclaration::providerBinaryName));
+		writeMcpEndpointIndexResource(ordered, classOutputIndexPath,
+				touchedTopLevelBinaries, newlyCollected);
+		if (mcpProcessingErrorDetected)
+			return;
+		if (sideCarIndexPath != null)
+			writeMcpEndpointIndexCache(sideCarIndexPath, ordered);
+		if (persistentIndexPath != null)
+			writeMcpEndpointIndexCache(persistentIndexPath, ordered);
+		debug("SokletProcessor: wroteMcpEndpointIndexSize=%d",
+				ordered.size());
+	}
+
+	private boolean readMcpEndpointIndexFromLocation(
+			@NonNull Map<String, McpEndpointProviderDeclaration> output) {
+		boolean opened = false;
+		try {
+			FileObject resource = filer.getResource(StandardLocation.CLASS_OUTPUT,
+					"", McpGeneratedEndpointProviderIndex.RESOURCE_PATH);
+			try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+					resource.openInputStream(), StandardCharsets.UTF_8))) {
+				opened = true;
+				Map<String, McpEndpointProviderDeclaration> parsed =
+						new LinkedHashMap<>(output);
+				int errorsBefore = mcpProcessingErrorCount;
+				readMcpEndpointIndex(reader, parsed);
+				if (mcpProcessingErrorCount == errorsBefore) {
+					output.clear();
+					output.putAll(parsed);
+				}
+				return true;
+			}
+		} catch (IOException exception) {
+			if (opened)
+				mcpError("Soklet: Unable to read the existing generated MCP endpoint-provider index.");
+			// Failure to open normally means the resource does not exist during a
+			// clean compilation. Once opened, any read failure is fatal so a
+			// partial prior index can never replace the durable one.
+			return opened;
+		}
+	}
+
+	private boolean readMcpEndpointIndexFromPath(@NonNull Path path,
+			@NonNull Map<String, McpEndpointProviderDeclaration> output) {
+		if (!Files.isRegularFile(path))
+			return false;
+		try (BufferedReader reader = Files.newBufferedReader(path,
+				StandardCharsets.UTF_8)) {
+			Map<String, McpEndpointProviderDeclaration> parsed =
+					new LinkedHashMap<>(output);
+			int errorsBefore = mcpProcessingErrorCount;
+			readMcpEndpointIndex(reader, parsed);
+			if (mcpProcessingErrorCount == errorsBefore) {
+				output.clear();
+				output.putAll(parsed);
+			}
+			return true;
+		} catch (IOException exception) {
+			mcpError("Soklet: Unable to read the existing generated MCP endpoint-provider index.");
+			return true;
+		}
+	}
+
+	private void readMcpEndpointIndex(@NonNull BufferedReader reader,
+			@NonNull Map<String, McpEndpointProviderDeclaration> output)
+			throws IOException {
+		for (String line; (line = reader.readLine()) != null; ) {
+			String stripped = line.strip();
+			if (stripped.isEmpty() || stripped.startsWith("#"))
+				continue;
+			McpEndpointProviderDeclaration declaration =
+					parseMcpEndpointIndexLine(stripped);
+			if (declaration == null) {
+				mcpError("Soklet: The existing generated MCP endpoint-provider index is malformed.");
+				return;
+			}
+			McpEndpointProviderDeclaration previous = output.putIfAbsent(
+					declaration.endpointBinaryName(), declaration);
+			if (previous != null && !previous.equals(declaration)) {
+				mcpError("Soklet: Conflicting generated MCP endpoint providers exist for %s.",
+						declaration.endpointBinaryName());
+				return;
+			}
+		}
+	}
+
+	private static McpEndpointProviderDeclaration parseMcpEndpointIndexLine(
+			@NonNull String line) {
+		try {
+			String[] fields = line.split("\\|", -1);
+			if (fields.length != 5 || !"3".equals(fields[0]))
+				return null;
+			Base64.Decoder decoder = Base64.getDecoder();
+			String endpoint = new String(decoder.decode(fields[1]),
+					StandardCharsets.UTF_8);
+			String provider = new String(decoder.decode(fields[2]),
+					StandardCharsets.UTF_8);
+			String topLevel = new String(decoder.decode(fields[3]),
+					StandardCharsets.UTF_8);
+			String endpointPath = new String(decoder.decode(fields[4]),
+					StandardCharsets.UTF_8);
+			McpGeneratedEndpointProviderIndex.formatLine(endpoint, provider,
+					topLevel, endpointPath);
+			return new McpEndpointProviderDeclaration(endpoint, provider,
+					topLevel, endpointPath);
+		} catch (IllegalArgumentException exception) {
+			return null;
+		}
+	}
+
+	private void writeMcpEndpointIndexResource(
+			@NonNull List<McpEndpointProviderDeclaration> declarations,
+			Path directIndexPath,
+			@NonNull Set<String> touchedTopLevelBinaries,
+			@NonNull List<McpEndpointProviderDeclaration> newlyCollected) {
+		Element[] origins = computeMcpOriginatingElements(
+				touchedTopLevelBinaries, newlyCollected);
+		try {
+			FileObject resource = filer.createResource(StandardLocation.CLASS_OUTPUT,
+					"", McpGeneratedEndpointProviderIndex.RESOURCE_PATH, origins);
+			try (Writer writer = resource.openWriter()) {
+				writeMcpEndpointIndex(writer, declarations);
+			}
+			return;
+		} catch (FilerException exists) {
+			try {
+				FileObject resource = filer.getResource(StandardLocation.CLASS_OUTPUT,
+						"", McpGeneratedEndpointProviderIndex.RESOURCE_PATH);
+				try (Writer writer = resource.openWriter()) {
+					writeMcpEndpointIndex(writer, declarations);
+				}
+				return;
+			} catch (IOException ignored) {
+				// Fall through to a direct, atomic filesystem write.
+			}
+		} catch (IOException exception) {
+			debug("SokletProcessor: MCP index Filer write failed (%s); attempting direct write.",
+					exception);
+		}
+
+		if (directIndexPath == null) {
+			mcpError("Soklet: Unable to write the generated MCP endpoint-provider index.");
+			return;
+		}
+		try {
+			writeMcpEndpointIndexAtomically(directIndexPath, declarations);
+		} catch (IOException exception) {
+			mcpError("Soklet: Unable to write the generated MCP endpoint-provider index.");
+		}
+	}
+
+	private Element[] computeMcpOriginatingElements(
+			@NonNull Set<String> touchedTopLevelBinaries,
+			@NonNull List<McpEndpointProviderDeclaration> newlyCollected) {
+		Set<Element> origins = new LinkedHashSet<>();
+		for (String binaryName : touchedTopLevelBinaries) {
+			TypeElement type = elements.getTypeElement(binaryName);
+			if (type != null)
+				origins.add(type);
+		}
+		for (McpEndpointProviderDeclaration declaration : newlyCollected) {
+			TypeElement type = elements.getTypeElement(
+					declaration.topLevelBinaryName());
+			if (type != null)
+				origins.add(type);
+		}
+		return origins.toArray(new Element[0]);
+	}
+
+	private static void writeMcpEndpointIndex(@NonNull Writer writer,
+			@NonNull List<McpEndpointProviderDeclaration> declarations)
+			throws IOException {
+		for (McpEndpointProviderDeclaration declaration : declarations) {
+			writer.write(McpGeneratedEndpointProviderIndex.formatLine(
+					declaration.endpointBinaryName(),
+					declaration.providerBinaryName(),
+					declaration.topLevelBinaryName(),
+					declaration.endpointPath()));
+			writer.write('\n');
+		}
+	}
+
+	private static void writeMcpEndpointIndexAtomically(@NonNull Path target,
+			@NonNull List<McpEndpointProviderDeclaration> declarations)
+			throws IOException {
+		Path parent = target.getParent();
+		if (parent != null)
+			Files.createDirectories(parent);
+		Path fileName = target.getFileName();
+		if (fileName == null)
+			throw new IOException("Unable to determine MCP index filename.");
+		Path temporary = Files.createTempFile(parent == null ? Path.of(".")
+				: parent, fileName.toString(), ".tmp");
+		try {
+			try (Writer writer = Files.newBufferedWriter(temporary,
+					StandardCharsets.UTF_8)) {
+				writeMcpEndpointIndex(writer, declarations);
+			}
+			try {
+				Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING,
+						StandardCopyOption.ATOMIC_MOVE);
+			} catch (AtomicMoveNotSupportedException exception) {
+				Files.move(temporary, target,
+						StandardCopyOption.REPLACE_EXISTING);
+			}
+		} finally {
+			Files.deleteIfExists(temporary);
+		}
+	}
+
+	private void writeMcpEndpointIndexCache(@NonNull Path target,
+			@NonNull List<McpEndpointProviderDeclaration> declarations) {
+		try {
+			writeMcpEndpointIndexAtomically(target, declarations);
+		} catch (IOException exception) {
+			try {
+				Files.deleteIfExists(target);
+				debug("SokletProcessor: failed to write MCP cache index %s; invalidated the stale snapshot (%s)",
+						target, exception);
+			} catch (IOException deletionException) {
+				mcpError("Soklet: Unable to update or invalidate an MCP endpoint-provider cache index.");
+			}
+		}
+	}
+
 
 	private void removeTouchedEntries(Map<String, ResourceMethodDeclaration> merged,
 																		Set<String> touchedTopLevelBinaries) {
@@ -889,6 +2101,17 @@ public final class SokletProcessor extends AbstractProcessor {
 		return parent.resolve(SIDE_CAR_DIR_NAME).resolve(outputRootName).resolve(SIDE_CAR_INDEX_FILENAME);
 	}
 
+	private Path mcpSideCarIndexPath(Path classOutputRoot) {
+		if (classOutputRoot == null) return null;
+		Path parent = classOutputRoot.getParent();
+		if (parent == null) return null;
+		Path outputRootFileName = classOutputRoot.getFileName();
+		if (outputRootFileName == null) return null;
+		String outputRootName = outputRootFileName.toString();
+		return parent.resolve(SIDE_CAR_DIR_NAME).resolve(outputRootName)
+				.resolve(MCP_SIDE_CAR_INDEX_FILENAME);
+	}
+
 	private Path persistentIndexPath(Path classOutputRoot) {
 		if (classOutputRoot == null) return null;
 		Path cacheRoot = persistentCacheRoot();
@@ -896,6 +2119,17 @@ public final class SokletProcessor extends AbstractProcessor {
 
 		String key = hashPath(classOutputRoot.toAbsolutePath().normalize().toString());
 		return cacheRoot.resolve(PERSISTENT_CACHE_INDEX_DIR).resolve(key).resolve(SIDE_CAR_INDEX_FILENAME);
+	}
+
+	private Path mcpPersistentIndexPath(Path classOutputRoot) {
+		if (classOutputRoot == null) return null;
+		Path cacheRoot = persistentCacheRoot();
+		if (cacheRoot == null) return null;
+
+		String key = hashPath(classOutputRoot.toAbsolutePath().normalize()
+				.toString());
+		return cacheRoot.resolve(MCP_PERSISTENT_CACHE_INDEX_DIR).resolve(key)
+				.resolve(MCP_SIDE_CAR_INDEX_FILENAME);
 	}
 
 
@@ -1108,6 +2342,14 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	@FormatMethod
+	private void mcpError(@NonNull String format, Object... arguments) {
+		mcpProcessingErrorDetected = true;
+		mcpProcessingErrorCount++;
+		messager.printMessage(Diagnostic.Kind.ERROR,
+				String.format(format, arguments));
+	}
+
+	@FormatMethod
 	private void debug(String fmt, Object... args) {
 		if (!debugEnabled) return;
 		messager.printMessage(Diagnostic.Kind.NOTE, String.format(fmt, args));
@@ -1189,6 +2431,33 @@ public final class SokletProcessor extends AbstractProcessor {
 				.thenComparing(ResourceMethodDeclaration::className)
 				.thenComparing(ResourceMethodDeclaration::methodName));
 		return out;
+	}
+
+	private record McpEndpointProviderDeclaration(String endpointBinaryName,
+			String providerBinaryName, String topLevelBinaryName,
+			String endpointPath) {}
+
+	private record McpEndpointModel(String packageName,
+			String endpointQualifiedName, String endpointBinaryName,
+			String providerSimpleName, String providerBinaryName, String path,
+			String name, String version, String title, String description,
+			String websiteUrl, String instructions, String toolRateLimiter,
+			List<McpToolModel> tools) {}
+
+	private record McpToolModel(ExecutableElement method, String name,
+			String title, String description, String rateLimiter,
+			boolean mirrorStructuredContentAsText,
+			List<McpParameterBinding> bindings, String inputSchemaDigest,
+			String outputSchemaDigest) {}
+
+	private record McpParameterBinding(McpParameterBindingKind kind,
+			String publishedName, String carrierName, TypeMirror type, String title,
+			String description) {}
+
+	private enum McpParameterBindingKind {
+		REQUEST_CONTEXT,
+		INVOCATION_FEATURES,
+		TOOL_ARGUMENT
 	}
 
 

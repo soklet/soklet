@@ -16,6 +16,9 @@
 
 package com.soklet.internal.mcp.schema;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.NotThreadSafe;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
@@ -23,7 +26,10 @@ import static java.util.Objects.requireNonNull;
 /**
  * Stable typed binding failure which never retains or reflects an instance
  * value or an application exception.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@NotThreadSafe
 final class McpTypedJsonBindingException extends IllegalArgumentException {
 	enum Operation {
 		COMPILE,
@@ -58,24 +64,29 @@ final class McpTypedJsonBindingException extends IllegalArgumentException {
 		CONTAINER_ENTRY_COUNT
 	}
 
+	@NonNull
 	private final Operation operation;
+	@NonNull
 	private final Reason reason;
+	@NonNull
 	private final McpTypedSchemaPath path;
-	private final Optional<Limit> limit;
+	@NonNull
+	private final Optional<@NonNull Limit> limit;
 
-	McpTypedJsonBindingException(Operation operation, Reason reason,
-			McpTypedSchemaPath path) {
+	McpTypedJsonBindingException(@NonNull Operation operation,
+			@NonNull Reason reason, @NonNull McpTypedSchemaPath path) {
 		this(operation, reason, path, Optional.empty());
 	}
 
-	McpTypedJsonBindingException(Operation operation, Limit limit,
-			McpTypedSchemaPath path) {
+	McpTypedJsonBindingException(@NonNull Operation operation,
+			@NonNull Limit limit, @NonNull McpTypedSchemaPath path) {
 		this(operation, Reason.LIMIT_EXCEEDED, path,
 				Optional.of(requireNonNull(limit)));
 	}
 
-	private McpTypedJsonBindingException(Operation operation, Reason reason,
-			McpTypedSchemaPath path, Optional<Limit> limit) {
+	private McpTypedJsonBindingException(@NonNull Operation operation,
+			@NonNull Reason reason, @NonNull McpTypedSchemaPath path,
+			@NonNull Optional<@NonNull Limit> limit) {
 		super(messageFor(requireNonNull(reason)));
 		this.operation = requireNonNull(operation);
 		this.reason = reason;
@@ -83,23 +94,28 @@ final class McpTypedJsonBindingException extends IllegalArgumentException {
 		this.limit = requireNonNull(limit);
 	}
 
+	@NonNull
 	Operation operation() {
 		return operation;
 	}
 
+	@NonNull
 	Reason reason() {
 		return reason;
 	}
 
+	@NonNull
 	McpTypedSchemaPath path() {
 		return path;
 	}
 
-	Optional<Limit> limit() {
+	@NonNull
+	Optional<@NonNull Limit> limit() {
 		return limit;
 	}
 
-	private static String messageFor(Reason reason) {
+	@NonNull
+	private static String messageFor(@NonNull Reason reason) {
 		return switch (reason) {
 			case SHAPE_MISMATCH ->
 					"The Java binding does not match the resolved typed schema shape.";

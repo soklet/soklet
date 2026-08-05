@@ -16,6 +16,9 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -29,18 +32,21 @@ import static java.util.Objects.requireNonNull;
  * Precompiled, schema-independent instructions for validating tool argument
  * mirrors. Phase 4 registration projects validated Profile 1 schema metadata
  * into this plan exactly once.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 public record McpMirroredHeaderPlan(
-		List<McpMirroredHeaderDeclaration> declarations) {
+		@NonNull List<@NonNull McpMirroredHeaderDeclaration> declarations) {
 	public McpMirroredHeaderPlan {
-		List<McpMirroredHeaderDeclaration> sortedDeclarations =
+		List<@NonNull McpMirroredHeaderDeclaration> sortedDeclarations =
 				new ArrayList<>(requireNonNull(declarations));
 		for (McpMirroredHeaderDeclaration declaration : sortedDeclarations)
 			requireNonNull(declaration);
 		sortedDeclarations.sort(Comparator.comparing(
 				declaration -> declaration.headerName().toLowerCase(Locale.ROOT)));
 		declarations = List.copyOf(sortedDeclarations);
-		Map<String, McpMirroredHeaderDeclaration> declarationsByName =
+		Map<@NonNull String, @NonNull McpMirroredHeaderDeclaration> declarationsByName =
 				new LinkedHashMap<>();
 		for (McpMirroredHeaderDeclaration declaration : declarations) {
 			String normalizedName = declaration.headerName().toLowerCase(Locale.ROOT);
@@ -50,11 +56,13 @@ public record McpMirroredHeaderPlan(
 		}
 	}
 
+	@NonNull
 	public static McpMirroredHeaderPlan empty() {
 		return new McpMirroredHeaderPlan(List.of());
 	}
 
 	@Override
+	@NonNull
 	public String toString() {
 		return "McpMirroredHeaderPlan[declarationCount=" + declarations.size() + "]";
 	}

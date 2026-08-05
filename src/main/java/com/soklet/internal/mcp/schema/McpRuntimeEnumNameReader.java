@@ -16,6 +16,10 @@
 
 package com.soklet.internal.mcp.schema;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.NotThreadSafe;
+import javax.annotation.concurrent.ThreadSafe;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -31,7 +35,10 @@ import static java.util.Objects.requireNonNull;
 /**
  * Reads enum constant names directly from classfile field metadata so their
  * declaration order is retained without initializing the enum class.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 final class McpRuntimeEnumNameReader {
 	private static final int CLASS_FILE_MAGIC = 0xCAFEBABE;
 	private static final int ACCESS_ENUM = 0x4000;
@@ -49,7 +56,8 @@ final class McpRuntimeEnumNameReader {
 				"maximumNameLengthInCharacters");
 	}
 
-	List<String> read(Class<?> enumType) {
+	@NonNull
+	List<@NonNull String> read(@NonNull Class<?> enumType) {
 		requireNonNull(enumType);
 		if (!enumType.isEnum())
 			throw failure("The supplied runtime type is not an enum.");
@@ -60,7 +68,7 @@ final class McpRuntimeEnumNameReader {
 		return List.copyOf(names);
 	}
 
-	private byte[] readClassFile(Class<?> enumType) {
+	private byte @NonNull [] readClassFile(@NonNull Class<?> enumType) {
 		String resourceName = "/" + enumType.getName().replace('.', '/')
 				+ ".class";
 		try (InputStream input = enumType.getResourceAsStream(resourceName)) {
@@ -75,7 +83,9 @@ final class McpRuntimeEnumNameReader {
 		}
 	}
 
-	private List<String> parseClassFile(byte[] classFile, Class<?> enumType) {
+	@NonNull
+	private List<@NonNull String> parseClassFile(byte @NonNull [] classFile,
+			@NonNull Class<?> enumType) {
 		Cursor cursor = new Cursor(classFile);
 		if (cursor.readU4() != Integer.toUnsignedLong(CLASS_FILE_MAGIC))
 			throw failure("Enum classfile metadata has an invalid magic value.");
@@ -154,8 +164,10 @@ final class McpRuntimeEnumNameReader {
 		return names;
 	}
 
-	private String readClassName(byte[] classFile, int classIndex,
-			int[] classNameIndexes, int[] utf8Offsets, int[] utf8Lengths) {
+	@NonNull
+	private String readClassName(byte @NonNull [] classFile, int classIndex,
+			int @NonNull [] classNameIndexes, int @NonNull [] utf8Offsets,
+			int @NonNull [] utf8Lengths) {
 		if (classIndex <= 0 || classIndex >= classNameIndexes.length)
 			throw failure("Enum classfile metadata has an invalid class name.");
 		int nameIndex = classNameIndexes[classIndex];
@@ -163,9 +175,11 @@ final class McpRuntimeEnumNameReader {
 				classFile.length, "Enum class name exceeds the classfile bound.");
 	}
 
-	private String readUtf8(byte[] classFile, int index, int[] utf8Offsets,
-			int[] utf8Lengths, int maximumLengthInCharacters,
-			String lengthFailureMessage) {
+	@NonNull
+	private String readUtf8(byte @NonNull [] classFile, int index,
+			int @NonNull [] utf8Offsets, int @NonNull [] utf8Lengths,
+			int maximumLengthInCharacters,
+			@NonNull String lengthFailureMessage) {
 		if (index <= 0 || index >= utf8Offsets.length || utf8Offsets[index] == 0)
 			throw failure("Enum classfile metadata has an invalid UTF-8 reference.");
 		int offset = utf8Offsets[index];
@@ -184,7 +198,8 @@ final class McpRuntimeEnumNameReader {
 		}
 	}
 
-	private int modifiedUtf8CharacterCount(byte[] bytes, int offset, int length,
+	private int modifiedUtf8CharacterCount(byte @NonNull [] bytes, int offset,
+			int length,
 			int maximumLengthInCharacters) {
 		int end = offset + length;
 		int count = 0;
@@ -208,12 +223,14 @@ final class McpRuntimeEnumNameReader {
 		return count;
 	}
 
-	private void requireContinuation(byte[] bytes, int index, int end) {
+	private void requireContinuation(byte @NonNull [] bytes, int index,
+			int end) {
 		if (index >= end || (bytes[index] & 0xC0) != 0x80)
 			throw failure("Enum classfile metadata contains malformed UTF-8.");
 	}
 
-	void verifyLoadedEnumMetadata(Class<?> enumType, List<String> names) {
+	void verifyLoadedEnumMetadata(@NonNull Class<?> enumType,
+			@NonNull List<@NonNull String> names) {
 		List<String> reflectedNames = new ArrayList<>();
 		try {
 			for (Field field : enumType.getDeclaredFields()) {
@@ -227,26 +244,30 @@ final class McpRuntimeEnumNameReader {
 			throw failure("Loaded enum metadata does not match its classfile.");
 	}
 
-	private static int requirePositive(int value, String name) {
+	private static int requirePositive(int value, @NonNull String name) {
 		if (value <= 0)
 			throw new IllegalArgumentException(name + " must be positive.");
 		return value;
 	}
 
-	private static IllegalArgumentException failure(String message) {
+	@NonNull
+	private static IllegalArgumentException failure(@NonNull String message) {
 		return new IllegalArgumentException(message);
 	}
 
+	@NonNull
 	private static McpTypedTypeModelLimitException limit(
-			McpSchemaCompilationException.Limit limit, String message) {
+			McpSchemaCompilationException.@NonNull Limit limit,
+			@NonNull String message) {
 		return new McpTypedTypeModelLimitException(limit, message);
 	}
 
+	@NotThreadSafe
 	private static final class Cursor {
-		private final byte[] bytes;
+		private final byte @NonNull [] bytes;
 		private int position;
 
-		private Cursor(byte[] bytes) {
+		private Cursor(byte @NonNull [] bytes) {
 			this.bytes = requireNonNull(bytes);
 		}
 

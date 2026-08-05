@@ -18,8 +18,10 @@ package com.soklet.internal.mcp.transport;
 
 import com.soklet.StreamTerminationReason;
 import com.soklet.internal.microhttp.WritableSource;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
@@ -34,6 +36,13 @@ import java.util.function.LongSupplier;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
+/**
+ * Bounded, thread-safe outbound response channel used by the MCP transport
+ * containment runtime.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 public final class McpOutboundChannel {
 	public enum OfferResult {
 		ACCEPTED,
@@ -47,7 +56,8 @@ public final class McpOutboundChannel {
 
 		void didApplyBackpressure();
 
-		void didTerminate(StreamTerminationReason reason, @Nullable Throwable cause);
+		void didTerminate(@NonNull StreamTerminationReason reason,
+				@Nullable Throwable cause);
 	}
 
 	public record Snapshot(int frameCapacity, int byteCapacity, int terminalByteCapacity,
@@ -56,16 +66,23 @@ public final class McpOutboundChannel {
 			boolean terminalReserved, boolean started, boolean closed) {
 	}
 
-	private static final byte[] CRLF = "\r\n".getBytes(StandardCharsets.US_ASCII);
-	private static final byte[] TERMINAL_CHUNK = "0\r\n\r\n".getBytes(StandardCharsets.US_ASCII);
+	private static final byte @NonNull [] CRLF =
+			"\r\n".getBytes(StandardCharsets.US_ASCII);
+	private static final byte @NonNull [] TERMINAL_CHUNK =
+			"0\r\n\r\n".getBytes(StandardCharsets.US_ASCII);
 
+	@NonNull
 	private final Object lock;
 	private final int frameCapacity;
 	private final int byteCapacity;
 	private final int terminalByteCapacity;
+	@NonNull
 	private final LongSupplier nanoTimeSupplier;
+	@NonNull
 	private final Listener listener;
-	private final Queue<Chunk> chunks;
+	@NonNull
+	private final Queue<@NonNull Chunk> chunks;
+	@NonNull
 	private Runnable writeReadyCallback;
 	private @Nullable Chunk currentChunk;
 	private @Nullable Chunk terminalChunk;
@@ -85,7 +102,7 @@ public final class McpOutboundChannel {
 	private boolean terminationNotified;
 
 	public McpOutboundChannel(int frameCapacity, int byteCapacity, int terminalByteCapacity,
-			LongSupplier nanoTimeSupplier, Listener listener) {
+			@NonNull LongSupplier nanoTimeSupplier, @NonNull Listener listener) {
 		if (frameCapacity < 1)
 			throw new IllegalArgumentException("Outbound frame capacity must be > 0.");
 
@@ -105,7 +122,7 @@ public final class McpOutboundChannel {
 		this.writeReadyCallback = McpOutboundChannel::noOp;
 	}
 
-	public void enqueue(byte[] payload) throws InterruptedException {
+	public void enqueue(byte @NonNull [] payload) throws InterruptedException {
 		requireNonNull(payload);
 
 		if (payload.length == 0)
@@ -138,7 +155,8 @@ public final class McpOutboundChannel {
 		wake.run();
 	}
 
-	public OfferResult offer(byte[] payload) {
+	@NonNull
+	public OfferResult offer(byte @NonNull [] payload) {
 		requireNonNull(payload);
 
 		if (payload.length == 0)
@@ -165,7 +183,7 @@ public final class McpOutboundChannel {
 		return OfferResult.ACCEPTED;
 	}
 
-	public boolean complete(byte[] terminalPayload) {
+	public boolean complete(byte @NonNull [] terminalPayload) {
 		requireNonNull(terminalPayload);
 		Runnable wake;
 
@@ -190,7 +208,8 @@ public final class McpOutboundChannel {
 		return true;
 	}
 
-	public boolean fail(StreamTerminationReason reason, @Nullable Throwable cause) {
+	public boolean fail(@NonNull StreamTerminationReason reason,
+			@Nullable Throwable cause) {
 		requireNonNull(reason);
 		Runnable wake;
 		boolean notify;
@@ -209,7 +228,7 @@ public final class McpOutboundChannel {
 	}
 
 	public boolean failIfDeadlineExpired(long nowNanos, long deadlineNanos,
-			StreamTerminationReason reason, @Nullable Throwable cause) {
+			@NonNull StreamTerminationReason reason, @Nullable Throwable cause) {
 		requireNonNull(reason);
 		Runnable wake;
 		boolean notify;
@@ -229,7 +248,7 @@ public final class McpOutboundChannel {
 	}
 
 	public boolean failIfWriteIdleExpired(long nowNanos, long timeoutNanos,
-			StreamTerminationReason reason, @Nullable Throwable cause) {
+			@NonNull StreamTerminationReason reason, @Nullable Throwable cause) {
 		if (timeoutNanos <= 0L)
 			throw new IllegalArgumentException("Write-idle timeout must be positive.");
 		requireNonNull(reason);
@@ -259,6 +278,7 @@ public final class McpOutboundChannel {
 		}
 	}
 
+	@NonNull
 	public Snapshot snapshot() {
 		synchronized (lock) {
 			return new Snapshot(
@@ -285,6 +305,7 @@ public final class McpOutboundChannel {
 	 *
 	 * @return a fresh writable-source facade
 	 */
+	@NonNull
 	public WritableSource newWritableSource() {
 		return new WritableSourceFacade();
 	}
@@ -316,7 +337,8 @@ public final class McpOutboundChannel {
 		wake.run();
 	}
 
-	private long writeTo(SocketChannel socketChannel, long maximumBytes) throws IOException {
+	private long writeTo(@NonNull SocketChannel socketChannel,
+			long maximumBytes) throws IOException {
 		requireNonNull(socketChannel);
 
 		if (maximumBytes <= 0L)
@@ -410,8 +432,9 @@ public final class McpOutboundChannel {
 		close(StreamTerminationReason.CLIENT_DISCONNECTED, null);
 	}
 
-	public void close(@Nullable StreamTerminationReason reason, @Nullable Throwable cause) {
-		StreamTerminationReason effectiveReason = reason == null
+	public void close(@Nullable StreamTerminationReason reason,
+			@Nullable Throwable cause) {
+		@NonNull StreamTerminationReason effectiveReason = reason == null
 				? StreamTerminationReason.CLIENT_DISCONNECTED
 				: reason;
 		boolean notify;
@@ -442,7 +465,8 @@ public final class McpOutboundChannel {
 		}
 
 		@Override
-		public long writeTo(SocketChannel socketChannel, long maximumBytes) throws IOException {
+		public long writeTo(@NonNull SocketChannel socketChannel,
+				long maximumBytes) throws IOException {
 			return McpOutboundChannel.this.writeTo(socketChannel, maximumBytes);
 		}
 
@@ -471,7 +495,7 @@ public final class McpOutboundChannel {
 		return bufferedFrames < frameCapacity && bufferedBytes <= byteCapacity - payloadBytes;
 	}
 
-	private void addRegularChunk(byte[] payload) {
+	private void addRegularChunk(byte @NonNull [] payload) {
 		chunks.add(Chunk.payload(payload));
 		bufferedFrames++;
 		bufferedBytes += payload.length;
@@ -479,6 +503,7 @@ public final class McpOutboundChannel {
 		maximumObservedBufferedBytes = Math.max(maximumObservedBufferedBytes, bufferedBytes);
 	}
 
+	@NonNull
 	private Runnable reserveWakeIfNeeded() {
 		if (!callbackInstalled || wakePending || !isReadyToWriteUnderLock())
 			return McpOutboundChannel::noOp;
@@ -503,7 +528,7 @@ public final class McpOutboundChannel {
 		return true;
 	}
 
-	private void reserveFailure(StreamTerminationReason reason,
+	private void reserveFailure(@NonNull StreamTerminationReason reason,
 			@Nullable Throwable cause) {
 		failure = cause instanceof IOException ioException
 				? ioException
@@ -513,8 +538,8 @@ public final class McpOutboundChannel {
 		lock.notifyAll();
 	}
 
-	private void finishFailure(StreamTerminationReason reason,
-			@Nullable Throwable cause, Runnable wake, boolean notify) {
+	private void finishFailure(@NonNull StreamTerminationReason reason,
+			@Nullable Throwable cause, @NonNull Runnable wake, boolean notify) {
 		if (notify)
 			listener.didTerminate(reason, cause);
 		wake.run();
@@ -539,37 +564,44 @@ public final class McpOutboundChannel {
 	}
 
 	private static final class Chunk {
-		private final List<ByteBuffer> buffers;
+		@NonNull
+		private final List<@NonNull ByteBuffer> buffers;
 		private final int regularPayloadBytes;
 		private final boolean terminal;
 		private int bufferIndex;
 
-		private Chunk(List<ByteBuffer> buffers, int regularPayloadBytes, boolean terminal) {
+		private Chunk(@NonNull List<@NonNull ByteBuffer> buffers,
+				int regularPayloadBytes, boolean terminal) {
 			this.buffers = requireNonNull(buffers);
 			this.regularPayloadBytes = regularPayloadBytes;
 			this.terminal = terminal;
 		}
 
-		private static Chunk payload(byte[] payload) {
+		@NonNull
+		private static Chunk payload(byte @NonNull [] payload) {
 			return new Chunk(framedPayload(payload), payload.length, false);
 		}
 
-		private static Chunk terminal(byte[] payload) {
-			List<ByteBuffer> buffers = framedPayload(payload);
+		@NonNull
+		private static Chunk terminal(byte @NonNull [] payload) {
+			List<@NonNull ByteBuffer> buffers = framedPayload(payload);
 			buffers.add(ByteBuffer.wrap(TERMINAL_CHUNK));
 			return new Chunk(buffers, 0, true);
 		}
 
-		private static List<ByteBuffer> framedPayload(byte[] payload) {
+		@NonNull
+		private static List<@NonNull ByteBuffer> framedPayload(
+				byte @NonNull [] payload) {
 			byte[] header = format("%x\r\n", payload.length).getBytes(StandardCharsets.US_ASCII);
-			List<ByteBuffer> buffers = new ArrayList<>(3);
+			List<@NonNull ByteBuffer> buffers = new ArrayList<>(3);
 			buffers.add(ByteBuffer.wrap(header));
 			buffers.add(ByteBuffer.wrap(payload));
 			buffers.add(ByteBuffer.wrap(CRLF));
 			return buffers;
 		}
 
-		private long writeTo(SocketChannel socketChannel, long maximumBytes) throws IOException {
+		private long writeTo(@NonNull SocketChannel socketChannel,
+				long maximumBytes) throws IOException {
 			long written = 0L;
 
 			while (written < maximumBytes && bufferIndex < buffers.size()) {

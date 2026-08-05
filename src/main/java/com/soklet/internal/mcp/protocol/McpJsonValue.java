@@ -16,9 +16,14 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import javax.annotation.concurrent.ThreadSafe;
+
 /**
  * Immutable JSON value tree used by Soklet's bounded production MCP codec.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 public sealed interface McpJsonValue permits McpJsonObject, McpJsonArray, McpJsonString,
 		McpJsonNumber, McpJsonBoolean, McpJsonNull {
 }

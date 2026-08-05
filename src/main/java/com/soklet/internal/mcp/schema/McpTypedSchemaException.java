@@ -16,11 +16,19 @@
 
 package com.soklet.internal.mcp.schema;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.NotThreadSafe;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
-/** Stable typed-schema rejection with no instance-value reflection. */
+/**
+ * Stable typed-schema rejection with no instance-value reflection.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@NotThreadSafe
 final class McpTypedSchemaException extends IllegalArgumentException {
 	enum Reason {
 		INVALID_DESCRIPTOR,
@@ -41,39 +49,46 @@ final class McpTypedSchemaException extends IllegalArgumentException {
 		LIMIT_EXCEEDED
 	}
 
+	@NonNull
 	private final Reason reason;
+	@NonNull
 	private final McpTypedSchemaPath path;
-	private final Optional<McpSchemaCompilationException.Limit> limit;
+	@NonNull
+	private final Optional<McpSchemaCompilationException.@NonNull Limit> limit;
 
-	McpTypedSchemaException(Reason reason, String message,
-			McpTypedSchemaPath path) {
+	McpTypedSchemaException(@NonNull Reason reason, @NonNull String message,
+			@NonNull McpTypedSchemaPath path) {
 		this(reason, message, path, Optional.empty());
 	}
 
-	McpTypedSchemaException(McpSchemaCompilationException.Limit limit,
-			String message, McpTypedSchemaPath path) {
+	McpTypedSchemaException(
+			McpSchemaCompilationException.@NonNull Limit limit,
+			@NonNull String message, @NonNull McpTypedSchemaPath path) {
 		this(Reason.LIMIT_EXCEEDED, message, path,
 				Optional.of(requireNonNull(limit)));
 	}
 
-	private McpTypedSchemaException(Reason reason, String message,
-			McpTypedSchemaPath path,
-			Optional<McpSchemaCompilationException.Limit> limit) {
+	private McpTypedSchemaException(@NonNull Reason reason,
+			@NonNull String message, @NonNull McpTypedSchemaPath path,
+			@NonNull Optional<McpSchemaCompilationException.@NonNull Limit> limit) {
 		super(requireNonNull(message));
 		this.reason = requireNonNull(reason);
 		this.path = requireNonNull(path);
 		this.limit = requireNonNull(limit);
 	}
 
+	@NonNull
 	Reason reason() {
 		return reason;
 	}
 
+	@NonNull
 	McpTypedSchemaPath path() {
 		return path;
 	}
 
-	Optional<McpSchemaCompilationException.Limit> limit() {
+	@NonNull
+	Optional<McpSchemaCompilationException.@NonNull Limit> limit() {
 		return limit;
 	}
 }

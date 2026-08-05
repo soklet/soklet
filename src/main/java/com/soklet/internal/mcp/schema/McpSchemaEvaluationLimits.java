@@ -16,13 +16,20 @@
 
 package com.soklet.internal.mcp.schema;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
+
 /**
  * Explicit per-invocation bounds for schema evaluation.
  *
  * <p>Static references consume the reference-traversal budget. Pending work
  * has a separate allocation-first bound so branching reference cycles cannot
  * grow evaluator work until memory exhaustion.</p>
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 record McpSchemaEvaluationLimits(long maximumEvaluationOperations,
 		long maximumReferenceTraversals, int maximumPendingTaskCount,
 		int maximumDiagnosticCount, int maximumDiagnosticUtf8Bytes) {
@@ -34,9 +41,11 @@ record McpSchemaEvaluationLimits(long maximumEvaluationOperations,
 	private static final int MAXIMUM_SUPPORTED_DIAGNOSTIC_COUNT = 1_000;
 	private static final int MAXIMUM_SUPPORTED_DIAGNOSTIC_UTF8_BYTES =
 			1_024 * 1_024;
+	@NonNull
 	private static final McpSchemaEvaluationLimits PRODUCTION_DEFAULTS =
 			new McpSchemaEvaluationLimits(1_000_000, 100_000, 128, 100,
 					64 * 1_024);
+	@NonNull
 	private static final McpSchemaEvaluationLimits MAXIMUM_SUPPORTED =
 			new McpSchemaEvaluationLimits(
 					MAXIMUM_SUPPORTED_EVALUATION_OPERATIONS,
@@ -71,20 +80,23 @@ record McpSchemaEvaluationLimits(long maximumEvaluationOperations,
 				"maximumDiagnosticUtf8Bytes");
 	}
 
+	@NonNull
 	static McpSchemaEvaluationLimits productionDefaults() {
 		return PRODUCTION_DEFAULTS;
 	}
 
+	@NonNull
 	static McpSchemaEvaluationLimits maximumSupported() {
 		return MAXIMUM_SUPPORTED;
 	}
 
-	private static void requirePositive(long value, String name) {
+	private static void requirePositive(long value, @NonNull String name) {
 		if (value <= 0)
 			throw new IllegalArgumentException(name + " must be positive.");
 	}
 
-	private static void requireAtMost(long value, long maximum, String name) {
+	private static void requireAtMost(long value, long maximum,
+			@NonNull String name) {
 		if (value > maximum)
 			throw new IllegalArgumentException(name + " must not exceed "
 					+ maximum + ".");

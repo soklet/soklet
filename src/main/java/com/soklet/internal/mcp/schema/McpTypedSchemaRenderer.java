@@ -22,7 +22,10 @@ import com.soklet.internal.mcp.protocol.McpJsonNumber;
 import com.soklet.internal.mcp.protocol.McpJsonObject;
 import com.soklet.internal.mcp.protocol.McpJsonString;
 import com.soklet.internal.mcp.protocol.McpJsonValue;
+import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.NotThreadSafe;
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -30,21 +33,29 @@ import java.util.Map;
 
 import static java.util.Objects.requireNonNull;
 
-/** Deterministic Profile 1 renderer for normalized typed Java shapes. */
+/**
+ * Deterministic Profile 1 renderer for normalized typed Java shapes.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 final class McpTypedSchemaRenderer {
+	@NonNull
 	private final McpSchemaCompilationLimits limits;
 
-	McpTypedSchemaRenderer(McpSchemaCompilationLimits limits) {
+	McpTypedSchemaRenderer(@NonNull McpSchemaCompilationLimits limits) {
 		this.limits = requireNonNull(limits);
 	}
 
-	McpJsonObject render(McpTypedSchemaShape shape) {
+	@NonNull
+	McpJsonObject render(@NonNull McpTypedSchemaShape shape) {
 		requireNonNull(shape);
 		new Preflight().visit(shape, McpTypedSchemaPath.root(), 1, 0);
 		return renderShape(shape);
 	}
 
-	private McpJsonObject renderShape(McpTypedSchemaShape shape) {
+	@NonNull
+	private McpJsonObject renderShape(@NonNull McpTypedSchemaShape shape) {
 		if (shape instanceof McpTypedSchemaShape.Scalar scalar)
 			return renderScalar(scalar.scalar());
 		if (shape instanceof McpTypedSchemaShape.Enumeration enumeration)
@@ -60,7 +71,8 @@ final class McpTypedSchemaRenderer {
 		throw new IllegalArgumentException("Unknown typed schema shape.");
 	}
 
-	private McpJsonObject renderScalar(McpTypedSchemaScalar scalar) {
+	@NonNull
+	private McpJsonObject renderScalar(@NonNull McpTypedSchemaScalar scalar) {
 		Map<String, McpJsonValue> members = new LinkedHashMap<>();
 		members.put("type", new McpJsonString(scalar.jsonType()));
 		scalar.minimum().ifPresent(minimum ->
@@ -70,8 +82,9 @@ final class McpTypedSchemaRenderer {
 		return new McpJsonObject(members);
 	}
 
+	@NonNull
 	private McpJsonObject renderEnumeration(
-			McpTypedSchemaShape.Enumeration enumeration) {
+			McpTypedSchemaShape.@NonNull Enumeration enumeration) {
 		List<McpJsonValue> constants = new ArrayList<>(
 				enumeration.constants().size());
 		for (String constant : enumeration.constants())
@@ -80,7 +93,9 @@ final class McpTypedSchemaRenderer {
 				new McpJsonArray(constants));
 	}
 
-	private McpJsonObject renderRecord(McpTypedSchemaShape.RecordValue record) {
+	@NonNull
+	private McpJsonObject renderRecord(
+			McpTypedSchemaShape.@NonNull RecordValue record) {
 		Map<String, McpJsonValue> propertySchemas = new LinkedHashMap<>();
 		List<McpJsonValue> required = new ArrayList<>();
 		for (McpTypedSchemaShape.Property property : record.properties()) {
@@ -106,19 +121,23 @@ final class McpTypedSchemaRenderer {
 		return new McpJsonObject(members);
 	}
 
-	private McpJsonObject objectOf(String firstName, McpJsonValue firstValue,
-			String secondName, McpJsonValue secondValue) {
+	@NonNull
+	private McpJsonObject objectOf(@NonNull String firstName,
+			@NonNull McpJsonValue firstValue, @NonNull String secondName,
+			@NonNull McpJsonValue secondValue) {
 		Map<String, McpJsonValue> members = new LinkedHashMap<>();
 		members.put(firstName, firstValue);
 		members.put(secondName, secondValue);
 		return new McpJsonObject(members);
 	}
 
+	@NotThreadSafe
 	private final class Preflight {
 		private int nodeCount;
 		private int keywordCount;
 
-		private void visit(McpTypedSchemaShape shape, McpTypedSchemaPath path,
+		private void visit(@NonNull McpTypedSchemaShape shape,
+				@NonNull McpTypedSchemaPath path,
 				int depth, int attachedAnnotationCount) {
 			if (depth > limits.maximumSchemaDepth())
 				throw limit(McpSchemaCompilationException.Limit.SCHEMA_DEPTH,
@@ -177,7 +196,7 @@ final class McpTypedSchemaRenderer {
 		}
 
 		private void chargeKeywords(int shapeKeywords, int attachedAnnotations,
-				McpTypedSchemaPath path) {
+				@NonNull McpTypedSchemaPath path) {
 			long requested = (long) keywordCount + shapeKeywords
 					+ attachedAnnotations;
 			if (requested > limits.maximumKeywordCount())
@@ -187,7 +206,8 @@ final class McpTypedSchemaRenderer {
 			keywordCount = (int) requested;
 		}
 
-		private void checkCollectionSize(long size, McpTypedSchemaPath path) {
+		private void checkCollectionSize(long size,
+				@NonNull McpTypedSchemaPath path) {
 			if (size > limits.maximumCollectionEntryCount())
 				throw limit(
 						McpSchemaCompilationException.Limit.COLLECTION_ENTRY_COUNT,
@@ -195,16 +215,18 @@ final class McpTypedSchemaRenderer {
 						path);
 		}
 
-		private void checkName(String name, McpTypedSchemaPath path) {
+		private void checkName(@NonNull String name,
+				@NonNull McpTypedSchemaPath path) {
 			if (name.length() > limits.maximumNameLengthInCharacters())
 				throw limit(McpSchemaCompilationException.Limit.NAME_LENGTH,
 						"A rendered typed schema name exceeds its configured limit.", path);
 		}
 	}
 
+	@NonNull
 	private McpTypedSchemaException limit(
-			McpSchemaCompilationException.Limit limit, String message,
-			McpTypedSchemaPath path) {
+			McpSchemaCompilationException.@NonNull Limit limit,
+			@NonNull String message, @NonNull McpTypedSchemaPath path) {
 		return new McpTypedSchemaException(limit, message, path);
 	}
 }

@@ -18,19 +18,31 @@ package com.soklet.internal.mcp.schema;
 
 import com.soklet.internal.mcp.protocol.McpJsonValue;
 import com.soklet.internal.mcp.protocol.McpMirroredHeaderPlan;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
+
+import javax.annotation.concurrent.ThreadSafe;
 
 import static java.util.Objects.requireNonNull;
 
 /**
  * One registration-ready runtime schema and its matching intrinsic binding.
+ *
+ * @param <T> the bound Java type
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 final class McpCompiledRuntimeTypedSchema<T> {
+	@NonNull
 	private final McpCompiledTypedSchema schema;
+	@NonNull
 	private final McpTypedJsonBinding<T> binding;
+	@NonNull
 	private final McpTypedJsonBinder binder;
 
-	McpCompiledRuntimeTypedSchema(McpCompiledTypedSchema schema,
-			McpTypedJsonBinding<T> binding, McpTypedJsonBinder binder) {
+	McpCompiledRuntimeTypedSchema(@NonNull McpCompiledTypedSchema schema,
+			@NonNull McpTypedJsonBinding<T> binding,
+			@NonNull McpTypedJsonBinder binder) {
 		this.schema = requireNonNull(schema);
 		this.binding = requireNonNull(binding);
 		this.binder = requireNonNull(binder);
@@ -39,19 +51,23 @@ final class McpCompiledRuntimeTypedSchema<T> {
 					"A runtime binding must use the compiled schema shape.");
 	}
 
+	@NonNull
 	McpCompiledTypedSchema schema() {
 		return schema;
 	}
 
+	@NonNull
 	McpMirroredHeaderPlan mirroredHeaderPlan() {
 		return schema.mirroredHeaderPlan();
 	}
 
-	T fromJson(McpJsonValue value) {
+	@NonNull
+	T fromJson(@Nullable McpJsonValue value) {
 		return binder.fromJson(value, binding);
 	}
 
-	McpJsonValue toJson(T value) {
+	@NonNull
+	McpJsonValue toJson(@Nullable T value) {
 		return binder.toJson(value, binding);
 	}
 }

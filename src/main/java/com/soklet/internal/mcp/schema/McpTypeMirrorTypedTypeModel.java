@@ -16,8 +16,11 @@
 
 package com.soklet.internal.mcp.schema;
 
+import com.soklet.annotation.McpToolArgument;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.NotThreadSafe;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.RecordComponentElement;
@@ -41,46 +44,75 @@ import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
 
-/** Compile-time type adapter for the shared typed-schema policy resolver. */
+/**
+ * Compile-time type adapter for the shared typed-schema policy resolver.
+ * Annotation-processing type utilities do not promise concurrent access.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@NotThreadSafe
 final class McpTypeMirrorTypedTypeModel
 		implements McpTypedTypeModel<TypeMirror> {
+	@NonNull
 	private static final String BOOLEAN = "java.lang.Boolean";
+	@NonNull
 	private static final String BYTE = "java.lang.Byte";
+	@NonNull
 	private static final String SHORT = "java.lang.Short";
+	@NonNull
 	private static final String INTEGER = "java.lang.Integer";
+	@NonNull
 	private static final String LONG = "java.lang.Long";
+	@NonNull
 	private static final String FLOAT = "java.lang.Float";
+	@NonNull
 	private static final String DOUBLE = "java.lang.Double";
+	@NonNull
 	private static final String BIG_INTEGER = "java.math.BigInteger";
+	@NonNull
 	private static final String BIG_DECIMAL = "java.math.BigDecimal";
+	@NonNull
 	private static final String STRING = "java.lang.String";
+	@NonNull
 	private static final String OBJECT = "java.lang.Object";
+	@NonNull
 	private static final String CHAR_SEQUENCE = "java.lang.CharSequence";
+	@NonNull
 	private static final String LIST = "java.util.List";
+	@NonNull
 	private static final String MAP = "java.util.Map";
+	@NonNull
 	private static final String OPTIONAL = "java.util.Optional";
+	@NonNull
 	private static final String INTERNAL_JSON_VALUE =
 			"com.soklet.internal.mcp.protocol.McpJsonValue";
-	private static final Set<String> FRAMEWORK_ROOT_TYPE_NAMES = Set.of(
+	@NonNull
+	private static final Set<@NonNull String> FRAMEWORK_ROOT_TYPE_NAMES = Set.of(
 			"com.soklet.McpJsonValue",
 			"com.soklet.McpOperationResult",
 			"com.soklet.McpCompletePayload",
 			"com.soklet.McpContentBlock",
 			"com.soklet.McpResourceContents");
 
+	@NonNull
 	private final Types types;
+	@NonNull
 	private final Elements elements;
+	@NonNull
 	private final McpSchemaCompilationLimits limits;
-	private final Set<String> frameworkRootTypeNames;
+	@NonNull
+	private final Set<@NonNull String> frameworkRootTypeNames;
 
-	McpTypeMirrorTypedTypeModel(Types types, Elements elements,
-			McpSchemaCompilationLimits limits) {
+	McpTypeMirrorTypedTypeModel(@NonNull Types types,
+			@NonNull Elements elements,
+			@NonNull McpSchemaCompilationLimits limits) {
 		this(types, elements, limits, FRAMEWORK_ROOT_TYPE_NAMES);
 	}
 
-	McpTypeMirrorTypedTypeModel(Types types, Elements elements,
-			McpSchemaCompilationLimits limits,
-			Set<String> frameworkRootTypeNames) {
+	McpTypeMirrorTypedTypeModel(@NonNull Types types,
+			@NonNull Elements elements,
+			@NonNull McpSchemaCompilationLimits limits,
+			@NonNull Set<@NonNull String> frameworkRootTypeNames) {
 		this.types = requireNonNull(types);
 		this.elements = requireNonNull(elements);
 		this.limits = requireNonNull(limits);
@@ -91,7 +123,9 @@ final class McpTypeMirrorTypedTypeModel
 	}
 
 	@Override
-	public McpTypedTypeDescriptor<TypeMirror> describe(TypeMirror type) {
+	@NonNull
+	public McpTypedTypeDescriptor<@NonNull TypeMirror> describe(
+			@NonNull TypeMirror type) {
 		requireNonNull(type);
 		McpTypedSchemaScalar scalar = scalar(type);
 		if (scalar != null)
@@ -108,7 +142,9 @@ final class McpTypeMirrorTypedTypeModel
 		};
 	}
 
-	private McpTypedTypeDescriptor<TypeMirror> describeArray(ArrayType type) {
+	@NonNull
+	private McpTypedTypeDescriptor<@NonNull TypeMirror> describeArray(
+			@NonNull ArrayType type) {
 		TypeMirror component = requireNonNull(type.getComponentType());
 		if (new GenericTraversal().containsUnresolved(component))
 			return unsupported(McpTypedSchemaException.Reason
@@ -116,8 +152,9 @@ final class McpTypeMirrorTypedTypeModel
 		return new McpTypedTypeDescriptor.ArrayValue<>(component);
 	}
 
-	private McpTypedTypeDescriptor<TypeMirror> describeDeclared(
-			DeclaredType type) {
+	@NonNull
+	private McpTypedTypeDescriptor<@NonNull TypeMirror> describeDeclared(
+			@NonNull DeclaredType type) {
 		if (!(type.asElement() instanceof TypeElement declaration))
 			return unsupported(McpTypedSchemaException.Reason.UNSUPPORTED_TYPE);
 		String name = declaration.getQualifiedName().toString();
@@ -152,8 +189,8 @@ final class McpTypeMirrorTypedTypeModel
 		return unsupported(McpTypedSchemaException.Reason.UNSUPPORTED_TYPE);
 	}
 
-	private McpTypedTypeDescriptor.Enumeration<TypeMirror> enumerationDescriptor(
-			TypeElement declaration) {
+	private McpTypedTypeDescriptor.@NonNull Enumeration<@NonNull TypeMirror> enumerationDescriptor(
+			@NonNull TypeElement declaration) {
 		int constantCount = 0;
 		for (Element enclosed : declaration.getEnclosedElements()) {
 			if (enclosed.getKind() != ElementKind.ENUM_CONSTANT)
@@ -178,8 +215,8 @@ final class McpTypeMirrorTypedTypeModel
 				binaryName(declaration), constants);
 	}
 
-	private McpTypedTypeDescriptor.RecordValue<TypeMirror> recordDescriptor(
-			DeclaredType type, TypeElement declaration) {
+	private McpTypedTypeDescriptor.@NonNull RecordValue<@NonNull TypeMirror> recordDescriptor(
+			@NonNull DeclaredType type, @NonNull TypeElement declaration) {
 		List<? extends TypeMirror> arguments = typeArguments(type);
 		List<? extends TypeParameterElement> parameters =
 				declaration.getTypeParameters();
@@ -222,16 +259,29 @@ final class McpTypeMirrorTypedTypeModel
 			if (!(accessorAsMember instanceof ExecutableType accessor))
 				throw new IllegalArgumentException(
 						"A record component accessor must have an executable type.");
-			described.add(McpTypedTypeDescriptor.RecordComponent
-					.fromNameAndType(component.getSimpleName().toString(),
-							accessor.getReturnType()));
+			@Nullable McpToolArgument argument = component.getAnnotation(
+					McpToolArgument.class);
+			String javaName = component.getSimpleName().toString();
+			String configuredName = argument == null ? ""
+					: requireNonNull(argument.name());
+			String publishedName = configuredName.isBlank()
+					? javaName : configuredName;
+			described.add(argument == null
+					? McpTypedTypeDescriptor.RecordComponent.fromNameAndType(
+							javaName, accessor.getReturnType())
+					: McpTypedTypeDescriptor.RecordComponent.fromNameAndType(
+							publishedName, accessor.getReturnType(),
+							requireNonNull(argument.title()),
+							requireNonNull(argument.description())));
 		}
 		return new McpTypedTypeDescriptor.RecordValue<>(binaryName(declaration),
 				described, genericArgumentStructuralComplexity,
 				screeningOnlyGenericArguments);
 	}
 
-	private List<? extends TypeMirror> typeArguments(DeclaredType type) {
+	@NonNull
+	private List<? extends @NonNull TypeMirror> typeArguments(
+			@NonNull DeclaredType type) {
 		List<? extends TypeMirror> arguments = requireNonNull(
 				type.getTypeArguments());
 		if (arguments.size() > limits.maximumCollectionEntryCount())
@@ -242,7 +292,7 @@ final class McpTypeMirrorTypedTypeModel
 		return arguments;
 	}
 
-	private boolean frameworkType(DeclaredType type) {
+	private boolean frameworkType(@NonNull DeclaredType type) {
 		if (assignableTo(type, INTERNAL_JSON_VALUE))
 			return true;
 		for (String frameworkRootTypeName : frameworkRootTypeNames) {
@@ -252,22 +302,25 @@ final class McpTypeMirrorTypedTypeModel
 		return false;
 	}
 
-	private boolean assignableTo(TypeMirror type, String targetName) {
+	private boolean assignableTo(@NonNull TypeMirror type,
+			@NonNull String targetName) {
 		TypeElement target = elements.getTypeElement(targetName);
 		return target != null && types.isAssignable(types.erasure(type),
 				types.erasure(target.asType()));
 	}
 
+	@NotThreadSafe
 	private final class GenericTraversal {
-		private final Set<TypeMirror> activeTypes =
+		@NonNull
+		private final Set<@NonNull TypeMirror> activeTypes =
 				Collections.newSetFromMap(new IdentityHashMap<>());
 		private int visitedNodeCount;
 
-		private boolean containsUnresolved(TypeMirror type) {
+		private boolean containsUnresolved(@NonNull TypeMirror type) {
 			return containsUnresolved(type, 1);
 		}
 
-		private boolean containsUnresolved(TypeMirror type, int depth) {
+		private boolean containsUnresolved(@NonNull TypeMirror type, int depth) {
 			enter(type, depth);
 			try {
 				if (type.getKind() == TypeKind.TYPEVAR
@@ -293,13 +346,13 @@ final class McpTypeMirrorTypedTypeModel
 		}
 
 		private int structuralComplexity(
-				List<? extends TypeMirror> argumentTypes) {
+				@NonNull List<? extends @NonNull TypeMirror> argumentTypes) {
 			for (TypeMirror argumentType : argumentTypes)
 				visitStructure(argumentType, 1);
 			return visitedNodeCount;
 		}
 
-		private void visitStructure(TypeMirror type, int depth) {
+		private void visitStructure(@NonNull TypeMirror type, int depth) {
 			enter(type, depth);
 			try {
 				if (type instanceof ArrayType array) {
@@ -317,15 +370,15 @@ final class McpTypeMirrorTypedTypeModel
 			}
 		}
 
-		private void collectReferencedParameters(TypeMirror type,
-				Set<TypeParameterElement> declaredParameters,
-				Set<TypeParameterElement> destination) {
+		private void collectReferencedParameters(@NonNull TypeMirror type,
+				@NonNull Set<@NonNull TypeParameterElement> declaredParameters,
+				@NonNull Set<@NonNull TypeParameterElement> destination) {
 			collectReferencedParameters(type, declaredParameters, destination, 1);
 		}
 
-		private void collectReferencedParameters(TypeMirror type,
-				Set<TypeParameterElement> declaredParameters,
-				Set<TypeParameterElement> destination, int depth) {
+		private void collectReferencedParameters(@NonNull TypeMirror type,
+				@NonNull Set<@NonNull TypeParameterElement> declaredParameters,
+				@NonNull Set<@NonNull TypeParameterElement> destination, int depth) {
 			enter(type, depth);
 			try {
 				if (type instanceof TypeVariable variable) {
@@ -366,7 +419,7 @@ final class McpTypeMirrorTypedTypeModel
 			}
 		}
 
-		private void enter(TypeMirror type, int depth) {
+		private void enter(@NonNull TypeMirror type, int depth) {
 			requireNonNull(type);
 			if (depth > limits.maximumSchemaDepth())
 				throw limit(McpSchemaCompilationException.Limit.SCHEMA_DEPTH,
@@ -380,12 +433,12 @@ final class McpTypeMirrorTypedTypeModel
 						"Generic type metadata contains an identity cycle.");
 		}
 
-		private void exit(TypeMirror type) {
+		private void exit(@NonNull TypeMirror type) {
 			activeTypes.remove(type);
 		}
 	}
 
-	private @Nullable McpTypedSchemaScalar scalar(TypeMirror type) {
+	private @Nullable McpTypedSchemaScalar scalar(@NonNull TypeMirror type) {
 		McpTypedSchemaScalar primitive = switch (type.getKind()) {
 			case BOOLEAN -> McpTypedSchemaScalar.BOOLEAN;
 			case BYTE -> McpTypedSchemaScalar.BYTE;
@@ -415,17 +468,21 @@ final class McpTypeMirrorTypedTypeModel
 		};
 	}
 
-	private String binaryName(TypeElement declaration) {
+	@NonNull
+	private String binaryName(@NonNull TypeElement declaration) {
 		return elements.getBinaryName(declaration).toString();
 	}
 
-	private McpTypedTypeDescriptor<TypeMirror> unsupported(
-			McpTypedSchemaException.Reason reason) {
+	@NonNull
+	private McpTypedTypeDescriptor<@NonNull TypeMirror> unsupported(
+			McpTypedSchemaException.@NonNull Reason reason) {
 		return new McpTypedTypeDescriptor.Unsupported<>(reason);
 	}
 
+	@NonNull
 	private McpTypedTypeModelLimitException limit(
-			McpSchemaCompilationException.Limit limit, String message) {
+			McpSchemaCompilationException.@NonNull Limit limit,
+			@NonNull String message) {
 		return new McpTypedTypeModelLimitException(limit, message);
 	}
 }

@@ -205,11 +205,11 @@ assert.equal(assertCurrentMatchesPhase0WhileInventoryEmpty(
   mcpApiIncludeTexts,
   phase0RemovalSet,
   currentRemovalSet,
-), true);
+), false);
 assert.equal(assertCurrentMatchesPhase0WhileInventoryEmpty(
-  ['# phase 4\n', '\n# phase 5\n', '', '   # provisional\n'],
-  phase0RemovalSet,
-  currentRemovalSet,
+	['# phase 4\n', '\n# phase 5\n', '', '   # provisional\n'],
+	phase0RemovalSet,
+	phase0RemovalSet,
 ), true);
 assert.equal(assertCurrentMatchesPhase0WhileInventoryEmpty(
   ['com.soklet.McpFutureType\n', '', '', ''],

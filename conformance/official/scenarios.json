@@ -1,0 +1,638 @@
+{
+  "schemaVersion": 1,
+  "protocolVersion": "2026-07-28",
+  "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+  "currentImplementationPhase": 3,
+  "earliestPhaseSemantics": "The first phase in which the scenario is mandatory as part of its full gate. An independently runnable scenario may be activated earlier as an infrastructure smoke test.",
+  "phase3ExecutionPolicy": "Only dns-rebinding-protection is active. All other RUN rows remain selected for their owning phase but are not executable until their expected check profiles are observed, reviewed, and frozen.",
+  "scenarios": [
+    {
+      "ordinal": 1,
+      "name": "server-stateless",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "framework-owned server/discover",
+        "truthful tools, prompts, resources, and subscription capabilities",
+        "progress-reporting tool",
+        "MRTR tools"
+      ],
+      "localSupplements": [
+        "McpHttpServerConnectionContractTests#persistent_connection_never_carries_protocol_metadata_between_posts",
+        "McpHttpServerConnectionContractTests#persistent_connection_isolates_tool_headers_and_releases_request_ids",
+        "McpInputRequestContractTests#capability_preflight_uses_only_the_current_request"
+      ],
+      "rationale": "The pinned scenario exercises the full stateless server profile, including Phase 5 behavior."
+    },
+    {
+      "ordinal": 2,
+      "name": "completion-complete",
+      "selection": "NOT_APPLICABLE",
+      "earliestPhase": null,
+      "phase3Status": "NOT_APPLICABLE",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [],
+      "localSupplements": [],
+      "rationale": "Soklet 3.6.0 does not implement or advertise Completion."
+    },
+    {
+      "ordinal": 3,
+      "name": "tools-list",
+      "selection": "RUN",
+      "earliestPhase": 4,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "immutable tools/list catalog containing every official fixture tool"
+      ],
+      "localSupplements": [
+        "McpServerCapabilityRegistryTests#tool_and_prompt_catalogs_are_truthful_immutable_and_never_mutable",
+        "McpServerCapabilityRegistryTests#duplicate_catalog_names_fail_during_normalization"
+      ],
+      "rationale": "Owned by the Phase 4 tools gate."
+    },
+    {
+      "ordinal": 4,
+      "name": "tools-call-simple-text",
+      "selection": "RUN",
+      "earliestPhase": 4,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "tools/call simple-text tool with typed arguments and text content result"
+      ],
+      "localSupplements": [
+        "McpRuntimeTypedSchemaCompilerTests#atomicallyCompilesInputSchemaAndMatchingIntrinsicBinding",
+        "McpHttpServerApplicationExecutionTests#application_handler_returns_json_and_preserves_string_and_integer_ids"
+      ],
+      "rationale": "Owned by the Phase 4 tools gate."
+    },
+    {
+      "ordinal": 5,
+      "name": "tools-call-image",
+      "selection": "RUN",
+      "earliestPhase": 4,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "tools/call image-content tool with deterministic Base64 and MIME type"
+      ],
+      "localSupplements": [
+        "McpToolContentTests#image_content_uses_exact_base64_and_mime_type"
+      ],
+      "rationale": "Owned by the Phase 4 tools gate."
+    },
+    {
+      "ordinal": 6,
+      "name": "tools-call-audio",
+      "selection": "RUN",
+      "earliestPhase": 4,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "tools/call audio-content tool with deterministic Base64 and MIME type"
+      ],
+      "localSupplements": [
+        "McpToolContentTests#audio_content_uses_exact_base64_and_mime_type"
+      ],
+      "rationale": "Owned by the Phase 4 tools gate."
+    },
+    {
+      "ordinal": 7,
+      "name": "tools-call-embedded-resource",
+      "selection": "RUN",
+      "earliestPhase": 4,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "tools/call embedded-resource tool with deterministic resource contents"
+      ],
+      "localSupplements": [
+        "McpToolContentTests#embedded_resource_content_preserves_uri_mime_type_and_payload"
+      ],
+      "rationale": "Owned by the Phase 4 tools gate."
+    },
+    {
+      "ordinal": 8,
+      "name": "tools-call-mixed-content",
+      "selection": "RUN",
+      "earliestPhase": 4,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "tools/call mixed-content tool returning the reviewed ordered content variants"
+      ],
+      "localSupplements": [
+        "McpToolContentTests#mixed_content_preserves_registration_order_and_exact_variants"
+      ],
+      "rationale": "Owned by the Phase 4 tools gate."
+    },
+    {
+      "ordinal": 9,
+      "name": "tools-call-error",
+      "selection": "RUN",
+      "earliestPhase": 4,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "tools/call error-result tool returning isError content without throwing"
+      ],
+      "localSupplements": [
+        "McpToolCallTests#tool_error_is_a_successful_json_rpc_result_with_is_error"
+      ],
+      "rationale": "Owned by the Phase 4 tools gate."
+    },
+    {
+      "ordinal": 10,
+      "name": "tools-call-with-progress",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "progress-reporting tools/call handler using request-scoped SSE"
+      ],
+      "localSupplements": [
+        "McpHttpServerRequestScopedSseTests#related_notification_commits_sse_then_terminal_result_ends_stream",
+        "McpProgressTests#progress_notifications_are_correlated_bounded_and_monotonic"
+      ],
+      "rationale": "Progress reporting is owned by Phase 5."
+    },
+    {
+      "ordinal": 11,
+      "name": "json-schema-2020-12",
+      "selection": "RUN",
+      "earliestPhase": 4,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "typed tool whose generated input and output schemas exercise the reviewed Profile 1 subset"
+      ],
+      "localSupplements": [
+        "McpToolSchemaProfileTests#exactOfficialMcpFixtureCompilesPreservesAndEvaluates",
+        "McpToolSchemaProfileOfficialSuiteTests#passesEveryManifestSelectedPinnedGroupAndCase"
+      ],
+      "rationale": "Owned by the Phase 4 schema and tools gate."
+    },
+    {
+      "ordinal": 12,
+      "name": "server-sse-multiple-streams",
+      "selection": "RUN",
+      "earliestPhase": 4,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "truthful tools/list catalog",
+        "independent concurrent request-scoped response ownership"
+      ],
+      "localSupplements": [
+        "McpHttpServerRequestScopedSseTests#completion_without_related_notifications_remains_json",
+        "McpHttpServerRequestScopedSseTests#slow_reader_applies_bounded_backpressure_without_blocking_other_requests"
+      ],
+      "rationale": "Requires the Phase 4 truthful tools/list fixture before the transport scenario can run."
+    },
+    {
+      "ordinal": 13,
+      "name": "resources-list",
+      "selection": "RUN",
+      "earliestPhase": 4,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "deterministic resources/list authority with reviewed descriptors and application-owned cursors"
+      ],
+      "localSupplements": [
+        "McpServerCapabilityRegistryTests#every_registered_resource_surface_derives_resources_capability",
+        "McpResourceListTests#authorization_partition_and_cursor_are_application_owned"
+      ],
+      "rationale": "Owned by the Phase 4 resources gate."
+    },
+    {
+      "ordinal": 14,
+      "name": "resources-read-text",
+      "selection": "RUN",
+      "earliestPhase": 4,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "exact text resource with deterministic URI, MIME type, and UTF-8 contents"
+      ],
+      "localSupplements": [
+        "McpResourceReadTests#text_resource_preserves_uri_mime_type_and_unicode_contents"
+      ],
+      "rationale": "Owned by the Phase 4 resources gate."
+    },
+    {
+      "ordinal": 15,
+      "name": "resources-read-binary",
+      "selection": "RUN",
+      "earliestPhase": 4,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "exact binary resource with deterministic URI, MIME type, and Base64 contents"
+      ],
+      "localSupplements": [
+        "McpResourceReadTests#binary_resource_uses_canonical_base64_and_exact_mime_type"
+      ],
+      "rationale": "Owned by the Phase 4 resources gate."
+    },
+    {
+      "ordinal": 16,
+      "name": "resources-templates-read",
+      "selection": "RUN",
+      "earliestPhase": 4,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "RFC 6570 Level 1 resource template and matching deterministic reader"
+      ],
+      "localSupplements": [
+        "McpResourceTemplateTests#level_one_template_expands_and_routes_exactly"
+      ],
+      "rationale": "Owned by the Phase 4 resources gate."
+    },
+    {
+      "ordinal": 17,
+      "name": "sep-2164-resource-not-found",
+      "selection": "RUN",
+      "earliestPhase": 4,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "resource reader with deterministic ResourceNotFound mapping"
+      ],
+      "localSupplements": [
+        "McpResourceReadTests#missing_resource_maps_to_the_exact_not_found_error"
+      ],
+      "rationale": "Owned by the Phase 4 resources gate."
+    },
+    {
+      "ordinal": 18,
+      "name": "prompts-list",
+      "selection": "RUN",
+      "earliestPhase": 4,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "immutable prompts/list catalog containing every official fixture prompt"
+      ],
+      "localSupplements": [
+        "McpServerCapabilityRegistryTests#tool_and_prompt_catalogs_are_truthful_immutable_and_never_mutable",
+        "McpPromptCatalogTests#catalog_is_deterministic_and_rejects_duplicate_names"
+      ],
+      "rationale": "Owned by the Phase 4 prompts gate."
+    },
+    {
+      "ordinal": 19,
+      "name": "prompts-get-simple",
+      "selection": "RUN",
+      "earliestPhase": 4,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "simple prompt returning deterministic text messages"
+      ],
+      "localSupplements": [
+        "McpPromptGetTests#simple_prompt_preserves_roles_and_text_message_order"
+      ],
+      "rationale": "Owned by the Phase 4 prompts gate."
+    },
+    {
+      "ordinal": 20,
+      "name": "prompts-get-with-args",
+      "selection": "RUN",
+      "earliestPhase": 4,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "prompt with required and optional string arguments"
+      ],
+      "localSupplements": [
+        "McpPromptGetTests#prompt_arguments_preserve_absent_empty_and_exact_strings"
+      ],
+      "rationale": "Owned by the Phase 4 prompts gate."
+    },
+    {
+      "ordinal": 21,
+      "name": "prompts-get-embedded-resource",
+      "selection": "RUN",
+      "earliestPhase": 4,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "prompt returning a deterministic embedded-resource message"
+      ],
+      "localSupplements": [
+        "McpPromptGetTests#embedded_resource_message_preserves_uri_mime_type_and_payload"
+      ],
+      "rationale": "Owned by the Phase 4 prompts gate."
+    },
+    {
+      "ordinal": 22,
+      "name": "prompts-get-with-image",
+      "selection": "RUN",
+      "earliestPhase": 4,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "prompt returning a deterministic image message"
+      ],
+      "localSupplements": [
+        "McpPromptGetTests#image_message_uses_canonical_base64_and_exact_mime_type"
+      ],
+      "rationale": "Owned by the Phase 4 prompts gate."
+    },
+    {
+      "ordinal": 23,
+      "name": "dns-rebinding-protection",
+      "selection": "RUN",
+      "earliestPhase": 4,
+      "phase3Status": "ACTIVE_EARLY",
+      "expectedCheckProfile": "dns-rebinding-protection.phase3.v1",
+      "requiredFixtureRegistrations": [
+        "public-API-only candidate-JAR fixture bound to 127.0.0.1:0",
+        "shared CorsAuthorizer allowing only the exact effective loopback Origin",
+        "framework-owned server/discover"
+      ],
+      "localSupplements": [
+        "McpHttpServerRuntimeTests#routing_host_method_and_content_negotiation_fail_before_protocol_dispatch",
+        "McpHttpServerRuntimeTests#cors_rejects_present_origins_by_default_and_reuses_shared_authorizer",
+        "McpHttpServerRuntimeTests#ipv6_loopback_bind_authorizes_its_effective_authority"
+      ],
+      "rationale": "The production Host and Origin path exists in Phase 3, so this scenario is an early public-API development smoke test through the packaged candidate before becoming part of the mandatory Phase 4 set. It remains non-release evidence because this checkpoint does not run a complete phase gate."
+    },
+    {
+      "ordinal": 24,
+      "name": "caching",
+      "selection": "RUN",
+      "earliestPhase": 4,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "cache hints on discovery, list, template-list, and resource-read results",
+        "truthful tools, prompts, resources, and resource-template fixtures"
+      ],
+      "localSupplements": [
+        "McpCachingTests#validatesFieldsAndDefaults",
+        "McpCachingTests#neverInfersPublicAndPartitionsPrivate",
+        "McpCachingTests#fixesScopeAcrossPages"
+      ],
+      "rationale": "Requires the Phase 4 truthful tools, prompts, and resources fixture."
+    },
+    {
+      "ordinal": 25,
+      "name": "http-header-validation",
+      "selection": "RUN",
+      "earliestPhase": 4,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "truthful tools/list catalog",
+        "standard MCP-Protocol-Version, Mcp-Method, and Mcp-Name validation"
+      ],
+      "localSupplements": [
+        "McpHttpServerModernHeaderTests#standard_name_mirrors_decode_and_match_for_all_required_methods",
+        "McpHttpServerModernHeaderTests#required_name_missing_duplicate_malformed_or_mismatched_is_header_mismatch",
+        "McpHttpServerRuntimeTests#modern_header_metadata_and_method_failures_have_deterministic_errors"
+      ],
+      "rationale": "Requires Phase 4 tools/list discovery before its header probes."
+    },
+    {
+      "ordinal": 26,
+      "name": "http-custom-header-server-validation",
+      "selection": "RUN",
+      "earliestPhase": 4,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "x-mcp-header tool input schema and matching tools/call handler"
+      ],
+      "localSupplements": [
+        "McpHttpServerCustomHeaderTests#custom_mirrors_decode_all_types_compare_numerically_and_strip_ows",
+        "McpHttpServerCustomHeaderTests#custom_mirror_failures_are_header_mismatches_before_admission",
+        "McpHttpServerCustomHeaderTests#custom_mirror_registration_is_scoped_to_the_selected_tool"
+      ],
+      "rationale": "Requires the Phase 4 custom-header tool registration and tools/list discovery."
+    },
+    {
+      "ordinal": 27,
+      "name": "input-required-result-basic-elicitation",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "MRTR tool producing a core elicitation input request when the client advertises elicitation"
+      ],
+      "localSupplements": [
+        "McpInputRequestContractTests#core_declarations_enforce_their_exact_capability_shapes",
+        "McpMrtrElicitationTests#elicitation_round_trip_validates_the_exact_input_response"
+      ],
+      "rationale": "Owned by the Phase 5 MRTR gate."
+    },
+    {
+      "ordinal": 28,
+      "name": "input-required-result-basic-sampling",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "MRTR tool producing a sampling input request only when the client advertises sampling"
+      ],
+      "localSupplements": [
+        "McpInputRequestContractTests#sampling_subcapabilities_imply_sampling_in_builder_but_not_raw_wire_shape",
+        "McpMrtrSamplingTests#sampling_is_suppressed_without_the_current_request_capability"
+      ],
+      "rationale": "Owned by the Phase 5 MRTR gate."
+    },
+    {
+      "ordinal": 29,
+      "name": "input-required-result-basic-list-roots",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "MRTR tool producing a roots/list input request only when the client advertises roots"
+      ],
+      "localSupplements": [
+        "McpInputRequestContractTests#required_capabilities_preflight_while_conditional_capabilities_wait_for_emission",
+        "McpMrtrRootsTests#roots_are_file_uris_and_respect_application_boundaries"
+      ],
+      "rationale": "Owned by the Phase 5 MRTR gate."
+    },
+    {
+      "ordinal": 30,
+      "name": "input-required-result-request-state",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "MRTR tool with deterministic request-state sealing and reopening"
+      ],
+      "localSupplements": [
+        "McpInputRequestContractTests#framework_state_prior_id_evidence_rejects_only_exact_id_reuse",
+        "McpRequestStateProtectorTests#sealed_state_round_trips_with_authorization_partition_binding"
+      ],
+      "rationale": "Owned by the Phase 5 MRTR gate."
+    },
+    {
+      "ordinal": 31,
+      "name": "input-required-result-multiple-input-requests",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "MRTR tool producing multiple uniquely keyed input requests in one result"
+      ],
+      "localSupplements": [
+        "McpWireDtoSketchTests#input_required_results_enforce_structure_supported_methods_and_unique_keys",
+        "McpMrtrResultTests#multiple_input_requests_preserve_key_and_declaration_order"
+      ],
+      "rationale": "Owned by the Phase 5 MRTR gate."
+    },
+    {
+      "ordinal": 32,
+      "name": "input-required-result-multi-round",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "MRTR tool completing deterministic repeated input-required rounds"
+      ],
+      "localSupplements": [
+        "McpMrtrLifecycleTests#multiple_rounds_reuse_only_valid_prior_state",
+        "McpMrtrLifecycleTests#cancellation_does_not_retry_or_retain_round_state"
+      ],
+      "rationale": "Owned by the Phase 5 MRTR gate."
+    },
+    {
+      "ordinal": 33,
+      "name": "input-required-result-missing-input-response",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "MRTR tool that truthfully re-requests a missing required input response"
+      ],
+      "localSupplements": [
+        "McpMrtrInputBindingTests#missing_required_response_is_re_requested_without_consuming_other_inputs"
+      ],
+      "rationale": "Owned by the Phase 5 MRTR gate."
+    },
+    {
+      "ordinal": 34,
+      "name": "input-required-result-non-tool-request",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "non-tools/call handler proving input-required results are rejected outside tool calls"
+      ],
+      "localSupplements": [
+        "McpMrtrResultTests#input_required_result_is_rejected_for_non_tool_methods"
+      ],
+      "rationale": "Owned by the Phase 5 MRTR gate."
+    },
+    {
+      "ordinal": 35,
+      "name": "input-required-result-result-type",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "MRTR tools exercising core and extension resultType values"
+      ],
+      "localSupplements": [
+        "McpWireDtoSketchTests#result_type_is_open_while_core_and_extension_construction_remain_distinct"
+      ],
+      "rationale": "Owned by the Phase 5 MRTR gate."
+    },
+    {
+      "ordinal": 36,
+      "name": "input-required-result-unsupported-methods",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "MRTR result validator rejecting unsupported core input-request methods"
+      ],
+      "localSupplements": [
+        "McpInputRequestContractTests#input_request_declarations_are_limited_to_final_core_schema_methods"
+      ],
+      "rationale": "Owned by the Phase 5 MRTR gate."
+    },
+    {
+      "ordinal": 37,
+      "name": "input-required-result-tampered-state",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "MRTR tool with deterministic request-state protection and tamper rejection"
+      ],
+      "localSupplements": [
+        "McpRequestStateProtectorTests#tamper_wrong_partition_and_wrong_epoch_fail_closed"
+      ],
+      "rationale": "Owned by the Phase 5 MRTR gate."
+    },
+    {
+      "ordinal": 38,
+      "name": "input-required-result-capability-check",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "MRTR tools conditionally emitting elicitation, sampling, and roots requests from current client capabilities"
+      ],
+      "localSupplements": [
+        "McpInputRequestContractTests#capability_preflight_uses_only_the_current_request",
+        "McpInputRequestContractTests#required_capabilities_preflight_while_conditional_capabilities_wait_for_emission"
+      ],
+      "rationale": "Owned by the Phase 5 MRTR gate."
+    },
+    {
+      "ordinal": 39,
+      "name": "input-required-result-ignore-extra-params",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "MRTR tool whose input-response binder ignores unexpected response keys"
+      ],
+      "localSupplements": [
+        "McpMrtrInputBindingTests#unexpected_input_response_keys_are_ignored_without_mutating_required_inputs"
+      ],
+      "rationale": "Owned by the Phase 5 MRTR gate."
+    },
+    {
+      "ordinal": 40,
+      "name": "input-required-result-validate-input",
+      "selection": "RUN",
+      "earliestPhase": 5,
+      "phase3Status": "DEFERRED",
+      "expectedCheckProfile": null,
+      "requiredFixtureRegistrations": [
+        "MRTR tool validating inputResponses against the requested declarations"
+      ],
+      "localSupplements": [
+        "McpMrtrInputBindingTests#input_responses_are_validated_before_handler_resumption"
+      ],
+      "rationale": "Owned by the Phase 5 MRTR gate."
+    }
+  ]
+}

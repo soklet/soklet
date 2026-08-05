@@ -16,13 +16,23 @@
 
 package com.soklet.internal.mcp.schema;
 
-/** Positive finite per-conversion bounds for intrinsic typed JSON binding. */
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
+
+/**
+ * Positive finite per-conversion bounds for intrinsic typed JSON binding.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 record McpTypedJsonBindingLimits(int maximumNodeCount,
 		int maximumNestingDepth, int maximumContainerEntryCount) {
 	private static final int MAXIMUM_SUPPORTED_NODE_COUNT = 1_000_000;
 	private static final int MAXIMUM_SUPPORTED_NESTING_DEPTH = 256;
 	private static final int MAXIMUM_SUPPORTED_CONTAINER_ENTRY_COUNT =
 			1_000_000;
+	@NonNull
 	private static final McpTypedJsonBindingLimits PRODUCTION_DEFAULTS =
 			new McpTypedJsonBindingLimits(100_000, 128, 100_000);
 
@@ -40,16 +50,18 @@ record McpTypedJsonBindingLimits(int maximumNodeCount,
 				"maximumContainerEntryCount");
 	}
 
+	@NonNull
 	static McpTypedJsonBindingLimits productionDefaults() {
 		return PRODUCTION_DEFAULTS;
 	}
 
-	private static void requirePositive(int value, String name) {
+	private static void requirePositive(int value, @NonNull String name) {
 		if (value <= 0)
 			throw new IllegalArgumentException(name + " must be positive.");
 	}
 
-	private static void requireAtMost(int value, int maximum, String name) {
+	private static void requireAtMost(int value, int maximum,
+			@NonNull String name) {
 		if (value > maximum)
 			throw new IllegalArgumentException(name + " must not exceed "
 					+ maximum + ".");

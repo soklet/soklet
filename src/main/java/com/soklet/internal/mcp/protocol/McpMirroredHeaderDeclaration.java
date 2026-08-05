@@ -16,17 +16,27 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.List;
 
 import static java.util.Objects.requireNonNull;
 
-/** One validated custom mirrored-header instruction. */
-public record McpMirroredHeaderDeclaration(String headerSuffix,
-		List<String> argumentPropertyPath, McpMirroredHeaderValueType valueType) {
+/**
+ * One validated custom mirrored-header instruction.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+public record McpMirroredHeaderDeclaration(@NonNull String headerSuffix,
+		@NonNull List<@NonNull String> argumentPropertyPath,
+		@NonNull McpMirroredHeaderValueType valueType) {
+	@NonNull
 	private static final String HEADER_PREFIX = "Mcp-Param-";
 
 	public McpMirroredHeaderDeclaration {
-		headerSuffix = requireNonNull(headerSuffix);
+		requireNonNull(headerSuffix);
 		if (headerSuffix.isEmpty() || !httpToken(headerSuffix))
 			throw new IllegalArgumentException(
 					"Mirrored header suffix must be a non-empty HTTP token.");
@@ -39,11 +49,12 @@ public record McpMirroredHeaderDeclaration(String headerSuffix,
 		requireNonNull(valueType);
 	}
 
+	@NonNull
 	public String headerName() {
 		return HEADER_PREFIX + headerSuffix;
 	}
 
-	private static boolean httpToken(String value) {
+	private static boolean httpToken(@NonNull String value) {
 		for (int index = 0; index < value.length(); index++) {
 			char character = value.charAt(index);
 			if (!(character >= '0' && character <= '9')
@@ -56,6 +67,7 @@ public record McpMirroredHeaderDeclaration(String headerSuffix,
 	}
 
 	@Override
+	@NonNull
 	public String toString() {
 		return "McpMirroredHeaderDeclaration[pathDepth="
 				+ argumentPropertyPath.size() + ", valueType=" + valueType + "]";

@@ -1,0 +1,308 @@
+#!/usr/bin/env node
+
+import assert from 'node:assert/strict';
+import { EventEmitter, once } from 'node:events';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  truncateSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { delimiter, resolve } from 'node:path';
+import { PassThrough } from 'node:stream';
+import {
+  boundedCollector,
+  boundedLineReader,
+  ChildSupervisor,
+  exactlyOneChecksFile,
+  installSignalHandlers,
+  runBoundedCommand,
+  runOfficialConformance,
+  RunnerCancelledError,
+  verifyPublicFixtureClasspath,
+} from './run.mjs';
+
+await boundedLineReaderStopsRetainingAfterOverflow();
+await timedOutLineWaiterDoesNotConsumeTheNextLine();
+boundedCollectorStopsRetainingAfterOverflow();
+await boundedCommandDrainsPipesAndReportsOutputLimit();
+await timedOutCommandThatExitsZeroRemainsTimedOut();
+publicFixtureClasspathRequiresExactCandidateBoundary();
+resultTreeTraversalIsBounded();
+await supervisorCancelsEveryChildAndRejectsLaterSpawns();
+if (process.platform !== 'win32') await supervisorCancelsOrdinaryDescendants();
+await failedSpawnDoesNotWaitForTerminationTimeouts();
+await installedSignalHandlerRequestsBoundedCancellation();
+await earlyFailureWritesDurableEvidence();
+
+console.log('Official MCP conformance runner self-test passed.');
+
+async function boundedLineReaderStopsRetainingAfterOverflow() {
+  const stream = new PassThrough();
+  const reader = boundedLineReader(stream, 'test control stream', 8);
+  const pending = reader.next(1_000);
+  stream.write('12345678');
+  stream.write('overflow');
+  stream.write('x'.repeat(1024 * 1024));
+  stream.end();
+
+  await assert.rejects(pending, /exceeded 8 bytes/);
+  assert.equal(reader.text(), '12345678');
+  assert.equal(reader.retainedByteCount(), 8);
+  assert.throws(() => reader.assertHealthy(), /exceeded 8 bytes/);
+}
+
+async function timedOutLineWaiterDoesNotConsumeTheNextLine() {
+  const stream = new PassThrough();
+  const reader = boundedLineReader(stream, 'test control stream', 64);
+  await assert.rejects(reader.next(10), /control-line timeout/);
+
+  const pending = reader.next(1_000);
+  stream.end('ready\n');
+  assert.equal(await pending, 'ready');
+  assert.equal(reader.lineCount(), 1);
+}
+
+function boundedCollectorStopsRetainingAfterOverflow() {
+  const stream = new PassThrough();
+  const collector = boundedCollector(stream, 'test diagnostic stream', 8);
+  stream.write(Buffer.from('12345678'));
+  stream.write(Buffer.from('overflow'));
+  stream.end(Buffer.alloc(1024 * 1024));
+
+  assert.equal(collector.text(), '12345678');
+  assert.equal(collector.retainedByteCount(), 8);
+  assert.throws(() => collector.assertWithinLimit(), /exceeded 8 bytes/);
+}
+
+async function boundedCommandDrainsPipesAndReportsOutputLimit() {
+  const result = await runBoundedCommand(
+    process.execPath,
+    ['-e', "process.stdout.write(Buffer.alloc(2 * 1024 * 1024, 'x'))"],
+    { timeoutMilliseconds: 5_000, workingDirectory: tmpdir() },
+  );
+  assert.equal(result.status, 0);
+  assert.equal(result.timedOut, false);
+  assert.match(result.outputFailure, /child stdout exceeded/);
+  assert.ok(Buffer.byteLength(result.stdout, 'utf8') <= 1024 * 1024);
+}
+
+async function timedOutCommandThatExitsZeroRemainsTimedOut() {
+  const result = await runBoundedCommand(
+    process.execPath,
+    ['-e', "process.on('SIGTERM', () => process.exit(0)); setInterval(() => {}, 1000)"],
+    { timeoutMilliseconds: 25, workingDirectory: tmpdir() },
+  );
+  assert.equal(result.status, 0);
+  assert.equal(result.timedOut, true);
+}
+
+function publicFixtureClasspathRequiresExactCandidateBoundary() {
+  const scratch = mkdtempSync(resolve(tmpdir(), 'soklet-mcp-classpath-self-test-'));
+  const fixtureClasses = resolve(scratch, 'target/conformance/public-fixture/classes');
+  const fixtureMainClass = resolve(
+    fixtureClasses, 'com/soklet/conformance/McpConformanceFixture.class',
+  );
+  const candidateJar = resolve(scratch, 'target/soklet-3.6.0-SNAPSHOT.jar');
+  try {
+    mkdirSync(resolve(fixtureMainClass, '..'), { recursive: true });
+    writeFileSync(fixtureMainClass, 'fixture');
+    writeFileSync(candidateJar, 'candidate');
+    const classpath = [
+      'target/conformance/public-fixture/classes',
+      'target/soklet-3.6.0-SNAPSHOT.jar',
+    ].join(delimiter);
+
+    assert.deepEqual(verifyPublicFixtureClasspath(classpath, scratch), {
+      fixtureClasses,
+      candidateJar,
+    });
+    assert.throws(() => verifyPublicFixtureClasspath(
+      ['target/soklet-3.6.0-SNAPSHOT.jar',
+        'target/conformance/public-fixture/classes'].join(delimiter),
+      scratch,
+    ), /classpath must be exactly/);
+    assert.throws(() => verifyPublicFixtureClasspath(
+      ['target/conformance/public-fixture/classes', 'target/classes'].join(delimiter),
+      scratch,
+    ), /classpath must be exactly/);
+    assert.throws(() => verifyPublicFixtureClasspath(
+      [classpath, 'target/test-classes'].join(delimiter), scratch,
+    ), /classpath must be exactly/);
+
+    rmSync(fixtureMainClass);
+    assert.throws(() => verifyPublicFixtureClasspath(classpath, scratch),
+      /classpath must be exactly/);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
+function resultTreeTraversalIsBounded() {
+  const scratch = mkdtempSync(resolve(tmpdir(), 'soklet-mcp-result-tree-self-test-'));
+  try {
+    const valid = resolve(scratch, 'valid');
+    mkdirSync(resolve(valid, 'nested'), { recursive: true });
+    const validChecks = resolve(valid, 'nested/checks.json');
+    writeFileSync(validChecks, '[]\n');
+    assert.equal(exactlyOneChecksFile(valid), validChecks);
+
+    const oversized = resolve(scratch, 'oversized');
+    mkdirSync(oversized);
+    const oversizedChecks = resolve(oversized, 'checks.json');
+    writeFileSync(oversizedChecks, '[]\n');
+    truncateSync(oversizedChecks, 8 * 1024 * 1024 + 1);
+    assert.throws(() => exactlyOneChecksFile(oversized), /exceeded .* bytes/);
+
+    const tooMany = resolve(scratch, 'too-many');
+    mkdirSync(tooMany);
+    writeFileSync(resolve(tooMany, 'checks.json'), '[]\n');
+    for (let index = 0; index < 128; ++index)
+      writeFileSync(resolve(tooMany, `extra-${String(index).padStart(3, '0')}.txt`), 'x');
+    assert.throws(() => exactlyOneChecksFile(tooMany), /exceeded 128 files/);
+
+    const tooDeep = resolve(scratch, 'too-deep');
+    let directory = tooDeep;
+    for (let depth = 0; depth < 9; ++depth) directory = resolve(directory, `d${depth}`);
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(resolve(directory, 'checks.json'), '[]\n');
+    assert.throws(() => exactlyOneChecksFile(tooDeep), /exceeded depth 8/);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
+async function supervisorCancelsEveryChildAndRejectsLaterSpawns() {
+  const supervisor = new ChildSupervisor({ terminationGraceMilliseconds: 50 });
+  const cooperative = supervisor.spawn(
+    process.execPath,
+    ['-e', "process.stdout.write('ready\\n'); setInterval(() => {}, 1000)"],
+    { stdio: ['ignore', 'pipe', 'ignore'] },
+  );
+  const stubborn = supervisor.spawn(
+    process.execPath,
+    ['-e', "process.on('SIGTERM', () => {}); process.stdout.write('ready\\n'); "
+      + 'setInterval(() => {}, 1000)'],
+    { stdio: ['ignore', 'pipe', 'ignore'] },
+  );
+  await Promise.all([once(cooperative.stdout, 'data'), once(stubborn.stdout, 'data')]);
+  assert.equal(supervisor.activeChildCount, 2);
+
+  supervisor.requestCancellation('SIGTERM');
+  await supervisor.terminateAndWaitForAll();
+
+  assert.equal(supervisor.activeChildCount, 0);
+  assert.notEqual(cooperative.signalCode, null);
+  assert.equal(stubborn.signalCode, 'SIGKILL');
+  assert.throws(
+    () => supervisor.spawn(process.execPath, ['-e', ''], { stdio: 'ignore' }),
+    RunnerCancelledError,
+  );
+}
+
+async function installedSignalHandlerRequestsBoundedCancellation() {
+  const processObject = new EventEmitter();
+  processObject.exitCode = undefined;
+  const supervisor = new ChildSupervisor({ terminationGraceMilliseconds: 25 });
+  const remove = installSignalHandlers(supervisor, processObject);
+  try {
+    processObject.emit('SIGTERM');
+    await supervisor.terminateAndWaitForAll();
+    assert.equal(processObject.exitCode, 143);
+    assert.equal(supervisor.cancellationSignal, 'SIGTERM');
+  } finally {
+    remove();
+  }
+  assert.equal(processObject.listenerCount('SIGINT'), 0);
+  assert.equal(processObject.listenerCount('SIGTERM'), 0);
+}
+
+async function supervisorCancelsOrdinaryDescendants() {
+  const supervisor = new ChildSupervisor({ terminationGraceMilliseconds: 50 });
+  const parentScript = [
+    "const { spawn } = require('node:child_process');",
+    "const descendant = spawn(process.execPath, ['-e',",
+    "  \"process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)\"],",
+    "  { stdio: 'ignore' });",
+    "process.on('SIGTERM', () => {});",
+    "setTimeout(() => process.stdout.write(`${descendant.pid}\\n`), 100);",
+    "setInterval(() => {}, 1000);",
+  ].join('\n');
+  const parent = supervisor.spawn(
+    process.execPath,
+    ['-e', parentScript],
+    { stdio: ['ignore', 'pipe', 'ignore'] },
+  );
+  let descendantPid;
+  try {
+    const [chunk] = await once(parent.stdout, 'data');
+    descendantPid = Number(chunk.toString('utf8').trim());
+    assert.ok(Number.isInteger(descendantPid) && descendantPid > 0);
+    assert.equal(processExists(descendantPid), true);
+
+    supervisor.requestCancellation('SIGTERM');
+    await supervisor.terminateAndWaitForAll();
+
+    assert.equal(supervisor.activeChildCount, 0);
+    assert.equal(parent.signalCode, 'SIGKILL');
+    assert.equal(processExists(descendantPid), false, 'descendant must not survive its leader');
+  } finally {
+    if (!supervisor.cancellationRequested) supervisor.requestCancellation('SIGTERM');
+    await supervisor.terminateAndWaitForAll();
+  }
+}
+
+function processExists(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error?.code === 'ESRCH') return false;
+    throw error;
+  }
+}
+
+async function failedSpawnDoesNotWaitForTerminationTimeouts() {
+  const missingExecutable = resolve(
+    tmpdir(), `soklet-missing-conformance-command-${process.pid}`,
+  );
+  await assert.rejects(() => runBoundedCommand(missingExecutable, [], {
+    timeoutMilliseconds: 100,
+    workingDirectory: tmpdir(),
+  }), /ENOENT/);
+}
+
+async function earlyFailureWritesDurableEvidence() {
+  const scratch = mkdtempSync(resolve(tmpdir(), 'soklet-mcp-runner-self-test-'));
+  const workDirectory = resolve(scratch, 'evidence');
+  const processObject = new EventEmitter();
+  processObject.exitCode = undefined;
+  try {
+    await assert.rejects(() => runOfficialConformance({
+      suiteDirectory: scratch,
+      workDirectory,
+      classpath: 'unused',
+      projectRoot: scratch,
+      javaExecutable: 'java',
+      phase: 4,
+    }, { processObject }), /accepts only Phase 3/);
+
+    const evidence = JSON.parse(readFileSync(resolve(workDirectory, 'evidence.json'), 'utf8'));
+    assert.equal(evidence.status, 'FAILED');
+    assert.equal(evidence.phase, 4);
+    assert.equal(evidence.suiteCommit, null);
+    assert.deepEqual(evidence.scenarios, []);
+    assert.match(evidence.failure, /accepts only Phase 3/);
+    assert.deepEqual(
+      readdirSync(workDirectory).sort(),
+      ['evidence.json'],
+      'atomic evidence update must not leave a temporary file',
+    );
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}

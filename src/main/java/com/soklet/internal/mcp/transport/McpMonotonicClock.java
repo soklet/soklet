@@ -16,6 +16,11 @@
 
 package com.soklet.internal.mcp.transport;
 
+/**
+ * Monotonic time source used by the MCP transport.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
 @FunctionalInterface
 interface McpMonotonicClock {
 	McpMonotonicClock SYSTEM = System::nanoTime;

@@ -103,6 +103,63 @@ public class SokletConfigTests {
 		Assertions.assertEquals(List.of("first", "second", "third", "fourth"), calls);
 	}
 
+	@Test
+	public void mcpServerCanAnchorConfigurationAndIsPreservedWhenCopied() {
+		McpServer mcpServer = newMcpServer();
+		SokletConfig config = SokletConfig.withMcpServer(mcpServer).build();
+		SokletConfig copy = config.copy().finish();
+
+		Assertions.assertSame(mcpServer, config.getMcpServer().orElseThrow());
+		Assertions.assertSame(mcpServer, copy.getMcpServer().orElseThrow());
+		Assertions.assertTrue(config.getHttpServer().isEmpty());
+		Assertions.assertTrue(config.getSseServer().isEmpty());
+	}
+
+	@Test
+	public void configurationRequiresAtLeastOneTransportServer() {
+		SokletConfig config = SokletConfig.withMcpServer(newMcpServer()).build();
+
+		Assertions.assertThrows(IllegalStateException.class,
+				() -> config.copy().mcpServer(null).finish());
+	}
+
+	@Test
+	public void mcpLifecycleCallbacksFanOutInRegistrationOrder() {
+		List<String> calls = new ArrayList<>();
+		McpServer mcpServer = newMcpServer();
+		LifecycleObserver first = new LifecycleObserver() {
+			@Override
+			public void willStartMcpServer(@NonNull McpServer server) {
+				calls.add("first");
+			}
+		};
+		LifecycleObserver second = new LifecycleObserver() {
+			@Override
+			public void willStartMcpServer(@NonNull McpServer server) {
+				calls.add("second");
+			}
+		};
+		SokletConfig config = SokletConfig.withMcpServer(mcpServer)
+				.lifecycleObservers(List.of(first, second))
+				.build();
+
+		config.getAggregateLifecycleObserver().willStartMcpServer(mcpServer);
+
+		Assertions.assertEquals(List.of("first", "second"), calls);
+	}
+
+	@NonNull
+	private static McpServer newMcpServer() {
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
+				.serverInformation(McpImplementation.withNameAndVersion("test-server", "1.0").build())
+				.build();
+
+		return McpServer.withPort(0)
+				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
+				.requestAdmissionPolicy(McpRequestAdmissionPolicy.acceptAllInstance())
+				.build();
+	}
+
 	@NonNull
 	private static LifecycleObserver namedObserver(@NonNull String name,
 																								 @NonNull List<String> calls) {

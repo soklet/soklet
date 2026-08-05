@@ -19,7 +19,9 @@ package com.soklet.internal.mcp.schema;
 import com.soklet.internal.mcp.protocol.McpJsonCodec;
 import com.soklet.internal.mcp.protocol.McpJsonObject;
 import com.soklet.internal.mcp.protocol.McpMirroredHeaderPlan;
+import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.NotThreadSafe;
 import java.util.List;
 
 import static java.util.Objects.requireNonNull;
@@ -32,17 +34,25 @@ import static java.util.Objects.requireNonNull;
  * compiled as Profile 1, and checked for its intended tool use. Discovery can
  * therefore reuse the retained document bytes without becoming the first
  * place a generated schema is encoded or validated.</p>
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@NotThreadSafe
 final class McpTypedSchemaCompiler<T> {
+	@NonNull
 	private final McpTypedSchemaResolver<T> resolver;
+	@NonNull
 	private final McpTypedSchemaRenderer renderer;
+	@NonNull
 	private final McpToolSchemaProfileCompiler profileCompiler;
+	@NonNull
 	private final McpSchemaUseValidator useValidator;
+	@NonNull
 	private final McpJsonCodec jsonCodec;
 
-	McpTypedSchemaCompiler(McpTypedTypeModel<T> typeModel,
-			McpSchemaCompilationLimits compilationLimits,
-			McpJsonCodec jsonCodec) {
+	McpTypedSchemaCompiler(@NonNull McpTypedTypeModel<T> typeModel,
+			@NonNull McpSchemaCompilationLimits compilationLimits,
+			@NonNull McpJsonCodec jsonCodec) {
 		requireNonNull(typeModel);
 		requireNonNull(compilationLimits);
 		this.jsonCodec = requireNonNull(jsonCodec);
@@ -54,27 +64,33 @@ final class McpTypedSchemaCompiler<T> {
 		this.useValidator = new McpSchemaUseValidator();
 	}
 
-	McpCompiledTypedSchema compileSchema(T type) {
+	@NonNull
+	McpCompiledTypedSchema compileSchema(@NonNull T type) {
 		return finish(resolver.resolveSchema(requireNonNull(type)), Use.SCHEMA);
 	}
 
-	McpCompiledTypedSchema compileToolInput(T type) {
+	@NonNull
+	McpCompiledTypedSchema compileToolInput(@NonNull T type) {
 		return finish(resolver.resolveToolInput(requireNonNull(type)),
 				Use.TOOL_INPUT);
 	}
 
-	McpCompiledTypedSchema compileToolOutput(T type) {
+	@NonNull
+	McpCompiledTypedSchema compileToolOutput(@NonNull T type) {
 		return finish(resolver.resolveToolOutput(requireNonNull(type)),
 				Use.TOOL_OUTPUT);
 	}
 
+	@NonNull
 	McpCompiledTypedSchema compileToolInputProperties(
-			List<McpTypedTypeDescriptor.RecordComponent<T>> components) {
+			@NonNull List<McpTypedTypeDescriptor.@NonNull RecordComponent<@NonNull T>> components) {
 		return finish(resolver.resolveToolInputProperties(
 				requireNonNull(components)), Use.TOOL_INPUT);
 	}
 
-	private McpCompiledTypedSchema finish(McpTypedSchemaShape shape, Use use) {
+	@NonNull
+	private McpCompiledTypedSchema finish(@NonNull McpTypedSchemaShape shape,
+			@NonNull Use use) {
 		McpJsonObject document = renderer.render(shape);
 		byte[] serializedDocument;
 		try {

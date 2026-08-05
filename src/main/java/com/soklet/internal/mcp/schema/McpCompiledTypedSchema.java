@@ -18,22 +18,34 @@ package com.soklet.internal.mcp.schema;
 
 import com.soklet.internal.mcp.protocol.McpJsonObject;
 import com.soklet.internal.mcp.protocol.McpMirroredHeaderPlan;
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
 
 import static java.util.Objects.requireNonNull;
 
 /**
  * One immutable typed schema after every registration-time check has passed.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 final class McpCompiledTypedSchema {
+	@NonNull
 	private final McpTypedSchemaShape shape;
+	@NonNull
 	private final McpJsonObject document;
+	@NonNull
 	private final McpToolSchemaProfileProgram program;
+	@NonNull
 	private final McpMirroredHeaderPlan mirroredHeaderPlan;
-	private final byte[] serializedDocument;
+	private final byte @NonNull [] serializedDocument;
 
-	McpCompiledTypedSchema(McpTypedSchemaShape shape, McpJsonObject document,
-			McpToolSchemaProfileProgram program,
-			McpMirroredHeaderPlan mirroredHeaderPlan, byte[] serializedDocument) {
+	McpCompiledTypedSchema(@NonNull McpTypedSchemaShape shape,
+			@NonNull McpJsonObject document,
+			@NonNull McpToolSchemaProfileProgram program,
+			@NonNull McpMirroredHeaderPlan mirroredHeaderPlan,
+			byte @NonNull [] serializedDocument) {
 		this.shape = requireNonNull(shape);
 		this.document = requireNonNull(document);
 		this.program = requireNonNull(program);
@@ -41,23 +53,27 @@ final class McpCompiledTypedSchema {
 		this.serializedDocument = requireNonNull(serializedDocument).clone();
 	}
 
+	@NonNull
 	McpTypedSchemaShape shape() {
 		return shape;
 	}
 
+	@NonNull
 	McpJsonObject document() {
 		return document;
 	}
 
+	@NonNull
 	McpToolSchemaProfileProgram program() {
 		return program;
 	}
 
+	@NonNull
 	McpMirroredHeaderPlan mirroredHeaderPlan() {
 		return mirroredHeaderPlan;
 	}
 
-	byte[] serializedDocument() {
+	byte @NonNull [] serializedDocument() {
 		return serializedDocument.clone();
 	}
 

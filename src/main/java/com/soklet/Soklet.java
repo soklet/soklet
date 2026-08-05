@@ -71,7 +71,8 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Soklet's main class - manages one or more configured transport servers ({@link HttpServer} and/or {@link SseServer})
+ * Soklet's main class - manages one or more configured transport servers ({@link HttpServer}, {@link SseServer}, and/or
+ * {@link McpServer})
  * using the provided system configuration.
  * <p>
  * <pre>{@code // Use out-of-the-box defaults
@@ -187,7 +188,8 @@ public final class Soklet implements AutoCloseable {
 		Set<ResourceMethod> resourceMethods = sokletConfig.getResourceMethodResolver().getResourceMethods();
 
 		// Fail fast in the event that Soklet appears misconfigured
-		if (resourceMethods.size() == 0)
+		if (resourceMethods.isEmpty()
+				&& (sokletConfig.getHttpServer().isPresent() || sokletConfig.getSseServer().isPresent()))
 			throw new IllegalStateException(format("No Soklet Resource Methods were found. First, try to rebuild and see if that solves the problem. If not, please ensure your %s is configured correctly. "
 					+ "See https://www.soklet.com/docs/request-handling#resource-method-resolution for details.", ResourceMethodResolver.class.getSimpleName()));
 
@@ -238,72 +240,98 @@ public final class Soklet implements AutoCloseable {
 				soklet.handleRequest(request, ServerType.SSE, marshaledResponseConsumer);
 			});
 
+		McpServer mcpServer = sokletConfig.getMcpServer().orElse(null);
+
+		if (mcpServer instanceof DefaultMcpServer defaultMcpServer)
+			defaultMcpServer.initialize(sokletConfig);
+
 	}
 
 	/**
 	 * Starts the managed server instance[s].
 	 * <p>
-	 * If the managed server[s] are already started, this is a no-op.
+	 * Configured servers that are already started are left untouched. If all configured servers are already started,
+	 * this is a no-op.
 	 */
 	public void start() {
 		getLock().lock();
 
 		try {
-			if (isStarted())
+			SokletConfig sokletConfig = getSokletConfig();
+			HttpServer httpServer = sokletConfig.getHttpServer().orElse(null);
+			SseServer sseServer = sokletConfig.getSseServer().orElse(null);
+			McpServer mcpServer = sokletConfig.getMcpServer().orElse(null);
+			boolean httpServerNeedsStart = httpServer != null && !httpServer.isStarted();
+			boolean sseServerNeedsStart = sseServer != null && !sseServer.isStarted();
+			boolean mcpServerNeedsStart = mcpServer != null && !mcpServer.isStarted();
+
+			if (!httpServerNeedsStart && !sseServerNeedsStart && !mcpServerNeedsStart)
 				return;
 
 			getAwaitShutdownLatchReference().set(new CountDownLatch(1));
 
-			SokletConfig sokletConfig = getSokletConfig();
 			LifecycleObserver lifecycleObserver = sokletConfig.getAggregateLifecycleObserver();
 
-				// 1. Notify global intent to start
-				lifecycleObserver.willStartSoklet(this);
+			// 1. Notify global intent to start
+			lifecycleObserver.willStartSoklet(this);
 
-				HttpServer httpServer = sokletConfig.getHttpServer().orElse(null);
-				SseServer sseServer = sokletConfig.getSseServer().orElse(null);
-				boolean httpServerStarted = false;
-				boolean sseServerStarted = false;
+			boolean httpServerStarted = false;
+			boolean sseServerStarted = false;
+			boolean mcpServerStarted = false;
 
-				try {
-					// 2. Attempt to start Main HttpServer
-					if (httpServer != null) {
-						lifecycleObserver.willStartHttpServer(httpServer);
-						try {
-							httpServer.start();
-							httpServerStarted = true;
-							lifecycleObserver.didStartHttpServer(httpServer);
-						} catch (Throwable t) {
-							lifecycleObserver.didFailToStartHttpServer(httpServer, t);
-							throw t; // Rethrow to trigger outer catch block
-						}
+			try {
+				// 2. Attempt to start the main HTTP server
+				if (httpServerNeedsStart) {
+					lifecycleObserver.willStartHttpServer(httpServer);
+					try {
+						httpServer.start();
+						httpServerStarted = true;
+						lifecycleObserver.didStartHttpServer(httpServer);
+					} catch (Throwable t) {
+						lifecycleObserver.didFailToStartHttpServer(httpServer, t);
+						throw t;
 					}
+				}
 
-					// 3. Attempt to start SSE HttpServer (if present)
-					if (sseServer != null) {
-						lifecycleObserver.willStartSseServer(sseServer);
-						try {
-							sseServer.start();
-							sseServerStarted = true;
-							lifecycleObserver.didStartSseServer(sseServer);
-						} catch (Throwable t) {
-							lifecycleObserver.didFailToStartSseServer(sseServer, t);
-							throw t; // Rethrow to trigger outer catch block
-						}
+				// 3. Attempt to start the SSE server
+				if (sseServerNeedsStart) {
+					lifecycleObserver.willStartSseServer(sseServer);
+					try {
+						sseServer.start();
+						sseServerStarted = true;
+						lifecycleObserver.didStartSseServer(sseServer);
+					} catch (Throwable t) {
+						lifecycleObserver.didFailToStartSseServer(sseServer, t);
+						throw t;
 					}
+				}
 
-					// 4. Global success
-					lifecycleObserver.didStartSoklet(this);
-				} catch (Throwable t) {
-					rollbackStartedServersAfterFailedStart(lifecycleObserver,
-							httpServer, httpServerStarted,
-							sseServer, sseServerStarted,
-							t);
+				// 4. Attempt to start the MCP server
+				if (mcpServerNeedsStart) {
+					lifecycleObserver.willStartMcpServer(mcpServer);
+					try {
+						mcpServer.start();
+						mcpServerStarted = true;
+						lifecycleObserver.didStartMcpServer(mcpServer);
+					} catch (Throwable t) {
+						lifecycleObserver.didFailToStartMcpServer(mcpServer, t);
+						throw t;
+					}
+				}
 
-					// 5. Global failure
-					lifecycleObserver.didFailToStartSoklet(this, t);
+				// 5. Global success
+				lifecycleObserver.didStartSoklet(this);
+			} catch (Throwable t) {
+				rollbackStartedServersAfterFailedStart(lifecycleObserver,
+						httpServer, httpServerStarted,
+						sseServer, sseServerStarted,
+						mcpServer, mcpServerStarted,
+						t);
 
-					// Ensure the exception bubbles up so the application knows startup failed
+				// 6. Global failure
+				lifecycleObserver.didFailToStartSoklet(this, t);
+
+				// Ensure the exception bubbles up so the application knows startup failed
 				if (t instanceof RuntimeException)
 					throw (RuntimeException) t;
 
@@ -315,13 +343,18 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	private void rollbackStartedServersAfterFailedStart(@NonNull LifecycleObserver lifecycleObserver,
-																										@Nullable HttpServer httpServer,
-																										boolean httpServerStarted,
-																										@Nullable SseServer sseServer,
-																										boolean sseServerStarted,
-																										@NonNull Throwable startupFailure) {
+																			@Nullable HttpServer httpServer,
+																			boolean httpServerStarted,
+																			@Nullable SseServer sseServer,
+																			boolean sseServerStarted,
+																			@Nullable McpServer mcpServer,
+																			boolean mcpServerStarted,
+																			@NonNull Throwable startupFailure) {
 		requireNonNull(lifecycleObserver);
 		requireNonNull(startupFailure);
+
+		if (mcpServerStarted && mcpServer != null)
+			stopStartedMcpServerForRollback(lifecycleObserver, mcpServer, startupFailure);
 
 		if (sseServerStarted && sseServer != null)
 			stopStartedSseServerForRollback(lifecycleObserver, sseServer, startupFailure);
@@ -397,6 +430,37 @@ public final class Soklet implements AutoCloseable {
 		}
 	}
 
+	private void stopStartedMcpServerForRollback(@NonNull LifecycleObserver lifecycleObserver,
+																				 @NonNull McpServer mcpServer,
+																				 @NonNull Throwable startupFailure) {
+		requireNonNull(lifecycleObserver);
+		requireNonNull(mcpServer);
+		requireNonNull(startupFailure);
+
+		try {
+			lifecycleObserver.willStopMcpServer(mcpServer);
+		} catch (Throwable t) {
+			startupFailure.addSuppressed(t);
+		}
+
+		try {
+			McpShutdownOutcome shutdownOutcome = ((DefaultMcpServer) mcpServer).stopForSoklet();
+			try {
+				lifecycleObserver.didStopMcpServer(mcpServer, shutdownOutcome);
+			} catch (Throwable t) {
+				startupFailure.addSuppressed(t);
+			}
+		} catch (Throwable t) {
+			startupFailure.addSuppressed(t);
+
+			try {
+				lifecycleObserver.didFailToStopMcpServer(mcpServer, t);
+			} catch (Throwable t2) {
+				startupFailure.addSuppressed(t2);
+			}
+		}
+	}
+
 	/**
 	 * Stops the managed server instance[s].
 	 * <p>
@@ -406,7 +470,12 @@ public final class Soklet implements AutoCloseable {
 		getLock().lock();
 
 		try {
-			if (isStarted()) {
+			McpServer configuredMcpServer = getSokletConfig().getMcpServer()
+					.orElse(null);
+			boolean mcpServerRequiresStop = configuredMcpServer
+					instanceof DefaultMcpServer defaultMcpServer
+					&& defaultMcpServer.requiresStop();
+			if (isStarted() || mcpServerRequiresStop) {
 				SokletConfig sokletConfig = getSokletConfig();
 				LifecycleObserver lifecycleObserver = sokletConfig.getAggregateLifecycleObserver();
 
@@ -414,37 +483,89 @@ public final class Soklet implements AutoCloseable {
 				lifecycleObserver.willStopSoklet(this);
 
 				Throwable firstEncounteredException = null;
-					HttpServer httpServer = sokletConfig.getHttpServer().orElse(null);
+				HttpServer httpServer = sokletConfig.getHttpServer().orElse(null);
 
-					// 2. Attempt to stop Main HttpServer
-					if (httpServer != null && httpServer.isStarted()) {
+				// 2. Attempt to stop the main HTTP server
+				if (httpServer != null && httpServer.isStarted()) {
+					try {
 						lifecycleObserver.willStopHttpServer(httpServer);
-						try {
-							httpServer.stop();
-						lifecycleObserver.didStopHttpServer(httpServer);
 					} catch (Throwable t) {
-						firstEncounteredException = t;
-						lifecycleObserver.didFailToStopHttpServer(httpServer, t);
+						firstEncounteredException = retainFirstFailure(firstEncounteredException, t);
+					}
+
+					try {
+						httpServer.stop();
+						try {
+							lifecycleObserver.didStopHttpServer(httpServer);
+						} catch (Throwable t) {
+							firstEncounteredException = retainFirstFailure(firstEncounteredException, t);
+						}
+					} catch (Throwable t) {
+						firstEncounteredException = retainFirstFailure(firstEncounteredException, t);
+						try {
+							lifecycleObserver.didFailToStopHttpServer(httpServer, t);
+						} catch (Throwable t2) {
+							firstEncounteredException = retainFirstFailure(firstEncounteredException, t2);
+						}
 					}
 				}
 
-				// 3. Attempt to stop SSE HttpServer
+				// 3. Attempt to stop the SSE server
 				SseServer sseServer = sokletConfig.getSseServer().orElse(null);
 
 				if (sseServer != null && sseServer.isStarted()) {
-					lifecycleObserver.willStopSseServer(sseServer);
+					try {
+						lifecycleObserver.willStopSseServer(sseServer);
+					} catch (Throwable t) {
+						firstEncounteredException = retainFirstFailure(firstEncounteredException, t);
+					}
+
 					try {
 						sseServer.stop();
-						lifecycleObserver.didStopSseServer(sseServer);
+						try {
+							lifecycleObserver.didStopSseServer(sseServer);
+						} catch (Throwable t) {
+							firstEncounteredException = retainFirstFailure(firstEncounteredException, t);
+						}
 					} catch (Throwable t) {
-						if (firstEncounteredException == null)
-							firstEncounteredException = t;
-
-						lifecycleObserver.didFailToStopSseServer(sseServer, t);
+						firstEncounteredException = retainFirstFailure(firstEncounteredException, t);
+						try {
+							lifecycleObserver.didFailToStopSseServer(sseServer, t);
+						} catch (Throwable t2) {
+							firstEncounteredException = retainFirstFailure(firstEncounteredException, t2);
+						}
 					}
 				}
 
-				// 4. Global completion (Success or Failure)
+				// 4. Attempt to stop the MCP server
+				McpServer mcpServer = sokletConfig.getMcpServer().orElse(null);
+
+				if (mcpServer instanceof DefaultMcpServer defaultMcpServer
+						&& defaultMcpServer.requiresStop()) {
+					try {
+						lifecycleObserver.willStopMcpServer(mcpServer);
+					} catch (Throwable t) {
+						firstEncounteredException = retainFirstFailure(firstEncounteredException, t);
+					}
+
+					try {
+						McpShutdownOutcome shutdownOutcome = ((DefaultMcpServer) mcpServer).stopForSoklet();
+						try {
+							lifecycleObserver.didStopMcpServer(mcpServer, shutdownOutcome);
+						} catch (Throwable t) {
+							firstEncounteredException = retainFirstFailure(firstEncounteredException, t);
+						}
+					} catch (Throwable t) {
+						firstEncounteredException = retainFirstFailure(firstEncounteredException, t);
+						try {
+							lifecycleObserver.didFailToStopMcpServer(mcpServer, t);
+						} catch (Throwable t2) {
+							firstEncounteredException = retainFirstFailure(firstEncounteredException, t2);
+						}
+					}
+				}
+
+				// 5. Global completion (success or failure)
 				if (firstEncounteredException == null)
 					lifecycleObserver.didStopSoklet(this);
 				else
@@ -457,6 +578,20 @@ public final class Soklet implements AutoCloseable {
 				getLock().unlock();
 			}
 		}
+	}
+
+	@NonNull
+	private static Throwable retainFirstFailure(@Nullable Throwable firstFailure,
+																				@NonNull Throwable encounteredFailure) {
+		requireNonNull(encounteredFailure);
+
+		if (firstFailure == null)
+			return encounteredFailure;
+
+		if (firstFailure != encounteredFailure)
+			firstFailure.addSuppressed(encounteredFailure);
+
+		return firstFailure;
 	}
 
 	/**
@@ -1510,6 +1645,10 @@ public final class Soklet implements AutoCloseable {
 
 			SseServer sseServer = getSokletConfig().getSseServer().orElse(null);
 			if (sseServer != null && sseServer.isStarted())
+				return true;
+
+			McpServer mcpServer = getSokletConfig().getMcpServer().orElse(null);
+			if (mcpServer != null && mcpServer.isStarted())
 				return true;
 
 			return false;

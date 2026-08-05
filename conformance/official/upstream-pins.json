@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "reviewedOn": "2026-08-04",
+  "protocolVersion": "2026-07-28",
+  "officialConformanceSuite": {
+    "repository": "https://github.com/modelcontextprotocol/conformance.git",
+    "commit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+    "package": {
+      "name": "@modelcontextprotocol/conformance",
+      "version": "0.2.0-alpha.10",
+      "versionIsDescriptiveOnly": true,
+      "packageJsonSha256": "2fd65cda83b8af49452198944e1924a9dc1a52ed4f56aba18e1d814922150149",
+      "packageLockJsonSha256": "161aef794720d2393a6a3db64e9751f2d52730b49f662e84b23363df5c1196e1"
+    },
+    "entryPoint": "dist/index.js",
+    "builtEntryPoint": {
+      "path": "dist/index.js",
+      "bytes": 779702,
+      "sha256": "b48694977974635ba1bdfa77a4423dd9cafb2419ef70840ce3cee67e8b184aa4"
+    },
+    "sourceTree": {
+      "algorithm": "SHA-256 of bytewise-path-sorted '<file-sha256>  <relative-path>\\n' rows",
+      "excludedDirectoryNames": [
+        ".git",
+        "dist",
+        "node_modules"
+      ],
+      "fileCount": 263,
+      "sha256": "94d3b3de1266796353380122acaf7c1d02257769618d08e7dcc38cfc60fd595b"
+    },
+    "listCommandArguments": [
+      "list",
+      "--server",
+      "--spec-version",
+      "2026-07-28"
+    ],
+    "scenarioCommandArguments": [
+      "server",
+      "--url",
+      "<fixture-url>",
+      "--scenario",
+      "<exact-scenario-name>",
+      "--spec-version",
+      "2026-07-28",
+      "-o",
+      "<scenario-output-directory>",
+      "--verbose"
+    ],
+    "lockedSchemaDependencies": {
+      "ajv": "8.20.0",
+      "ajv-formats": "3.0.1"
+    },
+    "vendoredProtocolSchema": {
+      "specificationCommit": "71e306956a4959c9655e5036be215d41986596e6",
+      "path": "src/spec-types/draft.schema.json",
+      "sha256": "9281c4890630e2d1e61792fa23b4084c4ea360cd58519610cd050545ab7b8708"
+    }
+  },
+  "finalSpecification": {
+    "repository": "https://github.com/modelcontextprotocol/modelcontextprotocol.git",
+    "tag": "2026-07-28",
+    "commit": "5f5440bb26a62e2cf3440b92da5a667efa03b267",
+    "schema": {
+      "path": "schema/2026-07-28/schema.json",
+      "sha256": "ef70b61f99b6d2e5e3b46863822eab08dff6a45bedc7a08914e0e5b133f40203",
+      "bytes": 181474,
+      "definitionCount": 155,
+      "vendoredPath": "final-schema/schema.json"
+    },
+    "license": {
+      "path": "LICENSE",
+      "sha256": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a",
+      "bytes": 12227,
+      "vendoredPath": "final-schema/LICENSE.upstream"
+    }
+  },
+  "toolchain": {
+    "node": "26.5.0",
+    "npm": "11.17.0",
+    "versionMatch": "EXACT",
+    "nodeDistribution": {
+      "checksumsUrl": "https://nodejs.org/dist/v26.5.0/SHASUMS256.txt",
+      "checksumsSha256": "c293d34153b5d2357e6c1e521907dbf6bd3833a18565e3eb19839e5589a2bd9d",
+      "linuxX64Artifact": "node-v26.5.0-linux-x64.tar.xz",
+      "linuxX64Sha256": "9f619528f1db5ddc41dccf54211066fb42228d69a156733c69cb9d6cc92e358c"
+    }
+  },
+  "scenarioInventory": {
+    "fullCount": 40,
+    "selectedRunCount": 39,
+    "excludedNames": [
+      "completion-complete"
+    ],
+    "serialization": {
+      "encoding": "UTF-8",
+      "unicodeNormalization": "NONE",
+      "trimWhitespace": false,
+      "lineTerminator": "LF",
+      "terminatesLastLine": true,
+      "order": "PINNED_CLI_OUTPUT"
+    },
+    "fullInventorySha256": "3c41ddedcefd14403c891b5a518dfde19ee9f90ad18d9ca6e012de325a78821a",
+    "selectedRunSetSha256": "4979955e16de137e16d1fe1b1aa5699fe1fc879daec0033ae57629858ec3b8d5"
+  },
+  "upstreamDriftReview": {
+    "reviewedOn": "2026-08-04",
+    "decision": "RETAIN_REVIEWED_PIN",
+    "suiteLabelsProtocolVersionAsDraft": true,
+    "suiteVendoredSchemaMatchesFinalTaggedSchema": false,
+    "knownSchemaDifference": "The suite's vendored schema predates the final tagged subscriptions/listen terminal-response correction.",
+    "requiredSupplement": "Validate Soklet golden-wire fixtures independently against the checksum-pinned final tagged schema without modifying the official suite checkout."
+  }
+}

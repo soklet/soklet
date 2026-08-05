@@ -16,9 +16,13 @@
 
 package com.soklet.internal.mcp.schema;
 
+import com.soklet.annotation.McpToolArgument;
 import com.soklet.internal.mcp.protocol.McpJsonValue;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.NotThreadSafe;
+import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.GenericArrayType;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.RecordComponent;
@@ -41,27 +45,37 @@ import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
 
-/** Reflection adapter for the shared typed-schema policy resolver. */
+/**
+ * Reflection adapter for the shared typed-schema policy resolver.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
-	private static final Set<String> FRAMEWORK_ROOT_TYPE_NAMES = Set.of(
+	@NonNull
+	private static final Set<@NonNull String> FRAMEWORK_ROOT_TYPE_NAMES = Set.of(
 			"com.soklet.McpJsonValue",
 			"com.soklet.McpOperationResult",
 			"com.soklet.McpCompletePayload",
 			"com.soklet.McpContentBlock",
 			"com.soklet.McpResourceContents");
 
+	@NonNull
 	private final McpSchemaCompilationLimits limits;
+	@NonNull
 	private final McpRuntimeEnumNameReader enumNameReader;
-	private final Set<String> frameworkRootTypeNames;
-	private final ClassValue<McpTypedTypeDescriptor.Enumeration<Type>>
+	@NonNull
+	private final Set<@NonNull String> frameworkRootTypeNames;
+	@NonNull
+	private final ClassValue<McpTypedTypeDescriptor.@NonNull Enumeration<@NonNull Type>>
 			enumerationsByClass;
 
-	McpRuntimeTypedTypeModel(McpSchemaCompilationLimits limits) {
+	McpRuntimeTypedTypeModel(@NonNull McpSchemaCompilationLimits limits) {
 		this(limits, FRAMEWORK_ROOT_TYPE_NAMES);
 	}
 
-	McpRuntimeTypedTypeModel(McpSchemaCompilationLimits limits,
-			Set<String> frameworkRootTypeNames) {
+	McpRuntimeTypedTypeModel(@NonNull McpSchemaCompilationLimits limits,
+			@NonNull Set<@NonNull String> frameworkRootTypeNames) {
 		this.limits = requireNonNull(limits);
 		this.frameworkRootTypeNames = Set.copyOf(
 				requireNonNull(frameworkRootTypeNames));
@@ -70,8 +84,8 @@ final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
 				limits.maximumNameLengthInCharacters());
 		this.enumerationsByClass = new ClassValue<>() {
 			@Override
-			protected McpTypedTypeDescriptor.Enumeration<Type> computeValue(
-					Class<?> type) {
+			protected McpTypedTypeDescriptor.@NonNull Enumeration<@NonNull Type> computeValue(
+					@NonNull Class<?> type) {
 				return new McpTypedTypeDescriptor.Enumeration<>(type.getName(),
 						enumNameReader.read(type));
 			}
@@ -79,7 +93,8 @@ final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
 	}
 
 	@Override
-	public McpTypedTypeDescriptor<Type> describe(Type type) {
+	@NonNull
+	public McpTypedTypeDescriptor<@NonNull Type> describe(@NonNull Type type) {
 		requireNonNull(type);
 		if (type instanceof Class<?> typeClass)
 			return describeClass(typeClass);
@@ -97,7 +112,9 @@ final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
 				McpTypedSchemaException.Reason.UNSUPPORTED_TYPE);
 	}
 
-	private McpTypedTypeDescriptor<Type> describeClass(Class<?> type) {
+	@NonNull
+	private McpTypedTypeDescriptor<@NonNull Type> describeClass(
+			@NonNull Class<?> type) {
 		McpTypedSchemaScalar scalar = scalar(type);
 		if (scalar != null)
 			return new McpTypedTypeDescriptor.Scalar<>(scalar);
@@ -120,8 +137,9 @@ final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
 		return unsupported(McpTypedSchemaException.Reason.UNSUPPORTED_TYPE);
 	}
 
-	private McpTypedTypeDescriptor<Type> describeParameterized(
-			ParameterizedType type) {
+	@NonNull
+	private McpTypedTypeDescriptor<@NonNull Type> describeParameterized(
+			@NonNull ParameterizedType type) {
 		Type rawType = requireNonNull(type.getRawType());
 		if (!(rawType instanceof Class<?> rawClass))
 			throw new IllegalArgumentException(
@@ -155,8 +173,9 @@ final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
 				genericArgumentStructuralComplexity);
 	}
 
-	private McpTypedTypeDescriptor<Type> describeGenericArray(
-			GenericArrayType type) {
+	@NonNull
+	private McpTypedTypeDescriptor<@NonNull Type> describeGenericArray(
+			@NonNull GenericArrayType type) {
 		Type component = requireNonNull(type.getGenericComponentType());
 		if (new GenericTraversal().containsUnresolved(component))
 			return unsupported(
@@ -164,9 +183,10 @@ final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
 		return new McpTypedTypeDescriptor.ArrayValue<>(component);
 	}
 
-	private McpTypedTypeDescriptor.RecordValue<Type> recordDescriptor(
-			Class<?> recordClass, Map<TypeVariable<?>, Type> substitutions,
-			Type[] actualArguments,
+	private McpTypedTypeDescriptor.@NonNull RecordValue<@NonNull Type> recordDescriptor(
+			@NonNull Class<?> recordClass,
+			@NonNull Map<@NonNull TypeVariable<?>, @NonNull Type> substitutions,
+			Type @NonNull [] actualArguments,
 			int genericArgumentStructuralComplexity) {
 		RecordComponent[] components = requireNonNull(
 				recordClass.getRecordComponents());
@@ -210,15 +230,26 @@ final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
 			RecordComponent component = components[index];
 			Type componentType = substitutionTraversal.substitute(
 					sourceComponentTypes.get(index), substitutions);
-			described.add(McpTypedTypeDescriptor.RecordComponent
-					.fromNameAndType(component.getName(), componentType));
+			@Nullable McpToolArgument argument = component.getAnnotation(
+					McpToolArgument.class);
+			String configuredName = argument == null ? ""
+					: requireNonNull(argument.name());
+			String publishedName = configuredName.isBlank()
+					? component.getName() : configuredName;
+			described.add(argument == null
+					? McpTypedTypeDescriptor.RecordComponent.fromNameAndType(
+							component.getName(), componentType)
+					: McpTypedTypeDescriptor.RecordComponent.fromNameAndType(
+							publishedName, componentType,
+							requireNonNull(argument.title()),
+							requireNonNull(argument.description())));
 		}
 		return new McpTypedTypeDescriptor.RecordValue<>(recordClass.getName(),
 				described, genericArgumentStructuralComplexity,
 				screeningOnlyGenericArguments);
 	}
 
-	private Type[] typeArguments(ParameterizedType type) {
+	private Type @NonNull [] typeArguments(@NonNull ParameterizedType type) {
 		Type[] arguments = requireNonNull(type.getActualTypeArguments());
 		if (arguments.length > limits.maximumCollectionEntryCount())
 			throw new McpTypedTypeModelLimitException(
@@ -230,7 +261,7 @@ final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
 		return arguments;
 	}
 
-	private Type[] wildcardBounds(Type[] bounds) {
+	private Type @NonNull [] wildcardBounds(Type @NonNull [] bounds) {
 		requireNonNull(bounds);
 		if (bounds.length > limits.maximumCollectionEntryCount())
 			throw new McpTypedTypeModelLimitException(
@@ -242,18 +273,23 @@ final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
 		return bounds;
 	}
 
+	@NotThreadSafe
 	private final class GenericTraversal {
-		private final Set<Type> activeTypes =
+		@NonNull
+		private final Set<@NonNull Type> activeTypes =
 				Collections.newSetFromMap(new IdentityHashMap<>());
 		private int visitedNodeCount;
 
-		private Type substitute(Type type,
-				Map<TypeVariable<?>, Type> substitutions) {
+		@NonNull
+		private Type substitute(@NonNull Type type,
+				@NonNull Map<@NonNull TypeVariable<?>, @NonNull Type> substitutions) {
 			return substitute(type, substitutions, 1);
 		}
 
-		private Type substitute(Type type,
-				Map<TypeVariable<?>, Type> substitutions, int depth) {
+		@NonNull
+		private Type substitute(@NonNull Type type,
+				@NonNull Map<@NonNull TypeVariable<?>, @NonNull Type> substitutions,
+				int depth) {
 			enter(type, depth);
 			try {
 				if (type instanceof TypeVariable<?> variable)
@@ -280,11 +316,11 @@ final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
 			}
 		}
 
-		private boolean containsUnresolved(Type type) {
+		private boolean containsUnresolved(@NonNull Type type) {
 			return containsUnresolved(type, 1);
 		}
 
-		private boolean containsUnresolved(Type type, int depth) {
+		private boolean containsUnresolved(@NonNull Type type, int depth) {
 			enter(type, depth);
 			try {
 				if (type instanceof TypeVariable<?> || type instanceof WildcardType)
@@ -311,13 +347,13 @@ final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
 			}
 		}
 
-		private int structuralComplexity(Type[] types) {
+		private int structuralComplexity(Type @NonNull [] types) {
 			for (Type type : types)
 				visitStructure(type, 1);
 			return visitedNodeCount;
 		}
 
-		private void visitStructure(Type type, int depth) {
+		private void visitStructure(@NonNull Type type, int depth) {
 			enter(type, depth);
 			try {
 				if (type instanceof GenericArrayType array) {
@@ -337,15 +373,15 @@ final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
 			}
 		}
 
-		private void collectReferencedParameters(Type type,
-				Set<TypeVariable<?>> declaredParameters,
-				Set<TypeVariable<?>> destination) {
+		private void collectReferencedParameters(@NonNull Type type,
+				@NonNull Set<@NonNull TypeVariable<?>> declaredParameters,
+				@NonNull Set<@NonNull TypeVariable<?>> destination) {
 			collectReferencedParameters(type, declaredParameters, destination, 1);
 		}
 
-		private void collectReferencedParameters(Type type,
-				Set<TypeVariable<?>> declaredParameters,
-				Set<TypeVariable<?>> destination, int depth) {
+		private void collectReferencedParameters(@NonNull Type type,
+				@NonNull Set<@NonNull TypeVariable<?>> declaredParameters,
+				@NonNull Set<@NonNull TypeVariable<?>> destination, int depth) {
 			enter(type, depth);
 			try {
 				if (type instanceof TypeVariable<?> variable) {
@@ -387,7 +423,7 @@ final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
 			}
 		}
 
-		private void enter(Type type, int depth) {
+		private void enter(@NonNull Type type, int depth) {
 			requireNonNull(type);
 			if (depth > limits.maximumSchemaDepth())
 				throw new McpTypedTypeModelLimitException(
@@ -403,12 +439,12 @@ final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
 						"Generic type metadata contains an identity cycle.");
 		}
 
-		private void exit(Type type) {
+		private void exit(@NonNull Type type) {
 			activeTypes.remove(type);
 		}
 	}
 
-	private boolean frameworkType(Class<?> type) {
+	private boolean frameworkType(@NonNull Class<?> type) {
 		if (McpJsonValue.class.isAssignableFrom(type))
 			return true;
 
@@ -449,7 +485,7 @@ final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
 		return scheduledNodeCount + 1;
 	}
 
-	private @Nullable McpTypedSchemaScalar scalar(Class<?> type) {
+	private @Nullable McpTypedSchemaScalar scalar(@NonNull Class<?> type) {
 		if (type == boolean.class || type == Boolean.class)
 			return McpTypedSchemaScalar.BOOLEAN;
 		if (type == byte.class || type == Byte.class)
@@ -473,26 +509,28 @@ final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
 		return null;
 	}
 
-	private McpTypedTypeDescriptor<Type> unsupported(
-			McpTypedSchemaException.Reason reason) {
+	@NonNull
+	private McpTypedTypeDescriptor<@NonNull Type> unsupported(
+			McpTypedSchemaException.@NonNull Reason reason) {
 		return new McpTypedTypeDescriptor.Unsupported<>(reason);
 	}
 
-	private record ResolvedGenericArrayType(Type genericComponentType)
+	private record ResolvedGenericArrayType(@NonNull Type genericComponentType)
 			implements GenericArrayType {
 		private ResolvedGenericArrayType {
 			requireNonNull(genericComponentType);
 		}
 
 		@Override
+		@NonNull
 		public Type getGenericComponentType() {
 			return genericComponentType;
 		}
 	}
 
-	private record ResolvedParameterizedType(Type rawType,
+	private record ResolvedParameterizedType(@NonNull Type rawType,
 			@Nullable Type ownerType,
-			List<Type> arguments) implements ParameterizedType {
+			@NonNull List<@NonNull Type> arguments) implements ParameterizedType {
 		private ResolvedParameterizedType {
 			requireNonNull(rawType);
 			arguments = List.copyOf(requireNonNull(arguments));
@@ -501,11 +539,12 @@ final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
 		}
 
 		@Override
-		public Type[] getActualTypeArguments() {
+		public Type @NonNull [] getActualTypeArguments() {
 			return arguments.toArray(Type[]::new);
 		}
 
 		@Override
+		@NonNull
 		public Type getRawType() {
 			return rawType;
 		}

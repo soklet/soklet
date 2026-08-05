@@ -16,6 +16,9 @@
 
 package com.soklet.internal.mcp.schema;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
@@ -27,10 +30,15 @@ import static java.util.Objects.requireNonNull;
 /**
  * Immutable runtime mechanics paired with one already-resolved typed schema
  * shape.
+ *
+ * @param <T> the bound Java type
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 @SuppressWarnings("UnusedTypeParameter")
-record McpTypedJsonBinding<T>(Type declaredType, McpTypedSchemaShape shape,
-		McpTypedJsonBindingNode rootNode) {
+record McpTypedJsonBinding<T>(@NonNull Type declaredType,
+		@NonNull McpTypedSchemaShape shape,
+		@NonNull McpTypedJsonBindingNode rootNode) {
 	McpTypedJsonBinding {
 		requireNonNull(declaredType);
 		requireNonNull(shape);
@@ -42,7 +50,10 @@ record McpTypedJsonBinding<T>(Type declaredType, McpTypedSchemaShape shape,
  * Runtime-only mechanics. Support policy remains in
  * {@link McpTypedSchemaShape}; these nodes retain only the Java information
  * required to perform a conversion.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 sealed interface McpTypedJsonBindingNode permits
 		McpTypedJsonBindingNode.Scalar,
 		McpTypedJsonBindingNode.Enumeration,
@@ -50,7 +61,8 @@ sealed interface McpTypedJsonBindingNode permits
 		McpTypedJsonBindingNode.ListValue,
 		McpTypedJsonBindingNode.MapValue,
 		McpTypedJsonBindingNode.RecordValue {
-	record Scalar(McpTypedSchemaScalar scalar, Class<?> javaType)
+	record Scalar(@NonNull McpTypedSchemaScalar scalar,
+			@NonNull Class<?> javaType)
 			implements McpTypedJsonBindingNode {
 		public Scalar {
 			requireNonNull(scalar);
@@ -58,8 +70,9 @@ sealed interface McpTypedJsonBindingNode permits
 		}
 	}
 
-	record Enumeration(Class<? extends Enum<?>> enumType,
-			Set<String> constantNames) implements McpTypedJsonBindingNode {
+	record Enumeration(@NonNull Class<? extends @NonNull Enum<?>> enumType,
+			@NonNull Set<@NonNull String> constantNames)
+			implements McpTypedJsonBindingNode {
 		public Enumeration {
 			requireNonNull(enumType);
 			constantNames = Set.copyOf(requireNonNull(constantNames));
@@ -68,8 +81,9 @@ sealed interface McpTypedJsonBindingNode permits
 		}
 	}
 
-	record ArrayValue(Class<?> arrayType, Class<?> componentType,
-			McpTypedJsonBindingNode elementNode)
+	record ArrayValue(@NonNull Class<?> arrayType,
+			@NonNull Class<?> componentType,
+			@NonNull McpTypedJsonBindingNode elementNode)
 			implements McpTypedJsonBindingNode {
 		public ArrayValue {
 			requireNonNull(arrayType);
@@ -80,22 +94,24 @@ sealed interface McpTypedJsonBindingNode permits
 		}
 	}
 
-	record ListValue(McpTypedJsonBindingNode elementNode)
+	record ListValue(@NonNull McpTypedJsonBindingNode elementNode)
 			implements McpTypedJsonBindingNode {
 		public ListValue {
 			requireNonNull(elementNode);
 		}
 	}
 
-	record MapValue(McpTypedJsonBindingNode valueNode)
+	record MapValue(@NonNull McpTypedJsonBindingNode valueNode)
 			implements McpTypedJsonBindingNode {
 		public MapValue {
 			requireNonNull(valueNode);
 		}
 	}
 
-	record RecordValue(Class<?> recordType, Constructor<?> constructor,
-			List<Property> properties, Set<String> propertyNames)
+	record RecordValue(@NonNull Class<?> recordType,
+			@NonNull Constructor<?> constructor,
+			@NonNull List<@NonNull Property> properties,
+			@NonNull Set<@NonNull String> propertyNames)
 			implements McpTypedJsonBindingNode {
 		public RecordValue {
 			requireNonNull(recordType);
@@ -112,8 +128,9 @@ sealed interface McpTypedJsonBindingNode permits
 		}
 	}
 
-	record Property(String name, boolean optional, Method accessor,
-			McpTypedJsonBindingNode valueNode) {
+	record Property(@NonNull String name, boolean optional,
+			@NonNull Method accessor,
+			@NonNull McpTypedJsonBindingNode valueNode) {
 		public Property {
 			requireNonNull(name);
 			requireNonNull(accessor);

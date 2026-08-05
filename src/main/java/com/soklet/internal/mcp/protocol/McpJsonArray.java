@@ -16,11 +16,18 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.List;
 
 import static java.util.Objects.requireNonNull;
 
-public record McpJsonArray(List<McpJsonValue> values) implements McpJsonValue {
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+public record McpJsonArray(@NonNull List<@NonNull McpJsonValue> values) implements McpJsonValue {
 	public McpJsonArray {
 		values = List.copyOf(requireNonNull(values));
 	}

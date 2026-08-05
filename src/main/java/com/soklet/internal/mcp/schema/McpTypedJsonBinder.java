@@ -23,7 +23,11 @@ import com.soklet.internal.mcp.protocol.McpJsonNumber;
 import com.soklet.internal.mcp.protocol.McpJsonObject;
 import com.soklet.internal.mcp.protocol.McpJsonString;
 import com.soklet.internal.mcp.protocol.McpJsonValue;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.NotThreadSafe;
+import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.Array;
 import java.lang.reflect.InvocationTargetException;
 import java.math.BigDecimal;
@@ -40,20 +44,28 @@ import java.util.TreeMap;
 
 import static java.util.Objects.requireNonNull;
 
-/** Stateless intrinsic JSON binder for the closed typed-schema profile. */
+/**
+ * Stateless intrinsic JSON binder for the closed typed-schema profile.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 final class McpTypedJsonBinder {
+	@NonNull
 	private final McpTypedJsonBindingLimits limits;
 
 	McpTypedJsonBinder() {
 		this(McpTypedJsonBindingLimits.productionDefaults());
 	}
 
-	McpTypedJsonBinder(McpTypedJsonBindingLimits limits) {
+	McpTypedJsonBinder(@NonNull McpTypedJsonBindingLimits limits) {
 		this.limits = requireNonNull(limits);
 	}
 
 	@SuppressWarnings("unchecked")
-	<T> T fromJson(McpJsonValue value, McpTypedJsonBinding<T> binding) {
+	@NonNull
+	<T> T fromJson(@Nullable McpJsonValue value,
+			@NonNull McpTypedJsonBinding<T> binding) {
 		requireNonNull(binding);
 		ConversionContext context = new ConversionContext(
 				McpTypedJsonBindingException.Operation.FROM_JSON);
@@ -61,7 +73,9 @@ final class McpTypedJsonBinder {
 				1, false, context);
 	}
 
-	<T> McpJsonValue toJson(T value, McpTypedJsonBinding<T> binding) {
+	@NonNull
+	<T> McpJsonValue toJson(@Nullable T value,
+			@NonNull McpTypedJsonBinding<T> binding) {
 		requireNonNull(binding);
 		ConversionContext context = new ConversionContext(
 				McpTypedJsonBindingException.Operation.TO_JSON);
@@ -69,9 +83,11 @@ final class McpTypedJsonBinder {
 				false, context);
 	}
 
-	private Object read(McpJsonValue value, McpTypedJsonBindingNode node,
-			McpTypedSchemaPath path, int depth, boolean nodePrecharged,
-			ConversionContext context) {
+	@NonNull
+	private Object read(@Nullable McpJsonValue value,
+			@NonNull McpTypedJsonBindingNode node,
+			@NonNull McpTypedSchemaPath path, int depth,
+			boolean nodePrecharged, @NonNull ConversionContext context) {
 		context.enterValue(depth, nodePrecharged, path);
 		if (value == null || value instanceof McpJsonNull)
 			throw failure(McpTypedJsonBindingException.Operation.FROM_JSON,
@@ -92,8 +108,10 @@ final class McpTypedJsonBinder {
 				McpTypedJsonBindingException.Reason.JAVA_TYPE_MISMATCH, path);
 	}
 
-	private Object readScalar(McpJsonValue value,
-			McpTypedJsonBindingNode.Scalar binding, McpTypedSchemaPath path) {
+	@NonNull
+	private Object readScalar(@NonNull McpJsonValue value,
+			McpTypedJsonBindingNode.@NonNull Scalar binding,
+			@NonNull McpTypedSchemaPath path) {
 		if (binding.scalar() == McpTypedSchemaScalar.BOOLEAN) {
 			if (!(value instanceof McpJsonBoolean booleanValue))
 				throw jsonType(path);
@@ -126,8 +144,10 @@ final class McpTypedJsonBinder {
 		};
 	}
 
-	private BigInteger boundedInteger(BigDecimal value,
-			McpTypedSchemaScalar scalar, McpTypedSchemaPath path) {
+	@NonNull
+	private BigInteger boundedInteger(@NonNull BigDecimal value,
+			@NonNull McpTypedSchemaScalar scalar,
+			@NonNull McpTypedSchemaPath path) {
 		BigInteger integer = integral(value, path);
 		BigInteger minimum = scalar.minimum().orElseThrow().toBigIntegerExact();
 		BigInteger maximum = scalar.maximum().orElseThrow().toBigIntegerExact();
@@ -137,7 +157,9 @@ final class McpTypedJsonBinder {
 		return integer;
 	}
 
-	private BigInteger integral(BigDecimal value, McpTypedSchemaPath path) {
+	@NonNull
+	private BigInteger integral(@NonNull BigDecimal value,
+			@NonNull McpTypedSchemaPath path) {
 		try {
 			return value.toBigIntegerExact();
 		} catch (ArithmeticException exception) {
@@ -146,7 +168,9 @@ final class McpTypedJsonBinder {
 		}
 	}
 
-	private Float finiteFloat(BigDecimal value, McpTypedSchemaPath path) {
+	@NonNull
+	private Float finiteFloat(@NonNull BigDecimal value,
+			@NonNull McpTypedSchemaPath path) {
 		float result = value.floatValue();
 		if (!Float.isFinite(result))
 			throw failure(McpTypedJsonBindingException.Operation.FROM_JSON,
@@ -154,7 +178,9 @@ final class McpTypedJsonBinder {
 		return result;
 	}
 
-	private Double finiteDouble(BigDecimal value, McpTypedSchemaPath path) {
+	@NonNull
+	private Double finiteDouble(@NonNull BigDecimal value,
+			@NonNull McpTypedSchemaPath path) {
 		double result = value.doubleValue();
 		if (!Double.isFinite(result))
 			throw failure(McpTypedJsonBindingException.Operation.FROM_JSON,
@@ -163,9 +189,10 @@ final class McpTypedJsonBinder {
 	}
 
 	@SuppressWarnings({ "rawtypes", "unchecked" })
-	private Object readEnumeration(McpJsonValue value,
-			McpTypedJsonBindingNode.Enumeration binding,
-			McpTypedSchemaPath path) {
+	@NonNull
+	private Object readEnumeration(@NonNull McpJsonValue value,
+			McpTypedJsonBindingNode.@NonNull Enumeration binding,
+			@NonNull McpTypedSchemaPath path) {
 		if (!(value instanceof McpJsonString string))
 			throw jsonType(path);
 		if (!binding.constantNames().contains(string.value()))
@@ -181,9 +208,11 @@ final class McpTypedJsonBinder {
 		}
 	}
 
-	private Object readArray(McpJsonValue value,
-			McpTypedJsonBindingNode.ArrayValue binding,
-			McpTypedSchemaPath path, int depth, ConversionContext context) {
+	@NonNull
+	private Object readArray(@NonNull McpJsonValue value,
+			McpTypedJsonBindingNode.@NonNull ArrayValue binding,
+			@NonNull McpTypedSchemaPath path, int depth,
+			@NonNull ConversionContext context) {
 		if (!(value instanceof McpJsonArray array))
 			throw jsonType(path);
 		context.enterComposite(array, path);
@@ -214,9 +243,11 @@ final class McpTypedJsonBinder {
 		}
 	}
 
-	private Object readList(McpJsonValue value,
-			McpTypedJsonBindingNode.ListValue binding,
-			McpTypedSchemaPath path, int depth, ConversionContext context) {
+	@NonNull
+	private Object readList(@NonNull McpJsonValue value,
+			McpTypedJsonBindingNode.@NonNull ListValue binding,
+			@NonNull McpTypedSchemaPath path, int depth,
+			@NonNull ConversionContext context) {
 		if (!(value instanceof McpJsonArray array))
 			throw jsonType(path);
 		context.enterComposite(array, path);
@@ -233,9 +264,11 @@ final class McpTypedJsonBinder {
 		}
 	}
 
-	private Object readMap(McpJsonValue value,
-			McpTypedJsonBindingNode.MapValue binding,
-			McpTypedSchemaPath path, int depth, ConversionContext context) {
+	@NonNull
+	private Object readMap(@NonNull McpJsonValue value,
+			McpTypedJsonBindingNode.@NonNull MapValue binding,
+			@NonNull McpTypedSchemaPath path, int depth,
+			@NonNull ConversionContext context) {
 		if (!(value instanceof McpJsonObject object))
 			throw jsonType(path);
 		context.enterComposite(object, path);
@@ -254,9 +287,11 @@ final class McpTypedJsonBinder {
 		}
 	}
 
-	private Object readRecord(McpJsonValue value,
-			McpTypedJsonBindingNode.RecordValue binding,
-			McpTypedSchemaPath path, int depth, ConversionContext context) {
+	@NonNull
+	private Object readRecord(@NonNull McpJsonValue value,
+			McpTypedJsonBindingNode.@NonNull RecordValue binding,
+			@NonNull McpTypedSchemaPath path, int depth,
+			@NonNull ConversionContext context) {
 		if (!(value instanceof McpJsonObject object))
 			throw jsonType(path);
 		context.enterComposite(object, path);
@@ -305,9 +340,11 @@ final class McpTypedJsonBinder {
 		}
 	}
 
-	private McpJsonValue write(Object value, McpTypedJsonBindingNode node,
-			McpTypedSchemaPath path, int depth, boolean nodePrecharged,
-			ConversionContext context) {
+	@NonNull
+	private McpJsonValue write(@Nullable Object value,
+			@NonNull McpTypedJsonBindingNode node,
+			@NonNull McpTypedSchemaPath path, int depth,
+			boolean nodePrecharged, @NonNull ConversionContext context) {
 		context.enterValue(depth, nodePrecharged, path);
 		if (value == null)
 			throw failure(McpTypedJsonBindingException.Operation.TO_JSON,
@@ -327,8 +364,10 @@ final class McpTypedJsonBinder {
 		throw javaType(McpTypedJsonBindingException.Operation.TO_JSON, path);
 	}
 
-	private McpJsonValue writeScalar(Object value,
-			McpTypedJsonBindingNode.Scalar binding, McpTypedSchemaPath path) {
+	@NonNull
+	private McpJsonValue writeScalar(@NonNull Object value,
+			McpTypedJsonBindingNode.@NonNull Scalar binding,
+			@NonNull McpTypedSchemaPath path) {
 		if (value.getClass() != binding.javaType())
 			throw javaType(McpTypedJsonBindingException.Operation.TO_JSON, path);
 		return switch (binding.scalar()) {
@@ -346,23 +385,28 @@ final class McpTypedJsonBinder {
 		};
 	}
 
-	private McpJsonNumber jsonFloat(float value, McpTypedSchemaPath path) {
+	@NonNull
+	private McpJsonNumber jsonFloat(float value,
+			@NonNull McpTypedSchemaPath path) {
 		if (!Float.isFinite(value))
 			throw failure(McpTypedJsonBindingException.Operation.TO_JSON,
 					McpTypedJsonBindingException.Reason.NON_FINITE_NUMBER, path);
 		return new McpJsonNumber(new BigDecimal(Float.toString(value)));
 	}
 
-	private McpJsonNumber jsonDouble(double value, McpTypedSchemaPath path) {
+	@NonNull
+	private McpJsonNumber jsonDouble(double value,
+			@NonNull McpTypedSchemaPath path) {
 		if (!Double.isFinite(value))
 			throw failure(McpTypedJsonBindingException.Operation.TO_JSON,
 					McpTypedJsonBindingException.Reason.NON_FINITE_NUMBER, path);
 		return new McpJsonNumber(new BigDecimal(Double.toString(value)));
 	}
 
-	private McpJsonValue writeEnumeration(Object value,
-			McpTypedJsonBindingNode.Enumeration binding,
-			McpTypedSchemaPath path) {
+	@NonNull
+	private McpJsonValue writeEnumeration(@NonNull Object value,
+			McpTypedJsonBindingNode.@NonNull Enumeration binding,
+			@NonNull McpTypedSchemaPath path) {
 		if (!binding.enumType().isInstance(value))
 			throw javaType(McpTypedJsonBindingException.Operation.TO_JSON, path);
 		String name = ((Enum<?>) value).name();
@@ -373,9 +417,11 @@ final class McpTypedJsonBinder {
 		return new McpJsonString(name);
 	}
 
-	private McpJsonValue writeArray(Object value,
-			McpTypedJsonBindingNode.ArrayValue binding,
-			McpTypedSchemaPath path, int depth, ConversionContext context) {
+	@NonNull
+	private McpJsonValue writeArray(@NonNull Object value,
+			McpTypedJsonBindingNode.@NonNull ArrayValue binding,
+			@NonNull McpTypedSchemaPath path, int depth,
+			@NonNull ConversionContext context) {
 		if (value.getClass() != binding.arrayType())
 			throw javaType(McpTypedJsonBindingException.Operation.TO_JSON, path);
 		context.enterComposite(value, path);
@@ -406,9 +452,11 @@ final class McpTypedJsonBinder {
 		}
 	}
 
-	private McpJsonValue writeList(Object value,
-			McpTypedJsonBindingNode.ListValue binding,
-			McpTypedSchemaPath path, int depth, ConversionContext context) {
+	@NonNull
+	private McpJsonValue writeList(@NonNull Object value,
+			McpTypedJsonBindingNode.@NonNull ListValue binding,
+			@NonNull McpTypedSchemaPath path, int depth,
+			@NonNull ConversionContext context) {
 		if (!(value instanceof List<?> list))
 			throw javaType(McpTypedJsonBindingException.Operation.TO_JSON, path);
 		context.enterComposite(value, path);
@@ -435,9 +483,11 @@ final class McpTypedJsonBinder {
 		}
 	}
 
-	private McpJsonValue writeMap(Object value,
-			McpTypedJsonBindingNode.MapValue binding,
-			McpTypedSchemaPath path, int depth, ConversionContext context) {
+	@NonNull
+	private McpJsonValue writeMap(@NonNull Object value,
+			McpTypedJsonBindingNode.@NonNull MapValue binding,
+			@NonNull McpTypedSchemaPath path, int depth,
+			@NonNull ConversionContext context) {
 		if (!(value instanceof Map<?, ?> map))
 			throw javaType(McpTypedJsonBindingException.Operation.TO_JSON, path);
 		context.enterComposite(value, path);
@@ -475,9 +525,11 @@ final class McpTypedJsonBinder {
 		}
 	}
 
-	private McpJsonValue writeRecord(Object value,
-			McpTypedJsonBindingNode.RecordValue binding,
-			McpTypedSchemaPath path, int depth, ConversionContext context) {
+	@NonNull
+	private McpJsonValue writeRecord(@NonNull Object value,
+			McpTypedJsonBindingNode.@NonNull RecordValue binding,
+			@NonNull McpTypedSchemaPath path, int depth,
+			@NonNull ConversionContext context) {
 		if (!binding.recordType().isInstance(value))
 			throw javaType(McpTypedJsonBindingException.Operation.TO_JSON, path);
 		context.enterComposite(value, path);
@@ -537,48 +589,58 @@ final class McpTypedJsonBinder {
 		}
 	}
 
-	private McpTypedJsonBindingException jsonType(McpTypedSchemaPath path) {
+	@NonNull
+	private McpTypedJsonBindingException jsonType(
+			@NonNull McpTypedSchemaPath path) {
 		return failure(McpTypedJsonBindingException.Operation.FROM_JSON,
 				McpTypedJsonBindingException.Reason.JSON_TYPE_MISMATCH, path);
 	}
 
+	@NonNull
 	private McpTypedJsonBindingException javaType(
-			McpTypedJsonBindingException.Operation operation,
-			McpTypedSchemaPath path) {
+			McpTypedJsonBindingException.@NonNull Operation operation,
+			@NonNull McpTypedSchemaPath path) {
 		return failure(operation,
 				McpTypedJsonBindingException.Reason.JAVA_TYPE_MISMATCH, path);
 	}
 
-	private McpTypedJsonBindingException container(McpTypedSchemaPath path) {
+	@NonNull
+	private McpTypedJsonBindingException container(
+			@NonNull McpTypedSchemaPath path) {
 		return failure(McpTypedJsonBindingException.Operation.TO_JSON,
 				McpTypedJsonBindingException.Reason.CONTAINER_ACCESS_FAILED, path);
 	}
 
-	private McpTypedJsonBindingException mutated(McpTypedSchemaPath path) {
+	@NonNull
+	private McpTypedJsonBindingException mutated(
+			@NonNull McpTypedSchemaPath path) {
 		return failure(McpTypedJsonBindingException.Operation.TO_JSON,
 				McpTypedJsonBindingException.Reason.CONTAINER_MUTATED, path);
 	}
 
+	@NonNull
 	private McpTypedJsonBindingException failure(
-			McpTypedJsonBindingException.Operation operation,
-			McpTypedJsonBindingException.Reason reason,
-			McpTypedSchemaPath path) {
+			McpTypedJsonBindingException.@NonNull Operation operation,
+			McpTypedJsonBindingException.@NonNull Reason reason,
+			@NonNull McpTypedSchemaPath path) {
 		return new McpTypedJsonBindingException(operation, reason, path);
 	}
 
+	@NotThreadSafe
 	private final class ConversionContext {
-		private final McpTypedJsonBindingException.Operation operation;
-		private final IdentityHashMap<Object, Boolean> activeComposites =
+		private final McpTypedJsonBindingException.@NonNull Operation operation;
+		@NonNull
+		private final IdentityHashMap<@NonNull Object, @NonNull Boolean> activeComposites =
 				new IdentityHashMap<>();
 		private int nodeCount;
 
 		private ConversionContext(
-				McpTypedJsonBindingException.Operation operation) {
+				McpTypedJsonBindingException.@NonNull Operation operation) {
 			this.operation = requireNonNull(operation);
 		}
 
 		private void enterValue(int depth, boolean nodePrecharged,
-				McpTypedSchemaPath path) {
+				@NonNull McpTypedSchemaPath path) {
 			if (depth > limits.maximumNestingDepth())
 				throw limit(
 						McpTypedJsonBindingException.Limit.NESTING_DEPTH, path);
@@ -587,13 +649,13 @@ final class McpTypedJsonBinder {
 		}
 
 		private void prechargeContainer(int entryCount,
-				McpTypedSchemaPath path) {
+				@NonNull McpTypedSchemaPath path) {
 			checkContainerEntryCount(entryCount, path);
 			chargeNodes(entryCount, path);
 		}
 
 		private void checkContainerEntryCount(int entryCount,
-				McpTypedSchemaPath path) {
+				@NonNull McpTypedSchemaPath path) {
 			if (entryCount < 0)
 				throw failure(operation,
 						McpTypedJsonBindingException.Reason.CONTAINER_MUTATED,
@@ -604,7 +666,8 @@ final class McpTypedJsonBinder {
 						path);
 		}
 
-		private void chargeNodes(int count, McpTypedSchemaPath path) {
+		private void chargeNodes(int count,
+				@NonNull McpTypedSchemaPath path) {
 			if (count < 0)
 				throw failure(operation,
 						McpTypedJsonBindingException.Reason.CONTAINER_MUTATED,
@@ -614,19 +677,21 @@ final class McpTypedJsonBinder {
 			nodeCount += count;
 		}
 
-		private void enterComposite(Object value, McpTypedSchemaPath path) {
+		private void enterComposite(@NonNull Object value,
+				@NonNull McpTypedSchemaPath path) {
 			if (activeComposites.put(requireNonNull(value), Boolean.TRUE) != null)
 				throw failure(operation,
 						McpTypedJsonBindingException.Reason.CYCLIC_VALUE, path);
 		}
 
-		private void exitComposite(Object value) {
+		private void exitComposite(@NonNull Object value) {
 			activeComposites.remove(value);
 		}
 
+		@NonNull
 		private McpTypedJsonBindingException limit(
-				McpTypedJsonBindingException.Limit limit,
-				McpTypedSchemaPath path) {
+				McpTypedJsonBindingException.@NonNull Limit limit,
+				@NonNull McpTypedSchemaPath path) {
 			return new McpTypedJsonBindingException(operation, limit, path);
 		}
 	}

@@ -16,13 +16,20 @@
 
 package com.soklet.internal.mcp.schema;
 
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.NotThreadSafe;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
-/** Typed, bounded failure produced while compiling a Profile 1 document. */
+/**
+ * Typed, bounded failure produced while compiling a Profile 1 document.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@NotThreadSafe
 final class McpSchemaCompilationException extends IllegalArgumentException {
 	enum Kind {
 		INVALID_SCHEMA,
@@ -51,26 +58,32 @@ final class McpSchemaCompilationException extends IllegalArgumentException {
 		POINTER_SEGMENT_LENGTH
 	}
 
+	@NonNull
 	private final Kind kind;
-	private final Optional<Limit> limit;
-	private final Optional<McpSchemaLocation> location;
-	private final Optional<String> keyword;
+	@NonNull
+	private final Optional<@NonNull Limit> limit;
+	@NonNull
+	private final Optional<@NonNull McpSchemaLocation> location;
+	@NonNull
+	private final Optional<@NonNull String> keyword;
 
-	McpSchemaCompilationException(Kind kind, String message,
+	McpSchemaCompilationException(@NonNull Kind kind, @NonNull String message,
 			@Nullable McpSchemaLocation location, @Nullable String keyword) {
 		this(kind, message, Optional.empty(), Optional.ofNullable(location),
 				Optional.ofNullable(keyword));
 	}
 
-	McpSchemaCompilationException(Limit limit, String message,
+	McpSchemaCompilationException(@NonNull Limit limit,
+			@NonNull String message,
 			@Nullable McpSchemaLocation location, @Nullable String keyword) {
 		this(Kind.LIMIT_EXCEEDED, message, Optional.of(requireNonNull(limit)),
 				Optional.ofNullable(location), Optional.ofNullable(keyword));
 	}
 
-	private McpSchemaCompilationException(Kind kind, String message,
-			Optional<Limit> limit, Optional<McpSchemaLocation> location,
-			Optional<String> keyword) {
+	private McpSchemaCompilationException(@NonNull Kind kind,
+			@NonNull String message, @NonNull Optional<@NonNull Limit> limit,
+			@NonNull Optional<@NonNull McpSchemaLocation> location,
+			@NonNull Optional<@NonNull String> keyword) {
 		super(requireNonNull(message));
 		this.kind = requireNonNull(kind);
 		this.limit = requireNonNull(limit);
@@ -78,19 +91,23 @@ final class McpSchemaCompilationException extends IllegalArgumentException {
 		this.keyword = requireNonNull(keyword);
 	}
 
+	@NonNull
 	Kind kind() {
 		return kind;
 	}
 
-	Optional<Limit> limit() {
+	@NonNull
+	Optional<@NonNull Limit> limit() {
 		return limit;
 	}
 
-	Optional<McpSchemaLocation> location() {
+	@NonNull
+	Optional<@NonNull McpSchemaLocation> location() {
 		return location;
 	}
 
-	Optional<String> keyword() {
+	@NonNull
+	Optional<@NonNull String> keyword() {
 		return keyword;
 	}
 }

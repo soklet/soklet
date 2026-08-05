@@ -16,7 +16,14 @@
 
 package com.soklet.internal.mcp.protocol;
 
-/** Primitive body-value kinds permitted by {@code x-mcp-header}. */
+import javax.annotation.concurrent.ThreadSafe;
+
+/**
+ * Primitive body-value kinds permitted by {@code x-mcp-header}.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 public enum McpMirroredHeaderValueType {
 	STRING,
 	BOOLEAN,

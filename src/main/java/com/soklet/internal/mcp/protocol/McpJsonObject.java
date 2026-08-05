@@ -16,25 +16,36 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static java.util.Objects.requireNonNull;
 
-public record McpJsonObject(Map<String, McpJsonValue> members) implements McpJsonValue {
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+public record McpJsonObject(@NonNull Map<@NonNull String, @NonNull McpJsonValue> members)
+		implements McpJsonValue {
+	@NonNull
 	private static final McpJsonObject EMPTY = new McpJsonObject(Map.of());
 
 	public McpJsonObject {
 		requireNonNull(members);
-		Map<String, McpJsonValue> copiedMembers = new LinkedHashMap<>(members.size());
+		Map<@NonNull String, @NonNull McpJsonValue> copiedMembers =
+				new LinkedHashMap<>(members.size());
 
-		for (Map.Entry<String, McpJsonValue> entry : members.entrySet())
+		for (Map.Entry<@NonNull String, @NonNull McpJsonValue> entry : members.entrySet())
 			copiedMembers.put(requireNonNull(entry.getKey()), requireNonNull(entry.getValue()));
 
 		members = Collections.unmodifiableMap(copiedMembers);
 	}
 
+	@NonNull
 	public static McpJsonObject empty() {
 		return EMPTY;
 	}

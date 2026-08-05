@@ -376,7 +376,67 @@ public interface LifecycleObserver {
 	 * Called after a {@link SseServer} instance was asked to stop, but failed due to an exception.
 	 */
 	default void didFailToStopSseServer(@NonNull SseServer sseServer,
-																									@NonNull Throwable throwable) {
+																	@NonNull Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
+	 * Called before the MCP server starts.
+	 *
+	 * @param mcpServer the MCP server that will start
+	 */
+	default void willStartMcpServer(@NonNull McpServer mcpServer) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after the MCP server starts.
+	 *
+	 * @param mcpServer the MCP server that started
+	 */
+	default void didStartMcpServer(@NonNull McpServer mcpServer) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after an {@link McpServer} instance was asked to start, but failed due to an exception.
+	 *
+	 * @param mcpServer the MCP server that failed to start
+	 * @param throwable the startup failure
+	 */
+	default void didFailToStartMcpServer(@NonNull McpServer mcpServer,
+																		@NonNull Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
+	 * Called before the MCP server stops.
+	 *
+	 * @param mcpServer the MCP server that will stop
+	 */
+	default void willStopMcpServer(@NonNull McpServer mcpServer) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after the MCP server stops.
+	 *
+	 * @param mcpServer       the MCP server that stopped
+	 * @param shutdownOutcome the result of stopping the MCP server
+	 */
+	default void didStopMcpServer(@NonNull McpServer mcpServer,
+														 @NonNull McpShutdownOutcome shutdownOutcome) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after an {@link McpServer} instance was asked to stop, but failed due to an exception.
+	 *
+	 * @param mcpServer the MCP server that failed to stop
+	 * @param throwable the shutdown failure
+	 */
+	default void didFailToStopMcpServer(@NonNull McpServer mcpServer,
+																	 @NonNull Throwable throwable) {
 		// No-op by default
 	}
 

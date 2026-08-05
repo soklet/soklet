@@ -16,19 +16,29 @@
 
 package com.soklet.internal.mcp.schema;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.NotThreadSafe;
+
 import static java.util.Objects.requireNonNull;
 
-/** Type-model limit failure that the shared resolver attaches to its path. */
+/**
+ * Type-model limit failure that the shared resolver attaches to its path.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@NotThreadSafe
 final class McpTypedTypeModelLimitException extends IllegalArgumentException {
-	private final McpSchemaCompilationException.Limit limit;
+	private final McpSchemaCompilationException.@NonNull Limit limit;
 
-	McpTypedTypeModelLimitException(McpSchemaCompilationException.Limit limit,
-			String message) {
+	McpTypedTypeModelLimitException(
+			McpSchemaCompilationException.@NonNull Limit limit,
+			@NonNull String message) {
 		super(requireNonNull(message));
 		this.limit = requireNonNull(limit);
 	}
 
-	McpSchemaCompilationException.Limit limit() {
+	McpSchemaCompilationException.@NonNull Limit limit() {
 		return limit;
 	}
 }

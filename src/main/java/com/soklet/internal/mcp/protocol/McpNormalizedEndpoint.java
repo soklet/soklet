@@ -16,6 +16,10 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.NotThreadSafe;
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -27,25 +31,38 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Provisional normalized endpoint snapshot shared by discovery and later dispatch.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 final class McpNormalizedEndpoint {
+	@NonNull
 	private final McpImplementationMetadata serverInformation;
-	private final Optional<String> instructions;
+	@NonNull
+	private final Optional<@NonNull String> instructions;
+	@NonNull
 	private final McpDiscoveryCachePolicy discoveryCachePolicy;
 	private final boolean includeServerInformation;
+	@NonNull
 	private final McpJsonObject discoveryMetadata;
-	private final List<McpNormalizedOperation> tools;
-	private final List<McpNormalizedOperation> prompts;
-	private final List<McpNormalizedOperation> exactResources;
-	private final List<McpNormalizedOperation> resourceTemplates;
+	@NonNull
+	private final List<@NonNull McpNormalizedOperation> tools;
+	@NonNull
+	private final List<@NonNull McpNormalizedOperation> prompts;
+	@NonNull
+	private final List<@NonNull McpNormalizedOperation> exactResources;
+	@NonNull
+	private final List<@NonNull McpNormalizedOperation> resourceTemplates;
 	private final boolean customResourceListHandler;
-	private final Optional<McpNormalizedSubscriptionConfiguration> subscriptions;
+	@NonNull
+	private final Optional<@NonNull McpNormalizedSubscriptionConfiguration> subscriptions;
 
-	static Builder withServerInformation(McpImplementationMetadata serverInformation) {
+	@NonNull
+	static Builder withServerInformation(@NonNull McpImplementationMetadata serverInformation) {
 		return new Builder(serverInformation);
 	}
 
-	private McpNormalizedEndpoint(Builder builder) {
+	private McpNormalizedEndpoint(@NonNull Builder builder) {
 		this.serverInformation = builder.serverInformation;
 		this.instructions = builder.instructions;
 		this.discoveryCachePolicy = builder.discoveryCachePolicy;
@@ -56,6 +73,8 @@ final class McpNormalizedEndpoint {
 		this.exactResources = immutableOperations(builder.exactResources, "exact resource URI");
 		this.resourceTemplates = immutableOperations(
 				builder.resourceTemplates, "resource URI template");
+		validateToolDescriptors(this.prompts, this.exactResources,
+				this.resourceTemplates);
 		validateToolOnlyMirroredHeaders(this.prompts, this.exactResources,
 				this.resourceTemplates);
 		validateDistinctResources(this.exactResources, this.resourceTemplates);
@@ -67,14 +86,17 @@ final class McpNormalizedEndpoint {
 					"Resource subscriptions require an exact resource, template, or custom list handler.");
 	}
 
+	@NonNull
 	McpImplementationMetadata serverInformation() {
 		return serverInformation;
 	}
 
-	Optional<String> instructions() {
+	@NonNull
+	Optional<@NonNull String> instructions() {
 		return instructions;
 	}
 
+	@NonNull
 	McpDiscoveryCachePolicy discoveryCachePolicy() {
 		return discoveryCachePolicy;
 	}
@@ -83,23 +105,28 @@ final class McpNormalizedEndpoint {
 		return includeServerInformation;
 	}
 
+	@NonNull
 	McpJsonObject discoveryMetadata() {
 		return discoveryMetadata;
 	}
 
-	List<McpNormalizedOperation> tools() {
+	@NonNull
+	List<@NonNull McpNormalizedOperation> tools() {
 		return tools;
 	}
 
-	List<McpNormalizedOperation> prompts() {
+	@NonNull
+	List<@NonNull McpNormalizedOperation> prompts() {
 		return prompts;
 	}
 
-	List<McpNormalizedOperation> exactResources() {
+	@NonNull
+	List<@NonNull McpNormalizedOperation> exactResources() {
 		return exactResources;
 	}
 
-	List<McpNormalizedOperation> resourceTemplates() {
+	@NonNull
+	List<@NonNull McpNormalizedOperation> resourceTemplates() {
 		return resourceTemplates;
 	}
 
@@ -107,7 +134,8 @@ final class McpNormalizedEndpoint {
 		return customResourceListHandler;
 	}
 
-	Optional<McpNormalizedSubscriptionConfiguration> subscriptions() {
+	@NonNull
+	Optional<@NonNull McpNormalizedSubscriptionConfiguration> subscriptions() {
 		return subscriptions;
 	}
 
@@ -115,8 +143,10 @@ final class McpNormalizedEndpoint {
 		return customResourceListHandler || !exactResources.isEmpty() || !resourceTemplates.isEmpty();
 	}
 
-	private static List<McpNormalizedOperation> immutableOperations(
-			List<McpNormalizedOperation> operations, String description) {
+	@NonNull
+	private static List<@NonNull McpNormalizedOperation> immutableOperations(
+			@NonNull List<@NonNull McpNormalizedOperation> operations,
+			@NonNull String description) {
 		requireNonNull(operations);
 		List<McpNormalizedOperation> copiedOperations = List.copyOf(operations);
 		Set<String> names = new java.util.LinkedHashSet<>();
@@ -132,8 +162,9 @@ final class McpNormalizedEndpoint {
 		return copiedOperations;
 	}
 
-	private static void validateDistinctResources(List<McpNormalizedOperation> exactResources,
-			List<McpNormalizedOperation> resourceTemplates) {
+	private static void validateDistinctResources(
+			@NonNull List<@NonNull McpNormalizedOperation> exactResources,
+			@NonNull List<@NonNull McpNormalizedOperation> resourceTemplates) {
 		Set<String> resourceIdentities = new java.util.LinkedHashSet<>();
 
 		for (McpNormalizedOperation resource : exactResources)
@@ -147,8 +178,20 @@ final class McpNormalizedEndpoint {
 	}
 
 	@SafeVarargs
+	private static void validateToolDescriptors(
+			@NonNull List<@NonNull McpNormalizedOperation>... operationGroups) {
+		for (List<McpNormalizedOperation> operations : operationGroups) {
+			for (McpNormalizedOperation operation : operations) {
+				if (operation.toolDescriptor().isPresent())
+					throw new IllegalArgumentException(
+							"Tool descriptors are supported only for tools.");
+			}
+		}
+	}
+
+	@SafeVarargs
 	private static void validateToolOnlyMirroredHeaders(
-			List<McpNormalizedOperation>... operationGroups) {
+			@NonNull List<@NonNull McpNormalizedOperation>... operationGroups) {
 		for (List<McpNormalizedOperation> operations : operationGroups) {
 			for (McpNormalizedOperation operation : operations) {
 				if (!operation.mirroredHeaderPlan().declarations().isEmpty())
@@ -158,20 +201,30 @@ final class McpNormalizedEndpoint {
 		}
 	}
 
+	@NotThreadSafe
 	static final class Builder {
+		@NonNull
 		private final McpImplementationMetadata serverInformation;
-		private Optional<String> instructions;
+		@NonNull
+		private Optional<@NonNull String> instructions;
+		@NonNull
 		private McpDiscoveryCachePolicy discoveryCachePolicy;
 		private boolean includeServerInformation;
+		@NonNull
 		private McpJsonObject discoveryMetadata;
-		private final List<McpNormalizedOperation> tools;
-		private final List<McpNormalizedOperation> prompts;
-		private final List<McpNormalizedOperation> exactResources;
-		private final List<McpNormalizedOperation> resourceTemplates;
+		@NonNull
+		private final List<@NonNull McpNormalizedOperation> tools;
+		@NonNull
+		private final List<@NonNull McpNormalizedOperation> prompts;
+		@NonNull
+		private final List<@NonNull McpNormalizedOperation> exactResources;
+		@NonNull
+		private final List<@NonNull McpNormalizedOperation> resourceTemplates;
 		private boolean customResourceListHandler;
-		private Optional<McpNormalizedSubscriptionConfiguration> subscriptions;
+		@NonNull
+		private Optional<@NonNull McpNormalizedSubscriptionConfiguration> subscriptions;
 
-		private Builder(McpImplementationMetadata serverInformation) {
+		private Builder(@NonNull McpImplementationMetadata serverInformation) {
 			this.serverInformation = requireNonNull(serverInformation);
 			this.instructions = Optional.empty();
 			this.discoveryCachePolicy = McpDiscoveryCachePolicy.privateNoCache();
@@ -184,91 +237,139 @@ final class McpNormalizedEndpoint {
 			this.subscriptions = Optional.empty();
 		}
 
-		Builder instructions(String instructions) {
+		@NonNull
+		Builder instructions(@NonNull String instructions) {
 			this.instructions = Optional.of(
 					McpProtocolSupport.requireNonBlank(instructions, "Endpoint instructions"));
 			return this;
 		}
 
-		Builder discoveryCachePolicy(McpDiscoveryCachePolicy discoveryCachePolicy) {
+		@NonNull
+		Builder discoveryCachePolicy(@NonNull McpDiscoveryCachePolicy discoveryCachePolicy) {
 			this.discoveryCachePolicy = requireNonNull(discoveryCachePolicy);
 			return this;
 		}
 
+		@NonNull
 		Builder includeServerInformation(boolean includeServerInformation) {
 			this.includeServerInformation = includeServerInformation;
 			return this;
 		}
 
-		Builder discoveryMetadata(McpJsonObject discoveryMetadata) {
+		@NonNull
+		Builder discoveryMetadata(@NonNull McpJsonObject discoveryMetadata) {
 			this.discoveryMetadata = McpProtocolSupport.requireApplicationMetadataFields(
 					discoveryMetadata, Set.of(McpResultMetadata.SERVER_INFORMATION_KEY));
 			return this;
 		}
 
-		Builder tool(McpNormalizedOperation tool) {
+		@NonNull
+		Builder tool(@NonNull McpNormalizedOperation tool) {
 			tools.add(requireNonNull(tool));
 			return this;
 		}
 
-		Builder prompt(McpNormalizedOperation prompt) {
+		@NonNull
+		Builder prompt(@NonNull McpNormalizedOperation prompt) {
 			prompts.add(requireNonNull(prompt));
 			return this;
 		}
 
-		Builder exactResource(String uri) {
+		@NonNull
+		Builder exactResource(@NonNull String uri) {
 			return exactResource(McpNormalizedOperation.named(uri));
 		}
 
-		Builder exactResource(McpNormalizedOperation resource) {
+		@NonNull
+		Builder exactResource(@NonNull McpNormalizedOperation resource) {
 			exactResources.add(requireNonNull(resource));
 			return this;
 		}
 
-		Builder resourceTemplate(String uriTemplate) {
+		@NonNull
+		Builder resourceTemplate(@NonNull String uriTemplate) {
 			return resourceTemplate(McpNormalizedOperation.named(uriTemplate));
 		}
 
-		Builder resourceTemplate(McpNormalizedOperation resourceTemplate) {
+		@NonNull
+		Builder resourceTemplate(@NonNull McpNormalizedOperation resourceTemplate) {
 			resourceTemplates.add(requireNonNull(resourceTemplate));
 			return this;
 		}
 
+		@NonNull
 		Builder customResourceListHandler() {
 			customResourceListHandler = true;
 			return this;
 		}
 
-		Builder subscriptions(McpNormalizedSubscriptionConfiguration subscriptions) {
+		@NonNull
+		Builder subscriptions(
+				@NonNull McpNormalizedSubscriptionConfiguration subscriptions) {
 			this.subscriptions = Optional.of(requireNonNull(subscriptions));
 			return this;
 		}
 
+		@NonNull
 		McpNormalizedEndpoint build() {
 			return new McpNormalizedEndpoint(this);
 		}
 	}
 }
 
-record McpNormalizedOperation(String name, McpInputRequestPlan inputRequestPlan,
-		McpMirroredHeaderPlan mirroredHeaderPlan) {
-	McpNormalizedOperation(String name, McpInputRequestPlan inputRequestPlan) {
-		this(name, inputRequestPlan, McpMirroredHeaderPlan.empty());
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpNormalizedOperation(@NonNull String name,
+		@NonNull McpInputRequestPlan inputRequestPlan,
+		@NonNull McpMirroredHeaderPlan mirroredHeaderPlan,
+		@NonNull Optional<@NonNull McpNormalizedToolDescriptor> toolDescriptor) {
+	McpNormalizedOperation(@NonNull String name,
+			@NonNull McpInputRequestPlan inputRequestPlan) {
+		this(name, inputRequestPlan, McpMirroredHeaderPlan.empty(), Optional.empty());
+	}
+
+	McpNormalizedOperation(@NonNull String name,
+			@NonNull McpInputRequestPlan inputRequestPlan,
+			@NonNull McpMirroredHeaderPlan mirroredHeaderPlan) {
+		this(name, inputRequestPlan, mirroredHeaderPlan, Optional.empty());
 	}
 
 	McpNormalizedOperation {
 		name = McpProtocolSupport.requireNonBlank(name, "Operation name");
 		requireNonNull(inputRequestPlan);
 		requireNonNull(mirroredHeaderPlan);
+		requireNonNull(toolDescriptor);
+		if (toolDescriptor.isPresent()
+				&& !name.equals(toolDescriptor.orElseThrow().name()))
+			throw new IllegalArgumentException(
+					"Tool operation and descriptor names must match.");
 	}
 
-	static McpNormalizedOperation named(String name) {
+	@NonNull
+	static McpNormalizedOperation tool(
+			@NonNull McpNormalizedToolDescriptor descriptor,
+			@NonNull McpMirroredHeaderPlan mirroredHeaderPlan) {
+		requireNonNull(descriptor);
+		return new McpNormalizedOperation(descriptor.name(),
+				McpInputRequestPlan.empty(), requireNonNull(mirroredHeaderPlan),
+				Optional.of(descriptor));
+	}
+
+	@NonNull
+	static McpNormalizedOperation named(@NonNull String name) {
 		return new McpNormalizedOperation(name, McpInputRequestPlan.empty(),
-				McpMirroredHeaderPlan.empty());
+				McpMirroredHeaderPlan.empty(), Optional.empty());
 	}
 }
 
-record McpDiscoveryCachePolicy(long timeToLiveMilliseconds, McpCacheScope scope) {
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpDiscoveryCachePolicy(long timeToLiveMilliseconds,
+		@NonNull McpCacheScope scope) {
 	McpDiscoveryCachePolicy {
 		if (timeToLiveMilliseconds < 0L)
 			throw new IllegalArgumentException("Discovery cache TTL must be >= 0.");
@@ -276,26 +377,37 @@ record McpDiscoveryCachePolicy(long timeToLiveMilliseconds, McpCacheScope scope)
 		requireNonNull(scope);
 	}
 
+	@NonNull
 	static McpDiscoveryCachePolicy privateNoCache() {
 		return new McpDiscoveryCachePolicy(0L, McpCacheScope.PRIVATE);
 	}
 }
 
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 enum McpCacheScope {
 	PRIVATE("private"),
 	PUBLIC("public");
 
+	@NonNull
 	private final String wireValue;
 
-	McpCacheScope(String wireValue) {
+	McpCacheScope(@NonNull String wireValue) {
 		this.wireValue = wireValue;
 	}
 
+	@NonNull
 	String wireValue() {
 		return wireValue;
 	}
 }
 
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 enum McpResourceNotificationType {
 	RESOURCES_LIST_CHANGED,
 	RESOURCE_UPDATED
@@ -304,9 +416,12 @@ enum McpResourceNotificationType {
 /**
  * Post-validation subscription snapshot. Its presence proves that an endpoint
  * has an attached publisher-backed subscription configuration.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 record McpNormalizedSubscriptionConfiguration(
-		Set<McpResourceNotificationType> notificationTypes) {
+		@NonNull Set<@NonNull McpResourceNotificationType> notificationTypes) {
 	McpNormalizedSubscriptionConfiguration {
 		requireNonNull(notificationTypes);
 
@@ -318,9 +433,10 @@ record McpNormalizedSubscriptionConfiguration(
 				EnumSet.copyOf(notificationTypes));
 	}
 
+	@NonNull
 	static McpNormalizedSubscriptionConfiguration supporting(
-			McpResourceNotificationType first,
-			McpResourceNotificationType... remaining) {
+			@NonNull McpResourceNotificationType first,
+			@NonNull McpResourceNotificationType... remaining) {
 		requireNonNull(first);
 		requireNonNull(remaining);
 		Set<McpResourceNotificationType> notificationTypes = EnumSet.of(first);

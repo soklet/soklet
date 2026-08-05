@@ -19,10 +19,21 @@ package com.soklet;
 import com.google.testing.compile.Compilation;
 import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import javax.annotation.concurrent.ThreadSafe;
+import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
+import javax.tools.StandardJavaFileManager;
+import javax.tools.ToolProvider;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Base64;
+import java.util.List;
 
 import static com.google.testing.compile.CompilationSubject.assertThat;
 
@@ -343,6 +354,72 @@ public class SokletProcessorTests {
 		assertThat(compilation)
 				.hadErrorContaining("Resource Method path parameter {cssPath*} not bound to a @PathParameter argument")
 				.inFile(src);
+	}
+
+	@Test
+	void removingFinalSokletAnnotationPrunesOnlyTouchedMcpIndexRow(
+			@TempDir Path temporaryDirectory) throws IOException {
+		Path sourceDirectory = temporaryDirectory.resolve("src/example");
+		Path classDirectory = temporaryDirectory.resolve("classes");
+		Path generatedDirectory = temporaryDirectory.resolve("generated");
+		Files.createDirectories(sourceDirectory);
+		Files.createDirectories(classDirectory);
+		Files.createDirectories(generatedDirectory);
+		Path firstEndpoint = sourceDirectory.resolve("AEndpoint.java");
+		Path secondEndpoint = sourceDirectory.resolve("BEndpoint.java");
+		Files.writeString(firstEndpoint, """
+				package example;
+				import com.soklet.annotation.McpServerEndpoint;
+				@McpServerEndpoint(path="/a", name="a", version="1")
+				public final class AEndpoint {}
+				""", StandardCharsets.UTF_8);
+		Files.writeString(secondEndpoint, """
+				package example;
+				import com.soklet.annotation.McpServerEndpoint;
+				@McpServerEndpoint(path="/b", name="b", version="1")
+				public final class BEndpoint {}
+				""", StandardCharsets.UTF_8);
+
+		Assertions.assertTrue(compileWithSokletProcessor(classDirectory,
+				generatedDirectory, List.of(firstEndpoint, secondEndpoint)));
+		Files.writeString(firstEndpoint, """
+				package example;
+				public final class AEndpoint {}
+				""", StandardCharsets.UTF_8);
+		Assertions.assertTrue(compileWithSokletProcessor(classDirectory,
+				generatedDirectory, List.of(firstEndpoint)));
+
+		Path index = classDirectory.resolve(
+				"META-INF/soklet/mcp-endpoint-descriptor-providers");
+		List<String> rows = Files.readAllLines(index, StandardCharsets.UTF_8);
+		Assertions.assertEquals(1, rows.size());
+		String[] fields = rows.get(0).split("\\|", -1);
+		Assertions.assertEquals(5, fields.length);
+		Assertions.assertEquals("example.BEndpoint", new String(
+				Base64.getDecoder().decode(fields[1]), StandardCharsets.UTF_8));
+		Assertions.assertEquals("example.BEndpoint", new String(
+				Base64.getDecoder().decode(fields[3]), StandardCharsets.UTF_8));
+		Assertions.assertEquals("/b", new String(
+				Base64.getDecoder().decode(fields[4]), StandardCharsets.UTF_8));
+	}
+
+	private static boolean compileWithSokletProcessor(Path classes,
+			Path generated, List<Path> sources)
+			throws IOException {
+		JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+		Assertions.assertNotNull(compiler);
+		try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(
+				null, null, StandardCharsets.UTF_8)) {
+			String classpath = classes + System.getProperty("path.separator")
+					+ System.getProperty("java.class.path");
+			JavaCompiler.CompilationTask task = compiler.getTask(null, fileManager,
+					null, List.of("--release", "17", "-parameters",
+						"-Asoklet.cacheMode=none", "-classpath", classpath,
+						"-d", classes.toString(), "-s", generated.toString()),
+					null, fileManager.getJavaFileObjectsFromPaths(sources));
+			task.setProcessors(List.of(new SokletProcessor()));
+			return task.call();
+		}
 	}
 
 }

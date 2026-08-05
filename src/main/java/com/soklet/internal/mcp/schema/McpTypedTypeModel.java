@@ -16,7 +16,15 @@
 
 package com.soklet.internal.mcp.schema;
 
-/** Adapter from one Java type system to the shared typed-schema descriptor. */
+import org.jspecify.annotations.NonNull;
+
+/**
+ * Adapter from one Java type system to the shared typed-schema descriptor.
+ *
+ * @param <T> the Java type representation
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
 interface McpTypedTypeModel<T> {
-	McpTypedTypeDescriptor<T> describe(T type);
+	@NonNull
+	McpTypedTypeDescriptor<@NonNull T> describe(@NonNull T type);
 }

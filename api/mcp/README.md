@@ -19,8 +19,10 @@ the Phase 0 set.
 The `phase-4.includes`, `phase-5.includes`, `phase-6.includes`, and
 `provisional.includes` files select the new MCP public and protected-extension
 API. Each nonblank line is a fully qualified binary type name; lines are unique
-and sorted by Unicode code point. They are intentionally empty while Phase 0
-contains no MCP implementation.
+and sorted by Unicode code point. A phase include assigns API ownership; it does
+not freeze that API until the corresponding reviewed signature snapshot is
+created after the phase's production-slice gate. The Phase 4 server bootstrap
+therefore appears in these inventories while its API remains under review.
 
 `non-mcp-public-api.allowlist` uses the same format for reviewed public API
 changes unrelated to MCP. The union of the four MCP include files drives the

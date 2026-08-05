@@ -16,16 +16,25 @@
 
 package com.soklet.internal.mcp.transport;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 
 import static java.util.Objects.requireNonNull;
 
-record McpTransportConfiguration(String host, int port, int connectionWriterConcurrency,
+/**
+ * Immutable bounded configuration for the containment transport runtime.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpTransportConfiguration(@NonNull String host, int port, int connectionWriterConcurrency,
 		int maximumConnections, int handlerConcurrency, int handlerQueueCapacity,
 		int outboundFrameCapacity, int outboundByteCapacity, int terminalByteCapacity,
-		Duration requestDeadline, Duration responseWriteIdleTimeout, Duration keepAliveInterval,
-		McpThreadStrategy threadStrategy) {
+		@NonNull Duration requestDeadline, @NonNull Duration responseWriteIdleTimeout,
+		@NonNull Duration keepAliveInterval, @NonNull McpThreadStrategy threadStrategy) {
 	static final int MINIMUM_FRAMEWORK_TERMINAL_BYTE_CAPACITY =
 			"event: error\ndata: Request deadline exceeded\n\n".getBytes(StandardCharsets.UTF_8).length;
 
@@ -57,12 +66,12 @@ record McpTransportConfiguration(String host, int port, int connectionWriterConc
 		positive(keepAliveInterval, "Keepalive interval");
 	}
 
-	private static void positive(int value, String name) {
+	private static void positive(int value, @NonNull String name) {
 		if (value < 1)
 			throw new IllegalArgumentException(name + " must be > 0.");
 	}
 
-	private static void positive(Duration value, String name) {
+	private static void positive(@NonNull Duration value, @NonNull String name) {
 		if (value.isZero() || value.isNegative())
 			throw new IllegalArgumentException(name + " must be > 0.");
 	}

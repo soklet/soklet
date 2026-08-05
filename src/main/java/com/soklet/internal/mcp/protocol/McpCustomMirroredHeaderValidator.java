@@ -17,7 +17,9 @@
 package com.soklet.internal.mcp.protocol;
 
 import com.soklet.internal.microhttp.Header;
+import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -28,22 +30,34 @@ import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
-/** Validates request-only custom argument mirrors from a precompiled plan. */
+/**
+ * Validates request-only custom argument mirrors from a precompiled plan.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 final class McpCustomMirroredHeaderValidator {
+	@NonNull
 	private static final String NORMALIZED_HEADER_PREFIX = "mcp-param-";
+	@NonNull
 	private static final BigInteger MAXIMUM_SAFE_INTEGER =
 			BigInteger.valueOf(9_007_199_254_740_991L);
+	@NonNull
 	private static final BigInteger MINIMUM_SAFE_INTEGER = MAXIMUM_SAFE_INTEGER.negate();
 
+	@NonNull
 	private final McpMirroredHeaderCodec codec;
 
-	McpCustomMirroredHeaderValidator(McpMirroredHeaderCodec codec) {
+	McpCustomMirroredHeaderValidator(@NonNull McpMirroredHeaderCodec codec) {
 		this.codec = requireNonNull(codec);
 	}
 
-	McpCustomMirroredHeaderValidation validate(List<Header> headers,
-			McpJsonRpcEnvelope.Request request, McpServerCapabilityRegistry registry,
-			McpUnknownMirroredHeaderPolicy unknownHeaderPolicy) {
+	@NonNull
+	McpCustomMirroredHeaderValidation validate(
+			@NonNull List<@NonNull Header> headers,
+			McpJsonRpcEnvelope.@NonNull Request request,
+			@NonNull McpServerCapabilityRegistry registry,
+			@NonNull McpUnknownMirroredHeaderPolicy unknownHeaderPolicy) {
 		requireNonNull(headers);
 		requireNonNull(request);
 		requireNonNull(registry);
@@ -96,8 +110,10 @@ final class McpCustomMirroredHeaderValidator {
 				McpCustomMirroredHeaderOutcome.VALID, unknownHeaderCount);
 	}
 
-	private Optional<McpMirroredHeaderPlan> selectedPlan(
-			McpJsonRpcEnvelope.Request request, McpServerCapabilityRegistry registry) {
+	@NonNull
+	private Optional<@NonNull McpMirroredHeaderPlan> selectedPlan(
+			McpJsonRpcEnvelope.@NonNull Request request,
+			@NonNull McpServerCapabilityRegistry registry) {
 		if (!"tools/call".equals(request.method()))
 			return Optional.empty();
 		Optional<String> toolName = toolName(request);
@@ -106,7 +122,9 @@ final class McpCustomMirroredHeaderValidator {
 		return registry.toolMirroredHeaderPlan(toolName.orElseThrow());
 	}
 
-	private Optional<String> toolName(McpJsonRpcEnvelope.Request request) {
+	@NonNull
+	private Optional<@NonNull String> toolName(
+			McpJsonRpcEnvelope.@NonNull Request request) {
 		if (request.params().isEmpty()
 				|| !(request.params().orElseThrow() instanceof McpJsonObject params))
 			return Optional.empty();
@@ -116,7 +134,9 @@ final class McpCustomMirroredHeaderValidator {
 				: Optional.empty();
 	}
 
-	private Optional<McpJsonObject> toolArguments(McpJsonRpcEnvelope.Request request) {
+	@NonNull
+	private Optional<@NonNull McpJsonObject> toolArguments(
+			McpJsonRpcEnvelope.@NonNull Request request) {
 		if (request.params().isEmpty()
 				|| !(request.params().orElseThrow() instanceof McpJsonObject params))
 			return Optional.empty();
@@ -126,7 +146,9 @@ final class McpCustomMirroredHeaderValidator {
 				: Optional.empty();
 	}
 
-	private Optional<McpJsonValue> valueAtPath(McpJsonObject root, List<String> path) {
+	@NonNull
+	private Optional<@NonNull McpJsonValue> valueAtPath(@NonNull McpJsonObject root,
+			@NonNull List<@NonNull String> path) {
 		McpJsonValue current = root;
 		for (String property : path) {
 			if (!(current instanceof McpJsonObject object)
@@ -137,8 +159,8 @@ final class McpCustomMirroredHeaderValidator {
 		return Optional.of(current);
 	}
 
-	private boolean matches(McpMirroredHeaderDeclaration declaration,
-			String headerValue, McpJsonValue bodyValue) {
+	private boolean matches(@NonNull McpMirroredHeaderDeclaration declaration,
+			@NonNull String headerValue, @NonNull McpJsonValue bodyValue) {
 		try {
 			return switch (declaration.valueType()) {
 				case STRING -> bodyValue instanceof McpJsonString string
@@ -154,7 +176,8 @@ final class McpCustomMirroredHeaderValidator {
 		}
 	}
 
-	private boolean integerMatches(String headerValue, McpJsonNumber bodyValue) {
+	private boolean integerMatches(@NonNull String headerValue,
+			@NonNull McpJsonNumber bodyValue) {
 		String decodedValue = codec.decodeString(headerValue);
 		if (!decimalInteger(decodedValue))
 			return false;
@@ -171,7 +194,7 @@ final class McpCustomMirroredHeaderValidator {
 		return new BigInteger(decodedValue).equals(bodyInteger);
 	}
 
-	private boolean decimalInteger(String value) {
+	private boolean decimalInteger(@NonNull String value) {
 		if ("0".equals(value))
 			return true;
 		int firstDigit = value.startsWith("-") ? 1 : 0;
@@ -186,7 +209,8 @@ final class McpCustomMirroredHeaderValidator {
 		return true;
 	}
 
-	private String trimOptionalWhitespace(String value) {
+	@NonNull
+	private String trimOptionalWhitespace(@NonNull String value) {
 		int start = 0;
 		int end = value.length();
 		while (start < end && (value.charAt(start) == ' ' || value.charAt(start) == '\t'))
@@ -197,14 +221,19 @@ final class McpCustomMirroredHeaderValidator {
 		return value.substring(start, end);
 	}
 
+	@NonNull
 	private McpCustomMirroredHeaderValidation mismatch(int unknownHeaderCount) {
 		return new McpCustomMirroredHeaderValidation(
 				McpCustomMirroredHeaderOutcome.HEADER_MISMATCH, unknownHeaderCount);
 	}
 }
 
-record McpCustomMirroredHeaderValidation(McpCustomMirroredHeaderOutcome outcome,
-		int unknownHeaderCount) {
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpCustomMirroredHeaderValidation(
+		@NonNull McpCustomMirroredHeaderOutcome outcome, int unknownHeaderCount) {
 	McpCustomMirroredHeaderValidation {
 		requireNonNull(outcome);
 		if (unknownHeaderCount < 0)
@@ -212,6 +241,10 @@ record McpCustomMirroredHeaderValidation(McpCustomMirroredHeaderOutcome outcome,
 	}
 }
 
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 enum McpCustomMirroredHeaderOutcome {
 	VALID,
 	HEADER_MISMATCH,

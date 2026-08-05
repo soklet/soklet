@@ -16,5 +16,7 @@
 
 /**
  * Provisional, package-private transport work for MCP 2026-07-28.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 package com.soklet.internal.mcp.transport;

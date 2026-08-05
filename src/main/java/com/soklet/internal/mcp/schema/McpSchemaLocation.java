@@ -16,24 +16,35 @@
 
 package com.soklet.internal.mcp.schema;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.ArrayList;
 import java.util.List;
 
 import static java.util.Objects.requireNonNull;
 
-/** Decoded JSON Pointer segments within one Profile 1 document. */
-record McpSchemaLocation(List<String> pointerSegments) {
+/**
+ * Decoded JSON Pointer segments within one Profile 1 document.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpSchemaLocation(
+		@NonNull List<@NonNull String> pointerSegments) {
 	McpSchemaLocation {
 		pointerSegments = List.copyOf(requireNonNull(pointerSegments));
 	}
 
+	@NonNull
 	static McpSchemaLocation root() {
 		return new McpSchemaLocation(List.of());
 	}
 
-	McpSchemaLocation child(String... segments) {
+	@NonNull
+	McpSchemaLocation child(@NonNull String... segments) {
 		requireNonNull(segments);
-		List<String> childSegments = new ArrayList<>(pointerSegments.size()
+		List<@NonNull String> childSegments = new ArrayList<>(pointerSegments.size()
 				+ segments.length);
 		childSegments.addAll(pointerSegments);
 
@@ -43,6 +54,7 @@ record McpSchemaLocation(List<String> pointerSegments) {
 		return new McpSchemaLocation(childSegments);
 	}
 
+	@NonNull
 	String jsonPointer() {
 		StringBuilder pointer = new StringBuilder();
 

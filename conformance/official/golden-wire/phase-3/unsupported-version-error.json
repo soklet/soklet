@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":"phase-3-golden","error":{"code":-32022,"message":"Unsupported protocol version","data":{"supported":["2026-07-28"],"requested":"2025-11-25"}}}

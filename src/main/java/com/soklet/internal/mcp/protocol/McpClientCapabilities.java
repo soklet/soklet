@@ -16,6 +16,10 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.NotThreadSafe;
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -25,12 +29,18 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Presence-aware provisional representation of the open client-capability object.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-record McpClientCapabilities(Optional<McpJsonObject> elicitation,
-		Optional<McpJsonObject> roots, Optional<McpJsonObject> sampling,
-		Map<String, McpJsonObject> extensions, Map<String, McpJsonObject> experimental,
-		Map<String, McpJsonValue> unknownCapabilities) {
-	private static final Set<String> KNOWN_CAPABILITY_NAMES =
+@ThreadSafe
+record McpClientCapabilities(@NonNull Optional<@NonNull McpJsonObject> elicitation,
+		@NonNull Optional<@NonNull McpJsonObject> roots,
+		@NonNull Optional<@NonNull McpJsonObject> sampling,
+		@NonNull Map<@NonNull String, @NonNull McpJsonObject> extensions,
+		@NonNull Map<@NonNull String, @NonNull McpJsonObject> experimental,
+		@NonNull Map<@NonNull String, @NonNull McpJsonValue> unknownCapabilities) {
+	@NonNull
+	private static final Set<@NonNull String> KNOWN_CAPABILITY_NAMES =
 			Set.of("elicitation", "roots", "sampling", "extensions", "experimental");
 
 	McpClientCapabilities {
@@ -54,15 +64,19 @@ record McpClientCapabilities(Optional<McpJsonObject> elicitation,
 		validateObjectMembers(sampling, Set.of("context", "tools"), "sampling");
 	}
 
+	@NonNull
 	static McpClientCapabilities empty() {
 		return builder().build();
 	}
 
+	@NonNull
 	static Builder builder() {
 		return new Builder();
 	}
 
-	static McpClientCapabilities fromRequirements(Set<McpClientCapabilityRequirement> requirements) {
+	@NonNull
+	static McpClientCapabilities fromRequirements(
+			@NonNull Set<@NonNull McpClientCapabilityRequirement> requirements) {
 		requireNonNull(requirements);
 		Builder builder = builder();
 
@@ -72,7 +86,7 @@ record McpClientCapabilities(Optional<McpJsonObject> elicitation,
 		return builder.build();
 	}
 
-	boolean supports(McpClientCapabilityRequirement requirement) {
+	boolean supports(@NonNull McpClientCapabilityRequirement requirement) {
 		requireNonNull(requirement);
 
 		McpCoreClientCapability coreCapability = (McpCoreClientCapability) requirement;
@@ -96,8 +110,10 @@ record McpClientCapabilities(Optional<McpJsonObject> elicitation,
 		};
 	}
 
+	@NonNull
 	McpJsonObject toJsonObject() {
-		Map<String, McpJsonValue> values = new LinkedHashMap<>(unknownCapabilities);
+		Map<@NonNull String, @NonNull McpJsonValue> values =
+				new LinkedHashMap<>(unknownCapabilities);
 		elicitation.ifPresent(value -> values.put("elicitation", value));
 		roots.ifPresent(value -> values.put("roots", value));
 		sampling.ifPresent(value -> values.put("sampling", value));
@@ -111,8 +127,10 @@ record McpClientCapabilities(Optional<McpJsonObject> elicitation,
 		return new McpJsonObject(values);
 	}
 
-	private static void validateObjectMembers(Optional<McpJsonObject> capability,
-			Set<String> objectMemberNames, String capabilityName) {
+	private static void validateObjectMembers(
+			@NonNull Optional<@NonNull McpJsonObject> capability,
+			@NonNull Set<@NonNull String> objectMemberNames,
+			@NonNull String capabilityName) {
 		capability.ifPresent(value -> {
 			for (String memberName : objectMemberNames) {
 				McpJsonValue member = value.members().get(memberName);
@@ -124,19 +142,29 @@ record McpClientCapabilities(Optional<McpJsonObject> elicitation,
 		});
 	}
 
-	private static McpJsonObject objectOfObjects(Map<String, McpJsonObject> objects) {
-		Map<String, McpJsonValue> values = new LinkedHashMap<>(objects.size());
+	@NonNull
+	private static McpJsonObject objectOfObjects(
+			@NonNull Map<@NonNull String, @NonNull McpJsonObject> objects) {
+		Map<@NonNull String, @NonNull McpJsonValue> values =
+				new LinkedHashMap<>(objects.size());
 		values.putAll(objects);
 		return new McpJsonObject(values);
 	}
 
+	@NotThreadSafe
 	static final class Builder {
-		private Optional<McpJsonObject> elicitation;
-		private Optional<McpJsonObject> roots;
-		private Optional<McpJsonObject> sampling;
-		private final Map<String, McpJsonObject> extensions;
-		private final Map<String, McpJsonObject> experimental;
-		private final Map<String, McpJsonValue> unknownCapabilities;
+		@NonNull
+		private Optional<@NonNull McpJsonObject> elicitation;
+		@NonNull
+		private Optional<@NonNull McpJsonObject> roots;
+		@NonNull
+		private Optional<@NonNull McpJsonObject> sampling;
+		@NonNull
+		private final Map<@NonNull String, @NonNull McpJsonObject> extensions;
+		@NonNull
+		private final Map<@NonNull String, @NonNull McpJsonObject> experimental;
+		@NonNull
+		private final Map<@NonNull String, @NonNull McpJsonValue> unknownCapabilities;
 
 		private Builder() {
 			this.elicitation = Optional.empty();
@@ -147,7 +175,8 @@ record McpClientCapabilities(Optional<McpJsonObject> elicitation,
 			this.unknownCapabilities = new LinkedHashMap<>();
 		}
 
-		Builder capability(McpCoreClientCapability capability) {
+		@NonNull
+		Builder capability(@NonNull McpCoreClientCapability capability) {
 			requireNonNull(capability);
 
 			switch (capability) {
@@ -166,45 +195,54 @@ record McpClientCapabilities(Optional<McpJsonObject> elicitation,
 			return this;
 		}
 
-		Builder elicitation(McpJsonObject settings) {
+		@NonNull
+		Builder elicitation(@NonNull McpJsonObject settings) {
 			elicitation = Optional.of(requireNonNull(settings));
 			return this;
 		}
 
-		Builder roots(McpJsonObject settings) {
+		@NonNull
+		Builder roots(@NonNull McpJsonObject settings) {
 			roots = Optional.of(requireNonNull(settings));
 			return this;
 		}
 
-		Builder sampling(McpJsonObject settings) {
+		@NonNull
+		Builder sampling(@NonNull McpJsonObject settings) {
 			sampling = Optional.of(requireNonNull(settings));
 			return this;
 		}
 
-		Builder extension(String identifier, McpJsonObject settings) {
+		@NonNull
+		Builder extension(@NonNull String identifier, @NonNull McpJsonObject settings) {
 			extensions.put(McpProtocolSupport.requireExtensionIdentifier(identifier),
 					requireNonNull(settings));
 			return this;
 		}
 
-		Builder experimental(String name, McpJsonObject settings) {
+		@NonNull
+		Builder experimental(@NonNull String name, @NonNull McpJsonObject settings) {
 			experimental.put(requireNonNull(name), requireNonNull(settings));
 			return this;
 		}
 
-		Builder unknown(String name, McpJsonValue settings) {
+		@NonNull
+		Builder unknown(@NonNull String name, @NonNull McpJsonValue settings) {
 			unknownCapabilities.put(requireNonNull(name), requireNonNull(settings));
 			return this;
 		}
 
+		@NonNull
 		McpClientCapabilities build() {
 			return new McpClientCapabilities(elicitation, roots, sampling,
 					extensions, experimental, unknownCapabilities);
 		}
 
+		@NonNull
 		private static McpJsonObject withObjectMember(
-				McpJsonObject object, String memberName) {
-			Map<String, McpJsonValue> values = new LinkedHashMap<>(object.members());
+				@NonNull McpJsonObject object, @NonNull String memberName) {
+			Map<@NonNull String, @NonNull McpJsonValue> values =
+					new LinkedHashMap<>(object.members());
 			values.putIfAbsent(memberName, McpJsonObject.empty());
 			return new McpJsonObject(values);
 		}

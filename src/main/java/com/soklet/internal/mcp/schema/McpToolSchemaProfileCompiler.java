@@ -22,8 +22,12 @@ import com.soklet.internal.mcp.protocol.McpJsonNumber;
 import com.soklet.internal.mcp.protocol.McpJsonObject;
 import com.soklet.internal.mcp.protocol.McpJsonString;
 import com.soklet.internal.mcp.protocol.McpJsonValue;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.NotThreadSafe;
+import javax.annotation.concurrent.ThreadSafe;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -42,18 +46,24 @@ import static java.util.Objects.requireNonNull;
  * <p>The compiler accepts one self-contained object document. It rejects every
  * keyword outside the closed profile and resolves only same-document JSON
  * Pointer and plain-name-anchor references.</p>
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 final class McpToolSchemaProfileCompiler {
+	@NonNull
 	static final String DRAFT_2020_12_URI =
 			"https://json-schema.org/draft/2020-12/schema";
-	private static final Set<String> SUPPORTED_KEYWORDS = Set.of(
+	@NonNull
+	private static final Set<@NonNull String> SUPPORTED_KEYWORDS = Set.of(
 			"$schema", "$defs", "$anchor", "$ref", "$comment",
 			"properties", "additionalProperties", "items", "allOf",
 			"anyOf", "if", "then", "else", "type", "enum", "const",
 			"required", "minimum", "maximum", "title", "description",
 			"default", "examples", "deprecated", "readOnly", "writeOnly",
 			"format", "x-mcp-header");
-	private static final Set<String> EXPLICITLY_REJECTED_KEYWORDS = Set.of(
+	@NonNull
+	private static final Set<@NonNull String> EXPLICITLY_REJECTED_KEYWORDS = Set.of(
 			"$id", "$vocabulary", "$dynamicAnchor", "$dynamicRef", "oneOf",
 			"not", "dependentRequired", "dependentSchemas", "prefixItems",
 			"contains", "minContains", "maxContains", "pattern",
@@ -63,35 +73,46 @@ final class McpToolSchemaProfileCompiler {
 			"exclusiveMaximum", "unevaluatedItems", "unevaluatedProperties",
 			"contentEncoding", "contentMediaType", "contentSchema");
 
+	@NonNull
 	private final McpSchemaCompilationLimits limits;
 
-	McpToolSchemaProfileCompiler(McpSchemaCompilationLimits limits) {
+	McpToolSchemaProfileCompiler(@NonNull McpSchemaCompilationLimits limits) {
 		this.limits = requireNonNull(limits);
 	}
 
-	McpToolSchemaProfileProgram compile(McpJsonObject document) {
+	@NonNull
+	McpToolSchemaProfileProgram compile(@NonNull McpJsonObject document) {
 		return new Compilation(requireNonNull(document)).compile();
 	}
 
-	static Set<String> supportedKeywords() {
+	@NonNull
+	static Set<@NonNull String> supportedKeywords() {
 		return SUPPORTED_KEYWORDS;
 	}
 
-	static Set<String> explicitlyRejectedKeywords() {
+	@NonNull
+	static Set<@NonNull String> explicitlyRejectedKeywords() {
 		return EXPLICITLY_REJECTED_KEYWORDS;
 	}
 
+	@NotThreadSafe
 	private final class Compilation {
+		@NonNull
 		private final McpJsonObject document;
-		private final List<NodeBuilder> nodes;
-		private final Map<String, McpSchemaNodeId> nodesByPointer;
-		private final Map<String, McpSchemaNodeId> anchors;
-		private final List<UnresolvedReference> references;
-		private final Map<String, String> headersByPointer;
+		@NonNull
+		private final List<@NonNull NodeBuilder> nodes;
+		@NonNull
+		private final Map<@NonNull String, @NonNull McpSchemaNodeId> nodesByPointer;
+		@NonNull
+		private final Map<@NonNull String, @NonNull McpSchemaNodeId> anchors;
+		@NonNull
+		private final List<@NonNull UnresolvedReference> references;
+		@NonNull
+		private final Map<@NonNull String, @NonNull String> headersByPointer;
 		private int keywordCount;
 		private int anchorCount;
 
-		private Compilation(McpJsonObject document) {
+		private Compilation(@NonNull McpJsonObject document) {
 			this.document = document;
 			this.nodes = new ArrayList<>();
 			this.nodesByPointer = new LinkedHashMap<>();
@@ -100,6 +121,7 @@ final class McpToolSchemaProfileCompiler {
 			this.headersByPointer = new LinkedHashMap<>();
 		}
 
+		@NonNull
 		private McpToolSchemaProfileProgram compile() {
 			McpSchemaNodeId root = compileSchema(document,
 					McpSchemaLocation.root(), 1, true);
@@ -111,8 +133,10 @@ final class McpToolSchemaProfileCompiler {
 					headersByPointer);
 		}
 
-		private McpSchemaNodeId compileSchema(McpJsonValue schema,
-				McpSchemaLocation location, int depth, boolean documentRoot) {
+		@NonNull
+		private McpSchemaNodeId compileSchema(@NonNull McpJsonValue schema,
+				@NonNull McpSchemaLocation location, int depth,
+				boolean documentRoot) {
 			checkNodeAndDepth(location, depth);
 			McpSchemaNodeId id = new McpSchemaNodeId(nodes.size());
 			NodeBuilder builder = new NodeBuilder(id, location);
@@ -166,8 +190,8 @@ final class McpToolSchemaProfileCompiler {
 			return id;
 		}
 
-		private void validateKeywordNames(McpJsonObject schema,
-				McpSchemaLocation location) {
+		private void validateKeywordNames(@NonNull McpJsonObject schema,
+				@NonNull McpSchemaLocation location) {
 			if ((long) keywordCount + schema.members().size()
 					> limits.maximumKeywordCount())
 				throw limit(McpSchemaCompilationException.Limit.KEYWORD_COUNT,
@@ -186,8 +210,8 @@ final class McpToolSchemaProfileCompiler {
 			}
 		}
 
-		private void validateDialect(McpJsonObject schema,
-				McpSchemaLocation location, boolean documentRoot) {
+		private void validateDialect(@NonNull McpJsonObject schema,
+				@NonNull McpSchemaLocation location, boolean documentRoot) {
 			McpJsonValue value = schema.members().get("$schema");
 			if (value == null)
 				return;
@@ -202,8 +226,8 @@ final class McpToolSchemaProfileCompiler {
 						location, "$schema");
 		}
 
-		private void validateAnnotations(McpJsonObject schema,
-				McpSchemaLocation location) {
+		private void validateAnnotations(@NonNull McpJsonObject schema,
+				@NonNull McpSchemaLocation location) {
 			for (String keyword : List.of("$comment", "title", "description",
 					"format")) {
 				McpJsonValue value = schema.members().get(keyword);
@@ -223,8 +247,9 @@ final class McpToolSchemaProfileCompiler {
 			}
 		}
 
-		private void registerAnchor(McpJsonObject schema,
-				McpSchemaLocation location, McpSchemaNodeId id) {
+		private void registerAnchor(@NonNull McpJsonObject schema,
+				@NonNull McpSchemaLocation location,
+				@NonNull McpSchemaNodeId id) {
 			McpJsonValue value = schema.members().get("$anchor");
 			if (value == null)
 				return;
@@ -249,8 +274,8 @@ final class McpToolSchemaProfileCompiler {
 						location, "$anchor");
 		}
 
-		private void registerHeader(McpJsonObject schema,
-				McpSchemaLocation location) {
+		private void registerHeader(@NonNull McpJsonObject schema,
+				@NonNull McpSchemaLocation location) {
 			McpJsonValue value = schema.members().get("x-mcp-header");
 			if (value == null)
 				return;
@@ -261,15 +286,19 @@ final class McpToolSchemaProfileCompiler {
 			headersByPointer.put(location.jsonPointer(), header.value());
 		}
 
-		private Optional<McpSchemaType> readDirectType(McpJsonObject schema) {
+		@NonNull
+		private Optional<@NonNull McpSchemaType> readDirectType(
+				@NonNull McpJsonObject schema) {
 			McpJsonValue value = schema.members().get("type");
 			if (!(value instanceof McpJsonString name))
 				return Optional.empty();
 			return McpSchemaType.fromSchemaName(name.value());
 		}
 
-		private Set<McpSchemaType> readTypes(McpJsonObject schema,
-				McpSchemaLocation location) {
+		@NonNull
+		private Set<@NonNull McpSchemaType> readTypes(
+				@NonNull McpJsonObject schema,
+				@NonNull McpSchemaLocation location) {
 			McpJsonValue value = schema.members().get("type");
 			if (value == null)
 				return Set.of();
@@ -290,8 +319,10 @@ final class McpToolSchemaProfileCompiler {
 			return types;
 		}
 
-		private void addType(McpJsonString name, Set<String> names,
-				Set<McpSchemaType> types, McpSchemaLocation location) {
+		private void addType(@NonNull McpJsonString name,
+				@NonNull Set<@NonNull String> names,
+				@NonNull Set<@NonNull McpSchemaType> types,
+				@NonNull McpSchemaLocation location) {
 			McpSchemaType type = McpSchemaType.fromSchemaName(name.value())
 					.orElseThrow(() -> invalidType(location));
 			if (!names.add(name.value()))
@@ -299,8 +330,10 @@ final class McpToolSchemaProfileCompiler {
 			types.add(type);
 		}
 
-		private Optional<List<McpJsonValue>> readEnumeration(McpJsonObject schema,
-				McpSchemaLocation location) {
+		@NonNull
+		private Optional<@NonNull List<@NonNull McpJsonValue>> readEnumeration(
+				@NonNull McpJsonObject schema,
+				@NonNull McpSchemaLocation location) {
 			McpJsonValue value = schema.members().get("enum");
 			if (value == null)
 				return Optional.empty();
@@ -311,8 +344,10 @@ final class McpToolSchemaProfileCompiler {
 			return Optional.of(array.values());
 		}
 
-		private List<String> readRequired(McpJsonObject schema,
-				McpSchemaLocation location) {
+		@NonNull
+		private List<@NonNull String> readRequired(
+				@NonNull McpJsonObject schema,
+				@NonNull McpSchemaLocation location) {
 			McpJsonValue value = schema.members().get("required");
 			if (value == null)
 				return List.of();
@@ -332,8 +367,10 @@ final class McpToolSchemaProfileCompiler {
 			return List.copyOf(sorted);
 		}
 
-		private Optional<java.math.BigDecimal> readNumber(McpJsonObject schema,
-				String keyword, McpSchemaLocation location) {
+		@NonNull
+		private Optional<@NonNull BigDecimal> readNumber(
+				@NonNull McpJsonObject schema, @NonNull String keyword,
+				@NonNull McpSchemaLocation location) {
 			McpJsonValue value = schema.members().get(keyword);
 			if (value == null)
 				return Optional.empty();
@@ -343,9 +380,10 @@ final class McpToolSchemaProfileCompiler {
 			return Optional.of(number.value());
 		}
 
-		private void compileMapChildren(McpJsonObject schema, String keyword,
-				McpSchemaLocation location, int depth,
-				Map<String, McpSchemaNodeId> destination) {
+		private void compileMapChildren(@NonNull McpJsonObject schema,
+				@NonNull String keyword, @NonNull McpSchemaLocation location,
+				int depth,
+				@NonNull Map<@NonNull String, @NonNull McpSchemaNodeId> destination) {
 			McpJsonValue value = schema.members().get(keyword);
 			if (value == null)
 				return;
@@ -376,8 +414,10 @@ final class McpToolSchemaProfileCompiler {
 			}
 		}
 
-		private Optional<McpSchemaNodeId> compileSingleChild(McpJsonObject schema,
-				String keyword, McpSchemaLocation location, int depth) {
+		@NonNull
+		private Optional<@NonNull McpSchemaNodeId> compileSingleChild(
+				@NonNull McpJsonObject schema, @NonNull String keyword,
+				@NonNull McpSchemaLocation location, int depth) {
 			McpJsonValue value = schema.members().get(keyword);
 			if (value == null)
 				return Optional.empty();
@@ -392,8 +432,10 @@ final class McpToolSchemaProfileCompiler {
 					depth + 1, false));
 		}
 
-		private List<McpSchemaNodeId> compileArrayChildren(McpJsonObject schema,
-				String keyword, McpSchemaLocation location, int depth) {
+		@NonNull
+		private List<@NonNull McpSchemaNodeId> compileArrayChildren(
+				@NonNull McpJsonObject schema, @NonNull String keyword,
+				@NonNull McpSchemaLocation location, int depth) {
 			McpJsonValue value = schema.members().get(keyword);
 			if (value == null)
 				return List.of();
@@ -422,8 +464,9 @@ final class McpToolSchemaProfileCompiler {
 			return List.copyOf(children);
 		}
 
-		private void collectReference(McpJsonObject schema,
-				McpSchemaLocation location, McpSchemaNodeId source) {
+		private void collectReference(@NonNull McpJsonObject schema,
+				@NonNull McpSchemaLocation location,
+				@NonNull McpSchemaNodeId source) {
 			McpJsonValue value = schema.members().get("$ref");
 			if (value == null)
 				return;
@@ -474,8 +517,9 @@ final class McpToolSchemaProfileCompiler {
 			}
 		}
 
-		private String decodeFragment(String rawFragment,
-				McpSchemaLocation location) {
+		@NonNull
+		private String decodeFragment(@NonNull String rawFragment,
+				@NonNull McpSchemaLocation location) {
 			FragmentDecoder decoder = new FragmentDecoder(rawFragment.length(),
 					location);
 			for (int index = 0; index < rawFragment.length();) {
@@ -493,8 +537,10 @@ final class McpToolSchemaProfileCompiler {
 			return decoder.value();
 		}
 
+		@NonNull
 		private PercentDecodedCodePoint decodePercentEncodedCodePoint(
-				String rawFragment, int index, McpSchemaLocation location) {
+				@NonNull String rawFragment, int index,
+				@NonNull McpSchemaLocation location) {
 			int first = percentEncodedByte(rawFragment, index, 0, location);
 			int byteCount;
 			if (first <= 0x7F)
@@ -538,8 +584,8 @@ final class McpToolSchemaProfileCompiler {
 			return new PercentDecodedCodePoint(value, index + byteCount * 3);
 		}
 
-		private int percentEncodedByte(String rawFragment, int index,
-				int byteIndex, McpSchemaLocation location) {
+		private int percentEncodedByte(@NonNull String rawFragment, int index,
+				int byteIndex, @NonNull McpSchemaLocation location) {
 			int relativeOffset = byteIndex * 3;
 			if (rawFragment.length() - index < relativeOffset + 3)
 				throw invalidReferenceEncoding(location);
@@ -553,8 +599,8 @@ final class McpToolSchemaProfileCompiler {
 			return high * 16 + low;
 		}
 
-		private void validateRawFragmentSyntax(String fragment,
-				McpSchemaLocation location) {
+		private void validateRawFragmentSyntax(@NonNull String fragment,
+				@NonNull McpSchemaLocation location) {
 			for (int index = 0; index < fragment.length(); ++index) {
 				char character = fragment.charAt(index);
 				if (character == '%') {
@@ -573,8 +619,9 @@ final class McpToolSchemaProfileCompiler {
 			}
 		}
 
-		private String decodePointer(String fragment,
-				McpSchemaLocation location) {
+		@NonNull
+		private String decodePointer(@NonNull String fragment,
+				@NonNull McpSchemaLocation location) {
 			int segmentCount = 1;
 			for (int index = 1; index < fragment.length(); ++index) {
 				if (fragment.charAt(index) == '/')
@@ -615,8 +662,8 @@ final class McpToolSchemaProfileCompiler {
 			return new McpSchemaLocation(segments).jsonPointer();
 		}
 
-		private int decodedPointerSegmentLength(String fragment, int start,
-				int end, McpSchemaLocation location) {
+		private int decodedPointerSegmentLength(@NonNull String fragment,
+				int start, int end, @NonNull McpSchemaLocation location) {
 			int length = 0;
 			for (int index = start; index < end; ++index) {
 				if (fragment.charAt(index) == '~') {
@@ -636,15 +683,19 @@ final class McpToolSchemaProfileCompiler {
 			return length;
 		}
 
+		@NotThreadSafe
 		private final class FragmentDecoder {
+			@NonNull
 			private final McpSchemaLocation location;
+			@NonNull
 			private final StringBuilder decoded;
 			private boolean firstCharacter = true;
 			private boolean pointer;
 			private int pointerSegmentCount;
 			private long rawPointerSegmentLength;
 
-			private FragmentDecoder(int rawLength, McpSchemaLocation location) {
+			private FragmentDecoder(int rawLength,
+					@NonNull McpSchemaLocation location) {
 				this.location = location;
 				this.decoded = new StringBuilder(Math.min(rawLength, 256));
 			}
@@ -703,6 +754,7 @@ final class McpToolSchemaProfileCompiler {
 							location, "$ref");
 			}
 
+			@NonNull
 			private McpSchemaCompilationException pointerSegmentLengthLimit() {
 				return limit(
 						McpSchemaCompilationException.Limit.POINTER_SEGMENT_LENGTH,
@@ -710,12 +762,14 @@ final class McpToolSchemaProfileCompiler {
 						location, "$ref");
 			}
 
+			@NonNull
 			private String value() {
 				return decoded.toString();
 			}
 		}
 
-		private void checkNodeAndDepth(McpSchemaLocation location, int depth) {
+		private void checkNodeAndDepth(@NonNull McpSchemaLocation location,
+				int depth) {
 			if (nodes.size() >= limits.maximumSchemaNodeCount())
 				throw limit(McpSchemaCompilationException.Limit.SCHEMA_NODE_COUNT,
 						"Profile schema node count exceeds its configured limit.",
@@ -739,8 +793,8 @@ final class McpToolSchemaProfileCompiler {
 			}
 		}
 
-		private void checkCollectionWidth(int size, McpSchemaLocation location,
-				String keyword) {
+		private void checkCollectionWidth(int size,
+				@NonNull McpSchemaLocation location, @NonNull String keyword) {
 			if (size > limits.maximumCollectionEntryCount())
 				throw limit(
 						McpSchemaCompilationException.Limit.COLLECTION_ENTRY_COUNT,
@@ -749,7 +803,7 @@ final class McpToolSchemaProfileCompiler {
 		}
 
 		private void checkImmediateNodeCapacity(int childCount,
-				McpSchemaLocation location, String keyword) {
+				@NonNull McpSchemaLocation location, @NonNull String keyword) {
 			if (childCount > limits.maximumSchemaNodeCount() - nodes.size())
 				throw limit(McpSchemaCompilationException.Limit.SCHEMA_NODE_COUNT,
 						"Profile schema node count exceeds its configured limit.",
@@ -757,7 +811,7 @@ final class McpToolSchemaProfileCompiler {
 		}
 
 		private void checkImmediateChildDepth(int parentDepth,
-				McpSchemaLocation location, String keyword) {
+				@NonNull McpSchemaLocation location, @NonNull String keyword) {
 			if (parentDepth >= limits.maximumSchemaDepth())
 				throw limit(McpSchemaCompilationException.Limit.SCHEMA_DEPTH,
 						"Profile schema depth exceeds its configured limit.",
@@ -765,7 +819,7 @@ final class McpToolSchemaProfileCompiler {
 		}
 
 		private void checkImmediatePointerCapacity(int additionalSegments,
-				McpSchemaLocation location, String keyword) {
+				@NonNull McpSchemaLocation location, @NonNull String keyword) {
 			if (additionalSegments > limits.maximumPointerSegmentCount()
 					- location.pointerSegments().size())
 				throw limit(
@@ -774,16 +828,16 @@ final class McpToolSchemaProfileCompiler {
 						location, keyword);
 		}
 
-		private void checkNameLength(String name, McpSchemaLocation location,
-				String keyword) {
+		private void checkNameLength(@NonNull String name,
+				@NonNull McpSchemaLocation location, @NonNull String keyword) {
 			if (name.length() > limits.maximumNameLengthInCharacters())
 				throw limit(McpSchemaCompilationException.Limit.NAME_LENGTH,
 						"A Profile 1 name exceeds its configured character limit.",
 						location, keyword);
 		}
 
-		private void checkPointerSegmentLength(String segment,
-				McpSchemaLocation location, String keyword) {
+		private void checkPointerSegmentLength(@NonNull String segment,
+				@NonNull McpSchemaLocation location, @NonNull String keyword) {
 			if (segment.length()
 					> limits.maximumPointerSegmentLengthInCharacters())
 				throw limit(
@@ -792,38 +846,42 @@ final class McpToolSchemaProfileCompiler {
 						location, keyword);
 		}
 
+		@NonNull
 		private McpSchemaCompilationException invalidType(
-				McpSchemaLocation location) {
+				@NonNull McpSchemaLocation location) {
 			return invalidKeywordValue(location, "type",
 					"The type keyword must contain a valid unique type name or a non-empty array of unique type names.");
 		}
 
+		@NonNull
 		private McpSchemaCompilationException invalidRequired(
-				McpSchemaLocation location) {
+				@NonNull McpSchemaLocation location) {
 			return invalidKeywordValue(location, "required",
 					"The required keyword must contain an array of unique strings.");
 		}
 
+		@NonNull
 		private McpSchemaCompilationException invalidPointer(
-				McpSchemaLocation location) {
+				@NonNull McpSchemaLocation location) {
 			return failure(McpSchemaCompilationException.Kind.INVALID_REFERENCE,
 					"A local schema reference contains an invalid JSON Pointer escape.",
 					location, "$ref");
 		}
 
+		@NonNull
 		private McpSchemaCompilationException invalidReferenceEncoding(
-				McpSchemaLocation location) {
+				@NonNull McpSchemaLocation location) {
 			return failure(McpSchemaCompilationException.Kind.INVALID_REFERENCE,
 					"A local schema reference contains invalid percent-encoded UTF-8.",
 					location, "$ref");
 		}
 	}
 
-	private static boolean isSchema(McpJsonValue value) {
+	private static boolean isSchema(@NonNull McpJsonValue value) {
 		return value instanceof McpJsonObject || value instanceof McpJsonBoolean;
 	}
 
-	private static boolean validAnchorName(String value) {
+	private static boolean validAnchorName(@NonNull String value) {
 		if (value.isEmpty() || !anchorInitial(value.charAt(0)))
 			return false;
 		for (int index = 1; index < value.length(); ++index) {
@@ -859,26 +917,32 @@ final class McpToolSchemaProfileCompiler {
 				|| "-._~!$&'()*+,;=:@/?".indexOf(character) >= 0;
 	}
 
+	@NonNull
 	private static McpSchemaCompilationException invalidKeywordValue(
-			McpSchemaLocation location, String keyword, String message) {
+			@NonNull McpSchemaLocation location, @NonNull String keyword,
+			@NonNull String message) {
 		return failure(McpSchemaCompilationException.Kind.INVALID_KEYWORD_VALUE,
 				message, location, keyword);
 	}
 
+	@NonNull
 	private static McpSchemaCompilationException failure(
-			McpSchemaCompilationException.Kind kind, String message,
+			McpSchemaCompilationException.@NonNull Kind kind,
+			@NonNull String message,
 			@Nullable McpSchemaLocation location, @Nullable String keyword) {
 		return new McpSchemaCompilationException(kind, message, location, keyword);
 	}
 
+	@NonNull
 	private static McpSchemaCompilationException limit(
-			McpSchemaCompilationException.Limit limit, String message,
+			McpSchemaCompilationException.@NonNull Limit limit,
+			@NonNull String message,
 			@Nullable McpSchemaLocation location, @Nullable String keyword) {
 		return new McpSchemaCompilationException(limit, message, location, keyword);
 	}
 
-	private record UnresolvedReference(McpSchemaNodeId source, String value,
-			McpSchemaLocation location) {
+	private record UnresolvedReference(@NonNull McpSchemaNodeId source,
+			@NonNull String value, @NonNull McpSchemaLocation location) {
 		private UnresolvedReference {
 			requireNonNull(source);
 			requireNonNull(value);
@@ -889,36 +953,60 @@ final class McpToolSchemaProfileCompiler {
 	private record PercentDecodedCodePoint(int value, int nextIndex) {
 	}
 
+	@NotThreadSafe
 	private static final class NodeBuilder {
+		@NonNull
 		private final McpSchemaNodeId id;
+		@NonNull
 		private final McpSchemaLocation location;
-		private Optional<McpJsonBoolean> booleanSchema = Optional.empty();
-		private Set<McpSchemaType> acceptedTypes = Set.of();
-		private Optional<McpSchemaType> directType = Optional.empty();
-		private Optional<McpJsonValue> constant = Optional.empty();
-		private Optional<List<McpJsonValue>> enumeration = Optional.empty();
-		private final Map<String, McpSchemaNodeId> propertySchemas =
-				new LinkedHashMap<>();
-		private final Map<String, McpSchemaNodeId> ignoredDefinitionSchemas =
-				new LinkedHashMap<>();
-		private List<String> requiredProperties = List.of();
-		private Optional<McpSchemaNodeId> additionalPropertiesSchema =
+		@NonNull
+		private Optional<@NonNull McpJsonBoolean> booleanSchema = Optional.empty();
+		@NonNull
+		private Set<@NonNull McpSchemaType> acceptedTypes = Set.of();
+		@NonNull
+		private Optional<@NonNull McpSchemaType> directType = Optional.empty();
+		@NonNull
+		private Optional<@NonNull McpJsonValue> constant = Optional.empty();
+		@NonNull
+		private Optional<@NonNull List<@NonNull McpJsonValue>> enumeration =
 				Optional.empty();
-		private Optional<McpSchemaNodeId> itemSchema = Optional.empty();
-		private List<McpSchemaNodeId> allOfSchemas = List.of();
-		private List<McpSchemaNodeId> anyOfSchemas = List.of();
-		private Optional<McpSchemaNodeId> ifSchema = Optional.empty();
-		private Optional<McpSchemaNodeId> thenSchema = Optional.empty();
-		private Optional<McpSchemaNodeId> elseSchema = Optional.empty();
-		private Optional<java.math.BigDecimal> minimum = Optional.empty();
-		private Optional<java.math.BigDecimal> maximum = Optional.empty();
-		private Optional<McpSchemaNodeId> referenceTarget = Optional.empty();
+		@NonNull
+		private final Map<@NonNull String, @NonNull McpSchemaNodeId> propertySchemas =
+				new LinkedHashMap<>();
+		@NonNull
+		private final Map<@NonNull String, @NonNull McpSchemaNodeId> ignoredDefinitionSchemas =
+				new LinkedHashMap<>();
+		@NonNull
+		private List<@NonNull String> requiredProperties = List.of();
+		@NonNull
+		private Optional<@NonNull McpSchemaNodeId> additionalPropertiesSchema =
+				Optional.empty();
+		@NonNull
+		private Optional<@NonNull McpSchemaNodeId> itemSchema = Optional.empty();
+		@NonNull
+		private List<@NonNull McpSchemaNodeId> allOfSchemas = List.of();
+		@NonNull
+		private List<@NonNull McpSchemaNodeId> anyOfSchemas = List.of();
+		@NonNull
+		private Optional<@NonNull McpSchemaNodeId> ifSchema = Optional.empty();
+		@NonNull
+		private Optional<@NonNull McpSchemaNodeId> thenSchema = Optional.empty();
+		@NonNull
+		private Optional<@NonNull McpSchemaNodeId> elseSchema = Optional.empty();
+		@NonNull
+		private Optional<@NonNull BigDecimal> minimum = Optional.empty();
+		@NonNull
+		private Optional<@NonNull BigDecimal> maximum = Optional.empty();
+		@NonNull
+		private Optional<@NonNull McpSchemaNodeId> referenceTarget = Optional.empty();
 
-		private NodeBuilder(McpSchemaNodeId id, McpSchemaLocation location) {
+		private NodeBuilder(@NonNull McpSchemaNodeId id,
+				@NonNull McpSchemaLocation location) {
 			this.id = requireNonNull(id);
 			this.location = requireNonNull(location);
 		}
 
+		@NonNull
 		private McpToolSchemaProfileNode freeze() {
 			return new McpToolSchemaProfileNode(id, location, booleanSchema,
 					acceptedTypes, directType, constant, enumeration, propertySchemas,

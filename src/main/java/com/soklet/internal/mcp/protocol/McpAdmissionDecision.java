@@ -17,8 +17,11 @@
 package com.soklet.internal.mcp.protocol;
 
 import com.soklet.Request;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.NotThreadSafe;
+import javax.annotation.concurrent.ThreadSafe;
 import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
@@ -34,13 +37,20 @@ import static java.util.Objects.requireNonNull;
 /**
  * Package-private Phase 3 policy contracts. The companion public API remains
  * provisional until the Phase 4 production vertical slice freezes it.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-record McpAdmissionContext(Request request, McpNormalizedEndpoint endpoint,
-		Map<String, String> endpointPathParameters, String jsonRpcMethod,
-		boolean notification, Optional<McpJsonRpcId> requestId,
-		String protocolVersion, Optional<String> operationName,
-		Optional<McpImplementationMetadata> clientInformation,
-		Optional<McpClientCapabilities> clientCapabilities) {
+@ThreadSafe
+record McpAdmissionContext(@NonNull Request request,
+		@NonNull McpNormalizedEndpoint endpoint,
+		@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
+		@NonNull String jsonRpcMethod, boolean notification,
+		@NonNull Optional<@NonNull McpJsonRpcId> requestId,
+		@NonNull String protocolVersion,
+		@NonNull Optional<@NonNull String> operationName,
+		@NonNull Optional<@NonNull McpImplementationMetadata> clientInformation,
+		@NonNull Optional<@NonNull McpClientCapabilities> clientCapabilities,
+		@NonNull Optional<@NonNull McpJsonObject> requestMetadata) {
 	McpAdmissionContext {
 		requireNonNull(request);
 		requireNonNull(endpoint);
@@ -53,9 +63,12 @@ record McpAdmissionContext(Request request, McpNormalizedEndpoint endpoint,
 		requireNonNull(operationName);
 		requireNonNull(clientInformation);
 		requireNonNull(clientCapabilities);
+		requireNonNull(requestMetadata);
 	}
 
-	private static String requireNonBlank(String value, String description) {
+	@NonNull
+	private static String requireNonBlank(@NonNull String value,
+			@NonNull String description) {
 		requireNonNull(value);
 		if (value.isBlank())
 			throw new IllegalArgumentException(description + " must not be blank.");
@@ -63,6 +76,7 @@ record McpAdmissionContext(Request request, McpNormalizedEndpoint endpoint,
 	}
 
 	@Override
+	@NonNull
 	public String toString() {
 		return "McpAdmissionContext[notification=" + notification
 				+ ", requestIdPresent=" + requestId.isPresent()
@@ -72,27 +86,42 @@ record McpAdmissionContext(Request request, McpNormalizedEndpoint endpoint,
 	}
 }
 
+/**
+ * Shallowly immutable admission identity carrier.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 final class McpAdmissionIdentity {
 	static final int MAXIMUM_PARTITION_KEY_UTF_8_BYTES = 256;
+	@NonNull
 	private static final McpAdmissionIdentity ANONYMOUS = new McpAdmissionIdentity(
 			Optional.of("anonymous"), Optional.empty(), Optional.empty(), Optional.empty());
 
-	private final Optional<String> rateLimitPartitionKey;
-	private final Optional<String> authorizationPartitionKey;
-	private final Optional<Object> principal;
-	private final Optional<Object> applicationContext;
+	@NonNull
+	private final Optional<@NonNull String> rateLimitPartitionKey;
+	@NonNull
+	private final Optional<@NonNull String> authorizationPartitionKey;
+	@NonNull
+	private final Optional<@NonNull Object> principal;
+	@NonNull
+	private final Optional<@NonNull Object> applicationContext;
 
+	@NonNull
 	static McpAdmissionIdentity anonymousInstance() {
 		return ANONYMOUS;
 	}
 
-	static Builder withRateLimitPartitionKey(String rateLimitPartitionKey) {
+	@NonNull
+	static Builder withRateLimitPartitionKey(@NonNull String rateLimitPartitionKey) {
 		return new Builder(rateLimitPartitionKey);
 	}
 
-	private McpAdmissionIdentity(Optional<String> rateLimitPartitionKey,
-			Optional<String> authorizationPartitionKey, Optional<Object> principal,
-			Optional<Object> applicationContext) {
+	private McpAdmissionIdentity(
+			@NonNull Optional<@NonNull String> rateLimitPartitionKey,
+			@NonNull Optional<@NonNull String> authorizationPartitionKey,
+			@NonNull Optional<@NonNull Object> principal,
+			@NonNull Optional<@NonNull Object> applicationContext) {
 		this.rateLimitPartitionKey = requireNonNull(rateLimitPartitionKey)
 				.map(value -> requirePartitionKey(value, "rateLimitPartitionKey"));
 		this.authorizationPartitionKey = requireNonNull(authorizationPartitionKey)
@@ -111,23 +140,29 @@ final class McpAdmissionIdentity {
 		return principal.isPresent();
 	}
 
-	Optional<Object> principal() {
+	@NonNull
+	Optional<@NonNull Object> principal() {
 		return principal;
 	}
 
-	Optional<Object> applicationContext() {
+	@NonNull
+	Optional<@NonNull Object> applicationContext() {
 		return applicationContext;
 	}
 
-	Optional<String> rateLimitPartitionKey() {
+	@NonNull
+	Optional<@NonNull String> rateLimitPartitionKey() {
 		return rateLimitPartitionKey;
 	}
 
-	Optional<String> authorizationPartitionKey() {
+	@NonNull
+	Optional<@NonNull String> authorizationPartitionKey() {
 		return authorizationPartitionKey;
 	}
 
-	private static String requirePartitionKey(String value, String name) {
+	@NonNull
+	private static String requirePartitionKey(@NonNull String value,
+			@NonNull String name) {
 		requireNonNull(value);
 		if (value.isBlank())
 			throw new IllegalArgumentException(name + " must not be blank");
@@ -150,31 +185,37 @@ final class McpAdmissionIdentity {
 		return value;
 	}
 
+	@NotThreadSafe
 	static final class Builder {
+		@NonNull
 		private final String rateLimitPartitionKey;
 		private @Nullable String authorizationPartitionKey;
 		private @Nullable Object principal;
 		private @Nullable Object applicationContext;
 
-		private Builder(String rateLimitPartitionKey) {
+		private Builder(@NonNull String rateLimitPartitionKey) {
 			this.rateLimitPartitionKey = requireNonNull(rateLimitPartitionKey);
 		}
 
-		Builder authorizationPartitionKey(String authorizationPartitionKey) {
+		@NonNull
+		Builder authorizationPartitionKey(@NonNull String authorizationPartitionKey) {
 			this.authorizationPartitionKey = requireNonNull(authorizationPartitionKey);
 			return this;
 		}
 
-		Builder principal(Object principal) {
+		@NonNull
+		Builder principal(@NonNull Object principal) {
 			this.principal = requireNonNull(principal);
 			return this;
 		}
 
-		Builder applicationContext(Object applicationContext) {
+		@NonNull
+		Builder applicationContext(@NonNull Object applicationContext) {
 			this.applicationContext = requireNonNull(applicationContext);
 			return this;
 		}
 
+		@NonNull
 		McpAdmissionIdentity build() {
 			return new McpAdmissionIdentity(
 					Optional.of(rateLimitPartitionKey),
@@ -185,17 +226,23 @@ final class McpAdmissionIdentity {
 	}
 }
 
-record McpEffectiveAdmissionIdentity(McpAdmissionIdentity admittedIdentity,
-		McpEffectivePartition rateLimitPartition,
-		McpEffectivePartition authorizationPartition) {
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpEffectiveAdmissionIdentity(@NonNull McpAdmissionIdentity admittedIdentity,
+		@NonNull McpEffectivePartition rateLimitPartition,
+		@NonNull McpEffectivePartition authorizationPartition) {
 	McpEffectiveAdmissionIdentity {
 		requireNonNull(admittedIdentity);
 		requireNonNull(rateLimitPartition);
 		requireNonNull(authorizationPartition);
 	}
 
-	static McpEffectiveAdmissionIdentity resolve(McpNormalizedEndpoint endpoint,
-			String endpointPath, McpAdmissionIdentity admittedIdentity) {
+	@NonNull
+	static McpEffectiveAdmissionIdentity resolve(@NonNull McpNormalizedEndpoint endpoint,
+			@NonNull String endpointPath,
+			@NonNull McpAdmissionIdentity admittedIdentity) {
 		requireNonNull(endpoint);
 		requireNonNull(endpointPath);
 		requireNonNull(admittedIdentity);
@@ -211,30 +258,45 @@ record McpEffectiveAdmissionIdentity(McpAdmissionIdentity admittedIdentity,
 	}
 
 	@Override
+	@NonNull
 	public String toString() {
 		return "McpEffectiveAdmissionIdentity[authenticated="
 				+ admittedIdentity.authenticated() + "]";
 	}
 }
 
-record McpEndpointPartitionIdentity(String endpointPath) {
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpEndpointPartitionIdentity(@NonNull String endpointPath) {
 	McpEndpointPartitionIdentity {
-		endpointPath = requireNonNull(endpointPath);
+		requireNonNull(endpointPath);
 	}
 
 	@Override
+	@NonNull
 	public String toString() {
 		return "McpEndpointPartitionIdentity[endpointPath=" + endpointPath + "]";
 	}
 }
 
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 enum McpPartitionPurpose {
 	RATE_LIMIT,
 	AUTHORIZATION
 }
 
-record McpEffectivePartition(McpEndpointPartitionIdentity endpointIdentity,
-		McpPartitionPurpose purpose, Optional<String> applicationKey) {
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpEffectivePartition(@NonNull McpEndpointPartitionIdentity endpointIdentity,
+		@NonNull McpPartitionPurpose purpose,
+		@NonNull Optional<@NonNull String> applicationKey) {
 	McpEffectivePartition {
 		requireNonNull(endpointIdentity);
 		requireNonNull(purpose);
@@ -242,33 +304,41 @@ record McpEffectivePartition(McpEndpointPartitionIdentity endpointIdentity,
 	}
 
 	@Override
+	@NonNull
 	public String toString() {
 		return "McpEffectivePartition[purpose=" + purpose
 				+ ", applicationKeyPresent=" + applicationKey.isPresent() + "]";
 	}
 }
 
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 sealed interface McpAdmissionDecision
 		permits McpAdmissionDecision.Accepted, McpAdmissionDecision.Rejected {
-	static Accepted accepted(McpAdmissionIdentity identity) {
+	@NonNull
+	static Accepted accepted(@NonNull McpAdmissionIdentity identity) {
 		return new Accepted(identity);
 	}
 
+	@NonNull
 	static Accepted acceptedAnonymous() {
 		return accepted(McpAdmissionIdentity.anonymousInstance());
 	}
 
-	static Rejected rejected(McpRequestRejection rejection) {
+	@NonNull
+	static Rejected rejected(@NonNull McpRequestRejection rejection) {
 		return new Rejected(rejection);
 	}
 
-	record Accepted(McpAdmissionIdentity identity) implements McpAdmissionDecision {
+	record Accepted(@NonNull McpAdmissionIdentity identity) implements McpAdmissionDecision {
 		public Accepted {
 			requireNonNull(identity);
 		}
 	}
 
-	record Rejected(McpRequestRejection rejection) implements McpAdmissionDecision {
+	record Rejected(@NonNull McpRequestRejection rejection) implements McpAdmissionDecision {
 		public Rejected {
 			requireNonNull(rejection);
 		}
@@ -278,9 +348,14 @@ sealed interface McpAdmissionDecision
 /**
  * Temporary source-compatibility constants for Phase 3 tests. The public API
  * uses {@link McpAdmissionDecision}; this class is not a public contract.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 final class McpRequestAdmissionDecision {
+	@NonNull
 	static final McpAdmissionDecision ACCEPT = McpAdmissionDecision.acceptedAnonymous();
+	@NonNull
 	static final McpAdmissionDecision REJECT = McpAdmissionDecision.rejected(
 			new McpRequestRejection(403,
 					new McpJsonRpcError(1_000,
@@ -290,17 +365,27 @@ final class McpRequestAdmissionDecision {
 	}
 }
 
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 @FunctionalInterface
 interface McpRequestAdmissionPolicy {
-	McpAdmissionDecision admit(McpAdmissionContext context) throws Exception;
+	@NonNull
+	McpAdmissionDecision admit(@NonNull McpAdmissionContext context) throws Exception;
 
+	@NonNull
 	static McpRequestAdmissionPolicy acceptAllInstance() {
 		return ignored -> McpAdmissionDecision.acceptedAnonymous();
 	}
 }
 
-record McpRequestRejection(int statusCode, McpJsonRpcError jsonRpcError,
-		Map<String, List<String>> headers) {
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpRequestRejection(int statusCode, @NonNull McpJsonRpcError jsonRpcError,
+		@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 	McpRequestRejection {
 		if (statusCode < 400 || statusCode > 599)
 			throw new IllegalArgumentException(
@@ -314,6 +399,7 @@ record McpRequestRejection(int statusCode, McpJsonRpcError jsonRpcError,
 	}
 
 	@Override
+	@NonNull
 	public String toString() {
 		return "McpRequestRejection[statusCode=" + statusCode
 				+ ", jsonRpcErrorCode=" + jsonRpcError.code()
@@ -321,25 +407,35 @@ record McpRequestRejection(int statusCode, McpJsonRpcError jsonRpcError,
 	}
 }
 
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 enum McpRateLimitTarget {
 	REQUEST,
 	TOOL
 }
 
-record McpRateLimitContext(Request request, McpNormalizedEndpoint endpoint,
-		McpEffectiveAdmissionIdentity admissionIdentity,
-		McpRateLimitTarget target, String jsonRpcMethod,
-		Optional<String> operationName) {
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpRateLimitContext(@NonNull Request request,
+		@NonNull McpNormalizedEndpoint endpoint,
+		@NonNull McpEffectiveAdmissionIdentity admissionIdentity,
+		@NonNull McpRateLimitTarget target, @NonNull String jsonRpcMethod,
+		@NonNull Optional<@NonNull String> operationName) {
 	McpRateLimitContext {
 		requireNonNull(request);
 		requireNonNull(endpoint);
 		requireNonNull(admissionIdentity);
 		requireNonNull(target);
-		jsonRpcMethod = requireNonNull(jsonRpcMethod);
+		requireNonNull(jsonRpcMethod);
 		requireNonNull(operationName);
 	}
 
 	@Override
+	@NonNull
 	public String toString() {
 		return "McpRateLimitContext[target=" + target
 				+ ", operationNamePresent=" + operationName.isPresent()
@@ -348,20 +444,26 @@ record McpRateLimitContext(Request request, McpNormalizedEndpoint endpoint,
 	}
 }
 
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 sealed interface McpRateLimitDecision
 		permits McpRateLimitDecision.Allowed, McpRateLimitDecision.Denied {
+	@NonNull
 	static Allowed allowed() {
 		return new Allowed();
 	}
 
-	static Denied denied(Duration retryAfter) {
+	@NonNull
+	static Denied denied(@NonNull Duration retryAfter) {
 		return new Denied(retryAfter);
 	}
 
 	record Allowed() implements McpRateLimitDecision {
 	}
 
-	record Denied(Duration retryAfter) implements McpRateLimitDecision {
+	record Denied(@NonNull Duration retryAfter) implements McpRateLimitDecision {
 		public Denied {
 			requireNonNull(retryAfter);
 			if (retryAfter.isNegative())
@@ -370,22 +472,37 @@ sealed interface McpRateLimitDecision
 	}
 }
 
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 @FunctionalInterface
 interface McpRateLimiter {
-	McpRateLimitDecision acquire(McpRateLimitContext context) throws Exception;
+	@NonNull
+	McpRateLimitDecision acquire(@NonNull McpRateLimitContext context) throws Exception;
 }
 
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 @FunctionalInterface
 interface McpApplicationRequestInterceptor {
-	McpWireResult intercept(McpApplicationInvocation invocation,
-			McpApplicationHandlerInvocation handlerInvocation) throws Exception;
+	@NonNull
+	McpWireResult intercept(@NonNull McpApplicationInvocation invocation,
+			@NonNull McpApplicationHandlerInvocation handlerInvocation) throws Exception;
 
+	@NonNull
 	static McpApplicationRequestInterceptor passThroughInstance() {
 		return (invocation, handlerInvocation) -> handlerInvocation.invoke();
 	}
 }
 
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
 @FunctionalInterface
 interface McpApplicationHandlerInvocation {
+	@NonNull
 	McpWireResult invoke() throws Exception;
 }

@@ -16,6 +16,9 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,7 +28,12 @@ import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
 
-record McpJsonRpcError(int code, String message, Optional<McpJsonValue> data) {
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpJsonRpcError(int code, @NonNull String message,
+		@NonNull Optional<@NonNull McpJsonValue> data) {
 	static final int PARSE_ERROR = -32700;
 	static final int INVALID_REQUEST = -32600;
 	static final int METHOD_NOT_FOUND = -32601;
@@ -38,19 +46,34 @@ record McpJsonRpcError(int code, String message, Optional<McpJsonValue> data) {
 	McpJsonRpcError {
 		requireNonNull(message);
 		requireNonNull(data);
+		if (code >= -32768 && code <= -32000 && !isDefinedReservedCode(code))
+			throw new IllegalArgumentException(
+					"The JSON-RPC/MCP reserved range may contain only defined error codes.");
 	}
 
+	private static boolean isDefinedReservedCode(int code) {
+		return switch (code) {
+			case PARSE_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND, INVALID_PARAMS,
+					INTERNAL_ERROR, HEADER_MISMATCH, MISSING_REQUIRED_CLIENT_CAPABILITY,
+					UNSUPPORTED_PROTOCOL_VERSION -> true;
+			default -> false;
+		};
+	}
+
+	@NonNull
 	McpJsonObject toJsonObject() {
-		Map<String, McpJsonValue> values = new LinkedHashMap<>();
+		Map<@NonNull String, @NonNull McpJsonValue> values = new LinkedHashMap<>();
 		values.put("code", new McpJsonNumber(code));
 		values.put("message", new McpJsonString(message));
 		data.ifPresent(value -> values.put("data", value));
 		return new McpJsonObject(values);
 	}
 
-	static McpJsonRpcError unsupportedProtocolVersion(String requestedVersion) {
-		Map<String, McpJsonValue> values = new LinkedHashMap<>();
-		List<McpJsonValue> supportedVersions = new ArrayList<>(McpProtocolVersion.SUPPORTED.size());
+	@NonNull
+	static McpJsonRpcError unsupportedProtocolVersion(@NonNull String requestedVersion) {
+		Map<@NonNull String, @NonNull McpJsonValue> values = new LinkedHashMap<>();
+		List<@NonNull McpJsonValue> supportedVersions =
+				new ArrayList<>(McpProtocolVersion.SUPPORTED.size());
 
 		for (String supportedVersion : McpProtocolVersion.SUPPORTED)
 			supportedVersions.add(new McpJsonString(supportedVersion));
@@ -61,8 +84,9 @@ record McpJsonRpcError(int code, String message, Optional<McpJsonValue> data) {
 				"Unsupported protocol version", Optional.of(new McpJsonObject(values)));
 	}
 
+	@NonNull
 	static McpJsonRpcError missingRequiredClientCapabilities(
-			Set<McpClientCapabilityRequirement> missingCapabilities) {
+			@NonNull Set<@NonNull McpClientCapabilityRequirement> missingCapabilities) {
 		requireNonNull(missingCapabilities);
 
 		if (missingCapabilities.isEmpty())

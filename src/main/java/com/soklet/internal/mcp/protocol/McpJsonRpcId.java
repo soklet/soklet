@@ -16,11 +16,19 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
 import java.math.BigInteger;
 
 import static java.util.Objects.requireNonNull;
 
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 sealed interface McpJsonRpcId permits McpJsonRpcId.StringId, McpJsonRpcId.IntegerId {
+	@NonNull
 	default McpJsonValue toJsonValue() {
 		if (this instanceof StringId stringId)
 			return new McpJsonString(stringId.value());
@@ -31,28 +39,32 @@ sealed interface McpJsonRpcId permits McpJsonRpcId.StringId, McpJsonRpcId.Intege
 		throw new IllegalArgumentException("Unsupported JSON-RPC request ID: " + this);
 	}
 
-	record StringId(String value) implements McpJsonRpcId {
+	record StringId(@NonNull String value) implements McpJsonRpcId {
 		public StringId {
 			requireNonNull(value);
 		}
 	}
 
-	record IntegerId(BigInteger value) implements McpJsonRpcId {
+	record IntegerId(@NonNull BigInteger value) implements McpJsonRpcId {
 		public IntegerId {
 			requireNonNull(value);
 		}
 	}
 }
 
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 sealed interface McpProgressToken permits McpProgressToken.StringToken,
 		McpProgressToken.IntegerToken {
-	record StringToken(String value) implements McpProgressToken {
+	record StringToken(@NonNull String value) implements McpProgressToken {
 		public StringToken {
 			requireNonNull(value);
 		}
 	}
 
-	record IntegerToken(BigInteger value) implements McpProgressToken {
+	record IntegerToken(@NonNull BigInteger value) implements McpProgressToken {
 		public IntegerToken {
 			requireNonNull(value);
 		}

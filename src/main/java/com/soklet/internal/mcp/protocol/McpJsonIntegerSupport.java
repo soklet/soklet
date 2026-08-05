@@ -16,16 +16,25 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
 import static java.util.Objects.requireNonNull;
 
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 final class McpJsonIntegerSupport {
 	private McpJsonIntegerSupport() {
 	}
 
-	static BigInteger toSerializableInteger(BigDecimal decimal, McpJsonLimits limits) {
+	@NonNull
+	static BigInteger toSerializableInteger(@NonNull BigDecimal decimal,
+			@NonNull McpJsonLimits limits) {
 		requireNonNull(decimal);
 		requireNonNull(limits);
 		BigDecimal normalized = decimal.stripTrailingZeros();

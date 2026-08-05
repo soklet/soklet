@@ -16,6 +16,9 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
@@ -29,21 +32,32 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static java.util.Objects.requireNonNull;
 
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
 @FunctionalInterface
 interface McpApplicationHandlerExecutorFactory {
+	@NonNull
 	ExecutorService create(int concurrency);
 
+	@NonNull
 	static McpApplicationHandlerExecutorFactory production() {
 		return McpApplicationHandlerExecutors::newProductionExecutor;
 	}
 }
 
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 final class McpApplicationHandlerExecutors {
+	@NonNull
 	private static final String THREAD_NAME_PREFIX = "soklet-mcp-handler-";
 
 	private McpApplicationHandlerExecutors() {
 	}
 
+	@NonNull
 	static ExecutorService newProductionExecutor(int concurrency) {
 		if (concurrency < 1)
 			throw new IllegalArgumentException("Handler concurrency must be positive.");
@@ -53,6 +67,7 @@ final class McpApplicationHandlerExecutors {
 				: newPlatformThreadExecutor(concurrency);
 	}
 
+	@NonNull
 	private static ExecutorService newPlatformThreadExecutor(int concurrency) {
 		return new ThreadPoolExecutor(
 				concurrency,
@@ -64,6 +79,7 @@ final class McpApplicationHandlerExecutors {
 				new ThreadPoolExecutor.AbortPolicy());
 	}
 
+	@NonNull
 	private static ExecutorService newVirtualThreadExecutor() {
 		try {
 			MethodHandles.Lookup lookup = MethodHandles.publicLookup();
@@ -97,6 +113,7 @@ final class McpApplicationHandlerExecutors {
 		}
 	}
 
+	@NonNull
 	private static ThreadFactory platformThreadFactory() {
 		AtomicLong sequence = new AtomicLong();
 		return runnable -> {

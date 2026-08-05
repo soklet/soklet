@@ -19,7 +19,9 @@ package com.soklet.internal.mcp.schema;
 import com.soklet.internal.mcp.protocol.McpMirroredHeaderDeclaration;
 import com.soklet.internal.mcp.protocol.McpMirroredHeaderPlan;
 import com.soklet.internal.mcp.protocol.McpMirroredHeaderValueType;
+import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -35,9 +37,14 @@ import static java.util.Objects.requireNonNull;
 /**
  * Applies schema-use constraints that are intentionally separate from Profile
  * 1 document compilation.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 final class McpSchemaUseValidator {
-	McpMirroredHeaderPlan validateToolInput(McpToolSchemaProfileProgram program) {
+	@NonNull
+	McpMirroredHeaderPlan validateToolInput(
+			@NonNull McpToolSchemaProfileProgram program) {
 		requireNonNull(program);
 		McpToolSchemaProfileNode root = program.node(program.rootNodeId());
 		if (root.directType().orElse(null) != McpSchemaType.OBJECT)
@@ -91,18 +98,19 @@ final class McpSchemaUseValidator {
 		return new McpMirroredHeaderPlan(declarations);
 	}
 
-	void validateToolOutput(McpToolSchemaProfileProgram program) {
+	void validateToolOutput(@NonNull McpToolSchemaProfileProgram program) {
 		rejectMirroredHeaders(program,
 				"x-mcp-header is not permitted in a tool output schema.");
 	}
 
-	void validateSchema(McpToolSchemaProfileProgram program) {
+	void validateSchema(@NonNull McpToolSchemaProfileProgram program) {
 		rejectMirroredHeaders(program,
 				"x-mcp-header is permitted only in a tool input schema.");
 	}
 
-	private void rejectMirroredHeaders(McpToolSchemaProfileProgram program,
-			String message) {
+	private void rejectMirroredHeaders(
+			@NonNull McpToolSchemaProfileProgram program,
+			@NonNull String message) {
 		requireNonNull(program);
 		requireNonNull(message);
 		for (McpToolSchemaProfileNode node : program.nodes()) {
@@ -112,8 +120,9 @@ final class McpSchemaUseValidator {
 		}
 	}
 
-	private Set<McpSchemaNodeId> staticallyReachableProperties(
-			McpToolSchemaProfileProgram program) {
+	@NonNull
+	private Set<@NonNull McpSchemaNodeId> staticallyReachableProperties(
+			@NonNull McpToolSchemaProfileProgram program) {
 		Set<McpSchemaNodeId> reachable = new LinkedHashSet<>();
 		Deque<McpSchemaNodeId> pending = new ArrayDeque<>();
 		addProperties(program.node(program.rootNodeId()), pending);
@@ -127,13 +136,15 @@ final class McpSchemaUseValidator {
 		return Set.copyOf(reachable);
 	}
 
-	private void addProperties(McpToolSchemaProfileNode node,
-			Deque<McpSchemaNodeId> destination) {
+	private void addProperties(@NonNull McpToolSchemaProfileNode node,
+			@NonNull Deque<@NonNull McpSchemaNodeId> destination) {
 		for (McpSchemaNodeId property : node.propertySchemas().values())
 			destination.addLast(property);
 	}
 
-	private List<String> argumentPropertyPath(McpSchemaLocation location) {
+	@NonNull
+	private List<@NonNull String> argumentPropertyPath(
+			@NonNull McpSchemaLocation location) {
 		List<String> segments = location.pointerSegments();
 		if (segments.isEmpty() || segments.size() % 2 != 0)
 			throw new IllegalStateException(
@@ -148,7 +159,7 @@ final class McpSchemaUseValidator {
 		return List.copyOf(properties);
 	}
 
-	private boolean isHttpToken(String value) {
+	private boolean isHttpToken(@NonNull String value) {
 		for (int index = 0; index < value.length(); ++index) {
 			char character = value.charAt(index);
 				boolean token = (character >= '0' && character <= '9')
@@ -161,15 +172,19 @@ final class McpSchemaUseValidator {
 		return true;
 	}
 
+	@NonNull
 	private McpSchemaCompilationException invalidHeader(
-			McpToolSchemaProfileNode node, String message) {
+			@NonNull McpToolSchemaProfileNode node,
+			@NonNull String message) {
 		return failure(McpSchemaCompilationException.Kind.INVALID_KEYWORD_VALUE,
 				message, node.location(), "x-mcp-header");
 	}
 
+	@NonNull
 	private McpSchemaCompilationException failure(
-			McpSchemaCompilationException.Kind kind, String message,
-			McpSchemaLocation location, String keyword) {
+			McpSchemaCompilationException.@NonNull Kind kind,
+			@NonNull String message, @NonNull McpSchemaLocation location,
+			@NonNull String keyword) {
 		return new McpSchemaCompilationException(kind, message, location, keyword);
 	}
 }

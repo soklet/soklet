@@ -75,12 +75,11 @@ public class McpPublicJavadocTests {
 			"[A-Za-z_$][A-Za-z0-9_$]*(?:\\.[A-Za-z_$][A-Za-z0-9_$]*)+");
 
 	@Test
-	public void phaseZeroReviewedIncludeUnionIsEmpty() throws IOException {
+	public void reviewedIncludeUnionIsNonemptyAndHasNoOverlap() throws IOException {
 		ReviewedIncludes includes = loadReviewedIncludes();
 
-		Assertions.assertTrue(includes.typeNames().isEmpty(),
-				() -> "MCP-free Phase 0 requires empty phase/provisional include files, but found "
-						+ includes.typeNames());
+		Assertions.assertFalse(includes.typeNames().isEmpty(),
+				"The public MCP bootstrap requires a reviewed API inventory");
 	}
 
 	@Test

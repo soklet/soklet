@@ -16,6 +16,8 @@
 
 package com.soklet.internal.mcp.transport;
 
+import org.jspecify.annotations.NonNull;
+
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -30,11 +32,17 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static java.util.Objects.requireNonNull;
 
+/**
+ * Supported bounded application-handler execution strategies.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
 enum McpThreadStrategy {
 	PLATFORM {
 		@Override
-		ExecutorService createExecutor(int concurrency, String threadNamePrefix,
-				UncaughtExceptionHandler uncaughtExceptionHandler) {
+		@NonNull
+		ExecutorService createExecutor(int concurrency, @NonNull String threadNamePrefix,
+				@NonNull UncaughtExceptionHandler uncaughtExceptionHandler) {
 			validate(concurrency, threadNamePrefix, uncaughtExceptionHandler);
 			ThreadFactory threadFactory = platformThreadFactory(threadNamePrefix, uncaughtExceptionHandler);
 
@@ -61,8 +69,9 @@ enum McpThreadStrategy {
 		}
 
 		@Override
-		ExecutorService createExecutor(int concurrency, String threadNamePrefix,
-				UncaughtExceptionHandler uncaughtExceptionHandler) {
+		@NonNull
+		ExecutorService createExecutor(int concurrency, @NonNull String threadNamePrefix,
+				@NonNull UncaughtExceptionHandler uncaughtExceptionHandler) {
 			validate(concurrency, threadNamePrefix, uncaughtExceptionHandler);
 
 			if (!supported())
@@ -92,11 +101,12 @@ enum McpThreadStrategy {
 		return true;
 	}
 
-	abstract ExecutorService createExecutor(int concurrency, String threadNamePrefix,
-			UncaughtExceptionHandler uncaughtExceptionHandler);
+	@NonNull
+	abstract ExecutorService createExecutor(int concurrency, @NonNull String threadNamePrefix,
+			@NonNull UncaughtExceptionHandler uncaughtExceptionHandler);
 
-	private static void validate(int concurrency, String threadNamePrefix,
-			UncaughtExceptionHandler uncaughtExceptionHandler) {
+	private static void validate(int concurrency, @NonNull String threadNamePrefix,
+			@NonNull UncaughtExceptionHandler uncaughtExceptionHandler) {
 		if (concurrency < 1)
 			throw new IllegalArgumentException("Handler concurrency must be > 0.");
 
@@ -104,8 +114,9 @@ enum McpThreadStrategy {
 		requireNonNull(uncaughtExceptionHandler);
 	}
 
-	private static ThreadFactory platformThreadFactory(String prefix,
-			UncaughtExceptionHandler uncaughtExceptionHandler) {
+	@NonNull
+	private static ThreadFactory platformThreadFactory(@NonNull String prefix,
+			@NonNull UncaughtExceptionHandler uncaughtExceptionHandler) {
 		AtomicLong sequence = new AtomicLong();
 
 		return runnable -> {
@@ -115,8 +126,9 @@ enum McpThreadStrategy {
 		};
 	}
 
-	private static ThreadFactory virtualThreadFactory(String prefix,
-			UncaughtExceptionHandler uncaughtExceptionHandler) {
+	@NonNull
+	private static ThreadFactory virtualThreadFactory(@NonNull String prefix,
+			@NonNull UncaughtExceptionHandler uncaughtExceptionHandler) {
 		Class<?> virtualBuilderClass;
 
 		try {

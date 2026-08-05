@@ -23,6 +23,7 @@ import com.soklet.internal.mcp.protocol.McpJsonNumber;
 import com.soklet.internal.mcp.protocol.McpJsonObject;
 import com.soklet.internal.mcp.protocol.McpJsonString;
 import com.soklet.internal.mcp.protocol.McpJsonValue;
+import org.jspecify.annotations.NonNull;
 
 import java.util.Optional;
 
@@ -30,6 +31,8 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Exact Draft 2020-12 JSON instance types.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 enum McpSchemaType {
 	NULL("null"),
@@ -40,13 +43,16 @@ enum McpSchemaType {
 	STRING("string"),
 	INTEGER("integer");
 
+	@NonNull
 	private final String schemaName;
 
-	McpSchemaType(String schemaName) {
+	McpSchemaType(@NonNull String schemaName) {
 		this.schemaName = schemaName;
 	}
 
-	static Optional<McpSchemaType> fromSchemaName(String name) {
+	@NonNull
+	static Optional<@NonNull McpSchemaType> fromSchemaName(
+			@NonNull String name) {
 		requireNonNull(name);
 		for (McpSchemaType type : values()) {
 			if (type.schemaName.equals(name))
@@ -55,7 +61,7 @@ enum McpSchemaType {
 		return Optional.empty();
 	}
 
-	boolean matches(McpJsonValue instance) {
+	boolean matches(@NonNull McpJsonValue instance) {
 		requireNonNull(instance);
 		return switch (this) {
 			case NULL -> instance instanceof McpJsonNull;

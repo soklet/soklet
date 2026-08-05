@@ -25,6 +25,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 public class McpRequestPolicyTests {
 	@Test
@@ -175,6 +177,46 @@ public class McpRequestPolicyTests {
 						+ "unknownMirroredHeaderPolicy=IGNORE]",
 				policy.toString());
 		Assertions.assertFalse(policy.toString().contains("secret"));
+	}
+
+	@Test
+	public void endpoint_policy_copies_preserve_cors_authorizer_provenance() {
+		CorsAuthorizer rejectAll = CorsAuthorizer.rejectAllInstance();
+		McpRequestAdmissionPolicy admissionPolicy =
+				ignored -> McpAdmissionDecision.acceptedAnonymous();
+		McpHttpEndpointPolicy omitted =
+				McpHttpEndpointPolicy.forDiscoveryWithDefaultCorsAuthorizer(
+						admissionPolicy)
+						.withRequestRateLimiter(ignored -> McpRateLimitDecision.allowed())
+						.withRequestInterceptor(
+								McpApplicationRequestInterceptor.passThroughInstance())
+						.withUnknownMirroredHeaderPolicy(
+								McpUnknownMirroredHeaderPolicy.REJECT_REQUESTS);
+
+		Assertions.assertSame(rejectAll, omitted.corsAuthorizer());
+		Assertions.assertFalse(omitted.corsAuthorizerExplicitlyConfigured());
+
+		McpHttpEndpointPolicy explicit = McpHttpEndpointPolicy.forDiscovery(
+				rejectAll, admissionPolicy)
+				.withRequestRateLimiter(ignored -> McpRateLimitDecision.allowed())
+				.withRequestInterceptor(
+						McpApplicationRequestInterceptor.passThroughInstance())
+				.withUnknownMirroredHeaderPolicy(
+						McpUnknownMirroredHeaderPolicy.REJECT_REQUESTS);
+
+		Assertions.assertSame(rejectAll, explicit.corsAuthorizer());
+		Assertions.assertTrue(explicit.corsAuthorizerExplicitlyConfigured());
+
+		IllegalArgumentException exception = Assertions.assertThrows(
+				IllegalArgumentException.class,
+				() -> new McpHttpEndpointPolicy("/mcp", Set.of(),
+						McpAbsentOriginPolicy.ALLOW, CorsAuthorizer.acceptAllInstance(),
+						admissionPolicy, Optional.empty(),
+						McpApplicationRequestInterceptor.passThroughInstance(),
+						McpUnknownMirroredHeaderPolicy.IGNORE, false));
+		Assertions.assertEquals(
+				"An omitted CORS authorizer must use the reject-all default.",
+				exception.getMessage());
 	}
 
 	@Test

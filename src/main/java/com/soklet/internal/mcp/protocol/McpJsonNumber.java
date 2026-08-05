@@ -16,11 +16,18 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
 import java.math.BigDecimal;
 
 import static java.util.Objects.requireNonNull;
 
-public record McpJsonNumber(BigDecimal value) implements McpJsonValue {
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+public record McpJsonNumber(@NonNull BigDecimal value) implements McpJsonValue {
 	public McpJsonNumber {
 		requireNonNull(value);
 	}

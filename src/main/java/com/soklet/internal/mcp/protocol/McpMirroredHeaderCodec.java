@@ -16,6 +16,9 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
@@ -29,11 +32,17 @@ import static java.util.Objects.requireNonNull;
  * Decodes string-valued MCP mirrors without ever reflecting their untrusted
  * values into an exception. The sentinel markers deliberately remain
  * case-sensitive.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 final class McpMirroredHeaderCodec {
 	static final int DEFAULT_MAXIMUM_DECODED_BYTES = 16 * 1_024;
+	@NonNull
 	private static final String BASE64_PREFIX = "=?base64?";
+	@NonNull
 	private static final String BASE64_SUFFIX = "?=";
+	@NonNull
 	private static final String INVALID_VALUE = "Invalid mirrored header value.";
 
 	private final int maximumDecodedBytes;
@@ -45,7 +54,8 @@ final class McpMirroredHeaderCodec {
 		this.maximumDecodedBytes = maximumDecodedBytes;
 	}
 
-	String decodeString(String encodedValue) {
+	@NonNull
+	String decodeString(@NonNull String encodedValue) {
 		requireNonNull(encodedValue);
 
 		if (encodedValue.startsWith(BASE64_PREFIX)
@@ -57,13 +67,15 @@ final class McpMirroredHeaderCodec {
 		return encodedValue;
 	}
 
-	String requirePlainString(String value) {
+	@NonNull
+	String requirePlainString(@NonNull String value) {
 		requireNonNull(value);
 		validatePlainValue(value);
 		return value;
 	}
 
-	private String decodeBase64(String payload) {
+	@NonNull
+	private String decodeBase64(@NonNull String payload) {
 		long maximumEncodedBytes = ((long) maximumDecodedBytes + 2L) / 3L * 4L;
 		if (payload.length() > maximumEncodedBytes || !canonicalBase64Shape(payload))
 			throw invalidValue();
@@ -89,7 +101,7 @@ final class McpMirroredHeaderCodec {
 		}
 	}
 
-	private boolean canonicalBase64Shape(String payload) {
+	private boolean canonicalBase64Shape(@NonNull String payload) {
 		if (payload.length() % 4 != 0)
 			return false;
 
@@ -115,7 +127,7 @@ final class McpMirroredHeaderCodec {
 		return true;
 	}
 
-	private void validatePlainValue(String value) {
+	private void validatePlainValue(@NonNull String value) {
 		if (value.length() > maximumDecodedBytes)
 			throw invalidValue();
 		if (!value.isEmpty() && (optionalWhitespace(value.charAt(0))
@@ -133,6 +145,7 @@ final class McpMirroredHeaderCodec {
 		return character == ' ' || character == '\t';
 	}
 
+	@NonNull
 	private IllegalArgumentException invalidValue() {
 		return new IllegalArgumentException(INVALID_VALUE);
 	}

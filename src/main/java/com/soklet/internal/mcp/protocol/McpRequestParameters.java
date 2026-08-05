@@ -16,21 +16,36 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
 
-record McpRequestMetadata(String protocolVersion, McpClientCapabilities clientCapabilities,
-		Optional<McpImplementationMetadata> clientInformation,
-		Optional<McpRequestLogLevel> deprecatedLogLevel,
-		Optional<McpProgressToken> progressToken, McpJsonObject extensionFields) {
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpRequestMetadata(@NonNull String protocolVersion,
+		@NonNull McpClientCapabilities clientCapabilities,
+		@NonNull Optional<@NonNull McpImplementationMetadata> clientInformation,
+		@NonNull Optional<@NonNull McpRequestLogLevel> deprecatedLogLevel,
+		@NonNull Optional<@NonNull McpProgressToken> progressToken,
+		@NonNull McpJsonObject extensionFields) {
+	@NonNull
 	static final String PROTOCOL_VERSION_KEY = "io.modelcontextprotocol/protocolVersion";
+	@NonNull
 	static final String CLIENT_CAPABILITIES_KEY = "io.modelcontextprotocol/clientCapabilities";
+	@NonNull
 	static final String CLIENT_INFORMATION_KEY = "io.modelcontextprotocol/clientInfo";
+	@NonNull
 	static final String LOG_LEVEL_KEY = "io.modelcontextprotocol/logLevel";
+	@NonNull
 	static final String PROGRESS_TOKEN_KEY = "progressToken";
 
 	McpRequestMetadata {
@@ -44,13 +59,17 @@ record McpRequestMetadata(String protocolVersion, McpClientCapabilities clientCa
 						LOG_LEVEL_KEY, PROGRESS_TOKEN_KEY));
 	}
 
-	static McpRequestMetadata fromClientCapabilities(McpClientCapabilities clientCapabilities) {
+	@NonNull
+	static McpRequestMetadata fromClientCapabilities(
+			@NonNull McpClientCapabilities clientCapabilities) {
 		return new McpRequestMetadata(McpProtocolVersion.CURRENT, clientCapabilities,
 				Optional.empty(), Optional.empty(), Optional.empty(), McpJsonObject.empty());
 	}
 
+	@NonNull
 	McpJsonObject toJsonObject() {
-		Map<String, McpJsonValue> fields = new LinkedHashMap<>(extensionFields.members());
+		Map<@NonNull String, @NonNull McpJsonValue> fields =
+				new LinkedHashMap<>(extensionFields.members());
 		fields.put(PROTOCOL_VERSION_KEY, new McpJsonString(protocolVersion));
 		fields.put(CLIENT_CAPABILITIES_KEY, clientCapabilities.toJsonObject());
 		clientInformation.ifPresent(value -> fields.put(CLIENT_INFORMATION_KEY, value.toJsonObject()));
@@ -60,7 +79,8 @@ record McpRequestMetadata(String protocolVersion, McpClientCapabilities clientCa
 		return new McpJsonObject(fields);
 	}
 
-	private static McpJsonValue progressTokenValue(McpProgressToken token) {
+	@NonNull
+	private static McpJsonValue progressTokenValue(@NonNull McpProgressToken token) {
 		if (token instanceof McpProgressToken.StringToken stringToken)
 			return new McpJsonString(stringToken.value());
 
@@ -71,19 +91,30 @@ record McpRequestMetadata(String protocolVersion, McpClientCapabilities clientCa
 	}
 }
 
-record McpRequestParameters(McpRequestMetadata metadata, McpJsonObject fields) {
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpRequestParameters(@NonNull McpRequestMetadata metadata,
+		@NonNull McpJsonObject fields) {
 	McpRequestParameters {
 		requireNonNull(metadata);
 		fields = McpProtocolSupport.requireExtensionFields(fields, Set.of("_meta"));
 	}
 
+	@NonNull
 	McpJsonObject toJsonObject() {
-		Map<String, McpJsonValue> values = new LinkedHashMap<>(fields.members());
+		Map<@NonNull String, @NonNull McpJsonValue> values =
+				new LinkedHashMap<>(fields.members());
 		values.put("_meta", metadata.toJsonObject());
 		return new McpJsonObject(values);
 	}
 }
 
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 enum McpRequestLogLevel {
 	ALERT("alert"),
 	CRITICAL("critical"),
@@ -94,20 +125,28 @@ enum McpRequestLogLevel {
 	NOTICE("notice"),
 	WARNING("warning");
 
+	@NonNull
 	private final String wireValue;
 
-	McpRequestLogLevel(String wireValue) {
+	McpRequestLogLevel(@NonNull String wireValue) {
 		this.wireValue = wireValue;
 	}
 
+	@NonNull
 	String wireValue() {
 		return wireValue;
 	}
 }
 
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 final class McpProtocolVersion {
+	@NonNull
 	static final String CURRENT = "2026-07-28";
-	static final java.util.List<String> SUPPORTED = java.util.List.of(CURRENT);
+	@NonNull
+	static final List<@NonNull String> SUPPORTED = List.of(CURRENT);
 
 	private McpProtocolVersion() {
 	}

@@ -16,6 +16,9 @@
 
 package com.soklet.internal.mcp.schema;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.NotThreadSafe;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -24,16 +27,21 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Per-call mutable state for the otherwise stateless schema evaluator.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@NotThreadSafe
 final class McpSchemaEvaluationContext {
+	@NonNull
 	private final McpSchemaEvaluationLimits limits;
-	private final List<McpSchemaDiagnostic> diagnostics;
+	@NonNull
+	private final List<@NonNull McpSchemaDiagnostic> diagnostics;
 	private long evaluationOperations;
 	private long referenceTraversals;
 	private int diagnosticUtf8Bytes;
 	private boolean diagnosticsTruncated;
 
-	McpSchemaEvaluationContext(McpSchemaEvaluationLimits limits) {
+	McpSchemaEvaluationContext(@NonNull McpSchemaEvaluationLimits limits) {
 		this.limits = requireNonNull(limits);
 		this.diagnostics = new ArrayList<>(Math.min(
 				limits.maximumDiagnosticCount(), 16));
@@ -61,10 +69,12 @@ final class McpSchemaEvaluationContext {
 		return true;
 	}
 
-	void addDiagnostic(McpSchemaDiagnostic.Code code,
-			McpSchemaLocation schemaLocation, Optional<String> keyword,
-			Optional<String> missingPropertyName,
-			List<String> instancePointerSegments, String message) {
+	void addDiagnostic(McpSchemaDiagnostic.@NonNull Code code,
+			@NonNull McpSchemaLocation schemaLocation,
+			@NonNull Optional<@NonNull String> keyword,
+			@NonNull Optional<@NonNull String> missingPropertyName,
+			@NonNull List<@NonNull String> instancePointerSegments,
+			@NonNull String message) {
 		if (diagnosticsTruncated)
 			return;
 		if (diagnostics.size() >= limits.maximumDiagnosticCount()) {
@@ -89,7 +99,8 @@ final class McpSchemaEvaluationContext {
 		return evaluationOperations;
 	}
 
-	List<McpSchemaDiagnostic> diagnostics() {
+	@NonNull
+	List<@NonNull McpSchemaDiagnostic> diagnostics() {
 		return List.copyOf(diagnostics);
 	}
 

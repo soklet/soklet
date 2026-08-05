@@ -15,6 +15,9 @@ concurrency:
   group: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'nightly' || 'ci' }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Test (JDK ${{ matrix.jdk }})
@@ -180,6 +183,122 @@ jobs:
 
       - name: Run SpotBugs
         run: mvn -B -ntp -Pspotbugs -DskipTests clean compile spotbugs:check
+
+  mcp-conformance-phase-3:
+    name: MCP Conformance Public API Phase 3 (JDK 17)
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out Soklet
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: corretto
+          java-version: '17'
+          cache: maven
+
+      - name: Initialize MCP conformance evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/conformance/official
+          printf '%s\n' '{"formatVersion":1,"phase":3,"status":"STARTED"}' \
+            > target/conformance/official/ci-started.json
+
+      - name: Download and verify pinned Node.js distribution
+        shell: bash
+        run: >-
+          bash conformance/official/scripts/install-pinned-node-linux-x64.sh
+          "${RUNNER_TEMP}" "${GITHUB_PATH}"
+          target/conformance/official/node-distribution.txt
+
+      - name: Compile and verify production golden-wire bridge
+        run: >-
+          mvn -B -ntp
+          -Dtest=McpFinalTagGoldenWireProductionTests
+          test
+
+      - name: Package candidate and build public-only fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          mvn -B -ntp -DskipTests package
+          sh conformance/official/build-public-fixture.sh \
+            "${GITHUB_WORKSPACE}/target/soklet-3.6.0-SNAPSHOT.jar" \
+            "${GITHUB_WORKSPACE}/target/conformance/public-fixture" \
+            > target/conformance/official/public-fixture-classpath.txt
+
+      - name: Check out pinned official MCP conformance suite
+        uses: actions/checkout@v6
+        with:
+          repository: modelcontextprotocol/conformance
+          ref: 49103de6ed70804e940637bf3e9e29e4a3f54e64
+          path: .mcp-conformance-source
+          persist-credentials: false
+
+      - name: Verify pinned suite source inputs
+        run: >-
+          node --input-type=module -e
+          "Promise.all([import('node:child_process'),import('./conformance/official/verify.mjs')])
+          .then(([{execFileSync},{verifyManifestSet,verifyOfficialSuite,verifyToolchain}]) => {
+          const {pins}=verifyManifestSet();
+          verifyToolchain(pins,execFileSync('npm',['--version'],{encoding:'utf8'}).trim());
+          verifyOfficialSuite('.mcp-conformance-source',pins,{requireBuilt:false});
+          })"
+
+      - name: Build pinned official MCP conformance suite
+        working-directory: .mcp-conformance-source
+        run: |
+          mkdir -p "${RUNNER_TEMP}/soklet-mcp-npm-cache"
+          env -i \
+            PATH="${PATH}" \
+            LANG=C.UTF-8 \
+            CI=true \
+            NO_COLOR=1 \
+            npm_config_cache="${RUNNER_TEMP}/soklet-mcp-npm-cache" \
+            npm_config_userconfig=/dev/null \
+            npm_config_globalconfig=/dev/null \
+            npm ci --ignore-scripts
+          env -i \
+            PATH="${PATH}" \
+            LANG=C.UTF-8 \
+            CI=true \
+            NO_COLOR=1 \
+            npm_config_cache="${RUNNER_TEMP}/soklet-mcp-npm-cache" \
+            npm_config_userconfig=/dev/null \
+            npm_config_globalconfig=/dev/null \
+            npm run build
+
+      - name: Self-test Soklet conformance infrastructure
+        run: |
+          node conformance/official/self-test.mjs \
+            --suite-dir .mcp-conformance-source
+          node conformance/official/runner-self-test.mjs
+
+      - name: Run applicable Phase 3 official scenario
+        run: |
+          mkdir -p target/conformance/official/phase-3
+          node conformance/official/run.mjs \
+            --suite-dir "${{ github.workspace }}/.mcp-conformance-source" \
+            --work-dir "${{ github.workspace }}/target/conformance/official/phase-3" \
+            --classpath "$(cat target/conformance/official/public-fixture-classpath.txt)" \
+            --project-root "${{ github.workspace }}" \
+            --phase 3
+
+      - name: Upload MCP conformance evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: mcp-conformance-phase-3-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          path: |
+            target/conformance/official
+            target/conformance/public-fixture/dependencies.txt
 
   fuzz-nightly:
     name: Nightly Fuzzing (JDK 25, ${{ matrix.target_id }})

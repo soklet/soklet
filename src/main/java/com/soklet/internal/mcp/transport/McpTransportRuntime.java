@@ -25,8 +25,10 @@ import com.soklet.internal.microhttp.MicrohttpResponse;
 import com.soklet.internal.microhttp.Options;
 import com.soklet.internal.microhttp.OptionsBuilder;
 import com.soklet.internal.microhttp.StreamingMicrohttpResponses;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -48,41 +50,53 @@ import java.util.function.Consumer;
 
 import static java.util.Objects.requireNonNull;
 
+/**
+ * Thread-safe containment runtime for the original MCP transport spike.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 final class McpTransportRuntime implements AutoCloseable {
+	@NonNull
 	private static final Duration EVENT_LOOP_RESOLUTION = Duration.ofMillis(10);
+	@NonNull
 	private static final Duration REQUEST_READ_TIMEOUT = Duration.ofSeconds(5);
 	private static final int MAXIMUM_REQUEST_SIZE = 64 * 1_024;
 	private static final int MAXIMUM_HEADER_COUNT = 64;
 	private static final int MAXIMUM_HEADERS_SIZE = 16 * 1_024;
 	private static final int MAXIMUM_REQUEST_TARGET_LENGTH = 2_048;
-	private static final byte[] KEEP_ALIVE_EVENT = ": keepalive\n\n".getBytes(StandardCharsets.UTF_8);
+	private static final byte @NonNull [] KEEP_ALIVE_EVENT =
+			": keepalive\n\n".getBytes(StandardCharsets.UTF_8);
 
 	@FunctionalInterface
 	interface InvocationHandler {
-		void handle(Invocation invocation) throws Exception;
+		void handle(@NonNull Invocation invocation) throws Exception;
 	}
 
 	@FunctionalInterface
 	interface TimerCycleProbe {
-		void beforeExchange(String requestId);
+		void beforeExchange(@NonNull String requestId);
 	}
 
+	@ThreadSafe
 	static final class Invocation {
+		@NonNull
 		private final Exchange exchange;
 
-		private Invocation(Exchange exchange) {
-			this.exchange = exchange;
+		private Invocation(@NonNull Exchange exchange) {
+			this.exchange = requireNonNull(exchange);
 		}
 
+		@NonNull
 		String requestId() {
 			return exchange.requestId;
 		}
 
-		void progress(String value) throws InterruptedException {
+		void progress(@NonNull String value) throws InterruptedException {
 			exchange.progress(value);
 		}
 
-		boolean complete(String value) {
+		boolean complete(@NonNull String value) {
 			return exchange.complete(value);
 		}
 
@@ -94,14 +108,16 @@ final class McpTransportRuntime implements AutoCloseable {
 			return exchange.cancellation.get() != null;
 		}
 
-		Optional<StreamTerminationReason> cancellationReason() {
+		@NonNull
+		Optional<@NonNull StreamTerminationReason> cancellationReason() {
 			Cancellation cancellation = exchange.cancellation.get();
 			return cancellation == null ? Optional.empty() : Optional.of(cancellation.reason());
 		}
 	}
 
 	record Snapshot(int configuredConnectionWriterConcurrency, int configuredMaximumConnections,
-			McpThreadStrategy threadStrategy, McpHandlerDispatcher.Snapshot dispatcher,
+			@NonNull McpThreadStrategy threadStrategy,
+			McpHandlerDispatcher.@NonNull Snapshot dispatcher,
 			int liveExchanges, int activeStreams, int subscriptions,
 			int bufferedFrames, int bufferedBytes, int terminalBytes,
 			int maximumObservedBufferedFramesPerStream, int maximumObservedBufferedBytesPerStream,
@@ -110,46 +126,51 @@ final class McpTransportRuntime implements AutoCloseable {
 			int residualHandlerSlots, boolean running) {
 	}
 
-	private record Cancellation(StreamTerminationReason reason, @Nullable Throwable cause) {
+	private record Cancellation(@NonNull StreamTerminationReason reason,
+			@Nullable Throwable cause) {
 		private Cancellation {
 			requireNonNull(reason);
 		}
 	}
 
-	private final McpTransportConfiguration configuration;
-	private final InvocationHandler invocationHandler;
-	private final McpMonotonicClock clock;
-	private final TimerCycleProbe timerCycleProbe;
-	private final ExecutorService handlerExecutor;
-	private final McpHandlerDispatcher dispatcher;
-	private final EventLoop eventLoop;
-	private final Map<MicrohttpRequest, Exchange> requestsByIdentity;
-	private final ConcurrentHashMap<Long, Exchange> exchanges;
-	private final ConcurrentHashMap<Long, Exchange> subscriptions;
-	private final AtomicLong exchangeSequence;
-	private final AtomicLong admittedRequests;
-	private final AtomicLong rejectedRequests;
-	private final AtomicLong cleanupCount;
-	private final AtomicLong terminalReservations;
-	private final AtomicLong appliedBackpressureCount;
-	private final AtomicBoolean running;
-	private final AtomicBoolean stopped;
-	private final Thread timerThread;
+	@NonNull private final McpTransportConfiguration configuration;
+	@NonNull private final InvocationHandler invocationHandler;
+	@NonNull private final McpMonotonicClock clock;
+	@NonNull private final TimerCycleProbe timerCycleProbe;
+	@NonNull private final ExecutorService handlerExecutor;
+	@NonNull private final McpHandlerDispatcher dispatcher;
+	@NonNull private final EventLoop eventLoop;
+	@NonNull private final Map<@NonNull MicrohttpRequest, @NonNull Exchange> requestsByIdentity;
+	@NonNull private final ConcurrentHashMap<@NonNull Long, @NonNull Exchange> exchanges;
+	@NonNull private final ConcurrentHashMap<@NonNull Long, @NonNull Exchange> subscriptions;
+	@NonNull private final AtomicLong exchangeSequence;
+	@NonNull private final AtomicLong admittedRequests;
+	@NonNull private final AtomicLong rejectedRequests;
+	@NonNull private final AtomicLong cleanupCount;
+	@NonNull private final AtomicLong terminalReservations;
+	@NonNull private final AtomicLong appliedBackpressureCount;
+	@NonNull private final AtomicBoolean running;
+	@NonNull private final AtomicBoolean stopped;
+	@NonNull private final Thread timerThread;
 
-	McpTransportRuntime(McpTransportConfiguration configuration, InvocationHandler invocationHandler)
+	McpTransportRuntime(@NonNull McpTransportConfiguration configuration,
+			@NonNull InvocationHandler invocationHandler)
 			throws IOException {
 		this(configuration, invocationHandler, McpMonotonicClock.SYSTEM);
 	}
 
-	McpTransportRuntime(McpTransportConfiguration configuration, InvocationHandler invocationHandler,
-			McpMonotonicClock clock) throws IOException {
+	McpTransportRuntime(@NonNull McpTransportConfiguration configuration,
+			@NonNull InvocationHandler invocationHandler,
+			@NonNull McpMonotonicClock clock) throws IOException {
 		this(configuration, invocationHandler, clock, requestId -> {
 			// No-op outside deterministic timer-failure tests.
 		});
 	}
 
-	McpTransportRuntime(McpTransportConfiguration configuration, InvocationHandler invocationHandler,
-			McpMonotonicClock clock, TimerCycleProbe timerCycleProbe) throws IOException {
+	McpTransportRuntime(@NonNull McpTransportConfiguration configuration,
+			@NonNull InvocationHandler invocationHandler,
+			@NonNull McpMonotonicClock clock,
+			@NonNull TimerCycleProbe timerCycleProbe) throws IOException {
 		this.configuration = requireNonNull(configuration);
 		this.invocationHandler = requireNonNull(invocationHandler);
 		this.clock = requireNonNull(clock);
@@ -200,22 +221,26 @@ final class McpTransportRuntime implements AutoCloseable {
 
 		this.eventLoop = new EventLoop(options, new Handler() {
 			@Override
-			public void handle(MicrohttpRequest request, Consumer<MicrohttpResponse> callback) {
+			public void handle(@NonNull MicrohttpRequest request,
+					@NonNull Consumer<@NonNull MicrohttpResponse> callback) {
 				handleHttpRequest(request, callback);
 			}
 
 			@Override
-			public boolean monitorClientDisconnectsBeforeResponse(MicrohttpRequest request) {
+			public boolean monitorClientDisconnectsBeforeResponse(
+					@NonNull MicrohttpRequest request) {
 				return true;
 			}
 
 			@Override
-			public boolean monitorClientDisconnectsDuringStreamingResponse(MicrohttpRequest request) {
+			public boolean monitorClientDisconnectsDuringStreamingResponse(
+					@NonNull MicrohttpRequest request) {
 				return true;
 			}
 
 			@Override
-			public void cancel(MicrohttpRequest request, StreamTerminationReason reason,
+			public void cancel(@NonNull MicrohttpRequest request,
+					@NonNull StreamTerminationReason reason,
 					@Nullable Throwable cause) {
 				cancelHttpRequest(request, reason, cause);
 			}
@@ -234,7 +259,7 @@ final class McpTransportRuntime implements AutoCloseable {
 		return eventLoop.getPort();
 	}
 
-	int publishSubscriptionEvent(String value) {
+	int publishSubscriptionEvent(@NonNull String value) {
 		requireNonNull(value);
 		byte[] frame = sseEvent("resources-updated", value);
 		int accepted = 0;
@@ -274,6 +299,7 @@ final class McpTransportRuntime implements AutoCloseable {
 		return timerThread.isAlive();
 	}
 
+	@NonNull
 	Snapshot snapshot() {
 		McpHandlerDispatcher.Snapshot dispatcherSnapshot = dispatcher.snapshot();
 		int liveExchanges = 0;
@@ -353,7 +379,8 @@ final class McpTransportRuntime implements AutoCloseable {
 			timerThread.join();
 	}
 
-	boolean awaitHandlerTermination(Duration timeout) throws InterruptedException {
+	boolean awaitHandlerTermination(@NonNull Duration timeout)
+			throws InterruptedException {
 		requireNonNull(timeout);
 		return handlerExecutor.awaitTermination(timeout.toNanos(), TimeUnit.NANOSECONDS);
 	}
@@ -369,7 +396,8 @@ final class McpTransportRuntime implements AutoCloseable {
 		}
 	}
 
-	private void handleHttpRequest(MicrohttpRequest request, Consumer<MicrohttpResponse> callback) {
+	private void handleHttpRequest(@NonNull MicrohttpRequest request,
+			@NonNull Consumer<@NonNull MicrohttpResponse> callback) {
 		requireNonNull(request);
 		requireNonNull(callback);
 
@@ -418,7 +446,8 @@ final class McpTransportRuntime implements AutoCloseable {
 		signalTimer();
 	}
 
-	private void cancelHttpRequest(MicrohttpRequest request, StreamTerminationReason reason,
+	private void cancelHttpRequest(@NonNull MicrohttpRequest request,
+			@NonNull StreamTerminationReason reason,
 			@Nullable Throwable cause) {
 		Exchange exchange = requestsByIdentity.get(request);
 
@@ -426,7 +455,7 @@ final class McpTransportRuntime implements AutoCloseable {
 			exchange.cancel(reason, cause, true);
 	}
 
-	private void cleanupResponse(Exchange exchange) {
+	private void cleanupResponse(@NonNull Exchange exchange) {
 		if (!exchange.responseCleaned.compareAndSet(false, true))
 			return;
 
@@ -452,8 +481,10 @@ final class McpTransportRuntime implements AutoCloseable {
 		LockSupport.unpark(timerThread);
 	}
 
-	private static MicrohttpResponse staticResponse(int status, String reason, String contentType,
-			String body) {
+	@NonNull
+	private static MicrohttpResponse staticResponse(int status,
+			@NonNull String reason, @NonNull String contentType,
+			@NonNull String body) {
 		return new MicrohttpResponse(
 				status,
 				reason,
@@ -461,13 +492,16 @@ final class McpTransportRuntime implements AutoCloseable {
 				body.getBytes(StandardCharsets.UTF_8));
 	}
 
-	private static MicrohttpResponse unavailableResponse(String requestId) {
+	@NonNull
+	private static MicrohttpResponse unavailableResponse(
+			@NonNull String requestId) {
 		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"" + escapeJson(requestId)
 				+ "\",\"error\":{\"code\":-32603,\"message\":\"Internal error\"}}";
 		return staticResponse(503, "Service Unavailable", "application/json", body);
 	}
 
-	private static String escapeJson(String value) {
+	@NonNull
+	private static String escapeJson(@NonNull String value) {
 		StringBuilder escaped = new StringBuilder(value.length() + 8);
 
 		for (int index = 0; index < value.length(); index++) {
@@ -493,7 +527,8 @@ final class McpTransportRuntime implements AutoCloseable {
 		return escaped.toString();
 	}
 
-	private static byte[] sseEvent(String event, String data) {
+	private static byte @NonNull [] sseEvent(@NonNull String event,
+			@NonNull String data) {
 		StringBuilder frame = new StringBuilder(event.length() + data.length() + 24);
 		frame.append("event: ").append(event).append('\n');
 		String normalized = data.replace("\r\n", "\n").replace('\r', '\n');
@@ -517,23 +552,36 @@ final class McpTransportRuntime implements AutoCloseable {
 
 	private final class Exchange {
 		private final long exchangeId;
+		@NonNull
 		private final MicrohttpRequest request;
+		@NonNull
 		private final String requestId;
 		private final boolean subscriptionRequest;
 		private final long deadlineNanos;
+		@NonNull
 		private final Consumer<MicrohttpResponse> callback;
-		private final AtomicReference<Cancellation> cancellation;
+		@NonNull
+		private final AtomicReference<@Nullable Cancellation> cancellation;
+		@NonNull
 		private final AtomicBoolean responseClaimed;
+		@NonNull
 		private final AtomicBoolean responseTerminated;
+		@NonNull
 		private final AtomicBoolean handlerRunning;
+		@NonNull
 		private final AtomicBoolean subscription;
+		@NonNull
 		private final AtomicBoolean responseCleaned;
+		@NonNull
 		private final AtomicLong nextKeepAliveNanos;
+		@NonNull
 		private final McpOutboundChannel channel;
 		private volatile McpHandlerDispatcher.@Nullable Ticket ticket;
 
-		private Exchange(long exchangeId, MicrohttpRequest request, String requestId,
-				boolean subscriptionRequest, long deadlineNanos, Consumer<MicrohttpResponse> callback) {
+		private Exchange(long exchangeId, @NonNull MicrohttpRequest request,
+				@NonNull String requestId, boolean subscriptionRequest,
+				long deadlineNanos,
+				@NonNull Consumer<@NonNull MicrohttpResponse> callback) {
 			this.exchangeId = exchangeId;
 			this.request = requireNonNull(request);
 			this.requestId = requireNonNull(requestId);
@@ -564,7 +612,9 @@ final class McpTransportRuntime implements AutoCloseable {
 						}
 
 						@Override
-						public void didTerminate(StreamTerminationReason reason, @Nullable Throwable cause) {
+						public void didTerminate(
+								@NonNull StreamTerminationReason reason,
+								@Nullable Throwable cause) {
 							onChannelTerminated(reason, cause);
 						}
 					});
@@ -630,7 +680,7 @@ final class McpTransportRuntime implements AutoCloseable {
 			}
 		}
 
-		private void progress(String value) throws InterruptedException {
+		private void progress(@NonNull String value) throws InterruptedException {
 			requireNonNull(value);
 
 			if (cancellation.get() != null)
@@ -639,7 +689,7 @@ final class McpTransportRuntime implements AutoCloseable {
 			channel.enqueue(sseEvent("progress", value));
 		}
 
-		private boolean complete(String value) {
+		private boolean complete(@NonNull String value) {
 			requireNonNull(value);
 			boolean won = channel.complete(sseEvent("result", value));
 
@@ -665,7 +715,7 @@ final class McpTransportRuntime implements AutoCloseable {
 			}
 		}
 
-		private void handlerFailed(Throwable throwable) {
+		private void handlerFailed(@NonNull Throwable throwable) {
 			if (cancellation.get() != null)
 				return;
 
@@ -677,7 +727,8 @@ final class McpTransportRuntime implements AutoCloseable {
 			}
 		}
 
-		private void cancel(StreamTerminationReason reason, @Nullable Throwable cause,
+		private void cancel(@NonNull StreamTerminationReason reason,
+				@Nullable Throwable cause,
 				boolean interruptHandler) {
 			requireNonNull(reason);
 			Cancellation value = new Cancellation(reason, cause);
@@ -704,7 +755,9 @@ final class McpTransportRuntime implements AutoCloseable {
 			channel.fail(StreamTerminationReason.BACKPRESSURE, null);
 		}
 
-		private void onChannelTerminated(StreamTerminationReason reason, @Nullable Throwable cause) {
+		private void onChannelTerminated(
+				@NonNull StreamTerminationReason reason,
+				@Nullable Throwable cause) {
 			if (reason != StreamTerminationReason.COMPLETED) {
 				cancellation.compareAndSet(null, new Cancellation(reason, cause));
 				ticket().requestInterrupt();
@@ -758,7 +811,7 @@ final class McpTransportRuntime implements AutoCloseable {
 			}
 		}
 
-		private void onTimerFailure(Throwable throwable) {
+		private void onTimerFailure(@NonNull Throwable throwable) {
 			if (responseTerminated.get() && !handlerRunning.get())
 				return;
 
@@ -803,7 +856,8 @@ final class McpTransportRuntime implements AutoCloseable {
 			}
 		}
 
-		private McpHandlerDispatcher.Ticket ticket() {
+		@NonNull
+		private McpHandlerDispatcher.@NonNull Ticket ticket() {
 			return requireNonNull(ticket, "Exchange ticket has not been initialized");
 		}
 	}

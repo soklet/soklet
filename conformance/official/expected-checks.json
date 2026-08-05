@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "protocolVersion": "2026-07-28",
+  "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+  "profilePolicy": "A profile is a complete expected multiset of check ID, status, and occurrence count. Missing or extra checks, changed statuses, changed counts, FAILURE, WARNING, or an unlisted INFO fail adjudication.",
+  "deferredProfilePolicy": "Future scenarios deliberately have null expectedCheckProfile values in scenarios.json. Their complete outcomes are observed, reviewed, and frozen only when the owning implementation phase lands; this file never invents future results.",
+  "profiles": [
+    {
+      "id": "dns-rebinding-protection.phase3.v1",
+      "scenario": "dns-rebinding-protection",
+      "frozenInPhase": 3,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "localhost-host-rebinding-rejected",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "localhost-host-valid-accepted",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 0,
+        "wire-schema-harness-error": 0,
+        "rationale": "This pinned scenario sends raw Host/Origin probes outside the suite's instrumented wire recorder, so it emits no automatic wire-schema check."
+      }
+    }
+  ]
+}

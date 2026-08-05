@@ -16,6 +16,9 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -26,9 +29,15 @@ import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
 
-record McpImplementationMetadata(String name, String version, Optional<String> title,
-		Optional<String> description, Optional<URI> websiteUrl, List<Icon> icons,
-		McpJsonObject extensionFields) {
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpImplementationMetadata(@NonNull String name, @NonNull String version,
+		@NonNull Optional<@NonNull String> title,
+		@NonNull Optional<@NonNull String> description,
+		@NonNull Optional<@NonNull URI> websiteUrl,
+		@NonNull List<@NonNull Icon> icons, @NonNull McpJsonObject extensionFields) {
 	McpImplementationMetadata {
 		requireNonNull(name);
 		requireNonNull(version);
@@ -41,7 +50,9 @@ record McpImplementationMetadata(String name, String version, Optional<String> t
 				Set.of("name", "version", "title", "description", "websiteUrl", "icons"));
 	}
 
-	static McpImplementationMetadata withNameAndVersion(String name, String version) {
+	@NonNull
+	static McpImplementationMetadata withNameAndVersion(@NonNull String name,
+			@NonNull String version) {
 		return new McpImplementationMetadata(
 				McpProtocolSupport.requireNonBlank(name, "Implementation name"),
 				McpProtocolSupport.requireNonBlank(version, "Implementation version"),
@@ -49,8 +60,10 @@ record McpImplementationMetadata(String name, String version, Optional<String> t
 				Optional.empty(), List.of(), McpJsonObject.empty());
 	}
 
+	@NonNull
 	McpJsonObject toJsonObject() {
-		Map<String, McpJsonValue> fields = new LinkedHashMap<>(extensionFields.members());
+		Map<@NonNull String, @NonNull McpJsonValue> fields =
+				new LinkedHashMap<>(extensionFields.members());
 		fields.put("name", new McpJsonString(name));
 		fields.put("version", new McpJsonString(version));
 		title.ifPresent(value -> fields.put("title", new McpJsonString(value)));
@@ -58,7 +71,7 @@ record McpImplementationMetadata(String name, String version, Optional<String> t
 		websiteUrl.ifPresent(value -> fields.put("websiteUrl", new McpJsonString(value.toString())));
 
 		if (!icons.isEmpty()) {
-			List<McpJsonValue> iconValues = new ArrayList<>(icons.size());
+			List<@NonNull McpJsonValue> iconValues = new ArrayList<>(icons.size());
 
 			for (Icon icon : icons)
 				iconValues.add(icon.toJsonObject());
@@ -69,8 +82,10 @@ record McpImplementationMetadata(String name, String version, Optional<String> t
 		return new McpJsonObject(fields);
 	}
 
-	record Icon(URI source, Optional<String> mimeType, List<String> sizes,
-			Optional<Theme> theme, McpJsonObject extensionFields) {
+	record Icon(@NonNull URI source, @NonNull Optional<@NonNull String> mimeType,
+			@NonNull List<@NonNull String> sizes,
+			@NonNull Optional<@NonNull Theme> theme,
+			@NonNull McpJsonObject extensionFields) {
 		Icon {
 			source = McpProtocolSupport.requireAbsoluteUri(source, "Icon source");
 			requireNonNull(mimeType);
@@ -80,13 +95,15 @@ record McpImplementationMetadata(String name, String version, Optional<String> t
 					Set.of("src", "mimeType", "sizes", "theme"));
 		}
 
+		@NonNull
 		McpJsonObject toJsonObject() {
-			Map<String, McpJsonValue> fields = new LinkedHashMap<>(extensionFields.members());
+			Map<@NonNull String, @NonNull McpJsonValue> fields =
+					new LinkedHashMap<>(extensionFields.members());
 			fields.put("src", new McpJsonString(source.toString()));
 			mimeType.ifPresent(value -> fields.put("mimeType", new McpJsonString(value)));
 
 			if (!sizes.isEmpty()) {
-				List<McpJsonValue> sizeValues = new ArrayList<>(sizes.size());
+				List<@NonNull McpJsonValue> sizeValues = new ArrayList<>(sizes.size());
 
 				for (String size : sizes)
 					sizeValues.add(new McpJsonString(requireNonNull(size)));
@@ -103,20 +120,28 @@ record McpImplementationMetadata(String name, String version, Optional<String> t
 		LIGHT("light"),
 		DARK("dark");
 
+		@NonNull
 		private final String wireValue;
 
-		Theme(String wireValue) {
+		Theme(@NonNull String wireValue) {
 			this.wireValue = wireValue;
 		}
 
+		@NonNull
 		String wireValue() {
 			return wireValue;
 		}
 	}
 }
 
-record McpResultMetadata(Optional<McpImplementationMetadata> serverInformation,
-		McpJsonObject extensionFields) {
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpResultMetadata(
+		@NonNull Optional<@NonNull McpImplementationMetadata> serverInformation,
+		@NonNull McpJsonObject extensionFields) {
+	@NonNull
 	static final String SERVER_INFORMATION_KEY = "io.modelcontextprotocol/serverInfo";
 
 	McpResultMetadata {
@@ -125,12 +150,16 @@ record McpResultMetadata(Optional<McpImplementationMetadata> serverInformation,
 				Set.of(SERVER_INFORMATION_KEY));
 	}
 
-	static McpResultMetadata withServerInformation(McpImplementationMetadata serverInformation) {
+	@NonNull
+	static McpResultMetadata withServerInformation(
+			@NonNull McpImplementationMetadata serverInformation) {
 		return new McpResultMetadata(Optional.of(requireNonNull(serverInformation)), McpJsonObject.empty());
 	}
 
+	@NonNull
 	McpJsonObject toJsonObject() {
-		Map<String, McpJsonValue> fields = new LinkedHashMap<>(extensionFields.members());
+		Map<@NonNull String, @NonNull McpJsonValue> fields =
+				new LinkedHashMap<>(extensionFields.members());
 		serverInformation.ifPresent(value -> fields.put(SERVER_INFORMATION_KEY, value.toJsonObject()));
 		return new McpJsonObject(fields);
 	}

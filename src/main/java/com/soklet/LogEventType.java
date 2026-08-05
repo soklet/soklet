@@ -32,6 +32,10 @@ public enum LogEventType {
 	 */
 	CONFIGURATION_UNSUPPORTED,
 	/**
+	 * Indicates an MCP server configuration diagnostic, such as the use of the default reject-all CORS authorizer.
+	 */
+	MCP_SERVER_CONFIGURATION,
+	/**
 	 * Indicates that an exception was thrown during core request processing operations.
 	 */
 	REQUEST_PROCESSING_FAILED,
@@ -172,7 +176,7 @@ public enum LogEventType {
 	 */
 	SERVER_INTERNAL_ERROR,
 	/**
-	 * Indicates an HTTP or SSE transport encountered a low-level timeout, I/O error, or event-loop failure.
+	 * Indicates an HTTP, SSE, or MCP transport encountered a low-level timeout, I/O error, or event-loop failure.
 	 */
 	SERVER_TRANSPORT_FAILURE,
 	/**

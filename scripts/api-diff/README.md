@@ -25,5 +25,6 @@ binary- or source-incompatible remains included.
 canonical symbols, and bidirectional comparison fixtures. It also verifies the
 reviewed Phase 0 symbol counts, shared-host rationales, and the requirement that
 the current set match Phase 0 while all phase/provisional MCP API inventories
-remain empty. Once greenfield types enter an inventory, the current set may
-evolve and is checked against the current build by the wrapper.
+remain empty. The Phase 4 bootstrap now makes that inventory nonempty, so the
+immutable Phase 0 set remains historical while the wrapper compares the evolving
+reviewed current set against the current build.

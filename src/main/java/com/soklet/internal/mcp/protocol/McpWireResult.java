@@ -16,6 +16,10 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.NotThreadSafe;
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -28,35 +32,48 @@ import static java.util.Objects.requireNonNull;
  * Provisional open wire result. Core factories enforce the invariants of the
  * result type they emit; the extension factory keeps the representation open
  * without advertising or enabling an extension in Soklet 3.6.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 final class McpWireResult {
-	private static final Set<String> INPUT_REQUIRED_CLIENT_METHODS =
+	@NonNull
+	private static final Set<@NonNull String> INPUT_REQUIRED_CLIENT_METHODS =
 			Set.of("tools/call", "prompts/get", "resources/read");
 
+	@NonNull
 	private final McpResultType resultType;
+	@NonNull
 	private final McpJsonObject fields;
-	private final Optional<McpResultMetadata> metadata;
+	@NonNull
+	private final Optional<@NonNull McpResultMetadata> metadata;
 
-	private McpWireResult(McpResultType resultType, McpJsonObject fields,
-			Optional<McpResultMetadata> metadata) {
+	private McpWireResult(@NonNull McpResultType resultType,
+			@NonNull McpJsonObject fields,
+			@NonNull Optional<@NonNull McpResultMetadata> metadata) {
 		this.resultType = requireNonNull(resultType);
 		this.fields = McpProtocolSupport.requireExtensionFields(
 				fields, Set.of("resultType", "_meta"));
 		this.metadata = requireNonNull(metadata);
 	}
 
-	static McpWireResult complete(McpJsonObject fields) {
+	@NonNull
+	static McpWireResult complete(@NonNull McpJsonObject fields) {
 		return complete(fields, Optional.empty());
 	}
 
-	static McpWireResult complete(McpJsonObject fields,
-			Optional<McpResultMetadata> metadata) {
+	@NonNull
+	static McpWireResult complete(@NonNull McpJsonObject fields,
+			@NonNull Optional<@NonNull McpResultMetadata> metadata) {
 		return new McpWireResult(McpResultType.COMPLETE, fields, metadata);
 	}
 
-	static McpWireResult inputRequired(String clientRequestMethod,
-			Optional<McpInputRequests> inputRequests, Optional<String> requestState,
-			Optional<McpResultMetadata> metadata, McpJsonObject extensionFields) {
+	@NonNull
+	static McpWireResult inputRequired(@NonNull String clientRequestMethod,
+			@NonNull Optional<@NonNull McpInputRequests> inputRequests,
+			@NonNull Optional<@NonNull String> requestState,
+			@NonNull Optional<@NonNull McpResultMetadata> metadata,
+			@NonNull McpJsonObject extensionFields) {
 		requireNonNull(clientRequestMethod);
 		requireNonNull(inputRequests);
 		requireNonNull(requestState);
@@ -79,8 +96,10 @@ final class McpWireResult {
 				new McpJsonObject(values), metadata);
 	}
 
-	static McpWireResult extension(McpResultType resultType, McpJsonObject fields,
-			Optional<McpResultMetadata> metadata) {
+	@NonNull
+	static McpWireResult extension(@NonNull McpResultType resultType,
+			@NonNull McpJsonObject fields,
+			@NonNull Optional<@NonNull McpResultMetadata> metadata) {
 		requireNonNull(resultType);
 
 		if (resultType.isCore())
@@ -90,22 +109,26 @@ final class McpWireResult {
 		return new McpWireResult(resultType, fields, metadata);
 	}
 
-	static boolean supportsInputRequired(String clientRequestMethod) {
+	static boolean supportsInputRequired(@NonNull String clientRequestMethod) {
 		return INPUT_REQUIRED_CLIENT_METHODS.contains(requireNonNull(clientRequestMethod));
 	}
 
+	@NonNull
 	McpResultType resultType() {
 		return resultType;
 	}
 
+	@NonNull
 	McpJsonObject fields() {
 		return fields;
 	}
 
-	Optional<McpResultMetadata> metadata() {
+	@NonNull
+	Optional<@NonNull McpResultMetadata> metadata() {
 		return metadata;
 	}
 
+	@NonNull
 	McpJsonObject toJsonObject() {
 		Map<String, McpJsonValue> values = new LinkedHashMap<>(fields.members());
 		values.put("resultType", new McpJsonString(resultType.wireValue()));
@@ -115,15 +138,22 @@ final class McpWireResult {
 	}
 }
 
-record McpResultType(String wireValue) {
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpResultType(@NonNull String wireValue) {
+	@NonNull
 	static final McpResultType COMPLETE = new McpResultType("complete");
+	@NonNull
 	static final McpResultType INPUT_REQUIRED = new McpResultType("input_required");
 
 	McpResultType {
 		wireValue = McpProtocolSupport.requireNonBlank(wireValue, "Result type");
 	}
 
-	static McpResultType extension(String wireValue) {
+	@NonNull
+	static McpResultType extension(@NonNull String wireValue) {
 		McpResultType resultType = new McpResultType(wireValue);
 
 		if (resultType.isCore())
@@ -137,8 +167,12 @@ record McpResultType(String wireValue) {
 	}
 }
 
-record McpEmbeddedInputRequest(McpInputRequestDeclaration declaration,
-		McpJsonObject params, McpJsonObject extensionFields) {
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpEmbeddedInputRequest(@NonNull McpInputRequestDeclaration declaration,
+		@NonNull McpJsonObject params, @NonNull McpJsonObject extensionFields) {
 	McpEmbeddedInputRequest {
 		requireNonNull(declaration);
 		requireNonNull(params);
@@ -146,12 +180,15 @@ record McpEmbeddedInputRequest(McpInputRequestDeclaration declaration,
 				extensionFields, Set.of("method", "params"));
 	}
 
+	@NonNull
 	static McpEmbeddedInputRequest fromDeclaration(
-			McpInputRequestDeclaration declaration, McpJsonObject params) {
+			@NonNull McpInputRequestDeclaration declaration,
+			@NonNull McpJsonObject params) {
 		return new McpEmbeddedInputRequest(declaration, requireNonNull(params),
 				McpJsonObject.empty());
 	}
 
+	@NonNull
 	McpJsonObject toJsonObject() {
 		Map<String, McpJsonValue> values = new LinkedHashMap<>(extensionFields.members());
 		values.put("method", new McpJsonString(declaration.method()));
@@ -160,10 +197,16 @@ record McpEmbeddedInputRequest(McpInputRequestDeclaration declaration,
 	}
 }
 
+/**
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
 final class McpInputRequests {
-	private final Map<String, McpEmbeddedInputRequest> requests;
+	@NonNull
+	private final Map<@NonNull String, @NonNull McpEmbeddedInputRequest> requests;
 
-	private McpInputRequests(Map<String, McpEmbeddedInputRequest> requests) {
+	private McpInputRequests(
+			@NonNull Map<@NonNull String, @NonNull McpEmbeddedInputRequest> requests) {
 		requireNonNull(requests);
 		Map<String, McpEmbeddedInputRequest> copiedRequests =
 				new LinkedHashMap<>(requests.size());
@@ -174,14 +217,17 @@ final class McpInputRequests {
 		this.requests = Collections.unmodifiableMap(copiedRequests);
 	}
 
+	@NonNull
 	static Builder builder() {
 		return new Builder();
 	}
 
-	Map<String, McpEmbeddedInputRequest> requests() {
+	@NonNull
+	Map<@NonNull String, @NonNull McpEmbeddedInputRequest> requests() {
 		return requests;
 	}
 
+	@NonNull
 	McpJsonObject toJsonObject() {
 		Map<String, McpJsonValue> values = new LinkedHashMap<>(requests.size());
 
@@ -191,10 +237,15 @@ final class McpInputRequests {
 		return new McpJsonObject(values);
 	}
 
+	@NotThreadSafe
 	static final class Builder {
-		private final Map<String, McpEmbeddedInputRequest> requests = new LinkedHashMap<>();
+		@NonNull
+		private final Map<@NonNull String, @NonNull McpEmbeddedInputRequest> requests =
+				new LinkedHashMap<>();
 
-		Builder inputRequest(String key, McpEmbeddedInputRequest inputRequest) {
+		@NonNull
+		Builder inputRequest(@NonNull String key,
+				@NonNull McpEmbeddedInputRequest inputRequest) {
 			requireNonNull(key);
 			requireNonNull(inputRequest);
 
@@ -204,6 +255,7 @@ final class McpInputRequests {
 			return this;
 		}
 
+		@NonNull
 		McpInputRequests build() {
 			return new McpInputRequests(requests);
 		}

@@ -20,7 +20,9 @@ import com.soklet.internal.mcp.protocol.McpJsonArray;
 import com.soklet.internal.mcp.protocol.McpJsonNumber;
 import com.soklet.internal.mcp.protocol.McpJsonObject;
 import com.soklet.internal.mcp.protocol.McpJsonValue;
+import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Map;
@@ -29,7 +31,10 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Iterative, budget-aware JSON Schema semantic equality.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 final class McpSchemaJsonEquality {
 	enum Result {
 		EQUAL,
@@ -37,8 +42,10 @@ final class McpSchemaJsonEquality {
 		LIMIT_EXCEEDED
 	}
 
-	Result compare(McpJsonValue left, McpJsonValue right,
-			McpSchemaEvaluationContext context) {
+	@NonNull
+	Result compare(@NonNull McpJsonValue left,
+			@NonNull McpJsonValue right,
+			@NonNull McpSchemaEvaluationContext context) {
 		requireNonNull(left);
 		requireNonNull(right);
 		requireNonNull(context);
@@ -102,7 +109,8 @@ final class McpSchemaJsonEquality {
 		return Result.EQUAL;
 	}
 
-	private record ValuePair(McpJsonValue left, McpJsonValue right) {
+	private record ValuePair(@NonNull McpJsonValue left,
+			@NonNull McpJsonValue right) {
 		private ValuePair {
 			requireNonNull(left);
 			requireNonNull(right);

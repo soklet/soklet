@@ -16,13 +16,19 @@
 
 package com.soklet.internal.mcp.schema;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.List;
 
 import static java.util.Objects.requireNonNull;
 
 /**
  * Typed result of a bounded schema evaluation.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 sealed interface McpSchemaValidationOutcome permits
 		McpSchemaValidationOutcome.Valid,
 		McpSchemaValidationOutcome.Invalid,
@@ -35,7 +41,7 @@ sealed interface McpSchemaValidationOutcome permits
 		}
 	}
 
-	record Invalid(List<McpSchemaDiagnostic> diagnostics,
+	record Invalid(@NonNull List<@NonNull McpSchemaDiagnostic> diagnostics,
 			boolean diagnosticsTruncated,
 			long evaluationOperations) implements McpSchemaValidationOutcome {
 		public Invalid {
@@ -47,7 +53,7 @@ sealed interface McpSchemaValidationOutcome permits
 		}
 	}
 
-	record LimitExceeded(McpSchemaEvaluationLimit limit,
+	record LimitExceeded(@NonNull McpSchemaEvaluationLimit limit,
 			long evaluationOperations) implements McpSchemaValidationOutcome {
 		public LimitExceeded {
 			requireNonNull(limit);

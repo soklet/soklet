@@ -16,9 +16,14 @@
 
 package com.soklet.internal.mcp.transport;
 
+import javax.annotation.concurrent.ThreadSafe;
+
 /**
  * Phase 1's fixed, JDK-independent production defaults for bounded handler admission.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 final class McpExecutionDefaults {
 	static final int REQUEST_HANDLER_CONCURRENCY = 32;
 	static final int REQUEST_HANDLER_QUEUE_CAPACITY = 128;
@@ -26,4 +31,3 @@ final class McpExecutionDefaults {
 	private McpExecutionDefaults() {
 	}
 }
-

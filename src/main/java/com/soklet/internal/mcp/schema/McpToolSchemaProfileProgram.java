@@ -17,7 +17,9 @@
 package com.soklet.internal.mcp.schema;
 
 import com.soklet.internal.mcp.protocol.McpJsonObject;
+import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,10 +29,14 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Immutable compiled Soklet MCP Tool Schema Profile 1 document.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-record McpToolSchemaProfileProgram(McpJsonObject document,
-		McpSchemaNodeId rootNodeId, List<McpToolSchemaProfileNode> nodes,
-		Map<String, String> declaredHeadersBySchemaPointer) {
+@ThreadSafe
+record McpToolSchemaProfileProgram(@NonNull McpJsonObject document,
+		@NonNull McpSchemaNodeId rootNodeId,
+		@NonNull List<@NonNull McpToolSchemaProfileNode> nodes,
+		@NonNull Map<@NonNull String, @NonNull String> declaredHeadersBySchemaPointer) {
 	McpToolSchemaProfileProgram {
 		requireNonNull(document);
 		requireNonNull(rootNodeId);
@@ -47,7 +53,8 @@ record McpToolSchemaProfileProgram(McpJsonObject document,
 		}
 	}
 
-	McpToolSchemaProfileNode node(McpSchemaNodeId id) {
+	@NonNull
+	McpToolSchemaProfileNode node(@NonNull McpSchemaNodeId id) {
 		return nodes.get(requireNonNull(id).value());
 	}
 }

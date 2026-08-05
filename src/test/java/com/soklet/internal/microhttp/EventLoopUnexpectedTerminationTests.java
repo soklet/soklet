@@ -93,6 +93,17 @@ class EventLoopUnexpectedTerminationTests {
 				.build());
 	}
 
+	@Test
+	void legacy_options_constructor_preserves_original_defaults() {
+		Duration timeout = Duration.ofSeconds(1);
+		Options options = new Options("127.0.0.1", 0, true, false, timeout,
+				timeout, timeout, timeout, 1024, 16, 4096, 32, 2048,
+				1024, 8, 2);
+
+		Assertions.assertEquals(options.maxRequestSize(), options.maxRequestBodySize());
+		Assertions.assertEquals(List.of(), options.earlyErrorResponseHeaders());
+	}
+
 	private static Selector connectionSelector(EventLoop eventLoop) throws Exception {
 		Field loopsField = EventLoop.class.getDeclaredField("connectionEventLoops");
 		loopsField.setAccessible(true);

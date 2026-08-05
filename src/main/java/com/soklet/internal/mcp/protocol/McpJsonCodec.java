@@ -16,6 +16,10 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.NotThreadSafe;
+import javax.annotation.concurrent.ThreadSafe;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
@@ -37,19 +41,25 @@ import static java.util.Objects.requireNonNull;
  * output limits count exact UTF-8 bytes. Every JSON value, including the root
  * and containers, counts as one node; property names do not. The root has
  * depth one and each contained value increments the depth.</p>
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 public final class McpJsonCodec {
+	@NonNull
 	private final McpJsonLimits limits;
 
-	public McpJsonCodec(McpJsonLimits limits) {
+	public McpJsonCodec(@NonNull McpJsonLimits limits) {
 		this.limits = requireNonNull(limits);
 	}
 
+	@NonNull
 	public McpJsonLimits limits() {
 		return limits;
 	}
 
-	public McpJsonValue parse(byte[] utf8) {
+	@NonNull
+	public McpJsonValue parse(byte @NonNull [] utf8) {
 		requireNonNull(utf8);
 
 		if (utf8.length > limits.maximumInputBytes())
@@ -58,31 +68,35 @@ public final class McpJsonCodec {
 		return parseDecoded(decodeUtf8(utf8));
 	}
 
-	public McpJsonValue parse(String json) {
+	@NonNull
+	public McpJsonValue parse(@NonNull String json) {
 		requireNonNull(json);
 		validateUtf8Length(json, limits.maximumInputBytes(), "JSON input");
 		return parseDecoded(json);
 	}
 
-	public byte[] toUtf8Bytes(McpJsonValue value) {
+	public byte @NonNull [] toUtf8Bytes(@NonNull McpJsonValue value) {
 		requireNonNull(value);
 		BoundedUtf8Writer writer = new BoundedUtf8Writer(limits.maximumOutputBytes());
 		new JsonWriter(writer).write(value);
 		return writer.toByteArray();
 	}
 
-	public String toJson(McpJsonValue value) {
+	@NonNull
+	public String toJson(@NonNull McpJsonValue value) {
 		return new String(toUtf8Bytes(value), StandardCharsets.UTF_8);
 	}
 
-	private McpJsonValue parseDecoded(String json) {
+	@NonNull
+	private McpJsonValue parseDecoded(@NonNull String json) {
 		if (!json.isEmpty() && json.charAt(0) == '\uFEFF')
 			throw new IllegalArgumentException("A leading byte-order mark is not permitted at character offset 0.");
 
 		return new JsonParser(json).parse();
 	}
 
-	private static String decodeUtf8(byte[] utf8) {
+	@NonNull
+	private static String decodeUtf8(byte @NonNull [] utf8) {
 		ByteBuffer input = ByteBuffer.wrap(utf8);
 		CharBuffer output = CharBuffer.allocate(utf8.length);
 		var decoder = StandardCharsets.UTF_8.newDecoder()
@@ -104,7 +118,8 @@ public final class McpJsonCodec {
 		return output.toString();
 	}
 
-	private static void validateUtf8Length(String value, int maximumBytes, String description) {
+	private static void validateUtf8Length(@NonNull String value, int maximumBytes,
+			@NonNull String description) {
 		long encodedLength = 0;
 
 		for (int index = 0; index < value.length(); ++index) {
@@ -137,15 +152,18 @@ public final class McpJsonCodec {
 		}
 	}
 
+	@NotThreadSafe
 	private final class JsonParser {
+		@NonNull
 		private final String source;
 		private int index;
 		private int nodeCount;
 
-		private JsonParser(String source) {
+		private JsonParser(@NonNull String source) {
 			this.source = source;
 		}
 
+		@NonNull
 		private McpJsonValue parse() {
 			skipWhitespace();
 			McpJsonValue value = parseValue(1);
@@ -157,6 +175,7 @@ public final class McpJsonCodec {
 			return value;
 		}
 
+		@NonNull
 		private McpJsonValue parseValue(int depth) {
 			skipWhitespace();
 			validateDepth(depth);
@@ -192,6 +211,7 @@ public final class McpJsonCodec {
 			};
 		}
 
+		@NonNull
 		private McpJsonObject parseObject(int depth) {
 			expect('{');
 			skipWhitespace();
@@ -227,6 +247,7 @@ public final class McpJsonCodec {
 			}
 		}
 
+		@NonNull
 		private McpJsonArray parseArray(int depth) {
 			expect('[');
 			skipWhitespace();
@@ -250,6 +271,7 @@ public final class McpJsonCodec {
 			}
 		}
 
+		@NonNull
 		private String parseString() {
 			expect('"');
 			int tokenStart = index;
@@ -288,6 +310,7 @@ public final class McpJsonCodec {
 			}
 		}
 
+		@NonNull
 		private String parseEscape(int tokenStart) {
 			if (atEnd())
 				throw error("Unexpected end of input after an escape character");
@@ -306,6 +329,7 @@ public final class McpJsonCodec {
 			};
 		}
 
+		@NonNull
 		private String parseUnicodeEscape(int tokenStart) {
 			char first = parseHexCharacter(tokenStart);
 
@@ -361,7 +385,8 @@ public final class McpJsonCodec {
 			return character;
 		}
 
-		private void appendDecoded(StringBuilder value, String addition) {
+		private void appendDecoded(@NonNull StringBuilder value,
+				@NonNull String addition) {
 			if ((long) value.length() + addition.length()
 					> limits.maximumStringLengthInCharacters())
 				throw error("Decoded JSON string exceeds the configured character limit");
@@ -369,6 +394,7 @@ public final class McpJsonCodec {
 			value.append(addition);
 		}
 
+		@NonNull
 		private BigDecimal parseNumber() {
 			int start = index;
 
@@ -414,7 +440,7 @@ public final class McpJsonCodec {
 			return value;
 		}
 
-		private void consumeDigits(int start, String missingMessage) {
+		private void consumeDigits(int start, @NonNull String missingMessage) {
 			if (atEnd() || !asciiDigit(current()))
 				throw error(missingMessage);
 
@@ -450,7 +476,7 @@ public final class McpJsonCodec {
 				throw error("JSON number exceeds the configured character limit");
 		}
 
-		private void consumeLiteral(String literal) {
+		private void consumeLiteral(@NonNull String literal) {
 			if (literal.length() > limits.maximumTokenLengthInCharacters())
 				throw error("JSON token exceeds the configured character limit");
 
@@ -503,25 +529,28 @@ public final class McpJsonCodec {
 			return source.charAt(index);
 		}
 
-		private IllegalArgumentException error(String message) {
+		@NonNull
+		private IllegalArgumentException error(@NonNull String message) {
 			return new IllegalArgumentException(
 					message + " at character offset " + index + ".");
 		}
 	}
 
+	@NotThreadSafe
 	private final class JsonWriter {
+		@NonNull
 		private final BoundedUtf8Writer output;
 		private int nodeCount;
 
-		private JsonWriter(BoundedUtf8Writer output) {
+		private JsonWriter(@NonNull BoundedUtf8Writer output) {
 			this.output = output;
 		}
 
-		private void write(McpJsonValue value) {
+		private void write(@NonNull McpJsonValue value) {
 			writeValue(value, 1);
 		}
 
-		private void writeValue(McpJsonValue value, int depth) {
+		private void writeValue(@NonNull McpJsonValue value, int depth) {
 			requireNonNull(value);
 
 			if (depth > limits.maximumNestingDepth())
@@ -553,7 +582,7 @@ public final class McpJsonCodec {
 			}
 		}
 
-		private void writeObject(McpJsonObject object, int depth) {
+		private void writeObject(@NonNull McpJsonObject object, int depth) {
 			output.writeAscii('{');
 			boolean first = true;
 
@@ -570,7 +599,7 @@ public final class McpJsonCodec {
 			output.writeAscii('}');
 		}
 
-		private void writeArray(McpJsonArray array, int depth) {
+		private void writeArray(@NonNull McpJsonArray array, int depth) {
 			output.writeAscii('[');
 
 			for (int index = 0; index < array.values().size(); ++index) {
@@ -583,7 +612,7 @@ public final class McpJsonCodec {
 			output.writeAscii(']');
 		}
 
-		private void writeString(String value) {
+		private void writeString(@NonNull String value) {
 			requireNonNull(value);
 
 			if (value.length() > limits.maximumStringLengthInCharacters())
@@ -672,7 +701,7 @@ public final class McpJsonCodec {
 			output.writeAscii(hexadecimal[character & 0x0F]);
 		}
 
-		private void writeNumber(BigDecimal value) {
+		private void writeNumber(@NonNull BigDecimal value) {
 			requireNonNull(value);
 			validateNumberForSerialization(value);
 			String token = value.toString();
@@ -685,7 +714,7 @@ public final class McpJsonCodec {
 			output.writeAscii(token);
 		}
 
-		private void writeLiteral(String literal) {
+		private void writeLiteral(@NonNull String literal) {
 			if (literal.length() > limits.maximumTokenLengthInCharacters())
 				throw new IllegalArgumentException(
 						"Serialized JSON token exceeds the configured character limit.");
@@ -694,7 +723,7 @@ public final class McpJsonCodec {
 		}
 	}
 
-	private void validateNumberForSerialization(BigDecimal value) {
+	private void validateNumberForSerialization(@NonNull BigDecimal value) {
 		int precision = value.precision();
 		long adjustedExponent = (long) precision - value.scale() - 1;
 
@@ -711,7 +740,7 @@ public final class McpJsonCodec {
 	}
 
 	private static long canonicalNumberLength(
-			BigDecimal value, int precision, long adjustedExponent) {
+			@NonNull BigDecimal value, int precision, long adjustedExponent) {
 		long signLength = value.signum() < 0 ? 1 : 0;
 		int scale = value.scale();
 
@@ -757,9 +786,10 @@ public final class McpJsonCodec {
 		return character >= '0' && character <= '9';
 	}
 
+	@NotThreadSafe
 	private static final class BoundedUtf8Writer {
 		private final int maximumBytes;
-		private byte[] bytes;
+		private byte @NonNull [] bytes;
 		private int size;
 
 		private BoundedUtf8Writer(int maximumBytes) {
@@ -772,7 +802,7 @@ public final class McpJsonCodec {
 			bytes[size++] = (byte) character;
 		}
 
-		private void writeAscii(String value) {
+		private void writeAscii(@NonNull String value) {
 			ensureCapacity(value.length());
 
 			for (int index = 0; index < value.length(); ++index)
@@ -817,7 +847,7 @@ public final class McpJsonCodec {
 			bytes = Arrays.copyOf(bytes, newCapacity);
 		}
 
-		private byte[] toByteArray() {
+		private byte @NonNull [] toByteArray() {
 			return Arrays.copyOf(bytes, size);
 		}
 	}

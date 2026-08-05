@@ -1,4 +1,5 @@
 /.apt_generated/
+/.mcp-conformance-source/
 /target/
 /benchmarks/target/
 /fuzz/target/
