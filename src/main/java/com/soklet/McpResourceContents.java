@@ -30,7 +30,7 @@ import java.util.Optional;
 @ThreadSafe
 public sealed interface McpResourceContents
 		permits McpBlobResourceContents, McpTextResourceContents {
-	/** @return resource URI */
+	/** @return absolute normalized resource URI in ASCII wire form */
 	@NonNull
 	URI getUri();
 

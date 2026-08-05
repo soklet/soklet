@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":"phase-4-resources-list","result":{"resources":[{"uri":"golden://documents/readme","name":"Golden README","mimeType":"text/plain","size":22},{"uri":"golden://assets/logo.bin","name":"Golden bytes","mimeType":"application/octet-stream","size":4}],"ttlMs":0,"cacheScope":"private","resultType":"complete"}}

@@ -1,0 +1,779 @@
+/*
+ * Copyright 2022-2026 Revetware LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.soklet;
+
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+
+/**
+ * Black-box real-listener coverage for public MCP resource registrations.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@Timeout(30)
+public class McpResourcePublicRuntimeTests {
+	private static final String LOOPBACK = "127.0.0.1";
+	private static final String MCP_PATH = "/mcp";
+	private static final String PROTOCOL_VERSION = "2026-07-28";
+	private static final String JSON_MEDIA_TYPE = "application/json";
+	private static final URI TEXT_URI = URI.create("test://static-text");
+	private static final URI BINARY_URI = URI.create("test://static-binary");
+	private static final URI SPECIAL_URI =
+			URI.create("test://template/special/data");
+	private static final String TEMPLATE_URI = "test://template/{id}/data";
+
+	@Test
+	public void staticCatalogsAndReadsUseThePublicPipeline() throws Exception {
+		List<String> stages = Collections.synchronizedList(new ArrayList<>());
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		AtomicInteger exactSpecialInvocations = new AtomicInteger();
+		AtomicInteger templateInvocations = new AtomicInteger();
+		AtomicInteger toolLimiterInvocations = new AtomicInteger();
+		AtomicReference<McpRequestContext> exactRequest = new AtomicReference<>();
+		AtomicReference<McpResourceReadContext> templateRead = new AtomicReference<>();
+
+		McpResourceRegistration text = McpResourceRegistration
+				.withUriAndName(TEXT_URI, "Static text")
+				.handler((request, resource, features) -> {
+					stages.add("handler:" + resource.getUri());
+					handlerInvocations.incrementAndGet();
+					return completeText(resource.getUri(), "static text", "text/plain");
+				})
+				.title("Static text resource")
+				.description("A deterministic text resource")
+				.mimeType("text/plain")
+				.size(11)
+				.cachePolicy(McpCachePolicy.fromPublicTimeToLive(
+						Duration.ofMillis(50)))
+				.metadata(McpJsonObject.builder().put("kind", "text").build())
+				.build();
+		McpResourceRegistration binary = McpResourceRegistration
+				.withUriAndName(BINARY_URI, "Static binary")
+				.handler((request, resource, features) -> {
+					stages.add("handler:" + resource.getUri());
+					handlerInvocations.incrementAndGet();
+					return McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
+							.content(McpBlobResourceContents.withUriAndData(
+									resource.getUri(), new byte[] { 1, 2, 3 })
+									.mimeType("application/octet-stream")
+									.build())
+							.build());
+				})
+				.mimeType("application/octet-stream")
+				.size(3)
+				.cachePolicy(McpCachePolicy.fromPrivateTimeToLive(
+						Duration.ofMillis(60)))
+				.build();
+		McpResourceRegistration exactSpecial = McpResourceRegistration
+				.withUriAndName(SPECIAL_URI, "Special exact resource")
+				.handler((request, resource, features) -> {
+					stages.add("handler:" + resource.getUri());
+					handlerInvocations.incrementAndGet();
+					exactSpecialInvocations.incrementAndGet();
+					exactRequest.set(request);
+					return completeText(resource.getUri(), "exact-special", "text/plain");
+				})
+				.cachePolicy(McpCachePolicy.fromPrivateTimeToLive(
+						Duration.ofMillis(70)))
+				.build();
+		McpResourceRegistration template = McpResourceRegistration
+				.withUriTemplateAndName(TEMPLATE_URI, "Template resource")
+				.handler((request, resource, features) -> {
+					stages.add("handler:" + resource.getUri());
+					handlerInvocations.incrementAndGet();
+					templateInvocations.incrementAndGet();
+					templateRead.set(resource);
+					return completeText(resource.getUri(), "template:"
+							+ resource.getUriTemplateVariables().get("id"),
+							"text/plain");
+				})
+				.description("A Level-1 URI template")
+				.mimeType("text/plain")
+				.cachePolicy(McpCachePolicy.fromPublicTimeToLive(
+						Duration.ofMillis(80)))
+				.build();
+		McpEndpoint endpoint = endpointBuilder()
+				.resource(text)
+				.resource(binary)
+				.resource(exactSpecial)
+				.resource(template)
+				.resourcesListCachePolicy(McpCachePolicy.fromPublicTimeToLive(
+						Duration.ofMillis(100)))
+				.resourceTemplatesListCachePolicy(
+						McpCachePolicy.fromPrivateTimeToLive(Duration.ofMillis(200)))
+				.build();
+		McpServer server = McpServer.withPort(0)
+				.host(LOOPBACK)
+				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
+				.requestAdmissionPolicy(context -> {
+					stages.add("admission:"
+							+ context.getOperationName().orElse("-"));
+					return McpAdmissionDecision.fromAnonymousIdentity();
+				})
+				.requestRateLimiter(context -> {
+					Assertions.assertEquals(McpRateLimitTarget.REQUEST,
+							context.getTarget());
+					stages.add("request:"
+							+ context.getOperationName().orElse("-"));
+					return McpRateLimitDecision.fromAllowed();
+				})
+				.toolRateLimiter(context -> {
+					toolLimiterInvocations.incrementAndGet();
+					return McpRateLimitDecision.fromAllowed();
+				})
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.allowedHosts(Set.of(LOOPBACK))
+				.build();
+
+		try {
+			server.start();
+			int port = server.getDiagnostics().getBoundAddress()
+					.orElseThrow().getPort();
+
+			HttpResponse<String> discover = send(port,
+					request("discover", "server/discover", ""),
+					"server/discover");
+			assertSuccess(discover, "discover");
+			assertContains(discover.body(), "\"resources\":{");
+			stages.clear();
+
+			HttpResponse<String> resources = send(port,
+					request("resources", "resources/list", ""),
+					"resources/list");
+			assertSuccess(resources, "resources");
+			String resourcesBody = resources.body();
+			assertContains(resourcesBody, "\"ttlMs\":100");
+			assertContains(resourcesBody, "\"cacheScope\":\"public\"");
+			assertContains(resourcesBody, "\"uri\":\"" + TEXT_URI + "\"");
+			assertContains(resourcesBody, "\"uri\":\"" + BINARY_URI + "\"");
+			assertContains(resourcesBody, "\"uri\":\"" + SPECIAL_URI + "\"");
+			assertContains(resourcesBody, "\"size\":11");
+			assertContains(resourcesBody, "\"kind\":\"text\"");
+			Assertions.assertFalse(resourcesBody.contains(TEMPLATE_URI), resourcesBody);
+			Assertions.assertFalse(resourcesBody.contains("\"nextCursor\""),
+					resourcesBody);
+			assertOrdered(resourcesBody, TEXT_URI.toString(), BINARY_URI.toString(),
+					SPECIAL_URI.toString());
+			Assertions.assertEquals(0, handlerInvocations.get());
+			Assertions.assertEquals(List.of("admission:-", "request:-"), stages);
+
+			stages.clear();
+			HttpResponse<String> templates = send(port,
+					request("templates", "resources/templates/list", ""),
+					"resources/templates/list");
+			assertSuccess(templates, "templates");
+			String templatesBody = templates.body();
+			assertContains(templatesBody, "\"ttlMs\":200");
+			assertContains(templatesBody, "\"cacheScope\":\"private\"");
+			assertContains(templatesBody, "\"uriTemplate\":\""
+					+ TEMPLATE_URI + "\"");
+			Assertions.assertFalse(templatesBody.contains(
+					"\"uri\":\"" + TEXT_URI + "\""), templatesBody);
+			Assertions.assertEquals(List.of("admission:-", "request:-"), stages);
+
+			stages.clear();
+			HttpResponse<String> staticCursor = send(port,
+					request("static-cursor", "resources/list", ",\"cursor\":\"\""),
+					"resources/list");
+			assertError(staticCursor, 400, -32602, "static-cursor");
+			Assertions.assertTrue(stages.isEmpty(), stages.toString());
+
+			stages.clear();
+			HttpResponse<String> textRead = read(port, "read-text", TEXT_URI.toString());
+			assertSuccess(textRead, "read-text");
+			assertContains(textRead.body(), "\"text\":\"static text\"");
+			assertContains(textRead.body(), "\"ttlMs\":50");
+			assertContains(textRead.body(), "\"cacheScope\":\"public\"");
+			Assertions.assertEquals(List.of("admission:" + TEXT_URI,
+					"request:" + TEXT_URI, "handler:" + TEXT_URI), stages);
+
+			stages.clear();
+			HttpResponse<String> binaryRead = read(port, "read-binary",
+					BINARY_URI.toString());
+			assertSuccess(binaryRead, "read-binary");
+			assertContains(binaryRead.body(), "\"blob\":\"AQID\"");
+			assertContains(binaryRead.body(), "\"ttlMs\":60");
+			assertContains(binaryRead.body(), "\"cacheScope\":\"private\"");
+
+			HttpResponse<String> exactRead = read(port, "read-exact",
+					SPECIAL_URI.toString());
+			assertSuccess(exactRead, "read-exact");
+			assertContains(exactRead.body(), "\"text\":\"exact-special\"");
+			Assertions.assertEquals(1, exactSpecialInvocations.get());
+			Assertions.assertEquals(0, templateInvocations.get());
+				Assertions.assertEquals("resources/read",
+						exactRequest.get().getJsonRpcMethod());
+				Assertions.assertSame(endpoint, exactRequest.get().getEndpoint());
+				HttpResponse<String> equivalentExactRead = read(port,
+						"read-exact-equivalent", "TEST://TEMPLATE/special/data");
+				assertSuccess(equivalentExactRead, "read-exact-equivalent");
+				assertContains(equivalentExactRead.body(),
+						"\"text\":\"exact-special\"");
+				Assertions.assertEquals(2, exactSpecialInvocations.get());
+				Assertions.assertEquals(0, templateInvocations.get());
+
+				String cafeUri = "test://template/caf%c3%a9/data";
+			HttpResponse<String> templateReadResponse = read(port, "read-template",
+					cafeUri);
+			assertSuccess(templateReadResponse, "read-template");
+			assertContains(templateReadResponse.body(), "\"text\":\"template:café\"");
+			assertContains(templateReadResponse.body(), "\"ttlMs\":80");
+			assertContains(templateReadResponse.body(), "\"cacheScope\":\"public\"");
+			Assertions.assertEquals(URI.create(cafeUri), templateRead.get().getUri());
+			Assertions.assertEquals(Map.of("id", "café"),
+					templateRead.get().getUriTemplateVariables());
+			Assertions.assertEquals(1, templateInvocations.get());
+
+			String encodedSlashUri = "test://template/a%2Fb/data";
+			HttpResponse<String> encodedSlashRead = read(port,
+					"read-template-encoded-slash", encodedSlashUri);
+			assertSuccess(encodedSlashRead, "read-template-encoded-slash");
+			assertContains(encodedSlashRead.body(), "\"text\":\"template:a/b\"");
+			Assertions.assertEquals(Map.of("id", "a/b"),
+					templateRead.get().getUriTemplateVariables());
+			Assertions.assertEquals(2, templateInvocations.get());
+
+			stages.clear();
+			HttpResponse<String> rawSlashRead = read(port,
+					"read-template-raw-slash", "test://template/a/b/data");
+			assertError(rawSlashRead, 400, -32602, "read-template-raw-slash");
+			Assertions.assertTrue(stages.isEmpty(), stages.toString());
+			Assertions.assertEquals(2, templateInvocations.get());
+
+			stages.clear();
+			HttpResponse<String> unknown = read(port, "read-unknown",
+					"test://unknown-resource");
+			assertError(unknown, 400, -32602, "read-unknown");
+			assertContains(unknown.body(),
+					"\"data\":{\"uri\":\"test://unknown-resource\"}");
+			Assertions.assertTrue(stages.isEmpty(), stages.toString());
+				Assertions.assertEquals(6, handlerInvocations.get());
+			Assertions.assertEquals(0, toolLimiterInvocations.get());
+		} finally {
+			server.stop();
+		}
+	}
+
+	@Test
+	public void dynamicListPreservesApplicationCursorsAndConfiguredBounds()
+			throws Exception {
+		AtomicInteger admissions = new AtomicInteger();
+		AtomicInteger requestLimiterInvocations = new AtomicInteger();
+		AtomicInteger toolLimiterInvocations = new AtomicInteger();
+		AtomicInteger listHandlerInvocations = new AtomicInteger();
+		List<Optional<String>> observedCursors =
+				Collections.synchronizedList(new ArrayList<>());
+		AtomicReference<McpResourceListContext> firstListContext =
+				new AtomicReference<>();
+		AtomicReference<McpRequestContext> firstRequestContext =
+				new AtomicReference<>();
+
+		McpResourceRegistration exact = McpResourceRegistration
+				.withUriAndName(URI.create("test://registered"), "Registered")
+				.handler((request, resource, features) ->
+						completeText(resource.getUri(), "registered", "text/plain"))
+				.build();
+		McpResourceRegistration template = McpResourceRegistration
+				.withUriTemplateAndName("test://dynamic/{id}", "Dynamic")
+				.handler((request, resource, features) ->
+						completeText(resource.getUri(), "dynamic", "text/plain"))
+				.build();
+		McpResourceListHandler listHandler = (request, list, features) -> {
+			listHandlerInvocations.incrementAndGet();
+			observedCursors.add(list.getCursor());
+			if (firstListContext.compareAndSet(null, list))
+				firstRequestContext.set(request);
+
+			McpResourcePage.Builder page = McpResourcePage.builder();
+			if (list.getCursor().isEmpty())
+				return page.resources(list.getRegisteredResourceDescriptors())
+						.metadata(McpJsonObject.builder().put("page", 1).build())
+						.cacheTimeToLiveOverride(Duration.ofMillis(125))
+						.nextCursor("世界")
+						.build();
+
+			return switch (list.getCursor().orElseThrow()) {
+				case "" -> page.nextCursor("").build();
+				case "世界" -> page.build();
+				case "bad" -> throw new McpJsonRpcException(
+						McpJsonRpcError.fromInvalidParameters(
+								"The resource-list cursor is invalid.",
+								McpJsonObject.builder().put("reason", "expired").build()));
+				case "big" -> page.nextCursor("世界語").build();
+				default -> throw new AssertionError("Unexpected cursor");
+			};
+		};
+		McpEndpoint endpoint = endpointBuilder()
+				.resource(exact)
+				.resource(template)
+				.resourceListHandler(listHandler)
+				.resourcesListCachePolicy(McpCachePolicy.fromPrivateTimeToLive(
+						Duration.ofMillis(500)))
+				.build();
+		McpServer server = McpServer.withPort(0)
+				.host(LOOPBACK)
+				.maximumCursorSizeInBytes(8)
+				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
+				.requestAdmissionPolicy(context -> {
+					admissions.incrementAndGet();
+					return McpAdmissionDecision.fromAnonymousIdentity();
+				})
+				.requestRateLimiter(context -> {
+					Assertions.assertEquals(McpRateLimitTarget.REQUEST,
+							context.getTarget());
+					requestLimiterInvocations.incrementAndGet();
+					return McpRateLimitDecision.fromAllowed();
+				})
+				.toolRateLimiter(context -> {
+					toolLimiterInvocations.incrementAndGet();
+					return McpRateLimitDecision.fromAllowed();
+				})
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.allowedHosts(Set.of(LOOPBACK))
+				.build();
+
+		try {
+			server.start();
+			int port = server.getDiagnostics().getBoundAddress()
+					.orElseThrow().getPort();
+
+			HttpResponse<String> first = send(port,
+					request("first", "resources/list", ""), "resources/list");
+			assertSuccess(first, "first");
+			assertContains(first.body(), "\"uri\":\"test://registered\"");
+			Assertions.assertFalse(first.body().contains("test://dynamic/{id}"),
+					first.body());
+			assertContains(first.body(), "\"nextCursor\":\"世界\"");
+			assertContains(first.body(), "\"ttlMs\":125");
+			assertContains(first.body(), "\"cacheScope\":\"private\"");
+			assertContains(first.body(), "\"page\":1");
+			McpResourceListContext capturedList = firstListContext.get();
+			Assertions.assertEquals(List.of(URI.create("test://registered")),
+					capturedList.getRegisteredResourceDescriptors().stream()
+							.map(McpResourceDescriptor::getUri).toList());
+			Assertions.assertThrows(UnsupportedOperationException.class,
+					() -> capturedList.getRegisteredResourceDescriptors().clear());
+			Assertions.assertEquals("resources/list",
+					firstRequestContext.get().getJsonRpcMethod());
+			Assertions.assertSame(endpoint, firstRequestContext.get().getEndpoint());
+
+			HttpResponse<String> empty = send(port,
+					request("empty", "resources/list", ",\"cursor\":\"\""),
+					"resources/list");
+			assertSuccess(empty, "empty");
+			assertContains(empty.body(), "\"nextCursor\":\"\"");
+			assertContains(empty.body(), "\"ttlMs\":500");
+
+			HttpResponse<String> unicode = send(port,
+					request("unicode", "resources/list", ",\"cursor\":\"世界\""),
+					"resources/list");
+			assertSuccess(unicode, "unicode");
+			Assertions.assertFalse(unicode.body().contains("\"nextCursor\""),
+					unicode.body());
+
+			HttpResponse<String> rejected = send(port,
+					request("rejected", "resources/list", ",\"cursor\":\"bad\""),
+					"resources/list");
+			assertError(rejected, 400, -32602, "rejected");
+			assertContains(rejected.body(), "The resource-list cursor is invalid.");
+			assertContains(rejected.body(), "\"reason\":\"expired\"");
+
+			HttpResponse<String> oversizedOutput = send(port,
+					request("oversized-output", "resources/list",
+							",\"cursor\":\"big\""), "resources/list");
+			assertError(oversizedOutput, 500, -32603, "oversized-output");
+			Assertions.assertFalse(oversizedOutput.body().contains("世界語"),
+					oversizedOutput.body());
+
+			Assertions.assertEquals(List.of(Optional.empty(), Optional.of(""),
+					Optional.of("世界"), Optional.of("bad"), Optional.of("big")),
+					observedCursors);
+			Assertions.assertEquals(5, admissions.get());
+			Assertions.assertEquals(5, requestLimiterInvocations.get());
+			Assertions.assertEquals(5, listHandlerInvocations.get());
+
+			HttpResponse<String> oversizedInput = send(port,
+					request("oversized-input", "resources/list",
+							",\"cursor\":\"世界語\""), "resources/list");
+			assertError(oversizedInput, 400, -32602, "oversized-input");
+			HttpResponse<String> wrongType = send(port,
+					request("wrong-type", "resources/list", ",\"cursor\":7"),
+					"resources/list");
+			assertError(wrongType, 400, -32602, "wrong-type");
+			Assertions.assertEquals(5, admissions.get());
+			Assertions.assertEquals(5, requestLimiterInvocations.get());
+			Assertions.assertEquals(5, listHandlerInvocations.get());
+			Assertions.assertEquals(0, toolLimiterInvocations.get());
+		} finally {
+			server.stop();
+		}
+	}
+
+	@Test
+	public void dynamicListRejectsInvalidApplicationOutputSafely() throws Exception {
+		McpResourceRegistration exact = McpResourceRegistration
+				.withUriAndName(URI.create("test://registered"), "Registered")
+				.handler((request, resource, features) ->
+						completeText(resource.getUri(), "registered", "text/plain"))
+				.build();
+		McpResourceRegistration template = McpResourceRegistration
+				.withUriTemplateAndName("test://dynamic/{id}", "Dynamic")
+				.handler((request, resource, features) ->
+						completeText(resource.getUri(), "dynamic", "text/plain"))
+				.build();
+		McpResourceRegistration invalidContentMetadata = McpResourceRegistration
+				.withUriAndName(URI.create("test://invalid-content-metadata"),
+						"Invalid content metadata")
+				.handler((request, resource, features) ->
+						McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
+								.content(McpTextResourceContents
+										.withUriAndText(resource.getUri(), "secret")
+										.metadata(McpJsonObject.builder()
+												.put("dev.mcp/secret", "must-not-leak")
+												.build())
+										.build())
+								.build()))
+				.build();
+		McpResourceDescriptor exactDescriptor = McpResourceDescriptor
+				.withUriAndName(URI.create("test://registered"), "Registered")
+				.build();
+		McpResourceListHandler listHandler = (request, list, features) -> {
+			String cursor = list.getCursor().orElseThrow();
+			return switch (cursor) {
+				case "template" -> McpResourcePage.builder()
+						.resource(McpResourceDescriptor.withUriAndName(
+								URI.create("test://dynamic/visible"), "Visible")
+								.build())
+						.build();
+				case "duplicate" -> McpResourcePage.builder()
+						.resource(exactDescriptor)
+						.resource(exactDescriptor)
+						.build();
+				case "unreadable" -> McpResourcePage.builder()
+						.resource(McpResourceDescriptor.withUriAndName(
+								URI.create("secret://not-registered"), "Secret")
+								.build())
+						.build();
+				case "reserved-metadata" -> McpResourcePage.builder()
+						.resource(McpResourceDescriptor.withUriAndName(
+								URI.create("test://registered"), "Registered")
+								.metadata(McpJsonObject.builder()
+										.put("dev.mcp/secret", "must-not-leak")
+										.build())
+								.build())
+						.build();
+				default -> throw new AssertionError("Unexpected cursor");
+			};
+		};
+		McpEndpoint endpoint = endpointBuilder()
+				.resource(exact)
+				.resource(template)
+				.resource(invalidContentMetadata)
+				.resourceListHandler(listHandler)
+				.build();
+		McpServer server = McpServer.withPort(0)
+				.host(LOOPBACK)
+				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
+				.requestAdmissionPolicy(McpRequestAdmissionPolicy.acceptAllInstance())
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.allowedHosts(Set.of(LOOPBACK))
+				.build();
+
+		try {
+			server.start();
+			int port = server.getDiagnostics().getBoundAddress()
+					.orElseThrow().getPort();
+			HttpResponse<String> templatePage = send(port,
+					request("template-page", "resources/list",
+							",\"cursor\":\"template\""), "resources/list");
+			assertSuccess(templatePage, "template-page");
+			assertContains(templatePage.body(), "test://dynamic/visible");
+
+			for (String cursor : List.of("duplicate", "unreadable",
+					"reserved-metadata")) {
+				HttpResponse<String> response = send(port,
+						request(cursor, "resources/list",
+								",\"cursor\":\"" + cursor + "\""),
+						"resources/list");
+				assertError(response, 500, -32603, cursor);
+				Assertions.assertFalse(response.body().contains("secret"),
+						response.body());
+			}
+
+			HttpResponse<String> invalidContent = read(port,
+					"invalid-content-metadata", "test://invalid-content-metadata");
+			assertError(invalidContent, 500, -32603,
+					"invalid-content-metadata");
+			Assertions.assertFalse(invalidContent.body().contains("secret"),
+					invalidContent.body());
+		} finally {
+			server.stop();
+		}
+	}
+
+	@Test
+	public void invalidResourceRoutingFailsDuringPublicServerBuild() {
+		for (String invalidTemplate : List.of(
+				"test://items/{+id}",
+				"items/{id}",
+				"test://items/{id}/{id}",
+				"test://items/{first}{second}")) {
+			McpEndpoint endpoint = endpointBuilder()
+					.resource(templateRegistration(invalidTemplate))
+					.build();
+			Assertions.assertThrows(IllegalArgumentException.class,
+					() -> serverBuilder(endpoint).build(), invalidTemplate);
+		}
+
+		McpEndpoint overlapping = endpointBuilder()
+				.resource(templateRegistration("test://items/{id}"))
+				.resource(templateRegistration("test://items/{slug}"))
+				.build();
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> serverBuilder(overlapping).build());
+
+		McpEndpoint exactPrecedence = endpointBuilder()
+				.resource(McpResourceRegistration.withUriAndName(
+						URI.create("test://items/special"), "Special")
+						.handler(resourceHandler()).build())
+				.resource(templateRegistration("test://items/{id}"))
+				.build();
+		McpServer server = Assertions.assertDoesNotThrow(
+				() -> serverBuilder(exactPrecedence).build());
+		server.close();
+	}
+
+	@Test
+	public void blobOutputHonorsTheProductionJsonStringBound() throws Exception {
+		URI boundaryUri = URI.create("test://blob-boundary");
+		URI oversizedUri = URI.create("test://blob-oversized");
+		URI aggregateUri = URI.create("test://blob-aggregate-oversized");
+		McpBlobResourceContents boundaryContents = McpBlobResourceContents
+				.withUriAndData(boundaryUri, new byte[786_432])
+				.mimeType("application/octet-stream")
+				.build();
+		McpBlobResourceContents oversizedContents = McpBlobResourceContents
+				.withUriAndData(oversizedUri, new byte[786_433])
+				.mimeType("application/octet-stream")
+					.build();
+		McpResourceOutput.Builder aggregateOutput = McpResourceOutput.builder();
+		for (int index = 0; index < 5; ++index)
+			aggregateOutput.content(McpBlobResourceContents.withUriAndData(
+					aggregateUri, new byte[700_000]).build());
+		McpResourceOutput aggregateContents = aggregateOutput.build();
+		McpEndpoint endpoint = endpointBuilder()
+					.resource(McpResourceRegistration
+						.withUriAndName(boundaryUri, "Boundary blob")
+						.handler((request, resource, features) ->
+								McpCompleteResult.fromResourceOutput(
+										McpResourceOutput.builder()
+												.content(boundaryContents)
+												.build()))
+						.build())
+				.resource(McpResourceRegistration
+						.withUriAndName(oversizedUri, "Oversized blob")
+						.handler((request, resource, features) ->
+								McpCompleteResult.fromResourceOutput(
+										McpResourceOutput.builder()
+												.content(oversizedContents)
+												.build()))
+							.build())
+					.resource(McpResourceRegistration
+							.withUriAndName(aggregateUri, "Aggregate oversized blobs")
+							.handler((request, resource, features) ->
+									McpCompleteResult.fromResourceOutput(aggregateContents))
+							.build())
+					.build();
+		McpServer server = serverBuilder(endpoint).build();
+
+		try {
+			server.start();
+			int port = server.getDiagnostics().getBoundAddress()
+					.orElseThrow().getPort();
+			HttpResponse<String> boundary = read(port, "blob-boundary",
+					boundaryUri.toString());
+			assertSuccess(boundary, "blob-boundary");
+			assertContains(boundary.body(), "\"blob\":\"");
+			Assertions.assertTrue(boundary.body().length() > 1_048_576,
+					Integer.toString(boundary.body().length()));
+
+			HttpResponse<String> oversized = read(port, "blob-oversized",
+					oversizedUri.toString());
+			assertError(oversized, 500, -32603, "blob-oversized");
+				Assertions.assertTrue(oversized.body().length() < 1_000,
+						Integer.toString(oversized.body().length()));
+
+				HttpResponse<String> aggregateOversized = read(port,
+						"blob-aggregate-oversized", aggregateUri.toString());
+				assertError(aggregateOversized, 500, -32603,
+						"blob-aggregate-oversized");
+				Assertions.assertTrue(aggregateOversized.body().length() < 1_000,
+						Integer.toString(aggregateOversized.body().length()));
+		} finally {
+			server.stop();
+		}
+	}
+
+	@Test
+	public void oversizedStaticResourceCatalogFailsDuringPublicServerBuild() {
+		String largeDescription = "x".repeat(900_000);
+		McpEndpoint.Builder endpoint = endpointBuilder();
+		for (int index = 0; index < 5; ++index) {
+			URI uri = URI.create("test://large-static-resource/" + index);
+			endpoint.resource(McpResourceRegistration.withUriAndName(
+						uri, "Large resource " + index)
+					.handler(resourceHandler())
+					.description(largeDescription)
+					.build());
+		}
+
+		IllegalArgumentException exception = Assertions.assertThrows(
+				IllegalArgumentException.class,
+				() -> serverBuilder(endpoint.build()).build());
+		assertContains(exception.getMessage(), "'resources/list'");
+		assertContains(exception.getMessage(), "maximum UTF-8 bytes: 4194304");
+	}
+
+	private static McpEndpoint.Builder endpointBuilder() {
+		return McpEndpoint.withPath(MCP_PATH)
+				.serverInformation(McpImplementation.withNameAndVersion(
+						"resource-public-runtime-test", "3.6.0-SNAPSHOT").build());
+	}
+
+	private static McpServer.Builder serverBuilder(McpEndpoint endpoint) {
+		return McpServer.withPort(0)
+				.host(LOOPBACK)
+				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
+				.requestAdmissionPolicy(
+						McpRequestAdmissionPolicy.acceptAllInstance())
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.allowedHosts(Set.of(LOOPBACK));
+	}
+
+	private static McpResourceRegistration templateRegistration(String uriTemplate) {
+		return McpResourceRegistration
+				.withUriTemplateAndName(uriTemplate, "Template")
+				.handler(resourceHandler())
+				.build();
+	}
+
+	private static McpResourceHandler resourceHandler() {
+		return (request, resource, features) ->
+				completeText(resource.getUri(), "value", "text/plain");
+	}
+
+	private static McpCompleteResult completeText(URI uri, String text,
+			String mimeType) {
+		return McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
+				.content(McpTextResourceContents.withUriAndText(uri, text)
+						.mimeType(mimeType)
+						.build())
+				.build());
+	}
+
+	private static HttpResponse<String> read(int port, String id, String uri)
+			throws Exception {
+		return send(port, request(id, "resources/read", ",\"uri\":\""
+				+ uri + "\""), "resources/read", uri);
+	}
+
+	private static HttpResponse<String> send(int port, String body,
+			String method) throws Exception {
+		return send(port, body, method, Optional.empty());
+	}
+
+	private static HttpResponse<String> send(int port, String body,
+			String method, String operationName) throws Exception {
+		return send(port, body, method, Optional.of(operationName));
+	}
+
+	private static HttpResponse<String> send(int port, String body,
+			String method, Optional<String> operationName) throws Exception {
+		HttpRequest.Builder request = HttpRequest.newBuilder()
+				.uri(URI.create("http://" + LOOPBACK + ":" + port + MCP_PATH))
+				.timeout(Duration.ofSeconds(5))
+				.header("Content-Type", JSON_MEDIA_TYPE + "; charset=UTF-8")
+				.header("Accept", JSON_MEDIA_TYPE + ", text/event-stream")
+				.header("MCP-Protocol-Version", PROTOCOL_VERSION)
+				.header("Mcp-Method", method);
+		operationName.ifPresent(value -> request.header("Mcp-Name", value));
+		return HttpClient.newBuilder()
+				.connectTimeout(Duration.ofSeconds(5))
+				.version(HttpClient.Version.HTTP_1_1)
+				.build()
+				.send(request.POST(HttpRequest.BodyPublishers.ofString(
+						body, StandardCharsets.UTF_8)).build(),
+						HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+	}
+
+	private static String request(String id, String method,
+			String additionalParameters) {
+		return "{\"jsonrpc\":\"2.0\",\"id\":\"" + id
+				+ "\",\"method\":\"" + method + "\",\"params\":{\"_meta\":{"
+				+ "\"io.modelcontextprotocol/protocolVersion\":\""
+				+ PROTOCOL_VERSION + "\","
+				+ "\"io.modelcontextprotocol/clientCapabilities\":{}}"
+				+ additionalParameters + "}}";
+	}
+
+	private static void assertSuccess(HttpResponse<String> response,
+			String expectedId) {
+		Assertions.assertEquals(200, response.statusCode(), response.body());
+		Assertions.assertEquals(JSON_MEDIA_TYPE,
+				response.headers().firstValue("Content-Type").orElseThrow());
+		Assertions.assertEquals("no-store",
+				response.headers().firstValue("Cache-Control").orElseThrow());
+		assertContains(response.body(), "\"id\":\"" + expectedId + "\"");
+	}
+
+	private static void assertError(HttpResponse<String> response, int status,
+			int code, String expectedId) {
+		Assertions.assertEquals(status, response.statusCode(), response.body());
+		assertContains(response.body(), "\"code\":" + code);
+		assertContains(response.body(), "\"id\":\"" + expectedId + "\"");
+	}
+
+	private static void assertOrdered(String text, String... values) {
+		int previous = -1;
+		for (String value : values) {
+			int index = text.indexOf(value);
+			Assertions.assertTrue(index > previous, text);
+			previous = index;
+		}
+	}
+
+	private static void assertContains(String text, String expected) {
+		Assertions.assertTrue(text.contains(expected), () ->
+				"Expected <" + text + "> to contain <" + expected + ">.");
+	}
+}

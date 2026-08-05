@@ -45,9 +45,11 @@ public final class McpTextResourceContents implements McpResourceContents {
 	/**
 	 * Vends a builder primed with the resource URI and text.
 	 *
-	 * @param uri resource URI
+	 * @param uri absolute normalized resource URI in ASCII wire form
 	 * @param text resource text
 	 * @return resource-content builder
+	 * @throws IllegalArgumentException if the URI is relative, not normalized,
+	 * or not in ASCII wire form
 	 */
 	@NonNull
 	public static Builder withUriAndText(@NonNull URI uri,
@@ -65,7 +67,7 @@ public final class McpTextResourceContents implements McpResourceContents {
 	/**
 	 * Returns the URI that identifies this resource.
 	 *
-	 * @return resource URI
+	 * @return absolute normalized resource URI in ASCII wire form
 	 */
 	@Override
 	@NonNull
@@ -118,7 +120,8 @@ public final class McpTextResourceContents implements McpResourceContents {
 		private McpJsonObject metadata = McpJsonObject.emptyInstance();
 
 		private Builder(@NonNull URI uri, @NonNull String text) {
-			this.uri = requireNonNull(uri);
+			this.uri = McpResourceValueSupport
+					.requireAbsoluteNormalizedUri(uri);
 			this.text = requireNonNull(text);
 		}
 
@@ -130,7 +133,8 @@ public final class McpTextResourceContents implements McpResourceContents {
 		 */
 		@NonNull
 		public Builder mimeType(@NonNull String mimeType) {
-			this.mimeType = requireNonNull(mimeType);
+			this.mimeType = McpResourceValueSupport.requireNonBlank(mimeType,
+					"MCP resource MIME type");
 			return this;
 		}
 

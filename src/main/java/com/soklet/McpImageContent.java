@@ -66,6 +66,10 @@ public final class McpImageContent implements McpContentBlock {
 		return Arrays.copyOf(this.data, this.data.length);
 	}
 
+	int dataLength() {
+		return this.data.length;
+	}
+
 	/** @return image MIME type */
 	@NonNull
 	public String getMimeType() {

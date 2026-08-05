@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":"phase-4-resources-read-blob","result":{"contents":[{"uri":"golden://assets/logo.bin","mimeType":"application/octet-stream","blob":"AAEC/w=="}],"cacheScope":"private","ttlMs":0,"resultType":"complete"}}

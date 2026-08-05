@@ -95,8 +95,10 @@ class McpResultContentTests {
 				.lastModified(lastModified)
 				.build();
 
-		assertEquals(java.util.Set.of(McpRole.USER, McpRole.ASSISTANT),
-				annotations.getAudience());
+		assertEquals(List.of(McpRole.USER, McpRole.ASSISTANT),
+				new ArrayList<>(annotations.getAudience()));
+		assertThrows(UnsupportedOperationException.class,
+				() -> annotations.getAudience().add(McpRole.USER));
 		assertEquals(0.75, annotations.getPriority().orElseThrow());
 		assertEquals(lastModified,
 				annotations.getLastModified().orElseThrow());
@@ -156,5 +158,37 @@ class McpResultContentTests {
 		assertEquals(List.of(contents), output.getContents());
 		assertEquals(Duration.ofMillis(250),
 				output.getCacheTimeToLiveOverride().orElseThrow());
+	}
+
+	@Test
+	void resourceValuesRejectRelativeOrUnnormalizedUrisAndBlankScalars() {
+		assertThrows(IllegalArgumentException.class, () ->
+				McpTextResourceContents.withUriAndText(
+						URI.create("relative"), "text"));
+		assertThrows(IllegalArgumentException.class, () ->
+				McpBlobResourceContents.withUriAndData(
+						URI.create("catalog://items/a/../b"), new byte[0]));
+		assertThrows(IllegalArgumentException.class, () ->
+				McpTextResourceContents.withUriAndText(
+						URI.create("catalog://items/café"), "text"));
+		assertEquals(URI.create("catalog://items/%FF"),
+				McpTextResourceContents.withUriAndText(
+						URI.create("catalog://items/%FF"), "text")
+						.build().getUri());
+		assertThrows(IllegalArgumentException.class, () ->
+				McpTextResourceContents.withUriAndText(
+						URI.create("catalog://readme"), "text")
+						.mimeType(" "));
+		assertThrows(IllegalArgumentException.class, () ->
+				McpBlobResourceContents.withUriAndData(
+						URI.create("catalog://blob"), new byte[0])
+						.mimeType(" "));
+		assertThrows(IllegalArgumentException.class, () ->
+				McpResourceLink.withUriAndName(
+						URI.create("catalog://linked"), " "));
+		assertThrows(IllegalArgumentException.class, () ->
+				McpResourceLink.withUriAndName(
+						URI.create("catalog://linked"), "linked")
+						.mimeType(" "));
 	}
 }

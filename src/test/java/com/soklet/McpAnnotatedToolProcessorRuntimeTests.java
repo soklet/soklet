@@ -90,6 +90,11 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 					generatedSource);
 			Assertions.assertTrue(generatedSource.contains("argument0"),
 					generatedSource);
+			Assertions.assertTrue(generatedSource.contains("promptBuilder0"),
+					generatedSource);
+			Assertions.assertTrue(generatedSource.contains(
+					"McpPromptArgumentDefinition.withName(\"subject\")"),
+					generatedSource);
 
 			try (URLClassLoader classLoader = new URLClassLoader(
 					new URL[] { classDirectory.toUri().toURL() },
@@ -116,6 +121,17 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				Assertions.assertNull(System.getProperty(INITIALIZED_PROPERTY));
 				Assertions.assertEquals(0, providedInstances.get());
 				McpEndpoint endpoint = resolver.getEndpoints().get(0);
+				McpPromptRegistration prompt = endpoint.getPrompts().get(0);
+				Assertions.assertEquals("catalog.compose", prompt.getName());
+				Assertions.assertEquals("Catalog composer",
+						prompt.getTitle().orElseThrow());
+				Assertions.assertEquals(2, prompt.getArguments().size());
+				Assertions.assertEquals("subject",
+						prompt.getArguments().get(0).getName());
+				Assertions.assertTrue(prompt.getArguments().get(0).isRequired());
+				Assertions.assertEquals("tone",
+						prompt.getArguments().get(1).getName());
+				Assertions.assertFalse(prompt.getArguments().get(1).isRequired());
 				Assertions.assertEquals("/catalog/mcp", endpoint.getPath());
 				Assertions.assertEquals("catalog", endpoint.getServerInformation()
 						.getName());
@@ -185,6 +201,23 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 							"\"query-text\""), listResponse.body());
 					Assertions.assertEquals(0, providedInstances.get());
 
+					HttpResponse<String> promptListResponse = send(port,
+							"prompts/list",
+							"{\"jsonrpc\":\"2.0\",\"id\":\"annotated-prompt-list\","
+									+ "\"method\":\"prompts/list\",\"params\":{\"_meta\":{"
+									+ "\"io.modelcontextprotocol/protocolVersion\":\""
+									+ PROTOCOL_VERSION + "\","
+									+ "\"io.modelcontextprotocol/clientCapabilities\":{}}}}");
+					Assertions.assertEquals(200, promptListResponse.statusCode(),
+							promptListResponse.body());
+					Assertions.assertTrue(promptListResponse.body().contains(
+							"\"name\":\"catalog.compose\""),
+							promptListResponse.body());
+					Assertions.assertTrue(promptListResponse.body().contains(
+							"\"name\":\"subject\""),
+							promptListResponse.body());
+					Assertions.assertEquals(0, providedInstances.get());
+
 					HttpResponse<String> callResponse = send(port, "tools/call",
 							"{\"jsonrpc\":\"2.0\",\"id\":\"annotated-call\","
 									+ "\"method\":\"tools/call\",\"params\":{\"_meta\":{"
@@ -206,6 +239,24 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 							System.getProperty(INITIALIZED_PROPERTY));
 					Assertions.assertEquals(0,
 							endpointLimiterInvocations.get());
+					Assertions.assertEquals(1, toolLimiterInvocations.get());
+					Assertions.assertEquals(0,
+							fallbackLimiterInvocations.get());
+
+					HttpResponse<String> promptResponse = send(port, "prompts/get",
+							"{\"jsonrpc\":\"2.0\",\"id\":\"annotated-prompt\","
+									+ "\"method\":\"prompts/get\",\"params\":{\"_meta\":{"
+									+ "\"io.modelcontextprotocol/protocolVersion\":\""
+									+ PROTOCOL_VERSION + "\","
+									+ "\"io.modelcontextprotocol/clientCapabilities\":{}},"
+									+ "\"name\":\"catalog.compose\",\"arguments\":{"
+									+ "\"subject\":\"needle\"}}}");
+					Assertions.assertEquals(200, promptResponse.statusCode(),
+							promptResponse.body());
+					Assertions.assertTrue(promptResponse.body().contains(
+							"\"text\":\"needle|default|true\""),
+							promptResponse.body());
+					Assertions.assertEquals(2, providedInstances.get());
 					Assertions.assertEquals(1, toolLimiterInvocations.get());
 					Assertions.assertEquals(0,
 							fallbackLimiterInvocations.get());
@@ -267,6 +318,8 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				.header("Mcp-Method", method);
 		if (method.equals("tools/call"))
 			request.header("Mcp-Name", "catalog.search");
+		else if (method.equals("prompts/get"))
+			request.header("Mcp-Name", "catalog.compose");
 		return HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5))
 				.build().send(request.POST(HttpRequest.BodyPublishers.ofString(body,
 						StandardCharsets.UTF_8)).build(),
@@ -279,7 +332,12 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				package example;
 
 				import com.soklet.McpInvocationFeatures;
+				import com.soklet.McpPromptMessage;
+				import com.soklet.McpPromptOutput;
 				import com.soklet.McpRequestContext;
+				import com.soklet.McpTextContent;
+				import com.soklet.annotation.McpPrompt;
+				import com.soklet.annotation.McpPromptArgument;
 				import com.soklet.annotation.McpServerEndpoint;
 				import com.soklet.annotation.McpTool;
 				import com.soklet.annotation.McpToolArgument;
@@ -322,9 +380,28 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				          description = "Text to search for") @InternalMarker String toString,
 				      @McpToolArgument Optional<Integer> limit,
 				      McpInvocationFeatures features) {
-				    return new SearchResult(
-				        List.of(new SearchItem(toString, limit.orElse(-1))),
-				        request != null && features != null);
+					return new SearchResult(
+					    List.of(new SearchItem(toString, limit.orElse(-1))),
+					    request != null && features != null);
+				  }
+
+				  @McpPrompt(
+				      name = "catalog.compose",
+				      title = "Catalog composer",
+				      description = "Builds a catalog prompt")
+				  public McpPromptOutput compose(
+				      McpRequestContext request,
+				      @McpPromptArgument(
+				          name = "subject",
+				          title = "Prompt subject",
+				          description = "Subject to discuss") String subject,
+				      @McpPromptArgument Optional<String> tone,
+				      McpInvocationFeatures features) {
+				    return McpPromptOutput.fromMessages(
+				        McpPromptMessage.fromUserContent(
+				            McpTextContent.fromText(subject + "|"
+				                + tone.orElse("default") + "|"
+				                + (request != null && features != null))));
 				  }
 
 				  public record SearchResult(

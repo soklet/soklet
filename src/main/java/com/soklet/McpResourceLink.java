@@ -57,9 +57,11 @@ public final class McpResourceLink implements McpContentBlock {
 	/**
 	 * Vends a builder primed with the linked resource URI and name.
 	 *
-	 * @param uri resource URI
+	 * @param uri absolute normalized resource URI in ASCII wire form
 	 * @param name resource name
 	 * @return resource-link builder
+	 * @throws IllegalArgumentException if the URI is relative, not normalized,
+	 * not in ASCII wire form, or the name is blank
 	 */
 	@NonNull
 	public static Builder withUriAndName(@NonNull URI uri,
@@ -79,7 +81,7 @@ public final class McpResourceLink implements McpContentBlock {
 		this.metadata = builder.metadata;
 	}
 
-	/** @return linked resource URI */
+	/** @return absolute normalized linked-resource URI in ASCII wire form */
 	@NonNull
 	public URI getUri() {
 		return this.uri;
@@ -160,8 +162,10 @@ public final class McpResourceLink implements McpContentBlock {
 		private McpJsonObject metadata = McpJsonObject.emptyInstance();
 
 		private Builder(@NonNull URI uri, @NonNull String name) {
-			this.uri = requireNonNull(uri);
-			this.name = requireNonNull(name);
+			this.uri = McpResourceValueSupport
+					.requireAbsoluteNormalizedUri(uri);
+			this.name = McpResourceValueSupport.requireNonBlank(name,
+					"MCP resource name");
 		}
 
 		/** @param title human-readable title
@@ -184,7 +188,8 @@ public final class McpResourceLink implements McpContentBlock {
 		 * @return this builder */
 		@NonNull
 		public Builder mimeType(@NonNull String mimeType) {
-			this.mimeType = requireNonNull(mimeType);
+			this.mimeType = McpResourceValueSupport.requireNonBlank(mimeType,
+					"MCP resource MIME type");
 			return this;
 		}
 

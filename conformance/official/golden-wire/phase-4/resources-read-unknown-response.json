@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":"phase-4-resources-read-unknown","error":{"code":-32602,"message":"Invalid params","data":{"uri":"golden://missing/resource"}}}

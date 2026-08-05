@@ -22,7 +22,9 @@ import com.soklet.internal.microhttp.MicrohttpRequest;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.net.URI;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -57,9 +59,31 @@ interface McpApplicationRequestHandler {
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@NotThreadSafe
 final class McpInvalidApplicationInputException extends Exception {
 	McpInvalidApplicationInputException() {
 		super(null, null, false, false);
+	}
+}
+
+/**
+ * Internal control signal for an intentional application JSON-RPC error.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@NotThreadSafe
+final class McpApplicationJsonRpcException extends Exception {
+	@NonNull
+	private final McpJsonRpcError error;
+
+	McpApplicationJsonRpcException(@NonNull McpJsonRpcError error) {
+		super(null, null, false, false);
+		this.error = requireNonNull(error);
+	}
+
+	@NonNull
+	McpJsonRpcError error() {
+		return error;
 	}
 }
 
@@ -78,6 +102,165 @@ record McpApplicationToolRoute(@NonNull McpApplicationRequestHandler handler,
 }
 
 /**
+ * Exact executable route for one registered prompt.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpApplicationPromptRoute(@NonNull McpApplicationRequestHandler handler) {
+	McpApplicationPromptRoute {
+		requireNonNull(handler);
+	}
+}
+
+/**
+ * Bridge-neutral resource-read handler. Public model adaptation remains
+ * outside the protocol package.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+@FunctionalInterface
+interface McpApplicationResourceReadHandler {
+	@NonNull
+	McpWireResult handle(@NonNull McpApplicationResourceReadInvocation invocation)
+			throws Exception;
+}
+
+/**
+ * Immutable resource-read invocation after exact/template route resolution.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpApplicationResourceReadInvocation(
+		@NonNull McpApplicationInvocation invocation, @NonNull String uri,
+		@NonNull Map<@NonNull String, @NonNull String> templateVariables,
+		@NonNull McpResourceCachePolicy cachePolicy) {
+	McpApplicationResourceReadInvocation {
+		requireNonNull(invocation);
+		uri = McpLevelOneUriTemplate.requireValidAbsoluteUri(uri, "Resource URI");
+		requireNonNull(templateVariables);
+		Map<String, String> copiedVariables = new LinkedHashMap<>();
+		for (Map.Entry<String, String> entry : templateVariables.entrySet())
+			copiedVariables.put(requireNonNull(entry.getKey()),
+					requireNonNull(entry.getValue()));
+		templateVariables = Collections.unmodifiableMap(copiedVariables);
+		requireNonNull(cachePolicy);
+	}
+}
+
+/**
+ * Exact resource-read route and its fixed cache owner.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpApplicationResourceReadRoute(
+		@NonNull McpApplicationResourceReadHandler handler,
+		@NonNull McpResourceCachePolicy cachePolicy) {
+	McpApplicationResourceReadRoute(@NonNull McpApplicationResourceReadHandler handler) {
+		this(handler, McpResourceCachePolicy.privateNoCache());
+	}
+
+	McpApplicationResourceReadRoute {
+		requireNonNull(handler);
+		requireNonNull(cachePolicy);
+	}
+}
+
+/**
+ * Ordered resource-template route. The two-argument constructor is the bridge
+ * seam; parsing is an internal normalization concern.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpApplicationResourceTemplateRoute(@NonNull String uriTemplate,
+		@NonNull McpApplicationResourceReadRoute readRoute,
+		@NonNull McpLevelOneUriTemplate parsedTemplate) {
+	McpApplicationResourceTemplateRoute(@NonNull String uriTemplate,
+			@NonNull McpApplicationResourceReadRoute readRoute) {
+		this(uriTemplate, readRoute, McpLevelOneUriTemplate.parse(uriTemplate));
+	}
+
+	McpApplicationResourceTemplateRoute {
+		uriTemplate = McpProtocolSupport.requireNonBlank(uriTemplate,
+				"Resource URI template route");
+		requireNonNull(readRoute);
+		requireNonNull(parsedTemplate);
+		if (!uriTemplate.equals(parsedTemplate.template()))
+			throw new IllegalArgumentException(
+					"Parsed resource URI-template route does not match its identity.");
+	}
+}
+
+/**
+ * One resolved URI-template route and its strictly decoded values.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpApplicationResourceTemplateMatch(@NonNull String uriTemplate,
+		@NonNull McpApplicationResourceReadRoute readRoute,
+		@NonNull Map<@NonNull String, @NonNull String> templateVariables) {
+	McpApplicationResourceTemplateMatch {
+		requireNonNull(uriTemplate);
+		requireNonNull(readRoute);
+		templateVariables = Collections.unmodifiableMap(
+				new LinkedHashMap<>(requireNonNull(templateVariables)));
+	}
+}
+
+/**
+ * Bridge-neutral dynamic resources/list handler.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+@FunctionalInterface
+interface McpApplicationResourceListHandler {
+	@NonNull
+	McpWireResult handle(@NonNull McpApplicationResourceListInvocation invocation)
+			throws Exception;
+}
+
+/**
+ * Immutable dynamic-list invocation. The exact descriptor snapshot is a
+ * convenience input only and is never merged into the returned page.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpApplicationResourceListInvocation(
+		@NonNull McpApplicationInvocation invocation,
+		@NonNull Optional<@NonNull String> cursor,
+		@NonNull List<@NonNull McpNormalizedResourceDescriptor>
+				registeredResourceDescriptors,
+		@NonNull McpResourceCachePolicy cachePolicy) {
+	McpApplicationResourceListInvocation {
+		requireNonNull(invocation);
+		requireNonNull(cursor);
+		registeredResourceDescriptors = List.copyOf(
+				requireNonNull(registeredResourceDescriptors));
+		requireNonNull(cachePolicy);
+	}
+}
+
+/**
+ * Sole dynamic resources/list authority for an endpoint.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpApplicationResourceListRoute(
+		@NonNull McpApplicationResourceListHandler handler) {
+	McpApplicationResourceListRoute {
+		requireNonNull(handler);
+	}
+}
+
+/**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -86,37 +269,110 @@ final class McpApplicationRequestRouter {
 	private final Map<@NonNull String, @NonNull McpApplicationRequestHandler> handlersByMethod;
 	@NonNull
 	private final Map<@NonNull String, @NonNull McpApplicationToolRoute> toolRoutesByName;
+	@NonNull
+	private final Map<@NonNull String, @NonNull McpApplicationPromptRoute> promptRoutesByName;
+	@NonNull
+	private final Map<@NonNull URI, @NonNull McpApplicationResourceReadRoute>
+			exactResourceRoutesByUri;
+	@NonNull
+	private final List<@NonNull McpApplicationResourceTemplateRoute>
+			resourceTemplateRoutes;
+	@NonNull
+	private final Optional<@NonNull McpApplicationResourceListRoute> resourceListRoute;
 
 	private McpApplicationRequestRouter(
 			@NonNull Map<@NonNull String, @NonNull McpApplicationRequestHandler> handlersByMethod,
-			@NonNull Map<@NonNull String, @NonNull McpApplicationToolRoute> toolRoutesByName) {
+			@NonNull Map<@NonNull String, @NonNull McpApplicationToolRoute> toolRoutesByName,
+			@NonNull Map<@NonNull String, @NonNull McpApplicationPromptRoute> promptRoutesByName,
+			@NonNull Map<@NonNull URI, @NonNull McpApplicationResourceReadRoute>
+					exactResourceRoutesByUri,
+			@NonNull List<@NonNull McpApplicationResourceTemplateRoute>
+					resourceTemplateRoutes,
+			@NonNull Optional<@NonNull McpApplicationResourceListRoute> resourceListRoute) {
 		this.handlersByMethod = handlersByMethod;
 		this.toolRoutesByName = toolRoutesByName;
+		this.promptRoutesByName = promptRoutesByName;
+		this.exactResourceRoutesByUri = exactResourceRoutesByUri;
+		this.resourceTemplateRoutes = resourceTemplateRoutes;
+		this.resourceListRoute = resourceListRoute;
 	}
 
 	@NonNull
 	static McpApplicationRequestRouter empty() {
-		return new McpApplicationRequestRouter(Map.of(), Map.of());
+		return new McpApplicationRequestRouter(Map.of(), Map.of(), Map.of(),
+				Map.of(), List.of(), Optional.empty());
 	}
 
 	@NonNull
 	static McpApplicationRequestRouter fromHandlers(
 			@NonNull Map<@NonNull String, @NonNull McpApplicationRequestHandler> handlersByMethod) {
-		return fromHandlersAndToolRoutes(handlersByMethod, Map.of());
+		return fromHandlersAndToolAndPromptRoutes(handlersByMethod, Map.of(), Map.of());
 	}
 
 	@NonNull
 	static McpApplicationRequestRouter fromToolRoutes(
 			@NonNull Map<@NonNull String, @NonNull McpApplicationToolRoute> toolRoutesByName) {
-		return fromHandlersAndToolRoutes(Map.of(), toolRoutesByName);
+		return fromHandlersAndToolAndPromptRoutes(Map.of(), toolRoutesByName, Map.of());
+	}
+
+	@NonNull
+	static McpApplicationRequestRouter fromPromptRoutes(
+			@NonNull Map<@NonNull String, @NonNull McpApplicationPromptRoute> promptRoutesByName) {
+		return fromHandlersAndToolAndPromptRoutes(Map.of(), Map.of(), promptRoutesByName);
+	}
+
+	@NonNull
+	static McpApplicationRequestRouter fromToolAndPromptRoutes(
+			@NonNull Map<@NonNull String, @NonNull McpApplicationToolRoute> toolRoutesByName,
+			@NonNull Map<@NonNull String, @NonNull McpApplicationPromptRoute> promptRoutesByName) {
+		return fromHandlersAndToolAndPromptRoutes(
+				Map.of(), toolRoutesByName, promptRoutesByName);
 	}
 
 	@NonNull
 	static McpApplicationRequestRouter fromHandlersAndToolRoutes(
 			@NonNull Map<@NonNull String, @NonNull McpApplicationRequestHandler> handlersByMethod,
 			@NonNull Map<@NonNull String, @NonNull McpApplicationToolRoute> toolRoutesByName) {
+		return fromHandlersAndToolAndPromptRoutes(
+				handlersByMethod, toolRoutesByName, Map.of());
+	}
+
+	@NonNull
+	static McpApplicationRequestRouter fromHandlersAndToolAndPromptRoutes(
+			@NonNull Map<@NonNull String, @NonNull McpApplicationRequestHandler> handlersByMethod,
+			@NonNull Map<@NonNull String, @NonNull McpApplicationToolRoute> toolRoutesByName,
+			@NonNull Map<@NonNull String, @NonNull McpApplicationPromptRoute> promptRoutesByName) {
+		return fromHandlersAndOperationRoutes(handlersByMethod, toolRoutesByName,
+				promptRoutesByName, Map.of(), List.of(), Optional.empty());
+	}
+
+	@NonNull
+	static McpApplicationRequestRouter fromResourceRoutes(
+			@NonNull Map<@NonNull String, @NonNull McpApplicationResourceReadRoute>
+					exactResourceRoutesByUri,
+			@NonNull List<@NonNull McpApplicationResourceTemplateRoute>
+					resourceTemplateRoutes,
+			@NonNull Optional<@NonNull McpApplicationResourceListRoute> resourceListRoute) {
+		return fromHandlersAndOperationRoutes(Map.of(), Map.of(), Map.of(),
+				exactResourceRoutesByUri, resourceTemplateRoutes, resourceListRoute);
+	}
+
+	@NonNull
+	static McpApplicationRequestRouter fromHandlersAndOperationRoutes(
+			@NonNull Map<@NonNull String, @NonNull McpApplicationRequestHandler> handlersByMethod,
+			@NonNull Map<@NonNull String, @NonNull McpApplicationToolRoute> toolRoutesByName,
+			@NonNull Map<@NonNull String, @NonNull McpApplicationPromptRoute> promptRoutesByName,
+			@NonNull Map<@NonNull String, @NonNull McpApplicationResourceReadRoute>
+					exactResourceRoutesByUri,
+			@NonNull List<@NonNull McpApplicationResourceTemplateRoute>
+					resourceTemplateRoutes,
+			@NonNull Optional<@NonNull McpApplicationResourceListRoute> resourceListRoute) {
 		requireNonNull(handlersByMethod);
 		requireNonNull(toolRoutesByName);
+		requireNonNull(promptRoutesByName);
+		requireNonNull(exactResourceRoutesByUri);
+		requireNonNull(resourceTemplateRoutes);
+		requireNonNull(resourceListRoute);
 		Map<String, McpApplicationRequestHandler> copied =
 				new LinkedHashMap<>(handlersByMethod.size());
 
@@ -124,7 +380,10 @@ final class McpApplicationRequestRouter {
 			String method = requireNonNull(entry.getKey());
 			if (method.isBlank())
 				throw new IllegalArgumentException("Application MCP methods must not be blank.");
-			if ("server/discover".equals(method) || "tools/list".equals(method))
+			if ("server/discover".equals(method) || "tools/list".equals(method)
+					|| "prompts/list".equals(method)
+					|| "resources/list".equals(method)
+					|| "resources/templates/list".equals(method))
 				throw new IllegalArgumentException(
 						"Framework-owned MCP methods cannot be replaced by an application handler.");
 			copied.put(method, requireNonNull(entry.getValue()));
@@ -139,9 +398,52 @@ final class McpApplicationRequestRouter {
 			copiedToolRoutes.put(name, requireNonNull(entry.getValue()));
 		}
 
+		Map<String, McpApplicationPromptRoute> copiedPromptRoutes =
+				new LinkedHashMap<>(promptRoutesByName.size());
+		for (Map.Entry<String, McpApplicationPromptRoute> entry
+				: promptRoutesByName.entrySet()) {
+			String name = McpProtocolSupport.requireNonBlank(
+					requireNonNull(entry.getKey()), "Prompt route name");
+			copiedPromptRoutes.put(name, requireNonNull(entry.getValue()));
+		}
+
+		Map<URI, McpApplicationResourceReadRoute> copiedExactResourceRoutes =
+				new LinkedHashMap<>(exactResourceRoutesByUri.size());
+		for (Map.Entry<String, McpApplicationResourceReadRoute> entry
+				: exactResourceRoutesByUri.entrySet()) {
+			String wireUri = McpLevelOneUriTemplate.requireValidAbsoluteUri(
+					requireNonNull(entry.getKey()), "Exact resource route URI");
+			URI uri = URI.create(wireUri);
+			if (copiedExactResourceRoutes.putIfAbsent(uri,
+					requireNonNull(entry.getValue())) != null)
+				throw new IllegalArgumentException(
+						"Equivalent exact resource route URIs are not permitted: "
+								+ wireUri);
+		}
+
+		List<McpApplicationResourceTemplateRoute> copiedResourceTemplateRoutes =
+				List.copyOf(resourceTemplateRoutes);
+		for (int left = 0; left < copiedResourceTemplateRoutes.size(); ++left) {
+			McpApplicationResourceTemplateRoute leftRoute = requireNonNull(
+					copiedResourceTemplateRoutes.get(left));
+			for (int right = left + 1; right < copiedResourceTemplateRoutes.size(); ++right) {
+				McpApplicationResourceTemplateRoute rightRoute = requireNonNull(
+						copiedResourceTemplateRoutes.get(right));
+				if (leftRoute.parsedTemplate().potentiallyOverlaps(
+						rightRoute.parsedTemplate()))
+					throw new IllegalArgumentException(
+							"Potentially overlapping resource URI-template routes '"
+									+ leftRoute.uriTemplate() + "' and '"
+									+ rightRoute.uriTemplate() + "'.");
+			}
+		}
+
 		return new McpApplicationRequestRouter(
 				Collections.unmodifiableMap(copied),
-				Collections.unmodifiableMap(copiedToolRoutes));
+				Collections.unmodifiableMap(copiedToolRoutes),
+				Collections.unmodifiableMap(copiedPromptRoutes),
+				Collections.unmodifiableMap(copiedExactResourceRoutes),
+				copiedResourceTemplateRoutes, resourceListRoute);
 	}
 
 	@NonNull
@@ -154,8 +456,52 @@ final class McpApplicationRequestRouter {
 		return Optional.ofNullable(toolRoutesByName.get(requireNonNull(name)));
 	}
 
+	@NonNull
+	Optional<@NonNull McpApplicationPromptRoute> resolvePrompt(@NonNull String name) {
+		return Optional.ofNullable(promptRoutesByName.get(requireNonNull(name)));
+	}
+
+	@NonNull
+	Optional<@NonNull McpApplicationResourceReadRoute> resolveExactResource(
+			@NonNull String uri) {
+		String wireUri = McpLevelOneUriTemplate.requireValidAbsoluteUri(
+				requireNonNull(uri), "Exact resource route URI");
+		return Optional.ofNullable(exactResourceRoutesByUri.get(URI.create(wireUri)));
+	}
+
+	@NonNull
+	Optional<@NonNull McpApplicationResourceTemplateMatch> resolveResourceTemplate(
+			@NonNull String uri) {
+		requireNonNull(uri);
+		McpApplicationResourceTemplateMatch match = null;
+		for (McpApplicationResourceTemplateRoute route : resourceTemplateRoutes) {
+			Optional<Map<String, String>> variables = route.parsedTemplate().match(uri);
+			if (variables.isEmpty())
+				continue;
+			if (match != null)
+				throw new IllegalStateException(
+						"A resource URI matched more than one normalized template route.");
+			match = new McpApplicationResourceTemplateMatch(route.uriTemplate(),
+					route.readRoute(), variables.orElseThrow());
+		}
+		return Optional.ofNullable(match);
+	}
+
+	@NonNull
+	Optional<@NonNull McpApplicationResourceListRoute> resourceListRoute() {
+		return resourceListRoute;
+	}
+
 	boolean hasToolRoutes() {
 		return !toolRoutesByName.isEmpty();
+	}
+
+	boolean hasPromptRoutes() {
+		return !promptRoutesByName.isEmpty();
+	}
+
+	boolean hasResourceReadRoutes() {
+		return !exactResourceRoutesByUri.isEmpty() || !resourceTemplateRoutes.isEmpty();
 	}
 }
 
@@ -362,6 +708,14 @@ record McpApplicationResponse(int status, @NonNull String reason,
 	}
 
 	@NonNull
+	static McpApplicationResponse applicationJsonRpcError(
+			@NonNull McpJsonRpcId id, @NonNull McpJsonRpcError error) {
+		return new McpApplicationResponse(400, "Bad Request", Optional.of(
+				new McpJsonRpcMessage.ErrorResponse(Optional.of(requireNonNull(id)),
+						requireNonNull(error), McpJsonObject.empty())));
+	}
+
+	@NonNull
 	static McpApplicationResponse activeDeadline() {
 		// Phase 3B.1 has no frozen pre-commit active-handler timeout wire mapping.
 		// An empty 504 closes the JSON-only response lifetime without claiming one.
@@ -440,7 +794,7 @@ final class McpApplicationExecution {
 	private final McpApplicationClock clock;
 	private final @Nullable McpProtocolDeadlineCycle protocolDeadlineCycle;
 	@NonNull
-	private final McpApplicationRequestInterceptor requestInterceptor;
+	private final McpApplicationRequestInterceptor defaultRequestInterceptor;
 	@NonNull
 	private final ExecutorService handlerExecutor;
 	@NonNull
@@ -509,7 +863,7 @@ final class McpApplicationExecution {
 		this.configuration = requireNonNull(configuration);
 		this.clock = requireNonNull(clock);
 		this.protocolDeadlineCycle = protocolDeadlineCycle;
-		this.requestInterceptor = requireNonNull(requestInterceptor);
+		this.defaultRequestInterceptor = requireNonNull(requestInterceptor);
 		this.handlerExecutor = requireNonNull(requireNonNull(executorFactory).create(
 				configuration.handlerConcurrency()),
 				"The application handler executor factory returned null.");
@@ -548,7 +902,8 @@ final class McpApplicationExecution {
 			long deadlineNanos, @NonNull McpApplicationResponseWriter responseWriter,
 			@NonNull Runnable terminalCleanup) {
 		dispatchInternal(transportRequest, null, request, admissionIdentity, handler,
-				deadlineNanos, responseWriter, terminalCleanup);
+				this.defaultRequestInterceptor, deadlineNanos, responseWriter,
+				terminalCleanup);
 	}
 
 	void dispatchWithSokletRequest(@NonNull MicrohttpRequest transportRequest,
@@ -559,8 +914,21 @@ final class McpApplicationExecution {
 			long deadlineNanos, @NonNull McpApplicationResponseWriter responseWriter,
 			@NonNull Runnable terminalCleanup) {
 		dispatchInternal(transportRequest, requireNonNull(sokletRequest), request,
-				admissionIdentity, handler, deadlineNanos, responseWriter,
-				terminalCleanup);
+				admissionIdentity, handler, this.defaultRequestInterceptor, deadlineNanos,
+				responseWriter, terminalCleanup);
+	}
+
+	void dispatchWithSokletRequest(@NonNull MicrohttpRequest transportRequest,
+			@NonNull Request sokletRequest,
+			McpJsonRpcMessage.@NonNull Request request,
+			@NonNull McpEffectiveAdmissionIdentity admissionIdentity,
+			@NonNull McpApplicationRequestHandler handler,
+			@NonNull McpApplicationRequestInterceptor requestInterceptor,
+			long deadlineNanos, @NonNull McpApplicationResponseWriter responseWriter,
+			@NonNull Runnable terminalCleanup) {
+		dispatchInternal(transportRequest, requireNonNull(sokletRequest), request,
+				admissionIdentity, handler, requestInterceptor, deadlineNanos,
+				responseWriter, terminalCleanup);
 	}
 
 	private void dispatchInternal(@NonNull MicrohttpRequest transportRequest,
@@ -568,12 +936,14 @@ final class McpApplicationExecution {
 			McpJsonRpcMessage.@NonNull Request request,
 			@NonNull McpEffectiveAdmissionIdentity admissionIdentity,
 			@NonNull McpApplicationRequestHandler handler,
+			@NonNull McpApplicationRequestInterceptor requestInterceptor,
 			long deadlineNanos, @NonNull McpApplicationResponseWriter responseWriter,
 			@NonNull Runnable terminalCleanup) {
 		requireNonNull(transportRequest);
 		requireNonNull(request);
 		requireNonNull(admissionIdentity);
 		requireNonNull(handler);
+		requireNonNull(requestInterceptor);
 		requireNonNull(responseWriter);
 		requireNonNull(terminalCleanup);
 
@@ -584,7 +954,8 @@ final class McpApplicationExecution {
 
 		long exchangeId = exchangeSequence.incrementAndGet();
 		Exchange exchange = new Exchange(exchangeId, transportRequest, sokletRequest, request,
-				admissionIdentity, handler, deadlineNanos, responseWriter, terminalCleanup);
+				admissionIdentity, handler, requestInterceptor, deadlineNanos,
+				responseWriter, terminalCleanup);
 
 		McpApplicationHandlerDispatcher.Ticket ticket = dispatcher.newTicket(
 				exchange::runHandler, exchange::submissionFailed);
@@ -787,6 +1158,8 @@ final class McpApplicationExecution {
 		private final McpEffectiveAdmissionIdentity admissionIdentity;
 		@NonNull
 		private final McpApplicationRequestHandler handler;
+		@NonNull
+		private final McpApplicationRequestInterceptor requestInterceptor;
 		private final long deadlineNanos;
 		@NonNull
 		private final AtomicReference<@Nullable TransportLease> transportLease;
@@ -808,6 +1181,7 @@ final class McpApplicationExecution {
 				McpJsonRpcMessage.@NonNull Request request,
 				@NonNull McpEffectiveAdmissionIdentity admissionIdentity,
 				@NonNull McpApplicationRequestHandler handler,
+				@NonNull McpApplicationRequestInterceptor requestInterceptor,
 				long deadlineNanos,
 				@NonNull McpApplicationResponseWriter responseWriter,
 				@NonNull Runnable terminalCleanup) {
@@ -816,6 +1190,7 @@ final class McpApplicationExecution {
 			this.request = request;
 			this.admissionIdentity = admissionIdentity;
 			this.handler = handler;
+			this.requestInterceptor = requireNonNull(requestInterceptor);
 			this.deadlineNanos = deadlineNanos;
 			this.transportLease = new AtomicReference<>(new TransportLease(
 					transportRequest, responseWriter, terminalCleanup));
@@ -852,7 +1227,7 @@ final class McpApplicationExecution {
 				Thread interceptorThread = Thread.currentThread();
 				McpWireResult result;
 				try {
-					result = requestInterceptor.intercept(invocation, () -> {
+					result = this.requestInterceptor.intercept(invocation, () -> {
 						if (!interceptorActive.get())
 							throw new IllegalStateException(
 									"An MCP interceptor continuation cannot be invoked after interception returns.");
@@ -877,6 +1252,10 @@ final class McpApplicationExecution {
 			} catch (McpInvalidApplicationInputException exception) {
 				if (!cancellation.isCancellationRequested())
 					respond(McpApplicationResponse.invalidParams(request.id()));
+			} catch (McpApplicationJsonRpcException exception) {
+				if (!cancellation.isCancellationRequested())
+					respond(McpApplicationResponse.applicationJsonRpcError(
+							request.id(), exception.error()));
 			} catch (InterruptedException exception) {
 				Thread.currentThread().interrupt();
 				if (!cancellation.isCancellationRequested())

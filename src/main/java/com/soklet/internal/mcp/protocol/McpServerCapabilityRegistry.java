@@ -19,6 +19,7 @@ package com.soklet.internal.mcp.protocol;
 import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.net.URI;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -43,9 +44,23 @@ final class McpServerCapabilityRegistry {
 	@NonNull
 	private final List<@NonNull String> prompts;
 	@NonNull
+	private final Map<@NonNull String, @NonNull McpNormalizedPromptDescriptor> promptDescriptors;
+	@NonNull
 	private final List<@NonNull String> exactResourceUris;
 	@NonNull
 	private final List<@NonNull String> resourceTemplates;
+	@NonNull
+	private final List<@NonNull McpNormalizedResourceDescriptor>
+			exactResourceDescriptors;
+	@NonNull
+	private final List<@NonNull McpNormalizedResourceTemplateDescriptor>
+			resourceTemplateDescriptors;
+	@NonNull
+	private final Map<@NonNull URI, @NonNull McpNormalizedResourceDescriptor>
+			exactResourceDescriptorsByUri;
+	@NonNull
+	private final Map<@NonNull String, @NonNull McpNormalizedResourceTemplateDescriptor>
+			resourceTemplateDescriptorsByTemplate;
 	@NonNull
 	private final Map<@NonNull McpOperationKey, @NonNull McpInputRequestPlan> inputRequestPlans;
 	@NonNull
@@ -56,6 +71,12 @@ final class McpServerCapabilityRegistry {
 	private final McpDiscoverResult discoverResult;
 	@NonNull
 	private final McpWireResult toolsListResult;
+	@NonNull
+	private final McpWireResult promptsListResult;
+	@NonNull
+	private final McpWireResult resourcesListResult;
+	@NonNull
+	private final McpWireResult resourceTemplatesListResult;
 
 	@NonNull
 	static McpServerCapabilityRegistry fromEndpoint(
@@ -67,12 +88,30 @@ final class McpServerCapabilityRegistry {
 		requireNonNull(endpoint);
 		this.tools = namesOf(endpoint.tools());
 		this.prompts = namesOf(endpoint.prompts());
-		this.exactResourceUris = namesOf(endpoint.exactResources());
-		this.resourceTemplates = namesOf(endpoint.resourceTemplates());
+		this.promptDescriptors = promptDescriptors(endpoint.prompts());
+		this.exactResourceDescriptors = endpoint.exactResources().stream()
+				.map(operation -> operation.resourceDescriptor().orElseThrow())
+				.toList();
+		this.resourceTemplateDescriptors = endpoint.resourceTemplates().stream()
+				.map(operation -> operation.resourceTemplateDescriptor().orElseThrow())
+				.toList();
+		this.exactResourceUris = exactResourceDescriptors.stream()
+				.map(McpNormalizedResourceDescriptor::uri).toList();
+		this.resourceTemplates = resourceTemplateDescriptors.stream()
+				.map(McpNormalizedResourceTemplateDescriptor::uriTemplate).toList();
+		this.exactResourceDescriptorsByUri = exactResourceDescriptorsByUri(
+				exactResourceDescriptors);
+		this.resourceTemplateDescriptorsByTemplate = resourceTemplateDescriptorsByTemplate(
+				resourceTemplateDescriptors);
 		this.inputRequestPlans = inputRequestPlans(endpoint);
 		this.toolMirroredHeaderPlans = toolMirroredHeaderPlans(endpoint);
 		this.customMirroredHeaderNames = customMirroredHeaderNames(endpoint);
 		this.toolsListResult = toolsListResult(endpoint.tools());
+		this.promptsListResult = promptsListResult(endpoint.prompts());
+		this.resourcesListResult = resourcesListResult(exactResourceDescriptors,
+				endpoint.resourcesListCachePolicy());
+		this.resourceTemplatesListResult = resourceTemplatesListResult(
+				resourceTemplateDescriptors, endpoint.resourceTemplatesListCachePolicy());
 
 		Optional<McpImmutableCatalogCapability> toolsCapability = tools.isEmpty()
 				? Optional.empty()
@@ -128,6 +167,12 @@ final class McpServerCapabilityRegistry {
 	}
 
 	@NonNull
+	Optional<@NonNull McpNormalizedPromptDescriptor> promptDescriptor(
+			@NonNull String promptName) {
+		return Optional.ofNullable(promptDescriptors.get(requireNonNull(promptName)));
+	}
+
+	@NonNull
 	List<@NonNull String> exactResourceUris() {
 		return exactResourceUris;
 	}
@@ -135,6 +180,33 @@ final class McpServerCapabilityRegistry {
 	@NonNull
 	List<@NonNull String> resourceTemplates() {
 		return resourceTemplates;
+	}
+
+	@NonNull
+	List<@NonNull McpNormalizedResourceDescriptor> exactResourceDescriptors() {
+		return exactResourceDescriptors;
+	}
+
+	@NonNull
+	List<@NonNull McpNormalizedResourceTemplateDescriptor>
+	resourceTemplateDescriptors() {
+		return resourceTemplateDescriptors;
+	}
+
+	@NonNull
+	Optional<@NonNull McpNormalizedResourceDescriptor> exactResourceDescriptor(
+			@NonNull String uri) {
+		String wireUri = McpLevelOneUriTemplate.requireValidAbsoluteUri(
+				requireNonNull(uri), "Exact resource URI");
+		return Optional.ofNullable(exactResourceDescriptorsByUri.get(
+				URI.create(wireUri)));
+	}
+
+	@NonNull
+	Optional<@NonNull McpNormalizedResourceTemplateDescriptor>
+	resourceTemplateDescriptor(@NonNull String uriTemplate) {
+		return Optional.ofNullable(resourceTemplateDescriptorsByTemplate.get(
+				requireNonNull(uriTemplate)));
 	}
 
 	@NonNull
@@ -166,6 +238,21 @@ final class McpServerCapabilityRegistry {
 		return toolsListResult;
 	}
 
+	@NonNull
+	McpWireResult promptsListResult() {
+		return promptsListResult;
+	}
+
+	@NonNull
+	McpWireResult resourcesListResult() {
+		return resourcesListResult;
+	}
+
+	@NonNull
+	McpWireResult resourceTemplatesListResult() {
+		return resourceTemplatesListResult;
+	}
+
 	boolean permitsResultType(@NonNull McpResultType resultType) {
 		return requireNonNull(resultType).isCore();
 	}
@@ -190,6 +277,95 @@ final class McpServerCapabilityRegistry {
 		fields.put("ttlMs", new McpJsonNumber(0L));
 		fields.put("cacheScope", new McpJsonString(McpCacheScope.PRIVATE.wireValue()));
 		return McpWireResult.complete(new McpJsonObject(fields));
+	}
+
+	@NonNull
+	private static Map<@NonNull String, @NonNull McpNormalizedPromptDescriptor>
+	promptDescriptors(@NonNull List<@NonNull McpNormalizedOperation> prompts) {
+		Map<String, McpNormalizedPromptDescriptor> descriptors = new LinkedHashMap<>();
+		for (McpNormalizedOperation prompt : prompts) {
+			McpNormalizedPromptDescriptor descriptor = prompt.promptDescriptor()
+					.orElseGet(() -> McpNormalizedPromptDescriptor.minimal(prompt.name()));
+			descriptors.put(prompt.name(), descriptor);
+		}
+		return Collections.unmodifiableMap(descriptors);
+	}
+
+	@NonNull
+	private static McpWireResult promptsListResult(
+			@NonNull List<@NonNull McpNormalizedOperation> prompts) {
+		List<McpJsonValue> descriptors = prompts.stream()
+				.map(prompt -> prompt.promptDescriptor()
+						.orElseGet(() -> McpNormalizedPromptDescriptor.minimal(
+								prompt.name())))
+				.map(McpNormalizedPromptDescriptor::toJsonObject)
+				.map(McpJsonValue.class::cast)
+				.toList();
+		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
+		fields.put("prompts", new McpJsonArray(descriptors));
+		fields.put("ttlMs", new McpJsonNumber(0L));
+		fields.put("cacheScope", new McpJsonString(McpCacheScope.PRIVATE.wireValue()));
+		return McpWireResult.complete(new McpJsonObject(fields));
+	}
+
+	@NonNull
+	private static McpWireResult resourcesListResult(
+			@NonNull List<@NonNull McpNormalizedResourceDescriptor> resources,
+			@NonNull McpResourceCachePolicy cachePolicy) {
+		List<McpJsonValue> descriptors = resources.stream()
+				.map(McpNormalizedResourceDescriptor::toJsonObject)
+				.map(McpJsonValue.class::cast)
+				.toList();
+		return staticResourceCatalogResult("resources", descriptors, cachePolicy);
+	}
+
+	@NonNull
+	private static McpWireResult resourceTemplatesListResult(
+			@NonNull List<@NonNull McpNormalizedResourceTemplateDescriptor> templates,
+			@NonNull McpResourceCachePolicy cachePolicy) {
+		List<McpJsonValue> descriptors = templates.stream()
+				.map(McpNormalizedResourceTemplateDescriptor::toJsonObject)
+				.map(McpJsonValue.class::cast)
+				.toList();
+		return staticResourceCatalogResult(
+				"resourceTemplates", descriptors, cachePolicy);
+	}
+
+	@NonNull
+	private static McpWireResult staticResourceCatalogResult(
+			@NonNull String fieldName,
+			@NonNull List<@NonNull McpJsonValue> descriptors,
+			@NonNull McpResourceCachePolicy cachePolicy) {
+		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
+		fields.put(fieldName, new McpJsonArray(descriptors));
+		fields.put("ttlMs", new McpJsonNumber(cachePolicy.timeToLiveMilliseconds()));
+		fields.put("cacheScope", new McpJsonString(cachePolicy.scope().wireValue()));
+		return McpWireResult.complete(new McpJsonObject(fields));
+	}
+
+	@NonNull
+	private static Map<@NonNull URI, @NonNull McpNormalizedResourceDescriptor>
+	exactResourceDescriptorsByUri(
+			@NonNull List<@NonNull McpNormalizedResourceDescriptor> descriptors) {
+		Map<URI, McpNormalizedResourceDescriptor> byUri = new LinkedHashMap<>();
+		for (McpNormalizedResourceDescriptor descriptor : descriptors) {
+			if (byUri.putIfAbsent(URI.create(descriptor.uri()), descriptor) != null)
+				throw new IllegalArgumentException(
+						"Equivalent exact resource URIs are not permitted: "
+								+ descriptor.uri());
+		}
+		return Collections.unmodifiableMap(byUri);
+	}
+
+	@NonNull
+	private static Map<@NonNull String, @NonNull McpNormalizedResourceTemplateDescriptor>
+	resourceTemplateDescriptorsByTemplate(
+			@NonNull List<@NonNull McpNormalizedResourceTemplateDescriptor> descriptors) {
+		Map<String, McpNormalizedResourceTemplateDescriptor> byTemplate =
+				new LinkedHashMap<>();
+		for (McpNormalizedResourceTemplateDescriptor descriptor : descriptors)
+			byTemplate.put(descriptor.uriTemplate(), descriptor);
+		return Collections.unmodifiableMap(byTemplate);
 	}
 
 	@NonNull

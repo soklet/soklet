@@ -66,6 +66,10 @@ public final class McpAudioContent implements McpContentBlock {
 		return Arrays.copyOf(this.data, this.data.length);
 	}
 
+	int dataLength() {
+		return this.data.length;
+	}
+
 	/** @return audio MIME type */
 	@NonNull
 	public String getMimeType() {

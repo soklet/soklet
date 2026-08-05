@@ -21,6 +21,7 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
@@ -49,6 +50,16 @@ public final class McpEndpoint {
 	private final String instructions;
 	@NonNull
 	private final List<@NonNull McpToolRegistration<?>> tools;
+	@NonNull
+	private final List<@NonNull McpPromptRegistration> prompts;
+	@NonNull
+	private final List<@NonNull McpResourceRegistration> resources;
+	@Nullable
+	private final McpResourceListHandler resourceListHandler;
+	@NonNull
+	private final McpCachePolicy resourcesListCachePolicy;
+	@NonNull
+	private final McpCachePolicy resourceTemplatesListCachePolicy;
 	@Nullable
 	private final String toolRateLimiterName;
 	@Nullable
@@ -78,6 +89,12 @@ public final class McpEndpoint {
 		this.serverInformation = builder.serverInformation;
 		this.instructions = builder.instructions;
 		this.tools = List.copyOf(builder.tools);
+		this.prompts = List.copyOf(builder.prompts);
+		this.resources = List.copyOf(builder.resources);
+		this.resourceListHandler = builder.resourceListHandler;
+		this.resourcesListCachePolicy = builder.resourcesListCachePolicy;
+		this.resourceTemplatesListCachePolicy =
+				builder.resourceTemplatesListCachePolicy;
 		this.toolRateLimiterName = builder.toolRateLimiterName;
 		this.toolRateLimiter = builder.toolRateLimiter;
 
@@ -86,6 +103,27 @@ public final class McpEndpoint {
 			if (!toolNames.add(tool.getName()))
 				throw new IllegalStateException(
 						"Duplicate MCP tool name: " + tool.getName());
+		}
+		Set<String> promptNames = new LinkedHashSet<>();
+		for (McpPromptRegistration prompt : this.prompts) {
+			if (!promptNames.add(prompt.getName()))
+				throw new IllegalStateException(
+						"Duplicate MCP prompt name: " + prompt.getName());
+		}
+		Set<URI> exactResourceUris = new LinkedHashSet<>();
+		Set<String> resourceUriTemplates = new LinkedHashSet<>();
+		for (McpResourceRegistration resource : this.resources) {
+			if (resource.getAddressType() == McpResourceAddressType.URI) {
+				URI uri = resource.getUri().orElseThrow();
+				if (!exactResourceUris.add(uri))
+					throw new IllegalStateException(
+							"Duplicate MCP exact resource URI: " + uri);
+			} else {
+				String uriTemplate = resource.getUriTemplate().orElseThrow();
+				if (!resourceUriTemplates.add(uriTemplate))
+					throw new IllegalStateException(
+							"Duplicate MCP resource URI template: " + uriTemplate);
+			}
 		}
 	}
 
@@ -127,6 +165,66 @@ public final class McpEndpoint {
 	@NonNull
 	public List<@NonNull McpToolRegistration<?>> getTools() {
 		return this.tools;
+	}
+
+	/**
+	 * Returns the prompts exposed by this endpoint in registration order.
+	 *
+	 * @return immutable prompt registrations
+	 */
+	@NonNull
+	public List<@NonNull McpPromptRegistration> getPrompts() {
+		return this.prompts;
+	}
+
+	/**
+	 * Returns exact-URI and URI-template resource registrations in registration
+	 * order.
+	 * <p>
+	 * When {@link #getResourceListHandler()} is empty, Soklet derives the static
+	 * {@code resources/list} page from only the exact-URI registrations in this
+	 * list. Template registrations are advertised separately by
+	 * {@code resources/templates/list}.
+	 *
+	 * @return immutable resource registrations
+	 */
+	@NonNull
+	public List<@NonNull McpResourceRegistration> getResources() {
+		return this.resources;
+	}
+
+	/**
+	 * Returns the optional sole custom {@code resources/list} handler.
+	 * <p>
+	 * When present, the returned handler is authoritative; Soklet does not merge
+	 * exact registrations into its pages. When absent, the endpoint uses the
+	 * single-page static fallback.
+	 *
+	 * @return custom resource-list handler, or empty for the static fallback
+	 */
+	@NonNull
+	public Optional<@NonNull McpResourceListHandler> getResourceListHandler() {
+		return Optional.ofNullable(this.resourceListHandler);
+	}
+
+	/**
+	 * Returns the fixed cache policy for every {@code resources/list} page.
+	 *
+	 * @return resources-list cache policy
+	 */
+	@NonNull
+	public McpCachePolicy getResourcesListCachePolicy() {
+		return this.resourcesListCachePolicy;
+	}
+
+	/**
+	 * Returns the fixed cache policy for {@code resources/templates/list}.
+	 *
+	 * @return resource-template-list cache policy
+	 */
+	@NonNull
+	public McpCachePolicy getResourceTemplatesListCachePolicy() {
+		return this.resourceTemplatesListCachePolicy;
 	}
 
 	/**
@@ -190,6 +288,16 @@ public final class McpEndpoint {
 		private String instructions;
 		@NonNull
 		private final List<@NonNull McpToolRegistration<?>> tools;
+		@NonNull
+		private final List<@NonNull McpPromptRegistration> prompts;
+		@NonNull
+		private final List<@NonNull McpResourceRegistration> resources;
+		@Nullable
+		private McpResourceListHandler resourceListHandler;
+		@NonNull
+		private McpCachePolicy resourcesListCachePolicy;
+		@NonNull
+		private McpCachePolicy resourceTemplatesListCachePolicy;
 		@Nullable
 		private String toolRateLimiterName;
 		@Nullable
@@ -198,6 +306,12 @@ public final class McpEndpoint {
 		private Builder(@NonNull String path) {
 			this.path = requireNonNull(path);
 			this.tools = new ArrayList<>();
+			this.prompts = new ArrayList<>();
+			this.resources = new ArrayList<>();
+			this.resourcesListCachePolicy =
+					McpCachePolicy.privateNoCacheInstance();
+			this.resourceTemplatesListCachePolicy =
+					McpCachePolicy.privateNoCacheInstance();
 		}
 
 		/**
@@ -260,6 +374,111 @@ public final class McpEndpoint {
 		}
 
 		/**
+		 * Adds a prompt registration.
+		 *
+		 * @param prompt prompt registration
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder prompt(@NonNull McpPromptRegistration prompt) {
+			this.prompts.add(requireNonNull(prompt));
+			return this;
+		}
+
+		/**
+		 * Adds prompt registrations in iteration order.
+		 *
+		 * @param prompts prompt registrations
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder prompts(
+				@NonNull Collection<? extends @NonNull McpPromptRegistration> prompts) {
+			requireNonNull(prompts);
+			for (McpPromptRegistration prompt : prompts)
+				prompt(prompt);
+			return this;
+		}
+
+		/**
+		 * Adds an exact-URI or URI-template resource registration.
+		 *
+		 * @param resource resource registration
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder resource(@NonNull McpResourceRegistration resource) {
+			this.resources.add(requireNonNull(resource));
+			return this;
+		}
+
+		/**
+		 * Adds resource registrations in iteration order.
+		 *
+		 * @param resources resource registrations
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder resources(
+				@NonNull Collection<? extends @NonNull McpResourceRegistration> resources) {
+			requireNonNull(resources);
+			for (McpResourceRegistration resource : resources)
+				resource(resource);
+			return this;
+		}
+
+		/**
+		 * Installs the sole custom {@code resources/list} handler.
+		 * <p>
+		 * A custom handler is authoritative for every returned page; exact resource
+		 * registrations are not merged automatically. Omitting this setting selects
+		 * the static single-page fallback.
+		 *
+		 * @param resourceListHandler custom list handler
+		 * @return this builder
+		 * @throws IllegalStateException if a handler was already installed
+		 */
+		@NonNull
+		public Builder resourceListHandler(
+				@NonNull McpResourceListHandler resourceListHandler) {
+			if (this.resourceListHandler != null)
+				throw new IllegalStateException(
+						"An MCP resource-list handler is already configured.");
+			this.resourceListHandler = requireNonNull(resourceListHandler);
+			return this;
+		}
+
+		/**
+		 * Sets the fixed scope and default time to live for every
+		 * {@code resources/list} page. The default is private scope with a zero
+		 * time to live.
+		 *
+		 * @param cachePolicy resources-list cache policy
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder resourcesListCachePolicy(
+				@NonNull McpCachePolicy cachePolicy) {
+			this.resourcesListCachePolicy = requireNonNull(cachePolicy);
+			return this;
+		}
+
+		/**
+		 * Sets the fixed scope and default time to live for
+		 * {@code resources/templates/list}. The default is private scope with a
+		 * zero time to live.
+		 *
+		 * @param cachePolicy resource-template-list cache policy
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder resourceTemplatesListCachePolicy(
+				@NonNull McpCachePolicy cachePolicy) {
+			this.resourceTemplatesListCachePolicy = requireNonNull(cachePolicy);
+			return this;
+		}
+
+		/**
 		 * Sets a named tool-limiter override.
 		 * <p>
 		 * Sequential named and direct setter calls are last-call-wins. This call
@@ -298,12 +517,14 @@ public final class McpEndpoint {
 		/**
 		 * Builds an immutable endpoint.
 		 * <p>
-		 * No tool, prompt, or resource operation is required. Tool names must be
-		 * unique within the endpoint.
+		 * No tool, prompt, or resource operation is required. Tool and prompt
+		 * names must each be unique within the endpoint, as must exact resource
+		 * URIs and resource URI templates.
 		 *
 		 * @return the endpoint
 		 * @throws IllegalStateException if server information was not configured or
-		 *                               a tool name is duplicated
+		 *                               a tool name, prompt name, exact resource URI,
+		 *                               or resource URI template is duplicated
 		 */
 		@NonNull
 		public McpEndpoint build() {

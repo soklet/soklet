@@ -16,11 +16,26 @@
 
 package com.soklet;
 
+import com.soklet.internal.mcp.protocol.McpJsonLimits;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.AdmissionInput;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CachePlan;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CacheScope;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.EndpointPlan;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptArgumentPlan;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptInvocation;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptInvocationResult;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptPlan;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RateLimitAdapter;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RateLimitInput;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RateLimitResult;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ResourceAddressKind;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ResourceInvocation;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ResourceInvocationResult;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ResourceListInvocation;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ResourceListInvocationResult;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ResourceListPlan;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ResourcePlan;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RuntimeState;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolInvocation;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolInvocationResult;
@@ -32,6 +47,8 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
+import java.net.URI;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -40,6 +57,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.function.Supplier;
 
 import static java.util.Objects.requireNonNull;
 
@@ -50,8 +69,13 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class DefaultMcpServer implements McpServer {
+	private static final int MAXIMUM_BASE64_CHARACTERS =
+			maximumBase64Characters();
+	private static final int MAXIMUM_AGGREGATE_BASE64_CHARACTERS =
+			McpJsonLimits.productionDefaults().maximumOutputBytes();
 	@NonNull
 	private final Object lifecycleLock;
+	private final int maximumCursorSizeInBytes;
 	@NonNull
 	private final McpHandlerResolver handlerResolver;
 	@NonNull
@@ -72,6 +96,11 @@ final class DefaultMcpServer implements McpServer {
 	private volatile McpShutdownOutcome lastShutdownOutcome;
 
 	DefaultMcpServer(int port, @NonNull String host,
+			int maximumCursorSizeInBytes,
+			int requestHandlerConcurrency, int requestHandlerQueueCapacity,
+			@NonNull Duration requestTimeout,
+			@Nullable Supplier<@NonNull ExecutorService>
+					requestHandlerExecutorServiceSupplier,
 			@NonNull McpHandlerResolver handlerResolver,
 			@NonNull McpRequestAdmissionPolicy requestAdmissionPolicy,
 			@Nullable CorsAuthorizer configuredCorsAuthorizer,
@@ -81,6 +110,7 @@ final class DefaultMcpServer implements McpServer {
 			@Nullable McpRateLimiter toolRateLimiter,
 			@NonNull McpRateLimiterRegistry rateLimiterRegistry) {
 		this.lifecycleLock = new Object();
+		this.maximumCursorSizeInBytes = maximumCursorSizeInBytes;
 		this.handlerResolver = requireNonNull(handlerResolver);
 		this.requestAdmissionPolicy = requireNonNull(requestAdmissionPolicy);
 		this.requestRateLimiter = requestRateLimiter;
@@ -91,20 +121,49 @@ final class DefaultMcpServer implements McpServer {
 				? CorsAuthorizer.rejectAllInstance() : configuredCorsAuthorizer;
 		this.lifecycleObserver = LifecycleObserver.defaultInstance();
 		this.lastShutdownOutcome = McpShutdownOutcome.CLEAN;
-		McpEndpoint endpoint = handlerResolver.getEndpoints().get(0);
-		List<ToolPlan> toolPlans = endpoint.getTools().stream()
-				.map(tool -> toToolPlan(endpoint, tool))
+		List<EndpointPlan> endpointPlans = handlerResolver.getEndpoints().stream()
+				.map(this::toEndpointPlan)
 				.toList();
-		this.runtimeBridge = new McpServerRuntimeBridge(host, port, endpoint,
+		this.runtimeBridge = new McpServerRuntimeBridge(host, port, endpointPlans,
 				allowedHosts, absentOriginPolicy == McpAbsentOriginPolicy.REQUIRE_ORIGIN,
 				this.corsAuthorizer, corsAuthorizerExplicitlyConfigured,
 				input -> this.requestAdmissionPolicy.admit(
 						new DefaultMcpAdmissionContext(input)),
 				Optional.ofNullable(this.requestRateLimiter)
 						.map(DefaultMcpServer::toRateLimitAdapter),
-				toolPlans,
+				requestHandlerConcurrency, requestHandlerQueueCapacity,
+				requestTimeout,
+				Optional.ofNullable(requestHandlerExecutorServiceSupplier),
 				this::safelyLogStartupDiagnostic,
 				this::safelyLogUnexpectedTermination);
+	}
+
+	@NonNull
+	private EndpointPlan toEndpointPlan(@NonNull McpEndpoint endpoint) {
+		List<ToolPlan> toolPlans = endpoint.getTools().stream()
+				.map(tool -> toToolPlan(endpoint, tool))
+				.toList();
+		List<PromptPlan> promptPlans = endpoint.getPrompts().stream()
+				.map(this::toPromptPlan)
+				.toList();
+		List<ResourcePlan> resourcePlans = endpoint.getResources().stream()
+				.map(this::toResourcePlan)
+				.toList();
+		List<McpResourceDescriptor> registeredResourceDescriptors = endpoint
+				.getResources().stream()
+				.filter(resource -> resource.getAddressType()
+						== McpResourceAddressType.URI)
+				.map(DefaultMcpServer::toResourceDescriptor)
+				.toList();
+		ResourceListPlan resourceListPlan = new ResourceListPlan(
+				toCachePlan(endpoint.getResourcesListCachePolicy()),
+				toCachePlan(endpoint.getResourceTemplatesListCachePolicy()),
+				this.maximumCursorSizeInBytes,
+				endpoint.getResourceListHandler().map(handler -> invocation ->
+						invokeResourceList(handler, registeredResourceDescriptors,
+								invocation)));
+		return new EndpointPlan(endpoint, toolPlans, promptPlans, resourcePlans,
+				resourceListPlan);
 	}
 
 	void initialize(@NonNull SokletConfig sokletConfig) {
@@ -202,6 +261,11 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	@Override
+	public int getMaximumCursorSizeInBytes() {
+		return this.maximumCursorSizeInBytes;
+	}
+
+	@Override
 	@NonNull
 	public McpServerDiagnostics getDiagnostics() {
 		synchronized (this.lifecycleLock) {
@@ -226,6 +290,43 @@ final class DefaultMcpServer implements McpServer {
 				tool.isStructuredContentTextMirroringEnabled(),
 				toRateLimitAdapter(resolvedRateLimiter),
 				invocation -> invokeTool(tool, invocation));
+	}
+
+	@NonNull
+	private PromptPlan toPromptPlan(@NonNull McpPromptRegistration prompt) {
+		List<PromptArgumentPlan> arguments = prompt.getArguments().stream()
+				.map(argument -> new PromptArgumentPlan(argument.getName(),
+						argument.isRequired(),
+						promptArgumentDescriptorFields(argument)))
+				.toList();
+		return new PromptPlan(prompt.getName(), arguments,
+				promptDescriptorFields(prompt), prompt.getMetadata(),
+				invocation -> invokePrompt(prompt, invocation));
+	}
+
+	@NonNull
+	private ResourcePlan toResourcePlan(
+			@NonNull McpResourceRegistration resource) {
+		ResourceAddressKind addressKind;
+		String address;
+		if (resource.getAddressType() == McpResourceAddressType.URI) {
+			addressKind = ResourceAddressKind.URI;
+			address = resource.getUri().orElseThrow().toString();
+		} else {
+			addressKind = ResourceAddressKind.URI_TEMPLATE;
+			address = resource.getUriTemplate().orElseThrow();
+		}
+		return new ResourcePlan(addressKind, address, resource.getName(),
+				resourceDescriptorFields(resource), resource.getMetadata(),
+				toCachePlan(resource.getCachePolicy()),
+				invocation -> invokeResource(resource, invocation));
+	}
+
+	@NonNull
+	private static CachePlan toCachePlan(@NonNull McpCachePolicy cachePolicy) {
+		return new CachePlan(cachePolicy.getTimeToLive().toMillis(),
+				cachePolicy.getScope() == McpCacheScope.PUBLIC
+						? CacheScope.PUBLIC : CacheScope.PRIVATE);
 	}
 
 	@NonNull
@@ -294,6 +395,83 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	@NonNull
+	private static PromptInvocationResult invokePrompt(
+			@NonNull McpPromptRegistration prompt,
+			@NonNull PromptInvocation invocation) throws Exception {
+		McpOperationResult result;
+		try {
+			result = prompt.invoke(new DefaultMcpRequestContext(invocation),
+					invocation.rawArguments(),
+					McpInvocationFeatures.fromFeatures(Map.of()));
+		} catch (McpInvalidPromptArgumentsException exception) {
+			return PromptInvocationResult.invalidInput();
+		}
+
+		if (!(result instanceof McpCompleteResult completeResult))
+			throw new IllegalArgumentException(
+					"Unsupported MCP prompt result implementation: "
+							+ result.getClass().getName());
+		if (!(completeResult.getPayload() instanceof McpPromptOutput output))
+			throw new IllegalArgumentException(
+					"An MCP prompt handler must return prompt output.");
+
+		return PromptInvocationResult.complete(promptOutputFields(output),
+				completeResult.getMetadata());
+	}
+
+	@NonNull
+	private static ResourceInvocationResult invokeResource(
+			@NonNull McpResourceRegistration resource,
+			@NonNull ResourceInvocation invocation) throws Exception {
+		McpOperationResult result;
+		try {
+			result = requireNonNull(resource.getHandler().handle(
+					new DefaultMcpRequestContext(invocation),
+					new DefaultMcpResourceReadContext(invocation),
+					McpInvocationFeatures.fromFeatures(Map.of())),
+					"The MCP resource handler returned null.");
+		} catch (McpJsonRpcException exception) {
+			McpJsonRpcError error = exception.getError();
+			return ResourceInvocationResult.jsonRpcError(error.getCode(),
+					error.getMessage(), error.getData());
+		}
+
+		if (!(result instanceof McpCompleteResult completeResult))
+			throw new IllegalArgumentException(
+					"Unsupported MCP resource result implementation: "
+							+ result.getClass().getName());
+		if (!(completeResult.getPayload() instanceof McpResourceOutput output))
+			throw new IllegalArgumentException(
+					"An MCP resource handler must return resource output.");
+
+		return ResourceInvocationResult.complete(resourceOutputFields(output),
+				completeResult.getMetadata());
+	}
+
+	@NonNull
+	private static ResourceListInvocationResult invokeResourceList(
+			@NonNull McpResourceListHandler handler,
+			@NonNull List<@NonNull McpResourceDescriptor> registeredDescriptors,
+			@NonNull ResourceListInvocation invocation) throws Exception {
+		McpResourcePage page;
+		try {
+			page = requireNonNull(handler.handle(
+					new DefaultMcpRequestContext(invocation),
+					new DefaultMcpResourceListContext(invocation.cursor(),
+							registeredDescriptors),
+					McpInvocationFeatures.fromFeatures(Map.of())),
+					"The MCP resource-list handler returned null.");
+		} catch (McpJsonRpcException exception) {
+			McpJsonRpcError error = exception.getError();
+			return ResourceListInvocationResult.jsonRpcError(error.getCode(),
+					error.getMessage(), error.getData());
+		}
+
+		return ResourceListInvocationResult.complete(resourcePageFields(page),
+				page.getMetadata());
+	}
+
+	@NonNull
 	private static McpJsonObject toolDescriptorFields(
 			@NonNull McpToolRegistration<?> tool) {
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
@@ -307,6 +485,76 @@ final class DefaultMcpServer implements McpServer {
 					.toList()));
 		tool.getAnnotations().ifPresent(value ->
 				fields.put("annotations", toolAnnotationsToJson(value)));
+		return McpJsonObject.fromMembers(fields);
+	}
+
+	@NonNull
+	private static McpJsonObject promptDescriptorFields(
+			@NonNull McpPromptRegistration prompt) {
+		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
+		prompt.getTitle().ifPresent(value ->
+				fields.put("title", new McpJsonString(value)));
+		prompt.getDescription().ifPresent(value ->
+				fields.put("description", new McpJsonString(value)));
+		if (!prompt.getIcons().isEmpty())
+			fields.put("icons", McpJsonArray.fromElements(prompt.getIcons().stream()
+					.map(DefaultMcpServer::iconToJson)
+					.toList()));
+		return McpJsonObject.fromMembers(fields);
+	}
+
+	@NonNull
+	private static McpJsonObject resourceDescriptorFields(
+			@NonNull McpResourceRegistration resource) {
+		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
+		resource.getTitle().ifPresent(value ->
+				fields.put("title", new McpJsonString(value)));
+		resource.getDescription().ifPresent(value ->
+				fields.put("description", new McpJsonString(value)));
+		resource.getMimeType().ifPresent(value ->
+				fields.put("mimeType", new McpJsonString(value)));
+		if (!resource.getIcons().isEmpty())
+			fields.put("icons", McpJsonArray.fromElements(resource.getIcons().stream()
+					.map(DefaultMcpServer::iconToJson)
+					.toList()));
+		resource.getAnnotations().ifPresent(value ->
+				fields.put("annotations", contentAnnotationsToJson(value)));
+		resource.getSize().ifPresent(value ->
+				fields.put("size", new McpJsonNumber(
+						java.math.BigDecimal.valueOf(value))));
+		return McpJsonObject.fromMembers(fields);
+	}
+
+	@NonNull
+	private static McpJsonObject resourceDescriptorFields(
+			@NonNull McpResourceDescriptor resource) {
+		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
+		resource.getTitle().ifPresent(value ->
+				fields.put("title", new McpJsonString(value)));
+		resource.getDescription().ifPresent(value ->
+				fields.put("description", new McpJsonString(value)));
+		resource.getMimeType().ifPresent(value ->
+				fields.put("mimeType", new McpJsonString(value)));
+		if (!resource.getIcons().isEmpty())
+			fields.put("icons", McpJsonArray.fromElements(resource.getIcons().stream()
+					.map(DefaultMcpServer::iconToJson)
+					.toList()));
+		resource.getAnnotations().ifPresent(value ->
+				fields.put("annotations", contentAnnotationsToJson(value)));
+		resource.getSize().ifPresent(value ->
+				fields.put("size", new McpJsonNumber(
+						java.math.BigDecimal.valueOf(value))));
+		return McpJsonObject.fromMembers(fields);
+	}
+
+	@NonNull
+	private static McpJsonObject promptArgumentDescriptorFields(
+			@NonNull McpPromptArgumentDefinition argument) {
+		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
+		argument.getTitle().ifPresent(value ->
+				fields.put("title", new McpJsonString(value)));
+		argument.getDescription().ifPresent(value ->
+				fields.put("description", new McpJsonString(value)));
 		return McpJsonObject.fromMembers(fields);
 	}
 
@@ -344,6 +592,7 @@ final class DefaultMcpServer implements McpServer {
 
 	@NonNull
 	private static McpJsonObject toolOutputFields(@NonNull McpToolOutput output) {
+		requireAggregateBinaryDataFitsOutput(output.getContent());
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
 		fields.put("content", McpJsonArray.fromElements(output.getContent().stream()
 				.map(DefaultMcpServer::contentBlockToJson)
@@ -352,6 +601,85 @@ final class DefaultMcpServer implements McpServer {
 				fields.put("structuredContent", value));
 		if (output.isError())
 			fields.put("isError", new McpJsonBoolean(true));
+		return McpJsonObject.fromMembers(fields);
+	}
+
+	@NonNull
+	private static McpJsonObject promptOutputFields(
+			@NonNull McpPromptOutput output) {
+		requireAggregatePromptBinaryDataFitsOutput(output.getMessages());
+		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
+		output.getDescription().ifPresent(value ->
+				fields.put("description", new McpJsonString(value)));
+		fields.put("messages", McpJsonArray.fromElements(
+				output.getMessages().stream()
+						.map(DefaultMcpServer::promptMessageToJson)
+						.toList()));
+		return McpJsonObject.fromMembers(fields);
+	}
+
+	@NonNull
+	private static McpJsonObject resourceOutputFields(
+			@NonNull McpResourceOutput output) {
+		requireAggregateResourceBinaryDataFitsOutput(output.getContents());
+		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
+		fields.put("contents", McpJsonArray.fromElements(output.getContents().stream()
+				.map(DefaultMcpServer::resourceContentsToJson)
+				.toList()));
+		output.getCacheTimeToLiveOverride().ifPresent(value ->
+				fields.put("ttlMs", new McpJsonNumber(
+						java.math.BigDecimal.valueOf(value.toMillis()))));
+		return McpJsonObject.fromMembers(fields);
+	}
+
+	@NonNull
+	private static McpJsonObject resourcePageFields(@NonNull McpResourcePage page) {
+		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
+		fields.put("resources", McpJsonArray.fromElements(page.getResources().stream()
+				.map(DefaultMcpServer::resourceDescriptorToJson)
+				.toList()));
+		page.getNextCursor().ifPresent(value ->
+				fields.put("nextCursor", new McpJsonString(value)));
+		page.getCacheTimeToLiveOverride().ifPresent(value ->
+				fields.put("ttlMs", new McpJsonNumber(
+						java.math.BigDecimal.valueOf(value.toMillis()))));
+		return McpJsonObject.fromMembers(fields);
+	}
+
+	@NonNull
+	private static McpJsonObject resourceDescriptorToJson(
+			@NonNull McpResourceDescriptor resource) {
+		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
+		fields.put("uri", new McpJsonString(resource.getUri().toString()));
+		fields.put("name", new McpJsonString(resource.getName()));
+		fields.putAll(resourceDescriptorFields(resource).getMembers());
+		if (!resource.getMetadata().getMembers().isEmpty())
+			fields.put("_meta", resource.getMetadata());
+		return McpJsonObject.fromMembers(fields);
+	}
+
+	@NonNull
+	private static McpResourceDescriptor toResourceDescriptor(
+			@NonNull McpResourceRegistration resource) {
+		McpResourceDescriptor.Builder builder = McpResourceDescriptor
+				.withUriAndName(resource.getUri().orElseThrow(), resource.getName());
+		resource.getTitle().ifPresent(builder::title);
+		resource.getDescription().ifPresent(builder::description);
+		resource.getMimeType().ifPresent(builder::mimeType);
+		resource.getIcons().forEach(builder::icon);
+		resource.getAnnotations().ifPresent(builder::annotations);
+		resource.getSize().ifPresent(builder::size);
+		builder.metadata(resource.getMetadata());
+		return builder.build();
+	}
+
+	@NonNull
+	private static McpJsonObject promptMessageToJson(
+			@NonNull McpPromptMessage message) {
+		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
+		fields.put("role", new McpJsonString(
+				message.role().name().toLowerCase(Locale.ROOT)));
+		fields.put("content", contentBlockToJson(message.content()));
 		return McpJsonObject.fromMembers(fields);
 	}
 
@@ -366,15 +694,15 @@ final class DefaultMcpServer implements McpServer {
 					text.getMetadata());
 		} else if (content instanceof McpImageContent image) {
 			fields.put("type", new McpJsonString("image"));
-			fields.put("data", new McpJsonString(
-					Base64.getEncoder().encodeToString(image.getData())));
+			requireBinaryDataFitsOutput(image.dataLength());
+			fields.put("data", new McpJsonString(encodeBinaryData(image.getData())));
 			fields.put("mimeType", new McpJsonString(image.getMimeType()));
 			addContentAnnotationsAndMetadata(fields, image.getAnnotations(),
 					image.getMetadata());
 		} else if (content instanceof McpAudioContent audio) {
 			fields.put("type", new McpJsonString("audio"));
-			fields.put("data", new McpJsonString(
-					Base64.getEncoder().encodeToString(audio.getData())));
+			requireBinaryDataFitsOutput(audio.dataLength());
+			fields.put("data", new McpJsonString(encodeBinaryData(audio.getData())));
 			fields.put("mimeType", new McpJsonString(audio.getMimeType()));
 			addContentAnnotationsAndMetadata(fields, audio.getAnnotations(),
 					audio.getMetadata());
@@ -445,16 +773,88 @@ final class DefaultMcpServer implements McpServer {
 				fields.put("mimeType", new McpJsonString(value)));
 		if (contents instanceof McpTextResourceContents text)
 			fields.put("text", new McpJsonString(text.getText()));
-		else if (contents instanceof McpBlobResourceContents blob)
-			fields.put("blob", new McpJsonString(
-					Base64.getEncoder().encodeToString(blob.getData())));
-		else
+		else if (contents instanceof McpBlobResourceContents blob) {
+			requireBinaryDataFitsOutput(blob.dataLength());
+			fields.put("blob", new McpJsonString(encodeBinaryData(blob.getData())));
+		} else
 			throw new IllegalArgumentException(
 					"Unsupported MCP resource contents: "
 							+ contents.getClass().getName());
 		if (!contents.getMetadata().getMembers().isEmpty())
 			fields.put("_meta", contents.getMetadata());
 		return McpJsonObject.fromMembers(fields);
+	}
+
+	@NonNull
+	private static String encodeBinaryData(byte @NonNull [] data) {
+		requireBinaryDataFitsOutput(data.length);
+		return Base64.getEncoder().encodeToString(data);
+	}
+
+	private static void requireBinaryDataFitsOutput(int dataLength) {
+		long encodedLength = base64EncodedLength(dataLength);
+		if (encodedLength > MAXIMUM_BASE64_CHARACTERS)
+			throw new IllegalArgumentException(
+					"Base64-encoded MCP binary data cannot fit within the JSON output bound.");
+	}
+
+	private static void requireAggregateBinaryDataFitsOutput(
+			@NonNull List<@NonNull McpContentBlock> contents) {
+		long encodedCharacters = 0L;
+		for (McpContentBlock content : contents) {
+			if (content instanceof McpImageContent image)
+				encodedCharacters += base64EncodedLength(image.dataLength());
+			else if (content instanceof McpAudioContent audio)
+				encodedCharacters += base64EncodedLength(audio.dataLength());
+			else if (content instanceof McpEmbeddedResource embedded
+					&& embedded.getResource() instanceof McpBlobResourceContents blob)
+				encodedCharacters += base64EncodedLength(blob.dataLength());
+			requireAggregateBinaryDataFitsOutput(encodedCharacters);
+		}
+	}
+
+	private static void requireAggregatePromptBinaryDataFitsOutput(
+			@NonNull List<@NonNull McpPromptMessage> messages) {
+		long encodedCharacters = 0L;
+		for (McpPromptMessage message : messages) {
+			McpContentBlock content = message.content();
+			if (content instanceof McpImageContent image)
+				encodedCharacters += base64EncodedLength(image.dataLength());
+			else if (content instanceof McpAudioContent audio)
+				encodedCharacters += base64EncodedLength(audio.dataLength());
+			else if (content instanceof McpEmbeddedResource embedded
+					&& embedded.getResource() instanceof McpBlobResourceContents blob)
+				encodedCharacters += base64EncodedLength(blob.dataLength());
+			requireAggregateBinaryDataFitsOutput(encodedCharacters);
+		}
+	}
+
+	private static void requireAggregateResourceBinaryDataFitsOutput(
+			@NonNull List<@NonNull McpResourceContents> contents) {
+		long encodedCharacters = 0L;
+		for (McpResourceContents content : contents) {
+			if (content instanceof McpBlobResourceContents blob)
+				encodedCharacters += base64EncodedLength(blob.dataLength());
+			requireAggregateBinaryDataFitsOutput(encodedCharacters);
+		}
+	}
+
+	private static void requireAggregateBinaryDataFitsOutput(
+			long encodedCharacters) {
+		if (encodedCharacters > MAXIMUM_AGGREGATE_BASE64_CHARACTERS)
+			throw new IllegalArgumentException(
+					"Combined Base64-encoded MCP binary data cannot fit within the JSON output bound.");
+	}
+
+	private static long base64EncodedLength(int dataLength) {
+		return 4L * ((dataLength + 2L) / 3L);
+	}
+
+	private static int maximumBase64Characters() {
+		McpJsonLimits limits = McpJsonLimits.productionDefaults();
+		return Math.min(limits.maximumStringLengthInCharacters(),
+				Math.min(limits.maximumTokenLengthInCharacters(),
+						limits.maximumOutputBytes() - 2));
 	}
 
 	private void safelyLogStartupDiagnostic(@NonNull String message) {
@@ -606,7 +1006,23 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 	private static final String DEPRECATED_LOG_LEVEL_KEY =
 			"io.modelcontextprotocol/logLevel";
 	@NonNull
-	private final ToolInvocation invocation;
+	private final Request request;
+	@NonNull
+	private final McpEndpoint endpoint;
+	@NonNull
+	private final Map<@NonNull String, @NonNull String> endpointPathParameters;
+	@NonNull
+	private final String jsonRpcMethod;
+	@NonNull
+	private final McpRequestId requestId;
+	@NonNull
+	private final String protocolVersion;
+	@NonNull
+	private final Optional<@NonNull McpImplementation> clientInformation;
+	@NonNull
+	private final McpJsonObject requestMetadata;
+	@NonNull
+	private final McpAdmissionIdentity admissionIdentity;
 	@NonNull
 	private final McpClientCapabilities clientCapabilities;
 	@NonNull
@@ -616,10 +1032,63 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 
 	@SuppressWarnings("deprecation")
 	DefaultMcpRequestContext(@NonNull ToolInvocation invocation) {
-		this.invocation = requireNonNull(invocation);
+		this(requireNonNull(invocation).request(), invocation.endpoint(),
+				invocation.endpointPathParameters(), invocation.jsonRpcMethod(),
+				invocation.requestId(), invocation.protocolVersion(),
+				invocation.clientInformation(), invocation.clientCapabilitiesJson(),
+				invocation.requestMetadata(), invocation.admissionIdentity());
+	}
+
+	@SuppressWarnings("deprecation")
+	DefaultMcpRequestContext(@NonNull PromptInvocation invocation) {
+		this(requireNonNull(invocation).request(), invocation.endpoint(),
+				invocation.endpointPathParameters(), invocation.jsonRpcMethod(),
+				invocation.requestId(), invocation.protocolVersion(),
+				invocation.clientInformation(), invocation.clientCapabilitiesJson(),
+				invocation.requestMetadata(), invocation.admissionIdentity());
+	}
+
+	@SuppressWarnings("deprecation")
+	DefaultMcpRequestContext(@NonNull ResourceInvocation invocation) {
+		this(requireNonNull(invocation).request(), invocation.endpoint(),
+				invocation.endpointPathParameters(), invocation.jsonRpcMethod(),
+				invocation.requestId(), invocation.protocolVersion(),
+				invocation.clientInformation(), invocation.clientCapabilitiesJson(),
+				invocation.requestMetadata(), invocation.admissionIdentity());
+	}
+
+	@SuppressWarnings("deprecation")
+	DefaultMcpRequestContext(@NonNull ResourceListInvocation invocation) {
+		this(requireNonNull(invocation).request(), invocation.endpoint(),
+				invocation.endpointPathParameters(), invocation.jsonRpcMethod(),
+				invocation.requestId(), invocation.protocolVersion(),
+				invocation.clientInformation(), invocation.clientCapabilitiesJson(),
+				invocation.requestMetadata(), invocation.admissionIdentity());
+	}
+
+	@SuppressWarnings("deprecation")
+	private DefaultMcpRequestContext(@NonNull Request request,
+			@NonNull McpEndpoint endpoint,
+			@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
+			@NonNull String jsonRpcMethod, @NonNull McpRequestId requestId,
+			@NonNull String protocolVersion,
+			@NonNull Optional<@NonNull McpImplementation> clientInformation,
+			@NonNull McpJsonObject clientCapabilitiesJson,
+			@NonNull McpJsonObject requestMetadata,
+			@NonNull McpAdmissionIdentity admissionIdentity) {
+		this.request = requireNonNull(request);
+		this.endpoint = requireNonNull(endpoint);
+		this.endpointPathParameters = Map.copyOf(
+				requireNonNull(endpointPathParameters));
+		this.jsonRpcMethod = requireNonNull(jsonRpcMethod);
+		this.requestId = requireNonNull(requestId);
+		this.protocolVersion = requireNonNull(protocolVersion);
+		this.clientInformation = requireNonNull(clientInformation);
+		this.requestMetadata = requireNonNull(requestMetadata);
+		this.admissionIdentity = requireNonNull(admissionIdentity);
 		this.clientCapabilities = McpClientCapabilities.fromJson(
-				invocation.clientCapabilitiesJson());
-		this.deprecatedLogLevel = invocation.requestMetadata()
+				clientCapabilitiesJson);
+		this.deprecatedLogLevel = requestMetadata
 				.find(DEPRECATED_LOG_LEVEL_KEY)
 				.filter(McpJsonString.class::isInstance)
 				.map(McpJsonString.class::cast)
@@ -627,36 +1096,36 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 				.map(value -> McpLogLevel.valueOf(
 						value.toUpperCase(Locale.ROOT)));
 		this.requestPropagation = McpRequestPropagation.fromMetadata(
-				invocation.requestMetadata());
+				requestMetadata);
 	}
 
 	@Override public @NonNull Request getRequest() {
-		return this.invocation.request();
+		return this.request;
 	}
 	@Override public @NonNull McpEndpoint getEndpoint() {
-		return this.invocation.endpoint();
+		return this.endpoint;
 	}
 	@Override public @NonNull Map<@NonNull String, @NonNull String>
 	getEndpointPathParameters() {
-		return this.invocation.endpointPathParameters();
+		return this.endpointPathParameters;
 	}
 	@Override public @NonNull String getJsonRpcMethod() {
-		return this.invocation.jsonRpcMethod();
+		return this.jsonRpcMethod;
 	}
 	@Override public @NonNull Optional<@NonNull McpRequestId> getRequestId() {
-		return Optional.of(this.invocation.requestId());
+		return Optional.of(this.requestId);
 	}
 	@Override public @NonNull String getProtocolVersion() {
-		return this.invocation.protocolVersion();
+		return this.protocolVersion;
 	}
 	@Override public @NonNull Optional<@NonNull McpImplementation> getClientInfo() {
-		return this.invocation.clientInformation();
+		return this.clientInformation;
 	}
 	@Override public @NonNull McpClientCapabilities getClientCapabilities() {
 		return this.clientCapabilities;
 	}
 	@Override public @NonNull McpJsonObject getRequestMetadata() {
-		return this.invocation.requestMetadata();
+		return this.requestMetadata;
 	}
 	@Override
 	@SuppressWarnings("deprecation")
@@ -670,6 +1139,6 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 		return this.requestPropagation.baggage();
 	}
 	@Override public @NonNull McpAdmissionIdentity getAdmissionIdentity() {
-		return this.invocation.admissionIdentity();
+		return this.admissionIdentity;
 	}
 }

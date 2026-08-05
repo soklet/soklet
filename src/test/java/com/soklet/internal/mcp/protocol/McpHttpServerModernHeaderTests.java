@@ -47,8 +47,11 @@ public class McpHttpServerModernHeaderTests {
 					new SuccessfulCase("tools/call", "name", "get_weather", "get_weather"),
 					new SuccessfulCase("prompts/get", "name", "line1\nline2",
 							"=?base64?bGluZTEKbGluZTI=?="),
-					new SuccessfulCase("resources/read", "uri", "file:///世界",
-							"=?base64?ZmlsZTovLy/kuJbnlYw=?="),
+						new SuccessfulCase("resources/read", "uri",
+								"file:///%E4%B8%96%E7%95%8C",
+								"=?base64?ZmlsZTovLy8lRTQlQjglOTYlRTclOTUlOEM=?="),
+						new SuccessfulCase("prompts/get", "name", "世界",
+								"=?base64?5LiW55WM?="),
 					new SuccessfulCase("tools/call", "name", "=?Base64?literal?=",
 							"=?Base64?literal?="));
 

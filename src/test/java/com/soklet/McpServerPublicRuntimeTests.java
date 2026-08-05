@@ -42,6 +42,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -60,6 +62,88 @@ public class McpServerPublicRuntimeTests {
 	private static final String OMITTED_CORS_AUTHORIZER_DIAGNOSTIC =
 			"No CorsAuthorizer is configured for the MCP server; requests carrying an "
 					+ "Origin header will be rejected.";
+
+	@Test
+	public void executionConfigurationValidatesAndOwnsOneExecutorPerGeneration()
+			throws Exception {
+		McpServer.Builder validationBuilder = McpServer.withPort(0);
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> validationBuilder.requestHandlerConcurrency(0));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> validationBuilder.requestHandlerQueueCapacity(-1));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> validationBuilder.requestTimeout(Duration.ZERO));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> validationBuilder.requestTimeout(Duration.ofNanos(-1)));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> validationBuilder.requestTimeout(
+						Duration.ofSeconds(Long.MAX_VALUE)));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> validationBuilder.requestTimeout(null));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> validationBuilder
+						.requestHandlerExecutorServiceSupplier(null));
+
+		List<ExecutorService> suppliedExecutors = new ArrayList<>();
+		McpServer server = McpServer.withPort(0)
+				.handlerResolver(McpHandlerResolver.fromEndpoints(
+						List.of(newEndpoint())))
+				.requestAdmissionPolicy(
+						McpRequestAdmissionPolicy.acceptAllInstance())
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.requestHandlerConcurrency(3)
+				.requestHandlerQueueCapacity(7)
+				.requestTimeout(Duration.ofSeconds(2))
+				.requestHandlerExecutorServiceSupplier(() -> {
+					ExecutorService executor = Executors.newFixedThreadPool(4);
+					suppliedExecutors.add(executor);
+					return executor;
+				})
+				.build();
+
+		Assertions.assertTrue(suppliedExecutors.isEmpty(),
+				"Building a server must not allocate its generation executor.");
+		try {
+			server.start();
+			Assertions.assertEquals(1, suppliedExecutors.size());
+			Assertions.assertFalse(suppliedExecutors.get(0).isShutdown());
+			server.stop();
+			Assertions.assertTrue(suppliedExecutors.get(0).isShutdown());
+
+			server.start();
+			Assertions.assertEquals(2, suppliedExecutors.size());
+			Assertions.assertNotSame(suppliedExecutors.get(0),
+					suppliedExecutors.get(1));
+			Assertions.assertFalse(suppliedExecutors.get(1).isShutdown());
+		} finally {
+			server.stop();
+			for (ExecutorService executor : suppliedExecutors)
+				executor.shutdownNow();
+		}
+		Assertions.assertTrue(suppliedExecutors.stream()
+				.allMatch(ExecutorService::isShutdown));
+
+		ExecutorService shutDownExecutor = Executors.newSingleThreadExecutor();
+		shutDownExecutor.shutdown();
+		McpServer invalidServer = McpServer.withPort(0)
+				.handlerResolver(McpHandlerResolver.fromEndpoints(
+						List.of(newEndpoint())))
+				.requestAdmissionPolicy(
+						McpRequestAdmissionPolicy.acceptAllInstance())
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.requestHandlerExecutorServiceSupplier(() -> shutDownExecutor)
+				.build();
+		try {
+			IllegalStateException exception = Assertions.assertThrows(
+					IllegalStateException.class, invalidServer::start);
+			Assertions.assertTrue(exception.getMessage().contains("shut-down"),
+					exception.getMessage());
+			Assertions.assertEquals(McpServerStatus.STOPPED,
+					invalidServer.getDiagnostics().getStatus());
+		} finally {
+			invalidServer.stop();
+		}
+	}
 
 	@Test
 	public void directPortZeroLifecyclePublishesImmutableDiagnosticSnapshots()

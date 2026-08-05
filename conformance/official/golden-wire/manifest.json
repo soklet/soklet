@@ -54,6 +54,166 @@
       "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_3_messages_match_the_production_listener"
     },
     {
+      "name": "phase-4-prompts-get-request",
+      "phase": 4,
+      "source": "production",
+      "path": "phase-4/prompts-get-request.json",
+      "sha256": "30a447c79ce5e11c5ac8d9b148c31fa3e7cf29a1641f0dcefd5db6f8819db3c6",
+      "schemaRef": "#/$defs/GetPromptRequest",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_prompt_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-4-prompts-get-response",
+      "phase": 4,
+      "source": "production",
+      "path": "phase-4/prompts-get-response.json",
+      "sha256": "6f50bb7c6b4645699c38448a02cfac71554651ef287c31022d7d90d1599ae062",
+      "schemaRef": "#/$defs/GetPromptResultResponse",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_prompt_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-4-prompts-list-request",
+      "phase": 4,
+      "source": "production",
+      "path": "phase-4/prompts-list-request.json",
+      "sha256": "782fc49f588be8c1f18bb5b32b8589f59fab125fca54a3f944b3163a747e1fdd",
+      "schemaRef": "#/$defs/ListPromptsRequest",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_prompt_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-4-prompts-list-response",
+      "phase": 4,
+      "source": "production",
+      "path": "phase-4/prompts-list-response.json",
+      "sha256": "116de1860fc471d66bcf4a55531f92ebb9ba8fba909b6ddeb208048632ae61d7",
+      "schemaRef": "#/$defs/ListPromptsResultResponse",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_prompt_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-4-resources-list-request",
+      "phase": 4,
+      "source": "production",
+      "path": "phase-4/resources-list-request.json",
+      "sha256": "44aafc6fdc0c0e4b4aa9a58ac261efa24f947fab3291a86de7af98aaa23c4e00",
+      "schemaRef": "#/$defs/ListResourcesRequest",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_resource_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-4-resources-list-response",
+      "phase": 4,
+      "source": "production",
+      "path": "phase-4/resources-list-response.json",
+      "sha256": "393a9814fe02f9318a993e3c878e47f10206c787ac2020126283dc88cf278489",
+      "schemaRef": "#/$defs/ListResourcesResultResponse",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_resource_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-4-resources-read-blob-request",
+      "phase": 4,
+      "source": "production",
+      "path": "phase-4/resources-read-blob-request.json",
+      "sha256": "815e04c99b70b02458c6dc7dc88dbfafe7ddce0a54807f9e62219868a521c2c5",
+      "schemaRef": "#/$defs/ReadResourceRequest",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_resource_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-4-resources-read-blob-response",
+      "phase": 4,
+      "source": "production",
+      "path": "phase-4/resources-read-blob-response.json",
+      "sha256": "8d08aa5de0d69431ed1e82d865e2e4cacb6c7a1203ee2deabc3d5dd949734e62",
+      "schemaRef": "#/$defs/ReadResourceResultResponse",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_resource_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-4-resources-read-template-request",
+      "phase": 4,
+      "source": "production",
+      "path": "phase-4/resources-read-template-request.json",
+      "sha256": "9e347a86f5506be22e662a4535df7d1dd0120846e4aad71d279c323d9d8aa09b",
+      "schemaRef": "#/$defs/ReadResourceRequest",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_resource_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-4-resources-read-template-response",
+      "phase": 4,
+      "source": "production",
+      "path": "phase-4/resources-read-template-response.json",
+      "sha256": "7450c160b9c6a599eb75acede1ec6bb736b033dd528b25507d3f63881d41817a",
+      "schemaRef": "#/$defs/ReadResourceResultResponse",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_resource_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-4-resources-read-text-request",
+      "phase": 4,
+      "source": "production",
+      "path": "phase-4/resources-read-text-request.json",
+      "sha256": "486a1b9c9aa5eb2b2bba36ec38e54d31b04bb894680bb1c16d60fb3e4839f43d",
+      "schemaRef": "#/$defs/ReadResourceRequest",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_resource_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-4-resources-read-text-response",
+      "phase": 4,
+      "source": "production",
+      "path": "phase-4/resources-read-text-response.json",
+      "sha256": "6c82b94f82d6de64b17565b96ef856711857d1ddfe331ec398b189439641634a",
+      "schemaRef": "#/$defs/ReadResourceResultResponse",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_resource_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-4-resources-read-unknown-request",
+      "phase": 4,
+      "source": "production",
+      "path": "phase-4/resources-read-unknown-request.json",
+      "sha256": "60d08b54123c789c9a8263d96bc19c34df85132f4ec5bf8f7746687b0cc7eed5",
+      "schemaRef": "#/$defs/ReadResourceRequest",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_resource_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-4-resources-read-unknown-response",
+      "phase": 4,
+      "source": "production",
+      "path": "phase-4/resources-read-unknown-response.json",
+      "sha256": "b3cb0385be9911e8198f51e18480e1eda4af556ab29c0f280841dbe03ab93c16",
+      "schemaRef": "#/$defs/JSONRPCErrorResponse",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_resource_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-4-resources-templates-list-request",
+      "phase": 4,
+      "source": "production",
+      "path": "phase-4/resources-templates-list-request.json",
+      "sha256": "b8b75572883abab9ba23ad39e159d041d8244965fbee41a97d431bf69b52e8f8",
+      "schemaRef": "#/$defs/ListResourceTemplatesRequest",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_resource_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-4-resources-templates-list-response",
+      "phase": 4,
+      "source": "production",
+      "path": "phase-4/resources-templates-list-response.json",
+      "sha256": "5eaabf61270c6b34860ea15b05c788b4a2a248adddc859bfa44cc4d5bd173a26",
+      "schemaRef": "#/$defs/ListResourceTemplatesResultResponse",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_resource_messages_match_the_production_listener"
+    },
+    {
       "name": "final-schema-subscription-terminal-canary",
       "phase": 5,
       "source": "schema-canary",

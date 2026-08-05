@@ -21,9 +21,12 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.time.Duration;
 import java.util.LinkedHashSet;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.function.Supplier;
 
 import static java.util.Objects.requireNonNull;
 
@@ -113,6 +116,14 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 	CorsAuthorizer getCorsAuthorizer();
 
 	/**
+	 * Returns the maximum UTF-8 encoded size of an incoming or outgoing
+	 * application cursor.
+	 *
+	 * @return positive cursor-size limit in bytes
+	 */
+	int getMaximumCursorSizeInBytes();
+
+	/**
 	 * Captures immutable point-in-time server diagnostics.
 	 *
 	 * @return diagnostics snapshot
@@ -147,9 +158,21 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 	 */
 	@NotThreadSafe
 	final class Builder {
+		private static final int DEFAULT_MAXIMUM_CURSOR_SIZE_IN_BYTES = 4_096;
+		private static final int DEFAULT_REQUEST_HANDLER_CONCURRENCY = 32;
+		private static final int DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY = 128;
+		@NonNull
+		private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(60);
 		private int port;
+		private int maximumCursorSizeInBytes;
+		private int requestHandlerConcurrency;
+		private int requestHandlerQueueCapacity;
 		@NonNull
 		private String host;
+		@NonNull
+		private Duration requestTimeout;
+		@Nullable
+		private Supplier<@NonNull ExecutorService> requestHandlerExecutorServiceSupplier;
 		@Nullable
 		private McpHandlerResolver handlerResolver;
 		@Nullable
@@ -169,7 +192,12 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 
 		private Builder(int port) {
 			this.port = port;
+			this.maximumCursorSizeInBytes = DEFAULT_MAXIMUM_CURSOR_SIZE_IN_BYTES;
+			this.requestHandlerConcurrency = DEFAULT_REQUEST_HANDLER_CONCURRENCY;
+			this.requestHandlerQueueCapacity =
+					DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY;
 			this.host = "127.0.0.1";
+			this.requestTimeout = DEFAULT_REQUEST_TIMEOUT;
 			this.absentOriginPolicy = McpAbsentOriginPolicy.ALLOW;
 			this.allowedHosts = Set.of();
 			this.rateLimiterRegistry = McpRateLimiterRegistry.emptyInstance();
@@ -201,6 +229,95 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 			if (host.isBlank())
 				throw new IllegalArgumentException("MCP bind host must not be blank.");
 			this.host = host;
+			return this;
+		}
+
+		/**
+		 * Sets the maximum UTF-8 encoded size of an incoming or outgoing
+		 * application cursor. The default is {@code 4096} bytes.
+		 *
+		 * @param maximumCursorSizeInBytes positive cursor-size limit in bytes
+		 * @return this builder
+		 * @throws IllegalArgumentException if the limit is not positive
+		 */
+		@NonNull
+		public Builder maximumCursorSizeInBytes(int maximumCursorSizeInBytes) {
+			if (maximumCursorSizeInBytes < 1)
+				throw new IllegalArgumentException(
+						"MCP maximum cursor size must be positive.");
+			this.maximumCursorSizeInBytes = maximumCursorSizeInBytes;
+			return this;
+		}
+
+		/**
+		 * Sets the absolute client-visible request deadline. The deadline does not
+		 * forcibly terminate application code that ignores interruption.
+		 * The default is 60 seconds.
+		 *
+		 * @param requestTimeout positive finite request timeout
+		 * @return this builder
+		 * @throws IllegalArgumentException if the timeout is zero, negative, below
+		 *                                  one nanosecond, or too large to represent
+		 *                                  as signed nanoseconds
+		 */
+		@NonNull
+		public Builder requestTimeout(@NonNull Duration requestTimeout) {
+			this.requestTimeout = requirePositiveDuration(requestTimeout,
+					"MCP request timeout");
+			return this;
+		}
+
+		/**
+		 * Sets the positive, finite number of application handler dispatches that
+		 * may hold server-wide execution slots. The default is {@code 32}.
+		 *
+		 * @param requestHandlerConcurrency maximum active handler dispatches
+		 * @return this builder
+		 * @throws IllegalArgumentException if the value is not positive
+		 */
+		@NonNull
+		public Builder requestHandlerConcurrency(int requestHandlerConcurrency) {
+			if (requestHandlerConcurrency < 1)
+				throw new IllegalArgumentException(
+						"MCP request-handler concurrency must be positive.");
+			this.requestHandlerConcurrency = requestHandlerConcurrency;
+			return this;
+		}
+
+		/**
+		 * Sets the positive, finite number of admitted requests that may wait for
+		 * an application handler slot. The default is {@code 128}.
+		 *
+		 * @param requestHandlerQueueCapacity maximum queued handler dispatches
+		 * @return this builder
+		 * @throws IllegalArgumentException if the value is not positive
+		 */
+		@NonNull
+		public Builder requestHandlerQueueCapacity(
+				int requestHandlerQueueCapacity) {
+			if (requestHandlerQueueCapacity < 1)
+				throw new IllegalArgumentException(
+						"MCP request-handler queue capacity must be positive.");
+			this.requestHandlerQueueCapacity = requestHandlerQueueCapacity;
+			return this;
+		}
+
+		/**
+		 * Sets a supplier for the application handler executor used by each
+		 * listener generation. The supplier is invoked during {@link McpServer#start()}
+		 * and must return a fresh, running executor each time. Soklet owns and shuts
+		 * down every returned executor. Its own handler-slot and queue bounds remain
+		 * authoritative regardless of executor capacity.
+		 *
+		 * @param requestHandlerExecutorServiceSupplier executor supplier
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder requestHandlerExecutorServiceSupplier(
+				@NonNull Supplier<@NonNull ExecutorService>
+						requestHandlerExecutorServiceSupplier) {
+			this.requestHandlerExecutorServiceSupplier = requireNonNull(
+					requestHandlerExecutorServiceSupplier);
 			return this;
 		}
 
@@ -334,9 +451,6 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 			if (this.requestAdmissionPolicy == null)
 				throw new IllegalStateException(
 						"An MCP request-admission policy must be configured.");
-			if (this.handlerResolver.getEndpoints().size() != 1)
-				throw new IllegalStateException(
-						"This MCP implementation checkpoint supports exactly one endpoint.");
 			boolean toolsPresent = this.handlerResolver.getEndpoints().stream()
 					.anyMatch(endpoint -> !endpoint.getTools().isEmpty());
 			if (toolsPresent && this.toolRateLimiter == null)
@@ -351,7 +465,12 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 							requireRegisteredLimiter(name,
 									"tool " + tool.getName()));
 			}
-			return new DefaultMcpServer(this.port, this.host, this.handlerResolver,
+			return new DefaultMcpServer(this.port, this.host,
+					this.maximumCursorSizeInBytes,
+					this.requestHandlerConcurrency,
+					this.requestHandlerQueueCapacity, this.requestTimeout,
+					this.requestHandlerExecutorServiceSupplier,
+					this.handlerResolver,
 					this.requestAdmissionPolicy, this.corsAuthorizer,
 					this.absentOriginPolicy, this.allowedHosts,
 					this.requestRateLimiter, this.toolRateLimiter,
@@ -363,6 +482,24 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 			if (this.rateLimiterRegistry.find(name).isEmpty())
 				throw new IllegalStateException(
 						"Unknown MCP rate limiter '" + name + "' for " + owner + ".");
+		}
+
+		@NonNull
+		private static Duration requirePositiveDuration(@NonNull Duration value,
+				@NonNull String description) {
+			requireNonNull(value);
+			if (value.isZero() || value.isNegative())
+				throw new IllegalArgumentException(description + " must be positive.");
+			try {
+				if (value.toNanos() < 1L)
+					throw new IllegalArgumentException(
+							description + " must be positive.");
+			} catch (ArithmeticException exception) {
+				throw new IllegalArgumentException(
+						description + " must fit in a signed nanosecond duration.",
+						exception);
+			}
+			return value;
 		}
 	}
 

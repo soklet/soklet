@@ -16,8 +16,8 @@
 
 /**
  * Annotations applicable to HTTP <em>Resource Methods</em> and their
- * parameters, as well as MCP server endpoints, tool handler methods, and tool
- * arguments.
+ * parameters, as well as MCP server endpoints and their tool, prompt, and
+ * resource handler methods and arguments.
  * <p>
  * HTTP request-handling annotations are documented in detail at
  * <a href="https://www.soklet.com/docs/request-handling">https://www.soklet.com/docs/request-handling</a>.

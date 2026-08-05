@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":"phase-4-resources-templates-list","result":{"resourceTemplates":[{"uriTemplate":"golden://records/{recordId}","name":"Golden record","mimeType":"text/plain"}],"ttlMs":0,"cacheScope":"private","resultType":"complete"}}

@@ -19,6 +19,11 @@ package com.soklet;
 import com.soklet.annotation.DELETE;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.HEAD;
+import com.soklet.annotation.McpListResources;
+import com.soklet.annotation.McpPrompt;
+import com.soklet.annotation.McpPromptArgument;
+import com.soklet.annotation.McpResource;
+import com.soklet.annotation.McpResourceUriParameter;
 import com.soklet.annotation.McpServerEndpoint;
 import com.soklet.annotation.McpTool;
 import com.soklet.annotation.McpToolArgument;
@@ -31,6 +36,7 @@ import com.soklet.internal.mcp.generated.McpGeneratedEndpointProviderIndex;
 import com.soklet.internal.mcp.schema.McpTypeMirrorTypedSchemaBridge;
 import com.google.errorprone.annotations.FormatMethod;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.processing.AbstractProcessor;
@@ -78,6 +84,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
@@ -166,6 +173,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	private static final String PERSISTENT_CACHE_INDEX_DIR = "resource-methods";
 	private static final String MCP_PERSISTENT_CACHE_INDEX_DIR =
 			"mcp-endpoints";
+	private static final int MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_VARIABLES = 32;
 
 	// ---- Index paths ---------------------------------------------------------
 
@@ -198,6 +206,14 @@ public final class SokletProcessor extends AbstractProcessor {
 	private TypeElement pathParameterElement;    // com.soklet.annotation.PathParameter
 	private TypeMirror mcpRequestContextType;
 	private TypeMirror mcpInvocationFeaturesType;
+	private TypeMirror mcpPromptOutputType;
+	private TypeMirror mcpResourceOutputType;
+	private TypeMirror mcpResourcePageType;
+	private TypeMirror mcpResourceReadContextType;
+	private TypeMirror mcpResourceListContextType;
+	private TypeMirror mcpOperationResultType;
+	private TypeMirror stringType;
+	private TypeMirror optionalType;
 	private TypeMirror exceptionType;
 	private TypeMirror errorType;
 
@@ -257,6 +273,34 @@ public final class SokletProcessor extends AbstractProcessor {
 				elements.getTypeElement("com.soklet.McpInvocationFeatures");
 		this.mcpInvocationFeaturesType = mcpInvocationFeatures == null
 				? null : mcpInvocationFeatures.asType();
+		TypeElement mcpPromptOutput =
+				elements.getTypeElement("com.soklet.McpPromptOutput");
+		this.mcpPromptOutputType = mcpPromptOutput == null
+				? null : mcpPromptOutput.asType();
+		TypeElement mcpResourceOutput =
+				elements.getTypeElement("com.soklet.McpResourceOutput");
+		this.mcpResourceOutputType = mcpResourceOutput == null
+				? null : mcpResourceOutput.asType();
+		TypeElement mcpResourcePage =
+				elements.getTypeElement("com.soklet.McpResourcePage");
+		this.mcpResourcePageType = mcpResourcePage == null
+				? null : mcpResourcePage.asType();
+		TypeElement mcpResourceReadContext =
+				elements.getTypeElement("com.soklet.McpResourceReadContext");
+		this.mcpResourceReadContextType = mcpResourceReadContext == null
+				? null : mcpResourceReadContext.asType();
+		TypeElement mcpResourceListContext =
+				elements.getTypeElement("com.soklet.McpResourceListContext");
+		this.mcpResourceListContextType = mcpResourceListContext == null
+				? null : mcpResourceListContext.asType();
+		TypeElement mcpOperationResult =
+				elements.getTypeElement("com.soklet.McpOperationResult");
+		this.mcpOperationResultType = mcpOperationResult == null
+				? null : mcpOperationResult.asType();
+		TypeElement string = elements.getTypeElement("java.lang.String");
+		this.stringType = string == null ? null : string.asType();
+		TypeElement optional = elements.getTypeElement("java.util.Optional");
+		this.optionalType = optional == null ? null : optional.asType();
 		TypeElement exception = elements.getTypeElement("java.lang.Exception");
 		this.exceptionType = exception == null ? null : exception.asType();
 		TypeElement error = elements.getTypeElement("java.lang.Error");
@@ -281,6 +325,11 @@ public final class SokletProcessor extends AbstractProcessor {
 		out.add(McpServerEndpoint.class.getCanonicalName());
 		out.add(McpTool.class.getCanonicalName());
 		out.add(McpToolArgument.class.getCanonicalName());
+		out.add(McpPrompt.class.getCanonicalName());
+		out.add(McpPromptArgument.class.getCanonicalName());
+		out.add(McpResource.class.getCanonicalName());
+		out.add(McpResourceUriParameter.class.getCanonicalName());
+		out.add(McpListResources.class.getCanonicalName());
 		// Keep the processor active when a touched type removes its final Soklet
 		// annotation so stale generated index rows can still be pruned.
 		out.add("*");
@@ -435,12 +484,27 @@ public final class SokletProcessor extends AbstractProcessor {
 				elements.getTypeElement(McpTool.class.getCanonicalName());
 		TypeElement argumentAnnotation = elements.getTypeElement(
 				McpToolArgument.class.getCanonicalName());
+		TypeElement promptAnnotation =
+				elements.getTypeElement(McpPrompt.class.getCanonicalName());
+		TypeElement promptArgumentAnnotation = elements.getTypeElement(
+				McpPromptArgument.class.getCanonicalName());
+		TypeElement resourceAnnotation =
+				elements.getTypeElement(McpResource.class.getCanonicalName());
+		TypeElement resourceUriParameterAnnotation = elements.getTypeElement(
+				McpResourceUriParameter.class.getCanonicalName());
+		TypeElement listResourcesAnnotation = elements.getTypeElement(
+				McpListResources.class.getCanonicalName());
 		if (endpointAnnotation == null || toolAnnotation == null
-				|| argumentAnnotation == null)
+				|| argumentAnnotation == null || promptAnnotation == null
+				|| promptArgumentAnnotation == null || resourceAnnotation == null
+				|| resourceUriParameterAnnotation == null
+				|| listResourcesAnnotation == null)
 			return;
 
 		validateMcpAnnotationPlacement(roundEnv, endpointAnnotation,
-				toolAnnotation, argumentAnnotation);
+				toolAnnotation, argumentAnnotation, promptAnnotation,
+				promptArgumentAnnotation, resourceAnnotation,
+				resourceUriParameterAnnotation, listResourcesAnnotation);
 
 		for (Element element : roundEnv.getElementsAnnotatedWith(
 				endpointAnnotation)) {
@@ -474,10 +538,12 @@ public final class SokletProcessor extends AbstractProcessor {
 					elements.getBinaryName(endpointType).toString();
 			if (processedMcpEndpointBinaries.contains(endpointBinaryName))
 				continue;
-			if (hasUnresolvedMcpToolType(endpointType, toolAnnotation)) {
+			if (hasUnresolvedMcpOperationType(endpointType, toolAnnotation,
+					promptAnnotation, resourceAnnotation,
+					listResourcesAnnotation)) {
 				if (roundEnv.processingOver()) {
 					mcpError(endpointType,
-							"Soklet: @McpServerEndpoint contains an unresolved MCP tool parameter or return type after annotation processing completed.");
+							"Soklet: @McpServerEndpoint contains an unresolved MCP operation parameter or return type after annotation processing completed.");
 					processedMcpEndpointBinaries.add(endpointBinaryName);
 					pendingMcpEndpoints.remove(endpointBinaryName);
 				}
@@ -487,7 +553,9 @@ public final class SokletProcessor extends AbstractProcessor {
 			pendingMcpEndpoints.remove(endpointBinaryName);
 
 			McpEndpointModel endpoint = validateMcpEndpoint(endpointType,
-					toolAnnotation, argumentAnnotation);
+					toolAnnotation, argumentAnnotation, promptAnnotation,
+					promptArgumentAnnotation, resourceAnnotation,
+					resourceUriParameterAnnotation, listResourcesAnnotation);
 			if (endpoint == null)
 				continue;
 
@@ -510,11 +578,18 @@ public final class SokletProcessor extends AbstractProcessor {
 		}
 	}
 
-	private boolean hasUnresolvedMcpToolType(@NonNull TypeElement endpointType,
-			@NonNull TypeElement toolAnnotation) {
+	private boolean hasUnresolvedMcpOperationType(
+			@NonNull TypeElement endpointType,
+			@NonNull TypeElement toolAnnotation,
+			@NonNull TypeElement promptAnnotation,
+			@NonNull TypeElement resourceAnnotation,
+			@NonNull TypeElement listResourcesAnnotation) {
 		for (Element enclosed : endpointType.getEnclosedElements()) {
 			if (enclosed.getKind() != ElementKind.METHOD
-					|| findAnnotation(enclosed, toolAnnotation) == null)
+					|| (findAnnotation(enclosed, toolAnnotation) == null
+					&& findAnnotation(enclosed, promptAnnotation) == null
+					&& findAnnotation(enclosed, resourceAnnotation) == null
+					&& findAnnotation(enclosed, listResourcesAnnotation) == null))
 				continue;
 			ExecutableElement method = (ExecutableElement) enclosed;
 			if (containsErrorType(method.getReturnType()))
@@ -577,9 +652,10 @@ public final class SokletProcessor extends AbstractProcessor {
 			}
 			return false;
 		}
-		// Tool type variables are rejected later by the typed-schema/signature
-		// policies. Avoid traversing self-referential generic bounds while looking
-		// only for compiler ERROR placeholders that another processor may resolve.
+		// Unsupported operation type variables are rejected later by the
+		// signature policies. Avoid traversing self-referential generic bounds
+		// while looking only for compiler ERROR placeholders that another
+		// processor may resolve.
 		if (type instanceof TypeVariable)
 			return false;
 		if (type instanceof WildcardType wildcard) {
@@ -599,7 +675,12 @@ public final class SokletProcessor extends AbstractProcessor {
 			@NonNull RoundEnvironment roundEnv,
 			@NonNull TypeElement endpointAnnotation,
 			@NonNull TypeElement toolAnnotation,
-			@NonNull TypeElement argumentAnnotation) {
+			@NonNull TypeElement argumentAnnotation,
+			@NonNull TypeElement promptAnnotation,
+			@NonNull TypeElement promptArgumentAnnotation,
+			@NonNull TypeElement resourceAnnotation,
+			@NonNull TypeElement resourceUriParameterAnnotation,
+			@NonNull TypeElement listResourcesAnnotation) {
 		for (Element element : roundEnv.getElementsAnnotatedWith(toolAnnotation)) {
 			if (element.getKind() != ElementKind.METHOD) {
 				mcpError(element,
@@ -610,6 +691,45 @@ public final class SokletProcessor extends AbstractProcessor {
 			if (findAnnotation(owner, endpointAnnotation) == null)
 				mcpError(element,
 						"Soklet: @McpTool methods must be declared directly by an @McpServerEndpoint class.");
+		}
+
+		for (Element element : roundEnv.getElementsAnnotatedWith(
+				promptAnnotation)) {
+			if (element.getKind() != ElementKind.METHOD) {
+				mcpError(element,
+						"Soklet: @McpPrompt can only be applied to methods.");
+				continue;
+			}
+			Element owner = element.getEnclosingElement();
+			if (findAnnotation(owner, endpointAnnotation) == null)
+				mcpError(element,
+						"Soklet: @McpPrompt methods must be declared directly by an @McpServerEndpoint class.");
+		}
+
+		for (Element element : roundEnv.getElementsAnnotatedWith(
+				resourceAnnotation)) {
+			if (element.getKind() != ElementKind.METHOD) {
+				mcpError(element,
+						"Soklet: @McpResource can only be applied to methods.");
+				continue;
+			}
+			Element owner = element.getEnclosingElement();
+			if (findAnnotation(owner, endpointAnnotation) == null)
+				mcpError(element,
+						"Soklet: @McpResource methods must be declared directly by an @McpServerEndpoint class.");
+		}
+
+		for (Element element : roundEnv.getElementsAnnotatedWith(
+				listResourcesAnnotation)) {
+			if (element.getKind() != ElementKind.METHOD) {
+				mcpError(element,
+						"Soklet: @McpListResources can only be applied to methods.");
+				continue;
+			}
+			Element owner = element.getEnclosingElement();
+			if (findAnnotation(owner, endpointAnnotation) == null)
+				mcpError(element,
+						"Soklet: @McpListResources methods must be declared directly by an @McpServerEndpoint class.");
 		}
 
 		for (Element element : roundEnv.getElementsAnnotatedWith(
@@ -642,12 +762,47 @@ public final class SokletProcessor extends AbstractProcessor {
 				mcpError(element,
 						"Soklet: @McpToolArgument parameters must belong to an @McpTool method on an @McpServerEndpoint class.");
 		}
+
+		for (Element element : roundEnv.getElementsAnnotatedWith(
+				promptArgumentAnnotation)) {
+			if (element.getKind() != ElementKind.PARAMETER) {
+				mcpError(element,
+						"Soklet: @McpPromptArgument can only be applied to parameters.");
+				continue;
+			}
+			Element method = element.getEnclosingElement();
+			Element owner = method.getEnclosingElement();
+			if (findAnnotation(method, promptAnnotation) == null
+					|| findAnnotation(owner, endpointAnnotation) == null)
+				mcpError(element,
+						"Soklet: @McpPromptArgument parameters must belong to an @McpPrompt method on an @McpServerEndpoint class.");
+		}
+
+		for (Element element : roundEnv.getElementsAnnotatedWith(
+				resourceUriParameterAnnotation)) {
+			if (element.getKind() != ElementKind.PARAMETER) {
+				mcpError(element,
+						"Soklet: @McpResourceUriParameter can only be applied to parameters.");
+				continue;
+			}
+			Element method = element.getEnclosingElement();
+			Element owner = method.getEnclosingElement();
+			if (findAnnotation(method, resourceAnnotation) == null
+					|| findAnnotation(owner, endpointAnnotation) == null)
+				mcpError(element,
+						"Soklet: @McpResourceUriParameter parameters must belong to an @McpResource method on an @McpServerEndpoint class.");
+		}
 	}
 
 	private McpEndpointModel validateMcpEndpoint(
 			@NonNull TypeElement endpointType,
 			@NonNull TypeElement toolAnnotation,
-			@NonNull TypeElement argumentAnnotation) {
+			@NonNull TypeElement argumentAnnotation,
+			@NonNull TypeElement promptAnnotation,
+			@NonNull TypeElement promptArgumentAnnotation,
+			@NonNull TypeElement resourceAnnotation,
+			@NonNull TypeElement resourceUriParameterAnnotation,
+			@NonNull TypeElement listResourcesAnnotation) {
 		int errorsBefore = mcpProcessingErrorCount;
 		AnnotationMirror annotation = findAnnotation(endpointType,
 				McpServerEndpoint.class.getCanonicalName());
@@ -685,7 +840,7 @@ public final class SokletProcessor extends AbstractProcessor {
 					"Soklet: MCP endpoint path must be a non-root absolute path without a query or fragment.");
 		} else if (path.indexOf('{') >= 0 || path.indexOf('}') >= 0) {
 			mcpError(endpointType,
-					"Soklet: MCP endpoint path parameters are not supported by the initial annotated-tool processor vertical; use a fixed path.");
+					"Soklet: MCP endpoint path parameters are not supported by the annotated MCP processor; use a fixed path.");
 		} else {
 			path = ResourcePathDeclaration.normalizePath(path);
 			if (path.length() == 1)
@@ -700,6 +855,14 @@ public final class SokletProcessor extends AbstractProcessor {
 		String websiteUrl = annotationString(annotation, "websiteUrl");
 		String instructions = annotationString(annotation, "instructions");
 		String toolRateLimiter = annotationString(annotation, "toolRateLimiter");
+		long resourcesListCacheTtlMs = annotationLong(annotation,
+				"resourcesListCacheTtlMs");
+		String resourcesListCacheScope = annotationEnumConstantName(annotation,
+				"resourcesListCacheScope");
+		long resourceTemplatesListCacheTtlMs = annotationLong(annotation,
+				"resourceTemplatesListCacheTtlMs");
+		String resourceTemplatesListCacheScope = annotationEnumConstantName(
+				annotation, "resourceTemplatesListCacheScope");
 		if (name.isBlank())
 			mcpError(endpointType,
 					"Soklet: MCP implementation name must not be blank.");
@@ -709,6 +872,12 @@ public final class SokletProcessor extends AbstractProcessor {
 		if (!toolRateLimiter.isEmpty() && toolRateLimiter.isBlank())
 			mcpError(endpointType,
 					"Soklet: MCP endpoint tool rate-limiter name must not be blank.");
+		if (resourcesListCacheTtlMs < 0)
+			mcpError(endpointType,
+					"Soklet: MCP resources-list cache TTL must not be negative.");
+		if (resourceTemplatesListCacheTtlMs < 0)
+			mcpError(endpointType,
+					"Soklet: MCP resource-template-list cache TTL must not be negative.");
 		if (!websiteUrl.isBlank()) {
 			try {
 				URI uri = URI.create(websiteUrl);
@@ -730,15 +899,57 @@ public final class SokletProcessor extends AbstractProcessor {
 				? providerSimpleName : packageName + "." + providerSimpleName;
 
 		List<McpToolModel> tools = new ArrayList<>();
+		List<McpPromptModel> prompts = new ArrayList<>();
+		List<McpResourceModel> resources = new ArrayList<>();
+		McpResourceListModel resourceList = null;
 		for (Element enclosed : endpointType.getEnclosedElements()) {
-			if (enclosed.getKind() != ElementKind.METHOD
-					|| findAnnotation(enclosed, toolAnnotation) == null)
+			if (enclosed.getKind() != ElementKind.METHOD)
 				continue;
-			McpToolModel tool = validateMcpTool((ExecutableElement) enclosed,
-					argumentAnnotation);
-			if (tool != null)
-				tools.add(tool);
+			boolean tool = findAnnotation(enclosed, toolAnnotation) != null;
+			boolean prompt = findAnnotation(enclosed, promptAnnotation) != null;
+			boolean resource = findAnnotation(enclosed, resourceAnnotation) != null;
+			boolean listResources = findAnnotation(enclosed,
+					listResourcesAnnotation) != null;
+			if (tool && prompt) {
+				mcpError(enclosed,
+						"Soklet: An MCP handler method must not declare both @McpTool and @McpPrompt.");
+				continue;
+			}
+			if ((tool ? 1 : 0) + (prompt ? 1 : 0) + (resource ? 1 : 0)
+					+ (listResources ? 1 : 0) > 1) {
+				mcpError(enclosed,
+						"Soklet: An MCP handler method must declare exactly one operation annotation.");
+				continue;
+			}
+			if (tool) {
+				McpToolModel model = validateMcpTool((ExecutableElement) enclosed,
+						argumentAnnotation);
+				if (model != null)
+					tools.add(model);
+			} else if (prompt) {
+				McpPromptModel model = validateMcpPrompt(
+						(ExecutableElement) enclosed, promptArgumentAnnotation);
+				if (model != null)
+					prompts.add(model);
+			} else if (resource) {
+				McpResourceModel model = validateMcpResource(
+						(ExecutableElement) enclosed,
+						resourceUriParameterAnnotation);
+				if (model != null)
+					resources.add(model);
+			} else if (listResources) {
+				McpResourceListModel model = validateMcpResourceList(
+						(ExecutableElement) enclosed);
+				if (model != null) {
+					if (resourceList != null)
+						mcpError(enclosed,
+								"Soklet: An annotated MCP endpoint may declare at most one @McpListResources method.");
+					else
+						resourceList = model;
+				}
+			}
 		}
+
 		tools.sort(Comparator.comparing(McpToolModel::name)
 				.thenComparing(tool -> tool.method().getSimpleName().toString())
 				.thenComparing(tool -> tool.method().getParameters().stream()
@@ -752,13 +963,62 @@ public final class SokletProcessor extends AbstractProcessor {
 						tool.name(), endpointBinaryName);
 		}
 
+		prompts.sort(Comparator.comparing(McpPromptModel::name)
+				.thenComparing(prompt -> prompt.method().getSimpleName().toString())
+				.thenComparing(prompt -> prompt.method().getParameters().stream()
+						.map(parameter -> parameter.asType().toString())
+						.collect(Collectors.joining(","))));
+		Set<String> promptNames = new LinkedHashSet<>();
+		for (McpPromptModel prompt : prompts) {
+			if (!promptNames.add(prompt.name()))
+				mcpError(prompt.method(),
+						"Soklet: Duplicate MCP prompt name '%s' in endpoint %s.",
+						prompt.name(), endpointBinaryName);
+		}
+
+		resources.sort(Comparator.comparing(McpResourceModel::address)
+				.thenComparing(resource -> resource.method().getSimpleName()
+						.toString())
+				.thenComparing(resource -> resource.method().getParameters().stream()
+						.map(parameter -> parameter.asType().toString())
+						.collect(Collectors.joining(","))));
+		Set<URI> exactResourceUris = new LinkedHashSet<>();
+		Set<String> resourceTemplateAddresses = new LinkedHashSet<>();
+		for (McpResourceModel resource : resources) {
+			boolean unique = resource.template()
+					? resourceTemplateAddresses.add(resource.address())
+					: exactResourceUris.add(URI.create(resource.address()));
+			if (!unique)
+				mcpError(resource.method(),
+						"Soklet: Duplicate MCP resource address in endpoint %s.",
+						endpointBinaryName);
+		}
+		List<McpResourceModel> templates = resources.stream()
+				.filter(McpResourceModel::template).toList();
+		for (int leftIndex = 0; leftIndex < templates.size(); ++leftIndex) {
+			for (int rightIndex = leftIndex + 1;
+					rightIndex < templates.size(); ++rightIndex) {
+				McpResourceModel left = templates.get(leftIndex);
+				McpResourceModel right = templates.get(rightIndex);
+				if (!left.address().equals(right.address())
+						&& resourceTemplatesPotentiallyOverlap(left.address(),
+						right.address()))
+					mcpError(right.method(),
+							"Soklet: Potentially overlapping MCP resource URI templates in endpoint %s.",
+							endpointBinaryName);
+			}
+		}
+
 		if (mcpProcessingErrorCount != errorsBefore)
 			return null;
 		return new McpEndpointModel(packageName,
 				endpointType.getQualifiedName().toString(), endpointBinaryName,
 				providerSimpleName, providerBinaryName, path, name, version,
 				title, description, websiteUrl, instructions, toolRateLimiter,
-				List.copyOf(tools));
+				resourcesListCacheTtlMs, resourcesListCacheScope,
+				resourceTemplatesListCacheTtlMs,
+				resourceTemplatesListCacheScope, List.copyOf(tools),
+				List.copyOf(prompts), List.copyOf(resources), resourceList);
 	}
 
 	private McpToolModel validateMcpTool(@NonNull ExecutableElement method,
@@ -914,6 +1174,697 @@ public final class SokletProcessor extends AbstractProcessor {
 				sha256Hex(compiledSchemas.getOutputSchemaBytes()));
 	}
 
+	private McpPromptModel validateMcpPrompt(
+			@NonNull ExecutableElement method,
+			@NonNull TypeElement argumentAnnotation) {
+		int errorsBefore = mcpProcessingErrorCount;
+		AnnotationMirror annotation =
+				findAnnotation(method, McpPrompt.class.getCanonicalName());
+		if (annotation == null)
+			return null;
+
+		if (!method.getModifiers().contains(Modifier.PUBLIC))
+			mcpError(method, "Soklet: @McpPrompt method must be public.");
+		if (method.getModifiers().contains(Modifier.STATIC))
+			mcpError(method, "Soklet: @McpPrompt method must not be static.");
+		if (method.getModifiers().contains(Modifier.ABSTRACT)
+				|| method.getModifiers().contains(Modifier.NATIVE))
+			mcpError(method,
+					"Soklet: @McpPrompt method must have a concrete Java implementation.");
+		if (!method.getTypeParameters().isEmpty())
+			mcpError(method,
+					"Soklet: @McpPrompt method must not declare type parameters.");
+		for (TypeMirror thrownType : method.getThrownTypes()) {
+			if (!isSubtypeOf(thrownType, exceptionType)
+					&& !isSubtypeOf(thrownType, errorType))
+				mcpError(method,
+						"Soklet: @McpPrompt method throws types must extend Exception or Error so the generated handler can invoke them.");
+		}
+
+		TypeMirror returnType = method.getReturnType();
+		boolean promptOutputReturn = mcpPromptOutputType != null
+				&& types.isSameType(returnType, mcpPromptOutputType);
+		boolean operationResultReturn = isSubtypeOf(returnType,
+				mcpOperationResultType);
+		if (!promptOutputReturn && !operationResultReturn)
+			mcpError(method,
+					"Soklet: @McpPrompt method return type must be McpPromptOutput or a subtype of McpOperationResult.");
+		String providerPackage = elements.getPackageOf(method)
+				.getQualifiedName().toString();
+		if (returnType.getKind() != TypeKind.VOID
+				&& !isTypeAccessibleFromGeneratedProvider(returnType,
+						providerPackage))
+			mcpError(method,
+					"Soklet: The @McpPrompt return type must be accessible to the generated MCP endpoint provider.");
+
+		String name = annotationString(annotation, "name");
+		String title = annotationString(annotation, "title");
+		String description = annotationString(annotation, "description");
+		if (name.isBlank())
+			mcpError(method, "Soklet: MCP prompt name must not be blank.");
+
+		List<McpPromptParameterBinding> bindings = new ArrayList<>();
+		Set<String> publishedNames = new LinkedHashSet<>();
+		boolean requestContextSeen = false;
+		boolean invocationFeaturesSeen = false;
+		for (VariableElement parameter : method.getParameters()) {
+			AnnotationMirror argument = findAnnotation(parameter,
+					argumentAnnotation);
+			boolean requestContext = isExactType(parameter.asType(),
+					mcpRequestContextType);
+			boolean invocationFeatures = isExactType(parameter.asType(),
+					mcpInvocationFeaturesType);
+			if (requestContext || invocationFeatures) {
+				if (argument != null)
+					mcpError(parameter,
+							"Soklet: Injectable MCP context parameters must not also be annotated with @McpPromptArgument.");
+				if (requestContext) {
+					if (requestContextSeen)
+						mcpError(parameter,
+								"Soklet: An @McpPrompt method may inject McpRequestContext at most once.");
+					requestContextSeen = true;
+					bindings.add(new McpPromptParameterBinding(
+							McpPromptParameterBindingKind.REQUEST_CONTEXT, null,
+							"", "", false));
+				} else {
+					if (invocationFeaturesSeen)
+						mcpError(parameter,
+								"Soklet: An @McpPrompt method may inject McpInvocationFeatures at most once.");
+					invocationFeaturesSeen = true;
+					bindings.add(new McpPromptParameterBinding(
+							McpPromptParameterBindingKind.INVOCATION_FEATURES,
+							null, "", "", false));
+				}
+				continue;
+			}
+
+			if (argument == null) {
+				mcpError(parameter,
+						"Soklet: Every non-context @McpPrompt parameter must be annotated with @McpPromptArgument.");
+				continue;
+			}
+
+			boolean required = stringType != null
+					&& types.isSameType(parameter.asType(), stringType);
+			if (!required && !isOptionalString(parameter.asType())) {
+				mcpError(parameter,
+						"Soklet: @McpPromptArgument parameters must be String or Optional<String>.");
+				continue;
+			}
+			String explicitName = annotationString(argument, "name");
+			String javaName = parameter.getSimpleName().toString();
+			String publishedName = explicitName.isBlank()
+					? javaName : explicitName;
+			if (!publishedNames.add(publishedName))
+				mcpError(parameter,
+						"Soklet: Duplicate MCP prompt argument name.");
+			String argumentTitle = annotationString(argument, "title");
+			String argumentDescription = annotationString(argument,
+					"description");
+			bindings.add(new McpPromptParameterBinding(
+					McpPromptParameterBindingKind.PROMPT_ARGUMENT,
+					publishedName, argumentTitle, argumentDescription, required));
+		}
+
+		if (mcpProcessingErrorCount != errorsBefore)
+			return null;
+		return new McpPromptModel(method, name, title, description,
+				promptOutputReturn, List.copyOf(bindings));
+	}
+
+	private McpResourceModel validateMcpResource(
+			@NonNull ExecutableElement method,
+			@NonNull TypeElement uriParameterAnnotation) {
+		int errorsBefore = mcpProcessingErrorCount;
+		AnnotationMirror annotation = findAnnotation(method,
+				McpResource.class.getCanonicalName());
+		if (annotation == null)
+			return null;
+
+		validateConcreteMcpHandlerMethod(method, "@McpResource");
+		TypeMirror returnType = method.getReturnType();
+		boolean resourceOutputReturn = mcpResourceOutputType != null
+				&& types.isSameType(returnType, mcpResourceOutputType);
+		boolean operationResultReturn = isSubtypeOf(returnType,
+				mcpOperationResultType);
+		if (!resourceOutputReturn && !operationResultReturn)
+			mcpError(method,
+					"Soklet: @McpResource method return type must be McpResourceOutput or a subtype of McpOperationResult.");
+		String providerPackage = elements.getPackageOf(method)
+				.getQualifiedName().toString();
+		if (returnType.getKind() != TypeKind.VOID
+				&& !isTypeAccessibleFromGeneratedProvider(returnType,
+						providerPackage))
+			mcpError(method,
+					"Soklet: The @McpResource return type must be accessible to the generated MCP endpoint provider.");
+
+		String address = annotationString(annotation, "uri");
+		String name = annotationString(annotation, "name");
+		String title = annotationString(annotation, "title");
+		String description = annotationString(annotation, "description");
+		String mimeType = annotationString(annotation, "mimeType");
+		long size = annotationLong(annotation, "size");
+		long cacheTtlMs = annotationLong(annotation, "cacheTtlMs");
+		String cacheScope = annotationEnumConstantName(annotation, "cacheScope");
+		if (address.isBlank())
+			mcpError(method,
+					"Soklet: MCP resource URI or URI template must not be blank.");
+		if (name.isBlank())
+			mcpError(method, "Soklet: MCP resource name must not be blank.");
+		if (!mimeType.isEmpty() && mimeType.isBlank())
+			mcpError(method,
+					"Soklet: MCP resource MIME type must not be blank.");
+		if (size < -1)
+			mcpError(method,
+					"Soklet: MCP exact-resource size must be nonnegative or -1 when absent.");
+		if (cacheTtlMs < 0)
+			mcpError(method,
+					"Soklet: MCP resource cache TTL must not be negative.");
+
+		boolean template = address.indexOf('{') >= 0
+				|| address.indexOf('}') >= 0;
+		List<String> templateVariables = template
+				? parseLevelOneTemplateVariables(address) : List.of();
+		boolean tooManyTemplateVariables = template
+				&& resourceTemplateVariableExpressionCount(address)
+				> MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_VARIABLES;
+		if (tooManyTemplateVariables)
+			mcpError(method,
+					"Soklet: An MCP resource URI template may declare at most %d variable expressions.",
+					MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_VARIABLES);
+		else if (template && templateVariables == null)
+			mcpError(method,
+					"Soklet: @McpResource uri must be a valid absolute RFC 6570 Level 1 URI template.");
+		if (!template) {
+			if (!validExactMcpResourceUri(address)) {
+				mcpError(method,
+						"Soklet: @McpResource uri must be an absolute normalized URI in ASCII RFC 3986 wire form with valid percent triplets.");
+			}
+		} else if (size >= 0) {
+			mcpError(method,
+					"Soklet: An MCP resource URI template must not declare size.");
+		}
+
+		List<McpResourceParameterBinding> bindings = new ArrayList<>();
+		Set<String> boundVariables = new LinkedHashSet<>();
+		boolean requestContextSeen = false;
+		boolean invocationFeaturesSeen = false;
+		boolean resourceReadContextSeen = false;
+		for (VariableElement parameter : method.getParameters()) {
+			AnnotationMirror uriParameter = findAnnotation(parameter,
+					uriParameterAnnotation);
+			boolean requestContext = isExactType(parameter.asType(),
+					mcpRequestContextType);
+			boolean invocationFeatures = isExactType(parameter.asType(),
+					mcpInvocationFeaturesType);
+			boolean resourceReadContext = isExactType(parameter.asType(),
+					mcpResourceReadContextType);
+			if (requestContext || invocationFeatures || resourceReadContext) {
+				if (uriParameter != null)
+					mcpError(parameter,
+							"Soklet: Injectable MCP context parameters must not also be annotated with @McpResourceUriParameter.");
+				if (requestContext) {
+					if (requestContextSeen)
+						mcpError(parameter,
+								"Soklet: An @McpResource method may inject McpRequestContext at most once.");
+					requestContextSeen = true;
+					bindings.add(new McpResourceParameterBinding(
+							McpResourceParameterBindingKind.REQUEST_CONTEXT, null));
+				} else if (invocationFeatures) {
+					if (invocationFeaturesSeen)
+						mcpError(parameter,
+								"Soklet: An @McpResource method may inject McpInvocationFeatures at most once.");
+					invocationFeaturesSeen = true;
+					bindings.add(new McpResourceParameterBinding(
+							McpResourceParameterBindingKind.INVOCATION_FEATURES,
+							null));
+				} else {
+					if (resourceReadContextSeen)
+						mcpError(parameter,
+								"Soklet: An @McpResource method may inject McpResourceReadContext at most once.");
+					resourceReadContextSeen = true;
+					bindings.add(new McpResourceParameterBinding(
+							McpResourceParameterBindingKind.RESOURCE_READ_CONTEXT,
+							null));
+				}
+				continue;
+			}
+
+			if (uriParameter == null) {
+				mcpError(parameter,
+						"Soklet: Every non-context @McpResource parameter must be annotated with @McpResourceUriParameter.");
+				continue;
+			}
+			if (stringType == null
+					|| !types.isSameType(parameter.asType(), stringType)) {
+				mcpError(parameter,
+						"Soklet: @McpResourceUriParameter parameters must be String.");
+				continue;
+			}
+			String explicitName = annotationString(uriParameter, "value");
+			String variableName = explicitName.isBlank()
+					? parameter.getSimpleName().toString() : explicitName;
+			if (!boundVariables.add(variableName))
+				mcpError(parameter,
+						"Soklet: Duplicate MCP resource URI-template variable binding.");
+			bindings.add(new McpResourceParameterBinding(
+					McpResourceParameterBindingKind.URI_PARAMETER, variableName));
+		}
+
+		if (templateVariables != null) {
+			Set<String> declaredVariables = new LinkedHashSet<>(templateVariables);
+			if (!template && !boundVariables.isEmpty())
+				mcpError(method,
+						"Soklet: An exact @McpResource method must not declare URI-template parameters.");
+			else if (!declaredVariables.equals(boundVariables))
+				mcpError(method,
+						"Soklet: Every URI-template variable must be bound exactly once and no undeclared variable may be bound.");
+		}
+
+		if (mcpProcessingErrorCount != errorsBefore)
+			return null;
+		return new McpResourceModel(method, address, template, name, title,
+				description, mimeType, size, cacheTtlMs, cacheScope,
+				resourceOutputReturn, List.copyOf(bindings));
+	}
+
+	private McpResourceListModel validateMcpResourceList(
+			@NonNull ExecutableElement method) {
+		int errorsBefore = mcpProcessingErrorCount;
+		validateConcreteMcpHandlerMethod(method, "@McpListResources");
+		if (mcpResourcePageType == null || !types.isSameType(
+				method.getReturnType(), mcpResourcePageType))
+			mcpError(method,
+					"Soklet: @McpListResources method return type must be exactly McpResourcePage.");
+
+		List<McpResourceListParameterBinding> bindings = new ArrayList<>();
+		boolean requestContextSeen = false;
+		boolean invocationFeaturesSeen = false;
+		boolean resourceListContextSeen = false;
+		for (VariableElement parameter : method.getParameters()) {
+			if (isExactType(parameter.asType(), mcpRequestContextType)) {
+				if (requestContextSeen)
+					mcpError(parameter,
+							"Soklet: An @McpListResources method may inject McpRequestContext at most once.");
+				requestContextSeen = true;
+				bindings.add(McpResourceListParameterBinding.REQUEST_CONTEXT);
+			} else if (isExactType(parameter.asType(),
+					mcpInvocationFeaturesType)) {
+				if (invocationFeaturesSeen)
+					mcpError(parameter,
+							"Soklet: An @McpListResources method may inject McpInvocationFeatures at most once.");
+				invocationFeaturesSeen = true;
+				bindings.add(McpResourceListParameterBinding.INVOCATION_FEATURES);
+			} else if (isExactType(parameter.asType(),
+					mcpResourceListContextType)) {
+				if (resourceListContextSeen)
+					mcpError(parameter,
+							"Soklet: An @McpListResources method must inject McpResourceListContext exactly once.");
+				resourceListContextSeen = true;
+				bindings.add(McpResourceListParameterBinding.RESOURCE_LIST_CONTEXT);
+			} else {
+				mcpError(parameter,
+						"Soklet: @McpListResources parameters must be McpRequestContext, McpResourceListContext, or McpInvocationFeatures.");
+			}
+		}
+		if (!resourceListContextSeen)
+			mcpError(method,
+					"Soklet: An @McpListResources method must inject McpResourceListContext exactly once.");
+
+		if (mcpProcessingErrorCount != errorsBefore)
+			return null;
+		return new McpResourceListModel(method, List.copyOf(bindings));
+	}
+
+	private void validateConcreteMcpHandlerMethod(
+			@NonNull ExecutableElement method, @NonNull String annotationName) {
+		if (!method.getModifiers().contains(Modifier.PUBLIC))
+			mcpError(method, "Soklet: %s method must be public.", annotationName);
+		if (method.getModifiers().contains(Modifier.STATIC))
+			mcpError(method, "Soklet: %s method must not be static.",
+					annotationName);
+		if (method.getModifiers().contains(Modifier.ABSTRACT)
+				|| method.getModifiers().contains(Modifier.NATIVE))
+			mcpError(method,
+					"Soklet: %s method must have a concrete Java implementation.",
+					annotationName);
+		if (!method.getTypeParameters().isEmpty())
+			mcpError(method,
+					"Soklet: %s method must not declare type parameters.",
+					annotationName);
+		for (TypeMirror thrownType : method.getThrownTypes())
+			if (!isSubtypeOf(thrownType, exceptionType)
+					&& !isSubtypeOf(thrownType, errorType))
+				mcpError(method,
+						"Soklet: %s method throws types must extend Exception or Error so the generated handler can invoke them.",
+						annotationName);
+	}
+
+	private static List<String> parseLevelOneTemplateVariables(
+			@NonNull String template) {
+		McpLevelOneResourceTemplate parsed = parseLevelOneResourceTemplate(
+				template);
+		return parsed == null ? null : parsed.variables();
+	}
+
+	private static McpLevelOneResourceTemplate parseLevelOneResourceTemplate(
+			@NonNull String template) {
+		List<String> variables = new ArrayList<>();
+		List<McpTemplateOverlapAtom> overlapAtoms = new ArrayList<>();
+		StringBuilder uriCandidate = new StringBuilder(template.length() + 16);
+		boolean previousWasVariable = false;
+		for (int index = 0; index < template.length();) {
+			char character = template.charAt(index);
+			if (character == '}')
+				return null;
+			if (character != '{') {
+				McpTemplateLiteralToken token = templateLiteralToken(template,
+						index);
+				if (token == null)
+					return null;
+				uriCandidate.append(token.value());
+				overlapAtoms.add(new McpTemplateOverlapAtom(token.value(),
+						false, token.variableConsumable()));
+				previousWasVariable = false;
+				index += token.sourceLength();
+				continue;
+			}
+			if (previousWasVariable)
+				return null;
+			int close = template.indexOf('}', index + 1);
+			if (close < 0 || template.indexOf('{', index + 1) >= 0
+					&& template.indexOf('{', index + 1) < close)
+				return null;
+			String variable = template.substring(index + 1, close);
+			if (!validLevelOneVariableName(variable)
+					|| variables.contains(variable)
+					|| variables.size()
+					>= MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_VARIABLES)
+				return null;
+			variables.add(variable);
+			uriCandidate.append('x');
+			overlapAtoms.add(McpTemplateOverlapAtom.wildcardAtom());
+			previousWasVariable = true;
+			index = close + 1;
+		}
+		if (variables.isEmpty())
+			return null;
+		if (!validExactMcpResourceUri(uriCandidate.toString()))
+			return null;
+		return new McpLevelOneResourceTemplate(List.copyOf(variables),
+				List.copyOf(overlapAtoms));
+	}
+
+	private static int resourceTemplateVariableExpressionCount(
+			@NonNull String template) {
+		int count = 0;
+		for (int index = 0; index < template.length(); ++index)
+			if (template.charAt(index) == '{')
+				++count;
+		return count;
+	}
+
+	private static boolean validExactMcpResourceUri(@NonNull String address) {
+		if (address.isEmpty())
+			return false;
+		for (int index = 0; index < address.length();) {
+			char character = address.charAt(index);
+			if (character == '%') {
+				if (index + 2 >= address.length()
+						|| hexadecimal(address.charAt(index + 1)) < 0
+						|| hexadecimal(address.charAt(index + 2)) < 0)
+					return false;
+				index += 3;
+				continue;
+			}
+			if (!rfc3986AsciiCharacter(character))
+				return false;
+			++index;
+		}
+		try {
+			URI uri = URI.create(address);
+			return uri.isAbsolute() && uri.equals(uri.normalize());
+		} catch (IllegalArgumentException exception) {
+			return false;
+		}
+	}
+
+	private static boolean rfc3986AsciiCharacter(char character) {
+		return asciiLetterOrDigit(character)
+				|| "-._~:/?#[]@!$&'()*+,;=".indexOf(character) >= 0;
+	}
+
+	private static McpTemplateLiteralToken templateLiteralToken(
+			@NonNull String template, int index) {
+		char character = template.charAt(index);
+		if (character == '%')
+			return percentEncodedTemplateLiteralToken(template, index);
+		if (character < 128) {
+			if (!rfc6570LiteralAscii(character))
+				return null;
+			return new McpTemplateLiteralToken(String.valueOf(character),
+					levelOneUnreserved(character), 1);
+		}
+
+		int codePoint = template.codePointAt(index);
+		if (!rfc6570UnicodeLiteral(codePoint))
+			return null;
+		return new McpTemplateLiteralToken(percentEncodeCodePoint(codePoint),
+				true, Character.charCount(codePoint));
+	}
+
+	private static McpTemplateLiteralToken percentEncodedTemplateLiteralToken(
+			@NonNull String template, int index) {
+		int firstByte = percentEncodedByte(template, index);
+		if (firstByte < 0)
+			return null;
+		int encodedByteCount = utf8EncodedByteCount(firstByte);
+		if (encodedByteCount > 1 && validUtf8PercentSequence(template, index,
+				encodedByteCount))
+			return new McpTemplateLiteralToken(uppercasePercentTriplets(template,
+					index, encodedByteCount), true, encodedByteCount * 3);
+
+		String value = uppercasePercentTriplets(template, index, 1);
+		boolean variableConsumable = firstByte <= 127
+				&& !levelOneUnreserved((char) firstByte);
+		return new McpTemplateLiteralToken(value, variableConsumable, 3);
+	}
+
+	private static int utf8EncodedByteCount(int firstByte) {
+		if (firstByte >= 0xC2 && firstByte <= 0xDF)
+			return 2;
+		if (firstByte >= 0xE0 && firstByte <= 0xEF)
+			return 3;
+		if (firstByte >= 0xF0 && firstByte <= 0xF4)
+			return 4;
+		return 1;
+	}
+
+	private static boolean validUtf8PercentSequence(@NonNull String value,
+			int index, int byteCount) {
+		if (index + byteCount * 3 > value.length())
+			return false;
+		int firstByte = percentEncodedByte(value, index);
+		int secondByte = percentEncodedByte(value, index + 3);
+		if (secondByte < 0x80 || secondByte > 0xBF)
+			return false;
+		if (firstByte == 0xE0 && secondByte < 0xA0
+				|| firstByte == 0xED && secondByte > 0x9F
+				|| firstByte == 0xF0 && secondByte < 0x90
+				|| firstByte == 0xF4 && secondByte > 0x8F)
+			return false;
+		for (int byteIndex = 2; byteIndex < byteCount; ++byteIndex) {
+			int continuation = percentEncodedByte(value,
+					index + byteIndex * 3);
+			if (continuation < 0x80 || continuation > 0xBF)
+				return false;
+		}
+		return true;
+	}
+
+	private static int percentEncodedByte(@NonNull String value,
+			int percentIndex) {
+		if (percentIndex + 2 >= value.length()
+				|| value.charAt(percentIndex) != '%')
+			return -1;
+		int high = hexadecimal(value.charAt(percentIndex + 1));
+		int low = hexadecimal(value.charAt(percentIndex + 2));
+		return high < 0 || low < 0 ? -1 : high << 4 | low;
+	}
+
+	@NonNull
+	private static String uppercasePercentTriplets(@NonNull String value,
+			int index, int byteCount) {
+		StringBuilder normalized = new StringBuilder(byteCount * 3);
+		for (int byteIndex = 0; byteIndex < byteCount; ++byteIndex) {
+			int encodedByte = percentEncodedByte(value, index + byteIndex * 3);
+			normalized.append('%').append(uppercaseHexadecimal(encodedByte >> 4))
+					.append(uppercaseHexadecimal(encodedByte & 15));
+		}
+		return normalized.toString();
+	}
+
+	@NonNull
+	private static String percentEncodeCodePoint(int codePoint) {
+		byte[] bytes = new String(Character.toChars(codePoint))
+				.getBytes(StandardCharsets.UTF_8);
+		StringBuilder encoded = new StringBuilder(bytes.length * 3);
+		for (byte value : bytes) {
+			int unsigned = Byte.toUnsignedInt(value);
+			encoded.append('%').append(uppercaseHexadecimal(unsigned >> 4))
+					.append(uppercaseHexadecimal(unsigned & 15));
+		}
+		return encoded.toString();
+	}
+
+	private static char uppercaseHexadecimal(int value) {
+		return (char) (value < 10 ? '0' + value : 'A' + value - 10);
+	}
+
+	private static boolean rfc6570LiteralAscii(char character) {
+		return character == 0x21 || character >= 0x23 && character <= 0x24
+				|| character == 0x26
+				|| character >= 0x28 && character <= 0x3B
+				|| character == 0x3D
+				|| character >= 0x3F && character <= 0x5B
+				|| character == 0x5D || character == 0x5F
+				|| character >= 0x61 && character <= 0x7A
+				|| character == 0x7E;
+	}
+
+	private static boolean rfc6570UnicodeLiteral(int codePoint) {
+		if (codePoint >= 0xA0 && codePoint <= 0xD7FF
+				|| codePoint >= 0xE000 && codePoint <= 0xFDCF
+				|| codePoint >= 0xFDF0 && codePoint <= 0xFFEF)
+			return true;
+		return codePoint >= 0x10000 && codePoint <= 0x10FFFD
+				&& (codePoint & 0xFFFF) <= 0xFFFD;
+	}
+
+	private static boolean levelOneUnreserved(char character) {
+		return asciiLetterOrDigit(character) || character == '-'
+				|| character == '.' || character == '_'
+				|| character == '~';
+	}
+
+	private static boolean validLevelOneVariableName(@NonNull String name) {
+		if (name.isEmpty())
+			return false;
+		boolean segmentHasCharacter = false;
+		for (int index = 0; index < name.length();) {
+			char character = name.charAt(index);
+			if (character == '.') {
+				if (!segmentHasCharacter)
+					return false;
+				segmentHasCharacter = false;
+				++index;
+				continue;
+			}
+			if (asciiLetterOrDigit(character) || character == '_') {
+				segmentHasCharacter = true;
+				++index;
+				continue;
+			}
+			if (character == '%' && index + 2 < name.length()
+					&& hexadecimal(name.charAt(index + 1)) >= 0
+					&& hexadecimal(name.charAt(index + 2)) >= 0) {
+				segmentHasCharacter = true;
+				index += 3;
+				continue;
+			}
+			return false;
+		}
+		return segmentHasCharacter;
+	}
+
+	private static boolean asciiLetterOrDigit(char character) {
+		return character >= 'A' && character <= 'Z'
+				|| character >= 'a' && character <= 'z'
+				|| character >= '0' && character <= '9';
+	}
+
+	private static int hexadecimal(char character) {
+		if (character >= '0' && character <= '9')
+			return character - '0';
+		if (character >= 'A' && character <= 'F')
+			return character - 'A' + 10;
+		if (character >= 'a' && character <= 'f')
+			return character - 'a' + 10;
+		return -1;
+	}
+
+	private static boolean resourceTemplatesPotentiallyOverlap(
+			@NonNull String leftTemplate, @NonNull String rightTemplate) {
+		McpLevelOneResourceTemplate leftParsed =
+				parseLevelOneResourceTemplate(leftTemplate);
+		McpLevelOneResourceTemplate rightParsed =
+				parseLevelOneResourceTemplate(rightTemplate);
+		if (leftParsed == null || rightParsed == null)
+			return false;
+		List<McpTemplateOverlapAtom> leftAtoms = leftParsed.overlapAtoms();
+		List<McpTemplateOverlapAtom> rightAtoms = rightParsed.overlapAtoms();
+		ArrayDeque<McpTemplateOverlapState> pending = new ArrayDeque<>();
+		Set<McpTemplateOverlapState> visited = new LinkedHashSet<>();
+		pending.add(new McpTemplateOverlapState(0, 0));
+
+		while (!pending.isEmpty()) {
+			McpTemplateOverlapState state = pending.removeFirst();
+			if (!visited.add(state))
+				continue;
+			int left = state.leftIndex();
+			int right = state.rightIndex();
+			if (left == leftAtoms.size() && right == rightAtoms.size())
+				return true;
+			if (left == leftAtoms.size()) {
+				if (onlyTemplateWildcardsRemain(rightAtoms, right))
+					return true;
+				continue;
+			}
+			if (right == rightAtoms.size()) {
+				if (onlyTemplateWildcardsRemain(leftAtoms, left))
+					return true;
+				continue;
+			}
+
+			McpTemplateOverlapAtom leftAtom = leftAtoms.get(left);
+			McpTemplateOverlapAtom rightAtom = rightAtoms.get(right);
+			boolean leftWildcard = leftAtom.wildcard();
+			boolean rightWildcard = rightAtom.wildcard();
+			if (leftWildcard) {
+				pending.add(new McpTemplateOverlapState(left + 1, right));
+				if (!rightWildcard && rightAtom.variableConsumable())
+					pending.add(new McpTemplateOverlapState(left, right + 1));
+			}
+			if (rightWildcard) {
+				pending.add(new McpTemplateOverlapState(left, right + 1));
+				if (!leftWildcard && leftAtom.variableConsumable())
+					pending.add(new McpTemplateOverlapState(left + 1, right));
+			}
+			if (!leftWildcard && !rightWildcard
+					&& leftAtom.value().equals(rightAtom.value()))
+				pending.add(new McpTemplateOverlapState(left + 1, right + 1));
+		}
+		return false;
+	}
+
+	private static boolean onlyTemplateWildcardsRemain(
+			@NonNull List<@NonNull McpTemplateOverlapAtom> atoms, int index) {
+		for (; index < atoms.size(); ++index)
+			if (!atoms.get(index).wildcard())
+				return false;
+		return true;
+	}
+
+	private boolean isOptionalString(@NonNull TypeMirror type) {
+		if (!(type instanceof DeclaredType declared) || optionalType == null
+				|| !types.isSameType(types.erasure(declared),
+						types.erasure(optionalType))
+				|| declared.getTypeArguments().size() != 1)
+			return false;
+		return stringType != null && types.isSameType(
+				declared.getTypeArguments().get(0), stringType);
+	}
+
 	private boolean isTypeAccessibleFromGeneratedProvider(
 			@NonNull TypeMirror type, @NonNull String providerPackage) {
 		if (type.getKind().isPrimitive() || type.getKind() == TypeKind.VOID
@@ -999,6 +1950,21 @@ public final class SokletProcessor extends AbstractProcessor {
 				endpoint.instructions());
 		appendOptionalBuilderCall(source, "endpointBuilder", "toolRateLimiter",
 				endpoint.toolRateLimiter());
+		if (endpoint.resourcesListCacheTtlMs() != 0
+				|| !"PRIVATE".equals(endpoint.resourcesListCacheScope()))
+			source.append("\t\tendpointBuilder.resourcesListCachePolicy(")
+					.append(cachePolicyExpression(
+							endpoint.resourcesListCacheTtlMs(),
+							endpoint.resourcesListCacheScope()))
+					.append(");\n");
+		if (endpoint.resourceTemplatesListCacheTtlMs() != 0
+				|| !"PRIVATE".equals(
+						endpoint.resourceTemplatesListCacheScope()))
+			source.append("\t\tendpointBuilder.resourceTemplatesListCachePolicy(")
+					.append(cachePolicyExpression(
+							endpoint.resourceTemplatesListCacheTtlMs(),
+							endpoint.resourceTemplatesListCacheScope()))
+					.append(");\n");
 
 		for (int index = 0; index < endpoint.tools().size(); ++index) {
 			McpToolModel tool = endpoint.tools().get(index);
@@ -1027,6 +1993,106 @@ public final class SokletProcessor extends AbstractProcessor {
 					.append(tool.mirrorStructuredContentAsText()).append(");\n")
 					.append("\t\tendpointBuilder.tool(toolBuilder")
 					.append(index).append(".build());\n");
+		}
+
+		for (int index = 0; index < endpoint.prompts().size(); ++index) {
+			McpPromptModel prompt = endpoint.prompts().get(index);
+			source.append("\t\tvar promptBuilder").append(index)
+					.append(" = com.soklet.McpPromptRegistration.withName(")
+					.append(javaStringLiteral(prompt.name())).append(")\n")
+					.append("\t\t\t\t.handler((request, prompt, features) -> ");
+			if (prompt.promptOutputReturn())
+				source.append("com.soklet.McpCompleteResult.fromPromptOutput(");
+			source.append("instanceProvider.provide(")
+					.append(endpoint.endpointQualifiedName()).append(".class).")
+					.append(prompt.method().getSimpleName()).append('(')
+					.append(promptInvocationArguments(prompt.bindings()))
+					.append(')');
+			if (prompt.promptOutputReturn())
+				source.append(')');
+			source.append(");\n");
+			appendOptionalBuilderCall(source, "promptBuilder" + index, "title",
+					prompt.title());
+			appendOptionalBuilderCall(source, "promptBuilder" + index,
+					"description", prompt.description());
+			int argumentIndex = 0;
+			for (McpPromptParameterBinding binding : prompt.bindings()) {
+				if (binding.kind()
+						!= McpPromptParameterBindingKind.PROMPT_ARGUMENT)
+					continue;
+				String argumentBuilder = "promptArgumentBuilder" + index + "_"
+						+ argumentIndex++;
+				source.append("\t\tvar ").append(argumentBuilder)
+						.append(" = com.soklet.McpPromptArgumentDefinition.withName(")
+						.append(javaStringLiteral(binding.publishedName()))
+						.append(");\n");
+				appendOptionalBuilderCall(source, argumentBuilder, "title",
+						binding.title());
+				appendOptionalBuilderCall(source, argumentBuilder, "description",
+						binding.description());
+				source.append("\t\t").append(argumentBuilder).append(".required(")
+						.append(binding.required()).append(");\n")
+						.append("\t\tpromptBuilder").append(index)
+						.append(".argument(").append(argumentBuilder)
+						.append(".build());\n");
+			}
+			source.append("\t\tendpointBuilder.prompt(promptBuilder")
+					.append(index).append(".build());\n");
+		}
+
+		for (int index = 0; index < endpoint.resources().size(); ++index) {
+			McpResourceModel resource = endpoint.resources().get(index);
+			source.append("\t\tvar resourceBuilder").append(index)
+					.append(" = com.soklet.McpResourceRegistration.");
+			if (resource.template())
+				source.append("withUriTemplateAndName(")
+						.append(javaStringLiteral(resource.address()));
+			else
+				source.append("withUriAndName(java.net.URI.create(")
+						.append(javaStringLiteral(resource.address()))
+						.append(')');
+			source.append(", ").append(javaStringLiteral(resource.name()))
+					.append(")\n")
+					.append("\t\t\t\t.handler((request, resource, features) -> ");
+			if (resource.resourceOutputReturn())
+				source.append("com.soklet.McpCompleteResult.fromResourceOutput(");
+			source.append("instanceProvider.provide(")
+					.append(endpoint.endpointQualifiedName()).append(".class).")
+					.append(resource.method().getSimpleName()).append('(')
+					.append(resourceInvocationArguments(resource.bindings()))
+					.append(')');
+			if (resource.resourceOutputReturn())
+				source.append(')');
+			source.append(");\n");
+			appendOptionalBuilderCall(source, "resourceBuilder" + index, "title",
+					resource.title());
+			appendOptionalBuilderCall(source, "resourceBuilder" + index,
+					"description", resource.description());
+			appendOptionalBuilderCall(source, "resourceBuilder" + index,
+					"mimeType", resource.mimeType());
+			if (!resource.template() && resource.size() >= 0)
+				source.append("\t\tresourceBuilder").append(index)
+						.append(".size(").append(resource.size()).append("L);\n");
+			if (resource.cacheTtlMs() != 0
+					|| !"PRIVATE".equals(resource.cacheScope()))
+				source.append("\t\tresourceBuilder").append(index)
+						.append(".cachePolicy(")
+						.append(cachePolicyExpression(resource.cacheTtlMs(),
+								resource.cacheScope()))
+						.append(");\n");
+			source.append("\t\tendpointBuilder.resource(resourceBuilder")
+					.append(index).append(".build());\n");
+		}
+
+		if (endpoint.resourceList() != null) {
+			McpResourceListModel resourceList = endpoint.resourceList();
+			source.append("\t\tendpointBuilder.resourceListHandler(")
+					.append("(request, list, features) -> instanceProvider.provide(")
+					.append(endpoint.endpointQualifiedName()).append(".class).")
+					.append(resourceList.method().getSimpleName()).append('(')
+					.append(resourceListInvocationArguments(
+							resourceList.bindings()))
+					.append("));\n");
 		}
 		source.append("\t\treturn endpointBuilder.build();\n\t}\n");
 
@@ -1093,6 +2159,63 @@ public final class SokletProcessor extends AbstractProcessor {
 			});
 		}
 		return String.join(", ", arguments);
+	}
+
+	@NonNull
+	private static String promptInvocationArguments(
+			@NonNull List<McpPromptParameterBinding> bindings) {
+		List<String> arguments = new ArrayList<>(bindings.size());
+		for (McpPromptParameterBinding binding : bindings) {
+			arguments.add(switch (binding.kind()) {
+				case REQUEST_CONTEXT -> "request";
+				case INVOCATION_FEATURES -> "features";
+				case PROMPT_ARGUMENT -> binding.required()
+						? "prompt.findArgument("
+								+ javaStringLiteral(binding.publishedName())
+								+ ").orElseThrow()"
+						: "prompt.findArgument("
+								+ javaStringLiteral(binding.publishedName()) + ")";
+			});
+		}
+		return String.join(", ", arguments);
+	}
+
+	@NonNull
+	private static String resourceInvocationArguments(
+			@NonNull List<McpResourceParameterBinding> bindings) {
+		List<String> arguments = new ArrayList<>(bindings.size());
+		for (McpResourceParameterBinding binding : bindings) {
+			arguments.add(switch (binding.kind()) {
+				case REQUEST_CONTEXT -> "request";
+				case INVOCATION_FEATURES -> "features";
+				case RESOURCE_READ_CONTEXT -> "resource";
+				case URI_PARAMETER -> "java.util.Objects.requireNonNull("
+						+ "resource.getUriTemplateVariables().get("
+						+ javaStringLiteral(binding.variableName()) + "))";
+			});
+		}
+		return String.join(", ", arguments);
+	}
+
+	@NonNull
+	private static String resourceListInvocationArguments(
+			@NonNull List<McpResourceListParameterBinding> bindings) {
+		List<String> arguments = new ArrayList<>(bindings.size());
+		for (McpResourceListParameterBinding binding : bindings) {
+			arguments.add(switch (binding) {
+				case REQUEST_CONTEXT -> "request";
+				case INVOCATION_FEATURES -> "features";
+				case RESOURCE_LIST_CONTEXT -> "list";
+			});
+		}
+		return String.join(", ", arguments);
+	}
+
+	@NonNull
+	private static String cachePolicyExpression(long timeToLiveMs,
+			@NonNull String scope) {
+		return "new com.soklet.McpCachePolicy(java.time.Duration.ofMillis("
+				+ timeToLiveMs + "L), com.soklet.McpCacheScope." + scope + ")";
 	}
 
 	@NonNull
@@ -1191,6 +2314,21 @@ public final class SokletProcessor extends AbstractProcessor {
 			@NonNull String member) {
 		Object value = annotationMemberWithDefaults(annotation, member);
 		return value instanceof Boolean bool && bool;
+	}
+
+	private long annotationLong(@NonNull AnnotationMirror annotation,
+			@NonNull String member) {
+		Object value = annotationMemberWithDefaults(annotation, member);
+		return value instanceof Long number ? number : 0;
+	}
+
+	@NonNull
+	private String annotationEnumConstantName(
+			@NonNull AnnotationMirror annotation, @NonNull String member) {
+		Object value = annotationMemberWithDefaults(annotation, member);
+		if (value instanceof VariableElement constant)
+			return constant.getSimpleName().toString();
+		return value == null ? "" : value.toString();
 	}
 
 	private Object annotationMemberWithDefaults(
@@ -2442,13 +3580,22 @@ public final class SokletProcessor extends AbstractProcessor {
 			String providerSimpleName, String providerBinaryName, String path,
 			String name, String version, String title, String description,
 			String websiteUrl, String instructions, String toolRateLimiter,
-			List<McpToolModel> tools) {}
+			long resourcesListCacheTtlMs, String resourcesListCacheScope,
+			long resourceTemplatesListCacheTtlMs,
+			String resourceTemplatesListCacheScope,
+			List<McpToolModel> tools, List<McpPromptModel> prompts,
+			List<McpResourceModel> resources,
+			@Nullable McpResourceListModel resourceList) {}
 
 	private record McpToolModel(ExecutableElement method, String name,
 			String title, String description, String rateLimiter,
 			boolean mirrorStructuredContentAsText,
 			List<McpParameterBinding> bindings, String inputSchemaDigest,
 			String outputSchemaDigest) {}
+
+	private record McpPromptModel(ExecutableElement method, String name,
+			String title, String description, boolean promptOutputReturn,
+			List<McpPromptParameterBinding> bindings) {}
 
 	private record McpParameterBinding(McpParameterBindingKind kind,
 			String publishedName, String carrierName, TypeMirror type, String title,
@@ -2458,6 +3605,58 @@ public final class SokletProcessor extends AbstractProcessor {
 		REQUEST_CONTEXT,
 		INVOCATION_FEATURES,
 		TOOL_ARGUMENT
+	}
+
+	private record McpPromptParameterBinding(
+			McpPromptParameterBindingKind kind, String publishedName,
+			String title, String description, boolean required) {}
+
+	private enum McpPromptParameterBindingKind {
+		REQUEST_CONTEXT,
+		INVOCATION_FEATURES,
+		PROMPT_ARGUMENT
+	}
+
+	private record McpResourceModel(ExecutableElement method, String address,
+			boolean template, String name, String title, String description,
+			String mimeType, long size, long cacheTtlMs, String cacheScope,
+			boolean resourceOutputReturn,
+			List<McpResourceParameterBinding> bindings) {}
+
+	private record McpResourceParameterBinding(
+			McpResourceParameterBindingKind kind,
+			@Nullable String variableName) {}
+
+	private enum McpResourceParameterBindingKind {
+		REQUEST_CONTEXT,
+		INVOCATION_FEATURES,
+		RESOURCE_READ_CONTEXT,
+		URI_PARAMETER
+	}
+
+	private record McpResourceListModel(ExecutableElement method,
+			List<McpResourceListParameterBinding> bindings) {}
+
+	private record McpLevelOneResourceTemplate(List<String> variables,
+			List<McpTemplateOverlapAtom> overlapAtoms) {}
+
+	private record McpTemplateLiteralToken(String value,
+			boolean variableConsumable, int sourceLength) {}
+
+	private record McpTemplateOverlapAtom(String value, boolean wildcard,
+			boolean variableConsumable) {
+		@NonNull
+		private static McpTemplateOverlapAtom wildcardAtom() {
+			return new McpTemplateOverlapAtom("", true, false);
+		}
+	}
+
+	private record McpTemplateOverlapState(int leftIndex, int rightIndex) {}
+
+	private enum McpResourceListParameterBinding {
+		REQUEST_CONTEXT,
+		INVOCATION_FEATURES,
+		RESOURCE_LIST_CONTEXT
 	}
 
 

@@ -32,6 +32,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -47,6 +52,118 @@ public class McpTypedToolPublicRuntimeTests {
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final String JSON_MEDIA_TYPE = "application/json";
 	private static final String TOOL_NAME = "catalog.search";
+
+	@Test
+	public void publicHandlerBoundsRemainAuthoritativeWithACustomExecutor()
+			throws Exception {
+		CountDownLatch firstHandlerEntered = new CountDownLatch(1);
+		CountDownLatch releaseFirstHandler = new CountDownLatch(1);
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		AtomicInteger activeHandlers = new AtomicInteger();
+		AtomicInteger maximumActiveHandlers = new AtomicInteger();
+		AtomicInteger supplierInvocations = new AtomicInteger();
+		AtomicReference<ExecutorService> suppliedExecutor = new AtomicReference<>();
+
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName("bounded")
+				.jsonArguments()
+				.handler((request, call, features) -> {
+					int invocation = handlerInvocations.incrementAndGet();
+					int active = activeHandlers.incrementAndGet();
+					maximumActiveHandlers.accumulateAndGet(active, Math::max);
+					try {
+						if (invocation == 1) {
+							firstHandlerEntered.countDown();
+							if (!releaseFirstHandler.await(10, TimeUnit.SECONDS))
+								throw new IllegalStateException(
+										"Timed out awaiting test release.");
+						}
+						return McpCompleteResult.fromToolText("done");
+					} finally {
+						activeHandlers.decrementAndGet();
+					}
+				})
+				.build();
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
+				.serverInformation(McpImplementation.withNameAndVersion(
+						"bounded-public-runtime-test", "3.6.0-SNAPSHOT").build())
+				.tool(tool)
+				.build();
+		McpServer server = McpServer.withPort(0)
+				.host(LOOPBACK)
+				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
+				.requestAdmissionPolicy(
+						McpRequestAdmissionPolicy.acceptAllInstance())
+				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.allowedHosts(Set.of(LOOPBACK))
+				.requestHandlerConcurrency(1)
+				.requestHandlerQueueCapacity(1)
+				.requestHandlerExecutorServiceSupplier(() -> {
+					supplierInvocations.incrementAndGet();
+					ExecutorService executor = Executors.newFixedThreadPool(4);
+					suppliedExecutor.set(executor);
+					return executor;
+				})
+				.build();
+
+		try {
+			server.start();
+			int port = server.getDiagnostics().getBoundAddress()
+					.orElseThrow().getPort();
+			CompletableFuture<HttpResponse<String>> first = sendAsync(port,
+					request("capacity-1", "tools/call",
+							",\"name\":\"bounded\",\"arguments\":{}"),
+					"tools/call", "bounded");
+			Assertions.assertTrue(firstHandlerEntered.await(5, TimeUnit.SECONDS),
+					"The first bounded handler did not start.");
+
+			CompletableFuture<HttpResponse<String>> second = sendAsync(port,
+					request("capacity-2", "tools/call",
+							",\"name\":\"bounded\",\"arguments\":{}"),
+					"tools/call", "bounded");
+			CompletableFuture<HttpResponse<String>> third = sendAsync(port,
+					request("capacity-3", "tools/call",
+							",\"name\":\"bounded\",\"arguments\":{}"),
+					"tools/call", "bounded");
+
+			HttpResponse<String> rejected = second.applyToEither(third,
+					response -> response).get(5, TimeUnit.SECONDS);
+			Assertions.assertEquals(503, rejected.statusCode(), rejected.body());
+			assertContains(rejected.body(), "\"code\":-32603");
+			assertContains(rejected.body(), "\"message\":\"Internal error\"");
+			Assertions.assertFalse(rejected.body().contains("\"data\""),
+					rejected.body());
+			Assertions.assertTrue(rejected.headers().firstValue("Retry-After").isEmpty());
+			Assertions.assertTrue(rejected.body().contains("\"id\":\"capacity-2\"")
+					|| rejected.body().contains("\"id\":\"capacity-3\""),
+					rejected.body());
+
+			releaseFirstHandler.countDown();
+			HttpResponse<String> firstResponse = first.get(5, TimeUnit.SECONDS);
+			HttpResponse<String> secondResponse = second.get(5, TimeUnit.SECONDS);
+			HttpResponse<String> thirdResponse = third.get(5, TimeUnit.SECONDS);
+			Assertions.assertEquals(2, List.of(firstResponse, secondResponse,
+					thirdResponse).stream()
+					.filter(response -> response.statusCode() == 200)
+					.count());
+			Assertions.assertEquals(1, List.of(firstResponse, secondResponse,
+					thirdResponse).stream()
+					.filter(response -> response.statusCode() == 503)
+					.count());
+			Assertions.assertEquals(2, handlerInvocations.get());
+			Assertions.assertEquals(1, maximumActiveHandlers.get(),
+					"A roomy custom executor must not bypass Soklet's slot bound.");
+			Assertions.assertEquals(1, supplierInvocations.get());
+		} finally {
+			releaseFirstHandler.countDown();
+			server.stop();
+			ExecutorService executor = suppliedExecutor.get();
+			if (executor != null)
+				executor.shutdownNow();
+		}
+		Assertions.assertTrue(suppliedExecutor.get().isShutdown());
+	}
 
 	@Test
 	public void typedToolCatalogAndCallsUseThePublicPipeline() throws Exception {
@@ -270,6 +387,23 @@ public class McpTypedToolPublicRuntimeTests {
 	private static HttpResponse<String> send(int port, String body,
 			String method) throws Exception {
 		return send(port, body, method, Optional.empty());
+	}
+
+	private static CompletableFuture<HttpResponse<String>> sendAsync(int port,
+			String body, String method, String operationName) {
+		HttpRequest request = HttpRequest.newBuilder()
+				.uri(URI.create("http://" + LOOPBACK + ":" + port + MCP_PATH))
+				.timeout(Duration.ofSeconds(5))
+				.header("Content-Type", JSON_MEDIA_TYPE + "; charset=UTF-8")
+				.header("Accept", JSON_MEDIA_TYPE + ", text/event-stream")
+				.header("MCP-Protocol-Version", PROTOCOL_VERSION)
+				.header("Mcp-Method", method)
+				.header("Mcp-Name", operationName)
+				.POST(HttpRequest.BodyPublishers.ofString(
+						body, StandardCharsets.UTF_8))
+				.build();
+		return httpClient().sendAsync(request,
+				HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
 	}
 
 	private static HttpResponse<String> send(int port, String body,

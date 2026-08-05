@@ -123,12 +123,8 @@ public final class McpResourceOutput implements McpCompletePayload {
 		 */
 		@NonNull
 		public Builder cacheTimeToLiveOverride(@NonNull Duration timeToLive) {
-			requireNonNull(timeToLive);
-			if (timeToLive.isNegative()
-					|| timeToLive.getNano() % 1_000_000 != 0)
-				throw new IllegalArgumentException(
-						"Cache time to live must be a nonnegative whole-millisecond duration.");
-			this.cacheTimeToLiveOverride = timeToLive;
+			this.cacheTimeToLiveOverride =
+					McpCachePolicy.requireTimeToLive(timeToLive);
 			return this;
 		}
 

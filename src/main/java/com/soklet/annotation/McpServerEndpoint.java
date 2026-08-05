@@ -16,6 +16,7 @@
 
 package com.soklet.annotation;
 
+import com.soklet.McpCacheScope;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -106,4 +107,36 @@ public @interface McpServerEndpoint {
 	 */
 	@Nullable
 	String toolRateLimiter() default "";
+
+	/**
+	 * The default cache time to live for {@code resources/list} pages.
+	 *
+	 * @return nonnegative whole-millisecond time to live
+	 */
+	long resourcesListCacheTtlMs() default 0;
+
+	/**
+	 * The fixed cache scope for every {@code resources/list} page.
+	 *
+	 * @return resources-list cache scope
+	 */
+	@NonNull
+	McpCacheScope resourcesListCacheScope() default McpCacheScope.PRIVATE;
+
+	/**
+	 * The default cache time to live for
+	 * {@code resources/templates/list}.
+	 *
+	 * @return nonnegative whole-millisecond time to live
+	 */
+	long resourceTemplatesListCacheTtlMs() default 0;
+
+	/**
+	 * The fixed cache scope for {@code resources/templates/list}.
+	 *
+	 * @return resource-template-list cache scope
+	 */
+	@NonNull
+	McpCacheScope resourceTemplatesListCacheScope()
+			default McpCacheScope.PRIVATE;
 }

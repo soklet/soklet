@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":"phase-4-resources-read-text","result":{"contents":[{"uri":"golden://documents/readme","mimeType":"text/plain","text":"Soklet golden resource"}],"cacheScope":"private","ttlMs":0,"resultType":"complete"}}

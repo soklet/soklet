@@ -29,7 +29,7 @@ import java.util.Optional;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Immutable icon descriptor for an MCP tool or resource.
+ * Immutable icon descriptor for an MCP tool, prompt, or resource.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

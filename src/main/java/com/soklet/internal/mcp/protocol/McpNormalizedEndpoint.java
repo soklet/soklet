@@ -20,6 +20,7 @@ import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -55,6 +56,11 @@ final class McpNormalizedEndpoint {
 	private final List<@NonNull McpNormalizedOperation> resourceTemplates;
 	private final boolean customResourceListHandler;
 	@NonNull
+	private final McpResourceCachePolicy resourcesListCachePolicy;
+	@NonNull
+	private final McpResourceCachePolicy resourceTemplatesListCachePolicy;
+	private final int maximumCursorSizeInBytes;
+	@NonNull
 	private final Optional<@NonNull McpNormalizedSubscriptionConfiguration> subscriptions;
 
 	@NonNull
@@ -75,10 +81,16 @@ final class McpNormalizedEndpoint {
 				builder.resourceTemplates, "resource URI template");
 		validateToolDescriptors(this.prompts, this.exactResources,
 				this.resourceTemplates);
+		validatePromptDescriptors(this.tools, this.exactResources,
+				this.resourceTemplates);
+		validateResourceDescriptors(this.tools, this.prompts);
 		validateToolOnlyMirroredHeaders(this.prompts, this.exactResources,
 				this.resourceTemplates);
 		validateDistinctResources(this.exactResources, this.resourceTemplates);
 		this.customResourceListHandler = builder.customResourceListHandler;
+		this.resourcesListCachePolicy = builder.resourcesListCachePolicy;
+		this.resourceTemplatesListCachePolicy = builder.resourceTemplatesListCachePolicy;
+		this.maximumCursorSizeInBytes = builder.maximumCursorSizeInBytes;
 		this.subscriptions = builder.subscriptions;
 
 		if (this.subscriptions.isPresent() && !hasResourceSurface())
@@ -135,6 +147,20 @@ final class McpNormalizedEndpoint {
 	}
 
 	@NonNull
+	McpResourceCachePolicy resourcesListCachePolicy() {
+		return resourcesListCachePolicy;
+	}
+
+	@NonNull
+	McpResourceCachePolicy resourceTemplatesListCachePolicy() {
+		return resourceTemplatesListCachePolicy;
+	}
+
+	int maximumCursorSizeInBytes() {
+		return maximumCursorSizeInBytes;
+	}
+
+	@NonNull
 	Optional<@NonNull McpNormalizedSubscriptionConfiguration> subscriptions() {
 		return subscriptions;
 	}
@@ -165,15 +191,50 @@ final class McpNormalizedEndpoint {
 	private static void validateDistinctResources(
 			@NonNull List<@NonNull McpNormalizedOperation> exactResources,
 			@NonNull List<@NonNull McpNormalizedOperation> resourceTemplates) {
-		Set<String> resourceIdentities = new java.util.LinkedHashSet<>();
+		Set<URI> exactResourceIdentities = new java.util.LinkedHashSet<>();
+		Set<String> templateIdentities = new java.util.LinkedHashSet<>();
 
-		for (McpNormalizedOperation resource : exactResources)
-			resourceIdentities.add(resource.name());
+		for (McpNormalizedOperation resource : exactResources) {
+			String uri = resource.resourceDescriptor().orElseThrow().uri();
+			if (!exactResourceIdentities.add(URI.create(uri)))
+				throw new IllegalArgumentException(
+						"Duplicate exact resource URI '" + uri + "'.");
+		}
 
 		for (McpNormalizedOperation resourceTemplate : resourceTemplates) {
-			if (!resourceIdentities.add(resourceTemplate.name()))
+			String uriTemplate = resourceTemplate.resourceTemplateDescriptor()
+					.orElseThrow().uriTemplate();
+			if (!templateIdentities.add(uriTemplate))
 				throw new IllegalArgumentException(
-						"Duplicate resource identity '" + resourceTemplate.name() + "'.");
+						"Duplicate resource identity '" + uriTemplate + "'.");
+		}
+
+		for (int left = 0; left < resourceTemplates.size(); ++left) {
+			McpNormalizedResourceTemplateDescriptor leftDescriptor = resourceTemplates
+					.get(left).resourceTemplateDescriptor().orElseThrow();
+			for (int right = left + 1; right < resourceTemplates.size(); ++right) {
+				McpNormalizedResourceTemplateDescriptor rightDescriptor = resourceTemplates
+						.get(right).resourceTemplateDescriptor().orElseThrow();
+				if (leftDescriptor.parsedTemplate().potentiallyOverlaps(
+						rightDescriptor.parsedTemplate()))
+					throw new IllegalArgumentException(
+							"Potentially overlapping resource URI templates '"
+									+ leftDescriptor.uriTemplate() + "' and '"
+									+ rightDescriptor.uriTemplate() + "'.");
+			}
+		}
+	}
+
+	@SafeVarargs
+	private static void validateResourceDescriptors(
+			@NonNull List<@NonNull McpNormalizedOperation>... operationGroups) {
+		for (List<McpNormalizedOperation> operations : operationGroups) {
+			for (McpNormalizedOperation operation : operations) {
+				if (operation.resourceDescriptor().isPresent()
+						|| operation.resourceTemplateDescriptor().isPresent())
+					throw new IllegalArgumentException(
+							"Resource descriptors are supported only for resources.");
+			}
 		}
 	}
 
@@ -185,6 +246,18 @@ final class McpNormalizedEndpoint {
 				if (operation.toolDescriptor().isPresent())
 					throw new IllegalArgumentException(
 							"Tool descriptors are supported only for tools.");
+			}
+		}
+	}
+
+	@SafeVarargs
+	private static void validatePromptDescriptors(
+			@NonNull List<@NonNull McpNormalizedOperation>... operationGroups) {
+		for (List<McpNormalizedOperation> operations : operationGroups) {
+			for (McpNormalizedOperation operation : operations) {
+				if (operation.promptDescriptor().isPresent())
+					throw new IllegalArgumentException(
+							"Prompt descriptors are supported only for prompts.");
 			}
 		}
 	}
@@ -222,6 +295,11 @@ final class McpNormalizedEndpoint {
 		private final List<@NonNull McpNormalizedOperation> resourceTemplates;
 		private boolean customResourceListHandler;
 		@NonNull
+		private McpResourceCachePolicy resourcesListCachePolicy;
+		@NonNull
+		private McpResourceCachePolicy resourceTemplatesListCachePolicy;
+		private int maximumCursorSizeInBytes;
+		@NonNull
 		private Optional<@NonNull McpNormalizedSubscriptionConfiguration> subscriptions;
 
 		private Builder(@NonNull McpImplementationMetadata serverInformation) {
@@ -234,6 +312,10 @@ final class McpNormalizedEndpoint {
 			this.prompts = new ArrayList<>();
 			this.exactResources = new ArrayList<>();
 			this.resourceTemplates = new ArrayList<>();
+			this.resourcesListCachePolicy = McpResourceCachePolicy.privateNoCache();
+			this.resourceTemplatesListCachePolicy =
+					McpResourceCachePolicy.privateNoCache();
+			this.maximumCursorSizeInBytes = 4_096;
 			this.subscriptions = Optional.empty();
 		}
 
@@ -276,30 +358,95 @@ final class McpNormalizedEndpoint {
 		}
 
 		@NonNull
+		Builder prompt(@NonNull McpNormalizedPromptDescriptor prompt) {
+			return prompt(McpNormalizedOperation.prompt(prompt));
+		}
+
+		@NonNull
 		Builder exactResource(@NonNull String uri) {
-			return exactResource(McpNormalizedOperation.named(uri));
+			return exactResource(McpNormalizedResourceDescriptor.minimal(uri));
 		}
 
 		@NonNull
 		Builder exactResource(@NonNull McpNormalizedOperation resource) {
-			exactResources.add(requireNonNull(resource));
+			requireResourceOperation(resource);
+			exactResources.add(McpNormalizedOperation.resource(
+					McpNormalizedResourceDescriptor.minimal(resource.name()),
+					resource.inputRequestPlan()));
+			return this;
+		}
+
+		@NonNull
+		Builder exactResource(@NonNull McpNormalizedResourceDescriptor descriptor) {
+			return exactResource(descriptor, McpInputRequestPlan.empty());
+		}
+
+		@NonNull
+		Builder exactResource(@NonNull McpNormalizedResourceDescriptor descriptor,
+				@NonNull McpInputRequestPlan inputRequestPlan) {
+			exactResources.add(McpNormalizedOperation.resource(
+					requireNonNull(descriptor), requireNonNull(inputRequestPlan)));
 			return this;
 		}
 
 		@NonNull
 		Builder resourceTemplate(@NonNull String uriTemplate) {
-			return resourceTemplate(McpNormalizedOperation.named(uriTemplate));
+			return resourceTemplate(
+					McpNormalizedResourceTemplateDescriptor.minimal(uriTemplate));
 		}
 
 		@NonNull
 		Builder resourceTemplate(@NonNull McpNormalizedOperation resourceTemplate) {
-			resourceTemplates.add(requireNonNull(resourceTemplate));
+			requireResourceOperation(resourceTemplate);
+			resourceTemplates.add(McpNormalizedOperation.resourceTemplate(
+					McpNormalizedResourceTemplateDescriptor.minimal(
+							resourceTemplate.name()),
+					resourceTemplate.inputRequestPlan()));
+			return this;
+		}
+
+		@NonNull
+		Builder resourceTemplate(
+				@NonNull McpNormalizedResourceTemplateDescriptor descriptor) {
+			return resourceTemplate(descriptor, McpInputRequestPlan.empty());
+		}
+
+		@NonNull
+		Builder resourceTemplate(
+				@NonNull McpNormalizedResourceTemplateDescriptor descriptor,
+				@NonNull McpInputRequestPlan inputRequestPlan) {
+			resourceTemplates.add(McpNormalizedOperation.resourceTemplate(
+					requireNonNull(descriptor), requireNonNull(inputRequestPlan)));
 			return this;
 		}
 
 		@NonNull
 		Builder customResourceListHandler() {
 			customResourceListHandler = true;
+			return this;
+		}
+
+		@NonNull
+		Builder resourcesListCachePolicy(
+				@NonNull McpResourceCachePolicy resourcesListCachePolicy) {
+			this.resourcesListCachePolicy = requireNonNull(resourcesListCachePolicy);
+			return this;
+		}
+
+		@NonNull
+		Builder resourceTemplatesListCachePolicy(
+				@NonNull McpResourceCachePolicy resourceTemplatesListCachePolicy) {
+			this.resourceTemplatesListCachePolicy =
+					requireNonNull(resourceTemplatesListCachePolicy);
+			return this;
+		}
+
+		@NonNull
+		Builder maximumCursorSizeInBytes(int maximumCursorSizeInBytes) {
+			if (maximumCursorSizeInBytes < 1)
+				throw new IllegalArgumentException(
+						"Maximum cursor size must be positive.");
+			this.maximumCursorSizeInBytes = maximumCursorSizeInBytes;
 			return this;
 		}
 
@@ -314,6 +461,20 @@ final class McpNormalizedEndpoint {
 		McpNormalizedEndpoint build() {
 			return new McpNormalizedEndpoint(this);
 		}
+
+		private static void requireResourceOperation(
+				@NonNull McpNormalizedOperation operation) {
+			requireNonNull(operation);
+			if (operation.toolDescriptor().isPresent()
+					|| operation.promptDescriptor().isPresent()
+					|| operation.resourceDescriptor().isPresent()
+					|| operation.resourceTemplateDescriptor().isPresent())
+				throw new IllegalArgumentException(
+						"A legacy resource operation must not carry a descriptor.");
+			if (!operation.mirroredHeaderPlan().declarations().isEmpty())
+				throw new IllegalArgumentException(
+						"Custom mirrored headers are supported only for tools.");
+		}
 	}
 }
 
@@ -324,16 +485,30 @@ final class McpNormalizedEndpoint {
 record McpNormalizedOperation(@NonNull String name,
 		@NonNull McpInputRequestPlan inputRequestPlan,
 		@NonNull McpMirroredHeaderPlan mirroredHeaderPlan,
-		@NonNull Optional<@NonNull McpNormalizedToolDescriptor> toolDescriptor) {
+		@NonNull Optional<@NonNull McpNormalizedToolDescriptor> toolDescriptor,
+		@NonNull Optional<@NonNull McpNormalizedPromptDescriptor> promptDescriptor,
+		@NonNull Optional<@NonNull McpNormalizedResourceDescriptor> resourceDescriptor,
+		@NonNull Optional<@NonNull McpNormalizedResourceTemplateDescriptor>
+				resourceTemplateDescriptor) {
 	McpNormalizedOperation(@NonNull String name,
 			@NonNull McpInputRequestPlan inputRequestPlan) {
-		this(name, inputRequestPlan, McpMirroredHeaderPlan.empty(), Optional.empty());
+		this(name, inputRequestPlan, McpMirroredHeaderPlan.empty(),
+				Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
 	}
 
 	McpNormalizedOperation(@NonNull String name,
 			@NonNull McpInputRequestPlan inputRequestPlan,
 			@NonNull McpMirroredHeaderPlan mirroredHeaderPlan) {
-		this(name, inputRequestPlan, mirroredHeaderPlan, Optional.empty());
+		this(name, inputRequestPlan, mirroredHeaderPlan,
+				Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
+	}
+
+	McpNormalizedOperation(@NonNull String name,
+			@NonNull McpInputRequestPlan inputRequestPlan,
+			@NonNull McpMirroredHeaderPlan mirroredHeaderPlan,
+			@NonNull Optional<@NonNull McpNormalizedToolDescriptor> toolDescriptor) {
+		this(name, inputRequestPlan, mirroredHeaderPlan, toolDescriptor,
+				Optional.empty(), Optional.empty(), Optional.empty());
 	}
 
 	McpNormalizedOperation {
@@ -341,10 +516,32 @@ record McpNormalizedOperation(@NonNull String name,
 		requireNonNull(inputRequestPlan);
 		requireNonNull(mirroredHeaderPlan);
 		requireNonNull(toolDescriptor);
+		requireNonNull(promptDescriptor);
+		requireNonNull(resourceDescriptor);
+		requireNonNull(resourceTemplateDescriptor);
+		int descriptorCount = (toolDescriptor.isPresent() ? 1 : 0)
+				+ (promptDescriptor.isPresent() ? 1 : 0)
+				+ (resourceDescriptor.isPresent() ? 1 : 0)
+				+ (resourceTemplateDescriptor.isPresent() ? 1 : 0);
+		if (descriptorCount > 1)
+			throw new IllegalArgumentException(
+					"An operation cannot have more than one descriptor.");
 		if (toolDescriptor.isPresent()
 				&& !name.equals(toolDescriptor.orElseThrow().name()))
 			throw new IllegalArgumentException(
 					"Tool operation and descriptor names must match.");
+		if (promptDescriptor.isPresent()
+				&& !name.equals(promptDescriptor.orElseThrow().name()))
+			throw new IllegalArgumentException(
+					"Prompt operation and descriptor names must match.");
+		if (resourceDescriptor.isPresent()
+				&& !name.equals(resourceDescriptor.orElseThrow().uri()))
+			throw new IllegalArgumentException(
+					"Resource operation and descriptor URIs must match.");
+		if (resourceTemplateDescriptor.isPresent()
+				&& !name.equals(resourceTemplateDescriptor.orElseThrow().uriTemplate()))
+			throw new IllegalArgumentException(
+					"Resource-template operation and descriptor templates must match.");
 	}
 
 	@NonNull
@@ -354,13 +551,45 @@ record McpNormalizedOperation(@NonNull String name,
 		requireNonNull(descriptor);
 		return new McpNormalizedOperation(descriptor.name(),
 				McpInputRequestPlan.empty(), requireNonNull(mirroredHeaderPlan),
-				Optional.of(descriptor));
+				Optional.of(descriptor), Optional.empty(), Optional.empty(),
+				Optional.empty());
+	}
+
+	@NonNull
+	static McpNormalizedOperation prompt(
+			@NonNull McpNormalizedPromptDescriptor descriptor) {
+		requireNonNull(descriptor);
+		return new McpNormalizedOperation(descriptor.name(),
+				McpInputRequestPlan.empty(), McpMirroredHeaderPlan.empty(),
+				Optional.empty(), Optional.of(descriptor), Optional.empty(),
+				Optional.empty());
+	}
+
+	@NonNull
+	static McpNormalizedOperation resource(
+			@NonNull McpNormalizedResourceDescriptor descriptor,
+			@NonNull McpInputRequestPlan inputRequestPlan) {
+		requireNonNull(descriptor);
+		return new McpNormalizedOperation(descriptor.uri(), inputRequestPlan,
+				McpMirroredHeaderPlan.empty(), Optional.empty(), Optional.empty(),
+				Optional.of(descriptor), Optional.empty());
+	}
+
+	@NonNull
+	static McpNormalizedOperation resourceTemplate(
+			@NonNull McpNormalizedResourceTemplateDescriptor descriptor,
+			@NonNull McpInputRequestPlan inputRequestPlan) {
+		requireNonNull(descriptor);
+		return new McpNormalizedOperation(descriptor.uriTemplate(), inputRequestPlan,
+				McpMirroredHeaderPlan.empty(), Optional.empty(), Optional.empty(),
+				Optional.empty(), Optional.of(descriptor));
 	}
 
 	@NonNull
 	static McpNormalizedOperation named(@NonNull String name) {
 		return new McpNormalizedOperation(name, McpInputRequestPlan.empty(),
-				McpMirroredHeaderPlan.empty(), Optional.empty());
+				McpMirroredHeaderPlan.empty(), Optional.empty(), Optional.empty(),
+				Optional.empty(), Optional.empty());
 	}
 }
 

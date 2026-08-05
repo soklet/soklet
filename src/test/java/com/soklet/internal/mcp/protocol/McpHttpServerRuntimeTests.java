@@ -53,12 +53,16 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 @NotThreadSafe
 public class McpHttpServerRuntimeTests {
@@ -107,6 +111,193 @@ public class McpHttpServerRuntimeTests {
 			assertDiscoveryResponse(integerResponse, "42");
 		} finally {
 			runtime.close();
+		}
+	}
+
+	@Test
+	public void multi_endpoint_construction_rejects_empty_and_duplicate_paths() {
+		McpHttpTransportConfiguration configuration = configuration(0);
+		IllegalArgumentException empty = Assertions.assertThrows(
+				IllegalArgumentException.class,
+				() -> new McpHttpServerRuntime(configuration, List.of()));
+		Assertions.assertEquals(
+				"At least one MCP HTTP endpoint binding must be configured.",
+				empty.getMessage());
+
+		McpHttpEndpointBinding first = endpointBinding(
+				"/same", "first", ignored -> completeResult("first"));
+		McpHttpEndpointBinding second = endpointBinding(
+				"/same", "second", ignored -> completeResult("second"));
+		IllegalArgumentException duplicate = Assertions.assertThrows(
+				IllegalArgumentException.class,
+				() -> new McpHttpServerRuntime(configuration,
+						List.of(first, second)));
+		Assertions.assertEquals("Duplicate MCP HTTP endpoint path '/same'.",
+				duplicate.getMessage());
+	}
+
+	@Test
+	public void exact_path_routing_selects_each_endpoint_policy_catalog_and_router()
+			throws Exception {
+		AtomicInteger alphaAdmissions = new AtomicInteger();
+		AtomicInteger betaAdmissions = new AtomicInteger();
+		AtomicInteger alphaInterceptions = new AtomicInteger();
+		AtomicInteger betaInterceptions = new AtomicInteger();
+		McpHttpEndpointBinding alpha = endpointBinding("/alpha", "alpha",
+				alphaAdmissions, alphaInterceptions,
+				ignored -> completeResult("alpha"));
+		McpHttpEndpointBinding beta = endpointBinding("/beta", "beta",
+				betaAdmissions, betaInterceptions,
+				ignored -> completeResult("beta"));
+		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
+				configuration(0), List.of(alpha, beta));
+
+		try {
+			int port = runtime.start().getPort();
+			RawResponse alphaDiscovery = request(port, "/alpha", "alpha-discovery",
+					DISCOVER_METHOD);
+			RawResponse betaDiscovery = request(port, "/beta", "beta-discovery",
+					DISCOVER_METHOD);
+			Assertions.assertEquals(200, alphaDiscovery.status(),
+					alphaDiscovery.bodyText());
+			Assertions.assertTrue(alphaDiscovery.bodyText().contains(
+					"\"name\":\"alpha\""), alphaDiscovery.bodyText());
+			Assertions.assertEquals(200, betaDiscovery.status(),
+					betaDiscovery.bodyText());
+			Assertions.assertTrue(betaDiscovery.bodyText().contains(
+					"\"name\":\"beta\""), betaDiscovery.bodyText());
+
+			RawResponse alphaResult = request(port, "/alpha", "alpha-call",
+					"example/echo");
+			RawResponse betaResult = request(port, "/beta", "beta-call",
+					"example/echo");
+			Assertions.assertEquals(200, alphaResult.status(), alphaResult.bodyText());
+			Assertions.assertTrue(alphaResult.bodyText().contains(
+					"\"value\":\"alpha\""), alphaResult.bodyText());
+			Assertions.assertEquals(200, betaResult.status(), betaResult.bodyText());
+			Assertions.assertTrue(betaResult.bodyText().contains(
+					"\"value\":\"beta\""), betaResult.bodyText());
+			Assertions.assertEquals(2, alphaAdmissions.get());
+			Assertions.assertEquals(2, betaAdmissions.get());
+			Assertions.assertEquals(1, alphaInterceptions.get());
+			Assertions.assertEquals(1, betaInterceptions.get());
+
+			RawResponse missing = send(port, "POST", "/missing",
+					replaceHeader(standardHeaders(port, DISCOVER_METHOD),
+							"Host", "untrusted.example:" + port),
+					discoverBody("\"missing\"", DISCOVER_METHOD, PROTOCOL_VERSION));
+			Assertions.assertEquals(404, missing.status(), missing.bodyText());
+			Assertions.assertEquals(0, missing.body().length);
+			Assertions.assertEquals(2, alphaAdmissions.get(),
+					"Unknown paths must not reach endpoint policy.");
+			Assertions.assertEquals(2, betaAdmissions.get(),
+					"Unknown paths must not reach endpoint policy.");
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
+	public void handler_capacity_is_server_wide_across_endpoint_paths() throws Exception {
+		CountDownLatch alphaEntered = new CountDownLatch(1);
+		CountDownLatch releaseAlpha = new CountDownLatch(1);
+		McpHttpEndpointBinding alpha = endpointBinding("/alpha", "alpha", invocation -> {
+			alphaEntered.countDown();
+			releaseAlpha.await();
+			return completeResult("alpha");
+		});
+		McpHttpEndpointBinding beta = endpointBinding(
+				"/beta", "beta", ignored -> completeResult("beta"));
+		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
+				configuration(0), List.of(alpha, beta),
+				McpJsonLimits.productionDefaults(),
+				new McpApplicationExecutionConfiguration(
+						1, 1, Duration.ofSeconds(15), Duration.ofMillis(10)),
+				McpApplicationClock.SYSTEM,
+				McpApplicationHandlerExecutorFactory.production(),
+				ignored -> {}, ignored -> {});
+		ExecutorService clients = Executors.newFixedThreadPool(2);
+
+		try {
+			int port = runtime.start().getPort();
+			Future<RawResponse> active = clients.submit(
+					() -> request(port, "/alpha", "active", "example/echo"));
+			Assertions.assertTrue(alphaEntered.await(5, TimeUnit.SECONDS),
+					"The alpha handler did not enter.");
+			Future<RawResponse> queued = clients.submit(
+					() -> request(port, "/beta", "queued", "example/echo"));
+			awaitApplicationSnapshot(runtime, snapshot ->
+					snapshot.activeHandlerSlots() == 1
+							&& snapshot.queuedRequests() == 1);
+
+			RawResponse rejected = request(port, "/beta", "rejected", "example/echo");
+			assertCapacityResponse(rejected, "rejected");
+
+			releaseAlpha.countDown();
+			Assertions.assertTrue(active.get(5, TimeUnit.SECONDS).bodyText()
+					.contains("\"value\":\"alpha\""));
+			Assertions.assertTrue(queued.get(5, TimeUnit.SECONDS).bodyText()
+					.contains("\"value\":\"beta\""));
+			McpApplicationExecutionSnapshot snapshot = awaitApplicationSnapshot(runtime,
+					value -> value.activeHandlerSlots() == 0
+							&& value.queuedRequests() == 0
+							&& value.activeRequestIds() == 0);
+			Assertions.assertEquals(1, snapshot.maximumObservedActiveHandlerSlots());
+			Assertions.assertEquals(1, snapshot.maximumObservedQueuedRequests());
+			Assertions.assertEquals(1, snapshot.capacityRejections());
+		} finally {
+			releaseAlpha.countDown();
+			runtime.close();
+			clients.shutdownNow();
+		}
+	}
+
+	@Test
+	public void active_request_ids_are_server_wide_across_endpoint_paths()
+			throws Exception {
+		CountDownLatch alphaEntered = new CountDownLatch(1);
+		CountDownLatch releaseAlpha = new CountDownLatch(1);
+		AtomicInteger betaInvocations = new AtomicInteger();
+		McpHttpEndpointBinding alpha = endpointBinding("/alpha", "alpha", invocation -> {
+			alphaEntered.countDown();
+			releaseAlpha.await();
+			return completeResult("alpha");
+		});
+		McpHttpEndpointBinding beta = endpointBinding("/beta", "beta", ignored -> {
+			betaInvocations.incrementAndGet();
+			return completeResult("beta");
+		});
+		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
+				configuration(0), List.of(alpha, beta));
+		ExecutorService client = Executors.newSingleThreadExecutor();
+
+		try {
+			int port = runtime.start().getPort();
+			Future<RawResponse> active = client.submit(
+					() -> request(port, "/alpha", "shared-id", "example/echo"));
+			Assertions.assertTrue(alphaEntered.await(5, TimeUnit.SECONDS),
+					"The alpha handler did not enter.");
+
+			RawResponse duplicate = request(
+					port, "/beta", "shared-id", "example/echo");
+			Assertions.assertEquals(400, duplicate.status(), duplicate.bodyText());
+			Assertions.assertTrue(duplicate.bodyText().contains("\"code\":-32600"),
+					duplicate.bodyText());
+			Assertions.assertTrue(duplicate.bodyText().contains(
+					"\"id\":\"shared-id\""), duplicate.bodyText());
+			Assertions.assertEquals(0, betaInvocations.get());
+			Assertions.assertEquals(1, runtime.applicationExecutionSnapshot()
+					.orElseThrow().duplicateIdRejections());
+
+			releaseAlpha.countDown();
+			Assertions.assertTrue(active.get(5, TimeUnit.SECONDS).bodyText()
+					.contains("\"value\":\"alpha\""));
+			awaitApplicationSnapshot(runtime, snapshot ->
+					snapshot.activeRequestIds() == 0);
+		} finally {
+			releaseAlpha.countDown();
+			runtime.close();
+			client.shutdownNow();
 		}
 	}
 
@@ -1008,6 +1199,71 @@ public class McpHttpServerRuntimeTests {
 				.build();
 		return new McpHttpServerRuntime(
 				configuration, policy, endpoint, startupDiagnosticConsumer);
+	}
+
+	private static McpHttpEndpointBinding endpointBinding(String path,
+			String serverName, McpApplicationRequestHandler handler) {
+		return endpointBinding(path, serverName, new AtomicInteger(),
+				new AtomicInteger(), handler);
+	}
+
+	private static McpHttpEndpointBinding endpointBinding(String path,
+			String serverName, AtomicInteger admissions, AtomicInteger interceptions,
+			McpApplicationRequestHandler handler) {
+		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
+				McpImplementationMetadata.withNameAndVersion(
+						serverName, "3.6.0-SNAPSHOT"))
+				.build();
+		McpHttpEndpointPolicy policy = new McpHttpEndpointPolicy(
+				path, Set.of(), McpAbsentOriginPolicy.ALLOW,
+				CorsAuthorizer.rejectAllInstance(), context -> {
+					Assertions.assertSame(endpoint, context.endpoint());
+					admissions.incrementAndGet();
+					return McpRequestAdmissionDecision.ACCEPT;
+				}).withRequestInterceptor((invocation, handlerInvocation) -> {
+					interceptions.incrementAndGet();
+					return handlerInvocation.invoke();
+				});
+		return new McpHttpEndpointBinding(policy, endpoint,
+				McpApplicationRequestRouter.fromHandlers(
+						Map.of("example/echo", handler)));
+	}
+
+	private static McpWireResult completeResult(String value) {
+		return McpWireResult.complete(new McpJsonObject(
+				Map.of("value", new McpJsonString(value))));
+	}
+
+	private static RawResponse request(int port, String path, String id, String method)
+			throws Exception {
+		return send(port, "POST", path, standardHeaders(port, method),
+				discoverBody("\"" + id + "\"", method, PROTOCOL_VERSION));
+	}
+
+	private static McpApplicationExecutionSnapshot awaitApplicationSnapshot(
+			McpHttpServerRuntime runtime,
+			Predicate<McpApplicationExecutionSnapshot> condition) throws Exception {
+		McpApplicationExecutionSnapshot latest = null;
+		for (int attempt = 0; attempt < 500; attempt++) {
+			latest = runtime.applicationExecutionSnapshot().orElseThrow();
+			if (condition.test(latest))
+				return latest;
+			Thread.sleep(10L);
+		}
+		throw new AssertionError("Application snapshot condition was not met: " + latest);
+	}
+
+	private static void assertCapacityResponse(RawResponse response, String id) {
+		Assertions.assertEquals(503, response.status(), response.bodyText());
+		Assertions.assertTrue(response.bodyText().contains("\"id\":\"" + id + "\""),
+				response.bodyText());
+		Assertions.assertTrue(response.bodyText().contains("\"code\":-32603"),
+				response.bodyText());
+		Assertions.assertTrue(response.bodyText().contains(
+				"\"message\":\"Internal error\""), response.bodyText());
+		Assertions.assertFalse(response.bodyText().contains("\"data\""),
+				response.bodyText());
+		Assertions.assertFalse(response.headers().containsKey("retry-after"));
 	}
 
 	private static void assertOmittedCorsDiagnostics(List<String> diagnostics,

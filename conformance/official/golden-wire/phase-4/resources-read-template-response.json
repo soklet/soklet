@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":"phase-4-resources-read-template","result":{"contents":[{"uri":"golden://records/record-42","mimeType":"text/plain","text":"recordId=record-42"}],"cacheScope":"private","ttlMs":0,"resultType":"complete"}}
