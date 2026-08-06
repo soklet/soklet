@@ -73,6 +73,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 import static java.util.Objects.requireNonNull;
@@ -211,6 +212,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	@NonNull
 	private final AtomicLong unknownMirroredHeaderOccurrences;
 	@NonNull
+	private final McpUnknownMirroredHeaderNameDiagnostics
+			unknownMirroredHeaderNameDiagnostics;
+	@NonNull
 	private LifecycleState lifecycleState;
 	private @Nullable EventLoop eventLoop;
 	private @Nullable EventLoop residualEventLoop;
@@ -340,6 +344,23 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			@NonNull McpApplicationHandlerExecutorFactory applicationExecutorFactory,
 			@NonNull Consumer<@NonNull String> startupDiagnosticConsumer,
 			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer) {
+		this(transportConfiguration, endpointBindings, jsonLimits,
+				applicationConfiguration, applicationClock, applicationExecutorFactory,
+				startupDiagnosticConsumer, unexpectedTerminationConsumer,
+				Optional.empty());
+	}
+
+	McpHttpServerRuntime(
+			@NonNull McpHttpTransportConfiguration transportConfiguration,
+			@NonNull List<@NonNull McpHttpEndpointBinding> endpointBindings,
+			@NonNull McpJsonLimits jsonLimits,
+			@NonNull McpApplicationExecutionConfiguration applicationConfiguration,
+			@NonNull McpApplicationClock applicationClock,
+			@NonNull McpApplicationHandlerExecutorFactory applicationExecutorFactory,
+			@NonNull Consumer<@NonNull String> startupDiagnosticConsumer,
+			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer,
+			@NonNull Optional<@NonNull BiConsumer<@NonNull String, @NonNull String>>
+					unknownMirroredHeaderNameDiagnosticConsumer) {
 		this.transportConfiguration = requireNonNull(transportConfiguration);
 		this.jsonLimits = requireNonNull(jsonLimits);
 		this.applicationConfiguration = requireNonNull(applicationConfiguration);
@@ -368,6 +389,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		this.activeRequestIds = new ConcurrentHashMap<>();
 		this.processorThreadSequence = new AtomicLong();
 		this.unknownMirroredHeaderOccurrences = new AtomicLong();
+		this.unknownMirroredHeaderNameDiagnostics =
+				new McpUnknownMirroredHeaderNameDiagnostics(applicationClock,
+						requireNonNull(unknownMirroredHeaderNameDiagnosticConsumer));
 		this.lifecycleState = LifecycleState.STOPPED;
 	}
 
@@ -1075,8 +1099,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		McpCustomMirroredHeaderValidation customHeaderValidation =
 				customMirroredHeaderValidator.validate(request.headers(), wireRequest,
 						capabilityRegistry,
-						endpointPolicy.unknownMirroredHeaderPolicy());
+						endpointPolicy.unknownMirroredHeaderPolicy(),
+						this.unknownMirroredHeaderNameDiagnostics.enabled());
 		recordUnknownMirroredHeaders(customHeaderValidation.unknownHeaderCount());
+		for (String unknownHeaderName : customHeaderValidation.unknownHeaderNames())
+			this.unknownMirroredHeaderNameDiagnostics.observe(endpointRuntime.path(),
+					unknownHeaderName);
 		if (customHeaderValidation.outcome()
 				== McpCustomMirroredHeaderOutcome.HEADER_MISMATCH)
 			return headerMismatch(wireRequest.id(), corsHeaders);

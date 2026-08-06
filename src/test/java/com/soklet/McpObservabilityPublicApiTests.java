@@ -48,6 +48,9 @@ public class McpObservabilityPublicApiTests {
 				"getMcpMetrics");
 		Method setMetrics = MetricsCollector.Snapshot.Builder.class.getMethod(
 				"mcpMetrics", McpMetricsSnapshot.class);
+		Method setUnknownMirroredHeaderNameDiagnostics =
+				McpServer.Builder.class.getMethod(
+						"unknownMirroredHeaderNameDiagnostics", boolean.class);
 
 		Assertions.assertTrue(didStart.isDefault());
 		Assertions.assertTrue(didFinish.isDefault());
@@ -56,6 +59,8 @@ public class McpObservabilityPublicApiTests {
 				getMetrics.getReturnType());
 		Assertions.assertEquals(MetricsCollector.Snapshot.Builder.class,
 				setMetrics.getReturnType());
+		Assertions.assertEquals(McpServer.Builder.class,
+				setUnknownMirroredHeaderNameDiagnostics.getReturnType());
 	}
 
 	@Test
@@ -118,6 +123,8 @@ public class McpObservabilityPublicApiTests {
 				LogEventType.LIFECYCLE_OBSERVER_DID_FINISH_MCP_REQUEST_HANDLING_FAILED,
 				LogEventType.valueOf(
 						"LIFECYCLE_OBSERVER_DID_FINISH_MCP_REQUEST_HANDLING_FAILED"));
+		Assertions.assertSame(LogEventType.MCP_UNKNOWN_MIRRORED_HEADER,
+				LogEventType.valueOf("MCP_UNKNOWN_MIRRORED_HEADER"));
 	}
 
 	@Test

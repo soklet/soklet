@@ -212,6 +212,7 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		private McpAbsentOriginPolicy absentOriginPolicy;
 		@NonNull
 		private McpUnknownMirroredHeaderPolicy unknownMirroredHeaderPolicy;
+		private boolean unknownMirroredHeaderNameDiagnostics;
 		@NonNull
 		private Set<@NonNull String> allowedHosts;
 
@@ -226,6 +227,7 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 			this.absentOriginPolicy = McpAbsentOriginPolicy.ALLOW;
 			this.unknownMirroredHeaderPolicy =
 					McpUnknownMirroredHeaderPolicy.IGNORE;
+			this.unknownMirroredHeaderNameDiagnostics = false;
 			this.allowedHosts = Set.of();
 			this.rateLimiterRegistry = McpRateLimiterRegistry.emptyInstance();
 			this.handlerInterceptor = McpHandlerInterceptor.defaultInstance();
@@ -503,6 +505,38 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		}
 
 		/**
+		 * Enables or disables bounded diagnostics that identify unregistered
+		 * {@code Mcp-Param-*} request-header names. The default is {@code false}.
+		 * <p>
+		 * When enabled, Soklet emits at most ten
+		 * {@link LogEventType#MCP_UNKNOWN_MIRRORED_HEADER} events for this server in
+		 * any monotonic 60-second window. Each event contains the registered endpoint
+		 * path and only the request header's name. ASCII HTTP token characters and
+		 * casing are preserved, every other displayed character is replaced with
+		 * {@code _}, and the result is truncated to 128 bytes. Header values are never
+		 * logged, no {@link Request} is attached, and Soklet retains no observed-name
+		 * set or cache. Repeated names are not deduplicated: each occurrence is
+		 * independently eligible for the shared bound, and a failed event delivery
+		 * consumes its attempted slot. The configured {@link LifecycleObserver}
+		 * controls external retention of delivered events.
+		 * Diagnostics are independent of {@link #unknownMirroredHeaderPolicy(
+		 * McpUnknownMirroredHeaderPolicy)} and therefore apply under both policies;
+		 * MCP notifications never produce them. Enabling diagnostics changes neither
+		 * client-visible responses nor metric dimensions. The exact message format is
+		 * {@code Unknown MCP mirrored header: endpointPath=<path>,
+		 * headerName=<name>}, where {@code <path>} is the registered endpoint path
+		 * and {@code <name>} is the sanitized, truncated received field name.
+		 *
+		 * @param enabled whether bounded name-bearing diagnostics are enabled
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder unknownMirroredHeaderNameDiagnostics(boolean enabled) {
+			this.unknownMirroredHeaderNameDiagnostics = enabled;
+			return this;
+		}
+
+		/**
 		 * Adds hostname-only values accepted by MCP Host validation. Host ports
 		 * must still equal the effective bound port.
 		 *
@@ -556,6 +590,7 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 					this.requestAdmissionPolicy, this.handlerInterceptor,
 					this.toolOutputSanitizer, this.corsAuthorizer,
 					this.absentOriginPolicy, this.unknownMirroredHeaderPolicy,
+					this.unknownMirroredHeaderNameDiagnostics,
 					this.allowedHosts,
 					this.requestRateLimiter, this.toolRateLimiter,
 					this.rateLimiterRegistry);

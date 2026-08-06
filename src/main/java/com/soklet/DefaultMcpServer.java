@@ -125,6 +125,7 @@ final class DefaultMcpServer implements McpServer {
 			@Nullable CorsAuthorizer configuredCorsAuthorizer,
 			@NonNull McpAbsentOriginPolicy absentOriginPolicy,
 			@NonNull McpUnknownMirroredHeaderPolicy unknownMirroredHeaderPolicy,
+			boolean unknownMirroredHeaderNameDiagnostics,
 			@NonNull Set<@NonNull String> allowedHosts,
 			@Nullable McpRateLimiter requestRateLimiter,
 			@Nullable McpRateLimiter toolRateLimiter,
@@ -156,6 +157,8 @@ final class DefaultMcpServer implements McpServer {
 				Optional.ofNullable(this.requestRateLimiter)
 						.map(DefaultMcpServer::toRateLimitAdapter),
 				unknownMirroredHeaderPolicy,
+				unknownMirroredHeaderNameDiagnostics,
+				this::safelyLogUnknownMirroredHeaderName,
 				requestHandlerConcurrency, requestHandlerQueueCapacity,
 				requestTimeout,
 				Optional.ofNullable(requestHandlerExecutorServiceSupplier),
@@ -1104,6 +1107,20 @@ final class DefaultMcpServer implements McpServer {
 					LogEventType.MCP_SERVER_CONFIGURATION, message).build());
 		} catch (Throwable ignored) {
 			// Informational diagnostics must not change server availability.
+		}
+	}
+
+	private void safelyLogUnknownMirroredHeaderName(@NonNull String endpointPath,
+			@NonNull String headerName) {
+		try {
+			this.lifecycleObserver.didReceiveLogEvent(LogEvent.with(
+					LogEventType.MCP_UNKNOWN_MIRRORED_HEADER,
+					"Unknown MCP mirrored header: endpointPath="
+							+ requireNonNull(endpointPath) + ", headerName="
+							+ requireNonNull(headerName))
+					.build());
+		} catch (Throwable ignored) {
+			// Optional diagnostics must not affect request processing.
 		}
 	}
 

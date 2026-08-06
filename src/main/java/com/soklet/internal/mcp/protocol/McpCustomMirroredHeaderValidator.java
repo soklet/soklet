@@ -57,7 +57,8 @@ final class McpCustomMirroredHeaderValidator {
 			@NonNull List<@NonNull Header> headers,
 			McpJsonRpcEnvelope.@NonNull Request request,
 			@NonNull McpServerCapabilityRegistry registry,
-			@NonNull McpUnknownMirroredHeaderPolicy unknownHeaderPolicy) {
+			@NonNull McpUnknownMirroredHeaderPolicy unknownHeaderPolicy,
+			boolean captureUnknownHeaderNames) {
 		requireNonNull(headers);
 		requireNonNull(request);
 		requireNonNull(registry);
@@ -73,12 +74,16 @@ final class McpCustomMirroredHeaderValidator {
 
 		Map<String, List<String>> recognizedValues = new LinkedHashMap<>();
 		int unknownHeaderCount = 0;
+		List<String> unknownHeaderNames = captureUnknownHeaderNames
+				? new ArrayList<>() : List.of();
 		for (Header header : headers) {
 			String normalizedName = header.name().toLowerCase(Locale.ROOT);
 			if (!normalizedName.startsWith(NORMALIZED_HEADER_PREFIX))
 				continue;
 			if (!declarationsByHeader.containsKey(normalizedName)) {
 				unknownHeaderCount++;
+				if (captureUnknownHeaderNames)
+					unknownHeaderNames.add(header.name());
 				continue;
 			}
 			recognizedValues.computeIfAbsent(normalizedName,
@@ -93,21 +98,23 @@ final class McpCustomMirroredHeaderValidator {
 					valueAtPath(value, entry.getValue().argumentPropertyPath()));
 			if (bodyValue.isEmpty() || bodyValue.orElseThrow() == McpJsonNull.INSTANCE) {
 				if (!values.isEmpty())
-					return mismatch(unknownHeaderCount);
+					return mismatch(unknownHeaderCount, unknownHeaderNames);
 				continue;
 			}
 			if (values.size() != 1
 					|| !matches(entry.getValue(), values.get(0), bodyValue.orElseThrow()))
-				return mismatch(unknownHeaderCount);
+				return mismatch(unknownHeaderCount, unknownHeaderNames);
 		}
 
 		if (unknownHeaderCount > 0
 				&& unknownHeaderPolicy == McpUnknownMirroredHeaderPolicy.REJECT_REQUESTS)
 			return new McpCustomMirroredHeaderValidation(
-					McpCustomMirroredHeaderOutcome.STRICT_UNKNOWN, unknownHeaderCount);
+					McpCustomMirroredHeaderOutcome.STRICT_UNKNOWN, unknownHeaderCount,
+					unknownHeaderNames);
 
 		return new McpCustomMirroredHeaderValidation(
-				McpCustomMirroredHeaderOutcome.VALID, unknownHeaderCount);
+				McpCustomMirroredHeaderOutcome.VALID, unknownHeaderCount,
+				unknownHeaderNames);
 	}
 
 	@NonNull
@@ -222,9 +229,11 @@ final class McpCustomMirroredHeaderValidator {
 	}
 
 	@NonNull
-	private McpCustomMirroredHeaderValidation mismatch(int unknownHeaderCount) {
+	private McpCustomMirroredHeaderValidation mismatch(int unknownHeaderCount,
+			@NonNull List<@NonNull String> unknownHeaderNames) {
 		return new McpCustomMirroredHeaderValidation(
-				McpCustomMirroredHeaderOutcome.HEADER_MISMATCH, unknownHeaderCount);
+				McpCustomMirroredHeaderOutcome.HEADER_MISMATCH, unknownHeaderCount,
+				unknownHeaderNames);
 	}
 }
 
@@ -233,11 +242,16 @@ final class McpCustomMirroredHeaderValidator {
  */
 @ThreadSafe
 record McpCustomMirroredHeaderValidation(
-		@NonNull McpCustomMirroredHeaderOutcome outcome, int unknownHeaderCount) {
+		@NonNull McpCustomMirroredHeaderOutcome outcome, int unknownHeaderCount,
+		@NonNull List<@NonNull String> unknownHeaderNames) {
 	McpCustomMirroredHeaderValidation {
 		requireNonNull(outcome);
 		if (unknownHeaderCount < 0)
 			throw new IllegalArgumentException("Unknown header count must not be negative.");
+		unknownHeaderNames = List.copyOf(requireNonNull(unknownHeaderNames));
+		if (unknownHeaderNames.size() > unknownHeaderCount)
+			throw new IllegalArgumentException(
+					"Captured unknown header names must not exceed the occurrence count.");
 	}
 }
 

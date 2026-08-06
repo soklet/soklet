@@ -17,6 +17,7 @@
 package com.soklet;
 
 import com.soklet.annotation.McpHeader;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -32,6 +33,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -94,20 +96,167 @@ public class McpMirroredHeaderPublicRuntimeTests {
 	}
 
 	@Test
+	public void unknownNameDiagnosticsAreDefaultOffOnThePublicListener()
+			throws Exception {
+		AtomicInteger admissions = new AtomicInteger();
+		AtomicInteger handlers = new AtomicInteger();
+		List<LogEvent> events = new CopyOnWriteArrayList<>();
+		McpToolRegistration<MirroredArguments> tool = mirroredTool(TOOL_NAME,
+				handlers, new AtomicReference<>());
+		McpServer server = serverBuilder(List.of(endpoint(MCP_PATH, tool)),
+				admissions, CorsAuthorizer.rejectAllInstance()).build();
+		Soklet soklet = lifecycleSoklet(server, events);
+
+		try {
+			soklet.start();
+			Map<String, String> headers = validHeaders();
+			headers.put("Mcp-Param-Default-Off", "must-not-be-logged");
+			HttpResponse<String> response = call(boundPort(server), MCP_PATH,
+					"default-off", TOOL_NAME, mirroredArgumentsJson(), headers);
+
+			assertSuccess(response, "default-off");
+			Assertions.assertEquals(1, admissions.get());
+			Assertions.assertEquals(1, handlers.get());
+			Assertions.assertTrue(nameDiagnostics(events).isEmpty(), events.toString());
+		} finally {
+			soklet.stop();
+		}
+	}
+
+	@Test
+	public void optedInUnknownNameDiagnosticsReachTheSharedLifecycleObserver()
+			throws Exception {
+		AtomicInteger admissions = new AtomicInteger();
+		AtomicInteger handlers = new AtomicInteger();
+		List<LogEvent> events = new CopyOnWriteArrayList<>();
+		McpToolRegistration<MirroredArguments> tool = mirroredTool(TOOL_NAME,
+				handlers, new AtomicReference<>());
+		McpServer server = serverBuilder(List.of(endpoint(MCP_PATH, tool)),
+				admissions, CorsAuthorizer.rejectAllInstance())
+				.unknownMirroredHeaderNameDiagnostics(true)
+				.build();
+		Soklet soklet = lifecycleSoklet(server, events);
+
+		try {
+			soklet.start();
+			Map<String, String> headers = validHeaders();
+			headers.put("mCp-PaRaM-Super-Secret-Name", "super-secret-value");
+			HttpResponse<String> response = call(boundPort(server), MCP_PATH,
+					"diagnostic", TOOL_NAME, mirroredArgumentsJson(), headers);
+
+			assertSuccess(response, "diagnostic");
+			Assertions.assertEquals(1, admissions.get());
+			Assertions.assertEquals(1, handlers.get());
+			assertNameDiagnostic(events, "mCp-PaRaM-Super-Secret-Name",
+					"super-secret-value");
+
+			Map<String, String> notificationHeaders = new LinkedHashMap<>();
+			notificationHeaders.put("Mcp-Param-Notification-Only",
+					"notification-secret-value");
+			HttpResponse<String> notification = notifyCancellation(
+					boundPort(server), notificationHeaders);
+			Assertions.assertEquals(202, notification.statusCode(),
+					notification.body());
+			Assertions.assertEquals("", notification.body());
+			Assertions.assertEquals(2, admissions.get());
+			Assertions.assertEquals(1, handlers.get());
+			Assertions.assertEquals(1, nameDiagnostics(events).size(),
+					events.toString());
+			Assertions.assertFalse(events.toString().contains(
+					"notification-secret-value"), events.toString());
+		} finally {
+			soklet.stop();
+		}
+	}
+
+	@Test
+	public void diagnosticQuotaIsSharedAcrossEndpointsAndSurvivesRestart()
+			throws Exception {
+		String firstPath = "/first";
+		String secondPath = "/second";
+		String firstToolName = "catalog.first";
+		String secondToolName = "catalog.second";
+		AtomicInteger admissions = new AtomicInteger();
+		AtomicInteger handlers = new AtomicInteger();
+		List<LogEvent> events = new CopyOnWriteArrayList<>();
+		McpServer server = serverBuilder(List.of(
+				endpoint(firstPath, mirroredTool(firstToolName, handlers,
+						new AtomicReference<>())),
+				endpoint(secondPath, mirroredTool(secondToolName, handlers,
+						new AtomicReference<>()))),
+				admissions, CorsAuthorizer.rejectAllInstance())
+				.unknownMirroredHeaderNameDiagnostics(true)
+				.build();
+		Soklet soklet = lifecycleSoklet(server, events);
+
+		try {
+			soklet.start();
+			int port = boundPort(server);
+			for (int index = 0; index < 10; index++) {
+				String path = index % 2 == 0 ? firstPath : secondPath;
+				String toolName = index % 2 == 0
+						? firstToolName : secondToolName;
+				Map<String, String> headers = validHeaders();
+				headers.put("Mcp-Param-Quota-" + index, "private-" + index);
+				HttpResponse<String> response = call(port, path, "quota-" + index,
+						toolName, mirroredArgumentsJson(), headers);
+				assertSuccess(response, "quota-" + index);
+			}
+
+			List<LogEvent> diagnostics = nameDiagnostics(events);
+			Assertions.assertEquals(10, diagnostics.size(), events.toString());
+			for (int index = 0; index < 10; index++) {
+				String path = index % 2 == 0 ? firstPath : secondPath;
+				Assertions.assertEquals(
+						"Unknown MCP mirrored header: endpointPath=" + path
+								+ ", headerName=Mcp-Param-Quota-" + index,
+						diagnostics.get(index).getMessage());
+			}
+
+			Map<String, String> overBudgetHeaders = validHeaders();
+			overBudgetHeaders.put("Mcp-Param-Over-Budget", "private-over-budget");
+			HttpResponse<String> overBudget = call(port, firstPath, "over-budget",
+					firstToolName, mirroredArgumentsJson(), overBudgetHeaders);
+			assertSuccess(overBudget, "over-budget");
+			Assertions.assertEquals(10, nameDiagnostics(events).size(),
+					events.toString());
+
+			soklet.stop();
+			soklet.start();
+			Map<String, String> restartedHeaders = validHeaders();
+			restartedHeaders.put("Mcp-Param-After-Restart",
+					"private-after-restart");
+			HttpResponse<String> afterRestart = call(boundPort(server), secondPath,
+					"after-restart", secondToolName, mirroredArgumentsJson(),
+					restartedHeaders);
+			assertSuccess(afterRestart, "after-restart");
+			Assertions.assertEquals(10, nameDiagnostics(events).size(),
+					events.toString());
+			Assertions.assertEquals(12, admissions.get());
+			Assertions.assertEquals(12, handlers.get());
+		} finally {
+			soklet.stop();
+		}
+	}
+
+	@Test
 	public void strictUnknownPolicyRejectsBeforeAdmissionWithoutReflection()
 			throws Exception {
 		AtomicInteger admissions = new AtomicInteger();
 		AtomicInteger handlers = new AtomicInteger();
+		List<LogEvent> events = new CopyOnWriteArrayList<>();
 		McpToolRegistration<MirroredArguments> tool = mirroredTool(TOOL_NAME,
 				handlers, new AtomicReference<>());
 		McpServer server = serverBuilder(List.of(endpoint(MCP_PATH, tool)),
 				admissions, CorsAuthorizer.rejectAllInstance())
 				.unknownMirroredHeaderPolicy(
 						McpUnknownMirroredHeaderPolicy.REJECT_REQUESTS)
+				.unknownMirroredHeaderNameDiagnostics(true)
 				.build();
+		Soklet soklet = lifecycleSoklet(server, events);
 
 		try {
-			server.start();
+			soklet.start();
 			Map<String, String> headers = validHeaders();
 			headers.put("Mcp-Param-Super-Secret-Name", "super-secret-value");
 			HttpResponse<String> response = call(boundPort(server), MCP_PATH,
@@ -122,8 +271,10 @@ public class McpMirroredHeaderPublicRuntimeTests {
 					response.body());
 			Assertions.assertEquals(0, admissions.get());
 			Assertions.assertEquals(0, handlers.get());
+			assertNameDiagnostic(events, "Mcp-Param-Super-Secret-Name",
+					"super-secret-value");
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -207,6 +358,39 @@ public class McpMirroredHeaderPublicRuntimeTests {
 		return server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 	}
 
+	private static Soklet lifecycleSoklet(McpServer server, List<LogEvent> events) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new LifecycleObserver() {
+					@Override
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+						events.add(logEvent);
+					}
+				})
+				.build());
+	}
+
+	private static List<LogEvent> nameDiagnostics(List<LogEvent> events) {
+		return events.stream().filter(event -> event.getLogEventType()
+				== LogEventType.MCP_UNKNOWN_MIRRORED_HEADER).toList();
+	}
+
+	private static void assertNameDiagnostic(List<LogEvent> events,
+			String expectedHeaderName, String forbiddenHeaderValue) {
+		List<LogEvent> diagnostics = nameDiagnostics(events);
+		Assertions.assertEquals(1, diagnostics.size(), events.toString());
+		LogEvent diagnostic = diagnostics.get(0);
+		Assertions.assertEquals("Unknown MCP mirrored header: endpointPath="
+				+ MCP_PATH + ", headerName=" + expectedHeaderName,
+				diagnostic.getMessage());
+		Assertions.assertFalse(diagnostic.getMessage().contains(forbiddenHeaderValue));
+		Assertions.assertFalse(diagnostic.toString().contains(forbiddenHeaderValue));
+		Assertions.assertTrue(diagnostic.getThrowable().isEmpty());
+		Assertions.assertTrue(diagnostic.getRequest().isEmpty());
+		Assertions.assertTrue(diagnostic.getResourceMethod().isEmpty());
+		Assertions.assertTrue(diagnostic.getMarshaledResponse().isEmpty());
+	}
+
 	private static HttpResponse<String> call(int port, String path, String id,
 			String toolName, String argumentsJson, Map<String, String> headers)
 			throws Exception {
@@ -221,6 +405,22 @@ public class McpMirroredHeaderPublicRuntimeTests {
 		headers.forEach(request::header);
 		return httpClient().send(request.POST(HttpRequest.BodyPublishers.ofString(
 				callBody(id, toolName, argumentsJson), StandardCharsets.UTF_8)).build(),
+				HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+	}
+
+	private static HttpResponse<String> notifyCancellation(int port,
+			Map<String, String> headers) throws Exception {
+		HttpRequest.Builder request = HttpRequest.newBuilder()
+				.uri(URI.create("http://" + LOOPBACK + ":" + port + MCP_PATH))
+				.timeout(Duration.ofSeconds(5))
+				.header("Content-Type", JSON_MEDIA_TYPE + "; charset=UTF-8")
+				.header("Accept", JSON_MEDIA_TYPE + ", text/event-stream")
+				.header("MCP-Protocol-Version", PROTOCOL_VERSION);
+		headers.forEach(request::header);
+		return httpClient().send(request.POST(HttpRequest.BodyPublishers.ofString(
+				"{\"jsonrpc\":\"2.0\",\"method\":\"notifications/cancelled\","
+						+ "\"params\":{\"requestId\":\"unknown\"}}",
+				StandardCharsets.UTF_8)).build(),
 				HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
 	}
 

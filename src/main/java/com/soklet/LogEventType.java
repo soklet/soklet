@@ -36,6 +36,17 @@ public enum LogEventType {
 	 */
 	MCP_SERVER_CONFIGURATION,
 	/**
+	 * Indicates that an MCP request carried an unregistered mirrored-header name
+	 * and the server's bounded name-diagnostic opt-in was enabled. The event
+	 * message contains only the registered endpoint path and the
+	 * ASCII-token-sanitized header name truncated to 128 bytes. At most ten events
+	 * are attempted per server in any monotonic 60-second window. The event's
+	 * throwable, request, resource method, and marshaled response are all absent.
+	 * See {@link McpServer.Builder#unknownMirroredHeaderNameDiagnostics(boolean)}
+	 * for the complete contract and exact message format.
+	 */
+	MCP_UNKNOWN_MIRRORED_HEADER,
+	/**
 	 * Indicates that an exception was thrown during core request processing operations.
 	 */
 	REQUEST_PROCESSING_FAILED,

@@ -47,6 +47,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -98,6 +99,7 @@ public final class McpServerRuntimeBridge {
 				allowedHosts, requireOrigin, corsAuthorizer,
 				corsAuthorizerExplicitlyConfigured, admissionAdapter, Optional.empty(),
 				com.soklet.McpUnknownMirroredHeaderPolicy.IGNORE,
+				Optional.empty(),
 				McpApplicationExecutionConfiguration.productionDefaults()
 						.handlerConcurrency(),
 				McpApplicationExecutionConfiguration.productionDefaults()
@@ -279,11 +281,54 @@ public final class McpServerRuntimeBridge {
 		this(host, port, endpointPlans, allowedHosts, requireOrigin,
 				corsAuthorizer, corsAuthorizerExplicitlyConfigured,
 				admissionAdapter, requestRateLimitAdapter,
-				unknownMirroredHeaderPolicy,
+				unknownMirroredHeaderPolicy, Optional.empty(),
 				requestHandlerConcurrency, requestHandlerQueueCapacity,
 				requestTimeout, requestHandlerExecutorServiceSupplier,
 				startupDiagnosticConsumer, unexpectedTerminationConsumer,
 				Optional.of(requireNonNull(requestObservationAdapter)));
+	}
+
+	/**
+	 * Creates one listener projection with explicit mirrored-header policy and
+	 * bounded name diagnostics.
+	 */
+	public McpServerRuntimeBridge(@NonNull String host, int port,
+			@NonNull List<@NonNull EndpointPlan> endpointPlans,
+			@NonNull Set<@NonNull String> allowedHosts, boolean requireOrigin,
+			@NonNull CorsAuthorizer corsAuthorizer,
+			boolean corsAuthorizerExplicitlyConfigured,
+			@NonNull AdmissionAdapter admissionAdapter,
+			@NonNull Optional<@NonNull RateLimitAdapter> requestRateLimitAdapter,
+			com.soklet.@NonNull McpUnknownMirroredHeaderPolicy
+					unknownMirroredHeaderPolicy,
+			boolean unknownMirroredHeaderNameDiagnostics,
+			@NonNull BiConsumer<@NonNull String, @NonNull String>
+					unknownMirroredHeaderNameDiagnosticConsumer,
+			int requestHandlerConcurrency, int requestHandlerQueueCapacity,
+			@NonNull Duration requestTimeout,
+			@NonNull Optional<@NonNull Supplier<@NonNull ExecutorService>>
+					requestHandlerExecutorServiceSupplier,
+			@NonNull Consumer<@NonNull String> startupDiagnosticConsumer,
+			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer,
+			@NonNull RequestObservationAdapter requestObservationAdapter) {
+		this(host, port, endpointPlans, allowedHosts, requireOrigin,
+				corsAuthorizer, corsAuthorizerExplicitlyConfigured,
+				admissionAdapter, requestRateLimitAdapter,
+				unknownMirroredHeaderPolicy,
+				nameDiagnosticConsumer(unknownMirroredHeaderNameDiagnostics,
+						unknownMirroredHeaderNameDiagnosticConsumer),
+				requestHandlerConcurrency, requestHandlerQueueCapacity,
+				requestTimeout, requestHandlerExecutorServiceSupplier,
+				startupDiagnosticConsumer, unexpectedTerminationConsumer,
+				Optional.of(requireNonNull(requestObservationAdapter)));
+	}
+
+	@NonNull
+	private static Optional<@NonNull BiConsumer<@NonNull String, @NonNull String>>
+			nameDiagnosticConsumer(boolean enabled,
+					@NonNull BiConsumer<@NonNull String, @NonNull String> consumer) {
+		requireNonNull(consumer);
+		return enabled ? Optional.of(consumer) : Optional.empty();
 	}
 
 	private McpServerRuntimeBridge(@NonNull String host, int port,
@@ -295,6 +340,8 @@ public final class McpServerRuntimeBridge {
 			@NonNull Optional<@NonNull RateLimitAdapter> requestRateLimitAdapter,
 			com.soklet.@NonNull McpUnknownMirroredHeaderPolicy
 					unknownMirroredHeaderPolicy,
+			@NonNull Optional<@NonNull BiConsumer<@NonNull String, @NonNull String>>
+					unknownMirroredHeaderNameDiagnosticConsumer,
 			int requestHandlerConcurrency, int requestHandlerQueueCapacity,
 			@NonNull Duration requestTimeout,
 			@NonNull Optional<@NonNull Supplier<@NonNull ExecutorService>>
@@ -311,6 +358,7 @@ public final class McpServerRuntimeBridge {
 		requireNonNull(admissionAdapter);
 		requireNonNull(requestRateLimitAdapter);
 		requireNonNull(unknownMirroredHeaderPolicy);
+		requireNonNull(unknownMirroredHeaderNameDiagnosticConsumer);
 		requireNonNull(requestTimeout);
 		requireNonNull(requestHandlerExecutorServiceSupplier);
 		requireNonNull(startupDiagnosticConsumer);
@@ -352,7 +400,8 @@ public final class McpServerRuntimeBridge {
 		this.runtime = new McpHttpServerRuntime(transport, endpointBindings,
 				McpJsonLimits.productionDefaults(), applicationConfiguration,
 				McpApplicationClock.SYSTEM, applicationExecutorFactory,
-				startupDiagnosticConsumer, unexpectedTerminationConsumer);
+				startupDiagnosticConsumer, unexpectedTerminationConsumer,
+				unknownMirroredHeaderNameDiagnosticConsumer);
 	}
 
 	@NonNull
