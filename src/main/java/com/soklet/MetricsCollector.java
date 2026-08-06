@@ -182,8 +182,22 @@ public interface MetricsCollector {
 	 * @param throwable  an optional underlying cause, or {@code null} if not applicable
 	 */
 	default void didRecordTransportFailure(@NonNull ServerType serverType,
-																				 @NonNull TransportFailureReason reason,
-																				 @Nullable Throwable throwable) {
+																 @NonNull TransportFailureReason reason,
+																 @Nullable Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
+	 * Called after Soklet records an immutable semantic MCP metrics event.
+	 * <p>
+	 * Events expose only dimensions valid for their transition. Implementations
+	 * must not block and must be safe for concurrent invocation. Exceptions are
+	 * contained and surfaced through {@link LogEventType#METRICS_COLLECTOR_FAILED};
+	 * they never alter MCP request handling or its wire result.
+	 *
+	 * @param event immutable MCP metrics event
+	 */
+	default void didRecordMcpMetricsEvent(@NonNull McpMetricsEvent event) {
 		// No-op by default
 	}
 
@@ -788,6 +802,8 @@ public interface MetricsCollector {
 		@NonNull
 		private final Long activeSseStreams;
 		@NonNull
+		private final McpMetricsSnapshot mcpMetrics;
+		@NonNull
 		private final Long httpConnectionsAccepted;
 		@NonNull
 		private final Long httpConnectionsRejected;
@@ -861,6 +877,7 @@ public interface MetricsCollector {
 
 			this.activeRequests = requireNonNull(builder.activeRequests);
 			this.activeSseStreams = requireNonNull(builder.activeSseStreams);
+			this.mcpMetrics = requireNonNull(builder.mcpMetrics);
 			this.httpConnectionsAccepted = requireNonNull(builder.httpConnectionsAccepted);
 			this.httpConnectionsRejected = requireNonNull(builder.httpConnectionsRejected);
 			this.sseConnectionsAccepted = requireNonNull(builder.sseConnectionsAccepted);
@@ -910,6 +927,19 @@ public interface MetricsCollector {
 		@NonNull
 		public Long getActiveSseStreams() {
 			return this.activeSseStreams;
+		}
+
+		/**
+		 * Returns the immutable MCP metrics aggregate.
+		 * <p>
+		 * This value is non-null and contains zero or empty values when no MCP
+		 * metrics have been recorded.
+		 *
+		 * @return MCP metrics aggregate
+		 */
+		@NonNull
+		public McpMetricsSnapshot getMcpMetrics() {
+			return this.mcpMetrics;
 		}
 
 
@@ -1230,6 +1260,8 @@ public interface MetricsCollector {
 			@NonNull
 			private Long activeSseStreams;
 			@NonNull
+			private McpMetricsSnapshot mcpMetrics;
+			@NonNull
 			private Long httpConnectionsAccepted;
 			@NonNull
 			private Long httpConnectionsRejected;
@@ -1291,6 +1323,7 @@ public interface MetricsCollector {
 			private Builder() {
 				this.activeRequests = 0L;
 				this.activeSseStreams = 0L;
+				this.mcpMetrics = McpMetricsSnapshot.emptyInstance();
 				this.httpConnectionsAccepted = 0L;
 				this.httpConnectionsRejected = 0L;
 				this.sseConnectionsAccepted = 0L;
@@ -1318,6 +1351,18 @@ public interface MetricsCollector {
 			@NonNull
 			public Builder activeSseStreams(@NonNull Long activeSseStreams) {
 				this.activeSseStreams = requireNonNull(activeSseStreams);
+				return this;
+			}
+
+			/**
+			 * Sets the immutable MCP metrics aggregate.
+			 *
+			 * @param mcpMetrics MCP metrics aggregate
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder mcpMetrics(@NonNull McpMetricsSnapshot mcpMetrics) {
+				this.mcpMetrics = requireNonNull(mcpMetrics);
 				return this;
 			}
 
@@ -1973,6 +2018,11 @@ public interface MetricsCollector {
 			return this.bucketBoundaries[this.bucketBoundaries.length - 1];
 		}
 
+		/**
+		 * Returns a diagnostic summary of this histogram snapshot.
+		 *
+		 * @return histogram summary
+		 */
 		@Override
 		public String toString() {
 			return String.format("%s{count=%d, min=%d, max=%d, sum=%d, bucketBoundaries=%s}",
@@ -2111,10 +2161,18 @@ public interface MetricsCollector {
 	/**
 	 * Key for transport failures grouped by server type and reason.
 	 *
+	 * @param serverType server that recorded the failure
+	 * @param reason fixed transport failure reason
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	record TransportFailureKey(@NonNull ServerType serverType,
-														 @NonNull TransportFailureReason reason) {
+												 @NonNull TransportFailureReason reason) {
+		/**
+		 * Creates a transport failure key.
+		 *
+		 * @param serverType server that recorded the failure
+		 * @param reason fixed transport failure reason
+		 */
 		public TransportFailureKey {
 			requireNonNull(serverType);
 			requireNonNull(reason);
@@ -2124,9 +2182,15 @@ public interface MetricsCollector {
 	/**
 	 * Key for request read failures grouped by reason.
 	 *
+	 * @param reason fixed request read failure reason
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	record RequestReadFailureKey(@NonNull RequestReadFailureReason reason) {
+		/**
+		 * Creates a request read failure key.
+		 *
+		 * @param reason fixed request read failure reason
+		 */
 		public RequestReadFailureKey {
 			requireNonNull(reason);
 		}
@@ -2135,9 +2199,15 @@ public interface MetricsCollector {
 	/**
 	 * Key for request rejections grouped by reason.
 	 *
+	 * @param reason fixed request rejection reason
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	record RequestRejectionKey(@NonNull RequestRejectionReason reason) {
+		/**
+		 * Creates a request rejection key.
+		 *
+		 * @param reason fixed request rejection reason
+		 */
 		public RequestRejectionKey {
 			requireNonNull(reason);
 		}
@@ -2146,11 +2216,21 @@ public interface MetricsCollector {
 	/**
 	 * Key for metrics grouped by HTTP method and route match information.
 	 *
+	 * @param method HTTP method
+	 * @param routeType whether a route matched
+	 * @param route matched route, or {@code null} when unmatched
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	record HttpServerRouteKey(@NonNull HttpMethod method,
-												@NonNull RouteType routeType,
-												@Nullable ResourcePathDeclaration route) {
+										@NonNull RouteType routeType,
+										@Nullable ResourcePathDeclaration route) {
+		/**
+		 * Creates an HTTP route key.
+		 *
+		 * @param method HTTP method
+		 * @param routeType whether a route matched
+		 * @param route matched route, or {@code null} when unmatched
+		 */
 		public HttpServerRouteKey {
 			requireNonNull(method);
 			requireNonNull(routeType);
@@ -2164,12 +2244,24 @@ public interface MetricsCollector {
 	/**
 	 * Key for metrics grouped by HTTP method, route match information, and status class (e.g. 2xx).
 	 *
+	 * @param method HTTP method
+	 * @param routeType whether a route matched
+	 * @param route matched route, or {@code null} when unmatched
+	 * @param statusClass HTTP status class
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	record HttpServerRouteStatusKey(@NonNull HttpMethod method,
 															@NonNull RouteType routeType,
-															@Nullable ResourcePathDeclaration route,
-															@NonNull String statusClass) {
+																	@Nullable ResourcePathDeclaration route,
+																	@NonNull String statusClass) {
+		/**
+		 * Creates an HTTP route and status key.
+		 *
+		 * @param method HTTP method
+		 * @param routeType whether a route matched
+		 * @param route matched route, or {@code null} when unmatched
+		 * @param statusClass HTTP status class
+		 */
 		public HttpServerRouteStatusKey {
 			requireNonNull(method);
 			requireNonNull(routeType);
@@ -2184,11 +2276,21 @@ public interface MetricsCollector {
 	/**
 	 * Key for metrics grouped by Server-Sent Event comment type and route match information.
 	 *
+	 * @param routeType whether a route matched
+	 * @param route matched route, or {@code null} when unmatched
+	 * @param commentType SSE comment type
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	record SseCommentRouteKey(@NonNull RouteType routeType,
-																				@Nullable ResourcePathDeclaration route,
-																				SseComment.@NonNull CommentType commentType) {
+																																@Nullable ResourcePathDeclaration route,
+																																SseComment.@NonNull CommentType commentType) {
+		/**
+		 * Creates an SSE comment route key.
+		 *
+		 * @param routeType whether a route matched
+		 * @param route matched route, or {@code null} when unmatched
+		 * @param commentType SSE comment type
+		 */
 		public SseCommentRouteKey {
 			requireNonNull(routeType);
 			requireNonNull(commentType);
@@ -2202,10 +2304,18 @@ public interface MetricsCollector {
 	/**
 	 * Key for metrics grouped by Server-Sent Event route match information.
 	 *
+	 * @param routeType whether a route matched
+	 * @param route matched route, or {@code null} when unmatched
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	record SseEventRouteKey(@NonNull RouteType routeType,
-																 @Nullable ResourcePathDeclaration route) {
+																		 @Nullable ResourcePathDeclaration route) {
+		/**
+		 * Creates an SSE event route key.
+		 *
+		 * @param routeType whether a route matched
+		 * @param route matched route, or {@code null} when unmatched
+		 */
 		public SseEventRouteKey {
 			requireNonNull(routeType);
 			if (routeType == RouteType.MATCHED && route == null)
@@ -2218,11 +2328,21 @@ public interface MetricsCollector {
 	/**
 	 * Key for metrics grouped by Server-Sent Event route match information and handshake failure reason.
 	 *
+	 * @param routeType whether a route matched
+	 * @param route matched route, or {@code null} when unmatched
+	 * @param handshakeFailureReason fixed handshake failure reason
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	record SseEventRouteHandshakeFailureKey(@NonNull RouteType routeType,
-																								 @Nullable ResourcePathDeclaration route,
-																								 SseConnection.@NonNull HandshakeFailureReason handshakeFailureReason) {
+																																				 @Nullable ResourcePathDeclaration route,
+																																				 SseConnection.@NonNull HandshakeFailureReason handshakeFailureReason) {
+		/**
+		 * Creates an SSE handshake failure key.
+		 *
+		 * @param routeType whether a route matched
+		 * @param route matched route, or {@code null} when unmatched
+		 * @param handshakeFailureReason fixed handshake failure reason
+		 */
 		public SseEventRouteHandshakeFailureKey {
 			requireNonNull(routeType);
 			if (routeType == RouteType.MATCHED && route == null)
@@ -2236,11 +2356,21 @@ public interface MetricsCollector {
 	/**
 	 * Key for metrics grouped by Server-Sent Event route match information and enqueue outcome.
 	 *
+	 * @param routeType whether a route matched
+	 * @param route matched route, or {@code null} when unmatched
+	 * @param outcome fixed enqueue outcome
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	record SseEventRouteEnqueueOutcomeKey(@NonNull RouteType routeType,
-																							 @Nullable ResourcePathDeclaration route,
-																							 @NonNull SseEventEnqueueOutcome outcome) {
+																																	 @Nullable ResourcePathDeclaration route,
+																																	 @NonNull SseEventEnqueueOutcome outcome) {
+		/**
+		 * Creates an SSE enqueue outcome key.
+		 *
+		 * @param routeType whether a route matched
+		 * @param route matched route, or {@code null} when unmatched
+		 * @param outcome fixed enqueue outcome
+		 */
 		public SseEventRouteEnqueueOutcomeKey {
 			requireNonNull(routeType);
 			if (routeType == RouteType.MATCHED && route == null)
@@ -2254,12 +2384,24 @@ public interface MetricsCollector {
 	/**
 	 * Key for metrics grouped by Server-Sent Event comment type, route match information, and enqueue outcome.
 	 *
+	 * @param routeType whether a route matched
+	 * @param route matched route, or {@code null} when unmatched
+	 * @param commentType SSE comment type
+	 * @param outcome fixed enqueue outcome
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	record SseCommentRouteEnqueueOutcomeKey(@NonNull RouteType routeType,
 																											@Nullable ResourcePathDeclaration route,
-																											SseComment.@NonNull CommentType commentType,
-																											@NonNull SseEventEnqueueOutcome outcome) {
+																																																SseComment.@NonNull CommentType commentType,
+																																																@NonNull SseEventEnqueueOutcome outcome) {
+		/**
+		 * Creates an SSE comment enqueue outcome key.
+		 *
+		 * @param routeType whether a route matched
+		 * @param route matched route, or {@code null} when unmatched
+		 * @param commentType SSE comment type
+		 * @param outcome fixed enqueue outcome
+		 */
 		public SseCommentRouteEnqueueOutcomeKey {
 			requireNonNull(routeType);
 			requireNonNull(commentType);
@@ -2274,11 +2416,21 @@ public interface MetricsCollector {
 	/**
 	 * Key for metrics grouped by Server-Sent Event route match information and drop reason.
 	 *
+	 * @param routeType whether a route matched
+	 * @param route matched route, or {@code null} when unmatched
+	 * @param dropReason fixed drop reason
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	record SseEventRouteDropKey(@NonNull RouteType routeType,
-																		 @Nullable ResourcePathDeclaration route,
-																		 @NonNull SseEventDropReason dropReason) {
+																													 @Nullable ResourcePathDeclaration route,
+																													 @NonNull SseEventDropReason dropReason) {
+		/**
+		 * Creates an SSE event drop key.
+		 *
+		 * @param routeType whether a route matched
+		 * @param route matched route, or {@code null} when unmatched
+		 * @param dropReason fixed drop reason
+		 */
 		public SseEventRouteDropKey {
 			requireNonNull(routeType);
 			if (routeType == RouteType.MATCHED && route == null)
@@ -2292,12 +2444,24 @@ public interface MetricsCollector {
 	/**
 	 * Key for metrics grouped by Server-Sent Event comment type, route match information, and drop reason.
 	 *
+	 * @param routeType whether a route matched
+	 * @param route matched route, or {@code null} when unmatched
+	 * @param commentType SSE comment type
+	 * @param dropReason fixed drop reason
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	record SseCommentRouteDropKey(@NonNull RouteType routeType,
 																						@Nullable ResourcePathDeclaration route,
-																						SseComment.@NonNull CommentType commentType,
-																						@NonNull SseEventDropReason dropReason) {
+																																				SseComment.@NonNull CommentType commentType,
+																																				@NonNull SseEventDropReason dropReason) {
+		/**
+		 * Creates an SSE comment drop key.
+		 *
+		 * @param routeType whether a route matched
+		 * @param route matched route, or {@code null} when unmatched
+		 * @param commentType SSE comment type
+		 * @param dropReason fixed drop reason
+		 */
 		public SseCommentRouteDropKey {
 			requireNonNull(routeType);
 			requireNonNull(commentType);
@@ -2312,11 +2476,21 @@ public interface MetricsCollector {
 	/**
 	 * Key for metrics grouped by Server-Sent Event stream route match information and termination reason.
 	 *
+	 * @param routeType whether a route matched
+	 * @param route matched route, or {@code null} when unmatched
+	 * @param terminationReason fixed stream termination reason
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	record SseStreamRouteTerminationKey(@NonNull RouteType routeType,
-																						@Nullable ResourcePathDeclaration route,
-																						@NonNull StreamTerminationReason terminationReason) {
+																																		 @Nullable ResourcePathDeclaration route,
+																																		 @NonNull StreamTerminationReason terminationReason) {
+		/**
+		 * Creates an SSE stream termination key.
+		 *
+		 * @param routeType whether a route matched
+		 * @param route matched route, or {@code null} when unmatched
+		 * @param terminationReason fixed stream termination reason
+		 */
 		public SseStreamRouteTerminationKey {
 			requireNonNull(routeType);
 			if (routeType == RouteType.MATCHED && route == null)

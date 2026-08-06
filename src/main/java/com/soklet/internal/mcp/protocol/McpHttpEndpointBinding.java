@@ -30,10 +30,19 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 record McpHttpEndpointBinding(@NonNull McpHttpEndpointPolicy endpointPolicy,
 		@NonNull McpNormalizedEndpoint endpoint,
-		@NonNull McpApplicationRequestRouter applicationRouter) {
+		@NonNull McpApplicationRequestRouter applicationRouter,
+		@NonNull McpRuntimeObservationSink observationSink) {
+	McpHttpEndpointBinding(@NonNull McpHttpEndpointPolicy endpointPolicy,
+			@NonNull McpNormalizedEndpoint endpoint,
+			@NonNull McpApplicationRequestRouter applicationRouter) {
+		this(endpointPolicy, endpoint, applicationRouter,
+				McpRuntimeObservationSink.disabledInstance());
+	}
+
 	McpHttpEndpointBinding {
 		requireNonNull(endpointPolicy);
 		requireNonNull(endpoint);
 		requireNonNull(applicationRouter);
+		requireNonNull(observationSink);
 	}
 }

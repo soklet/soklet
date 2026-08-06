@@ -297,6 +297,17 @@ public final class McpOutboundChannel {
 	}
 
 	/**
+	 * Reports whether the complete terminal chunk has reached the socket.
+	 *
+	 * @return {@code true} after the terminal chunk is fully written
+	 */
+	public boolean isTerminalWritten() {
+		synchronized (lock) {
+			return terminalWritten;
+		}
+	}
+
+	/**
 	 * Returns a fresh Microhttp body-source facade backed by this channel.
 	 *
 	 * <p>Each invocation returns a distinct facade so a Microhttp response-body

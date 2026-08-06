@@ -22,6 +22,8 @@ import com.soklet.CorsPreflightResponse;
 import com.soklet.CorsResponse;
 import com.soklet.HttpMethod;
 import com.soklet.MediaRange;
+import com.soklet.McpRequestContext;
+import com.soklet.McpRequestOutcome;
 import com.soklet.Request;
 import com.soklet.StatusCode;
 import com.soklet.StreamTerminationReason;
@@ -970,6 +972,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			return processRequestSafely(effectiveAddress, request,
 					requestControl, application);
 		} catch (Throwable throwable) {
+			requestControl.planRequestObservation(new RequestObservationResult(
+					McpRequestOutcome.INTERNAL_ERROR, null,
+					List.of(throwable)));
 			return emptyResponse(500, "Internal Server Error", List.of());
 		}
 	}
@@ -1343,6 +1348,15 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						admittedIdentity);
 		if (!requestControl.protocolProcessingAllowed())
 			return null;
+		requestControl.startObservation(endpointBinding.observationSink(),
+				new McpRuntimeRequestInput(sokletRequest, Map.of(),
+						mappedRequest.method(), Optional.of(mappedRequest.id()),
+						requestedProtocolVersion, operationName,
+						mappedRequest.params().metadata().clientInformation(),
+						mappedRequest.params().metadata().clientCapabilities()
+								.toJsonObject(),
+						mappedRequest.params().metadata().toJsonObject(),
+						effectiveIdentity.admittedIdentity()));
 
 		if (endpointPolicy.requestRateLimiter().isPresent()) {
 			McpRateLimitDecision rateLimitDecision;
@@ -1352,14 +1366,17 @@ final class McpHttpServerRuntime implements AutoCloseable {
 								McpRateLimitTarget.REQUEST, mappedRequest.method(),
 								operationName));
 			} catch (Throwable throwable) {
-				return policyHookInternalError(mappedRequest.id(), corsHeaders);
+				return observedPolicyHookInternalError(requestControl,
+						mappedRequest.id(), corsHeaders, throwable);
 			}
 			if (!requestControl.protocolProcessingAllowed())
 				return null;
 			if (rateLimitDecision == null)
-				return policyHookInternalError(mappedRequest.id(), corsHeaders);
+				return observedPolicyHookInternalError(requestControl,
+						mappedRequest.id(), corsHeaders, null);
 			if (rateLimitDecision instanceof McpRateLimitDecision.Denied denied)
-				return rateLimited(mappedRequest.id(), denied.retryAfter(), corsHeaders);
+				return observedRateLimited(requestControl, mappedRequest.id(),
+						denied.retryAfter(), corsHeaders);
 		}
 
 		if (toolRoute.isPresent()) {
@@ -1370,14 +1387,17 @@ final class McpHttpServerRuntime implements AutoCloseable {
 								McpRateLimitTarget.TOOL, mappedRequest.method(),
 								operationName));
 			} catch (Throwable throwable) {
-				return policyHookInternalError(mappedRequest.id(), corsHeaders);
+				return observedPolicyHookInternalError(requestControl,
+						mappedRequest.id(), corsHeaders, throwable);
 			}
 			if (!requestControl.protocolProcessingAllowed())
 				return null;
 			if (rateLimitDecision == null)
-				return policyHookInternalError(mappedRequest.id(), corsHeaders);
+				return observedPolicyHookInternalError(requestControl,
+						mappedRequest.id(), corsHeaders, null);
 			if (rateLimitDecision instanceof McpRateLimitDecision.Denied denied)
-				return rateLimited(mappedRequest.id(), denied.retryAfter(), corsHeaders);
+				return observedRateLimited(requestControl, mappedRequest.id(),
+						denied.retryAfter(), corsHeaders);
 		}
 
 		if (discoveryRequest) {
@@ -1417,11 +1437,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		McpApplicationRequestHandler resolvedApplicationHandler =
 				applicationHandler.orElseThrow();
-		requestControl.handoff(application, () -> application.dispatchWithSokletRequest(
-				request, sokletRequest, mappedRequest, effectiveIdentity,
-				resolvedApplicationHandler, endpointPolicy.requestInterceptor(),
-				requestControl.deadlineNanos(),
-				new McpApplicationResponseWriter() {
+		requestControl.handoff(application, () -> {
+			McpApplicationResponseWriter responseWriter =
+					new McpApplicationResponseWriter() {
 					@Override
 					public boolean write(@NonNull McpApplicationResponse response) {
 						return requestControl.writeApplicationResponse(response,
@@ -1435,8 +1453,27 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						return requestControl.writeApplicationNotification(
 								notification, corsHeaders);
 					}
-				},
-				requestControl::applicationTerminated));
+				};
+			Optional<McpRequestContext> publicContext =
+					requestControl.publicRequestContext();
+			if (publicContext.isPresent()) {
+				application.dispatchWithSokletRequest(request, sokletRequest,
+						publicContext.orElseThrow(), mappedRequest, effectiveIdentity,
+						resolvedApplicationHandler,
+						endpointPolicy.requestInterceptor(),
+						requestControl::applicationEntryAllowed,
+						requestControl.deadlineNanos(), responseWriter,
+						requestControl::applicationTerminated);
+			} else {
+				application.dispatchWithSokletRequest(request, sokletRequest,
+						mappedRequest, effectiveIdentity,
+						resolvedApplicationHandler,
+						endpointPolicy.requestInterceptor(),
+						requestControl::applicationEntryAllowed,
+						requestControl.deadlineNanos(), responseWriter,
+						requestControl::applicationTerminated);
+			}
+		});
 		return null;
 	}
 
@@ -1732,6 +1769,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						admittedIdentity);
 		if (!requestControl.protocolProcessingAllowed())
 			return null;
+		requestControl.startObservation(endpointBinding.observationSink(),
+				new McpRuntimeRequestInput(sokletRequest, Map.of(),
+						notification.method(), Optional.empty(), protocolVersion,
+						Optional.empty(), Optional.empty(), McpJsonObject.empty(),
+						notificationMetadata(notification)
+								.orElseGet(McpJsonObject::empty),
+						effectiveIdentity.admittedIdentity()));
 
 		if (endpointPolicy.requestRateLimiter().isPresent()) {
 			McpRateLimitDecision rateLimitDecision;
@@ -1741,14 +1785,22 @@ final class McpHttpServerRuntime implements AutoCloseable {
 								McpRateLimitTarget.REQUEST, notification.method(),
 								Optional.empty()));
 			} catch (Throwable throwable) {
+				requestControl.planRequestObservation(new RequestObservationResult(
+						McpRequestOutcome.INTERNAL_ERROR, null, List.of(throwable)));
 				return emptyResponse(500, "Internal Server Error", corsHeaders);
 			}
 			if (!requestControl.protocolProcessingAllowed())
 				return null;
-			if (rateLimitDecision == null)
+			if (rateLimitDecision == null) {
+				requestControl.planRequestObservation(new RequestObservationResult(
+						McpRequestOutcome.INTERNAL_ERROR, null, List.of()));
 				return emptyResponse(500, "Internal Server Error", corsHeaders);
-			if (rateLimitDecision instanceof McpRateLimitDecision.Denied denied)
+			}
+			if (rateLimitDecision instanceof McpRateLimitDecision.Denied denied) {
+				requestControl.planRequestObservation(new RequestObservationResult(
+						McpRequestOutcome.REJECTED, null, List.of()));
 				return notificationRateLimited(denied.retryAfter(), corsHeaders);
+			}
 		}
 
 		return cancellationNotification
@@ -1787,7 +1839,66 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	}
 
 	@NonNull
+	private static RequestObservationResult requestObservationResult(
+			@NonNull MicrohttpResponse response) {
+		requireNonNull(response);
+		McpRequestOutcome outcome;
+		if (response.status() >= 200 && response.status() < 300)
+			outcome = McpRequestOutcome.COMPLETE;
+		else if (response.status() == 429 || response.status() == 503)
+			outcome = McpRequestOutcome.REJECTED;
+		else if (response.status() == 504)
+			outcome = McpRequestOutcome.DEADLINE_EXCEEDED;
+		else if (response.status() >= 500)
+			outcome = McpRequestOutcome.INTERNAL_ERROR;
+		else
+			outcome = McpRequestOutcome.PROTOCOL_ERROR;
+		return new RequestObservationResult(outcome, null, List.of());
+	}
+
+	@NonNull
+	private static RequestObservationResult requestObservationResult(
+			@NonNull McpApplicationResponse response) {
+		requireNonNull(response);
+		if (response.message().orElse(null)
+				instanceof McpJsonRpcMessage.ErrorResponse errorResponse) {
+			return new RequestObservationResult(response.outcome(),
+					errorResponse.error(),
+					response.throwables());
+		}
+		return new RequestObservationResult(response.outcome(), null,
+				response.throwables());
+	}
+
+	@NonNull
+	private static RequestObservationResult requestObservationResult(
+			@NonNull StreamTerminationReason reason, @Nullable Throwable cause) {
+		McpRequestOutcome outcome = switch (requireNonNull(reason)) {
+			case COMPLETED -> McpRequestOutcome.COMPLETE;
+			case CLIENT_DISCONNECTED -> McpRequestOutcome.CLIENT_DISCONNECTED;
+			case RESPONSE_TIMEOUT -> McpRequestOutcome.DEADLINE_EXCEEDED;
+			case RESPONSE_IDLE_TIMEOUT, WRITE_FAILED -> McpRequestOutcome.WRITE_FAILED;
+			case PRODUCER_FAILED, INTERNAL_ERROR, UNKNOWN ->
+					McpRequestOutcome.INTERNAL_ERROR;
+			case SERVER_STOPPING, PROTOCOL_UNSUPPORTED, APPLICATION_CANCELED,
+					BACKPRESSURE, SIMULATOR_LIMIT_EXCEEDED ->
+					McpRequestOutcome.CANCELED;
+		};
+		return new RequestObservationResult(outcome, null,
+				cause == null ? List.of() : List.of(cause));
+	}
+
+	@NonNull
 	private MicrohttpResponse applicationResponse(
+			@NonNull McpApplicationResponse response,
+			@NonNull McpJsonRpcId requestId,
+			@NonNull List<@NonNull Header> additionalHeaders) {
+		return renderApplicationResponse(response, requestId,
+				additionalHeaders).response();
+	}
+
+	@NonNull
+	private ApplicationResponseRendering renderApplicationResponse(
 			@NonNull McpApplicationResponse response,
 			@NonNull McpJsonRpcId requestId,
 			@NonNull List<@NonNull Header> additionalHeaders) {
@@ -1796,20 +1907,26 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		requireNonNull(additionalHeaders);
 
 		MicrohttpResponse httpResponse;
+		RequestObservationResult observationResult;
 		try {
 			httpResponse = response.message()
 					.map(message -> jsonResponse(response.status(), response.reason(),
 							envelopeCodec.encode(message), additionalHeaders))
 					.orElseGet(() -> emptyResponse(
 							response.status(), response.reason(), additionalHeaders));
+			observationResult = requestObservationResult(response);
 		} catch (Throwable throwable) {
 			McpJsonRpcError error = new McpJsonRpcError(
 					McpJsonRpcError.INTERNAL_ERROR, "Internal error", Optional.empty());
 			httpResponse = jsonRpcError(500, "Internal Server Error",
 					Optional.of(requestId), error, additionalHeaders);
+			List<Throwable> throwables = new ArrayList<>(response.throwables());
+			throwables.add(throwable);
+			observationResult = new RequestObservationResult(
+					McpRequestOutcome.INTERNAL_ERROR, error, throwables);
 		}
 
-		return httpResponse;
+		return new ApplicationResponseRendering(httpResponse, observationResult);
 	}
 
 	@NonNull
@@ -1819,6 +1936,21 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		return jsonRpcError(500, "Internal Server Error", Optional.of(requestId),
 				new McpJsonRpcError(McpJsonRpcError.INTERNAL_ERROR,
 						"Internal error", Optional.empty()), corsHeaders);
+	}
+
+	@NonNull
+	private MicrohttpResponse observedPolicyHookInternalError(
+			@NonNull RequestControl requestControl,
+			@NonNull McpJsonRpcId requestId,
+			@NonNull List<@NonNull Header> corsHeaders,
+			@Nullable Throwable throwable) {
+		McpJsonRpcError error = new McpJsonRpcError(
+				McpJsonRpcError.INTERNAL_ERROR, "Internal error", Optional.empty());
+		requestControl.planRequestObservation(new RequestObservationResult(
+				McpRequestOutcome.INTERNAL_ERROR, error,
+				throwable == null ? List.of() : List.of(throwable)));
+		return jsonRpcError(500, "Internal Server Error", Optional.of(requestId),
+				error, corsHeaders);
 	}
 
 	@NonNull
@@ -1872,6 +2004,18 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		return jsonRpcError(429, "Too Many Requests", Optional.of(requestId),
 				new McpJsonRpcError(SOKLET_RATE_LIMITED, "Rate limited", Optional.empty()),
 				List.copyOf(headers));
+	}
+
+	@NonNull
+	private MicrohttpResponse observedRateLimited(
+			@NonNull RequestControl requestControl,
+			@NonNull McpJsonRpcId requestId, @NonNull Duration retryAfter,
+			@NonNull List<@NonNull Header> corsHeaders) {
+		McpJsonRpcError error = new McpJsonRpcError(SOKLET_RATE_LIMITED,
+				"Rate limited", Optional.empty());
+		requestControl.planRequestObservation(new RequestObservationResult(
+				McpRequestOutcome.REJECTED, error, List.of()));
+		return rateLimited(requestId, retryAfter, corsHeaders);
 	}
 
 	@NonNull
@@ -2983,8 +3127,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	/**
 	 * Arbitrates protocol-task ownership against asynchronous application
 	 * ownership for one transport request. Handoff reserves application ownership
-	 * at the generation boundary, then invokes registration while holding this
-	 * control's lock so cancellation cannot fall into the gap between owners.
+	 * at the generation boundary, then invokes registration after releasing this
+	 * control's lock. The application-entry gate closes the cancellation gap
+	 * without running an application-supplied executor under the monitor.
 	 */
 	@ThreadSafe
 	private final class RequestControl {
@@ -3001,6 +3146,15 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private @Nullable Consumer<@NonNull MicrohttpResponse> responseCallback;
 		private @Nullable McpJsonRpcId registeredRequestId;
 		private @Nullable McpRequestSseStream responseStream;
+		private @Nullable StreamTerminationReason cancellationReason;
+		private @Nullable Throwable cancellationCause;
+		private @Nullable McpRuntimeRequestObservation requestObservation;
+		@NonNull
+		private Optional<@NonNull McpRequestContext> publicRequestContext;
+		private @Nullable RequestObservationResult plannedRequestObservationResult;
+		private @Nullable RequestObservationTerminal requestObservationTerminal;
+		private long requestObservationStartedAtNanos;
+		private boolean requestObservationDelivered;
 		@NonNull
 		private List<@NonNull Header> deadlineResponseHeaders;
 		private long nextKeepAliveNanos;
@@ -3020,11 +3174,128 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			this.application = requireNonNull(application);
 			this.lock = new Object();
 			this.responseCallback = requireNonNull(responseCallback);
+			this.publicRequestContext = Optional.empty();
 			this.deadlineResponseHeaders = List.of();
 		}
 
 		private long deadlineNanos() {
 			return deadlineNanos;
+		}
+
+		private boolean applicationEntryAllowed() {
+			synchronized (lock) {
+				return applicationOwned && !canceled && !terminal;
+			}
+		}
+
+		private void startObservation(@NonNull McpRuntimeObservationSink sink,
+				@NonNull McpRuntimeRequestInput input) {
+			requireNonNull(sink);
+			requireNonNull(input);
+			long startedAtNanos = applicationClock.nanoTime();
+			McpRuntimeRequestObservation observation;
+			Optional<@NonNull McpRequestContext> publicRequestContext;
+			try {
+				observation = requireNonNull(sink.didStartRequest(input),
+						"The MCP runtime observation sink returned null.");
+				publicRequestContext = requireNonNull(observation.publicContext(),
+						"The MCP runtime request observation returned a null public context.");
+			} catch (Throwable ignored) {
+				observation = McpRuntimeRequestObservation.disabledInstance();
+				publicRequestContext = Optional.empty();
+			}
+
+			synchronized (lock) {
+				if (requestObservation != null)
+					throw new IllegalStateException(
+							"MCP request observation cannot start twice.");
+				requestObservation = observation;
+				this.publicRequestContext = publicRequestContext;
+				requestObservationStartedAtNanos = startedAtNanos;
+			}
+			drainRequestObservation();
+		}
+
+		@NonNull
+		private Optional<@NonNull McpRequestContext> publicRequestContext() {
+			synchronized (lock) {
+				return publicRequestContext;
+			}
+		}
+
+		private void finishRequestObservation(@NonNull McpRequestOutcome outcome,
+				@Nullable McpJsonRpcError error,
+				@NonNull List<@NonNull Throwable> throwables) {
+			requireNonNull(outcome);
+			requireNonNull(throwables);
+			synchronized (lock) {
+				if (requestObservationTerminal == null)
+					requestObservationTerminal = new RequestObservationTerminal(
+							outcome, error, applicationClock.nanoTime(), throwables);
+			}
+			drainRequestObservation();
+		}
+
+		private void planRequestObservation(
+				@NonNull RequestObservationResult result) {
+			requireNonNull(result);
+			synchronized (lock) {
+				if (plannedRequestObservationResult == null)
+					plannedRequestObservationResult = result;
+			}
+		}
+
+		private void replacePlannedRequestObservation(
+				@NonNull RequestObservationResult result) {
+			requireNonNull(result);
+			synchronized (lock) {
+				if (requestObservationTerminal == null)
+					plannedRequestObservationResult = result;
+			}
+		}
+
+		@NonNull
+		private RequestObservationResult plannedRequestObservationOr(
+				@NonNull RequestObservationResult fallback) {
+			requireNonNull(fallback);
+			synchronized (lock) {
+				return plannedRequestObservationResult == null ? fallback
+						: plannedRequestObservationResult;
+			}
+		}
+
+		private void finishPlannedRequestObservation(
+				@NonNull RequestObservationResult fallback) {
+			RequestObservationResult result = plannedRequestObservationOr(fallback);
+			finishRequestObservation(result.outcome(), result.error(),
+					result.throwables());
+		}
+
+		private void drainRequestObservation() {
+			if (Thread.holdsLock(lock))
+				return;
+
+			McpRuntimeRequestObservation observation;
+			RequestObservationTerminal terminal;
+			long startedAtNanos;
+			synchronized (lock) {
+				if (requestObservationDelivered || requestObservation == null
+						|| requestObservationTerminal == null)
+					return;
+				requestObservationDelivered = true;
+				observation = requestObservation;
+				terminal = requestObservationTerminal;
+				startedAtNanos = requestObservationStartedAtNanos;
+			}
+
+			long elapsedNanos = terminal.finishedAtNanos() - startedAtNanos;
+			Duration duration = Duration.ofNanos(Math.max(0L, elapsedNanos));
+			try {
+				observation.didFinish(terminal.outcome(), terminal.error(), duration,
+						terminal.throwables());
+			} catch (Throwable ignored) {
+				// Observation must never alter protocol or transport behavior.
+			}
 		}
 
 		private boolean protocolProcessingAllowed() {
@@ -3137,24 +3408,39 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					applicationOwned = true;
 					return new ProtocolProcessingReservation(true, null);
 				}).orElse(null);
-				if (reservation != null && reservation.allowed()) {
-					try {
-						registration.run();
-						if (applicationOwned)
-							protocolTask = null;
-					} catch (Throwable throwable) {
-						if (!terminal)
-							applicationOwned = false;
-						throw throwable;
-					}
-				}
 			}
 
 			if (reservation == null)
 				return false;
-			if (reservation.deadlineExpiration() != null)
+			if (reservation.deadlineExpiration() != null) {
 				finishProtocolDeadline(reservation.deadlineExpiration());
-			return reservation.allowed();
+				return false;
+			}
+
+			try {
+				registration.run();
+			} catch (RuntimeException | Error failure) {
+				synchronized (lock) {
+					if (!terminal)
+						applicationOwned = false;
+				}
+				throw failure;
+			} finally {
+				StreamTerminationReason pendingCancellationReason;
+				Throwable pendingCancellationCause;
+				synchronized (lock) {
+					if (applicationOwned)
+						protocolTask = null;
+					pendingCancellationReason = canceled
+							? cancellationReason : null;
+					pendingCancellationCause = cancellationCause;
+				}
+				if (pendingCancellationReason != null)
+					application.cancel(request, pendingCancellationReason,
+							pendingCancellationCause);
+			}
+			drainRequestObservation();
+			return true;
 		}
 
 		private void completeProtocol(@Nullable MicrohttpResponse response) {
@@ -3188,6 +3474,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 			if (reservation == null) {
 				requestControls.remove(request, this);
+				finishRequestObservation(McpRequestOutcome.CANCELED, null, List.of());
 				return;
 			}
 			if (reservation.deadlineExpiration() != null) {
@@ -3195,9 +3482,19 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				return;
 			}
 			requestControls.remove(request, this);
-			if (reservation.responseCallback() != null)
-				deliverResponse(reservation.responseCallback(),
-						requireNonNull(reservation.response()));
+			if (reservation.responseCallback() != null) {
+				MicrohttpResponse terminalResponse =
+						requireNonNull(reservation.response());
+				RequestObservationResult fallback =
+						requestObservationResult(terminalResponse);
+				MicrohttpResponse observedResponse =
+						withRequestObservationTermination(terminalResponse, fallback);
+				Throwable deliveryFailure = deliverResponse(
+						reservation.responseCallback(), observedResponse);
+				if (deliveryFailure != null)
+					finishRequestObservation(McpRequestOutcome.WRITE_FAILED, null,
+							List.of(deliveryFailure));
+			}
 		}
 
 		private boolean writeApplicationNotification(
@@ -3235,7 +3532,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				try {
 					requireNonNull(callback).accept(stream.response(additionalHeaders));
 				} catch (Throwable throwable) {
-					stream.fail(StreamTerminationReason.INTERNAL_ERROR, throwable);
+					stream.fail(StreamTerminationReason.WRITE_FAILED, throwable);
 					return false;
 				}
 				return true;
@@ -3254,7 +3551,6 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			requireNonNull(additionalHeaders);
 			Consumer<MicrohttpResponse> callback = null;
 			McpRequestSseStream stream;
-			MicrohttpResponse jsonResponse = null;
 
 			synchronized (lock) {
 				if (!applicationOwned || streamAbortOwned || canceled || terminal)
@@ -3272,12 +3568,20 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 
 			if (stream == null) {
-				jsonResponse = applicationResponse(
+				ApplicationResponseRendering rendering = renderApplicationResponse(
 						response, requestId, additionalHeaders);
+				planRequestObservation(rendering.observationResult());
 				requestControls.remove(request, this);
-				deliverResponse(requireNonNull(callback), requireNonNull(jsonResponse));
+				MicrohttpResponse observedResponse = withRequestObservationTermination(
+						rendering.response(), rendering.observationResult());
+				Throwable deliveryFailure = deliverResponse(requireNonNull(callback),
+						observedResponse);
+				if (deliveryFailure != null)
+					finishRequestObservation(McpRequestOutcome.WRITE_FAILED, null,
+							List.of(deliveryFailure));
 				return true;
 			}
+			planRequestObservation(requestObservationResult(response));
 
 			if (response.message().isEmpty())
 				return stream.fail(StreamTerminationReason.RESPONSE_TIMEOUT, null);
@@ -3328,15 +3632,19 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				@Nullable Throwable cause) {
 			FutureTask<Void> task;
 			McpRequestSseStream stream;
+			boolean completedStream;
 			boolean remove;
 			synchronized (lock) {
 				if (terminal)
 					return;
 
 				canceled = true;
+				cancellationReason = reason;
+				cancellationCause = cause;
 				task = protocolTask;
 				protocolTask = null;
 				stream = responseStream;
+				completedStream = stream != null && stream.isTerminalWritten();
 				remove = !applicationOwned;
 				if (applicationOwned) {
 					// Application cancellation runs under the ownership lock. Its
@@ -3366,6 +3674,14 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				stream.close(reason, cause);
 			if (remove)
 				requestControls.remove(request, this);
+			if (completedStream)
+				finishPlannedRequestObservation(requestObservationResult(
+						StreamTerminationReason.COMPLETED, null));
+			else {
+				RequestObservationResult result = requestObservationResult(reason, cause);
+				finishRequestObservation(result.outcome(), result.error(),
+						result.throwables());
+			}
 		}
 
 		private void onTimer(long nowNanos) {
@@ -3447,6 +3763,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 
 			requestControls.remove(request, this);
+			if (reason == StreamTerminationReason.COMPLETED)
+				finishPlannedRequestObservation(requestObservationResult(reason, cause));
+			else {
+				RequestObservationResult result = requestObservationResult(reason, cause);
+				finishRequestObservation(result.outcome(), result.error(),
+						result.throwables());
+			}
 			if (cancelApplication)
 				application.cancel(request, reason, cause);
 		}
@@ -3472,16 +3795,29 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				processor.remove(expiration.task());
 			}
 			application.recordProtocolDeadlineExpiration();
-			deliverResponse(expiration.responseCallback(),
-					emptyResponse(504, "Gateway Timeout", expiration.responseHeaders()));
+			RequestObservationResult fallback = new RequestObservationResult(
+					McpRequestOutcome.DEADLINE_EXCEEDED, null, List.of());
+			replacePlannedRequestObservation(fallback);
+			MicrohttpResponse response = withRequestObservationTermination(
+					emptyResponse(504, "Gateway Timeout", expiration.responseHeaders()),
+					fallback);
+			Throwable deliveryFailure = deliverResponse(
+					expiration.responseCallback(), response);
+			if (deliveryFailure != null)
+				finishRequestObservation(McpRequestOutcome.WRITE_FAILED, null,
+						List.of(deliveryFailure));
 		}
 
 		private void applicationTerminated() {
 			boolean remove;
+			boolean finishCanceled;
 			synchronized (lock) {
 				applicationOwned = false;
 				protocolTask = null;
 				remove = responseStream == null || canceled || terminal;
+				finishCanceled = remove
+						&& plannedRequestObservationResult == null
+						&& requestObservationTerminal == null;
 				if (remove) {
 					terminal = true;
 					responseCallback = null;
@@ -3490,6 +3826,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 			if (remove)
 				requestControls.remove(request, this);
+			if (finishCanceled)
+				finishRequestObservation(McpRequestOutcome.CANCELED, null, List.of());
 		}
 
 		@NonNull
@@ -3500,13 +3838,37 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			return callback;
 		}
 
-		private void deliverResponse(
+		@NonNull
+		private MicrohttpResponse withRequestObservationTermination(
+				@NonNull MicrohttpResponse response,
+				@NonNull RequestObservationResult fallback) {
+			requireNonNull(response);
+			requireNonNull(fallback);
+			synchronized (lock) {
+				if (requestObservation == null)
+					return response;
+			}
+			return response.withBodyTerminationListener((reason, cause) -> {
+				if (reason == StreamTerminationReason.COMPLETED)
+					finishPlannedRequestObservation(fallback);
+				else {
+					RequestObservationResult result =
+							requestObservationResult(reason, cause);
+					finishRequestObservation(result.outcome(), result.error(),
+							result.throwables());
+				}
+			});
+		}
+
+		private @Nullable Throwable deliverResponse(
 				@NonNull Consumer<@NonNull MicrohttpResponse> callback,
 				@NonNull MicrohttpResponse response) {
 			try {
 				callback.accept(response);
-			} catch (Throwable ignored) {
+				return null;
+			} catch (Throwable throwable) {
 				// A reserved terminal outcome remains authoritative on delivery failure.
+				return throwable;
 			}
 		}
 
@@ -3586,6 +3948,33 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 	private record ProtocolSubmission(
 			@Nullable Consumer<@NonNull MicrohttpResponse> rejectedCallback) {
+	}
+
+	private record RequestObservationTerminal(@NonNull McpRequestOutcome outcome,
+			@Nullable McpJsonRpcError error, long finishedAtNanos,
+			@NonNull List<@NonNull Throwable> throwables) {
+		private RequestObservationTerminal {
+			requireNonNull(outcome);
+			throwables = List.copyOf(requireNonNull(throwables));
+		}
+	}
+
+	private record RequestObservationResult(@NonNull McpRequestOutcome outcome,
+			@Nullable McpJsonRpcError error,
+			@NonNull List<@NonNull Throwable> throwables) {
+		private RequestObservationResult {
+			requireNonNull(outcome);
+			throwables = List.copyOf(requireNonNull(throwables));
+		}
+	}
+
+	private record ApplicationResponseRendering(
+			@NonNull MicrohttpResponse response,
+			@NonNull RequestObservationResult observationResult) {
+		private ApplicationResponseRendering {
+			requireNonNull(response);
+			requireNonNull(observationResult);
+		}
 	}
 
 	private record HostAuthority(@NonNull String host,

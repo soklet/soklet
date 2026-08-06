@@ -23,7 +23,13 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Immutable request metadata supplied to MCP application handlers.
+ * Immutable metadata for one admitted semantic MCP request or notification.
+ * <p>
+ * Soklet creates this context after structural and semantic validation and
+ * request admission. The same instance is supplied to MCP lifecycle callbacks
+ * and, when application handling is required, to the selected handler. This
+ * includes framework-owned operations such as discovery and static catalogs,
+ * even though those operations do not invoke an application handler.
  *
  * <p>Invocation-specific optional behavior is exposed through
  * {@link McpInvocationFeatures}, not by adding optional members to this

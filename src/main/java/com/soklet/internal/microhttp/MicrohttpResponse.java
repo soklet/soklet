@@ -1,16 +1,20 @@
 package com.soklet.internal.microhttp;
 
 import com.soklet.StreamTerminationReason;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static java.nio.file.StandardOpenOption.READ;
 import static java.util.Objects.requireNonNull;
@@ -23,6 +27,7 @@ public final class MicrohttpResponse {
     private final BodySourceFactory bodySourceFactory;
     private final byte @Nullable [] body;
     private final boolean streaming;
+    private final @Nullable BodyTerminationState bodyTerminationState;
 
     public MicrohttpResponse(int status, String reason, List<Header> headers, byte[] body) {
         this(status, reason, headers, requireNonNull(body).length, () -> new ByteBufferWritableSource(ByteBuffer.wrap(body)), body, false);
@@ -30,6 +35,12 @@ public final class MicrohttpResponse {
 
     private MicrohttpResponse(int status, String reason, List<Header> headers, long bodyLength,
                               BodySourceFactory bodySourceFactory, byte @Nullable [] body, boolean streaming) {
+        this(status, reason, headers, bodyLength, bodySourceFactory, body, streaming, null);
+    }
+
+    private MicrohttpResponse(int status, String reason, List<Header> headers, long bodyLength,
+                              BodySourceFactory bodySourceFactory, byte @Nullable [] body, boolean streaming,
+                              @Nullable BodyTerminationState bodyTerminationState) {
         this.status = status;
         this.reason = requireNonNull(reason);
         this.headers = requireNonNull(headers);
@@ -37,6 +48,7 @@ public final class MicrohttpResponse {
         this.bodySourceFactory = requireNonNull(bodySourceFactory);
         this.body = body;
         this.streaming = streaming;
+        this.bodyTerminationState = bodyTerminationState;
     }
 
     public static MicrohttpResponse withFileBody(int status, String reason, List<Header> headers,
@@ -112,14 +124,41 @@ public final class MicrohttpResponse {
     }
 
     public MicrohttpResponse withHeaders(List<Header> headers) {
-        return new MicrohttpResponse(status, reason, headers, bodyLength, bodySourceFactory, body, streaming);
+        return new MicrohttpResponse(status, reason, headers, bodyLength, bodySourceFactory, body, streaming,
+                bodyTerminationState);
+    }
+
+    /**
+     * Returns a copy that reports the terminal delivery of this non-streaming response body.
+     *
+     * <p>The listener is invoked at most once. {@link StreamTerminationReason#COMPLETED} means the complete
+     * serialized response was written to the socket; every other reason means delivery failed or the body was
+     * discarded. The callback is delivered only after the transport has released its active response state.</p>
+     *
+     * <p>This is an internal transport hook. Streaming responses have their own termination mechanism.</p>
+     *
+     * @throws IllegalStateException if this response is streaming or already has a termination listener
+     */
+    public MicrohttpResponse withBodyTerminationListener(@NonNull BodyTerminationListener listener) {
+        requireNonNull(listener);
+
+        if (streaming)
+            throw new IllegalStateException("Streaming responses use the streaming termination listener.");
+
+        if (bodyTerminationState != null)
+            throw new IllegalStateException("Response already has a body termination listener.");
+
+        return new MicrohttpResponse(status, reason, headers, bodyLength, bodySourceFactory, body, false,
+                new BodyTerminationState(listener));
     }
 
     MicrohttpResponse withoutBodyOrFramingHeaders() {
+        byte[] emptyBody = new byte[0];
         return new MicrohttpResponse(status, reason, headers.stream()
                 .filter(header -> !header.name().equalsIgnoreCase("Content-Length"))
                 .filter(header -> !header.name().equalsIgnoreCase("Transfer-Encoding"))
-                .toList(), new byte[0]);
+                .toList(), 0L, () -> new ByteBufferWritableSource(ByteBuffer.wrap(emptyBody)), emptyBody, false,
+                bodyTerminationState);
     }
 
     // RFC 9110 §9.3.2: a response to HEAD carries no content, but SHOULD send the header fields a
@@ -143,7 +182,10 @@ public final class MicrohttpResponse {
             headResponseHeaders.add(new Header("Content-Length", Long.toString(bodyLength())));
         }
 
-        return new MicrohttpResponse(status, reason, headResponseHeaders, new byte[0]);
+        byte[] emptyBody = new byte[0];
+        return new MicrohttpResponse(status, reason, headResponseHeaders, 0L,
+                () -> new ByteBufferWritableSource(ByteBuffer.wrap(emptyBody)), emptyBody, false,
+                bodyTerminationState);
     }
 
     public boolean streaming() {
@@ -191,7 +233,7 @@ public final class MicrohttpResponse {
     WritableSource writableSource(byte[] serializedHead) throws IOException {
         return new CompositeWritableSource(List.of(
                 new ByteBufferWritableSource(ByteBuffer.wrap(serializedHead)),
-                bodySourceFactory.create()));
+                newBodySource()));
     }
 
     void closeStreamingBody(StreamTerminationReason cancelationReason, @Nullable Throwable cause) throws IOException {
@@ -203,8 +245,23 @@ public final class MicrohttpResponse {
     }
 
     void closeBody(StreamTerminationReason cancelationReason, @Nullable Throwable cause) throws IOException {
-        WritableSource source = bodySourceFactory.create();
+        WritableSource source = newBodySource();
         source.close(cancelationReason, cause);
+    }
+
+    void reserveBodyTermination(StreamTerminationReason reason, @Nullable Throwable cause) {
+        if (bodyTerminationState != null)
+            bodyTerminationState.reserve(reason, cause);
+    }
+
+    void deliverBodyTermination() {
+        if (bodyTerminationState != null)
+            bodyTerminationState.deliver();
+    }
+
+    private WritableSource newBodySource() throws IOException {
+        WritableSource source = bodySourceFactory.create();
+        return bodyTerminationState == null ? source : new BodyTerminationWritableSource(source, bodyTerminationState);
     }
 
     private void appendHead(String version, List<Header> headers, HeadWriter writer) {
@@ -322,5 +379,115 @@ public final class MicrohttpResponse {
     @FunctionalInterface
     interface BodySourceFactory {
         WritableSource create() throws IOException;
+    }
+
+    /**
+     * Receives the exactly-once terminal outcome of a non-streaming response body.
+     */
+    @FunctionalInterface
+    public interface BodyTerminationListener {
+        void didTerminate(@NonNull StreamTerminationReason reason, @Nullable Throwable cause);
+    }
+
+    private record BodyTermination(@NonNull StreamTerminationReason reason, @Nullable Throwable cause) {
+        private BodyTermination {
+            requireNonNull(reason);
+        }
+    }
+
+    private static final class BodyTerminationState {
+        private final BodyTerminationListener listener;
+        private final AtomicReference<BodyTermination> termination;
+        private final AtomicBoolean delivered;
+
+        private BodyTerminationState(BodyTerminationListener listener) {
+            this.listener = requireNonNull(listener);
+            this.termination = new AtomicReference<>();
+            this.delivered = new AtomicBoolean();
+        }
+
+        private void reserve(StreamTerminationReason reason, @Nullable Throwable cause) {
+            termination.compareAndSet(null, new BodyTermination(reason, cause));
+        }
+
+        private void deliver() {
+            BodyTermination termination = this.termination.get();
+
+            if (termination != null && delivered.compareAndSet(false, true))
+                listener.didTerminate(termination.reason(), termination.cause());
+        }
+    }
+
+    private static final class BodyTerminationWritableSource implements WritableSource {
+        private final WritableSource delegate;
+        private final BodyTerminationState terminationState;
+        private final AtomicBoolean closed;
+
+        private BodyTerminationWritableSource(WritableSource delegate,
+                                               BodyTerminationState terminationState) {
+            this.delegate = requireNonNull(delegate);
+            this.terminationState = requireNonNull(terminationState);
+            this.closed = new AtomicBoolean();
+        }
+
+        @Override
+        public void start() throws IOException {
+            delegate.start();
+        }
+
+        @Override
+        public void writeReadyCallback(Runnable callback) {
+            delegate.writeReadyCallback(callback);
+        }
+
+        @Override
+        public long writeTo(SocketChannel socketChannel, long maxBytes) throws IOException {
+            return delegate.writeTo(socketChannel, maxBytes);
+        }
+
+        @Override
+        public boolean hasRemaining() {
+            return delegate.hasRemaining();
+        }
+
+        @Override
+        public boolean isReadyToWrite() {
+            return delegate.isReadyToWrite();
+        }
+
+        @Override
+        public void close() throws IOException {
+            if (!closed.compareAndSet(false, true))
+                return;
+
+            try {
+                delegate.close();
+            } catch (IOException | RuntimeException | Error throwable) {
+                terminationState.reserve(StreamTerminationReason.WRITE_FAILED, throwable);
+                throw throwable;
+            }
+        }
+
+        @Override
+        public void close(@Nullable StreamTerminationReason reason, @Nullable Throwable cause) throws IOException {
+            if (reason == null) {
+                close();
+                return;
+            }
+
+            if (!closed.compareAndSet(false, true))
+                return;
+
+            Throwable closeFailure = null;
+
+            try {
+                delegate.close(reason, cause);
+            } catch (IOException | RuntimeException | Error throwable) {
+                closeFailure = throwable;
+                throw throwable;
+            } finally {
+                terminationState.reserve(reason, cause == null ? closeFailure : cause);
+            }
+        }
     }
 }

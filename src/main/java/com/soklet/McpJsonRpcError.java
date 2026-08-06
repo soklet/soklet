@@ -25,7 +25,8 @@ import java.util.Optional;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Immutable client-visible JSON-RPC error used for an application admission rejection.
+ * Immutable client-visible JSON-RPC error used by MCP application policies,
+ * handlers, and request lifecycle observation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -114,6 +115,12 @@ public final class McpJsonRpcError {
 		if (message.isBlank())
 			throw new IllegalArgumentException("message must not be blank");
 		this.data = data;
+	}
+
+	@NonNull
+	static McpJsonRpcError fromServer(int code, @NonNull String message,
+			@Nullable McpJsonValue data) {
+		return new McpJsonRpcError(code, message, data);
 	}
 
 	/**

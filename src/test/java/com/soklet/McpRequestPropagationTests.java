@@ -17,7 +17,7 @@
 package com.soklet;
 
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.AdmissionInput;
-import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolInvocation;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestObservationInput;
 import org.junit.jupiter.api.Test;
 import org.jspecify.annotations.NonNull;
 
@@ -60,7 +60,7 @@ class McpRequestPropagationTests {
 		DefaultMcpAdmissionContext admission = new DefaultMcpAdmissionContext(
 				admissionInput(request, Optional.of(metadata)));
 		DefaultMcpRequestContext toolRequest = new DefaultMcpRequestContext(
-				toolInvocation(request, metadata));
+				requestObservationInput(request, metadata));
 
 		assertEquals("0af7651916cd43dd8448eb211c80319c",
 				admission.getTraceContext().orElseThrow().getTraceId());
@@ -106,7 +106,7 @@ class McpRequestPropagationTests {
 		DefaultMcpAdmissionContext admission = new DefaultMcpAdmissionContext(
 				admissionInput(request, Optional.of(malformed)));
 		DefaultMcpRequestContext toolRequest = new DefaultMcpRequestContext(
-				toolInvocation(request, malformed));
+				requestObservationInput(request, malformed));
 		assertTrue(admission.getTraceContext().isEmpty());
 		assertTrue(toolRequest.getTraceContext().isEmpty());
 		assertEquals(Map.of("valid", "retained"), toolRequest.getBaggage());
@@ -117,7 +117,7 @@ class McpRequestPropagationTests {
 				.put("baggage", McpJsonArray.fromElements(List.of()))
 				.build();
 		DefaultMcpRequestContext mistypedContext = new DefaultMcpRequestContext(
-				toolInvocation(request, mistyped));
+				requestObservationInput(request, mistyped));
 		assertTrue(mistypedContext.getTraceContext().isEmpty());
 		assertTrue(mistypedContext.getBaggage().isEmpty());
 
@@ -175,13 +175,14 @@ class McpRequestPropagationTests {
 				Optional.of(McpJsonObject.emptyInstance()), metadata);
 	}
 
-	private static ToolInvocation toolInvocation(@NonNull Request request,
+	private static RequestObservationInput requestObservationInput(
+			@NonNull Request request,
 			@NonNull McpJsonObject metadata) {
-		return new ToolInvocation(request, endpoint(), Map.of(), "tools/call",
-				McpRequestId.fromString("request"), "2026-07-28", "propagation",
-					Optional.empty(), McpJsonObject.emptyInstance(), metadata,
-					McpAdmissionIdentity.anonymousInstance(),
-					McpJsonObject.emptyInstance(), () -> {});
+		return new RequestObservationInput(request, endpoint(), Map.of(),
+				"tools/call", Optional.of(McpRequestId.fromString("request")),
+				"2026-07-28", Optional.of("propagation"), Optional.empty(),
+				McpJsonObject.emptyInstance(), metadata,
+				McpAdmissionIdentity.anonymousInstance());
 	}
 
 	private static McpEndpoint endpoint() {

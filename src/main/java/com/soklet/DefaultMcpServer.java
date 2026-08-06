@@ -38,6 +38,9 @@ import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ResourceListInvoc
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ResourceListPlan;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ResourcePlan;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RuntimeState;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestError;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestObservation;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestObservationInput;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolInvocation;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolInvocationResult;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolPlan;
@@ -77,6 +80,11 @@ final class DefaultMcpServer implements McpServer {
 	private static final int MAXIMUM_AGGREGATE_BASE64_CHARACTERS =
 			McpJsonLimits.productionDefaults().maximumOutputBytes();
 	@NonNull
+	private static final Set<@NonNull String> BOUNDED_METRIC_METHODS = Set.of(
+			"server/discover", "tools/list", "tools/call", "prompts/list",
+			"prompts/get", "resources/list", "resources/templates/list",
+			"resources/read", "notifications/cancelled");
+	@NonNull
 	private final Object lifecycleLock;
 	private final int maximumCursorSizeInBytes;
 	@NonNull
@@ -99,6 +107,8 @@ final class DefaultMcpServer implements McpServer {
 	private final McpServerRuntimeBridge runtimeBridge;
 	@NonNull
 	private volatile LifecycleObserver lifecycleObserver;
+	@NonNull
+	private volatile MetricsCollector metricsCollector;
 	@NonNull
 	private volatile McpShutdownOutcome lastShutdownOutcome;
 
@@ -131,6 +141,7 @@ final class DefaultMcpServer implements McpServer {
 		this.corsAuthorizer = configuredCorsAuthorizer == null
 				? CorsAuthorizer.rejectAllInstance() : configuredCorsAuthorizer;
 		this.lifecycleObserver = LifecycleObserver.defaultInstance();
+		this.metricsCollector = MetricsCollector.disabledInstance();
 		this.lastShutdownOutcome = McpShutdownOutcome.CLEAN;
 		List<EndpointPlan> endpointPlans = handlerResolver.getEndpoints().stream()
 				.map(this::toEndpointPlan)
@@ -146,7 +157,8 @@ final class DefaultMcpServer implements McpServer {
 				requestTimeout,
 				Optional.ofNullable(requestHandlerExecutorServiceSupplier),
 				this::safelyLogStartupDiagnostic,
-				this::safelyLogUnexpectedTermination);
+				this::safelyLogUnexpectedTermination,
+				this::didStartRequestObservation);
 	}
 
 	@NonNull
@@ -178,8 +190,9 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	void initialize(@NonNull SokletConfig sokletConfig) {
-		this.lifecycleObserver = requireNonNull(sokletConfig)
-				.getAggregateLifecycleObserver();
+		SokletConfig configuration = requireNonNull(sokletConfig);
+		this.lifecycleObserver = configuration.getAggregateLifecycleObserver();
+		this.metricsCollector = configuration.getMetricsCollector();
 	}
 
 	@Override
@@ -390,8 +403,7 @@ final class DefaultMcpServer implements McpServer {
 	private <A> ToolInvocationResult invokeTool(
 			@NonNull McpToolRegistration<A> tool,
 			@NonNull ToolInvocation invocation) throws Exception {
-		DefaultMcpRequestContext requestContext =
-				new DefaultMcpRequestContext(invocation);
+		McpRequestContext requestContext = invocation.requestContext();
 		McpOperationResult result;
 		try {
 			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
@@ -434,8 +446,7 @@ final class DefaultMcpServer implements McpServer {
 	private PromptInvocationResult invokePrompt(
 			@NonNull McpPromptRegistration prompt,
 			@NonNull PromptInvocation invocation) throws Exception {
-		DefaultMcpRequestContext requestContext =
-				new DefaultMcpRequestContext(invocation);
+		McpRequestContext requestContext = invocation.requestContext();
 		McpOperationResult result;
 		try {
 			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
@@ -462,8 +473,7 @@ final class DefaultMcpServer implements McpServer {
 	private ResourceInvocationResult invokeResource(
 			@NonNull McpResourceRegistration resource,
 			@NonNull ResourceInvocation invocation) throws Exception {
-		DefaultMcpRequestContext requestContext =
-				new DefaultMcpRequestContext(invocation);
+		McpRequestContext requestContext = invocation.requestContext();
 		McpOperationResult result;
 		try {
 			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
@@ -536,8 +546,7 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpResourceListHandler handler,
 			@NonNull List<@NonNull McpResourceDescriptor> registeredDescriptors,
 			@NonNull ResourceListInvocation invocation) throws Exception {
-		DefaultMcpRequestContext requestContext =
-				new DefaultMcpRequestContext(invocation);
+		McpRequestContext requestContext = invocation.requestContext();
 		McpOperationResult result;
 		try {
 			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
@@ -979,6 +988,112 @@ final class DefaultMcpServer implements McpServer {
 						limits.maximumOutputBytes() - 2));
 	}
 
+	@NonNull
+	private RequestObservation didStartRequestObservation(
+			@NonNull RequestObservationInput input) {
+		DefaultMcpRequestContext context = new DefaultMcpRequestContext(
+				requireNonNull(input));
+		LifecycleObserver observer = this.lifecycleObserver;
+		MetricsCollector collector = this.metricsCollector;
+		List<Throwable> startThrowables = new ArrayList<>();
+
+		try {
+			observer.didStartMcpRequestHandling(context);
+		} catch (Throwable throwable) {
+			startThrowables.add(throwable);
+			safelyLogRequestObservation(observer, LogEvent.with(
+					LogEventType.LIFECYCLE_OBSERVER_DID_START_MCP_REQUEST_HANDLING_FAILED,
+					"An exception occurred while invoking LifecycleObserver::didStartMcpRequestHandling")
+					.throwable(throwable)
+					.request(context.getRequest())
+					.build(), startThrowables);
+		}
+		safelyRecordMcpMetrics(collector, observer,
+				new McpMetricsEvent.RequestStarted(input.endpoint().getPath(),
+						metricMethod(input.jsonRpcMethod())), context);
+
+		List<Throwable> immutableStartThrowables = List.copyOf(startThrowables);
+		return new RequestObservation() {
+			@NonNull
+			private final AtomicBoolean finished = new AtomicBoolean();
+
+			@Override
+			@NonNull
+			public McpRequestContext context() {
+				return context;
+			}
+
+			@Override
+			public void didFinish(@NonNull McpRequestOutcome outcome,
+					@Nullable RequestError error, @NonNull Duration duration,
+					@NonNull List<@NonNull Throwable> throwables) {
+				requireNonNull(outcome);
+				requireNonNull(duration);
+				requireNonNull(throwables);
+				if (!this.finished.compareAndSet(false, true))
+					return;
+
+				List<Throwable> allThrowables = new ArrayList<>(
+						immutableStartThrowables.size() + throwables.size());
+				allThrowables.addAll(immutableStartThrowables);
+				allThrowables.addAll(throwables);
+				List<Throwable> immutableThrowables = List.copyOf(allThrowables);
+				McpJsonRpcError publicError = error == null ? null
+						: McpJsonRpcError.fromServer(error.code(), error.message(),
+								error.data().orElse(null));
+
+				safelyRecordMcpMetrics(collector, observer,
+						new McpMetricsEvent.RequestFinished(
+								input.endpoint().getPath(),
+								metricMethod(input.jsonRpcMethod()),
+								outcome, duration), context);
+				try {
+					observer.didFinishMcpRequestHandling(context, outcome,
+							publicError, duration, immutableThrowables);
+				} catch (Throwable throwable) {
+					safelyLogRequestObservation(observer, LogEvent.with(
+							LogEventType.LIFECYCLE_OBSERVER_DID_FINISH_MCP_REQUEST_HANDLING_FAILED,
+							"An exception occurred while invoking LifecycleObserver::didFinishMcpRequestHandling")
+							.throwable(throwable)
+							.request(context.getRequest())
+							.build(), null);
+				}
+			}
+		};
+	}
+
+	@NonNull
+	private static String metricMethod(@NonNull String jsonRpcMethod) {
+		return BOUNDED_METRIC_METHODS.contains(requireNonNull(jsonRpcMethod))
+				? jsonRpcMethod : McpMetricsEvent.UNRECOGNIZED_JSON_RPC_METHOD;
+	}
+
+	private void safelyRecordMcpMetrics(@NonNull MetricsCollector collector,
+			@NonNull LifecycleObserver observer, @NonNull McpMetricsEvent event,
+			@NonNull McpRequestContext context) {
+		try {
+			collector.didRecordMcpMetricsEvent(requireNonNull(event));
+		} catch (Throwable throwable) {
+			safelyLogRequestObservation(observer, LogEvent.with(
+					LogEventType.METRICS_COLLECTOR_FAILED,
+					"An exception occurred while invoking MetricsCollector::didRecordMcpMetricsEvent")
+					.throwable(throwable)
+					.request(context.getRequest())
+					.build(), null);
+		}
+	}
+
+	private void safelyLogRequestObservation(@NonNull LifecycleObserver observer,
+			@NonNull LogEvent event,
+			@Nullable List<@NonNull Throwable> requestThrowables) {
+		try {
+			observer.didReceiveLogEvent(requireNonNull(event));
+		} catch (Throwable throwable) {
+			if (requestThrowables != null)
+				requestThrowables.add(throwable);
+		}
+	}
+
 	private void safelyLogStartupDiagnostic(@NonNull String message) {
 		try {
 			this.lifecycleObserver.didReceiveLogEvent(LogEvent.with(
@@ -1136,7 +1251,7 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 	@NonNull
 	private final String jsonRpcMethod;
 	@NonNull
-	private final McpRequestId requestId;
+	private final Optional<@NonNull McpRequestId> requestId;
 	@NonNull
 	private final String protocolVersion;
 	@NonNull
@@ -1158,7 +1273,7 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 	DefaultMcpRequestContext(@NonNull ToolInvocation invocation) {
 		this(requireNonNull(invocation).request(), invocation.endpoint(),
 				invocation.endpointPathParameters(), invocation.jsonRpcMethod(),
-				invocation.requestId(), invocation.protocolVersion(),
+				Optional.of(invocation.requestId()), invocation.protocolVersion(),
 				Optional.of(invocation.operationName()),
 				invocation.clientInformation(), invocation.clientCapabilitiesJson(),
 				invocation.requestMetadata(), invocation.admissionIdentity());
@@ -1168,7 +1283,7 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 	DefaultMcpRequestContext(@NonNull PromptInvocation invocation) {
 		this(requireNonNull(invocation).request(), invocation.endpoint(),
 				invocation.endpointPathParameters(), invocation.jsonRpcMethod(),
-				invocation.requestId(), invocation.protocolVersion(),
+				Optional.of(invocation.requestId()), invocation.protocolVersion(),
 				Optional.of(invocation.operationName()),
 				invocation.clientInformation(), invocation.clientCapabilitiesJson(),
 				invocation.requestMetadata(), invocation.admissionIdentity());
@@ -1178,7 +1293,7 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 	DefaultMcpRequestContext(@NonNull ResourceInvocation invocation) {
 		this(requireNonNull(invocation).request(), invocation.endpoint(),
 				invocation.endpointPathParameters(), invocation.jsonRpcMethod(),
-				invocation.requestId(), invocation.protocolVersion(),
+				Optional.of(invocation.requestId()), invocation.protocolVersion(),
 				Optional.of(invocation.operationName()),
 				invocation.clientInformation(), invocation.clientCapabilitiesJson(),
 				invocation.requestMetadata(), invocation.admissionIdentity());
@@ -1188,17 +1303,27 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 	DefaultMcpRequestContext(@NonNull ResourceListInvocation invocation) {
 		this(requireNonNull(invocation).request(), invocation.endpoint(),
 				invocation.endpointPathParameters(), invocation.jsonRpcMethod(),
-				invocation.requestId(), invocation.protocolVersion(),
+				Optional.of(invocation.requestId()), invocation.protocolVersion(),
 				Optional.empty(),
 				invocation.clientInformation(), invocation.clientCapabilitiesJson(),
 				invocation.requestMetadata(), invocation.admissionIdentity());
 	}
 
 	@SuppressWarnings("deprecation")
+	DefaultMcpRequestContext(@NonNull RequestObservationInput input) {
+		this(requireNonNull(input).request(), input.endpoint(),
+				input.endpointPathParameters(), input.jsonRpcMethod(),
+				input.requestId(), input.protocolVersion(), input.operationName(),
+				input.clientInformation(), input.clientCapabilities(),
+				input.requestMetadata(), input.admissionIdentity());
+	}
+
+	@SuppressWarnings("deprecation")
 	private DefaultMcpRequestContext(@NonNull Request request,
 			@NonNull McpEndpoint endpoint,
 			@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
-			@NonNull String jsonRpcMethod, @NonNull McpRequestId requestId,
+			@NonNull String jsonRpcMethod,
+			@NonNull Optional<@NonNull McpRequestId> requestId,
 			@NonNull String protocolVersion,
 			@NonNull Optional<@NonNull String> operationName,
 			@NonNull Optional<@NonNull McpImplementation> clientInformation,
@@ -1243,7 +1368,7 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 		return this.jsonRpcMethod;
 	}
 	@Override public @NonNull Optional<@NonNull McpRequestId> getRequestId() {
-		return Optional.of(this.requestId);
+		return this.requestId;
 	}
 	@Override public @NonNull String getProtocolVersion() {
 		return this.protocolVersion;

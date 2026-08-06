@@ -140,6 +140,10 @@ final class McpRequestSseStream {
 		return channel.snapshot();
 	}
 
+	boolean isTerminalWritten() {
+		return channel.isTerminalWritten();
+	}
+
 	private byte @NonNull [] frame(@NonNull McpJsonRpcMessage message) {
 		byte[] json = envelopeCodec.encode(message);
 		byte[] frame = new byte[MESSAGE_PREFIX.length + json.length

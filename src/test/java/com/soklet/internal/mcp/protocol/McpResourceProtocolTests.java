@@ -17,6 +17,7 @@
 package com.soklet.internal.mcp.protocol;
 
 import com.soklet.CorsAuthorizer;
+import com.soklet.McpRequestObservationTestSupport;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -329,7 +330,8 @@ public class McpResourceProtocolTests {
 				CorsAuthorizer.rejectAllInstance(), true,
 				ignored -> com.soklet.McpAdmissionDecision.fromAnonymousIdentity(),
 				Optional.empty(), List.of(), List.of(), List.of(resourcePlan),
-				Optional.of(listPlan), ignored -> {}, ignored -> {});
+				Optional.of(listPlan), ignored -> {}, ignored -> {},
+				McpRequestObservationTestSupport.noOpAdapter());
 
 		try {
 			int port = bridge.start().getPort();

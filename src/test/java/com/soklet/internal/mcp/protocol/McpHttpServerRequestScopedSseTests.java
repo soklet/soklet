@@ -17,6 +17,7 @@
 package com.soklet.internal.mcp.protocol;
 
 import com.soklet.CorsAuthorizer;
+import com.soklet.McpRequestOutcome;
 import com.soklet.StreamTerminationReason;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.AfterEach;
@@ -27,6 +28,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
@@ -527,6 +529,8 @@ public class McpHttpServerRequestScopedSseTests {
 	@Test
 	public void absolute_deadline_atomically_discards_undrained_terminal_response()
 			throws Exception {
+		McpRuntimeObservationRecorder observations =
+				new McpRuntimeObservationRecorder();
 		ControllableClock clock = new ControllableClock();
 		AtomicReference<McpHttpServerRuntime> runtimeReference = new AtomicReference<>();
 		AtomicLong hookInvocations = new AtomicLong();
@@ -542,7 +546,8 @@ public class McpHttpServerRequestScopedSseTests {
 				transportConfiguration(Duration.ofSeconds(1),
 						Duration.ofSeconds(10)),
 				new McpApplicationExecutionConfiguration(
-						1, 1, Duration.ofSeconds(1), Duration.ofDays(1)));
+						1, 1, Duration.ofSeconds(1), Duration.ofDays(1)),
+				observations);
 		runtimeReference.set(runtime);
 
 		try {
@@ -554,12 +559,23 @@ public class McpHttpServerRequestScopedSseTests {
 				Assertions.assertTrue(client.awaitTransportClosure());
 			}
 			Assertions.assertEquals(1L, hookInvocations.get());
+			McpRuntimeObservationRecorder.Observation observation =
+					observations.observation("deadline-race");
+			McpRuntimeObservationRecorder.Finish finish =
+					observation.awaitFinish();
+			Assertions.assertEquals(McpRequestOutcome.DEADLINE_EXCEEDED,
+					finish.outcome());
+			Assertions.assertNull(finish.error());
+			Assertions.assertTrue(finish.throwables().isEmpty());
 			McpApplicationExecutionSnapshot timedOut =
 					awaitApplicationSnapshot(runtime,
 							snapshot -> snapshot.deadlineExpirations() == 1
 									&& snapshot.retainedExchanges() == 0);
 			Assertions.assertEquals(1, timedOut.deadlineExpirations());
 			awaitClean(runtime);
+			Assertions.assertEquals(1, observations.startCount());
+			Assertions.assertEquals(1, observation.finishCount(),
+					"The stale complete result must not publish a second finish.");
 		} finally {
 			runtime.close();
 		}
@@ -612,6 +628,29 @@ public class McpHttpServerRequestScopedSseTests {
 				McpHttpEndpointPolicy.forDiscovery(CorsAuthorizer.rejectAllInstance(),
 						request -> McpRequestAdmissionDecision.ACCEPT),
 				endpoint, router, executionConfiguration, clock);
+	}
+
+	private static McpHttpServerRuntime runtime(McpApplicationRequestHandler handler,
+			McpApplicationClock clock,
+			McpHttpTransportConfiguration transportConfiguration,
+			McpApplicationExecutionConfiguration executionConfiguration,
+			McpRuntimeObservationSink observationSink) {
+		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
+				McpImplementationMetadata.withNameAndVersion(
+						"request-scoped-sse-test", "3.6.0-SNAPSHOT"))
+				.build();
+		McpApplicationRequestRouter router = McpApplicationRequestRouter.fromHandlers(
+				Map.of(APPLICATION_METHOD, handler));
+		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
+				CorsAuthorizer.rejectAllInstance(),
+				request -> McpRequestAdmissionDecision.ACCEPT);
+		McpHttpEndpointBinding binding = new McpHttpEndpointBinding(
+				policy, endpoint, router, observationSink);
+		return new McpHttpServerRuntime(
+				transportConfiguration, List.of(binding),
+				McpJsonLimits.productionDefaults(), executionConfiguration, clock,
+				McpApplicationHandlerExecutorFactory.production(),
+				ignored -> {}, ignored -> {});
 	}
 
 	private static McpHttpTransportConfiguration transportConfiguration(

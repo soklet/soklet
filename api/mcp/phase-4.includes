@@ -115,6 +115,9 @@ com.soklet.McpToolRegistration$CompleteBuilder
 com.soklet.McpToolRegistration$CompleteHandlerStage
 com.soklet.McpToolRegistration$NamedBuilder
 com.soklet.McpToolRegistration$OperationHandlerStage
+com.soklet.MetricsCollector
+com.soklet.MetricsCollector$Snapshot
+com.soklet.MetricsCollector$Snapshot$Builder
 com.soklet.SokletConfig
 com.soklet.SokletConfig$Builder
 com.soklet.SokletConfig$Copier

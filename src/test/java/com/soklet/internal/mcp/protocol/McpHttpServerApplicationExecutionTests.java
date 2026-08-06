@@ -17,6 +17,7 @@
 package com.soklet.internal.mcp.protocol;
 
 import com.soklet.CorsAuthorizer;
+import com.soklet.McpRequestOutcome;
 import com.soklet.StreamTerminationReason;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -178,6 +179,8 @@ public class McpHttpServerApplicationExecutionTests {
 	@Test
 	public void bounded_handler_capacity_queues_one_and_rejects_the_third_exactly()
 			throws Exception {
+		McpRuntimeObservationRecorder observations =
+				new McpRuntimeObservationRecorder();
 		CountDownLatch firstEntered = new CountDownLatch(1);
 		CountDownLatch releaseFirst = new CountDownLatch(1);
 		CountDownLatch secondEntered = new CountDownLatch(1);
@@ -193,7 +196,7 @@ public class McpHttpServerApplicationExecutionTests {
 			return completeResult("invocation-" + invocationNumber);
 		});
 		McpHttpServerRuntime runtime = runtime(router, executionConfiguration(1, 1),
-				McpApplicationClock.SYSTEM);
+				McpApplicationClock.SYSTEM, observations);
 		ExecutorService clients = Executors.newFixedThreadPool(2);
 
 		try {
@@ -208,6 +211,14 @@ public class McpHttpServerApplicationExecutionTests {
 
 			RawResponse third = send(port, "\"third\"");
 			assertExactCapacityResponse(third, "\"third\"");
+			McpRuntimeObservationRecorder.Finish thirdFinish =
+					observations.observation("third").awaitFinish();
+			Assertions.assertEquals(McpRequestOutcome.REJECTED,
+					thirdFinish.outcome());
+			Assertions.assertEquals(new McpJsonRpcError(
+					McpJsonRpcError.INTERNAL_ERROR, "Internal error", Optional.empty()),
+					thirdFinish.error());
+			Assertions.assertTrue(thirdFinish.throwables().isEmpty());
 			Assertions.assertEquals(1, invocations.get(),
 					"A capacity-rejected request must never reach application code.");
 
@@ -228,6 +239,20 @@ public class McpHttpServerApplicationExecutionTests {
 			Assertions.assertEquals(1, snapshot.maximumObservedActiveHandlerSlots());
 			Assertions.assertEquals(1, snapshot.maximumObservedQueuedRequests());
 			Assertions.assertEquals(1, snapshot.capacityRejections());
+
+			McpRuntimeObservationRecorder.Observation firstObservation =
+					observations.observation("first");
+			McpRuntimeObservationRecorder.Observation secondObservation =
+					observations.observation("second");
+			Assertions.assertEquals(McpRequestOutcome.COMPLETE,
+					firstObservation.awaitFinish().outcome());
+			Assertions.assertEquals(McpRequestOutcome.COMPLETE,
+					secondObservation.awaitFinish().outcome());
+			Assertions.assertEquals(3, observations.startCount());
+			Assertions.assertEquals(1, firstObservation.finishCount());
+			Assertions.assertEquals(1, secondObservation.finishCount());
+			Assertions.assertEquals(1,
+					observations.observation("third").finishCount());
 		} finally {
 			releaseFirst.countDown();
 			runtime.close();
@@ -238,6 +263,8 @@ public class McpHttpServerApplicationExecutionTests {
 	@Test
 	public void queued_absolute_deadline_gets_the_exact_capacity_response_without_dispatch()
 			throws Exception {
+		McpRuntimeObservationRecorder observations =
+				new McpRuntimeObservationRecorder();
 		CountDownLatch firstEntered = new CountDownLatch(1);
 		CountDownLatch releaseFirst = new CountDownLatch(1);
 		CountDownLatch firstInterrupted = new CountDownLatch(1);
@@ -262,7 +289,8 @@ public class McpHttpServerApplicationExecutionTests {
 		McpApplicationExecutionConfiguration configuration =
 				new McpApplicationExecutionConfiguration(1, 1,
 						Duration.ofSeconds(5), Duration.ofDays(1));
-		McpHttpServerRuntime runtime = runtime(router, configuration, clock);
+		McpHttpServerRuntime runtime = runtime(router, configuration, clock,
+				observations);
 		ExecutorService clients = Executors.newFixedThreadPool(2);
 
 		try {
@@ -280,6 +308,15 @@ public class McpHttpServerApplicationExecutionTests {
 
 			RawResponse queuedResponse = queued.get(5, TimeUnit.SECONDS);
 			assertExactCapacityResponse(queuedResponse, "\"queued-deadline\"");
+			McpRuntimeObservationRecorder.Observation queuedObservation =
+					observations.observation("queued-deadline");
+			McpRuntimeObservationRecorder.Finish queuedFinish =
+					queuedObservation.awaitFinish();
+			Assertions.assertEquals(McpRequestOutcome.DEADLINE_EXCEEDED,
+					queuedFinish.outcome());
+			Assertions.assertEquals(new McpJsonRpcError(
+					McpJsonRpcError.INTERNAL_ERROR, "Internal error", Optional.empty()),
+					queuedFinish.error());
 			Assertions.assertTrue(firstInterrupted.await(5, TimeUnit.SECONDS),
 					"The simultaneously expired active handler was not interrupted.");
 			Assertions.assertEquals(1, invocations.get(),
@@ -290,6 +327,19 @@ public class McpHttpServerApplicationExecutionTests {
 
 			// The active-deadline wire mapping is intentionally provisional in 3B.1.
 			first.get(5, TimeUnit.SECONDS);
+			McpRuntimeObservationRecorder.Observation activeObservation =
+					observations.observation("active");
+			McpRuntimeObservationRecorder.Finish activeFinish =
+					activeObservation.awaitFinish();
+			Assertions.assertEquals(McpRequestOutcome.DEADLINE_EXCEEDED,
+					activeFinish.outcome());
+			Assertions.assertNull(activeFinish.error());
+			McpApplicationExecutionSnapshot retained =
+					runtime.applicationExecutionSnapshot().orElseThrow();
+			Assertions.assertEquals(1, retained.activeHandlerSlots(),
+					"Client-visible request finish must not recycle a live handler slot.");
+			Assertions.assertEquals(1, retained.retainedExchanges());
+			Assertions.assertEquals(0, retained.retainedTransportLeases());
 			releaseFirst.countDown();
 			McpApplicationExecutionSnapshot snapshot = awaitSnapshot(runtime,
 					value -> value.activeHandlerSlots() == 0
@@ -297,6 +347,9 @@ public class McpHttpServerApplicationExecutionTests {
 							&& value.activeRequestIds() == 0
 							&& value.retainedExchanges() == 0);
 			Assertions.assertEquals(2, snapshot.deadlineExpirations());
+			Assertions.assertEquals(2, observations.startCount());
+			Assertions.assertEquals(1, activeObservation.finishCount());
+			Assertions.assertEquals(1, queuedObservation.finishCount());
 		} finally {
 			releaseFirst.countDown();
 			runtime.close();
@@ -1076,6 +1129,27 @@ public class McpHttpServerApplicationExecutionTests {
 			McpApplicationClock clock) {
 		return runtime(McpHttpTransportConfiguration.productionDefaults(0), router,
 				executionConfiguration, clock);
+	}
+
+	private static McpHttpServerRuntime runtime(McpApplicationRequestRouter router,
+			McpApplicationExecutionConfiguration executionConfiguration,
+			McpApplicationClock clock,
+			McpRuntimeObservationSink observationSink) {
+		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
+				McpImplementationMetadata.withNameAndVersion(
+						"application-test-server", "3.6.0-SNAPSHOT"))
+				.build();
+		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
+				CorsAuthorizer.rejectAllInstance(),
+				request -> McpRequestAdmissionDecision.ACCEPT);
+		McpHttpEndpointBinding binding = new McpHttpEndpointBinding(
+				policy, endpoint, router, observationSink);
+		return new McpHttpServerRuntime(
+				McpHttpTransportConfiguration.productionDefaults(0),
+				List.of(binding), McpJsonLimits.productionDefaults(),
+				executionConfiguration, clock,
+				McpApplicationHandlerExecutorFactory.production(),
+				ignored -> {}, ignored -> {});
 	}
 
 	private static McpHttpServerRuntime runtime(

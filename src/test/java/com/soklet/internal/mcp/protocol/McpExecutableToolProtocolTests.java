@@ -20,6 +20,7 @@ import com.soklet.CorsAuthorizer;
 import com.soklet.McpAdmissionDecision;
 import com.soklet.McpEndpoint;
 import com.soklet.McpImplementation;
+import com.soklet.McpRequestObservationTestSupport;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RateLimitResult;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolInvocationResult;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolPlan;
@@ -243,7 +244,8 @@ public class McpExecutableToolProtocolTests {
 							&& "request-denied".equals(operationName))
 						return RateLimitResult.denied(Duration.ofSeconds(3));
 					return RateLimitResult.allowed();
-				}), toolPlans, ignored -> {}, ignored -> {});
+				}), toolPlans, ignored -> {}, ignored -> {},
+				McpRequestObservationTestSupport.noOpAdapter());
 	}
 
 	private static ToolPlan toolPlan(String name, boolean denyTool,

@@ -46,6 +46,9 @@ public class McpPublicApiInventoryTests {
 			"com.soklet.CorsAuthorizer",
 			"com.soklet.LifecycleObserver",
 			"com.soklet.LogEventType",
+			"com.soklet.MetricsCollector",
+			"com.soklet.MetricsCollector$Snapshot",
+			"com.soklet.MetricsCollector$Snapshot$Builder",
 			"com.soklet.SokletConfig",
 			"com.soklet.SokletConfig$Builder",
 			"com.soklet.SokletConfig$Copier");

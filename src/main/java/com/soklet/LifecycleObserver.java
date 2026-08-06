@@ -436,7 +436,48 @@ public interface LifecycleObserver {
 	 * @param throwable the shutdown failure
 	 */
 	default void didFailToStopMcpServer(@NonNull McpServer mcpServer,
-																	 @NonNull Throwable throwable) {
+														 @NonNull Throwable throwable) {
+		// No-op by default
+	}
+
+	/**
+	 * Called when handling begins for an admitted semantic MCP request or
+	 * notification.
+	 * <p>
+	 * This callback runs after request admission and before request or tool rate
+	 * limiting, handler queue admission, framework response generation,
+	 * application interception, typed-input validation, or handler entry.
+	 * Framework-owned discovery and static catalog operations also invoke this
+	 * callback. Exceptions are contained and do not alter the wire result.
+	 *
+	 * @param context immutable admitted-request context
+	 */
+	default void didStartMcpRequestHandling(@NonNull McpRequestContext context) {
+		// No-op by default
+	}
+
+	/**
+	 * Called exactly once when an admitted semantic MCP request or notification
+	 * reaches its client-visible terminal outcome.
+	 * <p>
+	 * This is a request-finish callback, not a handler-exit callback: application
+	 * code that does not cooperate with cancellation may continue after this
+	 * method runs. The supplied context is the same instance passed to
+	 * {@link #didStartMcpRequestHandling(McpRequestContext)}. Exceptions are
+	 * contained and do not alter the wire result.
+	 *
+	 * @param context    immutable admitted-request context
+	 * @param outcome    fixed client-visible terminal outcome
+	 * @param error      exact client-visible JSON-RPC error, or {@code null} when
+	 *                   the terminal outcome has no JSON-RPC error
+	 * @param duration   total admitted-request duration
+	 * @param throwables immutable failures observed while handling the request
+	 */
+	default void didFinishMcpRequestHandling(@NonNull McpRequestContext context,
+			@NonNull McpRequestOutcome outcome,
+			@Nullable McpJsonRpcError error,
+			@NonNull Duration duration,
+			@NonNull List<@NonNull Throwable> throwables) {
 		// No-op by default
 	}
 

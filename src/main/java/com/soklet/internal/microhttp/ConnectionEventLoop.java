@@ -309,6 +309,8 @@ class ConnectionEventLoop {
         @Nullable
         WritableSource writableSource;
         @Nullable
+        MicrohttpResponse responseInDelivery;
+        @Nullable
         ByteBuffer continueResponseBuffer;
         @Nullable
         Cancelable requestReadTimeoutTask;
@@ -781,6 +783,7 @@ class ConnectionEventLoop {
                 return;
             }
 
+            responseInDelivery = microhttpResponse;
             boolean committed = false;
             boolean bodyOwnershipAttempted = false;
             boolean monitorStreamingResponse = false;
@@ -882,6 +885,7 @@ class ConnectionEventLoop {
                 if (!committed) {
                     cancelDispatch(dispatch, StreamTerminationReason.INTERNAL_ERROR, throwable);
                     if (!bodyOwnershipAttempted) {
+                        responseInDelivery = null;
                         discardResponse(microhttpResponse, StreamTerminationReason.INTERNAL_ERROR, throwable);
                     }
                 }
@@ -942,23 +946,35 @@ class ConnectionEventLoop {
             if (!activeWritableSource.hasRemaining()) { // response fully written
                 activeWritableSource.close();
                 writableSource = null; // done with current write source, remove reference
+                MicrohttpResponse deliveredResponse = responseInDelivery;
+                responseInDelivery = null;
                 monitorClientDisconnectsDuringStreamingResponse = false;
                 streamingResponseBytesDiscarded = 0;
                 cancelResponseWriteIdleTimeout();
-                if (logger.enabled()) {
-                    logger.log(
-                            new LogEntry("event", "write_response"),
-                            new LogEntry("id", id),
-                            new LogEntry("num_bytes", Long.toString(numBytes)));
-                }
-                if (closeAfterResponse) { // non-persistent connection, close now
+                if (deliveredResponse != null)
+                    deliveredResponse.reserveBodyTermination(StreamTerminationReason.COMPLETED, null);
+
+                try {
                     if (logger.enabled()) {
                         logger.log(
+                                new LogEntry("event", "write_response"),
+                                new LogEntry("id", id),
+                                new LogEntry("num_bytes", Long.toString(numBytes)));
+                    }
+                    if (closeAfterResponse) { // non-persistent connection, close now
+                        if (logger.enabled()) {
+                            logger.log(
                                 new LogEntry("event", "close_after_response"),
                                 new LogEntry("id", id));
+                        }
+                        failSafeClose();
                     }
-                    failSafeClose();
-                } else { // persistent connection
+                } finally {
+                    if (deliveredResponse != null)
+                        deliverBodyTermination(deliveredResponse);
+                }
+
+                if (!closeAfterResponse) { // persistent connection
                     parseBufferedRequestAfterResponse();
                 }
             } else { // response not fully written, switch to or remain in write mode
@@ -1136,11 +1152,27 @@ class ConnectionEventLoop {
 
         private void discardResponse(MicrohttpResponse response, StreamTerminationReason reason,
                                      @Nullable Throwable cause) {
+            Throwable closeFailure = null;
+
             try {
                 response.closeBody(reason, cause);
             } catch (Throwable throwable) {
+                closeFailure = throwable;
                 logThrowable(throwable,
                         new LogEntry("event", "response_discard_error"),
+                        new LogEntry("id", id));
+            } finally {
+                response.reserveBodyTermination(reason, cause == null ? closeFailure : cause);
+                deliverBodyTermination(response);
+            }
+        }
+
+        private void deliverBodyTermination(MicrohttpResponse response) {
+            try {
+                response.deliverBodyTermination();
+            } catch (Throwable throwable) {
+                logThrowable(throwable,
+                        new LogEntry("event", "response_termination_listener_error"),
                         new LogEntry("id", id));
             }
         }
@@ -1158,6 +1190,9 @@ class ConnectionEventLoop {
                     : cancelationReason;
             InFlightDispatch dispatch = inFlightDispatch;
             inFlightDispatch = null;
+            MicrohttpResponse response = responseInDelivery;
+            responseInDelivery = null;
+            Throwable responseCloseFailure = null;
 
             try {
                 if (dispatch != null) {
@@ -1174,6 +1209,7 @@ class ConnectionEventLoop {
                     try {
                         source.close(effectiveReason, cause);
                     } catch (Throwable throwable) {
+                        responseCloseFailure = throwable;
                         logThrowable(throwable,
                                 new LogEntry("event", "response_close_error"),
                                 new LogEntry("id", id));
@@ -1190,6 +1226,12 @@ class ConnectionEventLoop {
                     connectionCount.decrementAndGet();
                     admission.release();
                 }
+            }
+
+            if (response != null) {
+                response.reserveBodyTermination(effectiveReason,
+                        cause == null ? responseCloseFailure : cause);
+                deliverBodyTermination(response);
             }
         }
 

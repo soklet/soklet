@@ -28,10 +28,13 @@ import com.soklet.McpJsonNumber;
 import com.soklet.McpJsonObject;
 import com.soklet.McpJsonString;
 import com.soklet.McpJsonValue;
+import com.soklet.McpRequestContext;
 import com.soklet.McpRequestId;
+import com.soklet.McpRequestOutcome;
 import com.soklet.McpRequestRejection;
 import com.soklet.Request;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
@@ -89,10 +92,19 @@ public final class McpServerRuntimeBridge {
 			@NonNull AdmissionAdapter admissionAdapter,
 			@NonNull Consumer<@NonNull String> startupDiagnosticConsumer,
 			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer) {
-		this(host, port, publicEndpoint, allowedHosts, requireOrigin,
-				corsAuthorizer, corsAuthorizerExplicitlyConfigured, admissionAdapter,
-				Optional.empty(), List.of(), startupDiagnosticConsumer,
-				unexpectedTerminationConsumer);
+		this(host, port,
+				List.of(singletonEndpointPlan(publicEndpoint, List.of(), List.of(),
+						List.of(), Optional.empty())),
+				allowedHosts, requireOrigin, corsAuthorizer,
+				corsAuthorizerExplicitlyConfigured, admissionAdapter, Optional.empty(),
+				McpApplicationExecutionConfiguration.productionDefaults()
+						.handlerConcurrency(),
+				McpApplicationExecutionConfiguration.productionDefaults()
+						.handlerQueueCapacity(),
+				McpApplicationExecutionConfiguration.productionDefaults()
+						.requestDeadline(),
+				Optional.empty(), startupDiagnosticConsumer,
+				unexpectedTerminationConsumer, Optional.empty());
 	}
 
 	/**
@@ -107,11 +119,13 @@ public final class McpServerRuntimeBridge {
 			@NonNull Optional<@NonNull RateLimitAdapter> requestRateLimitAdapter,
 			@NonNull List<@NonNull ToolPlan> toolPlans,
 			@NonNull Consumer<@NonNull String> startupDiagnosticConsumer,
-			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer) {
+			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer,
+			@NonNull RequestObservationAdapter requestObservationAdapter) {
 		this(host, port, publicEndpoint, allowedHosts, requireOrigin,
 				corsAuthorizer, corsAuthorizerExplicitlyConfigured,
 				admissionAdapter, requestRateLimitAdapter, toolPlans, List.of(),
-				startupDiagnosticConsumer, unexpectedTerminationConsumer);
+				startupDiagnosticConsumer, unexpectedTerminationConsumer,
+				requestObservationAdapter);
 	}
 
 	/**
@@ -128,12 +142,13 @@ public final class McpServerRuntimeBridge {
 			@NonNull List<@NonNull ToolPlan> toolPlans,
 			@NonNull List<@NonNull PromptPlan> promptPlans,
 			@NonNull Consumer<@NonNull String> startupDiagnosticConsumer,
-			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer) {
+			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer,
+			@NonNull RequestObservationAdapter requestObservationAdapter) {
 		this(host, port, publicEndpoint, allowedHosts, requireOrigin,
 				corsAuthorizer, corsAuthorizerExplicitlyConfigured, admissionAdapter,
 				requestRateLimitAdapter, toolPlans, promptPlans, List.of(),
 				Optional.empty(), startupDiagnosticConsumer,
-				unexpectedTerminationConsumer);
+				unexpectedTerminationConsumer, requestObservationAdapter);
 	}
 
 	/**
@@ -151,7 +166,8 @@ public final class McpServerRuntimeBridge {
 			@NonNull List<@NonNull ResourcePlan> resourcePlans,
 			@NonNull Optional<@NonNull ResourceListPlan> resourceListPlan,
 			@NonNull Consumer<@NonNull String> startupDiagnosticConsumer,
-			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer) {
+			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer,
+			@NonNull RequestObservationAdapter requestObservationAdapter) {
 		this(host, port, publicEndpoint, allowedHosts, requireOrigin,
 				corsAuthorizer, corsAuthorizerExplicitlyConfigured, admissionAdapter,
 				requestRateLimitAdapter, toolPlans, promptPlans, resourcePlans,
@@ -163,7 +179,7 @@ public final class McpServerRuntimeBridge {
 				McpApplicationExecutionConfiguration.productionDefaults()
 						.requestDeadline(),
 				Optional.empty(), startupDiagnosticConsumer,
-				unexpectedTerminationConsumer);
+				unexpectedTerminationConsumer, requestObservationAdapter);
 	}
 
 	/**
@@ -185,7 +201,8 @@ public final class McpServerRuntimeBridge {
 			@NonNull Optional<@NonNull Supplier<@NonNull ExecutorService>>
 					requestHandlerExecutorServiceSupplier,
 			@NonNull Consumer<@NonNull String> startupDiagnosticConsumer,
-			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer) {
+			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer,
+			@NonNull RequestObservationAdapter requestObservationAdapter) {
 		this(host, port,
 				List.of(singletonEndpointPlan(publicEndpoint, toolPlans, promptPlans,
 						resourcePlans, resourceListPlan)),
@@ -194,7 +211,7 @@ public final class McpServerRuntimeBridge {
 				requestRateLimitAdapter, requestHandlerConcurrency,
 				requestHandlerQueueCapacity, requestTimeout,
 				requestHandlerExecutorServiceSupplier, startupDiagnosticConsumer,
-				unexpectedTerminationConsumer);
+				unexpectedTerminationConsumer, requestObservationAdapter);
 	}
 
 	@NonNull
@@ -211,8 +228,8 @@ public final class McpServerRuntimeBridge {
 	}
 
 	/**
-	 * Creates one listener projection from multiple immutable endpoint plans.
-	 * Handler execution bounds and the optional executor remain server-wide.
+	 * Creates one listener projection from immutable endpoint plans with
+	 * admitted-request context and observation.
 	 */
 	public McpServerRuntimeBridge(@NonNull String host, int port,
 			@NonNull List<@NonNull EndpointPlan> endpointPlans,
@@ -226,7 +243,32 @@ public final class McpServerRuntimeBridge {
 			@NonNull Optional<@NonNull Supplier<@NonNull ExecutorService>>
 					requestHandlerExecutorServiceSupplier,
 			@NonNull Consumer<@NonNull String> startupDiagnosticConsumer,
-			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer) {
+			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer,
+			@NonNull RequestObservationAdapter requestObservationAdapter) {
+		this(host, port, endpointPlans, allowedHosts, requireOrigin,
+				corsAuthorizer, corsAuthorizerExplicitlyConfigured,
+				admissionAdapter, requestRateLimitAdapter,
+				requestHandlerConcurrency, requestHandlerQueueCapacity,
+				requestTimeout, requestHandlerExecutorServiceSupplier,
+				startupDiagnosticConsumer, unexpectedTerminationConsumer,
+				Optional.of(requireNonNull(requestObservationAdapter)));
+	}
+
+	private McpServerRuntimeBridge(@NonNull String host, int port,
+			@NonNull List<@NonNull EndpointPlan> endpointPlans,
+			@NonNull Set<@NonNull String> allowedHosts, boolean requireOrigin,
+			@NonNull CorsAuthorizer corsAuthorizer,
+			boolean corsAuthorizerExplicitlyConfigured,
+			@NonNull AdmissionAdapter admissionAdapter,
+			@NonNull Optional<@NonNull RateLimitAdapter> requestRateLimitAdapter,
+			int requestHandlerConcurrency, int requestHandlerQueueCapacity,
+			@NonNull Duration requestTimeout,
+			@NonNull Optional<@NonNull Supplier<@NonNull ExecutorService>>
+					requestHandlerExecutorServiceSupplier,
+			@NonNull Consumer<@NonNull String> startupDiagnosticConsumer,
+			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer,
+			@NonNull Optional<@NonNull RequestObservationAdapter>
+					requestObservationAdapter) {
 		requireNonNull(host);
 		List<EndpointPlan> immutableEndpointPlans =
 				List.copyOf(requireNonNull(endpointPlans));
@@ -238,12 +280,13 @@ public final class McpServerRuntimeBridge {
 		requireNonNull(requestHandlerExecutorServiceSupplier);
 		requireNonNull(startupDiagnosticConsumer);
 		requireNonNull(unexpectedTerminationConsumer);
+		requireNonNull(requestObservationAdapter);
 
 		List<McpHttpEndpointBinding> endpointBindings = immutableEndpointPlans.stream()
 				.map(endpointPlan -> toEndpointBinding(endpointPlan, allowedHosts,
 						requireOrigin, corsAuthorizer,
 						corsAuthorizerExplicitlyConfigured, admissionAdapter,
-						requestRateLimitAdapter))
+						requestRateLimitAdapter, requestObservationAdapter))
 				.toList();
 		McpHttpTransportConfiguration defaults =
 				McpHttpTransportConfiguration.productionDefaults(port);
@@ -282,7 +325,9 @@ public final class McpServerRuntimeBridge {
 			@NonNull CorsAuthorizer corsAuthorizer,
 			boolean corsAuthorizerExplicitlyConfigured,
 			@NonNull AdmissionAdapter admissionAdapter,
-			@NonNull Optional<@NonNull RateLimitAdapter> requestRateLimitAdapter) {
+			@NonNull Optional<@NonNull RateLimitAdapter> requestRateLimitAdapter,
+			@NonNull Optional<@NonNull RequestObservationAdapter>
+					requestObservationAdapter) {
 		requireNonNull(endpointPlan);
 		McpEndpoint publicEndpoint = endpointPlan.endpoint();
 		McpImplementation publicInformation = publicEndpoint.getServerInformation();
@@ -440,8 +485,49 @@ public final class McpServerRuntimeBridge {
 				McpApplicationRequestRouter.fromHandlersAndOperationRoutes(
 						Map.of(), toolRoutes, promptRoutes, exactResourceRoutes,
 						resourceTemplateRoutes, internalResourceListRoute);
+		if (requestObservationAdapter.isEmpty())
+			return new McpHttpEndpointBinding(endpointPolicy, endpoint,
+					applicationRouter);
+
+		RequestObservationAdapter observationAdapter =
+				requestObservationAdapter.orElseThrow();
+		McpRuntimeObservationSink observationSink = input -> {
+			RequestObservation publicObservation = requireNonNull(
+					observationAdapter.didStartRequest(new RequestObservationInput(
+							input.request(), publicEndpoint,
+							input.endpointPathParameters(), input.jsonRpcMethod(),
+							input.requestId().map(McpServerRuntimeBridge::toPublic),
+							input.protocolVersion(), input.operationName(),
+							input.clientInformation().map(
+									McpServerRuntimeBridge::toPublic),
+							(McpJsonObject) toPublic(input.clientCapabilities()),
+							(McpJsonObject) toPublic(input.requestMetadata()),
+							toPublic(input.admissionIdentity()))),
+					"The MCP request-observation adapter returned null.");
+			return new McpRuntimeRequestObservation() {
+				@Override
+				@NonNull
+				public Optional<@NonNull McpRequestContext> publicContext() {
+					return Optional.of(requireNonNull(publicObservation.context(),
+							"An MCP request observation returned a null context."));
+				}
+
+				@Override
+				public void didFinish(@NonNull McpRequestOutcome outcome,
+						com.soklet.internal.mcp.protocol.@Nullable McpJsonRpcError error,
+						@NonNull Duration duration,
+						@NonNull List<@NonNull Throwable> throwables) {
+					publicObservation.didFinish(outcome,
+							error == null ? null : new RequestError(
+									error.code(), error.message(),
+									error.data().map(McpServerRuntimeBridge::toPublic)),
+							duration,
+							throwables);
+				}
+			};
+		};
 		return new McpHttpEndpointBinding(endpointPolicy, endpoint,
-				applicationRouter);
+				applicationRouter, observationSink);
 	}
 
 	@NonNull
@@ -742,6 +828,7 @@ public final class McpServerRuntimeBridge {
 	 */
 	@ThreadSafe
 	public record ResourceInvocation(@NonNull Request request,
+			@NonNull McpRequestContext requestContext,
 			@NonNull McpEndpoint endpoint,
 			@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
 			@NonNull String jsonRpcMethod, @NonNull McpRequestId requestId,
@@ -756,6 +843,7 @@ public final class McpServerRuntimeBridge {
 		/** Validates and snapshots the erased invocation. */
 		public ResourceInvocation {
 			requireNonNull(request);
+			requireNonNull(requestContext);
 			requireNonNull(endpoint);
 			endpointPathParameters = Map.copyOf(
 					requireNonNull(endpointPathParameters));
@@ -783,6 +871,7 @@ public final class McpServerRuntimeBridge {
 	 */
 	@ThreadSafe
 	public record ResourceListInvocation(@NonNull Request request,
+			@NonNull McpRequestContext requestContext,
 			@NonNull McpEndpoint endpoint,
 			@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
 			@NonNull String jsonRpcMethod, @NonNull McpRequestId requestId,
@@ -797,6 +886,7 @@ public final class McpServerRuntimeBridge {
 		/** Validates and snapshots the erased invocation. */
 		public ResourceListInvocation {
 			requireNonNull(request);
+			requireNonNull(requestContext);
 			requireNonNull(endpoint);
 			endpointPathParameters = Map.copyOf(
 					requireNonNull(endpointPathParameters));
@@ -983,6 +1073,7 @@ public final class McpServerRuntimeBridge {
 	 */
 	@ThreadSafe
 	public record ToolInvocation(@NonNull Request request,
+			@NonNull McpRequestContext requestContext,
 			@NonNull McpEndpoint endpoint,
 			@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
 			@NonNull String jsonRpcMethod,
@@ -997,6 +1088,7 @@ public final class McpServerRuntimeBridge {
 			@NonNull HandlerEntryGuard handlerEntryGuard) {
 		public ToolInvocation {
 			requireNonNull(request);
+			requireNonNull(requestContext);
 			requireNonNull(endpoint);
 			endpointPathParameters = Map.copyOf(
 					requireNonNull(endpointPathParameters));
@@ -1033,6 +1125,7 @@ public final class McpServerRuntimeBridge {
 	 */
 	@ThreadSafe
 	public record PromptInvocation(@NonNull Request request,
+			@NonNull McpRequestContext requestContext,
 			@NonNull McpEndpoint endpoint,
 			@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
 			@NonNull String jsonRpcMethod,
@@ -1047,6 +1140,7 @@ public final class McpServerRuntimeBridge {
 			@NonNull HandlerEntryGuard handlerEntryGuard) {
 		public PromptInvocation {
 			requireNonNull(request);
+			requireNonNull(requestContext);
 			requireNonNull(endpoint);
 			endpointPathParameters = Map.copyOf(
 					requireNonNull(endpointPathParameters));
@@ -1324,6 +1418,87 @@ public final class McpServerRuntimeBridge {
 	}
 
 	/**
+	 * Internal bridge callback for an admitted semantic request.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	@FunctionalInterface
+	public interface RequestObservationAdapter {
+		/** @return one observation handle retaining the supplied context */
+		@NonNull
+		RequestObservation didStartRequest(
+				@NonNull RequestObservationInput input);
+	}
+
+	/**
+	 * Internal bridge handle for one admitted semantic request.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	public interface RequestObservation {
+		/** @return the request context propagated to lifecycle and handlers */
+		@NonNull
+		McpRequestContext context();
+
+		/** Delivers the exactly-once terminal observation. */
+		void didFinish(@NonNull McpRequestOutcome outcome,
+				@Nullable RequestError error,
+				@NonNull Duration duration,
+				@NonNull List<@NonNull Throwable> throwables);
+	}
+
+	/**
+	 * Immutable bridge projection of a client-visible JSON-RPC error.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	public record RequestError(int code, @NonNull String message,
+			@NonNull Optional<@NonNull McpJsonValue> data) {
+		/** Validates the client-visible error projection. */
+		public RequestError {
+			requireNonNull(message);
+			requireNonNull(data);
+		}
+	}
+
+	/**
+	 * Immutable public-value projection for one admitted semantic request.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	public record RequestObservationInput(@NonNull Request request,
+			@NonNull McpEndpoint endpoint,
+			@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
+			@NonNull String jsonRpcMethod,
+			@NonNull Optional<@NonNull McpRequestId> requestId,
+			@NonNull String protocolVersion,
+			@NonNull Optional<@NonNull String> operationName,
+			@NonNull Optional<@NonNull McpImplementation> clientInformation,
+			@NonNull McpJsonObject clientCapabilities,
+			@NonNull McpJsonObject requestMetadata,
+			@NonNull McpAdmissionIdentity admissionIdentity) {
+		/** Validates and snapshots the admitted-request projection. */
+		public RequestObservationInput {
+			requireNonNull(request);
+			requireNonNull(endpoint);
+			endpointPathParameters = Map.copyOf(
+					requireNonNull(endpointPathParameters));
+			requireNonNull(jsonRpcMethod);
+			requireNonNull(requestId);
+			requireNonNull(protocolVersion);
+			requireNonNull(operationName);
+			requireNonNull(clientInformation);
+			requireNonNull(clientCapabilities);
+			requireNonNull(requestMetadata);
+			requireNonNull(admissionIdentity);
+		}
+	}
+
+	/**
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
@@ -1352,6 +1527,14 @@ public final class McpServerRuntimeBridge {
 	}
 
 	@NonNull
+	private static McpRequestContext requirePublicRequestContext(
+			@NonNull McpApplicationInvocation invocation) {
+		return requireNonNull(invocation).publicRequestContext().orElseThrow(() ->
+				new IllegalStateException(
+						"A production MCP invocation requires its admitted request context."));
+	}
+
+	@NonNull
 	private static McpWireResult invokeTool(@NonNull ToolPlan toolPlan,
 			@NonNull McpApplicationInvocation invocation,
 			@NonNull McpEndpoint publicEndpoint) throws Exception {
@@ -1366,6 +1549,7 @@ public final class McpServerRuntimeBridge {
 				invocation.sokletRequest().orElseThrow(() ->
 						new IllegalStateException(
 								"A production MCP tool invocation requires its Soklet request.")),
+				requirePublicRequestContext(invocation),
 				publicEndpoint, Map.of(), request.method(), toPublic(request.id()),
 				requestMetadata.protocolVersion(), toolPlan.name(),
 				requestMetadata.clientInformation().map(McpServerRuntimeBridge::toPublic),
@@ -1470,6 +1654,7 @@ public final class McpServerRuntimeBridge {
 				invocation.sokletRequest().orElseThrow(() ->
 						new IllegalStateException(
 								"A production MCP prompt invocation requires its Soklet request.")),
+				requirePublicRequestContext(invocation),
 				publicEndpoint, Map.of(), request.method(), toPublic(request.id()),
 				requestMetadata.protocolVersion(), promptPlan.name(),
 				requestMetadata.clientInformation().map(McpServerRuntimeBridge::toPublic),
@@ -1512,6 +1697,7 @@ public final class McpServerRuntimeBridge {
 				invocation.sokletRequest().orElseThrow(() ->
 						new IllegalStateException(
 								"A production MCP resource invocation requires its Soklet request.")),
+				requirePublicRequestContext(invocation),
 				publicEndpoint, Map.of(), request.method(), toPublic(request.id()),
 				requestMetadata.protocolVersion(), internalInvocation.uri(),
 				requestMetadata.clientInformation().map(McpServerRuntimeBridge::toPublic),
@@ -1554,6 +1740,7 @@ public final class McpServerRuntimeBridge {
 				invocation.sokletRequest().orElseThrow(() ->
 						new IllegalStateException(
 								"A production MCP resource-list invocation requires its Soklet request.")),
+				requirePublicRequestContext(invocation),
 				publicEndpoint, Map.of(), request.method(), toPublic(request.id()),
 				requestMetadata.protocolVersion(),
 				requestMetadata.clientInformation().map(McpServerRuntimeBridge::toPublic),

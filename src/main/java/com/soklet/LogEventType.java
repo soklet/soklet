@@ -92,6 +92,14 @@ public enum LogEventType {
 	 */
 	LIFECYCLE_OBSERVER_DID_FINISH_REQUEST_HANDLING_FAILED,
 	/**
+	 * Indicates {@link LifecycleObserver#didStartMcpRequestHandling(McpRequestContext)} threw an exception.
+	 */
+	LIFECYCLE_OBSERVER_DID_START_MCP_REQUEST_HANDLING_FAILED,
+	/**
+	 * Indicates {@link LifecycleObserver#didFinishMcpRequestHandling(McpRequestContext, McpRequestOutcome, McpJsonRpcError, Duration, List)} threw an exception.
+	 */
+	LIFECYCLE_OBSERVER_DID_FINISH_MCP_REQUEST_HANDLING_FAILED,
+	/**
 	 * Indicates {@link LifecycleObserver#willWriteResponse(ServerType, Request, ResourceMethod, MarshaledResponse)}  threw an exception.
 	 */
 	LIFECYCLE_OBSERVER_WILL_WRITE_RESPONSE_FAILED,
