@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.annotation.McpHeader;
 import com.soklet.converter.TypeReference;
 import org.junit.jupiter.api.Test;
 
@@ -95,6 +96,43 @@ class McpToolRegistrationTests {
 				items.getElements().get(0));
 		assertEquals(new McpJsonString("a"),
 				item.find("identifier").orElseThrow());
+	}
+
+	@Test
+	void mirroredHeadersArePublishedAndRejectedOutsideTheirInputContract() {
+		McpToolRegistration<MirroredArguments> registration =
+				McpToolRegistration.withName("mirrored")
+						.argumentType(MirroredArguments.class)
+						.handler((request, call, features) ->
+								McpCompleteResult.fromToolText("done"))
+						.build();
+		McpJsonObject inputSchema = registration.getInputSchema().getDocument();
+
+		assertEquals(new McpJsonString("Tenant"),
+				property(inputSchema, "tenant").find("x-mcp-header")
+						.orElseThrow());
+		McpJsonObject routing = property(inputSchema, "routing");
+		assertEquals(new McpJsonString("Dry-Run"),
+				property(routing, "dryRun").find("x-mcp-header")
+						.orElseThrow());
+		assertEquals(new McpJsonString("Shard"),
+				property(routing, "shard").find("x-mcp-header")
+						.orElseThrow());
+		assertTrue(property(inputSchema, "unmirrored")
+				.find("x-mcp-header").isEmpty());
+
+		assertThrows(IllegalArgumentException.class,
+				() -> McpToolRegistration.withName("invalid-header-name")
+						.argumentType(InvalidHeaderName.class));
+		assertThrows(IllegalArgumentException.class,
+				() -> McpToolRegistration.withName("duplicate-header-name")
+						.argumentType(DuplicateHeaders.class));
+		assertThrows(IllegalArgumentException.class,
+				() -> McpToolRegistration.withName("nonprimitive-header")
+						.argumentType(NonprimitiveHeader.class));
+		assertThrows(IllegalArgumentException.class,
+				() -> McpToolRegistration.withName("mirrored-output")
+						.types(MirroredArguments.class, MirroredOutput.class));
 	}
 
 	@Test
@@ -283,6 +321,13 @@ class McpToolRegistrationTests {
 				.build();
 	}
 
+	private static McpJsonObject property(McpJsonObject schema, String name) {
+		McpJsonObject properties = assertInstanceOf(McpJsonObject.class,
+				schema.find("properties").orElseThrow());
+		return assertInstanceOf(McpJsonObject.class,
+				properties.find(name).orElseThrow());
+	}
+
 	private static McpRequestContext requestContext() {
 		return new McpRequestContext() {
 			@Override
@@ -371,5 +416,27 @@ class McpToolRegistrationTests {
 	}
 
 	private record Item(String identifier, int score) {
+	}
+
+	private record MirroredArguments(
+			@McpHeader("Tenant") String tenant, Routing routing,
+			String unmirrored) {
+	}
+
+	private record Routing(@McpHeader("Dry-Run") boolean dryRun,
+			@McpHeader("Shard") int shard) {
+	}
+
+	private record InvalidHeaderName(@McpHeader("bad name") String value) {
+	}
+
+	private record DuplicateHeaders(@McpHeader("Tenant") String first,
+			@McpHeader("tenant") boolean second) {
+	}
+
+	private record NonprimitiveHeader(@McpHeader("Routing") Routing routing) {
+	}
+
+	private record MirroredOutput(@McpHeader("Output") String value) {
 	}
 }

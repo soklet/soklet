@@ -16,6 +16,7 @@
 
 package com.soklet.internal.mcp.schema;
 
+import com.soklet.annotation.McpHeader;
 import com.soklet.annotation.McpToolArgument;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -40,6 +41,7 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
@@ -261,18 +263,18 @@ final class McpTypeMirrorTypedTypeModel
 						"A record component accessor must have an executable type.");
 			@Nullable McpToolArgument argument = component.getAnnotation(
 					McpToolArgument.class);
+			@Nullable McpHeader header = component.getAnnotation(McpHeader.class);
 			String javaName = component.getSimpleName().toString();
 			String configuredName = argument == null ? ""
 					: requireNonNull(argument.name());
 			String publishedName = configuredName.isBlank()
 					? javaName : configuredName;
-			described.add(argument == null
-					? McpTypedTypeDescriptor.RecordComponent.fromNameAndType(
-							javaName, accessor.getReturnType())
-					: McpTypedTypeDescriptor.RecordComponent.fromNameAndType(
-							publishedName, accessor.getReturnType(),
-							requireNonNull(argument.title()),
-							requireNonNull(argument.description())));
+			described.add(McpTypedTypeDescriptor.RecordComponent.fromNameAndType(
+					publishedName, accessor.getReturnType(),
+					argument == null ? "" : requireNonNull(argument.title()),
+					argument == null ? "" : requireNonNull(argument.description()),
+					header == null ? Optional.empty()
+							: Optional.of(requireNonNull(header.value()))));
 		}
 		return new McpTypedTypeDescriptor.RecordValue<>(binaryName(declaration),
 				described, genericArgumentStructuralComplexity,

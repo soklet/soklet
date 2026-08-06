@@ -16,6 +16,7 @@
 
 package com.soklet.internal.mcp.schema;
 
+import com.soklet.annotation.McpHeader;
 import com.soklet.annotation.McpToolArgument;
 import com.soklet.internal.mcp.protocol.McpJsonValue;
 import org.jspecify.annotations.NonNull;
@@ -232,17 +233,17 @@ final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
 					sourceComponentTypes.get(index), substitutions);
 			@Nullable McpToolArgument argument = component.getAnnotation(
 					McpToolArgument.class);
+			@Nullable McpHeader header = component.getAnnotation(McpHeader.class);
 			String configuredName = argument == null ? ""
 					: requireNonNull(argument.name());
 			String publishedName = configuredName.isBlank()
 					? component.getName() : configuredName;
-			described.add(argument == null
-					? McpTypedTypeDescriptor.RecordComponent.fromNameAndType(
-							component.getName(), componentType)
-					: McpTypedTypeDescriptor.RecordComponent.fromNameAndType(
-							publishedName, componentType,
-							requireNonNull(argument.title()),
-							requireNonNull(argument.description())));
+			described.add(McpTypedTypeDescriptor.RecordComponent.fromNameAndType(
+					publishedName, componentType,
+					argument == null ? "" : requireNonNull(argument.title()),
+					argument == null ? "" : requireNonNull(argument.description()),
+					header == null ? Optional.empty()
+							: Optional.of(requireNonNull(header.value()))));
 		}
 		return new McpTypedTypeDescriptor.RecordValue<>(recordClass.getName(),
 				described, genericArgumentStructuralComplexity,

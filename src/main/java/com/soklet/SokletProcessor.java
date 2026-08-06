@@ -19,6 +19,7 @@ package com.soklet;
 import com.soklet.annotation.DELETE;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.HEAD;
+import com.soklet.annotation.McpHeader;
 import com.soklet.annotation.McpListResources;
 import com.soklet.annotation.McpPrompt;
 import com.soklet.annotation.McpPromptArgument;
@@ -95,6 +96,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -325,6 +327,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		out.add(McpServerEndpoint.class.getCanonicalName());
 		out.add(McpTool.class.getCanonicalName());
 		out.add(McpToolArgument.class.getCanonicalName());
+		out.add(McpHeader.class.getCanonicalName());
 		out.add(McpPrompt.class.getCanonicalName());
 		out.add(McpPromptArgument.class.getCanonicalName());
 		out.add(McpResource.class.getCanonicalName());
@@ -484,6 +487,8 @@ public final class SokletProcessor extends AbstractProcessor {
 				elements.getTypeElement(McpTool.class.getCanonicalName());
 		TypeElement argumentAnnotation = elements.getTypeElement(
 				McpToolArgument.class.getCanonicalName());
+		TypeElement headerAnnotation = elements.getTypeElement(
+				McpHeader.class.getCanonicalName());
 		TypeElement promptAnnotation =
 				elements.getTypeElement(McpPrompt.class.getCanonicalName());
 		TypeElement promptArgumentAnnotation = elements.getTypeElement(
@@ -495,14 +500,16 @@ public final class SokletProcessor extends AbstractProcessor {
 		TypeElement listResourcesAnnotation = elements.getTypeElement(
 				McpListResources.class.getCanonicalName());
 		if (endpointAnnotation == null || toolAnnotation == null
-				|| argumentAnnotation == null || promptAnnotation == null
+				|| argumentAnnotation == null || headerAnnotation == null
+				|| promptAnnotation == null
 				|| promptArgumentAnnotation == null || resourceAnnotation == null
 				|| resourceUriParameterAnnotation == null
 				|| listResourcesAnnotation == null)
 			return;
 
 		validateMcpAnnotationPlacement(roundEnv, endpointAnnotation,
-				toolAnnotation, argumentAnnotation, promptAnnotation,
+				toolAnnotation, argumentAnnotation, headerAnnotation,
+				promptAnnotation,
 				promptArgumentAnnotation, resourceAnnotation,
 				resourceUriParameterAnnotation, listResourcesAnnotation);
 
@@ -553,7 +560,8 @@ public final class SokletProcessor extends AbstractProcessor {
 			pendingMcpEndpoints.remove(endpointBinaryName);
 
 			McpEndpointModel endpoint = validateMcpEndpoint(endpointType,
-					toolAnnotation, argumentAnnotation, promptAnnotation,
+					toolAnnotation, argumentAnnotation, headerAnnotation,
+					promptAnnotation,
 					promptArgumentAnnotation, resourceAnnotation,
 					resourceUriParameterAnnotation, listResourcesAnnotation);
 			if (endpoint == null)
@@ -676,6 +684,7 @@ public final class SokletProcessor extends AbstractProcessor {
 			@NonNull TypeElement endpointAnnotation,
 			@NonNull TypeElement toolAnnotation,
 			@NonNull TypeElement argumentAnnotation,
+			@NonNull TypeElement headerAnnotation,
 			@NonNull TypeElement promptAnnotation,
 			@NonNull TypeElement promptArgumentAnnotation,
 			@NonNull TypeElement resourceAnnotation,
@@ -764,6 +773,38 @@ public final class SokletProcessor extends AbstractProcessor {
 		}
 
 		for (Element element : roundEnv.getElementsAnnotatedWith(
+				headerAnnotation)) {
+			if (element.getKind() == ElementKind.RECORD_COMPONENT)
+				continue;
+			if (element.getKind() != ElementKind.PARAMETER) {
+				mcpError(element,
+						"Soklet: @McpHeader can only be applied to parameters or record components.");
+				continue;
+			}
+			Element method = element.getEnclosingElement();
+			Element owner = method.getEnclosingElement();
+			// A record-component annotation whose target also includes PARAMETER
+			// is propagated by javac to the canonical constructor parameter.
+			if (method.getKind() == ElementKind.CONSTRUCTOR
+					&& owner instanceof TypeElement recordType
+					&& owner.getKind() == ElementKind.RECORD) {
+				boolean propagatedFromComponent = recordType.getRecordComponents()
+						.stream()
+						.anyMatch(component -> component.getSimpleName().contentEquals(
+								element.getSimpleName())
+								&& findAnnotation(component,
+									headerAnnotation) != null);
+				if (propagatedFromComponent)
+					continue;
+			}
+			if (findAnnotation(element, argumentAnnotation) == null
+					|| findAnnotation(method, toolAnnotation) == null
+					|| findAnnotation(owner, endpointAnnotation) == null)
+				mcpError(element,
+						"Soklet: @McpHeader parameters must also declare @McpToolArgument and belong to an @McpTool method on an @McpServerEndpoint class.");
+		}
+
+		for (Element element : roundEnv.getElementsAnnotatedWith(
 				promptArgumentAnnotation)) {
 			if (element.getKind() != ElementKind.PARAMETER) {
 				mcpError(element,
@@ -798,6 +839,7 @@ public final class SokletProcessor extends AbstractProcessor {
 			@NonNull TypeElement endpointType,
 			@NonNull TypeElement toolAnnotation,
 			@NonNull TypeElement argumentAnnotation,
+			@NonNull TypeElement headerAnnotation,
 			@NonNull TypeElement promptAnnotation,
 			@NonNull TypeElement promptArgumentAnnotation,
 			@NonNull TypeElement resourceAnnotation,
@@ -923,7 +965,7 @@ public final class SokletProcessor extends AbstractProcessor {
 			}
 			if (tool) {
 				McpToolModel model = validateMcpTool((ExecutableElement) enclosed,
-						argumentAnnotation);
+						argumentAnnotation, headerAnnotation);
 				if (model != null)
 					tools.add(model);
 			} else if (prompt) {
@@ -1022,7 +1064,8 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private McpToolModel validateMcpTool(@NonNull ExecutableElement method,
-			@NonNull TypeElement argumentAnnotation) {
+			@NonNull TypeElement argumentAnnotation,
+			@NonNull TypeElement headerAnnotation) {
 		int errorsBefore = mcpProcessingErrorCount;
 		AnnotationMirror annotation =
 				findAnnotation(method, McpTool.class.getCanonicalName());
@@ -1081,6 +1124,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		for (VariableElement parameter : method.getParameters()) {
 			AnnotationMirror argument = findAnnotation(parameter,
 					argumentAnnotation);
+			AnnotationMirror header = findAnnotation(parameter, headerAnnotation);
 			boolean requestContext = isExactType(parameter.asType(),
 					mcpRequestContextType);
 			boolean invocationFeatures = isExactType(parameter.asType(),
@@ -1101,7 +1145,7 @@ public final class SokletProcessor extends AbstractProcessor {
 					requestContextSeen = true;
 					bindings.add(new McpParameterBinding(
 							McpParameterBindingKind.REQUEST_CONTEXT, null, null,
-							parameter.asType(), "", ""));
+							parameter.asType(), "", "", null));
 				} else {
 					if (invocationFeaturesSeen)
 						mcpError(parameter,
@@ -1109,7 +1153,7 @@ public final class SokletProcessor extends AbstractProcessor {
 					invocationFeaturesSeen = true;
 					bindings.add(new McpParameterBinding(
 							McpParameterBindingKind.INVOCATION_FEATURES, null, null,
-							parameter.asType(), "", ""));
+							parameter.asType(), "", "", null));
 				}
 				continue;
 			}
@@ -1130,14 +1174,17 @@ public final class SokletProcessor extends AbstractProcessor {
 			String argumentTitle = annotationString(argument, "title");
 			String argumentDescription = annotationString(argument,
 					"description");
+			String headerName = header == null ? null
+					: annotationString(header, "value");
 
 			bindings.add(new McpParameterBinding(
 					McpParameterBindingKind.TOOL_ARGUMENT, publishedName,
 					"argument" + toolArgumentIndex++,
-					parameter.asType(), argumentTitle, argumentDescription));
+					parameter.asType(), argumentTitle, argumentDescription,
+					headerName));
 			schemaArguments.add(new McpTypeMirrorTypedSchemaBridge.ToolArgument(
 					publishedName, parameter.asType(), argumentTitle,
-					argumentDescription));
+					argumentDescription, Optional.ofNullable(headerName)));
 		}
 
 		McpTypeMirrorTypedSchemaBridge.CompiledSchemas compiledSchemas = null;
@@ -2113,7 +2160,12 @@ public final class SokletProcessor extends AbstractProcessor {
 						.append(javaStringLiteral(binding.title()))
 						.append(", description = ")
 						.append(javaStringLiteral(binding.description()))
-						.append(") ")
+						.append(") ");
+				if (binding.headerName() != null)
+					source.append("@com.soklet.annotation.McpHeader(")
+							.append(javaStringLiteral(binding.headerName()))
+							.append(") ");
+				source
 						.append(mcpSourceType(binding.type())).append(' ')
 						.append(binding.carrierName());
 			}
@@ -3599,7 +3651,7 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	private record McpParameterBinding(McpParameterBindingKind kind,
 			String publishedName, String carrierName, TypeMirror type, String title,
-			String description) {}
+			String description, @Nullable String headerName) {}
 
 	private enum McpParameterBindingKind {
 		REQUEST_CONTEXT,

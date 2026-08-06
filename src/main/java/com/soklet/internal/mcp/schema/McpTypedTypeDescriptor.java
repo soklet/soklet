@@ -162,9 +162,18 @@ sealed interface McpTypedTypeDescriptor<T>
 		static <T> RecordComponent<@NonNull T> fromNameAndType(
 				@NonNull String name, @NonNull T type,
 				@NonNull String title, @NonNull String description) {
+			return fromNameAndType(name, type, title, description,
+					Optional.empty());
+		}
+
+		@NonNull
+		static <T> RecordComponent<@NonNull T> fromNameAndType(
+				@NonNull String name, @NonNull T type,
+				@NonNull String title, @NonNull String description,
+				@NonNull Optional<@NonNull String> headerName) {
 			return new RecordComponent<>(name, type,
 					optionalMetadata(title), optionalMetadata(description),
-					Optional.empty());
+					requireNonNull(headerName));
 		}
 
 		@NonNull

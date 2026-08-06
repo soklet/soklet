@@ -28,6 +28,7 @@ import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
@@ -87,7 +88,8 @@ public final class McpTypeMirrorTypedSchemaBridge {
 			requireNonNull(argument);
 			components.add(McpTypedTypeDescriptor.RecordComponent
 					.fromNameAndType(argument.publishedName(), argument.type(),
-							argument.title(), argument.description()));
+							argument.title(), argument.description(),
+							argument.headerName()));
 		}
 
 		McpCompiledTypedSchema inputSchema;
@@ -150,16 +152,34 @@ public final class McpTypeMirrorTypedSchemaBridge {
 	 * @param title         the optional human-readable title; blank is absent
 	 * @param description   the optional human-readable description; blank is
 	 *                      absent
+	 * @param headerName    mirrored-header suffix, or empty when absent
 	 */
 	@NotThreadSafe
 	public record ToolArgument(@NonNull String publishedName,
 			@NonNull TypeMirror type, @NonNull String title,
-			@NonNull String description) {
+			@NonNull String description,
+			@NonNull Optional<@NonNull String> headerName) {
 		public ToolArgument {
 			requireNonNull(publishedName);
 			requireNonNull(type);
 			requireNonNull(title);
 			requireNonNull(description);
+			requireNonNull(headerName);
+		}
+
+		/**
+		 * Creates an argument without a mirrored header.
+		 *
+		 * @param publishedName the argument name published on the MCP wire
+		 * @param type          the declared Java argument type
+		 * @param title         the optional human-readable title; blank is absent
+		 * @param description   the optional human-readable description; blank is
+		 *                      absent
+		 */
+		public ToolArgument(@NonNull String publishedName,
+				@NonNull TypeMirror type, @NonNull String title,
+				@NonNull String description) {
+			this(publishedName, type, title, description, Optional.empty());
 		}
 
 		/**
@@ -170,7 +190,7 @@ public final class McpTypeMirrorTypedSchemaBridge {
 		 */
 		public ToolArgument(@NonNull String publishedName,
 				@NonNull TypeMirror type) {
-			this(publishedName, type, "", "");
+			this(publishedName, type, "", "", Optional.empty());
 		}
 	}
 

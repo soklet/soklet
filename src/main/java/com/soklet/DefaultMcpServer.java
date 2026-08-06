@@ -124,6 +124,7 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpToolOutputSanitizer toolOutputSanitizer,
 			@Nullable CorsAuthorizer configuredCorsAuthorizer,
 			@NonNull McpAbsentOriginPolicy absentOriginPolicy,
+			@NonNull McpUnknownMirroredHeaderPolicy unknownMirroredHeaderPolicy,
 			@NonNull Set<@NonNull String> allowedHosts,
 			@Nullable McpRateLimiter requestRateLimiter,
 			@Nullable McpRateLimiter toolRateLimiter,
@@ -137,6 +138,7 @@ final class DefaultMcpServer implements McpServer {
 		this.requestRateLimiter = requestRateLimiter;
 		this.toolRateLimiter = toolRateLimiter;
 		this.rateLimiterRegistry = requireNonNull(rateLimiterRegistry);
+		requireNonNull(unknownMirroredHeaderPolicy);
 		boolean corsAuthorizerExplicitlyConfigured = configuredCorsAuthorizer != null;
 		this.corsAuthorizer = configuredCorsAuthorizer == null
 				? CorsAuthorizer.rejectAllInstance() : configuredCorsAuthorizer;
@@ -153,6 +155,7 @@ final class DefaultMcpServer implements McpServer {
 						new DefaultMcpAdmissionContext(input)),
 				Optional.ofNullable(this.requestRateLimiter)
 						.map(DefaultMcpServer::toRateLimitAdapter),
+				unknownMirroredHeaderPolicy,
 				requestHandlerConcurrency, requestHandlerQueueCapacity,
 				requestTimeout,
 				Optional.ofNullable(requestHandlerExecutorServiceSupplier),
@@ -321,6 +324,7 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpToolRegistration<A> tool) {
 		McpRateLimiter resolvedRateLimiter = resolveToolRateLimiter(endpoint, tool);
 		return new ToolPlan(tool.getName(), tool.getInputSchema().getDocument(),
+				tool.getMirroredHeaderPlan(),
 				tool.getOutputSchema().map(McpSchema::getDocument),
 				toolDescriptorFields(tool), tool.getMetadata(),
 				tool.isStructuredContentTextMirroringEnabled(),

@@ -251,7 +251,8 @@ public class McpExecutableToolProtocolTests {
 	private static ToolPlan toolPlan(String name, boolean denyTool,
 			List<String> stages,
 			McpServerRuntimeBridge.ToolInvoker invoker) {
-		return new ToolPlan(name, publicObjectSchema(), Optional.empty(),
+		return new ToolPlan(name, publicObjectSchema(),
+				McpMirroredHeaderPlan.empty(), Optional.empty(),
 				com.soklet.McpJsonObject.builder().put("title", "Tool " + name).build(),
 				com.soklet.McpJsonObject.emptyInstance(), true, input -> {
 					Assertions.assertEquals(

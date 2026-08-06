@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.annotation.McpHeader;
 import com.soklet.annotation.McpListResources;
 import com.soklet.annotation.McpPrompt;
 import com.soklet.annotation.McpPromptArgument;
@@ -54,6 +55,8 @@ public class McpAnnotationContractTests {
 		assertAnnotationContract(McpTool.class, ElementType.METHOD);
 		assertAnnotationContract(McpToolArgument.class, ElementType.PARAMETER,
 				ElementType.RECORD_COMPONENT);
+		assertAnnotationContract(McpHeader.class, ElementType.PARAMETER,
+				ElementType.RECORD_COMPONENT);
 		assertAnnotationContract(McpPrompt.class, ElementType.METHOD);
 		assertAnnotationContract(McpPromptArgument.class, ElementType.PARAMETER);
 		assertAnnotationContract(McpResource.class, ElementType.METHOD);
@@ -75,6 +78,7 @@ public class McpAnnotationContractTests {
 				elementNames(McpTool.class));
 		Assertions.assertEquals(Set.of("name", "title", "description"),
 				elementNames(McpToolArgument.class));
+		Assertions.assertEquals(Set.of("value"), elementNames(McpHeader.class));
 		Assertions.assertEquals(Set.of("name", "title", "description"),
 				elementNames(McpPrompt.class));
 		Assertions.assertEquals(Set.of("name", "title", "description"),
@@ -122,6 +126,8 @@ public class McpAnnotationContractTests {
 		Assertions.assertEquals("", argument.name());
 		Assertions.assertEquals("", argument.title());
 		Assertions.assertEquals("", argument.description());
+		Assertions.assertEquals("Tenant",
+				parameter.getAnnotation(McpHeader.class).value());
 
 		McpToolArgument recordComponent = AnnotatedRecord.class
 				.getRecordComponents()[0].getAnnotation(McpToolArgument.class);
@@ -129,6 +135,8 @@ public class McpAnnotationContractTests {
 		Assertions.assertEquals("Published title", recordComponent.title());
 		Assertions.assertEquals("Published description",
 				recordComponent.description());
+		Assertions.assertEquals("Region", AnnotatedRecord.class
+				.getRecordComponents()[0].getAnnotation(McpHeader.class).value());
 
 		Method promptMethod = MinimalEndpoint.class.getDeclaredMethod("compose",
 				String.class, Optional.class);
@@ -189,7 +197,8 @@ public class McpAnnotationContractTests {
 	@McpServerEndpoint(path = "/mcp", name = "catalog", version = "3.6.0")
 	public static final class MinimalEndpoint {
 		@McpTool(name = "search")
-		public SearchResult search(@McpToolArgument String query) {
+		public SearchResult search(
+				@McpToolArgument @McpHeader("Tenant") String query) {
 			return new SearchResult(query);
 		}
 
@@ -228,5 +237,6 @@ public class McpAnnotationContractTests {
 	public record AnnotatedRecord(
 			@McpToolArgument(name = "publishedName",
 					title = "Published title",
-					description = "Published description") String javaName) {}
+					description = "Published description")
+			@McpHeader("Region") String javaName) {}
 }

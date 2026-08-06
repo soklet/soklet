@@ -97,6 +97,7 @@ public final class McpServerRuntimeBridge {
 						List.of(), Optional.empty())),
 				allowedHosts, requireOrigin, corsAuthorizer,
 				corsAuthorizerExplicitlyConfigured, admissionAdapter, Optional.empty(),
+				com.soklet.McpUnknownMirroredHeaderPolicy.IGNORE,
 				McpApplicationExecutionConfiguration.productionDefaults()
 						.handlerConcurrency(),
 				McpApplicationExecutionConfiguration.productionDefaults()
@@ -248,6 +249,37 @@ public final class McpServerRuntimeBridge {
 		this(host, port, endpointPlans, allowedHosts, requireOrigin,
 				corsAuthorizer, corsAuthorizerExplicitlyConfigured,
 				admissionAdapter, requestRateLimitAdapter,
+				com.soklet.McpUnknownMirroredHeaderPolicy.IGNORE,
+				requestHandlerConcurrency, requestHandlerQueueCapacity,
+				requestTimeout, requestHandlerExecutorServiceSupplier,
+				startupDiagnosticConsumer, unexpectedTerminationConsumer,
+				requestObservationAdapter);
+	}
+
+	/**
+	 * Creates one listener projection from immutable endpoint plans with an
+	 * explicit unknown mirrored-header policy.
+	 */
+	public McpServerRuntimeBridge(@NonNull String host, int port,
+			@NonNull List<@NonNull EndpointPlan> endpointPlans,
+			@NonNull Set<@NonNull String> allowedHosts, boolean requireOrigin,
+			@NonNull CorsAuthorizer corsAuthorizer,
+			boolean corsAuthorizerExplicitlyConfigured,
+			@NonNull AdmissionAdapter admissionAdapter,
+			@NonNull Optional<@NonNull RateLimitAdapter> requestRateLimitAdapter,
+			com.soklet.@NonNull McpUnknownMirroredHeaderPolicy
+					unknownMirroredHeaderPolicy,
+			int requestHandlerConcurrency, int requestHandlerQueueCapacity,
+			@NonNull Duration requestTimeout,
+			@NonNull Optional<@NonNull Supplier<@NonNull ExecutorService>>
+					requestHandlerExecutorServiceSupplier,
+			@NonNull Consumer<@NonNull String> startupDiagnosticConsumer,
+			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer,
+			@NonNull RequestObservationAdapter requestObservationAdapter) {
+		this(host, port, endpointPlans, allowedHosts, requireOrigin,
+				corsAuthorizer, corsAuthorizerExplicitlyConfigured,
+				admissionAdapter, requestRateLimitAdapter,
+				unknownMirroredHeaderPolicy,
 				requestHandlerConcurrency, requestHandlerQueueCapacity,
 				requestTimeout, requestHandlerExecutorServiceSupplier,
 				startupDiagnosticConsumer, unexpectedTerminationConsumer,
@@ -261,6 +293,8 @@ public final class McpServerRuntimeBridge {
 			boolean corsAuthorizerExplicitlyConfigured,
 			@NonNull AdmissionAdapter admissionAdapter,
 			@NonNull Optional<@NonNull RateLimitAdapter> requestRateLimitAdapter,
+			com.soklet.@NonNull McpUnknownMirroredHeaderPolicy
+					unknownMirroredHeaderPolicy,
 			int requestHandlerConcurrency, int requestHandlerQueueCapacity,
 			@NonNull Duration requestTimeout,
 			@NonNull Optional<@NonNull Supplier<@NonNull ExecutorService>>
@@ -276,6 +310,7 @@ public final class McpServerRuntimeBridge {
 		requireNonNull(corsAuthorizer);
 		requireNonNull(admissionAdapter);
 		requireNonNull(requestRateLimitAdapter);
+		requireNonNull(unknownMirroredHeaderPolicy);
 		requireNonNull(requestTimeout);
 		requireNonNull(requestHandlerExecutorServiceSupplier);
 		requireNonNull(startupDiagnosticConsumer);
@@ -286,7 +321,9 @@ public final class McpServerRuntimeBridge {
 				.map(endpointPlan -> toEndpointBinding(endpointPlan, allowedHosts,
 						requireOrigin, corsAuthorizer,
 						corsAuthorizerExplicitlyConfigured, admissionAdapter,
-						requestRateLimitAdapter, requestObservationAdapter))
+						requestRateLimitAdapter,
+						toInternal(unknownMirroredHeaderPolicy),
+						requestObservationAdapter))
 				.toList();
 		McpHttpTransportConfiguration defaults =
 				McpHttpTransportConfiguration.productionDefaults(port);
@@ -326,6 +363,7 @@ public final class McpServerRuntimeBridge {
 			boolean corsAuthorizerExplicitlyConfigured,
 			@NonNull AdmissionAdapter admissionAdapter,
 			@NonNull Optional<@NonNull RateLimitAdapter> requestRateLimitAdapter,
+			@NonNull McpUnknownMirroredHeaderPolicy unknownMirroredHeaderPolicy,
 			@NonNull Optional<@NonNull RequestObservationAdapter>
 					requestObservationAdapter) {
 		requireNonNull(endpointPlan);
@@ -354,7 +392,7 @@ public final class McpServerRuntimeBridge {
 					(com.soklet.internal.mcp.protocol.McpJsonObject)
 							toInternal(toolPlan.metadata()));
 			endpointBuilder.tool(McpNormalizedOperation.tool(
-					descriptor, McpMirroredHeaderPlan.empty()));
+					descriptor, toolPlan.mirroredHeaderPlan()));
 			McpRateLimiter internalToolRateLimiter = context ->
 					toInternalRateLimitDecision(requireNonNull(
 							toolPlan.toolRateLimitAdapter().acquire(
@@ -471,7 +509,7 @@ public final class McpServerRuntimeBridge {
 						: McpAbsentOriginPolicy.ALLOW,
 				corsAuthorizer, internalAdmissionPolicy, Optional.empty(),
 				McpApplicationRequestInterceptor.passThroughInstance(),
-				McpUnknownMirroredHeaderPolicy.IGNORE,
+				unknownMirroredHeaderPolicy,
 				corsAuthorizerExplicitlyConfigured);
 		if (requestRateLimitAdapter.isPresent()) {
 			RateLimitAdapter adapter = requestRateLimitAdapter.orElseThrow();
@@ -628,6 +666,7 @@ public final class McpServerRuntimeBridge {
 	@ThreadSafe
 	public record ToolPlan(@NonNull String name,
 			@NonNull McpJsonObject inputSchemaDocument,
+			@NonNull McpMirroredHeaderPlan mirroredHeaderPlan,
 			@NonNull Optional<@NonNull McpJsonObject> outputSchemaDocument,
 			@NonNull McpJsonObject descriptorFields,
 			@NonNull McpJsonObject metadata,
@@ -637,6 +676,7 @@ public final class McpServerRuntimeBridge {
 		public ToolPlan {
 			name = McpProtocolSupport.requireNonBlank(name, "Tool name");
 			requireNonNull(inputSchemaDocument);
+			requireNonNull(mirroredHeaderPlan);
 			requireNonNull(outputSchemaDocument);
 			requireNonNull(descriptorFields);
 			requireNonNull(metadata);
@@ -1783,6 +1823,16 @@ public final class McpServerRuntimeBridge {
 		return new McpResourceCachePolicy(cachePlan.timeToLiveMilliseconds(),
 				cachePlan.scope() == CacheScope.PUBLIC
 						? McpCacheScope.PUBLIC : McpCacheScope.PRIVATE);
+	}
+
+	@NonNull
+	private static McpUnknownMirroredHeaderPolicy toInternal(
+			com.soklet.@NonNull McpUnknownMirroredHeaderPolicy policy) {
+		return switch (requireNonNull(policy)) {
+			case IGNORE -> McpUnknownMirroredHeaderPolicy.IGNORE;
+			case REJECT_REQUESTS ->
+					McpUnknownMirroredHeaderPolicy.REJECT_REQUESTS;
+		};
 	}
 
 	@NonNull

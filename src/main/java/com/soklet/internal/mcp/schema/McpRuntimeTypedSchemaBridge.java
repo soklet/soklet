@@ -25,6 +25,7 @@ import com.soklet.McpJsonString;
 import com.soklet.McpJsonValue;
 import com.soklet.internal.mcp.protocol.McpJsonCodec;
 import com.soklet.internal.mcp.protocol.McpJsonLimits;
+import com.soklet.internal.mcp.protocol.McpMirroredHeaderPlan;
 import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -116,6 +117,21 @@ public final class McpRuntimeTypedSchemaBridge<T> {
 	@NonNull
 	public McpJsonObject getSchemaDocument() {
 		return this.schemaDocument;
+	}
+
+	/**
+	 * Returns the immutable custom mirrored-header plan retained by a compiled
+	 * tool-input schema.
+	 * <p>
+	 * Tool-output schemas always return an empty plan. This internal bridge
+	 * method exists so Soklet's registration/runtime boundary can preserve the
+	 * exact declarations that produced the published schema.
+	 *
+	 * @return mirrored-header validation plan
+	 */
+	@NonNull
+	public McpMirroredHeaderPlan getMirroredHeaderPlan() {
+		return this.compiledSchema.mirroredHeaderPlan();
 	}
 
 	/**

@@ -211,6 +211,8 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		@NonNull
 		private McpAbsentOriginPolicy absentOriginPolicy;
 		@NonNull
+		private McpUnknownMirroredHeaderPolicy unknownMirroredHeaderPolicy;
+		@NonNull
 		private Set<@NonNull String> allowedHosts;
 
 		private Builder(int port) {
@@ -222,6 +224,8 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 			this.host = "127.0.0.1";
 			this.requestTimeout = DEFAULT_REQUEST_TIMEOUT;
 			this.absentOriginPolicy = McpAbsentOriginPolicy.ALLOW;
+			this.unknownMirroredHeaderPolicy =
+					McpUnknownMirroredHeaderPolicy.IGNORE;
 			this.allowedHosts = Set.of();
 			this.rateLimiterRegistry = McpRateLimiterRegistry.emptyInstance();
 			this.handlerInterceptor = McpHandlerInterceptor.defaultInstance();
@@ -477,6 +481,28 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		}
 
 		/**
+		 * Sets the handling policy for unregistered {@code Mcp-Param-*} headers on
+		 * JSON-RPC requests. The default is
+		 * {@link McpUnknownMirroredHeaderPolicy#IGNORE}.
+		 * <p>
+		 * Unknown headers are never trusted as tool arguments. Strict rejection is
+		 * an origin-server policy for deployments whose upstream components make
+		 * routing or authorization decisions from mirrored headers; it does not
+		 * apply to MCP notifications.
+		 *
+		 * @param unknownMirroredHeaderPolicy unknown-header policy
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder unknownMirroredHeaderPolicy(
+				@NonNull McpUnknownMirroredHeaderPolicy
+						unknownMirroredHeaderPolicy) {
+			this.unknownMirroredHeaderPolicy = requireNonNull(
+					unknownMirroredHeaderPolicy);
+			return this;
+		}
+
+		/**
 		 * Adds hostname-only values accepted by MCP Host validation. Host ports
 		 * must still equal the effective bound port.
 		 *
@@ -529,7 +555,8 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 					this.handlerResolver,
 					this.requestAdmissionPolicy, this.handlerInterceptor,
 					this.toolOutputSanitizer, this.corsAuthorizer,
-					this.absentOriginPolicy, this.allowedHosts,
+					this.absentOriginPolicy, this.unknownMirroredHeaderPolicy,
+					this.allowedHosts,
 					this.requestRateLimiter, this.toolRateLimiter,
 					this.rateLimiterRegistry);
 		}

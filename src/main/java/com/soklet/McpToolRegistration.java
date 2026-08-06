@@ -17,6 +17,7 @@
 package com.soklet;
 
 import com.soklet.converter.TypeReference;
+import com.soklet.internal.mcp.protocol.McpMirroredHeaderPlan;
 import com.soklet.internal.mcp.schema.McpRuntimeTypedSchemaBridge;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -51,6 +52,9 @@ public final class McpToolRegistration<A> {
 	@NonNull
 	private static final McpSchema JSON_OBJECT_SCHEMA = new McpSchema(
 			McpJsonObject.builder().put("type", "object").build());
+	@NonNull
+	private static final McpMirroredHeaderPlan EMPTY_MIRRORED_HEADER_PLAN =
+			McpMirroredHeaderPlan.empty();
 
 	@NonNull
 	private final String name;
@@ -64,6 +68,8 @@ public final class McpToolRegistration<A> {
 	private final Type argumentType;
 	@NonNull
 	private final McpSchema inputSchema;
+	@NonNull
+	private final McpMirroredHeaderPlan mirroredHeaderPlan;
 	@Nullable
 	private final Type outputType;
 	@Nullable
@@ -110,6 +116,7 @@ public final class McpToolRegistration<A> {
 		this.icons = List.copyOf(state.icons);
 		this.argumentType = state.argumentType;
 		this.inputSchema = state.inputSchema;
+		this.mirroredHeaderPlan = state.mirroredHeaderPlan;
 		this.outputType = state.outputType;
 		this.outputSchema = state.outputSchema;
 		this.outputSchemaBridge = state.outputSchemaBridge;
@@ -157,6 +164,15 @@ public final class McpToolRegistration<A> {
 	@NonNull
 	public McpSchema getInputSchema() {
 		return this.inputSchema;
+	}
+
+	/**
+	 * Returns the immutable internal custom-header validation plan retained from
+	 * the compiled input schema.
+	 */
+	@NonNull
+	McpMirroredHeaderPlan getMirroredHeaderPlan() {
+		return this.mirroredHeaderPlan;
 	}
 
 	/** @return generated output schema for a typed-completion registration */
@@ -405,7 +421,8 @@ public final class McpToolRegistration<A> {
 		@NonNull
 		public OperationHandlerStage<McpJsonObject> jsonArguments() {
 			return new OperationHandlerStage<>(this.name, McpJsonObject.class,
-					JSON_OBJECT_SCHEMA, rawArguments -> rawArguments);
+					JSON_OBJECT_SCHEMA, EMPTY_MIRRORED_HEADER_PLAN,
+					rawArguments -> rawArguments);
 		}
 
 		@NonNull
@@ -430,7 +447,8 @@ public final class McpToolRegistration<A> {
 			McpSchema inputSchema =
 					new McpSchema(inputBridge.getSchemaDocument());
 			return new OperationHandlerStage<>(this.name, argumentType,
-					inputSchema, inputBridge::decode);
+					inputSchema, inputBridge.getMirroredHeaderPlan(),
+					inputBridge::decode);
 		}
 	}
 
@@ -487,6 +505,7 @@ public final class McpToolRegistration<A> {
 			RegistrationState<A> state = new RegistrationState<>(this.name,
 					this.argumentType,
 					new McpSchema(this.inputBridge.getSchemaDocument()),
+					this.inputBridge.getMirroredHeaderPlan(),
 					this.resultType,
 					new McpSchema(this.outputBridge.getSchemaDocument()),
 					this.outputBridge,
@@ -510,14 +529,18 @@ public final class McpToolRegistration<A> {
 		@NonNull
 		private final McpSchema inputSchema;
 		@NonNull
+		private final McpMirroredHeaderPlan mirroredHeaderPlan;
+		@NonNull
 		private final ArgumentDecoder<A> argumentDecoder;
 
 		private OperationHandlerStage(@NonNull String name,
 				@NonNull Type argumentType, @NonNull McpSchema inputSchema,
+				@NonNull McpMirroredHeaderPlan mirroredHeaderPlan,
 				@NonNull ArgumentDecoder<A> argumentDecoder) {
 			this.name = requireNonNull(name);
 			this.argumentType = requireNonNull(argumentType);
 			this.inputSchema = requireNonNull(inputSchema);
+			this.mirroredHeaderPlan = requireNonNull(mirroredHeaderPlan);
 			this.argumentDecoder = requireNonNull(argumentDecoder);
 		}
 
@@ -530,7 +553,8 @@ public final class McpToolRegistration<A> {
 		@NonNull
 		public Builder<A> handler(@NonNull McpToolHandler<A> handler) {
 			RegistrationState<A> state = new RegistrationState<>(this.name,
-					this.argumentType, this.inputSchema, null, null, null,
+					this.argumentType, this.inputSchema, this.mirroredHeaderPlan,
+					null, null, null,
 					requireNonNull(handler), this.argumentDecoder);
 			return new Builder<>(state);
 		}
@@ -817,6 +841,8 @@ public final class McpToolRegistration<A> {
 		private final Type argumentType;
 		@NonNull
 		private final McpSchema inputSchema;
+		@NonNull
+		private final McpMirroredHeaderPlan mirroredHeaderPlan;
 		@Nullable
 		private final Type outputType;
 		@Nullable
@@ -845,6 +871,7 @@ public final class McpToolRegistration<A> {
 
 		private RegistrationState(@NonNull String name,
 				@NonNull Type argumentType, @NonNull McpSchema inputSchema,
+				@NonNull McpMirroredHeaderPlan mirroredHeaderPlan,
 				@Nullable Type outputType, @Nullable McpSchema outputSchema,
 				@Nullable McpRuntimeTypedSchemaBridge<?> outputSchemaBridge,
 				@NonNull McpToolHandler<A> handler,
@@ -852,6 +879,7 @@ public final class McpToolRegistration<A> {
 			this.name = requireNonNull(name);
 			this.argumentType = requireNonNull(argumentType);
 			this.inputSchema = requireNonNull(inputSchema);
+			this.mirroredHeaderPlan = requireNonNull(mirroredHeaderPlan);
 			this.outputType = outputType;
 			this.outputSchema = outputSchema;
 			this.outputSchemaBridge = outputSchemaBridge;

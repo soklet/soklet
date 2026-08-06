@@ -19,6 +19,7 @@ package com.soklet.internal.mcp.schema;
 import com.google.testing.compile.Compilation;
 import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
+import com.soklet.annotation.McpHeader;
 import com.soklet.annotation.McpToolArgument;
 import com.soklet.internal.mcp.protocol.McpJsonCodec;
 import com.soklet.internal.mcp.protocol.McpJsonLimits;
@@ -46,6 +47,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -78,6 +80,37 @@ class McpTypeMirrorTypedSchemaBridgeTests {
 		assertEquals(
 				"{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"title\":\"Query title\",\"description\":\"Query description\"},\"limit\":{\"type\":\"integer\",\"minimum\":-2147483648,\"maximum\":2147483647}},\"required\":[\"query\"],\"additionalProperties\":false}",
 				new String(compiled.getInputSchemaBytes(), StandardCharsets.UTF_8));
+	}
+
+	@Test
+	void mirroredHeaderRulesAndNestedRecordsMatchRuntimeCompiler() {
+		Inspection inspection = inspect();
+		McpTypeMirrorTypedSchemaBridge.CompiledSchemas compiled =
+				assertInstanceOf(
+						McpTypeMirrorTypedSchemaBridge.CompiledSchemas.class,
+						inspection.results.get("validHeaders"));
+		McpRuntimeTypedSchemaCompiler runtimeCompiler = runtimeCompiler();
+		McpCompiledRuntimeTypedSchema<HeaderRuntimeInput> runtimeInput =
+				runtimeCompiler.compileToolInput(HeaderRuntimeInput.class);
+		McpCompiledRuntimeTypedSchema<HeaderRuntimeOutput> runtimeOutput =
+				runtimeCompiler.compileToolOutput(HeaderRuntimeOutput.class);
+
+		assertArrayEquals(runtimeInput.schema().serializedDocument(),
+				compiled.getInputSchemaBytes());
+		assertArrayEquals(runtimeOutput.schema().serializedDocument(),
+				compiled.getOutputSchemaBytes());
+		assertHeaderFailureParity(inspection, "invalidHeaderToken",
+				() -> runtimeCompiler.compileToolInput(
+						HeaderRuntimeInvalidToken.class));
+		assertHeaderFailureParity(inspection, "duplicateHeaders",
+				() -> runtimeCompiler.compileToolInput(
+						HeaderRuntimeDuplicate.class));
+		assertHeaderFailureParity(inspection, "invalidHeaderScalar",
+				() -> runtimeCompiler.compileToolInput(
+						HeaderRuntimeInvalidScalar.class));
+		assertHeaderFailureParity(inspection, "outputHeader",
+				() -> runtimeCompiler.compileToolOutput(
+						HeaderRuntimeInvalidOutput.class));
 	}
 
 	@Test
@@ -140,12 +173,28 @@ class McpTypeMirrorTypedSchemaBridgeTests {
 				.diagnostic();
 	}
 
+	private static void assertHeaderFailureParity(Inspection inspection,
+			String methodName, Runnable runtimeCompilation) {
+		McpSchemaCompilationException mirrorFailure = assertInstanceOf(
+				McpSchemaCompilationException.class,
+				inspection.schemaUseFailures.get(methodName));
+		McpSchemaCompilationException runtimeFailure = assertThrows(
+				McpSchemaCompilationException.class, runtimeCompilation::run);
+
+		assertEquals(McpSchemaCompilationException.Kind.INVALID_KEYWORD_VALUE,
+				mirrorFailure.kind(), methodName);
+		assertEquals(runtimeFailure.kind(), mirrorFailure.kind(), methodName);
+		assertEquals(runtimeFailure.keyword(), mirrorFailure.keyword(), methodName);
+		assertEquals(runtimeFailure.location(), mirrorFailure.location(), methodName);
+	}
+
 	private static Inspection inspect() {
 		Inspection inspection = new Inspection();
 		JavaFileObject fixture = JavaFileObjects.forSourceString(
 				"bridge.Fixture", """
 						package bridge;
 
+						import com.soklet.annotation.McpHeader;
 						import com.soklet.annotation.McpToolArgument;
 						import java.util.List;
 						import java.util.Optional;
@@ -164,12 +213,32 @@ class McpTypeMirrorTypedSchemaBridgeTests {
 						  CompileOutput duplicate(String first, int second) {
 						    return null;
 						  }
+						  HeaderOutput validHeaders(
+						      String tenant, HeaderRouting routing) {
+						    return null;
+						  }
+						  HeaderOutput invalidHeaderToken(String value) {
+						    return null;
+						  }
+						  HeaderOutput duplicateHeaders(String first, boolean second) {
+						    return null;
+						  }
+						  HeaderOutput invalidHeaderScalar(double ratio) {
+						    return null;
+						  }
+						  HeaderInvalidOutput outputHeader(String value) {
+						    return null;
+						  }
 						}
 						record CompileOutput(
 						    @McpToolArgument(name = "items", title = "Items title",
 						        description = "Items description")
 						    List<CompileItem> javaItems) {}
 						record CompileItem(String id, long score) {}
+						record HeaderRouting(@McpHeader("Shard") int shard) {}
+						record HeaderOutput(String value) {}
+						record HeaderInvalidOutput(
+						    @McpHeader("Output") String value) {}
 						""");
 		Compilation compilation = Compiler.javac()
 				.withOptions("--release", "17")
@@ -202,8 +271,38 @@ class McpTypeMirrorTypedSchemaBridgeTests {
 	private record RuntimeItem(String id, long score) {
 	}
 
+	private record HeaderRuntimeInput(
+			@McpHeader("Tenant") String tenant,
+			HeaderRuntimeRouting routing) {
+	}
+
+	private record HeaderRuntimeRouting(@McpHeader("Shard") int shard) {
+	}
+
+	private record HeaderRuntimeOutput(String value) {
+	}
+
+	private record HeaderRuntimeInvalidToken(
+			@McpHeader("bad name") String value) {
+	}
+
+	private record HeaderRuntimeDuplicate(
+			@McpHeader("Tenant") String first,
+			@McpHeader("tenant") boolean second) {
+	}
+
+	private record HeaderRuntimeInvalidScalar(
+			@McpHeader("Ratio") double ratio) {
+	}
+
+	private record HeaderRuntimeInvalidOutput(
+			@McpHeader("Output") String value) {
+	}
+
 	private static final class Inspection extends AbstractProcessor {
 		private final Map<String, McpTypeMirrorTypedSchemaBridge.Result> results =
+				new LinkedHashMap<>();
+		private final Map<String, McpSchemaCompilationException> schemaUseFailures =
 				new LinkedHashMap<>();
 		private boolean complete;
 
@@ -247,14 +346,31 @@ class McpTypeMirrorTypedSchemaBridgeTests {
 						case "duplicate" -> List.of(
 								argument("same", method, 0),
 								argument("same", method, 1));
+						case "validHeaders" -> List.of(
+								headerArgument("tenant", method, 0, "Tenant"),
+								argument("routing", method, 1));
+						case "invalidHeaderToken" -> List.of(
+								headerArgument("value", method, 0, "bad name"));
+						case "duplicateHeaders" -> List.of(
+								headerArgument("first", method, 0, "Tenant"),
+								headerArgument("second", method, 1, "tenant"));
+						case "invalidHeaderScalar" -> List.of(
+								headerArgument("ratio", method, 0, "Ratio"));
+						case "outputHeader" -> List.of(
+								argument("value", method, 0));
 						default -> throw new IllegalStateException(
 								"Unexpected fixture method.");
 					};
-				results.put(method.getSimpleName().toString(),
-						McpTypeMirrorTypedSchemaBridge.compileToolSchemas(
-								processingEnv.getTypeUtils(),
-								processingEnv.getElementUtils(), arguments,
-								method.getReturnType()));
+				String methodName = method.getSimpleName().toString();
+				try {
+					results.put(methodName,
+							McpTypeMirrorTypedSchemaBridge.compileToolSchemas(
+									processingEnv.getTypeUtils(),
+									processingEnv.getElementUtils(), arguments,
+									method.getReturnType()));
+				} catch (McpSchemaCompilationException exception) {
+					schemaUseFailures.put(methodName, exception);
+				}
 			}
 			complete = true;
 			return false;
@@ -264,6 +380,14 @@ class McpTypeMirrorTypedSchemaBridgeTests {
 				String publishedName, ExecutableElement method, int index) {
 			return new McpTypeMirrorTypedSchemaBridge.ToolArgument(publishedName,
 					method.getParameters().get(index).asType());
+		}
+
+		private McpTypeMirrorTypedSchemaBridge.ToolArgument headerArgument(
+				String publishedName, ExecutableElement method, int index,
+				String headerName) {
+			return new McpTypeMirrorTypedSchemaBridge.ToolArgument(publishedName,
+					method.getParameters().get(index).asType(), "", "",
+					Optional.of(headerName));
 		}
 
 		private McpTypeMirrorTypedSchemaBridge.ToolArgument argument(

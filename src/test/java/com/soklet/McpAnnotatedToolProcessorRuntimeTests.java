@@ -38,6 +38,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -94,6 +95,9 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 					generatedSource);
 			Assertions.assertTrue(generatedSource.contains(
 					"McpPromptArgumentDefinition.withName(\"subject\")"),
+					generatedSource);
+			Assertions.assertTrue(generatedSource.contains(
+					"@com.soklet.annotation.McpHeader(\"Tenant\")"),
 					generatedSource);
 
 			try (URLClassLoader classLoader = new URLClassLoader(
@@ -160,12 +164,16 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 						querySchema.find("title").orElseThrow());
 				Assertions.assertEquals(new McpJsonString("Text to search for"),
 						querySchema.find("description").orElseThrow());
+				Assertions.assertEquals(new McpJsonString("Tenant"),
+						querySchema.find("x-mcp-header").orElseThrow());
 				Assertions.assertEquals(0, providedInstances.get());
 
 				McpRateLimiter allow = context ->
 						McpRateLimitDecision.fromAllowed();
 				Assertions.assertThrows(IllegalStateException.class,
-						() -> serverBuilder(resolver, allow).build());
+						() -> serverBuilder(resolver, allow,
+								McpRequestAdmissionPolicy.acceptAllInstance()).build());
+				AtomicInteger admissionInvocations = new AtomicInteger();
 				AtomicInteger endpointLimiterInvocations = new AtomicInteger();
 				AtomicInteger toolLimiterInvocations = new AtomicInteger();
 				AtomicInteger fallbackLimiterInvocations = new AtomicInteger();
@@ -183,6 +191,9 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				McpServer server = serverBuilder(resolver, context -> {
 					fallbackLimiterInvocations.incrementAndGet();
 					return McpRateLimitDecision.fromAllowed();
+				}, context -> {
+					admissionInvocations.incrementAndGet();
+					return McpAdmissionDecision.fromAnonymousIdentity();
 				}).rateLimiterRegistry(registry)
 						.handlerInterceptor((context, invocation) -> {
 							handlerInterceptorInvocations.incrementAndGet();
@@ -205,6 +216,9 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 							"\"name\":\"catalog.search\""), listResponse.body());
 					Assertions.assertTrue(listResponse.body().contains(
 							"\"query-text\""), listResponse.body());
+					Assertions.assertTrue(listResponse.body().contains(
+							"\"x-mcp-header\":\"Tenant\""),
+							listResponse.body());
 					Assertions.assertEquals(0, providedInstances.get());
 					Assertions.assertEquals(0,
 							handlerInterceptorInvocations.get());
@@ -228,14 +242,30 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 					Assertions.assertEquals(0,
 							handlerInterceptorInvocations.get());
 
-					HttpResponse<String> callResponse = send(port, "tools/call",
-							"{\"jsonrpc\":\"2.0\",\"id\":\"annotated-call\","
-									+ "\"method\":\"tools/call\",\"params\":{\"_meta\":{"
-									+ "\"io.modelcontextprotocol/protocolVersion\":\""
-									+ PROTOCOL_VERSION + "\","
-									+ "\"io.modelcontextprotocol/clientCapabilities\":{}},"
-									+ "\"name\":\"catalog.search\",\"arguments\":{"
-									+ "\"query-text\":\"needle\",\"limit\":3}}}");
+					int admissionsBeforeMismatch = admissionInvocations.get();
+					Assertions.assertEquals(2, admissionsBeforeMismatch);
+					HttpResponse<String> mismatchResponse = sendToolCall(port,
+							"other", toolCallBody("annotated-mismatch"));
+					Assertions.assertEquals(400, mismatchResponse.statusCode(),
+							mismatchResponse.body());
+					Assertions.assertTrue(mismatchResponse.body().contains(
+							"\"id\":\"annotated-mismatch\""),
+							mismatchResponse.body());
+					Assertions.assertTrue(mismatchResponse.body().contains(
+							"\"code\":-32020"), mismatchResponse.body());
+					Assertions.assertEquals(admissionsBeforeMismatch,
+							admissionInvocations.get());
+					Assertions.assertEquals(0, providedInstances.get());
+					Assertions.assertNull(System.getProperty(INITIALIZED_PROPERTY));
+					Assertions.assertEquals(0,
+							endpointLimiterInvocations.get());
+					Assertions.assertEquals(0, toolLimiterInvocations.get());
+					Assertions.assertEquals(0, fallbackLimiterInvocations.get());
+					Assertions.assertEquals(0,
+							handlerInterceptorInvocations.get());
+
+					HttpResponse<String> callResponse = sendToolCall(port,
+							"needle", toolCallBody("annotated-call"));
 					Assertions.assertEquals(200, callResponse.statusCode(),
 							callResponse.body());
 					Assertions.assertTrue(callResponse.body().contains(
@@ -254,6 +284,8 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 							fallbackLimiterInvocations.get());
 					Assertions.assertEquals(1,
 							handlerInterceptorInvocations.get());
+					Assertions.assertEquals(admissionsBeforeMismatch + 1,
+							admissionInvocations.get());
 
 					HttpResponse<String> promptResponse = send(port, "prompts/get",
 							"{\"jsonrpc\":\"2.0\",\"id\":\"annotated-prompt\","
@@ -274,6 +306,8 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 							fallbackLimiterInvocations.get());
 					Assertions.assertEquals(2,
 							handlerInterceptorInvocations.get());
+					Assertions.assertEquals(admissionsBeforeMismatch + 2,
+							admissionInvocations.get());
 				} finally {
 					server.stop();
 				}
@@ -308,12 +342,12 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 
 	private static McpServer.@NonNull Builder serverBuilder(
 			@NonNull McpHandlerResolver resolver,
-			@NonNull McpRateLimiter fallbackToolLimiter) {
+			@NonNull McpRateLimiter fallbackToolLimiter,
+			@NonNull McpRequestAdmissionPolicy requestAdmissionPolicy) {
 		return McpServer.withPort(0)
 				.host(LOOPBACK)
 				.handlerResolver(resolver)
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
+				.requestAdmissionPolicy(requestAdmissionPolicy)
 				.toolRateLimiter(fallbackToolLimiter)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
@@ -322,6 +356,23 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 	@NonNull
 	private static HttpResponse<String> send(int port, @NonNull String method,
 			@NonNull String body) throws IOException, InterruptedException {
+		return send(port, method, body, Map.of());
+	}
+
+	@NonNull
+	private static HttpResponse<String> sendToolCall(int port,
+			@NonNull String tenant, @NonNull String body)
+			throws IOException, InterruptedException {
+		return send(port, "tools/call", body, Map.of(
+				"Mcp-Name", "catalog.search",
+				"Mcp-Param-Tenant", tenant));
+	}
+
+	@NonNull
+	private static HttpResponse<String> send(int port, @NonNull String method,
+			@NonNull String body,
+			@NonNull Map<@NonNull String, @NonNull String> additionalHeaders)
+			throws IOException, InterruptedException {
 		HttpRequest.Builder request = HttpRequest.newBuilder()
 				.uri(URI.create("http://" + LOOPBACK + ":" + port
 						+ "/catalog/mcp"))
@@ -330,14 +381,24 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				.header("Accept", "application/json, text/event-stream")
 				.header("MCP-Protocol-Version", PROTOCOL_VERSION)
 				.header("Mcp-Method", method);
-		if (method.equals("tools/call"))
-			request.header("Mcp-Name", "catalog.search");
-		else if (method.equals("prompts/get"))
+		if (method.equals("prompts/get"))
 			request.header("Mcp-Name", "catalog.compose");
+		additionalHeaders.forEach(request::header);
 		return HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5))
 				.build().send(request.POST(HttpRequest.BodyPublishers.ofString(body,
 						StandardCharsets.UTF_8)).build(),
 						HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+	}
+
+	@NonNull
+	private static String toolCallBody(@NonNull String requestId) {
+		return "{\"jsonrpc\":\"2.0\",\"id\":\"" + requestId + "\","
+				+ "\"method\":\"tools/call\",\"params\":{\"_meta\":{"
+				+ "\"io.modelcontextprotocol/protocolVersion\":\""
+				+ PROTOCOL_VERSION + "\","
+				+ "\"io.modelcontextprotocol/clientCapabilities\":{}},"
+				+ "\"name\":\"catalog.search\",\"arguments\":{"
+				+ "\"query-text\":\"needle\",\"limit\":3}}}";
 	}
 
 	@NonNull
@@ -350,6 +411,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				import com.soklet.McpPromptOutput;
 				import com.soklet.McpRequestContext;
 				import com.soklet.McpTextContent;
+				import com.soklet.annotation.McpHeader;
 				import com.soklet.annotation.McpPrompt;
 				import com.soklet.annotation.McpPromptArgument;
 				import com.soklet.annotation.McpServerEndpoint;
@@ -391,7 +453,8 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				      @McpToolArgument(
 				          name = "query-text",
 				          title = "Search query",
-				          description = "Text to search for") @InternalMarker String toString,
+				          description = "Text to search for")
+				      @McpHeader("Tenant") @InternalMarker String toString,
 				      @McpToolArgument Optional<Integer> limit,
 				      McpInvocationFeatures features) {
 					return new SearchResult(

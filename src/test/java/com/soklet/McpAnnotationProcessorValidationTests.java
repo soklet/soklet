@@ -143,6 +143,92 @@ public class McpAnnotationProcessorValidationTests {
 	}
 
 	@Test
+	void rejectsMcpHeaderParameterWithoutToolArgument() {
+		JavaFileObject source = JavaFileObjects.forSourceString(
+				"example.MisplacedHeaderEndpoint", """
+						package example;
+
+						import com.soklet.annotation.McpHeader;
+						import com.soklet.annotation.McpServerEndpoint;
+						import com.soklet.annotation.McpTool;
+
+						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						public final class MisplacedHeaderEndpoint {
+						  @McpTool(name = "invalid")
+						  public Result invalid(@McpHeader("Tenant") String tenant) {
+						    return new Result(tenant);
+						  }
+
+						  public record Result(String value) {}
+						}
+						""");
+
+		Compilation compilation = Compiler.javac()
+				.withProcessors(new SokletProcessor())
+				.compile(source);
+
+		assertThat(compilation).failed();
+		assertThat(compilation).hadErrorContaining(
+				"@McpHeader parameters must also declare @McpToolArgument")
+				.inFile(source);
+	}
+
+	@Test
+	void rejectsInvalidMirroredHeaderSchemas() {
+		JavaFileObject source = JavaFileObjects.forSourceString(
+				"example.InvalidMirroredHeadersEndpoint", """
+						package example;
+
+						import com.soklet.annotation.McpHeader;
+						import com.soklet.annotation.McpServerEndpoint;
+						import com.soklet.annotation.McpTool;
+						import com.soklet.annotation.McpToolArgument;
+
+						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						public final class InvalidMirroredHeadersEndpoint {
+						  @McpTool(name = "invalid-token")
+						  public Result invalidToken(
+						      @McpToolArgument @McpHeader("bad name") String value) {
+						    return new Result(value);
+						  }
+
+						  @McpTool(name = "duplicate-headers")
+						  public Result duplicateHeaders(
+						      @McpToolArgument @McpHeader("Tenant") String first,
+						      @McpToolArgument @McpHeader("tenant") boolean second) {
+						    return new Result(first + second);
+						  }
+
+						  @McpTool(name = "invalid-scalar")
+						  public Result invalidScalar(
+						      @McpToolArgument @McpHeader("Ratio") double ratio) {
+						    return new Result(Double.toString(ratio));
+						  }
+
+						  @McpTool(name = "output-placement")
+						  public InvalidOutput outputPlacement(
+						      @McpToolArgument String value) {
+						    return new InvalidOutput(value);
+						  }
+
+						  public record Result(String value) {}
+						  public record InvalidOutput(
+						      @McpHeader("Output") String value) {}
+						}
+						""");
+
+		Compilation compilation = Compiler.javac()
+				.withProcessors(new SokletProcessor())
+				.compile(source);
+
+		assertThat(compilation).failed();
+		for (String toolName : List.of("invalid-token", "duplicate-headers",
+				"invalid-scalar", "output-placement"))
+			assertThat(compilation).hadErrorContaining(
+					"MCP tool '" + toolName + "'").inFile(source);
+	}
+
+	@Test
 	void duplicateArgumentDiagnosticDoesNotRenderUnsafePublishedName() {
 		String bidiEscape = String.format("\\u%04X", 0x202E);
 		String unsafeLiteral = "\"duplicate\\n\\t" + bidiEscape + "\"";
