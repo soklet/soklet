@@ -1,0 +1,602 @@
+/*
+ * Copyright 2022-2026 Revetware LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.soklet;
+
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * Value, secrecy, and concurrency contracts for MCP security controls.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+public class McpSecurityControlsTests {
+	private static final String PROTECTION_GOLDEN_FINGERPRINT =
+			"K9oRkAG6QKeHW5rCTMNcocxoaQVySSJLmnvXbD4AV90";
+	private static final String TRACE_GOLDEN_FINGERPRINT =
+			"q6lgRnXgzPRK0yoi_va7Qcax0EjCUuFum3A38-Vp4J4";
+
+	@Test
+	public void keyFactoriesValidateIdsLengthsCopiesAndRedaction() {
+		byte[] protectionMaterial = bytesFrom(0);
+		byte[] traceMaterial = bytesFrom(32);
+		McpProtectionKey protectionKey = McpProtectionKey.fromIdAndBytes(
+				"protection-key", protectionMaterial);
+		McpTraceCorrelationKey traceKey =
+				McpTraceCorrelationKey.fromIdAndBytes("trace-key", traceMaterial);
+
+		Arrays.fill(protectionMaterial, (byte) 127);
+		Arrays.fill(traceMaterial, (byte) 127);
+		byte[] exposedProtectionCopy = protectionKey.copyKeyMaterial();
+		byte[] exposedTraceCopy = traceKey.copyKeyMaterial();
+		Assertions.assertArrayEquals(bytesFrom(0), exposedProtectionCopy);
+		Assertions.assertArrayEquals(bytesFrom(32), exposedTraceCopy);
+		Arrays.fill(exposedProtectionCopy, (byte) 126);
+		Arrays.fill(exposedTraceCopy, (byte) 126);
+		Assertions.assertArrayEquals(bytesFrom(0),
+				protectionKey.copyKeyMaterial());
+		Assertions.assertArrayEquals(bytesFrom(32), traceKey.copyKeyMaterial());
+		Assertions.assertEquals(
+				"McpProtectionKey{keyId='protection-key', keyMaterial=<redacted>}",
+				protectionKey.toString());
+		Assertions.assertEquals(
+				"McpTraceCorrelationKey{keyId='trace-key', keyMaterial=<redacted>}",
+				traceKey.toString());
+
+		for (String invalidId : List.of("", "contains space", "slash/",
+				"café", "a".repeat(65))) {
+			Assertions.assertThrows(IllegalArgumentException.class, () ->
+					McpProtectionKey.fromIdAndBytes(invalidId, bytesFrom(0)));
+			Assertions.assertThrows(IllegalArgumentException.class, () ->
+					McpTraceCorrelationKey.fromIdAndBytes(invalidId, bytesFrom(0)));
+		}
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				McpProtectionKey.fromIdAndBytes("short", new byte[31]));
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				McpTraceCorrelationKey.fromIdAndBytes("short", new byte[31]));
+		Assertions.assertThrows(NullPointerException.class, () ->
+				McpProtectionKey.fromIdAndBytes(null, bytesFrom(0)));
+		Assertions.assertThrows(NullPointerException.class, () ->
+				McpProtectionKey.fromIdAndBytes("key", null));
+		Assertions.assertThrows(NullPointerException.class, () ->
+				McpTraceCorrelationKey.fromIdAndBytes(null, bytesFrom(0)));
+		Assertions.assertThrows(NullPointerException.class, () ->
+				McpTraceCorrelationKey.fromIdAndBytes("key", null));
+	}
+
+	@Test
+	public void initialRingRejectsDuplicateIdsAndMaterialAndCopiesValues() {
+		McpProtectionKey active = protectionKey("active", 0);
+		McpProtectionKey verification = protectionKey("verification", 32);
+		McpProtectionKeyRing.Builder builder =
+				McpProtectionKeyRing.withActiveKey(active)
+						.verificationKey(verification);
+		McpProtectionKeyRing ring = builder.build();
+		builder.verificationKey(protectionKey("later", 64));
+
+		DefaultMcpSecurityControls controls = controls(ring, null);
+		McpProtectionKeyRingSnapshot snapshot = controls.getKeyRingSnapshot()
+				.orElseThrow();
+		Assertions.assertEquals("active", snapshot.getActiveKeyId());
+		Assertions.assertEquals(Set.of("verification"),
+				snapshot.getVerificationKeyIds());
+		Assertions.assertThrows(UnsupportedOperationException.class, () ->
+				snapshot.getVerificationKeyIds().add("forbidden"));
+
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				McpProtectionKeyRing.withActiveKey(active)
+						.verificationKey(protectionKey("active", 64)));
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				McpProtectionKeyRing.withActiveKey(active)
+						.verificationKey(protectionKey("alias", 0)));
+	}
+
+	@Test
+	public void bulkInitialRingMutationIsAtomicWhenALateKeyIsInvalid() {
+		McpProtectionKeyRing.Builder duplicateBuilder = McpProtectionKeyRing
+				.withActiveKey(protectionKey("active", 0));
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				duplicateBuilder.verificationKeys(List.of(
+						protectionKey("first", 32),
+						protectionKey("duplicate-material", 32))));
+		duplicateBuilder.verificationKey(protectionKey("first", 32));
+
+		McpProtectionKeyRing.Builder nullBuilder = McpProtectionKeyRing
+				.withActiveKey(protectionKey("active", 0));
+		List<McpProtectionKey> keysWithNull = new ArrayList<>();
+		keysWithNull.add(protectionKey("first", 32));
+		keysWithNull.add(null);
+		Assertions.assertThrows(NullPointerException.class,
+				() -> nullBuilder.verificationKeys(keysWithNull));
+		nullBuilder.verificationKey(protectionKey("first", 32));
+
+		for (McpProtectionKeyRing ring : List.of(duplicateBuilder.build(),
+				nullBuilder.build()))
+			Assertions.assertEquals(Set.of("first"), controls(ring, null)
+					.getKeyRingSnapshot().orElseThrow()
+					.getVerificationKeyIds());
+	}
+
+	@Test
+	public void protectionFingerprintMatchesFrozenGoldenConstruction() {
+		McpProtectionKeyRing ring = McpProtectionKeyRing
+				.withActiveKey(protectionKey("active", 0))
+				.verificationKeys(List.of(
+						protectionKey("verify-b", 64),
+						protectionKey("verify-a", 32)))
+				.build();
+		McpProtectionKeyRingFingerprint fingerprint = controls(ring, null)
+				.getKeyRingSnapshot().orElseThrow().getFingerprint();
+
+		Assertions.assertEquals("v1", fingerprint.getVersion());
+		Assertions.assertEquals("soklet-mcp-protection-v1",
+				fingerprint.getProfile());
+		Assertions.assertEquals(PROTECTION_GOLDEN_FINGERPRINT,
+				fingerprint.getValue());
+		Assertions.assertEquals(PROTECTION_GOLDEN_FINGERPRINT,
+				fingerprint.toString());
+		Assertions.assertEquals(fingerprint, controls(ring, null)
+				.getKeyRingSnapshot().orElseThrow().getFingerprint());
+		Assertions.assertEquals(fingerprint.hashCode(), controls(ring, null)
+				.getKeyRingSnapshot().orElseThrow().getFingerprint().hashCode());
+		Assertions.assertNotEquals(fingerprint, controls(McpProtectionKeyRing
+				.withActiveKey(protectionKey("active", 1))
+				.verificationKeys(List.of(
+						protectionKey("verify-a", 32),
+						protectionKey("verify-b", 64)))
+				.build(), null).getKeyRingSnapshot().orElseThrow()
+				.getFingerprint());
+	}
+
+	@Test
+	public void protectionMutationsAreRetrySafeAndRejectedMutationsAreAtomic() {
+		McpProtectionKey active = protectionKey("active", 0);
+		McpProtectionKey staged = protectionKey("staged", 32);
+		DefaultMcpSecurityControls controls = controls(McpProtectionKeyRing
+				.withActiveKey(active).verificationKey(staged).build(),
+				traceKey("trace", 96));
+
+		McpProtectionKeyRingFingerprint initialFingerprint = controls
+				.getKeyRingSnapshot().orElseThrow().getFingerprint();
+		controls.stageVerificationKey(protectionKey("active", 0));
+		controls.stageVerificationKey(protectionKey("staged", 32));
+		Assertions.assertEquals(initialFingerprint, controls.getKeyRingSnapshot()
+				.orElseThrow().getFingerprint());
+		assertRejectedWithoutProtectionChange(controls, () ->
+				controls.stageVerificationKey(protectionKey("active", 64)));
+		assertRejectedWithoutProtectionChange(controls, () ->
+				controls.stageVerificationKey(protectionKey("alias", 32)));
+		assertRejectedWithoutProtectionChange(controls, () ->
+				controls.stageVerificationKey(protectionKey("trace-alias", 96)));
+
+		controls.activateStagedKey("staged");
+		controls.activateStagedKey("staged");
+		McpProtectionKeyRingSnapshot stagedSnapshot = controls
+				.getKeyRingSnapshot().orElseThrow();
+		Assertions.assertEquals("staged", stagedSnapshot.getActiveKeyId());
+		Assertions.assertEquals(Set.of("active"),
+				stagedSnapshot.getVerificationKeyIds());
+		assertRejectedWithoutProtectionChange(controls,
+				() -> controls.activateStagedKey("unknown"));
+
+		controls.rotateTo(protectionKey("rotated", 64));
+		controls.rotateTo(protectionKey("rotated", 64));
+		McpProtectionKeyRingSnapshot rotatedSnapshot = controls
+				.getKeyRingSnapshot().orElseThrow();
+		Assertions.assertEquals("rotated", rotatedSnapshot.getActiveKeyId());
+		Assertions.assertEquals(Set.of("active", "staged"),
+				rotatedSnapshot.getVerificationKeyIds());
+		Assertions.assertFalse(controls.removeVerificationKey("absent"));
+		Assertions.assertTrue(controls.removeVerificationKey("active"));
+		Assertions.assertFalse(controls.removeVerificationKey("active"));
+		assertRejectedWithoutProtectionChange(controls,
+				() -> controls.removeVerificationKey("rotated"));
+	}
+
+	@Test
+	public void protectionControlsAreIndependentPerServer() {
+		McpProtectionConfig config = McpProtectionConfig.withKeyRing(
+				McpProtectionKeyRing.withActiveKey(
+						protectionKey("active", 0)).build()).build();
+		DefaultMcpSecurityControls first =
+				new DefaultMcpSecurityControls(config, null);
+		DefaultMcpSecurityControls second =
+				new DefaultMcpSecurityControls(config, null);
+
+		first.rotateTo(protectionKey("rotated", 32));
+		Assertions.assertEquals("rotated", first.getKeyRingSnapshot()
+				.orElseThrow().getActiveKeyId());
+		Assertions.assertEquals("active", second.getKeyRingSnapshot()
+				.orElseThrow().getActiveKeyId());
+		Assertions.assertEquals(Set.of(), second.getKeyRingSnapshot()
+				.orElseThrow().getVerificationKeyIds());
+	}
+
+	@Test
+	public void nonproductionModesExposeNoRingAndRejectLiveRingMutation() {
+		McpRequestStateProtector protector = new McpRequestStateProtector() {
+			@Override
+			public String seal(McpRequestStateProtectionContext context,
+					byte[] plaintext) {
+				return "opaque";
+			}
+
+			@Override
+			public byte[] open(McpRequestStateProtectionContext context,
+					String protectedState) {
+				return new byte[]{1};
+			}
+		};
+		List<DefaultMcpSecurityControls> controls = List.of(
+				new DefaultMcpSecurityControls(null, null),
+				new DefaultMcpSecurityControls(McpProtectionConfig
+						.withDevelopmentEphemeralProtection().build(), null),
+				new DefaultMcpSecurityControls(McpProtectionConfig
+						.withRequestStateProtector(protector).build(), null));
+		Assertions.assertEquals(List.of(
+				McpProtectionMode.NO_FRAMEWORK_KEYS,
+				McpProtectionMode.DEVELOPMENT_EPHEMERAL,
+				McpProtectionMode.APPLICATION_PROTECTOR), controls.stream()
+				.map(DefaultMcpSecurityControls::getProtectionMode).toList());
+
+		for (DefaultMcpSecurityControls control : controls) {
+			Assertions.assertEquals(Optional.empty(), control.getKeyRingSnapshot());
+			Assertions.assertThrows(IllegalStateException.class, () ->
+					control.stageVerificationKey(protectionKey("key", 0)));
+			Assertions.assertThrows(IllegalStateException.class, () ->
+					control.activateStagedKey("key"));
+			Assertions.assertThrows(IllegalStateException.class, () ->
+					control.rotateTo(protectionKey("key", 0)));
+			Assertions.assertThrows(IllegalStateException.class, () ->
+					control.removeVerificationKey("key"));
+		}
+	}
+
+	@Test
+	public void protectionConfigValidatesLimitsAndPreservesProviderIdentity() {
+		McpRequestStateProtector protector = new McpRequestStateProtector() {
+			@Override
+			public String seal(McpRequestStateProtectionContext context,
+					byte[] plaintext) {
+				return "opaque";
+			}
+
+			@Override
+			public byte[] open(McpRequestStateProtectionContext context,
+					String protectedState) {
+				return new byte[0];
+			}
+		};
+		McpProtectionConfig config = McpProtectionConfig
+				.withRequestStateProtector(protector)
+				.maximumEncodedRequestStateBytes(100)
+				.maximumDecodedRequestStateBytes(75)
+				.maximumRequestStateLifetime(Duration.ofSeconds(30))
+				.maximumRequestStateRounds(4)
+				.build();
+		Assertions.assertEquals(McpProtectionMode.APPLICATION_PROTECTOR,
+				config.getProtectionMode());
+		Assertions.assertSame(protector,
+				config.getRequestStateProtector().orElseThrow());
+		Assertions.assertEquals(Optional.empty(), config.getInitialKeyRing());
+		Assertions.assertEquals(100,
+				config.getMaximumEncodedRequestStateBytes());
+		Assertions.assertEquals(75,
+				config.getMaximumDecodedRequestStateBytes());
+		Assertions.assertEquals(Duration.ofSeconds(30),
+				config.getMaximumRequestStateLifetime());
+		Assertions.assertEquals(4, config.getMaximumRequestStateRounds());
+
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				McpProtectionConfig.withDevelopmentEphemeralProtection()
+						.maximumEncodedRequestStateBytes(0));
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				McpProtectionConfig.withDevelopmentEphemeralProtection()
+						.maximumDecodedRequestStateBytes(-1));
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				McpProtectionConfig.withDevelopmentEphemeralProtection()
+						.maximumRequestStateRounds(0));
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				McpProtectionConfig.withDevelopmentEphemeralProtection()
+						.maximumRequestStateLifetime(Duration.ZERO));
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				McpProtectionConfig.withDevelopmentEphemeralProtection()
+						.maximumRequestStateLifetime(Duration.ofSeconds(
+								Long.MAX_VALUE)));
+		Assertions.assertThrows(IllegalStateException.class, () ->
+				McpProtectionConfig.withDevelopmentEphemeralProtection()
+						.maximumEncodedRequestStateBytes(50)
+						.maximumDecodedRequestStateBytes(51).build());
+	}
+
+	@Test
+	public void protectionContextAndSanitizedFailuresExposeNoMutableState() {
+		byte[] associatedData = bytesFrom(0);
+		McpRequestStateProtectionContext context =
+				new McpRequestStateProtectionContext("/mcp", "2026-07-28",
+						"tools/call", associatedData);
+		Arrays.fill(associatedData, (byte) 127);
+		byte[] firstCopy = context.getAssociatedData();
+		Assertions.assertArrayEquals(bytesFrom(0), firstCopy);
+		Arrays.fill(firstCopy, (byte) 126);
+		Assertions.assertArrayEquals(bytesFrom(0), context.getAssociatedData());
+		Assertions.assertEquals("/mcp", context.getEndpointPath());
+		Assertions.assertEquals("2026-07-28", context.getProtocolVersion());
+		Assertions.assertEquals("tools/call", context.getMethod());
+
+		McpRequestStateProtectionException invalid =
+				McpRequestStateProtectionException.fromInvalidState();
+		McpRequestStateProtectionException unavailable =
+				McpRequestStateProtectionException
+						.fromProtectorUnavailable();
+		Assertions.assertEquals(
+				McpRequestStateProtectionException.Reason.INVALID_STATE,
+				invalid.getReason());
+		Assertions.assertEquals("Request state is invalid.",
+				invalid.getMessage());
+		Assertions.assertNull(invalid.getCause());
+		Assertions.assertEquals(
+				McpRequestStateProtectionException.Reason.PROTECTOR_UNAVAILABLE,
+				unavailable.getReason());
+		Assertions.assertEquals("Request-state protection is unavailable.",
+				unavailable.getMessage());
+		Assertions.assertNull(unavailable.getCause());
+		Assertions.assertEquals("An MCP protection key is still in use.",
+				new McpKeyInUseException().getMessage());
+	}
+
+	@Test
+	public void traceFingerprintMatchesFrozenGoldenConstructionAndValidation() {
+		DefaultMcpSecurityControls controls =
+				new DefaultMcpSecurityControls(null, traceKey("trace", 96));
+		McpTraceCorrelationConfigurationFingerprint fingerprint = controls
+				.getConfigurationFingerprint().orElseThrow();
+		Assertions.assertTrue(controls.isEnabled());
+		Assertions.assertEquals(Optional.of("trace"),
+				controls.getActiveKeyId());
+		Assertions.assertEquals("v1",
+				McpTraceCorrelationConfigurationFingerprint.VERSION);
+		Assertions.assertEquals(TRACE_GOLDEN_FINGERPRINT, fingerprint.value());
+		Assertions.assertEquals(fingerprint,
+				new McpTraceCorrelationConfigurationFingerprint(
+						TRACE_GOLDEN_FINGERPRINT));
+		Assertions.assertThrows(NullPointerException.class, () ->
+				new McpTraceCorrelationConfigurationFingerprint(null));
+		for (String invalid : List.of("", "A".repeat(42), "A".repeat(44),
+				"!" + "A".repeat(42), "A".repeat(42) + "B"))
+			Assertions.assertThrows(IllegalArgumentException.class, () ->
+					new McpTraceCorrelationConfigurationFingerprint(invalid));
+	}
+
+	@Test
+	public void traceRotationIsAtomicRetrySafeAndCrossPurposeDistinct() {
+		DefaultMcpSecurityControls disabled =
+				new DefaultMcpSecurityControls(null, null);
+		Assertions.assertFalse(disabled.isEnabled());
+		Assertions.assertEquals(Optional.empty(), disabled.getActiveKeyId());
+		Assertions.assertEquals(Optional.empty(),
+				disabled.getConfigurationFingerprint());
+		Assertions.assertThrows(IllegalStateException.class, () ->
+				disabled.rotateActiveKey(traceKey("trace", 0)));
+
+		DefaultMcpSecurityControls controls = controls(McpProtectionKeyRing
+				.withActiveKey(protectionKey("protection", 0)).build(),
+				traceKey("trace", 32));
+		McpTraceCorrelationConfigurationFingerprint initialFingerprint = controls
+				.getConfigurationFingerprint().orElseThrow();
+		controls.rotateActiveKey(traceKey("trace", 32));
+		Assertions.assertEquals(initialFingerprint,
+				controls.getConfigurationFingerprint().orElseThrow());
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				controls.rotateActiveKey(traceKey("trace", 64)));
+		Assertions.assertEquals(Optional.of("trace"),
+				controls.getActiveKeyId());
+		Assertions.assertEquals(initialFingerprint,
+				controls.getConfigurationFingerprint().orElseThrow());
+		controls.rotateActiveKey(traceKey("rotated", 64));
+		Assertions.assertEquals(Optional.of("rotated"),
+				controls.getActiveKeyId());
+		Assertions.assertNotEquals(initialFingerprint,
+				controls.getConfigurationFingerprint().orElseThrow());
+		McpTraceCorrelationConfigurationFingerprint beforeRejected = controls
+				.getConfigurationFingerprint().orElseThrow();
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				controls.rotateActiveKey(traceKey("protection-alias", 0)));
+		Assertions.assertEquals(Optional.of("rotated"),
+				controls.getActiveKeyId());
+		Assertions.assertEquals(beforeRejected,
+				controls.getConfigurationFingerprint().orElseThrow());
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				controls.stageVerificationKey(
+						protectionKey("trace-alias", 64)));
+
+		for (McpProtectionKeyRing aliasedRing : List.of(
+				McpProtectionKeyRing.withActiveKey(
+						protectionKey("active-alias", 96)).build(),
+				McpProtectionKeyRing.withActiveKey(
+						protectionKey("active", 0))
+						.verificationKey(
+								protectionKey("verification-alias", 96))
+						.build())) {
+			IllegalArgumentException exception = Assertions.assertThrows(
+					IllegalArgumentException.class,
+					() -> controls(aliasedRing, traceKey("trace", 96)));
+			Assertions.assertEquals(
+					"Protection and trace-correlation keys must use distinct material.",
+					exception.getMessage());
+		}
+	}
+
+	@Test
+	public void concurrentProtectionRotationPublishesOnlyCompleteSnapshots()
+			throws Exception {
+		McpProtectionKey first = protectionKey("first", 0);
+		McpProtectionKey second = protectionKey("second", 32);
+		DefaultMcpSecurityControls controls = controls(McpProtectionKeyRing
+				.withActiveKey(first).verificationKey(second).build(), null);
+		String firstFingerprint = controls(McpProtectionKeyRing
+				.withActiveKey(first).verificationKey(second).build(), null)
+				.getKeyRingSnapshot().orElseThrow().getFingerprint().getValue();
+		String secondFingerprint = controls(McpProtectionKeyRing
+				.withActiveKey(second).verificationKey(first).build(), null)
+				.getKeyRingSnapshot().orElseThrow().getFingerprint().getValue();
+		CountDownLatch start = new CountDownLatch(1);
+		ExecutorService executor = Executors.newFixedThreadPool(8);
+		try {
+			List<Future<?>> futures = new ArrayList<>();
+			for (int writer = 0; writer < 4; ++writer) {
+				int writerIndex = writer;
+				futures.add(executor.submit(() -> {
+					start.await();
+					for (int iteration = 0; iteration < 1_000; ++iteration)
+						controls.rotateTo((iteration + writerIndex) % 2 == 0
+								? first : second);
+					return null;
+				}));
+			}
+			for (int reader = 0; reader < 4; ++reader)
+				futures.add(executor.submit(() -> {
+					start.await();
+					for (int iteration = 0; iteration < 2_000; ++iteration) {
+						McpProtectionKeyRingSnapshot snapshot = controls
+								.getKeyRingSnapshot().orElseThrow();
+						if (snapshot.getActiveKeyId().equals("first")) {
+							Assertions.assertEquals(Set.of("second"),
+									snapshot.getVerificationKeyIds());
+							Assertions.assertEquals(firstFingerprint,
+									snapshot.getFingerprint().getValue());
+						} else {
+							Assertions.assertEquals("second",
+									snapshot.getActiveKeyId());
+							Assertions.assertEquals(Set.of("first"),
+									snapshot.getVerificationKeyIds());
+							Assertions.assertEquals(secondFingerprint,
+									snapshot.getFingerprint().getValue());
+						}
+					}
+					return null;
+				}));
+			start.countDown();
+			for (Future<?> future : futures)
+				future.get();
+		} finally {
+			executor.shutdownNow();
+		}
+	}
+
+	@Test
+	public void concurrentCrossPurposeAliasAttemptsHaveOneWinner()
+			throws Exception {
+		DefaultMcpSecurityControls controls = controls(McpProtectionKeyRing
+				.withActiveKey(protectionKey("protection", 0)).build(),
+				traceKey("trace", 32));
+		McpProtectionKey protectionCandidate =
+				protectionKey("shared-protection", 64);
+		McpTraceCorrelationKey traceCandidate =
+				traceKey("shared-trace", 64);
+		CountDownLatch start = new CountDownLatch(1);
+		AtomicInteger successes = new AtomicInteger();
+		AtomicInteger rejections = new AtomicInteger();
+		ExecutorService executor = Executors.newFixedThreadPool(2);
+		try {
+			Future<?> protectionFuture = executor.submit(() -> {
+				start.await();
+				try {
+					controls.rotateTo(protectionCandidate);
+					successes.incrementAndGet();
+				} catch (IllegalArgumentException exception) {
+					rejections.incrementAndGet();
+				}
+				return null;
+			});
+			Future<?> traceFuture = executor.submit(() -> {
+				start.await();
+				try {
+					controls.rotateActiveKey(traceCandidate);
+					successes.incrementAndGet();
+				} catch (IllegalArgumentException exception) {
+					rejections.incrementAndGet();
+				}
+				return null;
+			});
+			start.countDown();
+			protectionFuture.get();
+			traceFuture.get();
+		} finally {
+			executor.shutdownNow();
+		}
+
+		Assertions.assertEquals(1, successes.get());
+		Assertions.assertEquals(1, rejections.get());
+		String activeProtectionId = controls.getKeyRingSnapshot().orElseThrow()
+				.getActiveKeyId();
+		String activeTraceId = controls.getActiveKeyId().orElseThrow();
+		Assertions.assertTrue(
+				(activeProtectionId.equals("shared-protection")
+						&& activeTraceId.equals("trace"))
+				|| (activeProtectionId.equals("protection")
+						&& activeTraceId.equals("shared-trace")));
+	}
+
+	private static void assertRejectedWithoutProtectionChange(
+			DefaultMcpSecurityControls controls, Runnable mutation) {
+		McpProtectionKeyRingSnapshot before = controls.getKeyRingSnapshot()
+				.orElseThrow();
+		Assertions.assertThrows(IllegalArgumentException.class, mutation::run);
+		McpProtectionKeyRingSnapshot after = controls.getKeyRingSnapshot()
+				.orElseThrow();
+		Assertions.assertEquals(before.getActiveKeyId(), after.getActiveKeyId());
+		Assertions.assertEquals(before.getVerificationKeyIds(),
+				after.getVerificationKeyIds());
+		Assertions.assertEquals(before.getFingerprint(), after.getFingerprint());
+	}
+
+	private static DefaultMcpSecurityControls controls(
+			McpProtectionKeyRing ring,
+			McpTraceCorrelationKey traceCorrelationKey) {
+		McpProtectionConfig config = ring == null ? null
+				: McpProtectionConfig.withKeyRing(ring).build();
+		return new DefaultMcpSecurityControls(config, traceCorrelationKey);
+	}
+
+	private static McpProtectionKey protectionKey(String id, int firstByte) {
+		return McpProtectionKey.fromIdAndBytes(id, bytesFrom(firstByte));
+	}
+
+	private static McpTraceCorrelationKey traceKey(String id, int firstByte) {
+		return McpTraceCorrelationKey.fromIdAndBytes(id, bytesFrom(firstByte));
+	}
+
+	private static byte[] bytesFrom(int firstByte) {
+		byte[] bytes = new byte[32];
+		for (int index = 0; index < bytes.length; ++index)
+			bytes[index] = (byte) (firstByte + index);
+		return bytes;
+	}
+}

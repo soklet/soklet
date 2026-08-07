@@ -1,0 +1,471 @@
+/*
+ * Copyright 2022-2026 Revetware LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.soklet;
+
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * Black-box real-listener coverage for public MCP input-required results.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@Timeout(30)
+public class McpInputRequiredPublicRuntimeTests {
+	private static final String LOOPBACK = "127.0.0.1";
+	private static final String MCP_PATH = "/mcp";
+	private static final String PROTOCOL_VERSION = "2026-07-28";
+	private static final String JSON_MEDIA_TYPE = "application/json";
+	private static final String ROOTS_CAPABILITY = "{\"roots\":{}}";
+	private static final String FORM_AND_ROOTS_CAPABILITIES =
+			"{\"elicitation\":{\"form\":{}},\"roots\":{}}";
+
+	@Test
+	public void declaredInputRequestsEmitExactWireForToolsPromptsAndResources()
+			throws Exception {
+		AtomicInteger sanitizerInvocations = new AtomicInteger();
+		McpInputRequestDeclaration form = McpInputRequestDeclaration
+				.fromElicitationForm(McpInputRequirement.CONDITIONAL);
+		McpInputRequestDeclaration roots = McpInputRequestDeclaration
+				.fromRoots(McpInputRequirement.CONDITIONAL);
+		McpJsonObject requestedSchema = McpJsonObject.builder()
+				.put("type", "object")
+				.put("properties", McpJsonObject.emptyInstance())
+				.build();
+		McpJsonObject toolFormParams = McpJsonObject.builder()
+				.put("message", "Approve tool?")
+				.put("mode", "form")
+				.put("requestedSchema", requestedSchema)
+				.build();
+		McpJsonObject resourceFormParams = McpJsonObject.builder()
+				.put("message", "Approve resource?")
+				.put("mode", "form")
+				.put("requestedSchema", requestedSchema)
+				.build();
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName("input-tool")
+				.jsonArguments()
+				.handler((request, call, features) ->
+						McpInputRequiredResult.builder()
+								.inputRequest("approval", McpInputRequest
+										.fromDeclaration(form, toolFormParams))
+								.inputRequest("roots", McpInputRequest
+										.fromDeclaration(roots,
+												McpJsonObject.emptyInstance()))
+								.metadata(McpJsonObject.builder()
+										.put("testResult", "tool")
+										.build())
+								.build())
+				.mayRequestInput(form, roots)
+				.build();
+		McpPromptRegistration prompt = McpPromptRegistration
+				.withName("input-prompt")
+				.handler((request, promptGet, features) ->
+						McpInputRequiredResult.builder()
+								.inputRequest("promptRoots", McpInputRequest
+										.fromDeclaration(roots,
+												McpJsonObject.emptyInstance()))
+								.metadata(McpJsonObject.builder()
+										.put("testResult", "prompt")
+										.build())
+								.build())
+				.mayRequestInput(roots)
+				.build();
+		McpResourceRegistration resource = McpResourceRegistration
+				.withUriTemplateAndName("test://items/{id}", "input-resource")
+				.handler((request, read, features) ->
+						McpInputRequiredResult.builder()
+								.inputRequest("resourceApproval", McpInputRequest
+										.fromDeclaration(form, resourceFormParams))
+								.metadata(McpJsonObject.builder()
+										.put("testResult", "resource")
+										.build())
+								.build())
+				.mayRequestInput(form)
+				.cachePolicy(McpCachePolicy.fromPublicTimeToLive(
+						Duration.ofHours(1)))
+				.build();
+		McpEndpoint endpoint = endpointBuilder()
+				.tool(tool)
+				.prompt(prompt)
+				.resource(resource)
+				.build();
+		McpServer server = server(endpoint,
+				McpRequestAdmissionPolicy.acceptAllInstance(),
+				context -> McpRateLimitDecision.fromAllowed(),
+				context -> McpRateLimitDecision.fromAllowed(),
+				(request, toolName, rawArguments, output) -> {
+					sanitizerInvocations.incrementAndGet();
+					return output;
+				});
+
+		try {
+			server.start();
+			int port = boundPort(server);
+
+			HttpResponse<String> toolResponse = send(port, "tool-input",
+					"tools/call", "input-tool",
+					",\"name\":\"input-tool\",\"arguments\":{}",
+					FORM_AND_ROOTS_CAPABILITIES);
+			assertInputRequired(toolResponse, "tool-input");
+			Assertions.assertEquals(
+					"{\"jsonrpc\":\"2.0\",\"id\":\"tool-input\",\"result\":{"
+							+ "\"inputRequests\":{"
+							+ "\"approval\":{\"method\":\"elicitation/create\","
+							+ "\"params\":{\"message\":\"Approve tool?\","
+							+ "\"mode\":\"form\",\"requestedSchema\":{"
+							+ "\"type\":\"object\",\"properties\":{}}}},"
+							+ "\"roots\":{\"method\":\"roots/list\",\"params\":{}}},"
+							+ "\"resultType\":\"input_required\","
+							+ "\"_meta\":{\"testResult\":\"tool\"}}}",
+					toolResponse.body());
+
+			HttpResponse<String> promptResponse = send(port, "prompt-input",
+					"prompts/get", "input-prompt",
+					",\"name\":\"input-prompt\",\"arguments\":{}",
+					FORM_AND_ROOTS_CAPABILITIES);
+			assertInputRequired(promptResponse, "prompt-input");
+			Assertions.assertEquals(
+					"{\"jsonrpc\":\"2.0\",\"id\":\"prompt-input\",\"result\":{"
+							+ "\"inputRequests\":{\"promptRoots\":{"
+							+ "\"method\":\"roots/list\",\"params\":{}}},"
+							+ "\"resultType\":\"input_required\","
+							+ "\"_meta\":{\"testResult\":\"prompt\"}}}",
+					promptResponse.body());
+
+			HttpResponse<String> resourceResponse = send(port, "resource-input",
+					"resources/read", "test://items/42",
+					",\"uri\":\"test://items/42\"",
+					FORM_AND_ROOTS_CAPABILITIES);
+			assertInputRequired(resourceResponse, "resource-input");
+			Assertions.assertEquals(
+					"{\"jsonrpc\":\"2.0\",\"id\":\"resource-input\",\"result\":{"
+							+ "\"inputRequests\":{\"resourceApproval\":{"
+							+ "\"method\":\"elicitation/create\",\"params\":{"
+							+ "\"message\":\"Approve resource?\",\"mode\":\"form\","
+							+ "\"requestedSchema\":{\"type\":\"object\","
+							+ "\"properties\":{}}}}},\"resultType\":\"input_required\","
+							+ "\"_meta\":{\"testResult\":\"resource\"}}}",
+					resourceResponse.body());
+			Assertions.assertFalse(resourceResponse.body().contains("\"ttlMs\""),
+					resourceResponse.body());
+			Assertions.assertFalse(
+					resourceResponse.body().contains("\"cacheScope\""),
+					resourceResponse.body());
+			Assertions.assertEquals(0, sanitizerInvocations.get());
+		} finally {
+			server.stop();
+		}
+	}
+
+	@Test
+	public void capabilityRequirementsRespectThePolicyBoundaryAndRequestScope()
+			throws Exception {
+		AtomicInteger admissionInvocations = new AtomicInteger();
+		AtomicInteger requestLimiterInvocations = new AtomicInteger();
+		AtomicInteger toolLimiterInvocations = new AtomicInteger();
+		AtomicInteger requiredHandlerInvocations = new AtomicInteger();
+		AtomicInteger conditionalCompleteHandlerInvocations = new AtomicInteger();
+		AtomicInteger conditionalInputHandlerInvocations = new AtomicInteger();
+		AtomicInteger sanitizerInvocations = new AtomicInteger();
+		McpInputRequestDeclaration requiredRoots = McpInputRequestDeclaration
+				.fromRoots(McpInputRequirement.REQUIRED);
+		McpInputRequestDeclaration conditionalRoots = McpInputRequestDeclaration
+				.fromRoots(McpInputRequirement.CONDITIONAL);
+		McpToolRegistration<McpJsonObject> required = McpToolRegistration
+				.withName("required-roots")
+				.jsonArguments()
+				.handler((request, call, features) -> {
+					requiredHandlerInvocations.incrementAndGet();
+					return inputRequired("roots", requiredRoots,
+							McpJsonObject.emptyInstance());
+				})
+				.mayRequestInput(requiredRoots)
+				.build();
+		McpToolRegistration<McpJsonObject> conditionalComplete =
+				McpToolRegistration.withName("conditional-complete")
+						.jsonArguments()
+						.handler((request, call, features) -> {
+							conditionalCompleteHandlerInvocations.incrementAndGet();
+							return McpCompleteResult.fromToolText("complete");
+						})
+						.mayRequestInput(conditionalRoots)
+						.build();
+		McpToolRegistration<McpJsonObject> conditionalInput = McpToolRegistration
+				.withName("conditional-input")
+				.jsonArguments()
+				.handler((request, call, features) -> {
+					conditionalInputHandlerInvocations.incrementAndGet();
+					return inputRequired("roots", conditionalRoots,
+							McpJsonObject.emptyInstance());
+				})
+				.mayRequestInput(conditionalRoots)
+				.build();
+		McpEndpoint endpoint = endpointBuilder()
+				.tools(List.of(required, conditionalComplete, conditionalInput))
+				.build();
+		McpServer server = server(endpoint, context -> {
+			admissionInvocations.incrementAndGet();
+			return McpAdmissionDecision.fromAnonymousIdentity();
+		}, context -> {
+			requestLimiterInvocations.incrementAndGet();
+			return McpRateLimitDecision.fromAllowed();
+		}, context -> {
+			toolLimiterInvocations.incrementAndGet();
+			return McpRateLimitDecision.fromAllowed();
+		}, (request, toolName, rawArguments, output) -> {
+			sanitizerInvocations.incrementAndGet();
+			return output;
+		});
+
+		try {
+			server.start();
+			int port = boundPort(server);
+
+			HttpResponse<String> missingRequired = callTool(port,
+					"missing-required", "required-roots", "{}");
+			assertMissingCapability(missingRequired, "missing-required",
+					ROOTS_CAPABILITY);
+			assertCounts(0, admissionInvocations, requestLimiterInvocations,
+					toolLimiterInvocations, requiredHandlerInvocations,
+					conditionalCompleteHandlerInvocations,
+					conditionalInputHandlerInvocations, sanitizerInvocations);
+
+			HttpResponse<String> supportedRequired = callTool(port,
+					"supported-required", "required-roots", ROOTS_CAPABILITY);
+			assertInputRequired(supportedRequired, "supported-required");
+			Assertions.assertEquals(1, admissionInvocations.get());
+			Assertions.assertEquals(1, requestLimiterInvocations.get());
+			Assertions.assertEquals(1, toolLimiterInvocations.get());
+			Assertions.assertEquals(1, requiredHandlerInvocations.get());
+			Assertions.assertEquals(0, sanitizerInvocations.get());
+
+			HttpResponse<String> completeWithoutCapability = callTool(port,
+					"conditional-complete", "conditional-complete", "{}");
+			assertComplete(completeWithoutCapability, "conditional-complete");
+			Assertions.assertEquals(1,
+					conditionalCompleteHandlerInvocations.get());
+			Assertions.assertEquals(1, sanitizerInvocations.get());
+
+			HttpResponse<String> emittedWithoutCapability = callTool(port,
+					"conditional-missing", "conditional-input", "{}");
+			assertMissingCapability(emittedWithoutCapability,
+					"conditional-missing", ROOTS_CAPABILITY);
+			Assertions.assertEquals(1, conditionalInputHandlerInvocations.get());
+			Assertions.assertEquals(1, sanitizerInvocations.get());
+
+			HttpResponse<String> emittedWithCapability = callTool(port,
+					"conditional-supported", "conditional-input",
+					ROOTS_CAPABILITY);
+			assertInputRequired(emittedWithCapability, "conditional-supported");
+			Assertions.assertEquals(4, admissionInvocations.get());
+			Assertions.assertEquals(4, requestLimiterInvocations.get());
+			Assertions.assertEquals(4, toolLimiterInvocations.get());
+			Assertions.assertEquals(2, conditionalInputHandlerInvocations.get());
+			Assertions.assertEquals(1, sanitizerInvocations.get());
+		} finally {
+			server.stop();
+		}
+	}
+
+	@Test
+	public void undeclaredInputRequestsFailClosedWithoutSanitizationOrLeaks()
+			throws Exception {
+		String parameterSecret = "UNDECLARED-PARAMETER-SECRET";
+		String metadataSecret = "UNDECLARED-METADATA-SECRET";
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		AtomicInteger sanitizerInvocations = new AtomicInteger();
+		McpInputRequestDeclaration declared = McpInputRequestDeclaration
+				.fromElicitationForm(McpInputRequirement.CONDITIONAL);
+		McpInputRequestDeclaration emitted = McpInputRequestDeclaration
+				.fromRoots(McpInputRequirement.CONDITIONAL);
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName("undeclared-input")
+				.jsonArguments()
+				.handler((request, call, features) -> {
+					handlerInvocations.incrementAndGet();
+					return McpInputRequiredResult.builder()
+							.inputRequest("secret-key", McpInputRequest
+									.fromDeclaration(emitted,
+											McpJsonObject.builder()
+													.put("secret", parameterSecret)
+													.build()))
+							.metadata(McpJsonObject.builder()
+									.put("secret", metadataSecret)
+									.build())
+							.build();
+				})
+				.mayRequestInput(declared)
+				.build();
+		McpEndpoint endpoint = endpointBuilder().tool(tool).build();
+		McpServer server = server(endpoint,
+				McpRequestAdmissionPolicy.acceptAllInstance(),
+				context -> McpRateLimitDecision.fromAllowed(),
+				context -> McpRateLimitDecision.fromAllowed(),
+				(request, toolName, rawArguments, output) -> {
+					sanitizerInvocations.incrementAndGet();
+					return output;
+				});
+
+		try {
+			server.start();
+			HttpResponse<String> response = callTool(boundPort(server),
+					"undeclared", "undeclared-input",
+					FORM_AND_ROOTS_CAPABILITIES);
+
+			Assertions.assertEquals(500, response.statusCode(), response.body());
+			Assertions.assertEquals(
+					"{\"jsonrpc\":\"2.0\",\"id\":\"undeclared\",\"error\":{"
+							+ "\"code\":-32603,\"message\":\"Internal error\"}}",
+					response.body());
+			Assertions.assertFalse(response.body().contains(parameterSecret),
+					response.body());
+			Assertions.assertFalse(response.body().contains(metadataSecret),
+					response.body());
+			Assertions.assertFalse(response.body().contains("secret-key"),
+					response.body());
+			Assertions.assertEquals(1, handlerInvocations.get());
+			Assertions.assertEquals(0, sanitizerInvocations.get());
+		} finally {
+			server.stop();
+		}
+	}
+
+	private static McpEndpoint.Builder endpointBuilder() {
+		return McpEndpoint.withPath(MCP_PATH)
+				.serverInformation(McpImplementation.withNameAndVersion(
+						"input-required-public-runtime-test",
+						"3.6.0-SNAPSHOT").build());
+	}
+
+	private static McpServer server(McpEndpoint endpoint,
+			McpRequestAdmissionPolicy admissionPolicy,
+			McpRateLimiter requestRateLimiter,
+			McpRateLimiter toolRateLimiter,
+			McpToolOutputSanitizer sanitizer) {
+		return McpServer.withPort(0)
+				.host(LOOPBACK)
+				.handlerResolver(
+						McpHandlerResolver.fromEndpoints(List.of(endpoint)))
+				.requestAdmissionPolicy(admissionPolicy)
+				.requestRateLimiter(requestRateLimiter)
+				.toolRateLimiter(toolRateLimiter)
+				.toolOutputSanitizer(sanitizer)
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.allowedHosts(Set.of(LOOPBACK))
+				.build();
+	}
+
+	private static int boundPort(McpServer server) {
+		return server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+	}
+
+	private static McpInputRequiredResult inputRequired(String key,
+			McpInputRequestDeclaration declaration, McpJsonObject params) {
+		return McpInputRequiredResult.builder()
+				.inputRequest(key,
+						McpInputRequest.fromDeclaration(declaration, params))
+				.build();
+	}
+
+	private static HttpResponse<String> callTool(int port, String requestId,
+			String toolName, String clientCapabilities) throws Exception {
+		return send(port, requestId, "tools/call", toolName,
+				",\"name\":\"" + toolName + "\",\"arguments\":{}",
+				clientCapabilities);
+	}
+
+	private static HttpResponse<String> send(int port, String requestId,
+			String method, String operationName, String additionalParameters,
+			String clientCapabilities) throws Exception {
+		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"" + requestId
+				+ "\",\"method\":\"" + method + "\",\"params\":{\"_meta\":{"
+				+ "\"io.modelcontextprotocol/protocolVersion\":\""
+				+ PROTOCOL_VERSION + "\","
+				+ "\"io.modelcontextprotocol/clientCapabilities\":"
+				+ clientCapabilities + "}" + additionalParameters + "}}";
+		HttpRequest request = HttpRequest.newBuilder()
+				.uri(URI.create("http://" + LOOPBACK + ":" + port + MCP_PATH))
+				.timeout(Duration.ofSeconds(5))
+				.header("Content-Type", JSON_MEDIA_TYPE + "; charset=UTF-8")
+				.header("Accept", JSON_MEDIA_TYPE + ", text/event-stream")
+				.header("MCP-Protocol-Version", PROTOCOL_VERSION)
+				.header("Mcp-Method", method)
+				.header("Mcp-Name", operationName)
+				.POST(HttpRequest.BodyPublishers.ofString(
+						body, StandardCharsets.UTF_8))
+				.build();
+		return HttpClient.newBuilder()
+				.connectTimeout(Duration.ofSeconds(5))
+				.version(HttpClient.Version.HTTP_1_1)
+				.build()
+				.send(request, HttpResponse.BodyHandlers.ofString(
+						StandardCharsets.UTF_8));
+	}
+
+	private static void assertInputRequired(HttpResponse<String> response,
+			String expectedId) {
+		Assertions.assertEquals(200, response.statusCode(), response.body());
+		Assertions.assertEquals(JSON_MEDIA_TYPE,
+				response.headers().firstValue("Content-Type").orElseThrow());
+		Assertions.assertEquals("no-store",
+				response.headers().firstValue("Cache-Control").orElseThrow());
+		assertContains(response.body(), "\"id\":\"" + expectedId + "\"");
+		assertContains(response.body(), "\"resultType\":\"input_required\"");
+	}
+
+	private static void assertComplete(HttpResponse<String> response,
+			String expectedId) {
+		Assertions.assertEquals(200, response.statusCode(), response.body());
+		assertContains(response.body(), "\"id\":\"" + expectedId + "\"");
+		assertContains(response.body(), "\"resultType\":\"complete\"");
+	}
+
+	private static void assertMissingCapability(HttpResponse<String> response,
+			String expectedId, String requiredCapabilities) {
+		Assertions.assertEquals(400, response.statusCode(), response.body());
+		Assertions.assertEquals(
+				"{\"jsonrpc\":\"2.0\",\"id\":\"" + expectedId
+						+ "\",\"error\":{\"code\":-32021,"
+						+ "\"message\":\"Missing required client capability\","
+						+ "\"data\":{\"requiredCapabilities\":"
+						+ requiredCapabilities + "}}}",
+				response.body());
+	}
+
+	private static void assertCounts(int expected,
+			AtomicInteger... counters) {
+		for (AtomicInteger counter : counters)
+			Assertions.assertEquals(expected, counter.get());
+	}
+
+	private static void assertContains(String text, String expected) {
+		Assertions.assertTrue(text.contains(expected), () ->
+				"Expected <" + text + "> to contain <" + expected + ">.");
+	}
+}

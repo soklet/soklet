@@ -383,6 +383,104 @@ public class McpServerPublicRuntimeTests {
 	}
 
 	@Test
+	public void attachedSubscriptionConfigRemainsRuntimeNeutralBeforePhaseFive()
+			throws Exception {
+		AtomicInteger listenerRegistrations = new AtomicInteger();
+		AtomicInteger publishedEvents = new AtomicInteger();
+		McpSubscriptionEventPublisher publisher =
+				new McpSubscriptionEventPublisher() {
+					@Override
+					public McpSubscriptionEventSubscription subscribe(
+							@NonNull McpSubscriptionEventListener listener) {
+						listenerRegistrations.incrementAndGet();
+						return () -> {
+							// No registration is expected during Phase 4.
+						};
+					}
+
+					@Override
+					public void publish(@NonNull McpSubscriptionEvent event) {
+						publishedEvents.incrementAndGet();
+					}
+				};
+		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
+				.withEventPublisher(publisher)
+				.notificationType(
+						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED)
+				.notificationType(
+						McpSubscriptionNotificationType.RESOURCE_UPDATED)
+				.build();
+		McpResourceRegistration resource = McpResourceRegistration
+				.withUriAndName(URI.create("test://neutral-subscriptions"),
+						"neutral-subscriptions")
+				.handler((request, read, features) -> {
+					throw new AssertionError(
+							"Discovery must not invoke the resource handler.");
+				})
+				.build();
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
+				.serverInformation(McpImplementation
+						.withNameAndVersion("neutral-subscriptions", "1.0")
+						.build())
+				.resource(resource)
+				.subscriptions(subscriptions)
+				.build();
+		McpServer server = newMcpServer(0, endpoint,
+				McpRequestAdmissionPolicy.acceptAllInstance(), true);
+
+		Assertions.assertEquals(0, listenerRegistrations.get());
+		Assertions.assertEquals(0, publishedEvents.get());
+		try {
+			server.start();
+			int port = server.getDiagnostics().getBoundAddress().orElseThrow()
+					.getPort();
+			HttpResponse<String> response = sendDiscovery(port,
+					"neutral-subscriptions", "{}");
+
+			assertSuccessfulDiscovery(response, "neutral-subscriptions");
+			Assertions.assertTrue(response.body().contains(
+					"\"capabilities\":{\"resources\":{}}"), response.body());
+			Assertions.assertFalse(response.body().contains("\"subscribe\""),
+					response.body());
+			Assertions.assertFalse(response.body().contains("\"listChanged\""),
+					response.body());
+			Assertions.assertEquals(0, listenerRegistrations.get());
+			Assertions.assertEquals(0, publishedEvents.get());
+		} finally {
+			server.stop();
+		}
+		Assertions.assertEquals(0, listenerRegistrations.get());
+		Assertions.assertEquals(0, publishedEvents.get());
+	}
+
+	@Test
+	public void discoveryOmitsServerInformationMetadataWhenDisabled()
+			throws Exception {
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
+				.serverInformation(McpImplementation
+						.withNameAndVersion("omitted-server-info", "3.6.0-SNAPSHOT")
+						.build())
+				.includeServerInformation(false)
+				.build();
+		McpServer server = newMcpServer(0, endpoint,
+				McpRequestAdmissionPolicy.acceptAllInstance(), true);
+
+		try {
+			server.start();
+			int port = server.getDiagnostics().getBoundAddress().orElseThrow()
+					.getPort();
+			HttpResponse<String> response = sendDiscovery(port,
+					"discover-without-server-info", "{}");
+
+			assertSuccessfulDiscovery(response, "discover-without-server-info");
+			Assertions.assertFalse(response.body().contains(
+					"\"io.modelcontextprotocol/serverInfo\""), response.body());
+		} finally {
+			server.stop();
+		}
+	}
+
+	@Test
 	public void customAdmissionReceivesPublicMetadataAndMapsTypedRejectionToWire()
 			throws Exception {
 		AtomicInteger admissions = new AtomicInteger();

@@ -27,6 +27,9 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Immutable lookup for optional features associated with one MCP invocation.
+ * The lookup carrier is safe for concurrent access; feature values retain their
+ * own lifecycle, mutability, and thread-safety contracts. This type's
+ * {@link ThreadSafe} annotation does not make feature values thread-safe.
  *
  * <p>Features are registered and found by their exact public feature-interface
  * class. Assignable supertypes and subtypes are not searched. Feature types
@@ -40,7 +43,8 @@ public interface McpInvocationFeatures {
 	 * Creates an immutable feature lookup, primarily for application tests.
 	 *
 	 * <p>The map and its entries are defensively copied. Each value must be an
-	 * instance of its key.
+	 * instance of its key and retains its own mutability and thread-safety
+	 * contract.
 	 *
 	 * @param features exact feature-interface keys and matching values
 	 * @return immutable feature lookup

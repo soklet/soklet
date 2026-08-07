@@ -561,7 +561,7 @@ function validateClass(node) {
   });
 }
 
-function validateRoot(root) {
+function validateRoot(root, expectedOnlyModifications) {
   if (root.name !== 'japicmp') problem(`Expected <japicmp>, found <${root.name}>`);
   expectAttributes(root, [
     'xmlns:xsi', 'accessModifier', 'creationTimestamp', 'ignoreMissingClasses',
@@ -579,11 +579,15 @@ function validateRoot(root) {
   ]) expectBoolean(root, name);
   if (root.attributes.accessModifier !== 'PROTECTED' ||
       root.attributes.ignoreMissingClasses !== 'false' ||
+      (Object.hasOwn(root.attributes,
+        'ignoreMissingClassesByRegularExpressions') &&
+        root.attributes.ignoreMissingClassesByRegularExpressions !== '') ||
       root.attributes.onlyBinaryIncompatibleModifications !== 'false' ||
-      root.attributes.onlyModifications !== 'true' ||
+      root.attributes.onlyModifications !== String(expectedOnlyModifications) ||
       root.attributes.packagesExclude !== 'n.a.' ||
       root.attributes.packagesInclude !== 'all') {
-    problem('japicmp report does not satisfy the complete public/protected comparison contract');
+    const reportKind = expectedOnlyModifications ? 'modified-only' : 'full';
+    problem(`japicmp report does not satisfy the complete public/protected ${reportKind} comparison contract`);
   }
   if (root.attributes.creationTimestamp.length === 0 ||
       root.attributes.newJar.length === 0 || root.attributes.oldJar.length === 0 ||
@@ -599,6 +603,43 @@ function validateRoot(root) {
   });
   if (root.children.length !== 1 || root.children[0].name !== 'classes') {
     problem('japicmp report must contain exactly one <classes> container');
+  }
+}
+
+const REPORT_PAIR_METADATA_ATTRIBUTES = Object.freeze([
+  'oldJar', 'oldVersion', 'newJar', 'newVersion',
+]);
+
+export function verifyJapicmpReportPair(
+  modifiedOnlyXmlText,
+  fullXmlText,
+  expectedOldVersion,
+  expectedOldJar,
+) {
+  if (typeof expectedOldVersion !== 'string' || expectedOldVersion.length === 0 ||
+      typeof expectedOldJar !== 'string' || expectedOldJar.length === 0) {
+    problem('Expected japicmp baseline version and JAR must be nonempty strings');
+  }
+
+  const modifiedOnlyRoot = parseXml(modifiedOnlyXmlText);
+  const fullRoot = parseXml(fullXmlText);
+  validateRoot(modifiedOnlyRoot, true);
+  validateRoot(fullRoot, false);
+
+  const mismatchedAttributes = REPORT_PAIR_METADATA_ATTRIBUTES.filter((name) =>
+    modifiedOnlyRoot.attributes[name] !== fullRoot.attributes[name]);
+  if (mismatchedAttributes.length !== 0) {
+    problem(`japicmp report pair metadata differs for: ${mismatchedAttributes.join(', ')}`);
+  }
+
+  if (modifiedOnlyRoot.attributes.oldVersion !== expectedOldVersion ||
+      modifiedOnlyRoot.attributes.oldJar !== expectedOldJar) {
+    problem(
+      `japicmp report pair baseline must be oldVersion=${JSON.stringify(expectedOldVersion)} ` +
+      `and oldJar=${JSON.stringify(expectedOldJar)}; found ` +
+      `oldVersion=${JSON.stringify(modifiedOnlyRoot.attributes.oldVersion)} and ` +
+      `oldJar=${JSON.stringify(modifiedOnlyRoot.attributes.oldJar)}`,
+    );
   }
 }
 
@@ -850,9 +891,720 @@ function canonicalizeRecords(records) {
   return lines.length === 0 ? '' : `${lines.join('\n')}\n`;
 }
 
+const TYPE_NAME = /^(?:[A-Za-z_$][A-Za-z0-9_$]*\.)*[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+function reviewedTypeNames(text, location) {
+  if (text.includes('\r')) problem(`${location} must use LF line endings`);
+  if (text.length !== 0 && !text.endsWith('\n')) {
+    problem(`${location} must end with LF`);
+  }
+
+  const names = [];
+  const seen = new Set();
+  for (const [index, line] of text.split('\n').entries()) {
+    if (line.length === 0 || line.startsWith('#')) continue;
+    if (line !== line.trim()) {
+      problem(`${location} line ${index + 1} has surrounding whitespace`);
+    }
+    if (!TYPE_NAME.test(line)) {
+      problem(`${location} line ${index + 1} is not a fully qualified binary type name`);
+    }
+    if (seen.has(line)) problem(`${location} contains duplicate type ${line}`);
+    seen.add(line);
+    names.push(line);
+  }
+
+  const sorted = [...names].sort(bytewiseCompare);
+  if (names.some((name, index) => name !== sorted[index])) {
+    problem(`${location} is not in canonical bytewise type-name order`);
+  }
+  return names;
+}
+
+function currentAttribute(node, name, location, allowNotApplicable = false) {
+  if (!Object.hasOwn(node.attributes, name)) {
+    problem(`Missing current-side ${name} at ${location}`);
+  }
+  const value = node.attributes[name];
+  if (value === 'n.a.' && !allowNotApplicable) {
+    problem(`No current-side ${name} at ${location}`);
+  }
+  return value === 'n.a.' ? null : value;
+}
+
+function currentNode(node) {
+  return node.attributes.changeStatus !== 'REMOVED';
+}
+
+function sortedUniqueStrings(values, location) {
+  const sorted = [...values].sort(bytewiseCompare);
+  for (let index = 1; index < sorted.length; index += 1) {
+    if (sorted[index] === sorted[index - 1]) {
+      problem(`Duplicate ${location} value ${JSON.stringify(sorted[index])}`);
+    }
+  }
+  return sorted;
+}
+
+function sortedUniqueObjects(values, location) {
+  const lines = values.map((value) => JSON.stringify(value)).sort(bytewiseCompare);
+  for (let index = 1; index < lines.length; index += 1) {
+    if (lines[index] === lines[index - 1]) {
+      problem(`Duplicate ${location} value ${lines[index]}`);
+    }
+  }
+  return lines.map((line) => JSON.parse(line));
+}
+
+function annotationValueSignature(node) {
+  const attributes = {};
+  for (const name of ['fullyQualifiedName', 'name', 'type', 'value']) {
+    if (Object.hasOwn(node.attributes, name)) attributes[name] = node.attributes[name];
+  }
+  return {
+    attributes,
+    values: children(node, 'values').map(annotationValueSignature),
+  };
+}
+
+function currentAnnotationSignatures(node, location) {
+  const annotations = children(node, 'annotations')
+    .filter(currentNode)
+    .map((annotation) => {
+      const annotationName = annotation.attributes.fullyQualifiedName;
+      const elements = children(annotation, 'elements')
+        .filter(currentNode)
+        .map((element) => ({
+          name: element.attributes.name,
+          values: children(element, 'newElementValues').map(annotationValueSignature),
+        }));
+      elements.sort((left, right) => bytewiseCompare(left.name, right.name));
+      for (let index = 1; index < elements.length; index += 1) {
+        if (elements[index].name === elements[index - 1].name) {
+          problem(`Duplicate annotation element ${annotationName}.${elements[index].name} at ${location}`);
+        }
+      }
+      return { name: annotationName, elements };
+    });
+  return sortedUniqueObjects(annotations, `${location} annotation`);
+}
+
+function genericTypeSignature(node) {
+  return {
+    type: node.attributes.type,
+    genericWildCard: Object.hasOwn(node.attributes, 'genericWildCard')
+      ? node.attributes.genericWildCard
+      : null,
+    genericTypes: children(node, 'genericTypes').map(genericTypeSignature),
+  };
+}
+
+function currentGenericTypes(node, containerName) {
+  return children(node, containerName).map(genericTypeSignature);
+}
+
+function currentGenericTemplateSignatures(node, location) {
+  return children(node, 'genericTemplates')
+    .filter(currentNode)
+    .map((template) => ({
+      name: template.attributes.name,
+      type: currentAttribute(template, 'newType',
+        `${location} generic template ${template.attributes.name}`),
+      genericTypes: currentGenericTypes(template, 'newGenericTypes'),
+      interfaceTypes: currentGenericTypes(template, 'newInterfaceTypes'),
+    }));
+}
+
+function currentFacetValues(node, containerName, location) {
+  return sortedUniqueStrings(
+    children(node, containerName)
+      .filter(currentNode)
+      .map((facet) => currentAttribute(facet, 'newValue', location)),
+    location,
+  );
+}
+
+function currentExceptionNames(node, location) {
+  return sortedUniqueStrings(
+    children(node, 'exceptions').filter(currentNode)
+      .map((exception) => exception.attributes.name),
+    location,
+  );
+}
+
+function currentParameterSignatures(node) {
+  return children(node, 'parameters').map((parameter) => ({
+    type: parameter.attributes.type,
+    templateName: Object.hasOwn(parameter.attributes, 'templateName')
+      ? parameter.attributes.templateName
+      : null,
+    genericTypes: currentGenericTypes(parameter, 'newGenericTypes'),
+  }));
+}
+
+function currentReturnTypeSignature(method, owner) {
+  const returnType = child(method, 'returnType');
+  if (returnType === undefined) {
+    problem(`Method ${owner}#${method.attributes.name} has no current return type`);
+  }
+  return {
+    type: currentAttribute(returnType, 'newValue',
+      `${owner}#${method.attributes.name} return type`),
+    genericTypes: currentGenericTypes(returnType, 'newGenericTypes'),
+  };
+}
+
+function currentMethodIdentity(owner, method) {
+  const parameters = children(method, 'parameters')
+    .map((parameter, index) => descriptor(
+      parameter.attributes.type,
+      `${owner}#${method.attributes.name} current parameter ${index}`,
+    ))
+    .join('');
+  const returnType = currentReturnTypeSignature(method, owner).type;
+  return `M:${owner}#${method.attributes.name}(${parameters})${descriptor(
+    returnType,
+    `${owner}#${method.attributes.name} current return type`,
+    true,
+  )}`;
+}
+
+function currentFieldIdentity(owner, field) {
+  const type = child(field, 'type');
+  if (type === undefined) problem(`Field ${owner}#${field.attributes.name} has no <type>`);
+  const currentType = currentAttribute(type, 'newValue',
+    `${owner}#${field.attributes.name} current field type`);
+  return `F:${owner}#${field.attributes.name}:${descriptor(
+    currentType,
+    `${owner}#${field.attributes.name} current field type`,
+  )}`;
+}
+
+function currentClassApi(classNode, owner) {
+  const classType = child(classNode, 'classType');
+  if (classType === undefined) problem(`Class ${owner} has no <classType>`);
+  const superclass = child(classNode, 'superclass');
+  return {
+    annotations: currentAnnotationSignatures(classNode, owner),
+    attributes: currentFacetValues(classNode, 'attributes',
+      `${owner} class attribute`),
+    classType: currentAttribute(classType, 'newType', `${owner} class type`),
+    genericTemplates: currentGenericTemplateSignatures(classNode, owner),
+    interfaces: sortedUniqueStrings(
+      children(classNode, 'interfaces').filter(currentNode)
+        .map((interfaceNode) => interfaceNode.attributes.fullyQualifiedName),
+      `${owner} interface`,
+    ),
+    modifiers: currentFacetValues(classNode, 'modifiers',
+      `${owner} class modifier`),
+    superclass: superclass === undefined
+      ? null
+      : currentAttribute(superclass, 'superclassNew', `${owner} superclass`, true),
+  };
+}
+
+function currentBehaviorApi(node, owner, method) {
+  const api = {
+    annotations: currentAnnotationSignatures(node, owner),
+    attributes: currentFacetValues(node, 'attributes',
+      `${owner} behavior attribute`),
+    exceptions: currentExceptionNames(node, `${owner} behavior exception`),
+    genericTemplates: currentGenericTemplateSignatures(node, owner),
+    modifiers: currentFacetValues(node, 'modifiers',
+      `${owner} behavior modifier`),
+    parameters: currentParameterSignatures(node),
+  };
+  if (method) api.returnType = currentReturnTypeSignature(node, owner);
+  return api;
+}
+
+function currentFieldApi(field, owner) {
+  const type = child(field, 'type');
+  if (type === undefined) problem(`Field ${owner}#${field.attributes.name} has no <type>`);
+  return {
+    annotations: currentAnnotationSignatures(field, owner),
+    attributes: currentFacetValues(field, 'attributes',
+      `${owner} field attribute`),
+    genericTypes: currentGenericTypes(field, 'newGenericTypes'),
+    modifiers: currentFacetValues(field, 'modifiers',
+      `${owner} field modifier`),
+    type: currentAttribute(type, 'newValue',
+      `${owner}#${field.attributes.name} current field type`),
+  };
+}
+
+function addApiSignatureRecord(records, record) {
+  if (records.has(record.id)) problem(`Ambiguous duplicate API signature identity ${record.id}`);
+  records.set(record.id, record);
+}
+
+function collectApiSignatureRecords(root, selectedTypeNames) {
+  const selected = new Set(selectedTypeNames);
+  const found = new Set();
+  const classNodes = new Map();
+  for (const classNode of root.children[0].children) {
+    const typeName = classNode.attributes.fullyQualifiedName;
+    if (classNodes.has(typeName)) problem(`Ambiguous duplicate class ${typeName}`);
+    classNodes.set(typeName, classNode);
+  }
+
+  const records = new Map();
+  for (const typeName of selectedTypeNames) {
+    const classNode = classNodes.get(typeName);
+    if (classNode === undefined) {
+      problem(`Selected API type ${typeName} is absent from the japicmp modification report`);
+    }
+    if (!currentNode(classNode)) {
+      problem(`Selected API type ${typeName} has no current-side API`);
+    }
+    found.add(typeName);
+    const owner = binaryName(typeName, '<class>');
+    addApiSignatureRecord(records, {
+      id: `C:${owner}`,
+      kind: 'class',
+      api: currentClassApi(classNode, owner),
+    });
+    for (const constructor of children(classNode, 'constructors').filter(currentNode)) {
+      addApiSignatureRecord(records, {
+        id: constructorIdentity(owner, constructor).id,
+        kind: 'constructor',
+        api: currentBehaviorApi(constructor, owner, false),
+      });
+    }
+    for (const field of children(classNode, 'fields').filter(currentNode)) {
+      addApiSignatureRecord(records, {
+        id: currentFieldIdentity(owner, field),
+        kind: 'field',
+        api: currentFieldApi(field, owner),
+      });
+    }
+    for (const method of children(classNode, 'methods').filter(currentNode)) {
+      addApiSignatureRecord(records, {
+        id: currentMethodIdentity(owner, method),
+        kind: 'method',
+        api: currentBehaviorApi(method, owner, true),
+      });
+    }
+  }
+  if (found.size !== selected.size) problem('Selected API type discovery is incomplete');
+  return records;
+}
+
+function canonicalizeApiSignatureRecords(records) {
+  const lines = [...records.values()]
+    .sort((left, right) => bytewiseCompare(left.id, right.id))
+    .map((record) => JSON.stringify(record));
+  return lines.length === 0 ? '' : `${lines.join('\n')}\n`;
+}
+
+export function apiSignatureJsonlFromXml(xmlText, includeText) {
+  const root = parseXml(xmlText);
+  validateRoot(root, false);
+  const typeNames = reviewedTypeNames(includeText, 'API include inventory');
+  if (typeNames.length === 0) problem('API include inventory must not be empty');
+  return canonicalizeApiSignatureRecords(collectApiSignatureRecords(root, typeNames));
+}
+
+function expectApiObject(value, keys, location) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    problem(`${location} must be an object`);
+  }
+  const actualKeys = Object.keys(value);
+  if (actualKeys.length !== keys.length ||
+      actualKeys.some((key, index) => key !== keys[index])) {
+    problem(`${location} has unknown, missing, or noncanonical fields`);
+  }
+}
+
+function expectApiString(value, location, nullable = false) {
+  if ((nullable && value === null) || (typeof value === 'string' && value.length !== 0)) return;
+  problem(`${location} must be ${nullable ? 'null or ' : ''}a nonempty string`);
+}
+
+function validateReviewedStringArray(value, location, sorted) {
+  if (!Array.isArray(value)) problem(`${location} must be an array`);
+  value.forEach((entry, index) => expectApiString(entry, `${location}[${index}]`));
+  if (sorted) {
+    const canonical = sortedUniqueStrings(value, location);
+    if (canonical.some((entry, index) => entry !== value[index])) {
+      problem(`${location} is not in canonical bytewise order`);
+    }
+  }
+}
+
+function validateReviewedAnnotationValue(value, location) {
+  expectApiObject(value, ['attributes', 'values'], location);
+  if (value.attributes === null || typeof value.attributes !== 'object' ||
+      Array.isArray(value.attributes)) {
+    problem(`${location}.attributes must be an object`);
+  }
+  const allowed = ['fullyQualifiedName', 'name', 'type', 'value'];
+  let previous = -1;
+  for (const name of Object.keys(value.attributes)) {
+    const position = allowed.indexOf(name);
+    if (position === -1 || position <= previous) {
+      problem(`${location}.attributes has unknown or noncanonical fields`);
+    }
+    expectApiString(value.attributes[name], `${location}.attributes.${name}`);
+    previous = position;
+  }
+  if (!Array.isArray(value.values)) problem(`${location}.values must be an array`);
+  value.values.forEach((entry, index) =>
+    validateReviewedAnnotationValue(entry, `${location}.values[${index}]`));
+}
+
+function validateReviewedAnnotations(value, location) {
+  if (!Array.isArray(value)) problem(`${location} must be an array`);
+  value.forEach((annotation, annotationIndex) => {
+    const annotationLocation = `${location}[${annotationIndex}]`;
+    expectApiObject(annotation, ['name', 'elements'], annotationLocation);
+    expectApiString(annotation.name, `${annotationLocation}.name`);
+    if (!Array.isArray(annotation.elements)) {
+      problem(`${annotationLocation}.elements must be an array`);
+    }
+    let previousElement;
+    annotation.elements.forEach((element, elementIndex) => {
+      const elementLocation = `${annotationLocation}.elements[${elementIndex}]`;
+      expectApiObject(element, ['name', 'values'], elementLocation);
+      expectApiString(element.name, `${elementLocation}.name`);
+      if (previousElement !== undefined && bytewiseCompare(previousElement, element.name) >= 0) {
+        problem(`${annotationLocation}.elements is not in canonical name order`);
+      }
+      previousElement = element.name;
+      if (!Array.isArray(element.values)) problem(`${elementLocation}.values must be an array`);
+      element.values.forEach((entry, valueIndex) =>
+        validateReviewedAnnotationValue(entry, `${elementLocation}.values[${valueIndex}]`));
+    });
+  });
+  const canonical = sortedUniqueObjects(value, location);
+  if (canonical.some((entry, index) => JSON.stringify(entry) !== JSON.stringify(value[index]))) {
+    problem(`${location} is not in canonical bytewise order`);
+  }
+}
+
+function validateReviewedGenericTypes(value, location) {
+  if (!Array.isArray(value)) problem(`${location} must be an array`);
+  value.forEach((genericType, index) => {
+    const genericLocation = `${location}[${index}]`;
+    expectApiObject(genericType, ['type', 'genericWildCard', 'genericTypes'], genericLocation);
+    expectApiString(genericType.type, `${genericLocation}.type`);
+    if (genericType.genericWildCard !== null &&
+        !GENERIC_WILDCARDS.has(genericType.genericWildCard)) {
+      problem(`${genericLocation}.genericWildCard is invalid`);
+    }
+    validateReviewedGenericTypes(genericType.genericTypes, `${genericLocation}.genericTypes`);
+  });
+}
+
+function validateReviewedGenericTemplates(value, location) {
+  if (!Array.isArray(value)) problem(`${location} must be an array`);
+  value.forEach((template, index) => {
+    const templateLocation = `${location}[${index}]`;
+    expectApiObject(template, ['name', 'type', 'genericTypes', 'interfaceTypes'], templateLocation);
+    expectApiString(template.name, `${templateLocation}.name`);
+    expectApiString(template.type, `${templateLocation}.type`);
+    validateReviewedGenericTypes(template.genericTypes, `${templateLocation}.genericTypes`);
+    validateReviewedGenericTypes(template.interfaceTypes, `${templateLocation}.interfaceTypes`);
+  });
+}
+
+function validateReviewedParameters(value, location) {
+  if (!Array.isArray(value)) problem(`${location} must be an array`);
+  value.forEach((parameter, index) => {
+    const parameterLocation = `${location}[${index}]`;
+    expectApiObject(parameter, ['type', 'templateName', 'genericTypes'], parameterLocation);
+    expectApiString(parameter.type, `${parameterLocation}.type`);
+    expectApiString(parameter.templateName, `${parameterLocation}.templateName`, true);
+    validateReviewedGenericTypes(parameter.genericTypes, `${parameterLocation}.genericTypes`);
+  });
+}
+
+function validateReviewedClassApi(api, location) {
+  expectApiObject(api, [
+    'annotations', 'attributes', 'classType', 'genericTemplates',
+    'interfaces', 'modifiers', 'superclass',
+  ], location);
+  validateReviewedAnnotations(api.annotations, `${location}.annotations`);
+  validateReviewedStringArray(api.attributes, `${location}.attributes`, true);
+  expectApiString(api.classType, `${location}.classType`);
+  validateReviewedGenericTemplates(api.genericTemplates, `${location}.genericTemplates`);
+  validateReviewedStringArray(api.interfaces, `${location}.interfaces`, true);
+  validateReviewedStringArray(api.modifiers, `${location}.modifiers`, true);
+  expectApiString(api.superclass, `${location}.superclass`, true);
+}
+
+function validateReviewedBehaviorApi(api, location, method) {
+  const keys = [
+    'annotations', 'attributes', 'exceptions', 'genericTemplates',
+    'modifiers', 'parameters',
+  ];
+  if (method) keys.push('returnType');
+  expectApiObject(api, keys, location);
+  validateReviewedAnnotations(api.annotations, `${location}.annotations`);
+  validateReviewedStringArray(api.attributes, `${location}.attributes`, true);
+  validateReviewedStringArray(api.exceptions, `${location}.exceptions`, true);
+  validateReviewedGenericTemplates(api.genericTemplates, `${location}.genericTemplates`);
+  validateReviewedStringArray(api.modifiers, `${location}.modifiers`, true);
+  validateReviewedParameters(api.parameters, `${location}.parameters`);
+  if (method) {
+    expectApiObject(api.returnType, ['type', 'genericTypes'], `${location}.returnType`);
+    expectApiString(api.returnType.type, `${location}.returnType.type`);
+    validateReviewedGenericTypes(api.returnType.genericTypes,
+      `${location}.returnType.genericTypes`);
+  }
+}
+
+function validateReviewedFieldApi(api, location) {
+  expectApiObject(api,
+    ['annotations', 'attributes', 'genericTypes', 'modifiers', 'type'], location);
+  validateReviewedAnnotations(api.annotations, `${location}.annotations`);
+  validateReviewedStringArray(api.attributes, `${location}.attributes`, true);
+  validateReviewedGenericTypes(api.genericTypes, `${location}.genericTypes`);
+  validateReviewedStringArray(api.modifiers, `${location}.modifiers`, true);
+  expectApiString(api.type, `${location}.type`);
+}
+
+function parsedReviewedApiSignatures(reviewedText) {
+  if (reviewedText.includes('\r')) problem('Reviewed API signatures must use LF line endings');
+  if (reviewedText.length !== 0 && !reviewedText.endsWith('\n')) {
+    problem('Reviewed API signatures must end with LF');
+  }
+  const records = new Map();
+  for (const [index, line] of reviewedText.split('\n').entries()) {
+    if (line.length === 0) continue;
+    let record;
+    try {
+      record = JSON.parse(line);
+    } catch (error) {
+      problem(`Reviewed API signature line ${index + 1} is invalid JSON: ${error.message}`);
+    }
+    expectApiObject(record, ['id', 'kind', 'api'], `Reviewed API signature line ${index + 1}`);
+    if (typeof record.id !== 'string' || typeof record.kind !== 'string' ||
+        record.api === null || typeof record.api !== 'object' || Array.isArray(record.api)) {
+      problem(`Reviewed API signature line ${index + 1} has invalid field types`);
+    }
+    const prefix = record.kind === 'class' ? 'C:'
+      : record.kind === 'field' ? 'F:'
+        : record.kind === 'constructor' || record.kind === 'method' ? 'M:' : undefined;
+    if (prefix === undefined || !record.id.startsWith(prefix)) {
+      problem(`Reviewed API signature line ${index + 1} ID does not match kind ${record.kind}`);
+    }
+    if (record.kind === 'class') {
+      validateReviewedClassApi(record.api, `Reviewed API signature line ${index + 1}.api`);
+    } else if (record.kind === 'field') {
+      validateReviewedFieldApi(record.api, `Reviewed API signature line ${index + 1}.api`);
+    } else {
+      validateReviewedBehaviorApi(record.api,
+        `Reviewed API signature line ${index + 1}.api`, record.kind === 'method');
+    }
+    if (JSON.stringify(record) !== line) {
+      problem(`Reviewed API signature line ${index + 1} is not compact canonical JSON`);
+    }
+    if (records.has(record.id)) problem(`Reviewed API signatures contain duplicate ID ${record.id}`);
+    records.set(record.id, record);
+  }
+  const canonical = canonicalizeApiSignatureRecords(records);
+  if (canonical !== reviewedText) {
+    problem('Reviewed API signatures are not in canonical bytewise-sorted form');
+  }
+  return records;
+}
+
+export function verifyReviewedApiSignatures(xmlText, includeText, reviewedText) {
+  const reviewedRecords = parsedReviewedApiSignatures(reviewedText);
+  const actualText = apiSignatureJsonlFromXml(xmlText, includeText);
+  if (actualText === reviewedText) return;
+
+  const actualRecords = new Map();
+  for (const line of actualText.split('\n').filter(Boolean)) {
+    const record = JSON.parse(line);
+    actualRecords.set(record.id, line);
+  }
+  const reviewedLines = new Map([...reviewedRecords].map(([id, record]) =>
+    [id, JSON.stringify(record)]));
+  const unexpected = [...actualRecords.keys()]
+    .filter((id) => !reviewedLines.has(id)).sort(bytewiseCompare);
+  const missing = [...reviewedLines.keys()]
+    .filter((id) => !actualRecords.has(id)).sort(bytewiseCompare);
+  const changed = [...actualRecords.keys()]
+    .filter((id) => reviewedLines.has(id) && actualRecords.get(id) !== reviewedLines.get(id))
+    .sort(bytewiseCompare);
+  problem([
+    'japicmp selected API signatures differ from the reviewed snapshot',
+    `unexpected (${unexpected.length}): ${unexpected.join(', ') || 'none'}`,
+    `missing (${missing.length}): ${missing.join(', ') || 'none'}`,
+    `changed (${changed.length}): ${changed.join(', ') || 'none'}`,
+  ].join('\n'));
+}
+
+function hasCurrentChangedNode(nodes) {
+  return nodes.some((node) => currentNode(node) &&
+    (node.attributes.changeStatus === 'NEW' || node.attributes.changeStatus === 'MODIFIED'));
+}
+
+function classHasCurrentApiDelta(classNode) {
+  if (!currentNode(classNode)) return false;
+  if (classNode.attributes.changeStatus === 'NEW') return true;
+  if (hasCurrentChangedNode(children(classNode, 'annotations')) ||
+      hasCurrentChangedNode(children(classNode, 'attributes')) ||
+      hasCurrentChangedNode(children(classNode, 'constructors')) ||
+      hasCurrentChangedNode(children(classNode, 'fields')) ||
+      hasCurrentChangedNode(children(classNode, 'genericTemplates')) ||
+      hasCurrentChangedNode(children(classNode, 'interfaces')) ||
+      hasCurrentChangedNode(children(classNode, 'methods')) ||
+      hasCurrentChangedNode(children(classNode, 'modifiers'))) {
+    return true;
+  }
+  const classType = child(classNode, 'classType');
+  if (classType !== undefined && currentNode(classType) &&
+      (classType.attributes.changeStatus === 'NEW' ||
+        classType.attributes.changeStatus === 'MODIFIED')) {
+    return true;
+  }
+  const superclass = child(classNode, 'superclass');
+  return superclass !== undefined && currentNode(superclass) &&
+    (superclass.attributes.changeStatus === 'NEW' ||
+      superclass.attributes.changeStatus === 'MODIFIED');
+}
+
+function isMcpApiTypeName(typeName) {
+  return typeName.startsWith('com.soklet.Mcp') ||
+    typeName.startsWith('com.soklet.annotation.Mcp');
+}
+
+function annotationValueReferencesMcp(node) {
+  for (const name of ['fullyQualifiedName', 'type']) {
+    if (Object.hasOwn(node.attributes, name) && isMcpApiTypeName(node.attributes[name])) {
+      return true;
+    }
+  }
+  return children(node, 'values').some(annotationValueReferencesMcp);
+}
+
+function annotationsReferenceMcp(node) {
+  return children(node, 'annotations').filter(currentNode).some((annotation) =>
+    isMcpApiTypeName(annotation.attributes.fullyQualifiedName) ||
+      children(annotation, 'elements').filter(currentNode).some((element) =>
+        children(element, 'newElementValues').some(annotationValueReferencesMcp)));
+}
+
+function genericTypeReferencesMcp(node) {
+  return isMcpApiTypeName(node.attributes.type) ||
+    children(node, 'genericTypes').some(genericTypeReferencesMcp);
+}
+
+function currentGenericTypesReferenceMcp(node, containerName) {
+  return children(node, containerName).some(genericTypeReferencesMcp);
+}
+
+function genericTemplatesReferenceMcp(node) {
+  return children(node, 'genericTemplates').filter(currentNode).some((template) =>
+    (Object.hasOwn(template.attributes, 'newType') &&
+      isMcpApiTypeName(template.attributes.newType)) ||
+      currentGenericTypesReferenceMcp(template, 'newGenericTypes') ||
+      currentGenericTypesReferenceMcp(template, 'newInterfaceTypes'));
+}
+
+function behaviorReferencesMcp(node) {
+  if (annotationsReferenceMcp(node) || genericTemplatesReferenceMcp(node) ||
+      children(node, 'exceptions').filter(currentNode)
+        .some((exception) => isMcpApiTypeName(exception.attributes.name))) {
+    return true;
+  }
+  for (const parameter of children(node, 'parameters')) {
+    if (isMcpApiTypeName(parameter.attributes.type) ||
+        currentGenericTypesReferenceMcp(parameter, 'newGenericTypes')) {
+      return true;
+    }
+  }
+  const returnType = child(node, 'returnType');
+  return returnType !== undefined && currentNode(returnType) &&
+    (isMcpApiTypeName(returnType.attributes.newValue) ||
+      currentGenericTypesReferenceMcp(returnType, 'newGenericTypes'));
+}
+
+function fieldReferencesMcp(field) {
+  const type = child(field, 'type');
+  return annotationsReferenceMcp(field) ||
+    (type !== undefined && currentNode(type) && isMcpApiTypeName(type.attributes.newValue)) ||
+    currentGenericTypesReferenceMcp(field, 'newGenericTypes');
+}
+
+function classReferencesMcp(classNode) {
+  if (annotationsReferenceMcp(classNode) || genericTemplatesReferenceMcp(classNode) ||
+      children(classNode, 'interfaces').filter(currentNode)
+        .some((interfaceNode) => isMcpApiTypeName(interfaceNode.attributes.fullyQualifiedName))) {
+    return true;
+  }
+  const superclass = child(classNode, 'superclass');
+  if (superclass !== undefined && currentNode(superclass) &&
+      isMcpApiTypeName(superclass.attributes.superclassNew)) {
+    return true;
+  }
+  return children(classNode, 'constructors').filter(currentNode).some(behaviorReferencesMcp) ||
+    children(classNode, 'fields').filter(currentNode).some(fieldReferencesMcp) ||
+    children(classNode, 'methods').filter(currentNode).some(behaviorReferencesMcp);
+}
+
+function reviewedApiOwners(root) {
+  const owners = [];
+  const seen = new Set();
+  for (const classNode of root.children[0].children) {
+    const typeName = classNode.attributes.fullyQualifiedName;
+    if (seen.has(typeName)) problem(`Ambiguous duplicate class ${typeName}`);
+    seen.add(typeName);
+    if (!currentNode(classNode) || typeName.startsWith('com.soklet.internal.')) continue;
+    if (isMcpApiTypeName(typeName) || classReferencesMcp(classNode) ||
+        classHasCurrentApiDelta(classNode)) {
+      owners.push(typeName);
+    }
+  }
+  return owners.sort(bytewiseCompare);
+}
+
+export function verifyReviewedApiInventory(xmlText, nonMcpText, phaseIncludeTexts) {
+  if (!Array.isArray(phaseIncludeTexts) || phaseIncludeTexts.length === 0) {
+    problem('At least one phase API include inventory is required');
+  }
+  const root = parseXml(xmlText);
+  validateRoot(root, false);
+  const reviewedOwners = new Map();
+  const inventories = [
+    { location: 'non-MCP public API allowlist', text: nonMcpText },
+    ...phaseIncludeTexts.map((text, index) => ({
+      location: `phase API include inventory ${index + 1}`,
+      text,
+    })),
+  ];
+  for (const inventory of inventories) {
+    for (const typeName of reviewedTypeNames(inventory.text, inventory.location)) {
+      const previous = reviewedOwners.get(typeName);
+      if (previous !== undefined) {
+        problem(`Public API type ${typeName} appears in both ${previous} and ${inventory.location}`);
+      }
+      reviewedOwners.set(typeName, inventory.location);
+    }
+  }
+
+  const actual = reviewedApiOwners(root);
+  const actualSet = new Set(actual);
+  const expected = [...reviewedOwners.keys()].sort(bytewiseCompare);
+  const expectedSet = new Set(expected);
+  const unexpected = actual.filter((typeName) => !expectedSet.has(typeName));
+  const missing = expected.filter((typeName) => !actualSet.has(typeName));
+  if (unexpected.length !== 0 || missing.length !== 0) {
+    problem([
+      'japicmp current-side API ownership differs from the reviewed inventories',
+      `unexpected (${unexpected.length}): ${unexpected.join(', ') || 'none'}`,
+      `missing (${missing.length}): ${missing.join(', ') || 'none'}`,
+    ].join('\n'));
+  }
+  return actual.length;
+}
+
 export function incompatibilityJsonlFromXml(xmlText) {
   const root = parseXml(xmlText);
-  validateRoot(root);
+  validateRoot(root, true);
   return canonicalizeRecords(collectRecords(root));
 }
 
@@ -987,22 +1739,61 @@ export function verifyReviewedSet(xmlText, reviewedText) {
 }
 
 function usage() {
-  problem('Usage: japicmp-symbols.mjs --extract <japicmp.xml> <symbols.jsonl> | --verify <japicmp.xml> <reviewed.jsonl>');
+  problem([
+    'Usage:',
+    '  japicmp-symbols.mjs --extract <japicmp.xml> <symbols.jsonl>',
+    '  japicmp-symbols.mjs --verify <japicmp.xml> <reviewed.jsonl>',
+    '  japicmp-symbols.mjs --extract-signatures <japicmp.xml> <phase.includes> <signatures.jsonl>',
+    '  japicmp-symbols.mjs --verify-signatures <japicmp.xml> <phase.includes> <reviewed-signatures.jsonl>',
+    '  japicmp-symbols.mjs --verify-inventory <japicmp.xml> <non-mcp.allowlist> <phase-4.includes> <phase-5.includes> <phase-6.includes> <provisional.includes>',
+    '  japicmp-symbols.mjs --verify-report-pair <modified-only.xml> <full.xml>',
+  ].join('\n'));
 }
 
 function main() {
-  const [command, xmlPath, setPath, ...rest] = process.argv.slice(2);
-  if (rest.length !== 0 || xmlPath === undefined || setPath === undefined) usage();
-  const xml = readUtf8(xmlPath);
-  if (command === '--extract') {
+  const [command, ...paths] = process.argv.slice(2);
+  if (command === '--extract' && paths.length === 2) {
+    const [xmlPath, setPath] = paths;
+    const xml = readUtf8(xmlPath);
     const output = incompatibilityJsonlFromXml(xml);
     writeFileSync(setPath, output, { encoding: 'utf8', flag: 'w' });
     process.stdout.write(`Wrote ${output === '' ? 0 : output.split('\n').length - 1} canonical removal/incompatibility symbol(s): ${setPath}\n`);
-  } else if (command === '--verify') {
+  } else if (command === '--verify' && paths.length === 2) {
+    const [xmlPath, setPath] = paths;
+    const xml = readUtf8(xmlPath);
     const reviewed = readUtf8(setPath);
     verifyReviewedSet(xml, reviewed);
     const count = reviewed === '' ? 0 : reviewed.split('\n').length - 1;
     process.stdout.write(`Verified ${count} reviewed removal/incompatibility symbol(s): ${setPath}\n`);
+  } else if (command === '--extract-signatures' && paths.length === 3) {
+    const [xmlPath, includePath, signaturePath] = paths;
+    const output = apiSignatureJsonlFromXml(readUtf8(xmlPath), readUtf8(includePath));
+    writeFileSync(signaturePath, output, { encoding: 'utf8', flag: 'w' });
+    const count = output === '' ? 0 : output.split('\n').length - 1;
+    process.stdout.write(`Wrote ${count} canonical selected API signature(s): ${signaturePath}\n`);
+  } else if (command === '--verify-signatures' && paths.length === 3) {
+    const [xmlPath, includePath, signaturePath] = paths;
+    const reviewed = readUtf8(signaturePath);
+    verifyReviewedApiSignatures(readUtf8(xmlPath), readUtf8(includePath), reviewed);
+    const count = reviewed === '' ? 0 : reviewed.split('\n').length - 1;
+    process.stdout.write(`Verified ${count} reviewed selected API signature(s): ${signaturePath}\n`);
+  } else if (command === '--verify-inventory' && paths.length === 6) {
+    const [xmlPath, nonMcpPath, ...includePaths] = paths;
+    const count = verifyReviewedApiInventory(
+      readUtf8(xmlPath),
+      readUtf8(nonMcpPath),
+      includePaths.map(readUtf8),
+    );
+    process.stdout.write(`Verified ${count} reviewed current-side API owner(s)\n`);
+  } else if (command === '--verify-report-pair' && paths.length === 2) {
+    const [modifiedOnlyPath, fullPath] = paths;
+    verifyJapicmpReportPair(
+      readUtf8(modifiedOnlyPath),
+      readUtf8(fullPath),
+      '3.5.1',
+      'soklet-3.5.1.jar',
+    );
+    process.stdout.write('Verified matched japicmp report pair against Soklet 3.5.1\n');
   } else {
     usage();
   }

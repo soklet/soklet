@@ -23,11 +23,21 @@ REVIEWED_SET="$PROJECT_ROOT/api/mcp/current-incompatibilities.jsonl"
     -Dmaven.javadoc.skip=true \
     -DskipTests \
     clean package \
-    com.github.siom79.japicmp:japicmp-maven-plugin:0.26.1:cmp@mcp-api-diff
+    com.github.siom79.japicmp:japicmp-maven-plugin:0.26.1:cmp@mcp-api-diff \
+    com.github.siom79.japicmp:japicmp-maven-plugin:0.26.1:cmp@mcp-api-freeze
 )
 
 RAW_REPORT="$PROJECT_ROOT/target/japicmp/mcp-api-diff.xml"
+FULL_REPORT="$PROJECT_ROOT/target/japicmp/mcp-api-freeze.xml"
 GENERATED_SET="$PROJECT_ROOT/target/japicmp/mcp-api-diff.incompatibilities.jsonl"
+
+[ -f "$FULL_REPORT" ] || {
+  echo "Missing full MCP API freeze report: $FULL_REPORT" >&2
+  exit 1
+}
+
+"$NODE_EXECUTABLE" "$SCRIPT_DIR/japicmp-symbols.mjs" --verify-report-pair \
+  "$RAW_REPORT" "$FULL_REPORT"
 
 "$NODE_EXECUTABLE" "$SCRIPT_DIR/japicmp-symbols.mjs" --extract \
   "$RAW_REPORT" "$GENERATED_SET"

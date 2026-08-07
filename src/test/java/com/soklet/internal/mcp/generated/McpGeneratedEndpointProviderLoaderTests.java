@@ -21,8 +21,11 @@ import com.soklet.McpCompleteResult;
 import com.soklet.McpHandlerResolver;
 import com.soklet.McpInvocationFeatures;
 import com.soklet.McpJsonObject;
+import com.soklet.McpLocalSubscriptionEventPublisher;
 import com.soklet.McpOperationResult;
 import com.soklet.McpRequestContext;
+import com.soklet.McpSubscriptionConfig;
+import com.soklet.McpSubscriptionNotificationType;
 import com.soklet.McpToolCallContext;
 import com.soklet.McpToolHandler;
 import com.soklet.McpToolRegistration;
@@ -54,6 +57,7 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -175,13 +179,31 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				goodIndex())) {
 			Class<?> endpointA = Class.forName(ENDPOINT_A, false, classLoader);
 			Class<?> endpointB = Class.forName(ENDPOINT_B, false, classLoader);
+			Class<?> samePathImpostor = Class.forName(UNINDEXED_ENDPOINT, false,
+					classLoader);
 			CountingInstanceProvider instanceProvider =
 					new CountingInstanceProvider();
 
 			McpHandlerResolver resolver = McpHandlerResolver.fromClasses(
 					instanceProvider, endpointB, endpointA);
+			McpSubscriptionConfig subscriptions = McpSubscriptionConfig
+					.withEventPublisher(
+							McpLocalSubscriptionEventPublisher.fromDefaults())
+					.notificationType(
+							McpSubscriptionNotificationType.RESOURCE_UPDATED)
+					.build();
+			McpHandlerResolver overlaid = resolver.withSubscriptions(endpointB,
+					subscriptions);
 
 			assertEquals(List.of("/b", "/a"), endpointPaths(resolver));
+			assertTrue(resolver.getEndpoints().get(0).getSubscriptions().isEmpty());
+			assertSame(subscriptions, overlaid.getEndpoints().get(0)
+					.getSubscriptions().orElseThrow());
+			assertSame(resolver.getEndpoints().get(1),
+					overlaid.getEndpoints().get(1));
+			assertThrows(IllegalArgumentException.class,
+					() -> resolver.withSubscriptions(samePathImpostor,
+							subscriptions));
 			assertEquals(0, instanceProvider.invocationCount());
 		}
 	}
@@ -553,6 +575,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				import com.soklet.McpEndpoint;
 				import com.soklet.McpImplementation;
 				import com.soklet.McpToolRegistration;
+				import com.soklet.annotation.McpServerEndpoint;
 
 				public final class Fixtures {
 				  private static final String SCHEMA_DIGEST =
@@ -560,6 +583,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 
 				  private Fixtures() {}
 
+				  @McpServerEndpoint(path = "/a", name = "endpoint-a", version = "1")
 				  public static final class EndpointA {
 				    public EndpointA() {}
 				    public Result invoke(Arguments arguments) {
@@ -569,6 +593,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				    public record Result(String value) {}
 				  }
 
+				  @McpServerEndpoint(path = "/b", name = "endpoint-b", version = "1")
 				  public static final class EndpointB {
 				    @SuppressWarnings("unused")
 				    private static final int INITIALIZED = failIfInitialized();
@@ -583,6 +608,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				    public record Result(String value) {}
 				  }
 
+				  @McpServerEndpoint(path = "/b", name = "impostor", version = "1")
 				  public static final class UnindexedEndpoint {
 				    public UnindexedEndpoint() {}
 				  }

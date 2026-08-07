@@ -928,24 +928,29 @@ public class McpTransportContainmentSpikeTests {
 						value -> value.subscriptions() == 1 && value.dispatcher().activeSlots() == 0,
 						"shutdown subscription retained a handler slot");
 
-				try (RawHttpClient active = RawHttpClient.post(runtime.port(), "/request", "active-at-stop");
-						RawHttpClient queued = RawHttpClient.post(runtime.port(), "/request", "queued-at-stop")) {
+				try (RawHttpClient active = RawHttpClient.post(
+						runtime.port(), "/request", "active-at-stop")) {
 					await(activeStarted, "active shutdown fixture did not acquire its slot");
 					assertStreamingHead(active.readHead());
-					awaitSnapshot(
-							runtime,
-							value -> value.dispatcher().activeSlots() == 1
-									&& value.dispatcher().queueDepth() == 1
-									&& value.subscriptions() == 1,
-							"shutdown fixture did not reach subscription-plus-active-plus-queued state");
-					runtime.stop();
-					runtime.join();
-					await(activeInterrupted, "server shutdown did not signal the active handler");
-					Assertions.assertEquals(
-							StreamTerminationReason.SERVER_STOPPING,
-							activeCancelationReason.get());
-					Assertions.assertFalse(queuedRan.get(),
-							"server shutdown dispatched queued application work");
+
+					try (RawHttpClient queued = RawHttpClient.post(
+							runtime.port(), "/request", "queued-at-stop")) {
+						awaitSnapshot(
+								runtime,
+								value -> value.dispatcher().activeSlots() == 1
+										&& value.dispatcher().queueDepth() == 1
+										&& value.subscriptions() == 1,
+								"shutdown fixture did not reach subscription-plus-active-plus-queued state");
+						runtime.stop();
+						runtime.join();
+						await(activeInterrupted,
+								"server shutdown did not signal the active handler");
+						Assertions.assertEquals(
+								StreamTerminationReason.SERVER_STOPPING,
+								activeCancelationReason.get());
+						Assertions.assertFalse(queuedRan.get(),
+								"server shutdown dispatched queued application work");
+					}
 				}
 			}
 

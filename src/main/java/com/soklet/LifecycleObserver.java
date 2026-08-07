@@ -448,7 +448,11 @@ public interface LifecycleObserver {
 	 * limiting, handler queue admission, framework response generation,
 	 * application interception, typed-input validation, or handler entry.
 	 * Framework-owned discovery and static catalog operations also invoke this
-	 * callback. Exceptions are contained and do not alter the wire result.
+	 * callback. Soklet may invoke this callback concurrently for independent MCP
+	 * requests. Implementations must be safe for the server's configured request
+	 * concurrency, and the corresponding finish callback is not guaranteed to run
+	 * on the same thread. Exceptions are contained and do not alter the wire
+	 * result.
 	 *
 	 * @param context immutable admitted-request context
 	 */
@@ -463,8 +467,11 @@ public interface LifecycleObserver {
 	 * This is a request-finish callback, not a handler-exit callback: application
 	 * code that does not cooperate with cancellation may continue after this
 	 * method runs. The supplied context is the same instance passed to
-	 * {@link #didStartMcpRequestHandling(McpRequestContext)}. Exceptions are
-	 * contained and do not alter the wire result.
+	 * {@link #didStartMcpRequestHandling(McpRequestContext)}. Soklet may invoke
+	 * this callback concurrently for independent MCP requests, and it is not
+	 * guaranteed to run on the same thread as the corresponding start callback.
+	 * Implementations must be safe for the server's configured request
+	 * concurrency. Exceptions are contained and do not alter the wire result.
 	 *
 	 * @param context    immutable admitted-request context
 	 * @param outcome    fixed client-visible terminal outcome

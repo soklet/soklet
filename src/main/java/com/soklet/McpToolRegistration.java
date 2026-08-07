@@ -18,6 +18,7 @@ package com.soklet;
 
 import com.soklet.converter.TypeReference;
 import com.soklet.internal.mcp.protocol.McpMirroredHeaderPlan;
+import com.soklet.internal.mcp.schema.McpRuntimeToolInputSchemaBridge;
 import com.soklet.internal.mcp.schema.McpRuntimeTypedSchemaBridge;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -84,6 +85,10 @@ public final class McpToolRegistration<A> {
 	private final McpRateLimiter rateLimiter;
 	private final boolean structuredContentTextMirroringEnabled;
 	@NonNull
+	private final List<@NonNull McpInputRequestDeclaration> inputRequestDeclarations;
+	@NonNull
+	private final McpRequestStateMode requestStateMode;
+	@NonNull
 	private final McpJsonObject metadata;
 	@NonNull
 	private final McpToolHandler<A> handler;
@@ -125,6 +130,9 @@ public final class McpToolRegistration<A> {
 		this.rateLimiter = state.rateLimiter;
 		this.structuredContentTextMirroringEnabled =
 				state.structuredContentTextMirroringEnabled;
+		this.inputRequestDeclarations =
+				List.copyOf(state.inputRequestDeclarations);
+		this.requestStateMode = state.requestStateMode;
 		this.metadata = state.metadata;
 		this.handler = state.handler;
 		this.argumentDecoder = state.argumentDecoder;
@@ -230,6 +238,27 @@ public final class McpToolRegistration<A> {
 	 */
 	public boolean isStructuredContentTextMirroringEnabled() {
 		return this.structuredContentTextMirroringEnabled;
+	}
+
+	/**
+	 * Returns the input requests this advanced operation may emit.
+	 *
+	 * @return immutable declarations in registration order
+	 */
+	@NonNull
+	public List<@NonNull McpInputRequestDeclaration>
+			getInputRequestDeclarations() {
+		return this.inputRequestDeclarations;
+	}
+
+	/**
+	 * Returns the request-state contract for this operation.
+	 *
+	 * @return request-state mode
+	 */
+	@NonNull
+	public McpRequestStateMode getRequestStateMode() {
+		return this.requestStateMode;
 	}
 
 	/** @return immutable protocol extension metadata */
@@ -423,6 +452,29 @@ public final class McpToolRegistration<A> {
 			return new OperationHandlerStage<>(this.name, McpJsonObject.class,
 					JSON_OBJECT_SCHEMA, EMPTY_MIRRORED_HEADER_PLAN,
 					rawArguments -> rawArguments);
+		}
+
+		/**
+		 * Selects a package-private authored Profile 1 input schema for Soklet's
+		 * official conformance fixture.
+		 *
+		 * <p>This deliberately inaccessible seam runs the production compiler,
+		 * tool-input use validation, mirrored-header derivation, and bounded
+		 * invocation-time evaluation without creating a public hand-authored
+		 * schema API.
+		 *
+		 * @param inputSchema authored conformance-fixture input schema
+		 * @return advanced handler-selection stage
+		 */
+		@NonNull
+		OperationHandlerStage<McpJsonObject> conformanceInputSchema(
+				@NonNull McpJsonObject inputSchema) {
+			McpRuntimeToolInputSchemaBridge bridge =
+					McpRuntimeToolInputSchemaBridge.compileToolInput(
+							requireNonNull(inputSchema));
+			return new OperationHandlerStage<>(this.name, McpJsonObject.class,
+					new McpSchema(bridge.getSchemaDocument()),
+					bridge.getMirroredHeaderPlan(), bridge::decode);
 		}
 
 		@NonNull
@@ -654,6 +706,40 @@ public final class McpToolRegistration<A> {
 			return this;
 		}
 
+		/**
+		 * Appends input-request declarations for this advanced operation.
+		 *
+		 * <p>Repeated calls append declarations in order.
+		 *
+		 * @param declarations declarations to append
+		 * @return this builder
+		 * @throws NullPointerException if the array or a declaration is null
+		 */
+		@NonNull
+		public Builder<A> mayRequestInput(
+				@NonNull McpInputRequestDeclaration @NonNull ... declarations) {
+			requireNonNull(declarations);
+			List<McpInputRequestDeclaration> copiedDeclarations =
+					new ArrayList<>(declarations.length);
+			for (McpInputRequestDeclaration declaration : declarations)
+				copiedDeclarations.add(requireNonNull(declaration));
+			this.state.inputRequestDeclarations.addAll(copiedDeclarations);
+			return this;
+		}
+
+		/**
+		 * Sets the request-state contract for this advanced operation.
+		 *
+		 * @param requestStateMode request-state mode
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder<A> requestStateMode(
+				@NonNull McpRequestStateMode requestStateMode) {
+			this.state.requestStateMode = requireNonNull(requestStateMode);
+			return this;
+		}
+
 		/** @param metadata protocol extension metadata
 		 * @return this builder */
 		@NonNull
@@ -866,6 +952,11 @@ public final class McpToolRegistration<A> {
 		@Nullable
 		private McpRateLimiter rateLimiter;
 		private boolean structuredContentTextMirroringEnabled = true;
+		@NonNull
+		private final List<@NonNull McpInputRequestDeclaration>
+				inputRequestDeclarations = new ArrayList<>();
+		@NonNull
+		private McpRequestStateMode requestStateMode = McpRequestStateMode.NONE;
 		@NonNull
 		private McpJsonObject metadata = McpJsonObject.emptyInstance();
 

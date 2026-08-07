@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "protocolVersion": "2026-07-28",
   "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
-  "currentImplementationPhase": 3,
+  "currentImplementationPhase": 4,
   "earliestPhaseSemantics": "The first phase in which the scenario is mandatory as part of its full gate. An independently runnable scenario may be activated earlier as an infrastructure smoke test.",
-  "phase3ExecutionPolicy": "Only dns-rebinding-protection is active. All other RUN rows remain selected for their owning phase but are not executable until their expected check profiles are observed, reviewed, and frozen.",
+  "phaseExecutionPolicy": "Phase 4 activates exactly the 23 RUN rows whose earliestPhase is 4, retaining the Phase 3 DNS profile and requiring reviewed Phase 4 profiles for the other 22 rows. The 16 Phase 5 rows remain deferred and unprofiled.",
   "scenarios": [
     {
       "ordinal": 1,
@@ -43,7 +43,7 @@
       "selection": "RUN",
       "earliestPhase": 4,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "tools-list.phase4.v1",
       "requiredFixtureRegistrations": [
         "immutable tools/list catalog containing every official fixture tool"
       ],
@@ -59,7 +59,7 @@
       "selection": "RUN",
       "earliestPhase": 4,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "tools-call-simple-text.phase4.v1",
       "requiredFixtureRegistrations": [
         "tools/call simple-text tool with typed arguments and text content result"
       ],
@@ -75,12 +75,12 @@
       "selection": "RUN",
       "earliestPhase": 4,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "tools-call-image.phase4.v1",
       "requiredFixtureRegistrations": [
         "tools/call image-content tool with deterministic Base64 and MIME type"
       ],
       "localSupplements": [
-        "McpToolContentTests#image_content_uses_exact_base64_and_mime_type"
+        "McpToolContentPublicRuntimeTests#toolContentBlocksPreserveExactWireValuesAndOrderThroughPublicListener"
       ],
       "rationale": "Owned by the Phase 4 tools gate."
     },
@@ -90,12 +90,12 @@
       "selection": "RUN",
       "earliestPhase": 4,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "tools-call-audio.phase4.v1",
       "requiredFixtureRegistrations": [
         "tools/call audio-content tool with deterministic Base64 and MIME type"
       ],
       "localSupplements": [
-        "McpToolContentTests#audio_content_uses_exact_base64_and_mime_type"
+        "McpToolContentPublicRuntimeTests#toolContentBlocksPreserveExactWireValuesAndOrderThroughPublicListener"
       ],
       "rationale": "Owned by the Phase 4 tools gate."
     },
@@ -105,12 +105,12 @@
       "selection": "RUN",
       "earliestPhase": 4,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "tools-call-embedded-resource.phase4.v1",
       "requiredFixtureRegistrations": [
         "tools/call embedded-resource tool with deterministic resource contents"
       ],
       "localSupplements": [
-        "McpToolContentTests#embedded_resource_content_preserves_uri_mime_type_and_payload"
+        "McpToolContentPublicRuntimeTests#toolContentBlocksPreserveExactWireValuesAndOrderThroughPublicListener"
       ],
       "rationale": "Owned by the Phase 4 tools gate."
     },
@@ -120,12 +120,12 @@
       "selection": "RUN",
       "earliestPhase": 4,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "tools-call-mixed-content.phase4.v1",
       "requiredFixtureRegistrations": [
         "tools/call mixed-content tool returning the reviewed ordered content variants"
       ],
       "localSupplements": [
-        "McpToolContentTests#mixed_content_preserves_registration_order_and_exact_variants"
+        "McpToolContentPublicRuntimeTests#toolContentBlocksPreserveExactWireValuesAndOrderThroughPublicListener"
       ],
       "rationale": "Owned by the Phase 4 tools gate."
     },
@@ -135,12 +135,12 @@
       "selection": "RUN",
       "earliestPhase": 4,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "tools-call-error.phase4.v1",
       "requiredFixtureRegistrations": [
         "tools/call error-result tool returning isError content without throwing"
       ],
       "localSupplements": [
-        "McpToolCallTests#tool_error_is_a_successful_json_rpc_result_with_is_error"
+        "McpToolOutputSanitizerPublicRuntimeTests#typedValidationUsesSanitizedOutputAndAllowsStructuredOmission"
       ],
       "rationale": "Owned by the Phase 4 tools gate."
     },
@@ -166,9 +166,9 @@
       "selection": "RUN",
       "earliestPhase": 4,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "json-schema-2020-12.phase4.v1",
       "requiredFixtureRegistrations": [
-        "typed tool whose generated input and output schemas exercise the reviewed Profile 1 subset"
+        "tool registered through the audited same-package conformanceInputSchema seam with the exact pinned official input schema"
       ],
       "localSupplements": [
         "McpToolSchemaProfileTests#exactOfficialMcpFixtureCompilesPreservesAndEvaluates",
@@ -182,7 +182,7 @@
       "selection": "RUN",
       "earliestPhase": 4,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "server-sse-multiple-streams.phase4.v1",
       "requiredFixtureRegistrations": [
         "truthful tools/list catalog",
         "independent concurrent request-scoped response ownership"
@@ -199,13 +199,14 @@
       "selection": "RUN",
       "earliestPhase": 4,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "resources-list.phase4.v1",
       "requiredFixtureRegistrations": [
         "deterministic resources/list authority with reviewed descriptors and application-owned cursors"
       ],
       "localSupplements": [
         "McpServerCapabilityRegistryTests#every_registered_resource_surface_derives_resources_capability",
-        "McpResourceListTests#authorization_partition_and_cursor_are_application_owned"
+        "McpResourcePublicRuntimeTests#dynamicListPreservesApplicationCursorsAndConfiguredBounds",
+        "McpResourcePublicRuntimeTests#dynamicListCanVaryByAdmittedIdentity"
       ],
       "rationale": "Owned by the Phase 4 resources gate."
     },
@@ -215,12 +216,13 @@
       "selection": "RUN",
       "earliestPhase": 4,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "resources-read-text.phase4.v1",
       "requiredFixtureRegistrations": [
         "exact text resource with deterministic URI, MIME type, and UTF-8 contents"
       ],
       "localSupplements": [
-        "McpResourceReadTests#text_resource_preserves_uri_mime_type_and_unicode_contents"
+        "McpResourcePublicRuntimeTests#staticCatalogsAndReadsUseThePublicPipeline",
+        "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_resource_messages_match_the_production_listener"
       ],
       "rationale": "Owned by the Phase 4 resources gate."
     },
@@ -230,12 +232,13 @@
       "selection": "RUN",
       "earliestPhase": 4,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "resources-read-binary.phase4.v1",
       "requiredFixtureRegistrations": [
         "exact binary resource with deterministic URI, MIME type, and Base64 contents"
       ],
       "localSupplements": [
-        "McpResourceReadTests#binary_resource_uses_canonical_base64_and_exact_mime_type"
+        "McpResourcePublicRuntimeTests#staticCatalogsAndReadsUseThePublicPipeline",
+        "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_resource_messages_match_the_production_listener"
       ],
       "rationale": "Owned by the Phase 4 resources gate."
     },
@@ -245,12 +248,13 @@
       "selection": "RUN",
       "earliestPhase": 4,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "resources-templates-read.phase4.v1",
       "requiredFixtureRegistrations": [
         "RFC 6570 Level 1 resource template and matching deterministic reader"
       ],
       "localSupplements": [
-        "McpResourceTemplateTests#level_one_template_expands_and_routes_exactly"
+        "McpResourcePublicRuntimeTests#staticCatalogsAndReadsUseThePublicPipeline",
+        "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_resource_messages_match_the_production_listener"
       ],
       "rationale": "Owned by the Phase 4 resources gate."
     },
@@ -260,12 +264,13 @@
       "selection": "RUN",
       "earliestPhase": 4,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "sep-2164-resource-not-found.phase4.v1",
       "requiredFixtureRegistrations": [
         "resource reader with deterministic ResourceNotFound mapping"
       ],
       "localSupplements": [
-        "McpResourceReadTests#missing_resource_maps_to_the_exact_not_found_error"
+        "McpResourcePublicRuntimeTests#staticCatalogsAndReadsUseThePublicPipeline",
+        "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_resource_messages_match_the_production_listener"
       ],
       "rationale": "Owned by the Phase 4 resources gate."
     },
@@ -275,13 +280,14 @@
       "selection": "RUN",
       "earliestPhase": 4,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "prompts-list.phase4.v1",
       "requiredFixtureRegistrations": [
         "immutable prompts/list catalog containing every official fixture prompt"
       ],
       "localSupplements": [
         "McpServerCapabilityRegistryTests#tool_and_prompt_catalogs_are_truthful_immutable_and_never_mutable",
-        "McpPromptCatalogTests#catalog_is_deterministic_and_rejects_duplicate_names"
+        "McpPromptPublicRuntimeTests#promptCatalogAndGetUseThePublicPipeline",
+        "McpPromptRegistrationTests#endpointDefensivelyCopiesAndRejectsDuplicatePromptNames"
       ],
       "rationale": "Owned by the Phase 4 prompts gate."
     },
@@ -291,12 +297,13 @@
       "selection": "RUN",
       "earliestPhase": 4,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "prompts-get-simple.phase4.v1",
       "requiredFixtureRegistrations": [
         "simple prompt returning deterministic text messages"
       ],
       "localSupplements": [
-        "McpPromptGetTests#simple_prompt_preserves_roles_and_text_message_order"
+        "McpPromptPublicRuntimeTests#promptCatalogAndGetUseThePublicPipeline",
+        "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_prompt_messages_match_the_production_listener"
       ],
       "rationale": "Owned by the Phase 4 prompts gate."
     },
@@ -306,12 +313,14 @@
       "selection": "RUN",
       "earliestPhase": 4,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "prompts-get-with-args.phase4.v1",
       "requiredFixtureRegistrations": [
         "prompt with required and optional string arguments"
       ],
       "localSupplements": [
-        "McpPromptGetTests#prompt_arguments_preserve_absent_empty_and_exact_strings"
+        "McpPromptRegistrationTests#registrationPreservesDescriptorAndExactStringArguments",
+        "McpPromptPublicRuntimeTests#promptCatalogAndGetUseThePublicPipeline",
+        "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_prompt_messages_match_the_production_listener"
       ],
       "rationale": "Owned by the Phase 4 prompts gate."
     },
@@ -321,12 +330,12 @@
       "selection": "RUN",
       "earliestPhase": 4,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "prompts-get-embedded-resource.phase4.v1",
       "requiredFixtureRegistrations": [
         "prompt returning a deterministic embedded-resource message"
       ],
       "localSupplements": [
-        "McpPromptGetTests#embedded_resource_message_preserves_uri_mime_type_and_payload"
+        "McpPromptPublicRuntimeTests#promptCatalogAndGetUseThePublicPipeline"
       ],
       "rationale": "Owned by the Phase 4 prompts gate."
     },
@@ -336,12 +345,12 @@
       "selection": "RUN",
       "earliestPhase": 4,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "prompts-get-with-image.phase4.v1",
       "requiredFixtureRegistrations": [
         "prompt returning a deterministic image message"
       ],
       "localSupplements": [
-        "McpPromptGetTests#image_message_uses_canonical_base64_and_exact_mime_type"
+        "McpPromptPublicRuntimeTests#promptCatalogAndGetUseThePublicPipeline"
       ],
       "rationale": "Owned by the Phase 4 prompts gate."
     },
@@ -353,7 +362,7 @@
       "phase3Status": "ACTIVE_EARLY",
       "expectedCheckProfile": "dns-rebinding-protection.phase3.v1",
       "requiredFixtureRegistrations": [
-        "public-API-only candidate-JAR fixture bound to 127.0.0.1:0",
+        "candidate-JAR fixture using public transport APIs and bound to 127.0.0.1:0",
         "shared CorsAuthorizer allowing only the exact effective loopback Origin",
         "framework-owned server/discover"
       ],
@@ -362,7 +371,7 @@
         "McpHttpServerRuntimeTests#cors_rejects_present_origins_by_default_and_reuses_shared_authorizer",
         "McpHttpServerRuntimeTests#ipv6_loopback_bind_authorizes_its_effective_authority"
       ],
-      "rationale": "The production Host and Origin path exists in Phase 3, so this scenario is an early public-API development smoke test through the packaged candidate before becoming part of the mandatory Phase 4 set. It remains non-release evidence because this checkpoint does not run a complete phase gate."
+      "rationale": "The production Host and Origin path first ran in Phase 3 through the internal development adapter. Its frozen Phase 3 profile is retained unchanged, and the scenario now runs through the packaged candidate fixture as part of the complete Phase 4 gate. Current evidence remains non-release evidence because it lacks the release-candidate JAR/POM provenance path."
     },
     {
       "ordinal": 24,
@@ -370,15 +379,20 @@
       "selection": "RUN",
       "earliestPhase": 4,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "caching.phase4.v1",
       "requiredFixtureRegistrations": [
         "cache hints on discovery, list, template-list, and resource-read results",
         "truthful tools, prompts, resources, and resource-template fixtures"
       ],
       "localSupplements": [
-        "McpCachingTests#validatesFieldsAndDefaults",
-        "McpCachingTests#neverInfersPublicAndPartitionsPrivate",
-        "McpCachingTests#fixesScopeAcrossPages"
+        "McpServerCapabilityRegistryTests#discovery_contains_required_fields_and_optional_registration_metadata",
+        "McpTypedToolPublicRuntimeTests#typedToolCatalogAndCallsUseThePublicPipeline",
+        "McpPromptPublicRuntimeTests#promptCatalogAndGetUseThePublicPipeline",
+        "McpResourcePublicRuntimeTests#staticCatalogsAndReadsUseThePublicPipeline",
+        "McpResourcePublicRuntimeTests#dynamicListPreservesApplicationCursorsAndConfiguredBounds",
+        "McpResourcePublicRuntimeTests#dynamicListCanVaryByAdmittedIdentity",
+        "McpResourceRegistrationTests#validatesAddressesNamesMimeTypesSizesDurationsAndErrors",
+        "McpResourceRegistrationTests#endpointPreservesResourceOrderPoliciesAndSoleListAuthority"
       ],
       "rationale": "Requires the Phase 4 truthful tools, prompts, and resources fixture."
     },
@@ -388,7 +402,7 @@
       "selection": "RUN",
       "earliestPhase": 4,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "http-header-validation.phase4.v1",
       "requiredFixtureRegistrations": [
         "truthful tools/list catalog",
         "standard MCP-Protocol-Version, Mcp-Method, and Mcp-Name validation"
@@ -406,7 +420,7 @@
       "selection": "RUN",
       "earliestPhase": 4,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "http-custom-header-server-validation.phase4.v1",
       "requiredFixtureRegistrations": [
         "x-mcp-header tool input schema and matching tools/call handler"
       ],

@@ -23,8 +23,11 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
@@ -63,6 +66,29 @@ public interface McpHandlerResolver {
 	 */
 	@NonNull
 	McpHandlerResolver withEndpoint(@NonNull McpEndpoint endpoint);
+
+	/**
+	 * Returns a resolver whose generated endpoint for the supplied annotated
+	 * class carries the given resource-subscription configuration.
+	 * <p>
+	 * Soklet selects the already-generated endpoint by the exact loaded
+	 * {@link Class} identity retained during generated-descriptor discovery. It
+	 * does not initialize the endpoint class, acquire an endpoint instance, or
+	 * rediscover handler metadata. Endpoint order and every other endpoint value
+	 * are preserved.
+	 *
+	 * @param annotatedEndpointClass annotated endpoint class whose generated
+	 *                               endpoint is selected
+	 * @param subscriptions resource-subscription configuration
+	 * @return a new immutable resolver
+	 * @throws IllegalArgumentException if this resolver did not load a generated
+	 *                                  endpoint for the exact supplied class
+	 * @throws NullPointerException if either argument is null
+	 */
+	@NonNull
+	McpHandlerResolver withSubscriptions(
+			@NonNull Class<?> annotatedEndpointClass,
+			@NonNull McpSubscriptionConfig subscriptions);
 
 	/**
 	 * Resolves every generated MCP endpoint descriptor visible through the
@@ -109,7 +135,8 @@ public interface McpHandlerResolver {
 			classLoader = McpHandlerResolver.class.getClassLoader();
 		try {
 			return new DefaultMcpHandlerResolver(
-					McpGeneratedEndpointProviderLoader.loadAll(classLoader,
+					McpGeneratedEndpointProviderLoader.loadAllWithProvenance(
+							classLoader,
 							instanceProvider));
 		} catch (IllegalArgumentException exception) {
 			throw new IllegalStateException(
@@ -169,7 +196,7 @@ public interface McpHandlerResolver {
 		requireNonNull(instanceProvider);
 		requireNonNull(endpointClasses);
 		return new DefaultMcpHandlerResolver(
-				McpGeneratedEndpointProviderLoader.loadClasses(
+				McpGeneratedEndpointProviderLoader.loadClassesWithProvenance(
 						Arrays.asList(endpointClasses.clone()), instanceProvider));
 	}
 
@@ -197,10 +224,27 @@ public interface McpHandlerResolver {
 final class DefaultMcpHandlerResolver implements McpHandlerResolver {
 	@NonNull
 	private final List<@NonNull McpEndpoint> endpoints;
+	@NonNull
+	private final Map<@NonNull Class<?>, @NonNull McpEndpoint>
+			generatedEndpoints;
 
 	DefaultMcpHandlerResolver(
 			@NonNull Collection<@NonNull McpEndpoint> endpoints) {
+		this(endpoints, Map.of());
+	}
+
+	DefaultMcpHandlerResolver(
+			@NonNull Map<@NonNull Class<?>, @NonNull McpEndpoint>
+					generatedEndpoints) {
+		this(generatedEndpoints.values(), generatedEndpoints);
+	}
+
+	private DefaultMcpHandlerResolver(
+			@NonNull Collection<@NonNull McpEndpoint> endpoints,
+			@NonNull Map<@NonNull Class<?>, @NonNull McpEndpoint>
+					generatedEndpoints) {
 		requireNonNull(endpoints);
+		requireNonNull(generatedEndpoints);
 		List<@NonNull McpEndpoint> copiedEndpoints = List.copyOf(endpoints);
 
 		if (copiedEndpoints.isEmpty())
@@ -215,7 +259,24 @@ final class DefaultMcpHandlerResolver implements McpHandlerResolver {
 						"Duplicate MCP endpoint path '" + endpoint.getPath() + "'.");
 		}
 
+		Map<Class<?>, McpEndpoint> copiedGeneratedEndpoints =
+				new IdentityHashMap<>();
+		Set<McpEndpoint> endpointIdentities = Collections.newSetFromMap(
+				new IdentityHashMap<>());
+		endpointIdentities.addAll(copiedEndpoints);
+		for (Map.Entry<Class<?>, McpEndpoint> generatedEndpoint
+				: generatedEndpoints.entrySet()) {
+			Class<?> endpointClass = requireNonNull(generatedEndpoint.getKey());
+			McpEndpoint endpoint = requireNonNull(generatedEndpoint.getValue());
+			if (!endpointIdentities.contains(endpoint))
+				throw new IllegalArgumentException(
+						"Every generated MCP endpoint must identify a configured endpoint instance.");
+			copiedGeneratedEndpoints.put(endpointClass, endpoint);
+		}
+
 		this.endpoints = copiedEndpoints;
+		this.generatedEndpoints = Collections.unmodifiableMap(
+				copiedGeneratedEndpoints);
 	}
 
 	@Override
@@ -230,6 +291,41 @@ final class DefaultMcpHandlerResolver implements McpHandlerResolver {
 		requireNonNull(endpoint);
 		List<@NonNull McpEndpoint> endpoints = new ArrayList<>(getEndpoints());
 		endpoints.add(endpoint);
-		return new DefaultMcpHandlerResolver(endpoints);
+		return new DefaultMcpHandlerResolver(endpoints,
+				this.generatedEndpoints);
 	}
+
+	@Override
+	@NonNull
+	public McpHandlerResolver withSubscriptions(
+			@NonNull Class<?> annotatedEndpointClass,
+			@NonNull McpSubscriptionConfig subscriptions) {
+		requireNonNull(annotatedEndpointClass);
+		requireNonNull(subscriptions);
+		McpEndpoint generatedEndpoint = this.generatedEndpoints.get(
+				annotatedEndpointClass);
+		if (generatedEndpoint == null)
+			throw new IllegalArgumentException(
+					"No generated MCP endpoint is registered for annotated class '"
+							+ annotatedEndpointClass.getName() + "'.");
+
+		List<@NonNull McpEndpoint> endpoints = new ArrayList<>(getEndpoints());
+		for (int index = 0; index < endpoints.size(); ++index) {
+			McpEndpoint endpoint = endpoints.get(index);
+			if (endpoint == generatedEndpoint) {
+				McpEndpoint replacedEndpoint = endpoint.withSubscriptions(
+						subscriptions);
+				endpoints.set(index, replacedEndpoint);
+				Map<Class<?>, McpEndpoint> generatedEndpoints =
+						new IdentityHashMap<>(this.generatedEndpoints);
+				generatedEndpoints.put(annotatedEndpointClass, replacedEndpoint);
+				return new DefaultMcpHandlerResolver(endpoints,
+						generatedEndpoints);
+			}
+		}
+
+		throw new IllegalStateException(
+				"Generated MCP endpoint provenance is inconsistent.");
+	}
+
 }

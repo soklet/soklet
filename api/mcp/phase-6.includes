@@ -1,3 +1,6 @@
 com.soklet.McpServerDiagnostics
 com.soklet.McpServerStatus
 com.soklet.McpShutdownOutcome
+com.soklet.McpTraceCorrelation
+com.soklet.McpTraceCorrelationConfigurationFingerprint
+com.soklet.McpTraceCorrelationKey

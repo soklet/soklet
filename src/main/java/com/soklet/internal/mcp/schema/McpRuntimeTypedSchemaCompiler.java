@@ -56,6 +56,14 @@ final class McpRuntimeTypedSchemaCompiler {
 	}
 
 	@NonNull
+	<T> McpCompiledRuntimeTypedSchema<T> compileSchema(
+			@NonNull Type declaredType) {
+		McpCompiledTypedSchema schema = schemaCompiler.compileSchema(
+				requireNonNull(declaredType));
+		return finish(declaredType, schema);
+	}
+
+	@NonNull
 	<T> McpCompiledRuntimeTypedSchema<T> compileToolInput(
 			@NonNull Type declaredType) {
 		McpCompiledTypedSchema schema = schemaCompiler.compileToolInput(

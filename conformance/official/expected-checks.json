@@ -2,9 +2,401 @@
   "schemaVersion": 1,
   "protocolVersion": "2026-07-28",
   "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
-  "profilePolicy": "A profile is a complete expected multiset of check ID, status, and occurrence count. Missing or extra checks, changed statuses, changed counts, FAILURE, WARNING, or an unlisted INFO fail adjudication.",
-  "deferredProfilePolicy": "Future scenarios deliberately have null expectedCheckProfile values in scenarios.json. Their complete outcomes are observed, reviewed, and frozen only when the owning implementation phase lands; this file never invents future results.",
+  "profilePolicy": "A profile is the reviewed complete multiset of check ID, status, and occurrence count, plus its exact automatic wire-check count. Missing or extra checks, changed statuses or counts, FAILURE, WARNING, an unreviewed INFO or SKIPPED result, or any wire-schema-harness-error fails adjudication.",
+  "deferredProfilePolicy": "The 16 Phase 5 RUN rows deliberately retain null expectedCheckProfile values until their truthful fixture behavior is implemented and exact pinned-suite outcomes are observed and reviewed. Null never means accept anything.",
   "profiles": [
+    {
+      "id": "tools-list.phase4.v1",
+      "scenario": "tools-list",
+      "frozenInPhase": 4,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "tools-list",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "tools-name-format",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The exact pinned scenario emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "tools-call-simple-text.phase4.v1",
+      "scenario": "tools-call-simple-text",
+      "frozenInPhase": 4,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "tools-call-simple-text",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The exact pinned scenario emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "tools-call-image.phase4.v1",
+      "scenario": "tools-call-image",
+      "frozenInPhase": 4,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "tools-call-image",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The exact pinned scenario emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "tools-call-audio.phase4.v1",
+      "scenario": "tools-call-audio",
+      "frozenInPhase": 4,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "tools-call-audio",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The exact pinned scenario emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "tools-call-embedded-resource.phase4.v1",
+      "scenario": "tools-call-embedded-resource",
+      "frozenInPhase": 4,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "tools-call-embedded-resource",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The exact pinned scenario emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "tools-call-mixed-content.phase4.v1",
+      "scenario": "tools-call-mixed-content",
+      "frozenInPhase": 4,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "tools-call-mixed-content",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The exact pinned scenario emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "tools-call-error.phase4.v1",
+      "scenario": "tools-call-error",
+      "frozenInPhase": 4,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "tools-call-error",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The exact pinned scenario emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "json-schema-2020-12.phase4.v1",
+      "scenario": "json-schema-2020-12",
+      "frozenInPhase": 4,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "json-schema-2020-12-$defs",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "json-schema-2020-12-$schema",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "json-schema-2020-12-additionalProperties",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "json-schema-2020-12-tool-found",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2106-anchor-keyword-preserved",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2106-composition-keywords-preserved",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2106-conditional-keywords-preserved",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The exact pinned scenario emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "server-sse-multiple-streams.phase4.v1",
+      "scenario": "server-sse-multiple-streams",
+      "frozenInPhase": 4,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "server-accepts-multiple-post-streams",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "server-sse-streams-functional",
+          "status": "INFO",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 0,
+        "wire-schema-harness-error": 0,
+        "rationale": "The exact pinned scenario uses direct transport probes and emitted no automatic wire-schema check."
+      }
+    },
+    {
+      "id": "resources-list.phase4.v1",
+      "scenario": "resources-list",
+      "frozenInPhase": 4,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "resources-list",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The exact pinned scenario emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "resources-read-text.phase4.v1",
+      "scenario": "resources-read-text",
+      "frozenInPhase": 4,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "resources-read-text",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The exact pinned scenario emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "resources-read-binary.phase4.v1",
+      "scenario": "resources-read-binary",
+      "frozenInPhase": 4,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "resources-read-binary",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The exact pinned scenario emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "resources-templates-read.phase4.v1",
+      "scenario": "resources-templates-read",
+      "frozenInPhase": 4,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "resources-templates-read",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The exact pinned scenario emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "sep-2164-resource-not-found.phase4.v1",
+      "scenario": "sep-2164-resource-not-found",
+      "frozenInPhase": 4,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "sep-2164-data-uri",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2164-error-code",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2164-no-empty-contents",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The exact pinned scenario emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "prompts-list.phase4.v1",
+      "scenario": "prompts-list",
+      "frozenInPhase": 4,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "prompts-list",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The exact pinned scenario emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "prompts-get-simple.phase4.v1",
+      "scenario": "prompts-get-simple",
+      "frozenInPhase": 4,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "prompts-get-simple",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The exact pinned scenario emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "prompts-get-with-args.phase4.v1",
+      "scenario": "prompts-get-with-args",
+      "frozenInPhase": 4,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "prompts-get-with-args",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The exact pinned scenario emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "prompts-get-embedded-resource.phase4.v1",
+      "scenario": "prompts-get-embedded-resource",
+      "frozenInPhase": 4,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "prompts-get-embedded-resource",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The exact pinned scenario emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "prompts-get-with-image.phase4.v1",
+      "scenario": "prompts-get-with-image",
+      "frozenInPhase": 4,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "prompts-get-with-image",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The exact pinned scenario emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
     {
       "id": "dns-rebinding-protection.phase3.v1",
       "scenario": "dns-rebinding-protection",
@@ -26,6 +418,120 @@
         "wire-schema-valid": 0,
         "wire-schema-harness-error": 0,
         "rationale": "This pinned scenario sends raw Host/Origin probes outside the suite's instrumented wire recorder, so it emits no automatic wire-schema check."
+      }
+    },
+    {
+      "id": "caching.phase4.v1",
+      "scenario": "caching",
+      "frozenInPhase": 4,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "sep-2549-cache-scope-valid",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2549-prompts-list-caching-hints",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2549-resources-list-caching-hints",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2549-resources-read-caching-hints",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2549-resources-templates-list-caching-hints",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2549-tools-list-caching-hints",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2549-ttl-non-negative",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The exact pinned scenario emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "http-header-validation.phase4.v1",
+      "scenario": "http-header-validation",
+      "frozenInPhase": 4,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "sep-2243-header-name-case-insensitive",
+          "status": "SUCCESS",
+          "count": 2
+        },
+        {
+          "id": "sep-2243-server-accepts-whitespace-header-value",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2243-server-reject-error-code",
+          "status": "SUCCESS",
+          "count": 5
+        },
+        {
+          "id": "sep-2243-server-reject-invalid-headers",
+          "status": "SUCCESS",
+          "count": 5
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The exact pinned scenario emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "http-custom-header-server-validation.phase4.v1",
+      "scenario": "http-custom-header-server-validation",
+      "frozenInPhase": 4,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "sep-2243-server-decode-base64",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2243-server-reject-invalid-param-chars",
+          "status": "SUCCESS",
+          "count": 2
+        },
+        {
+          "id": "sep-2243-server-reject-param-mismatch",
+          "status": "SUCCESS",
+          "count": 3
+        },
+        {
+          "id": "sep-2243-server-validate-param-match",
+          "status": "SUCCESS",
+          "count": 3
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The exact pinned scenario emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
       }
     }
   ]

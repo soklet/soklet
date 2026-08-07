@@ -27,9 +27,14 @@ fi
 
 mkdir -p "$CLASSES_DIR"
 
-javac --release 17 -Xlint:all -Werror \
+# This fixture uses only programmatic registration. The candidate JAR also
+# contains SokletProcessor's service descriptor, so disable processor discovery
+# rather than letting javac execute an irrelevant processor and emit
+# JDK-dependent processing warnings under -Werror.
+javac --release 17 -proc:none -Xlint:all -Werror \
   -classpath "$CANDIDATE_JAR" \
   -d "$CLASSES_DIR" \
+  "$SOURCE_ROOT/com/soklet/McpOfficialSchemaConformanceTool.java" \
   "$SOURCE_ROOT/com/soklet/conformance/McpConformanceFixture.java"
 
 jdeps -q --multi-release 17 -verbose:class \

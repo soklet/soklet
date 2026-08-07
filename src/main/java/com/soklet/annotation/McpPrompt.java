@@ -16,6 +16,7 @@
 
 package com.soklet.annotation;
 
+import com.soklet.McpRequestStateMode;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -59,4 +60,21 @@ public @interface McpPrompt {
 	 */
 	@Nullable
 	String description() default "";
+
+	/**
+	 * Client requests this prompt operation may emit during multi-round-trip
+	 * handling.
+	 *
+	 * @return input-request declarations
+	 */
+	@NonNull
+	McpMayRequestInput @NonNull [] mayRequestInput() default {};
+
+	/**
+	 * The request-state contract for this prompt operation.
+	 *
+	 * @return request-state mode
+	 */
+	@NonNull
+	McpRequestStateMode requestStateMode() default McpRequestStateMode.NONE;
 }

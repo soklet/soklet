@@ -46,6 +46,7 @@ public final class McpEndpoint {
 	private final String path;
 	@NonNull
 	private final McpImplementation serverInformation;
+	private final boolean includeServerInformation;
 	@Nullable
 	private final String instructions;
 	@NonNull
@@ -64,6 +65,8 @@ public final class McpEndpoint {
 	private final String toolRateLimiterName;
 	@Nullable
 	private final McpRateLimiter toolRateLimiter;
+	@Nullable
+	private final McpSubscriptionConfig subscriptions;
 
 	/**
 	 * Vends a builder primed with an MCP endpoint path.
@@ -87,6 +90,7 @@ public final class McpEndpoint {
 
 		this.path = builder.path;
 		this.serverInformation = builder.serverInformation;
+		this.includeServerInformation = builder.includeServerInformation;
 		this.instructions = builder.instructions;
 		this.tools = List.copyOf(builder.tools);
 		this.prompts = List.copyOf(builder.prompts);
@@ -97,6 +101,7 @@ public final class McpEndpoint {
 				builder.resourceTemplatesListCachePolicy;
 		this.toolRateLimiterName = builder.toolRateLimiterName;
 		this.toolRateLimiter = builder.toolRateLimiter;
+		this.subscriptions = builder.subscriptions;
 
 		Set<String> toolNames = new LinkedHashSet<>();
 		for (McpToolRegistration<?> tool : this.tools) {
@@ -127,6 +132,25 @@ public final class McpEndpoint {
 		}
 	}
 
+	private McpEndpoint(@NonNull McpEndpoint endpoint,
+			@NonNull McpSubscriptionConfig subscriptions) {
+		requireNonNull(endpoint);
+		this.path = endpoint.path;
+		this.serverInformation = endpoint.serverInformation;
+		this.includeServerInformation = endpoint.includeServerInformation;
+		this.instructions = endpoint.instructions;
+		this.tools = endpoint.tools;
+		this.prompts = endpoint.prompts;
+		this.resources = endpoint.resources;
+		this.resourceListHandler = endpoint.resourceListHandler;
+		this.resourcesListCachePolicy = endpoint.resourcesListCachePolicy;
+		this.resourceTemplatesListCachePolicy =
+				endpoint.resourceTemplatesListCachePolicy;
+		this.toolRateLimiterName = endpoint.toolRateLimiterName;
+		this.toolRateLimiter = endpoint.toolRateLimiter;
+		this.subscriptions = requireNonNull(subscriptions);
+	}
+
 	/**
 	 * The normalized absolute endpoint path.
 	 *
@@ -145,6 +169,16 @@ public final class McpEndpoint {
 	@NonNull
 	public McpImplementation getServerInformation() {
 		return this.serverInformation;
+	}
+
+	/**
+	 * Indicates whether Soklet includes the configured server implementation at
+	 * {@code _meta["io.modelcontextprotocol/serverInfo"]} in MCP results.
+	 *
+	 * @return {@code true} when MCP result metadata includes server information
+	 */
+	public boolean isServerInformationIncluded() {
+		return this.includeServerInformation;
 	}
 
 	/**
@@ -253,8 +287,25 @@ public final class McpEndpoint {
 		return Optional.ofNullable(this.toolRateLimiter);
 	}
 
+	/**
+	 * Returns this endpoint's resource-subscription configuration.
+	 *
+	 * @return subscription configuration, or the empty optional if none was
+	 * configured
+	 */
 	@NonNull
-	private static String normalizePath(@NonNull String path) {
+	public Optional<@NonNull McpSubscriptionConfig> getSubscriptions() {
+		return Optional.ofNullable(this.subscriptions);
+	}
+
+	@NonNull
+	McpEndpoint withSubscriptions(
+			@NonNull McpSubscriptionConfig subscriptions) {
+		return new McpEndpoint(this, subscriptions);
+	}
+
+	@NonNull
+	static String normalizePath(@NonNull String path) {
 		requireNonNull(path);
 		String strippedPath = path.strip();
 
@@ -284,6 +335,7 @@ public final class McpEndpoint {
 		private final String path;
 		@Nullable
 		private McpImplementation serverInformation;
+		private boolean includeServerInformation;
 		@Nullable
 		private String instructions;
 		@NonNull
@@ -302,9 +354,12 @@ public final class McpEndpoint {
 		private String toolRateLimiterName;
 		@Nullable
 		private McpRateLimiter toolRateLimiter;
+		@Nullable
+		private McpSubscriptionConfig subscriptions;
 
 		private Builder(@NonNull String path) {
 			this.path = requireNonNull(path);
+			this.includeServerInformation = true;
 			this.tools = new ArrayList<>();
 			this.prompts = new ArrayList<>();
 			this.resources = new ArrayList<>();
@@ -324,6 +379,21 @@ public final class McpEndpoint {
 		public Builder serverInformation(
 				@NonNull McpImplementation serverInformation) {
 			this.serverInformation = requireNonNull(serverInformation);
+			return this;
+		}
+
+		/**
+		 * Controls whether Soklet includes the configured server implementation at
+		 * {@code _meta["io.modelcontextprotocol/serverInfo"]} in MCP results. The
+		 * default is {@code true}.
+		 *
+		 * @param includeServerInformation whether MCP result metadata includes server
+		 *                                 information
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder includeServerInformation(boolean includeServerInformation) {
+			this.includeServerInformation = includeServerInformation;
 			return this;
 		}
 
@@ -511,6 +581,22 @@ public final class McpEndpoint {
 		public Builder toolRateLimiter(@NonNull McpRateLimiter toolRateLimiter) {
 			this.toolRateLimiter = requireNonNull(toolRateLimiter);
 			this.toolRateLimiterName = null;
+			return this;
+		}
+
+		/**
+		 * Sets the endpoint's resource-subscription configuration.
+		 * <p>
+		 * Sequential calls are last-call-wins. The immutable configuration and its
+		 * application-owned publisher are retained by reference.
+		 *
+		 * @param subscriptions resource-subscription configuration
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder subscriptions(
+				@NonNull McpSubscriptionConfig subscriptions) {
+			this.subscriptions = requireNonNull(subscriptions);
 			return this;
 		}
 

@@ -16,14 +16,11 @@
 
 package com.soklet;
 
-import javax.annotation.concurrent.ThreadSafe;
-
 /**
  * The configured MCP rate-limit stage requesting an acquisition.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@ThreadSafe
 public enum McpRateLimitTarget {
 	/**
 	 * The optional limiter applied once to every admitted request or

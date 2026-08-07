@@ -30,15 +30,16 @@ export function adjudicateChecks(scenarioName, checks, profile) {
         throw new Error(`${scenarioName} emitted an invalid wire-schema-valid result`);
       }
     }
-    increment(actual, tuple(check.id, check.status), 1);
-  }
+		const reason = check.status === 'SKIPPED' ? skipReason(check) : null;
+		increment(actual, tuple(check.id, check.status, reason), 1);
+	}
 
-  const expected = new Map();
-  for (const check of profile.checks)
-    increment(expected, tuple(check.id, check.status), check.count);
-  const expectedWireSuccesses = profile.automaticWireChecks['wire-schema-valid'];
-  if (expectedWireSuccesses > 0)
-    increment(expected, tuple('wire-schema-valid', 'SUCCESS'), expectedWireSuccesses);
+	const expected = new Map();
+	for (const check of profile.checks)
+		increment(expected, tuple(check.id, check.status, check.reason ?? null), check.count);
+	const expectedWireSuccesses = profile.automaticWireChecks['wire-schema-valid'];
+	if (expectedWireSuccesses > 0)
+		increment(expected, tuple('wire-schema-valid', 'SUCCESS', null), expectedWireSuccesses);
 
   const actualObject = canonicalMultiset(actual);
   const expectedObject = canonicalMultiset(expected);
@@ -51,8 +52,18 @@ export function adjudicateChecks(scenarioName, checks, profile) {
   return actualObject;
 }
 
-function tuple(id, status) {
-  return `${id}\u0000${status}`;
+function skipReason(check) {
+	if (typeof check.errorMessage === 'string' && check.errorMessage.length !== 0)
+		return check.errorMessage;
+	if (check.details !== null && typeof check.details === 'object'
+			&& typeof check.details.reason === 'string'
+			&& check.details.reason.length !== 0)
+		return check.details.reason;
+	throw new Error(`SKIPPED check ${check.id} has no reviewable reason`);
+}
+
+function tuple(id, status, reason) {
+	return `${id}\u0000${status}\u0000${reason ?? ''}`;
 }
 
 function increment(multiset, key, count) {
@@ -63,8 +74,10 @@ function canonicalMultiset(multiset) {
   return [...multiset.entries()]
     .sort(([left], [right]) => Buffer.compare(Buffer.from(left), Buffer.from(right)))
     .map(([key, count]) => {
-      const [id, status] = key.split('\u0000');
-      return { id, status, count };
+		const [id, status, reason] = key.split('\u0000');
+		return reason.length === 0
+			? { id, status, count }
+			: { id, status, reason, count };
     });
 }
 

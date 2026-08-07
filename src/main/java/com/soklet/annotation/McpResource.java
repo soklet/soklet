@@ -17,6 +17,7 @@
 package com.soklet.annotation;
 
 import com.soklet.McpCacheScope;
+import com.soklet.McpRequestStateMode;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -103,4 +104,21 @@ public @interface McpResource {
 	 */
 	@NonNull
 	McpCacheScope cacheScope() default McpCacheScope.PRIVATE;
+
+	/**
+	 * Client requests this resource-read operation may emit during
+	 * multi-round-trip handling.
+	 *
+	 * @return input-request declarations
+	 */
+	@NonNull
+	McpMayRequestInput @NonNull [] mayRequestInput() default {};
+
+	/**
+	 * The request-state contract for this resource-read operation.
+	 *
+	 * @return request-state mode
+	 */
+	@NonNull
+	McpRequestStateMode requestStateMode() default McpRequestStateMode.NONE;
 }

@@ -143,6 +143,28 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 	int getMaximumCursorSizeInBytes();
 
 	/**
+	 * Returns this server's request-state protection control plane.
+	 * <p>
+	 * The control never exposes configured key material. Mutation methods reject
+	 * calls unless this server was built with a production key ring.
+	 *
+	 * @return server-owned protection control
+	 */
+	@NonNull
+	McpProtectionControl getProtectionControl();
+
+	/**
+	 * Returns this server's trace-correlation control plane.
+	 * <p>
+	 * The control reports disabled state when no trace-correlation key was
+	 * supplied during construction.
+	 *
+	 * @return server-owned trace-correlation control
+	 */
+	@NonNull
+	McpTraceCorrelation getTraceCorrelation();
+
+	/**
 	 * Captures immutable point-in-time server diagnostics.
 	 *
 	 * @return diagnostics snapshot
@@ -178,18 +200,42 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 	@NotThreadSafe
 	final class Builder {
 		private static final int DEFAULT_MAXIMUM_CURSOR_SIZE_IN_BYTES = 4_096;
+		private static final int DEFAULT_MAXIMUM_SUBSCRIPTIONS_PER_PRINCIPAL = 32;
 		private static final int DEFAULT_REQUEST_HANDLER_CONCURRENCY = 32;
 		private static final int DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY = 128;
+		private static final int DEFAULT_STREAM_QUEUE_CAPACITY = 128;
+		@NonNull
+		private static final Duration DEFAULT_KEEP_ALIVE_INTERVAL =
+				Duration.ofSeconds(15);
+		@NonNull
+		private static final Duration DEFAULT_MAXIMUM_SUBSCRIPTION_DURATION =
+				Duration.ofHours(24);
 		@NonNull
 		private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(60);
+		@NonNull
+		private static final Duration DEFAULT_SHUTDOWN_TIMEOUT =
+				Duration.ofSeconds(30);
+		@NonNull
+		private static final Duration DEFAULT_WRITE_TIMEOUT =
+				Duration.ofSeconds(30);
 		private int port;
 		private int maximumCursorSizeInBytes;
+		private int maximumSubscriptionsPerPrincipal;
 		private int requestHandlerConcurrency;
 		private int requestHandlerQueueCapacity;
+		private int streamQueueCapacity;
 		@NonNull
 		private String host;
 		@NonNull
+		private Duration keepAliveInterval;
+		@NonNull
+		private Duration maximumSubscriptionDuration;
+		@NonNull
 		private Duration requestTimeout;
+		@NonNull
+		private Duration shutdownTimeout;
+		@NonNull
+		private Duration writeTimeout;
 		@Nullable
 		private Supplier<@NonNull ExecutorService> requestHandlerExecutorServiceSupplier;
 		@Nullable
@@ -212,21 +258,35 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		private McpAbsentOriginPolicy absentOriginPolicy;
 		@NonNull
 		private McpUnknownMirroredHeaderPolicy unknownMirroredHeaderPolicy;
+		private boolean logRawValidatedTraceIds;
 		private boolean unknownMirroredHeaderNameDiagnostics;
+		@Nullable
+		private McpProtectionConfig protectionConfig;
+		@Nullable
+		private McpTraceCorrelationKey traceCorrelationKey;
 		@NonNull
 		private Set<@NonNull String> allowedHosts;
 
 		private Builder(int port) {
 			this.port = port;
 			this.maximumCursorSizeInBytes = DEFAULT_MAXIMUM_CURSOR_SIZE_IN_BYTES;
+			this.maximumSubscriptionsPerPrincipal =
+					DEFAULT_MAXIMUM_SUBSCRIPTIONS_PER_PRINCIPAL;
 			this.requestHandlerConcurrency = DEFAULT_REQUEST_HANDLER_CONCURRENCY;
 			this.requestHandlerQueueCapacity =
 					DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY;
+			this.streamQueueCapacity = DEFAULT_STREAM_QUEUE_CAPACITY;
 			this.host = "127.0.0.1";
+			this.keepAliveInterval = DEFAULT_KEEP_ALIVE_INTERVAL;
+			this.maximumSubscriptionDuration =
+					DEFAULT_MAXIMUM_SUBSCRIPTION_DURATION;
 			this.requestTimeout = DEFAULT_REQUEST_TIMEOUT;
+			this.shutdownTimeout = DEFAULT_SHUTDOWN_TIMEOUT;
+			this.writeTimeout = DEFAULT_WRITE_TIMEOUT;
 			this.absentOriginPolicy = McpAbsentOriginPolicy.ALLOW;
 			this.unknownMirroredHeaderPolicy =
 					McpUnknownMirroredHeaderPolicy.IGNORE;
+			this.logRawValidatedTraceIds = false;
 			this.unknownMirroredHeaderNameDiagnostics = false;
 			this.allowedHosts = Set.of();
 			this.rateLimiterRegistry = McpRateLimiterRegistry.emptyInstance();
@@ -278,6 +338,45 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 				throw new IllegalArgumentException(
 						"MCP maximum cursor size must be positive.");
 			this.maximumCursorSizeInBytes = maximumCursorSizeInBytes;
+			return this;
+		}
+
+		/**
+		 * Sets the positive, finite number of concurrently live subscriptions for
+		 * one admitted principal. The default is {@code 32}. This setting has
+		 * neutral behavior until subscriptions are active.
+		 *
+		 * @param maximumSubscriptionsPerPrincipal subscription limit per principal
+		 * @return this builder
+		 * @throws IllegalArgumentException if the value is not positive
+		 */
+		@NonNull
+		public Builder maximumSubscriptionsPerPrincipal(
+				int maximumSubscriptionsPerPrincipal) {
+			if (maximumSubscriptionsPerPrincipal < 1)
+				throw new IllegalArgumentException(
+						"MCP maximum subscriptions per principal must be positive.");
+			this.maximumSubscriptionsPerPrincipal =
+					maximumSubscriptionsPerPrincipal;
+			return this;
+		}
+
+		/**
+		 * Sets the positive finite lifetime of one subscription. The default is
+		 * 24 hours. This setting has neutral behavior until subscriptions are
+		 * active.
+		 *
+		 * @param maximumSubscriptionDuration maximum subscription lifetime
+		 * @return this builder
+		 * @throws IllegalArgumentException if the duration is not positive and
+		 *                                  representable as signed nanoseconds
+		 */
+		@NonNull
+		public Builder maximumSubscriptionDuration(
+				@NonNull Duration maximumSubscriptionDuration) {
+			this.maximumSubscriptionDuration = requirePositiveDuration(
+					maximumSubscriptionDuration,
+					"MCP maximum subscription duration");
 			return this;
 		}
 
@@ -350,6 +449,75 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 						requestHandlerExecutorServiceSupplier) {
 			this.requestHandlerExecutorServiceSupplier = requireNonNull(
 					requestHandlerExecutorServiceSupplier);
+			return this;
+		}
+
+		/**
+		 * Sets the positive, finite number of pending messages retained for one
+		 * MCP response or subscription stream. The default is {@code 128}.
+		 * This setting has neutral behavior until its streaming owner is active.
+		 *
+		 * @param streamQueueCapacity maximum pending messages per stream
+		 * @return this builder
+		 * @throws IllegalArgumentException if the value is not positive
+		 */
+		@NonNull
+		public Builder streamQueueCapacity(int streamQueueCapacity) {
+			if (streamQueueCapacity < 1)
+				throw new IllegalArgumentException(
+						"MCP stream queue capacity must be positive.");
+			this.streamQueueCapacity = streamQueueCapacity;
+			return this;
+		}
+
+		/**
+		 * Sets the positive finite deadline for one stream write. The default is
+		 * 30 seconds. This setting has neutral behavior until its streaming owner
+		 * is active.
+		 *
+		 * @param writeTimeout maximum duration of one stream write
+		 * @return this builder
+		 * @throws IllegalArgumentException if the duration is not positive and
+		 *                                  representable as signed nanoseconds
+		 */
+		@NonNull
+		public Builder writeTimeout(@NonNull Duration writeTimeout) {
+			this.writeTimeout = requirePositiveDuration(writeTimeout,
+					"MCP write timeout");
+			return this;
+		}
+
+		/**
+		 * Sets the positive finite interval between idle SSE keep-alive comments.
+		 * The default is 15 seconds. This setting has neutral behavior until its
+		 * streaming owner is active.
+		 *
+		 * @param keepAliveInterval SSE keep-alive interval
+		 * @return this builder
+		 * @throws IllegalArgumentException if the duration is not positive and
+		 *                                  representable as signed nanoseconds
+		 */
+		@NonNull
+		public Builder keepAliveInterval(@NonNull Duration keepAliveInterval) {
+			this.keepAliveInterval = requirePositiveDuration(keepAliveInterval,
+					"MCP keep-alive interval");
+			return this;
+		}
+
+		/**
+		 * Sets the positive finite upper bound for graceful MCP server shutdown.
+		 * The default is 30 seconds. This setting has neutral behavior until the
+		 * graceful-shutdown owner is active.
+		 *
+		 * @param shutdownTimeout graceful-shutdown deadline
+		 * @return this builder
+		 * @throws IllegalArgumentException if the duration is not positive and
+		 *                                  representable as signed nanoseconds
+		 */
+		@NonNull
+		public Builder shutdownTimeout(@NonNull Duration shutdownTimeout) {
+			this.shutdownTimeout = requirePositiveDuration(shutdownTimeout,
+					"MCP shutdown timeout");
 			return this;
 		}
 
@@ -537,6 +705,51 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		}
 
 		/**
+		 * Enables pseudonymous trace correlation with exactly one initial active
+		 * key. Omission leaves correlation disabled. The configured key is copied
+		 * into server-owned state.
+		 *
+		 * @param traceCorrelationKey initial trace-correlation key
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder traceCorrelationKey(
+				@NonNull McpTraceCorrelationKey traceCorrelationKey) {
+			this.traceCorrelationKey = requireNonNull(traceCorrelationKey);
+			return this;
+		}
+
+		/**
+		 * Enables or disables the separate high-cardinality, log-only opt-in for
+		 * raw validated trace IDs. The default is {@code false}. This never enables
+		 * pseudonymous correlation and never controls metric dimensions.
+		 *
+		 * @param enabled whether raw validated trace IDs may appear in logs
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder logRawValidatedTraceIds(boolean enabled) {
+			this.logRawValidatedTraceIds = enabled;
+			return this;
+		}
+
+		/**
+		 * Configures framework request-state protection. Omission leaves framework
+		 * protection unconfigured. A production key ring is copied into independent
+		 * server-owned live state; runtime rotation is available only through
+		 * {@link McpServer#getProtectionControl()}.
+		 *
+		 * @param protectionConfig initial protection configuration
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder protectionConfig(
+				@NonNull McpProtectionConfig protectionConfig) {
+			this.protectionConfig = requireNonNull(protectionConfig);
+			return this;
+		}
+
+		/**
 		 * Adds hostname-only values accepted by MCP Host validation. Host ports
 		 * must still equal the effective bound port.
 		 *
@@ -586,14 +799,20 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 					this.requestHandlerConcurrency,
 					this.requestHandlerQueueCapacity, this.requestTimeout,
 					this.requestHandlerExecutorServiceSupplier,
+					this.streamQueueCapacity, this.writeTimeout,
+					this.keepAliveInterval, this.shutdownTimeout,
+					this.maximumSubscriptionsPerPrincipal,
+					this.maximumSubscriptionDuration,
 					this.handlerResolver,
 					this.requestAdmissionPolicy, this.handlerInterceptor,
 					this.toolOutputSanitizer, this.corsAuthorizer,
 					this.absentOriginPolicy, this.unknownMirroredHeaderPolicy,
 					this.unknownMirroredHeaderNameDiagnostics,
+					this.logRawValidatedTraceIds,
 					this.allowedHosts,
 					this.requestRateLimiter, this.toolRateLimiter,
-					this.rateLimiterRegistry);
+					this.rateLimiterRegistry, this.protectionConfig,
+					this.traceCorrelationKey);
 		}
 
 		private void requireRegisteredLimiter(@NonNull String name,

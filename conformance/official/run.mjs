@@ -35,20 +35,31 @@ const maximumResultTreeBytes = 16 * 1024 * 1024;
 const maximumChecksFileBytes = 8 * 1024 * 1024;
 
 export async function runOfficialConformance(options, { processObject = process } = {}) {
-  prepareEmptyWorkDirectory(options.workDirectory);
-  const supervisor = new ChildSupervisor();
-  const removeSignalHandlers = installSignalHandlers(supervisor, processObject);
-  const evidence = createInitialEvidence(options.phase);
+	prepareEmptyWorkDirectory(options.workDirectory);
+	const mode = options.mode ?? 'verify';
+	const supervisor = new ChildSupervisor();
+	const removeSignalHandlers = installSignalHandlers(supervisor, processObject);
+	const evidence = createInitialEvidence(options.phase, mode);
   const evidencePath = resolve(options.workDirectory, 'evidence.json');
   let reportedFailure;
 
   try {
     writeJsonAtomically(evidencePath, evidence);
     supervisor.throwIfCancellationRequested();
-    if (options.phase !== 3)
-      throw new Error('This checkpoint runner accepts only Phase 3 development evidence');
-    verifyPublicFixtureClasspath(options.classpath, options.projectRoot);
-    const { pins, selection, expectedChecks } = verifyManifestSet();
+		const { pins, selection, expectedChecks } = verifyManifestSet();
+		const observing = mode === 'observe';
+		if (observing) {
+			if (options.phase !== selection.currentImplementationPhase + 1)
+				throw new Error(
+					`Profile observation must target Phase ${selection.currentImplementationPhase + 1}`,
+				);
+		} else if (mode !== 'verify'
+				|| options.phase !== selection.currentImplementationPhase) {
+			throw new Error(
+				`Verification must target current implementation Phase ${selection.currentImplementationPhase}`,
+			);
+		}
+		verifyPublicFixtureClasspath(options.classpath, options.projectRoot);
     evidence.suiteCommit = pins.officialConformanceSuite.commit;
     evidence.protocolVersion = pins.protocolVersion;
     persistEvidence(evidencePath, evidence);
@@ -94,23 +105,27 @@ export async function runOfficialConformance(options, { processObject = process 
     persistEvidence(evidencePath, evidence);
     supervisor.throwIfCancellationRequested();
 
-    const scenarios = activeScenarios(selection, options.phase);
-    if (scenarios.length !== 1 || scenarios[0].name !== 'dns-rebinding-protection')
-      throw new Error('Phase 3 must select exactly the reviewed DNS-rebinding scenario');
+		const scenarios = activeScenarios(selection, options.phase);
+		const expectedScenarioCount = options.phase === 3 ? 1 : options.phase === 4 ? 23 : null;
+		if (expectedScenarioCount !== null && scenarios.length !== expectedScenarioCount)
+			throw new Error(
+				`Phase ${options.phase} must select exactly ${expectedScenarioCount} reviewed scenarios`,
+			);
 
     let runFailure;
     for (const [index, scenario] of scenarios.entries()) {
       supervisor.throwIfCancellationRequested();
       try {
-        evidence.scenarios.push(await runScenario({
+			evidence.scenarios.push(await runScenario({
           ordinal: index + 1,
           scenario,
           options,
           entryPoint,
           pins,
           expectedChecks,
-          supervisor,
-        }));
+				supervisor,
+				observing,
+			}));
       } catch (error) {
         runFailure ??= error;
         evidence.scenarios.push({ name: scenario.name, passed: false, error: safeMessage(error) });
@@ -119,12 +134,14 @@ export async function runOfficialConformance(options, { processObject = process 
     }
 
     if (runFailure !== undefined) throw runFailure;
-    evidence.status = 'PASSED';
+		evidence.status = observing ? 'OBSERVED' : 'PASSED';
     evidence.failure = null;
     persistEvidence(evidencePath, evidence);
-    console.log(
-      `Official MCP Phase 3 development check passed: ${scenarios.map((s) => s.name).join(', ')}.`,
-    );
+		console.log(observing
+			? `Observed official MCP Phase ${options.phase} profiles for review: `
+				+ `${scenarios.map((scenario) => scenario.name).join(', ')}.`
+			: `Official MCP Phase ${options.phase} development check passed: `
+				+ `${scenarios.map((scenario) => scenario.name).join(', ')}.`);
   } catch (error) {
     const failure = supervisor.cancellationRequested
       ? new RunnerCancelledError(supervisor.cancellationSignal, { cause: error })
@@ -179,8 +196,9 @@ async function runScenario({
   options,
   entryPoint,
   pins,
-  expectedChecks,
-  supervisor,
+	expectedChecks,
+	supervisor,
+	observing,
 }) {
   const scenarioDirectory = resolve(
     options.workDirectory,
@@ -222,19 +240,25 @@ async function runScenario({
       throw new Error(
         `Official scenario ${scenario.name} output was invalid: ${commandResult.outputFailure}`,
       );
-    if (commandResult.status !== 0)
-      throw new Error(
-        `Official scenario ${scenario.name} exited ${commandResult.status}: `
-          + commandResult.stderr,
-      );
-    const checksPath = exactlyOneChecksFile(resultDirectory);
-    checks = JSON.parse(readFileSync(checksPath, 'utf8'));
-    const profile = expectedChecks.profiles.find(
-      (candidate) => candidate.id === scenario.expectedCheckProfile,
-    );
-    if (profile === undefined)
-      throw new Error(`Missing expected-check profile ${scenario.expectedCheckProfile}`);
-    adjudicateChecks(scenario.name, checks, profile);
+		const checksPath = exactlyOneChecksFile(resultDirectory);
+		checks = JSON.parse(readFileSync(checksPath, 'utf8'));
+		if (observing) {
+			writeJsonAtomically(resolve(scenarioDirectory, 'observed-profile-draft.json'),
+				observedProfileDraft(scenario.name, checks, options.phase,
+					pins.officialConformanceSuite.commit));
+		} else {
+			const profile = expectedChecks.profiles.find(
+				(candidate) => candidate.id === scenario.expectedCheckProfile,
+			);
+			if (profile === undefined)
+				throw new Error(`Missing expected-check profile ${scenario.expectedCheckProfile}`);
+			adjudicateChecks(scenario.name, checks, profile);
+		}
+		if (commandResult.status !== 0)
+			throw new Error(
+				`Official scenario ${scenario.name} exited ${commandResult.status}: `
+					+ commandResult.stderr,
+			);
   } catch (error) {
     primaryFailure = error;
   } finally {
@@ -250,12 +274,73 @@ async function runScenario({
     }
   }
   if (primaryFailure !== undefined) throw primaryFailure;
-  return {
-    name: scenario.name,
-    passed: true,
-    checkCount: checks.length,
-    expectedCheckProfile: scenario.expectedCheckProfile,
-  };
+	return {
+		name: scenario.name,
+		passed: true,
+		checkCount: checks.length,
+		expectedCheckProfile: observing ? null : scenario.expectedCheckProfile,
+		observedProfileDraft: observing
+			? `${String(ordinal).padStart(3, '0')}-${scenario.name}/observed-profile-draft.json`
+			: null,
+	};
+}
+
+export function observedProfileDraft(scenarioName, checks, phase, suiteCommit) {
+	if (!Array.isArray(checks))
+		throw new Error(`Official checks for ${scenarioName} must be an array`);
+	const ordinary = new Map();
+	let wireSuccesses = 0;
+	let wireHarnessErrors = 0;
+	for (const [index, check] of checks.entries()) {
+		if (check === null || typeof check !== 'object'
+				|| typeof check.id !== 'string' || check.id.length === 0
+				|| typeof check.status !== 'string')
+			throw new Error(`Malformed official check ${index + 1} for ${scenarioName}`);
+		if (check.id === 'wire-schema-valid') {
+			wireSuccesses++;
+			continue;
+		}
+		if (check.id === 'wire-schema-harness-error') {
+			wireHarnessErrors++;
+			continue;
+		}
+		const reason = check.status === 'SKIPPED'
+			? observedSkipReason(check)
+			: null;
+		const key = `${check.id}\u0000${check.status}\u0000${reason ?? ''}`;
+		const previous = ordinary.get(key);
+		if (previous === undefined) {
+			const row = { id: check.id, status: check.status, count: 1 };
+			if (reason !== null) row.reason = reason;
+			ordinary.set(key, row);
+		} else {
+			previous.count++;
+		}
+	}
+	return {
+		id: `${scenarioName}.phase${phase}.v1`,
+		scenario: scenarioName,
+		frozenInPhase: phase,
+		suiteCommit,
+		checks: [...ordinary.values()].sort((left, right) =>
+			Buffer.compare(Buffer.from(`${left.id}\u0000${left.status}\u0000${left.reason ?? ''}`),
+				Buffer.from(`${right.id}\u0000${right.status}\u0000${right.reason ?? ''}`))),
+		automaticWireChecks: {
+			'wire-schema-valid': wireSuccesses,
+			'wire-schema-harness-error': wireHarnessErrors,
+			rationale: 'Observation-only draft from the exact pinned official scenario; review before freezing.',
+		},
+	};
+}
+
+function observedSkipReason(check) {
+	if (typeof check.errorMessage === 'string' && check.errorMessage.length !== 0)
+		return check.errorMessage;
+	if (check.details !== null && typeof check.details === 'object'
+			&& typeof check.details.reason === 'string'
+			&& check.details.reason.length !== 0)
+		return check.details.reason;
+	return null;
 }
 
 function startFixture(scenarioName, options, supervisor) {
@@ -805,15 +890,18 @@ function writeJsonAtomically(path, value) {
   renameSync(temporary, path);
 }
 
-function createInitialEvidence(phase) {
-  return {
-    formatVersion: 1,
-    evidenceClass: 'PUBLIC_API_DEVELOPMENT_ONLY',
-    releaseCandidateEvidence: false,
+function createInitialEvidence(phase, mode) {
+	return {
+		formatVersion: 1,
+		evidenceClass: mode === 'observe'
+			? 'PROFILE_OBSERVATION_ONLY'
+			: 'CANDIDATE_ARTIFACT_DEVELOPMENT_ONLY',
+		releaseCandidateEvidence: false,
     status: 'PREPARING',
     suiteCommit: null,
     protocolVersion: null,
-    phase,
+		phase,
+		mode,
     goldenMessagesValidated: null,
     scenarios: [],
     failure: null,
@@ -834,7 +922,8 @@ function parseArguments(args) {
   for (let index = 0; index < args.length; index += 2) {
     const name = args[index];
     const value = args[index + 1];
-    if (!['--suite-dir', '--work-dir', '--classpath', '--project-root', '--java', '--phase']
+		if (!['--suite-dir', '--work-dir', '--classpath', '--project-root', '--java', '--phase',
+			'--mode']
       .includes(name) || value === undefined || values.has(name)) {
       usage();
     }
@@ -849,8 +938,9 @@ function parseArguments(args) {
     workDirectory: resolve(values.get('--work-dir')),
     classpath: values.get('--classpath'),
     projectRoot,
-    javaExecutable: values.get('--java') ?? 'java',
-    phase: Number(values.get('--phase') ?? '3'),
+		javaExecutable: values.get('--java') ?? 'java',
+		phase: Number(values.get('--phase') ?? '3'),
+		mode: values.get('--mode') ?? 'verify',
   });
 }
 
@@ -859,7 +949,7 @@ function usage() {
     'Usage: node conformance/official/run.mjs '
       + '--suite-dir <built-suite> --work-dir <empty-absolute-directory> '
       + '--classpath <fixture-classes-and-candidate-jar> [--project-root <root>] '
-      + '[--java <java>] [--phase 3]',
+			+ '[--java <java>] [--phase <phase>] [--mode verify|observe]',
   );
   process.exit(64);
 }

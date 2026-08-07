@@ -90,16 +90,45 @@ final class McpApplicationJsonRpcException extends Exception {
 }
 
 /**
+ * Internal control signal for a framework-detected protocol error after
+ * application dispatch has begun.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@NotThreadSafe
+final class McpProtocolJsonRpcException extends Exception {
+	@NonNull
+	private final McpJsonRpcError error;
+
+	McpProtocolJsonRpcException(@NonNull McpJsonRpcError error) {
+		super(null, null, false, false);
+		this.error = requireNonNull(error);
+	}
+
+	@NonNull
+	McpJsonRpcError error() {
+		return error;
+	}
+}
+
+/**
  * Exact executable route for one registered tool.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 record McpApplicationToolRoute(@NonNull McpApplicationRequestHandler handler,
-		@NonNull McpRateLimiter rateLimiter) {
+		@NonNull McpRateLimiter rateLimiter,
+		@NonNull McpInputRequestPlan inputRequestPlan) {
+	McpApplicationToolRoute(@NonNull McpApplicationRequestHandler handler,
+			@NonNull McpRateLimiter rateLimiter) {
+		this(handler, rateLimiter, McpInputRequestPlan.empty());
+	}
+
 	McpApplicationToolRoute {
 		requireNonNull(handler);
 		requireNonNull(rateLimiter);
+		requireNonNull(inputRequestPlan);
 	}
 }
 
@@ -109,9 +138,15 @@ record McpApplicationToolRoute(@NonNull McpApplicationRequestHandler handler,
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-record McpApplicationPromptRoute(@NonNull McpApplicationRequestHandler handler) {
+record McpApplicationPromptRoute(@NonNull McpApplicationRequestHandler handler,
+		@NonNull McpInputRequestPlan inputRequestPlan) {
+	McpApplicationPromptRoute(@NonNull McpApplicationRequestHandler handler) {
+		this(handler, McpInputRequestPlan.empty());
+	}
+
 	McpApplicationPromptRoute {
 		requireNonNull(handler);
+		requireNonNull(inputRequestPlan);
 	}
 }
 
@@ -160,14 +195,23 @@ record McpApplicationResourceReadInvocation(
 @ThreadSafe
 record McpApplicationResourceReadRoute(
 		@NonNull McpApplicationResourceReadHandler handler,
-		@NonNull McpResourceCachePolicy cachePolicy) {
+		@NonNull McpResourceCachePolicy cachePolicy,
+		@NonNull McpInputRequestPlan inputRequestPlan) {
 	McpApplicationResourceReadRoute(@NonNull McpApplicationResourceReadHandler handler) {
-		this(handler, McpResourceCachePolicy.privateNoCache());
+		this(handler, McpResourceCachePolicy.privateNoCache(),
+				McpInputRequestPlan.empty());
+	}
+
+	McpApplicationResourceReadRoute(
+			@NonNull McpApplicationResourceReadHandler handler,
+			@NonNull McpResourceCachePolicy cachePolicy) {
+		this(handler, cachePolicy, McpInputRequestPlan.empty());
 	}
 
 	McpApplicationResourceReadRoute {
 		requireNonNull(handler);
 		requireNonNull(cachePolicy);
+		requireNonNull(inputRequestPlan);
 	}
 }
 
@@ -793,6 +837,15 @@ record McpApplicationResponse(int status, @NonNull String reason,
 	}
 
 	@NonNull
+	static McpApplicationResponse protocolJsonRpcError(
+			@NonNull McpJsonRpcId id, @NonNull McpJsonRpcError error) {
+		return new McpApplicationResponse(400, "Bad Request", Optional.of(
+				new McpJsonRpcMessage.ErrorResponse(Optional.of(requireNonNull(id)),
+						requireNonNull(error), McpJsonObject.empty())),
+				McpRequestOutcome.PROTOCOL_ERROR, List.of());
+	}
+
+	@NonNull
 	static McpApplicationResponse activeDeadline() {
 		// Phase 3B.1 has no frozen pre-commit active-handler timeout wire mapping.
 		// An empty 504 closes the JSON-only response lifetime without claiming one.
@@ -1394,6 +1447,10 @@ final class McpApplicationExecution {
 			} catch (McpInvalidApplicationInputException exception) {
 				if (!cancellation.isCancellationRequested())
 					respond(McpApplicationResponse.invalidParams(request.id()));
+			} catch (McpProtocolJsonRpcException exception) {
+				if (!cancellation.isCancellationRequested())
+					respond(McpApplicationResponse.protocolJsonRpcError(
+							request.id(), exception.error()));
 			} catch (McpApplicationJsonRpcException exception) {
 				if (!cancellation.isCancellationRequested())
 					respond(McpApplicationResponse.applicationJsonRpcError(

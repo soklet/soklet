@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.sun.source.doctree.AuthorTree;
 import com.sun.source.doctree.DocCommentTree;
 import com.sun.source.doctree.DocTree;
 import com.sun.source.doctree.ParamTree;
@@ -73,6 +74,52 @@ public class McpPublicJavadocTests {
 	);
 	private static final Pattern TYPE_NAME = Pattern.compile(
 			"[A-Za-z_$][A-Za-z0-9_$]*(?:\\.[A-Za-z_$][A-Za-z0-9_$]*)+");
+	private static final String STANDARD_AUTHOR =
+			"<a href=\"https://www.revetkn.com\">Mark Allen</a>";
+	private static final String THREAD_SAFE =
+			"javax.annotation.concurrent.ThreadSafe";
+	private static final String NOT_THREAD_SAFE =
+			"javax.annotation.concurrent.NotThreadSafe";
+	private static final Set<String> PHASE_FOUR_NOT_THREAD_SAFE_MCP_TYPES = Set.of(
+			"com.soklet.McpAdmissionIdentity$Builder",
+			"com.soklet.McpAudioContent$Builder",
+			"com.soklet.McpBlobResourceContents$Builder",
+			"com.soklet.McpContentAnnotations$Builder",
+			"com.soklet.McpEmbeddedResource$Builder",
+			"com.soklet.McpEndpoint$Builder",
+			"com.soklet.McpHandlerInvocation",
+			"com.soklet.McpIcon$Builder",
+			"com.soklet.McpImageContent$Builder",
+			"com.soklet.McpImplementation$Builder",
+			"com.soklet.McpJsonArray$Builder",
+			"com.soklet.McpJsonObject$Builder",
+			"com.soklet.McpJsonRpcException",
+			"com.soklet.McpPromptArgumentDefinition$Builder",
+			"com.soklet.McpPromptOutput$Builder",
+			"com.soklet.McpPromptRegistration$Builder",
+			"com.soklet.McpPromptRegistration$NamedBuilder",
+			"com.soklet.McpRateLimiterRegistry$Builder",
+			"com.soklet.McpRequestRejection$Builder",
+			"com.soklet.McpResourceDescriptor$Builder",
+			"com.soklet.McpResourceLink$Builder",
+			"com.soklet.McpResourceOutput$Builder",
+			"com.soklet.McpResourcePage$Builder",
+			"com.soklet.McpResourceRegistration$ExactBuilder",
+			"com.soklet.McpResourceRegistration$ExactNamedBuilder",
+			"com.soklet.McpResourceRegistration$TemplateBuilder",
+			"com.soklet.McpResourceRegistration$TemplateNamedBuilder",
+			"com.soklet.McpServer$Builder",
+			"com.soklet.McpTextContent$Builder",
+			"com.soklet.McpTextResourceContents$Builder",
+			"com.soklet.McpTokenBucketConfig$Builder",
+			"com.soklet.McpToolAnnotations$Builder",
+			"com.soklet.McpToolOutput$Builder",
+			"com.soklet.McpToolRegistration$Builder",
+			"com.soklet.McpToolRegistration$CompleteBuilder",
+			"com.soklet.McpToolRegistration$CompleteHandlerStage",
+			"com.soklet.McpToolRegistration$NamedBuilder",
+			"com.soklet.McpToolRegistration$OperationHandlerStage"
+	);
 
 	@Test
 	public void reviewedIncludeUnionIsNonemptyAndHasNoOverlap() throws IOException {
@@ -80,6 +127,13 @@ public class McpPublicJavadocTests {
 
 		Assertions.assertFalse(includes.typeNames().isEmpty(),
 				"The public MCP bootstrap requires a reviewed API inventory");
+		Assertions.assertTrue(includes.phaseFourTypeNames().containsAll(
+				PHASE_FOUR_NOT_THREAD_SAFE_MCP_TYPES),
+				() -> "Stale exact @NotThreadSafe contract entries: "
+						+ PHASE_FOUR_NOT_THREAD_SAFE_MCP_TYPES.stream()
+								.filter(type -> !includes.phaseFourTypeNames()
+										.contains(type))
+								.sorted().toList());
 	}
 
 	@Test
@@ -107,7 +161,7 @@ public class McpPublicJavadocTests {
 				StandardCharsets.UTF_8)) {
 			Iterable<? extends JavaFileObject> sources = fileManager.getJavaFileObjectsFromPaths(sourcePaths);
 			List<String> missingDocumentation = inspectDocumentation(compiler, fileManager, sources,
-					includes.typeNames());
+					includes.typeNames(), includes.phaseFourTypeNames());
 
 			Assertions.assertTrue(missingDocumentation.isEmpty(),
 					() -> "Missing public documentation:\n - " + String.join("\n - ", missingDocumentation));
@@ -119,7 +173,11 @@ public class McpPublicJavadocTests {
 		String source = """
 				package fixtures;
 
-				/** Complete fixture. */
+				/**
+				 * Complete fixture.
+				 *
+				 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+				 */
 				public class CompleteApi {
 					/** Extension field. */
 					protected int field;
@@ -130,7 +188,11 @@ public class McpPublicJavadocTests {
 					/** Method. */
 					public void method() {}
 
-					/** Nested extension type. */
+					/**
+					 * Nested extension type.
+					 *
+					 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+					 */
 					protected static class Nested {
 						/** Nested constructor. */
 						protected Nested() {}
@@ -139,13 +201,21 @@ public class McpPublicJavadocTests {
 						protected void extend() {}
 					}
 
-					/** Annotation type. */
+					/**
+					 * Annotation type.
+					 *
+					 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+					 */
 					public @interface Marker {
 						/** Annotation element. */
 						String value();
 					}
 
-					/** Enum type. */
+					/**
+					 * Enum type.
+					 *
+					 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+					 */
 					public enum Choice {
 						/** Enum constant. */
 						FIRST
@@ -155,6 +225,7 @@ public class McpPublicJavadocTests {
 					 * Record type.
 					 *
 					 * @param name record component and implicit-accessor documentation
+					 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 					 */
 					public record Item(String name) {
 						/** Explicit compact canonical constructor. */
@@ -171,6 +242,7 @@ public class McpPublicJavadocTests {
 					 * Record with compiler-provided constructor and accessor.
 					 *
 					 * @param value record component and implicit-member documentation
+					 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 					 */
 					public record ImplicitItem(String value) {}
 				}
@@ -244,6 +316,7 @@ public class McpPublicJavadocTests {
 		assertMissing(missingDocumentation, "MissingApi.Item.name [RECORD_COMPONENT:");
 		assertMissing(missingDocumentation, "MissingApi.Item.<init> [CONSTRUCTOR:");
 		assertMissing(missingDocumentation, "MissingApi.Item.name [METHOD:");
+		assertMissing(missingDocumentation, "(missing standard @author tag)");
 		Assertions.assertTrue(missingDocumentation.stream().noneMatch(missing ->
 				missing.contains("values") || missing.contains("valueOf") || missing.contains("toString") ||
 						missing.contains("hashCode") || missing.contains("equals")),
@@ -259,14 +332,16 @@ public class McpPublicJavadocTests {
 		try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(null, Locale.ROOT,
 				StandardCharsets.UTF_8)) {
 			return inspectDocumentation(compiler, fileManager,
-					List.of(new StringJavaFileObject(binaryName, source)), typeNames);
+					List.of(new StringJavaFileObject(binaryName, source)), typeNames,
+					Set.of());
 		}
 	}
 
 	private static List<String> inspectDocumentation(JavaCompiler compiler,
-															 StandardJavaFileManager fileManager,
-															 Iterable<? extends JavaFileObject> sources,
-															 Set<String> typeNames) throws IOException {
+														 StandardJavaFileManager fileManager,
+														 Iterable<? extends JavaFileObject> sources,
+														 Set<String> typeNames,
+														 Set<String> phaseFourTypeNames) throws IOException {
 		DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
 		List<String> options = List.of(
 				"--release", "17",
@@ -306,6 +381,12 @@ public class McpPublicJavadocTests {
 				continue;
 			}
 
+			requireStandardAuthor(type, docTrees, missingDocumentation);
+			if (typeName.startsWith("com.soklet.Mcp")
+					|| typeName.startsWith("com.soklet.annotation.Mcp"))
+				requireMcpThreadSafetyMarker(typeName, type,
+						phaseFourTypeNames.contains(typeName),
+						missingDocumentation);
 			inspectExportedType(type, docTrees, sourceAuthoredDeclarations, inspected, missingDocumentation);
 		}
 
@@ -454,12 +535,61 @@ public class McpPublicJavadocTests {
 	}
 
 	private static void requireDocumentation(Element element,
-															 DocTrees docTrees,
-															 List<String> missingDocumentation) {
+														 DocTrees docTrees,
+														 List<String> missingDocumentation) {
 		DocCommentTree comment = docTrees.getDocCommentTree(element);
 
 		if (comment == null || comment.toString().isBlank())
 			missingDocumentation.add(describe(element));
+	}
+
+	private static void requireStandardAuthor(TypeElement type,
+			DocTrees docTrees, List<String> missingDocumentation) {
+		DocCommentTree comment = docTrees.getDocCommentTree(type);
+		boolean hasStandardAuthor = comment != null && comment.getBlockTags()
+				.stream()
+				.filter(AuthorTree.class::isInstance)
+				.map(AuthorTree.class::cast)
+				.map(author -> author.getName().stream()
+						.map(Object::toString)
+						.reduce("", String::concat)
+						.trim())
+				.anyMatch(STANDARD_AUTHOR::equals);
+
+		if (!hasStandardAuthor)
+			missingDocumentation.add(describe(type)
+					+ " (missing standard @author tag)");
+	}
+
+	private static void requireMcpThreadSafetyMarker(String binaryName,
+			TypeElement type, boolean phaseFour,
+			List<String> missingDocumentation) {
+		List<String> actualMarkers = type.getAnnotationMirrors().stream()
+				.map(annotation -> annotation.getAnnotationType().toString())
+				.filter(annotationType -> annotationType.equals(THREAD_SAFE)
+						|| annotationType.equals(NOT_THREAD_SAFE))
+				.sorted()
+				.toList();
+		boolean markerForbidden = type.getKind() == ElementKind.ENUM
+				|| type.getKind() == ElementKind.ANNOTATION_TYPE;
+		if (markerForbidden) {
+			if (!actualMarkers.isEmpty())
+				missingDocumentation.add(describe(type) + " (expected no "
+						+ "thread-safety marker, found " + actualMarkers + ")");
+			return;
+		}
+
+		if (phaseFour) {
+			List<String> expectedMarkers = List.of(
+					PHASE_FOUR_NOT_THREAD_SAFE_MCP_TYPES.contains(binaryName)
+							? NOT_THREAD_SAFE : THREAD_SAFE);
+			if (!expectedMarkers.equals(actualMarkers))
+				missingDocumentation.add(describe(type) + " (expected exact "
+						+ "Phase 4 thread-safety markers " + expectedMarkers
+						+ ", found " + actualMarkers + ")");
+		} else if (actualMarkers.size() != 1)
+			missingDocumentation.add(describe(type) + " (requires exactly one "
+					+ "thread-safety annotation, found " + actualMarkers + ")");
 	}
 
 	private static String describe(Element element) {
@@ -477,6 +607,7 @@ public class McpPublicJavadocTests {
 
 	private static ReviewedIncludes loadReviewedIncludes() throws IOException {
 		Map<String, Path> owners = new LinkedHashMap<>();
+		Set<String> phaseFourTypeNames = new LinkedHashSet<>();
 
 		for (Path includeFile : INCLUDE_FILES) {
 			Assertions.assertTrue(Files.isRegularFile(includeFile),
@@ -496,10 +627,13 @@ public class McpPublicJavadocTests {
 				Path previousOwner = owners.putIfAbsent(entry, includeFile);
 				Assertions.assertNull(previousOwner,
 						() -> "MCP API type '" + entry + "' appears in both " + previousOwner + " and " + includeFile);
+				if (includeFile.equals(INCLUDE_FILES.get(0)))
+					phaseFourTypeNames.add(entry);
 			}
 		}
 
-		return new ReviewedIncludes(new LinkedHashSet<>(owners.keySet()));
+		return new ReviewedIncludes(new LinkedHashSet<>(owners.keySet()),
+				Set.copyOf(phaseFourTypeNames));
 	}
 
 	private static String formatDiagnostic(Diagnostic<? extends JavaFileObject> diagnostic) {
@@ -528,5 +662,6 @@ public class McpPublicJavadocTests {
 		}
 	}
 
-	private record ReviewedIncludes(Set<String> typeNames) {}
+	private record ReviewedIncludes(Set<String> typeNames,
+			Set<String> phaseFourTypeNames) {}
 }

@@ -76,6 +76,21 @@ public final class McpGeneratedEndpointProviderLoader {
 	public static List<@NonNull McpEndpoint> loadAll(
 			@NonNull ClassLoader classLoader,
 			@NonNull InstanceProvider instanceProvider) {
+		return List.copyOf(loadAllWithProvenance(classLoader,
+				instanceProvider).values());
+	}
+
+	/**
+	 * Loads every indexed endpoint and its exact source-class identity.
+	 *
+	 * @param classLoader class loader used for index and provider discovery
+	 * @param instanceProvider application endpoint-instance provider
+	 * @return immutable class-to-endpoint mappings ordered by endpoint binary name
+	 */
+	@NonNull
+	public static Map<@NonNull Class<?>, @NonNull McpEndpoint>
+			loadAllWithProvenance(@NonNull ClassLoader classLoader,
+					@NonNull InstanceProvider instanceProvider) {
 		requireNonNull(classLoader);
 		requireNonNull(instanceProvider);
 		Map<String, McpGeneratedEndpointProviderIndex.Entry> entries =
@@ -83,11 +98,14 @@ public final class McpGeneratedEndpointProviderLoader {
 		if (entries.isEmpty())
 			throw new IllegalStateException(
 					"No generated MCP endpoint descriptors were found.");
-		List<McpEndpoint> endpoints = new ArrayList<>(entries.size());
-		for (McpGeneratedEndpointProviderIndex.Entry entry : entries.values())
-			endpoints.add(loadEndpoint(classLoader, entry, null,
-					instanceProvider));
-		return List.copyOf(endpoints);
+		Map<Class<?>, McpEndpoint> endpoints = new LinkedHashMap<>();
+		for (McpGeneratedEndpointProviderIndex.Entry entry : entries.values()) {
+			LoadedEndpoint loadedEndpoint = loadEndpoint(classLoader, entry, null,
+					instanceProvider);
+			endpoints.put(loadedEndpoint.endpointClass(),
+					loadedEndpoint.endpoint());
+		}
+		return Collections.unmodifiableMap(endpoints);
 	}
 
 	/**
@@ -101,6 +119,22 @@ public final class McpGeneratedEndpointProviderLoader {
 	public static List<@NonNull McpEndpoint> loadClasses(
 			@NonNull List<@NonNull Class<?>> endpointClasses,
 			@NonNull InstanceProvider instanceProvider) {
+		return List.copyOf(loadClassesWithProvenance(endpointClasses,
+				instanceProvider).values());
+	}
+
+	/**
+	 * Loads selected generated endpoints and their exact source-class identities.
+	 *
+	 * @param endpointClasses endpoint classes in caller-selected order
+	 * @param instanceProvider application endpoint-instance provider
+	 * @return immutable class-to-endpoint mappings in the supplied order
+	 */
+	@NonNull
+	public static Map<@NonNull Class<?>, @NonNull McpEndpoint>
+			loadClassesWithProvenance(
+					@NonNull List<@NonNull Class<?>> endpointClasses,
+					@NonNull InstanceProvider instanceProvider) {
 		requireNonNull(endpointClasses);
 		requireNonNull(instanceProvider);
 		if (endpointClasses.isEmpty())
@@ -111,7 +145,7 @@ public final class McpGeneratedEndpointProviderLoader {
 		IdentityHashMap<ClassLoader,
 				Map<String, McpGeneratedEndpointProviderIndex.Entry>>
 				entriesByLoader = new IdentityHashMap<>();
-		List<McpEndpoint> endpoints = new ArrayList<>(endpointClasses.size());
+		Map<Class<?>, McpEndpoint> endpoints = new LinkedHashMap<>();
 
 		for (Class<?> endpointClass : endpointClasses) {
 			requireNonNull(endpointClass);
@@ -129,11 +163,13 @@ public final class McpGeneratedEndpointProviderLoader {
 				throw new IllegalArgumentException(
 						"No generated MCP endpoint descriptor exists for '"
 								+ endpointClass.getName() + "'.");
-			endpoints.add(loadEndpoint(classLoader, entry, endpointClass,
-					instanceProvider));
+			LoadedEndpoint loadedEndpoint = loadEndpoint(classLoader, entry,
+					endpointClass, instanceProvider);
+			endpoints.put(loadedEndpoint.endpointClass(),
+					loadedEndpoint.endpoint());
 		}
 
-		return List.copyOf(endpoints);
+		return Collections.unmodifiableMap(endpoints);
 	}
 
 	@NonNull
@@ -205,7 +241,7 @@ public final class McpGeneratedEndpointProviderLoader {
 	}
 
 	@NonNull
-	private static McpEndpoint loadEndpoint(@NonNull ClassLoader classLoader,
+	private static LoadedEndpoint loadEndpoint(@NonNull ClassLoader classLoader,
 			McpGeneratedEndpointProviderIndex.@NonNull Entry entry,
 			@Nullable Class<?> selectedEndpointClass,
 			@NonNull InstanceProvider instanceProvider) {
@@ -269,7 +305,7 @@ public final class McpGeneratedEndpointProviderLoader {
 					schemaDigestsMethod.invoke(provider),
 					"The generated MCP endpoint provider returned null schema digests.");
 			verifySchemaDigests(entry, endpoint, schemaDigests);
-			return endpoint;
+			return new LoadedEndpoint(endpointClass, endpoint);
 		} catch (IllegalStateException exception) {
 			throw exception;
 		} catch (InvocationTargetException exception) {
@@ -283,6 +319,14 @@ public final class McpGeneratedEndpointProviderLoader {
 					"Unable to load generated MCP endpoint descriptor for '"
 							+ entry.endpointClassName() + "'.",
 					exception);
+		}
+	}
+
+	private record LoadedEndpoint(@NonNull Class<?> endpointClass,
+			@NonNull McpEndpoint endpoint) {
+		private LoadedEndpoint {
+			requireNonNull(endpointClass);
+			requireNonNull(endpoint);
 		}
 	}
 

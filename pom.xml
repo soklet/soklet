@@ -371,6 +371,18 @@
                                     <goal>cmp</goal>
                                 </goals>
                             </execution>
+                            <execution>
+                                <id>mcp-api-freeze</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>cmp</goal>
+                                </goals>
+                                <configuration>
+                                    <parameter>
+                                        <onlyModified>false</onlyModified>
+                                    </parameter>
+                                </configuration>
+                            </execution>
                         </executions>
                         <configuration>
                             <oldVersion>

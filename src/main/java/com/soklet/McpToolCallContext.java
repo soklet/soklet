@@ -21,7 +21,12 @@ import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Immutable arguments for one MCP tool invocation.
+ * Shallowly immutable arguments for one MCP tool invocation.
+ * <p>
+ * The context carrier is safe for concurrent access. The converted argument
+ * value is application-defined and retains its own mutability and thread-safety
+ * contract; this type's {@link ThreadSafe} annotation does not make that value
+ * thread-safe.
  *
  * @param <A> bound argument type
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -29,7 +34,9 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 public interface McpToolCallContext<A> {
 	/**
-	 * Returns arguments converted to the registration's declared Java type.
+	 * Returns arguments converted to the registration's declared Java type. The
+	 * returned application value retains its own mutability and thread-safety
+	 * contract.
 	 *
 	 * @return converted arguments
 	 */

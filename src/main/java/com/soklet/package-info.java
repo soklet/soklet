@@ -17,6 +17,12 @@
 /**
  * Core Soklet contracts and functionality.
  * <p>
+ * Includes ordinary HTTP routing, dedicated Server-Sent Events support, and a
+ * dedicated {@link com.soklet.McpServer} for Model Context Protocol
+ * 2026-07-28 endpoints. Each configured server owns an independent listener;
+ * {@link com.soklet.SokletConfig} composes their lifecycle without mounting
+ * MCP inside the ordinary HTTP or SSE server.
+ * <p>
  * Full documentation is available at <a href="https://www.soklet.com">https://www.soklet.com</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>

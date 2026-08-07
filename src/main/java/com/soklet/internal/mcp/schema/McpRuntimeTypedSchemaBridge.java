@@ -64,6 +64,28 @@ public final class McpRuntimeTypedSchemaBridge<T> {
 	private final McpJsonObject schemaDocument;
 
 	/**
+	 * Compiles an intrinsic binding for a general MCP JSON value.
+	 *
+	 * <p>This internal bridge is used for typed multi-round-trip input-response
+	 * lookup. Unlike the tool-specific factories, it imposes neither an object
+	 * root nor tool-output use constraints.
+	 *
+	 * @param declaredType requested Java value type
+	 * @param <T> requested Java value type
+	 * @return immutable compiled value bridge
+	 * @throws NullPointerException if {@code declaredType} is null
+	 * @throws IllegalArgumentException if the type is unsupported, cannot be
+	 * bound, or exceeds a production compilation limit
+	 */
+	@NonNull
+	public static <T> McpRuntimeTypedSchemaBridge<T> compileJsonValue(
+			@NonNull Type declaredType) {
+		McpCompiledRuntimeTypedSchema<T> compiledSchema = compiler()
+				.compileSchema(requireNonNull(declaredType));
+		return new McpRuntimeTypedSchemaBridge<>(compiledSchema);
+	}
+
+	/**
 	 * Compiles a Java type as an MCP tool input schema and intrinsic binding.
 	 *
 	 * @param declaredType the tool's declared Java argument type

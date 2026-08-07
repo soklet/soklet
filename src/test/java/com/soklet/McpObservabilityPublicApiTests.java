@@ -16,14 +16,20 @@
 
 package com.soklet;
 
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.AnnotatedParameterizedType;
+import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Method;
+import java.lang.reflect.ParameterizedType;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -42,6 +48,11 @@ public class McpObservabilityPublicApiTests {
 				"didFinishMcpRequestHandling", McpRequestContext.class,
 				McpRequestOutcome.class, McpJsonRpcError.class, Duration.class,
 				List.class);
+		Method didStop = LifecycleObserver.class.getMethod(
+				"didStopMcpServer", McpServer.class, McpShutdownOutcome.class);
+		Method getDiagnostics = McpServer.class.getMethod("getDiagnostics");
+		Method getOperationName = McpRequestContext.class.getMethod(
+				"getOperationName");
 		Method didRecord = MetricsCollector.class.getMethod(
 				"didRecordMcpMetricsEvent", McpMetricsEvent.class);
 		Method getMetrics = MetricsCollector.Snapshot.class.getMethod(
@@ -54,6 +65,46 @@ public class McpObservabilityPublicApiTests {
 
 		Assertions.assertTrue(didStart.isDefault());
 		Assertions.assertTrue(didFinish.isDefault());
+		Assertions.assertTrue(didStop.isDefault());
+		Assertions.assertEquals(void.class, didStop.getReturnType());
+		for (AnnotatedType parameter : didStop.getAnnotatedParameterTypes())
+			Assertions.assertTrue(parameter.isAnnotationPresent(NonNull.class));
+		Assertions.assertEquals(McpServerDiagnostics.class,
+				getDiagnostics.getReturnType());
+		Assertions.assertTrue(getDiagnostics.getAnnotatedReturnType()
+				.isAnnotationPresent(NonNull.class));
+		Assertions.assertEquals(Optional.class, getOperationName.getReturnType());
+		Assertions.assertInstanceOf(ParameterizedType.class,
+				getOperationName.getGenericReturnType());
+		ParameterizedType operationNameType = (ParameterizedType)
+				getOperationName.getGenericReturnType();
+		Assertions.assertArrayEquals(new Object[]{String.class},
+				operationNameType.getActualTypeArguments());
+		AnnotatedType annotatedOperationName =
+				getOperationName.getAnnotatedReturnType();
+		Assertions.assertTrue(annotatedOperationName
+				.isAnnotationPresent(NonNull.class));
+		Assertions.assertInstanceOf(AnnotatedParameterizedType.class,
+				annotatedOperationName);
+		AnnotatedType operationNameValue = ((AnnotatedParameterizedType)
+				annotatedOperationName).getAnnotatedActualTypeArguments()[0];
+		Assertions.assertEquals(String.class, operationNameValue.getType());
+		Assertions.assertTrue(operationNameValue
+				.isAnnotationPresent(NonNull.class));
+
+		AnnotatedType[] finishParameters = didFinish.getAnnotatedParameterTypes();
+		Assertions.assertTrue(finishParameters[0]
+				.isAnnotationPresent(NonNull.class));
+		Assertions.assertTrue(finishParameters[2]
+				.isAnnotationPresent(Nullable.class));
+		Assertions.assertTrue(finishParameters[4]
+				.isAnnotationPresent(NonNull.class));
+		Assertions.assertInstanceOf(AnnotatedParameterizedType.class,
+				finishParameters[4]);
+		AnnotatedType throwableType = ((AnnotatedParameterizedType)
+				finishParameters[4]).getAnnotatedActualTypeArguments()[0];
+		Assertions.assertEquals(Throwable.class, throwableType.getType());
+		Assertions.assertTrue(throwableType.isAnnotationPresent(NonNull.class));
 		Assertions.assertTrue(didRecord.isDefault());
 		Assertions.assertEquals(McpMetricsSnapshot.class,
 				getMetrics.getReturnType());
@@ -88,7 +139,7 @@ public class McpObservabilityPublicApiTests {
 	}
 
 	@Test
-	public void provisionalVocabulariesRemainFixedAndBounded() {
+	public void provisionalVocabulariesHaveReviewedCurrentBounds() {
 		Assertions.assertEquals("<unrecognized>",
 				McpMetricsEvent.UNRECOGNIZED_JSON_RPC_METHOD);
 		Assertions.assertArrayEquals(new McpRequestOutcome[]{

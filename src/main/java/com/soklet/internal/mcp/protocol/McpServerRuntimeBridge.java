@@ -19,8 +19,11 @@ package com.soklet.internal.mcp.protocol;
 import com.soklet.CorsAuthorizer;
 import com.soklet.McpAdmissionDecision;
 import com.soklet.McpAdmissionIdentity;
+import com.soklet.McpClientCapability;
 import com.soklet.McpEndpoint;
 import com.soklet.McpImplementation;
+import com.soklet.McpInputRequest;
+import com.soklet.McpInputRequiredResult;
 import com.soklet.McpJsonArray;
 import com.soklet.McpJsonBoolean;
 import com.soklet.McpJsonNull;
@@ -32,6 +35,7 @@ import com.soklet.McpRequestContext;
 import com.soklet.McpRequestId;
 import com.soklet.McpRequestOutcome;
 import com.soklet.McpRequestRejection;
+import com.soklet.McpRequestStateMode;
 import com.soklet.Request;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -42,6 +46,7 @@ import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -424,11 +429,15 @@ public final class McpServerRuntimeBridge {
 				publicInformation.getWebsiteUrl(), List.of(),
 				com.soklet.internal.mcp.protocol.McpJsonObject.empty());
 		McpNormalizedEndpoint.Builder endpointBuilder =
-				McpNormalizedEndpoint.withServerInformation(implementation);
+				McpNormalizedEndpoint.withServerInformation(implementation)
+						.includeServerInformation(
+								publicEndpoint.isServerInformationIncluded());
 		publicEndpoint.getInstructions().ifPresent(endpointBuilder::instructions);
 
 		Map<String, McpApplicationToolRoute> toolRoutes = new LinkedHashMap<>();
 		for (ToolPlan toolPlan : endpointPlan.toolPlans()) {
+			McpInputRequestPlan inputRequestPlan = toInternalInputRequestPlan(
+					toolPlan.inputRequestDeclarations());
 			McpNormalizedToolDescriptor descriptor = new McpNormalizedToolDescriptor(
 					toolPlan.name(),
 					(com.soklet.internal.mcp.protocol.McpJsonObject)
@@ -441,15 +450,16 @@ public final class McpServerRuntimeBridge {
 					(com.soklet.internal.mcp.protocol.McpJsonObject)
 							toInternal(toolPlan.metadata()));
 			endpointBuilder.tool(McpNormalizedOperation.tool(
-					descriptor, toolPlan.mirroredHeaderPlan()));
+					descriptor, inputRequestPlan, toolPlan.mirroredHeaderPlan()));
 			McpRateLimiter internalToolRateLimiter = context ->
 					toInternalRateLimitDecision(requireNonNull(
 							toolPlan.toolRateLimitAdapter().acquire(
 									toRateLimitInput(context, publicEndpoint)),
 							"The MCP tool rate limiter returned null."));
 			McpApplicationToolRoute route = new McpApplicationToolRoute(
-					invocation -> invokeTool(toolPlan, invocation, publicEndpoint),
-					internalToolRateLimiter);
+					invocation -> invokeTool(toolPlan, inputRequestPlan, invocation,
+							publicEndpoint),
+					internalToolRateLimiter, inputRequestPlan);
 			if (toolRoutes.putIfAbsent(toolPlan.name(), route) != null)
 				throw new IllegalArgumentException(
 						"Duplicate tool plan '" + toolPlan.name() + "'.");
@@ -457,6 +467,8 @@ public final class McpServerRuntimeBridge {
 
 		Map<String, McpApplicationPromptRoute> promptRoutes = new LinkedHashMap<>();
 		for (PromptPlan promptPlan : endpointPlan.promptPlans()) {
+			McpInputRequestPlan inputRequestPlan = toInternalInputRequestPlan(
+					promptPlan.inputRequestDeclarations());
 			List<McpNormalizedPromptArgumentDescriptor> arguments = promptPlan
 					.arguments().stream()
 					.map(argument -> new McpNormalizedPromptArgumentDescriptor(
@@ -470,9 +482,12 @@ public final class McpServerRuntimeBridge {
 									toInternal(promptPlan.descriptorFields()),
 							(com.soklet.internal.mcp.protocol.McpJsonObject)
 									toInternal(promptPlan.metadata()));
-			endpointBuilder.prompt(McpNormalizedOperation.prompt(descriptor));
+			endpointBuilder.prompt(McpNormalizedOperation.prompt(
+					descriptor, inputRequestPlan));
 			McpApplicationPromptRoute route = new McpApplicationPromptRoute(
-					invocation -> invokePrompt(promptPlan, invocation, publicEndpoint));
+					invocation -> invokePrompt(promptPlan, inputRequestPlan,
+							invocation, publicEndpoint),
+					inputRequestPlan);
 			if (promptRoutes.putIfAbsent(promptPlan.name(), route) != null)
 				throw new IllegalArgumentException(
 						"Duplicate prompt plan '" + promptPlan.name() + "'.");
@@ -490,12 +505,16 @@ public final class McpServerRuntimeBridge {
 		List<McpApplicationResourceTemplateRoute> resourceTemplateRoutes =
 				new ArrayList<>();
 		for (ResourcePlan resourcePlan : endpointPlan.resourcePlans()) {
+			McpInputRequestPlan inputRequestPlan = toInternalInputRequestPlan(
+					resourcePlan.inputRequestDeclarations());
 			McpResourceCachePolicy internalCachePolicy =
 					toInternal(resourcePlan.readCachePolicy());
 			McpApplicationResourceReadRoute readRoute =
 					new McpApplicationResourceReadRoute(
-							invocation -> invokeResource(resourcePlan, invocation,
-									publicEndpoint), internalCachePolicy);
+							invocation -> invokeResource(resourcePlan, inputRequestPlan,
+									invocation,
+									publicEndpoint), internalCachePolicy,
+							inputRequestPlan);
 			if (resourcePlan.addressKind() == ResourceAddressKind.URI) {
 				McpNormalizedResourceDescriptor descriptor =
 						new McpNormalizedResourceDescriptor(resourcePlan.address(),
@@ -505,7 +524,7 @@ public final class McpServerRuntimeBridge {
 								(com.soklet.internal.mcp.protocol.McpJsonObject)
 										toInternal(resourcePlan.metadata()),
 								internalCachePolicy);
-				endpointBuilder.exactResource(descriptor);
+				endpointBuilder.exactResource(descriptor, inputRequestPlan);
 				if (exactResourceRoutes.putIfAbsent(resourcePlan.address(), readRoute)
 						!= null)
 					throw new IllegalArgumentException(
@@ -520,7 +539,7 @@ public final class McpServerRuntimeBridge {
 								(com.soklet.internal.mcp.protocol.McpJsonObject)
 										toInternal(resourcePlan.metadata()),
 								internalCachePolicy);
-				endpointBuilder.resourceTemplate(descriptor);
+				endpointBuilder.resourceTemplate(descriptor, inputRequestPlan);
 				resourceTemplateRoutes.add(
 						new McpApplicationResourceTemplateRoute(
 								resourcePlan.address(), readRoute));
@@ -721,7 +740,28 @@ public final class McpServerRuntimeBridge {
 			@NonNull McpJsonObject metadata,
 			boolean mirrorStructuredContentAsText,
 			@NonNull RateLimitAdapter toolRateLimitAdapter,
+			@NonNull List<com.soklet.@NonNull McpInputRequestDeclaration>
+					inputRequestDeclarations,
+			@NonNull McpRequestStateMode requestStateMode,
 			@NonNull ToolInvoker invoker) {
+		/**
+		 * Creates a tool plan without multi-round-trip declarations.
+		 */
+		public ToolPlan(@NonNull String name,
+				@NonNull McpJsonObject inputSchemaDocument,
+				@NonNull McpMirroredHeaderPlan mirroredHeaderPlan,
+				@NonNull Optional<@NonNull McpJsonObject> outputSchemaDocument,
+				@NonNull McpJsonObject descriptorFields,
+				@NonNull McpJsonObject metadata,
+				boolean mirrorStructuredContentAsText,
+				@NonNull RateLimitAdapter toolRateLimitAdapter,
+				@NonNull ToolInvoker invoker) {
+			this(name, inputSchemaDocument, mirroredHeaderPlan,
+					outputSchemaDocument, descriptorFields, metadata,
+					mirrorStructuredContentAsText, toolRateLimitAdapter,
+					List.of(), McpRequestStateMode.NONE, invoker);
+		}
+
 		public ToolPlan {
 			name = McpProtocolSupport.requireNonBlank(name, "Tool name");
 			requireNonNull(inputSchemaDocument);
@@ -730,6 +770,12 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(descriptorFields);
 			requireNonNull(metadata);
 			requireNonNull(toolRateLimitAdapter);
+			inputRequestDeclarations = List.copyOf(
+					requireNonNull(inputRequestDeclarations));
+			for (com.soklet.McpInputRequestDeclaration declaration
+					: inputRequestDeclarations)
+				requireNonNull(declaration);
+			requireNonNull(requestStateMode);
 			requireNonNull(invoker);
 		}
 
@@ -754,12 +800,33 @@ public final class McpServerRuntimeBridge {
 			@NonNull List<@NonNull PromptArgumentPlan> arguments,
 			@NonNull McpJsonObject descriptorFields,
 			@NonNull McpJsonObject metadata,
+			@NonNull List<com.soklet.@NonNull McpInputRequestDeclaration>
+					inputRequestDeclarations,
+			@NonNull McpRequestStateMode requestStateMode,
 			@NonNull PromptInvoker invoker) {
+		/**
+		 * Creates a prompt plan without multi-round-trip declarations.
+		 */
+		public PromptPlan(@NonNull String name,
+				@NonNull List<@NonNull PromptArgumentPlan> arguments,
+				@NonNull McpJsonObject descriptorFields,
+				@NonNull McpJsonObject metadata,
+				@NonNull PromptInvoker invoker) {
+			this(name, arguments, descriptorFields, metadata, List.of(),
+					McpRequestStateMode.NONE, invoker);
+		}
+
 		public PromptPlan {
 			name = McpProtocolSupport.requireNonBlank(name, "Prompt name");
 			arguments = List.copyOf(requireNonNull(arguments));
 			requireNonNull(descriptorFields);
 			requireNonNull(metadata);
+			inputRequestDeclarations = List.copyOf(
+					requireNonNull(inputRequestDeclarations));
+			for (com.soklet.McpInputRequestDeclaration declaration
+					: inputRequestDeclarations)
+				requireNonNull(declaration);
+			requireNonNull(requestStateMode);
 			requireNonNull(invoker);
 		}
 
@@ -847,7 +914,23 @@ public final class McpServerRuntimeBridge {
 			@NonNull McpJsonObject descriptorFields,
 			@NonNull McpJsonObject metadata,
 			@NonNull CachePlan readCachePolicy,
+			@NonNull List<com.soklet.@NonNull McpInputRequestDeclaration>
+					inputRequestDeclarations,
+			@NonNull McpRequestStateMode requestStateMode,
 			@NonNull ResourceInvoker invoker) {
+		/**
+		 * Creates a resource plan without multi-round-trip declarations.
+		 */
+		public ResourcePlan(@NonNull ResourceAddressKind addressKind,
+				@NonNull String address, @NonNull String name,
+				@NonNull McpJsonObject descriptorFields,
+				@NonNull McpJsonObject metadata,
+				@NonNull CachePlan readCachePolicy,
+				@NonNull ResourceInvoker invoker) {
+			this(addressKind, address, name, descriptorFields, metadata,
+					readCachePolicy, List.of(), McpRequestStateMode.NONE, invoker);
+		}
+
 		/** Validates the erased resource plan. */
 		public ResourcePlan {
 			requireNonNull(addressKind);
@@ -857,6 +940,12 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(descriptorFields);
 			requireNonNull(metadata);
 			requireNonNull(readCachePolicy);
+			inputRequestDeclarations = List.copyOf(
+					requireNonNull(inputRequestDeclarations));
+			for (com.soklet.McpInputRequestDeclaration declaration
+					: inputRequestDeclarations)
+				requireNonNull(declaration);
+			requireNonNull(requestStateMode);
 			requireNonNull(invoker);
 		}
 
@@ -1031,6 +1120,7 @@ public final class McpServerRuntimeBridge {
 	@ThreadSafe
 	public sealed interface ResourceInvocationResult
 			permits ResourceInvocationResult.Complete,
+			ResourceInvocationResult.InputRequired,
 			ResourceInvocationResult.InvalidInput,
 			ResourceInvocationResult.JsonRpcError {
 		/** @return completed resource result */
@@ -1038,6 +1128,12 @@ public final class McpServerRuntimeBridge {
 		static Complete complete(@NonNull McpJsonObject resultFields,
 				@NonNull McpJsonObject metadata) {
 			return new Complete(resultFields, metadata);
+		}
+
+		/** @return input-required resource result */
+		@NonNull
+		static InputRequired inputRequired(@NonNull McpInputRequiredResult result) {
+			return new InputRequired(result);
 		}
 
 		/** @return pre-handler input-binding failure */
@@ -1065,6 +1161,20 @@ public final class McpServerRuntimeBridge {
 			public Complete {
 				requireNonNull(resultFields);
 				requireNonNull(metadata);
+			}
+		}
+
+		/**
+		 * Input-required resource-read result awaiting a client request.
+		 *
+		 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+		 */
+		@ThreadSafe
+		record InputRequired(@NonNull McpInputRequiredResult result)
+				implements ResourceInvocationResult {
+			/** Validates the input-required result. */
+			public InputRequired {
+				requireNonNull(result);
 			}
 		}
 
@@ -1295,7 +1405,8 @@ public final class McpServerRuntimeBridge {
 	 */
 	@ThreadSafe
 	public sealed interface ToolInvocationResult permits ToolInvocationResult.Complete,
-			ToolInvocationResult.Structured, ToolInvocationResult.InvalidInput {
+			ToolInvocationResult.Structured, ToolInvocationResult.InputRequired,
+			ToolInvocationResult.InvalidInput {
 		@NonNull
 		static Complete complete(@NonNull McpJsonObject resultFields,
 				@NonNull McpJsonObject metadata) {
@@ -1306,6 +1417,12 @@ public final class McpServerRuntimeBridge {
 		static Structured structured(@NonNull McpJsonValue structuredContent,
 				@NonNull McpJsonObject metadata) {
 			return new Structured(structuredContent, metadata);
+		}
+
+		/** @return input-required tool result */
+		@NonNull
+		static InputRequired inputRequired(@NonNull McpInputRequiredResult result) {
+			return new InputRequired(result);
 		}
 
 		@NonNull
@@ -1343,6 +1460,20 @@ public final class McpServerRuntimeBridge {
 		}
 
 		/**
+		 * Input-required tool result awaiting a client request.
+		 *
+		 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+		 */
+		@ThreadSafe
+		record InputRequired(@NonNull McpInputRequiredResult result)
+				implements ToolInvocationResult {
+			/** Validates the input-required result. */
+			public InputRequired {
+				requireNonNull(result);
+			}
+		}
+
+		/**
 		 * Input validation or binding failed before the typed handler ran.
 		 *
 		 * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -1361,6 +1492,7 @@ public final class McpServerRuntimeBridge {
 	@ThreadSafe
 	public sealed interface PromptInvocationResult
 			permits PromptInvocationResult.Complete,
+			PromptInvocationResult.InputRequired,
 			PromptInvocationResult.InvalidInput {
 		/**
 		 * Creates a completed prompt result.
@@ -1373,6 +1505,12 @@ public final class McpServerRuntimeBridge {
 		static Complete complete(@NonNull McpJsonObject resultFields,
 				@NonNull McpJsonObject metadata) {
 			return new Complete(resultFields, metadata);
+		}
+
+		/** @return input-required prompt result */
+		@NonNull
+		static InputRequired inputRequired(@NonNull McpInputRequiredResult result) {
+			return new InputRequired(result);
 		}
 
 		/** @return invalid-input marker */
@@ -1396,6 +1534,20 @@ public final class McpServerRuntimeBridge {
 			public Complete {
 				requireNonNull(resultFields);
 				requireNonNull(metadata);
+			}
+		}
+
+		/**
+		 * Input-required prompt result awaiting a client request.
+		 *
+		 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+		 */
+		@ThreadSafe
+		record InputRequired(@NonNull McpInputRequiredResult result)
+				implements PromptInvocationResult {
+			/** Validates the input-required result. */
+			public InputRequired {
+				requireNonNull(result);
 			}
 		}
 
@@ -1625,6 +1777,7 @@ public final class McpServerRuntimeBridge {
 
 	@NonNull
 	private static McpWireResult invokeTool(@NonNull ToolPlan toolPlan,
+			@NonNull McpInputRequestPlan inputRequestPlan,
 			@NonNull McpApplicationInvocation invocation,
 			@NonNull McpEndpoint publicEndpoint) throws Exception {
 		McpJsonRpcMessage.Request request = invocation.request();
@@ -1654,6 +1807,11 @@ public final class McpServerRuntimeBridge {
 
 		if (result instanceof ToolInvocationResult.InvalidInput)
 			throw new McpInvalidApplicationInputException();
+		if (result instanceof ToolInvocationResult.InputRequired inputRequired)
+			return inputRequiredResult(inputRequired.result(),
+					inputRequestPlan,
+					toolPlan.requestStateMode(), request.method(),
+					requestMetadata.clientCapabilities());
 
 		com.soklet.internal.mcp.protocol.McpJsonObject resultFields;
 		com.soklet.internal.mcp.protocol.McpJsonObject resultMetadata;
@@ -1730,6 +1888,7 @@ public final class McpServerRuntimeBridge {
 
 	@NonNull
 	private static McpWireResult invokePrompt(@NonNull PromptPlan promptPlan,
+			@NonNull McpInputRequestPlan inputRequestPlan,
 			@NonNull McpApplicationInvocation invocation,
 			@NonNull McpEndpoint publicEndpoint) throws Exception {
 		McpJsonRpcMessage.Request request = invocation.request();
@@ -1759,6 +1918,11 @@ public final class McpServerRuntimeBridge {
 
 		if (result instanceof PromptInvocationResult.InvalidInput)
 			throw new McpInvalidApplicationInputException();
+		if (result instanceof PromptInvocationResult.InputRequired inputRequired)
+			return inputRequiredResult(inputRequired.result(),
+					inputRequestPlan,
+					promptPlan.requestStateMode(), request.method(),
+					requestMetadata.clientCapabilities());
 		if (!(result instanceof PromptInvocationResult.Complete complete))
 			throw new IllegalArgumentException(
 					"Unsupported MCP prompt invocation result.");
@@ -1777,6 +1941,7 @@ public final class McpServerRuntimeBridge {
 
 	@NonNull
 	private static McpWireResult invokeResource(@NonNull ResourcePlan resourcePlan,
+			@NonNull McpInputRequestPlan inputRequestPlan,
 			@NonNull McpApplicationResourceReadInvocation internalInvocation,
 			@NonNull McpEndpoint publicEndpoint) throws Exception {
 		McpApplicationInvocation invocation = internalInvocation.invocation();
@@ -1804,6 +1969,11 @@ public final class McpServerRuntimeBridge {
 			throw new McpInvalidApplicationInputException();
 		if (result instanceof ResourceInvocationResult.JsonRpcError error)
 			throw new McpApplicationJsonRpcException(toInternal(error));
+		if (result instanceof ResourceInvocationResult.InputRequired inputRequired)
+			return inputRequiredResult(inputRequired.result(),
+					inputRequestPlan,
+					resourcePlan.requestStateMode(), request.method(),
+					requestMetadata.clientCapabilities());
 		if (!(result instanceof ResourceInvocationResult.Complete complete))
 			throw new IllegalArgumentException(
 					"Unsupported MCP resource invocation result.");
@@ -1865,6 +2035,108 @@ public final class McpServerRuntimeBridge {
 				Optional.empty(), internalMetadata);
 		return McpWireResult.complete(internalResultFields,
 				metadata.isEmpty() ? Optional.empty() : Optional.of(metadata));
+	}
+
+	@NonNull
+	private static McpWireResult inputRequiredResult(
+			@NonNull McpInputRequiredResult publicResult,
+			@NonNull McpInputRequestPlan inputRequestPlan,
+			@NonNull McpRequestStateMode requestStateMode,
+			@NonNull String clientRequestMethod,
+			@NonNull McpClientCapabilities clientCapabilities)
+			throws McpProtocolJsonRpcException {
+		requireNonNull(publicResult);
+		requireNonNull(inputRequestPlan);
+		requireNonNull(requestStateMode);
+		requireNonNull(clientRequestMethod);
+		requireNonNull(clientCapabilities);
+
+		if (publicResult.getRequestState().isPresent()) {
+			if (McpRequestStateMode.NONE.equals(requestStateMode))
+				throw new IllegalArgumentException(
+						"The operation does not declare request-state support.");
+			throw new IllegalArgumentException(
+					"Request-state emission requires protected retry handling.");
+		}
+
+		com.soklet.internal.mcp.protocol.McpJsonObject internalMetadata =
+				(com.soklet.internal.mcp.protocol.McpJsonObject)
+						toInternal(publicResult.getMetadata());
+		McpResultMetadata metadata = new McpResultMetadata(
+				Optional.empty(), internalMetadata);
+		McpInputRequests.Builder requests = McpInputRequests.builder();
+		Set<McpClientCapabilityRequirement> missingCapabilities =
+				new LinkedHashSet<>();
+
+		for (Map.Entry<String, McpInputRequest> entry
+				: publicResult.getInputRequests().entrySet()) {
+			McpInputRequest publicRequest = entry.getValue();
+			McpInputRequestDeclaration internalDeclaration =
+					toInternal(publicRequest.declaration());
+			missingCapabilities.addAll(inputRequestPlan.missingForEmission(
+					internalDeclaration, clientCapabilities));
+			requests.inputRequest(entry.getKey(),
+					McpEmbeddedInputRequest.fromDeclaration(internalDeclaration,
+							(com.soklet.internal.mcp.protocol.McpJsonObject)
+									toInternal(publicRequest.params())));
+		}
+
+		if (!missingCapabilities.isEmpty())
+			throw new McpProtocolJsonRpcException(
+					McpJsonRpcError.missingRequiredClientCapabilities(
+							missingCapabilities));
+
+		return McpWireResult.inputRequired(clientRequestMethod,
+				publicResult.getInputRequests().isEmpty()
+						? Optional.empty() : Optional.of(requests.build()),
+				Optional.empty(),
+				metadata.isEmpty() ? Optional.empty() : Optional.of(metadata),
+				com.soklet.internal.mcp.protocol.McpJsonObject.empty());
+	}
+
+	@NonNull
+	private static McpInputRequestPlan toInternalInputRequestPlan(
+			@NonNull List<com.soklet.@NonNull McpInputRequestDeclaration>
+					declarations) {
+		requireNonNull(declarations);
+		List<McpInputRequestDeclaration> internalDeclarations =
+				new ArrayList<>(declarations.size());
+		for (com.soklet.McpInputRequestDeclaration declaration : declarations)
+			internalDeclarations.add(toInternal(requireNonNull(declaration)));
+		return new McpInputRequestPlan(internalDeclarations);
+	}
+
+	@NonNull
+	private static McpInputRequestDeclaration toInternal(
+			com.soklet.@NonNull McpInputRequestDeclaration declaration) {
+		Set<McpClientCapabilityRequirement> capabilities =
+				new LinkedHashSet<>();
+		for (McpClientCapability capability : declaration.capabilities())
+			capabilities.add(toInternal(capability));
+		return new McpInputRequestDeclaration(declaration.method(), capabilities,
+				toInternal(declaration.requirement()));
+	}
+
+	@NonNull
+	private static McpCoreClientCapability toInternal(
+			@NonNull McpClientCapability capability) {
+		return switch (requireNonNull(capability)) {
+			case ELICITATION_FORM -> McpCoreClientCapability.ELICITATION_FORM;
+			case ELICITATION_URL -> McpCoreClientCapability.ELICITATION_URL;
+			case SAMPLING -> McpCoreClientCapability.SAMPLING;
+			case SAMPLING_CONTEXT -> McpCoreClientCapability.SAMPLING_CONTEXT;
+			case SAMPLING_TOOLS -> McpCoreClientCapability.SAMPLING_TOOLS;
+			case ROOTS -> McpCoreClientCapability.ROOTS;
+		};
+	}
+
+	@NonNull
+	private static McpInputRequirement toInternal(
+			com.soklet.@NonNull McpInputRequirement requirement) {
+		return switch (requireNonNull(requirement)) {
+			case REQUIRED -> McpInputRequirement.REQUIRED;
+			case CONDITIONAL -> McpInputRequirement.CONDITIONAL;
+		};
 	}
 
 	@NonNull

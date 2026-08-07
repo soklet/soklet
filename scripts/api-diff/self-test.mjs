@@ -4,8 +4,12 @@ import assert from 'node:assert/strict';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  apiSignatureJsonlFromXml,
   incompatibilityJsonlFromXml,
   readUtf8,
+  verifyJapicmpReportPair,
+  verifyReviewedApiInventory,
+  verifyReviewedApiSignatures,
   verifyReviewedSet,
 } from './japicmp-symbols.mjs';
 
@@ -154,6 +158,13 @@ assert.match(
   changed,
   /"id":"M:com\/soklet\/McpClientInfo#version\(\)Ljava\/lang\/String;","newId":"M:com\/soklet\/McpClientInfo#version\(\)Ljava\/lang\/Object;"/,
 );
+assert.throws(
+  () => apiSignatureJsonlFromXml(
+    fixture('changed-descriptor', 'xml'),
+    fixture('changed-descriptor', 'includes'),
+  ),
+  /full comparison contract/,
+);
 
 const compatibleRemovalsXml = fixture('compatible-removals', 'xml');
 const compatibleRemovals = fixture('compatible-removals', 'jsonl');
@@ -186,6 +197,257 @@ assert.throws(
 
 const noChangesXml = fixture('no-changes', 'xml');
 assert.equal(incompatibilityJsonlFromXml(noChangesXml), '');
+
+const noChangesFullXml = noChangesXml.replace(
+  ' onlyModifications="true"',
+  ' onlyModifications="false"',
+);
+assert.doesNotThrow(() => verifyJapicmpReportPair(
+  noChangesXml,
+  noChangesFullXml,
+  '3.5.1',
+  'soklet-3.5.1.jar',
+));
+assert.throws(
+  () => verifyJapicmpReportPair(
+    noChangesXml.replace(' oldVersion="3.5.1"', ' oldVersion="3.5.0"'),
+    noChangesFullXml.replace(' oldVersion="3.5.1"', ' oldVersion="3.5.0"'),
+    '3.5.1',
+    'soklet-3.5.1.jar',
+  ),
+  /report pair baseline must be oldVersion="3\.5\.1"/,
+);
+assert.throws(
+  () => verifyJapicmpReportPair(
+    noChangesXml.replace(' oldJar="soklet-3.5.1.jar"', ' oldJar="soklet-3.5.0.jar"'),
+    noChangesFullXml.replace(' oldJar="soklet-3.5.1.jar"', ' oldJar="soklet-3.5.0.jar"'),
+    '3.5.1',
+    'soklet-3.5.1.jar',
+  ),
+  /report pair baseline must .*oldJar="soklet-3\.5\.1\.jar"/,
+);
+assert.throws(
+  () => verifyJapicmpReportPair(
+    noChangesFullXml,
+    noChangesFullXml,
+    '3.5.1',
+    'soklet-3.5.1.jar',
+  ),
+  /complete public\/protected modified-only comparison contract/,
+);
+assert.throws(
+  () => verifyJapicmpReportPair(
+    noChangesXml,
+    noChangesXml,
+    '3.5.1',
+    'soklet-3.5.1.jar',
+  ),
+  /complete public\/protected full comparison contract/,
+);
+
+const genericPairModifiedXml = fixture('compatible-removals', 'xml');
+const genericPairFullXml = genericPairModifiedXml.replace(
+  ' onlyModifications="true"',
+  ' onlyModifications="false"',
+);
+assert.doesNotThrow(() => verifyJapicmpReportPair(
+  genericPairModifiedXml,
+  genericPairFullXml,
+  'old',
+  'soklet-old.jar',
+));
+for (const [name, oldValue, newValue] of [
+  ['oldJar', 'soklet-old.jar', 'other-old.jar'],
+  ['oldVersion', 'old', 'other-old'],
+  ['newJar', 'soklet-new.jar', 'other-new.jar'],
+  ['newVersion', 'new', 'other-new'],
+]) {
+  assert.throws(
+    () => verifyJapicmpReportPair(
+      genericPairModifiedXml,
+      genericPairFullXml.replace(` ${name}="${oldValue}"`, ` ${name}="${newValue}"`),
+      'old',
+      'soklet-old.jar',
+    ),
+    new RegExp(`report pair metadata differs for: .*${name}`),
+  );
+}
+
+const addedApiXml = fixture('added-api', 'xml');
+const addedApiIncludes = fixture('added-api', 'includes');
+const addedApiSignatures = fixture('added-api.signatures', 'jsonl');
+assert.throws(
+  () => incompatibilityJsonlFromXml(addedApiXml),
+  /modified-only comparison contract/,
+);
+assert.equal(apiSignatureJsonlFromXml(addedApiXml, addedApiIncludes), addedApiSignatures);
+assert.doesNotThrow(() => verifyReviewedApiSignatures(
+  addedApiXml,
+  addedApiIncludes,
+  addedApiSignatures,
+));
+assert.match(addedApiSignatures, /"id":"C:com\/soklet\/McpFixture"/);
+assert.match(addedApiSignatures,
+  /"id":"M:com\/soklet\/SharedHost#mcp\(\)V"/);
+assert.match(addedApiSignatures,
+  /"id":"M:com\/soklet\/SharedHost#changed\(\)Ljava\/lang\/Object;"/);
+assert.match(addedApiSignatures,
+  /"id":"M:com\/soklet\/RestoredHost#endpoint\(\)Lcom\/soklet\/McpFixture;"/);
+assert.match(addedApiSignatures,
+  /"id":"C:com\/soklet\/annotation\/McpMarker"/);
+assert.doesNotMatch(addedApiSignatures, /FutureApi|PublicInternal|RemovedOnlyHost|#legacy\(\)V/);
+
+const addedSignatureLines = addedApiSignatures.trimEnd().split('\n');
+assert.throws(
+  () => verifyReviewedApiSignatures(
+    addedApiXml,
+    addedApiIncludes,
+    `${[...addedSignatureLines].reverse().join('\n')}\n`,
+  ),
+  /not in canonical bytewise-sorted form/,
+);
+assert.throws(
+  () => verifyReviewedApiSignatures(
+    addedApiXml,
+    addedApiIncludes,
+    `${addedSignatureLines.slice(0, -1).join('\n')}\n`,
+  ),
+  /unexpected \(1\).*missing \(0\).*changed \(0\)/s,
+);
+const changedApiSignatureLines = [...addedSignatureLines];
+const changedApiSignatureIndex = changedApiSignatureLines.findIndex((line) =>
+  line.includes('SharedHost#changed'));
+assert.notEqual(changedApiSignatureIndex, -1);
+const changedApiSignature = JSON.parse(
+  changedApiSignatureLines[changedApiSignatureIndex]);
+changedApiSignature.api.returnType.type = 'java.util.List';
+changedApiSignatureLines[changedApiSignatureIndex] = JSON.stringify(changedApiSignature);
+assert.throws(
+  () => verifyReviewedApiSignatures(
+    addedApiXml,
+    addedApiIncludes,
+    `${changedApiSignatureLines.join('\n')}\n`,
+  ),
+  /unexpected \(0\).*missing \(0\).*changed \(1\)/s,
+);
+const unexpectedApiSignature = JSON.parse(addedSignatureLines.at(-1));
+unexpectedApiSignature.id = 'M:com/soklet/Zzz#future()V';
+assert.throws(
+  () => verifyReviewedApiSignatures(
+    addedApiXml,
+    addedApiIncludes,
+    `${addedSignatureLines.join('\n')}\n${JSON.stringify(unexpectedApiSignature)}\n`,
+  ),
+  /unexpected \(0\).*missing \(1\).*changed \(0\)/s,
+);
+const unknownSignatureField = JSON.parse(addedSignatureLines[0]);
+unknownSignatureField.api.future = true;
+assert.throws(
+  () => verifyReviewedApiSignatures(
+    addedApiXml,
+    addedApiIncludes,
+    `${JSON.stringify(unknownSignatureField)}\n`,
+  ),
+  /unknown, missing, or noncanonical fields/,
+);
+assert.throws(
+  () => verifyReviewedApiSignatures(
+    addedApiXml,
+    addedApiIncludes,
+    addedApiSignatures.replaceAll('\n', '\r\n'),
+  ),
+  /must use LF line endings/,
+);
+assert.throws(
+  () => verifyReviewedApiSignatures(
+    addedApiXml,
+    addedApiIncludes,
+    addedApiSignatures.trimEnd(),
+  ),
+  /must end with LF/,
+);
+assert.throws(
+  () => apiSignatureJsonlFromXml(
+    addedApiXml,
+    'com.soklet.SharedHost\ncom.soklet.McpFixture\n',
+  ),
+  /not in canonical bytewise type-name order/,
+);
+assert.throws(
+  () => apiSignatureJsonlFromXml(
+    addedApiXml,
+    'com.soklet.McpFixture\ncom.soklet.McpFixture\n',
+  ),
+  /duplicate type/,
+);
+assert.throws(
+  () => apiSignatureJsonlFromXml(addedApiXml, 'com.soklet.McpFixture'),
+  /must end with LF/,
+);
+assert.throws(
+  () => apiSignatureJsonlFromXml(addedApiXml, 'com.soklet.Missing\n'),
+  /absent from the japicmp modification report/,
+);
+assert.throws(
+  () => apiSignatureJsonlFromXml(removalsXml, 'com.soklet.McpClientInfo\n'),
+  /full comparison contract/,
+);
+assert.throws(
+  () => apiSignatureJsonlFromXml(
+    addedApiXml.replace(
+      'changeStatus="NEW" fullyQualifiedName="com.soklet.McpFixture"',
+      'changeStatus="REMOVED" fullyQualifiedName="com.soklet.McpFixture"',
+    ),
+    'com.soklet.McpFixture\n',
+  ),
+  /has no current-side API/,
+);
+
+assert.equal(verifyReviewedApiInventory(
+  addedApiXml,
+  fixture('added-api', 'allowlist'),
+  [addedApiIncludes, '\n', '\n', '\n'],
+), 5);
+assert.throws(
+  () => verifyReviewedApiInventory(compatibleRemovalsXml, '\n', ['\n']),
+  /full comparison contract/,
+);
+assert.throws(
+  () => verifyReviewedApiInventory(
+    addedApiXml,
+    '\n',
+    [addedApiIncludes],
+  ),
+  /unexpected \(1\): com.soklet.extra.FutureApi.*missing \(0\)/s,
+);
+assert.throws(
+  () => verifyReviewedApiInventory(
+    addedApiXml,
+    'com.soklet.Stale\ncom.soklet.extra.FutureApi\n',
+    [addedApiIncludes],
+  ),
+  /unexpected \(0\).*missing \(1\): com.soklet.Stale/s,
+);
+assert.throws(
+  () => verifyReviewedApiInventory(
+    addedApiXml,
+    'com.soklet.extra.FutureApi\n',
+    ['com.soklet.extra.FutureApi\n', addedApiIncludes],
+  ),
+  /appears in both non-MCP public API allowlist and phase API include inventory 1/,
+);
+assert.throws(
+  () => verifyReviewedApiInventory(
+    addedApiXml,
+    '\n',
+    ['com.soklet.SharedHost\ncom.soklet.McpFixture\n'],
+  ),
+  /not in canonical bytewise type-name order/,
+);
+assert.throws(
+  () => verifyReviewedApiInventory(addedApiXml, '\n', []),
+  /At least one phase API include inventory is required/,
+);
 
 const phase0RemovalSet = readUtf8(resolve(
   projectRoot,
@@ -332,7 +594,14 @@ assert.throws(
   () => incompatibilityJsonlFromXml(
     removalsXml.replace(' packagesInclude="all"', ' packagesInclude="com.soklet.*"'),
   ),
-  /complete public\/protected comparison contract/,
+  /complete public\/protected modified-only comparison contract/,
+);
+assert.throws(
+  () => incompatibilityJsonlFromXml(removalsXml.replace(
+    ' ignoreMissingClassesByRegularExpressions=""',
+    ' ignoreMissingClassesByRegularExpressions=".*Optional"',
+  )),
+  /complete public\/protected modified-only comparison contract/,
 );
 assert.throws(
   () => incompatibilityJsonlFromXml(

@@ -54,6 +54,10 @@ public final class McpPromptRegistration {
 	@NonNull
 	private final List<@NonNull McpPromptArgumentDefinition> arguments;
 	@NonNull
+	private final List<@NonNull McpInputRequestDeclaration> inputRequestDeclarations;
+	@NonNull
+	private final McpRequestStateMode requestStateMode;
+	@NonNull
 	private final McpJsonObject metadata;
 	@NonNull
 	private final McpPromptHandler handler;
@@ -76,6 +80,9 @@ public final class McpPromptRegistration {
 		this.description = builder.description;
 		this.icons = List.copyOf(builder.icons);
 		this.arguments = immutableArguments(builder.arguments);
+		this.inputRequestDeclarations =
+				List.copyOf(builder.inputRequestDeclarations);
+		this.requestStateMode = builder.requestStateMode;
 		this.metadata = builder.metadata;
 		this.handler = builder.handler;
 	}
@@ -108,6 +115,27 @@ public final class McpPromptRegistration {
 	@NonNull
 	public List<@NonNull McpPromptArgumentDefinition> getArguments() {
 		return this.arguments;
+	}
+
+	/**
+	 * Returns the input requests this prompt operation may emit.
+	 *
+	 * @return immutable declarations in registration order
+	 */
+	@NonNull
+	public List<@NonNull McpInputRequestDeclaration>
+			getInputRequestDeclarations() {
+		return this.inputRequestDeclarations;
+	}
+
+	/**
+	 * Returns the request-state contract for this prompt operation.
+	 *
+	 * @return request-state mode
+	 */
+	@NonNull
+	public McpRequestStateMode getRequestStateMode() {
+		return this.requestStateMode;
 	}
 
 	/** @return immutable protocol extension metadata */
@@ -226,6 +254,11 @@ public final class McpPromptRegistration {
 		private final List<@NonNull McpPromptArgumentDefinition> arguments =
 				new ArrayList<>();
 		@NonNull
+		private final List<@NonNull McpInputRequestDeclaration>
+				inputRequestDeclarations = new ArrayList<>();
+		@NonNull
+		private McpRequestStateMode requestStateMode = McpRequestStateMode.NONE;
+		@NonNull
 		private McpJsonObject metadata = McpJsonObject.emptyInstance();
 
 		private Builder(@NonNull String name,
@@ -264,6 +297,40 @@ public final class McpPromptRegistration {
 		public Builder argument(
 				@NonNull McpPromptArgumentDefinition argument) {
 			this.arguments.add(requireNonNull(argument));
+			return this;
+		}
+
+		/**
+		 * Appends input-request declarations for this prompt operation.
+		 *
+		 * <p>Repeated calls append declarations in order.
+		 *
+		 * @param declarations declarations to append
+		 * @return this builder
+		 * @throws NullPointerException if the array or a declaration is null
+		 */
+		@NonNull
+		public Builder mayRequestInput(
+				@NonNull McpInputRequestDeclaration @NonNull ... declarations) {
+			requireNonNull(declarations);
+			List<McpInputRequestDeclaration> copiedDeclarations =
+					new ArrayList<>(declarations.length);
+			for (McpInputRequestDeclaration declaration : declarations)
+				copiedDeclarations.add(requireNonNull(declaration));
+			this.inputRequestDeclarations.addAll(copiedDeclarations);
+			return this;
+		}
+
+		/**
+		 * Sets the request-state contract for this prompt operation.
+		 *
+		 * @param requestStateMode request-state mode
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder requestStateMode(
+				@NonNull McpRequestStateMode requestStateMode) {
+			this.requestStateMode = requireNonNull(requestStateMode);
 			return this;
 		}
 

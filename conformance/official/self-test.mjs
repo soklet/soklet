@@ -14,7 +14,8 @@ import { fileURLToPath } from 'node:url';
 import { adjudicateChecks } from './adjudicate.mjs';
 import { validateFinalTagWire } from './validate-final-tag-wire.mjs';
 import {
-  inventoryBytes,
+	activeScenarios,
+	inventoryBytes,
   officialScenarioArguments,
   parseOfficialScenarioList,
   readCanonicalJson,
@@ -34,7 +35,10 @@ const suiteDirectory = resolve(process.argv[3]);
 const scratch = mkdtempSync(resolve(tmpdir(), 'soklet-mcp-conformance-self-test-'));
 
 try {
-  const manifests = verifyManifestSet();
+	const manifests = verifyManifestSet();
+	assert.equal(manifests.selection.currentImplementationPhase, 4);
+	assert.equal(activeScenarios(manifests.selection, 4).length, 23);
+	assert.equal(manifests.expectedChecks.profiles.length, 23);
   const syntheticListing = 'Server scenarios (test against a server):\n'
     + manifests.selection.scenarios
       .map((scenario) => `  - ${scenario.name} [2026-07-28]\n`)
@@ -66,7 +70,10 @@ try {
     syntheticListing.replace('\n', '\r\n'),
   ]) assert.throws(() => parseOfficialScenarioList(invalid));
 
-  const profile = manifests.expectedChecks.profiles[0];
+	const profile = manifests.expectedChecks.profiles.find(
+		(candidate) => candidate.id === 'dns-rebinding-protection.phase3.v1',
+	);
+	assert.notEqual(profile, undefined);
   const validChecks = [
     { id: 'localhost-host-rebinding-rejected', status: 'SUCCESS' },
     { id: 'localhost-host-valid-accepted', status: 'SUCCESS' },
@@ -99,7 +106,10 @@ try {
   );
 
   const validResult = validateFinalTagWire({ suiteDirectory });
-  assert.equal(validResult.validated.length, 6);
+  const goldenManifest = readCanonicalJson(
+    resolve(officialRoot, 'golden-wire/manifest.json'),
+  );
+  assert.equal(validResult.validated.length, goldenManifest.fixtures.length);
   assert.equal(validResult.ajvVersion, '8.20.0');
 
   const builtMutation = resolve(scratch, 'suite-built-entry-mutation');

@@ -137,6 +137,49 @@ public class McpRequestObservationPublicRuntimeTests {
 	}
 
 	@Test
+	@SuppressWarnings("deprecation")
+	public void deprecatedWireLogLevelProjectsToTheRealRequestContext()
+			throws Exception {
+		RecordingLifecycleObserver observer = new RecordingLifecycleObserver();
+		RecordingMetricsCollector collector = new RecordingMetricsCollector();
+		AtomicReference<McpRequestContext> handlerContext = new AtomicReference<>();
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName(TOOL_NAME)
+				.jsonArguments()
+				.handler((context, call, features) -> {
+					handlerContext.set(context);
+					return McpCompleteResult.fromToolText("log-level-observed");
+				})
+				.build();
+		McpEndpoint endpoint = endpointBuilder("log-level-observation-test")
+				.tool(tool)
+				.build();
+		McpServer server = serverBuilder(endpoint).build();
+		Soklet soklet = managedSoklet(server, List.of(observer), collector);
+
+		try {
+			soklet.start();
+			int port = server.getDiagnostics().getBoundAddress()
+					.orElseThrow().getPort();
+			String body = request("log-level", "tools/call",
+					",\"io.modelcontextprotocol/logLevel\":\"warning\"",
+					",\"name\":\"" + TOOL_NAME + "\",\"arguments\":{}");
+			HttpResponse<String> response = send(port, body, "tools/call",
+					Optional.of(TOOL_NAME));
+			observer.awaitFinished();
+
+			assertSuccess(response, "log-level");
+			McpRequestContext context = observer.startedContext.get();
+			Assertions.assertNotNull(context);
+			Assertions.assertSame(context, handlerContext.get());
+			Assertions.assertEquals(Optional.of(McpLogLevel.WARNING),
+					context.getDeprecatedLogLevel());
+		} finally {
+			soklet.stop();
+		}
+	}
+
+	@Test
 	public void handlerFailurePublishesExactInternalErrorAndImmutableThrowable()
 			throws Exception {
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver();
@@ -481,13 +524,21 @@ public class McpRequestObservationPublicRuntimeTests {
 	@NonNull
 	private static String request(@NonNull String id, @NonNull String method,
 			@NonNull String additionalParameters) {
+		return request(id, method, "", additionalParameters);
+	}
+
+	@NonNull
+	private static String request(@NonNull String id, @NonNull String method,
+			@NonNull String additionalMetadata,
+			@NonNull String additionalParameters) {
 		return "{\"jsonrpc\":\"2.0\",\"id\":\"" + id
 				+ "\",\"method\":\"" + method
 				+ "\",\"params\":{\"_meta\":"
 				+ "{"
 				+ "\"io.modelcontextprotocol/protocolVersion\":\""
 				+ PROTOCOL_VERSION + "\","
-				+ "\"io.modelcontextprotocol/clientCapabilities\":{}}"
+				+ "\"io.modelcontextprotocol/clientCapabilities\":{}"
+				+ additionalMetadata + "}"
 				+ additionalParameters + "}}";
 	}
 

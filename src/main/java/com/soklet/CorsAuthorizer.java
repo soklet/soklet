@@ -50,7 +50,7 @@ public interface CorsAuthorizer {
 	 * @return a {@link CorsResponse} if authorized, or {@link Optional#empty()} if not authorized
 	 */
 	@NonNull
-	Optional<CorsResponse> authorize(@NonNull Request request,
+	Optional<@NonNull CorsResponse> authorize(@NonNull Request request,
 																	 @NonNull Cors cors);
 
 	/**
@@ -62,14 +62,17 @@ public interface CorsAuthorizer {
 	 * @return a {@link CorsPreflightResponse} if authorized, or {@link Optional#empty()} if not authorized
 	 */
 	@NonNull
-	Optional<CorsPreflightResponse> authorizePreflight(@NonNull Request request,
-																										 @NonNull CorsPreflight corsPreflight,
-																										 @NonNull Map<@NonNull HttpMethod, @NonNull ResourceMethod> availableResourceMethodsByHttpMethod);
+	Optional<@NonNull CorsPreflightResponse> authorizePreflight(@NonNull Request request,
+																						 @NonNull CorsPreflight corsPreflight,
+																						 @NonNull Map<@NonNull HttpMethod, @NonNull ResourceMethod> availableResourceMethodsByHttpMethod);
 
 	/**
 	 * Authorizes a <a href="https://developer.mozilla.org/en-US/docs/Glossary/Preflight_request">CORS preflight</a> request for a transport that is not backed by Soklet <em>Resource Methods</em>.
 	 * <p>
 	 * The default implementation rejects the request. Implementations must explicitly override this method to authorize preflight requests for transport-neutral HTTP endpoints.
+	 * Soklet may invoke this method concurrently for independent MCP requests, so
+	 * application implementations used by MCP must be safe for the server's
+	 * configured request concurrency.
 	 *
 	 * @param request              the preflight request to authorize
 	 * @param corsPreflight        the CORS preflight data provided in the request
@@ -77,9 +80,9 @@ public interface CorsAuthorizer {
 	 * @return a {@link CorsPreflightResponse} if authorized, or {@link Optional#empty()} if not authorized
 	 */
 	@NonNull
-	default Optional<CorsPreflightResponse> authorizePreflight(@NonNull Request request,
-																				 @NonNull CorsPreflight corsPreflight,
-																				 @NonNull Set<@NonNull HttpMethod> availableHttpMethods) {
+	default Optional<@NonNull CorsPreflightResponse> authorizePreflight(@NonNull Request request,
+																	 @NonNull CorsPreflight corsPreflight,
+																	 @NonNull Set<@NonNull HttpMethod> availableHttpMethods) {
 		requireNonNull(request);
 		requireNonNull(corsPreflight);
 		requireNonNull(availableHttpMethods);

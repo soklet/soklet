@@ -277,7 +277,7 @@ public class McpResourcePublicRuntimeTests {
 			assertContains(unknown.body(),
 					"\"data\":{\"uri\":\"test://unknown-resource\"}");
 			Assertions.assertTrue(stages.isEmpty(), stages.toString());
-				Assertions.assertEquals(6, handlerInvocations.get());
+			Assertions.assertEquals(6, handlerInvocations.get());
 			Assertions.assertEquals(0, toolLimiterInvocations.get());
 		} finally {
 			server.stop();
@@ -393,6 +393,7 @@ public class McpResourcePublicRuntimeTests {
 			assertSuccess(empty, "empty");
 			assertContains(empty.body(), "\"nextCursor\":\"\"");
 			assertContains(empty.body(), "\"ttlMs\":500");
+			assertContains(empty.body(), "\"cacheScope\":\"private\"");
 
 			HttpResponse<String> unicode = send(port,
 					request("unicode", "resources/list", ",\"cursor\":\"世界\""),
@@ -400,6 +401,8 @@ public class McpResourcePublicRuntimeTests {
 			assertSuccess(unicode, "unicode");
 			Assertions.assertFalse(unicode.body().contains("\"nextCursor\""),
 					unicode.body());
+			assertContains(unicode.body(), "\"ttlMs\":500");
+			assertContains(unicode.body(), "\"cacheScope\":\"private\"");
 
 			HttpResponse<String> rejected = send(port,
 					request("rejected", "resources/list", ",\"cursor\":\"bad\""),
@@ -434,6 +437,81 @@ public class McpResourcePublicRuntimeTests {
 			Assertions.assertEquals(5, requestLimiterInvocations.get());
 			Assertions.assertEquals(5, listHandlerInvocations.get());
 			Assertions.assertEquals(0, toolLimiterInvocations.get());
+		} finally {
+			server.stop();
+		}
+	}
+
+	@Test
+	public void dynamicListCanVaryByAdmittedIdentity() throws Exception {
+		McpResourceRegistration alpha = McpResourceRegistration
+				.withUriAndName(URI.create("test://tenant/alpha"), "Alpha")
+				.handler(resourceHandler())
+				.build();
+		McpResourceRegistration beta = McpResourceRegistration
+				.withUriAndName(URI.create("test://tenant/beta"), "Beta")
+				.handler(resourceHandler())
+				.build();
+		McpEndpoint endpoint = endpointBuilder()
+				.resource(alpha)
+				.resource(beta)
+				.resourceListHandler((request, list, features) -> {
+					String tenant = (String) request.getAdmissionIdentity()
+							.getPrincipal().orElseThrow();
+					Assertions.assertEquals("auth-" + tenant,
+							request.getAdmissionIdentity()
+									.getAuthorizationPartitionKey().orElseThrow());
+					return McpResourcePage.builder()
+							.resources(list.getRegisteredResourceDescriptors().stream()
+									.filter(resource -> resource.getUri().toString()
+											.endsWith("/" + tenant))
+									.toList())
+							.build();
+				})
+				.resourcesListCachePolicy(McpCachePolicy.fromPrivateTimeToLive(
+						Duration.ofMillis(250)))
+				.build();
+		McpServer server = McpServer.withPort(0)
+				.host(LOOPBACK)
+				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
+				.requestAdmissionPolicy(context -> {
+					String authorization = context.getRequest()
+							.getHeader("Authorization").orElseThrow();
+					String tenant = authorization.substring("Bearer ".length());
+					return McpAdmissionDecision.fromAcceptedIdentity(
+							McpAdmissionIdentity.withRateLimitPartitionKey(
+										"rate-" + tenant)
+									.authorizationPartitionKey("auth-" + tenant)
+									.principal(tenant)
+									.build());
+				})
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.allowedHosts(Set.of(LOOPBACK))
+				.build();
+
+		try {
+			server.start();
+			int port = server.getDiagnostics().getBoundAddress()
+					.orElseThrow().getPort();
+			HttpResponse<String> alphaPage = sendWithAuthorization(port,
+					request("alpha", "resources/list", ""), "resources/list",
+					"Bearer alpha");
+			assertSuccess(alphaPage, "alpha");
+			assertContains(alphaPage.body(), "test://tenant/alpha");
+			Assertions.assertFalse(alphaPage.body().contains("test://tenant/beta"),
+					alphaPage.body());
+			assertContains(alphaPage.body(), "\"ttlMs\":250");
+			assertContains(alphaPage.body(), "\"cacheScope\":\"private\"");
+
+			HttpResponse<String> betaPage = sendWithAuthorization(port,
+					request("beta", "resources/list", ""), "resources/list",
+					"Bearer beta");
+			assertSuccess(betaPage, "beta");
+			assertContains(betaPage.body(), "test://tenant/beta");
+			Assertions.assertFalse(betaPage.body().contains("test://tenant/alpha"),
+					betaPage.body());
+			assertContains(betaPage.body(), "\"ttlMs\":250");
+			assertContains(betaPage.body(), "\"cacheScope\":\"private\"");
 		} finally {
 			server.stop();
 		}
@@ -719,6 +797,18 @@ public class McpResourcePublicRuntimeTests {
 
 	private static HttpResponse<String> send(int port, String body,
 			String method, Optional<String> operationName) throws Exception {
+		return send(port, body, method, operationName, Optional.empty());
+	}
+
+	private static HttpResponse<String> sendWithAuthorization(int port,
+			String body, String method, String authorization) throws Exception {
+		return send(port, body, method, Optional.empty(),
+				Optional.of(authorization));
+	}
+
+	private static HttpResponse<String> send(int port, String body,
+			String method, Optional<String> operationName,
+			Optional<String> authorization) throws Exception {
 		HttpRequest.Builder request = HttpRequest.newBuilder()
 				.uri(URI.create("http://" + LOOPBACK + ":" + port + MCP_PATH))
 				.timeout(Duration.ofSeconds(5))
@@ -727,6 +817,7 @@ public class McpResourcePublicRuntimeTests {
 				.header("MCP-Protocol-Version", PROTOCOL_VERSION)
 				.header("Mcp-Method", method);
 		operationName.ifPresent(value -> request.header("Mcp-Name", value));
+		authorization.ifPresent(value -> request.header("Authorization", value));
 		return HttpClient.newBuilder()
 				.connectTimeout(Duration.ofSeconds(5))
 				.version(HttpClient.Version.HTTP_1_1)

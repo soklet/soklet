@@ -548,9 +548,17 @@ record McpNormalizedOperation(@NonNull String name,
 	static McpNormalizedOperation tool(
 			@NonNull McpNormalizedToolDescriptor descriptor,
 			@NonNull McpMirroredHeaderPlan mirroredHeaderPlan) {
+		return tool(descriptor, McpInputRequestPlan.empty(), mirroredHeaderPlan);
+	}
+
+	@NonNull
+	static McpNormalizedOperation tool(
+			@NonNull McpNormalizedToolDescriptor descriptor,
+			@NonNull McpInputRequestPlan inputRequestPlan,
+			@NonNull McpMirroredHeaderPlan mirroredHeaderPlan) {
 		requireNonNull(descriptor);
 		return new McpNormalizedOperation(descriptor.name(),
-				McpInputRequestPlan.empty(), requireNonNull(mirroredHeaderPlan),
+				requireNonNull(inputRequestPlan), requireNonNull(mirroredHeaderPlan),
 				Optional.of(descriptor), Optional.empty(), Optional.empty(),
 				Optional.empty());
 	}
@@ -558,9 +566,16 @@ record McpNormalizedOperation(@NonNull String name,
 	@NonNull
 	static McpNormalizedOperation prompt(
 			@NonNull McpNormalizedPromptDescriptor descriptor) {
+		return prompt(descriptor, McpInputRequestPlan.empty());
+	}
+
+	@NonNull
+	static McpNormalizedOperation prompt(
+			@NonNull McpNormalizedPromptDescriptor descriptor,
+			@NonNull McpInputRequestPlan inputRequestPlan) {
 		requireNonNull(descriptor);
 		return new McpNormalizedOperation(descriptor.name(),
-				McpInputRequestPlan.empty(), McpMirroredHeaderPlan.empty(),
+				requireNonNull(inputRequestPlan), McpMirroredHeaderPlan.empty(),
 				Optional.empty(), Optional.of(descriptor), Optional.empty(),
 				Optional.empty());
 	}

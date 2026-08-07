@@ -185,6 +185,7 @@
 {"id":"M:com/soklet/McpHandlerResolver#withPrompt(Lcom/soklet/McpPromptHandler;Ljava/lang/Class;)Lcom/soklet/McpHandlerResolver;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpHandlerResolver#withResource(Lcom/soklet/McpResourceHandler;Ljava/lang/Class;)Lcom/soklet/McpHandlerResolver;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpHandlerResolver#withResourceList(Lcom/soklet/McpResourceListHandler;Ljava/lang/Class;)Lcom/soklet/McpHandlerResolver;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
+{"id":"M:com/soklet/McpHandlerResolver#withSubscriptions(Ljava/lang/Class;Lcom/soklet/McpSubscriptionConfig;)Lcom/soklet/McpHandlerResolver;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpHandlerResolver#withTool(Lcom/soklet/McpToolHandler;Ljava/lang/Class;)Lcom/soklet/McpHandlerResolver;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpInitializationContext#getClientCapabilities()Lcom/soklet/McpClientCapabilities;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpInitializationContext#getClientInfo()Ljava/util/Optional;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
@@ -371,6 +372,7 @@
 {"id":"M:com/soklet/McpServer#getDiagnostics()Lcom/soklet/McpServerDiagnostics;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpServer#getHandlerInterceptor()Lcom/soklet/McpHandlerInterceptor;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpServer#getMaximumCursorSizeInBytes()I","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
+{"id":"M:com/soklet/McpServer#getProtectionControl()Lcom/soklet/McpProtectionControl;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpServer#getRateLimiterRegistry()Lcom/soklet/McpRateLimiterRegistry;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpServer#getRequestInterceptor()Lcom/soklet/McpRequestInterceptor;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpServer#getRequestRateLimiter()Ljava/util/Optional;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
@@ -378,6 +380,7 @@
 {"id":"M:com/soklet/McpServer#getSessionStore()Lcom/soklet/McpSessionStore;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpServer#getToolOutputSanitizer()Lcom/soklet/McpToolOutputSanitizer;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpServer#getToolRateLimiter()Ljava/util/Optional;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
+{"id":"M:com/soklet/McpServer#getTraceCorrelation()Lcom/soklet/McpTraceCorrelation;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpServer#initialize(Lcom/soklet/SokletConfig;Lcom/soklet/McpServer$RequestHandler;)V","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpServer#isStarted()Ljava/lang/Boolean;","newId":"M:com/soklet/McpServer#isStarted()Z","kind":"method","changes":[{"type":"METHOD_RETURN_TYPE_CHANGED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpServer#withPort(Ljava/lang/Integer;)Lcom/soklet/McpServer$Builder;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
@@ -399,8 +402,6 @@
 {"id":"M:com/soklet/McpServer$Builder#requestReadBufferSizeInBytes(Ljava/lang/Integer;)Lcom/soklet/McpServer$Builder;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpServer$Builder#responseMarshaler(Lcom/soklet/McpResponseMarshaler;)Lcom/soklet/McpServer$Builder;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpServer$Builder#sessionStore(Lcom/soklet/McpSessionStore;)Lcom/soklet/McpServer$Builder;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
-{"id":"M:com/soklet/McpServer$Builder#shutdownTimeout(Ljava/time/Duration;)Lcom/soklet/McpServer$Builder;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
-{"id":"M:com/soklet/McpServer$Builder#writeTimeout(Ljava/time/Duration;)Lcom/soklet/McpServer$Builder;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpServer$RequestHandler#handleRequest(Lcom/soklet/Request;Ljava/util/function/Consumer;)V","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpSessionContext#asMap()Ljava/util/Map;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/McpSessionContext#contains(Ljava/lang/String;)Ljava/lang/Boolean;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
@@ -539,8 +540,12 @@
 {"id":"M:com/soklet/annotation/McpArgument#optional()Z","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/annotation/McpArgument#value()Ljava/lang/String;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/annotation/McpEndpointPathParameter#value()Ljava/lang/String;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
+{"id":"M:com/soklet/annotation/McpPrompt#mayRequestInput()[Lcom/soklet/annotation/McpMayRequestInput;","kind":"method","changes":[{"type":"METHOD_ABSTRACT_ADDED_TO_CLASS","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
+{"id":"M:com/soklet/annotation/McpPrompt#requestStateMode()Lcom/soklet/McpRequestStateMode;","kind":"method","changes":[{"type":"METHOD_ABSTRACT_ADDED_TO_CLASS","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/annotation/McpResource#cacheScope()Lcom/soklet/McpCacheScope;","kind":"method","changes":[{"type":"METHOD_ABSTRACT_ADDED_TO_CLASS","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/annotation/McpResource#cacheTtlMs()J","kind":"method","changes":[{"type":"METHOD_ABSTRACT_ADDED_TO_CLASS","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
+{"id":"M:com/soklet/annotation/McpResource#mayRequestInput()[Lcom/soklet/annotation/McpMayRequestInput;","kind":"method","changes":[{"type":"METHOD_ABSTRACT_ADDED_TO_CLASS","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
+{"id":"M:com/soklet/annotation/McpResource#requestStateMode()Lcom/soklet/McpRequestStateMode;","kind":"method","changes":[{"type":"METHOD_ABSTRACT_ADDED_TO_CLASS","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/annotation/McpResource#size()J","kind":"method","changes":[{"type":"METHOD_ABSTRACT_ADDED_TO_CLASS","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/annotation/McpResource#title()Ljava/lang/String;","kind":"method","changes":[{"type":"METHOD_ABSTRACT_ADDED_TO_CLASS","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/annotation/McpServerEndpoint#resourceTemplatesListCacheScope()Lcom/soklet/McpCacheScope;","kind":"method","changes":[{"type":"METHOD_ABSTRACT_ADDED_TO_CLASS","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
@@ -548,7 +553,9 @@
 {"id":"M:com/soklet/annotation/McpServerEndpoint#resourcesListCacheScope()Lcom/soklet/McpCacheScope;","kind":"method","changes":[{"type":"METHOD_ABSTRACT_ADDED_TO_CLASS","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/annotation/McpServerEndpoint#resourcesListCacheTtlMs()J","kind":"method","changes":[{"type":"METHOD_ABSTRACT_ADDED_TO_CLASS","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/annotation/McpServerEndpoint#toolRateLimiter()Ljava/lang/String;","kind":"method","changes":[{"type":"METHOD_ABSTRACT_ADDED_TO_CLASS","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
+{"id":"M:com/soklet/annotation/McpTool#mayRequestInput()[Lcom/soklet/annotation/McpMayRequestInput;","kind":"method","changes":[{"type":"METHOD_ABSTRACT_ADDED_TO_CLASS","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/annotation/McpTool#mirrorStructuredContentAsText()Z","kind":"method","changes":[{"type":"METHOD_ABSTRACT_ADDED_TO_CLASS","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/annotation/McpTool#rateLimiter()Ljava/lang/String;","kind":"method","changes":[{"type":"METHOD_ABSTRACT_ADDED_TO_CLASS","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
+{"id":"M:com/soklet/annotation/McpTool#requestStateMode()Lcom/soklet/McpRequestStateMode;","kind":"method","changes":[{"type":"METHOD_ABSTRACT_ADDED_TO_CLASS","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/annotation/McpTool#title()Ljava/lang/String;","kind":"method","changes":[{"type":"METHOD_ABSTRACT_ADDED_TO_CLASS","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/annotation/McpUriParameter#value()Ljava/lang/String;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}

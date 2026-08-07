@@ -21,6 +21,7 @@ import com.soklet.converter.TypeReference;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.lang.reflect.Modifier;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -257,6 +258,74 @@ class McpToolRegistrationTests {
 		assertSame(expectedApplicationFailure, applicationFailure);
 		assertFalse(applicationFailure
 				instanceof McpInvalidToolArgumentsException);
+	}
+
+	@Test
+	void conformanceSchemaSeamPreservesEnforcesAndDerivesMirroredHeaders()
+			throws Exception {
+		McpJsonObject tenantSchema = McpJsonObject.builder()
+				.put("type", "string")
+				.put("x-mcp-header", "Tenant")
+				.build();
+		McpJsonObject emailSchema = McpJsonObject.builder()
+				.put("type", "string")
+				.build();
+		McpJsonObject inputSchema = McpJsonObject.builder()
+				.put("$schema",
+						"https://json-schema.org/draft/2020-12/schema")
+				.put("type", "object")
+				.put("properties", McpJsonObject.builder()
+						.put("tenant", tenantSchema)
+						.put("email", emailSchema)
+						.build())
+				.put("required", McpJsonArray.fromElements(List.of(
+						new McpJsonString("tenant"),
+						new McpJsonString("email"))))
+				.put("additionalProperties", false)
+				.build();
+		AtomicReference<McpJsonObject> decodedArguments = new AtomicReference<>();
+		McpToolRegistration<McpJsonObject> registration =
+				McpToolRegistration.withName("conformance_schema")
+						.conformanceInputSchema(inputSchema)
+						.handler((request, call, features) -> {
+							decodedArguments.set(call.getArguments());
+							return McpCompleteResult.fromToolText("done");
+						})
+						.build();
+		McpJsonObject validArguments = McpJsonObject.builder()
+				.put("tenant", "tenant-a")
+				.put("email", "a@example.test")
+				.build();
+
+		assertFalse(Modifier.isPublic(McpToolRegistration.NamedBuilder.class
+				.getDeclaredMethod("conformanceInputSchema", McpJsonObject.class)
+				.getModifiers()));
+		assertSame(inputSchema, registration.getInputSchema().getDocument());
+		assertEquals(McpJsonObject.class, registration.getArgumentType());
+		assertEquals(1,
+				registration.getMirroredHeaderPlan().declarations().size());
+		var declaration =
+				registration.getMirroredHeaderPlan().declarations().get(0);
+		assertEquals("Mcp-Param-Tenant", declaration.headerName());
+		assertEquals(List.of("tenant"), declaration.argumentPropertyPath());
+
+		registration.invoke(requestContext(), validArguments,
+				McpInvocationFeatures.fromFeatures(Map.of()));
+		assertSame(validArguments, decodedArguments.get());
+		assertThrows(McpInvalidToolArgumentsException.class,
+				() -> registration.invoke(requestContext(),
+						McpJsonObject.builder()
+								.put("tenant", "tenant-a")
+								.build(),
+						McpInvocationFeatures.fromFeatures(Map.of())));
+
+		McpJsonObject unsupportedSchema = McpJsonObject.builder()
+				.put("type", "object")
+				.put("unknown-keyword", true)
+				.build();
+		assertThrows(IllegalArgumentException.class,
+				() -> McpToolRegistration.withName("unsupported_schema")
+						.conformanceInputSchema(unsupportedSchema));
 	}
 
 	@Test

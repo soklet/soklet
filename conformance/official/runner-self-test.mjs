@@ -19,8 +19,9 @@ import {
   boundedLineReader,
   ChildSupervisor,
   exactlyOneChecksFile,
-  installSignalHandlers,
-  runBoundedCommand,
+	installSignalHandlers,
+	observedProfileDraft,
+	runBoundedCommand,
   runOfficialConformance,
   RunnerCancelledError,
   verifyPublicFixtureClasspath,
@@ -33,6 +34,7 @@ await boundedCommandDrainsPipesAndReportsOutputLimit();
 await timedOutCommandThatExitsZeroRemainsTimedOut();
 publicFixtureClasspathRequiresExactCandidateBoundary();
 resultTreeTraversalIsBounded();
+observationDraftPreservesCompleteMultisetsAndSkipReasons();
 await supervisorCancelsEveryChildAndRejectsLaterSpawns();
 if (process.platform !== 'win32') await supervisorCancelsOrdinaryDescendants();
 await failedSpawnDoesNotWaitForTerminationTimeouts();
@@ -176,6 +178,36 @@ function resultTreeTraversalIsBounded() {
   }
 }
 
+function observationDraftPreservesCompleteMultisetsAndSkipReasons() {
+	const draft = observedProfileDraft('tools-list', [
+		{ id: 'tools-list', status: 'SUCCESS' },
+		{ id: 'tools-list', status: 'SUCCESS' },
+		{
+			id: 'conditional-list-change',
+			status: 'SKIPPED',
+			errorMessage: 'Capability flag is truthfully absent',
+		},
+		{
+			id: 'wire-schema-valid',
+			status: 'SUCCESS',
+			details: { messagesValidated: 2 },
+		},
+	], 4, 'a'.repeat(40));
+
+	assert.equal(draft.id, 'tools-list.phase4.v1');
+	assert.deepEqual(draft.checks, [
+		{
+			id: 'conditional-list-change',
+			status: 'SKIPPED',
+			count: 1,
+			reason: 'Capability flag is truthfully absent',
+		},
+		{ id: 'tools-list', status: 'SUCCESS', count: 2 },
+	]);
+	assert.equal(draft.automaticWireChecks['wire-schema-valid'], 1);
+	assert.equal(draft.automaticWireChecks['wire-schema-harness-error'], 0);
+}
+
 async function supervisorCancelsEveryChildAndRejectsLaterSpawns() {
   const supervisor = new ChildSupervisor({ terminationGraceMilliseconds: 50 });
   const cooperative = supervisor.spawn(
@@ -288,15 +320,16 @@ async function earlyFailureWritesDurableEvidence() {
       classpath: 'unused',
       projectRoot: scratch,
       javaExecutable: 'java',
-      phase: 4,
-    }, { processObject }), /accepts only Phase 3/);
+		phase: 7,
+	}, { processObject }), /Verification must target current implementation Phase/);
 
     const evidence = JSON.parse(readFileSync(resolve(workDirectory, 'evidence.json'), 'utf8'));
     assert.equal(evidence.status, 'FAILED');
-    assert.equal(evidence.phase, 4);
+	assert.equal(evidence.phase, 7);
+	assert.equal(evidence.mode, 'verify');
     assert.equal(evidence.suiteCommit, null);
     assert.deepEqual(evidence.scenarios, []);
-    assert.match(evidence.failure, /accepts only Phase 3/);
+	assert.match(evidence.failure, /Verification must target current implementation Phase/);
     assert.deepEqual(
       readdirSync(workDirectory).sort(),
       ['evidence.json'],

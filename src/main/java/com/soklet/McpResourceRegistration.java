@@ -65,6 +65,10 @@ public final class McpResourceRegistration {
 	@NonNull
 	private final McpCachePolicy cachePolicy;
 	@NonNull
+	private final List<@NonNull McpInputRequestDeclaration> inputRequestDeclarations;
+	@NonNull
+	private final McpRequestStateMode requestStateMode;
+	@NonNull
 	private final McpJsonObject metadata;
 	@NonNull
 	private final McpResourceHandler handler;
@@ -117,6 +121,9 @@ public final class McpResourceRegistration {
 		this.annotations = state.annotations;
 		this.size = state.size;
 		this.cachePolicy = state.cachePolicy;
+		this.inputRequestDeclarations =
+				List.copyOf(state.inputRequestDeclarations);
+		this.requestStateMode = state.requestStateMode;
 		this.metadata = state.metadata;
 		this.handler = state.handler;
 	}
@@ -189,6 +196,27 @@ public final class McpResourceRegistration {
 	@NonNull
 	public McpCachePolicy getCachePolicy() {
 		return this.cachePolicy;
+	}
+
+	/**
+	 * Returns the input requests this resource-read operation may emit.
+	 *
+	 * @return immutable declarations in registration order
+	 */
+	@NonNull
+	public List<@NonNull McpInputRequestDeclaration>
+			getInputRequestDeclarations() {
+		return this.inputRequestDeclarations;
+	}
+
+	/**
+	 * Returns the request-state contract for this resource-read operation.
+	 *
+	 * @return request-state mode
+	 */
+	@NonNull
+	public McpRequestStateMode getRequestStateMode() {
+		return this.requestStateMode;
 	}
 
 	/** @return immutable protocol extension metadata */
@@ -404,6 +432,35 @@ public final class McpResourceRegistration {
 			return this;
 		}
 
+		/**
+		 * Appends input-request declarations for this resource operation.
+		 *
+		 * <p>Repeated calls append declarations in order.
+		 *
+		 * @param declarations declarations to append
+		 * @return this builder
+		 * @throws NullPointerException if the array or a declaration is null
+		 */
+		@NonNull
+		public ExactBuilder mayRequestInput(
+				@NonNull McpInputRequestDeclaration @NonNull ... declarations) {
+			appendInputRequestDeclarations(this.state, declarations);
+			return this;
+		}
+
+		/**
+		 * Sets the request-state contract for this resource operation.
+		 *
+		 * @param requestStateMode request-state mode
+		 * @return this builder
+		 */
+		@NonNull
+		public ExactBuilder requestStateMode(
+				@NonNull McpRequestStateMode requestStateMode) {
+			this.state.requestStateMode = requireNonNull(requestStateMode);
+			return this;
+		}
+
 		/** @param metadata protocol extension metadata
 		 * @return this builder */
 		@NonNull
@@ -487,6 +544,35 @@ public final class McpResourceRegistration {
 			return this;
 		}
 
+		/**
+		 * Appends input-request declarations for this resource operation.
+		 *
+		 * <p>Repeated calls append declarations in order.
+		 *
+		 * @param declarations declarations to append
+		 * @return this builder
+		 * @throws NullPointerException if the array or a declaration is null
+		 */
+		@NonNull
+		public TemplateBuilder mayRequestInput(
+				@NonNull McpInputRequestDeclaration @NonNull ... declarations) {
+			appendInputRequestDeclarations(this.state, declarations);
+			return this;
+		}
+
+		/**
+		 * Sets the request-state contract for this resource operation.
+		 *
+		 * @param requestStateMode request-state mode
+		 * @return this builder
+		 */
+		@NonNull
+		public TemplateBuilder requestStateMode(
+				@NonNull McpRequestStateMode requestStateMode) {
+			this.state.requestStateMode = requireNonNull(requestStateMode);
+			return this;
+		}
+
 		/** @param metadata protocol extension metadata
 		 * @return this builder */
 		@NonNull
@@ -500,6 +586,18 @@ public final class McpResourceRegistration {
 		public McpResourceRegistration build() {
 			return new McpResourceRegistration(this.state);
 		}
+	}
+
+	private static void appendInputRequestDeclarations(
+			@NonNull BuilderState state,
+			@NonNull McpInputRequestDeclaration @NonNull ... declarations) {
+		requireNonNull(state);
+		requireNonNull(declarations);
+		List<McpInputRequestDeclaration> copiedDeclarations =
+				new ArrayList<>(declarations.length);
+		for (McpInputRequestDeclaration declaration : declarations)
+			copiedDeclarations.add(requireNonNull(declaration));
+		state.inputRequestDeclarations.addAll(copiedDeclarations);
 	}
 
 	@NotThreadSafe
@@ -527,6 +625,11 @@ public final class McpResourceRegistration {
 		@NonNull
 		private McpCachePolicy cachePolicy =
 				McpCachePolicy.privateNoCacheInstance();
+		@NonNull
+		private final List<@NonNull McpInputRequestDeclaration>
+				inputRequestDeclarations = new ArrayList<>();
+		@NonNull
+		private McpRequestStateMode requestStateMode = McpRequestStateMode.NONE;
 		@NonNull
 		private McpJsonObject metadata = McpJsonObject.emptyInstance();
 		@NonNull

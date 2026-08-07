@@ -20,6 +20,11 @@ released `com.soklet:soklet:3.5.1` JAR.
   removed exported symbols. It exercises a removed class, constructor, field,
   and public method plus a removed protected method on a surviving class;
   harmless `MODIFIED` containers are intentionally absent from the set.
+- `added-api.xml` covers canonical current-side Phase signatures and reviewed
+  ownership. It contains a selected new generic type, a modified shared host
+  with one added and one removed method, and an unselected new type assigned to
+  the controlled non-MCP allowlist. The companion include, allowlist, and
+  signature files are the exact canonical review inputs and output.
 
 An all-classes baseline-to-empty-JAR comparison was also generated during the
 parser review to exercise every emitted japicmp 0.26.1 element shape; the 5.4

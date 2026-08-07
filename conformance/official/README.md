@@ -34,14 +34,22 @@ only `NOT_APPLICABLE` row because Soklet does not advertise Completion.
 of that phase's full gate. The 23 applicable non-MRTR scenarios other than
 `server-stateless` and `tools-call-with-progress` are mandatory in Phase 4.
 Those two scenarios and all 14 MRTR scenarios are mandatory in Phase 5.
-`dns-rebinding-protection` is additionally active as an early Phase 3 smoke
-test because its production Host/Origin path already exists. That Phase 3 run
-uses a public-API-only black-box fixture compiled against the packaged
-`target/soklet-3.6.0-SNAPSHOT.jar`. Its runtime classpath contains only the
-fixture classes and that candidate JAR, never `target/classes` or
-`target/test-classes`. It is public-API development evidence, but it is not
-release-candidate evidence because this checkpoint deliberately runs only the
-already-reviewed DNS scenario rather than a complete phase gate.
+`dns-rebinding-protection` was additionally active as an early Phase 3 smoke
+test because its production Host/Origin path already existed. Phase 4 now runs
+all 23 owned scenarios through one common fullest-truthful Phase 4 fixture.
+Each scenario receives a fresh deterministic JVM; the fixture never changes
+its advertised capabilities to suit the selected scenario.
+
+The fixture is a candidate-artifact-only black box. It compiles and runs
+against packaged `target/soklet-3.6.0-SNAPSHOT.jar`, and its runtime classpath
+contains only fixture classes plus that JAR, never `target/classes` or
+`target/test-classes`. Normal configuration and handlers use public APIs.
+One audited same-package, package-private seam registers and enforces the exact
+official JSON Schema fixture because Soklet intentionally has no public
+hand-authored-schema API. The fixture imports no `com.soklet.internal` type.
+This is packaged development evidence, not release-candidate evidence; the
+later release gate separately requires checksum-matched JAR/POM provenance and
+the full 39-scenario run.
 
 Every scenario row names the truthful fixture registrations or features it
 needs and the local tests that supplement official-suite coverage. Existing
@@ -50,10 +58,10 @@ future phase are checked-in evidence obligations: they must be implemented and
 green before that row can acquire an expected profile. Empty arrays are valid
 only for the intentionally unsupported Completion row.
 
-Expected profiles are evidence, not guesses. During Phase 3,
-`expected-checks.json` therefore freezes only the complete two-check multiset
-for `dns-rebinding-protection`. Every future `RUN` row keeps a null
-`expectedCheckProfile` until its owning phase supplies a truthful fixture,
+Expected profiles are evidence, not guesses. `expected-checks.json` retains
+the Phase 3 DNS profile and freezes the complete observed profiles for the
+other 22 Phase 4 rows. The 16 Phase 5 `RUN` rows keep a null
+`expectedCheckProfile` until their owning phase supplies truthful behavior,
 runs the exact pinned scenario, and reviews and freezes the complete result.
 Null never means “accept anything”; it means “not executable in this phase.”
 
@@ -75,7 +83,7 @@ CORS, SSE framing, cross-message order, ID correlation, filter containment,
 and progress monotonicity remain production/local/official scenario duties.
 The `byte` format is annotation-only, matching the official suite.
 
-## Canonical Phase 3 run
+## Canonical Phase 4 run
 
 First obtain the exact source commit recorded in `upstream-pins.json`. Before
 installing or building it, run `verifyOfficialSuite(..., {requireBuilt:false})`
@@ -92,18 +100,20 @@ sh conformance/official/build-public-fixture.sh \
   > target/conformance/official/public-fixture-classpath.txt
 node conformance/official/self-test.mjs --suite-dir /absolute/pinned-suite
 node conformance/official/runner-self-test.mjs
-mkdir -p target/conformance/official/phase-3
+mkdir -p target/conformance/official/phase-4
 node conformance/official/run.mjs \
   --suite-dir /absolute/pinned-suite \
-  --work-dir /absolute/project/target/conformance/official/phase-3 \
+  --work-dir /absolute/project/target/conformance/official/phase-4 \
   --classpath "$(cat target/conformance/official/public-fixture-classpath.txt)" \
   --project-root /absolute/project \
-  --phase 3
+  --phase 4
 ```
 
-`build-public-fixture.sh` requires an empty fixture-classes directory, compiles
-the fixture with the candidate JAR as its only Soklet compile dependency, and
-uses `jdeps` to reject any compiled dependency on `com.soklet.internal`.
+`build-public-fixture.sh` requires an empty fixture-classes directory,
+compiles the fixture and its one same-package schema helper with the candidate
+JAR as their only Soklet compile dependency, explicitly disables annotation
+processing because the fixture uses programmatic registration, and uses
+`jdeps` to reject any compiled dependency on `com.soklet.internal`.
 `run.mjs` independently requires the exact fixture-classes/candidate-JAR pair
 in that order and refuses missing, substituted, symlinked, or exploded main/test
 class paths. The work directory must be empty.
@@ -127,17 +137,29 @@ before `checks.json` is read.
 
 Generated check files, fixture/CLI logs, cleanup disposition, and
 `evidence.json` belong under `target/conformance/official/`; none are checked
-in. `evidence.json` is written durably through `PREPARING`, `RUNNING`, and a
-terminal `PASSED`, `FAILED`, or `CANCELLED` state, so an early failure still
-leaves an explanation. The CI job initializes a separate start marker and
-uploads this tree even on failure.
+in. Verification evidence is written durably through `PREPARING`, `RUNNING`,
+and terminal `PASSED`, `FAILED`, or `CANCELLED` states, so an early failure
+still leaves an explanation. The CI job initializes a separate start marker
+and uploads this tree even on failure.
 
-The Phase 3 official checkpoint still covers only the already-supported DNS
-scenario, now through the packaged candidate and public-only fixture. It does
-not activate Phase 4 or imply support for tools, prompts, or resources. Phase 4
-must add those production operations, acquire reviewed expected-check profiles,
-and activate its 23 scenarios together; the runner intentionally rejects
-`--phase 4` until that complete gate is truthful.
+For controlled profile acquisition, `--mode observe` may target only the
+phase immediately after the manifest's current implementation phase. It
+retains raw checks and reviewable profile drafts, uses evidence class
+`PROFILE_OBSERVATION_ONLY`, and terminates as `OBSERVED`, never `PASSED`.
+It is not a CI or release gate. Once profiles are reviewed and frozen, normal
+verification uses `--mode verify` (the default) and requires the manifest's
+exact current phase.
+
+The Phase 4 gate now runs all 23 owned scenarios. Every frozen multiset and
+automatic wire-check count matched on a second fail-closed run; all official
+checks were successful except the one reviewed
+`server-sse-streams-functional` informational outcome, which truthfully
+records that the concurrent requests completed as independent JSON responses
+rather than SSE streams. A fresh clean Corretto 21 candidate built from the
+final frozen Phase 4 source passed the same exact gate on 2026-08-07, including
+all 81 expected outcome occurrences and 22 independently validated golden
+messages. This remains candidate-development evidence rather than
+release-candidate evidence.
 
 ## Updating a pin
 

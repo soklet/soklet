@@ -4,9 +4,47 @@
 
 ### Breaking Changes
 
-- Removed the MCP 2025-11-25 implementation and public API as the first step
-  toward greenfield support for MCP 2026-07-28. This is an intentional source-
-  and binary-incompatible change in a minor release.
+- Replaced the MCP 2025-11-25 implementation and public API with a greenfield
+  MCP 2026-07-28 design. The new transport has no session or initialization
+  lifecycle, and the new Java API is intentionally source- and binary-
+  incompatible in this minor release. Applications that require the legacy MCP
+  implementation must remain on Soklet 3.5.x; 3.6.0 provides no compatibility
+  adapter.
+
+### Features
+
+- Added a dedicated MCP 2026-07-28 Streamable HTTP server in core Soklet. It
+  owns an independent listener and port, integrates with `SokletConfig`, and
+  supports discovery as the first request without a session or initialization
+  handshake.
+- Added annotation-first and programmatic tools, prompts, exact resources,
+  resource templates, resource reads, and custom resource listing. Tool
+  registration uses staged typed, argument-only, or raw-JSON argument paths;
+  typed Java declarations produce schemas and conversion plans under Soklet
+  MCP Tool Schema Profile 1. There is no public hand-authored JSON Schema
+  registration API, and Soklet does not claim general-purpose JSON Schema
+  Draft 2020-12 support.
+- Added static resource-list fallback and sole-authority custom resource lists,
+  application-owned opaque cursors with UTF-8 byte bounds, cache hints, MCP
+  content blocks, structured tool results, and standard MCP metadata.
+- Added mandatory request admission, optional request-wide rate limiting,
+  required fallback tool limiting for tool-bearing servers, named endpoint and
+  tool limiter overrides, a bounded in-process token bucket, and a
+  `McpRateLimiter` interface suitable for distributed implementations.
+- Added one `McpHandlerInterceptor` for all application-owned MCP handlers,
+  tool-output sanitization, bounded handler concurrency and queueing, custom
+  `Mcp-Param-*` mirrored headers, shared `CorsAuthorizer` integration, strict
+  Host validation, a loopback bind default, and MCP lifecycle/metrics
+  attachment points on Soklet's existing shared hosts.
+
+### Development Status
+
+- The locally frozen Phase 4 surface implements discovery, tools, prompts, and
+  resources. Progress, cancellation, subscription delivery, multi-round-trip
+  execution, protected request-state execution, trace correlation,
+  comprehensive MCP telemetry, and MCP simulation remain Phase 5/6 work;
+  descriptors already present for those features are behaviorally neutral at
+  this checkpoint.
 
 ## 3.5.1 (2026-07-13)
 

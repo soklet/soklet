@@ -59,7 +59,7 @@ public interface McpRequestContext {
 	@NonNull
 	Optional<@NonNull McpRequestId> getRequestId();
 
-	/** @return negotiated MCP protocol version */
+	/** @return validated MCP protocol version supplied on this request */
 	@NonNull
 	String getProtocolVersion();
 
@@ -77,7 +77,7 @@ public interface McpRequestContext {
 	Optional<@NonNull String> getOperationName();
 
 	/**
-	 * Returns client implementation metadata supplied during initialization.
+	 * Returns client implementation metadata supplied on this request.
 	 * This value is informational and is not an authenticated identity.
 	 *
 	 * @return client implementation metadata, if supplied
@@ -85,13 +85,39 @@ public interface McpRequestContext {
 	@NonNull
 	Optional<@NonNull McpImplementation> getClientInfo();
 
-	/** @return immutable negotiated client capabilities */
+	/** @return immutable client capabilities validated from this request */
 	@NonNull
 	McpClientCapabilities getClientCapabilities();
 
 	/** @return immutable request {@code _meta} object */
 	@NonNull
 	McpJsonObject getRequestMetadata();
+
+	/**
+	 * Returns client responses supplied with a multi-round-trip retry.
+	 *
+	 * <p>The default preserves compatibility for request-context
+	 * implementations that do not yet supply multi-round-trip data.
+	 *
+	 * @return immutable input responses, empty for an initial request
+	 */
+	@NonNull
+	default McpInputResponses getInputResponses() {
+		return McpInputResponses.emptyInstance();
+	}
+
+	/**
+	 * Returns verified request state supplied with a multi-round-trip retry.
+	 *
+	 * <p>The default preserves compatibility for request-context
+	 * implementations that do not yet supply multi-round-trip data.
+	 *
+	 * @return request state, or empty when none was supplied
+	 */
+	@NonNull
+	default Optional<@NonNull McpRequestState> getRequestState() {
+		return Optional.empty();
+	}
 
 	/**
 	 * Returns the protocol's deprecated per-request log-level metadata.

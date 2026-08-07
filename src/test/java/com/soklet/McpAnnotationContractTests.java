@@ -18,6 +18,7 @@ package com.soklet;
 
 import com.soklet.annotation.McpHeader;
 import com.soklet.annotation.McpListResources;
+import com.soklet.annotation.McpMayRequestInput;
 import com.soklet.annotation.McpPrompt;
 import com.soklet.annotation.McpPromptArgument;
 import com.soklet.annotation.McpResource;
@@ -25,6 +26,7 @@ import com.soklet.annotation.McpResourceUriParameter;
 import com.soklet.annotation.McpServerEndpoint;
 import com.soklet.annotation.McpTool;
 import com.soklet.annotation.McpToolArgument;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -34,6 +36,8 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+import java.lang.reflect.AnnotatedArrayType;
+import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.net.URI;
@@ -63,6 +67,7 @@ public class McpAnnotationContractTests {
 		assertAnnotationContract(McpResourceUriParameter.class,
 				ElementType.PARAMETER);
 		assertAnnotationContract(McpListResources.class, ElementType.METHOD);
+		assertAnnotationContract(McpMayRequestInput.class);
 	}
 
 	@Test
@@ -74,17 +79,20 @@ public class McpAnnotationContractTests {
 				"resourceTemplatesListCacheScope"),
 				elementNames(McpServerEndpoint.class));
 		Assertions.assertEquals(Set.of("name", "title", "description",
-				"rateLimiter", "mirrorStructuredContentAsText"),
+				"rateLimiter", "mirrorStructuredContentAsText",
+				"mayRequestInput", "requestStateMode"),
 				elementNames(McpTool.class));
 		Assertions.assertEquals(Set.of("name", "title", "description"),
 				elementNames(McpToolArgument.class));
 		Assertions.assertEquals(Set.of("value"), elementNames(McpHeader.class));
-		Assertions.assertEquals(Set.of("name", "title", "description"),
+		Assertions.assertEquals(Set.of("name", "title", "description",
+				"mayRequestInput", "requestStateMode"),
 				elementNames(McpPrompt.class));
 		Assertions.assertEquals(Set.of("name", "title", "description"),
 				elementNames(McpPromptArgument.class));
 		Assertions.assertEquals(Set.of("uri", "name", "title", "description",
-				"mimeType", "size", "cacheTtlMs", "cacheScope"),
+				"mimeType", "size", "cacheTtlMs", "cacheScope",
+				"mayRequestInput", "requestStateMode"),
 				elementNames(McpResource.class));
 		Assertions.assertEquals(Set.of("value"),
 				elementNames(McpResourceUriParameter.class));
@@ -119,6 +127,9 @@ public class McpAnnotationContractTests {
 		Assertions.assertEquals("", tool.description());
 		Assertions.assertEquals("", tool.rateLimiter());
 		Assertions.assertTrue(tool.mirrorStructuredContentAsText());
+		Assertions.assertEquals(0, tool.mayRequestInput().length);
+		Assertions.assertEquals(McpRequestStateMode.NONE,
+				tool.requestStateMode());
 
 		Parameter parameter = method.getParameters()[0];
 		McpToolArgument argument = parameter
@@ -144,6 +155,9 @@ public class McpAnnotationContractTests {
 		Assertions.assertEquals("compose", prompt.name());
 		Assertions.assertEquals("", prompt.title());
 		Assertions.assertEquals("", prompt.description());
+		Assertions.assertEquals(0, prompt.mayRequestInput().length);
+		Assertions.assertEquals(McpRequestStateMode.NONE,
+				prompt.requestStateMode());
 		McpPromptArgument promptArgument = promptMethod.getParameters()[0]
 				.getAnnotation(McpPromptArgument.class);
 		Assertions.assertEquals("subject", promptArgument.name());
@@ -167,12 +181,44 @@ public class McpAnnotationContractTests {
 		Assertions.assertEquals(-1, resource.size());
 		Assertions.assertEquals(0, resource.cacheTtlMs());
 		Assertions.assertEquals(McpCacheScope.PRIVATE, resource.cacheScope());
+		Assertions.assertEquals(0, resource.mayRequestInput().length);
+		Assertions.assertEquals(McpRequestStateMode.NONE,
+				resource.requestStateMode());
 		McpResourceUriParameter uriParameter = resourceMethod.getParameters()[0]
 				.getAnnotation(McpResourceUriParameter.class);
 		Assertions.assertEquals("", uriParameter.value());
 		Assertions.assertNotNull(MinimalEndpoint.class.getDeclaredMethod(
 				"listResources", McpResourceListContext.class)
 				.getAnnotation(McpListResources.class));
+
+		McpTool multiRoundTripTool = MinimalEndpoint.class
+				.getDeclaredMethod("deleteItem")
+				.getAnnotation(McpTool.class);
+		Assertions.assertEquals(McpRequestStateMode.FRAMEWORK_PROTECTED,
+				multiRoundTripTool.requestStateMode());
+		Assertions.assertEquals(1, multiRoundTripTool.mayRequestInput().length);
+		McpMayRequestInput declaration =
+				multiRoundTripTool.mayRequestInput()[0];
+		Assertions.assertEquals("elicitation/create", declaration.method());
+		Assertions.assertArrayEquals(
+				new McpClientCapability[] {
+						McpClientCapability.ELICITATION_FORM},
+				declaration.capabilities());
+		Assertions.assertEquals(McpInputRequirement.REQUIRED,
+				declaration.requirement());
+	}
+
+	@Test
+	public void multiRoundTripAnnotationArraysHaveExplicitJSpecifyNullness()
+			throws Exception {
+		assertNonNullArray(McpMayRequestInput.class
+				.getDeclaredMethod("capabilities").getAnnotatedReturnType());
+		assertNonNullArray(McpTool.class
+				.getDeclaredMethod("mayRequestInput").getAnnotatedReturnType());
+		assertNonNullArray(McpPrompt.class
+				.getDeclaredMethod("mayRequestInput").getAnnotatedReturnType());
+		assertNonNullArray(McpResource.class
+				.getDeclaredMethod("mayRequestInput").getAnnotatedReturnType());
 	}
 
 	private static void assertAnnotationContract(
@@ -192,6 +238,14 @@ public class McpAnnotationContractTests {
 		return Arrays.stream(annotationType.getDeclaredMethods())
 				.map(Method::getName)
 				.collect(Collectors.toUnmodifiableSet());
+	}
+
+	private static void assertNonNullArray(AnnotatedType annotatedType) {
+		Assertions.assertTrue(annotatedType.isAnnotationPresent(NonNull.class));
+		AnnotatedArrayType arrayType = Assertions.assertInstanceOf(
+				AnnotatedArrayType.class, annotatedType);
+		Assertions.assertTrue(arrayType.getAnnotatedGenericComponentType()
+				.isAnnotationPresent(NonNull.class));
 	}
 
 	@McpServerEndpoint(path = "/mcp", name = "catalog", version = "3.6.0")
@@ -228,6 +282,15 @@ public class McpAnnotationContractTests {
 			return McpResourcePage.builder()
 					.resources(list.getRegisteredResourceDescriptors())
 					.build();
+		}
+
+		@McpTool(name = "delete", mayRequestInput = @McpMayRequestInput(
+				method = "elicitation/create",
+				capabilities = McpClientCapability.ELICITATION_FORM,
+				requirement = McpInputRequirement.REQUIRED),
+				requestStateMode = McpRequestStateMode.FRAMEWORK_PROTECTED)
+		public McpCompleteResult deleteItem() {
+			return McpCompleteResult.fromToolText("not invoked");
 		}
 	}
 

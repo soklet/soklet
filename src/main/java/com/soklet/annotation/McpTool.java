@@ -16,6 +16,7 @@
 
 package com.soklet.annotation;
 
+import com.soklet.McpRequestStateMode;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -78,4 +79,20 @@ public @interface McpTool {
 	 * @return {@code true} to mirror structured content as text
 	 */
 	boolean mirrorStructuredContentAsText() default true;
+
+	/**
+	 * Client requests this tool may emit during multi-round-trip handling.
+	 *
+	 * @return input-request declarations
+	 */
+	@NonNull
+	McpMayRequestInput @NonNull [] mayRequestInput() default {};
+
+	/**
+	 * The request-state contract for this tool.
+	 *
+	 * @return request-state mode
+	 */
+	@NonNull
+	McpRequestStateMode requestStateMode() default McpRequestStateMode.NONE;
 }

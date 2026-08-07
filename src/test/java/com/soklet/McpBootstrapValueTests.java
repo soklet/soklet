@@ -95,8 +95,20 @@ public class McpBootstrapValueTests {
 
 		Assertions.assertEquals("/mcp", endpoint.getPath());
 		Assertions.assertSame(serverInformation, endpoint.getServerInformation());
+		Assertions.assertTrue(endpoint.isServerInformationIncluded());
 		Assertions.assertEquals("Use this endpoint for catalog discovery.",
 				endpoint.getInstructions().orElseThrow());
+	}
+
+	@Test
+	public void endpointCanOmitServerInformationFromResponseMetadata() {
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
+				.serverInformation(McpImplementation
+						.withNameAndVersion("test-server", "1.0").build())
+				.includeServerInformation(false)
+				.build();
+
+		Assertions.assertFalse(endpoint.isServerInformationIncluded());
 	}
 
 	@Test
@@ -163,6 +175,25 @@ public class McpBootstrapValueTests {
 				McpShutdownOutcome.CLEAN,
 				McpShutdownOutcome.RESIDUAL_HANDLERS
 		}, McpShutdownOutcome.values());
+	}
+
+	@Test
+	@SuppressWarnings("deprecation")
+	public void deprecatedLogLevelExposesTheExactWireVocabulary() {
+		Assertions.assertArrayEquals(new McpLogLevel[]{
+				McpLogLevel.DEBUG,
+				McpLogLevel.INFO,
+				McpLogLevel.NOTICE,
+				McpLogLevel.WARNING,
+				McpLogLevel.ERROR,
+				McpLogLevel.CRITICAL,
+				McpLogLevel.ALERT,
+				McpLogLevel.EMERGENCY
+		}, McpLogLevel.values());
+		Deprecated deprecated = McpLogLevel.class.getAnnotation(Deprecated.class);
+		Assertions.assertNotNull(deprecated);
+		Assertions.assertEquals("3.6.0", deprecated.since());
+		Assertions.assertFalse(deprecated.forRemoval());
 	}
 
 	private static McpEndpoint endpoint(String path) {

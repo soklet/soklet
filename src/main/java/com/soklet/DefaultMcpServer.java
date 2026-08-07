@@ -87,6 +87,17 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	private final Object lifecycleLock;
 	private final int maximumCursorSizeInBytes;
+	private final int maximumSubscriptionsPerPrincipal;
+	private final int streamQueueCapacity;
+	@NonNull
+	private final Duration keepAliveInterval;
+	@NonNull
+	private final Duration maximumSubscriptionDuration;
+	@NonNull
+	private final Duration shutdownTimeout;
+	@NonNull
+	private final Duration writeTimeout;
+	private final boolean logRawValidatedTraceIds;
 	@NonNull
 	private final McpHandlerResolver handlerResolver;
 	@NonNull
@@ -103,6 +114,10 @@ final class DefaultMcpServer implements McpServer {
 	private final McpRateLimiterRegistry rateLimiterRegistry;
 	@NonNull
 	private final CorsAuthorizer corsAuthorizer;
+	@Nullable
+	private final McpProtectionConfig protectionConfig;
+	@NonNull
+	private final DefaultMcpSecurityControls securityControls;
 	@NonNull
 	private final McpServerRuntimeBridge runtimeBridge;
 	@NonNull
@@ -118,6 +133,11 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull Duration requestTimeout,
 			@Nullable Supplier<@NonNull ExecutorService>
 					requestHandlerExecutorServiceSupplier,
+			int streamQueueCapacity, @NonNull Duration writeTimeout,
+			@NonNull Duration keepAliveInterval,
+			@NonNull Duration shutdownTimeout,
+			int maximumSubscriptionsPerPrincipal,
+			@NonNull Duration maximumSubscriptionDuration,
 			@NonNull McpHandlerResolver handlerResolver,
 			@NonNull McpRequestAdmissionPolicy requestAdmissionPolicy,
 			@NonNull McpHandlerInterceptor handlerInterceptor,
@@ -126,12 +146,24 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpAbsentOriginPolicy absentOriginPolicy,
 			@NonNull McpUnknownMirroredHeaderPolicy unknownMirroredHeaderPolicy,
 			boolean unknownMirroredHeaderNameDiagnostics,
+			boolean logRawValidatedTraceIds,
 			@NonNull Set<@NonNull String> allowedHosts,
 			@Nullable McpRateLimiter requestRateLimiter,
 			@Nullable McpRateLimiter toolRateLimiter,
-			@NonNull McpRateLimiterRegistry rateLimiterRegistry) {
+			@NonNull McpRateLimiterRegistry rateLimiterRegistry,
+			@Nullable McpProtectionConfig protectionConfig,
+			@Nullable McpTraceCorrelationKey traceCorrelationKey) {
 		this.lifecycleLock = new Object();
 		this.maximumCursorSizeInBytes = maximumCursorSizeInBytes;
+		this.maximumSubscriptionsPerPrincipal =
+				maximumSubscriptionsPerPrincipal;
+		this.streamQueueCapacity = streamQueueCapacity;
+		this.keepAliveInterval = requireNonNull(keepAliveInterval);
+		this.maximumSubscriptionDuration = requireNonNull(
+				maximumSubscriptionDuration);
+		this.shutdownTimeout = requireNonNull(shutdownTimeout);
+		this.writeTimeout = requireNonNull(writeTimeout);
+		this.logRawValidatedTraceIds = logRawValidatedTraceIds;
 		this.handlerResolver = requireNonNull(handlerResolver);
 		this.requestAdmissionPolicy = requireNonNull(requestAdmissionPolicy);
 		this.handlerInterceptor = requireNonNull(handlerInterceptor);
@@ -139,6 +171,9 @@ final class DefaultMcpServer implements McpServer {
 		this.requestRateLimiter = requestRateLimiter;
 		this.toolRateLimiter = toolRateLimiter;
 		this.rateLimiterRegistry = requireNonNull(rateLimiterRegistry);
+		this.protectionConfig = protectionConfig;
+		this.securityControls = new DefaultMcpSecurityControls(protectionConfig,
+				traceCorrelationKey);
 		requireNonNull(unknownMirroredHeaderPolicy);
 		boolean corsAuthorizerExplicitlyConfigured = configuredCorsAuthorizer != null;
 		this.corsAuthorizer = configuredCorsAuthorizer == null
@@ -309,6 +344,55 @@ final class DefaultMcpServer implements McpServer {
 
 	@Override
 	@NonNull
+	public McpProtectionControl getProtectionControl() {
+		return this.securityControls;
+	}
+
+	@Override
+	@NonNull
+	public McpTraceCorrelation getTraceCorrelation() {
+		return this.securityControls;
+	}
+
+	@NonNull
+	Optional<@NonNull McpProtectionConfig> protectionConfig() {
+		return Optional.ofNullable(this.protectionConfig);
+	}
+
+	int streamQueueCapacity() {
+		return this.streamQueueCapacity;
+	}
+
+	@NonNull
+	Duration writeTimeout() {
+		return this.writeTimeout;
+	}
+
+	@NonNull
+	Duration keepAliveInterval() {
+		return this.keepAliveInterval;
+	}
+
+	@NonNull
+	Duration shutdownTimeout() {
+		return this.shutdownTimeout;
+	}
+
+	int maximumSubscriptionsPerPrincipal() {
+		return this.maximumSubscriptionsPerPrincipal;
+	}
+
+	@NonNull
+	Duration maximumSubscriptionDuration() {
+		return this.maximumSubscriptionDuration;
+	}
+
+	boolean logRawValidatedTraceIds() {
+		return this.logRawValidatedTraceIds;
+	}
+
+	@Override
+	@NonNull
 	public McpServerDiagnostics getDiagnostics() {
 		synchronized (this.lifecycleLock) {
 			RuntimeState runtimeState = this.runtimeBridge.getRuntimeState();
@@ -332,6 +416,7 @@ final class DefaultMcpServer implements McpServer {
 				toolDescriptorFields(tool), tool.getMetadata(),
 				tool.isStructuredContentTextMirroringEnabled(),
 				toRateLimitAdapter(resolvedRateLimiter),
+				tool.getInputRequestDeclarations(), tool.getRequestStateMode(),
 				invocation -> invokeTool(tool, invocation));
 	}
 
@@ -344,6 +429,7 @@ final class DefaultMcpServer implements McpServer {
 				.toList();
 		return new PromptPlan(prompt.getName(), arguments,
 				promptDescriptorFields(prompt), prompt.getMetadata(),
+				prompt.getInputRequestDeclarations(), prompt.getRequestStateMode(),
 				invocation -> invokePrompt(prompt, invocation));
 	}
 
@@ -362,6 +448,8 @@ final class DefaultMcpServer implements McpServer {
 		return new ResourcePlan(addressKind, address, resource.getName(),
 				resourceDescriptorFields(resource), resource.getMetadata(),
 				toCachePlan(resource.getCachePolicy()),
+				resource.getInputRequestDeclarations(),
+				resource.getRequestStateMode(),
 				invocation -> invokeResource(resource, invocation));
 	}
 
@@ -421,6 +509,8 @@ final class DefaultMcpServer implements McpServer {
 			return ToolInvocationResult.invalidInput();
 		}
 
+		if (result instanceof McpInputRequiredResult inputRequiredResult)
+			return ToolInvocationResult.inputRequired(inputRequiredResult);
 		if (!(result instanceof McpCompleteResult completeResult))
 			throw new IllegalArgumentException(
 					"Unsupported MCP tool result implementation: "
@@ -464,6 +554,8 @@ final class DefaultMcpServer implements McpServer {
 			return PromptInvocationResult.invalidInput();
 		}
 
+		if (result instanceof McpInputRequiredResult inputRequiredResult)
+			return PromptInvocationResult.inputRequired(inputRequiredResult);
 		if (!(result instanceof McpCompleteResult completeResult))
 			throw new IllegalArgumentException(
 					"Unsupported MCP prompt result implementation: "
@@ -502,6 +594,8 @@ final class DefaultMcpServer implements McpServer {
 					error.getMessage(), error.getData());
 		}
 
+		if (result instanceof McpInputRequiredResult inputRequiredResult)
+			return ResourceInvocationResult.inputRequired(inputRequiredResult);
 		if (!(result instanceof McpCompleteResult completeResult))
 			throw new IllegalArgumentException(
 					"Unsupported MCP resource result implementation: "

@@ -1151,6 +1151,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		Optional<McpApplicationToolRoute> toolRoute = Optional.empty();
 		Optional<McpApplicationPromptRoute> promptRoute = Optional.empty();
 		Optional<McpApplicationRequestHandler> applicationHandler = Optional.empty();
+		McpInputRequestPlan inputRequestPlan = McpInputRequestPlan.empty();
 
 		if (discoveryRequest) {
 			if (!mappedRequest.params().fields().members().isEmpty())
@@ -1213,11 +1214,15 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			if (!mappedRequest.params().fields().members().isEmpty())
 				return invalidParams(mappedRequest, corsHeaders);
 		} else if ("tools/call".equals(mappedRequest.method())) {
-			McpJsonValue nameValue = mappedRequest.params().fields().members().get("name");
+			Map<String, McpJsonValue> fields =
+					mappedRequest.params().fields().members();
+			if (fields.containsKey("inputResponses")
+					|| fields.containsKey("requestState"))
+				return invalidParams(mappedRequest, corsHeaders);
+			McpJsonValue nameValue = fields.get("name");
 			if (!(nameValue instanceof McpJsonString name) || name.value().isBlank())
 				return invalidParams(mappedRequest, corsHeaders);
-			McpJsonValue argumentsValue =
-					mappedRequest.params().fields().members().get("arguments");
+			McpJsonValue argumentsValue = fields.get("arguments");
 			if (argumentsValue != null && !(argumentsValue instanceof McpJsonObject))
 				return invalidParams(mappedRequest, corsHeaders);
 
@@ -1226,7 +1231,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			if (applicationRouter.hasToolRoutes()) {
 				if (toolRoute.isEmpty())
 					return invalidParams(mappedRequest, corsHeaders);
-				applicationHandler = Optional.of(toolRoute.orElseThrow().handler());
+				McpApplicationToolRoute resolvedRoute = toolRoute.orElseThrow();
+				applicationHandler = Optional.of(resolvedRoute.handler());
+				inputRequestPlan = resolvedRoute.inputRequestPlan();
 			} else {
 				// Retain the package-private generic method route for existing runtime
 				// tests while production registrations use exact immutable tool routes.
@@ -1241,12 +1248,16 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					&& genericPromptHandler.isEmpty())
 				return methodNotFound(mappedRequest, corsHeaders);
 
-			McpJsonValue nameValue = mappedRequest.params().fields().members().get("name");
+			Map<String, McpJsonValue> fields =
+					mappedRequest.params().fields().members();
+			if (fields.containsKey("inputResponses")
+					|| fields.containsKey("requestState"))
+				return invalidParams(mappedRequest, corsHeaders);
+			McpJsonValue nameValue = fields.get("name");
 			if (!(nameValue instanceof McpJsonString name) || name.value().isBlank())
 				return invalidParams(mappedRequest, corsHeaders);
 
-			McpJsonValue argumentsValue =
-					mappedRequest.params().fields().members().get("arguments");
+			McpJsonValue argumentsValue = fields.get("arguments");
 			if (capabilityRegistry.prompts().isEmpty()) {
 				// Preserve the package-private generic method seam used by transport
 				// tests while still enforcing the final wire's string-value shape.
@@ -1266,7 +1277,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			if (applicationRouter.hasPromptRoutes()) {
 				if (promptRoute.isEmpty())
 					return invalidParams(mappedRequest, corsHeaders);
-				applicationHandler = Optional.of(promptRoute.orElseThrow().handler());
+				McpApplicationPromptRoute resolvedRoute = promptRoute.orElseThrow();
+				applicationHandler = Optional.of(resolvedRoute.handler());
+				inputRequestPlan = resolvedRoute.inputRequestPlan();
 			} else {
 				// Retain the package-private generic method route for existing runtime
 				// tests while production registrations use exact immutable prompt routes.
@@ -1285,6 +1298,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			Map<String, McpJsonValue> fields = mappedRequest.params().fields().members();
 			if (!Set.of("uri", "inputResponses", "requestState")
 					.containsAll(fields.keySet()))
+				return invalidParams(mappedRequest, corsHeaders);
+			if (fields.containsKey("inputResponses")
+					|| fields.containsKey("requestState"))
 				return invalidParams(mappedRequest, corsHeaders);
 			McpJsonValue uriValue = fields.get("uri");
 			if (!(uriValue instanceof McpJsonString uriString))
@@ -1322,6 +1338,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					templateVariables = match.templateVariables();
 				}
 				McpApplicationResourceReadRoute route = resolvedRoute;
+				inputRequestPlan = route.inputRequestPlan();
 				Map<String, String> variables = templateVariables;
 				applicationHandler = Optional.of(invocation -> resourceResultWithCachePolicy(
 						route.handler().handle(new McpApplicationResourceReadInvocation(
@@ -1342,6 +1359,14 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			if (applicationHandler.isEmpty())
 				return methodNotFound(mappedRequest, corsHeaders);
 		}
+
+		Set<McpClientCapabilityRequirement> missingCapabilities =
+				inputRequestPlan.missingAtAdmission(
+						mappedRequest.params().metadata().clientCapabilities());
+		if (!missingCapabilities.isEmpty())
+			return jsonRpcError(400, "Bad Request", Optional.of(mappedRequest.id()),
+					McpJsonRpcError.missingRequiredClientCapabilities(
+							missingCapabilities), corsHeaders);
 
 		if (!requestControl.protocolProcessingAllowed())
 			return null;

@@ -16,6 +16,7 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import com.soklet.McpRequestOutcome;
 import com.soklet.StreamTerminationReason;
 import com.soklet.internal.microhttp.MicrohttpRequest;
 import org.junit.jupiter.api.Assertions;
@@ -27,6 +28,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.RejectedExecutionException;
@@ -39,6 +41,26 @@ import java.util.function.BooleanSupplier;
 
 @NotThreadSafe
 public class McpApplicationExecutionTests {
+	@Test
+	public void framework_protocol_errors_remain_protocol_observation_outcomes() {
+		McpJsonRpcId id = new McpJsonRpcId.StringId("conditional-capability");
+		McpJsonRpcError error = McpJsonRpcError.missingRequiredClientCapabilities(
+				Set.of(McpCoreClientCapability.ROOTS));
+
+		McpApplicationResponse response =
+				McpApplicationResponse.protocolJsonRpcError(id, error);
+
+		Assertions.assertEquals(400, response.status());
+		Assertions.assertEquals("Bad Request", response.reason());
+		Assertions.assertEquals(McpRequestOutcome.PROTOCOL_ERROR,
+				response.outcome());
+		McpJsonRpcMessage.ErrorResponse message =
+				(McpJsonRpcMessage.ErrorResponse) response.message().orElseThrow();
+		Assertions.assertEquals(Optional.of(id), message.id());
+		Assertions.assertSame(error, message.error());
+		Assertions.assertTrue(response.throwables().isEmpty());
+	}
+
 	@Test
 	public void protocol_operation_reservation_and_stop_share_the_execution_boundary()
 			throws Exception {

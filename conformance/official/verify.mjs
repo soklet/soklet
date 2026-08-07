@@ -381,14 +381,16 @@ function verifyPins(pins) {
 }
 
 function verifyScenarioManifest(selection, pins) {
-  assertExactKeys(selection, [
-    'schemaVersion', 'protocolVersion', 'suiteCommit', 'currentImplementationPhase',
-    'earliestPhaseSemantics', 'phase3ExecutionPolicy', 'scenarios',
-  ], 'scenario manifest');
-  if (selection.schemaVersion !== 1 || selection.protocolVersion !== pins.protocolVersion
-      || selection.suiteCommit !== pins.officialConformanceSuite.commit
-      || selection.currentImplementationPhase !== 3
-      || !Array.isArray(selection.scenarios))
+	assertExactKeys(selection, [
+		'schemaVersion', 'protocolVersion', 'suiteCommit', 'currentImplementationPhase',
+		'earliestPhaseSemantics', 'phaseExecutionPolicy', 'scenarios',
+	], 'scenario manifest');
+	if (selection.schemaVersion !== 1 || selection.protocolVersion !== pins.protocolVersion
+			|| selection.suiteCommit !== pins.officialConformanceSuite.commit
+			|| selection.currentImplementationPhase !== 4
+			|| nonBlankString(selection.earliestPhaseSemantics)
+			|| nonBlankString(selection.phaseExecutionPolicy)
+			|| !Array.isArray(selection.scenarios))
     throw new Error('Scenario manifest identity is invalid');
   if (selection.scenarios.length !== pins.scenarioInventory.fullCount)
     throw new Error('Scenario manifest must contain the complete 40-row inventory');
@@ -420,15 +422,19 @@ function verifyScenarioManifest(selection, pins) {
           || scenario.phase3Status !== 'NOT_APPLICABLE'
           || scenario.expectedCheckProfile !== null)
         throw new Error('Completion must be the sole exact NOT_APPLICABLE disposition');
-    } else if (scenario.selection === 'RUN') {
+		} else if (scenario.selection === 'RUN') {
       runCount++;
       if (![4, 5].includes(scenario.earliestPhase))
         throw new Error(`RUN scenario ${scenario.name} has an invalid earliest phase`);
-      const active = scenario.phase3Status === 'ACTIVE_EARLY';
-      if (active !== (scenario.name === 'dns-rebinding-protection'))
-        throw new Error('DNS rebinding must be the sole Phase 3 early scenario');
-      if (active !== (typeof scenario.expectedCheckProfile === 'string'))
-        throw new Error(`Scenario ${scenario.name} has an invalid Phase 3 profile reference`);
+			const active = scenario.phase3Status === 'ACTIVE_EARLY';
+			if (active !== (scenario.name === 'dns-rebinding-protection'))
+				throw new Error('DNS rebinding must be the sole Phase 3 early scenario');
+			const profileRequired = active
+				|| scenario.earliestPhase <= selection.currentImplementationPhase;
+			if (profileRequired !== (typeof scenario.expectedCheckProfile === 'string'))
+				throw new Error(
+					`Scenario ${scenario.name} has an invalid current-phase profile reference`,
+				);
     } else {
       throw new Error(`Scenario ${scenario.name} has an unknown selection`);
     }
@@ -459,37 +465,57 @@ function verifyExpectedChecks(expectedChecks, selection, pins) {
       || expectedChecks.suiteCommit !== pins.officialConformanceSuite.commit
       || !Array.isArray(expectedChecks.profiles))
     throw new Error('Expected-check manifest identity is invalid');
-  const referenced = new Set(selection.scenarios
+	const referenced = new Set(selection.scenarios
     .map((scenario) => scenario.expectedCheckProfile)
     .filter((profile) => profile !== null));
-  const seen = new Set();
-  for (const profile of expectedChecks.profiles) {
+	const seen = new Set();
+	const ownersByProfile = new Map(selection.scenarios
+		.filter((scenario) => scenario.expectedCheckProfile !== null)
+		.map((scenario) => [scenario.expectedCheckProfile, scenario]));
+	for (const profile of expectedChecks.profiles) {
     assertExactKeys(profile, [
       'id', 'scenario', 'frozenInPhase', 'suiteCommit', 'checks',
       'automaticWireChecks',
     ], `expected profile ${profile.id}`);
-    if (typeof profile.id !== 'string' || !referenced.has(profile.id) || !seen.add(profile.id)
-        || profile.suiteCommit !== pins.officialConformanceSuite.commit
-        || profile.frozenInPhase !== 3 || !Array.isArray(profile.checks))
-      throw new Error(`Invalid or orphan expected-check profile ${profile.id}`);
-    const tuples = new Set();
-    for (const check of profile.checks) {
-      assertExactKeys(check, ['id', 'status', 'count'], `expected check ${check.id}`);
-      if (typeof check.id !== 'string' || !allowedStatuses.has(check.status)
-          || !Number.isInteger(check.count) || check.count < 1
-          || !tuples.add(`${check.id}\u0000${check.status}`))
-        throw new Error(`Invalid expected check in profile ${profile.id}`);
-      if (check.status === 'FAILURE' || check.status === 'WARNING')
-        throw new Error(`Expected profile ${profile.id} may not accept ${check.status}`);
+		const owner = ownersByProfile.get(profile.id);
+		const expectedFrozenPhase = owner?.phase3Status === 'ACTIVE_EARLY'
+			? 3
+			: owner?.earliestPhase;
+		if (typeof profile.id !== 'string' || !referenced.has(profile.id) || !seen.add(profile.id)
+				|| profile.suiteCommit !== pins.officialConformanceSuite.commit
+				|| owner === undefined || profile.scenario !== owner.name
+				|| profile.frozenInPhase !== expectedFrozenPhase
+				|| profile.frozenInPhase > selection.currentImplementationPhase
+				|| !Array.isArray(profile.checks))
+			throw new Error(`Invalid or orphan expected-check profile ${profile.id}`);
+		const tuples = new Set();
+		for (const check of profile.checks) {
+			assertExactKeys(check,
+				check.status === 'SKIPPED'
+					? ['id', 'status', 'count', 'reason']
+					: ['id', 'status', 'count'],
+				`expected check ${check.id}`);
+			if (typeof check.id !== 'string' || !allowedStatuses.has(check.status)
+					|| !Number.isInteger(check.count) || check.count < 1
+					|| (check.status === 'SKIPPED' && nonBlankString(check.reason))
+					|| !tuples.add(`${check.id}\u0000${check.status}\u0000${check.reason ?? ''}`))
+				throw new Error(`Invalid expected check in profile ${profile.id}`);
+			if (check.status === 'FAILURE' || check.status === 'WARNING')
+				throw new Error(`Expected profile ${profile.id} may not accept ${check.status}`);
+			if (check.status === 'INFO'
+					&& (profile.scenario !== 'server-sse-multiple-streams'
+						|| check.id !== 'server-sse-streams-functional'))
+				throw new Error(`Expected profile ${profile.id} contains an unreviewed INFO`);
     }
     const wire = profile.automaticWireChecks;
     assertExactKeys(wire, [
       'wire-schema-valid', 'wire-schema-harness-error', 'rationale',
     ], `wire policy ${profile.id}`);
-    if (wire === null || typeof wire !== 'object'
-        || !Number.isInteger(wire['wire-schema-valid'])
-        || wire['wire-schema-valid'] < 0
-        || wire['wire-schema-harness-error'] !== 0)
+		if (wire === null || typeof wire !== 'object'
+				|| !Number.isInteger(wire['wire-schema-valid'])
+				|| wire['wire-schema-valid'] < 0
+				|| wire['wire-schema-harness-error'] !== 0
+				|| nonBlankString(wire.rationale))
       throw new Error(`Expected profile ${profile.id} has an invalid automatic-wire policy`);
   }
   if (JSON.stringify([...seen].sort()) !== JSON.stringify([...referenced].sort()))

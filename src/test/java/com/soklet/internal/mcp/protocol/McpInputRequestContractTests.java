@@ -135,6 +135,67 @@ public class McpInputRequestContractTests {
 	}
 
 	@Test
+	public void executable_routes_preserve_input_request_plans_and_default_legacy_constructors_to_empty() {
+		McpInputRequestPlan plan = new McpInputRequestPlan(List.of(
+				McpInputRequestDeclaration.roots(McpInputRequirement.CONDITIONAL)));
+		McpApplicationRequestHandler handler =
+				ignored -> McpWireResult.complete(McpJsonObject.empty());
+		McpApplicationResourceReadHandler resourceHandler =
+				ignored -> McpWireResult.complete(McpJsonObject.empty());
+		McpRateLimiter rateLimiter = ignored -> McpRateLimitDecision.allowed();
+		McpResourceCachePolicy cachePolicy =
+				new McpResourceCachePolicy(10L, McpCacheScope.PUBLIC);
+
+		Assertions.assertTrue(new McpApplicationToolRoute(handler, rateLimiter)
+				.inputRequestPlan().declarations().isEmpty());
+		Assertions.assertSame(plan,
+				new McpApplicationToolRoute(handler, rateLimiter, plan)
+						.inputRequestPlan());
+		Assertions.assertTrue(new McpApplicationPromptRoute(handler)
+				.inputRequestPlan().declarations().isEmpty());
+		Assertions.assertSame(plan,
+				new McpApplicationPromptRoute(handler, plan).inputRequestPlan());
+		Assertions.assertTrue(new McpApplicationResourceReadRoute(resourceHandler)
+				.inputRequestPlan().declarations().isEmpty());
+		Assertions.assertTrue(new McpApplicationResourceReadRoute(
+				resourceHandler, cachePolicy).inputRequestPlan().declarations().isEmpty());
+		McpApplicationResourceReadRoute resourceRoute =
+				new McpApplicationResourceReadRoute(
+						resourceHandler, cachePolicy, plan);
+		Assertions.assertSame(cachePolicy, resourceRoute.cachePolicy());
+		Assertions.assertSame(plan, resourceRoute.inputRequestPlan());
+	}
+
+	@Test
+	public void normalized_tool_and_prompt_factories_preserve_input_request_plans() {
+		McpInputRequestPlan plan = new McpInputRequestPlan(List.of(
+				McpInputRequestDeclaration.sampling(
+						Set.of(), McpInputRequirement.CONDITIONAL)));
+		McpNormalizedToolDescriptor tool =
+				McpNormalizedToolDescriptor.minimal("lookup");
+		McpMirroredHeaderPlan mirroredHeaders = McpMirroredHeaderPlan.empty();
+		McpNormalizedPromptDescriptor prompt =
+				McpNormalizedPromptDescriptor.minimal("summarize");
+
+		Assertions.assertTrue(McpNormalizedOperation.tool(tool, mirroredHeaders)
+				.inputRequestPlan().declarations().isEmpty());
+		McpNormalizedOperation normalizedTool =
+				McpNormalizedOperation.tool(tool, plan, mirroredHeaders);
+		Assertions.assertSame(plan, normalizedTool.inputRequestPlan());
+		Assertions.assertSame(tool, normalizedTool.toolDescriptor().orElseThrow());
+		Assertions.assertSame(mirroredHeaders,
+				normalizedTool.mirroredHeaderPlan());
+
+		Assertions.assertTrue(McpNormalizedOperation.prompt(prompt)
+				.inputRequestPlan().declarations().isEmpty());
+		McpNormalizedOperation normalizedPrompt =
+				McpNormalizedOperation.prompt(prompt, plan);
+		Assertions.assertSame(plan, normalizedPrompt.inputRequestPlan());
+		Assertions.assertSame(prompt,
+				normalizedPrompt.promptDescriptor().orElseThrow());
+	}
+
+	@Test
 	public void framework_state_prior_id_evidence_rejects_only_exact_id_reuse() {
 		McpRetryIdentity stringIdentity =
 				new McpRetryIdentity(new McpJsonRpcId.StringId("1"));

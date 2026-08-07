@@ -12,7 +12,7 @@
 
 ### What Is It?
 
-A small [HTTP/1.1 server](https://github.com/ebarlas/microhttp) and route handler for Java, well-suited for building RESTful APIs and broadcasting [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events).<br/><br/>
+A small [HTTP/1.1 server](https://github.com/ebarlas/microhttp) and route handler for Java, well-suited for building RESTful APIs, broadcasting [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events), and exposing dedicated [Model Context Protocol](https://modelcontextprotocol.io/) servers.<br/><br/>
 Zero dependencies. Dependency Injection friendly.<br/>
 Optionally powered by [JEP 444: Virtual Threads](https://openjdk.org/jeps/444).
 
@@ -544,8 +544,11 @@ public Response exampleRedirect() {
 
 #### HTTP Server Configuration
 
-Soklet ships with an embedded HTTP/1.1 [`HttpServer`](https://javadoc.soklet.com/com/soklet/HttpServer.html) and a dedicated
-[`SseServer`](https://javadoc.soklet.com/com/soklet/SseServer.html).
+Soklet ships with an embedded HTTP/1.1 [`HttpServer`](https://javadoc.soklet.com/com/soklet/HttpServer.html), a dedicated
+[`SseServer`](https://javadoc.soklet.com/com/soklet/SseServer.html), and a dedicated
+[`McpServer`](https://javadoc.soklet.com/com/soklet/McpServer.html). Each server owns
+its listener and port; MCP is never mounted inside the standard HTTP or SSE
+server.
 These builders let you configure host, read/write/handler timeouts, handler concurrency/queueing, request size limits, request decompression, and connection caps; you
 can also plug in custom [`IdGenerator`](https://javadoc.soklet.com/com/soklet/IdGenerator.html) and
 [`MultipartParser`](https://javadoc.soklet.com/com/soklet/MultipartParser.html) instances.
@@ -640,6 +643,95 @@ public void sseTest() {
   Assert.assertEquals("hello", events.get(0).getData().orElse(null));
 }
 ```
+
+#### Model Context Protocol (MCP)
+
+Soklet 3.6.0 implements the MCP `2026-07-28` server protocol through
+[`McpServer`](https://javadoc.soklet.com/com/soklet/McpServer.html). An MCP
+server always listens on its own port, independent of Soklet's standard HTTP
+and SSE servers. The protocol is stateless: a client may make
+`server/discover` its first request, there is no initialization or session
+lifecycle, and every request carries its own protocol metadata and client
+capabilities. Soklet derives the capabilities it advertises from the endpoint's
+registered operations. The complete current behavior and operational contract
+are documented in the [MCP guide](MCP.md).
+
+> **Unreleased API:** this section describes `3.6.0-SNAPSHOT`. The 3.5.1
+> installation shown above contains the older, incompatible MCP API.
+
+Complete compile-checked programmatic and annotation-driven applications are
+kept outside the source repository in the project-root
+`mcp/examples/phase-4` workspace. They each register a tool, prompt, and
+resource and start MCP on a dedicated port. The annotation-driven form runs
+[`SokletProcessor`](https://javadoc.soklet.com/com/soklet/SokletProcessor.html)
+with parameter names retained and loads its generated endpoint through
+`McpHandlerResolver.fromClasses(...)`; the programmatic form builds the same
+immutable endpoint and registration model directly.
+
+Programmatic tools use a staged builder so their schema and handler cannot
+drift apart:
+
+- `types(arguments, result)` derives and enforces input and output schemas and
+  adapts an ordinary Java result to a complete MCP result.
+- `argumentType(arguments)` derives typed inputs for an advanced handler that
+  returns `McpOperationResult` directly.
+- `jsonArguments()` supplies immutable `McpJsonObject` arguments and publishes
+  the fixed `{"type":"object"}` input schema.
+
+Typed derivation is the only application-facing schema-authoring path in
+3.6.0. It uses the closed Soklet MCP Tool Schema Profile 1, based on JSON Schema
+Draft 2020-12. Soklet rejects unsupported Java shapes and schema constructs at
+registration or compilation; it does not expose hand-authored schemas and does
+not claim complete Draft 2020-12 support.
+
+MCP's three application primitives serve different purposes:
+
+- **Tools** perform actions. Soklet validates and converts their JSON arguments,
+  invokes the selected application handler, and validates structured output.
+- **Prompts** are named, discoverable templates that turn string arguments into
+  ordered user/assistant content messages.
+- **Resources** expose application data by exact URI or bounded RFC 6570 Level 1
+  URI template. With no custom `resources/list` handler, exact registrations
+  form one static page and templates are listed separately. A custom
+  [`McpResourceListHandler`](https://javadoc.soklet.com/com/soklet/McpResourceListHandler.html)
+  is the sole authority for every page; Soklet passes its opaque cursor through
+  but does not create, sign, persist, or interpret it.
+
+Important operational defaults and boundaries:
+
+- Every server requires an admission policy. A tool-bearing server must also
+  resolve a tool limiter; a request-wide limiter is optional. `McpRateLimiter`
+  is a thread-safe application SPI, so a deployment may use Redis or another
+  distributed system instead of the finite in-JVM convenience implementation.
+- The MCP listener binds to `127.0.0.1` by default. Containers that need a
+  reachable listener must set `host(...)` deliberately and retain an explicit
+  Host allowlist. TLS termination and network exposure belong at the proxy or
+  load-balancer boundary.
+- A present `Origin` is rejected by default through the shared
+  [`CorsAuthorizer`](https://javadoc.soklet.com/com/soklet/CorsAuthorizer.html);
+  an absent Origin is allowed by default. Host validation is independent and
+  runs before protocol parsing or application work.
+- Handlers are synchronous. The defaults permit 32 active handlers and 128
+  queued requests with a 60-second absolute request timeout. A custom executor
+  does not bypass those bounds, and a timed-out or disconnected request cannot
+  forcibly stop non-cooperative application code.
+- [`McpHandlerInterceptor`](https://javadoc.soklet.com/com/soklet/McpHandlerInterceptor.html)
+  wraps every application-owned tool, prompt, resource-read, and custom
+  resource-list handler. Framework-owned discovery and static catalogs bypass
+  it. MCP server/request observation reuses Soklet's existing
+  `LifecycleObserver` and `MetricsCollector` hosts.
+- MCP responses carry protocol cache hints while transport responses remain
+  `Cache-Control: no-store`. Application-owned resource-list cursors are bounded
+  by UTF-8 size and must themselves preserve integrity, authorization,
+  snapshot, and fleet-portability semantics.
+
+The frozen Phase 4 API includes attachment descriptors for later work, but
+3.6.0 development builds do not yet implement progress reporting, cooperative
+cancellation, resource subscription delivery, multi-round-trip
+`input_required` execution, protected request-state execution, trace
+correlation, or complete MCP telemetry/simulator behavior. Applications must
+not advertise or depend on those capabilities until their implementation
+lands.
 
 #### Form Handling
 
