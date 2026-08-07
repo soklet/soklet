@@ -70,11 +70,72 @@ cursor integrity, expiry, authorization binding, backing snapshot semantics,
 and fleet portability. Do not put confidential data in a cursor unless the
 application protects it appropriately.
 
-The current Phase 4 implementation supports direct discovery, tools, prompts,
-resources, bounded handler execution, admission, rate limiting, interception,
-and the policies above. Progress, cancellation, subscription delivery,
-multi-round-trip execution, protected request-state execution, trace
-correlation, comprehensive MCP telemetry, and MCP simulation are Phase 5 or 6
-work. Their public configuration descriptors must not be interpreted as active
-security controls until the corresponding production behavior is implemented
-and documented.
+Tools, prompt gets, and resource reads may now perform multi-round-trip
+`input_required` exchanges. The operation must declare every client request it
+may emit. Required capabilities are checked before admission; conditional
+capabilities are checked only when emitted, but still before output parameters,
+metadata, request state, or a custom protector is processed. Client
+`inputResponses` remain untrusted input and must be authorized and validated in
+the handler even after Soklet validates their protocol shape.
+
+Request-state protection has two distinct trust boundaries:
+
+- `APPLICATION_PROTECTED` is exact opaque-string pass-through. Soklet enforces
+  nonempty/type and a 65,536-byte UTF-8 limit, but supplies no confidentiality,
+  integrity, expiry, authorization binding, replay protection, or fleet
+  portability. The application must provide every one of those properties it
+  needs; do not place secrets in the value without application encryption.
+- `FRAMEWORK_PROTECTED` lets the handler supply JSON while Soklet owns canonical
+  serialization, context binding, protection, lifetime, rounds, and immediate
+  prior-request-ID freshness. A server with any such operation fails to build
+  or start without `McpProtectionConfig`.
+
+Production deployments should use
+`McpProtectionConfig.withKeyRing(...)` with operator-generated, purpose-specific
+key material containing at least 256 bits of cryptographic entropy. Soklet's
+built-in versioned envelope uses authenticated encryption, copies the initial
+ring into server-owned state, redacts key material from public surfaces, and
+supports live stage/activate/remove rotation through `McpProtectionControl`.
+For a fleet, stage the identical new key everywhere, compare secret-free
+snapshots, activate it everywhere, wait at least the configured state lifetime
+and for outstanding sealing reservations, then remove the former key.
+
+`withDevelopmentEphemeralProtection()` is an explicit development convenience.
+Its state is process-local and becomes unreadable after restart or on another
+instance; the startup diagnostic is intentional. Never use it when a client
+may retry through a different process. A thread-safe
+`McpRequestStateProtector` is the alternative for application-owned or
+distributed protection. It must authenticate the exact associated-data bytes
+from `McpRequestStateProtectionContext`, return fresh plaintext arrays, avoid
+retaining call-confined plaintext, and collapse all invalid/tampered/context-
+mismatched input into `INVALID_STATE`. Report only temporary provider outages
+as `PROTECTOR_UNAVAILABLE`; do not expose backend diagnostics in the checked
+exception.
+
+Framework state is bound to endpoint path, protocol version, JSON-RPC method,
+the admitted authorization partition, and stable validated parameters. Retry-
+only fields and transient progress/trace/baggage metadata are excluded from the
+parameter digest; application operation arguments and identity partition are
+not. Wire shape and size are checked before capability/admission side effects,
+but structurally valid state is opened only after admission, preventing an
+unauthenticated cryptographic validity oracle. Invalid, tampered, expired, or
+wrong-bound state is a sanitized HTTP 400 / JSON-RPC `-32602`; temporary
+protection unavailability is HTTP 503 / `-32603`. Invalid-state reports and
+malformed, noncanonical, empty, or oversized custom-open plaintext collapse to
+the same 400 / `-32602` response. Null or unexpected provider behavior and
+invalid sealing/server output fail as HTTP 500 / `-32603`.
+
+The first framework state starts the configured lifetime and round count.
+Re-emission preserves that original expiry, increments the round, and records
+the emitting request ID; the next retry must use a different ID. This is not a
+single-use replay database. Workflows that require one-time approval or
+consumption must store and enforce that fact in application infrastructure.
+Input-required results have no protocol cache hints, and completed resource
+retries are forced to private, zero-TTL cache policy; the HTTP transport remains
+`Cache-Control: no-store`.
+
+Progress reporting, cooperative cancellation, resource-subscription delivery,
+operational trace correlation, comprehensive MCP telemetry, and MCP simulation
+remain Phase 5 or 6 work. Their public descriptors must not be interpreted as
+active security controls until the corresponding production behavior is
+implemented and documented.

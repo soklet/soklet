@@ -72,7 +72,7 @@ public final class McpProtectionConfig {
 	}
 
 	/**
-	 * Vends an application-protector configuration builder.
+	 * Vends a custom-protector configuration builder.
 	 *
 	 * @param requestStateProtector application-owned protector
 	 * @return protection configuration builder
@@ -80,7 +80,7 @@ public final class McpProtectionConfig {
 	@NonNull
 	public static Builder withRequestStateProtector(
 			@NonNull McpRequestStateProtector requestStateProtector) {
-		return new Builder(McpProtectionMode.APPLICATION_PROTECTOR, null,
+		return new Builder(McpProtectionMode.CUSTOM_PROTECTOR, null,
 				requireNonNull(requestStateProtector));
 	}
 
@@ -122,7 +122,7 @@ public final class McpProtectionConfig {
 		return Optional.ofNullable(this.initialKeyRing);
 	}
 
-	/** @return application protector, when configured */
+	/** @return custom application protector, when configured */
 	@NonNull
 	public Optional<@NonNull McpRequestStateProtector>
 			getRequestStateProtector() {

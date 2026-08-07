@@ -221,7 +221,7 @@
       "sha256": "5f434d8f81bdaf917b9416e6e34a8dc9b1516c3660858f6df824bc5f5e612391",
       "schemaRef": "#/$defs/CallToolRequest",
       "transportForm": "http-json-body",
-      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_input_required_message_matches_the_production_listener"
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_input_messages_match_the_production_listener"
     },
     {
       "name": "phase-5-input-required-tool-response",
@@ -231,7 +231,67 @@
       "sha256": "50c242b2d4c2b7f4d168127ca1d39c6cc2df028ed0096033fc4387940b6c2fb6",
       "schemaRef": "#/$defs/CallToolResultResponse",
       "transportForm": "http-json-body",
-      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_input_required_message_matches_the_production_listener"
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_input_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-5-input-responses-tool-request",
+      "phase": 5,
+      "source": "production",
+      "path": "phase-5/input-responses-tool-request.json",
+      "sha256": "fb2d2569a844c6c8b54ee7dd2835cfaba1139b3c42478bb902124ea4fdad10ba",
+      "schemaRef": "#/$defs/CallToolRequest",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_input_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-5-input-responses-tool-response",
+      "phase": 5,
+      "source": "production",
+      "path": "phase-5/input-responses-tool-response.json",
+      "sha256": "fbed56538b3e0bcc0000363b57230e173de38210f342f61523b44aa41e426fa5",
+      "schemaRef": "#/$defs/CallToolResultResponse",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_input_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-5-protected-state-initial-request",
+      "phase": 5,
+      "source": "production",
+      "path": "phase-5/protected-state-initial-request.json",
+      "sha256": "42bd584659ed1046caf4762d55e4ce4c42afbc5f7600926fe67af28d8e7df863",
+      "schemaRef": "#/$defs/CallToolRequest",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_protected_state_round_trip_matches_the_production_listener"
+    },
+    {
+      "name": "phase-5-protected-state-initial-response",
+      "phase": 5,
+      "source": "production",
+      "path": "phase-5/protected-state-initial-response.json",
+      "sha256": "ab288e41dc2a0ba346dce85cb89b08b7fa0dd3a7410a56092e09bff56d3f2449",
+      "schemaRef": "#/$defs/CallToolResultResponse",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_protected_state_round_trip_matches_the_production_listener"
+    },
+    {
+      "name": "phase-5-protected-state-retry-request",
+      "phase": 5,
+      "source": "production",
+      "path": "phase-5/protected-state-retry-request.json",
+      "sha256": "1e7679f23777dfcdc2179ce7b5d1dd18e757b24339a056cefc4df7e879c86b38",
+      "schemaRef": "#/$defs/CallToolRequest",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_protected_state_round_trip_matches_the_production_listener"
+    },
+    {
+      "name": "phase-5-protected-state-retry-response",
+      "phase": 5,
+      "source": "production",
+      "path": "phase-5/protected-state-retry-response.json",
+      "sha256": "09fb1b7ca63b3671c3c126b3c0294dbb25a211838fe22a6006bb2fa9083f0e4a",
+      "schemaRef": "#/$defs/CallToolResultResponse",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_protected_state_round_trip_matches_the_production_listener"
     },
     {
       "name": "final-schema-subscription-terminal-canary",

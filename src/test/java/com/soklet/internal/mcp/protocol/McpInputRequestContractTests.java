@@ -16,6 +16,7 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import com.soklet.McpRequestStateMode;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -135,7 +136,7 @@ public class McpInputRequestContractTests {
 	}
 
 	@Test
-	public void executable_routes_preserve_input_request_plans_and_default_legacy_constructors_to_empty() {
+	public void executable_routes_preserve_input_request_plans_and_default_legacy_constructors() {
 		McpInputRequestPlan plan = new McpInputRequestPlan(List.of(
 				McpInputRequestDeclaration.roots(McpInputRequirement.CONDITIONAL)));
 		McpApplicationRequestHandler handler =
@@ -146,17 +147,37 @@ public class McpInputRequestContractTests {
 		McpResourceCachePolicy cachePolicy =
 				new McpResourceCachePolicy(10L, McpCacheScope.PUBLIC);
 
-		Assertions.assertTrue(new McpApplicationToolRoute(handler, rateLimiter)
-				.inputRequestPlan().declarations().isEmpty());
+		McpApplicationToolRoute legacyToolRoute =
+				new McpApplicationToolRoute(handler, rateLimiter);
+		Assertions.assertTrue(legacyToolRoute.inputRequestPlan()
+				.declarations().isEmpty());
+		Assertions.assertSame(McpRequestStateMode.NONE,
+				legacyToolRoute.requestStateMode());
 		Assertions.assertSame(plan,
 				new McpApplicationToolRoute(handler, rateLimiter, plan)
 						.inputRequestPlan());
-		Assertions.assertTrue(new McpApplicationPromptRoute(handler)
-				.inputRequestPlan().declarations().isEmpty());
+		Assertions.assertSame(McpRequestStateMode.FRAMEWORK_PROTECTED,
+				new McpApplicationToolRoute(handler, rateLimiter, plan,
+						McpRequestStateMode.FRAMEWORK_PROTECTED)
+						.requestStateMode());
+		McpApplicationPromptRoute legacyPromptRoute =
+				new McpApplicationPromptRoute(handler);
+		Assertions.assertTrue(legacyPromptRoute.inputRequestPlan()
+				.declarations().isEmpty());
+		Assertions.assertSame(McpRequestStateMode.NONE,
+				legacyPromptRoute.requestStateMode());
 		Assertions.assertSame(plan,
 				new McpApplicationPromptRoute(handler, plan).inputRequestPlan());
-		Assertions.assertTrue(new McpApplicationResourceReadRoute(resourceHandler)
-				.inputRequestPlan().declarations().isEmpty());
+		Assertions.assertSame(McpRequestStateMode.APPLICATION_PROTECTED,
+				new McpApplicationPromptRoute(handler, plan,
+						McpRequestStateMode.APPLICATION_PROTECTED)
+						.requestStateMode());
+		McpApplicationResourceReadRoute legacyResourceRoute =
+				new McpApplicationResourceReadRoute(resourceHandler);
+		Assertions.assertTrue(legacyResourceRoute.inputRequestPlan()
+				.declarations().isEmpty());
+		Assertions.assertSame(McpRequestStateMode.NONE,
+				legacyResourceRoute.requestStateMode());
 		Assertions.assertTrue(new McpApplicationResourceReadRoute(
 				resourceHandler, cachePolicy).inputRequestPlan().declarations().isEmpty());
 		McpApplicationResourceReadRoute resourceRoute =
@@ -164,6 +185,12 @@ public class McpInputRequestContractTests {
 						resourceHandler, cachePolicy, plan);
 		Assertions.assertSame(cachePolicy, resourceRoute.cachePolicy());
 		Assertions.assertSame(plan, resourceRoute.inputRequestPlan());
+		Assertions.assertSame(McpRequestStateMode.NONE,
+				resourceRoute.requestStateMode());
+		Assertions.assertSame(McpRequestStateMode.FRAMEWORK_PROTECTED,
+				new McpApplicationResourceReadRoute(resourceHandler, cachePolicy,
+						plan, McpRequestStateMode.FRAMEWORK_PROTECTED)
+						.requestStateMode());
 	}
 
 	@Test

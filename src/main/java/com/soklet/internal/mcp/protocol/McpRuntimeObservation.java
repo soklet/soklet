@@ -18,6 +18,7 @@ package com.soklet.internal.mcp.protocol;
 
 import com.soklet.McpRequestContext;
 import com.soklet.McpRequestOutcome;
+import com.soklet.McpRequestState;
 import com.soklet.Request;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -86,7 +87,42 @@ record McpRuntimeRequestInput(@NonNull Request request,
 		@NonNull Optional<@NonNull McpImplementationMetadata> clientInformation,
 		@NonNull McpJsonObject clientCapabilities,
 		@NonNull McpJsonObject requestMetadata,
+		@NonNull McpJsonObject inputResponses,
+		@NonNull Optional<@NonNull McpRequestState> requestState,
 		@NonNull McpAdmissionIdentity admissionIdentity) {
+	McpRuntimeRequestInput(@NonNull Request request,
+			@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
+			@NonNull String jsonRpcMethod,
+			@NonNull Optional<@NonNull McpJsonRpcId> requestId,
+			@NonNull String protocolVersion,
+			@NonNull Optional<@NonNull String> operationName,
+			@NonNull Optional<@NonNull McpImplementationMetadata> clientInformation,
+			@NonNull McpJsonObject clientCapabilities,
+			@NonNull McpJsonObject requestMetadata,
+			@NonNull McpJsonObject inputResponses,
+			@NonNull McpAdmissionIdentity admissionIdentity) {
+		this(request, endpointPathParameters, jsonRpcMethod, requestId,
+				protocolVersion, operationName, clientInformation,
+				clientCapabilities, requestMetadata, inputResponses,
+				Optional.empty(), admissionIdentity);
+	}
+
+	McpRuntimeRequestInput(@NonNull Request request,
+			@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
+			@NonNull String jsonRpcMethod,
+			@NonNull Optional<@NonNull McpJsonRpcId> requestId,
+			@NonNull String protocolVersion,
+			@NonNull Optional<@NonNull String> operationName,
+			@NonNull Optional<@NonNull McpImplementationMetadata> clientInformation,
+			@NonNull McpJsonObject clientCapabilities,
+			@NonNull McpJsonObject requestMetadata,
+			@NonNull McpAdmissionIdentity admissionIdentity) {
+		this(request, endpointPathParameters, jsonRpcMethod, requestId,
+				protocolVersion, operationName, clientInformation,
+				clientCapabilities, requestMetadata, McpJsonObject.empty(),
+				Optional.empty(), admissionIdentity);
+	}
+
 	McpRuntimeRequestInput {
 		requireNonNull(request);
 		endpointPathParameters = Map.copyOf(
@@ -98,6 +134,8 @@ record McpRuntimeRequestInput(@NonNull Request request,
 		requireNonNull(clientInformation);
 		requireNonNull(clientCapabilities);
 		requireNonNull(requestMetadata);
+		requireNonNull(inputResponses);
+		requireNonNull(requestState);
 		requireNonNull(admissionIdentity);
 	}
 }

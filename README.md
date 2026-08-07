@@ -23,7 +23,7 @@ Soklet codes like a library, not a framework.
 
 ### Why?
 
-The Java web ecosystem is missing an HTTP server solution that is dependency-free but offers support for [Server-Sent Events (SSE)](/docs/server-sent-events) along with hooks for dependency injection and annotation-based request handling. Soklet aims to fill this void.
+The Java web ecosystem is missing an HTTP server solution that is dependency-free but offers support for [Server-Sent Events (SSE)](https://www.soklet.com/docs/server-sent-events) along with hooks for dependency injection and annotation-based request handling. Soklet aims to fill this void.
 
 Soklet provides the plumbing to build "transactional" REST APIs as well as systems that vend results via [HTTP response streaming](https://www.soklet.com/docs/response-writing#streaming-responses) or [SSE](https://www.soklet.com/docs/server-sent-events).
 It does not make technology choices on your behalf (but [an example of how to build a full-featured API is available](https://www.soklet.com/docs/toystore-app)). It does not natively support [Reactive Programming](https://en.wikipedia.org/wiki/Reactive_programming) or similar methodologies. It _does_ give you the foundation to build your system, your way.
@@ -725,13 +725,26 @@ Important operational defaults and boundaries:
   by UTF-8 size and must themselves preserve integrity, authorization,
   snapshot, and fleet-portability semantics.
 
-The frozen Phase 4 API includes attachment descriptors for later work, but
-3.6.0 development builds do not yet implement progress reporting, cooperative
-cancellation, resource subscription delivery, multi-round-trip
-`input_required` execution, protected request-state execution, trace
-correlation, or complete MCP telemetry/simulator behavior. Applications must
-not advertise or depend on those capabilities until their implementation
-lands.
+Tools, prompts, and resource reads may return `McpInputRequiredResult` after
+declaring their possible client requests with `mayRequestInput(...)` (or
+`@McpMayRequestInput`). Retries expose the client's `inputResponses` through
+`McpRequestContext`. An operation may also select one request-state contract:
+
+- `APPLICATION_PROTECTED` passes a nonempty opaque string through exactly;
+  the application owns its confidentiality, integrity, expiry, authorization
+  binding, replay policy, and fleet portability.
+- `FRAMEWORK_PROTECTED` lets the application work with `McpJsonValue` state
+  while Soklet canonicalizes, binds, protects, expires, and round-limits its
+  wire representation. It requires `McpServer.Builder.protectionConfig(...)`
+  using a production key ring, explicit development-ephemeral protection, or
+  a thread-safe custom `McpRequestStateProtector`.
+
+See the [MCP guide](MCP.md#multi-round-trip-input-and-request-state) for the
+declaration, protection, error, and retry-cache contracts. Progress reporting,
+cooperative cancellation, resource-subscription delivery, operational trace
+correlation, comprehensive MCP telemetry, and MCP simulation remain open
+Phase 5/6 work; applications must not advertise or depend on those behaviors
+yet.
 
 #### Form Handling
 

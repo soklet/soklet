@@ -85,6 +85,43 @@ public class McpRequestWireMapperTests {
 	}
 
 	@Test
+	public void preservesInputResponsesAndRequestStateForMethodValidation() {
+		McpJsonRpcMessage.Request mapped = mapRequest(requestWithParams("""
+				{"_meta":{
+				  "io.modelcontextprotocol/protocolVersion":"2026-07-28",
+				  "io.modelcontextprotocol/clientCapabilities":{}
+				 },
+				 "inputResponses":{
+				  "first":{"action":"decline","future":true},
+				  "second":{"roots":[{"uri":"file:///tmp/project"}]}
+				 },
+				 "requestState":{"opaque":[true,null]},
+				 "future":"preserved"}
+				"""));
+		McpJsonObject inputResponses = Assertions.assertInstanceOf(
+				McpJsonObject.class,
+				mapped.params().fields().members().get("inputResponses"));
+		McpJsonObject requestState = Assertions.assertInstanceOf(
+				McpJsonObject.class,
+				mapped.params().fields().members().get("requestState"));
+		McpJsonArray opaqueState = Assertions.assertInstanceOf(
+				McpJsonArray.class, requestState.members().get("opaque"));
+
+		Assertions.assertEquals(List.of("first", "second"),
+				List.copyOf(inputResponses.members().keySet()));
+		Assertions.assertEquals(McpJsonBoolean.TRUE,
+				opaqueState.values().get(0));
+		Assertions.assertSame(McpJsonNull.INSTANCE,
+				opaqueState.values().get(1));
+		Assertions.assertEquals(new McpJsonString("preserved"),
+				mapped.params().fields().members().get("future"));
+		McpJsonRpcEnvelope.Request encodedEnvelope = Assertions.assertInstanceOf(
+				McpJsonRpcEnvelope.Request.class,
+				ENVELOPE_CODEC.decode(ENVELOPE_CODEC.encode(mapped)));
+		Assertions.assertEquals(mapped, MAPPER.map(encodedEnvelope));
+	}
+
+	@Test
 	public void acceptsEmptyAndUnknownProtocolVersionsForLaterVersionValidation() {
 		for (String protocolVersion : List.of("", "unknown", "2025-11-25")) {
 			McpJsonRpcMessage.Request mapped = mapRequest(requestWithParams("""

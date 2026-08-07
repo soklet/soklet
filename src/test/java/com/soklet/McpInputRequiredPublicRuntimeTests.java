@@ -615,7 +615,9 @@ public class McpInputRequiredPublicRuntimeTests {
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		AtomicInteger sanitizerInvocations = new AtomicInteger();
 		McpInputRequestDeclaration roots = McpInputRequestDeclaration
-				.fromRoots(McpInputRequirement.CONDITIONAL);
+					.fromRoots(McpInputRequirement.CONDITIONAL);
+		McpInputRequestDeclaration undeclaredRoots = McpInputRequestDeclaration
+					.fromRoots(McpInputRequirement.REQUIRED);
 		McpJsonObject invalidRootsParams = McpJsonObject.builder()
 				.put("_meta", parameterSecret)
 				.put("secret", parameterSecret)
@@ -629,6 +631,9 @@ public class McpInputRequiredPublicRuntimeTests {
 				.handler((request, call, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpInputRequiredResult.builder()
+							.inputRequest("undeclared-" + inputKeySecret,
+									McpInputRequest.fromDeclaration(undeclaredRoots,
+											McpJsonObject.emptyInstance()))
 							.inputRequest(inputKeySecret, McpInputRequest
 									.fromDeclaration(roots, invalidRootsParams))
 							.metadata(secretMetadata)

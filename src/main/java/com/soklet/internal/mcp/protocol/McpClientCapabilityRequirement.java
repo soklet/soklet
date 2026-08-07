@@ -195,14 +195,17 @@ record McpInputRequestPlan(
 			@NonNull McpClientCapabilities clientCapabilities) {
 		requireNonNull(declaration);
 		requireNonNull(clientCapabilities);
-
-		if (!declarations.contains(declaration))
-			throw new IllegalArgumentException(
-					"Input request was not declared by this operation.");
+		requireDeclared(declaration);
 
 		Set<McpClientCapabilityRequirement> missingCapabilities = new LinkedHashSet<>();
 		addMissing(declaration, clientCapabilities, missingCapabilities);
 		return Collections.unmodifiableSet(missingCapabilities);
+	}
+
+	void requireDeclared(@NonNull McpInputRequestDeclaration declaration) {
+		if (!declarations.contains(requireNonNull(declaration)))
+			throw new IllegalArgumentException(
+					"Input request was not declared by this operation.");
 	}
 
 	private static void addMissing(@NonNull McpInputRequestDeclaration declaration,

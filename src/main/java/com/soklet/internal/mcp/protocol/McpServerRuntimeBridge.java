@@ -19,11 +19,14 @@ package com.soklet.internal.mcp.protocol;
 import com.soklet.CorsAuthorizer;
 import com.soklet.McpAdmissionDecision;
 import com.soklet.McpAdmissionIdentity;
+import com.soklet.McpApplicationRequestState;
 import com.soklet.McpClientCapability;
 import com.soklet.McpEndpoint;
 import com.soklet.McpImplementation;
 import com.soklet.McpInputRequest;
 import com.soklet.McpInputRequiredResult;
+import com.soklet.McpInputResponses;
+import com.soklet.McpFrameworkRequestState;
 import com.soklet.McpJsonArray;
 import com.soklet.McpJsonBoolean;
 import com.soklet.McpJsonNull;
@@ -35,7 +38,9 @@ import com.soklet.McpRequestContext;
 import com.soklet.McpRequestId;
 import com.soklet.McpRequestOutcome;
 import com.soklet.McpRequestRejection;
+import com.soklet.McpRequestState;
 import com.soklet.McpRequestStateMode;
+import com.soklet.McpRequestStateProtectionException;
 import com.soklet.Request;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -43,6 +48,7 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -112,7 +118,7 @@ public final class McpServerRuntimeBridge {
 				McpApplicationExecutionConfiguration.productionDefaults()
 						.requestDeadline(),
 				Optional.empty(), startupDiagnosticConsumer,
-				unexpectedTerminationConsumer, Optional.empty());
+				unexpectedTerminationConsumer, Optional.empty(), Optional.empty());
 	}
 
 	/**
@@ -290,7 +296,8 @@ public final class McpServerRuntimeBridge {
 				requestHandlerConcurrency, requestHandlerQueueCapacity,
 				requestTimeout, requestHandlerExecutorServiceSupplier,
 				startupDiagnosticConsumer, unexpectedTerminationConsumer,
-				Optional.of(requireNonNull(requestObservationAdapter)));
+				Optional.of(requireNonNull(requestObservationAdapter)),
+				Optional.empty());
 	}
 
 	/**
@@ -325,7 +332,45 @@ public final class McpServerRuntimeBridge {
 				requestHandlerConcurrency, requestHandlerQueueCapacity,
 				requestTimeout, requestHandlerExecutorServiceSupplier,
 				startupDiagnosticConsumer, unexpectedTerminationConsumer,
-				Optional.of(requireNonNull(requestObservationAdapter)));
+				Optional.of(requireNonNull(requestObservationAdapter)),
+				Optional.empty());
+	}
+
+	/**
+	 * Creates one production listener projection with protected request state.
+	 */
+	public McpServerRuntimeBridge(@NonNull String host, int port,
+			@NonNull List<@NonNull EndpointPlan> endpointPlans,
+			@NonNull Set<@NonNull String> allowedHosts, boolean requireOrigin,
+			@NonNull CorsAuthorizer corsAuthorizer,
+			boolean corsAuthorizerExplicitlyConfigured,
+			@NonNull AdmissionAdapter admissionAdapter,
+			@NonNull Optional<@NonNull RateLimitAdapter> requestRateLimitAdapter,
+			com.soklet.@NonNull McpUnknownMirroredHeaderPolicy
+					unknownMirroredHeaderPolicy,
+			boolean unknownMirroredHeaderNameDiagnostics,
+			@NonNull BiConsumer<@NonNull String, @NonNull String>
+					unknownMirroredHeaderNameDiagnosticConsumer,
+			int requestHandlerConcurrency, int requestHandlerQueueCapacity,
+			@NonNull Duration requestTimeout,
+			@NonNull Optional<@NonNull Supplier<@NonNull ExecutorService>>
+					requestHandlerExecutorServiceSupplier,
+			@NonNull Consumer<@NonNull String> startupDiagnosticConsumer,
+			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer,
+			@NonNull RequestObservationAdapter requestObservationAdapter,
+			@NonNull Optional<@NonNull RequestStateProtectionPlan>
+					requestStateProtectionPlan) {
+		this(host, port, endpointPlans, allowedHosts, requireOrigin,
+				corsAuthorizer, corsAuthorizerExplicitlyConfigured,
+				admissionAdapter, requestRateLimitAdapter,
+				unknownMirroredHeaderPolicy,
+				nameDiagnosticConsumer(unknownMirroredHeaderNameDiagnostics,
+						unknownMirroredHeaderNameDiagnosticConsumer),
+				requestHandlerConcurrency, requestHandlerQueueCapacity,
+				requestTimeout, requestHandlerExecutorServiceSupplier,
+				startupDiagnosticConsumer, unexpectedTerminationConsumer,
+				Optional.of(requireNonNull(requestObservationAdapter)),
+				requireNonNull(requestStateProtectionPlan));
 	}
 
 	@NonNull
@@ -354,7 +399,9 @@ public final class McpServerRuntimeBridge {
 			@NonNull Consumer<@NonNull String> startupDiagnosticConsumer,
 			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer,
 			@NonNull Optional<@NonNull RequestObservationAdapter>
-					requestObservationAdapter) {
+					requestObservationAdapter,
+			@NonNull Optional<@NonNull RequestStateProtectionPlan>
+					requestStateProtectionPlan) {
 		requireNonNull(host);
 		List<EndpointPlan> immutableEndpointPlans =
 				List.copyOf(requireNonNull(endpointPlans));
@@ -369,6 +416,10 @@ public final class McpServerRuntimeBridge {
 		requireNonNull(startupDiagnosticConsumer);
 		requireNonNull(unexpectedTerminationConsumer);
 		requireNonNull(requestObservationAdapter);
+		requireNonNull(requestStateProtectionPlan);
+		McpFrameworkRequestStateRuntime requestStateRuntime =
+				new McpFrameworkRequestStateRuntime(requestStateProtectionPlan,
+						Clock.systemUTC());
 
 		List<McpHttpEndpointBinding> endpointBindings = immutableEndpointPlans.stream()
 				.map(endpointPlan -> toEndpointBinding(endpointPlan, allowedHosts,
@@ -376,7 +427,7 @@ public final class McpServerRuntimeBridge {
 						corsAuthorizerExplicitlyConfigured, admissionAdapter,
 						requestRateLimitAdapter,
 						toInternal(unknownMirroredHeaderPolicy),
-						requestObservationAdapter))
+						requestObservationAdapter, requestStateRuntime))
 				.toList();
 		McpHttpTransportConfiguration defaults =
 				McpHttpTransportConfiguration.productionDefaults(port);
@@ -406,7 +457,8 @@ public final class McpServerRuntimeBridge {
 				McpJsonLimits.productionDefaults(), applicationConfiguration,
 				McpApplicationClock.SYSTEM, applicationExecutorFactory,
 				startupDiagnosticConsumer, unexpectedTerminationConsumer,
-				unknownMirroredHeaderNameDiagnosticConsumer);
+				unknownMirroredHeaderNameDiagnosticConsumer,
+				requestStateRuntime);
 	}
 
 	@NonNull
@@ -419,8 +471,10 @@ public final class McpServerRuntimeBridge {
 			@NonNull Optional<@NonNull RateLimitAdapter> requestRateLimitAdapter,
 			@NonNull McpUnknownMirroredHeaderPolicy unknownMirroredHeaderPolicy,
 			@NonNull Optional<@NonNull RequestObservationAdapter>
-					requestObservationAdapter) {
+					requestObservationAdapter,
+			@NonNull McpFrameworkRequestStateRuntime requestStateRuntime) {
 		requireNonNull(endpointPlan);
+		requireNonNull(requestStateRuntime);
 		McpEndpoint publicEndpoint = endpointPlan.endpoint();
 		McpImplementation publicInformation = publicEndpoint.getServerInformation();
 		McpImplementationMetadata implementation = new McpImplementationMetadata(
@@ -458,8 +512,9 @@ public final class McpServerRuntimeBridge {
 							"The MCP tool rate limiter returned null."));
 			McpApplicationToolRoute route = new McpApplicationToolRoute(
 					invocation -> invokeTool(toolPlan, inputRequestPlan, invocation,
-							publicEndpoint),
-					internalToolRateLimiter, inputRequestPlan);
+							publicEndpoint, requestStateRuntime),
+					internalToolRateLimiter, inputRequestPlan,
+					toolPlan.requestStateMode());
 			if (toolRoutes.putIfAbsent(toolPlan.name(), route) != null)
 				throw new IllegalArgumentException(
 						"Duplicate tool plan '" + toolPlan.name() + "'.");
@@ -486,8 +541,8 @@ public final class McpServerRuntimeBridge {
 					descriptor, inputRequestPlan));
 			McpApplicationPromptRoute route = new McpApplicationPromptRoute(
 					invocation -> invokePrompt(promptPlan, inputRequestPlan,
-							invocation, publicEndpoint),
-					inputRequestPlan);
+							invocation, publicEndpoint, requestStateRuntime),
+					inputRequestPlan, promptPlan.requestStateMode());
 			if (promptRoutes.putIfAbsent(promptPlan.name(), route) != null)
 				throw new IllegalArgumentException(
 						"Duplicate prompt plan '" + promptPlan.name() + "'.");
@@ -513,8 +568,9 @@ public final class McpServerRuntimeBridge {
 					new McpApplicationResourceReadRoute(
 							invocation -> invokeResource(resourcePlan, inputRequestPlan,
 									invocation,
-									publicEndpoint), internalCachePolicy,
-							inputRequestPlan);
+									publicEndpoint, requestStateRuntime),
+							internalCachePolicy,
+							inputRequestPlan, resourcePlan.requestStateMode());
 			if (resourcePlan.addressKind() == ResourceAddressKind.URI) {
 				McpNormalizedResourceDescriptor descriptor =
 						new McpNormalizedResourceDescriptor(resourcePlan.address(),
@@ -608,6 +664,8 @@ public final class McpServerRuntimeBridge {
 									McpServerRuntimeBridge::toPublic),
 							(McpJsonObject) toPublic(input.clientCapabilities()),
 							(McpJsonObject) toPublic(input.requestMetadata()),
+							toPublicInputResponses(input.inputResponses()),
+							input.requestState(),
 							toPublic(input.admissionIdentity()))),
 					"The MCP request-observation adapter returned null.");
 			return new McpRuntimeRequestObservation() {
@@ -1659,6 +1717,88 @@ public final class McpServerRuntimeBridge {
 	}
 
 	/**
+	 * Internal bridge callback for server-owned framework-state protection.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	public interface RequestStateProtectionAdapter {
+		/** Validates the cheap, identity-independent wire structure. */
+		void validateStructure(@NonNull String protectedState)
+				throws McpRequestStateProtectionException;
+
+		/** Protects canonical plaintext for the supplied operation binding. */
+		@NonNull
+		String seal(@NonNull RequestStateProtectionInput input,
+				byte @NonNull [] canonicalPlaintext)
+				throws McpRequestStateProtectionException;
+
+		/** Opens protected state for the supplied operation binding. */
+		byte @NonNull [] open(@NonNull RequestStateProtectionInput input,
+				@NonNull String protectedState)
+				throws McpRequestStateProtectionException;
+	}
+
+	/**
+	 * Immutable binding projection supplied to the protection adapter.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	public record RequestStateProtectionInput(@NonNull String endpointPath,
+			@NonNull String protocolVersion, @NonNull String method,
+			byte @NonNull [] associatedData) {
+		/** Validates and defensively copies the exact associated data. */
+		public RequestStateProtectionInput {
+			endpointPath = McpProtocolSupport.requireNonBlank(
+					endpointPath, "MCP endpoint path");
+			protocolVersion = McpProtocolSupport.requireNonBlank(
+					protocolVersion, "MCP protocol version");
+			method = McpProtocolSupport.requireNonBlank(method, "MCP method");
+			associatedData = requireNonNull(associatedData).clone();
+		}
+
+		@Override
+		public byte @NonNull [] associatedData() {
+			return associatedData.clone();
+		}
+	}
+
+	/**
+	 * Immutable server-wide limits and adapter for framework request state.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	public record RequestStateProtectionPlan(
+			int maximumEncodedRequestStateBytes,
+			int maximumDecodedRequestStateBytes,
+			@NonNull Duration maximumRequestStateLifetime,
+			int maximumRequestStateRounds,
+			@NonNull RequestStateProtectionAdapter adapter) {
+		/** Validates the protection limits and adapter. */
+		public RequestStateProtectionPlan {
+			if (maximumEncodedRequestStateBytes < 1)
+				throw new IllegalArgumentException(
+						"Maximum encoded request-state bytes must be positive.");
+			if (maximumDecodedRequestStateBytes < 1
+					|| maximumDecodedRequestStateBytes
+					> maximumEncodedRequestStateBytes)
+				throw new IllegalArgumentException(
+						"Maximum decoded request-state bytes must be positive and no greater than the encoded limit.");
+			requireNonNull(maximumRequestStateLifetime);
+			if (maximumRequestStateLifetime.isZero()
+					|| maximumRequestStateLifetime.isNegative())
+				throw new IllegalArgumentException(
+						"Maximum request-state lifetime must be positive.");
+			if (maximumRequestStateRounds < 1)
+				throw new IllegalArgumentException(
+						"Maximum request-state rounds must be positive.");
+			requireNonNull(adapter);
+		}
+	}
+
+	/**
 	 * Internal bridge callback for an admitted semantic request.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -1721,7 +1861,47 @@ public final class McpServerRuntimeBridge {
 			@NonNull Optional<@NonNull McpImplementation> clientInformation,
 			@NonNull McpJsonObject clientCapabilities,
 			@NonNull McpJsonObject requestMetadata,
+			@NonNull McpInputResponses inputResponses,
+			@NonNull Optional<@NonNull McpRequestState> requestState,
 			@NonNull McpAdmissionIdentity admissionIdentity) {
+		/** Creates an observation input without request state. */
+		public RequestObservationInput(@NonNull Request request,
+				@NonNull McpEndpoint endpoint,
+				@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
+				@NonNull String jsonRpcMethod,
+				@NonNull Optional<@NonNull McpRequestId> requestId,
+				@NonNull String protocolVersion,
+				@NonNull Optional<@NonNull String> operationName,
+				@NonNull Optional<@NonNull McpImplementation> clientInformation,
+				@NonNull McpJsonObject clientCapabilities,
+				@NonNull McpJsonObject requestMetadata,
+				@NonNull McpInputResponses inputResponses,
+				@NonNull McpAdmissionIdentity admissionIdentity) {
+			this(request, endpoint, endpointPathParameters, jsonRpcMethod, requestId,
+					protocolVersion, operationName, clientInformation,
+					clientCapabilities, requestMetadata, inputResponses,
+					Optional.empty(), admissionIdentity);
+		}
+
+		/** Creates an observation input without multi-round-trip responses. */
+		public RequestObservationInput(@NonNull Request request,
+				@NonNull McpEndpoint endpoint,
+				@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
+				@NonNull String jsonRpcMethod,
+				@NonNull Optional<@NonNull McpRequestId> requestId,
+				@NonNull String protocolVersion,
+				@NonNull Optional<@NonNull String> operationName,
+				@NonNull Optional<@NonNull McpImplementation> clientInformation,
+				@NonNull McpJsonObject clientCapabilities,
+				@NonNull McpJsonObject requestMetadata,
+				@NonNull McpAdmissionIdentity admissionIdentity) {
+			this(request, endpoint, endpointPathParameters, jsonRpcMethod, requestId,
+					protocolVersion, operationName, clientInformation,
+					clientCapabilities, requestMetadata,
+					McpInputResponses.emptyInstance(), Optional.empty(),
+					admissionIdentity);
+		}
+
 		/** Validates and snapshots the admitted-request projection. */
 		public RequestObservationInput {
 			requireNonNull(request);
@@ -1735,6 +1915,8 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(clientInformation);
 			requireNonNull(clientCapabilities);
 			requireNonNull(requestMetadata);
+			requireNonNull(inputResponses);
+			requireNonNull(requestState);
 			requireNonNull(admissionIdentity);
 		}
 	}
@@ -1779,7 +1961,9 @@ public final class McpServerRuntimeBridge {
 	private static McpWireResult invokeTool(@NonNull ToolPlan toolPlan,
 			@NonNull McpInputRequestPlan inputRequestPlan,
 			@NonNull McpApplicationInvocation invocation,
-			@NonNull McpEndpoint publicEndpoint) throws Exception {
+			@NonNull McpEndpoint publicEndpoint,
+			@NonNull McpFrameworkRequestStateRuntime requestStateRuntime)
+			throws Exception {
 		McpJsonRpcMessage.Request request = invocation.request();
 		com.soklet.internal.mcp.protocol.McpJsonValue argumentsValue =
 				request.params().fields().members().get("arguments");
@@ -1811,7 +1995,8 @@ public final class McpServerRuntimeBridge {
 			return inputRequiredResult(inputRequired.result(),
 					inputRequestPlan,
 					toolPlan.requestStateMode(), request.method(),
-					requestMetadata.clientCapabilities());
+					requestMetadata.clientCapabilities(), invocation,
+					publicEndpoint, requestStateRuntime);
 
 		com.soklet.internal.mcp.protocol.McpJsonObject resultFields;
 		com.soklet.internal.mcp.protocol.McpJsonObject resultMetadata;
@@ -1890,7 +2075,9 @@ public final class McpServerRuntimeBridge {
 	private static McpWireResult invokePrompt(@NonNull PromptPlan promptPlan,
 			@NonNull McpInputRequestPlan inputRequestPlan,
 			@NonNull McpApplicationInvocation invocation,
-			@NonNull McpEndpoint publicEndpoint) throws Exception {
+			@NonNull McpEndpoint publicEndpoint,
+			@NonNull McpFrameworkRequestStateRuntime requestStateRuntime)
+			throws Exception {
 		McpJsonRpcMessage.Request request = invocation.request();
 		com.soklet.internal.mcp.protocol.McpJsonValue argumentsValue =
 				request.params().fields().members().get("arguments");
@@ -1922,7 +2109,8 @@ public final class McpServerRuntimeBridge {
 			return inputRequiredResult(inputRequired.result(),
 					inputRequestPlan,
 					promptPlan.requestStateMode(), request.method(),
-					requestMetadata.clientCapabilities());
+					requestMetadata.clientCapabilities(), invocation,
+					publicEndpoint, requestStateRuntime);
 		if (!(result instanceof PromptInvocationResult.Complete complete))
 			throw new IllegalArgumentException(
 					"Unsupported MCP prompt invocation result.");
@@ -1943,7 +2131,9 @@ public final class McpServerRuntimeBridge {
 	private static McpWireResult invokeResource(@NonNull ResourcePlan resourcePlan,
 			@NonNull McpInputRequestPlan inputRequestPlan,
 			@NonNull McpApplicationResourceReadInvocation internalInvocation,
-			@NonNull McpEndpoint publicEndpoint) throws Exception {
+			@NonNull McpEndpoint publicEndpoint,
+			@NonNull McpFrameworkRequestStateRuntime requestStateRuntime)
+			throws Exception {
 		McpApplicationInvocation invocation = internalInvocation.invocation();
 		McpJsonRpcMessage.Request request = invocation.request();
 		McpRequestMetadata requestMetadata = request.params().metadata();
@@ -1973,7 +2163,8 @@ public final class McpServerRuntimeBridge {
 			return inputRequiredResult(inputRequired.result(),
 					inputRequestPlan,
 					resourcePlan.requestStateMode(), request.method(),
-					requestMetadata.clientCapabilities());
+					requestMetadata.clientCapabilities(), invocation,
+					publicEndpoint, requestStateRuntime);
 		if (!(result instanceof ResourceInvocationResult.Complete complete))
 			throw new IllegalArgumentException(
 					"Unsupported MCP resource invocation result.");
@@ -2043,21 +2234,20 @@ public final class McpServerRuntimeBridge {
 			@NonNull McpInputRequestPlan inputRequestPlan,
 			@NonNull McpRequestStateMode requestStateMode,
 			@NonNull String clientRequestMethod,
-			@NonNull McpClientCapabilities clientCapabilities)
-			throws McpProtocolJsonRpcException {
+			@NonNull McpClientCapabilities clientCapabilities,
+			@NonNull McpApplicationInvocation invocation,
+			@NonNull McpEndpoint publicEndpoint,
+			@NonNull McpFrameworkRequestStateRuntime requestStateRuntime)
+			throws McpProtocolJsonRpcException,
+			McpRequestStateUnavailableException {
 		requireNonNull(publicResult);
 		requireNonNull(inputRequestPlan);
 		requireNonNull(requestStateMode);
 		requireNonNull(clientRequestMethod);
 		requireNonNull(clientCapabilities);
-
-		if (publicResult.getRequestState().isPresent()) {
-			if (McpRequestStateMode.NONE.equals(requestStateMode))
-				throw new IllegalArgumentException(
-						"The operation does not declare request-state support.");
-			throw new IllegalArgumentException(
-					"Request-state emission requires protected retry handling.");
-		}
+		requireNonNull(invocation);
+		requireNonNull(publicEndpoint);
+		requireNonNull(requestStateRuntime);
 
 		Set<McpClientCapabilityRequirement> missingCapabilities =
 				new LinkedHashSet<>();
@@ -2069,14 +2259,20 @@ public final class McpServerRuntimeBridge {
 			McpInputRequestDeclaration internalDeclaration =
 					toInternal(entry.getValue().declaration());
 			internalDeclarations.put(entry.getKey(), internalDeclaration);
-			missingCapabilities.addAll(inputRequestPlan.missingForEmission(
-					internalDeclaration, clientCapabilities));
+			for (McpClientCapabilityRequirement capability
+					: internalDeclaration.capabilities())
+				if (!clientCapabilities.supports(capability))
+					missingCapabilities.add(capability);
 		}
 
 		if (!missingCapabilities.isEmpty())
 			throw new McpProtocolJsonRpcException(
 					McpJsonRpcError.missingRequiredClientCapabilities(
 							missingCapabilities));
+
+		for (McpInputRequestDeclaration internalDeclaration
+				: internalDeclarations.values())
+			inputRequestPlan.requireDeclared(internalDeclaration);
 
 		com.soklet.internal.mcp.protocol.McpJsonObject internalMetadata =
 				(com.soklet.internal.mcp.protocol.McpJsonObject)
@@ -2094,10 +2290,44 @@ public final class McpServerRuntimeBridge {
 							(com.soklet.internal.mcp.protocol.McpJsonObject)
 									toInternal(entry.getValue().params())));
 
+		Optional<String> protectedRequestState = Optional.empty();
+		if (publicResult.getRequestState().isPresent()) {
+			McpRequestState state = publicResult.getRequestState().orElseThrow();
+			if (requestStateMode == McpRequestStateMode.NONE)
+				throw new IllegalArgumentException(
+						"The operation does not declare request-state support.");
+			if (requestStateMode == McpRequestStateMode.APPLICATION_PROTECTED) {
+				if (!(state instanceof McpApplicationRequestState applicationState))
+					throw new IllegalArgumentException(
+							"The operation requires application-protected request state.");
+				McpRequestStateCanonicalJson.strictUtf8(applicationState.value(),
+						65_536, "Application-protected MCP request state");
+				protectedRequestState = Optional.of(applicationState.value());
+			} else if (requestStateMode
+					== McpRequestStateMode.FRAMEWORK_PROTECTED) {
+				if (!(state instanceof McpFrameworkRequestState frameworkState))
+					throw new IllegalArgumentException(
+							"The operation requires framework-protected request state.");
+				McpJsonRpcMessage.Request request = invocation.request();
+				protectedRequestState = Optional.of(requestStateRuntime.seal(
+						publicEndpoint.getPath(),
+						request.params().metadata().protocolVersion(),
+						request.method(),
+						invocation.admissionIdentity().authorizationPartition()
+								.applicationKey(),
+						request.params().toJsonObject(), request.id(),
+						toInternal(frameworkState.value()),
+						invocation.frameworkRequestStateContinuation()));
+			} else {
+				throw new IllegalArgumentException(
+						"Unsupported MCP request-state mode.");
+			}
+		}
+
 		return McpWireResult.inputRequired(clientRequestMethod,
 				publicResult.getInputRequests().isEmpty()
 						? Optional.empty() : Optional.of(requests.build()),
-				Optional.empty(),
+				protectedRequestState,
 				metadata.isEmpty() ? Optional.empty() : Optional.of(metadata),
 				com.soklet.internal.mcp.protocol.McpJsonObject.empty());
 	}
@@ -2270,6 +2500,21 @@ public final class McpServerRuntimeBridge {
 						error.getCode(), error.getMessage(), error.getData().map(
 								McpServerRuntimeBridge::toInternal)),
 				headers);
+	}
+
+	@NonNull
+	private static McpInputResponses toPublicInputResponses(
+			com.soklet.internal.mcp.protocol.@NonNull McpJsonObject responses) {
+		Map<String, McpJsonValue> publicResponses = new LinkedHashMap<>();
+		responses.members().forEach((key, value) ->
+				publicResponses.put(key, toPublic(value)));
+		return McpInputResponses.fromResponses(publicResponses);
+	}
+
+	@NonNull
+	static McpJsonValue toPublicRequestStateValue(
+			com.soklet.internal.mcp.protocol.@NonNull McpJsonValue value) {
+		return toPublic(requireNonNull(value));
 	}
 
 	@NonNull

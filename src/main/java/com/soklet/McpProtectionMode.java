@@ -25,8 +25,8 @@ public enum McpProtectionMode {
 	/** No Soklet-managed protection keys or application protector are configured. */
 	NO_FRAMEWORK_KEYS,
 
-	/** An application-owned {@link McpRequestStateProtector} is configured. */
-	APPLICATION_PROTECTOR,
+	/** A custom application-owned {@link McpRequestStateProtector} is configured. */
+	CUSTOM_PROTECTOR,
 
 	/** A stable production {@link McpProtectionKeyRing} is configured. */
 	PRODUCTION_KEY_RING,

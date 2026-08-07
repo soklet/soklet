@@ -41,6 +41,9 @@ import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RuntimeState;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestError;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestObservation;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestObservationInput;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestStateProtectionAdapter;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestStateProtectionInput;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestStateProtectionPlan;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolInvocation;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolInvocationResult;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ToolPlan;
@@ -79,6 +82,11 @@ final class DefaultMcpServer implements McpServer {
 			maximumBase64Characters();
 	private static final int MAXIMUM_AGGREGATE_BASE64_CHARACTERS =
 			McpJsonLimits.productionDefaults().maximumOutputBytes();
+	@NonNull
+	static final String DEVELOPMENT_EPHEMERAL_PROTECTION_DIAGNOSTIC =
+			"MCP development-ephemeral request-state protection is enabled; "
+					+ "protected state is process-local and will not survive restarts "
+					+ "or work across server instances.";
 	@NonNull
 	private static final Set<@NonNull String> BOUNDED_METRIC_METHODS = Set.of(
 			"server/discover", "tools/list", "tools/call", "prompts/list",
@@ -184,6 +192,10 @@ final class DefaultMcpServer implements McpServer {
 		List<EndpointPlan> endpointPlans = handlerResolver.getEndpoints().stream()
 				.map(this::toEndpointPlan)
 				.toList();
+		validateRequestStateProtection(endpointPlans, protectionConfig);
+		Optional<RequestStateProtectionPlan> requestStateProtectionPlan =
+				Optional.ofNullable(protectionConfig)
+						.map(this::toRequestStateProtectionPlan);
 		this.runtimeBridge = new McpServerRuntimeBridge(host, port, endpointPlans,
 				allowedHosts, absentOriginPolicy == McpAbsentOriginPolicy.REQUIRE_ORIGIN,
 				this.corsAuthorizer, corsAuthorizerExplicitlyConfigured,
@@ -199,7 +211,72 @@ final class DefaultMcpServer implements McpServer {
 				Optional.ofNullable(requestHandlerExecutorServiceSupplier),
 				this::safelyLogStartupDiagnostic,
 				this::safelyLogUnexpectedTermination,
-				this::didStartRequestObservation);
+				this::didStartRequestObservation, requestStateProtectionPlan);
+	}
+
+	@NonNull
+	private RequestStateProtectionPlan toRequestStateProtectionPlan(
+			@NonNull McpProtectionConfig configuration) {
+		requireNonNull(configuration);
+		RequestStateProtectionAdapter adapter =
+				new RequestStateProtectionAdapter() {
+					@Override
+					public void validateStructure(@NonNull String protectedState)
+							throws McpRequestStateProtectionException {
+						securityControls.validateRequestStateStructure(
+								protectedState);
+					}
+
+					@Override
+					@NonNull
+					public String seal(@NonNull RequestStateProtectionInput input,
+							byte @NonNull [] canonicalPlaintext)
+							throws McpRequestStateProtectionException {
+						return securityControls.sealRequestState(
+								protectionContext(input), canonicalPlaintext);
+					}
+
+					@Override
+					public byte @NonNull [] open(
+							@NonNull RequestStateProtectionInput input,
+							@NonNull String protectedState)
+							throws McpRequestStateProtectionException {
+						return securityControls.openRequestState(
+								protectionContext(input), protectedState);
+					}
+				};
+		return new RequestStateProtectionPlan(
+				configuration.getMaximumEncodedRequestStateBytes(),
+				configuration.getMaximumDecodedRequestStateBytes(),
+				configuration.getMaximumRequestStateLifetime(),
+				configuration.getMaximumRequestStateRounds(), adapter);
+	}
+
+	@NonNull
+	private static McpRequestStateProtectionContext protectionContext(
+			@NonNull RequestStateProtectionInput input) {
+		requireNonNull(input);
+		return new McpRequestStateProtectionContext(input.endpointPath(),
+				input.protocolVersion(), input.method(), input.associatedData());
+	}
+
+	private static void validateRequestStateProtection(
+			@NonNull List<@NonNull EndpointPlan> endpointPlans,
+			@Nullable McpProtectionConfig protectionConfig) {
+		requireNonNull(endpointPlans);
+		boolean frameworkProtectionRequired = endpointPlans.stream()
+				.anyMatch(endpointPlan -> endpointPlan.toolPlans().stream()
+						.anyMatch(toolPlan -> toolPlan.requestStateMode()
+								== McpRequestStateMode.FRAMEWORK_PROTECTED)
+						|| endpointPlan.promptPlans().stream()
+						.anyMatch(promptPlan -> promptPlan.requestStateMode()
+								== McpRequestStateMode.FRAMEWORK_PROTECTED)
+						|| endpointPlan.resourcePlans().stream()
+						.anyMatch(resourcePlan -> resourcePlan.requestStateMode()
+								== McpRequestStateMode.FRAMEWORK_PROTECTED));
+		if (frameworkProtectionRequired && protectionConfig == null)
+			throw new IllegalStateException(
+					"Framework-protected MCP request state requires protection configuration.");
 	}
 
 	@NonNull
@@ -250,6 +327,10 @@ final class DefaultMcpServer implements McpServer {
 						: McpShutdownOutcome.CLEAN;
 			}
 			try {
+				if (this.securityControls.getProtectionMode()
+						== McpProtectionMode.DEVELOPMENT_EPHEMERAL)
+					safelyLogStartupDiagnostic(
+							DEVELOPMENT_EPHEMERAL_PROTECTION_DIAGNOSTIC);
 				this.runtimeBridge.start();
 				this.lastShutdownOutcome = McpShutdownOutcome.CLEAN;
 			} catch (IOException exception) {
@@ -1376,6 +1457,10 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 	@NonNull
 	private final McpJsonObject requestMetadata;
 	@NonNull
+	private final McpInputResponses inputResponses;
+	@NonNull
+	private final Optional<@NonNull McpRequestState> requestState;
+	@NonNull
 	private final McpAdmissionIdentity admissionIdentity;
 	@NonNull
 	private final McpClientCapabilities clientCapabilities;
@@ -1391,7 +1476,10 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 				Optional.of(invocation.requestId()), invocation.protocolVersion(),
 				Optional.of(invocation.operationName()),
 				invocation.clientInformation(), invocation.clientCapabilitiesJson(),
-				invocation.requestMetadata(), invocation.admissionIdentity());
+				invocation.requestMetadata(),
+				invocation.requestContext().getInputResponses(),
+				invocation.requestContext().getRequestState(),
+				invocation.admissionIdentity());
 	}
 
 	@SuppressWarnings("deprecation")
@@ -1401,7 +1489,10 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 				Optional.of(invocation.requestId()), invocation.protocolVersion(),
 				Optional.of(invocation.operationName()),
 				invocation.clientInformation(), invocation.clientCapabilitiesJson(),
-				invocation.requestMetadata(), invocation.admissionIdentity());
+				invocation.requestMetadata(),
+				invocation.requestContext().getInputResponses(),
+				invocation.requestContext().getRequestState(),
+				invocation.admissionIdentity());
 	}
 
 	@SuppressWarnings("deprecation")
@@ -1411,7 +1502,10 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 				Optional.of(invocation.requestId()), invocation.protocolVersion(),
 				Optional.of(invocation.operationName()),
 				invocation.clientInformation(), invocation.clientCapabilitiesJson(),
-				invocation.requestMetadata(), invocation.admissionIdentity());
+				invocation.requestMetadata(),
+				invocation.requestContext().getInputResponses(),
+				invocation.requestContext().getRequestState(),
+				invocation.admissionIdentity());
 	}
 
 	@SuppressWarnings("deprecation")
@@ -1421,7 +1515,10 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 				Optional.of(invocation.requestId()), invocation.protocolVersion(),
 				Optional.empty(),
 				invocation.clientInformation(), invocation.clientCapabilitiesJson(),
-				invocation.requestMetadata(), invocation.admissionIdentity());
+				invocation.requestMetadata(),
+				invocation.requestContext().getInputResponses(),
+				invocation.requestContext().getRequestState(),
+				invocation.admissionIdentity());
 	}
 
 	@SuppressWarnings("deprecation")
@@ -1430,7 +1527,9 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 				input.endpointPathParameters(), input.jsonRpcMethod(),
 				input.requestId(), input.protocolVersion(), input.operationName(),
 				input.clientInformation(), input.clientCapabilities(),
-				input.requestMetadata(), input.admissionIdentity());
+				input.requestMetadata(), input.inputResponses(),
+				input.requestState(),
+				input.admissionIdentity());
 	}
 
 	@SuppressWarnings("deprecation")
@@ -1444,6 +1543,8 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 			@NonNull Optional<@NonNull McpImplementation> clientInformation,
 			@NonNull McpJsonObject clientCapabilitiesJson,
 			@NonNull McpJsonObject requestMetadata,
+			@NonNull McpInputResponses inputResponses,
+			@NonNull Optional<@NonNull McpRequestState> requestState,
 			@NonNull McpAdmissionIdentity admissionIdentity) {
 		this.request = requireNonNull(request);
 		this.endpoint = requireNonNull(endpoint);
@@ -1455,6 +1556,8 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 		this.operationName = requireNonNull(operationName);
 		this.clientInformation = requireNonNull(clientInformation);
 		this.requestMetadata = requireNonNull(requestMetadata);
+		this.inputResponses = requireNonNull(inputResponses);
+		this.requestState = requireNonNull(requestState);
 		this.admissionIdentity = requireNonNull(admissionIdentity);
 		this.clientCapabilities = McpClientCapabilities.fromJson(
 				clientCapabilitiesJson);
@@ -1499,6 +1602,12 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 	}
 	@Override public @NonNull McpJsonObject getRequestMetadata() {
 		return this.requestMetadata;
+	}
+	@Override public @NonNull McpInputResponses getInputResponses() {
+		return this.inputResponses;
+	}
+	@Override public @NonNull Optional<@NonNull McpRequestState> getRequestState() {
+		return this.requestState;
 	}
 	@Override
 	@SuppressWarnings("deprecation")

@@ -22,9 +22,11 @@
       "localSupplements": [
         "McpHttpServerConnectionContractTests#persistent_connection_never_carries_protocol_metadata_between_posts",
         "McpHttpServerConnectionContractTests#persistent_connection_isolates_tool_headers_and_releases_request_ids",
-        "McpInputRequestContractTests#capability_preflight_uses_only_the_current_request"
+        "McpInputRequestContractTests#capability_preflight_uses_only_the_current_request",
+        "McpInputResponsesPublicRuntimeTests#validRetriesReachEveryHandlerThroughTheExactObservedContext",
+        "McpRequestStatePublicRuntimeTests#frameworkProtectedStateCompletesOnlyWithAFreshRetryId"
       ],
-      "rationale": "The pinned scenario exercises the full stateless server profile, including Phase 5 behavior."
+      "rationale": "Local request-isolation and MRTR evidence exists, but the pinned scenario exercises the complete stateless Phase 5 profile; its progress-capable fixture and reviewed official profile remain future work."
     },
     {
       "ordinal": 2,
@@ -152,13 +154,12 @@
       "phase3Status": "DEFERRED",
       "expectedCheckProfile": null,
       "requiredFixtureRegistrations": [
-        "progress-reporting tools/call handler using request-scoped SSE"
+        "test_tool_with_progress tools/call handler emitting correlated 0/50/100 progress notifications before its complete result"
       ],
       "localSupplements": [
-        "McpHttpServerRequestScopedSseTests#related_notification_commits_sse_then_terminal_result_ends_stream",
-        "McpProgressTests#progress_notifications_are_correlated_bounded_and_monotonic"
+        "McpHttpServerRequestScopedSseTests#related_notification_commits_sse_then_terminal_result_ends_stream"
       ],
-      "rationale": "Progress reporting is owned by Phase 5."
+      "rationale": "Request-scoped SSE notification/terminal ordering has local infrastructure coverage, but the public progress producer, exact fixture registration, and official Phase 5 profile remain future work."
     },
     {
       "ordinal": 11,
@@ -439,13 +440,14 @@
       "phase3Status": "DEFERRED",
       "expectedCheckProfile": null,
       "requiredFixtureRegistrations": [
-        "MRTR tool producing a core elicitation input request when the client advertises elicitation"
+        "test_input_required_result_elicitation tool emitting user_name elicitation/create and completing after the valid retry"
       ],
       "localSupplements": [
         "McpInputRequestContractTests#core_declarations_enforce_their_exact_capability_shapes",
-        "McpMrtrElicitationTests#elicitation_round_trip_validates_the_exact_input_response"
+        "McpInputRequiredPublicRuntimeTests#validMethodSpecificParametersPreserveExactOpenWire",
+        "McpInputResponsesPublicRuntimeTests#validRetriesReachEveryHandlerThroughTheExactObservedContext"
       ],
-      "rationale": "Owned by the Phase 5 MRTR gate."
+      "rationale": "Local production-listener evidence covers elicitation emission and valid retry handling, but the exact official Phase 5 scenario remains deferred and unprofiled."
     },
     {
       "ordinal": 28,
@@ -455,13 +457,15 @@
       "phase3Status": "DEFERRED",
       "expectedCheckProfile": null,
       "requiredFixtureRegistrations": [
-        "MRTR tool producing a sampling input request only when the client advertises sampling"
+        "test_input_required_result_sampling tool emitting capital_question sampling/createMessage and completing after the valid retry"
       ],
       "localSupplements": [
         "McpInputRequestContractTests#sampling_subcapabilities_imply_sampling_in_builder_but_not_raw_wire_shape",
-        "McpMrtrSamplingTests#sampling_is_suppressed_without_the_current_request_capability"
+        "McpInputRequiredPublicRuntimeTests#validMethodSpecificParametersPreserveExactOpenWire",
+        "McpInputResponseValidatorTests#acceptsEverySamplingContentShapeAndOpenExtensions",
+        "McpInputResponsesPublicRuntimeTests#validRetriesReachEveryHandlerThroughTheExactObservedContext"
       ],
-      "rationale": "Owned by the Phase 5 MRTR gate."
+      "rationale": "Local production-listener and input-union evidence covers sampling emission and valid retry handling, but the exact official Phase 5 scenario remains deferred and unprofiled."
     },
     {
       "ordinal": 29,
@@ -471,13 +475,15 @@
       "phase3Status": "DEFERRED",
       "expectedCheckProfile": null,
       "requiredFixtureRegistrations": [
-        "MRTR tool producing a roots/list input request only when the client advertises roots"
+        "test_input_required_result_list_roots tool emitting client_roots roots/list and completing after the valid retry"
       ],
       "localSupplements": [
         "McpInputRequestContractTests#required_capabilities_preflight_while_conditional_capabilities_wait_for_emission",
-        "McpMrtrRootsTests#roots_are_file_uris_and_respect_application_boundaries"
+        "McpInputRequiredPublicRuntimeTests#declaredInputRequestsEmitExactWireForToolsPromptsAndResources",
+        "McpInputResponseValidatorTests#acceptsRootsResultsAndTheOpenUnionSemantics",
+        "McpInputResponsesPublicRuntimeTests#validRetriesReachEveryHandlerThroughTheExactObservedContext"
       ],
-      "rationale": "Owned by the Phase 5 MRTR gate."
+      "rationale": "Local production-listener and input-union evidence covers roots emission and valid retry handling, but the exact official Phase 5 scenario remains deferred and unprofiled."
     },
     {
       "ordinal": 30,
@@ -487,13 +493,15 @@
       "phase3Status": "DEFERRED",
       "expectedCheckProfile": null,
       "requiredFixtureRegistrations": [
-        "MRTR tool with deterministic request-state sealing and reopening"
+        "test_input_required_result_request_state tool emitting inputRequests plus opaque requestState and returning state-ok after a fresh-ID retry"
       ],
       "localSupplements": [
-        "McpInputRequestContractTests#framework_state_prior_id_evidence_rejects_only_exact_id_reuse",
-        "McpRequestStateProtectorTests#sealed_state_round_trips_with_authorization_partition_binding"
+        "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_protected_state_round_trip_matches_the_production_listener",
+        "McpRequestStatePublicRuntimeTests#frameworkProtectedStateCompletesOnlyWithAFreshRetryId",
+        "McpFrameworkRequestStateRuntimeTests#initialSealAndOpenUseTheExactBindingAndContinuation",
+        "McpSecurityControlsTests#builtInRequestStateProtectionMatchesFrozenVectorAndBinding"
       ],
-      "rationale": "Owned by the Phase 5 MRTR gate."
+      "rationale": "Local production-listener, coordinator, and protection-vector evidence exists, but the official Phase 5 scenario remains deferred and unprofiled."
     },
     {
       "ordinal": 31,
@@ -503,13 +511,15 @@
       "phase3Status": "DEFERRED",
       "expectedCheckProfile": null,
       "requiredFixtureRegistrations": [
-        "MRTR tool producing multiple uniquely keyed input requests in one result"
+        "test_input_required_result_multiple_inputs tool emitting elicitation, sampling, and roots inputRequests plus requestState, then completing after all responses"
       ],
       "localSupplements": [
-        "McpWireDtoSketchTests#input_required_results_enforce_structure_supported_methods_and_unique_keys",
-        "McpMrtrResultTests#multiple_input_requests_preserve_key_and_declaration_order"
+        "McpMultiRoundTripDescriptorTests#inputRequiredResultsSupportInputStateAndCombinedForms",
+        "McpInputRequiredPublicRuntimeTests#declaredInputRequestsEmitExactWireForToolsPromptsAndResources",
+        "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_input_messages_match_the_production_listener",
+        "McpInputResponsesPublicRuntimeTests#validRetriesReachEveryHandlerThroughTheExactObservedContext"
       ],
-      "rationale": "Owned by the Phase 5 MRTR gate."
+      "rationale": "Local descriptor and production-listener evidence covers combined state, ordered multi-input emission, and multi-type responses, but the exact official Phase 5 scenario remains deferred and unprofiled."
     },
     {
       "ordinal": 32,
@@ -519,13 +529,13 @@
       "phase3Status": "DEFERRED",
       "expectedCheckProfile": null,
       "requiredFixtureRegistrations": [
-        "MRTR tool completing deterministic repeated input-required rounds"
+        "test_input_required_result_multi_round tool emitting two successive input_required results with different requestState values, then completing on round three"
       ],
       "localSupplements": [
-        "McpMrtrLifecycleTests#multiple_rounds_reuse_only_valid_prior_state",
-        "McpMrtrLifecycleTests#cancellation_does_not_retry_or_retain_round_state"
+        "McpFrameworkRequestStateRuntimeTests#reemissionPreservesTimesAndAdvancesRoundAndOriginatingId",
+        "McpRequestStatePublicRuntimeTests#frameworkProtectedStateCompletesOnlyWithAFreshRetryId"
       ],
-      "rationale": "Owned by the Phase 5 MRTR gate."
+      "rationale": "Local coordinator evidence covers protected-state re-emission and a public fresh-ID retry, but the exact three-round listener flow and official Phase 5 scenario remain deferred and unprofiled."
     },
     {
       "ordinal": 33,
@@ -535,12 +545,12 @@
       "phase3Status": "DEFERRED",
       "expectedCheckProfile": null,
       "requiredFixtureRegistrations": [
-        "MRTR tool that truthfully re-requests a missing required input response"
+        "test_input_required_result_elicitation tool re-requesting user_name when inputResponses omit it or use a wrong key"
       ],
       "localSupplements": [
-        "McpMrtrInputBindingTests#missing_required_response_is_re_requested_without_consuming_other_inputs"
+        "McpInputResponsesPublicRuntimeTests#missingExpectedKeyIsReRequestedAndExtraResponsesRemainAvailable"
       ],
-      "rationale": "Owned by the Phase 5 MRTR gate."
+      "rationale": "A local production-listener test covers re-requesting a missing key while preserving unexpected valid responses, but the official Phase 5 scenario remains deferred and unprofiled."
     },
     {
       "ordinal": 34,
@@ -550,12 +560,14 @@
       "phase3Status": "DEFERRED",
       "expectedCheckProfile": null,
       "requiredFixtureRegistrations": [
-        "non-tools/call handler proving input-required results are rejected outside tool calls"
+        "test_input_required_result_prompt prompts/get handler emitting user_context elicitation, then returning a complete GetPromptResult after the valid retry"
       ],
       "localSupplements": [
-        "McpMrtrResultTests#input_required_result_is_rejected_for_non_tool_methods"
+        "McpInputRequiredPublicRuntimeTests#declaredInputRequestsEmitExactWireForToolsPromptsAndResources",
+        "McpInputRequiredPublicRuntimeTests#validMethodSpecificParametersPreserveExactOpenWire",
+        "McpInputResponsesPublicRuntimeTests#validRetriesReachEveryHandlerThroughTheExactObservedContext"
       ],
-      "rationale": "Owned by the Phase 5 MRTR gate."
+      "rationale": "Local production-listener evidence confirms prompts/get may return input_required and later a complete prompt result; the exact official Phase 5 scenario remains deferred and unprofiled."
     },
     {
       "ordinal": 35,
@@ -565,12 +577,13 @@
       "phase3Status": "DEFERRED",
       "expectedCheckProfile": null,
       "requiredFixtureRegistrations": [
-        "MRTR tools exercising core and extension resultType values"
+        "test_input_required_result_elicitation tool explicitly including resultType=input_required in its initial response"
       ],
       "localSupplements": [
-        "McpWireDtoSketchTests#result_type_is_open_while_core_and_extension_construction_remain_distinct"
+        "McpWireDtoSketchTests#input_required_results_enforce_structure_supported_methods_and_unique_keys",
+        "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_input_messages_match_the_production_listener"
       ],
-      "rationale": "Owned by the Phase 5 MRTR gate."
+      "rationale": "Local wire-model and production golden evidence confirms explicit input_required and complete resultType values, but the official Phase 5 scenario remains deferred and unprofiled."
     },
     {
       "ordinal": 36,
@@ -580,12 +593,14 @@
       "phase3Status": "DEFERRED",
       "expectedCheckProfile": null,
       "requiredFixtureRegistrations": [
-        "MRTR result validator rejecting unsupported core input-request methods"
+        "tools/list and prompts/list handlers that return their normal complete results and never input_required"
       ],
       "localSupplements": [
-        "McpInputRequestContractTests#input_request_declarations_are_limited_to_final_core_schema_methods"
+        "McpWireDtoSketchTests#input_required_results_enforce_structure_supported_methods_and_unique_keys",
+        "McpExecutableToolProtocolTests#static_tools_list_is_framework_owned_complete_and_unpaginated",
+        "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_prompt_messages_match_the_production_listener"
       ],
-      "rationale": "Owned by the Phase 5 MRTR gate."
+      "rationale": "Local result-factory and production-listener evidence covers the supported-method boundary and complete list results, but the official Phase 5 scenario remains deferred and unprofiled."
     },
     {
       "ordinal": 37,
@@ -595,12 +610,13 @@
       "phase3Status": "DEFERRED",
       "expectedCheckProfile": null,
       "requiredFixtureRegistrations": [
-        "MRTR tool with deterministic request-state protection and tamper rejection"
+        "test_input_required_result_tampered_state tool emitting integrity-protected requestState and rejecting an appended -TAMPERED retry with a JSON-RPC error"
       ],
       "localSupplements": [
-        "McpRequestStateProtectorTests#tamper_wrong_partition_and_wrong_epoch_fail_closed"
+        "McpRequestStatePublicRuntimeTests#malformedTamperedAndUnavailableStateHaveFixedPrecedence",
+        "McpSecurityControlsTests#builtInStructureRejectsNoncanonicalAndMalformedEnvelopes"
       ],
-      "rationale": "Owned by the Phase 5 MRTR gate."
+      "rationale": "Local production-listener and built-in-envelope evidence covers tamper rejection and its precedence, but the exact official Phase 5 scenario remains deferred and unprofiled."
     },
     {
       "ordinal": 38,
@@ -610,13 +626,15 @@
       "phase3Status": "DEFERRED",
       "expectedCheckProfile": null,
       "requiredFixtureRegistrations": [
-        "MRTR tools conditionally emitting elicitation, sampling, and roots requests from current client capabilities"
+        "test_input_required_result_capabilities tool emitting sampling-only inputRequests when the current request declares sampling but omits elicitation"
       ],
       "localSupplements": [
         "McpInputRequestContractTests#capability_preflight_uses_only_the_current_request",
-        "McpInputRequestContractTests#required_capabilities_preflight_while_conditional_capabilities_wait_for_emission"
+        "McpInputRequestContractTests#required_capabilities_preflight_while_conditional_capabilities_wait_for_emission",
+        "McpInputRequiredPublicRuntimeTests#capabilityRequirementsRespectThePolicyBoundaryAndRequestScope",
+        "McpInputRequiredPublicRuntimeTests#missingCapabilityWinsOverMalformedSecretBearingOutputAndRemainsRequestScoped"
       ],
-      "rationale": "Owned by the Phase 5 MRTR gate."
+      "rationale": "Local production-listener evidence covers current-request capability scoping and conditional emission, but the exact official Phase 5 scenario remains deferred and unprofiled."
     },
     {
       "ordinal": 39,
@@ -626,12 +644,13 @@
       "phase3Status": "DEFERRED",
       "expectedCheckProfile": null,
       "requiredFixtureRegistrations": [
-        "MRTR tool whose input-response binder ignores unexpected response keys"
+        "test_input_required_result_elicitation tool completing with a valid user_name response while ignoring additional valid response keys"
       ],
       "localSupplements": [
-        "McpMrtrInputBindingTests#unexpected_input_response_keys_are_ignored_without_mutating_required_inputs"
+        "McpInputResponsesPublicRuntimeTests#validRetriesReachEveryHandlerThroughTheExactObservedContext",
+        "McpInputResponsesPublicRuntimeTests#missingExpectedKeyIsReRequestedAndExtraResponsesRemainAvailable"
       ],
-      "rationale": "Owned by the Phase 5 MRTR gate."
+      "rationale": "Local production-listener evidence preserves unexpected valid responses for application handling and permits normal completion, but the official Phase 5 scenario remains deferred and unprofiled."
     },
     {
       "ordinal": 40,
@@ -641,12 +660,13 @@
       "phase3Status": "DEFERRED",
       "expectedCheckProfile": null,
       "requiredFixtureRegistrations": [
-        "MRTR tool validating inputResponses against the requested declarations"
+        "test_input_required_result_elicitation tool rejecting or re-requesting numeric and null inputResponses instead of completing"
       ],
       "localSupplements": [
-        "McpMrtrInputBindingTests#input_responses_are_validated_before_handler_resumption"
+        "McpInputResponseValidatorTests#rejectsValuesThatMatchNoInputResponseBranch",
+        "McpInputResponsesPublicRuntimeTests#malformedResponsesAndRequestStateFailBeforeApplicationPolicy"
       ],
-      "rationale": "Owned by the Phase 5 MRTR gate."
+      "rationale": "Local union-validator and production-listener evidence rejects malformed inputResponses before application policy, but the official Phase 5 scenario remains deferred and unprofiled."
     }
   ]
 }

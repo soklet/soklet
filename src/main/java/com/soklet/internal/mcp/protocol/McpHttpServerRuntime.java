@@ -22,8 +22,12 @@ import com.soklet.CorsPreflightResponse;
 import com.soklet.CorsResponse;
 import com.soklet.HttpMethod;
 import com.soklet.MediaRange;
+import com.soklet.McpApplicationRequestState;
+import com.soklet.McpFrameworkRequestState;
 import com.soklet.McpRequestContext;
 import com.soklet.McpRequestOutcome;
+import com.soklet.McpRequestState;
+import com.soklet.McpRequestStateMode;
 import com.soklet.Request;
 import com.soklet.StatusCode;
 import com.soklet.StreamTerminationReason;
@@ -159,6 +163,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private static final String JSON_MEDIA_TYPE = "application/json";
 	private static final int SOKLET_RATE_LIMITED = -31999;
 	private static final int SOKLET_STRICT_UNKNOWN_MIRRORED_HEADER = -31998;
+	private static final int APPLICATION_REQUEST_STATE_MAXIMUM_BYTES = 65_536;
 	@NonNull
 	private static final Set<@NonNull String> FRAMEWORK_OWNED_POLICY_HEADERS = Set.of(
 			"cache-control", "connection", "content-encoding", "content-length",
@@ -197,6 +202,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private final McpApplicationClock applicationClock;
 	@NonNull
 	private final McpApplicationHandlerExecutorFactory applicationExecutorFactory;
+	@NonNull
+	private final McpFrameworkRequestStateRuntime requestStateRuntime;
 	@NonNull
 	private final Consumer<@NonNull String> startupDiagnosticConsumer;
 	@NonNull
@@ -361,11 +368,32 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer,
 			@NonNull Optional<@NonNull BiConsumer<@NonNull String, @NonNull String>>
 					unknownMirroredHeaderNameDiagnosticConsumer) {
+		this(transportConfiguration, endpointBindings, jsonLimits,
+				applicationConfiguration, applicationClock,
+				applicationExecutorFactory, startupDiagnosticConsumer,
+				unexpectedTerminationConsumer,
+				unknownMirroredHeaderNameDiagnosticConsumer,
+				McpFrameworkRequestStateRuntime.disabledInstance());
+	}
+
+	McpHttpServerRuntime(
+			@NonNull McpHttpTransportConfiguration transportConfiguration,
+			@NonNull List<@NonNull McpHttpEndpointBinding> endpointBindings,
+			@NonNull McpJsonLimits jsonLimits,
+			@NonNull McpApplicationExecutionConfiguration applicationConfiguration,
+			@NonNull McpApplicationClock applicationClock,
+			@NonNull McpApplicationHandlerExecutorFactory applicationExecutorFactory,
+			@NonNull Consumer<@NonNull String> startupDiagnosticConsumer,
+			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer,
+			@NonNull Optional<@NonNull BiConsumer<@NonNull String, @NonNull String>>
+					unknownMirroredHeaderNameDiagnosticConsumer,
+			@NonNull McpFrameworkRequestStateRuntime requestStateRuntime) {
 		this.transportConfiguration = requireNonNull(transportConfiguration);
 		this.jsonLimits = requireNonNull(jsonLimits);
 		this.applicationConfiguration = requireNonNull(applicationConfiguration);
 		this.applicationClock = requireNonNull(applicationClock);
 		this.applicationExecutorFactory = requireNonNull(applicationExecutorFactory);
+		this.requestStateRuntime = requireNonNull(requestStateRuntime);
 		this.startupDiagnosticConsumer = requireNonNull(startupDiagnosticConsumer);
 		this.unexpectedTerminationConsumer = requireNonNull(
 				unexpectedTerminationConsumer);
@@ -1152,6 +1180,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		Optional<McpApplicationPromptRoute> promptRoute = Optional.empty();
 		Optional<McpApplicationRequestHandler> applicationHandler = Optional.empty();
 		McpInputRequestPlan inputRequestPlan = McpInputRequestPlan.empty();
+		McpRequestStateMode requestStateMode = McpRequestStateMode.NONE;
+		McpJsonObject inputResponses = McpJsonObject.empty();
+		boolean inputResponsesSupplied = false;
+		Optional<String> suppliedRequestState = Optional.empty();
 
 		if (discoveryRequest) {
 			if (!mappedRequest.params().fields().members().isEmpty())
@@ -1193,13 +1225,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				Optional<String> resolvedCursor = cursor;
 				McpApplicationResourceListRoute resolvedRoute = listRoute.orElseThrow();
 				applicationHandler = Optional.of(invocation -> resourceResultWithCachePolicy(
-						resolvedRoute.handler().handle(
-								new McpApplicationResourceListInvocation(invocation,
-										resolvedCursor,
-										capabilityRegistry.exactResourceDescriptors(),
-										endpoint.resourcesListCachePolicy())),
-						endpoint.resourcesListCachePolicy(), true,
-						endpoint.maximumCursorSizeInBytes(), applicationRouter));
+							resolvedRoute.handler().handle(
+									new McpApplicationResourceListInvocation(invocation,
+											resolvedCursor,
+											capabilityRegistry.exactResourceDescriptors(),
+											endpoint.resourcesListCachePolicy())),
+							endpoint.resourcesListCachePolicy(), true, false,
+							endpoint.maximumCursorSizeInBytes(), applicationRouter));
 			} else {
 				// The framework-owned fallback is exactly one static page. Every
 				// present cursor, including the empty string, is invalid.
@@ -1216,9 +1248,14 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		} else if ("tools/call".equals(mappedRequest.method())) {
 			Map<String, McpJsonValue> fields =
 					mappedRequest.params().fields().members();
-			if (fields.containsKey("inputResponses")
-					|| fields.containsKey("requestState"))
+			try {
+				Optional<McpJsonObject> parsedInputResponses =
+						parseInputResponses(fields);
+				inputResponses = parsedInputResponses.orElseGet(McpJsonObject::empty);
+				inputResponsesSupplied = parsedInputResponses.isPresent();
+			} catch (IllegalArgumentException exception) {
 				return invalidParams(mappedRequest, corsHeaders);
+			}
 			McpJsonValue nameValue = fields.get("name");
 			if (!(nameValue instanceof McpJsonString name) || name.value().isBlank())
 				return invalidParams(mappedRequest, corsHeaders);
@@ -1234,6 +1271,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				McpApplicationToolRoute resolvedRoute = toolRoute.orElseThrow();
 				applicationHandler = Optional.of(resolvedRoute.handler());
 				inputRequestPlan = resolvedRoute.inputRequestPlan();
+				requestStateMode = resolvedRoute.requestStateMode();
 			} else {
 				// Retain the package-private generic method route for existing runtime
 				// tests while production registrations use exact immutable tool routes.
@@ -1250,9 +1288,14 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 			Map<String, McpJsonValue> fields =
 					mappedRequest.params().fields().members();
-			if (fields.containsKey("inputResponses")
-					|| fields.containsKey("requestState"))
+			try {
+				Optional<McpJsonObject> parsedInputResponses =
+						parseInputResponses(fields);
+				inputResponses = parsedInputResponses.orElseGet(McpJsonObject::empty);
+				inputResponsesSupplied = parsedInputResponses.isPresent();
+			} catch (IllegalArgumentException exception) {
 				return invalidParams(mappedRequest, corsHeaders);
+			}
 			McpJsonValue nameValue = fields.get("name");
 			if (!(nameValue instanceof McpJsonString name) || name.value().isBlank())
 				return invalidParams(mappedRequest, corsHeaders);
@@ -1280,6 +1323,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				McpApplicationPromptRoute resolvedRoute = promptRoute.orElseThrow();
 				applicationHandler = Optional.of(resolvedRoute.handler());
 				inputRequestPlan = resolvedRoute.inputRequestPlan();
+				requestStateMode = resolvedRoute.requestStateMode();
 			} else {
 				// Retain the package-private generic method route for existing runtime
 				// tests while production registrations use exact immutable prompt routes.
@@ -1296,12 +1340,16 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				return methodNotFound(mappedRequest, corsHeaders);
 
 			Map<String, McpJsonValue> fields = mappedRequest.params().fields().members();
-			if (!Set.of("uri", "inputResponses", "requestState")
-					.containsAll(fields.keySet()))
+			try {
+				Optional<McpJsonObject> parsedInputResponses =
+						parseInputResponses(fields);
+				inputResponses = parsedInputResponses.orElseGet(McpJsonObject::empty);
+				inputResponsesSupplied = parsedInputResponses.isPresent();
+			} catch (IllegalArgumentException exception) {
 				return invalidParams(mappedRequest, corsHeaders);
-			if (fields.containsKey("inputResponses")
-					|| fields.containsKey("requestState"))
-				return invalidParams(mappedRequest, corsHeaders);
+			}
+			boolean resourceRetry = inputResponsesSupplied
+					|| fields.containsKey("requestState");
 			McpJsonValue uriValue = fields.get("uri");
 			if (!(uriValue instanceof McpJsonString uriString))
 				return invalidParams(mappedRequest, corsHeaders);
@@ -1339,11 +1387,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				}
 				McpApplicationResourceReadRoute route = resolvedRoute;
 				inputRequestPlan = route.inputRequestPlan();
+				requestStateMode = route.requestStateMode();
 				Map<String, String> variables = templateVariables;
 				applicationHandler = Optional.of(invocation -> resourceResultWithCachePolicy(
 						route.handler().handle(new McpApplicationResourceReadInvocation(
 								invocation, uri, variables, route.cachePolicy())),
 						route.cachePolicy(), false,
+						resourceRetry,
 						endpoint.maximumCursorSizeInBytes(), applicationRouter));
 			} else {
 				// Preserve the generic package-private seam used by transport tests.
@@ -1358,6 +1408,21 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			applicationHandler = applicationRouter.resolve(mappedRequest.method());
 			if (applicationHandler.isEmpty())
 				return methodNotFound(mappedRequest, corsHeaders);
+		}
+
+		if (McpWireResult.supportsInputRequired(mappedRequest.method())) {
+			try {
+				suppliedRequestState = parseRequestState(
+						mappedRequest.params().fields().members(),
+						requestStateMode);
+			} catch (McpInvalidRequestStateException
+					| IllegalArgumentException exception) {
+				return invalidParams(mappedRequest, corsHeaders);
+			} catch (McpRequestStateUnavailableException exception) {
+				return requestStateUnavailable(mappedRequest.id(), corsHeaders);
+			} catch (Throwable throwable) {
+				return policyHookInternalError(mappedRequest.id(), corsHeaders);
+			}
 		}
 
 		Set<McpClientCapabilityRequirement> missingCapabilities =
@@ -1399,6 +1464,39 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		McpEffectiveAdmissionIdentity effectiveIdentity =
 				McpEffectiveAdmissionIdentity.resolve(endpoint, endpointPolicy.path(),
 						admittedIdentity);
+		Optional<McpRequestState> requestState = Optional.empty();
+		Optional<McpFrameworkRequestStateContinuation>
+				frameworkRequestStateContinuation = Optional.empty();
+		if (suppliedRequestState.isPresent()) {
+			String protectedState = suppliedRequestState.orElseThrow();
+			if (requestStateMode == McpRequestStateMode.APPLICATION_PROTECTED) {
+				requestState = Optional.of(
+						new McpApplicationRequestState(protectedState));
+			} else if (requestStateMode
+					== McpRequestStateMode.FRAMEWORK_PROTECTED) {
+				McpFrameworkRequestStateRuntime.OpenedState openedState;
+				try {
+					openedState = requestStateRuntime.open(endpointPolicy.path(),
+							requestedProtocolVersion, mappedRequest.method(),
+							effectiveIdentity.authorizationPartition().applicationKey(),
+							mappedRequest.params().toJsonObject(), mappedRequest.id(),
+							protectedState);
+				} catch (McpInvalidRequestStateException exception) {
+					return invalidParams(mappedRequest, corsHeaders);
+				} catch (McpRequestStateUnavailableException exception) {
+					return requestStateUnavailable(mappedRequest.id(), corsHeaders);
+				} catch (Throwable throwable) {
+					return policyHookInternalError(mappedRequest.id(), corsHeaders);
+				}
+				requestState = Optional.of(new McpFrameworkRequestState(
+						McpServerRuntimeBridge.toPublicRequestStateValue(
+								openedState.state())));
+				frameworkRequestStateContinuation = Optional.of(
+						openedState.continuation());
+			} else {
+				return invalidParams(mappedRequest, corsHeaders);
+			}
+		}
 		if (!requestControl.protocolProcessingAllowed())
 			return null;
 		requestControl.startObservation(endpointBinding.observationSink(),
@@ -1409,6 +1507,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						mappedRequest.params().metadata().clientCapabilities()
 								.toJsonObject(),
 						mappedRequest.params().metadata().toJsonObject(),
+						inputResponses,
+						requestState,
 						effectiveIdentity.admittedIdentity()));
 
 		if (endpointPolicy.requestRateLimiter().isPresent()) {
@@ -1490,6 +1590,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		McpApplicationRequestHandler resolvedApplicationHandler =
 				applicationHandler.orElseThrow();
+		Optional<McpFrameworkRequestStateContinuation> resolvedContinuation =
+				frameworkRequestStateContinuation;
 		requestControl.handoff(application, () -> {
 			McpApplicationResponseWriter responseWriter =
 					new McpApplicationResponseWriter() {
@@ -1512,6 +1614,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			if (publicContext.isPresent()) {
 				application.dispatchWithSokletRequest(request, sokletRequest,
 						publicContext.orElseThrow(), mappedRequest, effectiveIdentity,
+						resolvedContinuation,
 						resolvedApplicationHandler,
 						endpointPolicy.requestInterceptor(),
 						requestControl::applicationEntryAllowed,
@@ -1520,6 +1623,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			} else {
 				application.dispatchWithSokletRequest(request, sokletRequest,
 						mappedRequest, effectiveIdentity,
+						resolvedContinuation,
 						resolvedApplicationHandler,
 						endpointPolicy.requestInterceptor(),
 						requestControl::applicationEntryAllowed,
@@ -1559,10 +1663,50 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	}
 
 	@NonNull
+	private static Optional<@NonNull McpJsonObject> parseInputResponses(
+			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields) {
+		McpJsonValue value = requireNonNull(fields).get("inputResponses");
+		if (value == null)
+			return Optional.empty();
+		if (!(value instanceof McpJsonObject responses))
+			throw new IllegalArgumentException("MCP input responses must be an object.");
+		for (McpJsonValue response : responses.members().values())
+			McpInputResponseValidator.validate(response);
+		return Optional.of(responses);
+	}
+
+	@NonNull
+	private Optional<@NonNull String> parseRequestState(
+			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields,
+			@NonNull McpRequestStateMode requestStateMode)
+			throws McpInvalidRequestStateException,
+			McpRequestStateUnavailableException {
+		McpJsonValue value = requireNonNull(fields).get("requestState");
+		if (value == null)
+			return Optional.empty();
+		if (requireNonNull(requestStateMode) == McpRequestStateMode.NONE
+				|| !(value instanceof McpJsonString string)
+				|| string.value().isEmpty())
+			throw new McpInvalidRequestStateException();
+
+		if (requestStateMode == McpRequestStateMode.APPLICATION_PROTECTED) {
+			if (utf8Size(string.value())
+					> APPLICATION_REQUEST_STATE_MAXIMUM_BYTES)
+				throw new McpInvalidRequestStateException();
+		} else if (requestStateMode == McpRequestStateMode.FRAMEWORK_PROTECTED) {
+			requestStateRuntime.validateStructure(string.value());
+		} else {
+			throw new McpInvalidRequestStateException();
+		}
+		return Optional.of(string.value());
+	}
+
+	@NonNull
 	private McpWireResult resourceResultWithCachePolicy(
 			@NonNull McpWireResult result,
 			@NonNull McpResourceCachePolicy cachePolicy,
-			boolean resourceListResult, int maximumCursorSizeInBytes,
+			boolean resourceListResult, boolean resourceRetry,
+			int maximumCursorSizeInBytes,
 			@NonNull McpApplicationRequestRouter applicationRouter) {
 		requireNonNull(result);
 		requireNonNull(cachePolicy);
@@ -1580,6 +1724,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			validateResourceListResult(fields, applicationRouter);
 		else
 			validateResourceReadResult(fields);
+		if (resourceRetry) {
+			fields.put("cacheScope", new McpJsonString(
+					McpCacheScope.PRIVATE.wireValue()));
+			fields.put("ttlMs", new McpJsonNumber(BigDecimal.ZERO));
+			return McpWireResult.complete(new McpJsonObject(fields), result.metadata());
+		}
 		McpJsonValue configuredScope = fields.get("cacheScope");
 		if (configuredScope != null
 				&& (!(configuredScope instanceof McpJsonString string)
@@ -1987,6 +2137,15 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			@NonNull McpJsonRpcId requestId,
 			@NonNull List<@NonNull Header> corsHeaders) {
 		return jsonRpcError(500, "Internal Server Error", Optional.of(requestId),
+				new McpJsonRpcError(McpJsonRpcError.INTERNAL_ERROR,
+						"Internal error", Optional.empty()), corsHeaders);
+	}
+
+	@NonNull
+	private MicrohttpResponse requestStateUnavailable(
+			@NonNull McpJsonRpcId requestId,
+			@NonNull List<@NonNull Header> corsHeaders) {
+		return jsonRpcError(503, "Service Unavailable", Optional.of(requestId),
 				new McpJsonRpcError(McpJsonRpcError.INTERNAL_ERROR,
 						"Internal error", Optional.empty()), corsHeaders);
 	}

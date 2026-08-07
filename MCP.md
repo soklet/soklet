@@ -6,9 +6,10 @@ the ordinary `HttpServer` or `SseServer`. The API and implementation ship in
 the zero-runtime-dependency `com.soklet:soklet` artifact; there is no separate
 `soklet-mcp` component.
 
-This guide describes the implemented, locally frozen Phase 4 surface in the
-current `3.6.0-SNAPSHOT`. It is development documentation, not a release or
-final conformance claim. Compile-checked programmatic and annotation-driven
+This guide describes the implemented, locally frozen Phase 4 surface plus the
+live Phase 5 multi-round-trip request-state slice in the current
+`3.6.0-SNAPSHOT`. It is development documentation, not a release or final
+conformance claim. Compile-checked programmatic and annotation-driven
 applications live outside this source repository in the project-root
 `mcp/examples/phase-4` workspace.
 
@@ -21,14 +22,15 @@ applications live outside this source repository in the project-root
 | Tools | Annotated and programmatic discovery, typed or JSON-object arguments, complete typed results, content results, rate limiting, interception, and output sanitization |
 | Prompts | Annotated and programmatic catalogs plus string-argument prompt rendering |
 | Resources | Exact URIs, bounded RFC 6570 Level 1 URI templates, reads, static catalogs, and application-owned custom listing/pagination |
+| Multi-round-trip | Declared `input_required` results and retries for tools, prompt gets, and resource reads; application- or framework-protected request state |
 | Policy | Host and Origin checks, application admission, optional request limiting, mandatory fallback tool limiting for tool-bearing servers, bounded execution, and shared Soklet observation hosts |
 | Schema | Closed, Java-first Soklet MCP Tool Schema Profile 1; no public hand-authored schema registration |
 
 Progress delivery, operational cancellation, resource-subscription delivery,
-multi-round-trip `input_required`, protected request-state execution, trace
-correlation, complete MCP telemetry, and MCP simulation are not implemented
-yet. Public descriptors already reserved for that Phase 5/6 work are
-behaviorally neutral and do not cause Soklet to advertise those capabilities.
+operational trace correlation, comprehensive MCP telemetry, and MCP simulation
+are not implemented yet. Public descriptors already reserved for that Phase
+5/6 work are behaviorally neutral and do not cause Soklet to advertise those
+capabilities.
 
 ## Server and request model
 
@@ -220,6 +222,123 @@ public scope only when the same descriptors are safe to share across callers.
 Protocol cache hints do not turn the HTTP transport into a shared cache: MCP
 transport responses use `Cache-Control: no-store`.
 
+## Multi-round-trip input and request state
+
+Tools, prompt gets, and resource reads may return `McpInputRequiredResult`
+when they need a supported client request, state for a later retry, or both.
+Programmatic operations declare every possible `McpInputRequestDeclaration`
+with `mayRequestInput(...)`; annotated operations use `@McpMayRequestInput`.
+Soklet supports the core `elicitation/create`, `sampling/createMessage`, and
+`roots/list` declarations, validates their method-specific parameters, and
+rejects an emitted declaration that was not registered for that operation.
+
+`McpInputRequirement.REQUIRED` makes the declaration's capabilities mandatory
+before admission on every call. `CONDITIONAL` defers that check until the
+handler actually emits the request. All missing capabilities from one result
+are reported together before result metadata, request parameters, request
+state, or a custom protector is evaluated. A retry's exact responses are
+available through `McpRequestContext.getInputResponses()` as raw
+`McpJsonValue` values or through its intrinsic typed lookup methods. The same
+admitted `McpRequestContext` instance, including verified responses and state,
+is supplied to lifecycle callbacks, the handler interceptor, and the handler
+for that request.
+
+For example, this raw-JSON tool asks the client for roots and lets Soklet carry
+JSON state between calls:
+
+```java
+McpInputRequestDeclaration roots = McpInputRequestDeclaration.fromRoots(
+  McpInputRequirement.CONDITIONAL
+);
+
+McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+  .withName("catalog.continue")
+  .jsonArguments()
+  .handler((request, call, features) -> {
+    if (request.getRequestState().isEmpty()) {
+      return McpInputRequiredResult.builder()
+        .inputRequest("roots", McpInputRequest.fromDeclaration(
+          roots, McpJsonObject.emptyInstance()))
+        .frameworkRequestState(McpJsonObject.builder()
+          .put("phase", "waiting-for-roots")
+          .build())
+        .build();
+    }
+
+    McpJsonObject state = (McpJsonObject) ((McpFrameworkRequestState)
+      request.getRequestState().orElseThrow()).value();
+    request.getInputResponses().find("roots").orElseThrow();
+    return McpCompleteResult.fromToolText(((McpJsonString)
+      state.find("phase").orElseThrow()).value());
+  })
+  .mayRequestInput(roots)
+  .requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
+  .build();
+```
+
+`McpRequestStateMode.NONE` is the default. The other modes have deliberately
+different ownership:
+
+- `APPLICATION_PROTECTED` sends the exact nonempty string supplied through
+  `applicationRequestState(...)` and returns the exact echoed value as
+  `McpApplicationRequestState`. Soklet applies a fixed 65,536-byte UTF-8 bound
+  but does not parse, protect, expire, authorize, round-limit, or otherwise
+  interpret it. No `McpProtectionConfig` is required.
+- `FRAMEWORK_PROTECTED` accepts application JSON through
+  `frameworkRequestState(...)`, emits an opaque protected string, and returns
+  verified JSON as `McpFrameworkRequestState`. Any operation using this mode
+  makes a server-wide `McpProtectionConfig` mandatory.
+
+Choose framework protection explicitly:
+
+- `McpProtectionConfig.withKeyRing(...)` is the production built-in. Supply
+  operator-generated `McpProtectionKey` material through an initial
+  `McpProtectionKeyRing`; each server copies the ring and exposes live rotation
+  through `McpServer.getProtectionControl()`.
+- `withDevelopmentEphemeralProtection()` creates process-local keys and emits
+  a startup diagnostic. State cannot survive a restart or move between server
+  instances, so this mode is for development only.
+- `withRequestStateProtector(...)` delegates sealing and opening to one
+  thread-safe application provider, suitable for a fleet-owned key service or
+  envelope. The provider must authenticate the exact associated data in
+  `McpRequestStateProtectionContext`; Soklet still owns canonical JSON,
+  binding, size, lifetime, round, and prior-request-ID checks.
+
+The defaults are 65,536 encoded bytes, 49,152 decoded bytes, a 15-minute
+lifetime, and 10 rounds; `McpProtectionConfig.Builder` can lower or raise them
+within its validated contract. Framework state is bound to the normalized
+endpoint path, protocol version, JSON-RPC method, admitted authorization
+partition, and stable request parameters. The parameter digest excludes only
+the retry's `inputResponses` and `requestState` plus transient `_meta`
+progress/trace/baggage fields, allowing those fields to change without moving
+state to a different operation or authorization partition.
+
+The first emission records round 1, issuance/expiry, and the emitting request
+ID. Re-emission preserves the original expiry, increments the round, and
+records the current request ID. The next retry must use an ID different from
+the request that emitted that particular state. This prior-ID check is not a
+server-side single-use store: an application that needs stronger replay or
+workflow-consumption semantics must enforce them itself.
+
+Soklet checks request-state wire shape and size before capability checks or
+admission, but does not cryptographically open structurally valid state until
+after accepted admission and authorization-partition resolution. Consequently
+a missing required capability or admission rejection wins over a later
+tamper/binding failure. Invalid, tampered, expired, wrong-bound, over-round, or
+same-prior-ID framework state returns HTTP 400 / JSON-RPC `-32602`; temporary
+protector unavailability returns HTTP 503 / `-32603`. Invalid-state reports
+and malformed, noncanonical, empty, or oversized plaintext returned while
+opening custom-protected state collapse to the same 400 / `-32602` response.
+Null or unexpected provider behavior, invalid sealing output, and invalid
+application output fail closed as HTTP 500 / `-32603`, without reflecting
+provider diagnostics.
+
+`input_required` results intentionally carry no protocol cache hints, and tool
+input-required results bypass the complete-output sanitizer. A completed
+resource read on any retry carrying `inputResponses` or `requestState` is
+forced to private scope with zero TTL, regardless of its registration cache
+policy. Every HTTP transport response remains `Cache-Control: no-store`.
+
 ## Admission and identity
 
 `McpRequestAdmissionPolicy` is the authentication, authorization, and
@@ -271,10 +390,10 @@ HTTP 503 with JSON-RPC `-32603`; a queued request whose absolute deadline
 expires never enters application code.
 
 A timeout or disconnect terminates the current framework response path, but
-the Phase 4 runtime does not yet deliver the Phase 5 cooperative-cancellation
-signal to application handlers. Java cannot forcibly stop a non-cooperative
-handler, so it retains its execution slot until it actually exits even if the
-client request has already completed.
+the runtime does not yet deliver a cooperative-cancellation signal to
+application handlers. Java cannot forcibly stop a non-cooperative handler, so
+it retains its execution slot until it actually exits even if the client
+request has already completed.
 
 One `McpHandlerInterceptor` wraps every application-owned tool call, prompt
 get, resource read, and custom resource list handler. Its continuation is
@@ -282,18 +401,21 @@ synchronous, same-thread, call-lifetime-bound, and one-shot. Framework-owned
 discovery and static catalogs do not pass through it because no application
 handler exists to intercept.
 
-For a tool call, the application pipeline is admission, optional request
-limiter, resolved tool limiter, bounded dispatch, handler interceptor, complete
-input conversion/validation and handler invocation, then output sanitization
-and final result validation. A capacity or deadline rejection happens before
-application interception. A successful dispatch slot remains charged until
-the handler/interceptor call actually exits.
+For a tool call, the application pipeline is structural and required-capability
+validation, admission, framework-state opening when present, observation,
+optional request limiting, resolved tool limiting, bounded dispatch, handler
+interception, complete input conversion/validation and handler invocation,
+then output sanitization and final result validation. A capacity or deadline
+rejection happens before application interception. A successful dispatch slot
+remains charged until the handler/interceptor call actually exits.
 
 `McpToolOutputSanitizer` runs at the tool-output boundary. Interceptor
 short-circuits and sanitizer replacements still undergo method compatibility,
 recognized-result, content, and structured-output validation. Application
 exceptions and unsafe outputs fail closed without reflecting secrets or raw
-exception text to the client.
+exception text to the client. An `input_required` result is validated through
+its separate declaration/request-state path and does not pass through the
+complete tool-output sanitizer.
 
 ## HTTP and error policy
 
@@ -310,7 +432,7 @@ never stored, and never echoed.
 
 An identifiable `notifications/cancelled` message still traverses version
 validation, admission, and request limiting, then returns an empty HTTP 202.
-Its payload is ignored and it never cancels active work in the Phase 4 runtime,
+Its payload is ignored and it never cancels active work in the current runtime,
 including when the supplied ID names an active request. Other notifications
 never receive a JSON-RPC response body.
 
@@ -325,6 +447,9 @@ Implemented framework mappings are stable:
 | Unsupported protocol version | 400 | `-32022` |
 | Missing required capability | 400 | `-32021` |
 | Specified invalid parameters | 400 | `-32602` |
+| Invalid, expired, or wrong-bound request state | 400 | `-32602` |
+| Request-state protector unavailable | 503 | `-32603` |
+| Application/protector output contract failure | 500 | `-32603` |
 | Unknown request method | 404 | `-32601` |
 
 Readable request IDs retain their original string or integer identity. Error
@@ -375,8 +500,8 @@ values through that diagnostic.
 
 MCP reuses Soklet's existing `LifecycleObserver` and `MetricsCollector` hosts.
 There is no parallel MCP observer or collector, and
-`McpHandlerInterceptor` is not an observability substitute. The current Phase
-4 runtime emits the admitted-request lifecycle start/finish pair and the
+`McpHandlerInterceptor` is not an observability substitute. The current
+runtime emits the admitted-request lifecycle start/finish pair and the
 corresponding `McpMetricsEvent.RequestStarted` and
 `McpMetricsEvent.RequestFinished` events for framework and application
 operations. Callback failures are logged and contained, and user callbacks do
@@ -405,8 +530,7 @@ deployment fully conformant with MCP Authorization; the deployment must meet
 every applicable authorization-server and resource-server obligation.
 
 The official MCP conformance suite is pinned and automated as release
-evidence. A fresh packaged candidate built from the final frozen Phase 4 source
-passed all 23 currently active scenarios and their complete expected-check
-profiles. The supported JDK 17/25 CI legs remain open, and this
-candidate-development result is not release-candidate evidence. Do not treat
-this snapshot guide as a release-conformance statement.
+evidence. The earlier frozen Phase 4 candidate passed its then-active reviewed
+profile; the current Phase 5 multi-round-trip slice has not yet received fresh
+official-suite evidence. Do not treat this snapshot guide as a
+release-conformance statement.

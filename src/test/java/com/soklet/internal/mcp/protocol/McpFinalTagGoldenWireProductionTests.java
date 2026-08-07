@@ -21,6 +21,7 @@ import com.soklet.McpBlobResourceContents;
 import com.soklet.McpClientCapability;
 import com.soklet.McpCompleteResult;
 import com.soklet.McpEndpoint;
+import com.soklet.McpFrameworkRequestState;
 import com.soklet.McpHandlerResolver;
 import com.soklet.McpImplementation;
 import com.soklet.McpInputRequest;
@@ -28,13 +29,20 @@ import com.soklet.McpInputRequestDeclaration;
 import com.soklet.McpInputRequiredResult;
 import com.soklet.McpInputRequirement;
 import com.soklet.McpJsonArray;
+import com.soklet.McpJsonBoolean;
 import com.soklet.McpJsonObject;
+import com.soklet.McpJsonString;
 import com.soklet.McpPromptArgumentDefinition;
 import com.soklet.McpPromptMessage;
 import com.soklet.McpPromptOutput;
 import com.soklet.McpPromptRegistration;
+import com.soklet.McpProtectionConfig;
 import com.soklet.McpRateLimitDecision;
 import com.soklet.McpRequestAdmissionPolicy;
+import com.soklet.McpRequestStateMode;
+import com.soklet.McpRequestStateProtectionContext;
+import com.soklet.McpRequestStateProtectionException;
+import com.soklet.McpRequestStateProtector;
 import com.soklet.McpResourceOutput;
 import com.soklet.McpResourceRegistration;
 import com.soklet.McpServer;
@@ -48,8 +56,10 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class McpFinalTagGoldenWireProductionTests {
 	private static final String PROTOCOL_VERSION = "2026-07-28";
@@ -247,7 +257,7 @@ public class McpFinalTagGoldenWireProductionTests {
 	}
 
 	@Test
-	public void checked_in_phase_5_input_required_message_matches_the_production_listener()
+	public void checked_in_phase_5_input_messages_match_the_production_listener()
 			throws Exception {
 		McpInputRequestDeclaration form = McpInputRequestDeclaration
 				.fromElicitationForm(McpInputRequirement.CONDITIONAL);
@@ -322,10 +332,33 @@ public class McpFinalTagGoldenWireProductionTests {
 								.build())
 				.mayRequestInput(form, url, sampling, roots)
 				.build();
+		McpToolRegistration<McpJsonObject> inputResponsesTool = McpToolRegistration
+				.withName("golden.input-responses")
+				.jsonArguments()
+				.handler((request, call, features) -> {
+					McpJsonObject response = Assertions.assertInstanceOf(
+							McpJsonObject.class, request.getInputResponses()
+									.find("approval").orElseThrow());
+					Assertions.assertEquals("accept", Assertions.assertInstanceOf(
+							McpJsonString.class,
+							response.find("action").orElseThrow()).value());
+					McpJsonObject extension = Assertions.assertInstanceOf(
+							McpJsonObject.class, response
+									.find("com.example/responseExtension")
+									.orElseThrow());
+					Assertions.assertTrue(Assertions.assertInstanceOf(
+							McpJsonBoolean.class,
+							extension.find("preserved").orElseThrow()).value());
+					return McpCompleteResult.fromToolText(
+							"input responses accepted");
+				})
+				.mayRequestInput(form)
+				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
 				.serverInformation(McpImplementation.withNameAndVersion(
 						"soklet-final-schema-golden", "3.6.0-SNAPSHOT").build())
 				.tool(tool)
+				.tool(inputResponsesTool)
 				.build();
 		McpServer server = McpServer.withPort(0)
 				.host("127.0.0.1")
@@ -348,9 +381,130 @@ public class McpFinalTagGoldenWireProductionTests {
 							new McpChunkedHttpClient.RequestHeader(
 									"Mcp-Name", "golden.input-required")),
 					200, fixture("phase-5/input-required-tool-response.json"));
+			assertExchange(port,
+					fixture("phase-5/input-responses-tool-request.json"), List.of(
+							new McpChunkedHttpClient.RequestHeader(
+									"MCP-Protocol-Version", PROTOCOL_VERSION),
+							new McpChunkedHttpClient.RequestHeader(
+									"Mcp-Method", "tools/call"),
+							new McpChunkedHttpClient.RequestHeader(
+									"Mcp-Name", "golden.input-responses")),
+					200, fixture("phase-5/input-responses-tool-response.json"));
 		} finally {
 			server.stop();
 		}
+	}
+
+	@Test
+	public void checked_in_phase_5_protected_state_round_trip_matches_the_production_listener()
+			throws Exception {
+		McpInputRequestDeclaration form = McpInputRequestDeclaration
+				.fromElicitationForm(McpInputRequirement.CONDITIONAL);
+		McpJsonObject requestedSchema = McpJsonObject.builder()
+				.put("type", "object")
+				.put("properties", McpJsonObject.builder()
+						.put("answer", McpJsonObject.builder()
+								.put("type", "string")
+								.put("description", "Protected-state answer")
+								.build())
+						.build())
+				.put("required", McpJsonArray.builder().add("answer").build())
+				.build();
+		McpJsonObject frameworkState = McpJsonObject.builder()
+				.put("phase", "awaiting-approval")
+				.put("fixture", "phase-5-protected-state")
+				.build();
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName("golden.protected-state")
+				.jsonArguments()
+				.handler((request, call, features) -> {
+					if (request.getRequestState().isEmpty()) {
+						Assertions.assertTrue(
+								request.getInputResponses().asMap().isEmpty());
+						return McpInputRequiredResult.builder()
+								.inputRequest("approval", McpInputRequest
+										.fromDeclaration(form,
+												McpJsonObject.builder()
+														.put("message",
+																"Approve the protected-state golden exchange")
+														.put("requestedSchema",
+																requestedSchema)
+														.build()))
+								.frameworkRequestState(frameworkState)
+								.metadata(McpJsonObject.builder()
+										.put("fixture", "phase-5-protected-state")
+										.build())
+								.build();
+					}
+
+					McpFrameworkRequestState state = Assertions.assertInstanceOf(
+							McpFrameworkRequestState.class,
+							request.getRequestState().orElseThrow());
+					McpJsonObject stateValue = Assertions.assertInstanceOf(
+							McpJsonObject.class, state.value());
+					Assertions.assertEquals("awaiting-approval",
+							Assertions.assertInstanceOf(McpJsonString.class,
+									stateValue.find("phase").orElseThrow()).value());
+					Assertions.assertEquals("phase-5-protected-state",
+							Assertions.assertInstanceOf(McpJsonString.class,
+									stateValue.find("fixture").orElseThrow()).value());
+					McpJsonObject approval = Assertions.assertInstanceOf(
+							McpJsonObject.class, request.getInputResponses()
+									.find("approval").orElseThrow());
+					Assertions.assertEquals("accept", Assertions.assertInstanceOf(
+							McpJsonString.class,
+							approval.find("action").orElseThrow()).value());
+					McpJsonObject content = Assertions.assertInstanceOf(
+							McpJsonObject.class,
+							approval.find("content").orElseThrow());
+					Assertions.assertEquals("approved",
+							Assertions.assertInstanceOf(McpJsonString.class,
+									content.find("answer").orElseThrow()).value());
+					return McpCompleteResult.fromToolText(
+							"protected request state accepted");
+				})
+				.mayRequestInput(form)
+				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
+				.build();
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
+				.serverInformation(McpImplementation.withNameAndVersion(
+						"soklet-final-schema-golden", "3.6.0-SNAPSHOT").build())
+				.tool(tool)
+				.build();
+		McpServer server = McpServer.withPort(0)
+				.host("127.0.0.1")
+				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
+				.requestAdmissionPolicy(McpRequestAdmissionPolicy.acceptAllInstance())
+				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.protectionConfig(McpProtectionConfig.withRequestStateProtector(
+						new DeterministicGoldenRequestStateProtector()).build())
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.allowedHosts(Set.of("127.0.0.1"))
+				.build();
+
+		try {
+			server.start();
+			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+			assertProtectedStateExchange(port,
+					"phase-5/protected-state-initial-request.json",
+					"phase-5/protected-state-initial-response.json");
+			assertProtectedStateExchange(port,
+					"phase-5/protected-state-retry-request.json",
+					"phase-5/protected-state-retry-response.json");
+		} finally {
+			server.stop();
+		}
+	}
+
+	private static void assertProtectedStateExchange(int port, String requestFixture,
+			String responseFixture) throws Exception {
+		assertExchange(port, fixture(requestFixture), List.of(
+				new McpChunkedHttpClient.RequestHeader(
+						"MCP-Protocol-Version", PROTOCOL_VERSION),
+				new McpChunkedHttpClient.RequestHeader("Mcp-Method", "tools/call"),
+				new McpChunkedHttpClient.RequestHeader(
+						"Mcp-Name", "golden.protected-state")),
+				200, fixture(responseFixture));
 	}
 
 	private static void assertResourceRead(int port, String fixtureName, String uri,
@@ -386,5 +540,53 @@ public class McpFinalTagGoldenWireProductionTests {
 		Assertions.assertFalse(text.substring(0, text.length() - 1).contains("\n"),
 				filename + " must contain one compact JSON line");
 		return text.substring(0, text.length() - 1);
+	}
+
+	private static final class DeterministicGoldenRequestStateProtector
+			implements McpRequestStateProtector {
+		private static final String PROTECTED_STATE =
+				"phase-5-protected-state-v1";
+		private final AtomicReference<ProtectedSnapshot> protectedSnapshot =
+				new AtomicReference<>();
+
+		@Override
+		public String seal(McpRequestStateProtectionContext context,
+				byte[] plaintext) {
+			ProtectedSnapshot snapshot = new ProtectedSnapshot(
+					context.getAssociatedData(), plaintext);
+			if (!this.protectedSnapshot.compareAndSet(null, snapshot))
+				throw new IllegalStateException(
+						"The golden protector supports one protected state.");
+			return PROTECTED_STATE;
+		}
+
+		@Override
+		public byte[] open(McpRequestStateProtectionContext context,
+				String protectedState)
+				throws McpRequestStateProtectionException {
+			ProtectedSnapshot snapshot = this.protectedSnapshot.get();
+			if (!PROTECTED_STATE.equals(protectedState) || snapshot == null
+					|| !snapshot.matches(context.getAssociatedData()))
+				throw McpRequestStateProtectionException.fromInvalidState();
+			return snapshot.copyPlaintext();
+		}
+	}
+
+	private static final class ProtectedSnapshot {
+		private final byte[] associatedData;
+		private final byte[] plaintext;
+
+		private ProtectedSnapshot(byte[] associatedData, byte[] plaintext) {
+			this.associatedData = associatedData.clone();
+			this.plaintext = plaintext.clone();
+		}
+
+		private boolean matches(byte[] associatedData) {
+			return MessageDigest.isEqual(this.associatedData, associatedData);
+		}
+
+		private byte[] copyPlaintext() {
+			return this.plaintext.clone();
+		}
 	}
 }

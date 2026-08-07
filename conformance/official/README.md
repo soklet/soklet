@@ -73,11 +73,18 @@ validates checked-in golden wire messages against the checksum-pinned final
 `golden-wire/manifest.json` binds every JSON fixture to a concrete final-schema
 definition and checksum. Production rows are byte-bound to the live listener
 by `McpFinalTagGoldenWireProductionTests`, including the Phase 5
-`input_required` tool exchange. The subscription terminal row is an explicit
-schema canary, not production evidence; Phase 5 must add a production-derived
-row when subscriptions exist. The validator uses Ajv and `ajv-formats` from
-the official suite's verified lockfile, so no Soklet runtime dependency or
-second package installation is added.
+`input_required` tool exchange and the production-derived `inputResponses`
+request/complete-response exchange. It also includes a protected request-state
+exchange: the initial response emits listener-produced `requestState`, and a
+fresh-ID retry echoes it with valid `inputResponses` before completing. The
+current corpus contains 30 messages: 29 production-derived messages plus one
+subscription terminal schema canary. The canary is not production evidence;
+Phase 5 must add a production-derived row when subscriptions exist. The
+validator uses Ajv and `ajv-formats` from the official suite's verified
+lockfile, so no Soklet runtime dependency or second package installation is
+added. The protected exchange and this corpus growth are local production-
+listener/final-schema evidence only. They do not constitute an official Phase
+5 scenario run or pass, and the Phase 5 expected profiles remain null.
 
 The schema layer checks JSON message shapes only. HTTP status and headers,
 CORS, SSE framing, cross-message order, ID correlation, filter containment,
