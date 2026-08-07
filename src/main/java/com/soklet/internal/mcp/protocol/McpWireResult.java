@@ -176,6 +176,7 @@ record McpEmbeddedInputRequest(@NonNull McpInputRequestDeclaration declaration,
 	McpEmbeddedInputRequest {
 		requireNonNull(declaration);
 		requireNonNull(params);
+		McpEmbeddedInputRequestValidator.validate(declaration, params);
 		extensionFields = McpProtocolSupport.requireExtensionFields(
 				extensionFields, Set.of("method", "params"));
 	}

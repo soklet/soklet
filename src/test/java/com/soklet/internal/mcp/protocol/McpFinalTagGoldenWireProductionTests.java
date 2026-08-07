@@ -18,20 +18,29 @@ package com.soklet.internal.mcp.protocol;
 
 import com.soklet.CorsAuthorizer;
 import com.soklet.McpBlobResourceContents;
+import com.soklet.McpClientCapability;
 import com.soklet.McpCompleteResult;
 import com.soklet.McpEndpoint;
 import com.soklet.McpHandlerResolver;
 import com.soklet.McpImplementation;
+import com.soklet.McpInputRequest;
+import com.soklet.McpInputRequestDeclaration;
+import com.soklet.McpInputRequiredResult;
+import com.soklet.McpInputRequirement;
+import com.soklet.McpJsonArray;
+import com.soklet.McpJsonObject;
 import com.soklet.McpPromptArgumentDefinition;
 import com.soklet.McpPromptMessage;
 import com.soklet.McpPromptOutput;
 import com.soklet.McpPromptRegistration;
+import com.soklet.McpRateLimitDecision;
 import com.soklet.McpRequestAdmissionPolicy;
 import com.soklet.McpResourceOutput;
 import com.soklet.McpResourceRegistration;
 import com.soklet.McpServer;
 import com.soklet.McpTextResourceContents;
 import com.soklet.McpTextContent;
+import com.soklet.McpToolRegistration;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -232,6 +241,113 @@ public class McpFinalTagGoldenWireProductionTests {
 			assertResourceRead(port, "template", "golden://records/record-42", 200);
 			assertResourceRead(port, "text", textResourceUri.toString(), 200);
 			assertResourceRead(port, "unknown", "golden://missing/resource", 400);
+		} finally {
+			server.stop();
+		}
+	}
+
+	@Test
+	public void checked_in_phase_5_input_required_message_matches_the_production_listener()
+			throws Exception {
+		McpInputRequestDeclaration form = McpInputRequestDeclaration
+				.fromElicitationForm(McpInputRequirement.CONDITIONAL);
+		McpInputRequestDeclaration url = McpInputRequestDeclaration
+				.fromElicitationUrl(McpInputRequirement.CONDITIONAL);
+		McpInputRequestDeclaration sampling = McpInputRequestDeclaration
+				.fromSampling(Set.of(McpClientCapability.SAMPLING_CONTEXT,
+						McpClientCapability.SAMPLING_TOOLS),
+						McpInputRequirement.CONDITIONAL);
+		McpInputRequestDeclaration roots = McpInputRequestDeclaration
+				.fromRoots(McpInputRequirement.CONDITIONAL);
+		McpJsonObject requestedSchema = McpJsonObject.builder()
+				.put("type", "object")
+				.put("properties", McpJsonObject.builder()
+						.put("answer", McpJsonObject.builder()
+								.put("type", "string")
+								.put("description", "Canonical answer")
+								.build())
+						.build())
+				.put("required", McpJsonArray.builder().add("answer").build())
+				.build();
+		McpJsonObject formParams = McpJsonObject.builder()
+				.put("message", "Provide the canonical answer")
+				.put("requestedSchema", requestedSchema)
+				.build();
+		McpJsonObject urlParams = McpJsonObject.builder()
+				.put("message", "Continue in the canonical browser flow")
+				.put("mode", "url")
+				.put("url", "https://example.test/continue")
+				.build();
+		McpJsonObject samplingParams = McpJsonObject.builder()
+				.put("maxTokens", 64)
+				.put("messages", McpJsonArray.builder()
+						.add(McpJsonObject.builder()
+								.put("role", "user")
+								.put("content", McpJsonObject.builder()
+										.put("type", "text")
+										.put("text", "Return one canonical word")
+										.build())
+								.build())
+						.build())
+				.put("includeContext", "thisServer")
+				.put("tools", McpJsonArray.builder()
+						.add(McpJsonObject.builder()
+								.put("name", "golden.lookup")
+								.put("inputSchema", McpJsonObject.builder()
+										.put("type", "object")
+										.build())
+								.build())
+						.build())
+				.put("toolChoice", McpJsonObject.builder()
+						.put("mode", "auto")
+						.build())
+				.build();
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName("golden.input-required")
+				.jsonArguments()
+				.handler((request, call, features) ->
+						McpInputRequiredResult.builder()
+								.inputRequest("form", McpInputRequest
+										.fromDeclaration(form, formParams))
+								.inputRequest("url", McpInputRequest
+										.fromDeclaration(url, urlParams))
+								.inputRequest("sampling", McpInputRequest
+										.fromDeclaration(sampling, samplingParams))
+								.inputRequest("roots", McpInputRequest
+										.fromDeclaration(roots,
+												McpJsonObject.emptyInstance()))
+								.metadata(McpJsonObject.builder()
+										.put("fixture", "phase-5-input-required")
+										.build())
+								.build())
+				.mayRequestInput(form, url, sampling, roots)
+				.build();
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
+				.serverInformation(McpImplementation.withNameAndVersion(
+						"soklet-final-schema-golden", "3.6.0-SNAPSHOT").build())
+				.tool(tool)
+				.build();
+		McpServer server = McpServer.withPort(0)
+				.host("127.0.0.1")
+				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
+				.requestAdmissionPolicy(McpRequestAdmissionPolicy.acceptAllInstance())
+				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.allowedHosts(Set.of("127.0.0.1"))
+				.build();
+
+		try {
+			server.start();
+			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+			assertExchange(port,
+					fixture("phase-5/input-required-tool-request.json"), List.of(
+							new McpChunkedHttpClient.RequestHeader(
+									"MCP-Protocol-Version", PROTOCOL_VERSION),
+							new McpChunkedHttpClient.RequestHeader(
+									"Mcp-Method", "tools/call"),
+							new McpChunkedHttpClient.RequestHeader(
+									"Mcp-Name", "golden.input-required")),
+					200, fixture("phase-5/input-required-tool-response.json"));
 		} finally {
 			server.stop();
 		}

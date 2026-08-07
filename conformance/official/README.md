@@ -72,11 +72,12 @@ validates checked-in golden wire messages against the checksum-pinned final
 
 `golden-wire/manifest.json` binds every JSON fixture to a concrete final-schema
 definition and checksum. Production rows are byte-bound to the live listener
-by `McpFinalTagGoldenWireProductionTests`. The subscription terminal row is an
-explicit schema canary, not production evidence; Phase 5 must add a
-production-derived row when subscriptions exist. The validator uses Ajv and
-`ajv-formats` from the official suite's verified lockfile, so no Soklet runtime
-dependency or second package installation is added.
+by `McpFinalTagGoldenWireProductionTests`, including the Phase 5
+`input_required` tool exchange. The subscription terminal row is an explicit
+schema canary, not production evidence; Phase 5 must add a production-derived
+row when subscriptions exist. The validator uses Ajv and `ajv-formats` from
+the official suite's verified lockfile, so no Soklet runtime dependency or
+second package installation is added.
 
 The schema layer checks JSON message shapes only. HTTP status and headers,
 CORS, SSE framing, cross-message order, ID correlation, filter containment,

@@ -214,6 +214,26 @@
       "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_resource_messages_match_the_production_listener"
     },
     {
+      "name": "phase-5-input-required-tool-request",
+      "phase": 5,
+      "source": "production",
+      "path": "phase-5/input-required-tool-request.json",
+      "sha256": "5f434d8f81bdaf917b9416e6e34a8dc9b1516c3660858f6df824bc5f5e612391",
+      "schemaRef": "#/$defs/CallToolRequest",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_input_required_message_matches_the_production_listener"
+    },
+    {
+      "name": "phase-5-input-required-tool-response",
+      "phase": 5,
+      "source": "production",
+      "path": "phase-5/input-required-tool-response.json",
+      "sha256": "50c242b2d4c2b7f4d168127ca1d39c6cc2df028ed0096033fc4387940b6c2fb6",
+      "schemaRef": "#/$defs/CallToolResultResponse",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_input_required_message_matches_the_production_listener"
+    },
+    {
       "name": "final-schema-subscription-terminal-canary",
       "phase": 5,
       "source": "schema-canary",

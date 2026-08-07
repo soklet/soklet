@@ -2059,32 +2059,40 @@ public final class McpServerRuntimeBridge {
 					"Request-state emission requires protected retry handling.");
 		}
 
-		com.soklet.internal.mcp.protocol.McpJsonObject internalMetadata =
-				(com.soklet.internal.mcp.protocol.McpJsonObject)
-						toInternal(publicResult.getMetadata());
-		McpResultMetadata metadata = new McpResultMetadata(
-				Optional.empty(), internalMetadata);
-		McpInputRequests.Builder requests = McpInputRequests.builder();
 		Set<McpClientCapabilityRequirement> missingCapabilities =
 				new LinkedHashSet<>();
+		Map<String, McpInputRequestDeclaration> internalDeclarations =
+				new LinkedHashMap<>();
 
 		for (Map.Entry<String, McpInputRequest> entry
 				: publicResult.getInputRequests().entrySet()) {
-			McpInputRequest publicRequest = entry.getValue();
 			McpInputRequestDeclaration internalDeclaration =
-					toInternal(publicRequest.declaration());
+					toInternal(entry.getValue().declaration());
+			internalDeclarations.put(entry.getKey(), internalDeclaration);
 			missingCapabilities.addAll(inputRequestPlan.missingForEmission(
 					internalDeclaration, clientCapabilities));
-			requests.inputRequest(entry.getKey(),
-					McpEmbeddedInputRequest.fromDeclaration(internalDeclaration,
-							(com.soklet.internal.mcp.protocol.McpJsonObject)
-									toInternal(publicRequest.params())));
 		}
 
 		if (!missingCapabilities.isEmpty())
 			throw new McpProtocolJsonRpcException(
 					McpJsonRpcError.missingRequiredClientCapabilities(
 							missingCapabilities));
+
+		com.soklet.internal.mcp.protocol.McpJsonObject internalMetadata =
+				(com.soklet.internal.mcp.protocol.McpJsonObject)
+						toInternal(publicResult.getMetadata());
+		McpResultMetadata metadata = new McpResultMetadata(
+				Optional.empty(), internalMetadata);
+		McpInputRequests.Builder requests = McpInputRequests.builder();
+
+		for (Map.Entry<String, McpInputRequest> entry
+				: publicResult.getInputRequests().entrySet())
+			requests.inputRequest(entry.getKey(),
+					McpEmbeddedInputRequest.fromDeclaration(
+							requireNonNull(internalDeclarations.get(
+									entry.getKey())),
+							(com.soklet.internal.mcp.protocol.McpJsonObject)
+									toInternal(entry.getValue().params())));
 
 		return McpWireResult.inputRequired(clientRequestMethod,
 				publicResult.getInputRequests().isEmpty()
