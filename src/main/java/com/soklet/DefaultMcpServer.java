@@ -27,6 +27,7 @@ import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptArgumentPla
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptInvocation;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptInvocationResult;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptPlan;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ProgressEmitter;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RateLimitAdapter;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RateLimitInput;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RateLimitResult;
@@ -580,12 +581,15 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpToolRegistration<A> tool,
 			@NonNull ToolInvocation invocation) throws Exception {
 		McpRequestContext requestContext = invocation.requestContext();
+		McpInvocationFeatures invocationFeatures = invocationFeatures(
+				requestContext, invocation.endpoint(), invocation.jsonRpcMethod(),
+				invocation.cancelationToken(), invocation.progressEmitter());
 		McpOperationResult result;
 		try {
 			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
 					() -> tool.invoke(
 							requestContext, invocation.rawArguments(),
-							McpInvocationFeatures.fromFeatures(Map.of())));
+							invocationFeatures));
 		} catch (McpInvalidToolArgumentsException exception) {
 			return ToolInvocationResult.invalidInput();
 		}
@@ -625,12 +629,15 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpPromptRegistration prompt,
 			@NonNull PromptInvocation invocation) throws Exception {
 		McpRequestContext requestContext = invocation.requestContext();
+		McpInvocationFeatures invocationFeatures = invocationFeatures(
+				requestContext, invocation.endpoint(), invocation.jsonRpcMethod(),
+				invocation.cancelationToken(), invocation.progressEmitter());
 		McpOperationResult result;
 		try {
 			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
 					() -> prompt.invoke(
 							requestContext, invocation.rawArguments(),
-							McpInvocationFeatures.fromFeatures(Map.of())));
+							invocationFeatures));
 		} catch (McpInvalidPromptArgumentsException exception) {
 			return PromptInvocationResult.invalidInput();
 		}
@@ -654,6 +661,9 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpResourceRegistration resource,
 			@NonNull ResourceInvocation invocation) throws Exception {
 		McpRequestContext requestContext = invocation.requestContext();
+		McpInvocationFeatures invocationFeatures = invocationFeatures(
+				requestContext, invocation.endpoint(), invocation.jsonRpcMethod(),
+				invocation.cancelationToken(), invocation.progressEmitter());
 		McpOperationResult result;
 		try {
 			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
@@ -662,7 +672,7 @@ final class DefaultMcpServer implements McpServer {
 							return requireNonNull(
 									resource.getHandler().handle(requestContext,
 											new DefaultMcpResourceReadContext(invocation),
-											McpInvocationFeatures.fromFeatures(Map.of())),
+											invocationFeatures),
 									"The MCP resource handler returned null.");
 						} catch (McpJsonRpcException exception) {
 							throw new ApplicationHandlerJsonRpcException(
@@ -729,6 +739,9 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull List<@NonNull McpResourceDescriptor> registeredDescriptors,
 			@NonNull ResourceListInvocation invocation) throws Exception {
 		McpRequestContext requestContext = invocation.requestContext();
+		McpInvocationFeatures invocationFeatures = invocationFeatures(
+				requestContext, invocation.endpoint(), invocation.jsonRpcMethod(),
+				invocation.cancelationToken(), invocation.progressEmitter());
 		McpOperationResult result;
 		try {
 			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
@@ -739,7 +752,7 @@ final class DefaultMcpServer implements McpServer {
 											new DefaultMcpResourceListContext(
 													invocation.cursor(),
 													registeredDescriptors),
-											McpInvocationFeatures.fromFeatures(Map.of())),
+											invocationFeatures),
 									"The MCP resource-list handler returned null.");
 						} catch (McpJsonRpcException exception) {
 							throw new ApplicationHandlerJsonRpcException(
@@ -757,6 +770,109 @@ final class DefaultMcpServer implements McpServer {
 
 		return ResourceListInvocationResult.complete(resourcePageFields(page),
 				page.getMetadata());
+	}
+
+	@NonNull
+	private McpInvocationFeatures invocationFeatures(
+			@NonNull McpRequestContext requestContext,
+			@NonNull McpEndpoint endpoint, @NonNull String jsonRpcMethod,
+			@NonNull CancelationToken cancelationToken,
+			@NonNull Optional<@NonNull ProgressEmitter> progressEmitter) {
+		requireNonNull(requestContext);
+		String endpointPath = requireNonNull(endpoint).getPath();
+		String boundedMethod = metricMethod(jsonRpcMethod);
+		CancelationToken token = requireNonNull(cancelationToken);
+		Optional<ProgressEmitter> emitter = requireNonNull(progressEmitter);
+		MetricsCollector collector = this.metricsCollector;
+		LifecycleObserver observer = this.lifecycleObserver;
+
+		token.onCancel(() -> safelyRecordMcpMetrics(collector, observer,
+				new McpMetricsEvent.CancelationSignaled(endpointPath, boundedMethod),
+				requestContext));
+
+		Map<Class<?>, Object> features = new LinkedHashMap<>();
+		features.put(CancelationToken.class, token);
+		emitter.ifPresent(value -> features.put(McpProgressReporter.class,
+				new DefaultMcpProgressReporter(token, value, collector, observer,
+						requestContext, endpointPath, boundedMethod)));
+		return McpInvocationFeatures.fromFeatures(features);
+	}
+
+	/**
+	 * Serializes application progress reports for one active MCP invocation.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	private final class DefaultMcpProgressReporter
+			implements McpProgressReporter {
+		@NonNull
+		private final CancelationToken cancelationToken;
+		@NonNull
+		private final ProgressEmitter progressEmitter;
+		@NonNull
+		private final MetricsCollector metricsCollector;
+		@NonNull
+		private final LifecycleObserver lifecycleObserver;
+		@NonNull
+		private final McpRequestContext requestContext;
+		@NonNull
+		private final String endpointPath;
+		@NonNull
+		private final String jsonRpcMethod;
+		@Nullable
+		private Double lastAcceptedProgress;
+
+		private DefaultMcpProgressReporter(
+				@NonNull CancelationToken cancelationToken,
+				@NonNull ProgressEmitter progressEmitter,
+				@NonNull MetricsCollector metricsCollector,
+				@NonNull LifecycleObserver lifecycleObserver,
+				@NonNull McpRequestContext requestContext,
+				@NonNull String endpointPath, @NonNull String jsonRpcMethod) {
+			this.cancelationToken = requireNonNull(cancelationToken);
+			this.progressEmitter = requireNonNull(progressEmitter);
+			this.metricsCollector = requireNonNull(metricsCollector);
+			this.lifecycleObserver = requireNonNull(lifecycleObserver);
+			this.requestContext = requireNonNull(requestContext);
+			this.endpointPath = requireNonNull(endpointPath);
+			this.jsonRpcMethod = requireNonNull(jsonRpcMethod);
+		}
+
+		@Override
+		public synchronized void report(@NonNull McpProgressUpdate update) {
+			McpProgressUpdate requiredUpdate = requireNonNull(update);
+			if (this.cancelationToken.isCanceled()
+					|| !this.progressEmitter.isActive())
+				return;
+
+			double progress = requiredUpdate.getProgress();
+			if (this.lastAcceptedProgress != null) {
+				int comparison = Double.compare(progress,
+						this.lastAcceptedProgress);
+				if (comparison < 0)
+					throw new IllegalArgumentException(
+							"MCP progress must not decrease.");
+				if (comparison == 0)
+					return;
+			}
+
+			try {
+				if (!this.progressEmitter.emit(progress,
+						requiredUpdate.getTotal(), requiredUpdate.getMessage()))
+					return;
+			} catch (InterruptedException exception) {
+				Thread.currentThread().interrupt();
+				return;
+			}
+
+			this.lastAcceptedProgress = progress;
+			safelyRecordMcpMetrics(this.metricsCollector,
+					this.lifecycleObserver,
+					new McpMetricsEvent.ProgressEmitted(this.endpointPath,
+							this.jsonRpcMethod),
+					this.requestContext);
+		}
 	}
 
 	/**

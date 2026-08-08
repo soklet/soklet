@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter, once } from 'node:events';
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -26,6 +27,27 @@ import {
   RunnerCancelledError,
   verifyPublicFixtureClasspath,
 } from './run.mjs';
+
+class ReadinessAwaitingChildSupervisor extends ChildSupervisor {
+  #readinessPath;
+  #waitState = new Int32Array(new SharedArrayBuffer(4));
+
+  constructor(readinessPath) {
+    super();
+    this.#readinessPath = readinessPath;
+  }
+
+  spawn(command, args, options) {
+    const child = super.spawn(command, args, options);
+    const deadline = Date.now() + 5_000;
+    while (!existsSync(this.#readinessPath)) {
+      if (Date.now() >= deadline)
+        throw new Error('Child did not report signal-handler readiness');
+      Atomics.wait(this.#waitState, 0, 0, 5);
+    }
+    return child;
+  }
+}
 
 await boundedLineReaderStopsRetainingAfterOverflow();
 await timedOutLineWaiterDoesNotConsumeTheNextLine();
@@ -94,13 +116,28 @@ async function boundedCommandDrainsPipesAndReportsOutputLimit() {
 }
 
 async function timedOutCommandThatExitsZeroRemainsTimedOut() {
-  const result = await runBoundedCommand(
-    process.execPath,
-    ['-e', "process.on('SIGTERM', () => process.exit(0)); setInterval(() => {}, 1000)"],
-    { timeoutMilliseconds: 25, workingDirectory: tmpdir() },
-  );
-  assert.equal(result.status, 0);
-  assert.equal(result.timedOut, true);
+  const scratch = mkdtempSync(resolve(tmpdir(), 'soklet-mcp-timeout-self-test-'));
+  const readinessPath = resolve(scratch, 'signal-handler-ready');
+  const supervisor = new ReadinessAwaitingChildSupervisor(readinessPath);
+  try {
+    const script = [
+      "const { writeFileSync } = require('node:fs');",
+      "process.on('SIGTERM', () => process.exit(0));",
+      "writeFileSync(process.argv[1], 'ready');",
+      'setInterval(() => {}, 1000);',
+    ].join('\n');
+    const result = await runBoundedCommand(
+      process.execPath,
+      ['-e', script, readinessPath],
+      { timeoutMilliseconds: 25, workingDirectory: scratch, supervisor },
+    );
+    assert.equal(result.status, 0);
+    assert.equal(result.signal, null);
+    assert.equal(result.timedOut, true);
+  } finally {
+    await supervisor.terminateAndWaitForAll();
+    rmSync(scratch, { recursive: true, force: true });
+  }
 }
 
 function publicFixtureClasspathRequiresExactCandidateBoundary() {

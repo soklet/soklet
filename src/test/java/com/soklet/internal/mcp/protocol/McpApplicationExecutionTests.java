@@ -16,6 +16,7 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import com.soklet.CancelationToken;
 import com.soklet.McpRequestOutcome;
 import com.soklet.StreamTerminationReason;
 import com.soklet.internal.microhttp.MicrohttpRequest;
@@ -294,6 +295,116 @@ public class McpApplicationExecutionTests {
 	}
 
 	@Test
+	public void progress_notifications_do_not_extend_the_absolute_request_deadline()
+			throws Exception {
+		AtomicLong now = new AtomicLong();
+		ManualExecutorService executor = new ManualExecutorService();
+		McpApplicationExecution execution = new McpApplicationExecution(
+				new McpApplicationExecutionConfiguration(
+						1, 1, Duration.ofSeconds(30), Duration.ofDays(1)),
+				now::get, ignored -> executor);
+		CountDownLatch firstProgress = new CountDownLatch(1);
+		CountDownLatch allowSecondProgress = new CountDownLatch(1);
+		CountDownLatch secondProgress = new CountDownLatch(1);
+		CountDownLatch holdHandler = new CountDownLatch(1);
+		CountDownLatch cancelationCallback = new CountDownLatch(1);
+		AtomicInteger notificationWrites = new AtomicInteger();
+		AtomicInteger cleanups = new AtomicInteger();
+		AtomicReference<McpApplicationResponse> terminalResponse =
+				new AtomicReference<>();
+		AtomicReference<CancelationToken> token = new AtomicReference<>();
+		AtomicReference<StreamTerminationReason> cancelationReason =
+				new AtomicReference<>();
+		AtomicBoolean handlerInterrupted = new AtomicBoolean();
+		McpApplicationResponseWriter writer =
+				new McpApplicationResponseWriter() {
+					@Override
+					public boolean write(McpApplicationResponse response) {
+						terminalResponse.set(response);
+						return true;
+					}
+
+					@Override
+					public boolean writeNotification(
+							McpJsonRpcMessage.Notification notification) {
+						Assertions.assertEquals("notifications/progress",
+								notification.method());
+						notificationWrites.incrementAndGet();
+						return true;
+					}
+				};
+		Thread handlerThread = null;
+
+		try {
+			execution.start();
+			execution.dispatch(transportRequest(), progressRequest("deadline-progress"),
+					admissionIdentity(), invocation -> {
+						token.set(invocation.cancelationToken());
+						invocation.cancelationToken().onCancel(() -> {
+							cancelationReason.set(invocation.cancellationReason()
+									.orElse(null));
+							cancelationCallback.countDown();
+						});
+						McpServerRuntimeBridge.ProgressEmitter emitter =
+								McpServerRuntimeBridge.progressEmitterFor(invocation,
+										McpInputRequestPlan.empty()).orElseThrow();
+						Assertions.assertTrue(emitter.emit(0.0d,
+								Optional.of(100.0d), Optional.empty()));
+						firstProgress.countDown();
+						if (!allowSecondProgress.await(5, TimeUnit.SECONDS))
+							throw new AssertionError(
+									"Second progress update was not released.");
+						Assertions.assertTrue(emitter.emit(50.0d,
+								Optional.of(100.0d), Optional.empty()));
+						secondProgress.countDown();
+						try {
+							holdHandler.await();
+						} catch (InterruptedException exception) {
+							handlerInterrupted.set(true);
+							Thread.currentThread().interrupt();
+						}
+						return McpWireResult.complete(McpJsonObject.empty());
+					}, 100L, writer, cleanups::incrementAndGet);
+
+			handlerThread = new Thread(executor.takeCommand(),
+					"mcp-progress-deadline-test");
+			handlerThread.start();
+			Assertions.assertTrue(firstProgress.await(5, TimeUnit.SECONDS));
+
+			now.set(99L);
+			execution.runTimerCycle();
+			Assertions.assertNull(terminalResponse.get());
+			allowSecondProgress.countDown();
+			Assertions.assertTrue(secondProgress.await(5, TimeUnit.SECONDS));
+			Assertions.assertEquals(2, notificationWrites.get());
+			Assertions.assertFalse(token.get().isCanceled());
+
+			now.set(100L);
+			execution.runTimerCycle();
+			Assertions.assertTrue(cancelationCallback.await(5, TimeUnit.SECONDS));
+			handlerThread.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertFalse(handlerThread.isAlive());
+			Assertions.assertTrue(handlerInterrupted.get());
+			Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT,
+					cancelationReason.get());
+			Assertions.assertTrue(token.get().isCanceled());
+			Assertions.assertEquals(504, terminalResponse.get().status());
+			Assertions.assertEquals(McpRequestOutcome.DEADLINE_EXCEEDED,
+					terminalResponse.get().outcome());
+			Assertions.assertEquals(1, cleanups.get());
+			Assertions.assertEquals(1,
+					execution.snapshot().deadlineExpirations());
+		} finally {
+			allowSecondProgress.countDown();
+			holdHandler.countDown();
+			execution.stop();
+			if (handlerThread != null)
+				handlerThread.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(5)));
+		}
+	}
+
+	@Test
 	public void cancellation_during_failed_executor_submission_releases_retained_exchange()
 			throws Exception {
 		CancelThenRejectExecutorService executor = new CancelThenRejectExecutorService();
@@ -426,6 +537,20 @@ public class McpApplicationExecutionTests {
 				+ "\",\"method\":\"test/execute\",\"params\":{\"_meta\":{"
 				+ "\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\","
 				+ "\"io.modelcontextprotocol/clientCapabilities\":{}}}}";
+		McpJsonLimits limits = McpJsonLimits.productionDefaults();
+		McpJsonRpcEnvelope envelope = new McpJsonRpcEnvelopeCodec(
+				new McpJsonCodec(limits)).decode(json.getBytes(StandardCharsets.UTF_8));
+		return new McpRequestWireMapper(limits).map(
+				(McpJsonRpcEnvelope.Request) envelope);
+	}
+
+	private static McpJsonRpcMessage.Request progressRequest(String id) {
+		String json = "{\"jsonrpc\":\"2.0\",\"id\":\"" + id
+				+ "\",\"method\":\"tools/call\",\"params\":{\"_meta\":{"
+				+ "\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\","
+				+ "\"io.modelcontextprotocol/clientCapabilities\":{},"
+				+ "\"progressToken\":\"deadline-token\"},"
+				+ "\"name\":\"deadline-progress\",\"arguments\":{}}}";
 		McpJsonLimits limits = McpJsonLimits.productionDefaults();
 		McpJsonRpcEnvelope envelope = new McpJsonRpcEnvelopeCodec(
 				new McpJsonCodec(limits)).decode(json.getBytes(StandardCharsets.UTF_8));

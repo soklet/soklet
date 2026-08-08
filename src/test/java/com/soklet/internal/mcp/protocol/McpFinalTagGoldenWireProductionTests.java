@@ -36,6 +36,8 @@ import com.soklet.McpPromptArgumentDefinition;
 import com.soklet.McpPromptMessage;
 import com.soklet.McpPromptOutput;
 import com.soklet.McpPromptRegistration;
+import com.soklet.McpProgressReporter;
+import com.soklet.McpProgressUpdate;
 import com.soklet.McpProtectionConfig;
 import com.soklet.McpRateLimitDecision;
 import com.soklet.McpRequestAdmissionPolicy;
@@ -396,6 +398,76 @@ public class McpFinalTagGoldenWireProductionTests {
 	}
 
 	@Test
+	public void checked_in_phase_5_progress_messages_match_the_production_listener()
+			throws Exception {
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName("golden.progress")
+				.jsonArguments()
+				.handler((request, call, features) -> {
+					McpProgressReporter reporter =
+							features.require(McpProgressReporter.class);
+					reporter.report(McpProgressUpdate.withProgress(0)
+							.total(100).build());
+					reporter.report(McpProgressUpdate.withProgress(50)
+							.total(100).build());
+					reporter.report(McpProgressUpdate.withProgress(100)
+							.total(100).build());
+					return McpCompleteResult.fromToolText("progress complete");
+				})
+				.build();
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
+				.serverInformation(McpImplementation.withNameAndVersion(
+						"soklet-final-schema-golden", "3.6.0-SNAPSHOT").build())
+				.tool(tool)
+				.build();
+		McpServer server = McpServer.withPort(0)
+				.host("127.0.0.1")
+				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
+				.requestAdmissionPolicy(McpRequestAdmissionPolicy.acceptAllInstance())
+				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.allowedHosts(Set.of("127.0.0.1"))
+				.build();
+
+		try {
+			server.start();
+			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+			try (McpChunkedHttpClient client = McpChunkedHttpClient.postMcpMessage(
+					port, fixture("phase-5/progress-tool-request.json"), List.of(
+							new McpChunkedHttpClient.RequestHeader(
+									"MCP-Protocol-Version", PROTOCOL_VERSION),
+							new McpChunkedHttpClient.RequestHeader(
+									"Mcp-Method", "tools/call"),
+							new McpChunkedHttpClient.RequestHeader(
+									"Mcp-Name", "golden.progress")))) {
+				McpChunkedHttpClient.HttpResponseHead head = client.readHead();
+				Assertions.assertEquals(200, head.status(), head.raw());
+				Assertions.assertEquals("text/event-stream",
+						head.singleHeader("Content-Type"));
+				Assertions.assertEquals("no-store",
+						head.singleHeader("Cache-Control"));
+				Assertions.assertEquals("chunked",
+						head.singleHeader("Transfer-Encoding"));
+				Assertions.assertEquals(sseFixture(
+						"phase-5/progress-notification-0.json"),
+						client.readChunkText());
+				Assertions.assertEquals(sseFixture(
+						"phase-5/progress-notification-50.json"),
+						client.readChunkText());
+				Assertions.assertEquals(sseFixture(
+						"phase-5/progress-notification-100.json"),
+						client.readChunkText());
+				Assertions.assertEquals(sseFixture(
+						"phase-5/progress-tool-response.json"),
+						client.readChunkText());
+				Assertions.assertNull(client.readChunk());
+			}
+		} finally {
+			server.stop();
+		}
+	}
+
+	@Test
 	public void checked_in_phase_5_protected_state_round_trip_matches_the_production_listener()
 			throws Exception {
 		McpInputRequestDeclaration form = McpInputRequestDeclaration
@@ -540,6 +612,10 @@ public class McpFinalTagGoldenWireProductionTests {
 		Assertions.assertFalse(text.substring(0, text.length() - 1).contains("\n"),
 				filename + " must contain one compact JSON line");
 		return text.substring(0, text.length() - 1);
+	}
+
+	private static String sseFixture(String filename) throws Exception {
+		return "data: " + fixture(filename) + "\n\n";
 	}
 
 	private static final class DeterministicGoldenRequestStateProtector

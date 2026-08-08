@@ -37,6 +37,8 @@ import com.soklet.McpPromptArgumentDefinition;
 import com.soklet.McpPromptMessage;
 import com.soklet.McpPromptOutput;
 import com.soklet.McpPromptRegistration;
+import com.soklet.McpProgressReporter;
+import com.soklet.McpProgressUpdate;
 import com.soklet.McpRateLimitDecision;
 import com.soklet.McpRateLimiter;
 import com.soklet.McpRequestAdmissionPolicy;
@@ -95,6 +97,7 @@ public final class McpConformanceFixture {
 			"tools-call-embedded-resource",
 			"tools-call-mixed-content",
 			"tools-call-error",
+			"tools-call-with-progress",
 			"json-schema-2020-12",
 			"server-sse-multiple-streams",
 			"resources-list",
@@ -234,6 +237,24 @@ public final class McpConformanceFixture {
 						"Returns a deterministic application-level tool error.",
 						() -> McpCompleteResult.fromToolErrorText(
 								"This tool intentionally returns an error for testing")),
+				McpToolRegistration.withName("test_tool_with_progress")
+						.jsonArguments()
+						.handler((request, call, features) -> {
+							McpProgressReporter reporter = features
+									.find(McpProgressReporter.class)
+									.orElseThrow(() -> new IllegalStateException(
+											"The progress scenario omitted its progress token."));
+							reporter.report(McpProgressUpdate.withProgress(0)
+									.total(100).build());
+							reporter.report(McpProgressUpdate.withProgress(50)
+									.total(100).build());
+							reporter.report(McpProgressUpdate.withProgress(100)
+									.total(100).build());
+							return McpCompleteResult.fromToolText(
+									"Progress test completed.");
+						})
+						.description("Reports deterministic 0/50/100 progress.")
+						.build(),
 				McpOfficialSchemaConformanceTool.create(),
 				McpToolRegistration.withName("test_custom_header")
 						.argumentType(CustomHeaderArguments.class)

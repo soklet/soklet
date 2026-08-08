@@ -208,6 +208,8 @@ public final class SokletProcessor extends AbstractProcessor {
 	private TypeElement pathParameterElement;    // com.soklet.annotation.PathParameter
 	private TypeMirror mcpRequestContextType;
 	private TypeMirror mcpInvocationFeaturesType;
+	private TypeMirror cancelationTokenType;
+	private TypeMirror mcpProgressReporterType;
 	private TypeMirror mcpPromptOutputType;
 	private TypeMirror mcpResourceOutputType;
 	private TypeMirror mcpResourcePageType;
@@ -275,6 +277,14 @@ public final class SokletProcessor extends AbstractProcessor {
 				elements.getTypeElement("com.soklet.McpInvocationFeatures");
 		this.mcpInvocationFeaturesType = mcpInvocationFeatures == null
 				? null : mcpInvocationFeatures.asType();
+		TypeElement cancelationToken =
+				elements.getTypeElement("com.soklet.CancelationToken");
+		this.cancelationTokenType = cancelationToken == null
+				? null : cancelationToken.asType();
+		TypeElement mcpProgressReporter =
+				elements.getTypeElement("com.soklet.McpProgressReporter");
+		this.mcpProgressReporterType = mcpProgressReporter == null
+				? null : mcpProgressReporter.asType();
 		TypeElement mcpPromptOutput =
 				elements.getTypeElement("com.soklet.McpPromptOutput");
 		this.mcpPromptOutputType = mcpPromptOutput == null
@@ -1120,6 +1130,8 @@ public final class SokletProcessor extends AbstractProcessor {
 		Set<String> publishedNames = new LinkedHashSet<>();
 		boolean requestContextSeen = false;
 		boolean invocationFeaturesSeen = false;
+		boolean cancelationTokenSeen = false;
+		boolean progressReporterSeen = false;
 		int toolArgumentIndex = 0;
 		for (VariableElement parameter : method.getParameters()) {
 			AnnotationMirror argument = findAnnotation(parameter,
@@ -1129,15 +1141,36 @@ public final class SokletProcessor extends AbstractProcessor {
 					mcpRequestContextType);
 			boolean invocationFeatures = isExactType(parameter.asType(),
 					mcpInvocationFeaturesType);
-			if (!requestContext && !invocationFeatures
+			boolean cancelationToken = isExactType(parameter.asType(),
+					cancelationTokenType);
+			boolean progressReporter = isOptionalMcpProgressReporter(
+					parameter.asType());
+			boolean bareProgressReporter = isExactType(parameter.asType(),
+					mcpProgressReporterType);
+			if (bareProgressReporter) {
+				if (argument != null)
+					mcpError(parameter,
+							"Soklet: Injectable MCP feature parameters must not also be annotated with @McpToolArgument.");
+				mcpError(parameter,
+						"Soklet: McpProgressReporter must be injected as Optional<McpProgressReporter>.");
+				continue;
+			}
+			if (!requestContext && !invocationFeatures && !cancelationToken
+					&& !progressReporter
 					&& !isTypeAccessibleFromGeneratedProvider(parameter.asType(),
 							providerPackage))
 				mcpError(parameter,
 						"Soklet: An @McpTool argument type must be accessible to the generated MCP endpoint provider.");
-			if (requestContext || invocationFeatures) {
-				if (argument != null)
-					mcpError(parameter,
-							"Soklet: Injectable MCP context parameters must not also be annotated with @McpToolArgument.");
+			if (requestContext || invocationFeatures || cancelationToken
+					|| progressReporter) {
+				if (argument != null) {
+					if (cancelationToken || progressReporter)
+						mcpError(parameter,
+								"Soklet: Injectable MCP feature parameters must not also be annotated with @McpToolArgument.");
+					else
+						mcpError(parameter,
+								"Soklet: Injectable MCP context parameters must not also be annotated with @McpToolArgument.");
+				}
 				if (requestContext) {
 					if (requestContextSeen)
 						mcpError(parameter,
@@ -1146,13 +1179,29 @@ public final class SokletProcessor extends AbstractProcessor {
 					bindings.add(new McpParameterBinding(
 							McpParameterBindingKind.REQUEST_CONTEXT, null, null,
 							parameter.asType(), "", "", null));
-				} else {
+				} else if (invocationFeatures) {
 					if (invocationFeaturesSeen)
 						mcpError(parameter,
 								"Soklet: An @McpTool method may inject McpInvocationFeatures at most once.");
 					invocationFeaturesSeen = true;
 					bindings.add(new McpParameterBinding(
 							McpParameterBindingKind.INVOCATION_FEATURES, null, null,
+							parameter.asType(), "", "", null));
+				} else if (cancelationToken) {
+					if (cancelationTokenSeen)
+						mcpError(parameter,
+								"Soklet: An @McpTool method may inject CancelationToken at most once.");
+					cancelationTokenSeen = true;
+					bindings.add(new McpParameterBinding(
+							McpParameterBindingKind.CANCELATION_TOKEN, null, null,
+							parameter.asType(), "", "", null));
+				} else {
+					if (progressReporterSeen)
+						mcpError(parameter,
+								"Soklet: An @McpTool method may inject Optional<McpProgressReporter> at most once.");
+					progressReporterSeen = true;
+					bindings.add(new McpParameterBinding(
+							McpParameterBindingKind.PROGRESS_REPORTER, null, null,
 							parameter.asType(), "", "", null));
 				}
 				continue;
@@ -1274,6 +1323,8 @@ public final class SokletProcessor extends AbstractProcessor {
 		Set<String> publishedNames = new LinkedHashSet<>();
 		boolean requestContextSeen = false;
 		boolean invocationFeaturesSeen = false;
+		boolean cancelationTokenSeen = false;
+		boolean progressReporterSeen = false;
 		for (VariableElement parameter : method.getParameters()) {
 			AnnotationMirror argument = findAnnotation(parameter,
 					argumentAnnotation);
@@ -1281,10 +1332,30 @@ public final class SokletProcessor extends AbstractProcessor {
 					mcpRequestContextType);
 			boolean invocationFeatures = isExactType(parameter.asType(),
 					mcpInvocationFeaturesType);
-			if (requestContext || invocationFeatures) {
+			boolean cancelationToken = isExactType(parameter.asType(),
+					cancelationTokenType);
+			boolean progressReporter = isOptionalMcpProgressReporter(
+					parameter.asType());
+			boolean bareProgressReporter = isExactType(parameter.asType(),
+					mcpProgressReporterType);
+			if (bareProgressReporter) {
 				if (argument != null)
 					mcpError(parameter,
-							"Soklet: Injectable MCP context parameters must not also be annotated with @McpPromptArgument.");
+							"Soklet: Injectable MCP feature parameters must not also be annotated with @McpPromptArgument.");
+				mcpError(parameter,
+						"Soklet: McpProgressReporter must be injected as Optional<McpProgressReporter>.");
+				continue;
+			}
+			if (requestContext || invocationFeatures || cancelationToken
+					|| progressReporter) {
+				if (argument != null) {
+					if (cancelationToken || progressReporter)
+						mcpError(parameter,
+								"Soklet: Injectable MCP feature parameters must not also be annotated with @McpPromptArgument.");
+					else
+						mcpError(parameter,
+								"Soklet: Injectable MCP context parameters must not also be annotated with @McpPromptArgument.");
+				}
 				if (requestContext) {
 					if (requestContextSeen)
 						mcpError(parameter,
@@ -1293,13 +1364,29 @@ public final class SokletProcessor extends AbstractProcessor {
 					bindings.add(new McpPromptParameterBinding(
 							McpPromptParameterBindingKind.REQUEST_CONTEXT, null,
 							"", "", false));
-				} else {
+				} else if (invocationFeatures) {
 					if (invocationFeaturesSeen)
 						mcpError(parameter,
 								"Soklet: An @McpPrompt method may inject McpInvocationFeatures at most once.");
 					invocationFeaturesSeen = true;
 					bindings.add(new McpPromptParameterBinding(
 							McpPromptParameterBindingKind.INVOCATION_FEATURES,
+							null, "", "", false));
+				} else if (cancelationToken) {
+					if (cancelationTokenSeen)
+						mcpError(parameter,
+								"Soklet: An @McpPrompt method may inject CancelationToken at most once.");
+					cancelationTokenSeen = true;
+					bindings.add(new McpPromptParameterBinding(
+							McpPromptParameterBindingKind.CANCELATION_TOKEN,
+							null, "", "", false));
+				} else {
+					if (progressReporterSeen)
+						mcpError(parameter,
+								"Soklet: An @McpPrompt method may inject Optional<McpProgressReporter> at most once.");
+					progressReporterSeen = true;
+					bindings.add(new McpPromptParameterBinding(
+							McpPromptParameterBindingKind.PROGRESS_REPORTER,
 							null, "", "", false));
 				}
 				continue;
@@ -1417,6 +1504,8 @@ public final class SokletProcessor extends AbstractProcessor {
 		boolean requestContextSeen = false;
 		boolean invocationFeaturesSeen = false;
 		boolean resourceReadContextSeen = false;
+		boolean cancelationTokenSeen = false;
+		boolean progressReporterSeen = false;
 		for (VariableElement parameter : method.getParameters()) {
 			AnnotationMirror uriParameter = findAnnotation(parameter,
 					uriParameterAnnotation);
@@ -1426,10 +1515,30 @@ public final class SokletProcessor extends AbstractProcessor {
 					mcpInvocationFeaturesType);
 			boolean resourceReadContext = isExactType(parameter.asType(),
 					mcpResourceReadContextType);
-			if (requestContext || invocationFeatures || resourceReadContext) {
+			boolean cancelationToken = isExactType(parameter.asType(),
+					cancelationTokenType);
+			boolean progressReporter = isOptionalMcpProgressReporter(
+					parameter.asType());
+			boolean bareProgressReporter = isExactType(parameter.asType(),
+					mcpProgressReporterType);
+			if (bareProgressReporter) {
 				if (uriParameter != null)
 					mcpError(parameter,
-							"Soklet: Injectable MCP context parameters must not also be annotated with @McpResourceUriParameter.");
+							"Soklet: Injectable MCP feature parameters must not also be annotated with @McpResourceUriParameter.");
+				mcpError(parameter,
+						"Soklet: McpProgressReporter must be injected as Optional<McpProgressReporter>.");
+				continue;
+			}
+			if (requestContext || invocationFeatures || resourceReadContext
+					|| cancelationToken || progressReporter) {
+				if (uriParameter != null) {
+					if (cancelationToken || progressReporter)
+						mcpError(parameter,
+								"Soklet: Injectable MCP feature parameters must not also be annotated with @McpResourceUriParameter.");
+					else
+						mcpError(parameter,
+								"Soklet: Injectable MCP context parameters must not also be annotated with @McpResourceUriParameter.");
+				}
 				if (requestContext) {
 					if (requestContextSeen)
 						mcpError(parameter,
@@ -1445,13 +1554,29 @@ public final class SokletProcessor extends AbstractProcessor {
 					bindings.add(new McpResourceParameterBinding(
 							McpResourceParameterBindingKind.INVOCATION_FEATURES,
 							null));
-				} else {
+				} else if (resourceReadContext) {
 					if (resourceReadContextSeen)
 						mcpError(parameter,
 								"Soklet: An @McpResource method may inject McpResourceReadContext at most once.");
 					resourceReadContextSeen = true;
 					bindings.add(new McpResourceParameterBinding(
 							McpResourceParameterBindingKind.RESOURCE_READ_CONTEXT,
+							null));
+				} else if (cancelationToken) {
+					if (cancelationTokenSeen)
+						mcpError(parameter,
+								"Soklet: An @McpResource method may inject CancelationToken at most once.");
+					cancelationTokenSeen = true;
+					bindings.add(new McpResourceParameterBinding(
+							McpResourceParameterBindingKind.CANCELATION_TOKEN,
+							null));
+				} else {
+					if (progressReporterSeen)
+						mcpError(parameter,
+								"Soklet: An @McpResource method may inject Optional<McpProgressReporter> at most once.");
+					progressReporterSeen = true;
+					bindings.add(new McpResourceParameterBinding(
+							McpResourceParameterBindingKind.PROGRESS_REPORTER,
 							null));
 				}
 				continue;
@@ -1508,6 +1633,8 @@ public final class SokletProcessor extends AbstractProcessor {
 		boolean requestContextSeen = false;
 		boolean invocationFeaturesSeen = false;
 		boolean resourceListContextSeen = false;
+		boolean cancelationTokenSeen = false;
+		boolean progressReporterSeen = false;
 		for (VariableElement parameter : method.getParameters()) {
 			if (isExactType(parameter.asType(), mcpRequestContextType)) {
 				if (requestContextSeen)
@@ -1522,6 +1649,22 @@ public final class SokletProcessor extends AbstractProcessor {
 							"Soklet: An @McpListResources method may inject McpInvocationFeatures at most once.");
 				invocationFeaturesSeen = true;
 				bindings.add(McpResourceListParameterBinding.INVOCATION_FEATURES);
+			} else if (isExactType(parameter.asType(), cancelationTokenType)) {
+				if (cancelationTokenSeen)
+					mcpError(parameter,
+							"Soklet: An @McpListResources method may inject CancelationToken at most once.");
+				cancelationTokenSeen = true;
+				bindings.add(McpResourceListParameterBinding.CANCELATION_TOKEN);
+			} else if (isOptionalMcpProgressReporter(parameter.asType())) {
+				if (progressReporterSeen)
+					mcpError(parameter,
+							"Soklet: An @McpListResources method may inject Optional<McpProgressReporter> at most once.");
+				progressReporterSeen = true;
+				bindings.add(McpResourceListParameterBinding.PROGRESS_REPORTER);
+			} else if (isExactType(parameter.asType(),
+					mcpProgressReporterType)) {
+				mcpError(parameter,
+						"Soklet: McpProgressReporter must be injected as Optional<McpProgressReporter>.");
 			} else if (isExactType(parameter.asType(),
 					mcpResourceListContextType)) {
 				if (resourceListContextSeen)
@@ -1531,7 +1674,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				bindings.add(McpResourceListParameterBinding.RESOURCE_LIST_CONTEXT);
 			} else {
 				mcpError(parameter,
-						"Soklet: @McpListResources parameters must be McpRequestContext, McpResourceListContext, or McpInvocationFeatures.");
+						"Soklet: @McpListResources parameters must be McpRequestContext, McpResourceListContext, McpInvocationFeatures, CancelationToken, or Optional<McpProgressReporter>.");
 			}
 		}
 		if (!resourceListContextSeen)
@@ -1912,6 +2055,17 @@ public final class SokletProcessor extends AbstractProcessor {
 				declared.getTypeArguments().get(0), stringType);
 	}
 
+	private boolean isOptionalMcpProgressReporter(@NonNull TypeMirror type) {
+		if (!(type instanceof DeclaredType declared) || optionalType == null
+				|| mcpProgressReporterType == null
+				|| !types.isSameType(types.erasure(declared),
+						types.erasure(optionalType))
+				|| declared.getTypeArguments().size() != 1)
+			return false;
+		return types.isSameType(declared.getTypeArguments().get(0),
+				mcpProgressReporterType);
+	}
+
 	private boolean isTypeAccessibleFromGeneratedProvider(
 			@NonNull TypeMirror type, @NonNull String providerPackage) {
 		if (type.getKind().isPrimitive() || type.getKind() == TypeKind.VOID
@@ -2206,6 +2360,10 @@ public final class SokletProcessor extends AbstractProcessor {
 			arguments.add(switch (binding.kind()) {
 				case REQUEST_CONTEXT -> "request";
 				case INVOCATION_FEATURES -> "features";
+				case CANCELATION_TOKEN ->
+						"features.require(com.soklet.CancelationToken.class)";
+				case PROGRESS_REPORTER ->
+						"features.find(com.soklet.McpProgressReporter.class)";
 				case TOOL_ARGUMENT -> "call.getArguments()."
 						+ binding.carrierName() + "()";
 			});
@@ -2221,6 +2379,10 @@ public final class SokletProcessor extends AbstractProcessor {
 			arguments.add(switch (binding.kind()) {
 				case REQUEST_CONTEXT -> "request";
 				case INVOCATION_FEATURES -> "features";
+				case CANCELATION_TOKEN ->
+						"features.require(com.soklet.CancelationToken.class)";
+				case PROGRESS_REPORTER ->
+						"features.find(com.soklet.McpProgressReporter.class)";
 				case PROMPT_ARGUMENT -> binding.required()
 						? "prompt.findArgument("
 								+ javaStringLiteral(binding.publishedName())
@@ -2240,6 +2402,10 @@ public final class SokletProcessor extends AbstractProcessor {
 			arguments.add(switch (binding.kind()) {
 				case REQUEST_CONTEXT -> "request";
 				case INVOCATION_FEATURES -> "features";
+				case CANCELATION_TOKEN ->
+						"features.require(com.soklet.CancelationToken.class)";
+				case PROGRESS_REPORTER ->
+						"features.find(com.soklet.McpProgressReporter.class)";
 				case RESOURCE_READ_CONTEXT -> "resource";
 				case URI_PARAMETER -> "java.util.Objects.requireNonNull("
 						+ "resource.getUriTemplateVariables().get("
@@ -2257,6 +2423,10 @@ public final class SokletProcessor extends AbstractProcessor {
 			arguments.add(switch (binding) {
 				case REQUEST_CONTEXT -> "request";
 				case INVOCATION_FEATURES -> "features";
+				case CANCELATION_TOKEN ->
+						"features.require(com.soklet.CancelationToken.class)";
+				case PROGRESS_REPORTER ->
+						"features.find(com.soklet.McpProgressReporter.class)";
 				case RESOURCE_LIST_CONTEXT -> "list";
 			});
 		}
@@ -3656,6 +3826,8 @@ public final class SokletProcessor extends AbstractProcessor {
 	private enum McpParameterBindingKind {
 		REQUEST_CONTEXT,
 		INVOCATION_FEATURES,
+		CANCELATION_TOKEN,
+		PROGRESS_REPORTER,
 		TOOL_ARGUMENT
 	}
 
@@ -3666,6 +3838,8 @@ public final class SokletProcessor extends AbstractProcessor {
 	private enum McpPromptParameterBindingKind {
 		REQUEST_CONTEXT,
 		INVOCATION_FEATURES,
+		CANCELATION_TOKEN,
+		PROGRESS_REPORTER,
 		PROMPT_ARGUMENT
 	}
 
@@ -3682,6 +3856,8 @@ public final class SokletProcessor extends AbstractProcessor {
 	private enum McpResourceParameterBindingKind {
 		REQUEST_CONTEXT,
 		INVOCATION_FEATURES,
+		CANCELATION_TOKEN,
+		PROGRESS_REPORTER,
 		RESOURCE_READ_CONTEXT,
 		URI_PARAMETER
 	}
@@ -3708,6 +3884,8 @@ public final class SokletProcessor extends AbstractProcessor {
 	private enum McpResourceListParameterBinding {
 		REQUEST_CONTEXT,
 		INVOCATION_FEATURES,
+		CANCELATION_TOKEN,
+		PROGRESS_REPORTER,
 		RESOURCE_LIST_CONTEXT
 	}
 

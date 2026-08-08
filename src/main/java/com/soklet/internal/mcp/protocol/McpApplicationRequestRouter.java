@@ -16,6 +16,7 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import com.soklet.CancelationToken;
 import com.soklet.McpRequestContext;
 import com.soklet.McpRequestOutcome;
 import com.soklet.McpRequestStateMode;
@@ -29,6 +30,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -639,11 +641,31 @@ interface McpProtocolDeadlineCycle {
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-interface McpApplicationCancellation {
+interface McpApplicationCancellation extends CancelationToken {
+	boolean isActive();
+
 	boolean isCancellationRequested();
 
 	@NonNull
 	Optional<@NonNull StreamTerminationReason> reason();
+
+	@Override
+	@NonNull
+	default Boolean isCanceled() {
+		return isCancellationRequested();
+	}
+
+	@Override
+	@NonNull
+	default Optional<@NonNull StreamTerminationReason> getCancelationReason() {
+		return reason();
+	}
+
+	@Override
+	@NonNull
+	default Optional<@NonNull Throwable> getCancelationCause() {
+		return Optional.empty();
+	}
 }
 
 /**
@@ -653,9 +675,24 @@ interface McpApplicationCancellation {
 final class McpApplicationCancellationState implements McpApplicationCancellation {
 	@NonNull
 	private final AtomicReference<@Nullable StreamTerminationReason> reason;
+	@NonNull
+	private final Object callbacksLock;
+	@NonNull
+	private final List<@NonNull CallbackRegistration> callbackRegistrations;
+	private boolean callbacksReleased;
 
 	McpApplicationCancellationState() {
 		this.reason = new AtomicReference<>();
+		this.callbacksLock = new Object();
+		this.callbackRegistrations = new ArrayList<>();
+		this.callbacksReleased = false;
+	}
+
+	@Override
+	public boolean isActive() {
+		synchronized (callbacksLock) {
+			return !callbacksReleased && reason.get() == null;
+		}
 	}
 
 	@Override
@@ -669,8 +706,113 @@ final class McpApplicationCancellationState implements McpApplicationCancellatio
 		return Optional.ofNullable(reason.get());
 	}
 
+	@Override
+	@NonNull
+	public AutoCloseable onCancel(@NonNull Runnable callback) {
+		CallbackRegistration registration = new CallbackRegistration(
+				requireNonNull(callback));
+		boolean runImmediately;
+		boolean completed;
+		synchronized (callbacksLock) {
+			runImmediately = callbacksReleased && reason.get() != null;
+			completed = callbacksReleased && reason.get() == null;
+			if (!runImmediately && !completed)
+				callbackRegistrations.add(registration);
+		}
+		if (runImmediately)
+			registration.runIfOpen();
+		else if (completed)
+			registration.close();
+		return registration;
+	}
+
 	boolean cancel(@NonNull StreamTerminationReason reason) {
-		return this.reason.compareAndSet(null, requireNonNull(reason));
+		if (!fixReason(reason))
+			return false;
+		releaseCallbacks();
+		return true;
+	}
+
+	boolean fixReason(@NonNull StreamTerminationReason reason) {
+		StreamTerminationReason requiredReason = requireNonNull(reason);
+		if (requiredReason == StreamTerminationReason.COMPLETED)
+			throw new IllegalArgumentException(
+					"Cancellation reason cannot be COMPLETED.");
+		synchronized (callbacksLock) {
+			if (callbacksReleased || this.reason.get() != null)
+				return false;
+			this.reason.set(requiredReason);
+			return true;
+		}
+	}
+
+	void complete() {
+		List<CallbackRegistration> registrations;
+		synchronized (callbacksLock) {
+			if (callbacksReleased)
+				return;
+			if (reason.get() != null)
+				throw new IllegalStateException(
+						"A canceled invocation cannot complete normally.");
+			callbacksReleased = true;
+			registrations = List.copyOf(callbackRegistrations);
+			callbackRegistrations.clear();
+		}
+		for (CallbackRegistration registration : registrations)
+			registration.close();
+	}
+
+	void releaseCallbacks() {
+		List<CallbackRegistration> registrations;
+		synchronized (callbacksLock) {
+			if (callbacksReleased)
+				return;
+			if (reason.get() == null)
+				throw new IllegalStateException(
+						"Cancellation callbacks require a fixed reason.");
+			callbacksReleased = true;
+			registrations = List.copyOf(callbackRegistrations);
+			callbackRegistrations.clear();
+		}
+		for (CallbackRegistration registration : registrations)
+			registration.runIfOpen();
+	}
+
+	/**
+	 * One independently removable callback registration.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	private final class CallbackRegistration implements AutoCloseable {
+		@NonNull
+		private final Runnable callback;
+		@NonNull
+		private final AtomicBoolean open;
+
+		private CallbackRegistration(@NonNull Runnable callback) {
+			this.callback = requireNonNull(callback);
+			this.open = new AtomicBoolean(true);
+		}
+
+		@Override
+		public void close() {
+			if (!open.compareAndSet(true, false))
+				return;
+			synchronized (callbacksLock) {
+				callbackRegistrations.remove(this);
+			}
+		}
+
+		private void runIfOpen() {
+			if (!open.compareAndSet(true, false))
+				return;
+			try {
+				callback.run();
+			} catch (Throwable ignored) {
+				// Application callback failures cannot escape the cancellation path.
+			}
+		}
 	}
 }
 
@@ -758,6 +900,15 @@ final class McpApplicationInvocation {
 	@NonNull
 	Optional<@NonNull StreamTerminationReason> cancellationReason() {
 		return cancellation.reason();
+	}
+
+	boolean isActive() {
+		return cancellation.isActive();
+	}
+
+	@NonNull
+	CancelationToken cancelationToken() {
+		return cancellation;
 	}
 
 	boolean sendNotification(McpJsonRpcMessage.@NonNull Notification notification)
@@ -1689,6 +1840,7 @@ final class McpApplicationExecution {
 							lease = requireNonNull(transportLease.get(),
 									"An open exchange must retain its transport lease.");
 							terminalState = TerminalState.RESPONSE_OFFERED;
+							cancellation.complete();
 						}
 					} else {
 						lease = null;
@@ -1765,16 +1917,20 @@ final class McpApplicationExecution {
 		private void cancel(@NonNull StreamTerminationReason reason,
 				@Nullable Throwable ignored) {
 			boolean cancelBeforeDispatch;
+			boolean releaseCancellationCallbacks;
 			synchronized (terminalLock) {
 				if (terminalState != TerminalState.OPEN)
 					return;
 				// Retain only the application-visible reason. Transport exceptions can
 				// retain connection internals and are detached with the response lease.
-				cancellation.cancel(requireNonNull(reason));
+				releaseCancellationCallbacks = cancellation.fixReason(
+						requireNonNull(reason));
 				terminalState = TerminalState.ABANDONED;
 				cancelBeforeDispatch = dispatcher.cancelBeforeDispatch(ticket());
 			}
 
+			if (releaseCancellationCallbacks)
+				cancellation.releaseCallbacks();
 			if (!cancelBeforeDispatch)
 				ticket().requestInterrupt();
 			abandonedResponses.incrementAndGet();
@@ -1792,6 +1948,7 @@ final class McpApplicationExecution {
 
 		private void onDeadline(boolean requestInterrupt) {
 			boolean canceledBeforeDispatch;
+			boolean releaseCancellationCallbacks = false;
 			McpApplicationResponse response;
 			TransportLease lease;
 			boolean shutdown;
@@ -1801,7 +1958,8 @@ final class McpApplicationExecution {
 					synchronized (terminalLock) {
 						if (terminalState != TerminalState.OPEN)
 							return;
-						cancellation.cancel(StreamTerminationReason.RESPONSE_TIMEOUT);
+						releaseCancellationCallbacks = cancellation.fixReason(
+								StreamTerminationReason.RESPONSE_TIMEOUT);
 						canceledBeforeDispatch = dispatcher.cancelBeforeDispatch(ticket());
 						lease = requireNonNull(transportLease.get(),
 								"An open exchange must retain its transport lease.");
@@ -1821,6 +1979,8 @@ final class McpApplicationExecution {
 				return;
 			}
 
+			if (releaseCancellationCallbacks)
+				cancellation.releaseCallbacks();
 			deadlineExpirations.incrementAndGet();
 			if (!canceledBeforeDispatch && requestInterrupt)
 				ticket().requestInterrupt();
@@ -1840,13 +2000,17 @@ final class McpApplicationExecution {
 		}
 
 		private void releaseAfterClosure() {
+			boolean releaseCancellationCallbacks = false;
 			synchronized (terminalLock) {
 				if (terminalState == TerminalState.OPEN) {
-					cancellation.cancel(stoppingReason());
+					releaseCancellationCallbacks = cancellation.fixReason(
+							stoppingReason());
 					terminalState = TerminalState.ABANDONED;
 					abandonedResponses.incrementAndGet();
 				}
 			}
+			if (releaseCancellationCallbacks)
+				cancellation.releaseCallbacks();
 			releaseResponseOwnership();
 		}
 

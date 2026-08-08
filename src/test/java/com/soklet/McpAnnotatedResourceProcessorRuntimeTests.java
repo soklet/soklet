@@ -85,6 +85,15 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 		Assertions.assertTrue(generatedSource.contains(
 				"resource.getUriTemplateVariables().get(\"section\")"),
 				generatedSource);
+		Assertions.assertTrue(generatedSource.contains(
+				"exactResource(resource, features.require(com.soklet.CancelationToken.class), features.find(com.soklet.McpProgressReporter.class), features)"),
+				generatedSource);
+		Assertions.assertTrue(generatedSource.contains(
+				"templateResource(request, java.util.Objects.requireNonNull(resource.getUriTemplateVariables().get(\"identifier\")), resource, java.util.Objects.requireNonNull(resource.getUriTemplateVariables().get(\"section\")), features.require(com.soklet.CancelationToken.class), features.find(com.soklet.McpProgressReporter.class), features)"),
+				generatedSource);
+		Assertions.assertTrue(generatedSource.contains(
+				"resources(features, features.require(com.soklet.CancelationToken.class), list, features.find(com.soklet.McpProgressReporter.class), request)"),
+				generatedSource);
 
 		try (URLClassLoader classLoader = new URLClassLoader(
 				new URL[] { classDirectory.toUri().toURL() },
@@ -145,8 +154,11 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 			Assertions.assertEquals(Duration.ofMillis(250),
 					template.getCachePolicy().getTimeToLive());
 
+			CancelationToken cancelationToken = uncanceledToken();
+			McpProgressReporter progressReporter = update -> {};
 			McpInvocationFeatures features = McpInvocationFeatures.fromFeatures(
-					Map.of());
+					Map.of(CancelationToken.class, cancelationToken,
+							McpProgressReporter.class, progressReporter));
 			McpRequestContext readRequest = requestContext(endpoint,
 					"resources/read");
 			McpOperationResult exactResult = exact.getHandler().handle(readRequest,
@@ -190,6 +202,36 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 					page.getCacheTimeToLiveOverride().orElseThrow());
 			Assertions.assertEquals(3, providedInstances.get());
 		}
+	}
+
+	@NonNull
+	private static CancelationToken uncanceledToken() {
+		return new CancelationToken() {
+			@Override
+			@NonNull
+			public Boolean isCanceled() {
+				return false;
+			}
+
+			@Override
+			@NonNull
+			public Optional<@NonNull StreamTerminationReason>
+					getCancelationReason() {
+				return Optional.empty();
+			}
+
+			@Override
+			@NonNull
+			public Optional<@NonNull Throwable> getCancelationCause() {
+				return Optional.empty();
+			}
+
+			@Override
+			@NonNull
+			public AutoCloseable onCancel(@NonNull Runnable callback) {
+				return () -> {};
+			}
+		};
 	}
 
 	private static void compile(@NonNull Path source,
@@ -302,9 +344,11 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 		return """
 				package example;
 
+				import com.soklet.CancelationToken;
 				import com.soklet.McpCacheScope;
 				import com.soklet.McpCompleteResult;
 				import com.soklet.McpInvocationFeatures;
+				import com.soklet.McpProgressReporter;
 				import com.soklet.McpRequestContext;
 				import com.soklet.McpResourceListContext;
 				import com.soklet.McpResourceOutput;
@@ -338,11 +382,18 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				      cacheScope = McpCacheScope.PUBLIC)
 				  public McpResourceOutput exactResource(
 				      McpResourceReadContext resource,
+				      CancelationToken cancelationToken,
+				      java.util.Optional<McpProgressReporter> progressReporter,
 				      McpInvocationFeatures features) {
 				    return McpResourceOutput.builder()
 				        .content(McpTextResourceContents.withUriAndText(
 				            resource.getUri(), "exact|" + resource.getUri() + "|"
-				                + (features != null)).build())
+				                + (features != null
+				                    && cancelationToken
+				                        == features.require(CancelationToken.class)
+				                    && progressReporter.orElseThrow()
+				                        == features.require(McpProgressReporter.class)))
+				                .build())
 				        .build();
 				  }
 
@@ -355,12 +406,19 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				      @McpResourceUriParameter String identifier,
 				      McpResourceReadContext resource,
 				      @McpResourceUriParameter("section") String part,
+				      CancelationToken cancelationToken,
+				      java.util.Optional<McpProgressReporter> progressReporter,
 				      McpInvocationFeatures features) {
 				    McpResourceOutput output = McpResourceOutput.builder()
 				        .content(McpTextResourceContents.withUriAndText(
 				            resource.getUri(), identifier + "|" + part + "|"
 				                + resource.getUri() + "|" + (request != null) + "|"
-				                + (features != null)).build())
+				                + (features != null
+				                    && cancelationToken
+				                        == features.require(CancelationToken.class)
+				                    && progressReporter.orElseThrow()
+				                        == features.require(McpProgressReporter.class)))
+				                .build())
 				        .build();
 				    return McpCompleteResult.fromResourceOutput(output);
 				  }
@@ -368,9 +426,14 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				  @McpListResources
 				  public McpResourcePage resources(
 				      McpInvocationFeatures features,
+				      CancelationToken cancelationToken,
 				      McpResourceListContext list,
+				      java.util.Optional<McpProgressReporter> progressReporter,
 				      McpRequestContext request) {
-				    if (features == null || request == null)
+				    if (features == null || request == null
+				        || cancelationToken != features.require(CancelationToken.class)
+				        || progressReporter.orElseThrow()
+				            != features.require(McpProgressReporter.class))
 				      throw new IllegalStateException("Missing injected context");
 				    return McpResourcePage.builder()
 				        .resources(list.getRegisteredResourceDescriptors())

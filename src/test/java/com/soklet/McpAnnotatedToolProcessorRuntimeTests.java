@@ -99,6 +99,12 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 			Assertions.assertTrue(generatedSource.contains(
 					"@com.soklet.annotation.McpHeader(\"Tenant\")"),
 					generatedSource);
+			Assertions.assertTrue(generatedSource.contains(
+					"search(request, features.require(com.soklet.CancelationToken.class), call.getArguments().argument0(), call.getArguments().argument1(), features.find(com.soklet.McpProgressReporter.class), features)"),
+					generatedSource);
+			Assertions.assertTrue(generatedSource.contains(
+					"compose(request, features.require(com.soklet.CancelationToken.class), prompt.findArgument(\"subject\").orElseThrow(), prompt.findArgument(\"tone\"), features.find(com.soklet.McpProgressReporter.class), features)"),
+					generatedSource);
 
 			try (URLClassLoader classLoader = new URLClassLoader(
 					new URL[] { classDirectory.toUri().toURL() },
@@ -406,7 +412,9 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 		return """
 				package example;
 
+				import com.soklet.CancelationToken;
 				import com.soklet.McpInvocationFeatures;
+				import com.soklet.McpProgressReporter;
 				import com.soklet.McpPromptMessage;
 				import com.soklet.McpPromptOutput;
 				import com.soklet.McpRequestContext;
@@ -450,16 +458,22 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				      mirrorStructuredContentAsText = false)
 				  public SearchResult search(
 				      McpRequestContext request,
+				      CancelationToken cancelationToken,
 				      @McpToolArgument(
 				          name = "query-text",
 				          title = "Search query",
 				          description = "Text to search for")
 				      @McpHeader("Tenant") @InternalMarker String toString,
 				      @McpToolArgument Optional<Integer> limit,
+				      Optional<McpProgressReporter> progressReporter,
 				      McpInvocationFeatures features) {
 					return new SearchResult(
 					    List.of(new SearchItem(toString, limit.orElse(-1))),
-					    request != null && features != null);
+					    request != null && features != null
+					        && cancelationToken
+					            == features.require(CancelationToken.class)
+					        && progressReporter.equals(
+					            features.find(McpProgressReporter.class)));
 				  }
 
 				  @McpPrompt(
@@ -468,17 +482,23 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				      description = "Builds a catalog prompt")
 				  public McpPromptOutput compose(
 				      McpRequestContext request,
+				      CancelationToken cancelationToken,
 				      @McpPromptArgument(
 				          name = "subject",
 				          title = "Prompt subject",
 				          description = "Subject to discuss") String subject,
 				      @McpPromptArgument Optional<String> tone,
+				      Optional<McpProgressReporter> progressReporter,
 				      McpInvocationFeatures features) {
 				    return McpPromptOutput.fromMessages(
 				        McpPromptMessage.fromUserContent(
 				            McpTextContent.fromText(subject + "|"
 				                + tone.orElse("default") + "|"
-				                + (request != null && features != null))));
+				                + (request != null && features != null
+				                    && cancelationToken
+				                        == features.require(CancelationToken.class)
+				                    && progressReporter.equals(
+				                        features.find(McpProgressReporter.class))))));
 				  }
 
 				  public record SearchResult(

@@ -713,7 +713,8 @@ Important operational defaults and boundaries:
   runs before protocol parsing or application work.
 - Handlers are synchronous. The defaults permit 32 active handlers and 128
   queued requests with a 60-second absolute request timeout. A custom executor
-  does not bypass those bounds, and a timed-out or disconnected request cannot
+  does not bypass those bounds. Disconnect, deadline, shutdown, and stream
+  backpressure signal the handler's cooperative `CancelationToken`, but cannot
   forcibly stop non-cooperative application code.
 - [`McpHandlerInterceptor`](https://javadoc.soklet.com/com/soklet/McpHandlerInterceptor.html)
   wraps every application-owned tool, prompt, resource-read, and custom
@@ -724,6 +725,35 @@ Important operational defaults and boundaries:
   `Cache-Control: no-store`. Application-owned resource-list cursors are bounded
   by UTF-8 size and must themselves preserve integrity, authorization,
   snapshot, and fleet-portability semantics.
+
+Every application handler can retrieve its request-scoped cancelation token;
+a progress reporter is available only when the request carries a valid MCP
+progress token and no conditional-capability decision requires the response to
+remain uncommitted:
+
+```java
+CancelationToken cancelation =
+    features.require(CancelationToken.class);
+
+features.find(McpProgressReporter.class).ifPresent(reporter ->
+    reporter.report(McpProgressUpdate.withProgress(50)
+        .total(100)
+        .message("Halfway")
+        .build()));
+
+cancelation.throwIfCanceled();
+```
+
+Soklet echoes string and integer progress tokens exactly, coalesces equal
+progress values, rejects decreases while the invocation is active, and writes
+accepted updates synchronously through the bounded request SSE queue. Progress
+never extends the absolute request deadline. Annotated tool, prompt, resource,
+and resource-list methods may directly inject `CancelationToken` and
+`Optional<McpProgressReporter>`; those are the same instances exposed through
+`McpInvocationFeatures`. A bare progress-reporter parameter is invalid because
+the feature is conditional. Accepted progress and cancelation signals also
+reach the shared metrics host with bounded endpoint-path and JSON-RPC-method
+dimensions.
 
 Tools, prompts, and resource reads may return `McpInputRequiredResult` after
 declaring their possible client requests with `mayRequestInput(...)` (or
@@ -740,11 +770,11 @@ declaring their possible client requests with `mayRequestInput(...)` (or
   a thread-safe custom `McpRequestStateProtector`.
 
 See the [MCP guide](MCP.md#multi-round-trip-input-and-request-state) for the
-declaration, protection, error, and retry-cache contracts. Progress reporting,
-cooperative cancellation, resource-subscription delivery, operational trace
-correlation, comprehensive MCP telemetry, and MCP simulation remain open
-Phase 5/6 work; applications must not advertise or depend on those behaviors
-yet.
+declaration, protection, error, and retry-cache contracts. Progress reporting
+and cooperative cancelation are implemented Phase 5 slices. Resource-
+subscription delivery, operational trace correlation, comprehensive MCP
+telemetry, and MCP simulation remain open Phase 5/6 work; applications must not
+advertise or depend on those remaining behaviors yet.
 
 #### Form Handling
 

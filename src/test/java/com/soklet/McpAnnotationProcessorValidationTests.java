@@ -351,6 +351,194 @@ public class McpAnnotationProcessorValidationTests {
 	}
 
 	@Test
+	void acceptsDirectInvocationFeatureInjectionAcrossAnnotatedHandlers() {
+		JavaFileObject source = JavaFileObjects.forSourceString(
+				"example.InvocationFeatureEndpoint", """
+						package example;
+
+						import com.soklet.CancelationToken;
+						import com.soklet.McpInvocationFeatures;
+						import com.soklet.McpProgressReporter;
+						import com.soklet.McpPromptOutput;
+						import com.soklet.McpRequestContext;
+						import com.soklet.McpResourceListContext;
+						import com.soklet.McpResourceOutput;
+						import com.soklet.McpResourcePage;
+						import com.soklet.McpResourceReadContext;
+						import com.soklet.annotation.McpListResources;
+						import com.soklet.annotation.McpPrompt;
+						import com.soklet.annotation.McpResource;
+						import com.soklet.annotation.McpServerEndpoint;
+						import com.soklet.annotation.McpTool;
+						import com.soklet.annotation.McpToolArgument;
+						import java.util.Optional;
+
+						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						public final class InvocationFeatureEndpoint {
+						  @McpTool(name = "tool")
+						  public Result tool(
+						      McpRequestContext request,
+						      CancelationToken cancelationToken,
+						      @McpToolArgument String value,
+						      Optional<McpProgressReporter> progressReporter,
+						      McpInvocationFeatures features) {
+						    return new Result(value);
+						  }
+
+						  @McpPrompt(name = "prompt")
+						  public McpPromptOutput prompt(
+						      McpInvocationFeatures features,
+						      Optional<McpProgressReporter> progressReporter,
+						      CancelationToken cancelationToken,
+						      McpRequestContext request) {
+						    return McpPromptOutput.fromMessages();
+						  }
+
+						  @McpResource(uri = "test://resource", name = "resource")
+						  public McpResourceOutput resource(
+						      McpResourceReadContext resource,
+						      CancelationToken cancelationToken,
+						      McpRequestContext request,
+						      Optional<McpProgressReporter> progressReporter,
+						      McpInvocationFeatures features) {
+						    return null;
+						  }
+
+						  @McpListResources
+						  public McpResourcePage resources(
+						      CancelationToken cancelationToken,
+						      McpResourceListContext list,
+						      Optional<McpProgressReporter> progressReporter,
+						      McpInvocationFeatures features,
+						      McpRequestContext request) {
+						    return null;
+						  }
+
+						  public record Result(String value) {}
+						}
+						""");
+
+		Compilation compilation = Compiler.javac()
+				.withProcessors(new SokletProcessor())
+				.compile(source);
+
+		assertThat(compilation).succeededWithoutWarnings();
+	}
+
+	@Test
+	void rejectsInvalidDirectInvocationFeatureInjectionSignatures() {
+		JavaFileObject source = JavaFileObjects.forSourceString(
+				"example.InvalidInvocationFeatureEndpoint", """
+						package example;
+
+						import com.soklet.CancelationToken;
+						import com.soklet.McpProgressReporter;
+						import com.soklet.McpPromptOutput;
+						import com.soklet.McpResourceListContext;
+						import com.soklet.McpResourceOutput;
+						import com.soklet.McpResourcePage;
+						import com.soklet.annotation.McpListResources;
+						import com.soklet.annotation.McpPrompt;
+						import com.soklet.annotation.McpPromptArgument;
+						import com.soklet.annotation.McpResource;
+						import com.soklet.annotation.McpResourceUriParameter;
+						import com.soklet.annotation.McpServerEndpoint;
+						import com.soklet.annotation.McpTool;
+						import com.soklet.annotation.McpToolArgument;
+						import java.util.Optional;
+
+						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						public final class InvalidInvocationFeatureEndpoint {
+						  @McpTool(name = "tool")
+						  public Result tool(
+						      CancelationToken firstCancelation,
+						      CancelationToken secondCancelation,
+						      Optional<McpProgressReporter> firstProgress,
+						      @McpToolArgument Optional<McpProgressReporter> secondProgress,
+						      McpProgressReporter bareProgress,
+						      Optional<? extends McpProgressReporter> wildcardProgress) {
+						    return new Result("tool");
+						  }
+
+						  @McpPrompt(name = "prompt")
+						  public McpPromptOutput prompt(
+						      CancelationToken firstCancelation,
+						      CancelationToken secondCancelation,
+						      Optional<McpProgressReporter> firstProgress,
+						      @McpPromptArgument Optional<McpProgressReporter> secondProgress,
+						      McpProgressReporter bareProgress,
+						      Optional rawProgress) {
+						    return McpPromptOutput.fromMessages();
+						  }
+
+						  @McpResource(uri = "test://resource", name = "resource")
+						  public McpResourceOutput resource(
+						      CancelationToken firstCancelation,
+						      CancelationToken secondCancelation,
+						      Optional<McpProgressReporter> firstProgress,
+						      @McpResourceUriParameter Optional<McpProgressReporter> secondProgress,
+						      McpProgressReporter bareProgress,
+						      Optional<CancelationToken> wrongProgress) {
+						    return null;
+						  }
+
+						  @McpListResources
+						  public McpResourcePage resources(
+						      McpResourceListContext list,
+						      CancelationToken firstCancelation,
+						      CancelationToken secondCancelation,
+						      Optional<McpProgressReporter> firstProgress,
+						      Optional<McpProgressReporter> secondProgress,
+						      McpProgressReporter bareProgress,
+						      Optional<String> wrongProgress) {
+						    return null;
+						  }
+
+						  public record Result(String value) {}
+						}
+						""");
+
+		Compilation compilation = Compiler.javac()
+				.withProcessors(new SokletProcessor())
+				.compile(source);
+
+		assertThat(compilation).failed();
+		for (String operation : List.of("@McpTool", "@McpPrompt",
+				"@McpResource", "@McpListResources")) {
+			assertThat(compilation).hadErrorContaining(operation
+					+ " method may inject CancelationToken at most once")
+					.inFile(source);
+			assertThat(compilation).hadErrorContaining(operation
+					+ " method may inject Optional<McpProgressReporter> at most once")
+					.inFile(source);
+		}
+		assertThat(compilation).hadErrorContaining(
+				"McpProgressReporter must be injected as Optional<McpProgressReporter>")
+				.inFile(source);
+		assertThat(compilation).hadErrorContaining(
+				"Injectable MCP feature parameters must not also be annotated with @McpToolArgument")
+				.inFile(source);
+		assertThat(compilation).hadErrorContaining(
+				"Injectable MCP feature parameters must not also be annotated with @McpPromptArgument")
+				.inFile(source);
+		assertThat(compilation).hadErrorContaining(
+				"Injectable MCP feature parameters must not also be annotated with @McpResourceUriParameter")
+				.inFile(source);
+		assertThat(compilation).hadErrorContaining(
+				"Every non-context @McpTool parameter must be annotated")
+				.inFile(source);
+		assertThat(compilation).hadErrorContaining(
+				"Every non-context @McpPrompt parameter must be annotated")
+				.inFile(source);
+		assertThat(compilation).hadErrorContaining(
+				"Every non-context @McpResource parameter must be annotated")
+				.inFile(source);
+		assertThat(compilation).hadErrorContaining(
+				"@McpListResources parameters must be McpRequestContext")
+				.inFile(source);
+	}
+
+	@Test
 	void rejectsDuplicatePromptContractsAndDualAnnotatedMethods() {
 		JavaFileObject source = JavaFileObjects.forSourceString(
 				"example.DuplicatePromptEndpoint", """

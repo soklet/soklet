@@ -4,7 +4,7 @@
   "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
   "currentImplementationPhase": 4,
   "earliestPhaseSemantics": "The first phase in which the scenario is mandatory as part of its full gate. An independently runnable scenario may be activated earlier as an infrastructure smoke test.",
-  "phaseExecutionPolicy": "Phase 4 activates exactly the 23 RUN rows whose earliestPhase is 4, retaining the Phase 3 DNS profile and requiring reviewed Phase 4 profiles for the other 22 rows. The 16 Phase 5 rows remain deferred and unprofiled.",
+  "phaseExecutionPolicy": "Phase 4 activates exactly the 23 RUN rows whose earliestPhase is 4, retaining the Phase 3 DNS profile and requiring reviewed Phase 4 profiles for the other 22 rows. All 16 Phase 5 rows remain fail-closed with null profiles until the complete Phase 5 profile-acquisition run is reviewed and the implementation phase advances atomically.",
   "scenarios": [
     {
       "ordinal": 1,
@@ -157,9 +157,13 @@
         "test_tool_with_progress tools/call handler emitting correlated 0/50/100 progress notifications before its complete result"
       ],
       "localSupplements": [
-        "McpHttpServerRequestScopedSseTests#related_notification_commits_sse_then_terminal_result_ends_stream"
+        "McpProgressPublicRuntimeTests#stringAndIntegerTokensProduceExactIsolatedMonotonicStreams",
+        "McpProgressPublicRuntimeTests#noTokenKeepsReporterAbsentAndReturnsOneJsonResponse",
+        "McpProgressPublicRuntimeTests#conditionalCapabilityHoldSuppressesProgressAndPreservesTerminalChoice",
+        "McpProgressPublicRuntimeTests#disconnectCancelsSameFeatureInstanceAndRunsCallback",
+        "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_progress_messages_match_the_production_listener"
       ],
-      "rationale": "Request-scoped SSE notification/terminal ordering has local infrastructure coverage, but the public progress producer, exact fixture registration, and official Phase 5 profile remain future work."
+      "rationale": "The public progress producer, exact official fixture registration, request-scoped SSE ordering, conditional-capability suppression, and disconnect cancelation have production-listener coverage. A standalone exact-pinned diagnostic observation produced tools-call-with-progress SUCCESS once and wire-schema-valid SUCCESS once over five messages, with no warning, failure, or harness-error outcome. The profile remains null under the fail-closed atomic Phase 5 advancement policy; this is not a Phase 5 gate pass."
     },
     {
       "ordinal": 11,

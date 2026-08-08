@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":"golden-progress-token","progress":50,"total":100}}

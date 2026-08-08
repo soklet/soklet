@@ -60,10 +60,14 @@ only for the intentionally unsupported Completion row.
 
 Expected profiles are evidence, not guesses. `expected-checks.json` retains
 the Phase 3 DNS profile and freezes the complete observed profiles for the
-other 22 Phase 4 rows. The 16 Phase 5 `RUN` rows keep a null
-`expectedCheckProfile` until their owning phase supplies truthful behavior,
-runs the exact pinned scenario, and reviews and freezes the complete result.
-Null never means “accept anything”; it means “not executable in this phase.”
+other 22 Phase 4 rows. All 16 Phase 5 `RUN` rows keep a null
+`expectedCheckProfile` until the complete Phase 5 profile-acquisition run is
+reviewed and the implementation phase advances atomically. A standalone
+exact-pinned diagnostic observation of `tools-call-with-progress` produced
+one ordinary `SUCCESS`, one automatic `wire-schema-valid` `SUCCESS`
+validating five messages, and no warning, failure, or harness-error outcome;
+it does not relax that fail-closed policy. Null never means “accept anything”;
+it means “not executable in this phase.”
 
 The selected suite's schema is not substituted for the final specification
 schema. The official checkout remains pristine, and Soklet separately
@@ -77,14 +81,17 @@ by `McpFinalTagGoldenWireProductionTests`, including the Phase 5
 request/complete-response exchange. It also includes a protected request-state
 exchange: the initial response emits listener-produced `requestState`, and a
 fresh-ID retry echoes it with valid `inputResponses` before completing. The
-current corpus contains 30 messages: 29 production-derived messages plus one
+Phase 5 progress exchange binds its initiating request, exact 0/50/100
+notifications, and terminal response to one production SSE stream. The current
+corpus contains 35 messages: 34 production-derived messages plus one
 subscription terminal schema canary. The canary is not production evidence;
 Phase 5 must add a production-derived row when subscriptions exist. The
 validator uses Ajv and `ajv-formats` from the official suite's verified
 lockfile, so no Soklet runtime dependency or second package installation is
-added. The protected exchange and this corpus growth are local production-
-listener/final-schema evidence only. They do not constitute an official Phase
-5 scenario run or pass, and the Phase 5 expected profiles remain null.
+added. These corpus additions are local production-listener/final-schema
+evidence. The standalone progress observation is useful diagnostic evidence,
+but it does not constitute the complete Phase 5 or 39-scenario gate; all 16
+Phase 5 expected profiles remain null until atomic phase advancement.
 
 The schema layer checks JSON message shapes only. HTTP status and headers,
 CORS, SSE framing, cross-message order, ID correlation, filter containment,

@@ -254,6 +254,56 @@
       "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_input_messages_match_the_production_listener"
     },
     {
+      "name": "phase-5-progress-notification-0",
+      "phase": 5,
+      "source": "production",
+      "path": "phase-5/progress-notification-0.json",
+      "sha256": "5078452d7f3a8629bc5196bb4460cd7ea40b51d645cff7a452b4184b5596fa40",
+      "schemaRef": "#/$defs/ProgressNotification",
+      "transportForm": "sse-data-json",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_progress_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-5-progress-notification-100",
+      "phase": 5,
+      "source": "production",
+      "path": "phase-5/progress-notification-100.json",
+      "sha256": "787ac285703b0ff8c7cc4871043f38e2e2cb66852321b3a957dcc71447cb490e",
+      "schemaRef": "#/$defs/ProgressNotification",
+      "transportForm": "sse-data-json",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_progress_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-5-progress-notification-50",
+      "phase": 5,
+      "source": "production",
+      "path": "phase-5/progress-notification-50.json",
+      "sha256": "0e844a4ba6e0a696ff05f7945d6e72949e5d9de9245c4a54b416422743545861",
+      "schemaRef": "#/$defs/ProgressNotification",
+      "transportForm": "sse-data-json",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_progress_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-5-progress-tool-request",
+      "phase": 5,
+      "source": "production",
+      "path": "phase-5/progress-tool-request.json",
+      "sha256": "2222d7652905377b71124fd118e8c588cd734e8594c74a8fe1699f1e44855cd6",
+      "schemaRef": "#/$defs/CallToolRequest",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_progress_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-5-progress-tool-response",
+      "phase": 5,
+      "source": "production",
+      "path": "phase-5/progress-tool-response.json",
+      "sha256": "f9598a7a2ff1e39f52c5a36ed3885ef2b4c8ebfe6aadb171eb635b33e586ddbe",
+      "schemaRef": "#/$defs/CallToolResultResponse",
+      "transportForm": "sse-data-json",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_progress_messages_match_the_production_listener"
+    },
+    {
       "name": "phase-5-protected-state-initial-request",
       "phase": 5,
       "source": "production",

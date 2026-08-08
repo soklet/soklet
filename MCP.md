@@ -7,7 +7,7 @@ the zero-runtime-dependency `com.soklet:soklet` artifact; there is no separate
 `soklet-mcp` component.
 
 This guide describes the implemented, locally frozen Phase 4 surface plus the
-live Phase 5 multi-round-trip request-state slice in the current
+live Phase 5 multi-round-trip request-state and progress/cancelation slices in the current
 `3.6.0-SNAPSHOT`. It is development documentation, not a release or final
 conformance claim. Compile-checked programmatic and annotation-driven
 applications live outside this source repository in the project-root
@@ -23,14 +23,14 @@ applications live outside this source repository in the project-root
 | Prompts | Annotated and programmatic catalogs plus string-argument prompt rendering |
 | Resources | Exact URIs, bounded RFC 6570 Level 1 URI templates, reads, static catalogs, and application-owned custom listing/pagination |
 | Multi-round-trip | Declared `input_required` results and retries for tools, prompt gets, and resource reads; application- or framework-protected request state |
+| Invocation control | Request-scoped progress over the MCP response stream plus cooperative cancelation for every application handler |
 | Policy | Host and Origin checks, application admission, optional request limiting, mandatory fallback tool limiting for tool-bearing servers, bounded execution, and shared Soklet observation hosts |
 | Schema | Closed, Java-first Soklet MCP Tool Schema Profile 1; no public hand-authored schema registration |
 
-Progress delivery, operational cancellation, resource-subscription delivery,
-operational trace correlation, comprehensive MCP telemetry, and MCP simulation
-are not implemented yet. Public descriptors already reserved for that Phase
-5/6 work are behaviorally neutral and do not cause Soklet to advertise those
-capabilities.
+Resource-subscription delivery, operational trace correlation, comprehensive
+MCP telemetry, and MCP simulation are not implemented yet. Public descriptors
+already reserved for that remaining Phase 5/6 work are behaviorally neutral
+and do not cause Soklet to advertise those capabilities.
 
 ## Server and request model
 
@@ -389,11 +389,11 @@ executor changes where work runs but cannot bypass them. Capacity rejection is
 HTTP 503 with JSON-RPC `-32603`; a queued request whose absolute deadline
 expires never enters application code.
 
-A timeout or disconnect terminates the current framework response path, but
-the runtime does not yet deliver a cooperative-cancellation signal to
-application handlers. Java cannot forcibly stop a non-cooperative handler, so
-it retains its execution slot until it actually exits even if the client
-request has already completed.
+A timeout, disconnect, server shutdown, or response-stream backpressure
+failure cancels the invocation's `CancelationToken`. Soklet also interrupts
+the dispatch thread where applicable, but Java cannot forcibly stop a
+non-cooperative handler. Such a handler retains its execution slot until it
+actually exits even if the client request has already completed.
 
 One `McpHandlerInterceptor` wraps every application-owned tool call, prompt
 get, resource read, and custom resource list handler. Its continuation is
@@ -417,6 +417,58 @@ exception text to the client. An `input_required` result is validated through
 its separate declaration/request-state path and does not pass through the
 complete tool-output sanitizer.
 
+## Progress and cooperative cancelation
+
+Every application-owned tool, prompt, resource-read, and custom resource-list
+handler receives one invocation-scoped `CancelationToken`. Programmatic
+handlers retrieve the exact feature instance from `McpInvocationFeatures`:
+
+```java
+CancelationToken cancelation =
+    features.require(CancelationToken.class);
+
+features.find(McpProgressReporter.class).ifPresent(reporter ->
+    reporter.report(McpProgressUpdate.withProgress(50)
+        .total(100)
+        .message("Halfway")
+        .build()));
+
+cancelation.throwIfCanceled();
+```
+
+Annotated tool, prompt, resource, and resource-list methods may instead inject
+one `CancelationToken` and one `Optional<McpProgressReporter>` directly. They
+may also request `McpInvocationFeatures`; direct injection and feature lookup
+return the same invocation-scoped instances. A bare `McpProgressReporter`
+parameter is rejected because progress is legitimately unavailable for some
+requests.
+
+The cancelation token is always present after an application handler is
+selected. It is signaled by client disconnect, the absolute request deadline,
+server shutdown, or a response-stream write/backpressure failure. Cancelation
+is cooperative: handlers should check between expensive operations, register a
+short nonblocking callback with `onCancel(...)`, or call
+`throwIfCanceled()`. Reports made after cancelation or terminal completion have
+no effect.
+
+A progress reporter is present only when the initiating request supplied a
+valid string or integer at `params._meta.progressToken` and Soklet can safely
+commit request-scoped SSE. Soklet preserves that opaque token's string or
+integer form exactly. `McpProgressUpdate` accepts finite floating-point
+`progress` and optional `total` values plus an optional message. Accepted
+progress values must strictly increase: an equal value is coalesced and a
+decrease while the invocation is active throws `IllegalArgumentException`.
+Delivery is synchronous through the request's bounded SSE queue, so a slow
+client applies bounded backpressure to the reporting handler. Progress and
+keep-alive writes never extend the absolute request deadline.
+
+If an operation has a missing `CONDITIONAL` input-request capability, Soklet
+must keep the response uncommitted until the handler chooses a complete or
+`input_required` result. The progress reporter is therefore absent for that
+invocation even if the request carried a token, and suppressed reports are
+never replayed later. A missing `REQUIRED` capability still fails during
+preflight before the handler runs.
+
 ## HTTP and error policy
 
 MCP messages use POST. `OPTIONS` exists only for the CORS preflight path; GET
@@ -430,11 +482,12 @@ method or selected operation. Notifications are exempt from these header
 requirements. Legacy `MCP-Session-Id` and `Last-Event-ID` headers are ignored,
 never stored, and never echoed.
 
-An identifiable `notifications/cancelled` message still traverses version
+An identifiable HTTP `notifications/cancelled` message still traverses version
 validation, admission, and request limiting, then returns an empty HTTP 202.
-Its payload is ignored and it never cancels active work in the current runtime,
-including when the supplied ID names an active request. Other notifications
-never receive a JSON-RPC response body.
+Its payload is ignored and it never cancels active work, including when the
+supplied ID names an active request. Stream-level disconnect, deadline,
+shutdown, and backpressure signals drive cooperative cancelation for this
+transport instead. Other notifications never receive a JSON-RPC response body.
 
 Implemented framework mappings are stable:
 
@@ -507,9 +560,12 @@ corresponding `McpMetricsEvent.RequestStarted` and
 operations. Callback failures are logged and contained, and user callbacks do
 not run under MCP runtime or dispatcher locks.
 
-The frozen shared-host descriptors also refer to provisional metric-event,
-metric-snapshot, request-outcome, and stream-termination types. Server
-diagnostics, status, and shutdown-outcome types are Phase 6-owned.
+Accepted progress emissions and cooperative cancelation signals additionally
+produce `McpMetricsEvent.ProgressEmitted` and
+`McpMetricsEvent.CancelationSignaled`, labeled only with the bounded endpoint
+path and JSON-RPC method. The frozen shared-host descriptors also refer to
+provisional metric-snapshot, request-outcome, and stream-termination types.
+Server diagnostics, status, and shutdown-outcome types are Phase 6-owned.
 Comprehensive event storage, connection/stream/subscription instrumentation,
 simulator integration, and final metric rendering remain Phase 6 work.
 
@@ -531,6 +587,9 @@ every applicable authorization-server and resource-server obligation.
 
 The official MCP conformance suite is pinned and automated as release
 evidence. The earlier frozen Phase 4 candidate passed its then-active reviewed
-profile; the current Phase 5 multi-round-trip slice has not yet received fresh
-official-suite evidence. Do not treat this snapshot guide as a
-release-conformance statement.
+profile. A standalone exact pinned `tools-call-with-progress` diagnostic for
+the current packaged fixture observed ordinary scenario `SUCCESS` once and
+`wire-schema-valid` `SUCCESS` once with five validated messages and no bad
+outcomes. All 16 Phase 5 profiles remain inactive and `null`; this diagnostic
+is not a frozen profile or a scenario, Phase 5, or 39-scenario pass. Do not
+treat this snapshot guide as a release-conformance statement.

@@ -6,9 +6,9 @@ records the exact 2026-08-06 decision and verification boundary.
 
 `current-incompatibilities.jsonl` is the canonical set of incompatibilities
 between the released `com.soklet:soklet:3.5.1` artifact and the current
-3.6.0 source tree. At the Phase 4 freeze it contains 561 records and has
+3.6.0 source tree. It currently contains 561 records and has
 SHA-256
-`8d5ab804ff4d438e139e66958668e94d86bc9a1c5d3996416db974a730bec89a`.
+`cece9489d13b79e286b0cacb1de10dee3e2884ea6b6f479fbdfd95e59ec4ff33`.
 The API-diff gate regenerates the set and compares it in both directions, so
 an unexpected addition, removal, or changed record fails.
 

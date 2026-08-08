@@ -22,12 +22,20 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.util.Optional;
 
 /**
- * Thread-safe cancelation signal for response stream producers.
+ * Thread-safe cooperative cancelation signal for response producers and
+ * request handlers.
  * <p>
- * Producers should check this token between expensive or blocking operations and stop producing when it becomes
- * canceled. Soklet cancels the token when a streaming response can no longer continue, such as when the client
- * disconnects, the server shuts down, the request HTTP version cannot support streaming, or a streaming timeout is
- * reached.
+ * Producers and handlers should check this token between expensive or blocking
+ * operations and stop work when it becomes canceled. Soklet exposes it through
+ * streaming response contexts and as an always-present
+ * {@link McpInvocationFeatures MCP invocation feature}. Soklet cancels the
+ * token when the associated response can no longer continue, such as when the
+ * client disconnects, the server shuts down, the request HTTP version cannot
+ * support streaming, or a response deadline or streaming timeout is reached.
+ *
+ * <p>Normal completion does not mark the token canceled. MCP invocation
+ * tokens release registered callbacks when the invocation completes normally,
+ * and callbacks registered afterward are inert.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -61,7 +69,8 @@ public interface CancelationToken {
 	 * Registers a callback that runs when the token is canceled.
 	 * <p>
 	 * The returned handle removes the callback when closed. If the token is already canceled, the callback may run
-	 * before this method returns.
+	 * before this method returns. If the associated operation already completed
+	 * normally, the callback does not run.
 	 * <p>
 	 * Callbacks run synchronously on the thread that performs cancelation. Keep callbacks fast and non-blocking; if
 	 * cleanup may take meaningful time, dispatch it to an application-owned executor from the callback.

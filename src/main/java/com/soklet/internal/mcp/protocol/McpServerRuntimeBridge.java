@@ -16,6 +16,7 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import com.soklet.CancelationToken;
 import com.soklet.CorsAuthorizer;
 import com.soklet.McpAdmissionDecision;
 import com.soklet.McpAdmissionIdentity;
@@ -42,6 +43,7 @@ import com.soklet.McpRequestState;
 import com.soklet.McpRequestStateMode;
 import com.soklet.McpRequestStateProtectionException;
 import com.soklet.Request;
+import com.soklet.StreamTerminationReason;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -75,6 +77,35 @@ public final class McpServerRuntimeBridge {
 	@NonNull
 	private static final McpJsonCodec CANONICAL_JSON_CODEC =
 			new McpJsonCodec(McpJsonLimits.productionDefaults());
+	@NonNull
+	private static final CancelationToken INACTIVE_CANCELATION_TOKEN =
+			new CancelationToken() {
+				@Override
+				@NonNull
+				public Boolean isCanceled() {
+					return false;
+				}
+
+				@Override
+				@NonNull
+				public Optional<@NonNull StreamTerminationReason>
+				getCancelationReason() {
+					return Optional.empty();
+				}
+
+				@Override
+				@NonNull
+				public Optional<@NonNull Throwable> getCancelationCause() {
+					return Optional.empty();
+				}
+
+				@Override
+				@NonNull
+				public AutoCloseable onCancel(@NonNull Runnable callback) {
+					requireNonNull(callback);
+					return () -> {};
+				}
+			};
 	@NonNull
 	private final McpHttpServerRuntime runtime;
 
@@ -1058,6 +1089,31 @@ public final class McpServerRuntimeBridge {
 	}
 
 	/**
+	 * Internal bridge callback that emits one request-scoped MCP progress
+	 * notification. The bridge retains ownership of the opaque progress token.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	@FunctionalInterface
+	public interface ProgressEmitter {
+		/** @return whether the initiating invocation still accepts progress */
+		default boolean isActive() {
+			return true;
+		}
+
+		/**
+		 * Emits an update when the initiating request still owns its response.
+		 *
+		 * @return {@code true} when the notification was accepted
+		 */
+		boolean emit(double progress,
+				@NonNull Optional<@NonNull Double> total,
+				@NonNull Optional<@NonNull String> message)
+				throws InterruptedException;
+	}
+
+	/**
 	 * Erased invocation input for one resource read.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -1075,7 +1131,33 @@ public final class McpServerRuntimeBridge {
 			@NonNull McpAdmissionIdentity admissionIdentity,
 			@NonNull String uri,
 			@NonNull Map<@NonNull String, @NonNull String> templateVariables,
+			@NonNull CancelationToken cancelationToken,
+			@NonNull Optional<@NonNull ProgressEmitter> progressEmitter,
 			@NonNull HandlerEntryGuard handlerEntryGuard) {
+		/**
+		 * Creates a legacy internal invocation without transport-owned progress or
+		 * mutable cancellation state.
+		 */
+		public ResourceInvocation(@NonNull Request request,
+				@NonNull McpRequestContext requestContext,
+				@NonNull McpEndpoint endpoint,
+				@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
+				@NonNull String jsonRpcMethod, @NonNull McpRequestId requestId,
+				@NonNull String protocolVersion, @NonNull String operationName,
+				@NonNull Optional<@NonNull McpImplementation> clientInformation,
+				@NonNull McpJsonObject clientCapabilitiesJson,
+				@NonNull McpJsonObject requestMetadata,
+				@NonNull McpAdmissionIdentity admissionIdentity,
+				@NonNull String uri,
+				@NonNull Map<@NonNull String, @NonNull String> templateVariables,
+				@NonNull HandlerEntryGuard handlerEntryGuard) {
+			this(request, requestContext, endpoint, endpointPathParameters,
+					jsonRpcMethod, requestId, protocolVersion, operationName,
+					clientInformation, clientCapabilitiesJson, requestMetadata,
+					admissionIdentity, uri, templateVariables,
+					INACTIVE_CANCELATION_TOKEN, Optional.empty(), handlerEntryGuard);
+		}
+
 		/** Validates and snapshots the erased invocation. */
 		public ResourceInvocation {
 			requireNonNull(request);
@@ -1096,6 +1178,8 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(admissionIdentity);
 			uri = McpProtocolSupport.requireNonBlank(uri, "Resource URI");
 			templateVariables = Map.copyOf(requireNonNull(templateVariables));
+			requireNonNull(cancelationToken);
+			requireNonNull(progressEmitter);
 			requireNonNull(handlerEntryGuard);
 		}
 	}
@@ -1118,7 +1202,33 @@ public final class McpServerRuntimeBridge {
 			@NonNull McpAdmissionIdentity admissionIdentity,
 			@NonNull Optional<@NonNull String> cursor,
 			@NonNull List<@NonNull McpJsonObject> registeredResourceDescriptors,
+			@NonNull CancelationToken cancelationToken,
+			@NonNull Optional<@NonNull ProgressEmitter> progressEmitter,
 			@NonNull HandlerEntryGuard handlerEntryGuard) {
+		/**
+		 * Creates a legacy internal invocation without transport-owned progress or
+		 * mutable cancellation state.
+		 */
+		public ResourceListInvocation(@NonNull Request request,
+				@NonNull McpRequestContext requestContext,
+				@NonNull McpEndpoint endpoint,
+				@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
+				@NonNull String jsonRpcMethod, @NonNull McpRequestId requestId,
+				@NonNull String protocolVersion,
+				@NonNull Optional<@NonNull McpImplementation> clientInformation,
+				@NonNull McpJsonObject clientCapabilitiesJson,
+				@NonNull McpJsonObject requestMetadata,
+				@NonNull McpAdmissionIdentity admissionIdentity,
+				@NonNull Optional<@NonNull String> cursor,
+				@NonNull List<@NonNull McpJsonObject> registeredResourceDescriptors,
+				@NonNull HandlerEntryGuard handlerEntryGuard) {
+			this(request, requestContext, endpoint, endpointPathParameters,
+					jsonRpcMethod, requestId, protocolVersion, clientInformation,
+					clientCapabilitiesJson, requestMetadata, admissionIdentity, cursor,
+					registeredResourceDescriptors, INACTIVE_CANCELATION_TOKEN,
+					Optional.empty(), handlerEntryGuard);
+		}
+
 		/** Validates and snapshots the erased invocation. */
 		public ResourceListInvocation {
 			requireNonNull(request);
@@ -1138,6 +1248,8 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(cursor);
 			registeredResourceDescriptors = List.copyOf(
 					requireNonNull(registeredResourceDescriptors));
+			requireNonNull(cancelationToken);
+			requireNonNull(progressEmitter);
 			requireNonNull(handlerEntryGuard);
 		}
 	}
@@ -1342,7 +1454,32 @@ public final class McpServerRuntimeBridge {
 			@NonNull McpJsonObject requestMetadata,
 			@NonNull McpAdmissionIdentity admissionIdentity,
 			@NonNull McpJsonObject rawArguments,
+			@NonNull CancelationToken cancelationToken,
+			@NonNull Optional<@NonNull ProgressEmitter> progressEmitter,
 			@NonNull HandlerEntryGuard handlerEntryGuard) {
+		/**
+		 * Creates a legacy internal invocation without transport-owned progress or
+		 * mutable cancellation state.
+		 */
+		public ToolInvocation(@NonNull Request request,
+				@NonNull McpRequestContext requestContext,
+				@NonNull McpEndpoint endpoint,
+				@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
+				@NonNull String jsonRpcMethod, @NonNull McpRequestId requestId,
+				@NonNull String protocolVersion, @NonNull String operationName,
+				@NonNull Optional<@NonNull McpImplementation> clientInformation,
+				@NonNull McpJsonObject clientCapabilitiesJson,
+				@NonNull McpJsonObject requestMetadata,
+				@NonNull McpAdmissionIdentity admissionIdentity,
+				@NonNull McpJsonObject rawArguments,
+				@NonNull HandlerEntryGuard handlerEntryGuard) {
+			this(request, requestContext, endpoint, endpointPathParameters,
+					jsonRpcMethod, requestId, protocolVersion, operationName,
+					clientInformation, clientCapabilitiesJson, requestMetadata,
+					admissionIdentity, rawArguments, INACTIVE_CANCELATION_TOKEN,
+					Optional.empty(), handlerEntryGuard);
+		}
+
 		public ToolInvocation {
 			requireNonNull(request);
 			requireNonNull(requestContext);
@@ -1361,6 +1498,8 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(requestMetadata);
 			requireNonNull(admissionIdentity);
 			requireNonNull(rawArguments);
+			requireNonNull(cancelationToken);
+			requireNonNull(progressEmitter);
 			requireNonNull(handlerEntryGuard);
 		}
 
@@ -1394,7 +1533,32 @@ public final class McpServerRuntimeBridge {
 			@NonNull McpJsonObject requestMetadata,
 			@NonNull McpAdmissionIdentity admissionIdentity,
 			@NonNull McpJsonObject rawArguments,
+			@NonNull CancelationToken cancelationToken,
+			@NonNull Optional<@NonNull ProgressEmitter> progressEmitter,
 			@NonNull HandlerEntryGuard handlerEntryGuard) {
+		/**
+		 * Creates a legacy internal invocation without transport-owned progress or
+		 * mutable cancellation state.
+		 */
+		public PromptInvocation(@NonNull Request request,
+				@NonNull McpRequestContext requestContext,
+				@NonNull McpEndpoint endpoint,
+				@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
+				@NonNull String jsonRpcMethod, @NonNull McpRequestId requestId,
+				@NonNull String protocolVersion, @NonNull String operationName,
+				@NonNull Optional<@NonNull McpImplementation> clientInformation,
+				@NonNull McpJsonObject clientCapabilitiesJson,
+				@NonNull McpJsonObject requestMetadata,
+				@NonNull McpAdmissionIdentity admissionIdentity,
+				@NonNull McpJsonObject rawArguments,
+				@NonNull HandlerEntryGuard handlerEntryGuard) {
+			this(request, requestContext, endpoint, endpointPathParameters,
+					jsonRpcMethod, requestId, protocolVersion, operationName,
+					clientInformation, clientCapabilitiesJson, requestMetadata,
+					admissionIdentity, rawArguments, INACTIVE_CANCELATION_TOKEN,
+					Optional.empty(), handlerEntryGuard);
+		}
+
 		public PromptInvocation {
 			requireNonNull(request);
 			requireNonNull(requestContext);
@@ -1413,6 +1577,8 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(requestMetadata);
 			requireNonNull(admissionIdentity);
 			requireNonNull(rawArguments);
+			requireNonNull(cancelationToken);
+			requireNonNull(progressEmitter);
 			requireNonNull(handlerEntryGuard);
 		}
 
@@ -1958,6 +2124,81 @@ public final class McpServerRuntimeBridge {
 	}
 
 	@NonNull
+	static Optional<@NonNull ProgressEmitter> progressEmitterFor(
+			@NonNull McpApplicationInvocation invocation,
+			@NonNull McpInputRequestPlan inputRequestPlan) {
+		requireNonNull(invocation);
+		requireNonNull(inputRequestPlan);
+		McpRequestMetadata requestMetadata = invocation.request().params().metadata();
+		Optional<McpProgressToken> progressToken = requestMetadata.progressToken();
+		if (progressToken.isEmpty()
+				|| inputRequestPlan.requiresUncommittedResponse(
+						requestMetadata.clientCapabilities()))
+			return Optional.empty();
+
+		McpProgressToken token = progressToken.orElseThrow();
+		return Optional.of(new ProgressEmitter() {
+			@Override
+			public boolean isActive() {
+				return invocation.isActive();
+			}
+
+			@Override
+			public boolean emit(double progress,
+					@NonNull Optional<@NonNull Double> total,
+					@NonNull Optional<@NonNull String> message)
+					throws InterruptedException {
+				return invocation.sendNotification(progressNotification(
+						token, progress, total, message));
+			}
+		});
+	}
+
+	private static McpJsonRpcMessage.@NonNull Notification progressNotification(
+			@NonNull McpProgressToken progressToken, double progress,
+			@NonNull Optional<@NonNull Double> total,
+			@NonNull Optional<@NonNull String> message) {
+		requireNonNull(progressToken);
+		requireNonNull(total);
+		requireNonNull(message);
+		Map<String, com.soklet.internal.mcp.protocol.McpJsonValue> fields =
+				new LinkedHashMap<>();
+		fields.put("progressToken", progressTokenValue(progressToken));
+		fields.put("progress", progressNumber(progress, "Progress"));
+		total.ifPresent(value -> fields.put("total",
+				progressNumber(value, "Progress total")));
+		message.ifPresent(value -> fields.put("message",
+				new com.soklet.internal.mcp.protocol.McpJsonString(value)));
+		return new McpJsonRpcMessage.Notification("notifications/progress",
+				Optional.of(new com.soklet.internal.mcp.protocol.McpJsonObject(fields)),
+				com.soklet.internal.mcp.protocol.McpJsonObject.empty());
+	}
+
+	private static com.soklet.internal.mcp.protocol.@NonNull McpJsonValue progressTokenValue(
+			@NonNull McpProgressToken progressToken) {
+		if (progressToken instanceof McpProgressToken.StringToken stringToken)
+			return new com.soklet.internal.mcp.protocol.McpJsonString(
+					stringToken.value());
+		if (progressToken instanceof McpProgressToken.IntegerToken integerToken)
+			return new com.soklet.internal.mcp.protocol.McpJsonNumber(
+					new java.math.BigDecimal(integerToken.value()));
+		throw new IllegalArgumentException(
+				"Unsupported MCP progress token: " + progressToken);
+	}
+
+	private static com.soklet.internal.mcp.protocol.@NonNull McpJsonNumber progressNumber(
+			double value, @NonNull String description) {
+		if (!Double.isFinite(value))
+			throw new IllegalArgumentException(description + " must be finite.");
+		java.math.BigDecimal number = java.math.BigDecimal.valueOf(
+				value == 0.0d ? 0.0d : value).stripTrailingZeros();
+		if (number.scale() < 0)
+			number = number.setScale(0);
+		return new com.soklet.internal.mcp.protocol.McpJsonNumber(
+				number);
+	}
+
+	@NonNull
 	private static McpWireResult invokeTool(@NonNull ToolPlan toolPlan,
 			@NonNull McpInputRequestPlan inputRequestPlan,
 			@NonNull McpApplicationInvocation invocation,
@@ -1984,6 +2225,8 @@ public final class McpServerRuntimeBridge {
 				(McpJsonObject) toPublic(requestMetadata.toJsonObject()),
 				toPublic(invocation.admissionIdentity().admittedIdentity()),
 				(McpJsonObject) toPublic(arguments),
+				invocation.cancelationToken(),
+				progressEmitterFor(invocation, inputRequestPlan),
 				invocation::requireHandlerEntry);
 		ToolInvocationResult result = requireNonNull(
 				toolPlan.invoker().invoke(toolInvocation),
@@ -2098,6 +2341,8 @@ public final class McpServerRuntimeBridge {
 				(McpJsonObject) toPublic(requestMetadata.toJsonObject()),
 				toPublic(invocation.admissionIdentity().admittedIdentity()),
 				(McpJsonObject) toPublic(arguments),
+				invocation.cancelationToken(),
+				progressEmitterFor(invocation, inputRequestPlan),
 				invocation::requireHandlerEntry);
 		PromptInvocationResult result = requireNonNull(
 				promptPlan.invoker().invoke(promptInvocation),
@@ -2150,6 +2395,8 @@ public final class McpServerRuntimeBridge {
 				(McpJsonObject) toPublic(requestMetadata.toJsonObject()),
 				toPublic(invocation.admissionIdentity().admittedIdentity()),
 				internalInvocation.uri(), internalInvocation.templateVariables(),
+				invocation.cancelationToken(),
+				progressEmitterFor(invocation, inputRequestPlan),
 				invocation::requireHandlerEntry);
 		ResourceInvocationResult result = requireNonNull(
 				resourcePlan.invoker().invoke(resourceInvocation),
@@ -2199,6 +2446,8 @@ public final class McpServerRuntimeBridge {
 				(McpJsonObject) toPublic(requestMetadata.toJsonObject()),
 				toPublic(invocation.admissionIdentity().admittedIdentity()),
 				internalInvocation.cursor(), registeredDescriptors,
+				invocation.cancelationToken(),
+				progressEmitterFor(invocation, McpInputRequestPlan.empty()),
 				invocation::requireHandlerEntry);
 		ResourceListInvocationResult result = requireNonNull(
 				resourceListPlan.invoker().orElseThrow().invoke(listInvocation),
