@@ -62,12 +62,10 @@ Expected profiles are evidence, not guesses. `expected-checks.json` retains
 the Phase 3 DNS profile and freezes the complete observed profiles for the
 other 22 Phase 4 rows. All 16 Phase 5 `RUN` rows keep a null
 `expectedCheckProfile` until the complete Phase 5 profile-acquisition run is
-reviewed and the implementation phase advances atomically. A standalone
-exact-pinned diagnostic observation of `tools-call-with-progress` produced
-one ordinary `SUCCESS`, one automatic `wire-schema-valid` `SUCCESS`
-validating five messages, and no warning, failure, or harness-error outcome;
-it does not relax that fail-closed policy. Null never means “accept anything”;
-it means “not executable in this phase.”
+reviewed and the implementation phase advances atomically. The controlled
+acquisition is now complete and reviewed, but soak/resource-delta evidence and
+the scoped API review intentionally precede that atomic activation. Null never
+means “accept anything”; it means “not executable in this phase.”
 
 The selected suite's schema is not substituted for the final specification
 schema. The official checkout remains pristine, and Soklet separately
@@ -91,8 +89,8 @@ replaced. The validator uses Ajv and `ajv-formats` from the official suite's
 verified lockfile, so no Soklet runtime dependency or second package
 installation is added. These corpus additions are local production-listener/
 final-schema evidence. The standalone progress observation is useful
-diagnostic evidence, but it does not constitute the complete Phase 5 or
-39-scenario gate; all 16
+diagnostic history. The later complete controlled observation is profile-
+acquisition evidence, but it is not an activated Phase 5 verify gate; all 16
 Phase 5 expected profiles remain null until atomic phase advancement.
 
 The schema layer checks JSON message shapes only. HTTP status and headers,
@@ -130,7 +128,11 @@ node conformance/official/run.mjs \
 compiles the fixture and its one same-package schema helper with the candidate
 JAR as their only Soklet compile dependency, explicitly disables annotation
 processing because the fixture uses programmatic registration, and uses
-`jdeps` to reject any compiled dependency on `com.soklet.internal`.
+`jdeps` to reject any compiled dependency on `com.soklet.internal`. It also
+compiles and runs a separate standalone public-API contract test for the exact
+Phase 5 registrations, declarations, handler branches, and application-state
+transitions; those test classes are not added to the emitted fixture runtime
+classpath.
 `run.mjs` independently requires the exact fixture-classes/candidate-JAR pair
 in that order and refuses missing, substituted, symlinked, or exploded main/test
 class paths. The work directory must be empty.
@@ -166,6 +168,39 @@ retains raw checks and reviewable profile drafts, uses evidence class
 It is not a CI or release gate. Once profiles are reviewed and frozen, normal
 verification uses `--mode verify` (the default) and requires the manifest's
 exact current phase.
+
+The reviewed 2026-08-08 Phase 5 acquisition exercised all 39 applicable rows
+against the packaged public fixture. Its observation-only evidence contains
+150 raw check occurrences: 147 `SUCCESS`, two exact `server-stateless`
+`SKIPPED`, and one reviewed `server-sse-streams-functional` `INFO`, with zero
+warning, failure, or harness-error outcomes. The skip reasons are exactly:
+
+- `Server did not declare prompts.listChanged capability in server/discover`;
+- `Server did not declare tools.listChanged capability in server/discover`.
+
+Thirty-six automatic `wire-schema-valid` successes covered 103 messages. The
+official suite does not route `server-stateless`, DNS rebinding, or the
+multiple-streams scenario through that recorder, so those draft profiles carry
+automatic counts `0/0`. The progress scenario retained its five-message
+exchange; the 14 MRTR scenarios produced 23 ordinary successes plus 14 wire
+successes over 48 messages. Every one of the prior 23 observed multisets and
+wire counts matched its frozen Phase 3/4 profile exactly.
+
+The first acquisition attempt found one fixture-only streaming-elicitation
+schema defect. The corrected `test_streaming_elicitation` embeds a valid form
+request whose `requestedSchema` contains `type: object` and an empty
+`properties` object, using the matching registered elicitation declaration.
+The rerun inspected one response frame and passed the no-independent-request
+check. The durable external checkpoint
+`../../../mcp/PHASE_5_PROFILE_OBSERVATION_2026-08-08.md` records acquisition
+provenance, review digests, and the complete 16 draft multisets.
+
+This does not change the active gate: `currentImplementationPhase` remains 4,
+all 16 Phase 5 profile references remain null, and CI/default verification
+remain Phase 4. After soak/resource-delta evidence and scoped API review, a
+separate atomic change must add only the 16 reviewed profiles, retain the 23
+historical profile IDs, advance the phase/counts/CI, and run a fresh 39-row
+`--phase 5 --mode verify` gate before a Phase 5 conformance claim is made.
 
 The Phase 4 gate now runs all 23 owned scenarios. Every frozen multiset and
 automatic wire-check count matched on a second fail-closed run; all official

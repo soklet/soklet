@@ -49,7 +49,7 @@ public class McpConformanceSupplementManifestTests {
 			"scenarios.json");
 
 	@Test
-	public void everyActiveLocalSupplementResolvesToExactlyOneJUnitTestMethod()
+	public void everyRunLocalSupplementResolvesToExactlyOneJUnitTestMethod()
 			throws IOException, URISyntaxException {
 		McpJsonObject manifest = object(new McpJsonCodec(
 				McpJsonLimits.productionDefaults()).parse(Files.readAllBytes(MANIFEST)),
@@ -68,13 +68,13 @@ public class McpConformanceSupplementManifestTests {
 					"scenario name");
 			String selection = string(member(scenario, "selection"),
 					"selection for " + scenarioName);
-			McpJsonValue earliestPhase = member(scenario, "earliestPhase");
-			if (!selection.equals("RUN") || !(earliestPhase instanceof McpJsonNumber)
-					|| integer(earliestPhase, "earliest phase for " + scenarioName)
-					> currentPhase)
+			if (!selection.equals("RUN"))
 				continue;
-			string(member(scenario, "expectedCheckProfile"),
-					"expected check profile for active scenario " + scenarioName);
+			int earliestPhase = integer(member(scenario, "earliestPhase"),
+					"earliest phase for " + scenarioName);
+			if (earliestPhase <= currentPhase)
+				string(member(scenario, "expectedCheckProfile"),
+						"expected check profile for active scenario " + scenarioName);
 			McpJsonArray supplements = array(member(scenario, "localSupplements"),
 					"local supplements for " + scenarioName);
 
@@ -88,9 +88,9 @@ public class McpConformanceSupplementManifestTests {
 		}
 
 		Assertions.assertTrue(referenceCount > 0,
-				"The active conformance scenarios do not declare any local supplements");
+				"The RUN conformance scenarios do not declare any local supplements");
 		Assertions.assertTrue(failures.isEmpty(), () ->
-				"Invalid active conformance localSupplements references:\n - "
+				"Invalid RUN conformance localSupplements references:\n - "
 						+ String.join("\n - ", failures));
 	}
 

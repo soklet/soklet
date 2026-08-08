@@ -692,10 +692,14 @@ The official MCP conformance suite is pinned and automated as release
 evidence. The earlier frozen Phase 4 candidate passed its then-active reviewed
 profile. The checked-in final-schema corpus now contains 39 production-derived
 messages, including five-message progress and subscription exchanges; that
-local wire evidence is not an official Phase 5 pass. A standalone exact pinned
-`tools-call-with-progress` diagnostic for
-the current packaged fixture observed ordinary scenario `SUCCESS` once and
-`wire-schema-valid` `SUCCESS` once with five validated messages and no bad
-outcomes. All 16 Phase 5 profiles remain inactive and `null`; this diagnostic
-is not a frozen profile or a scenario, Phase 5, or 39-scenario pass. Do not
-treat this snapshot guide as a release-conformance statement.
+local wire evidence is separate from the official suite. A controlled
+observation-only run of the current packaged fixture exercised all 39
+applicable pinned scenarios and recorded 147 `SUCCESS`, two exact reviewed
+`server-stateless` `SKIPPED`, and one reviewed
+`server-sse-streams-functional` `INFO` occurrence, with no warning, failure,
+or harness error. Thirty-six automatic wire successes covered 103 messages.
+All 16 Phase 5 profiles remain inactive and `null`, the harness remains at
+phase 4, and this acquisition is not a frozen profile set, Phase 5 verify pass,
+API freeze, or release-candidate result. Soak/resource-delta evidence and the
+scoped API review precede atomic activation and a fresh 39-scenario verify run.
+Do not treat this snapshot guide as a release-conformance statement.

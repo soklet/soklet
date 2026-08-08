@@ -80,10 +80,16 @@ tests also prove same-key/same-authorization-partition cross-instance state
 continuation and bounded residual-handler shutdown/restart recovery.
 
 Phase 5 is still unfrozen. Broader long-running cross-feature soak and
-resource-delta evidence remains open. All official Phase 5 scenario profiles
-and the complete Phase 5 pass remain open as well; the harness continues to
-leave all 16 Phase 5 expected profiles inactive and `null`. Local runtime and
-wire-schema evidence must not be read as an official Phase 5 conformance pass.
+resource-delta evidence and the scoped API review remain open. The packaged
+fixture and standalone public-API contract cover every Phase 5 scenario row,
+and a controlled observation-only run exercised all 39 applicable pinned
+scenarios with 147 `SUCCESS`, two exact reviewed `server-stateless` `SKIPPED`,
+one reviewed `server-sse-streams-functional` `INFO`, and no bad outcome.
+Thirty-six automatic wire successes covered 103 messages, and the prior 23
+profiles reproduced exactly. The harness nevertheless continues to leave all
+16 Phase 5 expected profiles inactive and `null`. This acquisition is not a
+profile freeze, Phase 5 verify pass, API freeze, or release-candidate result;
+soak/resource-delta and API review precede atomic activation and verification.
 
 ## Active freeze
 
@@ -140,12 +146,12 @@ on JDK 21.
 The conformance runner/infrastructure self-tests and scenario/supplement-
 manifest gates are green. The final-tag validator checks all 39 production-
 derived golden messages against the pinned final schema with Ajv 8.20.0. All
-16 Phase 5 expected profiles remain inactive and `null`; these local gates do
-not claim an official Phase 5 scenario/profile pass. Final JDK 17 and JDK 25 CI
+16 Phase 5 expected profiles remain inactive and `null`. The separate clean
+39-scenario controlled observation supplies draft-profile acquisition, not an
+activated Phase 5 verify or release sign-off. Final JDK 17 and JDK 25 CI
 results for this exact tree remain open. The pinned official MCP Phase 4 run
-that passed all 23 then-active scenarios remains historical evidence from
-before the current Phase 5 runtime slices, not current Phase 5 or release
-sign-off.
+that passed all 23 then-active scenarios remains historical evidence; its 23
+frozen profile IDs and exact multisets were unchanged by the later observation.
 
 A compatible addition to a frozen owner requires deliberate review, a
 snapshot update, and an update to the freeze rationale. An incompatible change

@@ -787,6 +787,15 @@ local or distributed broadcast publisher. Operational trace correlation,
 comprehensive MCP telemetry, and MCP simulation remain open Phase 6 work;
 applications must not advertise or depend on those remaining behaviors yet.
 
+The exact pinned 39-scenario MCP suite has completed one clean controlled
+profile-observation run against the packaged fixture: 147 successful outcomes,
+two reviewed skips for truthfully unadvertised mutable prompt/tool lists, one
+reviewed informational JSON-versus-optional-SSE outcome, and no warning,
+failure, or wire-harness error. This is profile-acquisition evidence only. The
+Phase 5 profiles remain inactive, the harness remains at phase 4, and Soklet
+does not yet claim the Phase 5 verify gate or API freeze; soak/resource-delta
+evidence and scoped API review come before atomic activation and verification.
+
 #### Form Handling
 
 Frontend:
