@@ -21,12 +21,15 @@
       ],
       "localSupplements": [
         "McpHttpServerConnectionContractTests#persistent_connection_never_carries_protocol_metadata_between_posts",
-        "McpHttpServerConnectionContractTests#persistent_connection_isolates_tool_headers_and_releases_request_ids",
+        "McpHttpServerRuntimeTests#concurrent_same_string_id_completes_independently_across_anonymous_endpoint_paths",
         "McpInputRequestContractTests#capability_preflight_uses_only_the_current_request",
         "McpInputResponsesPublicRuntimeTests#validRetriesReachEveryHandlerThroughTheExactObservedContext",
-        "McpRequestStatePublicRuntimeTests#frameworkProtectedStateCompletesOnlyWithAFreshRetryId"
+        "McpRequestStatePublicRuntimeTests#frameworkProtectedStateCompletesOnlyWithAFreshRetryId",
+        "McpProgressPublicRuntimeTests#stringAndIntegerTokensProduceExactIsolatedMonotonicStreams",
+        "McpSubscriptionPublicRuntimeTests#acknowledgmentIsFirstAndPreservesExactStringAndIntegerIds",
+        "McpSubscriptionPublicRuntimeTests#publisherEmitsOnlyRequestedResourceEventsForMatchingUris"
       ],
-      "rationale": "Local request-isolation and MRTR evidence exists, but the pinned scenario exercises the complete stateless Phase 5 profile; its progress-capable fixture and reviewed official profile remain future work."
+      "rationale": "The public fixture now provides the scenario's progress, capability-diagnostic, embedded-elicitation, logging, MRTR, and truthful resource-subscription registrations, with local production evidence for request isolation, progress, MRTR, and subscription ordering/filtering. The complete pinned scenario has not yet been acquired and reviewed, so its Phase 5 profile remains deliberately null and no official pass is claimed."
     },
     {
       "ordinal": 2,

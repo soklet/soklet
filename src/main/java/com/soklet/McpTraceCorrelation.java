@@ -33,7 +33,8 @@ import java.util.Optional;
 @ThreadSafe
 public interface McpTraceCorrelation {
 	/** @return whether trace correlation was enabled at server construction */
-	boolean isEnabled();
+	@NonNull
+	Boolean isEnabled();
 
 	/** @return active non-secret key ID, or empty when disabled */
 	@NonNull

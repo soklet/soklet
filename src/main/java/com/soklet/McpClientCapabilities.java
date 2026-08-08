@@ -61,7 +61,8 @@ public final class McpClientCapabilities {
 	 * @param capability capability to inspect
 	 * @return whether the client advertised it
 	 */
-	public boolean supports(@NonNull McpClientCapability capability) {
+	@NonNull
+	public Boolean supports(@NonNull McpClientCapability capability) {
 		requireNonNull(capability);
 		return switch (capability) {
 			case ROOTS -> this.json.find("roots").filter(McpJsonObject.class::isInstance).isPresent();

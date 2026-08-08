@@ -715,7 +715,9 @@ Important operational defaults and boundaries:
   queued requests with a 60-second absolute request timeout. A custom executor
   does not bypass those bounds. Disconnect, deadline, shutdown, and stream
   backpressure signal the handler's cooperative `CancelationToken`, but cannot
-  forcibly stop non-cooperative application code.
+  forcibly stop non-cooperative application code. Bounded shutdown reports
+  `RESIDUAL_HANDLERS` while any application-supplied MCP request-processing
+  execution remains and rejects restart until that work actually exits.
 - [`McpHandlerInterceptor`](https://javadoc.soklet.com/com/soklet/McpHandlerInterceptor.html)
   wraps every application-owned tool, prompt, resource-read, and custom
   resource-list handler. Framework-owned discovery and static catalogs bypass
@@ -736,8 +738,8 @@ CancelationToken cancelation =
     features.require(CancelationToken.class);
 
 features.find(McpProgressReporter.class).ifPresent(reporter ->
-    reporter.report(McpProgressUpdate.withProgress(50)
-        .total(100)
+    reporter.report(McpProgressUpdate.withProgress(50.0d)
+        .total(100.0d)
         .message("Halfway")
         .build()));
 
@@ -769,12 +771,21 @@ declaring their possible client requests with `mayRequestInput(...)` (or
   using a production key ring, explicit development-ephemeral protection, or
   a thread-safe custom `McpRequestStateProtector`.
 
+Framework-protected state can continue on another server instance when both
+instances share production protection material and admission resolves the
+retry to the same authorization partition. Wrong material under the same key
+ID or a different partition fails before application observation. Development-
+ephemeral state is intentionally process-local.
+
 See the [MCP guide](MCP.md#multi-round-trip-input-and-request-state) for the
-declaration, protection, error, and retry-cache contracts. Progress reporting
-and cooperative cancelation are implemented Phase 5 slices. Resource-
-subscription delivery, operational trace correlation, comprehensive MCP
-telemetry, and MCP simulation remain open Phase 5/6 work; applications must not
-advertise or depend on those remaining behaviors yet.
+declaration, protection, error, and retry-cache contracts. Progress reporting,
+cooperative cancelation, and resource-subscription delivery are implemented
+Phase 5 slices. Deterministic MRTR termination, cross-instance protected-state
+continuation, and residual-shutdown recovery are implemented as well. Resource
+subscriptions use framework-owned listen streams and an application-owned
+local or distributed broadcast publisher. Operational trace correlation,
+comprehensive MCP telemetry, and MCP simulation remain open Phase 6 work;
+applications must not advertise or depend on those remaining behaviors yet.
 
 #### Form Handling
 

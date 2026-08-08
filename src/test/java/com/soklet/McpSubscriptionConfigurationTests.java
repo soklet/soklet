@@ -23,14 +23,22 @@ import org.junit.jupiter.api.Test;
 import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 /**
  * Public value and attachment contracts for provisional MCP subscriptions.
@@ -139,16 +147,103 @@ public class McpSubscriptionConfigurationTests {
 	}
 
 	@Test
-	public void resourceUpdatedEventRequiresAUri() {
-		URI uri = URI.create("https://example.com/resources/1");
+	public void localPublisherBroadcastsConcurrentEventsToEveryCurrentListener()
+			throws Exception {
+		McpLocalSubscriptionEventPublisher publisher =
+				McpLocalSubscriptionEventPublisher.fromDefaults();
+		List<McpSubscriptionEvent> firstEvents = new CopyOnWriteArrayList<>();
+		List<McpSubscriptionEvent> secondEvents = new CopyOnWriteArrayList<>();
+		McpSubscriptionEventSubscription first = publisher.subscribe(
+				firstEvents::add);
+		McpSubscriptionEventSubscription second = publisher.subscribe(
+				secondEvents::add);
+		int eventCount = 32;
+		Set<McpSubscriptionEvent> expectedEvents = new HashSet<>();
+		for (int index = 0; index < eventCount; index++)
+			expectedEvents.add(McpSubscriptionEvent.resourceUpdated(
+					URI.create("test://concurrent/" + index)));
+		CountDownLatch start = new CountDownLatch(1);
+		ExecutorService executor = Executors.newFixedThreadPool(8);
+
+		try {
+			List<Future<?>> futures = new ArrayList<>();
+			for (int index = 0; index < eventCount; index++) {
+				URI uri = URI.create("test://concurrent/" + index);
+				futures.add(executor.submit(() -> {
+					start.await();
+					publisher.publishResourceUpdated(uri);
+					return null;
+				}));
+			}
+			start.countDown();
+			for (Future<?> future : futures)
+				future.get(5, TimeUnit.SECONDS);
+		} finally {
+			executor.shutdownNow();
+			Assertions.assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
+		}
+
+		Assertions.assertEquals(eventCount, firstEvents.size());
+		Assertions.assertEquals(eventCount, secondEvents.size());
+		Assertions.assertEquals(expectedEvents, new HashSet<>(firstEvents));
+		Assertions.assertEquals(expectedEvents, new HashSet<>(secondEvents));
+		first.close();
+		publisher.publishResourcesListChanged();
+		Assertions.assertEquals(eventCount, firstEvents.size());
+		Assertions.assertEquals(eventCount + 1, secondEvents.size());
+		second.close();
+	}
+
+	@Test
+	public void publicPublisherSurfaceContainsOnlyResourceEventFamilies() {
+		Assertions.assertArrayEquals(new McpSubscriptionNotificationType[]{
+				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED,
+				McpSubscriptionNotificationType.RESOURCE_UPDATED
+		}, McpSubscriptionNotificationType.values());
+		Assertions.assertEquals(Set.of(
+				McpSubscriptionEvent.ResourcesListChanged.class,
+				McpSubscriptionEvent.ResourceUpdated.class),
+				Set.of(McpSubscriptionEvent.class.getPermittedSubclasses()));
+		Assertions.assertEquals(Set.of(
+				"publish(McpSubscriptionEvent)",
+				"publishResourceUpdated(URI)",
+				"publishResourcesListChanged()",
+				"subscribe(McpSubscriptionEventListener)"),
+				Arrays.stream(McpSubscriptionEventPublisher.class
+						.getDeclaredMethods())
+						.map(method -> method.getName() + "("
+								+ Arrays.stream(method.getParameterTypes())
+								.map(Class::getSimpleName)
+								.collect(Collectors.joining(",")) + ")")
+						.collect(Collectors.toSet()));
+	}
+
+	@Test
+	public void resourceUpdatedEventRequiresAbsoluteNormalizedAsciiUri() {
+		URI uri = URI.create(
+				"https://example.com/resources/caf%C3%A9");
 		McpSubscriptionEvent.ResourceUpdated event =
 				McpSubscriptionEvent.resourceUpdated(uri);
 
 		Assertions.assertEquals(uri, event.resourceUri());
+		Assertions.assertEquals(uri,
+				new McpSubscriptionEvent.ResourceUpdated(uri).resourceUri());
 		Assertions.assertThrows(NullPointerException.class,
 				() -> McpSubscriptionEvent.resourceUpdated(null));
 		Assertions.assertThrows(NullPointerException.class,
 				() -> new McpSubscriptionEvent.ResourceUpdated(null));
+
+		for (URI invalid : List.of(
+				URI.create("resources/1"),
+				URI.create("https://example.com/a/../resources/1"),
+				URI.create("https://example.com/resources/café"))) {
+			Assertions.assertThrows(IllegalArgumentException.class,
+					() -> McpSubscriptionEvent.resourceUpdated(invalid),
+					invalid.toString());
+			Assertions.assertThrows(IllegalArgumentException.class,
+					() -> new McpSubscriptionEvent.ResourceUpdated(invalid),
+					invalid.toString());
+		}
 	}
 
 	@Test

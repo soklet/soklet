@@ -130,12 +130,14 @@ public final class McpProtectionConfig {
 	}
 
 	/** @return positive maximum encoded request-state size in bytes */
-	public int getMaximumEncodedRequestStateBytes() {
+	@NonNull
+	public Integer getMaximumEncodedRequestStateBytes() {
 		return this.maximumEncodedRequestStateBytes;
 	}
 
 	/** @return positive maximum decoded request-state size in bytes */
-	public int getMaximumDecodedRequestStateBytes() {
+	@NonNull
+	public Integer getMaximumDecodedRequestStateBytes() {
 		return this.maximumDecodedRequestStateBytes;
 	}
 
@@ -146,7 +148,8 @@ public final class McpProtectionConfig {
 	}
 
 	/** @return positive maximum request-state round count */
-	public int getMaximumRequestStateRounds() {
+	@NonNull
+	public Integer getMaximumRequestStateRounds() {
 		return this.maximumRequestStateRounds;
 	}
 
@@ -190,12 +193,14 @@ public final class McpProtectionConfig {
 		 *
 		 * @param maximumEncodedRequestStateBytes positive byte limit
 		 * @return this builder
+		 * @throws NullPointerException if {@code maximumEncodedRequestStateBytes}
+		 *                              is null
 		 */
 		@NonNull
 		public Builder maximumEncodedRequestStateBytes(
-				int maximumEncodedRequestStateBytes) {
+				@NonNull Integer maximumEncodedRequestStateBytes) {
 			this.maximumEncodedRequestStateBytes = requirePositive(
-					maximumEncodedRequestStateBytes,
+					requireNonNull(maximumEncodedRequestStateBytes),
 					"Maximum encoded request-state bytes");
 			return this;
 		}
@@ -205,12 +210,14 @@ public final class McpProtectionConfig {
 		 *
 		 * @param maximumDecodedRequestStateBytes positive byte limit
 		 * @return this builder
+		 * @throws NullPointerException if {@code maximumDecodedRequestStateBytes}
+		 *                              is null
 		 */
 		@NonNull
 		public Builder maximumDecodedRequestStateBytes(
-				int maximumDecodedRequestStateBytes) {
+				@NonNull Integer maximumDecodedRequestStateBytes) {
 			this.maximumDecodedRequestStateBytes = requirePositive(
-					maximumDecodedRequestStateBytes,
+					requireNonNull(maximumDecodedRequestStateBytes),
 					"Maximum decoded request-state bytes");
 			return this;
 		}
@@ -235,11 +242,13 @@ public final class McpProtectionConfig {
 		 *
 		 * @param maximumRequestStateRounds positive round limit
 		 * @return this builder
+		 * @throws NullPointerException if {@code maximumRequestStateRounds} is null
 		 */
 		@NonNull
-		public Builder maximumRequestStateRounds(int maximumRequestStateRounds) {
+		public Builder maximumRequestStateRounds(
+				@NonNull Integer maximumRequestStateRounds) {
 			this.maximumRequestStateRounds = requirePositive(
-					maximumRequestStateRounds,
+					requireNonNull(maximumRequestStateRounds),
 					"Maximum request-state rounds");
 			return this;
 		}

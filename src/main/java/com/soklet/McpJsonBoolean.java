@@ -16,7 +16,11 @@
 
 package com.soklet;
 
+import org.jspecify.annotations.NonNull;
+
 import javax.annotation.concurrent.ThreadSafe;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * An immutable JSON boolean.
@@ -25,5 +29,9 @@ import javax.annotation.concurrent.ThreadSafe;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public record McpJsonBoolean(boolean value) implements McpJsonValue {
+public record McpJsonBoolean(@NonNull Boolean value) implements McpJsonValue {
+	/** Creates an immutable JSON boolean. */
+	public McpJsonBoolean {
+		requireNonNull(value);
+	}
 }

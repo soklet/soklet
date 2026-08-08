@@ -17,6 +17,7 @@
 package com.soklet.internal.mcp.protocol;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
@@ -138,22 +139,70 @@ record McpImplementationMetadata(@NonNull String name, @NonNull String version,
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-record McpResultMetadata(
-		@NonNull Optional<@NonNull McpImplementationMetadata> serverInformation,
-		@NonNull McpJsonObject extensionFields) {
+final class McpResultMetadata {
 	@NonNull
 	static final String SERVER_INFORMATION_KEY = "io.modelcontextprotocol/serverInfo";
+	@NonNull
+	static final String SUBSCRIPTION_ID_KEY =
+			"io.modelcontextprotocol/subscriptionId";
 
-	McpResultMetadata {
-		requireNonNull(serverInformation);
-		extensionFields = McpProtocolSupport.requireApplicationMetadataFields(extensionFields,
-				Set.of(SERVER_INFORMATION_KEY));
+	@NonNull
+	private final Optional<@NonNull McpImplementationMetadata> serverInformation;
+	@NonNull
+	private final McpJsonObject extensionFields;
+
+	McpResultMetadata(
+			@NonNull Optional<@NonNull McpImplementationMetadata> serverInformation,
+			@NonNull McpJsonObject extensionFields) {
+		this(serverInformation, extensionFields, false);
+	}
+
+	private McpResultMetadata(
+			@NonNull Optional<@NonNull McpImplementationMetadata> serverInformation,
+			@NonNull McpJsonObject extensionFields, boolean frameworkOwned) {
+		this.serverInformation = requireNonNull(serverInformation);
+		if (frameworkOwned) {
+			McpJsonValue subscriptionId = requireNonNull(extensionFields)
+					.members().get(SUBSCRIPTION_ID_KEY);
+			if (extensionFields.members().size() != 1 || subscriptionId == null
+					|| (!(subscriptionId instanceof McpJsonString)
+					&& !(subscriptionId instanceof McpJsonNumber)))
+				throw new IllegalArgumentException(
+						"Framework subscription metadata requires exactly one string or integer subscription ID.");
+			this.extensionFields = McpProtocolSupport.requireInboundMetadataFields(
+					extensionFields, Set.of(SERVER_INFORMATION_KEY));
+		} else {
+			this.extensionFields =
+					McpProtocolSupport.requireApplicationMetadataFields(
+							requireNonNull(extensionFields),
+							Set.of(SERVER_INFORMATION_KEY));
+		}
 	}
 
 	@NonNull
 	static McpResultMetadata withServerInformation(
 			@NonNull McpImplementationMetadata serverInformation) {
 		return new McpResultMetadata(Optional.of(requireNonNull(serverInformation)), McpJsonObject.empty());
+	}
+
+	@NonNull
+	static McpResultMetadata withSubscriptionId(
+			@NonNull McpJsonRpcId subscriptionId,
+			@NonNull Optional<@NonNull McpImplementationMetadata>
+					serverInformation) {
+		return new McpResultMetadata(requireNonNull(serverInformation),
+				new McpJsonObject(Map.of(SUBSCRIPTION_ID_KEY,
+						requireNonNull(subscriptionId).toJsonValue())), true);
+	}
+
+	@NonNull
+	Optional<@NonNull McpImplementationMetadata> serverInformation() {
+		return serverInformation;
+	}
+
+	@NonNull
+	McpJsonObject extensionFields() {
+		return extensionFields;
 	}
 
 	@NonNull
@@ -166,5 +215,27 @@ record McpResultMetadata(
 
 	boolean isEmpty() {
 		return serverInformation.isEmpty() && extensionFields.members().isEmpty();
+	}
+
+	@Override
+	public boolean equals(@Nullable Object object) {
+		if (this == object)
+			return true;
+		if (!(object instanceof McpResultMetadata other))
+			return false;
+		return serverInformation.equals(other.serverInformation)
+				&& extensionFields.equals(other.extensionFields);
+	}
+
+	@Override
+	public int hashCode() {
+		return 31 * serverInformation.hashCode() + extensionFields.hashCode();
+	}
+
+	@Override
+	@NonNull
+	public String toString() {
+		return "McpResultMetadata[serverInformation=" + serverInformation
+				+ ", extensionFields=" + extensionFields + "]";
 	}
 }

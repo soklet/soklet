@@ -53,6 +53,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HexFormat;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -69,9 +70,22 @@ import java.util.TreeMap;
 public class McpPublicApiReflectionContractTests {
 	private static final Path PHASE_FOUR_INCLUDES =
 			Path.of("api/mcp/phase-4.includes");
+	private static final List<Path> MCP_API_INCLUDES = List.of(
+			PHASE_FOUR_INCLUDES,
+			Path.of("api/mcp/phase-5.includes"),
+			Path.of("api/mcp/phase-6.includes"),
+			Path.of("api/mcp/provisional.includes"));
 	private static final int PHASE_FOUR_TYPE_COUNT = 133;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"ad66bd34619a7b769bc637124c6eb49fe44b27ec6a8e214e1b88b7b4ccf657a1";
+			"c10d11f1c510b5219f819d19ff4dec687eec4fbfb13006b988366253eec70cab";
+	private static final Map<String, Object> PHASE_FOUR_PRIMITIVE_CONSTANTS =
+			Map.of(
+					"com.soklet.McpAdmissionIdentity#MAXIMUM_PARTITION_KEY_UTF_8_BYTES",
+					256,
+					"com.soklet.McpJsonRpcError#SOKLET_RATE_LIMIT_ERROR_CODE",
+					-31999,
+					"com.soklet.McpJsonRpcError#SOKLET_STRICT_UNKNOWN_MIRRORED_HEADER_ERROR_CODE",
+					-31998);
 	private static final Map<String, Set<String>> PHASE_FOUR_PERMITTED_TYPES =
 			Map.of(
 					"com.soklet.McpAdmissionDecision", Set.of(
@@ -165,14 +179,70 @@ public class McpPublicApiReflectionContractTests {
 			}
 		}
 
-		Assertions.assertEquals(Map.of(
-				"com.soklet.McpAdmissionIdentity#MAXIMUM_PARTITION_KEY_UTF_8_BYTES",
-				256,
-				"com.soklet.McpJsonRpcError#SOKLET_RATE_LIMIT_ERROR_CODE",
-				-31999,
-				"com.soklet.McpJsonRpcError#SOKLET_STRICT_UNKNOWN_MIRRORED_HEADER_ERROR_CODE",
-				-31998), actualConstants,
+		Assertions.assertEquals(PHASE_FOUR_PRIMITIVE_CONSTANTS, actualConstants,
 				"Phase 4 public static-final primitive constants changed");
+	}
+
+	@Test
+	public void publicMcpScalarSignaturesUseReferenceTypes()
+			throws Exception {
+		List<String> primitiveSignatures = new ArrayList<>();
+
+		for (Class<?> type : publicMcpTypes()) {
+			if (type.isAnnotation())
+				continue;
+
+			for (Field field : type.getDeclaredFields()) {
+				String fieldId = type.getName() + "#" + field.getName();
+				if (isPublicOrProtected(field.getModifiers())
+						&& field.getType().isPrimitive()
+						&& !PHASE_FOUR_PRIMITIVE_CONSTANTS.containsKey(fieldId))
+					primitiveSignatures.add("FIELD|" + fieldId + "|"
+							+ field.getType().getName());
+			}
+
+			for (Constructor<?> constructor : type.getDeclaredConstructors()) {
+				if (!isPublicOrProtected(constructor.getModifiers()))
+					continue;
+				for (Parameter parameter : constructor.getParameters()) {
+					if (parameter.getType().isPrimitive())
+						primitiveSignatures.add("CONSTRUCTOR|" + type.getName()
+								+ "|PARAMETER|" + parameter.getName() + "|"
+								+ parameter.getType().getName());
+				}
+			}
+
+			for (Method method : type.getDeclaredMethods()) {
+				if (!isPublicOrProtected(method.getModifiers())
+						|| isJavaObjectContractMethod(method))
+					continue;
+				if (method.getReturnType().isPrimitive()
+						&& method.getReturnType() != void.class)
+					primitiveSignatures.add("METHOD|" + type.getName() + "#"
+							+ method.getName() + "|RETURN|"
+							+ method.getReturnType().getName());
+				for (Parameter parameter : method.getParameters()) {
+					if (parameter.getType().isPrimitive())
+						primitiveSignatures.add("METHOD|" + type.getName() + "#"
+								+ method.getName() + "|PARAMETER|"
+								+ parameter.getName() + "|"
+								+ parameter.getType().getName());
+				}
+			}
+
+			for (RecordComponent component : type.getRecordComponents() == null
+					? new RecordComponent[0] : type.getRecordComponents()) {
+				if (component.getType().isPrimitive())
+					primitiveSignatures.add("RECORD_COMPONENT|" + type.getName()
+							+ "#" + component.getName() + "|"
+							+ component.getType().getName());
+			}
+		}
+
+		Assertions.assertEquals(List.of(), primitiveSignatures,
+				"Public MCP scalar signatures must use reference types; "
+						+ "void returns, Java annotation elements, reviewed compile-time "
+						+ "constants, and Object-contract methods are the only exceptions");
 	}
 
 	@Test
@@ -344,11 +414,11 @@ public class McpPublicApiReflectionContractTests {
 				MethodShape.CONCRETE, false, McpTraceCorrelationKey.class));
 		assertErasedGenericSignature(assertInstanceMethod(McpServer.Builder.class,
 				"logRawValidatedTraceIds", McpServer.Builder.class,
-				MethodShape.CONCRETE, false, boolean.class));
+				MethodShape.CONCRETE, false, Boolean.class));
 
 		assertErasedGenericSignature(assertInstanceMethod(McpServer.Builder.class,
 				"streamQueueCapacity", McpServer.Builder.class,
-				MethodShape.CONCRETE, false, int.class));
+				MethodShape.CONCRETE, false, Integer.class));
 		assertErasedGenericSignature(assertInstanceMethod(McpServer.Builder.class,
 				"writeTimeout", McpServer.Builder.class, MethodShape.CONCRETE,
 				false, Duration.class));
@@ -360,7 +430,7 @@ public class McpPublicApiReflectionContractTests {
 				MethodShape.CONCRETE, false, Duration.class));
 		assertErasedGenericSignature(assertInstanceMethod(McpServer.Builder.class,
 				"maximumSubscriptionsPerPrincipal", McpServer.Builder.class,
-				MethodShape.CONCRETE, false, int.class));
+				MethodShape.CONCRETE, false, Integer.class));
 		assertErasedGenericSignature(assertInstanceMethod(McpServer.Builder.class,
 				"maximumSubscriptionDuration", McpServer.Builder.class,
 				MethodShape.CONCRETE, false, Duration.class));
@@ -575,6 +645,28 @@ public class McpPublicApiReflectionContractTests {
 		return List.copyOf(types);
 	}
 
+	private static List<Class<?>> publicMcpTypes() throws Exception {
+		LinkedHashSet<String> typeNames = new LinkedHashSet<>();
+		for (Path includes : MCP_API_INCLUDES) {
+			for (String line : Files.readAllLines(includes, StandardCharsets.UTF_8)) {
+				String typeName = line.trim();
+				if (typeName.isEmpty() || typeName.startsWith("#"))
+					continue;
+				if (typeName.startsWith("com.soklet.Mcp")
+						|| typeName.startsWith("com.soklet.annotation.Mcp")
+						|| typeName.equals("com.soklet.DefaultMcpServer"))
+					typeNames.add(typeName);
+			}
+		}
+
+		ClassLoader classLoader =
+				McpPublicApiReflectionContractTests.class.getClassLoader();
+		List<Class<?>> types = new ArrayList<>(typeNames.size());
+		for (String typeName : typeNames)
+			types.add(Class.forName(typeName, false, classLoader));
+		return List.copyOf(types);
+	}
+
 	private static boolean isNonSealed(Class<?> type) {
 		if (type.isSealed() || Modifier.isFinal(type.getModifiers()))
 			return false;
@@ -585,6 +677,16 @@ public class McpPublicApiReflectionContractTests {
 
 		return Arrays.stream(type.getInterfaces())
 				.anyMatch(parent -> directlyPermits(parent, type));
+	}
+
+	private static boolean isJavaObjectContractMethod(Method method) {
+		return (method.getName().equals("equals")
+				&& method.getReturnType() == boolean.class
+				&& Arrays.equals(method.getParameterTypes(),
+						new Class<?>[] { Object.class }))
+				|| (method.getName().equals("hashCode")
+				&& method.getReturnType() == int.class
+				&& method.getParameterCount() == 0);
 	}
 
 	private static boolean directlyPermits(Class<?> parent, Class<?> child) {

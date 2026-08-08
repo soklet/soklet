@@ -47,8 +47,8 @@ public class McpRateLimiterTests {
 	public void inMemoryLimiterEnforcesCapacityAndSeparatesPartitions()
 			throws Exception {
 		McpRateLimiter limiter = McpRateLimiter.fromInMemoryTokenBucket(
-				McpTokenBucketConfig.withCapacity(1)
-						.refillTokens(1)
+				McpTokenBucketConfig.withCapacity(1L)
+						.refillTokens(1L)
 						.refillPeriod(Duration.ofDays(1))
 						.build());
 
@@ -75,29 +75,33 @@ public class McpRateLimiterTests {
 	@Test
 	public void tokenBucketConfigurationIsFiniteAndValidated() {
 		McpTokenBucketConfig defaults = McpTokenBucketConfig.fromDefaults();
-		Assertions.assertEquals(20, defaults.getCapacity());
-		Assertions.assertEquals(60, defaults.getRefillTokens());
+		Assertions.assertEquals(Long.valueOf(20), defaults.getCapacity());
+		Assertions.assertEquals(Long.valueOf(60), defaults.getRefillTokens());
 		Assertions.assertEquals(Duration.ofMinutes(1), defaults.getRefillPeriod());
 
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				McpTokenBucketConfig.withCapacity(0)
-						.refillTokens(1)
+				McpTokenBucketConfig.withCapacity(0L)
+						.refillTokens(1L)
 						.refillPeriod(Duration.ofSeconds(1))
 						.build());
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				McpTokenBucketConfig.withCapacity(1)
-						.refillTokens(0)
+				McpTokenBucketConfig.withCapacity(1L)
+						.refillTokens(0L)
 						.refillPeriod(Duration.ofSeconds(1))
 						.build());
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				McpTokenBucketConfig.withCapacity(1)
-						.refillTokens(1)
+				McpTokenBucketConfig.withCapacity(1L)
+						.refillTokens(1L)
 						.refillPeriod(Duration.ZERO)
 						.build());
 		Assertions.assertThrows(NullPointerException.class, () ->
-				McpTokenBucketConfig.withCapacity(1)
-						.refillTokens(1)
+				McpTokenBucketConfig.withCapacity(1L)
+						.refillTokens(1L)
 						.build());
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpTokenBucketConfig.withCapacity(null));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpTokenBucketConfig.withCapacity(1L).refillTokens(null));
 	}
 
 	@Test
@@ -132,8 +136,8 @@ public class McpRateLimiterTests {
 			throws Exception {
 		MutableClock clock = new MutableClock(0);
 		DefaultMcpRateLimiter limiter = new DefaultMcpRateLimiter(
-				McpTokenBucketConfig.withCapacity(1)
-						.refillTokens(3)
+				McpTokenBucketConfig.withCapacity(1L)
+						.refillTokens(3L)
 						.refillPeriod(Duration.ofNanos(10))
 						.build(), clock, 8);
 		McpRateLimitContext context = context(
@@ -157,8 +161,8 @@ public class McpRateLimiterTests {
 	public void deterministicClockHandlesSignedNanoTimeWrap() throws Exception {
 		MutableClock clock = new MutableClock(Long.MAX_VALUE - 5);
 		DefaultMcpRateLimiter limiter = new DefaultMcpRateLimiter(
-				McpTokenBucketConfig.withCapacity(1)
-						.refillTokens(1)
+				McpTokenBucketConfig.withCapacity(1L)
+						.refillTokens(1L)
 						.refillPeriod(Duration.ofNanos(10))
 						.build(), clock, 8);
 		McpRateLimitContext context = context(
@@ -178,8 +182,8 @@ public class McpRateLimiterTests {
 			throws Exception {
 		MutableClock clock = new MutableClock(0);
 		DefaultMcpRateLimiter limiter = new DefaultMcpRateLimiter(
-				McpTokenBucketConfig.withCapacity(1)
-						.refillTokens(1)
+				McpTokenBucketConfig.withCapacity(1L)
+						.refillTokens(1L)
 						.refillPeriod(Duration.ofNanos(10))
 						.build(), clock, 2);
 
@@ -213,8 +217,8 @@ public class McpRateLimiterTests {
 			throws Exception {
 		MutableClock clock = new MutableClock(0);
 		DefaultMcpRateLimiter limiter = new DefaultMcpRateLimiter(
-				McpTokenBucketConfig.withCapacity(100)
-						.refillTokens(1)
+				McpTokenBucketConfig.withCapacity(100L)
+						.refillTokens(1L)
 						.refillPeriod(Duration.ofDays(1))
 						.build(), clock, 8);
 		McpRateLimitContext context = context(

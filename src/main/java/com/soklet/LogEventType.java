@@ -42,7 +42,7 @@ public enum LogEventType {
 	 * ASCII-token-sanitized header name truncated to 128 bytes. At most ten events
 	 * are attempted per server in any monotonic 60-second window. The event's
 	 * throwable, request, resource method, and marshaled response are all absent.
-	 * See {@link McpServer.Builder#unknownMirroredHeaderNameDiagnostics(boolean)}
+	 * See {@link McpServer.Builder#unknownMirroredHeaderNameDiagnostics(Boolean)}
 	 * for the complete contract and exact message format.
 	 */
 	MCP_UNKNOWN_MIRRORED_HEADER,

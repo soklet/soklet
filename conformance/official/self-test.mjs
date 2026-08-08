@@ -104,6 +104,27 @@ try {
     ], profile),
     /forbidden FAILURE|wire-schema-harness-error/,
   );
+	const noteSkipProfile = {
+		id: 'server-stateless.phase5.test',
+		scenario: 'server-stateless',
+		checks: [{
+			id: 'sep-2575-server-sends-tools-list-changed-on-subscription',
+			status: 'SKIPPED',
+			count: 1,
+			reason: 'Server did not declare tools.listChanged capability in server/discover',
+		}],
+		automaticWireChecks: {
+			'wire-schema-valid': 0,
+			'wire-schema-harness-error': 0,
+		},
+	};
+	assert.doesNotThrow(() => adjudicateChecks('server-stateless', [{
+		id: 'sep-2575-server-sends-tools-list-changed-on-subscription',
+		status: 'SKIPPED',
+		details: {
+			note: 'Server did not declare tools.listChanged capability in server/discover',
+		},
+	}], noteSkipProfile));
 
   const validResult = validateFinalTagWire({ suiteDirectory });
   const goldenManifest = readCanonicalJson(
@@ -158,7 +179,7 @@ try {
   );
 
   copy = copyOfficialRoot('missing-subscription-id');
-  rewriteFixture(copy, 'schema-canaries/subscription-listen-terminal.json', (value) => {
+  rewriteFixture(copy, 'phase-5/subscription-listen-response.json', (value) => {
     delete value.result._meta['io.modelcontextprotocol/subscriptionId'];
     return value;
   });

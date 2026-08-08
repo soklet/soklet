@@ -316,7 +316,11 @@ public sealed interface McpMetricsEvent permits
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record ProtocolError(int code) implements McpMetricsEvent {
+	record ProtocolError(@NonNull Integer code) implements McpMetricsEvent {
+		/** Creates a protocol-error event. */
+		public ProtocolError {
+			requireNonNull(code);
+		}
 	}
 
 	/**

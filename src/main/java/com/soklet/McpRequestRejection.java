@@ -48,9 +48,10 @@ public final class McpRequestRejection {
 	 * @param statusCode HTTP status from 400 through 599
 	 * @param jsonRpcError client-visible JSON-RPC error
 	 * @return rejection builder
+	 * @throws NullPointerException if {@code statusCode} is null
 	 */
 	@NonNull
-	public static Builder withStatusCodeAndError(int statusCode,
+	public static Builder withStatusCodeAndError(@NonNull Integer statusCode,
 			@NonNull McpJsonRpcError jsonRpcError) {
 		return new Builder().statusCode(statusCode).jsonRpcError(jsonRpcError);
 	}
@@ -68,7 +69,8 @@ public final class McpRequestRejection {
 	}
 
 	/** @return rejection HTTP status */
-	public int getStatusCode() {
+	@NonNull
+	public Integer getStatusCode() {
 		return this.statusCode;
 	}
 
@@ -101,10 +103,14 @@ public final class McpRequestRejection {
 		private Builder() {
 		}
 
-		/** @param statusCode HTTP status from 400 through 599 @return this builder */
+		/**
+		 * @param statusCode HTTP status from 400 through 599
+		 * @return this builder
+		 * @throws NullPointerException if {@code statusCode} is null
+		 */
 		@NonNull
-		public Builder statusCode(int statusCode) {
-			this.statusCode = statusCode;
+		public Builder statusCode(@NonNull Integer statusCode) {
+			this.statusCode = requireNonNull(statusCode);
 			return this;
 		}
 

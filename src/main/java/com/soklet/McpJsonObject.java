@@ -161,10 +161,11 @@ public final class McpJsonObject implements McpJsonValue {
 		 * @param name  the member name
 		 * @param value the integer value
 		 * @return this builder
+		 * @throws NullPointerException if {@code value} is null
 		 */
 		@NonNull
-		public Builder put(@NonNull String name, int value) {
-			return put(name, BigDecimal.valueOf(value));
+		public Builder put(@NonNull String name, @NonNull Integer value) {
+			return put(name, BigDecimal.valueOf(requireNonNull(value)));
 		}
 
 		/**
@@ -173,10 +174,11 @@ public final class McpJsonObject implements McpJsonValue {
 		 * @param name  the member name
 		 * @param value the long value
 		 * @return this builder
+		 * @throws NullPointerException if {@code value} is null
 		 */
 		@NonNull
-		public Builder put(@NonNull String name, long value) {
-			return put(name, BigDecimal.valueOf(value));
+		public Builder put(@NonNull String name, @NonNull Long value) {
+			return put(name, BigDecimal.valueOf(requireNonNull(value)));
 		}
 
 		/**
@@ -185,10 +187,12 @@ public final class McpJsonObject implements McpJsonValue {
 		 * @param name  the member name
 		 * @param value the finite double value
 		 * @return this builder
+		 * @throws NullPointerException if {@code value} is null
 		 * @throws IllegalArgumentException if {@code value} is not finite
 		 */
 		@NonNull
-		public Builder put(@NonNull String name, double value) {
+		public Builder put(@NonNull String name, @NonNull Double value) {
+			requireNonNull(value);
 			if (!Double.isFinite(value))
 				throw new IllegalArgumentException("JSON numbers must be finite.");
 			return put(name, BigDecimal.valueOf(value));
@@ -200,10 +204,11 @@ public final class McpJsonObject implements McpJsonValue {
 		 * @param name  the member name
 		 * @param value the boolean value
 		 * @return this builder
+		 * @throws NullPointerException if {@code value} is null
 		 */
 		@NonNull
-		public Builder put(@NonNull String name, boolean value) {
-			return put(name, new McpJsonBoolean(value));
+		public Builder put(@NonNull String name, @NonNull Boolean value) {
+			return put(name, new McpJsonBoolean(requireNonNull(value)));
 		}
 
 		/**

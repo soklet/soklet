@@ -55,12 +55,15 @@ public final class McpJsonRpcError {
 	 * @param code    an application-owned error code
 	 * @param message the nonblank client-visible message
 	 * @return the JSON-RPC error
+	 * @throws NullPointerException if {@code code} is null
 	 * @throws IllegalArgumentException if the code is reserved by JSON-RPC, MCP,
 	 *                                  or Soklet, or the message is blank
 	 */
 	@NonNull
-	public static McpJsonRpcError fromApplication(int code, @NonNull String message) {
-		return new McpJsonRpcError(requireApplicationCode(code), message, null);
+	public static McpJsonRpcError fromApplication(@NonNull Integer code,
+			@NonNull String message) {
+		return new McpJsonRpcError(requireApplicationCode(requireNonNull(code)),
+				message, null);
 	}
 
 	/**
@@ -70,13 +73,15 @@ public final class McpJsonRpcError {
 	 * @param message the nonblank client-visible message
 	 * @param data    structured client-visible error data
 	 * @return the JSON-RPC error
+	 * @throws NullPointerException if {@code code} is null
 	 * @throws IllegalArgumentException if the code is reserved by JSON-RPC, MCP,
 	 *                                  or Soklet, or the message is blank
 	 */
 	@NonNull
-	public static McpJsonRpcError fromApplication(int code, @NonNull String message,
+	public static McpJsonRpcError fromApplication(@NonNull Integer code,
+			@NonNull String message,
 			@NonNull McpJsonValue data) {
-		return new McpJsonRpcError(requireApplicationCode(code), message,
+		return new McpJsonRpcError(requireApplicationCode(requireNonNull(code)), message,
 				requireNonNull(data));
 	}
 
@@ -128,7 +133,8 @@ public final class McpJsonRpcError {
 	 *
 	 * @return the error code
 	 */
-	public int getCode() {
+	@NonNull
+	public Integer getCode() {
 		return this.code;
 	}
 

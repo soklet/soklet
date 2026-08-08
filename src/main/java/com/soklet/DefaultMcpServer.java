@@ -92,7 +92,7 @@ final class DefaultMcpServer implements McpServer {
 	private static final Set<@NonNull String> BOUNDED_METRIC_METHODS = Set.of(
 			"server/discover", "tools/list", "tools/call", "prompts/list",
 			"prompts/get", "resources/list", "resources/templates/list",
-			"resources/read", "notifications/cancelled");
+			"resources/read", "subscriptions/listen", "notifications/cancelled");
 	@NonNull
 	private final Object lifecycleLock;
 	private final int maximumCursorSizeInBytes;
@@ -212,7 +212,11 @@ final class DefaultMcpServer implements McpServer {
 				Optional.ofNullable(requestHandlerExecutorServiceSupplier),
 				this::safelyLogStartupDiagnostic,
 				this::safelyLogUnexpectedTermination,
-				this::didStartRequestObservation, requestStateProtectionPlan);
+				this::didStartRequestObservation, requestStateProtectionPlan,
+				this.streamQueueCapacity, this.writeTimeout,
+				this.keepAliveInterval, this.shutdownTimeout,
+				this.maximumSubscriptionsPerPrincipal,
+				this.maximumSubscriptionDuration);
 	}
 
 	@NonNull
@@ -365,7 +369,8 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	@Override
-	public boolean isStarted() {
+	@NonNull
+	public Boolean isStarted() {
 		synchronized (this.lifecycleLock) {
 			return this.runtimeBridge.getRuntimeState().started();
 		}
@@ -420,7 +425,8 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	@Override
-	public int getMaximumCursorSizeInBytes() {
+	@NonNull
+	public Integer getMaximumCursorSizeInBytes() {
 		return this.maximumCursorSizeInBytes;
 	}
 
@@ -1357,6 +1363,48 @@ final class DefaultMcpServer implements McpServer {
 							.build(), null);
 				}
 			}
+
+			@Override
+			public void didOpenRequestStream() {
+				safelyRecordMcpMetrics(collector, observer,
+						new McpMetricsEvent.RequestStreamOpened(
+								input.endpoint().getPath(),
+								metricMethod(input.jsonRpcMethod())), context);
+			}
+
+			@Override
+			public void didCloseRequestStream(
+					@NonNull McpStreamTerminationReason reason,
+					@NonNull Duration duration) {
+				safelyRecordMcpMetrics(collector, observer,
+						new McpMetricsEvent.RequestStreamClosed(
+								input.endpoint().getPath(),
+								metricMethod(input.jsonRpcMethod()), reason,
+								duration), context);
+			}
+
+			@Override
+			public void didOpenSubscription() {
+				safelyRecordMcpMetrics(collector, observer,
+						new McpMetricsEvent.SubscriptionOpened(
+								input.endpoint().getPath()), context);
+			}
+
+			@Override
+			public void didCloseSubscription(
+					@NonNull McpStreamTerminationReason reason,
+					@NonNull Duration duration) {
+				safelyRecordMcpMetrics(collector, observer,
+						new McpMetricsEvent.SubscriptionClosed(
+								input.endpoint().getPath(), reason, duration),
+						context);
+			}
+
+			@Override
+			public void didEmitKeepAlive() {
+				safelyRecordMcpMetrics(collector, observer,
+						new McpMetricsEvent.KeepAliveEmitted(), context);
+			}
 		};
 	}
 
@@ -1490,7 +1538,9 @@ final class DefaultMcpAdmissionContext implements McpAdmissionContext {
 		return this.input.endpointPathParameters();
 	}
 	@Override public @NonNull String getJsonRpcMethod() { return this.input.jsonRpcMethod(); }
-	@Override public boolean isNotification() { return this.input.notification(); }
+	@Override public @NonNull Boolean isNotification() {
+		return this.input.notification();
+	}
 	@Override public @NonNull Optional<@NonNull McpRequestId> getRequestId() {
 		return this.input.requestId();
 	}

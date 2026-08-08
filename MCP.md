@@ -7,11 +7,12 @@ the zero-runtime-dependency `com.soklet:soklet` artifact; there is no separate
 `soklet-mcp` component.
 
 This guide describes the implemented, locally frozen Phase 4 surface plus the
-live Phase 5 multi-round-trip request-state and progress/cancelation slices in the current
-`3.6.0-SNAPSHOT`. It is development documentation, not a release or final
-conformance claim. Compile-checked programmatic and annotation-driven
-applications live outside this source repository in the project-root
-`mcp/examples/phase-4` workspace.
+live Phase 5 multi-round-trip request-state, progress/cancelation, resource-
+subscription, deterministic termination, cross-instance state, and residual-
+shutdown slices in the current `3.6.0-SNAPSHOT`. It is development
+documentation, not a release or final conformance claim. Compile-checked
+programmatic and annotation-driven applications live outside this source
+repository in the project-root `mcp/examples/phase-4` workspace.
 
 ## Current support
 
@@ -24,13 +25,14 @@ applications live outside this source repository in the project-root
 | Resources | Exact URIs, bounded RFC 6570 Level 1 URI templates, reads, static catalogs, and application-owned custom listing/pagination |
 | Multi-round-trip | Declared `input_required` results and retries for tools, prompt gets, and resource reads; application- or framework-protected request state |
 | Invocation control | Request-scoped progress over the MCP response stream plus cooperative cancelation for every application handler |
+| Subscriptions | Long-lived `subscriptions/listen` streams for resource-list changes and updates to requested resource URIs; application-owned local or distributed broadcast publishing |
 | Policy | Host and Origin checks, application admission, optional request limiting, mandatory fallback tool limiting for tool-bearing servers, bounded execution, and shared Soklet observation hosts |
 | Schema | Closed, Java-first Soklet MCP Tool Schema Profile 1; no public hand-authored schema registration |
 
-Resource-subscription delivery, operational trace correlation, comprehensive
-MCP telemetry, and MCP simulation are not implemented yet. Public descriptors
-already reserved for that remaining Phase 5/6 work are behaviorally neutral
-and do not cause Soklet to advertise those capabilities.
+Operational trace correlation, comprehensive MCP telemetry, and MCP simulation
+are not implemented yet. Public descriptors already reserved for that
+remaining Phase 6 work are behaviorally neutral and do not cause Soklet to
+advertise those capabilities.
 
 ## Server and request model
 
@@ -49,8 +51,17 @@ specific context.
 One server may host multiple `McpEndpoint` instances. Endpoint selection uses
 the normalized exact request path. Tool, prompt, and resource names may repeat
 on different endpoint paths without leaking across them, while handler slots,
-the admitted queue, active JSON-RPC IDs, and the server lifecycle remain
-server-wide.
+the admitted queue, and the server lifecycle remain server-wide.
+
+JSON-RPC requires a sender not to reuse an ID while an earlier request from
+that sender is still in flight. That is a sender obligation, not a receiver-
+side global namespace. Because this protocol is stateless, Soklet cannot
+reliably infer whether two HTTP requests came from one sender; a connection,
+endpoint, admitted identity, or authorization partition is not a protocol
+sender identity. Soklet therefore correlates each response within its own
+request/stream and permits independent concurrent requests to carry the same
+string or integer ID. It does not reserve IDs across the listener or reject a
+request merely because another live request has an equal ID.
 
 Every server must configure:
 
@@ -320,6 +331,16 @@ the request that emitted that particular state. This prior-ID check is not a
 server-side single-use store: an application that needs stronger replay or
 workflow-consumption semantics must enforce them itself.
 
+Built-in framework state can continue on another Soklet instance when both
+instances use the same production protection material and admission resolves
+the retry to the same authorization partition. A matching key ID with
+different bytes is not equivalent. Different material or a different
+partition fails as the same sanitized HTTP 400 / JSON-RPC `-32602` invalid-
+state response before lifecycle observation, interception, or handler entry.
+Development-ephemeral protection is intentionally not portable. A custom
+protector may provide fleet portability, but it must preserve the same binding
+and associated-data contract.
+
 Soklet checks request-state wire shape and size before capability checks or
 admission, but does not cryptographically open structurally valid state until
 after accepted admission and authorization-partition resolution. Consequently
@@ -395,6 +416,13 @@ the dispatch thread where applicable, but Java cannot forcibly stop a
 non-cooperative handler. Such a handler retains its execution slot until it
 actually exits even if the client request has already completed.
 
+The same non-forcible rule applies to application-supplied request-pipeline
+callbacks such as admission, rate limiting, and custom request-state
+protection. Terminal ownership prevents a protector or handler that returns
+late from publishing a result. Framework request/transport state is released
+at the terminal boundary, while the finite application execution remains
+accounted until it actually exits.
+
 One `McpHandlerInterceptor` wraps every application-owned tool call, prompt
 get, resource read, and custom resource list handler. Its continuation is
 synchronous, same-thread, call-lifetime-bound, and one-shot. Framework-owned
@@ -428,8 +456,8 @@ CancelationToken cancelation =
     features.require(CancelationToken.class);
 
 features.find(McpProgressReporter.class).ifPresent(reporter ->
-    reporter.report(McpProgressUpdate.withProgress(50)
-        .total(100)
+    reporter.report(McpProgressUpdate.withProgress(50.0d)
+        .total(100.0d)
         .message("Halfway")
         .build()));
 
@@ -468,6 +496,67 @@ must keep the response uncommitted until the handler chooses a complete or
 invocation even if the request carried a token, and suppressed reports are
 never replayed later. A missing `REQUIRED` capability still fails during
 preflight before the handler runs.
+
+## Resource subscriptions
+
+Soklet implements `subscriptions/listen` as a framework-owned, long-lived POST
+SSE stream on the dedicated MCP listener. Applications enable it per endpoint
+by attaching an `McpSubscriptionConfig` with an application-owned
+`McpSubscriptionEventPublisher` and one or both supported notification types:
+
+```java
+McpSubscriptionEventPublisher publisher =
+    McpLocalSubscriptionEventPublisher.fromDefaults();
+
+McpSubscriptionConfig subscriptions =
+    McpSubscriptionConfig.withEventPublisher(publisher)
+        .notificationType(
+            McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED)
+        .notificationType(
+            McpSubscriptionNotificationType.RESOURCE_UPDATED)
+        .build();
+
+McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
+    // registrations
+    .subscriptions(subscriptions)
+    .build();
+```
+
+The built-in publisher broadcasts synchronously within one process. A custom
+thread-safe implementation may bridge Redis or another distributed system,
+but it must retain broadcast semantics: every attached Soklet listener gets
+the event. Soklet subscribes when its server starts, closes only its listener
+registration when the server stops, and never closes the application-owned
+publisher. Shutdown first fences the old generation's callback, then invokes
+application registration close outside lifecycle locks on bounded daemon
+cleanup workers. A throwing or in-flight close remains residual state and
+blocks restart; calling `stop()` again retries or joins that cleanup without
+overlapping close invocations. Waiting remains bounded by the server's original
+global shutdown timeout. Application code publishes coarse change events with
+`publishResourcesListChanged()` or `publishResourceUpdated(URI)`; Soklet owns
+authorization, requested-filter matching, per-stream coalescing, bounded
+queues, backpressure, and wire serialization.
+
+The listener parses all protocol filter fields but acknowledges and emits only
+the configured resource-list and requested-resource update families. Tool and
+prompt catalogs remain immutable, so their list-change filters are never
+acknowledged or advertised. The acknowledgment is always the first stream
+message. Every subscription message carries the listen request's exact string
+or integer ID as `io.modelcontextprotocol/subscriptionId`. That reuse does not
+make the ID listener-global: independent subscriptions with equal IDs remain
+separate streams and may coexist, including across authorization partitions.
+
+A valid listen request traverses admission and the optional request limiter;
+it does not invoke an application handler, `McpHandlerInterceptor`, a tool
+limiter, or consume an application handler slot. Stream count per admitted
+principal, duration, pending queue size, and write-idle time are bounded.
+Keep-alive comments prevent an otherwise idle writable stream from reaching
+its write-idle timeout; `keepAliveInterval` must therefore be strictly shorter
+than `writeTimeout`, and `McpServer.Builder.build()` rejects an invalid pair.
+A slow or disconnected subscriber is cleaned up without blocking unrelated
+subscribers. Graceful HTTP server shutdown sends only the tagged empty terminal
+`complete` result when writable; Soklet never emits the stdio-only server
+`notifications/cancelled` message on HTTP.
 
 ## HTTP and error policy
 
@@ -563,11 +652,25 @@ not run under MCP runtime or dispatcher locks.
 Accepted progress emissions and cooperative cancelation signals additionally
 produce `McpMetricsEvent.ProgressEmitted` and
 `McpMetricsEvent.CancelationSignaled`, labeled only with the bounded endpoint
-path and JSON-RPC method. The frozen shared-host descriptors also refer to
-provisional metric-snapshot, request-outcome, and stream-termination types.
-Server diagnostics, status, and shutdown-outcome types are Phase 6-owned.
-Comprehensive event storage, connection/stream/subscription instrumentation,
+path and JSON-RPC method. Resource subscriptions additionally produce the
+request-stream open/close, subscription open/close, and keep-alive semantic
+events through the same collector. The frozen shared-host descriptors also
+refer to provisional metric-snapshot, request-outcome, and stream-termination
+types. Server diagnostics, status, and shutdown-outcome types are Phase 6-
+owned. Comprehensive event storage, remaining connection instrumentation,
 simulator integration, and final metric rendering remain Phase 6 work.
+
+`McpServer.stop()` is bounded by the configured shutdown timeout. If an
+application-supplied MCP request-processing execution remains afterward,
+`getStatus()` reports `STOPPED_WITH_RESIDUAL_HANDLERS` and
+`LifecycleObserver.didStopMcpServer(...)` receives `RESIDUAL_HANDLERS` exactly
+once. These are compatibility names: they cover registered handlers and
+request-pipeline callbacks such as admission, rate limiting, and request-state
+protection. Repeated stop and the eventual late exit emit no second outcome.
+Restart fails with `Cannot start MCP server while residual handler executions
+remain` until the execution actually exits, and then succeeds. The outcome
+does not claim that an executor or non-cooperative Java code was forcibly
+terminated; process termination is the only hard stop for such code.
 
 ## Compatibility and unsupported features
 
@@ -587,7 +690,10 @@ every applicable authorization-server and resource-server obligation.
 
 The official MCP conformance suite is pinned and automated as release
 evidence. The earlier frozen Phase 4 candidate passed its then-active reviewed
-profile. A standalone exact pinned `tools-call-with-progress` diagnostic for
+profile. The checked-in final-schema corpus now contains 39 production-derived
+messages, including five-message progress and subscription exchanges; that
+local wire evidence is not an official Phase 5 pass. A standalone exact pinned
+`tools-call-with-progress` diagnostic for
 the current packaged fixture observed ordinary scenario `SUCCESS` once and
 `wire-schema-valid` `SUCCESS` once with five validated messages and no bad
 outcomes. All 16 Phase 5 profiles remain inactive and `null`; this diagnostic

@@ -72,7 +72,7 @@ public class McpResourcePublicRuntimeTests {
 				.title("Static text resource")
 				.description("A deterministic text resource")
 				.mimeType("text/plain")
-				.size(11)
+				.size(11L)
 				.cachePolicy(McpCachePolicy.fromPublicTimeToLive(
 						Duration.ofMillis(50)))
 				.metadata(McpJsonObject.builder().put("kind", "text").build())
@@ -90,7 +90,7 @@ public class McpResourcePublicRuntimeTests {
 							.build());
 				})
 				.mimeType("application/octet-stream")
-				.size(3)
+				.size(3L)
 				.cachePolicy(McpCachePolicy.fromPrivateTimeToLive(
 						Duration.ofMillis(60)))
 				.build();

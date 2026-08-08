@@ -254,6 +254,127 @@ public class McpRequestStatePublicRuntimeTests {
 	}
 
 	@Test
+	public void frameworkProtectedStateContinuesAcrossInstancesOnlyWithinItsKeyAndAuthorizationPartition()
+			throws Exception {
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		AtomicInteger interceptorInvocations = new AtomicInteger();
+		McpInputRequestDeclaration roots = McpInputRequestDeclaration
+				.fromRoots(McpInputRequirement.REQUIRED);
+		McpJsonObject applicationState = McpJsonObject.builder()
+				.put("phase", "awaiting-roots")
+				.put("origin", "server-a")
+				.build();
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName(FRAMEWORK_TOOL)
+				.jsonArguments()
+				.handler((request, call, features) -> {
+					handlerInvocations.incrementAndGet();
+					if (request.getRequestState().isEmpty())
+						return McpInputRequiredResult.builder()
+								.inputRequest("roots", McpInputRequest
+										.fromDeclaration(roots,
+												McpJsonObject.emptyInstance()))
+								.frameworkRequestState(applicationState)
+								.build();
+
+					McpFrameworkRequestState state =
+							Assertions.assertInstanceOf(
+									McpFrameworkRequestState.class,
+									request.getRequestState().orElseThrow());
+					McpJsonObject stateValue = Assertions.assertInstanceOf(
+							McpJsonObject.class, state.value());
+					Assertions.assertEquals("server-a",
+							Assertions.assertInstanceOf(McpJsonString.class,
+									stateValue.find("origin").orElseThrow()).value());
+					return McpCompleteResult.fromToolText(
+							"cross-instance state accepted");
+				})
+				.mayRequestInput(roots)
+				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
+				.build();
+		McpEndpoint endpoint = endpointBuilder("cross-instance-state-runtime-test")
+				.tool(tool)
+				.build();
+		McpProtectionKeyRing sharedKeyRing = productionKeyRing(
+				"fleet-key", "0123456789abcdef0123456789abcdef");
+		McpProtectionKeyRing mismatchedKeyRing = productionKeyRing(
+				"fleet-key", "fedcba9876543210fedcba9876543210");
+		McpRequestAdmissionPolicy sharedPartition =
+				partitionedAdmissionPolicy("tenant-alpha");
+		McpRequestAdmissionPolicy mismatchedPartition =
+				partitionedAdmissionPolicy("tenant-beta");
+		McpHandlerInterceptor interceptor = (context, invocation) -> {
+			interceptorInvocations.incrementAndGet();
+			return invocation.invoke();
+		};
+
+		McpServer emittingServer = stateServer(endpoint, sharedKeyRing,
+				sharedPartition, interceptor);
+		String protectedState;
+		try {
+			emittingServer.start();
+			HttpResponse<String> initial = callTool(boundPort(emittingServer),
+					"fleet-initial", FRAMEWORK_TOOL, "", ROOTS_CAPABILITY);
+			assertSuccess(initial, "fleet-initial");
+			assertContains(initial.body(), "\"resultType\":\"input_required\"");
+			protectedState = extractRequestState(initial.body());
+			Assertions.assertTrue(protectedState.startsWith(
+					"soklet-mcp-request-state-v1."));
+		} finally {
+			emittingServer.stop();
+		}
+		Assertions.assertEquals(1, handlerInvocations.get());
+		Assertions.assertEquals(1, interceptorInvocations.get());
+
+		McpServer acceptingServer = stateServer(endpoint, sharedKeyRing,
+				sharedPartition, interceptor);
+		try {
+			acceptingServer.start();
+			HttpResponse<String> retry = callTool(boundPort(acceptingServer),
+					"fleet-retry", FRAMEWORK_TOOL,
+					",\"requestState\":\"" + protectedState + "\"",
+					ROOTS_CAPABILITY);
+			assertSuccess(retry, "fleet-retry");
+			assertContains(retry.body(), "\"resultType\":\"complete\"");
+			assertContains(retry.body(), "cross-instance state accepted");
+		} finally {
+			acceptingServer.stop();
+		}
+		Assertions.assertEquals(2, handlerInvocations.get());
+		Assertions.assertEquals(2, interceptorInvocations.get());
+
+		McpServer wrongKeyServer = stateServer(endpoint, mismatchedKeyRing,
+				sharedPartition, interceptor);
+		try {
+			wrongKeyServer.start();
+			HttpResponse<String> retry = callTool(boundPort(wrongKeyServer),
+					"wrong-key-retry", FRAMEWORK_TOOL,
+					",\"requestState\":\"" + protectedState + "\"",
+					ROOTS_CAPABILITY);
+			assertError(retry, 400, -32602, "wrong-key-retry");
+		} finally {
+			wrongKeyServer.stop();
+		}
+		Assertions.assertEquals(2, handlerInvocations.get());
+		Assertions.assertEquals(2, interceptorInvocations.get());
+
+		McpServer wrongPartitionServer = stateServer(endpoint, sharedKeyRing,
+				mismatchedPartition, interceptor);
+		try {
+			wrongPartitionServer.start();
+			HttpResponse<String> retry = callTool(boundPort(wrongPartitionServer),
+					"wrong-partition-retry", FRAMEWORK_TOOL,
+					",\"requestState\":\"" + protectedState + "\"",
+					ROOTS_CAPABILITY);
+			assertError(retry, 400, -32602, "wrong-partition-retry");
+		} finally {
+			wrongPartitionServer.stop();
+		}
+		Assertions.assertEquals(2, handlerInvocations.get());
+		Assertions.assertEquals(2, interceptorInvocations.get());
+	}
+
+	@Test
 	public void malformedTamperedAndUnavailableStateHaveFixedPrecedence()
 			throws Exception {
 		RecordingProtector protector = new RecordingProtector();
@@ -421,6 +542,35 @@ public class McpRequestStatePublicRuntimeTests {
 				.allowedHosts(Set.of(LOOPBACK));
 	}
 
+	private static McpServer stateServer(McpEndpoint endpoint,
+			McpProtectionKeyRing keyRing,
+			McpRequestAdmissionPolicy admissionPolicy,
+			McpHandlerInterceptor interceptor) {
+		return serverBuilder(endpoint)
+				.requestAdmissionPolicy(admissionPolicy)
+				.protectionConfig(McpProtectionConfig.withKeyRing(keyRing).build())
+				.handlerInterceptor(interceptor)
+				.build();
+	}
+
+	private static McpProtectionKeyRing productionKeyRing(String keyId,
+			String keyMaterial) {
+		return McpProtectionKeyRing.withActiveKey(
+				McpProtectionKey.fromIdAndBytes(keyId,
+						keyMaterial.getBytes(StandardCharsets.US_ASCII)))
+				.build();
+	}
+
+	private static McpRequestAdmissionPolicy partitionedAdmissionPolicy(
+			String authorizationPartition) {
+		return ignored -> McpAdmissionDecision.fromAcceptedIdentity(
+				McpAdmissionIdentity.withRateLimitPartitionKey(
+						"rate-" + authorizationPartition)
+						.authorizationPartitionKey(authorizationPartition)
+						.principal(authorizationPartition)
+						.build());
+	}
+
 	private static McpToolRegistration<McpJsonObject> noopTool(String name,
 			McpRequestStateMode requestStateMode) {
 		return McpToolRegistration.withName(name)
@@ -491,6 +641,18 @@ public class McpRequestStatePublicRuntimeTests {
 				+ "\"io.modelcontextprotocol/clientCapabilities\":"
 				+ (clientCapabilities.isEmpty() ? "{}" : clientCapabilities) + "}"
 				+ additionalParameters + "}}";
+	}
+
+	private static String extractRequestState(String body) {
+		String marker = "\"requestState\":\"";
+		int start = body.indexOf(marker);
+		Assertions.assertTrue(start >= 0,
+				() -> "Expected a requestState in <" + body + ">.");
+		start += marker.length();
+		int end = body.indexOf('"', start);
+		Assertions.assertTrue(end > start,
+				() -> "Expected a nonempty requestState in <" + body + ">.");
+		return body.substring(start, end);
 	}
 
 	private static void assertSuccess(HttpResponse<String> response,

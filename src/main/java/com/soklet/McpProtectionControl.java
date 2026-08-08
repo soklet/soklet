@@ -106,5 +106,6 @@ public interface McpProtectionControl {
 	 * @throws IllegalStateException if this server has no production key ring
 	 * @throws McpKeyInUseException if the key is still used for sealing
 	 */
-	boolean removeVerificationKey(@NonNull String keyId);
+	@NonNull
+	Boolean removeVerificationKey(@NonNull String keyId);
 }

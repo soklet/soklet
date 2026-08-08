@@ -22,11 +22,23 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -35,6 +47,140 @@ import java.util.concurrent.atomic.AtomicReference;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public class SokletMcpLifecycleTests {
+	@Test
+	@Timeout(30)
+	public void noncooperativeMcpHandlerProducesOneResidualStopOutcomeAndBlocksRestartUntilExit()
+			throws Exception {
+		String host = "127.0.0.1";
+		String path = "/mcp/residual-lifecycle";
+		String toolName = "lifecycle.blocking";
+		Duration shutdownTimeout = Duration.ofMillis(150);
+		CountDownLatch handlerEntered = new CountDownLatch(1);
+		CountDownLatch handlerInterrupted = new CountDownLatch(1);
+		CountDownLatch releaseHandler = new CountDownLatch(1);
+		CountDownLatch handlerExited = new CountDownLatch(1);
+		AtomicInteger willStopMcpCallbacks = new AtomicInteger();
+		List<McpShutdownOutcome> stopOutcomes = new CopyOnWriteArrayList<>();
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName(toolName)
+				.jsonArguments()
+				.handler((request, call, features) -> {
+					handlerEntered.countDown();
+					try {
+						while (releaseHandler.getCount() != 0L) {
+							try {
+								releaseHandler.await(25, TimeUnit.MILLISECONDS);
+							} catch (InterruptedException exception) {
+								handlerInterrupted.countDown();
+								// Model application code that ignores cooperative shutdown.
+							}
+						}
+						return McpCompleteResult.fromToolText("released");
+					} finally {
+						handlerExited.countDown();
+					}
+				})
+				.build();
+		McpEndpoint endpoint = McpEndpoint.withPath(path)
+				.serverInformation(McpImplementation.withNameAndVersion(
+						"residual-lifecycle-test", "3.6.0-SNAPSHOT").build())
+				.tool(tool)
+				.build();
+		McpServer mcpServer = McpServer.withPort(0)
+				.host(host)
+				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
+				.requestAdmissionPolicy(
+						McpRequestAdmissionPolicy.acceptAllInstance())
+				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.allowedHosts(Set.of(host))
+				.requestHandlerConcurrency(1)
+				.requestHandlerQueueCapacity(1)
+				.shutdownTimeout(shutdownTimeout)
+				.build();
+		LifecycleObserver lifecycleObserver = new LifecycleObserver() {
+			@Override
+			public void willStopMcpServer(@NonNull McpServer server) {
+				willStopMcpCallbacks.incrementAndGet();
+			}
+
+			@Override
+			public void didStopMcpServer(@NonNull McpServer server,
+					@NonNull McpShutdownOutcome shutdownOutcome) {
+				stopOutcomes.add(shutdownOutcome);
+			}
+
+			@Override
+			public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+				// Keep expected MCP configuration diagnostics out of test output.
+			}
+		};
+		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(mcpServer)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(lifecycleObserver)
+				.build());
+		CompletableFuture<HttpResponse<String>> request = null;
+
+		try {
+			soklet.start();
+			int port = mcpServer.getDiagnostics().getBoundAddress()
+					.orElseThrow().getPort();
+			request = callTool(host, port, path, toolName);
+			Assertions.assertTrue(handlerEntered.await(5, TimeUnit.SECONDS),
+					"The public MCP handler did not enter.");
+
+			long stopStartedAt = System.nanoTime();
+			soklet.stop();
+			Duration stopDuration = Duration.ofNanos(
+					System.nanoTime() - stopStartedAt);
+
+			Assertions.assertTrue(stopDuration.compareTo(
+					shutdownTimeout.plusSeconds(1)) < 0,
+					() -> "MCP shutdown exceeded its bounded deadline: "
+							+ stopDuration);
+			Assertions.assertTrue(handlerInterrupted.await(5, TimeUnit.SECONDS),
+					"Shutdown did not interrupt the noncooperative handler.");
+			Assertions.assertEquals(McpServerStatus.STOPPED_WITH_RESIDUAL_HANDLERS,
+					mcpServer.getDiagnostics().getStatus());
+			Assertions.assertEquals(List.of(McpShutdownOutcome.RESIDUAL_HANDLERS),
+					stopOutcomes);
+			Assertions.assertEquals(1, willStopMcpCallbacks.get());
+
+			soklet.stop();
+			Assertions.assertEquals(1, willStopMcpCallbacks.get(),
+					"Repeated stop while only a residual handler remains must be a no-op.");
+			Assertions.assertEquals(List.of(McpShutdownOutcome.RESIDUAL_HANDLERS),
+					stopOutcomes);
+
+			IllegalStateException restartFailure = Assertions.assertThrows(
+					IllegalStateException.class, soklet::start);
+			Assertions.assertEquals(
+					"Cannot start MCP server while residual handler executions remain",
+					restartFailure.getMessage());
+
+			releaseHandler.countDown();
+			Assertions.assertTrue(handlerExited.await(5, TimeUnit.SECONDS),
+					"The released MCP handler did not exit.");
+			awaitMcpStatus(mcpServer, McpServerStatus.STOPPED);
+			Assertions.assertEquals(List.of(McpShutdownOutcome.RESIDUAL_HANDLERS),
+					stopOutcomes,
+					"A residual handler's late exit must not emit another stop callback.");
+
+			Assertions.assertDoesNotThrow(soklet::start);
+			Assertions.assertEquals(McpServerStatus.STARTED,
+					mcpServer.getDiagnostics().getStatus());
+		} finally {
+			releaseHandler.countDown();
+			if (request != null)
+				request.cancel(true);
+			soklet.stop();
+		}
+
+		Assertions.assertEquals(1, stopOutcomes.stream()
+				.filter(outcome -> outcome == McpShutdownOutcome.RESIDUAL_HANDLERS)
+				.count());
+	}
+
 	@Test
 	public void mcpOnlySokletDoesNotRequireHttpResourceMethods() {
 		List<String> events = new ArrayList<>();
@@ -348,6 +494,46 @@ public class SokletMcpLifecycleTests {
 				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
 				.requestAdmissionPolicy(McpRequestAdmissionPolicy.acceptAllInstance())
 				.build();
+	}
+
+	@NonNull
+	private static CompletableFuture<HttpResponse<String>> callTool(
+			@NonNull String host, int port, @NonNull String path,
+			@NonNull String toolName) {
+		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"residual-lifecycle\","
+				+ "\"method\":\"tools/call\",\"params\":{\"_meta\":{"
+				+ "\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\","
+				+ "\"io.modelcontextprotocol/clientCapabilities\":{}},"
+				+ "\"name\":\"" + toolName + "\",\"arguments\":{}}}";
+		HttpRequest request = HttpRequest.newBuilder()
+				.uri(URI.create("http://" + host + ":" + port + path))
+				.timeout(Duration.ofSeconds(5))
+				.header("Content-Type", "application/json; charset=UTF-8")
+				.header("Accept", "application/json, text/event-stream")
+				.header("MCP-Protocol-Version", "2026-07-28")
+				.header("Mcp-Method", "tools/call")
+				.header("Mcp-Name", toolName)
+				.POST(HttpRequest.BodyPublishers.ofString(
+						body, StandardCharsets.UTF_8))
+				.build();
+		return HttpClient.newBuilder()
+				.connectTimeout(Duration.ofSeconds(5))
+				.version(HttpClient.Version.HTTP_1_1)
+				.build()
+				.sendAsync(request,
+						HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+	}
+
+	private static void awaitMcpStatus(@NonNull McpServer mcpServer,
+			@NonNull McpServerStatus expectedStatus) throws InterruptedException {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+		while (System.nanoTime() - deadline < 0L) {
+			if (mcpServer.getDiagnostics().getStatus() == expectedStatus)
+				return;
+			Thread.sleep(10);
+		}
+		Assertions.assertEquals(expectedStatus,
+				mcpServer.getDiagnostics().getStatus());
 	}
 
 	public static final class MixedTransportResource {

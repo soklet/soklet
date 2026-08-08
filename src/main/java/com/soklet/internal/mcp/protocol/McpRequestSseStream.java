@@ -97,6 +97,12 @@ final class McpRequestSseStream {
 		return channel.offer(frame(requireNonNull(message)));
 	}
 
+	McpOutboundChannel.@NonNull OfferResult offerCoalescingMessage(
+			@NonNull McpJsonRpcMessage message, @NonNull Object coalescingKey) {
+		return channel.offerCoalescing(frame(requireNonNull(message)),
+				requireNonNull(coalescingKey));
+	}
+
 	boolean completeMessage(@NonNull McpJsonRpcMessage message) {
 		byte[] terminalFrame = frame(requireNonNull(message));
 		testHooks.beforeTerminalReservation();

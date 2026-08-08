@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","method":"notifications/resources/updated","params":{"_meta":{"io.modelcontextprotocol/subscriptionId":"phase-5-subscription"},"uri":"golden://subscriptions/resource"}}

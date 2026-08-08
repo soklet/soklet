@@ -61,7 +61,7 @@ public class McpObservabilityPublicApiTests {
 				"mcpMetrics", McpMetricsSnapshot.class);
 		Method setUnknownMirroredHeaderNameDiagnostics =
 				McpServer.Builder.class.getMethod(
-						"unknownMirroredHeaderNameDiagnostics", boolean.class);
+						"unknownMirroredHeaderNameDiagnostics", Boolean.class);
 
 		Assertions.assertTrue(didStart.isDefault());
 		Assertions.assertTrue(didFinish.isDefault());
@@ -112,6 +112,10 @@ public class McpObservabilityPublicApiTests {
 				setMetrics.getReturnType());
 		Assertions.assertEquals(McpServer.Builder.class,
 				setUnknownMirroredHeaderNameDiagnostics.getReturnType());
+		Assertions.assertEquals(Boolean.class,
+				setUnknownMirroredHeaderNameDiagnostics.getParameterTypes()[0]);
+		Assertions.assertTrue(setUnknownMirroredHeaderNameDiagnostics
+				.getAnnotatedParameterTypes()[0].isAnnotationPresent(NonNull.class));
 	}
 
 	@Test
@@ -218,6 +222,11 @@ public class McpObservabilityPublicApiTests {
 		Set<Class<?>> permittedTypes = Set.copyOf(Arrays.asList(
 				McpMetricsEvent.class.getPermittedSubclasses()));
 		Assertions.assertEquals(permittedTypes, constructedTypes);
+		Assertions.assertEquals(Integer.class,
+				McpMetricsEvent.ProtocolError.class.getRecordComponents()[0]
+						.getType());
+		Assertions.assertThrows(NullPointerException.class,
+				() -> new McpMetricsEvent.ProtocolError(null));
 
 		McpMetricsEvent.RequestFinished finished =
 				(McpMetricsEvent.RequestFinished) events.get(6);

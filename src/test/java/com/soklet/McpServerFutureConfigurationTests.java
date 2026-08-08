@@ -41,8 +41,8 @@ class McpServerFutureConfigurationTests {
 		DefaultMcpServer defaults = (DefaultMcpServer) serverBuilder().build();
 		DefaultMcpServer configured = (DefaultMcpServer) serverBuilder()
 				.streamQueueCapacity(7)
-				.writeTimeout(Duration.ofSeconds(8))
-				.keepAliveInterval(Duration.ofSeconds(9))
+				.writeTimeout(Duration.ofSeconds(9))
+				.keepAliveInterval(Duration.ofSeconds(8))
 				.shutdownTimeout(Duration.ofSeconds(10))
 				.maximumSubscriptionsPerPrincipal(11)
 				.maximumSubscriptionDuration(Duration.ofSeconds(12))
@@ -59,8 +59,8 @@ class McpServerFutureConfigurationTests {
 		assertFalse(defaults.logRawValidatedTraceIds());
 
 		assertEquals(7, configured.streamQueueCapacity());
-		assertEquals(Duration.ofSeconds(8), configured.writeTimeout());
-		assertEquals(Duration.ofSeconds(9), configured.keepAliveInterval());
+		assertEquals(Duration.ofSeconds(9), configured.writeTimeout());
+		assertEquals(Duration.ofSeconds(8), configured.keepAliveInterval());
 		assertEquals(Duration.ofSeconds(10), configured.shutdownTimeout());
 		assertEquals(11, configured.maximumSubscriptionsPerPrincipal());
 		assertEquals(Duration.ofSeconds(12),
@@ -73,6 +73,8 @@ class McpServerFutureConfigurationTests {
 	void operationalControlsRejectNonpositiveAndUnrepresentableValues() {
 		McpServer.Builder builder = McpServer.withPort(0);
 
+		assertThrows(NullPointerException.class,
+				() -> builder.streamQueueCapacity(null));
 		assertThrows(IllegalArgumentException.class,
 				() -> builder.streamQueueCapacity(0));
 		assertThrows(IllegalArgumentException.class,
@@ -81,6 +83,10 @@ class McpServerFutureConfigurationTests {
 				() -> builder.maximumSubscriptionsPerPrincipal(0));
 		assertThrows(IllegalArgumentException.class,
 				() -> builder.maximumSubscriptionsPerPrincipal(-1));
+		assertThrows(NullPointerException.class,
+				() -> builder.maximumSubscriptionsPerPrincipal(null));
+		assertThrows(NullPointerException.class,
+				() -> builder.logRawValidatedTraceIds(null));
 
 		for (DurationSetter setter : List.<DurationSetter>of(
 				McpServer.Builder::writeTimeout,
@@ -97,6 +103,15 @@ class McpServerFutureConfigurationTests {
 					() -> setter.set(builder,
 							Duration.ofSeconds(Long.MAX_VALUE)));
 		}
+
+		assertThrows(IllegalStateException.class, () -> serverBuilder()
+				.writeTimeout(Duration.ofSeconds(8))
+				.keepAliveInterval(Duration.ofSeconds(8))
+				.build());
+		assertThrows(IllegalStateException.class, () -> serverBuilder()
+				.writeTimeout(Duration.ofSeconds(8))
+				.keepAliveInterval(Duration.ofSeconds(9))
+				.build());
 	}
 
 	@Test

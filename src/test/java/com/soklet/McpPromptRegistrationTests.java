@@ -140,6 +140,9 @@ class McpPromptRegistrationTests {
 				() -> McpPromptRegistration.withName(" "));
 		assertThrows(IllegalArgumentException.class,
 				() -> McpPromptArgumentDefinition.withName(""));
+		assertThrows(NullPointerException.class,
+				() -> McpPromptArgumentDefinition.withName("argument")
+						.required(null));
 
 		McpPromptArgumentDefinition duplicate =
 				McpPromptArgumentDefinition.withName("same").build();

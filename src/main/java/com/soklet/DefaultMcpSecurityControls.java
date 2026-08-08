@@ -297,7 +297,8 @@ final class DefaultMcpSecurityControls
 	}
 
 	@Override
-	public boolean removeVerificationKey(@NonNull String keyId) {
+	@NonNull
+	public Boolean removeVerificationKey(@NonNull String keyId) {
 		requireNonNull(keyId);
 		synchronized (this.lock) {
 			requireProductionRing();
@@ -460,7 +461,8 @@ final class DefaultMcpSecurityControls
 	}
 
 	@Override
-	public boolean isEnabled() {
+	@NonNull
+	public Boolean isEnabled() {
 		synchronized (this.lock) {
 			return this.activeTraceCorrelationKey != null;
 		}

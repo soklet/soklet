@@ -29,8 +29,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Queue;
+import java.util.Set;
 import java.util.function.LongSupplier;
 
 import static java.lang.String.format;
@@ -83,6 +85,8 @@ public final class McpOutboundChannel {
 	@NonNull
 	private final Queue<@NonNull Chunk> chunks;
 	@NonNull
+	private final Set<@NonNull Object> pendingCoalescingKeys;
+	@NonNull
 	private Runnable writeReadyCallback;
 	private @Nullable Chunk currentChunk;
 	private @Nullable Chunk terminalChunk;
@@ -119,6 +123,7 @@ public final class McpOutboundChannel {
 		this.nanoTimeSupplier = requireNonNull(nanoTimeSupplier);
 		this.listener = requireNonNull(listener);
 		this.chunks = new ArrayDeque<>(frameCapacity);
+		this.pendingCoalescingKeys = new HashSet<>(frameCapacity);
 		this.writeReadyCallback = McpOutboundChannel::noOp;
 	}
 
@@ -148,7 +153,7 @@ public final class McpOutboundChannel {
 			if (closed || failure != null || terminalReserved)
 				throw new InterruptedException("The MCP response stream is closed.");
 
-			addRegularChunk(ownedPayload);
+			addRegularChunk(ownedPayload, null);
 			wake = reserveWakeIfNeeded();
 		}
 
@@ -157,6 +162,26 @@ public final class McpOutboundChannel {
 
 	@NonNull
 	public OfferResult offer(byte @NonNull [] payload) {
+		return offer(payload, null);
+	}
+
+	/**
+	 * Offers a regular frame while suppressing another frame with the same key
+	 * until the pending or in-flight frame has been fully written.
+	 *
+	 * @param payload frame payload
+	 * @param coalescingKey semantic duplicate key
+	 * @return {@link OfferResult#ACCEPTED} when queued or already represented
+	 */
+	@NonNull
+	public OfferResult offerCoalescing(byte @NonNull [] payload,
+			@NonNull Object coalescingKey) {
+		return offer(payload, requireNonNull(coalescingKey));
+	}
+
+	@NonNull
+	private OfferResult offer(byte @NonNull [] payload,
+			@Nullable Object coalescingKey) {
 		requireNonNull(payload);
 
 		if (payload.length == 0)
@@ -169,13 +194,17 @@ public final class McpOutboundChannel {
 			if (closed || failure != null || terminalReserved)
 				return OfferResult.CLOSED;
 
+			if (coalescingKey != null
+					&& pendingCoalescingKeys.contains(coalescingKey))
+				return OfferResult.ACCEPTED;
+
 			if (ownedPayload.length > byteCapacity)
 				return OfferResult.TOO_LARGE;
 
 			if (!hasRegularCapacity(ownedPayload.length))
 				return OfferResult.FULL;
 
-			addRegularChunk(ownedPayload);
+			addRegularChunk(ownedPayload, coalescingKey);
 			wake = reserveWakeIfNeeded();
 		}
 
@@ -391,6 +420,8 @@ public final class McpOutboundChannel {
 					if (chunk.regularPayloadBytes > 0) {
 						bufferedFrames--;
 						bufferedBytes -= chunk.regularPayloadBytes;
+						if (chunk.coalescingKey != null)
+							pendingCoalescingKeys.remove(chunk.coalescingKey);
 						lock.notifyAll();
 					}
 
@@ -506,8 +537,11 @@ public final class McpOutboundChannel {
 		return bufferedFrames < frameCapacity && bufferedBytes <= byteCapacity - payloadBytes;
 	}
 
-	private void addRegularChunk(byte @NonNull [] payload) {
-		chunks.add(Chunk.payload(payload));
+	private void addRegularChunk(byte @NonNull [] payload,
+			@Nullable Object coalescingKey) {
+		chunks.add(Chunk.payload(payload, coalescingKey));
+		if (coalescingKey != null)
+			pendingCoalescingKeys.add(coalescingKey);
 		bufferedFrames++;
 		bufferedBytes += payload.length;
 		maximumObservedBufferedFrames = Math.max(maximumObservedBufferedFrames, bufferedFrames);
@@ -558,6 +592,7 @@ public final class McpOutboundChannel {
 
 	private void clearBufferedData() {
 		chunks.clear();
+		pendingCoalescingKeys.clear();
 		currentChunk = null;
 		terminalChunk = null;
 		bufferedFrames = 0;
@@ -579,25 +614,30 @@ public final class McpOutboundChannel {
 		private final List<@NonNull ByteBuffer> buffers;
 		private final int regularPayloadBytes;
 		private final boolean terminal;
+		private final @Nullable Object coalescingKey;
 		private int bufferIndex;
 
 		private Chunk(@NonNull List<@NonNull ByteBuffer> buffers,
-				int regularPayloadBytes, boolean terminal) {
+				int regularPayloadBytes, boolean terminal,
+				@Nullable Object coalescingKey) {
 			this.buffers = requireNonNull(buffers);
 			this.regularPayloadBytes = regularPayloadBytes;
 			this.terminal = terminal;
+			this.coalescingKey = coalescingKey;
 		}
 
 		@NonNull
-		private static Chunk payload(byte @NonNull [] payload) {
-			return new Chunk(framedPayload(payload), payload.length, false);
+		private static Chunk payload(byte @NonNull [] payload,
+				@Nullable Object coalescingKey) {
+			return new Chunk(framedPayload(payload), payload.length, false,
+					coalescingKey);
 		}
 
 		@NonNull
 		private static Chunk terminal(byte @NonNull [] payload) {
 			List<@NonNull ByteBuffer> buffers = framedPayload(payload);
 			buffers.add(ByteBuffer.wrap(TERMINAL_CHUNK));
-			return new Chunk(buffers, 0, true);
+			return new Chunk(buffers, 0, true, null);
 		}
 
 		@NonNull

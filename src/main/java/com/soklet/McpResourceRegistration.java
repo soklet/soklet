@@ -413,10 +413,12 @@ public final class McpResourceRegistration {
 		 *
 		 * @param size nonnegative byte count
 		 * @return this builder
+		 * @throws NullPointerException if {@code size} is null
 		 * @throws IllegalArgumentException if {@code size} is negative
 		 */
 		@NonNull
-		public ExactBuilder size(long size) {
+		public ExactBuilder size(@NonNull Long size) {
+			requireNonNull(size);
 			if (size < 0)
 				throw new IllegalArgumentException(
 						"MCP resource sizes must not be negative.");

@@ -241,7 +241,7 @@ public class McpHttpServerRuntimeTests {
 			McpApplicationExecutionSnapshot snapshot = awaitApplicationSnapshot(runtime,
 					value -> value.activeHandlerSlots() == 0
 							&& value.queuedRequests() == 0
-							&& value.activeRequestIds() == 0);
+							&& value.activeIdentifiedRequestExchanges() == 0);
 			Assertions.assertEquals(1, snapshot.maximumObservedActiveHandlerSlots());
 			Assertions.assertEquals(1, snapshot.maximumObservedQueuedRequests());
 			Assertions.assertEquals(1, snapshot.capacityRejections());
@@ -253,51 +253,71 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	@Test
-	public void active_request_ids_are_server_wide_across_endpoint_paths()
+	public void concurrent_same_string_id_completes_independently_across_anonymous_endpoint_paths()
 			throws Exception {
 		CountDownLatch alphaEntered = new CountDownLatch(1);
+		CountDownLatch betaEntered = new CountDownLatch(1);
 		CountDownLatch releaseAlpha = new CountDownLatch(1);
-		AtomicInteger betaInvocations = new AtomicInteger();
+		CountDownLatch releaseBeta = new CountDownLatch(1);
 		McpHttpEndpointBinding alpha = endpointBinding("/alpha", "alpha", invocation -> {
 			alphaEntered.countDown();
 			releaseAlpha.await();
 			return completeResult("alpha");
 		});
 		McpHttpEndpointBinding beta = endpointBinding("/beta", "beta", ignored -> {
-			betaInvocations.incrementAndGet();
+			betaEntered.countDown();
+			releaseBeta.await();
 			return completeResult("beta");
 		});
 		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
-				configuration(0), List.of(alpha, beta));
-		ExecutorService client = Executors.newSingleThreadExecutor();
+				configuration(0), List.of(alpha, beta),
+				McpJsonLimits.productionDefaults(),
+				new McpApplicationExecutionConfiguration(
+						2, 2, Duration.ofSeconds(15), Duration.ofMillis(10)),
+				McpApplicationClock.SYSTEM,
+				McpApplicationHandlerExecutorFactory.production(),
+				ignored -> {}, ignored -> {});
+		ExecutorService clients = Executors.newFixedThreadPool(2);
 
 		try {
 			int port = runtime.start().getPort();
-			Future<RawResponse> active = client.submit(
+			Future<RawResponse> alphaResponse = clients.submit(
 					() -> request(port, "/alpha", "shared-id", "example/echo"));
+			Future<RawResponse> betaResponse = clients.submit(
+					() -> request(port, "/beta", "shared-id", "example/echo"));
 			Assertions.assertTrue(alphaEntered.await(5, TimeUnit.SECONDS),
 					"The alpha handler did not enter.");
+			Assertions.assertTrue(betaEntered.await(5, TimeUnit.SECONDS),
+					"The beta handler did not enter.");
+			awaitApplicationSnapshot(runtime,
+					snapshot -> snapshot.activeIdentifiedRequestExchanges() == 2);
 
-			RawResponse duplicate = request(
-					port, "/beta", "shared-id", "example/echo");
-			Assertions.assertEquals(400, duplicate.status(), duplicate.bodyText());
-			Assertions.assertTrue(duplicate.bodyText().contains("\"code\":-32600"),
-					duplicate.bodyText());
-			Assertions.assertTrue(duplicate.bodyText().contains(
-					"\"id\":\"shared-id\""), duplicate.bodyText());
-			Assertions.assertEquals(0, betaInvocations.get());
-			Assertions.assertEquals(1, runtime.applicationExecutionSnapshot()
-					.orElseThrow().duplicateIdRejections());
+			releaseBeta.countDown();
+			RawResponse completedBeta = betaResponse.get(5, TimeUnit.SECONDS);
+			Assertions.assertEquals(200, completedBeta.status(),
+					completedBeta.bodyText());
+			Assertions.assertTrue(completedBeta.bodyText().contains(
+					"\"id\":\"shared-id\""), completedBeta.bodyText());
+			Assertions.assertTrue(completedBeta.bodyText().contains(
+					"\"value\":\"beta\""), completedBeta.bodyText());
+			awaitApplicationSnapshot(runtime,
+					snapshot -> snapshot.activeIdentifiedRequestExchanges() == 1);
 
 			releaseAlpha.countDown();
-			Assertions.assertTrue(active.get(5, TimeUnit.SECONDS).bodyText()
-					.contains("\"value\":\"alpha\""));
+			RawResponse completedAlpha = alphaResponse.get(5, TimeUnit.SECONDS);
+			Assertions.assertEquals(200, completedAlpha.status(),
+					completedAlpha.bodyText());
+			Assertions.assertTrue(completedAlpha.bodyText().contains(
+					"\"id\":\"shared-id\""), completedAlpha.bodyText());
+			Assertions.assertTrue(completedAlpha.bodyText().contains(
+					"\"value\":\"alpha\""), completedAlpha.bodyText());
 			awaitApplicationSnapshot(runtime, snapshot ->
-					snapshot.activeRequestIds() == 0);
+					snapshot.activeIdentifiedRequestExchanges() == 0);
 		} finally {
 			releaseAlpha.countDown();
+			releaseBeta.countDown();
 			runtime.close();
-			client.shutdownNow();
+			clients.shutdownNow();
 		}
 	}
 
@@ -544,7 +564,8 @@ public class McpHttpServerRuntimeTests {
 			McpRequestExecutionSnapshot snapshot = runtime.requestExecutionSnapshot();
 			Assertions.assertEquals(0, snapshot.retainedRequestControls());
 			Assertions.assertEquals(0, snapshot.queuedProtocolRequests());
-			Assertions.assertEquals(0, snapshot.activeRequestIds());
+			Assertions.assertEquals(0,
+					snapshot.activeIdentifiedRequestExchanges());
 
 			int restartedPort = runtime.start().getPort();
 			Assertions.assertEquals(200, discover(restartedPort, "\"after-late-submit\"").status());

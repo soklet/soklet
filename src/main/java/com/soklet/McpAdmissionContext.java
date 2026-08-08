@@ -42,7 +42,7 @@ public interface McpAdmissionContext {
 	@NonNull String getJsonRpcMethod();
 
 	/** @return whether the message is a JSON-RPC notification */
-	boolean isNotification();
+	@NonNull Boolean isNotification();
 
 	/** @return the request ID, empty for a notification */
 	@NonNull Optional<@NonNull McpRequestId> getRequestId();

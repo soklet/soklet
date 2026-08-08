@@ -69,7 +69,11 @@ public interface McpSubscriptionEventPublisher {
 	/**
 	 * Broadcasts a resource-updated event.
 	 *
-	 * @param resourceUri changed resource URI
+	 * @param resourceUri absolute normalized changed-resource URI in ASCII wire
+	 *                    form
+	 * @throws NullPointerException if {@code resourceUri} is null
+	 * @throws IllegalArgumentException if the URI is relative, not normalized,
+	 *                                  or not in ASCII wire form
 	 */
 	default void publishResourceUpdated(@NonNull URI resourceUri) {
 		publish(McpSubscriptionEvent.resourceUpdated(

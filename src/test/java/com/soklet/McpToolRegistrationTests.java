@@ -182,6 +182,17 @@ class McpToolRegistrationTests {
 										call.getArguments()))
 						.build();
 		McpJsonObject input = argumentsJson();
+		assertThrows(NullPointerException.class, () -> McpToolRegistration
+				.withName("advanced-null-mirror")
+				.argumentType(Arguments.class)
+				.handler((request, call, features) ->
+						McpCompleteResult.fromToolText("done"))
+				.mirrorStructuredContentAsText(null));
+		assertThrows(NullPointerException.class, () -> McpToolRegistration
+				.withName("typed-null-mirror")
+				.types(Arguments.class, Result.class)
+				.handler((request, call, features) -> new Result(List.of()))
+				.mirrorStructuredContentAsText(null));
 
 		McpCompleteResult advancedResult =
 				assertInstanceOf(McpCompleteResult.class,

@@ -195,7 +195,8 @@ public class McpHttpServerConnectionContractTests {
 					"127.0.0.1:" + port, "localhost:" + port,
 					"127.0.0.1:" + port), hosts);
 			Assertions.assertEquals(0,
-					runtime.requestExecutionSnapshot().activeRequestIds());
+					runtime.requestExecutionSnapshot()
+							.activeIdentifiedRequestExchanges());
 		} finally {
 			runtime.close();
 		}

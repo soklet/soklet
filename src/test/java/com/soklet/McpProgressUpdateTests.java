@@ -30,7 +30,7 @@ public class McpProgressUpdateTests {
 	@Test
 	public void builds_minimal_and_complete_updates() {
 		McpProgressUpdate minimal = McpProgressUpdate.withProgress(2.5d).build();
-		Assertions.assertEquals(2.5d, minimal.getProgress());
+		Assertions.assertEquals(Double.valueOf(2.5d), minimal.getProgress());
 		Assertions.assertEquals(Optional.empty(), minimal.getTotal());
 		Assertions.assertEquals(Optional.empty(), minimal.getMessage());
 
@@ -38,13 +38,13 @@ public class McpProgressUpdateTests {
 				.total(10.5d)
 				.message("Working")
 				.build();
-		Assertions.assertEquals(7.25d, complete.getProgress());
+		Assertions.assertEquals(Double.valueOf(7.25d), complete.getProgress());
 		Assertions.assertEquals(Optional.of(10.5d), complete.getTotal());
 		Assertions.assertEquals(Optional.of("Working"), complete.getMessage());
 	}
 
 	@Test
-	public void rejects_nonfinite_numbers_and_null_messages() {
+	public void rejects_nonfinite_numbers_and_null_references() {
 		for (double value : new double[]{
 				Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY}) {
 			Assertions.assertThrows(IllegalArgumentException.class,
@@ -54,7 +54,23 @@ public class McpProgressUpdateTests {
 		}
 
 		Assertions.assertThrows(NullPointerException.class,
+				() -> McpProgressUpdate.withProgress(null));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpProgressUpdate.withProgress(1.0d).total(null));
+		Assertions.assertThrows(NullPointerException.class,
 				() -> McpProgressUpdate.withProgress(1.0d).message(null));
+	}
+
+	@Test
+	public void scalar_public_surface_uses_reference_types() throws Exception {
+		Assertions.assertEquals(McpProgressUpdate.Builder.class,
+				McpProgressUpdate.class.getMethod("withProgress", Double.class)
+						.getReturnType());
+		Assertions.assertEquals(Double.class,
+				McpProgressUpdate.class.getMethod("getProgress").getReturnType());
+		Assertions.assertEquals(McpProgressUpdate.Builder.class,
+				McpProgressUpdate.Builder.class.getMethod("total", Double.class)
+						.getReturnType());
 	}
 
 	@Test

@@ -19,6 +19,7 @@ package com.soklet.internal.mcp.protocol;
 import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
@@ -31,12 +32,22 @@ import static java.util.Objects.requireNonNull;
 record McpHttpEndpointBinding(@NonNull McpHttpEndpointPolicy endpointPolicy,
 		@NonNull McpNormalizedEndpoint endpoint,
 		@NonNull McpApplicationRequestRouter applicationRouter,
-		@NonNull McpRuntimeObservationSink observationSink) {
+		@NonNull McpRuntimeObservationSink observationSink,
+		@NonNull Optional<@NonNull McpSubscriptionEventSource>
+				subscriptionEventSource) {
 	McpHttpEndpointBinding(@NonNull McpHttpEndpointPolicy endpointPolicy,
 			@NonNull McpNormalizedEndpoint endpoint,
 			@NonNull McpApplicationRequestRouter applicationRouter) {
 		this(endpointPolicy, endpoint, applicationRouter,
-				McpRuntimeObservationSink.disabledInstance());
+				McpRuntimeObservationSink.disabledInstance(), Optional.empty());
+	}
+
+	McpHttpEndpointBinding(@NonNull McpHttpEndpointPolicy endpointPolicy,
+			@NonNull McpNormalizedEndpoint endpoint,
+			@NonNull McpApplicationRequestRouter applicationRouter,
+			@NonNull McpRuntimeObservationSink observationSink) {
+		this(endpointPolicy, endpoint, applicationRouter, observationSink,
+				Optional.empty());
 	}
 
 	McpHttpEndpointBinding {
@@ -44,5 +55,9 @@ record McpHttpEndpointBinding(@NonNull McpHttpEndpointPolicy endpointPolicy,
 		requireNonNull(endpoint);
 		requireNonNull(applicationRouter);
 		requireNonNull(observationSink);
+		requireNonNull(subscriptionEventSource);
+		if (subscriptionEventSource.isPresent() != endpoint.subscriptions().isPresent())
+			throw new IllegalArgumentException(
+					"An MCP subscription source and normalized configuration must be present together.");
 	}
 }

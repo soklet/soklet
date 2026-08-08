@@ -20,6 +20,7 @@ import com.soklet.McpRequestContext;
 import com.soklet.McpRequestOutcome;
 import com.soklet.McpRequestState;
 import com.soklet.Request;
+import com.soklet.StreamTerminationReason;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -65,6 +66,27 @@ interface McpRuntimeRequestObservation {
 	void didFinish(@NonNull McpRequestOutcome outcome,
 			@Nullable McpJsonRpcError error, @NonNull Duration duration,
 			@NonNull List<@NonNull Throwable> throwables);
+
+	default void didOpenRequestStream() {
+	}
+
+	default void didCloseRequestStream(@NonNull StreamTerminationReason reason,
+			@NonNull Duration duration) {
+		requireNonNull(reason);
+		requireNonNull(duration);
+	}
+
+	default void didOpenSubscription() {
+	}
+
+	default void didCloseSubscription(@NonNull StreamTerminationReason reason,
+			@NonNull Duration duration) {
+		requireNonNull(reason);
+		requireNonNull(duration);
+	}
+
+	default void didEmitKeepAlive() {
+	}
 
 	@NonNull
 	static McpRuntimeRequestObservation disabledInstance() {

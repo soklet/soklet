@@ -79,7 +79,7 @@ public class McpHttpServerApplicationExecutionTests {
 			Assertions.assertEquals(2, invocations.get());
 			awaitSnapshot(runtime, snapshot -> snapshot.activeHandlerSlots() == 0
 					&& snapshot.queuedRequests() == 0
-					&& snapshot.activeRequestIds() == 0
+					&& snapshot.activeIdentifiedRequestExchanges() == 0
 					&& snapshot.retainedExchanges() == 0);
 		} finally {
 			runtime.close();
@@ -87,7 +87,7 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	@Test
-	public void active_request_ids_are_shared_by_application_and_framework_methods()
+	public void same_id_application_and_framework_requests_complete_independently()
 			throws Exception {
 		CountDownLatch applicationEntered = new CountDownLatch(1);
 		CountDownLatch releaseApplication = new CountDownLatch(1);
@@ -106,35 +106,159 @@ public class McpHttpServerApplicationExecutionTests {
 					() -> send(port, "\"shared-id\"", APPLICATION_METHOD));
 			Assertions.assertTrue(applicationEntered.await(5, TimeUnit.SECONDS),
 					"The application request did not enter.");
-			awaitSnapshot(runtime, snapshot -> snapshot.activeRequestIds() == 1);
+			awaitSnapshot(runtime,
+					snapshot -> snapshot.activeIdentifiedRequestExchanges() == 1);
 
-			RawResponse duplicateDiscovery = send(
+			RawResponse discovery = send(
 					port, "\"shared-id\"", "server/discover");
-			Assertions.assertEquals(400, duplicateDiscovery.status(),
-					duplicateDiscovery.bodyText());
-			Assertions.assertTrue(duplicateDiscovery.bodyText().contains("\"code\":-32600"),
-					duplicateDiscovery.bodyText());
-			Assertions.assertTrue(duplicateDiscovery.bodyText().contains(
-					"\"id\":\"shared-id\""), duplicateDiscovery.bodyText());
-			McpApplicationExecutionSnapshot collision =
-					runtime.applicationExecutionSnapshot().orElseThrow();
-			Assertions.assertEquals(1, collision.activeRequestIds());
-			Assertions.assertEquals(1, collision.duplicateIdRejections());
+			Assertions.assertEquals(200, discovery.status(), discovery.bodyText());
+			Assertions.assertTrue(discovery.bodyText().contains(
+					"\"id\":\"shared-id\""), discovery.bodyText());
+			Assertions.assertTrue(discovery.bodyText().contains(
+					"\"supportedVersions\":[\"" + PROTOCOL_VERSION + "\"]"),
+					discovery.bodyText());
+			Assertions.assertEquals(1, runtime.applicationExecutionSnapshot()
+					.orElseThrow().activeIdentifiedRequestExchanges(),
+					"Completing the framework request must not release the application peer.");
 
 			releaseApplication.countDown();
 			assertSuccessfulResult(application.get(5, TimeUnit.SECONDS),
 					"\"shared-id\"", "application-complete");
-			awaitSnapshot(runtime, snapshot -> snapshot.activeRequestIds() == 0
+			awaitSnapshot(runtime,
+					snapshot -> snapshot.activeIdentifiedRequestExchanges() == 0
 					&& snapshot.retainedExchanges() == 0);
 
-			RawResponse discoveryAfterRelease = send(
-					port, "\"shared-id\"", "server/discover");
-			Assertions.assertEquals(200, discoveryAfterRelease.status(),
-					discoveryAfterRelease.bodyText());
 		} finally {
 			releaseApplication.countDown();
 			runtime.close();
 			shutdown(client);
+		}
+	}
+
+	@Test
+	public void concurrent_same_integer_id_requests_complete_independently_and_diagnostics_count_exchanges()
+			throws Exception {
+		CountDownLatch bothEntered = new CountDownLatch(2);
+		CountDownLatch releaseFirst = new CountDownLatch(1);
+		CountDownLatch releaseSecond = new CountDownLatch(1);
+		AtomicInteger invocationOrdinal = new AtomicInteger();
+		McpApplicationRequestRouter router = router(invocation -> {
+			int ordinal = invocationOrdinal.incrementAndGet();
+			bothEntered.countDown();
+			if (ordinal == 1)
+				releaseFirst.await();
+			else
+				releaseSecond.await();
+			return completeResult("handled-" + ordinal);
+		});
+		McpHttpServerRuntime runtime = runtime(router, executionConfiguration(2, 2),
+				McpApplicationClock.SYSTEM);
+		ExecutorService clients = Executors.newFixedThreadPool(2);
+
+		try {
+			int port = runtime.start().getPort();
+			Future<RawResponse> first = clients.submit(() -> send(port, "73"));
+			Future<RawResponse> second = clients.submit(() -> send(port, "73"));
+			Assertions.assertTrue(bothEntered.await(5, TimeUnit.SECONDS),
+					"Both same-ID handlers did not enter concurrently.");
+			awaitSnapshot(runtime,
+					snapshot -> snapshot.activeIdentifiedRequestExchanges() == 2);
+
+			releaseFirst.countDown();
+			awaitSnapshot(runtime,
+					snapshot -> snapshot.activeIdentifiedRequestExchanges() == 1);
+			releaseSecond.countDown();
+
+			RawResponse firstResponse = first.get(5, TimeUnit.SECONDS);
+			RawResponse secondResponse = second.get(5, TimeUnit.SECONDS);
+			Assertions.assertEquals(200, firstResponse.status(),
+					firstResponse.bodyText());
+			Assertions.assertEquals(200, secondResponse.status(),
+					secondResponse.bodyText());
+			Assertions.assertTrue(firstResponse.bodyText().contains("\"id\":73"),
+					firstResponse.bodyText());
+			Assertions.assertTrue(secondResponse.bodyText().contains("\"id\":73"),
+					secondResponse.bodyText());
+			boolean responsesAreIndependent = (firstResponse.bodyText().contains(
+					"\"value\":\"handled-1\"")
+					&& secondResponse.bodyText().contains(
+							"\"value\":\"handled-2\""))
+					|| (firstResponse.bodyText().contains(
+							"\"value\":\"handled-2\"")
+					&& secondResponse.bodyText().contains(
+							"\"value\":\"handled-1\""));
+			Assertions.assertTrue(responsesAreIndependent,
+					"Each same-ID exchange must retain its own handler result.");
+			awaitSnapshot(runtime,
+					snapshot -> snapshot.activeIdentifiedRequestExchanges() == 0
+					&& snapshot.retainedExchanges() == 0);
+		} finally {
+			releaseFirst.countDown();
+			releaseSecond.countDown();
+			runtime.close();
+			shutdown(clients);
+		}
+	}
+
+	@Test
+	public void same_id_deadline_termination_decrements_identified_exchange_accounting_without_affecting_survivor()
+			throws Exception {
+		CountDownLatch firstEntered = new CountDownLatch(1);
+		CountDownLatch secondEntered = new CountDownLatch(1);
+		CountDownLatch releaseFirst = new CountDownLatch(1);
+		CountDownLatch releaseSecond = new CountDownLatch(1);
+		AtomicInteger invocationOrdinal = new AtomicInteger();
+		McpApplicationRequestRouter router = router(invocation -> {
+			int ordinal = invocationOrdinal.incrementAndGet();
+			if (ordinal == 1) {
+				firstEntered.countDown();
+				releaseFirst.await();
+				return completeResult("unexpected-first-completion");
+			}
+			secondEntered.countDown();
+			releaseSecond.await();
+			return completeResult("survivor-complete");
+		});
+		ControllableClock clock = new ControllableClock();
+		McpHttpServerRuntime runtime = runtime(router,
+				new McpApplicationExecutionConfiguration(
+						2, 2, Duration.ofSeconds(5), Duration.ofDays(1)), clock);
+		ExecutorService clients = Executors.newFixedThreadPool(2);
+
+		try {
+			int port = runtime.start().getPort();
+			Future<RawResponse> expiring = clients.submit(() -> send(port, "73"));
+			Assertions.assertTrue(firstEntered.await(5, TimeUnit.SECONDS),
+					"The expiring same-ID handler did not enter.");
+
+			clock.advance(Duration.ofSeconds(4));
+			Future<RawResponse> survivor = clients.submit(() -> send(port, "73"));
+			Assertions.assertTrue(secondEntered.await(5, TimeUnit.SECONDS),
+					"The surviving same-ID handler did not enter.");
+			awaitSnapshot(runtime,
+					snapshot -> snapshot.activeIdentifiedRequestExchanges() == 2);
+
+			clock.advance(Duration.ofSeconds(2));
+			runtime.runApplicationTimerCycle();
+			assertExactEmptyDeadlineResponse(expiring.get(5, TimeUnit.SECONDS));
+			McpApplicationExecutionSnapshot oneSurvivor = awaitSnapshot(runtime,
+					snapshot -> snapshot.activeIdentifiedRequestExchanges() == 1
+							&& snapshot.activeHandlerSlots() == 1
+							&& snapshot.retainedExchanges() == 1);
+			Assertions.assertEquals(1, oneSurvivor.deadlineExpirations());
+
+			releaseSecond.countDown();
+			assertSuccessfulResult(survivor.get(5, TimeUnit.SECONDS), "73",
+					"survivor-complete");
+			awaitSnapshot(runtime,
+					snapshot -> snapshot.activeIdentifiedRequestExchanges() == 0
+							&& snapshot.activeHandlerSlots() == 0
+							&& snapshot.retainedExchanges() == 0);
+		} finally {
+			releaseFirst.countDown();
+			releaseSecond.countDown();
+			runtime.close();
+			shutdown(clients);
 		}
 	}
 
@@ -234,7 +358,7 @@ public class McpHttpServerApplicationExecutionTests {
 			McpApplicationExecutionSnapshot snapshot = awaitSnapshot(runtime,
 					value -> value.activeHandlerSlots() == 0
 							&& value.queuedRequests() == 0
-							&& value.activeRequestIds() == 0
+							&& value.activeIdentifiedRequestExchanges() == 0
 							&& value.retainedExchanges() == 0);
 			Assertions.assertEquals(1, snapshot.maximumObservedActiveHandlerSlots());
 			Assertions.assertEquals(1, snapshot.maximumObservedQueuedRequests());
@@ -344,7 +468,7 @@ public class McpHttpServerApplicationExecutionTests {
 			McpApplicationExecutionSnapshot snapshot = awaitSnapshot(runtime,
 					value -> value.activeHandlerSlots() == 0
 							&& value.queuedRequests() == 0
-							&& value.activeRequestIds() == 0
+							&& value.activeIdentifiedRequestExchanges() == 0
 							&& value.retainedExchanges() == 0);
 			Assertions.assertEquals(2, snapshot.deadlineExpirations());
 			Assertions.assertEquals(2, observations.startCount());
@@ -393,7 +517,7 @@ public class McpHttpServerApplicationExecutionTests {
 			McpApplicationExecutionSnapshot snapshot = awaitSnapshot(runtime,
 					value -> value.activeHandlerSlots() == 0
 							&& value.queuedRequests() == 0
-							&& value.activeRequestIds() == 0
+							&& value.activeIdentifiedRequestExchanges() == 0
 							&& value.retainedExchanges() == 0);
 			Assertions.assertEquals(1, handlerInvocations.get());
 			Assertions.assertEquals(1, snapshot.deadlineExpirations());
@@ -462,10 +586,10 @@ public class McpHttpServerApplicationExecutionTests {
 					"Protocol-stage work must not reset the absolute deadline.");
 			awaitRequestSnapshot(runtime, snapshot -> snapshot.retainedRequestControls() == 0
 					&& snapshot.queuedProtocolRequests() == 0
-					&& snapshot.activeRequestIds() == 0);
+					&& snapshot.activeIdentifiedRequestExchanges() == 0);
 			McpApplicationExecutionSnapshot snapshot = awaitSnapshot(runtime,
 					value -> value.retainedExchanges() == 0
-							&& value.activeRequestIds() == 0);
+							&& value.activeIdentifiedRequestExchanges() == 0);
 			Assertions.assertEquals(1, snapshot.deadlineExpirations());
 			Assertions.assertEquals(1, snapshot.protocolDeadlineExpirations());
 			Assertions.assertEquals(0, snapshot.capacityRejections());
@@ -602,7 +726,7 @@ public class McpHttpServerApplicationExecutionTests {
 					"A late CORS result must not reach request admission.");
 			awaitRequestSnapshot(runtime, snapshot -> snapshot.retainedRequestControls() == 0
 					&& snapshot.queuedProtocolRequests() == 0
-					&& snapshot.activeRequestIds() == 0);
+					&& snapshot.activeIdentifiedRequestExchanges() == 0);
 			McpApplicationExecutionSnapshot snapshot =
 					runtime.applicationExecutionSnapshot().orElseThrow();
 			Assertions.assertEquals(1, snapshot.protocolDeadlineExpirations());
@@ -681,7 +805,7 @@ public class McpHttpServerApplicationExecutionTests {
 					"Expired protocol requests must never reach application code.");
 			awaitRequestSnapshot(runtime, snapshot -> snapshot.retainedRequestControls() == 0
 					&& snapshot.queuedProtocolRequests() == 0
-					&& snapshot.activeRequestIds() == 0);
+					&& snapshot.activeIdentifiedRequestExchanges() == 0);
 			McpApplicationExecutionSnapshot expired =
 					runtime.applicationExecutionSnapshot().orElseThrow();
 			Assertions.assertEquals(2, expired.deadlineExpirations());
@@ -703,7 +827,7 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	@Test
-	public void framework_discovery_deadline_releases_request_id_for_reuse()
+	public void framework_discovery_deadline_releases_identified_exchange_accounting()
 			throws Exception {
 		CountDownLatch admissionEntered = new CountDownLatch(1);
 		CountDownLatch admissionInterrupted = new CountDownLatch(1);
@@ -758,7 +882,7 @@ public class McpHttpServerApplicationExecutionTests {
 					"The deadline response must not wait for discovery work to exit.");
 			awaitRequestSnapshot(runtime, snapshot -> snapshot.retainedRequestControls() == 0
 					&& snapshot.queuedProtocolRequests() == 0
-					&& snapshot.activeRequestIds() == 0);
+					&& snapshot.activeIdentifiedRequestExchanges() == 0);
 			McpApplicationExecutionSnapshot expired =
 					runtime.applicationExecutionSnapshot().orElseThrow();
 			Assertions.assertEquals(1, expired.deadlineExpirations());
@@ -767,13 +891,13 @@ public class McpHttpServerApplicationExecutionTests {
 			releaseAdmission.countDown();
 			Assertions.assertTrue(admissionExited.await(5, TimeUnit.SECONDS),
 					"The released discovery admission gate did not exit.");
-			RawResponse reused = send(
+			RawResponse subsequent = send(
 					port, "\"shared-discovery\"", "server/discover");
-			Assertions.assertEquals(200, reused.status(), reused.bodyText());
+			Assertions.assertEquals(200, subsequent.status(), subsequent.bodyText());
 			Assertions.assertEquals(JSON_MEDIA_TYPE,
-					reused.singleHeader("Content-Type"));
-			Assertions.assertTrue(reused.bodyText().contains(
-					"\"id\":\"shared-discovery\""), reused.bodyText());
+					subsequent.singleHeader("Content-Type"));
+			Assertions.assertTrue(subsequent.bodyText().contains(
+					"\"id\":\"shared-discovery\""), subsequent.bodyText());
 			Assertions.assertEquals(2, admissions.get());
 		} finally {
 			releaseAdmission.countDown();
@@ -820,7 +944,7 @@ public class McpHttpServerApplicationExecutionTests {
 			assertExactEmptyDeadlineResponse(response.get(5, TimeUnit.SECONDS));
 			awaitRequestSnapshot(runtime, snapshot -> snapshot.retainedRequestControls() == 0
 					&& snapshot.queuedProtocolRequests() == 0
-					&& snapshot.activeRequestIds() == 0);
+					&& snapshot.activeIdentifiedRequestExchanges() == 0);
 			McpApplicationExecutionSnapshot snapshot =
 					runtime.applicationExecutionSnapshot().orElseThrow();
 			Assertions.assertEquals(1, snapshot.deadlineExpirations());
@@ -876,7 +1000,7 @@ public class McpHttpServerApplicationExecutionTests {
 					"invocation-1");
 			awaitSnapshot(runtime, snapshot -> snapshot.activeHandlerSlots() == 0
 					&& snapshot.queuedRequests() == 0
-					&& snapshot.activeRequestIds() == 0
+					&& snapshot.activeIdentifiedRequestExchanges() == 0
 					&& snapshot.retainedExchanges() == 0);
 			Assertions.assertEquals(1, invocations.get(),
 					"The disconnected request dispatched after the active slot was released.");
@@ -962,7 +1086,7 @@ public class McpHttpServerApplicationExecutionTests {
 			Assertions.assertEquals(2, invocations.get());
 			awaitSnapshot(runtime, snapshot -> snapshot.activeHandlerSlots() == 0
 					&& snapshot.queuedRequests() == 0
-					&& snapshot.activeRequestIds() == 0
+					&& snapshot.activeIdentifiedRequestExchanges() == 0
 					&& snapshot.retainedExchanges() == 0);
 		} finally {
 			releaseFirst.countDown();

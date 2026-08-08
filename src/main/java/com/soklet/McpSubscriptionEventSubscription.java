@@ -23,7 +23,13 @@ import javax.annotation.concurrent.ThreadSafe;
  * publisher.
  * <p>
  * Closing a registration is idempotent. It unsubscribes only its listener and
- * does not close the application-owned publisher.
+ * does not close the application-owned publisher. Soklet invokes
+ * {@link #close()} asynchronously and never overlaps invocations for the same
+ * registration. If an invocation throws, Soklet may retry it until one
+ * invocation succeeds; after a successful invocation, Soklet does not invoke
+ * it again. An in-flight invocation may outlive the server's bounded shutdown
+ * wait, in which case cleanup remains residual state and restart cannot proceed
+ * until the invocation completes successfully.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

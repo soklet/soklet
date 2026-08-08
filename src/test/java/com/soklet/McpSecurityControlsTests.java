@@ -315,13 +315,14 @@ public class McpSecurityControlsTests {
 		Assertions.assertSame(protector,
 				config.getRequestStateProtector().orElseThrow());
 		Assertions.assertEquals(Optional.empty(), config.getInitialKeyRing());
-		Assertions.assertEquals(100,
+		Assertions.assertEquals(Integer.valueOf(100),
 				config.getMaximumEncodedRequestStateBytes());
-		Assertions.assertEquals(75,
+		Assertions.assertEquals(Integer.valueOf(75),
 				config.getMaximumDecodedRequestStateBytes());
 		Assertions.assertEquals(Duration.ofSeconds(30),
 				config.getMaximumRequestStateLifetime());
-		Assertions.assertEquals(4, config.getMaximumRequestStateRounds());
+		Assertions.assertEquals(Integer.valueOf(4),
+				config.getMaximumRequestStateRounds());
 
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				McpProtectionConfig.withDevelopmentEphemeralProtection()
@@ -343,6 +344,41 @@ public class McpSecurityControlsTests {
 				McpProtectionConfig.withDevelopmentEphemeralProtection()
 						.maximumEncodedRequestStateBytes(50)
 						.maximumDecodedRequestStateBytes(51).build());
+		Assertions.assertThrows(NullPointerException.class, () ->
+				McpProtectionConfig.withDevelopmentEphemeralProtection()
+						.maximumEncodedRequestStateBytes(null));
+		Assertions.assertThrows(NullPointerException.class, () ->
+				McpProtectionConfig.withDevelopmentEphemeralProtection()
+						.maximumDecodedRequestStateBytes(null));
+		Assertions.assertThrows(NullPointerException.class, () ->
+				McpProtectionConfig.withDevelopmentEphemeralProtection()
+						.maximumRequestStateRounds(null));
+	}
+
+	@Test
+	public void unfrozen_security_scalars_use_reference_types() throws Exception {
+		Assertions.assertEquals(Integer.class, McpProtectionConfig.class
+				.getMethod("getMaximumEncodedRequestStateBytes").getReturnType());
+		Assertions.assertEquals(Integer.class, McpProtectionConfig.class
+				.getMethod("getMaximumDecodedRequestStateBytes").getReturnType());
+		Assertions.assertEquals(Integer.class, McpProtectionConfig.class
+				.getMethod("getMaximumRequestStateRounds").getReturnType());
+		Assertions.assertEquals(McpProtectionConfig.Builder.class,
+				McpProtectionConfig.Builder.class.getMethod(
+						"maximumEncodedRequestStateBytes", Integer.class)
+						.getReturnType());
+		Assertions.assertEquals(McpProtectionConfig.Builder.class,
+				McpProtectionConfig.Builder.class.getMethod(
+						"maximumDecodedRequestStateBytes", Integer.class)
+						.getReturnType());
+		Assertions.assertEquals(McpProtectionConfig.Builder.class,
+				McpProtectionConfig.Builder.class.getMethod(
+						"maximumRequestStateRounds", Integer.class)
+						.getReturnType());
+		Assertions.assertEquals(Boolean.class, McpProtectionControl.class
+				.getMethod("removeVerificationKey", String.class).getReturnType());
+		Assertions.assertEquals(Boolean.class, McpTraceCorrelation.class
+				.getMethod("isEnabled").getReturnType());
 	}
 
 	@Test

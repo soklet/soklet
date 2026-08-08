@@ -101,7 +101,8 @@ public final class McpToolOutput implements McpCompletePayload {
 	}
 
 	/** @return whether the tool reported an application-level error */
-	public boolean isError() {
+	@NonNull
+	public Boolean isError() {
 		return this.error;
 	}
 
@@ -165,10 +166,11 @@ public final class McpToolOutput implements McpCompletePayload {
 		 *
 		 * @param error error state
 		 * @return this builder
+		 * @throws NullPointerException if {@code error} is null
 		 */
 		@NonNull
-		public Builder isError(boolean error) {
-			this.error = error;
+		public Builder isError(@NonNull Boolean error) {
+			this.error = requireNonNull(error);
 			return this;
 		}
 

@@ -108,6 +108,8 @@ class McpResultContentTests {
 				() -> McpContentAnnotations.builder().priority(1.01));
 		assertThrows(IllegalArgumentException.class,
 				() -> McpContentAnnotations.builder().priority(Double.NaN));
+		assertThrows(NullPointerException.class,
+				() -> McpContentAnnotations.builder().priority(null));
 	}
 
 	@Test
@@ -121,6 +123,16 @@ class McpResultContentTests {
 		assertTrue(annotations.getIdempotentHint().orElseThrow());
 		assertTrue(annotations.getDestructiveHint().isEmpty());
 		assertTrue(annotations.getOpenWorldHint().isEmpty());
+		assertThrows(NullPointerException.class,
+				() -> McpToolAnnotations.builder().readOnlyHint(null));
+		assertThrows(NullPointerException.class,
+				() -> McpToolAnnotations.builder().destructiveHint(null));
+		assertThrows(NullPointerException.class,
+				() -> McpToolAnnotations.builder().idempotentHint(null));
+		assertThrows(NullPointerException.class,
+				() -> McpToolAnnotations.builder().openWorldHint(null));
+		assertThrows(NullPointerException.class,
+				() -> McpToolOutput.builder().isError(null));
 	}
 
 	@Test

@@ -16,6 +16,7 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import com.soklet.internal.mcp.protocol.McpSubscriptionEventSource.Event;
 import com.soklet.CancelationToken;
 import com.soklet.CorsAuthorizer;
 import com.soklet.McpAdmissionDecision;
@@ -42,6 +43,12 @@ import com.soklet.McpRequestRejection;
 import com.soklet.McpRequestState;
 import com.soklet.McpRequestStateMode;
 import com.soklet.McpRequestStateProtectionException;
+import com.soklet.McpStreamTerminationReason;
+import com.soklet.McpSubscriptionConfig;
+import com.soklet.McpSubscriptionEvent;
+import com.soklet.McpSubscriptionEventPublisher;
+import com.soklet.McpSubscriptionEventSubscription;
+import com.soklet.McpSubscriptionNotificationType;
 import com.soklet.Request;
 import com.soklet.StreamTerminationReason;
 import org.jspecify.annotations.NonNull;
@@ -50,9 +57,11 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -404,6 +413,52 @@ public final class McpServerRuntimeBridge {
 				requireNonNull(requestStateProtectionPlan));
 	}
 
+	/**
+	 * Creates one production listener projection with protected request state
+	 * and the exact configured response-stream and subscription bounds.
+	 */
+	public McpServerRuntimeBridge(@NonNull String host, int port,
+			@NonNull List<@NonNull EndpointPlan> endpointPlans,
+			@NonNull Set<@NonNull String> allowedHosts, boolean requireOrigin,
+			@NonNull CorsAuthorizer corsAuthorizer,
+			boolean corsAuthorizerExplicitlyConfigured,
+			@NonNull AdmissionAdapter admissionAdapter,
+			@NonNull Optional<@NonNull RateLimitAdapter> requestRateLimitAdapter,
+			com.soklet.@NonNull McpUnknownMirroredHeaderPolicy
+					unknownMirroredHeaderPolicy,
+			boolean unknownMirroredHeaderNameDiagnostics,
+			@NonNull BiConsumer<@NonNull String, @NonNull String>
+					unknownMirroredHeaderNameDiagnosticConsumer,
+			int requestHandlerConcurrency, int requestHandlerQueueCapacity,
+			@NonNull Duration requestTimeout,
+			@NonNull Optional<@NonNull Supplier<@NonNull ExecutorService>>
+					requestHandlerExecutorServiceSupplier,
+			@NonNull Consumer<@NonNull String> startupDiagnosticConsumer,
+			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer,
+			@NonNull RequestObservationAdapter requestObservationAdapter,
+			@NonNull Optional<@NonNull RequestStateProtectionPlan>
+					requestStateProtectionPlan,
+			int streamQueueCapacity, @NonNull Duration writeTimeout,
+			@NonNull Duration keepAliveInterval, @NonNull Duration shutdownTimeout,
+			int maximumSubscriptionsPerPrincipal,
+			@NonNull Duration maximumSubscriptionDuration) {
+		this(host, port, endpointPlans, allowedHosts, requireOrigin,
+				corsAuthorizer, corsAuthorizerExplicitlyConfigured,
+				admissionAdapter, requestRateLimitAdapter,
+				unknownMirroredHeaderPolicy,
+				nameDiagnosticConsumer(unknownMirroredHeaderNameDiagnostics,
+						unknownMirroredHeaderNameDiagnosticConsumer),
+				requestHandlerConcurrency, requestHandlerQueueCapacity,
+				requestTimeout, requestHandlerExecutorServiceSupplier,
+				startupDiagnosticConsumer, unexpectedTerminationConsumer,
+				Optional.of(requireNonNull(requestObservationAdapter)),
+				requireNonNull(requestStateProtectionPlan),
+				new McpSubscriptionRuntimeConfiguration(streamQueueCapacity,
+						writeTimeout, keepAliveInterval, shutdownTimeout,
+						maximumSubscriptionsPerPrincipal,
+						maximumSubscriptionDuration));
+	}
+
 	@NonNull
 	private static Optional<@NonNull BiConsumer<@NonNull String, @NonNull String>>
 			nameDiagnosticConsumer(boolean enabled,
@@ -433,6 +488,41 @@ public final class McpServerRuntimeBridge {
 					requestObservationAdapter,
 			@NonNull Optional<@NonNull RequestStateProtectionPlan>
 					requestStateProtectionPlan) {
+		this(host, port, endpointPlans, allowedHosts, requireOrigin,
+				corsAuthorizer, corsAuthorizerExplicitlyConfigured,
+				admissionAdapter, requestRateLimitAdapter,
+				unknownMirroredHeaderPolicy,
+				unknownMirroredHeaderNameDiagnosticConsumer,
+				requestHandlerConcurrency, requestHandlerQueueCapacity,
+				requestTimeout, requestHandlerExecutorServiceSupplier,
+				startupDiagnosticConsumer, unexpectedTerminationConsumer,
+				requestObservationAdapter, requestStateProtectionPlan,
+				McpSubscriptionRuntimeConfiguration.productionDefaults());
+	}
+
+	private McpServerRuntimeBridge(@NonNull String host, int port,
+			@NonNull List<@NonNull EndpointPlan> endpointPlans,
+			@NonNull Set<@NonNull String> allowedHosts, boolean requireOrigin,
+			@NonNull CorsAuthorizer corsAuthorizer,
+			boolean corsAuthorizerExplicitlyConfigured,
+			@NonNull AdmissionAdapter admissionAdapter,
+			@NonNull Optional<@NonNull RateLimitAdapter> requestRateLimitAdapter,
+			com.soklet.@NonNull McpUnknownMirroredHeaderPolicy
+					unknownMirroredHeaderPolicy,
+			@NonNull Optional<@NonNull BiConsumer<@NonNull String, @NonNull String>>
+					unknownMirroredHeaderNameDiagnosticConsumer,
+			int requestHandlerConcurrency, int requestHandlerQueueCapacity,
+			@NonNull Duration requestTimeout,
+			@NonNull Optional<@NonNull Supplier<@NonNull ExecutorService>>
+					requestHandlerExecutorServiceSupplier,
+			@NonNull Consumer<@NonNull String> startupDiagnosticConsumer,
+			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer,
+			@NonNull Optional<@NonNull RequestObservationAdapter>
+					requestObservationAdapter,
+			@NonNull Optional<@NonNull RequestStateProtectionPlan>
+					requestStateProtectionPlan,
+			@NonNull McpSubscriptionRuntimeConfiguration
+					subscriptionRuntimeConfiguration) {
 		requireNonNull(host);
 		List<EndpointPlan> immutableEndpointPlans =
 				List.copyOf(requireNonNull(endpointPlans));
@@ -448,6 +538,7 @@ public final class McpServerRuntimeBridge {
 		requireNonNull(unexpectedTerminationConsumer);
 		requireNonNull(requestObservationAdapter);
 		requireNonNull(requestStateProtectionPlan);
+		requireNonNull(subscriptionRuntimeConfiguration);
 		McpFrameworkRequestStateRuntime requestStateRuntime =
 				new McpFrameworkRequestStateRuntime(requestStateProtectionPlan,
 						Clock.systemUTC());
@@ -464,15 +555,18 @@ public final class McpServerRuntimeBridge {
 				McpHttpTransportConfiguration.productionDefaults(port);
 		McpHttpTransportConfiguration transport = new McpHttpTransportConfiguration(
 				host, port, defaults.selectorResolution(), defaults.requestHeaderTimeout(),
-				defaults.requestBodyTimeout(), defaults.responseWriteIdleTimeout(),
-				defaults.keepAliveInterval(), defaults.shutdownTimeout(),
+				defaults.requestBodyTimeout(),
+				subscriptionRuntimeConfiguration.writeTimeout(),
+				subscriptionRuntimeConfiguration.keepAliveInterval(),
+				subscriptionRuntimeConfiguration.shutdownTimeout(),
 				defaults.readBufferSize(), defaults.acceptBacklog(),
 				defaults.maximumAggregateRequestBytes(),
 				defaults.maximumRequestBodyBytes(), defaults.maximumHeaderCount(),
 				defaults.maximumHeaderBytes(), defaults.maximumRequestTargetBytes(),
 				defaults.maximumConnections(), defaults.connectionWriterConcurrency(),
 				defaults.requestProcessorConcurrency(),
-				defaults.requestProcessorQueueCapacity(), defaults.streamQueueCapacity());
+				defaults.requestProcessorQueueCapacity(),
+				subscriptionRuntimeConfiguration.streamQueueCapacity());
 		McpApplicationExecutionConfiguration applicationConfiguration =
 				new McpApplicationExecutionConfiguration(requestHandlerConcurrency,
 						requestHandlerQueueCapacity, requestTimeout,
@@ -489,7 +583,7 @@ public final class McpServerRuntimeBridge {
 				McpApplicationClock.SYSTEM, applicationExecutorFactory,
 				startupDiagnosticConsumer, unexpectedTerminationConsumer,
 				unknownMirroredHeaderNameDiagnosticConsumer,
-				requestStateRuntime);
+				requestStateRuntime, subscriptionRuntimeConfiguration);
 	}
 
 	@NonNull
@@ -518,6 +612,24 @@ public final class McpServerRuntimeBridge {
 						.includeServerInformation(
 								publicEndpoint.isServerInformationIncluded());
 		publicEndpoint.getInstructions().ifPresent(endpointBuilder::instructions);
+		Optional<McpSubscriptionEventSource> subscriptionEventSource =
+				publicEndpoint.getSubscriptions().map(configuration -> {
+					Set<McpResourceNotificationType> notificationTypes =
+							EnumSet.noneOf(McpResourceNotificationType.class);
+					for (McpSubscriptionNotificationType notificationType
+							: configuration.getNotificationTypes()) {
+						notificationTypes.add(switch (notificationType) {
+							case RESOURCES_LIST_CHANGED ->
+									McpResourceNotificationType.RESOURCES_LIST_CHANGED;
+							case RESOURCE_UPDATED ->
+									McpResourceNotificationType.RESOURCE_UPDATED;
+						});
+					}
+					endpointBuilder.subscriptions(
+							new McpNormalizedSubscriptionConfiguration(
+									notificationTypes));
+					return toInternal(configuration);
+				});
 
 		Map<String, McpApplicationToolRoute> toolRoutes = new LinkedHashMap<>();
 		for (ToolPlan toolPlan : endpointPlan.toolPlans()) {
@@ -680,7 +792,9 @@ public final class McpServerRuntimeBridge {
 						resourceTemplateRoutes, internalResourceListRoute);
 		if (requestObservationAdapter.isEmpty())
 			return new McpHttpEndpointBinding(endpointPolicy, endpoint,
-					applicationRouter);
+					applicationRouter,
+					McpRuntimeObservationSink.disabledInstance(),
+					subscriptionEventSource);
 
 		RequestObservationAdapter observationAdapter =
 				requestObservationAdapter.orElseThrow();
@@ -719,10 +833,77 @@ public final class McpServerRuntimeBridge {
 							duration,
 							throwables);
 				}
+
+				@Override
+				public void didOpenRequestStream() {
+					publicObservation.didOpenRequestStream();
+				}
+
+				@Override
+				public void didCloseRequestStream(
+						@NonNull StreamTerminationReason reason,
+						@NonNull Duration duration) {
+					publicObservation.didCloseRequestStream(
+							toPublic(reason), duration);
+				}
+
+				@Override
+				public void didOpenSubscription() {
+					publicObservation.didOpenSubscription();
+				}
+
+				@Override
+				public void didCloseSubscription(
+						@NonNull StreamTerminationReason reason,
+						@NonNull Duration duration) {
+					publicObservation.didCloseSubscription(
+							toPublic(reason), duration);
+				}
+
+				@Override
+				public void didEmitKeepAlive() {
+					publicObservation.didEmitKeepAlive();
+				}
 			};
 		};
 		return new McpHttpEndpointBinding(endpointPolicy, endpoint,
-				applicationRouter, observationSink);
+				applicationRouter, observationSink, subscriptionEventSource);
+	}
+
+	@NonNull
+	private static McpSubscriptionEventSource toInternal(
+			@NonNull McpSubscriptionConfig configuration) {
+		requireNonNull(configuration);
+		McpSubscriptionEventPublisher publisher = configuration.getEventPublisher();
+		return new McpSubscriptionEventSource(publisher, listener -> {
+			McpSubscriptionEventSubscription registration = requireNonNull(
+					publisher.subscribe(event -> {
+						try {
+							listener.onEvent(toInternal(requireNonNull(event)));
+						} catch (Throwable ignored) {
+							// Publisher callbacks must never expose one stream's failure
+							// or invalid application event to publisher callers.
+						}
+					}),
+					"An MCP subscription event publisher returned a null registration.");
+			return registration::close;
+		});
+	}
+
+	@NonNull
+	private static Event toInternal(
+			@NonNull McpSubscriptionEvent event) {
+		requireNonNull(event);
+		if (event instanceof McpSubscriptionEvent.ResourcesListChanged)
+			return new McpSubscriptionEventSource.Event.ResourcesListChanged();
+		if (event instanceof McpSubscriptionEvent.ResourceUpdated updated) {
+			String wireResourceUri = McpLevelOneUriTemplate.requireValidAbsoluteUri(
+					updated.resourceUri().toASCIIString(), "Subscription resource URI");
+			return new McpSubscriptionEventSource.Event.ResourceUpdated(
+					URI.create(wireResourceUri), wireResourceUri);
+		}
+		throw new IllegalArgumentException(
+				"Unsupported MCP subscription event: " + event.getClass().getName());
 	}
 
 	@NonNull
@@ -1994,6 +2175,34 @@ public final class McpServerRuntimeBridge {
 				@Nullable RequestError error,
 				@NonNull Duration duration,
 				@NonNull List<@NonNull Throwable> throwables);
+
+		/** Delivers a request-stream-opened transition. */
+		default void didOpenRequestStream() {
+		}
+
+		/** Delivers a request-stream-closed transition. */
+		default void didCloseRequestStream(
+				@NonNull McpStreamTerminationReason reason,
+				@NonNull Duration duration) {
+			requireNonNull(reason);
+			requireNonNull(duration);
+		}
+
+		/** Delivers a subscription-opened transition. */
+		default void didOpenSubscription() {
+		}
+
+		/** Delivers a subscription-closed transition. */
+		default void didCloseSubscription(
+				@NonNull McpStreamTerminationReason reason,
+				@NonNull Duration duration) {
+			requireNonNull(reason);
+			requireNonNull(duration);
+		}
+
+		/** Delivers an accepted keep-alive transition. */
+		default void didEmitKeepAlive() {
+		}
 	}
 
 	/**
@@ -2680,6 +2889,26 @@ public final class McpServerRuntimeBridge {
 		if (result instanceof RateLimitResult.Denied denied)
 			return McpRateLimitDecision.denied(denied.retryAfter());
 		throw new IllegalArgumentException("Unsupported MCP rate-limit result.");
+	}
+
+	@NonNull
+	private static McpStreamTerminationReason toPublic(
+			@NonNull StreamTerminationReason reason) {
+		return switch (requireNonNull(reason)) {
+			case COMPLETED -> McpStreamTerminationReason.COMPLETED;
+			case CLIENT_DISCONNECTED ->
+					McpStreamTerminationReason.CLIENT_DISCONNECTED;
+			case APPLICATION_CANCELED ->
+					McpStreamTerminationReason.REQUEST_CANCELED;
+			case RESPONSE_TIMEOUT, RESPONSE_IDLE_TIMEOUT ->
+					McpStreamTerminationReason.DEADLINE_EXCEEDED;
+			case WRITE_FAILED -> McpStreamTerminationReason.WRITE_FAILED;
+			case BACKPRESSURE -> McpStreamTerminationReason.BACKPRESSURE;
+			case SERVER_STOPPING -> McpStreamTerminationReason.SERVER_STOPPED;
+			case PROTOCOL_UNSUPPORTED, PRODUCER_FAILED, INTERNAL_ERROR,
+					SIMULATOR_LIMIT_EXCEEDED, UNKNOWN ->
+					McpStreamTerminationReason.INTERNAL_ERROR;
+		};
 	}
 
 	@NonNull

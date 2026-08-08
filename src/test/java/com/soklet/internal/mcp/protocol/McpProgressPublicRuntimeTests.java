@@ -89,18 +89,18 @@ public class McpProgressPublicRuntimeTests {
 							features.find(McpProgressReporter.class).orElseThrow());
 					reporters.add(reporter);
 					terminalReporter.set(reporter);
-					reporter.report(McpProgressUpdate.withProgress(0)
-							.total(100).build());
-					reporter.report(McpProgressUpdate.withProgress(50)
-							.total(100).message("Halfway 世界").build());
+					reporter.report(McpProgressUpdate.withProgress(0.0d)
+							.total(100.0d).build());
+					reporter.report(McpProgressUpdate.withProgress(50.0d)
+							.total(100.0d).message("Halfway 世界").build());
 					// Equal values are deliberately coalesced.
-					reporter.report(McpProgressUpdate.withProgress(50)
-							.total(100).message("not emitted").build());
+					reporter.report(McpProgressUpdate.withProgress(50.0d)
+							.total(100.0d).message("not emitted").build());
 					Assertions.assertThrows(IllegalArgumentException.class,
 							() -> reporter.report(
-									McpProgressUpdate.withProgress(49).build()));
-					reporter.report(McpProgressUpdate.withProgress(100)
-							.total(100).build());
+									McpProgressUpdate.withProgress(49.0d).build()));
+					reporter.report(McpProgressUpdate.withProgress(100.0d)
+							.total(100.0d).build());
 					return McpCompleteResult.fromToolText("progress complete");
 				});
 		McpServer server = server(List.of(progressTool));
@@ -119,11 +119,11 @@ public class McpProgressPublicRuntimeTests {
 
 			// A retained invocation feature becomes inert after its terminal event.
 			Assertions.assertDoesNotThrow(() -> terminalReporter.get().report(
-					McpProgressUpdate.withProgress(101).total(101).build()));
+					McpProgressUpdate.withProgress(101.0d).total(101.0d).build()));
 			Assertions.assertDoesNotThrow(() -> terminalReporter.get().report(
-					McpProgressUpdate.withProgress(99).build()));
+					McpProgressUpdate.withProgress(99.0d).build()));
 			Assertions.assertDoesNotThrow(() -> terminalReporter.get().report(
-					McpProgressUpdate.withProgress(100).build()));
+					McpProgressUpdate.withProgress(100.0d).build()));
 			AtomicBoolean lateCallback = new AtomicBoolean();
 			AutoCloseable lateRegistration = terminalToken.get().onCancel(
 					() -> lateCallback.set(true));
@@ -225,7 +225,7 @@ public class McpProgressPublicRuntimeTests {
 							if (request.getClientCapabilities().supports(
 									com.soklet.McpClientCapability.ROOTS)) {
 								features.require(McpProgressReporter.class).report(
-										McpProgressUpdate.withProgress(1).build());
+										McpProgressUpdate.withProgress(1.0d).build());
 							} else {
 								completeReporterSuppressed.set(features
 										.find(McpProgressReporter.class).isEmpty());
@@ -330,7 +330,7 @@ public class McpProgressPublicRuntimeTests {
 					McpProgressReporter reporter =
 							features.require(McpProgressReporter.class);
 					observedReporter.set(reporter);
-					reporter.report(McpProgressUpdate.withProgress(1).build());
+					reporter.report(McpProgressUpdate.withProgress(1.0d).build());
 					try {
 						emergencyRelease.await();
 						return McpCompleteResult.fromToolText("must not be written");
@@ -386,11 +386,11 @@ public class McpProgressPublicRuntimeTests {
 			// particular, a retained reporter cannot emit another notification or
 			// its corresponding accepted-delivery metric.
 			Assertions.assertDoesNotThrow(() -> observedReporter.get().report(
-					McpProgressUpdate.withProgress(0).build()));
+					McpProgressUpdate.withProgress(0.0d).build()));
 			Assertions.assertDoesNotThrow(() -> observedReporter.get().report(
-					McpProgressUpdate.withProgress(1).build()));
+					McpProgressUpdate.withProgress(1.0d).build()));
 			Assertions.assertDoesNotThrow(() -> observedReporter.get().report(
-					McpProgressUpdate.withProgress(2).build()));
+					McpProgressUpdate.withProgress(2.0d).build()));
 			Assertions.assertEquals(1, metrics.stream()
 					.filter(McpMetricsEvent.ProgressEmitted.class::isInstance)
 					.count(), "Canceled reports must not emit or record progress.");

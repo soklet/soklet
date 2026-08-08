@@ -225,6 +225,13 @@ function observationDraftPreservesCompleteMultisetsAndSkipReasons() {
 			errorMessage: 'Capability flag is truthfully absent',
 		},
 		{
+			id: 'server-stateless-list-change',
+			status: 'SKIPPED',
+			details: {
+				note: 'Server did not declare the optional listChanged capability',
+			},
+		},
+		{
 			id: 'wire-schema-valid',
 			status: 'SUCCESS',
 			details: { messagesValidated: 2 },
@@ -238,6 +245,12 @@ function observationDraftPreservesCompleteMultisetsAndSkipReasons() {
 			status: 'SKIPPED',
 			count: 1,
 			reason: 'Capability flag is truthfully absent',
+		},
+		{
+			id: 'server-stateless-list-change',
+			status: 'SKIPPED',
+			count: 1,
+			reason: 'Server did not declare the optional listChanged capability',
 		},
 		{ id: 'tools-list', status: 'SUCCESS', count: 2 },
 	]);

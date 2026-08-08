@@ -23,13 +23,17 @@ package com.soklet;
  */
 public enum McpShutdownOutcome {
 	/**
-	 * Transport shutdown completed and no application handler execution remains.
+	 * Transport shutdown completed and no application-supplied MCP
+	 * request-processing execution remains.
 	 */
 	CLEAN,
 
 	/**
-	 * Transport shutdown completed, but at least one application handler
-	 * execution remains after the bounded shutdown deadline.
+	 * Transport shutdown completed, but at least one application-supplied MCP
+	 * request-processing execution remains after the bounded shutdown deadline.
+	 * The compatibility name covers both registered handlers and request pipeline
+	 * callbacks, such as admission, rate-limiting, or request-state protection
+	 * code, that ignore cancellation or interruption.
 	 */
 	RESIDUAL_HANDLERS
 }

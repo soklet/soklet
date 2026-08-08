@@ -21,8 +21,6 @@ import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
 
-import static java.util.Objects.requireNonNull;
-
 /**
  * Immutable application event that identifies a coarse MCP resource change.
  * <p>
@@ -51,6 +49,9 @@ public sealed interface McpSubscriptionEvent
 	 *
 	 * @param resourceUri changed resource URI
 	 * @return resource-updated event
+	 * @throws NullPointerException if {@code resourceUri} is null
+	 * @throws IllegalArgumentException if the URI is relative, not normalized,
+	 *                                  or not in ASCII wire form
 	 */
 	@NonNull
 	static ResourceUpdated resourceUpdated(@NonNull URI resourceUri) {
@@ -69,15 +70,23 @@ public sealed interface McpSubscriptionEvent
 	/**
 	 * Signals that the representation at one resource URI changed.
 	 *
-	 * @param resourceUri changed resource URI
+	 * @param resourceUri absolute normalized changed-resource URI in ASCII wire
+	 *                    form
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
 	record ResourceUpdated(@NonNull URI resourceUri)
 			implements McpSubscriptionEvent {
-		/** Validates this resource-updated event. */
+		/**
+		 * Validates this resource-updated event.
+		 *
+		 * @throws NullPointerException if {@code resourceUri} is null
+		 * @throws IllegalArgumentException if the URI is relative, not normalized,
+		 *                                  or not in ASCII wire form
+		 */
 		public ResourceUpdated {
-			requireNonNull(resourceUri);
+			resourceUri = McpResourceValueSupport.requireAbsoluteNormalizedUri(
+					resourceUri);
 		}
 	}
 }

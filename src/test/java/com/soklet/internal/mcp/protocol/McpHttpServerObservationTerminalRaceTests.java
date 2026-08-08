@@ -446,7 +446,7 @@ class McpHttpServerObservationTerminalRaceTests {
 			McpApplicationExecutionSnapshot application =
 					runtime.applicationExecutionSnapshot().orElseThrow();
 			return requests.retainedRequestControls() == 0
-					&& requests.activeRequestIds() == 0
+					&& requests.activeIdentifiedRequestExchanges() == 0
 					&& application.activeHandlerSlots() == 0
 					&& application.queuedRequests() == 0
 					&& application.retainedExchanges() == 0

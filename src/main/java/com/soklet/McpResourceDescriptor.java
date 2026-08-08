@@ -239,10 +239,12 @@ public final class McpResourceDescriptor {
 		 *
 		 * @param size nonnegative byte count
 		 * @return this builder
+		 * @throws NullPointerException if {@code size} is null
 		 * @throws IllegalArgumentException if {@code size} is negative
 		 */
 		@NonNull
-		public Builder size(long size) {
+		public Builder size(@NonNull Long size) {
+			requireNonNull(size);
 			if (size < 0)
 				throw new IllegalArgumentException(
 						"MCP resource sizes must not be negative.");

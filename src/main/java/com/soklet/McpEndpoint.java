@@ -177,7 +177,8 @@ public final class McpEndpoint {
 	 *
 	 * @return {@code true} when MCP result metadata includes server information
 	 */
-	public boolean isServerInformationIncluded() {
+	@NonNull
+	public Boolean isServerInformationIncluded() {
 		return this.includeServerInformation;
 	}
 
@@ -390,10 +391,12 @@ public final class McpEndpoint {
 		 * @param includeServerInformation whether MCP result metadata includes server
 		 *                                 information
 		 * @return this builder
+		 * @throws NullPointerException if {@code includeServerInformation} is null
 		 */
 		@NonNull
-		public Builder includeServerInformation(boolean includeServerInformation) {
-			this.includeServerInformation = includeServerInformation;
+		public Builder includeServerInformation(
+				@NonNull Boolean includeServerInformation) {
+			this.includeServerInformation = requireNonNull(includeServerInformation);
 			return this;
 		}
 

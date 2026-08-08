@@ -127,10 +127,11 @@ public final class McpJsonArray implements McpJsonValue {
 		 *
 		 * @param value the boolean to append
 		 * @return this builder
+		 * @throws NullPointerException if {@code value} is null
 		 */
 		@NonNull
-		public Builder add(boolean value) {
-			return add(new McpJsonBoolean(value));
+		public Builder add(@NonNull Boolean value) {
+			return add(new McpJsonBoolean(requireNonNull(value)));
 		}
 
 		/**

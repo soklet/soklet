@@ -32,6 +32,7 @@ import com.soklet.McpJsonArray;
 import com.soklet.McpJsonBoolean;
 import com.soklet.McpJsonObject;
 import com.soklet.McpJsonString;
+import com.soklet.McpLocalSubscriptionEventPublisher;
 import com.soklet.McpPromptArgumentDefinition;
 import com.soklet.McpPromptMessage;
 import com.soklet.McpPromptOutput;
@@ -48,6 +49,8 @@ import com.soklet.McpRequestStateProtector;
 import com.soklet.McpResourceOutput;
 import com.soklet.McpResourceRegistration;
 import com.soklet.McpServer;
+import com.soklet.McpSubscriptionConfig;
+import com.soklet.McpSubscriptionNotificationType;
 import com.soklet.McpTextResourceContents;
 import com.soklet.McpTextContent;
 import com.soklet.McpToolRegistration;
@@ -182,7 +185,7 @@ public class McpFinalTagGoldenWireProductionTests {
 										.build())
 								.build()))
 				.mimeType("text/plain")
-				.size(22)
+				.size(22L)
 				.build();
 
 		URI blobResourceUri = URI.create("golden://assets/logo.bin");
@@ -197,7 +200,7 @@ public class McpFinalTagGoldenWireProductionTests {
 										.build())
 								.build()))
 				.mimeType("application/octet-stream")
-				.size(4)
+				.size(4L)
 				.build();
 
 		McpResourceRegistration recordTemplate = McpResourceRegistration
@@ -406,12 +409,12 @@ public class McpFinalTagGoldenWireProductionTests {
 				.handler((request, call, features) -> {
 					McpProgressReporter reporter =
 							features.require(McpProgressReporter.class);
-					reporter.report(McpProgressUpdate.withProgress(0)
-							.total(100).build());
-					reporter.report(McpProgressUpdate.withProgress(50)
-							.total(100).build());
-					reporter.report(McpProgressUpdate.withProgress(100)
-							.total(100).build());
+					reporter.report(McpProgressUpdate.withProgress(0.0d)
+							.total(100.0d).build());
+					reporter.report(McpProgressUpdate.withProgress(50.0d)
+							.total(100.0d).build());
+					reporter.report(McpProgressUpdate.withProgress(100.0d)
+							.total(100.0d).build());
 					return McpCompleteResult.fromToolText("progress complete");
 				})
 				.build();
@@ -464,6 +467,95 @@ public class McpFinalTagGoldenWireProductionTests {
 			}
 		} finally {
 			server.stop();
+		}
+	}
+
+	@Test
+	public void checked_in_phase_5_subscription_messages_match_the_production_listener()
+			throws Exception {
+		URI resourceUri = URI.create("golden://subscriptions/resource");
+		McpLocalSubscriptionEventPublisher publisher =
+				McpLocalSubscriptionEventPublisher.fromDefaults();
+		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
+				.withEventPublisher(publisher)
+				.notificationTypes(Set.of(
+						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED,
+						McpSubscriptionNotificationType.RESOURCE_UPDATED))
+				.build();
+		McpResourceRegistration resource = McpResourceRegistration
+				.withUriAndName(resourceUri, "Golden subscription resource")
+				.handler((request, read, features) ->
+						McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
+								.content(McpTextResourceContents.withUriAndText(
+										read.getUri(), "subscription golden")
+										.build())
+								.build()))
+				.build();
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
+				.serverInformation(McpImplementation.withNameAndVersion(
+						"soklet-final-schema-golden", "3.6.0-SNAPSHOT").build())
+				.resource(resource)
+				.subscriptions(subscriptions)
+				.build();
+		McpServer server = McpServer.withPort(0)
+				.host("127.0.0.1")
+				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
+				.requestAdmissionPolicy(McpRequestAdmissionPolicy.acceptAllInstance())
+				.requestRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.allowedHosts(Set.of("127.0.0.1"))
+				.build();
+		McpChunkedHttpClient client = null;
+		Thread stopThread = null;
+
+		try {
+			server.start();
+			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+			client = McpChunkedHttpClient.postMcpMessage(port,
+					fixture("phase-5/subscription-listen-request.json"), List.of(
+							new McpChunkedHttpClient.RequestHeader(
+									"MCP-Protocol-Version", PROTOCOL_VERSION),
+							new McpChunkedHttpClient.RequestHeader(
+									"Mcp-Method", "subscriptions/listen")));
+			McpChunkedHttpClient.HttpResponseHead head = client.readHead();
+			Assertions.assertEquals(200, head.status(), head.raw());
+			Assertions.assertEquals("text/event-stream",
+					head.singleHeader("Content-Type"));
+			Assertions.assertEquals("no-store",
+					head.singleHeader("Cache-Control"));
+			Assertions.assertEquals("no",
+					head.singleHeader("X-Accel-Buffering"));
+			Assertions.assertEquals("chunked",
+					head.singleHeader("Transfer-Encoding"));
+			Assertions.assertFalse(head.hasHeader("Content-Length"));
+			Assertions.assertEquals(sseFixture(
+					"phase-5/subscription-acknowledged.json"),
+					client.readChunkText());
+
+			publisher.publishResourcesListChanged();
+			Assertions.assertEquals(sseFixture(
+					"phase-5/subscription-resource-list-changed.json"),
+					client.readChunkText());
+			publisher.publishResourceUpdated(resourceUri);
+			Assertions.assertEquals(sseFixture(
+					"phase-5/subscription-resource-updated.json"),
+					client.readChunkText());
+
+			stopThread = new Thread(server::stop,
+					"mcp-subscription-golden-stop");
+			stopThread.start();
+			Assertions.assertEquals(sseFixture(
+					"phase-5/subscription-listen-response.json"),
+					client.readChunkText());
+			Assertions.assertNull(client.readChunk());
+			stopThread.join(5_000L);
+			Assertions.assertFalse(stopThread.isAlive());
+		} finally {
+			if (client != null)
+				client.close();
+			server.stop();
+			if (stopThread != null && stopThread.isAlive())
+				stopThread.join(5_000L);
 		}
 	}
 

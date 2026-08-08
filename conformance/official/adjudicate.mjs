@@ -59,6 +59,10 @@ function skipReason(check) {
 			&& typeof check.details.reason === 'string'
 			&& check.details.reason.length !== 0)
 		return check.details.reason;
+	if (check.details !== null && typeof check.details === 'object'
+			&& typeof check.details.note === 'string'
+			&& check.details.note.length !== 0)
+		return check.details.note;
 	throw new Error(`SKIPPED check ${check.id} has no reviewable reason`);
 }
 

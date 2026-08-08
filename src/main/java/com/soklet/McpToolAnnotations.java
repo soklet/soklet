@@ -124,35 +124,47 @@ public final class McpToolAnnotations {
 			return this;
 		}
 
-		/** @param readOnly whether the tool is read-only
-		 * @return this builder */
+		/**
+		 * @param readOnly whether the tool is read-only
+		 * @return this builder
+		 * @throws NullPointerException if {@code readOnly} is null
+		 */
 		@NonNull
-		public Builder readOnlyHint(boolean readOnly) {
-			this.readOnlyHint = readOnly;
+		public Builder readOnlyHint(@NonNull Boolean readOnly) {
+			this.readOnlyHint = requireNonNull(readOnly);
 			return this;
 		}
 
-		/** @param destructive whether the tool may perform destructive updates
-		 * @return this builder */
+		/**
+		 * @param destructive whether the tool may perform destructive updates
+		 * @return this builder
+		 * @throws NullPointerException if {@code destructive} is null
+		 */
 		@NonNull
-		public Builder destructiveHint(boolean destructive) {
-			this.destructiveHint = destructive;
+		public Builder destructiveHint(@NonNull Boolean destructive) {
+			this.destructiveHint = requireNonNull(destructive);
 			return this;
 		}
 
-		/** @param idempotent whether repeated calls have no additional effect
-		 * @return this builder */
+		/**
+		 * @param idempotent whether repeated calls have no additional effect
+		 * @return this builder
+		 * @throws NullPointerException if {@code idempotent} is null
+		 */
 		@NonNull
-		public Builder idempotentHint(boolean idempotent) {
-			this.idempotentHint = idempotent;
+		public Builder idempotentHint(@NonNull Boolean idempotent) {
+			this.idempotentHint = requireNonNull(idempotent);
 			return this;
 		}
 
-		/** @param openWorld whether the tool may interact with external entities
-		 * @return this builder */
+		/**
+		 * @param openWorld whether the tool may interact with external entities
+		 * @return this builder
+		 * @throws NullPointerException if {@code openWorld} is null
+		 */
 		@NonNull
-		public Builder openWorldHint(boolean openWorld) {
-			this.openWorldHint = openWorld;
+		public Builder openWorldHint(@NonNull Boolean openWorld) {
+			this.openWorldHint = requireNonNull(openWorld);
 			return this;
 		}
 

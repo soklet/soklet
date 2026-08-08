@@ -344,14 +344,54 @@
       "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_protected_state_round_trip_matches_the_production_listener"
     },
     {
-      "name": "final-schema-subscription-terminal-canary",
+      "name": "phase-5-subscription-acknowledged",
       "phase": 5,
-      "source": "schema-canary",
-      "path": "schema-canaries/subscription-listen-terminal.json",
-      "sha256": "07a08499aed44bfae0bbcb537667be0a6f9b1d6dbfa0688584c3d62dfcdc4841",
+      "source": "production",
+      "path": "phase-5/subscription-acknowledged.json",
+      "sha256": "89e1e858ed1f1e04de140f6aa45bd492b669d02bc54b7b6de8ac02b8745c8d52",
+      "schemaRef": "#/$defs/SubscriptionsAcknowledgedNotification",
+      "transportForm": "sse-data-json",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_subscription_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-5-subscription-listen-request",
+      "phase": 5,
+      "source": "production",
+      "path": "phase-5/subscription-listen-request.json",
+      "sha256": "f23d66560b0255674fe830c44f25c01ac4d53011dd5820b505faea2ee85beca3",
+      "schemaRef": "#/$defs/SubscriptionsListenRequest",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_subscription_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-5-subscription-listen-response",
+      "phase": 5,
+      "source": "production",
+      "path": "phase-5/subscription-listen-response.json",
+      "sha256": "867643b60208982d320fb529bcb73fa30b00fd00714b3a5fa9f0c4de02d5ce19",
       "schemaRef": "#/$defs/SubscriptionsListenResultResponse",
-      "transportForm": "sse-data-json-canary",
-      "owningTest": "self-test.mjs"
+      "transportForm": "sse-data-json",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_subscription_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-5-subscription-resource-list-changed",
+      "phase": 5,
+      "source": "production",
+      "path": "phase-5/subscription-resource-list-changed.json",
+      "sha256": "267d5837e4f07024d1764b45ba4d6f78d96e6898e83c5358bc60eab8c876c79c",
+      "schemaRef": "#/$defs/ResourceListChangedNotification",
+      "transportForm": "sse-data-json",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_subscription_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-5-subscription-resource-updated",
+      "phase": 5,
+      "source": "production",
+      "path": "phase-5/subscription-resource-updated.json",
+      "sha256": "98bada4031f1c691ef5f75abfd54ac067b0286fb5d1e5dcae18d7afc4c20a982",
+      "schemaRef": "#/$defs/ResourceUpdatedNotification",
+      "transportForm": "sse-data-json",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_subscription_messages_match_the_production_listener"
     }
   ]
 }

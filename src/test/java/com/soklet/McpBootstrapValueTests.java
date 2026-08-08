@@ -84,6 +84,38 @@ public class McpBootstrapValueTests {
 	}
 
 	@Test
+	public void jsonAndEndpointScalarInputsRejectNullReferences() {
+		Assertions.assertThrows(NullPointerException.class,
+				() -> new McpJsonBoolean(null));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpJsonArray.builder().add((Boolean) null));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpJsonObject.builder().put("value", (Integer) null));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpJsonObject.builder().put("value", (Long) null));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpJsonObject.builder().put("value", (Double) null));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpJsonObject.builder().put("value", (Boolean) null));
+		Assertions.assertSame(Boolean.TRUE,
+				endpoint("/mcp").isServerInformationIncluded());
+		Assertions.assertThrows(NullPointerException.class, () -> McpEndpoint
+				.withPath("/mcp")
+				.serverInformation(McpImplementation.withNameAndVersion(
+						"server", "3.6.0").build())
+				.includeServerInformation(null));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpJsonRpcError.fromApplication(null, "failure"));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpRequestRejection.withStatusCodeAndError(null,
+						McpJsonRpcError.fromApplication(1_000, "failure")));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpRequestRejection.withStatusCodeAndError(400,
+						McpJsonRpcError.fromApplication(1_000, "failure"))
+						.statusCode(null));
+	}
+
+	@Test
 	public void operationFreeEndpointIsValidAndNormalizesItsPath() {
 		McpImplementation serverInformation = McpImplementation
 				.withNameAndVersion("catalog", "3.6.0")

@@ -1017,14 +1017,6 @@ record McpApplicationResponse(int status, @NonNull String reason,
 	}
 
 	@NonNull
-	static McpApplicationResponse duplicateRequestId(@NonNull McpJsonRpcId id) {
-		// The protocol requires sender-side in-flight uniqueness but does not freeze a
-		// server collision mapping. This package-private response remains provisional.
-		return error(id, 400, "Bad Request", McpJsonRpcError.INVALID_REQUEST,
-				"Invalid Request", McpRequestOutcome.PROTOCOL_ERROR, List.of());
-	}
-
-	@NonNull
 	static McpApplicationResponse invalidParams(@NonNull McpJsonRpcId id) {
 		return error(id, 400, "Bad Request", McpJsonRpcError.INVALID_PARAMS,
 				"Invalid params", McpRequestOutcome.PROTOCOL_ERROR, List.of());
@@ -1089,9 +1081,10 @@ interface McpApplicationResponseWriter {
 record McpApplicationExecutionSnapshot(int configuredHandlerConcurrency,
 		int configuredHandlerQueueCapacity, int activeHandlerSlots, int queuedRequests,
 		int maximumObservedActiveHandlerSlots, int maximumObservedQueuedRequests,
-		int activeRequestIds, int retainedExchanges, int retainedTransportLeases,
+		int activeIdentifiedRequestExchanges, int retainedExchanges,
+		int retainedTransportLeases,
 		long admittedRequests,
-		long capacityRejections, long duplicateIdRejections, long deadlineExpirations,
+		long capacityRejections, long deadlineExpirations,
 		long protocolDeadlineExpirations,
 		long terminalResponses, long abandonedResponses, long responseCleanups,
 		boolean accepting, boolean terminated) {
@@ -1147,8 +1140,6 @@ final class McpApplicationExecution {
 	private final AtomicLong admittedRequests;
 	@NonNull
 	private final AtomicLong capacityRejections;
-	@NonNull
-	private final AtomicLong duplicateIdRejections;
 	@NonNull
 	private final AtomicLong deadlineExpirations;
 	@NonNull
@@ -1212,7 +1203,6 @@ final class McpApplicationExecution {
 		this.exchangeSequence = new AtomicLong();
 		this.admittedRequests = new AtomicLong();
 		this.capacityRejections = new AtomicLong();
-		this.duplicateIdRejections = new AtomicLong();
 		this.deadlineExpirations = new AtomicLong();
 		this.protocolDeadlineExpirations = new AtomicLong();
 		this.terminalResponses = new AtomicLong();
@@ -1415,10 +1405,6 @@ final class McpApplicationExecution {
 		}
 	}
 
-	void recordDuplicateIdRejection() {
-		duplicateIdRejections.incrementAndGet();
-	}
-
 	void recordProtocolDeadlineExpiration() {
 		protocolDeadlineExpirations.incrementAndGet();
 		deadlineExpirations.incrementAndGet();
@@ -1471,7 +1457,8 @@ final class McpApplicationExecution {
 	}
 
 	@NonNull
-	McpApplicationExecutionSnapshot snapshot(int activeRequestIds) {
+	McpApplicationExecutionSnapshot snapshot(
+			int activeIdentifiedRequestExchanges) {
 		McpApplicationHandlerDispatcher.Snapshot dispatcherSnapshot = dispatcher.snapshot();
 		return new McpApplicationExecutionSnapshot(
 				dispatcherSnapshot.concurrency(),
@@ -1480,13 +1467,12 @@ final class McpApplicationExecution {
 				dispatcherSnapshot.queueDepth(),
 				dispatcherSnapshot.maximumObservedActiveSlots(),
 				dispatcherSnapshot.maximumObservedQueueDepth(),
-				activeRequestIds,
+				activeIdentifiedRequestExchanges,
 				retainedExchanges.size(),
 				(int) retainedExchanges.values().stream()
 						.filter(Exchange::hasTransportLease).count(),
 				admittedRequests.get(),
 				capacityRejections.get(),
-				duplicateIdRejections.get(),
 				deadlineExpirations.get(),
 				protocolDeadlineExpirations.get(),
 				terminalResponses.get(),

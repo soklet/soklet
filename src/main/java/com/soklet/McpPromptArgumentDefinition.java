@@ -82,7 +82,8 @@ public final class McpPromptArgumentDefinition {
 	}
 
 	/** @return whether the argument must be present in {@code prompts/get} */
-	public boolean isRequired() {
+	@NonNull
+	public Boolean isRequired() {
 		return this.required;
 	}
 
@@ -143,10 +144,11 @@ public final class McpPromptArgumentDefinition {
 		 *
 		 * @param required whether callers must supply this argument
 		 * @return this builder
+		 * @throws NullPointerException if {@code required} is null
 		 */
 		@NonNull
-		public Builder required(boolean required) {
-			this.required = required;
+		public Builder required(@NonNull Boolean required) {
+			this.required = requireNonNull(required);
 			return this;
 		}
 

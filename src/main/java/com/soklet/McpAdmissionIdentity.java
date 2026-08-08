@@ -88,7 +88,8 @@ public final class McpAdmissionIdentity {
 	}
 
 	/** @return whether a principal is present */
-	public boolean isAuthenticated() {
+	@NonNull
+	public Boolean isAuthenticated() {
 		return this.principal != null;
 	}
 

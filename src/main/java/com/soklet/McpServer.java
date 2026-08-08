@@ -57,7 +57,7 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 	 *
 	 * @return {@code true} while started
 	 */
-	boolean isStarted();
+	@NonNull Boolean isStarted();
 
 	/**
 	 * Returns the immutable endpoint resolver.
@@ -140,7 +140,7 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 	 *
 	 * @return positive cursor-size limit in bytes
 	 */
-	int getMaximumCursorSizeInBytes();
+	@NonNull Integer getMaximumCursorSizeInBytes();
 
 	/**
 	 * Returns this server's request-state protection control plane.
@@ -186,10 +186,11 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 	 *
 	 * @param port port in the range 0 through 65535
 	 * @return server builder
+	 * @throws NullPointerException if {@code port} is null
 	 */
 	@NonNull
-	static Builder withPort(int port) {
-		return new Builder(requirePort(port));
+	static Builder withPort(@NonNull Integer port) {
+		return new Builder(requirePort(requireNonNull(port)));
 	}
 
 	/**
@@ -301,11 +302,12 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		 *
 		 * @param port port in the range 0 through 65535
 		 * @return this builder
+		 * @throws NullPointerException if {@code port} is null
 		 * @throws IllegalArgumentException if the port is outside the valid range
 		 */
 		@NonNull
-		public Builder port(int port) {
-			this.port = requirePort(port);
+		public Builder port(@NonNull Integer port) {
+			this.port = requirePort(requireNonNull(port));
 			return this;
 		}
 
@@ -330,10 +332,13 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		 *
 		 * @param maximumCursorSizeInBytes positive cursor-size limit in bytes
 		 * @return this builder
+		 * @throws NullPointerException if {@code maximumCursorSizeInBytes} is null
 		 * @throws IllegalArgumentException if the limit is not positive
 		 */
 		@NonNull
-		public Builder maximumCursorSizeInBytes(int maximumCursorSizeInBytes) {
+		public Builder maximumCursorSizeInBytes(
+				@NonNull Integer maximumCursorSizeInBytes) {
+			requireNonNull(maximumCursorSizeInBytes);
 			if (maximumCursorSizeInBytes < 1)
 				throw new IllegalArgumentException(
 						"MCP maximum cursor size must be positive.");
@@ -348,11 +353,14 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		 *
 		 * @param maximumSubscriptionsPerPrincipal subscription limit per principal
 		 * @return this builder
+		 * @throws NullPointerException if {@code maximumSubscriptionsPerPrincipal}
+		 *                              is null
 		 * @throws IllegalArgumentException if the value is not positive
 		 */
 		@NonNull
 		public Builder maximumSubscriptionsPerPrincipal(
-				int maximumSubscriptionsPerPrincipal) {
+				@NonNull Integer maximumSubscriptionsPerPrincipal) {
+			requireNonNull(maximumSubscriptionsPerPrincipal);
 			if (maximumSubscriptionsPerPrincipal < 1)
 				throw new IllegalArgumentException(
 						"MCP maximum subscriptions per principal must be positive.");
@@ -404,10 +412,13 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		 *
 		 * @param requestHandlerConcurrency maximum active handler dispatches
 		 * @return this builder
+		 * @throws NullPointerException if {@code requestHandlerConcurrency} is null
 		 * @throws IllegalArgumentException if the value is not positive
 		 */
 		@NonNull
-		public Builder requestHandlerConcurrency(int requestHandlerConcurrency) {
+		public Builder requestHandlerConcurrency(
+				@NonNull Integer requestHandlerConcurrency) {
+			requireNonNull(requestHandlerConcurrency);
 			if (requestHandlerConcurrency < 1)
 				throw new IllegalArgumentException(
 						"MCP request-handler concurrency must be positive.");
@@ -421,11 +432,13 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		 *
 		 * @param requestHandlerQueueCapacity maximum queued handler dispatches
 		 * @return this builder
+		 * @throws NullPointerException if {@code requestHandlerQueueCapacity} is null
 		 * @throws IllegalArgumentException if the value is not positive
 		 */
 		@NonNull
 		public Builder requestHandlerQueueCapacity(
-				int requestHandlerQueueCapacity) {
+				@NonNull Integer requestHandlerQueueCapacity) {
+			requireNonNull(requestHandlerQueueCapacity);
 			if (requestHandlerQueueCapacity < 1)
 				throw new IllegalArgumentException(
 						"MCP request-handler queue capacity must be positive.");
@@ -459,10 +472,12 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		 *
 		 * @param streamQueueCapacity maximum pending messages per stream
 		 * @return this builder
+		 * @throws NullPointerException if {@code streamQueueCapacity} is null
 		 * @throws IllegalArgumentException if the value is not positive
 		 */
 		@NonNull
-		public Builder streamQueueCapacity(int streamQueueCapacity) {
+		public Builder streamQueueCapacity(@NonNull Integer streamQueueCapacity) {
+			requireNonNull(streamQueueCapacity);
 			if (streamQueueCapacity < 1)
 				throw new IllegalArgumentException(
 						"MCP stream queue capacity must be positive.");
@@ -471,11 +486,11 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		}
 
 		/**
-		 * Sets the positive finite deadline for one stream write. The default is
-		 * 30 seconds. This setting has neutral behavior until its streaming owner
-		 * is active.
+		 * Sets the positive finite interval for which a live response stream may
+		 * write no bytes before Soklet closes it. The default is 30 seconds. The
+		 * configured keep-alive interval must be shorter than this interval.
 		 *
-		 * @param writeTimeout maximum duration of one stream write
+		 * @param writeTimeout maximum interval without a stream write
 		 * @return this builder
 		 * @throws IllegalArgumentException if the duration is not positive and
 		 *                                  representable as signed nanoseconds
@@ -697,10 +712,12 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		 *
 		 * @param enabled whether bounded name-bearing diagnostics are enabled
 		 * @return this builder
+		 * @throws NullPointerException if {@code enabled} is null
 		 */
 		@NonNull
-		public Builder unknownMirroredHeaderNameDiagnostics(boolean enabled) {
-			this.unknownMirroredHeaderNameDiagnostics = enabled;
+		public Builder unknownMirroredHeaderNameDiagnostics(
+				@NonNull Boolean enabled) {
+			this.unknownMirroredHeaderNameDiagnostics = requireNonNull(enabled);
 			return this;
 		}
 
@@ -726,10 +743,11 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		 *
 		 * @param enabled whether raw validated trace IDs may appear in logs
 		 * @return this builder
+		 * @throws NullPointerException if {@code enabled} is null
 		 */
 		@NonNull
-		public Builder logRawValidatedTraceIds(boolean enabled) {
-			this.logRawValidatedTraceIds = enabled;
+		public Builder logRawValidatedTraceIds(@NonNull Boolean enabled) {
+			this.logRawValidatedTraceIds = requireNonNull(enabled);
 			return this;
 		}
 
@@ -769,12 +787,17 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		 * Builds a stopped MCP server.
 		 *
 		 * @return configured server
-		 * @throws IllegalStateException if resolver or admission policy is absent,
-		 *                               a configured limiter name is unknown, or
-		 *                               tools exist without a fallback tool limiter
+		 * @throws IllegalStateException if the keep-alive interval is not shorter
+		 *                               than the write timeout, resolver or admission
+		 *                               policy is absent, a configured limiter name is
+		 *                               unknown, or tools exist without a fallback
+		 *                               tool limiter
 		 */
 		@NonNull
 		public McpServer build() {
+			if (this.keepAliveInterval.compareTo(this.writeTimeout) >= 0)
+				throw new IllegalStateException(
+						"The MCP keep-alive interval must be shorter than the write timeout.");
 			if (this.handlerResolver == null)
 				throw new IllegalStateException("An MCP handler resolver must be configured.");
 			if (this.requestAdmissionPolicy == null)

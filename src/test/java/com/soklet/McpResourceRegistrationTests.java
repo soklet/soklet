@@ -75,7 +75,7 @@ class McpResourceRegistrationTests {
 		assertEquals("application/json", resource.getMimeType().orElseThrow());
 		assertEquals(List.of(icon), resource.getIcons());
 		assertSame(annotations, resource.getAnnotations().orElseThrow());
-		assertEquals(42L, resource.getSize().orElseThrow());
+		assertEquals(Long.valueOf(42), resource.getSize().orElseThrow());
 		assertSame(cachePolicy, resource.getCachePolicy());
 		assertSame(metadata, resource.getMetadata());
 		assertSame(handler, resource.getHandler());
@@ -145,7 +145,7 @@ class McpResourceRegistrationTests {
 		assertEquals("Catalog usage guide",
 				descriptor.getDescription().orElseThrow());
 		assertEquals("text/plain", descriptor.getMimeType().orElseThrow());
-		assertEquals(128L, descriptor.getSize().orElseThrow());
+		assertEquals(Long.valueOf(128), descriptor.getSize().orElseThrow());
 		assertEquals(List.of(descriptor), page.getResources());
 		assertEquals("", page.getNextCursor().orElseThrow());
 		assertEquals(Duration.ofMillis(250),
@@ -176,6 +176,15 @@ class McpResourceRegistrationTests {
 		assertThrows(IllegalArgumentException.class, () -> McpResourceDescriptor
 				.withUriAndName(URI.create("catalog://item"), "resource")
 				.size(-1L));
+		assertThrows(NullPointerException.class, () -> McpResourceRegistration
+				.withUriAndName(URI.create("catalog://item"), "resource")
+				.handler(handler).size(null));
+		assertThrows(NullPointerException.class, () -> McpResourceDescriptor
+				.withUriAndName(URI.create("catalog://item"), "resource")
+				.size(null));
+		assertThrows(NullPointerException.class, () -> McpResourceLink
+				.withUriAndName(URI.create("catalog://item"), "resource")
+				.size(null));
 		assertThrows(IllegalArgumentException.class,
 				() -> McpCachePolicy.fromPrivateTimeToLive(Duration.ofMillis(-1)));
 		assertThrows(IllegalArgumentException.class,
@@ -277,12 +286,16 @@ class McpResourceRegistrationTests {
 						McpRequestAdmissionPolicy.acceptAllInstance())
 				.build();
 
-		assertEquals(4_096, defaultServer.getMaximumCursorSizeInBytes());
-		assertEquals(17, customServer.getMaximumCursorSizeInBytes());
+		assertEquals(Integer.valueOf(4_096),
+				defaultServer.getMaximumCursorSizeInBytes());
+		assertEquals(Integer.valueOf(17),
+				customServer.getMaximumCursorSizeInBytes());
 		assertThrows(IllegalArgumentException.class,
 				() -> McpServer.withPort(0).maximumCursorSizeInBytes(0));
 		assertThrows(IllegalArgumentException.class,
 				() -> McpServer.withPort(0).maximumCursorSizeInBytes(-1));
+		assertThrows(NullPointerException.class,
+				() -> McpServer.withPort(0).maximumCursorSizeInBytes(null));
 	}
 
 	private static McpResourceHandler resourceHandler() {

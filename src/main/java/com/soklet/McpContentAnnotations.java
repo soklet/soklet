@@ -111,11 +111,13 @@ public final class McpContentAnnotations {
 		 *
 		 * @param priority priority in the inclusive range {@code 0.0..1.0}
 		 * @return this builder
+		 * @throws NullPointerException if {@code priority} is null
 		 * @throws IllegalArgumentException if the value is non-finite or outside
 		 * the permitted range
 		 */
 		@NonNull
-		public Builder priority(double priority) {
+		public Builder priority(@NonNull Double priority) {
+			requireNonNull(priority);
 			if (!Double.isFinite(priority) || priority < 0.0 || priority > 1.0)
 				throw new IllegalArgumentException(
 						"Content priority must be finite and between 0.0 and 1.0.");

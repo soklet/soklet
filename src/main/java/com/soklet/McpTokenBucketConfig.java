@@ -57,9 +57,10 @@ public final class McpTokenBucketConfig {
 	 *
 	 * @param capacity positive maximum number of tokens
 	 * @return token-bucket configuration builder
+	 * @throws NullPointerException if {@code capacity} is null
 	 */
 	@NonNull
-	public static Builder withCapacity(long capacity) {
+	public static Builder withCapacity(@NonNull Long capacity) {
 		return new Builder().capacity(capacity);
 	}
 
@@ -84,7 +85,8 @@ public final class McpTokenBucketConfig {
 	 *
 	 * @return positive token capacity
 	 */
-	public long getCapacity() {
+	@NonNull
+	public Long getCapacity() {
 		return this.capacity;
 	}
 
@@ -93,7 +95,8 @@ public final class McpTokenBucketConfig {
 	 *
 	 * @return positive refill quantity
 	 */
-	public long getRefillTokens() {
+	@NonNull
+	public Long getRefillTokens() {
 		return this.refillTokens;
 	}
 
@@ -133,10 +136,11 @@ public final class McpTokenBucketConfig {
 		 *
 		 * @param capacity positive token capacity
 		 * @return this builder
+		 * @throws NullPointerException if {@code capacity} is null
 		 */
 		@NonNull
-		public Builder capacity(long capacity) {
-			this.capacity = capacity;
+		public Builder capacity(@NonNull Long capacity) {
+			this.capacity = requireNonNull(capacity);
 			return this;
 		}
 
@@ -145,10 +149,11 @@ public final class McpTokenBucketConfig {
 		 *
 		 * @param refillTokens positive refill quantity
 		 * @return this builder
+		 * @throws NullPointerException if {@code refillTokens} is null
 		 */
 		@NonNull
-		public Builder refillTokens(long refillTokens) {
-			this.refillTokens = refillTokens;
+		public Builder refillTokens(@NonNull Long refillTokens) {
+			this.refillTokens = requireNonNull(refillTokens);
 			return this;
 		}
 

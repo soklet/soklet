@@ -45,11 +45,12 @@ public final class McpProgressUpdate {
 	 *
 	 * @param progress finite progress value
 	 * @return progress-update builder
+	 * @throws NullPointerException if {@code progress} is null
 	 * @throws IllegalArgumentException if {@code progress} is not finite
 	 */
 	@NonNull
-	public static Builder withProgress(double progress) {
-		return new Builder(progress);
+	public static Builder withProgress(@NonNull Double progress) {
+		return new Builder(requireNonNull(progress));
 	}
 
 	private McpProgressUpdate(@NonNull Builder builder) {
@@ -60,7 +61,8 @@ public final class McpProgressUpdate {
 	}
 
 	/** @return finite progress value */
-	public double getProgress() {
+	@NonNull
+	public Double getProgress() {
 		return this.progress;
 	}
 
@@ -103,11 +105,12 @@ public final class McpProgressUpdate {
 		 *
 		 * @param total finite total value
 		 * @return this builder
+		 * @throws NullPointerException if {@code total} is null
 		 * @throws IllegalArgumentException if {@code total} is not finite
 		 */
 		@NonNull
-		public Builder total(double total) {
-			this.total = requireFinite(total, "Progress total");
+		public Builder total(@NonNull Double total) {
+			this.total = requireFinite(requireNonNull(total), "Progress total");
 			return this;
 		}
 

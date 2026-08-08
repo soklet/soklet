@@ -236,7 +236,8 @@ public final class McpToolRegistration<A> {
 	 *
 	 * @return {@code true} when mirroring is enabled
 	 */
-	public boolean isStructuredContentTextMirroringEnabled() {
+	@NonNull
+	public Boolean isStructuredContentTextMirroringEnabled() {
 		return this.structuredContentTextMirroringEnabled;
 	}
 
@@ -699,10 +700,11 @@ public final class McpToolRegistration<A> {
 		 *
 		 * @param enabled whether mirroring is enabled
 		 * @return this builder
+		 * @throws NullPointerException if {@code enabled} is null
 		 */
 		@NonNull
-		public Builder<A> mirrorStructuredContentAsText(boolean enabled) {
-			this.state.structuredContentTextMirroringEnabled = enabled;
+		public Builder<A> mirrorStructuredContentAsText(@NonNull Boolean enabled) {
+			this.state.structuredContentTextMirroringEnabled = requireNonNull(enabled);
 			return this;
 		}
 
@@ -850,11 +852,12 @@ public final class McpToolRegistration<A> {
 		 *
 		 * @param enabled whether mirroring is enabled
 		 * @return this builder
+		 * @throws NullPointerException if {@code enabled} is null
 		 */
 		@NonNull
 		public CompleteBuilder<A, R> mirrorStructuredContentAsText(
-				boolean enabled) {
-			this.state.structuredContentTextMirroringEnabled = enabled;
+				@NonNull Boolean enabled) {
+			this.state.structuredContentTextMirroringEnabled = requireNonNull(enabled);
 			return this;
 		}
 

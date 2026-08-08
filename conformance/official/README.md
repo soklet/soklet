@@ -82,15 +82,17 @@ request/complete-response exchange. It also includes a protected request-state
 exchange: the initial response emits listener-produced `requestState`, and a
 fresh-ID retry echoes it with valid `inputResponses` before completing. The
 Phase 5 progress exchange binds its initiating request, exact 0/50/100
-notifications, and terminal response to one production SSE stream. The current
-corpus contains 35 messages: 34 production-derived messages plus one
-subscription terminal schema canary. The canary is not production evidence;
-Phase 5 must add a production-derived row when subscriptions exist. The
-validator uses Ajv and `ajv-formats` from the official suite's verified
-lockfile, so no Soklet runtime dependency or second package installation is
-added. These corpus additions are local production-listener/final-schema
-evidence. The standalone progress observation is useful diagnostic evidence,
-but it does not constitute the complete Phase 5 or 39-scenario gate; all 16
+notifications, and terminal response to one production SSE stream. A second
+five-message production exchange binds a `subscriptions/listen` request,
+acknowledgment, resource-list change, resource update, and graceful tagged
+terminal result. The current corpus therefore contains 39 messages, all
+production-derived; the earlier subscription terminal schema canary has been
+replaced. The validator uses Ajv and `ajv-formats` from the official suite's
+verified lockfile, so no Soklet runtime dependency or second package
+installation is added. These corpus additions are local production-listener/
+final-schema evidence. The standalone progress observation is useful
+diagnostic evidence, but it does not constitute the complete Phase 5 or
+39-scenario gate; all 16
 Phase 5 expected profiles remain null until atomic phase advancement.
 
 The schema layer checks JSON message shapes only. HTTP status and headers,

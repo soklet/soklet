@@ -497,10 +497,10 @@ public class McpHttpServerPolicyPipelineTests {
 
 	private static void awaitClean(McpHttpServerRuntime runtime) throws Exception {
 		awaitRequestSnapshot(runtime, snapshot -> snapshot.retainedRequestControls() == 0
-				&& snapshot.activeRequestIds() == 0);
+				&& snapshot.activeIdentifiedRequestExchanges() == 0);
 		awaitApplicationSnapshot(runtime, snapshot -> snapshot.activeHandlerSlots() == 0
 				&& snapshot.queuedRequests() == 0
-				&& snapshot.activeRequestIds() == 0
+				&& snapshot.activeIdentifiedRequestExchanges() == 0
 				&& snapshot.retainedExchanges() == 0
 				&& snapshot.retainedTransportLeases() == 0);
 	}

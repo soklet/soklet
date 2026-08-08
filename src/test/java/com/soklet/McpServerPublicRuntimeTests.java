@@ -67,10 +67,21 @@ public class McpServerPublicRuntimeTests {
 	public void executionConfigurationValidatesAndOwnsOneExecutorPerGeneration()
 			throws Exception {
 		McpServer.Builder validationBuilder = McpServer.withPort(0);
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpServer.withPort(null));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> validationBuilder.port(null));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> validationBuilder.requestHandlerConcurrency(0));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> validationBuilder.requestHandlerQueueCapacity(-1));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> validationBuilder.requestHandlerConcurrency(null));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> validationBuilder.requestHandlerQueueCapacity(null));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> validationBuilder
+						.unknownMirroredHeaderNameDiagnostics(null));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> validationBuilder.requestTimeout(Duration.ZERO));
 		Assertions.assertThrows(IllegalArgumentException.class,
@@ -383,9 +394,10 @@ public class McpServerPublicRuntimeTests {
 	}
 
 	@Test
-	public void attachedSubscriptionConfigRemainsRuntimeNeutralBeforePhaseFive()
+	public void attachedSubscriptionConfigAdvertisesAndActivatesResourceSubscriptions()
 			throws Exception {
 		AtomicInteger listenerRegistrations = new AtomicInteger();
+		AtomicInteger listenerRegistrationCloses = new AtomicInteger();
 		AtomicInteger publishedEvents = new AtomicInteger();
 		McpSubscriptionEventPublisher publisher =
 				new McpSubscriptionEventPublisher() {
@@ -393,8 +405,10 @@ public class McpServerPublicRuntimeTests {
 					public McpSubscriptionEventSubscription subscribe(
 							@NonNull McpSubscriptionEventListener listener) {
 						listenerRegistrations.incrementAndGet();
+						AtomicInteger closed = new AtomicInteger();
 						return () -> {
-							// No registration is expected during Phase 4.
+							if (closed.compareAndSet(0, 1))
+								listenerRegistrationCloses.incrementAndGet();
 						};
 					}
 
@@ -411,8 +425,8 @@ public class McpServerPublicRuntimeTests {
 						McpSubscriptionNotificationType.RESOURCE_UPDATED)
 				.build();
 		McpResourceRegistration resource = McpResourceRegistration
-				.withUriAndName(URI.create("test://neutral-subscriptions"),
-						"neutral-subscriptions")
+				.withUriAndName(URI.create("test://phase-five-subscriptions"),
+						"phase-five-subscriptions")
 				.handler((request, read, features) -> {
 					throw new AssertionError(
 							"Discovery must not invoke the resource handler.");
@@ -420,7 +434,7 @@ public class McpServerPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation
-						.withNameAndVersion("neutral-subscriptions", "1.0")
+						.withNameAndVersion("phase-five-subscriptions", "1.0")
 						.build())
 				.resource(resource)
 				.subscriptions(subscriptions)
@@ -429,27 +443,33 @@ public class McpServerPublicRuntimeTests {
 				McpRequestAdmissionPolicy.acceptAllInstance(), true);
 
 		Assertions.assertEquals(0, listenerRegistrations.get());
+		Assertions.assertEquals(0, listenerRegistrationCloses.get());
 		Assertions.assertEquals(0, publishedEvents.get());
 		try {
 			server.start();
+			Assertions.assertEquals(1, listenerRegistrations.get());
+			Assertions.assertEquals(0, listenerRegistrationCloses.get());
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow()
 					.getPort();
 			HttpResponse<String> response = sendDiscovery(port,
-					"neutral-subscriptions", "{}");
+					"phase-five-subscriptions", "{}");
 
-			assertSuccessfulDiscovery(response, "neutral-subscriptions");
-			Assertions.assertTrue(response.body().contains(
-					"\"capabilities\":{\"resources\":{}}"), response.body());
-			Assertions.assertFalse(response.body().contains("\"subscribe\""),
-					response.body());
-			Assertions.assertFalse(response.body().contains("\"listChanged\""),
-					response.body());
-			Assertions.assertEquals(0, listenerRegistrations.get());
+			assertSuccessfulDiscovery(response, "phase-five-subscriptions");
+			Assertions.assertEquals("{\"jsonrpc\":\"2.0\","
+					+ "\"id\":\"phase-five-subscriptions\",\"result\":{"
+					+ "\"supportedVersions\":[\"2026-07-28\"],"
+					+ "\"capabilities\":{\"resources\":{\"listChanged\":true,"
+					+ "\"subscribe\":true}},\"ttlMs\":0,\"cacheScope\":\"private\","
+					+ "\"resultType\":\"complete\",\"_meta\":{"
+					+ "\"io.modelcontextprotocol/serverInfo\":{"
+					+ "\"name\":\"phase-five-subscriptions\","
+					+ "\"version\":\"1.0\"}}}}", response.body());
 			Assertions.assertEquals(0, publishedEvents.get());
 		} finally {
 			server.stop();
 		}
-		Assertions.assertEquals(0, listenerRegistrations.get());
+		Assertions.assertEquals(1, listenerRegistrations.get());
+		Assertions.assertEquals(1, listenerRegistrationCloses.get());
 		Assertions.assertEquals(0, publishedEvents.get());
 	}
 

@@ -29,9 +29,14 @@ import com.soklet.McpEndpoint;
 import com.soklet.McpHandlerResolver;
 import com.soklet.McpImageContent;
 import com.soklet.McpImplementation;
+import com.soklet.McpInputRequest;
+import com.soklet.McpInputRequestDeclaration;
+import com.soklet.McpInputRequiredResult;
+import com.soklet.McpInputRequirement;
 import com.soklet.McpJsonObject;
 import com.soklet.McpJsonRpcError;
 import com.soklet.McpJsonRpcException;
+import com.soklet.McpLocalSubscriptionEventPublisher;
 import com.soklet.McpOfficialSchemaConformanceTool;
 import com.soklet.McpPromptArgumentDefinition;
 import com.soklet.McpPromptMessage;
@@ -49,6 +54,8 @@ import com.soklet.McpResourceOutput;
 import com.soklet.McpServer;
 import com.soklet.McpServerStatus;
 import com.soklet.McpShutdownOutcome;
+import com.soklet.McpSubscriptionConfig;
+import com.soklet.McpSubscriptionNotificationType;
 import com.soklet.McpTextContent;
 import com.soklet.McpTextResourceContents;
 import com.soklet.McpToolOutput;
@@ -63,6 +70,7 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Set;
@@ -71,8 +79,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 /**
- * Candidate-artifact black-box fixture for Soklet's official MCP conformance
- * run through the complete Phase 4 capability profile.
+ * Candidate-artifact black-box fixture for a selected official MCP
+ * conformance scenario.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -90,6 +98,7 @@ public final class McpConformanceFixture {
 	private static final byte[] WAV_BYTES = Base64.getDecoder().decode(
 			"UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=");
 	private static final Set<String> SUPPORTED_SCENARIOS = Set.of(
+			"server-stateless",
 			"tools-list",
 			"tools-call-simple-text",
 			"tools-call-image",
@@ -122,7 +131,7 @@ public final class McpConformanceFixture {
 		if (arguments.length != 2 || !"--scenario".equals(arguments[0])
 				|| !SUPPORTED_SCENARIOS.contains(arguments[1]))
 			throw new IllegalArgumentException(
-					"Usage: McpConformanceFixture --scenario <Phase 4 scenario>");
+					"Usage: McpConformanceFixture --scenario <supported scenario>");
 
 		AtomicInteger effectivePort = new AtomicInteger(-1);
 		AtomicReference<McpShutdownOutcome> shutdownOutcome =
@@ -130,7 +139,7 @@ public final class McpConformanceFixture {
 		CorsAuthorizer corsAuthorizer = CorsAuthorizer.fromWhitelistAuthorizer(
 				origin -> origin.equals("http://" + LOOPBACK + ":"
 						+ effectivePort.get()));
-		McpEndpoint endpoint = phase4Endpoint();
+		McpEndpoint endpoint = endpointForScenario(arguments[1]);
 		McpRateLimiter allowLimiter = context ->
 				McpRateLimitDecision.fromAllowed();
 		McpServer mcpServer = McpServer.withPort(0)
@@ -184,14 +193,14 @@ public final class McpConformanceFixture {
 		writeControlLine("{\"format\":1,\"event\":\"stopped\",\"clean\":true}");
 	}
 
-	private static McpEndpoint phase4Endpoint() {
-		return McpEndpoint.withPath(MCP_PATH)
+	private static McpEndpoint endpointForScenario(String scenario) {
+		McpEndpoint.Builder builder = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
 						"soklet-public-conformance", "3.6.0-SNAPSHOT")
-						.description("Soklet MCP Phase 4 conformance fixture")
+						.description("Soklet MCP conformance fixture")
 						.build())
 				.includeServerInformation(true)
-				.tools(tools())
+				.tools(tools(scenario))
 				.prompts(prompts())
 				.resources(resources())
 				.resourceListHandler((request, list, features) -> {
@@ -204,12 +213,20 @@ public final class McpConformanceFixture {
 							.build();
 				})
 				.resourcesListCachePolicy(CACHE_POLICY)
-				.resourceTemplatesListCachePolicy(CACHE_POLICY)
-				.build();
+				.resourceTemplatesListCachePolicy(CACHE_POLICY);
+		if ("server-stateless".equals(scenario))
+			builder.subscriptions(McpSubscriptionConfig.withEventPublisher(
+					McpLocalSubscriptionEventPublisher.fromDefaults())
+					.notificationType(
+							McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED)
+					.notificationType(
+							McpSubscriptionNotificationType.RESOURCE_UPDATED)
+					.build());
+		return builder.build();
 	}
 
-	private static List<McpToolRegistration<?>> tools() {
-		return List.of(
+	private static List<McpToolRegistration<?>> tools(String scenario) {
+		List<McpToolRegistration<?>> tools = new ArrayList<>(List.of(
 				rawTool("test_simple_text",
 						"Returns deterministic text content.",
 						() -> McpCompleteResult.fromToolText(
@@ -244,12 +261,12 @@ public final class McpConformanceFixture {
 									.find(McpProgressReporter.class)
 									.orElseThrow(() -> new IllegalStateException(
 											"The progress scenario omitted its progress token."));
-							reporter.report(McpProgressUpdate.withProgress(0)
-									.total(100).build());
-							reporter.report(McpProgressUpdate.withProgress(50)
-									.total(100).build());
-							reporter.report(McpProgressUpdate.withProgress(100)
-									.total(100).build());
+							reporter.report(McpProgressUpdate.withProgress(0.0d)
+									.total(100.0d).build());
+							reporter.report(McpProgressUpdate.withProgress(50.0d)
+									.total(100.0d).build());
+							reporter.report(McpProgressUpdate.withProgress(100.0d)
+									.total(100.0d).build());
 							return McpCompleteResult.fromToolText(
 									"Progress test completed.");
 						})
@@ -263,7 +280,46 @@ public final class McpConformanceFixture {
 										"Custom header accepted."))
 						.description(
 								"Validates one string-valued custom mirrored header.")
-						.build());
+						.build()));
+		if ("server-stateless".equals(scenario)) {
+			McpInputRequestDeclaration sampling =
+					McpInputRequestDeclaration.fromSampling(Set.of(),
+							McpInputRequirement.REQUIRED);
+			McpInputRequestDeclaration elicitation =
+					McpInputRequestDeclaration.fromElicitationForm(
+							McpInputRequirement.REQUIRED);
+			McpJsonObject elicitationParameters = McpJsonObject.builder()
+					.put("message", "Provide a conformance value")
+					.put("requestedSchema", McpJsonObject.builder()
+							.put("type", "object")
+							.build())
+					.build();
+			tools.add(McpToolRegistration.withName("test_missing_capability")
+					.jsonArguments()
+					.handler((request, call, features) ->
+							McpCompleteResult.fromToolText(
+									"Sampling capability was declared."))
+					.mayRequestInput(sampling)
+					.description("Requires the base sampling capability.")
+					.build());
+			tools.add(McpToolRegistration.withName("test_streaming_elicitation")
+					.jsonArguments()
+					.handler((request, call, features) ->
+							McpInputRequiredResult.builder()
+									.inputRequest("conformance-value",
+											McpInputRequest.fromDeclaration(
+													elicitation,
+													elicitationParameters))
+									.build())
+					.mayRequestInput(elicitation)
+					.description("Returns one embedded elicitation input request.")
+					.build());
+			tools.add(rawTool("test_logging_tool",
+					"Completes without emitting a log notification.",
+					() -> McpCompleteResult.fromToolText(
+							"No log notification was emitted.")));
+		}
+		return List.copyOf(tools);
 	}
 
 	private static McpToolRegistration<McpJsonObject> rawTool(String name,

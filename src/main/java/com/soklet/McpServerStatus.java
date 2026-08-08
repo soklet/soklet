@@ -23,8 +23,8 @@ package com.soklet;
  */
 public enum McpServerStatus {
 	/**
-	 * The MCP listener is not accepting connections and has no residual handler
-	 * executions.
+	 * The MCP listener is not accepting connections and has no residual
+	 * application-supplied MCP request-processing executions.
 	 */
 	STOPPED,
 
@@ -34,8 +34,11 @@ public enum McpServerStatus {
 	STARTED,
 
 	/**
-	 * The listener is stopped, but one or more application handler executions
-	 * remain after the bounded shutdown deadline.
+	 * The listener is stopped, but one or more application-supplied MCP
+	 * request-processing executions remain after the bounded shutdown deadline.
+	 * The compatibility name covers both registered handlers and request pipeline
+	 * callbacks, such as admission, rate-limiting, or request-state protection
+	 * code, that ignore cancellation or interruption.
 	 */
 	STOPPED_WITH_RESIDUAL_HANDLERS
 }

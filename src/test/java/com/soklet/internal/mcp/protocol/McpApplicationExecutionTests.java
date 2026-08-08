@@ -196,7 +196,8 @@ public class McpApplicationExecutionTests {
 					"A dispatched-but-not-started ticket still owns its handler slot.");
 			Assertions.assertEquals(0, canceled.retainedTransportLeases(),
 					"Cancellation must detach raw transport and callback ownership.");
-			Assertions.assertEquals(0, canceled.activeRequestIds());
+			Assertions.assertEquals(0,
+					canceled.activeIdentifiedRequestExchanges());
 			Assertions.assertEquals(1, canceled.abandonedResponses());
 			Assertions.assertEquals(0, responses.get());
 			Assertions.assertEquals(1, cleanups.get());

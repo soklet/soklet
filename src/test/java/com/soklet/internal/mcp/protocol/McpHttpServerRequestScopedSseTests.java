@@ -355,16 +355,9 @@ public class McpHttpServerRequestScopedSseTests {
 								&& snapshot.terminalStreamBytes() > 0);
 				Assertions.assertEquals(1,
 						reserved.maximumObservedBufferedFramesPerStream());
-				Assertions.assertEquals(1, reserved.activeRequestIds(),
-						"The request ID must remain active until the stream drains.");
-				try (McpChunkedHttpClient duplicate = McpChunkedHttpClient.postMcp(
-						port, "\"terminal-lane\"", APPLICATION_METHOD)) {
-					McpChunkedHttpClient.HttpResponseHead duplicateHead =
-							duplicate.readHead();
-					Assertions.assertEquals(400, duplicateHead.status());
-					Assertions.assertTrue(duplicate.readFixedBody(duplicateHead).contains(
-							"\"code\":-32600"));
-				}
+				Assertions.assertEquals(1,
+						reserved.activeIdentifiedRequestExchanges(),
+						"The identified exchange must remain active until the stream drains.");
 				Assertions.assertTrue(client.readChunk().length > 3_000_000);
 				Assertions.assertEquals(
 						"data: {\"jsonrpc\":\"2.0\",\"id\":\"terminal-lane\","
@@ -463,7 +456,8 @@ public class McpHttpServerRequestScopedSseTests {
 			Assertions.assertTrue(stream.awaitTransportClosure());
 			McpRequestExecutionSnapshot stopped = runtime.requestExecutionSnapshot();
 			Assertions.assertEquals(0, stopped.retainedRequestControls());
-			Assertions.assertEquals(0, stopped.activeRequestIds());
+			Assertions.assertEquals(0,
+					stopped.activeIdentifiedRequestExchanges());
 			Assertions.assertEquals(0, stopped.activeResponseStreams());
 
 			int secondPort = runtime.start().getPort();
@@ -682,10 +676,10 @@ public class McpHttpServerRequestScopedSseTests {
 
 	private static void awaitClean(McpHttpServerRuntime runtime) throws Exception {
 		awaitRequestSnapshot(runtime, snapshot -> snapshot.retainedRequestControls() == 0
-				&& snapshot.activeRequestIds() == 0);
+				&& snapshot.activeIdentifiedRequestExchanges() == 0);
 		awaitApplicationSnapshot(runtime, snapshot -> snapshot.activeHandlerSlots() == 0
 				&& snapshot.queuedRequests() == 0
-				&& snapshot.activeRequestIds() == 0
+				&& snapshot.activeIdentifiedRequestExchanges() == 0
 				&& snapshot.retainedExchanges() == 0
 				&& snapshot.retainedTransportLeases() == 0);
 	}
