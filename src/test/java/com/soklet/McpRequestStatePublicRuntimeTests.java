@@ -108,6 +108,15 @@ public class McpRequestStatePublicRuntimeTests {
 					return invocation.invoke();
 				})
 				.build();
+		McpServerDiagnostics configuredDiagnostics = server.getDiagnostics();
+		Assertions.assertEquals(McpProtectionMode.CUSTOM_PROTECTOR,
+				configuredDiagnostics.getProtectionMode());
+		Assertions.assertEquals(Boolean.TRUE, configuredDiagnostics
+				.isApplicationRequestStateProtectorConfigured());
+		Assertions.assertTrue(configuredDiagnostics
+				.getProtectionKeyRingFingerprint().isEmpty());
+		Assertions.assertTrue(configuredDiagnostics
+				.getTraceCorrelationConfigurationFingerprint().isEmpty());
 		Soklet soklet = managedSoklet(server, observer);
 
 		try {
@@ -160,6 +169,8 @@ public class McpRequestStatePublicRuntimeTests {
 			Assertions.assertEquals(APPLICATION_STATE, retryState.value());
 			Assertions.assertEquals(0, protector.seals.get());
 			Assertions.assertEquals(0, protector.opens.get());
+			Assertions.assertFalse(server.getDiagnostics().toString()
+					.contains(APPLICATION_STATE));
 		} finally {
 			soklet.stop();
 		}
@@ -469,7 +480,17 @@ public class McpRequestStatePublicRuntimeTests {
 				.tool(noopTool("application-config",
 						McpRequestStateMode.APPLICATION_PROTECTED))
 				.build();
-		Assertions.assertNotNull(serverBuilder(applicationEndpoint).build());
+		McpServer applicationServer = serverBuilder(applicationEndpoint).build();
+		McpServerDiagnostics applicationDiagnostics =
+				applicationServer.getDiagnostics();
+		Assertions.assertEquals(McpProtectionMode.NO_FRAMEWORK_KEYS,
+				applicationDiagnostics.getProtectionMode());
+		Assertions.assertEquals(Boolean.FALSE, applicationDiagnostics
+				.isApplicationRequestStateProtectorConfigured());
+		Assertions.assertTrue(applicationDiagnostics
+				.getProtectionKeyRingFingerprint().isEmpty());
+		Assertions.assertTrue(applicationDiagnostics
+				.getTraceCorrelationConfigurationFingerprint().isEmpty());
 	}
 
 	@Test

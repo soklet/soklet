@@ -661,6 +661,8 @@ final class DefaultMcpServer implements McpServer {
 		synchronized (this.lifecycleLock) {
 			DiagnosticsState runtimeState = this.runtimeBridge
 					.getDiagnosticsState();
+			DefaultMcpSecurityControls.SecurityDiagnosticsState securityState =
+					this.securityControls.getDiagnosticsState();
 			McpServerStatus status = runtimeState.started()
 					? McpServerStatus.STARTED
 					: runtimeState.residualHandlers()
@@ -673,7 +675,11 @@ final class DefaultMcpServer implements McpServer {
 					runtimeState.activeHandlerExecutions(),
 					runtimeState.queuedRequests(),
 					runtimeState.activeRequestStreams(),
-					runtimeState.activeSubscriptions());
+					runtimeState.activeSubscriptions(),
+					securityState.protectionMode(),
+					securityState.applicationRequestStateProtectorConfigured(),
+					securityState.protectionKeyRingFingerprint(),
+					securityState.traceCorrelationConfigurationFingerprint());
 		}
 	}
 
@@ -1792,7 +1798,13 @@ record DefaultMcpServerDiagnostics(@NonNull McpServerStatus status,
 		@NonNull Optional<@NonNull InetSocketAddress> boundAddress,
 		int requestHandlerConcurrency, int requestHandlerQueueCapacity,
 		int activeHandlerExecutions, int queuedRequests,
-		int activeRequestStreams, int activeSubscriptions)
+		int activeRequestStreams, int activeSubscriptions,
+		@NonNull McpProtectionMode protectionMode,
+		boolean applicationRequestStateProtectorConfigured,
+		@NonNull Optional<@NonNull McpProtectionKeyRingFingerprint>
+				protectionKeyRingFingerprint,
+		@NonNull Optional<@NonNull McpTraceCorrelationConfigurationFingerprint>
+				traceCorrelationConfigurationFingerprint)
 		implements McpServerDiagnostics {
 	DefaultMcpServerDiagnostics {
 		requireNonNull(status);
@@ -1833,6 +1845,17 @@ record DefaultMcpServerDiagnostics(@NonNull McpServerStatus status,
 		if (status == McpServerStatus.STOPPED && activeSubscriptions != 0)
 			throw new IllegalArgumentException(
 					"A non-residual stopped MCP server snapshot cannot have active subscriptions.");
+		requireNonNull(protectionMode);
+		requireNonNull(protectionKeyRingFingerprint);
+		requireNonNull(traceCorrelationConfigurationFingerprint);
+		if (applicationRequestStateProtectorConfigured
+				!= (protectionMode == McpProtectionMode.CUSTOM_PROTECTOR))
+			throw new IllegalArgumentException(
+					"Application request-state protector presence must match custom-protector mode.");
+		if (protectionKeyRingFingerprint.isPresent()
+				!= (protectionMode == McpProtectionMode.PRODUCTION_KEY_RING))
+			throw new IllegalArgumentException(
+					"Production protection mode must have exactly one key-ring fingerprint.");
 	}
 
 	@Override
@@ -1881,6 +1904,32 @@ record DefaultMcpServerDiagnostics(@NonNull McpServerStatus status,
 	@NonNull
 	public Integer getActiveSubscriptions() {
 		return this.activeSubscriptions;
+	}
+
+	@Override
+	@NonNull
+	public McpProtectionMode getProtectionMode() {
+		return this.protectionMode;
+	}
+
+	@Override
+	@NonNull
+	public Boolean isApplicationRequestStateProtectorConfigured() {
+		return this.applicationRequestStateProtectorConfigured;
+	}
+
+	@Override
+	@NonNull
+	public Optional<@NonNull McpProtectionKeyRingFingerprint>
+			getProtectionKeyRingFingerprint() {
+		return this.protectionKeyRingFingerprint;
+	}
+
+	@Override
+	@NonNull
+	public Optional<@NonNull McpTraceCorrelationConfigurationFingerprint>
+			getTraceCorrelationConfigurationFingerprint() {
+		return this.traceCorrelationConfigurationFingerprint;
 	}
 }
 

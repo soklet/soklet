@@ -783,19 +783,20 @@ cooperative cancelation, and resource-subscription delivery are implemented
 Phase 5 slices. Deterministic MRTR termination, cross-instance protected-state
 continuation, and residual-shutdown recovery are implemented as well. Resource
 subscriptions use framework-owned listen streams and an application-owned
-local or distributed broadcast publisher. Four bounded Phase 6 verticals are
+local or distributed broadcast publisher. Five bounded Phase 6 verticals are
 implemented: shutdown observation, handler-capacity metrics, handler-capacity
-diagnostics, and live stream/subscription diagnostics. Every successfully
+diagnostics, live stream/subscription diagnostics, and protection/trace
+diagnostics. Every successfully
 started listener generation emits exactly one matching clean/residual shutdown
 metric, and server-wide handler execution, admitted-queue depth, and queue-full
 rejection transitions feed three label-free default metric families. Immutable
 server diagnostics expose the configured handler bounds, current active/queued
-counts, open request streams, and the subscription subset. The live-stream
-diagnostic slice adds no metric or event dimension. Operational trace
-correlation, the remaining telemetry/event hierarchy, the four still-planned
-protection/trace diagnostic projections, and MCP simulation remain open Phase
-6 work; applications must not advertise or depend on those remaining behaviors
-yet.
+counts, open request streams and subscription subset, effective request-state
+protection mode, custom-protector presence, and secret-free production-ring and
+trace-configuration fingerprints. The diagnostics add no metric, event, or
+wire dimension. Operational trace correlation, the remaining telemetry/event
+and redaction work, and MCP simulation remain open Phase 6 work; applications
+must not advertise or depend on those remaining behaviors yet.
 
 The exact pinned 39-scenario MCP suite has completed one clean controlled
 profile-observation run against the packaged fixture: 147 successful outcomes,
@@ -811,21 +812,22 @@ passes a fresh 39-scenario development-candidate verify with all 39 goldens and
 no bad outcome, standard-error output, or non-clean exit. It remains
 development evidence, not release-candidate provenance.
 
-The focused Phase 6 stream/subscription-diagnostics run passes 48 tests with
+The focused Phase 6 protection/trace-diagnostics run passes 70 tests with
 zero failures, zero errors, and zero skips. Full repository runs on JDK 21 and
-JDK 26 each report 1,424 tests, zero failures, zero errors, and four skips. The
+JDK 26 each report 1,428 tests, zero failures, zero errors, and four skips. The
 JDK 21 enforced static-analysis profile is green without counting advisory
 warnings; SpotBugs reports zero `BugInstance` values and zero errors. Exact
 API-freeze evidence remains unchanged at 556 incompatibilities, 206 reviewed
-owners, 1,049 Phase 4 records, and 195 Phase 5 records with the prior hashes. Candidate
-binary, source, and Javadoc packages plus the generated Javadoc report are
-green using offline-link resolution. All 167 API-sketch sources compile for
-Java 17 and pass Javadoc doclint on JDK 26. All 104 files from pinned JSON
-Schema commit `0c7b65dc16dd8eaa7bd83e21099c76610c3b246a` validate. These local
-results do not close the remaining Phase 6 telemetry/event hierarchy, four
-protection/trace diagnostic projections, tracing, simulator, sustained/fuzz,
-broader CI/provenance, or API review/freeze
-work. Phase 6 remains provisional and unfrozen.
+owners, 1,049 Phase 4 records, and 195 Phase 5 records with the prior hashes.
+Candidate binary, source, and Javadoc packages plus the generated Javadoc
+report are green using offline-link resolution. All 167 API-sketch sources
+compile for Java 17 and pass Javadoc doclint on JDK 26. All 104 files from
+pinned JSON Schema commit `0c7b65dc16dd8eaa7bd83e21099c76610c3b246a`
+validate. These local results do not close the remaining Phase 6
+telemetry/event hierarchy, broader
+trace-correlation and redaction work, simulator, sustained/fuzz, broader
+CI/provenance and release-candidate work, or API review/freeze. Phase 6 remains
+provisional and unfrozen.
 
 #### Form Handling
 
@@ -1463,17 +1465,27 @@ Use [`MetricsCollector.SnapshotTextOptions`](https://javadoc.soklet.com/com/sokl
 [`MetricsCollector.MetricsFormat`](https://javadoc.soklet.com/com/soklet/MetricsCollector.MetricsFormat.html) to control text output.
 
 `McpServer.getDiagnostics()` provides an immutable point-in-time view of MCP
-handler capacity and live request streams even when metrics are disabled. Its
-six boxed `@NonNull Integer` getters are
+handler capacity, live request streams, protection, and trace configuration
+even when metrics are disabled. `McpServerDiagnostics` declares exactly 12
+zero-argument methods: `getStatus()` and `getBoundAddress()`, plus all ten
+implemented diagnostic getters. Six are boxed `@NonNull Integer` values:
 `getRequestHandlerConcurrency()`, `getRequestHandlerQueueCapacity()`,
 `getActiveHandlerExecutions()`, `getQueuedRequests()`,
-`getActiveRequestStreams()`, and `getActiveSubscriptions()`. The configured
-values are positive and stable before start and across stop/restart. Lifecycle
-status, bound address, configured bounds, handler counts, and the paired
-stream/subscription counts are captured atomically by the runtime for the whole
-server; a retained snapshot never changes. Handler counts are nonnegative and
-bounded by their corresponding configuration, queued work implies all handler
-slots are occupied, and
+`getActiveRequestStreams()`, and `getActiveSubscriptions()`. The other four are
+`getProtectionMode()`, boxed
+`@NonNull Boolean isApplicationRequestStateProtectorConfigured()`,
+`getProtectionKeyRingFingerprint()`, and
+`getTraceCorrelationConfigurationFingerprint()`; both fingerprint accessors
+return non-null `Optional` values with non-null payloads.
+
+The configured numeric values are positive and stable before start and across
+stop/restart. Lifecycle status, bound address, configured bounds, handler
+counts, and the paired stream/subscription counts form one runtime-owned atomic
+tuple. The four security fields form a separate atomic tuple owned by the
+security controls. The resulting public record is immutable, but the two
+tuples do not claim a shared global linearization point. Handler counts are
+nonnegative and bounded by their corresponding configuration, queued work
+implies all handler slots are occupied, and
 `0 <= activeSubscriptions <= activeRequestStreams`.
 
 An ordinary request-scoped SSE stream produces pair `1/0`. An isolated
@@ -1493,18 +1505,26 @@ During internal `FAILED` cleanup, public residual status may transiently retain
 an open subscription pair `1/1`; completed cleanup reports `STOPPED` with
 `0/0`.
 
-The stream/subscription values are diagnostics-only: they add no metric family,
-event type, label, or other observation dimension, and collector reset cannot
-alter them. The exact four remaining planned getters are:
+The protection mode and custom-protector flag are construction-time values and
+remain stable across listener lifecycle. The flag is `true` exactly for
+`CUSTOM_PROTECTOR`; it reports selection of a custom application-owned
+`McpRequestStateProtector`, not `APPLICATION_PROTECTED` operation selection.
+Application-protected opaque state requires no framework protector and bypasses
+one even when configured. The protection fingerprint is present exactly for a
+live `PRODUCTION_KEY_RING`; development-ephemeral, custom, and unconfigured
+modes return empty. The trace fingerprint is independent of protection mode
+and is present exactly when trace correlation was enabled at construction.
+Successful live rotations update only fresh snapshots, survive listener
+stop/restart, and never mutate retained snapshots.
 
-- `getProtectionMode()`, returning `McpProtectionMode`;
-- `isApplicationRequestStateProtectorConfigured()`, returning `Boolean`;
-- `getProtectionKeyRingFingerprint()`, returning
-  `Optional<McpProtectionKeyRingFingerprint>`; and
-- `getTraceCorrelationConfigurationFingerprint()`, returning
-  `Optional<McpTraceCorrelationConfigurationFingerprint>`.
-
-They remain provisional, unimplemented, and unfrozen Phase 6 work.
+The fingerprints are deterministic operational comparison metadata, not
+authentication or token-derivation inputs. Diagnostics expose no raw key
+material, key IDs, per-key fingerprint tags, custom-provider identity,
+request-state cursors or epochs, or trace tokens. Strong operator key entropy
+remains required; equality is observable and rotation may create high-
+cardinality values, so fingerprints should not be metric labels or per-request
+log fields. These diagnostics add no metric family, event type, wire field,
+label, or other observation dimension, and collector reset cannot alter them.
 
 For MCP handler capacity, `McpMetricsSnapshot` exposes boxed, nonnegative
 `Long` values from `getActiveHandlerExecutions()`, `getHandlerQueueDepth()`,
@@ -1535,8 +1555,8 @@ enum-ordered `Map<McpShutdownOutcome, Long>`. The default collector omits
 unobserved outcomes, returns the map to empty on reset, and emits only
 `soklet_mcp_shutdowns_total{outcome="clean"}` or
 `soklet_mcp_shutdowns_total{outcome="residual_handlers"}`. The remaining MCP
-telemetry/event hierarchy, four protection/trace diagnostic projections,
-tracing, and simulator integration are still Phase 6 work.
+telemetry/event hierarchy, broader trace-correlation/redaction work, and
+simulator integration are still Phase 6 work.
 
 You can expose a `/metrics` endpoint by injecting [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html)
 into a [`ResourceMethod`](https://javadoc.soklet.com/com/soklet/ResourceMethod.html):

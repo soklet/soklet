@@ -27,6 +27,11 @@ import java.util.Optional;
  * <p>
  * A retained snapshot never changes. Obtain a new snapshot to observe a later
  * lifecycle state.
+ * <p>
+ * Lifecycle, handler-capacity, and stream values are captured together at one
+ * runtime linearization point. Protection and trace-correlation values are
+ * captured together at a separate security-control linearization point. No
+ * invariant spans those independently mutable domains.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -126,4 +131,67 @@ public interface McpServerDiagnostics {
 	 */
 	@NonNull
 	Integer getActiveSubscriptions();
+
+	/**
+	 * The effective framework request-state protection mode in this snapshot.
+	 * <p>
+	 * This value is fixed when the server is built and remains stable across
+	 * listener start, stop, and restart transitions.
+	 *
+	 * @return the effective protection mode
+	 */
+	@NonNull
+	McpProtectionMode getProtectionMode();
+
+	/**
+	 * Whether an application-owned request-state protector is configured in this
+	 * snapshot.
+	 * <p>
+	 * This value is {@code true} exactly when {@link #getProtectionMode()} is
+	 * {@link McpProtectionMode#CUSTOM_PROTECTOR}. It reports provider selection
+	 * without exposing the protector instance or its configuration. It does not
+	 * report whether an operation declares
+	 * {@link McpRequestStateMode#APPLICATION_PROTECTED}; it reports only custom-
+	 * protector selection for canonical
+	 * {@link McpRequestStateMode#FRAMEWORK_PROTECTED} state.
+	 *
+	 * @return whether a custom application request-state protector is configured
+	 */
+	@NonNull
+	Boolean isApplicationRequestStateProtectorConfigured();
+
+	/**
+	 * The secret-free fingerprint of the complete live production protection key
+	 * ring in this snapshot.
+	 * <p>
+	 * The fingerprint is present exactly when {@link #getProtectionMode()} is
+	 * {@link McpProtectionMode#PRODUCTION_KEY_RING}. Successful live ring
+	 * mutations are reflected only in subsequently obtained snapshots. The value
+	 * excludes trace-correlation configuration, request-state epochs, and cursors,
+	 * and exposes neither raw keys nor per-key fingerprint tags. It is operational
+	 * deployment-comparison metadata, not an authentication input.
+	 *
+	 * @return the live production key-ring fingerprint, or the empty optional
+	 */
+	@NonNull
+	Optional<@NonNull McpProtectionKeyRingFingerprint>
+			getProtectionKeyRingFingerprint();
+
+	/**
+	 * The secret-free fingerprint of the active trace-correlation configuration
+	 * in this snapshot.
+	 * <p>
+	 * The fingerprint is present exactly when trace correlation was enabled at
+	 * server construction. Successful trace-key rotations are reflected only in
+	 * subsequently obtained snapshots. This value is independent of the request-
+	 * state protection mode, exposes no raw key material, and is operational
+	 * deployment-comparison metadata rather than a token-derivation or
+	 * authentication input.
+	 *
+	 * @return the active trace-correlation configuration fingerprint, or the empty
+	 *         optional when trace correlation is disabled
+	 */
+	@NonNull
+	Optional<@NonNull McpTraceCorrelationConfigurationFingerprint>
+			getTraceCorrelationConfigurationFingerprint();
 }

@@ -55,22 +55,41 @@
   the rejection counter; residual handlers remain active until actual exit.
   Handler transitions and `ServerStopped` alone share deferred FIFO delivery
   outside dispatcher, request, runtime, server, and Soklet lifecycle locks.
-- Added an immutable, server-wide handler-capacity and live-stream projection
-  to `McpServerDiagnostics`. Its six boxed `@NonNull Integer` getters are
-  `getRequestHandlerConcurrency()`, `getRequestHandlerQueueCapacity()`,
-  `getActiveHandlerExecutions()`, `getQueuedRequests()`,
-  `getActiveRequestStreams()`, and `getActiveSubscriptions()`. They capture the
-  configured handler bounds, current active/queued counts, open request-scoped
-  SSE streams, and their resource-subscription subset atomically with lifecycle
-  status and bound address. Ordinary, subscription-only, and combined open
-  states produce stream pairs `1/0`, `1/1`, and `2/1`, with
+- Added five bounded Phase 6 observability verticals, culminating in an
+  immutable server-wide handler, stream, protection, and trace-configuration
+  projection through `McpServerDiagnostics`. The interface has exactly 12
+  zero-argument methods: lifecycle `getStatus()` and `getBoundAddress()`, plus
+  all ten implemented diagnostic getters. Six are boxed `@NonNull Integer`
+  methods: `getRequestHandlerConcurrency()`,
+  `getRequestHandlerQueueCapacity()`, `getActiveHandlerExecutions()`,
+  `getQueuedRequests()`, `getActiveRequestStreams()`, and
+  `getActiveSubscriptions()`. The other four are `getProtectionMode()`, boxed
+  `@NonNull Boolean isApplicationRequestStateProtectorConfigured()`,
+  `getProtectionKeyRingFingerprint()`, and
+  `getTraceCorrelationConfigurationFingerprint()`; both fingerprint getters
+  return non-null `Optional` containers with non-null payloads.
+- Lifecycle, address, handler, queue, stream, and subscription fields form one
+  runtime-owned atomic tuple. The protection/trace fields form a separate
+  security-controls atomic tuple; the immutable result does not claim one
+  global linearization point across both. Ordinary, subscription-only, and
+  combined open states produce stream pairs `1/0`, `1/1`, and `2/1`, with
   `0 <= activeSubscriptions <= activeRequestStreams`. Disconnect cleanup
   returns the pair through `1/0` to `0/0`; completed clean and residual-handler
   stops expose `0/0`; and internal `FAILED` cleanup may transiently retain
   `1/1` under public residual status before reporting `STOPPED` with `0/0`.
-  Retained snapshots never change. The stream counts are diagnostics-only and
-  add no metric or event dimension. The four protection/trace getters reserved
-  by the API sketch remain provisional, unimplemented, and unfrozen.
+  Retained snapshots never change.
+- Protection mode and custom-protector presence are construction-time values;
+  the boxed flag is true exactly for `CUSTOM_PROTECTOR` and does not mean an
+  operation selected `APPLICATION_PROTECTED`. The production-ring fingerprint
+  is present exactly for `PRODUCTION_KEY_RING`; the independent trace
+  fingerprint is present exactly when trace correlation was enabled. Live
+  rotations update only fresh snapshots and persist across listener restart.
+  Fingerprints are deterministic operational comparison metadata, not
+  authentication inputs, and expose no raw key material, key IDs, per-key tags,
+  provider identity, cursors/epochs, or trace tokens. Equality and rotation
+  carry entropy/cardinality implications, so these values are unsuitable for
+  metric labels or per-request logs. This diagnostics vertical adds no metric,
+  event, or wire dimension.
 
 ### Development Status
 
@@ -78,28 +97,24 @@
   prompts, resources, progress, cancelation, subscription delivery, multi-
   round-trip execution, and protected request-state execution. All 39 reviewed
   Phase 5 profiles are active. The bounded Phase 6 shutdown, handler-capacity,
-  handler-diagnostics, and stream/subscription-diagnostics verticals are
-  implemented and locally green. The focused stream/subscription-diagnostics
-  run passes 48 tests with zero failures, zero errors, and zero skips; full JDK
-  21 and JDK 26 runs each report 1,424 tests, zero failures, zero
-  errors, and four skips. The JDK 21 enforced static-analysis profile is green
+  handler-diagnostics, stream/subscription-diagnostics, and protection/trace-
+  diagnostics verticals are implemented and locally green. The focused
+  protection/trace-diagnostics run passes 70 tests with zero failures, zero
+  errors, and zero skips; full JDK 21 and JDK 26 runs each report 1,428 tests,
+  zero failures, zero errors, and four skips. The JDK 21 enforced static-
+  analysis profile is green
   without counting advisory warnings, and SpotBugs reports zero `BugInstance`
   values and zero errors. Exact API-freeze evidence remains unchanged at 556
   incompatibilities, 206 reviewed owners, 1,049 Phase 4 records, and 195 Phase
-  5 records with the prior hashes. Candidate binary, source, and Javadoc packages plus the
-  generated Javadoc report are green using offline-link resolution. All 167
-  API-sketch sources compile for Java 17 and pass Javadoc doclint on JDK 26.
+  5 records with the prior hashes. Candidate binary, source, and Javadoc
+  packages plus the generated Javadoc report are green using offline-link
+  resolution. All 167 API-sketch sources compile for Java 17 and pass Javadoc
+  doclint on JDK 26.
   All 104 files from pinned JSON Schema commit
   `0c7b65dc16dd8eaa7bd83e21099c76610c3b246a` validate. Remaining telemetry/event
-  hierarchy, the four planned protection/trace diagnostics
-  (`getProtectionMode()` returning `McpProtectionMode`,
-  `isApplicationRequestStateProtectorConfigured()` returning `Boolean`,
-  `getProtectionKeyRingFingerprint()` returning
-  `Optional<McpProtectionKeyRingFingerprint>`, and
-  `getTraceCorrelationConfigurationFingerprint()` returning
-  `Optional<McpTraceCorrelationConfigurationFingerprint>`), trace correlation,
-  simulation, sustained/fuzz gates, CI/provenance, and the provisional,
-  unfrozen Phase 6 API review/freeze remain open.
+  hierarchy, broader trace-correlation and redaction work, simulation,
+  sustained/fuzz gates, CI/provenance and release-candidate work, and the
+  provisional, unfrozen Phase 6 API review/freeze remain open.
 
 ## 3.5.1 (2026-07-13)
 

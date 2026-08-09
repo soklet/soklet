@@ -51,6 +51,33 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 final class DefaultMcpSecurityControls
 		implements McpProtectionControl, McpTraceCorrelation {
+	/**
+	 * Immutable, secret-free projection of protection and trace-correlation
+	 * diagnostics captured at one security-control linearization point.
+	 */
+	@ThreadSafe
+	record SecurityDiagnosticsState(
+			@NonNull McpProtectionMode protectionMode,
+			boolean applicationRequestStateProtectorConfigured,
+			@NonNull Optional<@NonNull McpProtectionKeyRingFingerprint>
+					protectionKeyRingFingerprint,
+			@NonNull Optional<@NonNull McpTraceCorrelationConfigurationFingerprint>
+					traceCorrelationConfigurationFingerprint) {
+		SecurityDiagnosticsState {
+			requireNonNull(protectionMode);
+			requireNonNull(protectionKeyRingFingerprint);
+			requireNonNull(traceCorrelationConfigurationFingerprint);
+			if (applicationRequestStateProtectorConfigured
+					!= (protectionMode == McpProtectionMode.CUSTOM_PROTECTOR))
+				throw new IllegalArgumentException(
+						"Application request-state protector presence must match custom-protector mode.");
+			if (protectionKeyRingFingerprint.isPresent()
+					!= (protectionMode == McpProtectionMode.PRODUCTION_KEY_RING))
+				throw new IllegalArgumentException(
+						"Production protection mode must have exactly one key-ring fingerprint.");
+		}
+	}
+
 	@NonNull
 	static final String REQUEST_STATE_PREFIX =
 			"soklet-mcp-request-state-v1.";
@@ -186,6 +213,33 @@ final class DefaultMcpSecurityControls
 	@NonNull
 	public McpProtectionMode getProtectionMode() {
 		return this.protectionMode;
+	}
+
+	/**
+	 * Captures the live protection and trace-correlation diagnostics while holding
+	 * their shared mutation lock.
+	 *
+	 * @return immutable secret-free diagnostics state
+	 */
+	@NonNull
+	SecurityDiagnosticsState getDiagnosticsState() {
+		synchronized (this.lock) {
+			Optional<@NonNull McpProtectionKeyRingFingerprint>
+					protectionKeyRingFingerprint =
+					this.protectionMode == McpProtectionMode.PRODUCTION_KEY_RING
+							? Optional.of(protectionFingerprint(
+									requireNonNull(this.activeProtectionKey),
+									this.verificationProtectionKeys.values()))
+							: Optional.empty();
+			Optional<@NonNull McpTraceCorrelationConfigurationFingerprint>
+					traceCorrelationConfigurationFingerprint =
+					Optional.ofNullable(this.activeTraceCorrelationKey)
+							.map(DefaultMcpSecurityControls::traceFingerprint);
+			return new SecurityDiagnosticsState(this.protectionMode,
+					this.requestStateProtector != null,
+					protectionKeyRingFingerprint,
+					traceCorrelationConfigurationFingerprint);
+		}
 	}
 
 	@Override

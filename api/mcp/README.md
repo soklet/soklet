@@ -133,13 +133,25 @@ markers.
 
 ## Current bounded Phase 6 checkpoint
 
-The Phase 6-owned `McpServerDiagnostics` now exposes six reviewed values
-through boxed `@NonNull Integer` getters:
+The fifth bounded Phase 6 diagnostics vertical is implemented.
+`McpServerDiagnostics` now has exactly 12 zero-argument methods: lifecycle
+`getStatus()` and `getBoundAddress()`, plus all ten implemented diagnostic
+getters. Six use boxed `@NonNull Integer` values:
 `getRequestHandlerConcurrency()`, `getRequestHandlerQueueCapacity()`,
 `getActiveHandlerExecutions()`, `getQueuedRequests()`,
-`getActiveRequestStreams()`, and `getActiveSubscriptions()`. They form one
-runtime-owned immutable, atomic point-in-time projection with lifecycle status
-and bound address. Configured values remain stable before start and across
+`getActiveRequestStreams()`, and `getActiveSubscriptions()`. The other four are
+`@NonNull McpProtectionMode getProtectionMode()`, boxed
+`@NonNull Boolean isApplicationRequestStateProtectorConfigured()`,
+`getProtectionKeyRingFingerprint()`, and
+`getTraceCorrelationConfigurationFingerprint()`; both fingerprint accessors
+return non-null `Optional` values with non-null payloads.
+
+Lifecycle, bound address, configured counts, current handler/queue counts, and
+the stream/subscription pair form one runtime-owned atomic tuple. Protection
+mode, custom-protector presence, production-ring fingerprint, and trace-
+configuration fingerprint form a separate security-controls atomic tuple. One
+immutable diagnostics result carries both, without claiming one shared global
+linearization point. Configured values remain stable before start and across
 stop/restart; handler values are bounded server-wide dispatcher counts; and
 `0 <= activeSubscriptions <= activeRequestStreams`. A subscription enters both
 stream counts once its acknowledgment stream opens, without claiming client
@@ -150,21 +162,27 @@ and `2/1`. Disconnect cleanup moves `2/1` through `1/0` to `0/0`. Completed
 clean and residual-handler stops report stream pair `0/0`, even while a
 residual handler remains active until actual exit. During internal `FAILED`
 cleanup, public residual status may transiently retain `1/1`; completed cleanup
-reports `STOPPED` with `0/0`. These two fields are diagnostics-only and add no
-metric family, event type, label, or other observation dimension.
+reports `STOPPED` with `0/0`.
+
+Protection mode and the custom-protector flag are fixed at construction and
+stable across listener lifecycle; the flag is true exactly for
+`CUSTOM_PROTECTOR`. It identifies selection of the custom application-owned
+`McpRequestStateProtector`, not an operation's `APPLICATION_PROTECTED` state
+mode. The production-ring fingerprint is present exactly in
+`PRODUCTION_KEY_RING` mode. The independent trace fingerprint is present
+exactly when trace correlation was enabled. Successful live rotations change
+only fresh snapshots and persist across listener stop/restart.
+
+Fingerprints are deterministic operational deployment-comparison metadata,
+not authentication or token-derivation inputs. Diagnostics expose no raw key
+material, key IDs, per-key tags, provider identity, cursors/epochs, or trace
+tokens. Equality remains observable and rotations can create high-cardinality
+values, so strong operator key entropy, bounded retention, and exclusion from
+metric labels and per-request logs remain necessary. This fifth vertical adds
+no metric family, event type, wire field, label, or other observation dimension.
 
 This checkpoint does not freeze Phase 6. `phase-6.includes` remains outside
-`frozen-phases`. The exact four additional protection/trace diagnostics
-reserved by the API sketch are:
-
-- `getProtectionMode()`, returning `McpProtectionMode`;
-- `isApplicationRequestStateProtectorConfigured()`, returning `Boolean`;
-- `getProtectionKeyRingFingerprint()`, returning
-  `Optional<McpProtectionKeyRingFingerprint>`; and
-- `getTraceCorrelationConfigurationFingerprint()`, returning
-  `Optional<McpTraceCorrelationConfigurationFingerprint>`.
-
-They remain provisional, unimplemented, and unfrozen.
+`frozen-phases`, and the diagnostics owner remains provisional and unfrozen.
 
 ## Running the gates
 
@@ -189,13 +207,16 @@ SHA-256
 `c6862ed49a9bc9565ba2284190c49605928270fb8a6fb73f75070452f909e75f`;
 its exact nullability digest is
 `d52a424ac33e679e0a0632004ac931e59966b68641659e254214964d9144f8c7`.
-The full JDK 21 and JDK 26 test suites each execute 1,424 tests with zero
+The 556/206/1,049/195 evidence counts are unchanged by this provisional
+diagnostics vertical.
+
+The full JDK 21 and JDK 26 test suites each execute 1,428 tests with zero
 failures, zero errors, and four expected skips. The JDK 21 Error Prone profile
 passes all enforced checks; NullAway remains advisory, and its warnings are not
 counted here. SpotBugs reports zero `BugInstance` values and zero errors. The
 focused Phase 5 API-review contract run passes 45 tests with no failure, error,
-or skip. The focused Phase 6 stream/subscription-diagnostics run passes 48
-tests with no failure, error, or skip. Candidate binary, source, and Javadoc
+or skip. The focused Phase 6 protection/trace-diagnostics run passes 70 tests
+with no failure, error, or skip. Candidate binary, source, and Javadoc
 packages plus the generated Javadoc report are green using offline-link
 resolution. All 167 API-sketch sources compile for Java 17 and pass Javadoc
 doclint on JDK 26. All 104 files from pinned JSON Schema commit

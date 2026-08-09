@@ -25,6 +25,7 @@ import java.lang.reflect.AnnotatedParameterizedType;
 import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -69,18 +70,32 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 			"getActiveSubscriptions");
 
 	@Test
-	public void publicSurfaceUsesExactBoxedNonNullDocumentedDiagnosticGetters()
+	public void publicSurfaceUsesExactReferenceNonNullDocumentedDiagnosticGetters()
 			throws Exception {
 		Assertions.assertTrue(McpServerDiagnostics.class.isInterface());
+		Method[] declaredGetterMethods =
+				McpServerDiagnostics.class.getDeclaredMethods();
+		Assertions.assertEquals(12, declaredGetterMethods.length);
+		for (Method getter : declaredGetterMethods) {
+			Assertions.assertEquals(0, getter.getParameterCount(), getter.toString());
+			Assertions.assertTrue(Modifier.isPublic(getter.getModifiers()),
+					getter.toString());
+			Assertions.assertTrue(Modifier.isAbstract(getter.getModifiers()),
+					getter.toString());
+		}
 		Set<String> declaredMethods = new TreeSet<>(Arrays.stream(
-				McpServerDiagnostics.class.getDeclaredMethods())
+				declaredGetterMethods)
 				.map(Method::getName).toList());
 		Assertions.assertEquals(Set.of(
 				"getStatus", "getBoundAddress",
 					"getRequestHandlerConcurrency",
 					"getRequestHandlerQueueCapacity",
 					"getActiveHandlerExecutions", "getQueuedRequests",
-					"getActiveRequestStreams", "getActiveSubscriptions"),
+					"getActiveRequestStreams", "getActiveSubscriptions",
+					"getProtectionMode",
+					"isApplicationRequestStateProtectorConfigured",
+					"getProtectionKeyRingFingerprint",
+					"getTraceCorrelationConfigurationFingerprint"),
 					declaredMethods);
 
 		for (String getterName : INTEGER_DIAGNOSTIC_GETTERS) {
@@ -94,17 +109,17 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 					.isAnnotationPresent(NonNull.class));
 		}
 
-		Method boundAddress = McpServerDiagnostics.class.getMethod(
-				"getBoundAddress");
-		AnnotatedType annotatedBoundAddress =
-				boundAddress.getAnnotatedReturnType();
-		Assertions.assertTrue(annotatedBoundAddress
-				.isAnnotationPresent(NonNull.class));
-		Assertions.assertInstanceOf(AnnotatedParameterizedType.class,
-				annotatedBoundAddress);
-		AnnotatedType addressType = ((AnnotatedParameterizedType)
-				annotatedBoundAddress).getAnnotatedActualTypeArguments()[0];
-		Assertions.assertTrue(addressType.isAnnotationPresent(NonNull.class));
+		assertNonNullReferenceGetter("getProtectionMode",
+				McpProtectionMode.class);
+		assertNonNullReferenceGetter(
+				"isApplicationRequestStateProtectorConfigured", Boolean.class);
+		assertNonNullOptionalGetter("getProtectionKeyRingFingerprint",
+				McpProtectionKeyRingFingerprint.class);
+		assertNonNullOptionalGetter(
+				"getTraceCorrelationConfigurationFingerprint",
+				McpTraceCorrelationConfigurationFingerprint.class);
+		assertNonNullReferenceGetter("getStatus", McpServerStatus.class);
+		assertNonNullOptionalGetter("getBoundAddress", InetSocketAddress.class);
 
 		String source = Files.readString(Path.of(
 				"src/main/java/com/soklet/McpServerDiagnostics.java"),
@@ -121,6 +136,16 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 				"open request-scoped SSE streams");
 		assertDocumented(source, "getActiveSubscriptions",
 				"never");
+		assertDocumented(source, "getProtectionMode",
+				"effective framework request-state protection mode");
+		assertDocumented(source,
+				"isApplicationRequestStateProtectorConfigured",
+				"application-owned");
+		assertDocumented(source, "getProtectionKeyRingFingerprint",
+				"PRODUCTION_KEY_RING");
+		assertDocumented(source,
+				"getTraceCorrelationConfigurationFingerprint",
+				"trace correlation");
 	}
 
 	@Test
@@ -339,9 +364,9 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 
 	private static void assertDocumented(@NonNull String source,
 			@NonNull String getterName, @NonNull String requiredFragment) {
-		String signature = "Integer " + requireNonNull(getterName) + "();";
-		int signatureIndex = requireNonNull(source).indexOf(signature);
-		Assertions.assertTrue(signatureIndex >= 0, signature);
+		String signatureSuffix = requireNonNull(getterName) + "();";
+		int signatureIndex = requireNonNull(source).indexOf(signatureSuffix);
+		Assertions.assertTrue(signatureIndex >= 0, signatureSuffix);
 		int javadocEnd = source.lastIndexOf("*/", signatureIndex);
 		int javadocStart = source.lastIndexOf("/**", javadocEnd);
 		Assertions.assertTrue(javadocStart >= 0 && javadocEnd > javadocStart,
@@ -350,6 +375,35 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 		Assertions.assertTrue(javadoc.contains("@return"), javadoc);
 		Assertions.assertTrue(javadoc.contains(requireNonNull(requiredFragment)),
 				javadoc);
+	}
+
+	private static void assertNonNullReferenceGetter(
+			@NonNull String getterName, @NonNull Class<?> returnType)
+			throws Exception {
+		Method getter = McpServerDiagnostics.class.getMethod(
+				requireNonNull(getterName));
+		Assertions.assertEquals(requireNonNull(returnType), getter.getReturnType());
+		Assertions.assertFalse(getter.getReturnType().isPrimitive());
+		Assertions.assertEquals(0, getter.getParameterCount());
+		Assertions.assertTrue(Modifier.isPublic(getter.getModifiers()));
+		Assertions.assertTrue(Modifier.isAbstract(getter.getModifiers()));
+		Assertions.assertTrue(getter.getAnnotatedReturnType()
+				.isAnnotationPresent(NonNull.class));
+	}
+
+	private static void assertNonNullOptionalGetter(
+			@NonNull String getterName, @NonNull Class<?> elementType)
+			throws Exception {
+		assertNonNullReferenceGetter(getterName, java.util.Optional.class);
+		AnnotatedType annotatedReturnType = McpServerDiagnostics.class
+				.getMethod(getterName).getAnnotatedReturnType();
+		AnnotatedParameterizedType optionalType = Assertions.assertInstanceOf(
+				AnnotatedParameterizedType.class, annotatedReturnType);
+		AnnotatedType optionalElement =
+				optionalType.getAnnotatedActualTypeArguments()[0];
+		Assertions.assertEquals(requireNonNull(elementType),
+				optionalElement.getType());
+		Assertions.assertTrue(optionalElement.isAnnotationPresent(NonNull.class));
 	}
 
 	private static void assertDiagnostics(
@@ -371,6 +425,14 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 				diagnostics.getActiveRequestStreams());
 		Assertions.assertEquals(Integer.valueOf(0),
 				diagnostics.getActiveSubscriptions());
+		Assertions.assertEquals(McpProtectionMode.NO_FRAMEWORK_KEYS,
+				diagnostics.getProtectionMode());
+		Assertions.assertEquals(Boolean.FALSE,
+				diagnostics.isApplicationRequestStateProtectorConfigured());
+		Assertions.assertTrue(
+				diagnostics.getProtectionKeyRingFingerprint().isEmpty());
+		Assertions.assertTrue(diagnostics
+				.getTraceCorrelationConfigurationFingerprint().isEmpty());
 		Assertions.assertTrue(active >= 0 && active <= concurrency);
 		Assertions.assertTrue(queued >= 0 && queued <= queueCapacity);
 		if (queued > 0)

@@ -233,73 +233,137 @@ public class McpServerPublicRuntimeTests {
 	}
 
 	@Test
-	public void diagnosticSnapshotValidatesLifecycleHandlerAndStreamTuples() {
+	public void diagnosticSnapshotValidatesLifecycleHandlerStreamAndSecurityTuples() {
 		InetSocketAddress address = new InetSocketAddress(LOOPBACK, 12_345);
-		McpServerDiagnostics started = new DefaultMcpServerDiagnostics(
-				McpServerStatus.STARTED, Optional.of(address), 2, 3, 1, 2, 4, 3);
+		McpProtectionKeyRingFingerprint protectionFingerprint =
+				new McpProtectionKeyRingFingerprint("A".repeat(43));
+		McpTraceCorrelationConfigurationFingerprint traceFingerprint =
+				new McpTraceCorrelationConfigurationFingerprint("E".repeat(43));
+		McpServerDiagnostics started = diagnosticSnapshot(
+				McpServerStatus.STARTED, Optional.of(address), 2, 3, 1, 2, 4, 3,
+				McpProtectionMode.PRODUCTION_KEY_RING, false,
+				Optional.of(protectionFingerprint), Optional.of(traceFingerprint));
 
 		Assertions.assertEquals(McpServerStatus.STARTED, started.getStatus());
 		Assertions.assertEquals(address, started.getBoundAddress().orElseThrow());
 		assertDiagnostics(started, 2, 3, 1, 2, 4, 3);
+		Assertions.assertEquals(McpProtectionMode.PRODUCTION_KEY_RING,
+				started.getProtectionMode());
+		Assertions.assertEquals(Boolean.FALSE,
+				started.isApplicationRequestStateProtectorConfigured());
+		Assertions.assertEquals(Optional.of(protectionFingerprint),
+				started.getProtectionKeyRingFingerprint());
+		Assertions.assertEquals(Optional.of(traceFingerprint),
+				started.getTraceCorrelationConfigurationFingerprint());
 
-		McpServerDiagnostics residualCleanup = new DefaultMcpServerDiagnostics(
+		McpServerDiagnostics residualCleanup = diagnosticSnapshot(
 				McpServerStatus.STOPPED_WITH_RESIDUAL_HANDLERS, Optional.empty(),
-				2, 3, 1, 2, 1, 1);
+				2, 3, 1, 2, 1, 1, McpProtectionMode.CUSTOM_PROTECTOR, true,
+				Optional.empty(), Optional.empty());
 		Assertions.assertEquals(McpServerStatus.STOPPED_WITH_RESIDUAL_HANDLERS,
 				residualCleanup.getStatus());
 		assertDiagnostics(residualCleanup, 2, 3, 1, 2, 1, 1);
+		Assertions.assertEquals(McpProtectionMode.CUSTOM_PROTECTOR,
+				residualCleanup.getProtectionMode());
+		Assertions.assertEquals(Boolean.TRUE,
+				residualCleanup.isApplicationRequestStateProtectorConfigured());
 
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new DefaultMcpServerDiagnostics(
+				() -> defaultSecurityDiagnosticSnapshot(
 						McpServerStatus.STARTED, Optional.empty(), 2, 3, 0, 0, 0, 0),
 				"A STARTED snapshot without a bound address violates the public contract.");
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new DefaultMcpServerDiagnostics(
+				() -> defaultSecurityDiagnosticSnapshot(
 						McpServerStatus.STOPPED, Optional.of(address), 2, 3, 0, 0, 0, 0));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new DefaultMcpServerDiagnostics(
+				() -> defaultSecurityDiagnosticSnapshot(
 						McpServerStatus.STARTED, Optional.of(address), 0, 3, 0, 0, 0, 0));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new DefaultMcpServerDiagnostics(
+				() -> defaultSecurityDiagnosticSnapshot(
 						McpServerStatus.STARTED, Optional.of(address), 2, 0, 0, 0, 0, 0));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new DefaultMcpServerDiagnostics(
+				() -> defaultSecurityDiagnosticSnapshot(
 						McpServerStatus.STARTED, Optional.of(address), 2, 3, -1, 0, 0, 0));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new DefaultMcpServerDiagnostics(
+				() -> defaultSecurityDiagnosticSnapshot(
 						McpServerStatus.STARTED, Optional.of(address), 2, 3, 3, 0, 0, 0));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new DefaultMcpServerDiagnostics(
+				() -> defaultSecurityDiagnosticSnapshot(
 						McpServerStatus.STARTED, Optional.of(address), 2, 3, 0, -1, 0, 0));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new DefaultMcpServerDiagnostics(
+				() -> defaultSecurityDiagnosticSnapshot(
 						McpServerStatus.STARTED, Optional.of(address), 2, 3, 0, 4, 0, 0));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new DefaultMcpServerDiagnostics(
+				() -> defaultSecurityDiagnosticSnapshot(
 						McpServerStatus.STOPPED, Optional.empty(), 2, 3, 1, 0, 0, 0));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new DefaultMcpServerDiagnostics(
+				() -> defaultSecurityDiagnosticSnapshot(
 						McpServerStatus.STOPPED, Optional.empty(), 2, 3, 0, 1, 0, 0));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new DefaultMcpServerDiagnostics(
+				() -> defaultSecurityDiagnosticSnapshot(
 						McpServerStatus.STARTED, Optional.of(address), 2, 3, 0, 0,
 						-1, 0));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new DefaultMcpServerDiagnostics(
+				() -> defaultSecurityDiagnosticSnapshot(
 						McpServerStatus.STARTED, Optional.of(address), 2, 3, 0, 0,
 						1, -1));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new DefaultMcpServerDiagnostics(
+				() -> defaultSecurityDiagnosticSnapshot(
 						McpServerStatus.STARTED, Optional.of(address), 2, 3, 0, 0,
 						1, 2));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new DefaultMcpServerDiagnostics(
+				() -> defaultSecurityDiagnosticSnapshot(
 						McpServerStatus.STOPPED, Optional.empty(), 2, 3, 0, 0,
 						1, 0));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new DefaultMcpServerDiagnostics(
+				() -> defaultSecurityDiagnosticSnapshot(
 						McpServerStatus.STOPPED, Optional.empty(), 2, 3, 0, 0,
 						1, 1));
+
+		Assertions.assertThrows(NullPointerException.class,
+				() -> diagnosticSnapshot(McpServerStatus.STOPPED, Optional.empty(),
+						2, 3, 0, 0, 0, 0, null, false,
+						Optional.empty(), Optional.empty()));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> diagnosticSnapshot(McpServerStatus.STOPPED, Optional.empty(),
+						2, 3, 0, 0, 0, 0,
+						McpProtectionMode.NO_FRAMEWORK_KEYS, false,
+						null, Optional.empty()));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> diagnosticSnapshot(McpServerStatus.STOPPED, Optional.empty(),
+						2, 3, 0, 0, 0, 0,
+						McpProtectionMode.NO_FRAMEWORK_KEYS, false,
+						Optional.empty(), null));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> diagnosticSnapshot(McpServerStatus.STOPPED, Optional.empty(),
+						2, 3, 0, 0, 0, 0,
+						McpProtectionMode.NO_FRAMEWORK_KEYS, true,
+						Optional.empty(), Optional.empty()));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> diagnosticSnapshot(McpServerStatus.STOPPED, Optional.empty(),
+						2, 3, 0, 0, 0, 0,
+						McpProtectionMode.CUSTOM_PROTECTOR, false,
+						Optional.empty(), Optional.empty()));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> diagnosticSnapshot(McpServerStatus.STOPPED, Optional.empty(),
+						2, 3, 0, 0, 0, 0,
+						McpProtectionMode.CUSTOM_PROTECTOR, true,
+						Optional.of(protectionFingerprint), Optional.empty()));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> diagnosticSnapshot(McpServerStatus.STOPPED, Optional.empty(),
+						2, 3, 0, 0, 0, 0,
+						McpProtectionMode.PRODUCTION_KEY_RING, false,
+						Optional.empty(), Optional.empty()));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> diagnosticSnapshot(McpServerStatus.STOPPED, Optional.empty(),
+						2, 3, 0, 0, 0, 0,
+						McpProtectionMode.PRODUCTION_KEY_RING, true,
+						Optional.of(protectionFingerprint), Optional.empty()));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> diagnosticSnapshot(McpServerStatus.STOPPED, Optional.empty(),
+						2, 3, 0, 0, 0, 0,
+						McpProtectionMode.DEVELOPMENT_EPHEMERAL, false,
+						Optional.of(protectionFingerprint), Optional.empty()));
 	}
 
 	@Test
@@ -926,6 +990,40 @@ public class McpServerPublicRuntimeTests {
 				// Quiet test lifecycle.
 			}
 		};
+	}
+
+	@NonNull
+	private static DefaultMcpServerDiagnostics defaultSecurityDiagnosticSnapshot(
+			McpServerStatus status, Optional<InetSocketAddress> boundAddress,
+			int requestHandlerConcurrency, int requestHandlerQueueCapacity,
+			int activeHandlerExecutions, int queuedRequests,
+			int activeRequestStreams, int activeSubscriptions) {
+		return diagnosticSnapshot(status, boundAddress,
+				requestHandlerConcurrency, requestHandlerQueueCapacity,
+				activeHandlerExecutions, queuedRequests,
+				activeRequestStreams, activeSubscriptions,
+				McpProtectionMode.NO_FRAMEWORK_KEYS, false,
+				Optional.empty(), Optional.empty());
+	}
+
+	@NonNull
+	private static DefaultMcpServerDiagnostics diagnosticSnapshot(
+			McpServerStatus status, Optional<InetSocketAddress> boundAddress,
+			int requestHandlerConcurrency, int requestHandlerQueueCapacity,
+			int activeHandlerExecutions, int queuedRequests,
+			int activeRequestStreams, int activeSubscriptions,
+			McpProtectionMode protectionMode,
+			boolean applicationRequestStateProtectorConfigured,
+			Optional<McpProtectionKeyRingFingerprint> protectionKeyRingFingerprint,
+			Optional<McpTraceCorrelationConfigurationFingerprint>
+					traceCorrelationConfigurationFingerprint) {
+		return new DefaultMcpServerDiagnostics(status, boundAddress,
+				requestHandlerConcurrency, requestHandlerQueueCapacity,
+				activeHandlerExecutions, queuedRequests,
+				activeRequestStreams, activeSubscriptions, protectionMode,
+				applicationRequestStateProtectorConfigured,
+				protectionKeyRingFingerprint,
+				traceCorrelationConfigurationFingerprint);
 	}
 
 	private static void assertOmittedCorsEvents(@NonNull List<LogEvent> events,
