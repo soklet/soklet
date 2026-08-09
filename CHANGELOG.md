@@ -36,15 +36,24 @@
   `Mcp-Param-*` mirrored headers, shared `CorsAuthorizer` integration, strict
   Host validation, a loopback bind default, and MCP lifecycle/metrics
   attachment points on Soklet's existing shared hosts.
+- Added multi-round-trip `input_required` results and retries, application- and
+  framework-protected request state, request-scoped progress and cooperative
+  cancelation, and framework-owned resource-subscription streams with
+  application-owned local or distributed event publishing.
+- Added exact-once clean/residual MCP shutdown observation for each successful
+  listener generation. The default collector exposes an immutable sparse
+  shutdown aggregate and the exact bounded
+  `soklet_mcp_shutdowns_total{outcome="clean"|"residual_handlers"}` family.
 
 ### Development Status
 
-- The locally frozen Phase 4 surface implements discovery, tools, prompts, and
-  resources. Progress, cancellation, subscription delivery, multi-round-trip
-  execution, protected request-state execution, trace correlation,
-  comprehensive MCP telemetry, and MCP simulation remain Phase 5/6 work;
-  descriptors already present for those features are behaviorally neutral at
-  this checkpoint.
+- The locally frozen Phase 4 and Phase 5 surfaces implement discovery, tools,
+  prompts, resources, progress, cancelation, subscription delivery, multi-
+  round-trip execution, and protected request-state execution. All 39 reviewed
+  Phase 5 profiles are active. The first Phase 6 shutdown-observability
+  vertical is implemented and locally green; remaining comprehensive
+  telemetry, handler/queue diagnostics, trace correlation, simulation,
+  sustained gates, and the Phase 6 API review/freeze remain open.
 
 ## 3.5.1 (2026-07-13)
 

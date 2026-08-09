@@ -24,6 +24,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -104,6 +105,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private final LongAdder sseConnectionsAccepted;
 	private final LongAdder sseConnectionsRejected;
 	private final ConcurrentLruMap<TransportFailureKey, LongAdder> transportFailuresByServerTypeAndReason;
+	private final Map<McpShutdownOutcome, LongAdder> mcpShutdownsByOutcome;
 	private final AtomicBoolean includeSseMetrics;
 
 	@NonNull
@@ -147,6 +149,11 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.sseConnectionsAccepted = new LongAdder();
 		this.sseConnectionsRejected = new LongAdder();
 		this.transportFailuresByServerTypeAndReason = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
+		EnumMap<McpShutdownOutcome, LongAdder> mcpShutdowns =
+				new EnumMap<>(McpShutdownOutcome.class);
+		for (McpShutdownOutcome outcome : McpShutdownOutcome.values())
+			mcpShutdowns.put(outcome, new LongAdder());
+		this.mcpShutdownsByOutcome = Collections.unmodifiableMap(mcpShutdowns);
 		this.includeSseMetrics = new AtomicBoolean(false);
 	}
 
@@ -651,7 +658,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	@Override
 	public void didTerminateSseConnection(@NonNull SseConnection sseConnection,
-																										@NonNull StreamTermination termination) {
+																			@NonNull StreamTermination termination) {
 		requireNonNull(sseConnection);
 		requireNonNull(termination);
 
@@ -668,11 +675,20 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@Override
+	public void didRecordMcpMetricsEvent(@NonNull McpMetricsEvent event) {
+		requireNonNull(event);
+		if (event instanceof McpMetricsEvent.ServerStopped serverStopped)
+			requireNonNull(this.mcpShutdownsByOutcome.get(serverStopped.outcome()))
+					.increment();
+	}
+
+	@Override
 	@NonNull
 	public Optional<Snapshot> snapshot() {
 		return Optional.of(Snapshot.builder()
 				.activeRequests(getActiveRequests())
 				.activeSseStreams(getActiveSseStreams())
+				.mcpMetrics(snapshotMcpMetrics())
 				.httpConnectionsAccepted(getHttpConnectionsAccepted())
 				.httpConnectionsRejected(getHttpConnectionsRejected())
 				.sseConnectionsAccepted(getSseConnectionsAccepted())
@@ -729,6 +745,9 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				snapshot.getHttpRequestReadFailures(), DefaultMetricsCollector::labelsForRequestReadFailureKey, options);
 		appendCounter(sb, "soklet_http_requests_rejected_total", "Total HTTP requests rejected before handling",
 				snapshot.getHttpRequestRejections(), DefaultMetricsCollector::labelsForRequestRejectionKey, options);
+		appendCounter(sb, "soklet_mcp_shutdowns_total", "Total MCP server shutdowns by outcome",
+				snapshot.getMcpMetrics().getShutdowns(),
+				DefaultMetricsCollector::labelsForMcpShutdownOutcome, options);
 
 		appendHistogram(sb, "soklet_http_request_duration_nanos", "HTTP request duration in nanoseconds",
 				snapshot.getHttpRequestDurations(), DefaultMetricsCollector::labelsForHttpStatusKey, options);
@@ -954,6 +973,20 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		return snapshotMap(this.sseStreamDurationByRouteAndReason);
 	}
 
+	@NonNull
+	McpMetricsSnapshot snapshotMcpMetrics() {
+		EnumMap<McpShutdownOutcome, Long> shutdowns =
+				new EnumMap<>(McpShutdownOutcome.class);
+		this.mcpShutdownsByOutcome.forEach((outcome, counter) -> {
+			long count = counter.sum();
+			if (count != 0L)
+				shutdowns.put(outcome, count);
+		});
+		if (shutdowns.isEmpty())
+			return McpMetricsSnapshot.emptyInstance();
+		return McpMetricsSnapshot.builder().shutdowns(shutdowns).build();
+	}
+
 
 	@Override
 	public void reset() {
@@ -963,6 +996,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.httpConnectionsRejected.reset();
 		this.sseConnectionsAccepted.reset();
 		this.sseConnectionsRejected.reset();
+		this.mcpShutdownsByOutcome.values().forEach(LongAdder::reset);
 		this.requestsInFlightByIdentity.clear();
 		this.requestsInFlightById.clear();
 		this.requestStateByThread.remove();
@@ -1358,6 +1392,20 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 		Map<String, String> labels = new LinkedHashMap<>(1);
 		labels.put("reason", key.reason().name());
+		return new LabelSet(labels);
+	}
+
+	@NonNull
+	private static LabelSet labelsForMcpShutdownOutcome(
+			@NonNull McpShutdownOutcome outcome) {
+		requireNonNull(outcome);
+
+		String outcomeLabel = switch (outcome) {
+			case CLEAN -> "clean";
+			case RESIDUAL_HANDLERS -> "residual_handlers";
+		};
+		Map<String, String> labels = new LinkedHashMap<>(1);
+		labels.put("outcome", outcomeLabel);
 		return new LabelSet(labels);
 	}
 

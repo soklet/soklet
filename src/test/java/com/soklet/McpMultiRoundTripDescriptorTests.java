@@ -127,8 +127,9 @@ class McpMultiRoundTripDescriptorTests {
 						McpInputRequirement.REQUIRED));
 
 		for (McpInputRequestDeclaration declaration : declarations) {
+			String secretParams = "secret-input-request-params";
 			McpJsonObject params = McpJsonObject.builder()
-					.put("dev.example/extension", declaration.method())
+					.put("dev.example/extension", secretParams)
 					.build();
 			McpInputRequest request =
 					McpInputRequest.fromDeclaration(declaration, params);
@@ -136,6 +137,9 @@ class McpMultiRoundTripDescriptorTests {
 			assertSame(declaration, request.declaration());
 			assertSame(params, request.params());
 			assertEquals(declaration.method(), request.method());
+			assertEquals("McpInputRequest{method='%s', params=<redacted>}"
+					.formatted(declaration.method()), request.toString());
+			assertFalse(request.toString().contains(secretParams));
 		}
 
 		McpInputRequestDeclaration roots = declarations.get(3);
@@ -353,13 +357,22 @@ class McpMultiRoundTripDescriptorTests {
 
 	@Test
 	void requestStateValuesAreClosedAndRejectTheSecondAbsenceConvention() {
-		McpJsonObject value = McpJsonObject.builder().put("itemId", "42").build();
+		String frameworkSecret = "secret-framework-state";
+		String applicationSecret = "secret-application-state";
+		McpJsonValue value = new McpJsonString(frameworkSecret);
 		McpRequestState framework = new McpFrameworkRequestState(value);
-		McpRequestState application = new McpApplicationRequestState("opaque");
+		McpRequestState application = new McpApplicationRequestState(
+				applicationSecret);
 
 		assertSame(value, ((McpFrameworkRequestState) framework).value());
-		assertEquals("opaque",
+		assertEquals(applicationSecret,
 				((McpApplicationRequestState) application).value());
+		assertEquals("McpFrameworkRequestState{value=<redacted>}",
+				framework.toString());
+		assertEquals("McpApplicationRequestState{value=<redacted>}",
+				application.toString());
+		assertFalse(framework.toString().contains(frameworkSecret));
+		assertFalse(application.toString().contains(applicationSecret));
 		assertThrows(IllegalArgumentException.class,
 				() -> new McpApplicationRequestState(""));
 		assertThrows(NullPointerException.class,

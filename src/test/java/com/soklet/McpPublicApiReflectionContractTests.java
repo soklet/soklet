@@ -27,6 +27,10 @@ import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.lang.annotation.Annotation;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 import java.lang.reflect.AnnotatedArrayType;
 import java.lang.reflect.AnnotatedParameterizedType;
 import java.lang.reflect.AnnotatedType;
@@ -61,8 +65,8 @@ import java.util.Set;
 import java.util.TreeMap;
 
 /**
- * Reflection contracts for Phase 4 public API details that ordinary binary
- * compatibility comparison does not reliably preserve.
+ * Reflection contracts for reviewed MCP public API details that ordinary
+ * binary compatibility comparison does not reliably preserve.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -70,14 +74,19 @@ import java.util.TreeMap;
 public class McpPublicApiReflectionContractTests {
 	private static final Path PHASE_FOUR_INCLUDES =
 			Path.of("api/mcp/phase-4.includes");
+	private static final Path PHASE_FIVE_INCLUDES =
+			Path.of("api/mcp/phase-5.includes");
 	private static final List<Path> MCP_API_INCLUDES = List.of(
 			PHASE_FOUR_INCLUDES,
-			Path.of("api/mcp/phase-5.includes"),
+			PHASE_FIVE_INCLUDES,
 			Path.of("api/mcp/phase-6.includes"),
 			Path.of("api/mcp/provisional.includes"));
 	private static final int PHASE_FOUR_TYPE_COUNT = 133;
+	private static final int PHASE_FIVE_TYPE_COUNT = 39;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
 			"c10d11f1c510b5219f819d19ff4dec687eec4fbfb13006b988366253eec70cab";
+	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
+			"d52a424ac33e679e0a0632004ac931e59966b68641659e254214964d9144f8c7";
 	private static final Map<String, Object> PHASE_FOUR_PRIMITIVE_CONSTANTS =
 			Map.of(
 					"com.soklet.McpAdmissionIdentity#MAXIMUM_PARTITION_KEY_UTF_8_BYTES",
@@ -140,27 +149,62 @@ public class McpPublicApiReflectionContractTests {
 							List.of("USER", "ASSISTANT")),
 					Map.entry("com.soklet.McpUnknownMirroredHeaderPolicy",
 							List.of("IGNORE", "REJECT_REQUESTS")));
+	private static final Map<String, Set<String>> PHASE_FIVE_PERMITTED_TYPES =
+			Map.of(
+					"com.soklet.McpRequestState", Set.of(
+							"com.soklet.McpApplicationRequestState",
+							"com.soklet.McpFrameworkRequestState"),
+					"com.soklet.McpSubscriptionEvent", Set.of(
+							"com.soklet.McpSubscriptionEvent$ResourceUpdated",
+							"com.soklet.McpSubscriptionEvent$ResourcesListChanged"));
+	private static final Set<String> PHASE_FIVE_NON_SEALED_TYPES = Set.of();
+	private static final Map<String, List<String>> PHASE_FIVE_MCP_ENUM_VALUES =
+			Map.of(
+					"com.soklet.McpInputRequirement",
+					List.of("REQUIRED", "CONDITIONAL"),
+					"com.soklet.McpProtectionMode", List.of(
+							"NO_FRAMEWORK_KEYS", "CUSTOM_PROTECTOR",
+							"PRODUCTION_KEY_RING", "DEVELOPMENT_EPHEMERAL"),
+					"com.soklet.McpRequestStateMode", List.of(
+							"NONE", "FRAMEWORK_PROTECTED", "APPLICATION_PROTECTED"),
+					"com.soklet.McpRequestStateProtectionException$Reason",
+					List.of("INVALID_STATE", "PROTECTOR_UNAVAILABLE"),
+					"com.soklet.McpSubscriptionNotificationType",
+					List.of("RESOURCES_LIST_CHANGED", "RESOURCE_UPDATED"));
+	private static final Map<String, Object> PHASE_FIVE_SCALAR_CONSTANTS =
+			Map.of(
+					"com.soklet.McpProtectionKeyRingFingerprint#PROFILE",
+					"soklet-mcp-protection-v1",
+					"com.soklet.McpProtectionKeyRingFingerprint#VERSION",
+					"v1");
+	private static final Map<Class<?>, List<String>> PHASE_FIVE_RECORDS =
+			Map.of(
+					McpApplicationRequestState.class, List.of("value"),
+					McpFrameworkRequestState.class, List.of("value"),
+					McpInputRequest.class, List.of("declaration", "params"),
+					McpInputRequestDeclaration.class,
+					List.of("method", "capabilities", "requirement"),
+					McpSubscriptionEvent.ResourceUpdated.class,
+					List.of("resourceUri"),
+					McpSubscriptionEvent.ResourcesListChanged.class, List.of());
 
 	@Test
 	public void phaseFourSealedHierarchyRemainsExact() throws Exception {
-		Map<String, Set<String>> actualPermittedTypes = new TreeMap<>();
-		Set<String> actualNonSealedTypes = new java.util.TreeSet<>();
+		assertSealedHierarchy(phaseFourTypes(), PHASE_FOUR_PERMITTED_TYPES,
+				PHASE_FOUR_NON_SEALED_TYPES, "Phase 4");
+	}
 
-		for (Class<?> type : phaseFourTypes()) {
-			if (type.isSealed())
-				actualPermittedTypes.put(type.getName(), Arrays.stream(
-						type.getPermittedSubclasses()).map(Class::getName)
-						.collect(java.util.stream.Collectors.toUnmodifiableSet()));
-			if (isNonSealed(type))
-				actualNonSealedTypes.add(type.getName());
-		}
+	@Test
+	public void phaseFiveInventoryRetainsExactlyThirtyNineOwners()
+			throws Exception {
+		Assertions.assertEquals(PHASE_FIVE_TYPE_COUNT, phaseFiveTypes().size(),
+				"The reviewed Phase 5 owner count changed");
+	}
 
-		Assertions.assertEquals(PHASE_FOUR_PERMITTED_TYPES,
-				actualPermittedTypes,
-				"Phase 4 sealed types or their exact permitted-subclass sets changed");
-		Assertions.assertEquals(PHASE_FOUR_NON_SEALED_TYPES,
-				actualNonSealedTypes,
-				"Phase 4 non-sealed type declarations changed");
+	@Test
+	public void phaseFiveSealedHierarchyRemainsExact() throws Exception {
+		assertSealedHierarchy(phaseFiveTypes(), PHASE_FIVE_PERMITTED_TYPES,
+				PHASE_FIVE_NON_SEALED_TYPES, "Phase 5");
 	}
 
 	@Test
@@ -181,6 +225,27 @@ public class McpPublicApiReflectionContractTests {
 
 		Assertions.assertEquals(PHASE_FOUR_PRIMITIVE_CONSTANTS, actualConstants,
 				"Phase 4 public static-final primitive constants changed");
+	}
+
+	@Test
+	public void phaseFivePublicScalarConstantsRetainExactValues()
+			throws Exception {
+		Map<String, Object> actualConstants = new TreeMap<>();
+
+		for (Class<?> type : phaseFiveTypes()) {
+			for (Field field : type.getDeclaredFields()) {
+				int modifiers = field.getModifiers();
+				if (Modifier.isPublic(modifiers) && Modifier.isStatic(modifiers)
+						&& Modifier.isFinal(modifiers)
+						&& (field.getType().isPrimitive()
+						|| field.getType() == String.class))
+					actualConstants.put(type.getName() + "#" + field.getName(),
+							field.get(null));
+			}
+		}
+
+		Assertions.assertEquals(PHASE_FIVE_SCALAR_CONSTANTS, actualConstants,
+				"Phase 5 public static-final primitive/String constants changed");
 	}
 
 	@Test
@@ -247,32 +312,30 @@ public class McpPublicApiReflectionContractTests {
 
 	@Test
 	public void phaseFourMcpEnumsRetainDeclarationOrder() throws Exception {
-		Map<String, List<String>> actualValues = new TreeMap<>();
+		assertEnumValues(phaseFourTypes(), PHASE_FOUR_MCP_ENUM_VALUES,
+				"Phase 4");
+	}
 
-		for (Class<?> type : phaseFourTypes()) {
-			if (type.isEnum() && type.getSimpleName().startsWith("Mcp"))
-				actualValues.put(type.getName(), Arrays.stream(type.getEnumConstants())
-						.map(value -> ((Enum<?>) value).name()).toList());
-		}
-
-		Assertions.assertEquals(PHASE_FOUR_MCP_ENUM_VALUES, actualValues,
-				"Phase 4 MCP enum declarations or value order changed");
+	@Test
+	public void phaseFiveMcpEnumsRetainDeclarationOrder() throws Exception {
+		assertEnumValues(phaseFiveTypes(), PHASE_FIVE_MCP_ENUM_VALUES,
+				"Phase 5");
 	}
 
 	@Test
 	public void phaseFourJSpecifyNullabilityLayoutRemainsExact()
 			throws Exception {
-		String canonicalContract = canonicalPhaseFourNullabilityContract();
-		String actualDigest = sha256(canonicalContract);
+		assertNullabilityLayout(phaseFourTypes(),
+				PHASE_FOUR_NULLABILITY_SHA_256,
+				"PHASE_FOUR_NULLABILITY_SHA_256", "Phase 4");
+	}
 
-		Assertions.assertEquals(PHASE_FOUR_NULLABILITY_SHA_256, actualDigest,
-				() -> "Phase 4 @NonNull/@Nullable type-use layout changed. "
-						+ "Review the canonical contract below, then deliberately "
-						+ "update PHASE_FOUR_NULLABILITY_SHA_256 if the change is "
-						+ "approved.\nExpected SHA-256: "
-						+ PHASE_FOUR_NULLABILITY_SHA_256 + "\nActual SHA-256:   "
-						+ actualDigest + "\nCanonical contract:\n"
-						+ canonicalContract);
+	@Test
+	public void phaseFiveJSpecifyNullabilityLayoutRemainsExact()
+			throws Exception {
+		assertNullabilityLayout(phaseFiveTypes(),
+				PHASE_FIVE_NULLABILITY_SHA_256,
+				"PHASE_FIVE_NULLABILITY_SHA_256", "Phase 5");
 	}
 
 	@Test
@@ -335,6 +398,36 @@ public class McpPublicApiReflectionContractTests {
 	}
 
 	@Test
+	public void phaseFiveExtensionPointParameterNamesRetainTheirDocumentedOrder()
+			throws Exception {
+		assertParameterNames(McpProgressReporter.class.getMethod("report",
+				McpProgressUpdate.class), "update");
+		assertParameterNames(McpProtectionControl.class.getMethod(
+				"stageVerificationKey", McpProtectionKey.class),
+				"verificationKey");
+		assertParameterNames(McpProtectionControl.class.getMethod(
+				"activateStagedKey", String.class), "keyId");
+		assertParameterNames(McpProtectionControl.class.getMethod("rotateTo",
+				McpProtectionKey.class), "activeKey");
+		assertParameterNames(McpProtectionControl.class.getMethod(
+				"removeVerificationKey", String.class), "keyId");
+		assertParameterNames(McpRequestStateProtector.class.getMethod("seal",
+				McpRequestStateProtectionContext.class, byte[].class),
+				"context", "plaintext");
+		assertParameterNames(McpRequestStateProtector.class.getMethod("open",
+				McpRequestStateProtectionContext.class, String.class),
+				"context", "protectedState");
+		assertParameterNames(McpSubscriptionEventListener.class.getMethod(
+				"onEvent", McpSubscriptionEvent.class), "event");
+		assertParameterNames(McpSubscriptionEventPublisher.class.getMethod(
+				"subscribe", McpSubscriptionEventListener.class), "listener");
+		assertParameterNames(McpSubscriptionEventPublisher.class.getMethod(
+				"publish", McpSubscriptionEvent.class), "event");
+		assertParameterNames(McpSubscriptionEventPublisher.class.getMethod(
+				"publishResourceUpdated", java.net.URI.class), "resourceUri");
+	}
+
+	@Test
 	public void publicRecordComponentsRetainTheirNamesAndDeclarationOrder()
 			throws Exception {
 		assertRecordContract(McpAdmissionDecision.Accepted.class, "identity");
@@ -345,6 +438,53 @@ public class McpPublicApiReflectionContractTests {
 		assertRecordContract(McpPromptMessage.class, "role", "content");
 		assertRecordContract(McpRateLimitDecision.Allowed.class);
 		assertRecordContract(McpRateLimitDecision.Denied.class, "retryAfter");
+	}
+
+	@Test
+	public void phaseFiveRecordsRetainTheirNamesAndDeclarationOrder()
+			throws Exception {
+		Map<Class<?>, List<String>> actualRecords = new TreeMap<>(
+				Comparator.comparing(Class::getName));
+		for (Class<?> type : phaseFiveTypes()) {
+			if (type.isRecord())
+				actualRecords.put(type, Arrays.stream(type.getRecordComponents())
+						.map(RecordComponent::getName).toList());
+		}
+
+		Assertions.assertEquals(PHASE_FIVE_RECORDS, actualRecords,
+				"Phase 5 record owners, component names, or declaration order changed");
+		for (Map.Entry<Class<?>, List<String>> entry
+				: PHASE_FIVE_RECORDS.entrySet())
+			assertRecordContract(entry.getKey(),
+					entry.getValue().toArray(String[]::new));
+	}
+
+	@Test
+	public void mayRequestInputAnnotationContractRemainsExact() {
+		Map<String, Class<?>> actualElements = new TreeMap<>();
+		for (Method element : McpMayRequestInput.class.getDeclaredMethods()) {
+			actualElements.put(element.getName(), element.getReturnType());
+			Assertions.assertNull(element.getDefaultValue(),
+					() -> McpMayRequestInput.class.getName() + "#"
+							+ element.getName() + " must not declare a default");
+		}
+
+		Assertions.assertEquals(Map.of(
+				"capabilities", McpClientCapability[].class,
+				"method", String.class,
+				"requirement", McpInputRequirement.class), actualElements,
+				"McpMayRequestInput elements or return types changed");
+		Target target = McpMayRequestInput.class.getAnnotation(Target.class);
+		Assertions.assertNotNull(target,
+				"McpMayRequestInput must retain an explicit @Target");
+		Assertions.assertArrayEquals(new ElementType[0], target.value(),
+				"McpMayRequestInput must remain a nested annotation value only");
+		Retention retention = McpMayRequestInput.class.getAnnotation(
+				Retention.class);
+		Assertions.assertNotNull(retention,
+				"McpMayRequestInput must retain an explicit @Retention");
+		Assertions.assertEquals(RetentionPolicy.RUNTIME, retention.value(),
+				"McpMayRequestInput retention changed");
 	}
 
 	@Test
@@ -622,18 +762,29 @@ public class McpPublicApiReflectionContractTests {
 	}
 
 	private static List<Class<?>> phaseFourTypes() throws Exception {
-		List<String> typeNames = Files.readAllLines(PHASE_FOUR_INCLUDES,
+		return phaseTypes(PHASE_FOUR_INCLUDES, PHASE_FOUR_TYPE_COUNT,
+				"Phase 4");
+	}
+
+	private static List<Class<?>> phaseFiveTypes() throws Exception {
+		return phaseTypes(PHASE_FIVE_INCLUDES, PHASE_FIVE_TYPE_COUNT,
+				"Phase 5");
+	}
+
+	private static List<Class<?>> phaseTypes(Path includes, int expectedCount,
+			String phase) throws Exception {
+		List<String> typeNames = Files.readAllLines(includes,
 				StandardCharsets.UTF_8).stream()
 				.map(String::trim)
 				.filter(line -> !line.isEmpty() && !line.startsWith("#"))
 				.toList();
 
-		Assertions.assertEquals(PHASE_FOUR_TYPE_COUNT, typeNames.size(),
-				"The reviewed Phase 4 type count changed");
+		Assertions.assertEquals(expectedCount, typeNames.size(),
+				"The reviewed " + phase + " type count changed");
 		Assertions.assertEquals(typeNames.stream().sorted().toList(), typeNames,
-				"The reviewed Phase 4 type inventory must remain sorted");
+				"The reviewed " + phase + " type inventory must remain sorted");
 		Assertions.assertEquals(typeNames.size(), Set.copyOf(typeNames).size(),
-				"The reviewed Phase 4 type inventory contains duplicates");
+				"The reviewed " + phase + " type inventory contains duplicates");
 
 		List<Class<?>> types = new ArrayList<>(typeNames.size());
 		ClassLoader classLoader =
@@ -643,6 +794,42 @@ public class McpPublicApiReflectionContractTests {
 			types.add(Class.forName(typeName, false, classLoader));
 
 		return List.copyOf(types);
+	}
+
+	private static void assertSealedHierarchy(List<Class<?>> types,
+			Map<String, Set<String>> expectedPermittedTypes,
+			Set<String> expectedNonSealedTypes, String phase) {
+		Map<String, Set<String>> actualPermittedTypes = new TreeMap<>();
+		Set<String> actualNonSealedTypes = new java.util.TreeSet<>();
+
+		for (Class<?> type : types) {
+			if (type.isSealed())
+				actualPermittedTypes.put(type.getName(), Arrays.stream(
+						type.getPermittedSubclasses()).map(Class::getName)
+						.collect(java.util.stream.Collectors.toUnmodifiableSet()));
+			if (isNonSealed(type))
+				actualNonSealedTypes.add(type.getName());
+		}
+
+		Assertions.assertEquals(expectedPermittedTypes, actualPermittedTypes,
+				phase + " sealed types or their exact permitted-subclass sets changed");
+		Assertions.assertEquals(expectedNonSealedTypes, actualNonSealedTypes,
+				phase + " non-sealed type declarations changed");
+	}
+
+	private static void assertEnumValues(List<Class<?>> types,
+			Map<String, List<String>> expectedValues, String phase) {
+		Map<String, List<String>> actualValues = new TreeMap<>();
+
+		for (Class<?> type : types) {
+			if (type.isEnum()
+					&& type.getName().startsWith("com.soklet.Mcp"))
+				actualValues.put(type.getName(), Arrays.stream(type.getEnumConstants())
+						.map(value -> ((Enum<?>) value).name()).toList());
+		}
+
+		Assertions.assertEquals(expectedValues, actualValues,
+				phase + " MCP enum declarations or value order changed");
 	}
 
 	private static List<Class<?>> publicMcpTypes() throws Exception {
@@ -694,11 +881,25 @@ public class McpPublicApiReflectionContractTests {
 				.contains(child);
 	}
 
-	private static String canonicalPhaseFourNullabilityContract()
+	private static void assertNullabilityLayout(List<Class<?>> types,
+			String expectedDigest, String digestConstant, String phase)
 			throws Exception {
+		String canonicalContract = canonicalNullabilityContract(types);
+		String actualDigest = sha256(canonicalContract);
+
+		Assertions.assertEquals(expectedDigest, actualDigest,
+				() -> phase + " @NonNull/@Nullable type-use layout changed. "
+						+ "Review the canonical contract below, then deliberately "
+						+ "update " + digestConstant + " if the change is approved."
+						+ "\nExpected SHA-256: " + expectedDigest
+						+ "\nActual SHA-256:   " + actualDigest
+						+ "\nCanonical contract:\n" + canonicalContract);
+	}
+
+	private static String canonicalNullabilityContract(List<Class<?>> types) {
 		List<String> lines = new ArrayList<>();
 
-		for (Class<?> type : phaseFourTypes()) {
+		for (Class<?> type : types) {
 			String typeOwner = "TYPE|" + type.getName();
 			lines.add(typeOwner);
 			appendTypeParameters(lines, typeOwner, type.getTypeParameters());

@@ -25,6 +25,7 @@ const profileConfiguration = 'fixture.iterations=1\n';
 const scenarios = [
   'concurrent SSE churn',
   'HTTP abort churn',
+  'MCP Phase 5 cross-feature churn',
   'concurrent HTTP churn',
 ];
 
@@ -36,6 +37,11 @@ const suites = [
       'concurrentHttpChurnReturnsResourcesAndActiveRequestsToBaseline',
       'httpAbortChurnReturnsResourcesAndActiveRequestsToBaseline',
     ],
+  },
+  {
+    filename: 'TEST-com.soklet.McpCrossFeatureSoakTests.xml',
+    name: 'com.soklet.McpCrossFeatureSoakTests',
+    testCases: ['mcpCrossFeatureChurnReturnsResourcesToBaselineAfterCancellationAndShutdown'],
   },
   {
     filename: 'TEST-com.soklet.RealtimeTransportSoakTests.xml',
@@ -94,14 +100,17 @@ try {
   writeValidFixture();
   const verified = verifySoakEvidence(profileName, fixtureRoot);
   assert.equal(verified.profileName, profileName);
-  assert.equal(verified.scenarios.length, 3);
+  assert.equal(verified.scenarios.length, 4);
 
   const reportPath = fixturePath('soak/target/soak-report.md');
   let restore = overwrite(reportPath, (report) => report.replace('- Profile: smoke', '- Profile: nightly'));
   assert.throws(() => verifySoakEvidence(profileName, fixtureRoot), /profile identity/);
   restore();
 
-  restore = overwrite(reportPath, (report) => report.replace('## HTTP abort churn', '## stale scenario'));
+  restore = overwrite(
+    reportPath,
+    (report) => report.replace('## MCP Phase 5 cross-feature churn', '## stale scenario'),
+  );
   assert.throws(() => verifySoakEvidence(profileName, fixtureRoot), /Unexpected scenario set/);
   restore();
 
@@ -115,6 +124,25 @@ try {
   restore = overwrite(realtimePath, (xml) => xml.replace('skipped="0"', 'skipped="1"'));
   assert.throws(() => verifySoakEvidence(profileName, fixtureRoot), /Expected skipped=0/);
   restore();
+
+  const mcpPath = fixturePath(
+    'soak/target/surefire-reports/TEST-com.soklet.McpCrossFeatureSoakTests.xml',
+  );
+  restore = overwrite(
+    mcpPath,
+    (xml) => xml.replace(
+      'mcpCrossFeatureChurnReturnsResourcesToBaselineAfterCancellationAndShutdown',
+      'staleMcpCrossFeatureTest',
+    ),
+  );
+  assert.throws(() => verifySoakEvidence(profileName, fixtureRoot), /Unexpected testcase set/);
+  restore();
+
+  rmSync(mcpPath);
+  assert.throws(() => verifySoakEvidence(profileName, fixtureRoot), /Unexpected Surefire XML report set/);
+  const mcpSuite = suites.find(({ filename }) => filename === 'TEST-com.soklet.McpCrossFeatureSoakTests.xml');
+  assert.notEqual(mcpSuite, undefined);
+  writeFileSync(mcpPath, suiteXml(mcpSuite.name, mcpSuite.testCases));
 
   const stalePath = fixturePath('soak/target/surefire-reports/TEST-com.soklet.StaleSoakTests.xml');
   writeFileSync(stalePath, suiteXml('com.soklet.StaleSoakTests', ['stale']));

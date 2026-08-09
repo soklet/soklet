@@ -186,8 +186,8 @@ jobs:
       - name: Run SpotBugs
         run: mvn -B -ntp -Pspotbugs -DskipTests clean compile spotbugs:check
 
-  mcp-conformance-phase-4:
-    name: MCP Conformance Candidate Artifact Phase 4 (JDK 17)
+  mcp-conformance-phase-5:
+    name: MCP Conformance Candidate Artifact Phase 5 (JDK 17)
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -209,7 +209,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p target/conformance/official
-          printf '%s\n' '{"formatVersion":1,"phase":4,"status":"STARTED"}' \
+          printf '%s\n' '{"formatVersion":1,"phase":5,"status":"STARTED"}' \
             > target/conformance/official/ci-started.json
 
       - name: Download and verify pinned Node.js distribution
@@ -282,21 +282,21 @@ jobs:
             --suite-dir .mcp-conformance-source
           node conformance/official/runner-self-test.mjs
 
-      - name: Run all applicable Phase 4 official scenarios
+      - name: Run all applicable Phase 5 official scenarios
         run: |
-          mkdir -p target/conformance/official/phase-4
+          mkdir -p target/conformance/official/phase-5
           node conformance/official/run.mjs \
             --suite-dir "${{ github.workspace }}/.mcp-conformance-source" \
-            --work-dir "${{ github.workspace }}/target/conformance/official/phase-4" \
+            --work-dir "${{ github.workspace }}/target/conformance/official/phase-5" \
             --classpath "$(cat target/conformance/official/public-fixture-classpath.txt)" \
             --project-root "${{ github.workspace }}" \
-            --phase 4
+            --phase 5
 
       - name: Upload MCP conformance evidence
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: mcp-conformance-phase-4-${{ github.run_id }}-${{ github.run_attempt }}
+          name: mcp-conformance-phase-5-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: error
           path: |
             target/conformance/official

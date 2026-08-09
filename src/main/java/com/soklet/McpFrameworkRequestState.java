@@ -40,4 +40,11 @@ public record McpFrameworkRequestState(
 	public McpFrameworkRequestState {
 		requireNonNull(value);
 	}
+
+	/** @return rendering that does not expose decrypted request state */
+	@Override
+	@NonNull
+	public final String toString() {
+		return "McpFrameworkRequestState{value=<redacted>}";
+	}
 }

@@ -54,7 +54,7 @@ layout with SHA-256
 
 ### Post-freeze wrapper correction
 
-The subsequent Phase 5 API review exposed one cross-cutting Soklet convention
+The pre-freeze Phase 5 wrapper audit exposed one cross-cutting Soklet convention
 that the initial freeze had not applied consistently: exported API should use
 reference wrappers for scalar values, reserving primitives for internal code.
 Because the MCP API is still unreleased in 3.6.0, the Phase 4 surface was
@@ -91,8 +91,10 @@ The six operational defaults are positive and finite:
 - maximum subscriptions per principal: 32; and
 - maximum subscription duration: 24 hours.
 
-The referenced Phase 5/6 types' own members remain unfrozen until their owning
-phases freeze. Their Phase 4 attachments are behaviorally neutral: they do not
+At the Phase 4 freeze, the referenced Phase 5/6 types' own members remained
+unfrozen until their owning phases froze. Phase 5 later froze under its own snapshot;
+Phase 6 remains unfrozen. Their Phase 4 attachments are behaviorally neutral:
+they do not
 advertise a later capability, subscribe to an event publisher, execute MRTR,
 protect request state, or perform trace correlation merely because the final
 descriptor exists.
@@ -144,11 +146,11 @@ earlier exact 23-scenario candidate-artifact result remains historical Phase 4
 implementation evidence, while a fresh run against the current artifact
 remains open.
 
-Subsequent local development has implemented MRTR input-required and retry
+Subsequent local development implemented MRTR input-required and retry
 paths, application- and framework-protected request state, request-scoped
-progress/cancelation, and resource subscriptions. Those Phase 5 APIs remain
-unfrozen, however, and every official Phase 5 scenario profile and pass remains
-open. This rationale does not claim the Phase 5/final 39-scenario gate,
+progress/cancelation, and resource subscriptions. Those APIs were later
+reviewed and frozen under the separate Phase 5 rationale; this historical
+Phase 4 rationale does not claim the Phase 5/final 39-scenario gate,
 current-tree package or static-analysis sign-off, release-candidate JAR/POM
 provenance, complete Phase 4 exit, or Phase 6 runtime behavior. It intentionally
 contains no commit identifier; repository history and publication remain

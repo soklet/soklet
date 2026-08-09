@@ -29,10 +29,12 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Each publisher is independent and reaches only listeners registered with
  * that instance in the current process. It invokes listeners synchronously on
- * the publishing thread. A listener should therefore return promptly. If a
- * listener throws a runtime exception, all other current listeners are still
- * attempted before the first exception is rethrown with later exceptions
- * suppressed.
+ * the publishing thread. Closing a registration does not wait for a delivery
+ * already selected or in flight, which may begin or finish after close returns;
+ * no later delivery is selected for the closed registration. A listener should
+ * therefore return promptly. If a listener throws a runtime exception, all
+ * other current listeners are still attempted before the first exception is
+ * rethrown with later exceptions suppressed.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

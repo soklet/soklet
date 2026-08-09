@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "protocolVersion": "2026-07-28",
   "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
-  "currentImplementationPhase": 4,
+  "currentImplementationPhase": 5,
   "earliestPhaseSemantics": "The first phase in which the scenario is mandatory as part of its full gate. An independently runnable scenario may be activated earlier as an infrastructure smoke test.",
-  "phaseExecutionPolicy": "Phase 4 activates exactly the 23 RUN rows whose earliestPhase is 4, retaining the Phase 3 DNS profile and requiring reviewed Phase 4 profiles for the other 22 rows. All 16 Phase 5 rows remain fail-closed with null profiles until the complete Phase 5 profile-acquisition run is reviewed and the implementation phase advances atomically.",
+  "phaseExecutionPolicy": "Phase 5 activates all 39 RUN rows, retaining the 23 historical Phase 3/4 profile IDs and requiring the 16 reviewed Phase 5 profiles acquired in one complete controlled observation. completion-complete remains the sole NOT_APPLICABLE row and its profile remains null.",
   "scenarios": [
     {
       "ordinal": 1,
@@ -12,7 +12,7 @@
       "selection": "RUN",
       "earliestPhase": 5,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "server-stateless.phase5.v1",
       "requiredFixtureRegistrations": [
         "framework-owned server/discover",
         "truthful tools, prompts, resources, and subscription capabilities",
@@ -29,7 +29,7 @@
         "McpSubscriptionPublicRuntimeTests#acknowledgmentIsFirstAndPreservesExactStringAndIntegerIds",
         "McpSubscriptionPublicRuntimeTests#publisherEmitsOnlyRequestedResourceEventsForMatchingUris"
       ],
-      "rationale": "The public fixture and standalone contract now provide the scenario's progress, capability-diagnostic, valid embedded-elicitation, logging, MRTR, and truthful resource-subscription registrations. The controlled complete Phase 5 observation cleanly produced 28 SUCCESS and the two exact reviewed mutable-list SKIPPED occurrences, with automatic wire counts 0/0. The reviewed draft remains deliberately null pending soak/resource-delta evidence, scoped API review, atomic activation, and a fresh Phase 5 verify run; no frozen-profile or official Phase 5 gate pass is claimed."
+      "rationale": "The public fixture and standalone contract provide the scenario's progress, capability-diagnostic, valid embedded-elicitation, logging, MRTR, and truthful resource-subscription registrations. The controlled complete Phase 5 observation cleanly produced 28 SUCCESS and the two exact reviewed mutable-list SKIPPED occurrences, with automatic wire counts 0/0. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
       "ordinal": 2,
@@ -155,7 +155,7 @@
       "selection": "RUN",
       "earliestPhase": 5,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "tools-call-with-progress.phase5.v1",
       "requiredFixtureRegistrations": [
         "test_tool_with_progress tools/call handler emitting correlated 0/50/100 progress notifications before its complete result"
       ],
@@ -166,7 +166,7 @@
         "McpProgressPublicRuntimeTests#disconnectCancelsSameFeatureInstanceAndRunsCallback",
         "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_progress_messages_match_the_production_listener"
       ],
-      "rationale": "The public progress producer, exact official fixture registration, request-scoped SSE ordering, conditional-capability suppression, and disconnect cancelation have production-listener coverage. The controlled complete Phase 5 observation produced tools-call-with-progress SUCCESS once and wire-schema-valid SUCCESS once over five messages, with no warning, failure, or harness-error outcome. The reviewed draft remains deliberately null pending soak/resource-delta evidence, scoped API review, atomic activation, and a fresh Phase 5 verify run; this is not a frozen-profile or Phase 5 gate pass."
+      "rationale": "The public progress producer, exact official fixture registration, request-scoped SSE ordering, conditional-capability suppression, and disconnect cancelation have production-listener coverage. The controlled complete Phase 5 observation produced tools-call-with-progress SUCCESS once and wire-schema-valid SUCCESS once over five messages, with no warning, failure, or harness-error outcome. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
       "ordinal": 11,
@@ -445,7 +445,7 @@
       "selection": "RUN",
       "earliestPhase": 5,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "input-required-result-basic-elicitation.phase5.v1",
       "requiredFixtureRegistrations": [
         "test_input_required_result_elicitation tool emitting user_name elicitation/create and completing after the valid retry"
       ],
@@ -454,7 +454,7 @@
         "McpInputRequiredPublicRuntimeTests#validMethodSpecificParametersPreserveExactOpenWire",
         "McpInputResponsesPublicRuntimeTests#validRetriesReachEveryHandlerThroughTheExactObservedContext"
       ],
-      "rationale": "Local production-listener evidence covers elicitation emission and valid retry handling. The exact official scenario cleanly produced its two ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. The reviewed draft remains deliberately null pending soak/resource-delta evidence, scoped API review, atomic activation, and a fresh Phase 5 verify run."
+      "rationale": "Local production-listener evidence covers elicitation emission and valid retry handling. The exact official scenario cleanly produced its two ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
       "ordinal": 28,
@@ -462,7 +462,7 @@
       "selection": "RUN",
       "earliestPhase": 5,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "input-required-result-basic-sampling.phase5.v1",
       "requiredFixtureRegistrations": [
         "test_input_required_result_sampling tool emitting capital_question sampling/createMessage and completing after the valid retry"
       ],
@@ -472,7 +472,7 @@
         "McpInputResponseValidatorTests#acceptsEverySamplingContentShapeAndOpenExtensions",
         "McpInputResponsesPublicRuntimeTests#validRetriesReachEveryHandlerThroughTheExactObservedContext"
       ],
-      "rationale": "Local production-listener and input-union evidence covers sampling emission and valid retry handling. The exact official scenario cleanly produced its two ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. The reviewed draft remains deliberately null pending soak/resource-delta evidence, scoped API review, atomic activation, and a fresh Phase 5 verify run."
+      "rationale": "Local production-listener and input-union evidence covers sampling emission and valid retry handling. The exact official scenario cleanly produced its two ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
       "ordinal": 29,
@@ -480,7 +480,7 @@
       "selection": "RUN",
       "earliestPhase": 5,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "input-required-result-basic-list-roots.phase5.v1",
       "requiredFixtureRegistrations": [
         "test_input_required_result_list_roots tool emitting client_roots roots/list and completing after the valid retry"
       ],
@@ -490,7 +490,7 @@
         "McpInputResponseValidatorTests#acceptsRootsResultsAndTheOpenUnionSemantics",
         "McpInputResponsesPublicRuntimeTests#validRetriesReachEveryHandlerThroughTheExactObservedContext"
       ],
-      "rationale": "Local production-listener and input-union evidence covers roots emission and valid retry handling. The exact official scenario cleanly produced its two ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. The reviewed draft remains deliberately null pending soak/resource-delta evidence, scoped API review, atomic activation, and a fresh Phase 5 verify run."
+      "rationale": "Local production-listener and input-union evidence covers roots emission and valid retry handling. The exact official scenario cleanly produced its two ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
       "ordinal": 30,
@@ -498,7 +498,7 @@
       "selection": "RUN",
       "earliestPhase": 5,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "input-required-result-request-state.phase5.v1",
       "requiredFixtureRegistrations": [
         "test_input_required_result_request_state tool emitting inputRequests plus opaque requestState and returning state-ok after a fresh-ID retry"
       ],
@@ -508,7 +508,7 @@
         "McpFrameworkRequestStateRuntimeTests#initialSealAndOpenUseTheExactBindingAndContinuation",
         "McpSecurityControlsTests#builtInRequestStateProtectionMatchesFrozenVectorAndBinding"
       ],
-      "rationale": "Local production-listener, coordinator, and protection-vector evidence covers protected request-state continuation. The exact official scenario cleanly produced its two ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. The reviewed draft remains deliberately null pending soak/resource-delta evidence, scoped API review, atomic activation, and a fresh Phase 5 verify run."
+      "rationale": "Local production-listener, coordinator, and protection-vector evidence covers protected request-state continuation. The exact official scenario cleanly produced its two ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
       "ordinal": 31,
@@ -516,7 +516,7 @@
       "selection": "RUN",
       "earliestPhase": 5,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "input-required-result-multiple-input-requests.phase5.v1",
       "requiredFixtureRegistrations": [
         "test_input_required_result_multiple_inputs tool emitting elicitation, sampling, and roots inputRequests plus requestState, then completing after all responses"
       ],
@@ -526,7 +526,7 @@
         "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_input_messages_match_the_production_listener",
         "McpInputResponsesPublicRuntimeTests#validRetriesReachEveryHandlerThroughTheExactObservedContext"
       ],
-      "rationale": "Local descriptor and production-listener evidence covers combined state, ordered multi-input emission, and multi-type responses. The exact official scenario cleanly produced its two ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. The reviewed draft remains deliberately null pending soak/resource-delta evidence, scoped API review, atomic activation, and a fresh Phase 5 verify run."
+      "rationale": "Local descriptor and production-listener evidence covers combined state, ordered multi-input emission, and multi-type responses. The exact official scenario cleanly produced its two ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
       "ordinal": 32,
@@ -534,7 +534,7 @@
       "selection": "RUN",
       "earliestPhase": 5,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "input-required-result-multi-round.phase5.v1",
       "requiredFixtureRegistrations": [
         "test_input_required_result_multi_round tool emitting two successive input_required results with different requestState values, then completing on round three"
       ],
@@ -542,7 +542,7 @@
         "McpFrameworkRequestStateRuntimeTests#reemissionPreservesTimesAndAdvancesRoundAndOriginatingId",
         "McpRequestStatePublicRuntimeTests#frameworkProtectedStateCompletesOnlyWithAFreshRetryId"
       ],
-      "rationale": "Local coordinator evidence covers protected-state re-emission and a public fresh-ID retry. The exact three-round official listener scenario cleanly produced three ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. The reviewed draft remains deliberately null pending soak/resource-delta evidence, scoped API review, atomic activation, and a fresh Phase 5 verify run."
+      "rationale": "Local coordinator evidence covers protected-state re-emission and a public fresh-ID retry. The exact three-round official listener scenario cleanly produced three ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
       "ordinal": 33,
@@ -550,14 +550,14 @@
       "selection": "RUN",
       "earliestPhase": 5,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "input-required-result-missing-input-response.phase5.v1",
       "requiredFixtureRegistrations": [
         "test_input_required_result_elicitation tool re-requesting user_name when inputResponses omit it or use a wrong key"
       ],
       "localSupplements": [
         "McpInputResponsesPublicRuntimeTests#missingExpectedKeyIsReRequestedAndExtraResponsesRemainAvailable"
       ],
-      "rationale": "A local production-listener test covers re-requesting a missing key while preserving unexpected valid responses. The exact official scenario cleanly produced one ordinary SUCCESS check plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. The reviewed draft remains deliberately null pending soak/resource-delta evidence, scoped API review, atomic activation, and a fresh Phase 5 verify run."
+      "rationale": "A local production-listener test covers re-requesting a missing key while preserving unexpected valid responses. The exact official scenario cleanly produced one ordinary SUCCESS check plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
       "ordinal": 34,
@@ -565,7 +565,7 @@
       "selection": "RUN",
       "earliestPhase": 5,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "input-required-result-non-tool-request.phase5.v1",
       "requiredFixtureRegistrations": [
         "test_input_required_result_prompt prompts/get handler emitting user_context elicitation, then returning a complete GetPromptResult after the valid retry"
       ],
@@ -574,7 +574,7 @@
         "McpInputRequiredPublicRuntimeTests#validMethodSpecificParametersPreserveExactOpenWire",
         "McpInputResponsesPublicRuntimeTests#validRetriesReachEveryHandlerThroughTheExactObservedContext"
       ],
-      "rationale": "Local production-listener evidence confirms prompts/get may return input_required and later a complete prompt result. The exact official scenario cleanly produced its two ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. The reviewed draft remains deliberately null pending soak/resource-delta evidence, scoped API review, atomic activation, and a fresh Phase 5 verify run."
+      "rationale": "Local production-listener evidence confirms prompts/get may return input_required and later a complete prompt result. The exact official scenario cleanly produced its two ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
       "ordinal": 35,
@@ -582,7 +582,7 @@
       "selection": "RUN",
       "earliestPhase": 5,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "input-required-result-result-type.phase5.v1",
       "requiredFixtureRegistrations": [
         "test_input_required_result_elicitation tool explicitly including resultType=input_required in its initial response"
       ],
@@ -590,7 +590,7 @@
         "McpWireDtoSketchTests#input_required_results_enforce_structure_supported_methods_and_unique_keys",
         "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_input_messages_match_the_production_listener"
       ],
-      "rationale": "Local wire-model and production golden evidence confirms explicit input_required and complete resultType values. The exact official scenario cleanly produced one ordinary SUCCESS check plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. The reviewed draft remains deliberately null pending soak/resource-delta evidence, scoped API review, atomic activation, and a fresh Phase 5 verify run."
+      "rationale": "Local wire-model and production golden evidence confirms explicit input_required and complete resultType values. The exact official scenario cleanly produced one ordinary SUCCESS check plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
       "ordinal": 36,
@@ -598,7 +598,7 @@
       "selection": "RUN",
       "earliestPhase": 5,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "input-required-result-unsupported-methods.phase5.v1",
       "requiredFixtureRegistrations": [
         "tools/list and prompts/list handlers that return their normal complete results and never input_required"
       ],
@@ -607,7 +607,7 @@
         "McpExecutableToolProtocolTests#static_tools_list_is_framework_owned_complete_and_unpaginated",
         "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_prompt_messages_match_the_production_listener"
       ],
-      "rationale": "Local result-factory and production-listener evidence covers the supported-method boundary and complete list results. The exact official scenario cleanly produced one ordinary SUCCESS check plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. The reviewed draft remains deliberately null pending soak/resource-delta evidence, scoped API review, atomic activation, and a fresh Phase 5 verify run."
+      "rationale": "Local result-factory and production-listener evidence covers the supported-method boundary and complete list results. The exact official scenario cleanly produced one ordinary SUCCESS check plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
       "ordinal": 37,
@@ -615,7 +615,7 @@
       "selection": "RUN",
       "earliestPhase": 5,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "input-required-result-tampered-state.phase5.v1",
       "requiredFixtureRegistrations": [
         "test_input_required_result_tampered_state tool emitting integrity-protected requestState and rejecting an appended -TAMPERED retry with a JSON-RPC error"
       ],
@@ -623,7 +623,7 @@
         "McpRequestStatePublicRuntimeTests#malformedTamperedAndUnavailableStateHaveFixedPrecedence",
         "McpSecurityControlsTests#builtInStructureRejectsNoncanonicalAndMalformedEnvelopes"
       ],
-      "rationale": "Local production-listener and built-in-envelope evidence covers tamper rejection and its precedence. The exact official scenario cleanly produced one ordinary SUCCESS check plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. The reviewed draft remains deliberately null pending soak/resource-delta evidence, scoped API review, atomic activation, and a fresh Phase 5 verify run."
+      "rationale": "Local production-listener and built-in-envelope evidence covers tamper rejection and its precedence. The exact official scenario cleanly produced one ordinary SUCCESS check plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
       "ordinal": 38,
@@ -631,7 +631,7 @@
       "selection": "RUN",
       "earliestPhase": 5,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "input-required-result-capability-check.phase5.v1",
       "requiredFixtureRegistrations": [
         "test_input_required_result_capabilities tool emitting sampling-only inputRequests when the current request declares sampling but omits elicitation"
       ],
@@ -641,7 +641,7 @@
         "McpInputRequiredPublicRuntimeTests#capabilityRequirementsRespectThePolicyBoundaryAndRequestScope",
         "McpInputRequiredPublicRuntimeTests#missingCapabilityWinsOverMalformedSecretBearingOutputAndRemainsRequestScoped"
       ],
-      "rationale": "Local production-listener evidence covers current-request capability scoping and conditional emission. The exact official scenario cleanly produced one ordinary SUCCESS check plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. The reviewed draft remains deliberately null pending soak/resource-delta evidence, scoped API review, atomic activation, and a fresh Phase 5 verify run."
+      "rationale": "Local production-listener evidence covers current-request capability scoping and conditional emission. The exact official scenario cleanly produced one ordinary SUCCESS check plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
       "ordinal": 39,
@@ -649,7 +649,7 @@
       "selection": "RUN",
       "earliestPhase": 5,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "input-required-result-ignore-extra-params.phase5.v1",
       "requiredFixtureRegistrations": [
         "test_input_required_result_elicitation tool completing with a valid user_name response while ignoring additional valid response keys"
       ],
@@ -657,7 +657,7 @@
         "McpInputResponsesPublicRuntimeTests#validRetriesReachEveryHandlerThroughTheExactObservedContext",
         "McpInputResponsesPublicRuntimeTests#missingExpectedKeyIsReRequestedAndExtraResponsesRemainAvailable"
       ],
-      "rationale": "Local production-listener evidence preserves unexpected valid responses for application handling and permits normal completion. The exact official scenario cleanly produced one ordinary SUCCESS check plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. The reviewed draft remains deliberately null pending soak/resource-delta evidence, scoped API review, atomic activation, and a fresh Phase 5 verify run."
+      "rationale": "Local production-listener evidence preserves unexpected valid responses for application handling and permits normal completion. The exact official scenario cleanly produced one ordinary SUCCESS check plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     },
     {
       "ordinal": 40,
@@ -665,7 +665,7 @@
       "selection": "RUN",
       "earliestPhase": 5,
       "phase3Status": "DEFERRED",
-      "expectedCheckProfile": null,
+      "expectedCheckProfile": "input-required-result-validate-input.phase5.v1",
       "requiredFixtureRegistrations": [
         "test_input_required_result_elicitation tool rejecting or re-requesting numeric and null inputResponses instead of completing"
       ],
@@ -673,7 +673,7 @@
         "McpInputResponseValidatorTests#rejectsValuesThatMatchNoInputResponseBranch",
         "McpInputResponsesPublicRuntimeTests#malformedResponsesAndRequestStateFailBeforeApplicationPolicy"
       ],
-      "rationale": "Local union-validator and production-listener evidence rejects malformed inputResponses before application policy. The exact official scenario cleanly produced its two ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. The reviewed draft remains deliberately null pending soak/resource-delta evidence, scoped API review, atomic activation, and a fresh Phase 5 verify run."
+      "rationale": "Local union-validator and production-listener evidence rejects malformed inputResponses before application policy. The exact official scenario cleanly produced its two ordinary SUCCESS checks plus one wire-schema-valid SUCCESS in the controlled complete Phase 5 observation. That reviewed expected profile is active and matched the fresh exact 39-scenario Phase 5 development verification; release-candidate provenance remains separately open."
     }
   ]
 }

@@ -88,5 +88,12 @@ public sealed interface McpSubscriptionEvent
 			resourceUri = McpResourceValueSupport.requireAbsoluteNormalizedUri(
 					resourceUri);
 		}
+
+		/** @return rendering that does not expose the resource URI */
+		@Override
+		@NonNull
+		public final String toString() {
+			return "ResourceUpdated{resourceUri=<redacted>}";
+		}
 	}
 }

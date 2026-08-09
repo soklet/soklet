@@ -6,10 +6,11 @@ the ordinary `HttpServer` or `SseServer`. The API and implementation ship in
 the zero-runtime-dependency `com.soklet:soklet` artifact; there is no separate
 `soklet-mcp` component.
 
-This guide describes the implemented, locally frozen Phase 4 surface plus the
-live Phase 5 multi-round-trip request-state, progress/cancelation, resource-
-subscription, deterministic termination, cross-instance state, and residual-
-shutdown slices in the current `3.6.0-SNAPSHOT`. It is development
+This guide describes the implemented, locally frozen Phase 4 and Phase 5
+surfaces, including multi-round-trip request state, progress/cancelation,
+resource subscriptions, deterministic termination, cross-instance state, and
+residual shutdown, plus the first Phase 6 shutdown-observability vertical in
+the current `3.6.0-SNAPSHOT`. It is development
 documentation, not a release or final conformance claim. Compile-checked
 programmatic and annotation-driven applications live outside this source
 repository in the project-root `mcp/examples/phase-4` workspace.
@@ -26,13 +27,14 @@ repository in the project-root `mcp/examples/phase-4` workspace.
 | Multi-round-trip | Declared `input_required` results and retries for tools, prompt gets, and resource reads; application- or framework-protected request state |
 | Invocation control | Request-scoped progress over the MCP response stream plus cooperative cancelation for every application handler |
 | Subscriptions | Long-lived `subscriptions/listen` streams for resource-list changes and updates to requested resource URIs; application-owned local or distributed broadcast publishing |
+| Shutdown observation | Exactly one clean/residual lifecycle and metric outcome per successfully started listener generation; default sparse shutdown counter rendering |
 | Policy | Host and Origin checks, application admission, optional request limiting, mandatory fallback tool limiting for tool-bearing servers, bounded execution, and shared Soklet observation hosts |
 | Schema | Closed, Java-first Soklet MCP Tool Schema Profile 1; no public hand-authored schema registration |
 
-Operational trace correlation, comprehensive MCP telemetry, and MCP simulation
-are not implemented yet. Public descriptors already reserved for that
-remaining Phase 6 work are behaviorally neutral and do not cause Soklet to
-advertise those capabilities.
+Operational trace correlation, the remaining comprehensive MCP telemetry, and
+MCP simulation are not implemented yet. Public descriptors already reserved
+for that remaining Phase 6 work are behaviorally neutral and do not cause
+Soklet to advertise those capabilities.
 
 ## Server and request model
 
@@ -657,8 +659,23 @@ request-stream open/close, subscription open/close, and keep-alive semantic
 events through the same collector. The frozen shared-host descriptors also
 refer to provisional metric-snapshot, request-outcome, and stream-termination
 types. Server diagnostics, status, and shutdown-outcome types are Phase 6-
-owned. Comprehensive event storage, remaining connection instrumentation,
-simulator integration, and final metric rendering remain Phase 6 work.
+owned. The first Phase 6 vertical now publishes one
+`McpMetricsEvent.ServerStopped` for every successfully started listener
+generation that later stops successfully. Managed ordinary stops, startup
+rollback, and unexpected-listener-termination normalization produce lifecycle
+and metric outcomes in parity. A failed start produces neither; failed
+asynchronous subscription-registration cleanup keeps the generation pending
+until a successful retry; and repeated stop or eventual residual-handler exit
+does not duplicate the outcome. User callbacks run after both MCP-server and
+Soklet locks are released.
+
+The default collector exposes shutdown counts as an immutable, enum-ordered
+`Map<McpShutdownOutcome, Long>`. It omits zero outcomes, returns to an empty map
+after reset, and renders exactly
+`soklet_mcp_shutdowns_total{outcome="clean"|"residual_handlers"}` in
+Prometheus/OpenMetrics text. The remaining event aggregation, handler/queue
+families and diagnostics, connection instrumentation, trace correlation, and
+simulator integration remain Phase 6 work.
 
 `McpServer.stop()` is bounded by the configured shutdown timeout. If an
 application-supplied MCP request-processing execution remains afterward,
@@ -698,8 +715,18 @@ applicable pinned scenarios and recorded 147 `SUCCESS`, two exact reviewed
 `server-stateless` `SKIPPED`, and one reviewed
 `server-sse-streams-functional` `INFO` occurrence, with no warning, failure,
 or harness error. Thirty-six automatic wire successes covered 103 messages.
-All 16 Phase 5 profiles remain inactive and `null`, the harness remains at
-phase 4, and this acquisition is not a frozen profile set, Phase 5 verify pass,
-API freeze, or release-candidate result. Soak/resource-delta evidence and the
-scoped API review precede atomic activation and a fresh 39-scenario verify run.
+That acquisition was not itself a frozen profile set, Phase 5 verify pass, API
+freeze, or release-candidate result. The bounded Phase 5 cross-feature
+soak/resource-delta gate is separately green: complete four-test Maven smoke
+runs pass on JDK 21 and JDK 26, and the four-test JDK 21 nightly run passes;
+the strict verifier accepts exactly four scenarios and three suites for each
+profile. Requests, streams, subscriptions, generations, and publisher
+registrations balance, each MCP run ends `STOPPED`, and no active publisher
+registration or client socket remains. Sustained/fleet/release-candidate
+calibration remains later work. The later atomic closeout activates all 39 exact
+profiles, preserves the 23 historical IDs, freezes the Phase 5 API, and advances
+the harness to phase 5. A fresh 39-scenario development-candidate verify passes
+all profiles, validates all 39 goldens, and records no bad outcome, standard-
+error output, or non-clean fixture exit. It is not release-candidate provenance;
+JDK 17/25 CI and the remaining Phase 6 work remain open.
 Do not treat this snapshot guide as a release-conformance statement.

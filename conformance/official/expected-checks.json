@@ -3,7 +3,7 @@
   "protocolVersion": "2026-07-28",
   "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
   "profilePolicy": "A profile is the reviewed complete multiset of check ID, status, and occurrence count, plus its exact automatic wire-check count. Missing or extra checks, changed statuses or counts, FAILURE, WARNING, an unreviewed INFO or SKIPPED result, or any wire-schema-harness-error fails adjudication.",
-  "deferredProfilePolicy": "The 16 Phase 5 RUN rows deliberately retain null expectedCheckProfile values until their truthful fixture behavior is implemented, the complete Phase 5 profile-acquisition run is observed and reviewed, and the implementation phase advances atomically. Null never means accept anything.",
+  "deferredProfilePolicy": "No Soklet 3.6.0 RUN row remains deferred after atomic Phase 5 activation. Null is retained only for the NOT_APPLICABLE completion-complete row and never means accept anything.",
   "profiles": [
     {
       "id": "tools-list.phase4.v1",
@@ -532,6 +532,476 @@
         "wire-schema-valid": 1,
         "wire-schema-harness-error": 0,
         "rationale": "The exact pinned scenario emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "server-stateless.phase5.v1",
+      "scenario": "server-stateless",
+      "frozenInPhase": 5,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "sep-2575-discover-capabilities-match-handlers",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2575-http-server-error-jsonrpc-id",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2575-http-server-header-mismatch-400",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2575-http-server-meta-invalid-400",
+          "status": "SUCCESS",
+          "count": 3
+        },
+        {
+          "id": "sep-2575-http-server-method-not-found-404",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2575-http-server-method-not-found-404-initialize",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2575-http-server-method-not-found-404-logging-setlevel",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2575-http-server-method-not-found-404-ping",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2575-http-server-method-not-found-404-resources-subscribe",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2575-http-server-method-not-found-404-resources-unsubscribe",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2575-http-server-no-independent-requests-on-stream",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2575-http-server-unsupported-version-400",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2575-missing-capability-http-400",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2575-request-meta-client-info-optional",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2575-request-meta-invalid-missing-client-capabilities",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2575-request-meta-invalid-missing-meta",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2575-request-meta-invalid-missing-protocol-version",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2575-server-declares-prompts-in-discover",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2575-server-honors-notification-filter",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2575-server-identifies-in-result-meta",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2575-server-implements-discover",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2575-server-no-log-without-loglevel",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2575-server-rejects-undeclared-capability",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2575-server-sends-prompts-list-changed-on-subscription",
+          "status": "SKIPPED",
+          "count": 1,
+          "reason": "Server did not declare prompts.listChanged capability in server/discover"
+        },
+        {
+          "id": "sep-2575-server-sends-subscription-ack",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2575-server-sends-tools-list-changed-on-subscription",
+          "status": "SKIPPED",
+          "count": 1,
+          "reason": "Server did not declare tools.listChanged capability in server/discover"
+        },
+        {
+          "id": "sep-2575-server-tags-subscription-id",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2575-server-unsupported-version-error",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 0,
+        "wire-schema-harness-error": 0,
+        "rationale": "The exact pinned scenario uses direct protocol and transport probes outside the suite's automatic wire recorder, so it emits no automatic wire-schema check."
+      }
+    },
+    {
+      "id": "tools-call-with-progress.phase5.v1",
+      "scenario": "tools-call-with-progress",
+      "frozenInPhase": 5,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "tools-call-with-progress",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The reviewed controlled Phase 5 observation emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "input-required-result-basic-elicitation.phase5.v1",
+      "scenario": "input-required-result-basic-elicitation",
+      "frozenInPhase": 5,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "sep-2322-elicitation-complete",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2322-elicitation-incomplete",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The reviewed controlled Phase 5 observation emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "input-required-result-basic-sampling.phase5.v1",
+      "scenario": "input-required-result-basic-sampling",
+      "frozenInPhase": 5,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "sep-2322-sampling-complete",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2322-sampling-incomplete",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The reviewed controlled Phase 5 observation emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "input-required-result-basic-list-roots.phase5.v1",
+      "scenario": "input-required-result-basic-list-roots",
+      "frozenInPhase": 5,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "sep-2322-list-roots-complete",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2322-list-roots-incomplete",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The reviewed controlled Phase 5 observation emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "input-required-result-request-state.phase5.v1",
+      "scenario": "input-required-result-request-state",
+      "frozenInPhase": 5,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "sep-2322-request-state-complete",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2322-request-state-incomplete",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The reviewed controlled Phase 5 observation emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "input-required-result-multiple-input-requests.phase5.v1",
+      "scenario": "input-required-result-multiple-input-requests",
+      "frozenInPhase": 5,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "sep-2322-multiple-inputs-complete",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2322-multiple-inputs-incomplete",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The reviewed controlled Phase 5 observation emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "input-required-result-multi-round.phase5.v1",
+      "scenario": "input-required-result-multi-round",
+      "frozenInPhase": 5,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "sep-2322-multi-round-r1",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2322-multi-round-r2",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2322-multi-round-r3",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The reviewed controlled Phase 5 observation emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "input-required-result-missing-input-response.phase5.v1",
+      "scenario": "input-required-result-missing-input-response",
+      "frozenInPhase": 5,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "sep-2322-missing-response-rerequests",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The reviewed controlled Phase 5 observation emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "input-required-result-non-tool-request.phase5.v1",
+      "scenario": "input-required-result-non-tool-request",
+      "frozenInPhase": 5,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "sep-2322-non-tool-complete",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2322-non-tool-incomplete",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The reviewed controlled Phase 5 observation emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "input-required-result-result-type.phase5.v1",
+      "scenario": "input-required-result-result-type",
+      "frozenInPhase": 5,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "sep-2322-result-type-included",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The reviewed controlled Phase 5 observation emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "input-required-result-unsupported-methods.phase5.v1",
+      "scenario": "input-required-result-unsupported-methods",
+      "frozenInPhase": 5,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "sep-2322-not-on-unsupported-requests",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The reviewed controlled Phase 5 observation emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "input-required-result-tampered-state.phase5.v1",
+      "scenario": "input-required-result-tampered-state",
+      "frozenInPhase": 5,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "sep-2322-reject-tampered-state",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The reviewed controlled Phase 5 observation emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "input-required-result-capability-check.phase5.v1",
+      "scenario": "input-required-result-capability-check",
+      "frozenInPhase": 5,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "sep-2322-respect-client-capabilities",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The reviewed controlled Phase 5 observation emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "input-required-result-ignore-extra-params.phase5.v1",
+      "scenario": "input-required-result-ignore-extra-params",
+      "frozenInPhase": 5,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "sep-2322-ignore-unexpected-params",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The reviewed controlled Phase 5 observation emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
+      }
+    },
+    {
+      "id": "input-required-result-validate-input.phase5.v1",
+      "scenario": "input-required-result-validate-input",
+      "frozenInPhase": 5,
+      "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "checks": [
+        {
+          "id": "sep-2322-error-on-protocol-error",
+          "status": "SUCCESS",
+          "count": 1
+        },
+        {
+          "id": "sep-2322-validate-input-responses",
+          "status": "SUCCESS",
+          "count": 1
+        }
+      ],
+      "automaticWireChecks": {
+        "wire-schema-valid": 1,
+        "wire-schema-harness-error": 0,
+        "rationale": "The reviewed controlled Phase 5 observation emitted one automatic wire-schema-valid result and no wire-schema-harness-error."
       }
     }
   ]

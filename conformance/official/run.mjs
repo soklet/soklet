@@ -106,7 +106,11 @@ export async function runOfficialConformance(options, { processObject = process 
     supervisor.throwIfCancellationRequested();
 
 		const scenarios = activeScenarios(selection, options.phase);
-		const expectedScenarioCount = options.phase === 3 ? 1 : options.phase === 4 ? 23 : null;
+		const expectedScenarioCount = options.phase === 3
+			? 1
+			: options.phase === 4
+				? 23
+				: options.phase === 5 ? 39 : null;
 		if (expectedScenarioCount !== null && scenarios.length !== expectedScenarioCount)
 			throw new Error(
 				`Phase ${options.phase} must select exactly ${expectedScenarioCount} reviewed scenarios`,
@@ -943,7 +947,7 @@ function parseArguments(args) {
     classpath: values.get('--classpath'),
     projectRoot,
 		javaExecutable: values.get('--java') ?? 'java',
-		phase: Number(values.get('--phase') ?? '3'),
+		phase: Number(values.get('--phase') ?? '5'),
 		mode: values.get('--mode') ?? 'verify',
   });
 }

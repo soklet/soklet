@@ -36,9 +36,14 @@ const scratch = mkdtempSync(resolve(tmpdir(), 'soklet-mcp-conformance-self-test-
 
 try {
 	const manifests = verifyManifestSet();
-	assert.equal(manifests.selection.currentImplementationPhase, 4);
+	assert.equal(manifests.selection.currentImplementationPhase, 5);
 	assert.equal(activeScenarios(manifests.selection, 4).length, 23);
-	assert.equal(manifests.expectedChecks.profiles.length, 23);
+	assert.equal(activeScenarios(manifests.selection, 5).length, 39);
+	assert.equal(manifests.expectedChecks.profiles.length, 39);
+	assert.equal(
+		manifests.expectedChecks.profiles.filter((profile) => profile.frozenInPhase < 5).length,
+		23,
+	);
   const syntheticListing = 'Server scenarios (test against a server):\n'
     + manifests.selection.scenarios
       .map((scenario) => `  - ${scenario.name} [2026-07-28]\n`)

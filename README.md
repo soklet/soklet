@@ -783,18 +783,30 @@ cooperative cancelation, and resource-subscription delivery are implemented
 Phase 5 slices. Deterministic MRTR termination, cross-instance protected-state
 continuation, and residual-shutdown recovery are implemented as well. Resource
 subscriptions use framework-owned listen streams and an application-owned
-local or distributed broadcast publisher. Operational trace correlation,
-comprehensive MCP telemetry, and MCP simulation remain open Phase 6 work;
-applications must not advertise or depend on those remaining behaviors yet.
+local or distributed broadcast publisher. The first Phase 6 observability
+vertical is also implemented: every successfully started listener generation
+emits exactly one matching clean/residual shutdown metric, failed starts emit
+none, cleanup/restart normalization preserves generation ownership, and the
+default collector renders a sparse bounded shutdown counter. Operational trace
+correlation, the remaining comprehensive MCP telemetry, and MCP simulation
+remain open Phase 6 work; applications must not advertise or depend on those
+remaining behaviors yet.
 
 The exact pinned 39-scenario MCP suite has completed one clean controlled
 profile-observation run against the packaged fixture: 147 successful outcomes,
 two reviewed skips for truthfully unadvertised mutable prompt/tool lists, one
 reviewed informational JSON-versus-optional-SSE outcome, and no warning,
 failure, or wire-harness error. This is profile-acquisition evidence only. The
-Phase 5 profiles remain inactive, the harness remains at phase 4, and Soklet
-does not yet claim the Phase 5 verify gate or API freeze; soak/resource-delta
-evidence and scoped API review come before atomic activation and verification.
+observation did not itself activate the Phase 5 profiles or freeze the API. The
+bounded Phase 5
+cross-feature soak/resource-delta gate is green: full Maven smoke runs pass on
+JDK 21 and JDK 26, and the full JDK 21 nightly profile also passes, with the
+strict verifier requiring four scenarios and three Surefire suites. The later
+atomic closeout activates all 39 exact profiles, freezes the Phase 5 API, and
+passes a fresh 39-scenario development-candidate verify with all 39 goldens and
+no bad outcome, standard-error output, or non-clean exit. JDK 17/25 CI,
+sustained/fleet/release-candidate work, and the remaining Phase 6 scope remain
+open.
 
 #### Form Handling
 
@@ -1416,7 +1428,7 @@ public void basicIntegrationTest() {
 
 #### Metrics Collection
 
-Soklet includes a [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html) hook for collecting HTTP and SSE telemetry. Use metrics collectors for low-cardinality counters, gauges, and histograms; use [`LifecycleObserver`](https://javadoc.soklet.com/com/soklet/LifecycleObserver.html) for per-request tracing and audit hooks. The default in-memory
+Soklet includes a [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html) hook for collecting HTTP, SSE, and MCP telemetry. Use metrics collectors for low-cardinality counters, gauges, and histograms; use [`LifecycleObserver`](https://javadoc.soklet.com/com/soklet/LifecycleObserver.html) for per-request tracing and audit hooks. The default in-memory
 collector is enabled automatically, but you can replace or disable it:
 
 ```java
@@ -1430,6 +1442,13 @@ SokletConfig config = SokletConfig.withHttpServer(
 
 Use [`MetricsCollector.SnapshotTextOptions`](https://javadoc.soklet.com/com/soklet/MetricsCollector.SnapshotTextOptions.html) and
 [`MetricsCollector.MetricsFormat`](https://javadoc.soklet.com/com/soklet/MetricsCollector.MetricsFormat.html) to control text output.
+
+For MCP shutdowns, `snapshot().getMcpMetrics().getShutdowns()` is an immutable,
+enum-ordered `Map<McpShutdownOutcome, Long>`. The default collector omits
+unobserved outcomes, returns the map to empty on reset, and emits only
+`soklet_mcp_shutdowns_total{outcome="clean"}` or
+`soklet_mcp_shutdowns_total{outcome="residual_handlers"}`. Remaining MCP metric
+families are still Phase 6 work; do not infer them from this shutdown counter.
 
 You can expose a `/metrics` endpoint by injecting [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html)
 into a [`ResourceMethod`](https://javadoc.soklet.com/com/soklet/ResourceMethod.html):

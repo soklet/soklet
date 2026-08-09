@@ -20,6 +20,8 @@ import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.Collections;
+import java.util.EnumMap;
 import java.util.Map;
 
 import static java.util.Objects.requireNonNull;
@@ -29,7 +31,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * The complete metric family is provisional until MCP telemetry is finalized.
  * An empty instance permits the shared {@link MetricsCollector.Snapshot}
- * attachment to remain non-null before that family is introduced.
+ * attachment to remain non-null when no MCP metrics have been observed.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -42,7 +44,23 @@ public final class McpMetricsSnapshot {
 
 	private McpMetricsSnapshot(@NonNull Builder builder) {
 		requireNonNull(builder);
-		this.shutdowns = Map.copyOf(builder.shutdowns);
+		this.shutdowns = copyShutdowns(builder.shutdowns);
+	}
+
+	@NonNull
+	private static Map<@NonNull McpShutdownOutcome, @NonNull Long> copyShutdowns(
+			@NonNull Map<@NonNull McpShutdownOutcome, @NonNull Long> shutdowns) {
+		EnumMap<McpShutdownOutcome, Long> copied =
+				new EnumMap<>(McpShutdownOutcome.class);
+		requireNonNull(shutdowns).forEach((outcome, count) -> {
+			requireNonNull(outcome);
+			requireNonNull(count);
+			if (count < 0L)
+				throw new IllegalArgumentException(
+						"MCP shutdown counts must not be negative.");
+			copied.put(outcome, count);
+		});
+		return Collections.unmodifiableMap(copied);
 	}
 
 	/**
@@ -66,9 +84,9 @@ public final class McpMetricsSnapshot {
 	}
 
 	/**
-	 * Returns shutdown counts grouped by fixed shutdown outcome.
+	 * Returns nonnegative shutdown counts grouped by fixed shutdown outcome.
 	 *
-	 * @return immutable shutdown counts
+	 * @return immutable, enum-ordered shutdown counts
 	 */
 	@NonNull
 	public Map<@NonNull McpShutdownOutcome, @NonNull Long> getShutdowns() {
@@ -90,15 +108,16 @@ public final class McpMetricsSnapshot {
 		}
 
 		/**
-		 * Sets shutdown counts grouped by fixed shutdown outcome.
+		 * Sets nonnegative shutdown counts grouped by fixed shutdown outcome.
 		 *
-		 * @param shutdowns shutdown counts
+		 * @param shutdowns nonnegative shutdown counts
 		 * @return this builder
+		 * @throws IllegalArgumentException if any count is negative
 		 */
 		@NonNull
 		public Builder shutdowns(
 				@NonNull Map<@NonNull McpShutdownOutcome, @NonNull Long> shutdowns) {
-			this.shutdowns = Map.copyOf(requireNonNull(shutdowns));
+			this.shutdowns = copyShutdowns(shutdowns);
 			return this;
 		}
 

@@ -195,6 +195,46 @@ public class McpSubscriptionConfigurationTests {
 	}
 
 	@Test
+	public void localPublisherCloseAllowsInFlightDeliveryAndFencesLaterEvents()
+			throws Exception {
+		McpLocalSubscriptionEventPublisher publisher =
+				McpLocalSubscriptionEventPublisher.fromDefaults();
+		CountDownLatch listenerEntered = new CountDownLatch(1);
+		CountDownLatch releaseListener = new CountDownLatch(1);
+		AtomicInteger deliveries = new AtomicInteger();
+		McpSubscriptionEventSubscription subscription = publisher.subscribe(event -> {
+			deliveries.incrementAndGet();
+			listenerEntered.countDown();
+			try {
+				if (!releaseListener.await(5, TimeUnit.SECONDS))
+					throw new AssertionError("Timed out waiting to release listener");
+			} catch (InterruptedException exception) {
+				Thread.currentThread().interrupt();
+				throw new AssertionError(exception);
+			}
+		});
+		ExecutorService executor = Executors.newSingleThreadExecutor();
+
+		try {
+			Future<?> publish = executor.submit(
+					publisher::publishResourcesListChanged);
+			Assertions.assertTrue(listenerEntered.await(5, TimeUnit.SECONDS));
+			subscription.close();
+			Assertions.assertFalse(publish.isDone());
+			releaseListener.countDown();
+			publish.get(5, TimeUnit.SECONDS);
+
+			publisher.publishResourcesListChanged();
+			Assertions.assertEquals(1, deliveries.get());
+		} finally {
+			releaseListener.countDown();
+			subscription.close();
+			executor.shutdownNow();
+			Assertions.assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
+		}
+	}
+
+	@Test
 	public void publicPublisherSurfaceContainsOnlyResourceEventFamilies() {
 		Assertions.assertArrayEquals(new McpSubscriptionNotificationType[]{
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED,
@@ -228,6 +268,14 @@ public class McpSubscriptionConfigurationTests {
 		Assertions.assertEquals(uri, event.resourceUri());
 		Assertions.assertEquals(uri,
 				new McpSubscriptionEvent.ResourceUpdated(uri).resourceUri());
+		URI sensitiveUri = URI.create(
+				"https://user:secret@example.com/resources/1?token=secret-token");
+		McpSubscriptionEvent.ResourceUpdated sensitiveEvent =
+				McpSubscriptionEvent.resourceUpdated(sensitiveUri);
+		Assertions.assertEquals(
+				"ResourceUpdated{resourceUri=<redacted>}",
+				sensitiveEvent.toString());
+		Assertions.assertFalse(sensitiveEvent.toString().contains("secret"));
 		Assertions.assertThrows(NullPointerException.class,
 				() -> McpSubscriptionEvent.resourceUpdated(null));
 		Assertions.assertThrows(NullPointerException.class,

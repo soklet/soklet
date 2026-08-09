@@ -23,13 +23,22 @@ dependencies out of the published artifact. It therefore validates the source
 at the checked-out commit; it does not claim to consume a prebuilt candidate
 JAR. The smoke profile is suitable for local checks and pull-request/push leak
 protection. The nightly profile increases operation counts, concurrency,
-timeouts, and explicit resource-delta thresholds.
+timeouts, shutdown cycles, and explicit resource-delta thresholds.
 
 Every profile probes file-descriptor, thread, heap, and active-gauge leaks by
 driving repeated live loopback transport activity and then asserting resources
-return to the running-idle baseline. `SOKLET_SOAK_PROFILE` accepts exactly
-`smoke` or `nightly`; an omitted value selects `smoke` for local
-convenience.
+return near a warmed, scenario-specific baseline. The HTTP and SSE scenarios
+use their running-idle baselines; the MCP scenario uses a stopped/warmed
+baseline so listener and executor resources are measured across restarts.
+`SOKLET_SOAK_PROFILE` accepts exactly `smoke` or `nightly`; an omitted value
+selects `smoke` for local convenience.
+
+The mandatory `MCP Phase 5 cross-feature churn` scenario runs mixed MCP work
+through cancellation and repeated shutdown boundaries, then requires request,
+stream, subscription, lifecycle, and process-resource accounting to return to
+its expected baseline. Its `mcp.*` profile keys freeze client/cycle counts,
+handler and stream bounds, subscription bounds, request/write/shutdown timing,
+shutdown cycles, and resource-delta tolerances for both profiles.
 
 ## CI Profiles
 
@@ -58,9 +67,10 @@ Surefire still writes its normal test output to
 `soak/target/surefire-reports/`. Every CI soak job starts with `clean`, then
 `scripts/verify-soak-evidence.mjs` proves that the selected profile resource
 and SHA-256 match, the canonical configuration is byte-exact, and exactly the
-three HTTP-abort, HTTP-churn, and SSE-churn scenarios passed. It also requires
-the exact two expected Surefire XML reports, exact test counts, zero
-failures/errors/skips, and no stale XML report. Only then does CI upload the
+four HTTP-abort, HTTP-churn, SSE-churn, and MCP Phase 5 cross-feature scenarios
+passed. It also requires the exact three expected Surefire XML reports, exact
+test counts, zero failures/errors/skips, and no stale XML report. Only then does
+CI upload the
 Markdown report and Surefire directory; missing or inconsistent evidence fails
 the job. The custom report is the human-readable artifact to attach to release
 notes or manual soak evidence. Generated reports and target output are

@@ -134,8 +134,14 @@ Input-required results have no protocol cache hints, and completed resource
 retries are forced to private, zero-TTL cache policy; the HTTP transport remains
 `Cache-Control: no-store`.
 
-Progress reporting, cooperative cancellation, resource-subscription delivery,
-operational trace correlation, comprehensive MCP telemetry, and MCP simulation
-remain Phase 5 or 6 work. Their public descriptors must not be interpreted as
-active security controls until the corresponding production behavior is
-implemented and documented.
+Progress reporting, cooperative cancelation, and resource-subscription delivery
+are implemented. The first Phase 6 shutdown-observability vertical is also
+implemented: its only metric dimension is the fixed
+`McpShutdownOutcome`-derived `clean`/`residual_handlers` label, and it records no
+endpoint, method, request, principal, URI, header, trace, baggage, state, or
+application-controlled value. This is bounded-label evidence, not completion
+of the broader telemetry-redaction gate. Operational trace correlation,
+remaining comprehensive MCP telemetry, and MCP simulation are still Phase 6
+work; their public descriptors must not be interpreted as active security
+controls until the corresponding production behavior is implemented and
+documented.

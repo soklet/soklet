@@ -27,7 +27,7 @@ distribution as CI evidence.
 `upstream-pins.json` records the immutable suite and final-specification
 identities, hashes, toolchain versions, and scenario-inventory digests.
 `scenarios.json` preserves all 40 names in the pinned CLI's exact order. Its 39
-`RUN` rows are the eventual Soklet 3.6.0 run set; `completion-complete` is the
+`RUN` rows are the active Soklet 3.6.0 run set; `completion-complete` is the
 only `NOT_APPLICABLE` row because Soklet does not advertise Completion.
 
 `earliestPhase` means the first phase in which a scenario is mandatory as part
@@ -58,14 +58,25 @@ future phase are checked-in evidence obligations: they must be implemented and
 green before that row can acquire an expected profile. Empty arrays are valid
 only for the intentionally unsupported Completion row.
 
-Expected profiles are evidence, not guesses. `expected-checks.json` retains
-the Phase 3 DNS profile and freezes the complete observed profiles for the
-other 22 Phase 4 rows. All 16 Phase 5 `RUN` rows keep a null
-`expectedCheckProfile` until the complete Phase 5 profile-acquisition run is
-reviewed and the implementation phase advances atomically. The controlled
-acquisition is now complete and reviewed, but soak/resource-delta evidence and
-the scoped API review intentionally precede that atomic activation. Null never
-means “accept anything”; it means “not executable in this phase.”
+Expected profiles are evidence, not guesses. `expected-checks.json` retains the
+23 historical Phase 3/4 profile IDs and freezes the 16 exact reviewed Phase 5
+profiles. All 39 `RUN` rows now have one non-null profile, the manifest records
+`currentImplementationPhase: 5`, and the complete profile file has SHA-256
+`59a4b982e04c7649b3318b6227a6bd73b000c690b7e5c9edab4a164069a76730`.
+The activated scenario manifest has SHA-256
+`8d97a1560a70373d4832c96bb627eb8e4009de77c86bf3a2d9772403621fe5df`.
+Null never means “accept anything”; for a future phase it means “not executable
+in this phase.”
+
+The complete Maven soak profile passes four tests with zero failures, errors,
+or skips on JDK 21 and JDK 26 in smoke mode and on JDK 21 in nightly mode. The
+strict evidence verifier accepts exactly four scenario sections and three
+Surefire suites with smoke profile SHA-256
+`eaa1f52aad86dc2765200273a468801e938f5a6be1719845358c9aa57879bcd6`
+and nightly profile SHA-256
+`a20a70d6adb1fd2cb5909be76b219e38fc112524a12fc06552b26bdd8ec76d99`;
+its self-test is green. This bounded soak evidence does not activate a profile,
+advance the manifest phase, or constitute an official conformance verify pass.
 
 The selected suite's schema is not substituted for the final specification
 schema. The official checkout remains pristine, and Soklet separately
@@ -90,15 +101,15 @@ verified lockfile, so no Soklet runtime dependency or second package
 installation is added. These corpus additions are local production-listener/
 final-schema evidence. The standalone progress observation is useful
 diagnostic history. The later complete controlled observation is profile-
-acquisition evidence, but it is not an activated Phase 5 verify gate; all 16
-Phase 5 expected profiles remain null until atomic phase advancement.
+acquisition evidence, not the later activated Phase 5 verify gate. The fresh
+verification and frozen profiles are recorded below.
 
 The schema layer checks JSON message shapes only. HTTP status and headers,
 CORS, SSE framing, cross-message order, ID correlation, filter containment,
 and progress monotonicity remain production/local/official scenario duties.
 The `byte` format is annotation-only, matching the official suite.
 
-## Canonical Phase 4 run
+## Canonical Phase 5 run
 
 First obtain the exact source commit recorded in `upstream-pins.json`. Before
 installing or building it, run `verifyOfficialSuite(..., {requireBuilt:false})`
@@ -115,13 +126,14 @@ sh conformance/official/build-public-fixture.sh \
   > target/conformance/official/public-fixture-classpath.txt
 node conformance/official/self-test.mjs --suite-dir /absolute/pinned-suite
 node conformance/official/runner-self-test.mjs
-mkdir -p target/conformance/official/phase-4
+mkdir -p target/conformance/official/phase-5
 node conformance/official/run.mjs \
   --suite-dir /absolute/pinned-suite \
-  --work-dir /absolute/project/target/conformance/official/phase-4 \
+  --work-dir /absolute/project/target/conformance/official/phase-5 \
   --classpath "$(cat target/conformance/official/public-fixture-classpath.txt)" \
   --project-root /absolute/project \
-  --phase 4
+  --phase 5 \
+  --mode verify
 ```
 
 `build-public-fixture.sh` requires an empty fixture-classes directory,
@@ -195,15 +207,37 @@ check. The durable external checkpoint
 `../../../mcp/PHASE_5_PROFILE_OBSERVATION_2026-08-08.md` records acquisition
 provenance, review digests, and the complete 16 draft multisets.
 
-This does not change the active gate: `currentImplementationPhase` remains 4,
-all 16 Phase 5 profile references remain null, and CI/default verification
-remain Phase 4. After soak/resource-delta evidence and scoped API review, a
-separate atomic change must add only the 16 reviewed profiles, retain the 23
-historical profile IDs, advance the phase/counts/CI, and run a fresh 39-row
-`--phase 5 --mode verify` gate before a Phase 5 conformance claim is made.
+At the time, that observation did not change the active gate: the manifest
+remained at Phase 4 and all 16 Phase 5 profile references remained null. The
+later atomic activation retained the 23 historical IDs, added only the 16
+reviewed profiles, advanced the phase/counts/default verification, and froze
+the scoped Phase 5 API. The historical acquisition facts remain unchanged.
 
-The Phase 4 gate now runs all 23 owned scenarios. Every frozen multiset and
-automatic wire-check count matched on a second fail-closed run; all official
+## Canonical Phase 5 development verification
+
+The fresh `--phase 5 --mode verify` run against protocol `2026-07-28` and suite
+commit `49103de6ed70804e940637bf3e9e29e4a3f54e64` passed all 39 selected
+scenarios and all exact frozen profiles. Its evidence is classified
+`CANDIDATE_ARTIFACT_DEVELOPMENT_ONLY`, records
+`releaseCandidateEvidence: false`, and contains exactly 150 outcomes: 147
+`SUCCESS`, the two reviewed `server-stateless` capability `SKIPPED` outcomes
+listed above, and the one reviewed `server-sse-streams-functional` `INFO`.
+Thirty-six wire-schema successes cover 103 messages; all 39 checked-in goldens
+validated. No warning, failure, or wire-schema-harness error occurred, every
+standard-error stream was empty, and all 39 fixture processes exited cleanly.
+
+The evidence SHA-256 is
+`082d841697f472da97a822c4dba35e922378f170a7050eca400b32a3eeaf6fc1`;
+the packaged candidate JAR SHA-256 is
+`8da753893d18ba64c8442c1e235bab66ccf29d7fe7c177f99702cca252c1b1ad`.
+A second clean final replay produced the same evidence digest and exact counts.
+This is development-candidate evidence, not checksum-matched release-candidate
+JAR/POM provenance. The durable external checkpoint is
+`../../../mcp/PHASE_5_ACTIVATION_AND_VERIFICATION_2026-08-08.md`.
+
+The historical Phase 4 gate ran all 23 Phase 4-owned scenarios. Every frozen
+multiset and automatic wire-check count matched on a second fail-closed run;
+all official
 checks were successful except the one reviewed
 `server-sse-streams-functional` informational outcome, which truthfully
 records that the concurrent requests completed as independent JSON responses

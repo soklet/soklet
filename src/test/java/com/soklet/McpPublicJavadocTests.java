@@ -120,6 +120,16 @@ public class McpPublicJavadocTests {
 			"com.soklet.McpToolRegistration$NamedBuilder",
 			"com.soklet.McpToolRegistration$OperationHandlerStage"
 	);
+	private static final Set<String> PHASE_FIVE_NOT_THREAD_SAFE_MCP_TYPES = Set.of(
+			"com.soklet.McpInputRequiredResult$Builder",
+			"com.soklet.McpInputResponses$Builder",
+			"com.soklet.McpKeyInUseException",
+			"com.soklet.McpProgressUpdate$Builder",
+			"com.soklet.McpProtectionConfig$Builder",
+			"com.soklet.McpProtectionKeyRing$Builder",
+			"com.soklet.McpRequestStateProtectionException",
+			"com.soklet.McpSubscriptionConfig$Builder"
+	);
 
 	@Test
 	public void reviewedIncludeUnionIsNonemptyAndHasNoOverlap() throws IOException {
@@ -129,9 +139,16 @@ public class McpPublicJavadocTests {
 				"The public MCP bootstrap requires a reviewed API inventory");
 		Assertions.assertTrue(includes.phaseFourTypeNames().containsAll(
 				PHASE_FOUR_NOT_THREAD_SAFE_MCP_TYPES),
-				() -> "Stale exact @NotThreadSafe contract entries: "
+				() -> "Stale exact Phase 4 @NotThreadSafe contract entries: "
 						+ PHASE_FOUR_NOT_THREAD_SAFE_MCP_TYPES.stream()
 								.filter(type -> !includes.phaseFourTypeNames()
+										.contains(type))
+								.sorted().toList());
+		Assertions.assertTrue(includes.phaseFiveTypeNames().containsAll(
+				PHASE_FIVE_NOT_THREAD_SAFE_MCP_TYPES),
+				() -> "Stale exact Phase 5 @NotThreadSafe contract entries: "
+						+ PHASE_FIVE_NOT_THREAD_SAFE_MCP_TYPES.stream()
+								.filter(type -> !includes.phaseFiveTypeNames()
 										.contains(type))
 								.sorted().toList());
 	}
@@ -161,7 +178,8 @@ public class McpPublicJavadocTests {
 				StandardCharsets.UTF_8)) {
 			Iterable<? extends JavaFileObject> sources = fileManager.getJavaFileObjectsFromPaths(sourcePaths);
 			List<String> missingDocumentation = inspectDocumentation(compiler, fileManager, sources,
-					includes.typeNames(), includes.phaseFourTypeNames());
+					includes.typeNames(), includes.phaseFourTypeNames(),
+					includes.phaseFiveTypeNames());
 
 			Assertions.assertTrue(missingDocumentation.isEmpty(),
 					() -> "Missing public documentation:\n - " + String.join("\n - ", missingDocumentation));
@@ -333,15 +351,16 @@ public class McpPublicJavadocTests {
 				StandardCharsets.UTF_8)) {
 			return inspectDocumentation(compiler, fileManager,
 					List.of(new StringJavaFileObject(binaryName, source)), typeNames,
-					Set.of());
+					Set.of(), Set.of());
 		}
 	}
 
 	private static List<String> inspectDocumentation(JavaCompiler compiler,
-														 StandardJavaFileManager fileManager,
-														 Iterable<? extends JavaFileObject> sources,
-														 Set<String> typeNames,
-														 Set<String> phaseFourTypeNames) throws IOException {
+													 StandardJavaFileManager fileManager,
+													 Iterable<? extends JavaFileObject> sources,
+													 Set<String> typeNames,
+													 Set<String> phaseFourTypeNames,
+													 Set<String> phaseFiveTypeNames) throws IOException {
 		DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
 		List<String> options = List.of(
 				"--release", "17",
@@ -386,6 +405,7 @@ public class McpPublicJavadocTests {
 					|| typeName.startsWith("com.soklet.annotation.Mcp"))
 				requireMcpThreadSafetyMarker(typeName, type,
 						phaseFourTypeNames.contains(typeName),
+						phaseFiveTypeNames.contains(typeName),
 						missingDocumentation);
 			inspectExportedType(type, docTrees, sourceAuthoredDeclarations, inspected, missingDocumentation);
 		}
@@ -562,7 +582,7 @@ public class McpPublicJavadocTests {
 	}
 
 	private static void requireMcpThreadSafetyMarker(String binaryName,
-			TypeElement type, boolean phaseFour,
+			TypeElement type, boolean phaseFour, boolean phaseFive,
 			List<String> missingDocumentation) {
 		List<String> actualMarkers = type.getAnnotationMirrors().stream()
 				.map(annotation -> annotation.getAnnotationType().toString())
@@ -579,13 +599,17 @@ public class McpPublicJavadocTests {
 			return;
 		}
 
-		if (phaseFour) {
+		if (phaseFour || phaseFive) {
+			Set<String> notThreadSafeTypes = phaseFour
+					? PHASE_FOUR_NOT_THREAD_SAFE_MCP_TYPES
+					: PHASE_FIVE_NOT_THREAD_SAFE_MCP_TYPES;
+			String phase = phaseFour ? "Phase 4" : "Phase 5";
 			List<String> expectedMarkers = List.of(
-					PHASE_FOUR_NOT_THREAD_SAFE_MCP_TYPES.contains(binaryName)
+					notThreadSafeTypes.contains(binaryName)
 							? NOT_THREAD_SAFE : THREAD_SAFE);
 			if (!expectedMarkers.equals(actualMarkers))
 				missingDocumentation.add(describe(type) + " (expected exact "
-						+ "Phase 4 thread-safety markers " + expectedMarkers
+						+ phase + " thread-safety markers " + expectedMarkers
 						+ ", found " + actualMarkers + ")");
 		} else if (actualMarkers.size() != 1)
 			missingDocumentation.add(describe(type) + " (requires exactly one "
@@ -608,6 +632,7 @@ public class McpPublicJavadocTests {
 	private static ReviewedIncludes loadReviewedIncludes() throws IOException {
 		Map<String, Path> owners = new LinkedHashMap<>();
 		Set<String> phaseFourTypeNames = new LinkedHashSet<>();
+		Set<String> phaseFiveTypeNames = new LinkedHashSet<>();
 
 		for (Path includeFile : INCLUDE_FILES) {
 			Assertions.assertTrue(Files.isRegularFile(includeFile),
@@ -629,11 +654,13 @@ public class McpPublicJavadocTests {
 						() -> "MCP API type '" + entry + "' appears in both " + previousOwner + " and " + includeFile);
 				if (includeFile.equals(INCLUDE_FILES.get(0)))
 					phaseFourTypeNames.add(entry);
+				else if (includeFile.equals(INCLUDE_FILES.get(1)))
+					phaseFiveTypeNames.add(entry);
 			}
 		}
 
 		return new ReviewedIncludes(new LinkedHashSet<>(owners.keySet()),
-				Set.copyOf(phaseFourTypeNames));
+				Set.copyOf(phaseFourTypeNames), Set.copyOf(phaseFiveTypeNames));
 	}
 
 	private static String formatDiagnostic(Diagnostic<? extends JavaFileObject> diagnostic) {
@@ -663,5 +690,6 @@ public class McpPublicJavadocTests {
 	}
 
 	private record ReviewedIncludes(Set<String> typeNames,
-			Set<String> phaseFourTypeNames) {}
+			Set<String> phaseFourTypeNames,
+			Set<String> phaseFiveTypeNames) {}
 }

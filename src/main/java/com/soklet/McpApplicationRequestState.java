@@ -44,4 +44,11 @@ public record McpApplicationRequestState(
 			throw new IllegalArgumentException(
 					"Application request state must not be empty.");
 	}
+
+	/** @return rendering that does not expose opaque request state */
+	@Override
+	@NonNull
+	public final String toString() {
+		return "McpApplicationRequestState{value=<redacted>}";
+	}
 }

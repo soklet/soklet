@@ -254,6 +254,7 @@ public final class Soklet implements AutoCloseable {
 	 * this is a no-op.
 	 */
 	public void start() {
+		List<Runnable> afterLifecycleUnlock = new ArrayList<>();
 		getLock().lock();
 
 		try {
@@ -309,13 +310,31 @@ public final class Soklet implements AutoCloseable {
 				// 4. Attempt to start the MCP server
 				if (mcpServerNeedsStart) {
 					lifecycleObserver.willStartMcpServer(mcpServer);
+					AtomicReference<McpShutdownOutcome>
+							normalizedShutdownOutcome = new AtomicReference<>();
 					try {
-						mcpServer.start();
+						if (mcpServer instanceof DefaultMcpServer defaultMcpServer)
+							defaultMcpServer.startForSoklet(
+									normalizedShutdownOutcome::set);
+						else
+							mcpServer.start();
 						mcpServerStarted = true;
+						reportNormalizedMcpStop(lifecycleObserver, mcpServer,
+								normalizedShutdownOutcome, afterLifecycleUnlock);
 						lifecycleObserver.didStartMcpServer(mcpServer);
 					} catch (Throwable t) {
-						lifecycleObserver.didFailToStartMcpServer(mcpServer, t);
-						throw t;
+						Throwable startupFailure = t;
+						try {
+							reportNormalizedMcpStop(lifecycleObserver, mcpServer,
+									normalizedShutdownOutcome,
+									afterLifecycleUnlock);
+						} catch (Throwable normalizedStopFailure) {
+							startupFailure = retainFirstFailure(startupFailure,
+									normalizedStopFailure);
+						}
+						lifecycleObserver.didFailToStartMcpServer(mcpServer,
+								startupFailure);
+						throw startupFailure;
 					}
 				}
 
@@ -326,7 +345,7 @@ public final class Soklet implements AutoCloseable {
 						httpServer, httpServerStarted,
 						sseServer, sseServerStarted,
 						mcpServer, mcpServerStarted,
-						t);
+						t, afterLifecycleUnlock);
 
 				// 6. Global failure
 				lifecycleObserver.didFailToStartSoklet(this, t);
@@ -339,7 +358,27 @@ public final class Soklet implements AutoCloseable {
 			}
 		} finally {
 			getLock().unlock();
+			runAfterLifecycleUnlock(afterLifecycleUnlock);
 		}
+	}
+
+	private static void reportNormalizedMcpStop(
+			@NonNull LifecycleObserver lifecycleObserver,
+			@NonNull McpServer mcpServer,
+			@NonNull AtomicReference<@Nullable McpShutdownOutcome>
+					normalizedShutdownOutcome,
+			@NonNull List<@NonNull Runnable> afterLifecycleUnlock) {
+		requireNonNull(lifecycleObserver);
+		requireNonNull(mcpServer);
+		requireNonNull(afterLifecycleUnlock);
+		McpShutdownOutcome shutdownOutcome = requireNonNull(
+				normalizedShutdownOutcome).getAndSet(null);
+		if (shutdownOutcome == null)
+			return;
+		DefaultMcpServer defaultMcpServer = (DefaultMcpServer) mcpServer;
+		afterLifecycleUnlock.add(() ->
+				defaultMcpServer.publishServerStoppedMetric(shutdownOutcome));
+		lifecycleObserver.didStopMcpServer(mcpServer, shutdownOutcome);
 	}
 
 	private void rollbackStartedServersAfterFailedStart(@NonNull LifecycleObserver lifecycleObserver,
@@ -348,13 +387,17 @@ public final class Soklet implements AutoCloseable {
 																			@Nullable SseServer sseServer,
 																			boolean sseServerStarted,
 																			@Nullable McpServer mcpServer,
-																			boolean mcpServerStarted,
-																			@NonNull Throwable startupFailure) {
+													boolean mcpServerStarted,
+													@NonNull Throwable startupFailure,
+													@NonNull List<@NonNull Runnable>
+															afterLifecycleUnlock) {
 		requireNonNull(lifecycleObserver);
 		requireNonNull(startupFailure);
+		requireNonNull(afterLifecycleUnlock);
 
 		if (mcpServerStarted && mcpServer != null)
-			stopStartedMcpServerForRollback(lifecycleObserver, mcpServer, startupFailure);
+			stopStartedMcpServerForRollback(lifecycleObserver, mcpServer,
+					startupFailure, afterLifecycleUnlock);
 
 		if (sseServerStarted && sseServer != null)
 			stopStartedSseServerForRollback(lifecycleObserver, sseServer, startupFailure);
@@ -431,11 +474,14 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	private void stopStartedMcpServerForRollback(@NonNull LifecycleObserver lifecycleObserver,
-																				 @NonNull McpServer mcpServer,
-																				 @NonNull Throwable startupFailure) {
+																 @NonNull McpServer mcpServer,
+																 @NonNull Throwable startupFailure,
+																 @NonNull List<@NonNull Runnable>
+																 		afterLifecycleUnlock) {
 		requireNonNull(lifecycleObserver);
 		requireNonNull(mcpServer);
 		requireNonNull(startupFailure);
+		requireNonNull(afterLifecycleUnlock);
 
 		try {
 			lifecycleObserver.willStopMcpServer(mcpServer);
@@ -444,12 +490,18 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		try {
-			McpShutdownOutcome shutdownOutcome = ((DefaultMcpServer) mcpServer).stopForSoklet();
+			DefaultMcpServer defaultMcpServer = (DefaultMcpServer) mcpServer;
+			McpServerStopResult stopResult = defaultMcpServer.stopForSoklet();
 			try {
-				lifecycleObserver.didStopMcpServer(mcpServer, shutdownOutcome);
+				lifecycleObserver.didStopMcpServer(mcpServer,
+						stopResult.shutdownOutcome());
 			} catch (Throwable t) {
 				startupFailure.addSuppressed(t);
 			}
+			if (stopResult.listenerGenerationStopped())
+				afterLifecycleUnlock.add(() ->
+						defaultMcpServer.publishServerStoppedMetric(
+								stopResult.shutdownOutcome()));
 		} catch (Throwable t) {
 			startupFailure.addSuppressed(t);
 
@@ -467,6 +519,7 @@ public final class Soklet implements AutoCloseable {
 	 * If the managed server[s] are already stopped, this is a no-op.
 	 */
 	public void stop() {
+		List<Runnable> afterLifecycleUnlock = new ArrayList<>();
 		getLock().lock();
 
 		try {
@@ -542,25 +595,41 @@ public final class Soklet implements AutoCloseable {
 
 				if (mcpServer instanceof DefaultMcpServer defaultMcpServer
 						&& defaultMcpServer.requiresStop()) {
-					try {
-						lifecycleObserver.willStopMcpServer(mcpServer);
-					} catch (Throwable t) {
-						firstEncounteredException = retainFirstFailure(firstEncounteredException, t);
+					boolean realListenerGeneration = defaultMcpServer
+							.hasPendingListenerGenerationStop();
+					if (realListenerGeneration) {
+						try {
+							lifecycleObserver.willStopMcpServer(mcpServer);
+						} catch (Throwable t) {
+							firstEncounteredException = retainFirstFailure(
+									firstEncounteredException, t);
+						}
 					}
 
 					try {
-						McpShutdownOutcome shutdownOutcome = ((DefaultMcpServer) mcpServer).stopForSoklet();
-						try {
-							lifecycleObserver.didStopMcpServer(mcpServer, shutdownOutcome);
-						} catch (Throwable t) {
-							firstEncounteredException = retainFirstFailure(firstEncounteredException, t);
+						McpServerStopResult stopResult = defaultMcpServer
+								.stopForSoklet();
+						if (stopResult.listenerGenerationStopped()) {
+							try {
+								lifecycleObserver.didStopMcpServer(mcpServer,
+										stopResult.shutdownOutcome());
+							} catch (Throwable t) {
+								firstEncounteredException = retainFirstFailure(
+										firstEncounteredException, t);
+							}
+							afterLifecycleUnlock.add(() ->
+									defaultMcpServer.publishServerStoppedMetric(
+											stopResult.shutdownOutcome()));
 						}
 					} catch (Throwable t) {
 						firstEncounteredException = retainFirstFailure(firstEncounteredException, t);
-						try {
-							lifecycleObserver.didFailToStopMcpServer(mcpServer, t);
-						} catch (Throwable t2) {
-							firstEncounteredException = retainFirstFailure(firstEncounteredException, t2);
+						if (realListenerGeneration) {
+							try {
+								lifecycleObserver.didFailToStopMcpServer(mcpServer, t);
+							} catch (Throwable t2) {
+								firstEncounteredException = retainFirstFailure(
+										firstEncounteredException, t2);
+							}
 						}
 					}
 				}
@@ -576,8 +645,15 @@ public final class Soklet implements AutoCloseable {
 				requireNonNull(getAwaitShutdownLatchReference().get()).countDown();
 			} finally {
 				getLock().unlock();
+				runAfterLifecycleUnlock(afterLifecycleUnlock);
 			}
 		}
+	}
+
+	private static void runAfterLifecycleUnlock(
+			@NonNull List<@NonNull Runnable> actions) {
+		for (Runnable action : requireNonNull(actions))
+			requireNonNull(action).run();
 	}
 
 	@NonNull

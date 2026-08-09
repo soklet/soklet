@@ -76,4 +76,12 @@ public record McpInputRequest(
 	public String method() {
 		return this.declaration.method();
 	}
+
+	/** @return rendering that identifies the method but redacts request parameters */
+	@Override
+	@NonNull
+	public final String toString() {
+		return "McpInputRequest{method='%s', params=<redacted>}"
+				.formatted(method());
+	}
 }

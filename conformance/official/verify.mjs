@@ -387,7 +387,7 @@ function verifyScenarioManifest(selection, pins) {
 	], 'scenario manifest');
 	if (selection.schemaVersion !== 1 || selection.protocolVersion !== pins.protocolVersion
 			|| selection.suiteCommit !== pins.officialConformanceSuite.commit
-			|| selection.currentImplementationPhase !== 4
+			|| selection.currentImplementationPhase !== 5
 			|| nonBlankString(selection.earliestPhaseSemantics)
 			|| nonBlankString(selection.phaseExecutionPolicy)
 			|| !Array.isArray(selection.scenarios))

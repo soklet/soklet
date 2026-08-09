@@ -3,7 +3,13 @@
 This directory contains the reviewed, repository-owned evidence for Soklet's
 MCP public/protected API. The [Phase 4 freeze rationale](phase-4-freeze-rationale.md)
 records the 2026-08-06 decision and the subsequently reviewed wrapper
-correction.
+correction. The external
+[Phase 5 API-review checkpoint](../../../mcp/PHASE_5_API_REVIEW_CHECKPOINT_2026-08-08.md)
+records review approval for the candidate, and the
+[Phase 5 freeze rationale](phase-5-freeze-rationale.md) records its exact
+compatibility snapshot. The external
+[activation/verification checkpoint](../../../mcp/PHASE_5_ACTIVATION_AND_VERIFICATION_2026-08-08.md)
+records the atomic profile activation and fresh official-suite result.
 
 `current-incompatibilities.jsonl` is the canonical set of incompatibilities
 between the released `com.soklet:soklet:3.5.1` artifact and the current
@@ -28,7 +34,7 @@ scope has exactly one owner:
 | Inventory | Entries | Meaning |
 | --- | ---: | --- |
 | `phase-4.includes` | 133 | frozen Phase 4 types and shared hosts |
-| `phase-5.includes` | 39 | Phase 5-owned types; not yet frozen |
+| `phase-5.includes` | 39 | frozen Phase 5 types |
 | `phase-6.includes` | 6 | Phase 6-owned types; not yet frozen |
 | `provisional.includes` | 28 | owner not yet assigned to a frozen phase |
 | `non-mcp-public-api.allowlist` | 0 | reviewed unrelated API deltas |
@@ -79,25 +85,33 @@ branches across shutdown, deadline, and disconnect outcomes. Public listener
 tests also prove same-key/same-authorization-partition cross-instance state
 continuation and bounded residual-handler shutdown/restart recovery.
 
-Phase 5 is still unfrozen. Broader long-running cross-feature soak and
-resource-delta evidence and the scoped API review remain open. The packaged
+The Phase 5 public API is frozen. The bounded cross-feature soak/resource-delta
+gate is green: complete Maven smoke runs pass on JDK 21 and JDK 26, the complete
+JDK 21 nightly run passes, and the strict verifier requires exactly four
+scenarios across three Surefire suites. Sustained/fleet/release-candidate
+calibration remains later work. The packaged
 fixture and standalone public-API contract cover every Phase 5 scenario row,
 and a controlled observation-only run exercised all 39 applicable pinned
 scenarios with 147 `SUCCESS`, two exact reviewed `server-stateless` `SKIPPED`,
 one reviewed `server-sse-streams-functional` `INFO`, and no bad outcome.
 Thirty-six automatic wire successes covered 103 messages, and the prior 23
-profiles reproduced exactly. The harness nevertheless continues to leave all
-16 Phase 5 expected profiles inactive and `null`. This acquisition is not a
-profile freeze, Phase 5 verify pass, API freeze, or release-candidate result;
-soak/resource-delta and API review precede atomic activation and verification.
+profiles reproduced exactly. That acquisition was not a profile freeze,
+Phase 5 verify pass, API freeze, or release-candidate result. The API snapshot
+also does not establish conformance by itself. The later atomic closeout
+activated all 39 profiles and passed the fresh exact 39-scenario verify; that
+separate evidence is recorded below.
 
 ## Active freeze
 
 `frozen-phases` contains the contiguous, sorted prefix of frozen phases. It
-currently contains only Phase 4. `phase-4.signatures.jsonl` freezes 1,049
-canonical records across all 133 selected owners: 133 classes, 10
+currently contains Phase 4 and Phase 5. `phase-4.signatures.jsonl` freezes
+1,049 canonical records across all 133 selected owners: 133 classes, 10
 constructors, 78 fields, and 828 methods. Its SHA-256 is
 `89d96458cee33f96b6eef3be4b971cbf887f087f6a604b8f0e7041891b8530b5`.
+`phase-5.signatures.jsonl` freezes 195 canonical records across all 39
+selected owners: 39 classes, six constructors, 15 fields, and 135 methods.
+Its SHA-256 is
+`c6862ed49a9bc9565ba2284190c49605928270fb8a6fb73f75070452f909e75f`.
 
 The snapshot includes a deliberate post-freeze correction to Soklet's
 unreleased `3.6.0` MCP API: 49 Phase 4 scalar signatures now use non-null
@@ -107,8 +121,8 @@ incompatibility set decreased from 561 to 556 records. Regeneration found no
 unrelated signature delta; the Phase 4 snapshot retains the same 1,049 records
 and component counts.
 
-The snapshot protects the complete public/protected signature of every
-selected Phase 4 owner, including shared hosts. A descriptor on one of those
+The snapshots protect the complete public/protected signatures of every
+selected Phase 4 and Phase 5 owner, including shared hosts. A descriptor on one of those
 hosts that names a Phase 5, Phase 6, or provisional type is frozen. The
 later-owned type's own members and behavior are not frozen until its owner
 phase freezes. Targeted reflection and source-contract tests cover important
@@ -133,25 +147,36 @@ evidence is written under `target/japicmp/` and
 
 CI runs the aggregate on JDK 17; the scripts themselves use the
 caller-selected JDK. On the exact current source, the aggregate gate is green
-for 556 incompatibility records, 206 reviewed owners, and 1,049 frozen Phase 4
-signatures. The full JDK 21 and JDK 26 test suites each execute 1,381 tests
-with zero failures, zero errors, and four expected skips. The JDK 21 Error
-Prone/NullAway profile passes all enforced checks; SpotBugs reports zero
-`BugInstance` values and zero errors. The focused subscription-registration
-boundary suite passes all 10 tests. The 167-source API sketch compiles for Java
+for 556 incompatibility records, 206 reviewed owners, 1,049 frozen Phase 4
+signatures, and 195 frozen Phase 5 signatures. The Phase 5 snapshot contains 195
+records (39 classes, six constructors, 15 fields, and 135 methods), with
+SHA-256
+`c6862ed49a9bc9565ba2284190c49605928270fb8a6fb73f75070452f909e75f`;
+its exact nullability digest is
+`d52a424ac33e679e0a0632004ac931e59966b68641659e254214964d9144f8c7`.
+The full JDK 21 and JDK 26 test suites each execute 1,390 tests with zero
+failures, zero errors, and four expected skips. The JDK 21 Error Prone profile
+passes all enforced checks; NullAway remains advisory and its warnings are
+neither reclassified nor counted here. SpotBugs reports zero `BugInstance`
+values and zero errors. The focused Phase 5 API-review contract run passes 45
+tests with no failure, error, or skip. The 167-source API sketch compiles for Java
 17 and passes Javadoc
 doclint, and the benchmark module compiles 437 Java source files for Java 17
 on JDK 21.
 
 The conformance runner/infrastructure self-tests and scenario/supplement-
 manifest gates are green. The final-tag validator checks all 39 production-
-derived golden messages against the pinned final schema with Ajv 8.20.0. All
-16 Phase 5 expected profiles remain inactive and `null`. The separate clean
-39-scenario controlled observation supplies draft-profile acquisition, not an
-activated Phase 5 verify or release sign-off. Final JDK 17 and JDK 25 CI
-results for this exact tree remain open. The pinned official MCP Phase 4 run
-that passed all 23 then-active scenarios remains historical evidence; its 23
-frozen profile IDs and exact multisets were unchanged by the later observation.
+derived golden messages against the pinned final schema with Ajv 8.20.0; the
+focused golden-wire suite passes seven tests with no failure, error, or skip.
+The separate clean observation supplied the 16 Phase 5 profile candidates. The
+later atomic activation retained all 23 historical IDs, activated all 39 exact
+profiles at implementation phase 5, and passed the fresh 39-scenario verify
+with 150 exact outcomes, 36 wire successes over 103 messages, all 39 goldens,
+empty standard error, and 39 clean exits. Evidence SHA-256 is
+`082d841697f472da97a822c4dba35e922378f170a7050eca400b32a3eeaf6fc1`.
+It is `CANDIDATE_ARTIFACT_DEVELOPMENT_ONLY` evidence with
+`releaseCandidateEvidence: false`, not release sign-off. Final JDK 17 and JDK
+25 CI results for this exact tree remain open.
 
 A compatible addition to a frozen owner requires deliberate review, a
 snapshot update, and an update to the freeze rationale. An incompatible change

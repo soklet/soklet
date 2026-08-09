@@ -27,10 +27,10 @@ import java.util.Optional;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Immutable server-wide limits and provider selection for framework-managed
+ * Immutable server-wide limits and provider selection for framework-protected
  * MCP request state.
  * <p>
- * No configuration is required until an operation declares framework-managed
+ * No configuration is required until an operation declares framework-protected
  * request state. Development-ephemeral mode is explicit and is not portable
  * across restarts or server instances. A production key ring is an immutable
  * initial value; building a server copies it into independent live state and
