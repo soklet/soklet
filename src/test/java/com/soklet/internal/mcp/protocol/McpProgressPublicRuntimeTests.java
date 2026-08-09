@@ -49,9 +49,14 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -299,20 +304,58 @@ public class McpProgressPublicRuntimeTests {
 	@Test
 	public void disconnectCancelsSameFeatureInstanceAndRunsCallback()
 			throws Exception {
-		List<McpMetricsEvent> metrics = Collections.synchronizedList(
-				new ArrayList<>());
+		List<McpMetricsEvent> metrics = new CopyOnWriteArrayList<>();
+		ExecutorService probeExecutor = Executors.newSingleThreadExecutor();
+		AtomicReference<McpProgressReporter> observedReporter =
+				new AtomicReference<>();
+		AtomicBoolean monitorProbed = new AtomicBoolean();
+		AtomicReference<Throwable> monitorProbeFailure = new AtomicReference<>();
+		AtomicInteger activeMetricCallbacks = new AtomicInteger();
+		AtomicInteger maximumConcurrentMetricCallbacks = new AtomicInteger();
+		CountDownLatch requestFinishedMetric = new CountDownLatch(1);
+		CountDownLatch handlerFinishedMetric = new CountDownLatch(1);
 		MetricsCollector metricsCollector = new MetricsCollector() {
 			@Override
 			public void didRecordMcpMetricsEvent(@NonNull McpMetricsEvent event) {
-				metrics.add(event);
+				int active = activeMetricCallbacks.incrementAndGet();
+				maximumConcurrentMetricCallbacks.accumulateAndGet(active, Math::max);
+				try {
+					metrics.add(event);
+					if (event instanceof McpMetricsEvent.ProgressEmitted
+							&& monitorProbed.compareAndSet(false, true)) {
+						try {
+							Future<?> probe = probeExecutor.submit(() -> {
+								McpProgressReporter reporter = observedReporter.get();
+								if (reporter == null)
+									throw new AssertionError(
+											"The progress reporter was not published.");
+								synchronized (reporter) {
+									// Acquiring the implementation monitor is the probe.
+								}
+							});
+							probe.get(2, TimeUnit.SECONDS);
+						} catch (Throwable throwable) {
+							monitorProbeFailure.compareAndSet(null, throwable);
+						}
+						McpProgressReporter reporter = observedReporter.get();
+						if (reporter == null)
+							throw new AssertionError(
+									"The progress reporter was not published.");
+						reporter.report(McpProgressUpdate.withProgress(2.0d).build());
+					}
+					if (event instanceof McpMetricsEvent.RequestFinished)
+						requestFinishedMetric.countDown();
+					if (event instanceof McpMetricsEvent.HandlerExecutionFinished)
+						handlerFinishedMetric.countDown();
+				} finally {
+					activeMetricCallbacks.decrementAndGet();
+				}
 			}
 		};
 		CountDownLatch callbackInvoked = new CountDownLatch(1);
 		CountDownLatch handlerExited = new CountDownLatch(1);
 		CountDownLatch emergencyRelease = new CountDownLatch(1);
 		AtomicReference<CancelationToken> observedToken = new AtomicReference<>();
-		AtomicReference<McpProgressReporter> observedReporter =
-				new AtomicReference<>();
 		AtomicReference<StreamTerminationReason> observedReason =
 				new AtomicReference<>();
 		AtomicBoolean callbackSawCanceled = new AtomicBoolean();
@@ -353,12 +396,18 @@ public class McpProgressPublicRuntimeTests {
 			assertSseHead(client.readHead());
 			Assertions.assertTrue(client.readChunkText().contains(
 					"\"progressToken\":\"disconnect-token\""));
+			Assertions.assertTrue(client.readChunkText().contains(
+					"\"progress\":2"));
 			client.closeWithReset();
 
 			Assertions.assertTrue(callbackInvoked.await(5, TimeUnit.SECONDS),
 					"Disconnect did not run the public cancelation callback.");
 			Assertions.assertTrue(handlerExited.await(5, TimeUnit.SECONDS),
 					"Disconnect did not interrupt the application handler.");
+			Assertions.assertTrue(requestFinishedMetric.await(5, TimeUnit.SECONDS),
+					"Disconnect did not deliver the request-finished metric.");
+			Assertions.assertTrue(handlerFinishedMetric.await(5, TimeUnit.SECONDS),
+					"The interrupted handler did not release its metric slot.");
 			Assertions.assertTrue(callbackSawCanceled.get());
 			Assertions.assertTrue(observedToken.get().isCanceled());
 			Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED,
@@ -376,11 +425,52 @@ public class McpProgressPublicRuntimeTests {
 							.map(McpMetricsEvent.CancelationSignaled.class::cast)
 							.toList();
 			Assertions.assertEquals(List.of(
+					new McpMetricsEvent.ProgressEmitted(MCP_PATH, "tools/call"),
 					new McpMetricsEvent.ProgressEmitted(MCP_PATH, "tools/call")),
 					progressEvents);
 			Assertions.assertEquals(List.of(
 					new McpMetricsEvent.CancelationSignaled(MCP_PATH, "tools/call")),
 					cancelationEvents);
+			List<McpMetricsEvent> eventSnapshot = List.copyOf(metrics);
+			List<Class<?>> deterministicPrefixTypes = eventSnapshot.stream()
+					.filter(event -> event instanceof McpMetricsEvent.ServerStarted
+							|| event instanceof McpMetricsEvent.RequestStarted
+							|| event instanceof McpMetricsEvent.HandlerExecutionStarted
+							|| event instanceof McpMetricsEvent.RequestStreamOpened
+							|| event instanceof McpMetricsEvent.ProgressEmitted)
+					.map(Object::getClass)
+					.toList();
+			Assertions.assertEquals(List.of(
+					McpMetricsEvent.ServerStarted.class,
+					McpMetricsEvent.RequestStarted.class,
+					McpMetricsEvent.HandlerExecutionStarted.class,
+					McpMetricsEvent.RequestStreamOpened.class,
+					McpMetricsEvent.ProgressEmitted.class,
+					McpMetricsEvent.ProgressEmitted.class),
+					deterministicPrefixTypes,
+					"Startup, stream-open, and accepted progress events must retain their deterministic record order.");
+			McpMetricsEvent.RequestStreamClosed streamClosed = eventSnapshot.stream()
+					.filter(McpMetricsEvent.RequestStreamClosed.class::isInstance)
+					.map(McpMetricsEvent.RequestStreamClosed.class::cast)
+					.findFirst().orElseThrow();
+			McpMetricsEvent.RequestFinished requestFinished = eventSnapshot.stream()
+					.filter(McpMetricsEvent.RequestFinished.class::isInstance)
+					.map(McpMetricsEvent.RequestFinished.class::cast)
+					.findFirst().orElseThrow();
+			Assertions.assertEquals(
+					com.soklet.McpStreamTerminationReason.CLIENT_DISCONNECTED,
+					streamClosed.reason());
+			Assertions.assertEquals(com.soklet.McpRequestOutcome.CLIENT_DISCONNECTED,
+					requestFinished.outcome());
+			int streamClosedIndex = eventSnapshot.indexOf(streamClosed);
+			int requestFinishedIndex = eventSnapshot.indexOf(requestFinished);
+			Assertions.assertTrue(streamClosedIndex < requestFinishedIndex,
+					"Request-stream closure must precede terminal request observation.");
+			Assertions.assertEquals(1,
+					maximumConcurrentMetricCallbacks.get(),
+					"A reentrant progress report must queue instead of recursively invoking the collector.");
+			Assertions.assertNull(monitorProbeFailure.get(),
+					"ProgressEmitted was delivered while the progress reporter monitor was held.");
 
 			// Once canceled, monotonicity and delivery are both inert. In
 			// particular, a retained reporter cannot emit another notification or
@@ -391,7 +481,7 @@ public class McpProgressPublicRuntimeTests {
 					McpProgressUpdate.withProgress(1.0d).build()));
 			Assertions.assertDoesNotThrow(() -> observedReporter.get().report(
 					McpProgressUpdate.withProgress(2.0d).build()));
-			Assertions.assertEquals(1, metrics.stream()
+			Assertions.assertEquals(2, metrics.stream()
 					.filter(McpMetricsEvent.ProgressEmitted.class::isInstance)
 					.count(), "Canceled reports must not emit or record progress.");
 		} finally {
@@ -399,6 +489,9 @@ public class McpProgressPublicRuntimeTests {
 			if (client != null)
 				client.close();
 			soklet.stop();
+			probeExecutor.shutdownNow();
+			Assertions.assertTrue(probeExecutor.awaitTermination(
+					5, TimeUnit.SECONDS));
 		}
 	}
 

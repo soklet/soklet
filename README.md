@@ -783,10 +783,10 @@ cooperative cancelation, and resource-subscription delivery are implemented
 Phase 5 slices. Deterministic MRTR termination, cross-instance protected-state
 continuation, and residual-shutdown recovery are implemented as well. Resource
 subscriptions use framework-owned listen streams and an application-owned
-local or distributed broadcast publisher. Five bounded Phase 6 verticals are
+local or distributed broadcast publisher. Six bounded Phase 6 verticals are
 implemented: shutdown observation, handler-capacity metrics, handler-capacity
-diagnostics, live stream/subscription diagnostics, and protection/trace
-diagnostics. Every successfully
+diagnostics, live stream/subscription diagnostics, protection/trace
+diagnostics, and serialized semantic-event delivery. Every successfully
 started listener generation emits exactly one matching clean/residual shutdown
 metric, and server-wide handler execution, admitted-queue depth, and queue-full
 rejection transitions feed three label-free default metric families. Immutable
@@ -794,9 +794,10 @@ server diagnostics expose the configured handler bounds, current active/queued
 counts, open request streams and subscription subset, effective request-state
 protection mode, custom-protector presence, and secret-free production-ring and
 trace-configuration fingerprints. The diagnostics add no metric, event, or
-wire dimension. Operational trace correlation, the remaining telemetry/event
-and redaction work, and MCP simulation remain open Phase 6 work; applications
-must not advertise or depend on those remaining behaviors yet.
+wire dimension. Seven event variants, aggregate families, operational trace
+emission/token support, broader redaction, MCP simulation, sustained/release
+gates, and Phase 6 review/freeze remain open; applications must not advertise
+or depend on those remaining behaviors yet.
 
 The exact pinned 39-scenario MCP suite has completed one clean controlled
 profile-observation run against the packaged fixture: 147 successful outcomes,
@@ -812,10 +813,11 @@ passes a fresh 39-scenario development-candidate verify with all 39 goldens and
 no bad outcome, standard-error output, or non-clean exit. It remains
 development evidence, not release-candidate provenance.
 
-The focused Phase 6 protection/trace-diagnostics run passes 70 tests with
-zero failures, zero errors, and zero skips. Full repository runs on JDK 21 and
-JDK 26 each report 1,428 tests, zero failures, zero errors, and four skips. The
-JDK 21 enforced static-analysis profile is green without counting advisory
+The focused Phase 6 semantic-event delivery run passes 96 tests with zero
+failures, zero errors, and zero skips. Final exact-source full repository runs
+on JDK 21 and JDK 26 each report 1,436 tests, zero failures, zero errors, and
+four skips. The JDK 21 enforced static-analysis profile is green without
+counting advisory
 warnings; SpotBugs reports zero `BugInstance` values and zero errors. Exact
 API-freeze evidence remains unchanged at 556 incompatibilities, 206 reviewed
 owners, 1,049 Phase 4 records, and 195 Phase 5 records with the prior hashes.
@@ -823,11 +825,10 @@ Candidate binary, source, and Javadoc packages plus the generated Javadoc
 report are green using offline-link resolution. All 167 API-sketch sources
 compile for Java 17 and pass Javadoc doclint on JDK 26. All 104 files from
 pinned JSON Schema commit `0c7b65dc16dd8eaa7bd83e21099c76610c3b246a`
-validate. These local results do not close the remaining Phase 6
-telemetry/event hierarchy, broader
-trace-correlation and redaction work, simulator, sustained/fuzz, broader
-CI/provenance and release-candidate work, or API review/freeze. Phase 6 remains
-provisional and unfrozen.
+validate. These local results do not close the remaining Phase 6 aggregate
+families, seven uninstrumented event variants, broader trace emission/token and
+redaction work, simulator, sustained/fuzz, broader CI/provenance and release-
+candidate work, or API review/freeze. Phase 6 remains provisional and unfrozen.
 
 #### Form Handling
 
@@ -1545,18 +1546,37 @@ clearing cumulative rejections. A non-cooperative residual handler remains
 active after bounded shutdown until it actually exits, at which point the
 active gauge returns to zero; retained snapshots do not change.
 
-Handler transitions and `McpMetricsEvent.ServerStopped` alone share a deferred,
-server-wide FIFO so collector callbacks run in transition order after internal
-dispatcher, request, and lifecycle locks are released. Other MCP event types
-continue through their existing paths.
+One context-aware, server-wide deferred FIFO serializes all 16 semantic event
+variants currently produced by the runtime: the five handler transitions,
+`ServerStopped`, admitted `RequestStarted`, `RequestFinished`,
+`RequestStreamOpened`, `RequestStreamClosed`, `SubscriptionOpened`,
+`SubscriptionClosed`, `CancelationSignaled`, `ProgressEmitted`, and
+`KeepAliveEmitted`, plus exactly one `ServerStarted` for each successfully
+started listener generation. Failed starts leave no phantom `ServerStarted`.
+Direct restart orders the old `ServerStopped` before the new `ServerStarted`,
+while managed startup rollback orders `ServerStarted` before `ServerStopped`.
+
+Collector callbacks drain after the relevant dispatcher, progress-reporter,
+stream-transition, request-control, runtime, server, and Soklet lifecycle locks
+or monitors are released. A pending request-scoped entry may transiently retain
+its originating `Request` only for the bounded delivery and correctly
+attributed failure-logging step; that context is never rendered. Collector
+failures are contained and do not stall the FIFO. This guarantees FIFO metric
+record/enqueue order, not a universal cross-thread causal or per-request total
+order between independently racing producers.
 
 For MCP shutdowns, `snapshot().getMcpMetrics().getShutdowns()` is an immutable,
 enum-ordered `Map<McpShutdownOutcome, Long>`. The default collector omits
 unobserved outcomes, returns the map to empty on reset, and emits only
 `soklet_mcp_shutdowns_total{outcome="clean"}` or
-`soklet_mcp_shutdowns_total{outcome="residual_handlers"}`. The remaining MCP
-telemetry/event hierarchy, broader trace-correlation/redaction work, and
-simulator integration are still Phase 6 work.
+`soklet_mcp_shutdowns_total{outcome="residual_handlers"}`. The seven
+uninstrumented variants remain `ConnectionAccepted`, `ConnectionRejected`,
+`RequestAccepted`, `RequestRejected`, `ProtocolError`,
+`UnknownMirroredHeader`, and `TransportFailure`. Aggregate families, trace
+emission/token support, broader redaction, simulator integration,
+sustained/release gates, and Phase 6 review/freeze are still open. This sixth
+vertical adds no public API, snapshot field, aggregate family, label, event
+variant, or wire dimension.
 
 You can expose a `/metrics` endpoint by injecting [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html)
 into a [`ResourceMethod`](https://javadoc.soklet.com/com/soklet/ResourceMethod.html):

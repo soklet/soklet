@@ -329,14 +329,13 @@ public final class Soklet implements AutoCloseable {
 							mcpServer.start();
 						mcpServerStarted = true;
 						reportNormalizedMcpStop(lifecycleObserver, mcpServer,
-								normalizedShutdownOutcome, afterLifecycleUnlock);
+								normalizedShutdownOutcome);
 						lifecycleObserver.didStartMcpServer(mcpServer);
 					} catch (Throwable t) {
 						Throwable startupFailure = t;
 						try {
 							reportNormalizedMcpStop(lifecycleObserver, mcpServer,
-									normalizedShutdownOutcome,
-									afterLifecycleUnlock);
+									normalizedShutdownOutcome);
 						} catch (Throwable normalizedStopFailure) {
 							startupFailure = retainFirstFailure(startupFailure,
 									normalizedStopFailure);
@@ -382,18 +381,13 @@ public final class Soklet implements AutoCloseable {
 			@NonNull LifecycleObserver lifecycleObserver,
 			@NonNull McpServer mcpServer,
 			@NonNull AtomicReference<@Nullable McpShutdownOutcome>
-					normalizedShutdownOutcome,
-			@NonNull List<@NonNull Runnable> afterLifecycleUnlock) {
+					normalizedShutdownOutcome) {
 		requireNonNull(lifecycleObserver);
 		requireNonNull(mcpServer);
-		requireNonNull(afterLifecycleUnlock);
 		McpShutdownOutcome shutdownOutcome = requireNonNull(
 				normalizedShutdownOutcome).getAndSet(null);
 		if (shutdownOutcome == null)
 			return;
-		DefaultMcpServer defaultMcpServer = (DefaultMcpServer) mcpServer;
-		afterLifecycleUnlock.add(() ->
-				defaultMcpServer.publishServerStoppedMetric(shutdownOutcome));
 		lifecycleObserver.didStopMcpServer(mcpServer, shutdownOutcome);
 	}
 
@@ -514,10 +508,6 @@ public final class Soklet implements AutoCloseable {
 			} catch (Throwable t) {
 				startupFailure.addSuppressed(t);
 			}
-			if (stopResult.listenerGenerationStopped())
-				afterLifecycleUnlock.add(() ->
-						defaultMcpServer.publishServerStoppedMetric(
-								stopResult.shutdownOutcome()));
 		} catch (Throwable t) {
 			startupFailure.addSuppressed(t);
 
@@ -640,9 +630,6 @@ public final class Soklet implements AutoCloseable {
 								firstEncounteredException = retainFirstFailure(
 										firstEncounteredException, t);
 							}
-							afterLifecycleUnlock.add(() ->
-									defaultMcpServer.publishServerStoppedMetric(
-											stopResult.shutdownOutcome()));
 						}
 					} catch (Throwable t) {
 						firstEncounteredException = retainFirstFailure(firstEncounteredException, t);

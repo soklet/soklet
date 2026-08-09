@@ -63,6 +63,7 @@ import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -381,7 +382,8 @@ final class DefaultMcpServer implements McpServer {
 	public void start() {
 		beginMcpMetricsDeferral();
 		try {
-			startForSoklet(this::publishServerStoppedMetric);
+			startForSoklet(ignored -> {
+			});
 		} finally {
 			endMcpMetricsDeferral();
 		}
@@ -404,6 +406,7 @@ final class DefaultMcpServer implements McpServer {
 		requireNonNull(stoppedGenerationConsumer);
 		McpShutdownOutcome normalizedShutdownOutcome = null;
 		Throwable startupFailure = null;
+		McpMetricEventDeliveryEntry provisionalServerStarted = null;
 		synchronized (this.lifecycleLock) {
 			RuntimeState runtimeState = this.runtimeBridge.getRuntimeState();
 			if (runtimeState.started())
@@ -426,15 +429,23 @@ final class DefaultMcpServer implements McpServer {
 				if (this.listenerGenerationStopPending) {
 					this.listenerGenerationStopPending = false;
 					normalizedShutdownOutcome = this.lastShutdownOutcome;
+					this.mcpMetricEventDelivery.record(
+							new McpMetricsEvent.ServerStopped(
+									normalizedShutdownOutcome));
 				}
 				if (this.securityControls.getProtectionMode()
 						== McpProtectionMode.DEVELOPMENT_EPHEMERAL)
 					safelyLogStartupDiagnostic(
 							DEVELOPMENT_EPHEMERAL_PROTECTION_DIAGNOSTIC);
+				provisionalServerStarted = this.mcpMetricEventDelivery.record(
+						new McpMetricsEvent.ServerStarted());
 				this.runtimeBridge.start();
 				this.lastShutdownOutcome = McpShutdownOutcome.CLEAN;
 				this.listenerGenerationStopPending = true;
 			} catch (IOException | RuntimeException | Error throwable) {
+				if (provisionalServerStarted != null)
+					this.mcpMetricEventDelivery.discard(
+							provisionalServerStarted);
 				preserveResidualShutdownOutcome();
 				startupFailure = throwable;
 			}
@@ -454,9 +465,7 @@ final class DefaultMcpServer implements McpServer {
 	public void stop() {
 		beginMcpMetricsDeferral();
 		try {
-			McpServerStopResult stopResult = stopForSoklet();
-			if (stopResult.listenerGenerationStopped())
-				publishServerStoppedMetric(stopResult.shutdownOutcome());
+			stopForSoklet();
 		} finally {
 			endMcpMetricsDeferral();
 		}
@@ -504,6 +513,8 @@ final class DefaultMcpServer implements McpServer {
 			if (this.listenerGenerationStopPending) {
 				this.listenerGenerationStopPending = false;
 				listenerGenerationStopped = true;
+				this.mcpMetricEventDelivery.record(
+						new McpMetricsEvent.ServerStopped(shutdownOutcome));
 			}
 		}
 		return new McpServerStopResult(shutdownOutcome,
@@ -520,13 +531,6 @@ final class DefaultMcpServer implements McpServer {
 		synchronized (this.lifecycleLock) {
 			return this.listenerGenerationStopPending;
 		}
-	}
-
-	void publishServerStoppedMetric(
-			@NonNull McpShutdownOutcome shutdownOutcome) {
-		this.mcpMetricEventDelivery.recordAndDrain(
-				new McpMetricsEvent.ServerStopped(
-						requireNonNull(shutdownOutcome)));
 	}
 
 	void beginMcpMetricsDeferral() {
@@ -978,17 +982,14 @@ final class DefaultMcpServer implements McpServer {
 		String boundedMethod = metricMethod(jsonRpcMethod);
 		CancelationToken token = requireNonNull(cancelationToken);
 		Optional<ProgressEmitter> emitter = requireNonNull(progressEmitter);
-		MetricsCollector collector = this.metricsCollector;
-		LifecycleObserver observer = this.lifecycleObserver;
-
-		token.onCancel(() -> safelyRecordMcpMetrics(collector, observer,
+		token.onCancel(() -> this.mcpMetricEventDelivery.recordAndDrain(
 				new McpMetricsEvent.CancelationSignaled(endpointPath, boundedMethod),
 				requestContext));
 
 		Map<Class<?>, Object> features = new LinkedHashMap<>();
 		features.put(CancelationToken.class, token);
 		emitter.ifPresent(value -> features.put(McpProgressReporter.class,
-				new DefaultMcpProgressReporter(token, value, collector, observer,
+				new DefaultMcpProgressReporter(token, value,
 						requestContext, endpointPath, boundedMethod)));
 		return McpInvocationFeatures.fromFeatures(features);
 	}
@@ -1006,10 +1007,6 @@ final class DefaultMcpServer implements McpServer {
 		@NonNull
 		private final ProgressEmitter progressEmitter;
 		@NonNull
-		private final MetricsCollector metricsCollector;
-		@NonNull
-		private final LifecycleObserver lifecycleObserver;
-		@NonNull
 		private final McpRequestContext requestContext;
 		@NonNull
 		private final String endpointPath;
@@ -1021,52 +1018,55 @@ final class DefaultMcpServer implements McpServer {
 		private DefaultMcpProgressReporter(
 				@NonNull CancelationToken cancelationToken,
 				@NonNull ProgressEmitter progressEmitter,
-				@NonNull MetricsCollector metricsCollector,
-				@NonNull LifecycleObserver lifecycleObserver,
 				@NonNull McpRequestContext requestContext,
 				@NonNull String endpointPath, @NonNull String jsonRpcMethod) {
 			this.cancelationToken = requireNonNull(cancelationToken);
 			this.progressEmitter = requireNonNull(progressEmitter);
-			this.metricsCollector = requireNonNull(metricsCollector);
-			this.lifecycleObserver = requireNonNull(lifecycleObserver);
 			this.requestContext = requireNonNull(requestContext);
 			this.endpointPath = requireNonNull(endpointPath);
 			this.jsonRpcMethod = requireNonNull(jsonRpcMethod);
 		}
 
 		@Override
-		public synchronized void report(@NonNull McpProgressUpdate update) {
+		public void report(@NonNull McpProgressUpdate update) {
 			McpProgressUpdate requiredUpdate = requireNonNull(update);
-			if (this.cancelationToken.isCanceled()
-					|| !this.progressEmitter.isActive())
-				return;
-
-			double progress = requiredUpdate.getProgress();
-			if (this.lastAcceptedProgress != null) {
-				int comparison = Double.compare(progress,
-						this.lastAcceptedProgress);
-				if (comparison < 0)
-					throw new IllegalArgumentException(
-							"MCP progress must not decrease.");
-				if (comparison == 0)
-					return;
-			}
-
+			DefaultMcpServer.this.mcpMetricEventDelivery.beginDeferral();
 			try {
-				if (!this.progressEmitter.emit(progress,
-						requiredUpdate.getTotal(), requiredUpdate.getMessage()))
-					return;
-			} catch (InterruptedException exception) {
-				Thread.currentThread().interrupt();
-				return;
-			}
+				synchronized (this) {
+					if (this.cancelationToken.isCanceled()
+							|| !this.progressEmitter.isActive())
+						return;
 
-			this.lastAcceptedProgress = progress;
-			safelyRecordMcpMetrics(this.metricsCollector,
-					this.lifecycleObserver,
-					new McpMetricsEvent.ProgressEmitted(this.endpointPath,
-							this.jsonRpcMethod),
-					this.requestContext);
+					double progress = requiredUpdate.getProgress();
+					if (this.lastAcceptedProgress != null) {
+						int comparison = Double.compare(progress,
+								this.lastAcceptedProgress);
+						if (comparison < 0)
+							throw new IllegalArgumentException(
+									"MCP progress must not decrease.");
+						if (comparison == 0)
+							return;
+					}
+
+					try {
+						if (!this.progressEmitter.emit(progress,
+								requiredUpdate.getTotal(),
+								requiredUpdate.getMessage()))
+							return;
+					} catch (InterruptedException exception) {
+						Thread.currentThread().interrupt();
+						return;
+					}
+
+					this.lastAcceptedProgress = progress;
+					mcpMetricEventDelivery.record(
+							new McpMetricsEvent.ProgressEmitted(
+									this.endpointPath, this.jsonRpcMethod),
+							this.requestContext);
+				}
+			} finally {
+				DefaultMcpServer.this.mcpMetricEventDelivery.endDeferral();
+			}
 		}
 	}
 
@@ -1487,7 +1487,6 @@ final class DefaultMcpServer implements McpServer {
 		DefaultMcpRequestContext context = new DefaultMcpRequestContext(
 				requireNonNull(input));
 		LifecycleObserver observer = this.lifecycleObserver;
-		MetricsCollector collector = this.metricsCollector;
 		List<Throwable> startThrowables = new ArrayList<>();
 
 		try {
@@ -1501,7 +1500,7 @@ final class DefaultMcpServer implements McpServer {
 					.request(context.getRequest())
 					.build(), startThrowables);
 		}
-		safelyRecordMcpMetrics(collector, observer,
+		this.mcpMetricEventDelivery.recordAndDrain(
 				new McpMetricsEvent.RequestStarted(input.endpoint().getPath(),
 						metricMethod(input.jsonRpcMethod())), context);
 
@@ -1535,7 +1534,7 @@ final class DefaultMcpServer implements McpServer {
 						: McpJsonRpcError.fromServer(error.code(), error.message(),
 								error.data().orElse(null));
 
-				safelyRecordMcpMetrics(collector, observer,
+				mcpMetricEventDelivery.recordAndDrain(
 						new McpMetricsEvent.RequestFinished(
 								input.endpoint().getPath(),
 								metricMethod(input.jsonRpcMethod()),
@@ -1555,7 +1554,7 @@ final class DefaultMcpServer implements McpServer {
 
 			@Override
 			public void didOpenRequestStream() {
-				safelyRecordMcpMetrics(collector, observer,
+				mcpMetricEventDelivery.record(
 						new McpMetricsEvent.RequestStreamOpened(
 								input.endpoint().getPath(),
 								metricMethod(input.jsonRpcMethod())), context);
@@ -1565,7 +1564,7 @@ final class DefaultMcpServer implements McpServer {
 			public void didCloseRequestStream(
 					@NonNull McpStreamTerminationReason reason,
 					@NonNull Duration duration) {
-				safelyRecordMcpMetrics(collector, observer,
+				mcpMetricEventDelivery.record(
 						new McpMetricsEvent.RequestStreamClosed(
 								input.endpoint().getPath(),
 								metricMethod(input.jsonRpcMethod()), reason,
@@ -1574,7 +1573,7 @@ final class DefaultMcpServer implements McpServer {
 
 			@Override
 			public void didOpenSubscription() {
-				safelyRecordMcpMetrics(collector, observer,
+				mcpMetricEventDelivery.record(
 						new McpMetricsEvent.SubscriptionOpened(
 								input.endpoint().getPath()), context);
 			}
@@ -1583,7 +1582,7 @@ final class DefaultMcpServer implements McpServer {
 			public void didCloseSubscription(
 					@NonNull McpStreamTerminationReason reason,
 					@NonNull Duration duration) {
-				safelyRecordMcpMetrics(collector, observer,
+				mcpMetricEventDelivery.record(
 						new McpMetricsEvent.SubscriptionClosed(
 								input.endpoint().getPath(), reason, duration),
 						context);
@@ -1591,7 +1590,7 @@ final class DefaultMcpServer implements McpServer {
 
 			@Override
 			public void didEmitKeepAlive() {
-				safelyRecordMcpMetrics(collector, observer,
+				mcpMetricEventDelivery.record(
 						new McpMetricsEvent.KeepAliveEmitted(), context);
 			}
 		};
@@ -1603,9 +1602,10 @@ final class DefaultMcpServer implements McpServer {
 				? jsonRpcMethod : McpMetricsEvent.UNRECOGNIZED_JSON_RPC_METHOD;
 	}
 
-	private void safelyRecordMcpMetrics(@NonNull MetricsCollector collector,
-			@NonNull LifecycleObserver observer, @NonNull McpMetricsEvent event,
+	private void safelyRecordMcpMetrics(@NonNull McpMetricsEvent event,
 			@NonNull McpRequestContext context) {
+		MetricsCollector collector = this.metricsCollector;
+		LifecycleObserver observer = this.lifecycleObserver;
 		try {
 			collector.didRecordMcpMetricsEvent(requireNonNull(event));
 		} catch (Throwable throwable) {
@@ -1680,15 +1680,15 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	/**
-	 * Serializes handler-accounting and listener-stop metric delivery while
-	 * permitting nested runtime, server, and Soklet lifecycle deferral.
+	 * Serializes semantic metric delivery while permitting nested runtime,
+	 * server, and Soklet lifecycle deferral.
 	 */
 	@ThreadSafe
 	private final class McpMetricEventDelivery {
 		@NonNull
 		private final Object lock;
 		@NonNull
-		private final Queue<@NonNull McpMetricsEvent> pendingEvents;
+		private final Queue<@NonNull McpMetricEventDeliveryEntry> pendingEvents;
 		private int deferralDepth;
 		private boolean delivering;
 		private @Nullable Thread deliveryThread;
@@ -1715,15 +1715,47 @@ final class DefaultMcpServer implements McpServer {
 				currentThread.interrupt();
 		}
 
-		private void record(@NonNull McpMetricsEvent event) {
-			synchronized (this.lock) {
-				this.pendingEvents.add(requireNonNull(event));
-			}
+		@NonNull
+		private McpMetricEventDeliveryEntry record(
+				@NonNull McpMetricsEvent event) {
+			return record(event, null);
 		}
 
-		private void recordAndDrain(@NonNull McpMetricsEvent event) {
-			record(event);
+		@NonNull
+		private McpMetricEventDeliveryEntry record(
+				@NonNull McpMetricsEvent event,
+				@Nullable McpRequestContext requestContext) {
+			McpMetricEventDeliveryEntry entry =
+					new McpMetricEventDeliveryEntry(event, requestContext);
+			synchronized (this.lock) {
+				this.pendingEvents.add(entry);
+			}
+			return entry;
+		}
+
+		private void recordAndDrain(@NonNull McpMetricsEvent event,
+				@NonNull McpRequestContext requestContext) {
+			record(event, requireNonNull(requestContext));
 			drain();
+		}
+
+		@SuppressWarnings("ReferenceEquality")
+		private void discard(
+				@NonNull McpMetricEventDeliveryEntry discardedEntry) {
+			McpMetricEventDeliveryEntry requiredEntry =
+					requireNonNull(discardedEntry);
+			synchronized (this.lock) {
+				Iterator<McpMetricEventDeliveryEntry> iterator =
+						this.pendingEvents.iterator();
+				while (iterator.hasNext()) {
+					if (iterator.next() == requiredEntry) {
+						iterator.remove();
+						return;
+					}
+				}
+			}
+			throw new IllegalStateException(
+					"The provisional MCP metric event is no longer pending.");
 		}
 
 		private void drain() {
@@ -1738,16 +1770,22 @@ final class DefaultMcpServer implements McpServer {
 
 			try {
 				while (true) {
-					McpMetricsEvent event;
+					McpMetricEventDeliveryEntry entry;
 					synchronized (this.lock) {
 						if (this.deferralDepth != 0
 								|| this.pendingEvents.isEmpty()) {
 							finishDeliveryLocked();
 							return;
 						}
-						event = this.pendingEvents.remove();
+						entry = this.pendingEvents.remove();
 					}
-					safelyRecordMcpServerMetrics(event);
+					@Nullable McpRequestContext requestContext =
+							entry.requestContext();
+					if (requestContext == null)
+						safelyRecordMcpServerMetrics(entry.event());
+					else
+						safelyRecordMcpMetrics(entry.event(),
+								requestContext);
 				}
 			} finally {
 				synchronized (this.lock) {
@@ -1771,6 +1809,16 @@ final class DefaultMcpServer implements McpServer {
 			this.delivering = false;
 			this.deliveryThread = null;
 			this.lock.notifyAll();
+		}
+	}
+
+	/** Immutable event plus optional request-scoped failure-log context. */
+	@ThreadSafe
+	private record McpMetricEventDeliveryEntry(
+			@NonNull McpMetricsEvent event,
+			@Nullable McpRequestContext requestContext) {
+		private McpMetricEventDeliveryEntry {
+			requireNonNull(event);
 		}
 	}
 }

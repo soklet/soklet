@@ -4321,16 +4321,20 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				@NonNull List<@NonNull Header> additionalHeaders) {
 			requireNonNull(additionalHeaders);
 			SubscriptionOpenReservation reservation;
-			synchronized (streamObservationTransitionLock) {
-				reservation = reserveSubscriptionOpen(endpointPath, endpoint,
-						authorizationPartition, subscriptionId, filter);
-				if (reservation.result() != SubscriptionOpenResult.OPENED)
-					return reservation.result();
-				markStreamOpened(true);
-				synchronized (lock) {
-					if (terminal || canceled)
-						return SubscriptionOpenResult.TERMINATED;
+			try {
+				synchronized (streamObservationTransitionLock) {
+					reservation = reserveSubscriptionOpen(endpointPath, endpoint,
+							authorizationPartition, subscriptionId, filter);
+					if (reservation.result() != SubscriptionOpenResult.OPENED)
+						return reservation.result();
+					markStreamOpenedInOrder(true);
+					synchronized (lock) {
+						if (terminal || canceled)
+							return SubscriptionOpenResult.TERMINATED;
+					}
 				}
+			} finally {
+				drainApplicationExecutionObservation();
 			}
 			McpRequestSseStream stream = requireNonNull(reservation.stream());
 			Consumer<MicrohttpResponse> callback = requireNonNull(
@@ -4636,20 +4640,25 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 		}
 
-		private void markStreamOpened(boolean subscription) {
-			synchronized (streamObservationTransitionLock) {
-				markStreamOpenedInOrder(subscription);
+		private void markStreamOpenedInOrder(boolean subscription) {
+			StreamObservationOpenTransition transition;
+			synchronized (lock) {
+				transition = reserveStreamObservationOpenWhileLocked(subscription);
 			}
+			recordStreamObservationOpenInOrder(transition);
 		}
 
-		private void markStreamOpenedInOrder(boolean subscription) {
-			McpRuntimeRequestObservation observation;
+		@NonNull
+		private StreamObservationOpenTransition
+				reserveStreamObservationOpenWhileLocked(boolean subscription) {
+			if (!Thread.holdsLock(lock))
+				throw new IllegalStateException(
+						"The request-control lock is required to reserve a stream-open observation.");
+			McpRuntimeRequestObservation observation = null;
 			boolean openRequestStream = false;
 			boolean openSubscription = false;
 			long nowNanos = applicationClock.nanoTime();
-			synchronized (lock) {
-				if (terminal || canceled)
-					return;
+			if (!terminal && !canceled) {
 				observation = requestObservation;
 				if (!streamObservationOpened) {
 					streamObservationOpened = true;
@@ -4662,18 +4671,29 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					openSubscription = true;
 				}
 			}
-			recordStreamDiagnosticsTransition(openRequestStream ? 1 : 0,
-					openSubscription ? 1 : 0);
+			return new StreamObservationOpenTransition(observation,
+					openRequestStream, openSubscription);
+		}
+
+		private void recordStreamObservationOpenInOrder(
+				@NonNull StreamObservationOpenTransition transition) {
+			StreamObservationOpenTransition requiredTransition =
+					requireNonNull(transition);
+			recordStreamDiagnosticsTransition(
+					requiredTransition.requestStreamOpened() ? 1 : 0,
+					requiredTransition.subscriptionOpened() ? 1 : 0);
+			@Nullable McpRuntimeRequestObservation observation =
+					requiredTransition.observation();
 			if (observation == null)
 				return;
-			if (openRequestStream) {
+			if (requiredTransition.requestStreamOpened()) {
 				try {
 					observation.didOpenRequestStream();
 				} catch (Throwable ignored) {
 					// Observation failures must not alter stream lifecycle behavior.
 				}
 			}
-			if (openSubscription) {
+			if (requiredTransition.subscriptionOpened()) {
 				try {
 					observation.didOpenSubscription();
 				} catch (Throwable ignored) {
@@ -4684,8 +4704,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		private void markStreamClosed(@NonNull StreamTerminationReason reason) {
 			requireNonNull(reason);
-			synchronized (streamObservationTransitionLock) {
-				markStreamClosedInOrder(reason);
+			try {
+				synchronized (streamObservationTransitionLock) {
+					markStreamClosedInOrder(reason);
+				}
+			} finally {
+				drainApplicationExecutionObservation();
 			}
 		}
 
@@ -4741,6 +4765,14 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				observation.didEmitKeepAlive();
 			} catch (Throwable ignored) {
 				// Observation failures must not alter keep-alive delivery behavior.
+			}
+		}
+
+		private void drainApplicationExecutionObservation() {
+			try {
+				McpHttpServerRuntime.this.applicationExecutionObserver.drain();
+			} catch (Throwable ignored) {
+				// Observation must never alter stream lifecycle behavior.
 			}
 		}
 
@@ -4957,26 +4989,50 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			synchronized (lock) {
 				if (!applicationOwned || streamAbortOwned || canceled || terminal)
 					return false;
-
 				stream = responseStream;
-				if (stream == null) {
-					stream = newResponseStream();
-					McpOutboundChannel.OfferResult result =
-							stream.offerMessage(notification);
-					if (result != McpOutboundChannel.OfferResult.ACCEPTED)
-						throw new IllegalStateException(
-								"A new MCP response stream could not accept its first message.");
+			}
 
-					responseStream = stream;
-					firstMessage = true;
-					nextKeepAliveNanos = saturatingAdd(applicationClock.nanoTime(),
-							transportConfiguration.keepAliveInterval().toNanos());
-					callback = takeResponseCallback();
+			if (stream != null) {
+				stream.enqueueMessage(notification);
+				return true;
+			}
+
+			StreamObservationOpenTransition openTransition = null;
+			try {
+				synchronized (streamObservationTransitionLock) {
+					synchronized (lock) {
+						if (!applicationOwned || streamAbortOwned || canceled
+								|| terminal)
+							return false;
+						stream = responseStream;
+						if (stream == null) {
+							stream = newResponseStream();
+							McpOutboundChannel.OfferResult result =
+									stream.offerMessage(notification);
+							if (result != McpOutboundChannel.OfferResult.ACCEPTED)
+								throw new IllegalStateException(
+										"A new MCP response stream could not accept its first message.");
+
+							responseStream = stream;
+							firstMessage = true;
+							nextKeepAliveNanos = saturatingAdd(
+									applicationClock.nanoTime(),
+									transportConfiguration.keepAliveInterval().toNanos());
+							callback = takeResponseCallback();
+							openTransition =
+									reserveStreamObservationOpenWhileLocked(false);
+						}
+					}
+					if (firstMessage)
+						recordStreamObservationOpenInOrder(
+								requireNonNull(openTransition));
 				}
+			} finally {
+				if (firstMessage)
+					drainApplicationExecutionObservation();
 			}
 
 			if (firstMessage) {
-				markStreamOpened(false);
 				try {
 					requireNonNull(callback).accept(stream.response(additionalHeaders));
 				} catch (Throwable throwable) {
@@ -5192,28 +5248,37 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 				boolean terminateForBackpressure = false;
 				boolean keepAliveEmitted = false;
-				synchronized (lock) {
-					if (terminal || canceled || responseStream != stream
-							|| streamTerminalResponseOwned || streamAbortOwned
-							|| nowNanos - deadlineNanos >= 0L)
-						return;
-					if (nowNanos - nextKeepAliveNanos >= 0L) {
-						McpOutboundChannel.OfferResult result = stream.offerKeepAlive();
-						if (result == McpOutboundChannel.OfferResult.ACCEPTED) {
-							nextKeepAliveNanos = saturatingAdd(nowNanos,
-									transportConfiguration.keepAliveInterval().toNanos());
-							keepAliveEmitted = true;
-						} else if (result == McpOutboundChannel.OfferResult.FULL
-								|| result == McpOutboundChannel.OfferResult.TOO_LARGE) {
-							streamAbortOwned = true;
-							terminateForBackpressure = true;
+				try {
+					synchronized (streamObservationTransitionLock) {
+						synchronized (lock) {
+							if (terminal || canceled || responseStream != stream
+									|| streamTerminalResponseOwned || streamAbortOwned
+									|| nowNanos - deadlineNanos >= 0L)
+								return;
+							if (nowNanos - nextKeepAliveNanos >= 0L) {
+								McpOutboundChannel.OfferResult result =
+										stream.offerKeepAlive();
+								if (result == McpOutboundChannel.OfferResult.ACCEPTED) {
+									nextKeepAliveNanos = saturatingAdd(nowNanos,
+											transportConfiguration.keepAliveInterval()
+													.toNanos());
+									keepAliveEmitted = true;
+								} else if (result
+										== McpOutboundChannel.OfferResult.FULL
+										|| result == McpOutboundChannel.OfferResult.TOO_LARGE) {
+									streamAbortOwned = true;
+									terminateForBackpressure = true;
+								}
+							}
 						}
+						if (keepAliveEmitted)
+							markKeepAliveEmitted();
 					}
+				} finally {
+					drainApplicationExecutionObservation();
 				}
 				if (terminateForBackpressure)
 					stream.fail(StreamTerminationReason.BACKPRESSURE, null);
-				else if (keepAliveEmitted)
-					markKeepAliveEmitted();
 				return;
 			}
 
@@ -5772,6 +5837,11 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			requireNonNull(outcome);
 			throwables = List.copyOf(requireNonNull(throwables));
 		}
+	}
+
+	private record StreamObservationOpenTransition(
+			@Nullable McpRuntimeRequestObservation observation,
+			boolean requestStreamOpened, boolean subscriptionOpened) {
 	}
 
 	private record RequestObservationResult(@NonNull McpRequestOutcome outcome,

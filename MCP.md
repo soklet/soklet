@@ -764,23 +764,46 @@ material, key IDs, per-key fingerprint tags, custom-provider identity,
 request-state cursors or epochs, or trace-correlation tokens. Operators must
 still supply high-entropy keys: a fingerprint reveals configuration equality,
 and rotation can create high-cardinality values, so fingerprints should not be
-used as metric labels or emitted per request. This fifth diagnostics vertical
-adds no metric family, event type, wire field, label, or other observation
-dimension, and collector reset cannot alter it.
+used as metric labels or emitted per request. The diagnostics vertical adds no
+metric family, event type, wire field, label, or other observation dimension,
+and collector reset cannot alter it.
 
-Handler transitions and `ServerStopped` alone use one shared, server-wide
-deferred FIFO. Delivery is serialized and occurs after dispatcher, exchange
-terminal/execution-boundary, request-control, runtime, MCP-server, and Soklet
-lifecycle locks are released; collector failures are logged and contained.
-Request, progress, cancelation, and subscription events do not use this FIFO.
+The sixth bounded Phase 6 vertical uses one context-aware, server-wide deferred
+FIFO for all 16 semantic event variants currently produced by the runtime:
+`HandlerExecutionStarted`, `HandlerExecutionFinished`, `HandlerQueued`,
+`HandlerDequeued`, `HandlerCapacityRejected`, `ServerStopped`, the nine
+admitted `RequestStarted`, `RequestFinished`, `RequestStreamOpened`,
+`RequestStreamClosed`, `SubscriptionOpened`, `SubscriptionClosed`,
+`CancelationSignaled`, `ProgressEmitted`, and `KeepAliveEmitted` variants, and
+exactly one `ServerStarted` for each successfully started listener generation.
+A failed start leaves no staged `ServerStarted`, and an already-started no-op
+does not duplicate it. Direct restart orders the old generation's
+`ServerStopped` before the new generation's `ServerStarted`; managed startup
+rollback orders that generation's `ServerStarted` before its `ServerStopped`.
+
+Collector callbacks are serialized and drain after the relevant dispatcher,
+exchange terminal/execution-boundary, progress-reporter, stream-transition,
+request-control, runtime, MCP-server, and Soklet lifecycle locks or monitors
+are released. Request-scoped collector failures retain the originating
+`Request` for correct failure attribution and are contained without stalling
+the FIFO; server-lifecycle failures remain request-free. While delivery is
+pending, an entry may therefore transiently retain its originating `Request`
+only for the bounded delivery and failure-logging step. That context is never
+rendered or promoted to a metric dimension. The ordering guarantee is FIFO
+metric record/enqueue order; it is not a universal cross-thread causal or per-
+request total-order guarantee for independently racing producers.
 
 The default collector separately exposes shutdown counts as an immutable,
 enum-ordered `Map<McpShutdownOutcome, Long>`. It omits zero outcomes, returns
 to an empty map after reset, and renders exactly
 `soklet_mcp_shutdowns_total{outcome="clean"|"residual_handlers"}` in
-Prometheus/OpenMetrics text. The remaining telemetry/event hierarchy,
-connection instrumentation, operational trace correlation, and simulator
-integration remain Phase 6 work.
+Prometheus/OpenMetrics text. `ConnectionAccepted`, `ConnectionRejected`,
+`RequestAccepted`, `RequestRejected`, `ProtocolError`,
+`UnknownMirroredHeader`, and `TransportFailure` remain uninstrumented. The
+aggregate families, trace emission and token work, simulator integration,
+broader redaction, sustained and release gates, and Phase 6 review/freeze also
+remain open. This vertical adds no public API, snapshot field, aggregate
+family, label, event variant, or wire dimension.
 
 `McpServer.stop()` is bounded by the configured shutdown timeout. If an
 application-supplied MCP request-processing execution remains afterward,
@@ -834,11 +857,12 @@ the harness to phase 5. A fresh 39-scenario development-candidate verify passes
 all profiles, validates all 39 goldens, and records no bad outcome, standard-
 error output, or non-clean fixture exit.
 
-The focused Phase 6 protection/trace-diagnostics run passes 70 tests with
-zero failures, zero errors, and zero skips. Full repository runs on JDK 21 and
-JDK 26 each report 1,428 tests, zero failures, zero errors, and four skips. The
-JDK 21 enforced static-analysis profile is green without counting advisory
-warnings; SpotBugs reports zero `BugInstance` values and zero errors. Exact
+The focused Phase 6 semantic-event delivery run passes 96 tests with zero
+failures, zero errors, and zero skips. Final exact-source full repository runs
+on JDK 21 and JDK 26 each report 1,436 tests, zero failures, zero errors, and
+four skips. The JDK 21 enforced static-analysis profile is green without
+counting advisory warnings; SpotBugs reports zero `BugInstance` values and zero
+errors. Exact
 API-freeze evidence remains unchanged at 556 incompatibilities, 206 reviewed
 owners, 1,049 Phase 4 records, and 195 Phase 5 records with the prior hashes.
 Candidate binary, source, and Javadoc packages plus the generated Javadoc
@@ -847,9 +871,9 @@ compile for Java 17 and pass Javadoc doclint on JDK 26. All 104 files from
 pinned JSON Schema commit `0c7b65dc16dd8eaa7bd83e21099c76610c3b246a`
 validate. These are local development results, not release-candidate
 provenance. The remaining
-Phase 6 telemetry/event hierarchy, broader trace-correlation and redaction
-work, simulator integration, sustained and fuzz gates, broader CI/provenance
-and release-candidate work, and Phase 6 API review/freeze remain open. Phase 6
-remains provisional and unfrozen.
+Phase 6 aggregate families, the seven uninstrumented event variants, broader
+trace emission/token and redaction work, simulator integration, sustained and
+fuzz gates, broader CI/provenance and release-candidate work, and Phase 6 API
+review/freeze remain open. Phase 6 remains provisional and unfrozen.
 
 Do not treat this snapshot guide as a release-conformance statement.

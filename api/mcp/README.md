@@ -133,7 +133,8 @@ markers.
 
 ## Current bounded Phase 6 checkpoint
 
-The fifth bounded Phase 6 diagnostics vertical is implemented.
+Six bounded Phase 6 verticals are implemented. `McpServerDiagnostics` remains
+the completed protection and trace diagnostics projection.
 `McpServerDiagnostics` now has exactly 12 zero-argument methods: lifecycle
 `getStatus()` and `getBoundAddress()`, plus all ten implemented diagnostic
 getters. Six use boxed `@NonNull Integer` values:
@@ -178,8 +179,33 @@ not authentication or token-derivation inputs. Diagnostics expose no raw key
 material, key IDs, per-key tags, provider identity, cursors/epochs, or trace
 tokens. Equality remains observable and rotations can create high-cardinality
 values, so strong operator key entropy, bounded retention, and exclusion from
-metric labels and per-request logs remain necessary. This fifth vertical adds
-no metric family, event type, wire field, label, or other observation dimension.
+metric labels and per-request logs remain necessary. This diagnostics vertical
+adds no metric family, event type, wire field, label, or other observation
+dimension.
+
+The sixth vertical serializes all 16 semantic event variants currently produced
+by the runtime through one context-aware deferred FIFO: the five handler
+transitions, `ServerStopped`, the nine admitted request, stream, subscription,
+cancelation, progress, and keep-alive variants, and exact-once `ServerStarted`.
+Collector callbacks run after the relevant internal locks or monitors are
+released. Request-scoped failures retain the originating `Request` for exact
+failure attribution; a pending entry may transiently hold that context only for
+the bounded delivery and failure-logging step, and it is never rendered.
+Server-event failures remain request-free and all collector failures are
+contained.
+
+Direct restart orders the old generation's `ServerStopped` before the new
+`ServerStarted`; managed startup rollback orders `ServerStarted` before
+`ServerStopped`. The FIFO guarantee is metric record/enqueue order only, not a
+universal cross-thread causal or per-request total order for independently
+racing producers. No public API, diagnostics/snapshot field, aggregate family,
+label, event variant, or wire dimension was added.
+
+`ConnectionAccepted`, `ConnectionRejected`, `RequestAccepted`,
+`RequestRejected`, `ProtocolError`, `UnknownMirroredHeader`, and
+`TransportFailure` remain uninstrumented. Aggregate families, trace
+emission/token support, broader redaction, simulator integration,
+sustained/release gates, and Phase 6 review/freeze remain open.
 
 This checkpoint does not freeze Phase 6. `phase-6.includes` remains outside
 `frozen-phases`, and the diagnostics owner remains provisional and unfrozen.
@@ -207,16 +233,17 @@ SHA-256
 `c6862ed49a9bc9565ba2284190c49605928270fb8a6fb73f75070452f909e75f`;
 its exact nullability digest is
 `d52a424ac33e679e0a0632004ac931e59966b68641659e254214964d9144f8c7`.
-The 556/206/1,049/195 evidence counts are unchanged by this provisional
-diagnostics vertical.
+The 556/206/1,049/195 evidence counts are unchanged by these provisional
+verticals.
 
-The full JDK 21 and JDK 26 test suites each execute 1,428 tests with zero
-failures, zero errors, and four expected skips. The JDK 21 Error Prone profile
-passes all enforced checks; NullAway remains advisory, and its warnings are not
-counted here. SpotBugs reports zero `BugInstance` values and zero errors. The
+The final exact-source JDK 21 and JDK 26 test suites each execute 1,436 tests
+with zero failures, zero errors, and four expected skips. The JDK 21 Error Prone
+profile passes all enforced checks; NullAway remains advisory, and its warnings
+are not counted here. SpotBugs reports zero `BugInstance` values and zero
+errors. The
 focused Phase 5 API-review contract run passes 45 tests with no failure, error,
-or skip. The focused Phase 6 protection/trace-diagnostics run passes 70 tests
-with no failure, error, or skip. Candidate binary, source, and Javadoc
+or skip. The focused Phase 6 semantic-event delivery run passes 96 tests with
+no failure, error, or skip. Candidate binary, source, and Javadoc
 packages plus the generated Javadoc report are green using offline-link
 resolution. All 167 API-sketch sources compile for Java 17 and pass Javadoc
 doclint on JDK 26. All 104 files from pinned JSON Schema commit

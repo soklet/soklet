@@ -53,10 +53,14 @@
   two live gauges while clearing cumulative rejections; queued cancelation,
   deadline, disconnect, and shutdown balance queue depth without incrementing
   the rejection counter; residual handlers remain active until actual exit.
-  Handler transitions and `ServerStopped` alone share deferred FIFO delivery
-  outside dispatcher, request, runtime, server, and Soklet lifecycle locks.
-- Added five bounded Phase 6 observability verticals, culminating in an
-  immutable server-wide handler, stream, protection, and trace-configuration
+  Handler transitions, lifecycle events, and admitted request, stream,
+  subscription, cancelation, progress, and keep-alive events now share one
+  context-aware deferred FIFO. Collector callbacks are serialized after the
+  relevant internal locks or monitors are released; request-scoped failures
+  retain the originating `Request` only for the bounded delivery/failure-
+  logging step without rendering that transient pending context.
+- Added the bounded Phase 6 diagnostics surface: an immutable server-wide
+  handler, stream, protection, and trace-configuration
   projection through `McpServerDiagnostics`. The interface has exactly 12
   zero-argument methods: lifecycle `getStatus()` and `getBoundAddress()`, plus
   all ten implemented diagnostic getters. Six are boxed `@NonNull Integer`
@@ -90,18 +94,32 @@
   carry entropy/cardinality implications, so these values are unsuitable for
   metric labels or per-request logs. This diagnostics vertical adds no metric,
   event, or wire dimension.
+- Added the sixth bounded Phase 6 vertical: one context-aware deferred FIFO now
+  serializes all 16 semantic event variants currently produced by the runtime—
+  the five handler transitions, `ServerStopped`, nine admitted request, stream,
+  subscription, cancelation, progress, and keep-alive variants, and exact-once
+  `ServerStarted`. Direct restart reserves old `ServerStopped` before new
+  `ServerStarted`, while managed startup rollback records `ServerStarted`
+  before `ServerStopped`. The guarantee is FIFO metric record/enqueue order,
+  not a universal cross-thread causal or per-request total order. The seven
+  uninstrumented variants remain `ConnectionAccepted`, `ConnectionRejected`,
+  `RequestAccepted`, `RequestRejected`, `ProtocolError`,
+  `UnknownMirroredHeader`, and `TransportFailure`. This vertical adds no public
+  API, snapshot field, aggregate family, label, event variant, or wire
+  dimension.
 
 ### Development Status
 
 - The locally frozen Phase 4 and Phase 5 surfaces implement discovery, tools,
   prompts, resources, progress, cancelation, subscription delivery, multi-
   round-trip execution, and protected request-state execution. All 39 reviewed
-  Phase 5 profiles are active. The bounded Phase 6 shutdown, handler-capacity,
-  handler-diagnostics, stream/subscription-diagnostics, and protection/trace-
-  diagnostics verticals are implemented and locally green. The focused
-  protection/trace-diagnostics run passes 70 tests with zero failures, zero
-  errors, and zero skips; full JDK 21 and JDK 26 runs each report 1,428 tests,
-  zero failures, zero errors, and four skips. The JDK 21 enforced static-
+  Phase 5 profiles are active. Six bounded Phase 6 verticals—shutdown,
+  handler-capacity, handler diagnostics, stream/subscription diagnostics,
+  protection/trace diagnostics, and serialized semantic-event delivery—are
+  implemented and locally green. The focused semantic-event delivery run
+  passes 96 tests with zero failures, zero errors, and zero skips; final exact-
+  source JDK 21 and JDK 26 runs each report 1,436 tests, zero failures, zero
+  errors, and four skips. The JDK 21 enforced static-
   analysis profile is green
   without counting advisory warnings, and SpotBugs reports zero `BugInstance`
   values and zero errors. Exact API-freeze evidence remains unchanged at 556
@@ -111,10 +129,11 @@
   resolution. All 167 API-sketch sources compile for Java 17 and pass Javadoc
   doclint on JDK 26.
   All 104 files from pinned JSON Schema commit
-  `0c7b65dc16dd8eaa7bd83e21099c76610c3b246a` validate. Remaining telemetry/event
-  hierarchy, broader trace-correlation and redaction work, simulation,
-  sustained/fuzz gates, CI/provenance and release-candidate work, and the
-  provisional, unfrozen Phase 6 API review/freeze remain open.
+  `0c7b65dc16dd8eaa7bd83e21099c76610c3b246a` validate. Aggregate families, the
+  seven uninstrumented variants, trace emission/token support, broader
+  redaction, simulation, sustained/fuzz gates, CI/provenance and release-
+  candidate work, and the provisional, unfrozen Phase 6 API review/freeze
+  remain open.
 
 ## 3.5.1 (2026-07-13)
 

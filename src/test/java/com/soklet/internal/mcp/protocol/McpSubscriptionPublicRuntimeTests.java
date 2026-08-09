@@ -52,15 +52,21 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.lang.reflect.Field;
 import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -672,6 +678,76 @@ public class McpSubscriptionPublicRuntimeTests {
 	}
 
 	@Test
+	public void keepAliveAcceptanceSharesStreamTransitionWithCloseObservation()
+			throws Exception {
+		RecordingPublisher publisher = new RecordingPublisher();
+		McpEndpoint endpoint = endpoint(MCP_PATH, publisher,
+				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED);
+		SubscriptionObservations observations = new SubscriptionObservations();
+		McpServer server = serverBuilder(List.of(endpoint),
+				McpRequestAdmissionPolicy.acceptAllInstance())
+				.writeTimeout(Duration.ofHours(2))
+				.keepAliveInterval(Duration.ofHours(1))
+				.build();
+		Soklet soklet = managedSoklet(server, observations);
+		ExecutorService readerExecutor = Executors.newSingleThreadExecutor();
+		McpChunkedHttpClient client = null;
+		Future<String> keepAliveRead = null;
+
+		try {
+			soklet.start();
+			client = listen(boundPort(server), "\"keepalive-transition\"",
+					"{\"resourcesListChanged\":true}");
+			assertSseHead(client.readHead());
+			Assertions.assertEquals(acknowledgment("\"keepalive-transition\"",
+					"{\"resourcesListChanged\":true}"),
+					client.readChunkText());
+
+			Object runtime = runtime(server);
+			Object requestControl = soleRequestControl(runtime);
+			Object transitionLock = field(requestControl,
+					"streamObservationTransitionLock");
+			Object applicationExecution = field(runtime, "applicationExecution");
+			Thread timerThread = (Thread) field(applicationExecution,
+					"timerThread");
+			McpApplicationClock clock = (McpApplicationClock) field(runtime,
+					"applicationClock");
+			McpChunkedHttpClient activeClient = client;
+			keepAliveRead = readerExecutor.submit(activeClient::readChunkText);
+
+			synchronized (transitionLock) {
+				setLongField(requestControl, "nextKeepAliveNanos",
+						clock.nanoTime());
+				LockSupport.unpark(timerThread);
+				awaitBlocked(timerThread);
+				Assertions.assertEquals(0L, observations.keepAliveCount(),
+						"Keep-alive observation crossed the held stream-transition boundary.");
+				Assertions.assertFalse(keepAliveRead.isDone(),
+						"Wire keep-alive acceptance crossed the held stream-transition boundary.");
+			}
+
+			Assertions.assertEquals(": keepalive\n\n",
+					keepAliveRead.get(5, TimeUnit.SECONDS));
+			client.closeWithReset();
+			client = null;
+			observations.awaitFinish();
+			observations.assertRequest(McpRequestOutcome.CLIENT_DISCONNECTED,
+					"keepalive-transition");
+			observations.assertStreamMetrics(
+					McpStreamTerminationReason.CLIENT_DISCONNECTED, true);
+		} finally {
+			if (keepAliveRead != null)
+				keepAliveRead.cancel(true);
+			if (client != null)
+				client.close();
+			soklet.stop();
+			readerExecutor.shutdownNow();
+			Assertions.assertTrue(readerExecutor.awaitTermination(
+					5, TimeUnit.SECONDS));
+		}
+	}
+
+	@Test
 	public void publisherVisibilityBeginsAfterAcknowledgmentActivation()
 			throws Exception {
 		RecordingPublisher publisher = new RecordingPublisher();
@@ -1093,6 +1169,48 @@ public class McpSubscriptionPublicRuntimeTests {
 		Assertions.assertFalse(head.hasHeader("Content-Length"));
 	}
 
+	@NonNull
+	private static Object runtime(@NonNull McpServer server) throws Exception {
+		return field(field(server, "runtimeBridge"), "runtime");
+	}
+
+	@NonNull
+	private static Object soleRequestControl(@NonNull Object runtime)
+			throws Exception {
+		Object value = field(runtime, "requestControls");
+		Assertions.assertInstanceOf(Map.class, value);
+		Map<?, ?> controls = (Map<?, ?>) value;
+		synchronized (controls) {
+			Assertions.assertEquals(1, controls.size(),
+					"Expected exactly one active subscription request control.");
+			return controls.values().iterator().next();
+		}
+	}
+
+	@NonNull
+	private static Object field(@NonNull Object target, @NonNull String name)
+			throws Exception {
+		Field field = target.getClass().getDeclaredField(name);
+		field.setAccessible(true);
+		return field.get(target);
+	}
+
+	private static void setLongField(@NonNull Object target,
+			@NonNull String name, long value) throws Exception {
+		Field field = target.getClass().getDeclaredField(name);
+		field.setAccessible(true);
+		field.setLong(target, value);
+	}
+
+	private static void awaitBlocked(@NonNull Thread thread) {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+		while (thread.getState() != Thread.State.BLOCKED
+				&& System.nanoTime() - deadline < 0L)
+			Thread.onSpinWait();
+		Assertions.assertEquals(Thread.State.BLOCKED, thread.getState(),
+				"The timer did not contend for the stream-transition boundary.");
+	}
+
 	private record InvalidSubscriptionParams(@NonNull String id,
 			@NonNull String paramsJson) {
 		private InvalidSubscriptionParams {
@@ -1220,11 +1338,22 @@ public class McpSubscriptionPublicRuntimeTests {
 		private final List<@NonNull McpMetricsEvent> metrics =
 				new CopyOnWriteArrayList<>();
 		@NonNull
+		private final AtomicInteger activeMetricCallbacks = new AtomicInteger();
+		@NonNull
+		private final AtomicInteger maximumConcurrentMetricCallbacks =
+				new AtomicInteger();
+		@NonNull
 		private final MetricsCollector metricsCollector = new MetricsCollector() {
 			@Override
 			public void didRecordMcpMetricsEvent(
 					@NonNull McpMetricsEvent event) {
-				metrics.add(event);
+				int active = activeMetricCallbacks.incrementAndGet();
+				maximumConcurrentMetricCallbacks.accumulateAndGet(active, Math::max);
+				try {
+					metrics.add(event);
+				} finally {
+					activeMetricCallbacks.decrementAndGet();
+				}
 			}
 		};
 		@NonNull
@@ -1281,6 +1410,12 @@ public class McpSubscriptionPublicRuntimeTests {
 			return this.finishes.get();
 		}
 
+		private long keepAliveCount() {
+			return this.metrics.stream()
+					.filter(McpMetricsEvent.KeepAliveEmitted.class::isInstance)
+					.count();
+		}
+
 		private void assertRequest(@NonNull McpRequestOutcome expectedOutcome,
 				@NonNull String expectedRequestId) {
 			Assertions.assertEquals(1, this.starts.get());
@@ -1301,10 +1436,12 @@ public class McpSubscriptionPublicRuntimeTests {
 		private void assertStreamMetrics(
 				@NonNull McpStreamTerminationReason expectedReason,
 				@Nullable Boolean expectKeepAlive) {
-			List<McpMetricsEvent> withoutKeepAlives = this.metrics.stream()
+			List<McpMetricsEvent> events = List.copyOf(this.metrics);
+			List<McpMetricsEvent> withoutKeepAlives = events.stream()
 					.filter(event -> !(event instanceof McpMetricsEvent.KeepAliveEmitted))
 					.toList();
 			Assertions.assertEquals(List.of(
+					McpMetricsEvent.ServerStarted.class,
 					McpMetricsEvent.RequestStarted.class,
 					McpMetricsEvent.RequestStreamOpened.class,
 					McpMetricsEvent.SubscriptionOpened.class,
@@ -1324,13 +1461,40 @@ public class McpSubscriptionPublicRuntimeTests {
 							.findFirst().orElseThrow();
 			Assertions.assertEquals(expectedReason, streamClosed.reason());
 			Assertions.assertEquals(expectedReason, subscriptionClosed.reason());
-			long keepAliveCount = this.metrics.stream()
+			long keepAliveCount = events.stream()
 					.filter(McpMetricsEvent.KeepAliveEmitted.class::isInstance)
 					.count();
 			if (Boolean.TRUE.equals(expectKeepAlive))
 				Assertions.assertTrue(keepAliveCount > 0);
 			else if (Boolean.FALSE.equals(expectKeepAlive))
 				Assertions.assertEquals(0, keepAliveCount);
+			Assertions.assertEquals(1,
+					this.maximumConcurrentMetricCallbacks.get(),
+					"Subscription lifecycle and keep-alive callbacks must share one serialized FIFO.");
+
+			int subscriptionOpenedIndex = indexOfEvent(events,
+					McpMetricsEvent.SubscriptionOpened.class);
+			int requestStreamClosedIndex = indexOfEvent(events,
+					McpMetricsEvent.RequestStreamClosed.class);
+			for (int index = 0; index < events.size(); index++) {
+				if (events.get(index) instanceof McpMetricsEvent.KeepAliveEmitted) {
+					Assertions.assertTrue(index > subscriptionOpenedIndex,
+							"Keep-alive delivery preceded subscription activation.");
+					Assertions.assertTrue(index < requestStreamClosedIndex,
+							"Keep-alive delivery followed stream closure.");
+				}
+			}
+		}
+
+		private static int indexOfEvent(
+				@NonNull List<@NonNull McpMetricsEvent> events,
+				@NonNull Class<? extends McpMetricsEvent> eventType) {
+			for (int index = 0; index < events.size(); index++) {
+				if (eventType.isInstance(events.get(index)))
+					return index;
+			}
+			throw new AssertionError("Missing MCP metric event: "
+					+ eventType.getSimpleName());
 		}
 	}
 }
