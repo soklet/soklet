@@ -32,6 +32,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -519,6 +522,92 @@ public class McpApplicationExecutionTests {
 		}
 	}
 
+	@Test
+	public void queued_cancel_and_deadline_drains_release_exchange_monitors()
+			throws Exception {
+		assertQueuedDequeueDrainReleasesExchangeMonitors(false);
+		assertQueuedDequeueDrainReleasesExchangeMonitors(true);
+	}
+
+	private static void assertQueuedDequeueDrainReleasesExchangeMonitors(
+			boolean deadline) throws Exception {
+		ExecutorService probeExecutor = Executors.newSingleThreadExecutor();
+		AtomicLong now = new AtomicLong();
+		DeferredDequeuedProbeObserver observer =
+				new DeferredDequeuedProbeObserver(probeExecutor);
+		McpApplicationExecution execution = new McpApplicationExecution(
+				new McpApplicationExecutionConfiguration(
+						1, 1, Duration.ofSeconds(30), Duration.ofDays(1)),
+				now::get, McpApplicationHandlerExecutorFactory.production(),
+				null, observer);
+		MicrohttpRequest activeRequest = transportRequest();
+		MicrohttpRequest queuedRequest = transportRequest();
+		CountDownLatch activeEntered = new CountDownLatch(1);
+		CountDownLatch releaseActive = new CountDownLatch(1);
+		AtomicInteger queuedInvocations = new AtomicInteger();
+		AtomicInteger queuedResponses = new AtomicInteger();
+		AtomicInteger queuedCleanups = new AtomicInteger();
+
+		try {
+			execution.start();
+			execution.dispatch(activeRequest,
+					request(deadline ? "deadline-active" : "cancel-active"),
+					admissionIdentity(), invocation -> {
+						activeEntered.countDown();
+						releaseActive.await();
+						return McpWireResult.complete(McpJsonObject.empty());
+					}, 1_000L, response -> true, () -> {});
+			Assertions.assertTrue(activeEntered.await(5, TimeUnit.SECONDS),
+					"The monitor-probe handler did not enter.");
+
+			execution.dispatch(queuedRequest,
+					request(deadline ? "deadline-queued" : "cancel-queued"),
+					admissionIdentity(), invocation -> {
+						queuedInvocations.incrementAndGet();
+						return McpWireResult.complete(McpJsonObject.empty());
+					}, deadline ? 10L : 1_000L, response -> {
+						queuedResponses.incrementAndGet();
+						return true;
+					}, queuedCleanups::incrementAndGet);
+			awaitCondition(() -> execution.snapshot().queuedRequests() == 1);
+
+			if (deadline) {
+				observer.probeWith(execution::runTimerCycle);
+				now.set(10L);
+				execution.runTimerCycle();
+			} else {
+				observer.probeWith(() -> execution.cancel(queuedRequest,
+						StreamTerminationReason.CLIENT_DISCONNECTED, null));
+				execution.cancel(queuedRequest,
+						StreamTerminationReason.CLIENT_DISCONNECTED, null);
+			}
+
+			observer.awaitProbe();
+			Assertions.assertNull(observer.probeFailure(),
+					deadline
+							? "Dequeued delivery retained the execution-boundary monitor."
+							: "Dequeued delivery retained the exchange terminal monitor.");
+			McpApplicationExecutionSnapshot dequeued = execution.snapshot();
+			Assertions.assertEquals(1, dequeued.activeHandlerSlots());
+			Assertions.assertEquals(0, dequeued.queuedRequests());
+			Assertions.assertEquals(1, dequeued.retainedExchanges());
+			Assertions.assertEquals(0, queuedInvocations.get());
+			Assertions.assertEquals(deadline ? 1 : 0, queuedResponses.get());
+			Assertions.assertEquals(1, queuedCleanups.get());
+
+			releaseActive.countDown();
+			awaitCondition(() -> execution.snapshot().activeHandlerSlots() == 0
+					&& execution.snapshot().retainedExchanges() == 0);
+		} finally {
+			releaseActive.countDown();
+			execution.stop();
+			Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(5)));
+			probeExecutor.shutdownNow();
+			Assertions.assertTrue(probeExecutor.awaitTermination(
+					5, TimeUnit.SECONDS));
+		}
+	}
+
 	private static MicrohttpRequest transportRequest() {
 		return new MicrohttpRequest("POST", "/mcp", "HTTP/1.1", List.of(),
 				new byte[0], false, new InetSocketAddress("127.0.0.1", 12345));
@@ -576,6 +665,108 @@ public class McpApplicationExecutionTests {
 		} catch (InterruptedException exception) {
 			Thread.currentThread().interrupt();
 			throw new AssertionError("Test coordination was interrupted.", exception);
+		}
+	}
+
+	private static final class DeferredDequeuedProbeObserver
+			implements McpApplicationExecutionObserver {
+		private final Object lock;
+		private final ExecutorService probeExecutor;
+		private final AtomicReference<Runnable> probeAction;
+		private final AtomicReference<Throwable> probeFailure;
+		private final CountDownLatch probeCompleted;
+		private int deferralDepth;
+		private boolean dequeuedPending;
+		private boolean delivering;
+
+		private DeferredDequeuedProbeObserver(ExecutorService probeExecutor) {
+			this.lock = new Object();
+			this.probeExecutor = probeExecutor;
+			this.probeAction = new AtomicReference<>();
+			this.probeFailure = new AtomicReference<>();
+			this.probeCompleted = new CountDownLatch(1);
+		}
+
+		@Override
+		public void beginDeferral() {
+			synchronized (this.lock) {
+				this.deferralDepth++;
+			}
+		}
+
+		@Override
+		public void recordHandlerExecutionStarted() {
+		}
+
+		@Override
+		public void recordHandlerExecutionFinished() {
+		}
+
+		@Override
+		public void recordHandlerQueued() {
+		}
+
+		@Override
+		public void recordHandlerDequeued() {
+			synchronized (this.lock) {
+				this.dequeuedPending = true;
+			}
+		}
+
+		@Override
+		public void recordHandlerCapacityRejected() {
+		}
+
+		@Override
+		public void drain() {
+			synchronized (this.lock) {
+				if (this.deferralDepth != 0 || this.delivering
+						|| !this.dequeuedPending)
+					return;
+				this.dequeuedPending = false;
+				this.delivering = true;
+			}
+
+			Future<?> probe = null;
+			try {
+				probe = this.probeExecutor.submit(this.probeAction.get());
+				probe.get(1, TimeUnit.SECONDS);
+			} catch (Throwable throwable) {
+				if (probe != null)
+					probe.cancel(true);
+				this.probeFailure.compareAndSet(null, throwable);
+			} finally {
+				synchronized (this.lock) {
+					this.delivering = false;
+				}
+				this.probeCompleted.countDown();
+			}
+		}
+
+		@Override
+		public void endDeferral() {
+			boolean drain;
+			synchronized (this.lock) {
+				if (this.deferralDepth == 0)
+					throw new IllegalStateException("Observer deferral is not active.");
+				this.deferralDepth--;
+				drain = this.deferralDepth == 0;
+			}
+			if (drain)
+				drain();
+		}
+
+		private void probeWith(Runnable probeAction) {
+			this.probeAction.set(probeAction);
+		}
+
+		private void awaitProbe() throws InterruptedException {
+			Assertions.assertTrue(this.probeCompleted.await(5, TimeUnit.SECONDS),
+					"Dequeued observer probe did not run.");
+		}
+
+		private Throwable probeFailure() {
+			return this.probeFailure.get();
 		}
 	}
 

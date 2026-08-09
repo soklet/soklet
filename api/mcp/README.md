@@ -131,6 +131,41 @@ public primitive constant values, MCP enum order, record and parameter names,
 annotation defaults, exact JSpecify type-use nullability, and thread-safety
 markers.
 
+## Current bounded Phase 6 checkpoint
+
+The Phase 6-owned `McpServerDiagnostics` now exposes six reviewed values
+through boxed `@NonNull Integer` getters:
+`getRequestHandlerConcurrency()`, `getRequestHandlerQueueCapacity()`,
+`getActiveHandlerExecutions()`, `getQueuedRequests()`,
+`getActiveRequestStreams()`, and `getActiveSubscriptions()`. They form one
+runtime-owned immutable, atomic point-in-time projection with lifecycle status
+and bound address. Configured values remain stable before start and across
+stop/restart; handler values are bounded server-wide dispatcher counts; and
+`0 <= activeSubscriptions <= activeRequestStreams`. A subscription enters both
+stream counts once its acknowledgment stream opens, without claiming client
+receipt. Retained snapshots never change.
+
+Ordinary, subscription-only, and combined open states report `1/0`, `1/1`,
+and `2/1`. Disconnect cleanup moves `2/1` through `1/0` to `0/0`. Completed
+clean and residual-handler stops report stream pair `0/0`, even while a
+residual handler remains active until actual exit. During internal `FAILED`
+cleanup, public residual status may transiently retain `1/1`; completed cleanup
+reports `STOPPED` with `0/0`. These two fields are diagnostics-only and add no
+metric family, event type, label, or other observation dimension.
+
+This checkpoint does not freeze Phase 6. `phase-6.includes` remains outside
+`frozen-phases`. The exact four additional protection/trace diagnostics
+reserved by the API sketch are:
+
+- `getProtectionMode()`, returning `McpProtectionMode`;
+- `isApplicationRequestStateProtectorConfigured()`, returning `Boolean`;
+- `getProtectionKeyRingFingerprint()`, returning
+  `Optional<McpProtectionKeyRingFingerprint>`; and
+- `getTraceCorrelationConfigurationFingerprint()`, returning
+  `Optional<McpTraceCorrelationConfigurationFingerprint>`.
+
+They remain provisional, unimplemented, and unfrozen.
+
 ## Running the gates
 
 Run the aggregate compatibility, ownership, and freeze gate with:
@@ -154,15 +189,18 @@ SHA-256
 `c6862ed49a9bc9565ba2284190c49605928270fb8a6fb73f75070452f909e75f`;
 its exact nullability digest is
 `d52a424ac33e679e0a0632004ac931e59966b68641659e254214964d9144f8c7`.
-The full JDK 21 and JDK 26 test suites each execute 1,390 tests with zero
+The full JDK 21 and JDK 26 test suites each execute 1,424 tests with zero
 failures, zero errors, and four expected skips. The JDK 21 Error Prone profile
-passes all enforced checks; NullAway remains advisory and its warnings are
-neither reclassified nor counted here. SpotBugs reports zero `BugInstance`
-values and zero errors. The focused Phase 5 API-review contract run passes 45
-tests with no failure, error, or skip. The 167-source API sketch compiles for Java
-17 and passes Javadoc
-doclint, and the benchmark module compiles 437 Java source files for Java 17
-on JDK 21.
+passes all enforced checks; NullAway remains advisory, and its warnings are not
+counted here. SpotBugs reports zero `BugInstance` values and zero errors. The
+focused Phase 5 API-review contract run passes 45 tests with no failure, error,
+or skip. The focused Phase 6 stream/subscription-diagnostics run passes 48
+tests with no failure, error, or skip. Candidate binary, source, and Javadoc
+packages plus the generated Javadoc report are green using offline-link
+resolution. All 167 API-sketch sources compile for Java 17 and pass Javadoc
+doclint on JDK 26. All 104 files from pinned JSON Schema commit
+`0c7b65dc16dd8eaa7bd83e21099c76610c3b246a` validate. The benchmark module
+compiles 437 Java source files for Java 17 on JDK 21.
 
 The conformance runner/infrastructure self-tests and scenario/supplement-
 manifest gates are green. The final-tag validator checks all 39 production-

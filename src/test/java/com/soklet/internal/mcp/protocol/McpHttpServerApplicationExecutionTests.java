@@ -957,8 +957,14 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	@Test
-	public void queued_client_disconnect_removes_the_request_without_dispatch()
+	public void queued_client_disconnect_dequeues_outside_request_control_lock()
 			throws Exception {
+		ExecutorService probeExecutor = Executors.newSingleThreadExecutor();
+		AtomicReference<McpHttpServerRuntime> runtimeReference =
+				new AtomicReference<>();
+		DeferredRequestSnapshotProbeObserver observer =
+				new DeferredRequestSnapshotProbeObserver(
+						probeExecutor, runtimeReference);
 		CountDownLatch firstEntered = new CountDownLatch(1);
 		CountDownLatch releaseFirst = new CountDownLatch(1);
 		AtomicInteger invocations = new AtomicInteger();
@@ -971,7 +977,8 @@ public class McpHttpServerApplicationExecutionTests {
 			return completeResult("invocation-" + invocationNumber);
 		});
 		McpHttpServerRuntime runtime = runtime(router, executionConfiguration(1, 1),
-				McpApplicationClock.SYSTEM);
+				McpApplicationClock.SYSTEM, observer);
+		runtimeReference.set(runtime);
 		ExecutorService clients = Executors.newSingleThreadExecutor();
 		Socket queuedClient = null;
 
@@ -991,6 +998,12 @@ public class McpHttpServerApplicationExecutionTests {
 					snapshot -> snapshot.activeHandlerSlots() == 1
 							&& snapshot.queuedRequests() == 0
 							&& snapshot.retainedExchanges() == 1);
+			observer.awaitProbe();
+			Assertions.assertNull(observer.probeFailure(),
+					"Dequeued delivery retained the request-control monitor.");
+			Assertions.assertEquals(1,
+					observer.probeSnapshot().retainedRequestControls(),
+					"Only the still-active request control should remain at delivery.");
 			Assertions.assertEquals(1, invocations.get(),
 					"A disconnected queued request must never reach application code.");
 			Assertions.assertEquals(1, afterDisconnect.abandonedResponses());
@@ -1010,6 +1023,7 @@ public class McpHttpServerApplicationExecutionTests {
 				queuedClient.close();
 			runtime.close();
 			shutdown(clients);
+			shutdown(probeExecutor);
 		}
 	}
 
@@ -1276,6 +1290,30 @@ public class McpHttpServerApplicationExecutionTests {
 				ignored -> {}, ignored -> {});
 	}
 
+	private static McpHttpServerRuntime runtime(McpApplicationRequestRouter router,
+			McpApplicationExecutionConfiguration executionConfiguration,
+			McpApplicationClock clock,
+			McpApplicationExecutionObserver executionObserver) {
+		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
+				McpImplementationMetadata.withNameAndVersion(
+						"application-test-server", "3.6.0-SNAPSHOT"))
+				.build();
+		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
+				CorsAuthorizer.rejectAllInstance(),
+				request -> McpRequestAdmissionDecision.ACCEPT);
+		McpHttpEndpointBinding binding = new McpHttpEndpointBinding(
+				policy, endpoint, router);
+		return new McpHttpServerRuntime(
+				McpHttpTransportConfiguration.productionDefaults(0),
+				List.of(binding), McpJsonLimits.productionDefaults(),
+				executionConfiguration, clock,
+				McpApplicationHandlerExecutorFactory.production(),
+				ignored -> {}, ignored -> {}, Optional.empty(),
+				McpFrameworkRequestStateRuntime.disabledInstance(),
+				McpSubscriptionRuntimeConfiguration.productionDefaults(),
+				executionObserver);
+	}
+
 	private static McpHttpServerRuntime runtime(
 			McpHttpTransportConfiguration transportConfiguration,
 			McpApplicationRequestRouter router,
@@ -1498,6 +1536,114 @@ public class McpHttpServerApplicationExecutionTests {
 
 		private void advance(Duration duration) {
 			nanoseconds.addAndGet(duration.toNanos());
+		}
+	}
+
+	private static final class DeferredRequestSnapshotProbeObserver
+			implements McpApplicationExecutionObserver {
+		private final Object lock;
+		private final ExecutorService probeExecutor;
+		private final AtomicReference<McpHttpServerRuntime> runtimeReference;
+		private final AtomicReference<McpRequestExecutionSnapshot> probeSnapshot;
+		private final AtomicReference<Throwable> probeFailure;
+		private final CountDownLatch probeCompleted;
+		private int deferralDepth;
+		private boolean dequeuedPending;
+		private boolean delivering;
+
+		private DeferredRequestSnapshotProbeObserver(
+				ExecutorService probeExecutor,
+				AtomicReference<McpHttpServerRuntime> runtimeReference) {
+			this.lock = new Object();
+			this.probeExecutor = probeExecutor;
+			this.runtimeReference = runtimeReference;
+			this.probeSnapshot = new AtomicReference<>();
+			this.probeFailure = new AtomicReference<>();
+			this.probeCompleted = new CountDownLatch(1);
+		}
+
+		@Override
+		public void beginDeferral() {
+			synchronized (this.lock) {
+				this.deferralDepth++;
+			}
+		}
+
+		@Override
+		public void recordHandlerExecutionStarted() {
+		}
+
+		@Override
+		public void recordHandlerExecutionFinished() {
+		}
+
+		@Override
+		public void recordHandlerQueued() {
+		}
+
+		@Override
+		public void recordHandlerDequeued() {
+			synchronized (this.lock) {
+				this.dequeuedPending = true;
+			}
+		}
+
+		@Override
+		public void recordHandlerCapacityRejected() {
+		}
+
+		@Override
+		public void drain() {
+			synchronized (this.lock) {
+				if (this.deferralDepth != 0 || this.delivering
+						|| !this.dequeuedPending)
+					return;
+				this.dequeuedPending = false;
+				this.delivering = true;
+			}
+
+			Future<?> probe = null;
+			try {
+				probe = this.probeExecutor.submit(() ->
+						this.probeSnapshot.set(this.runtimeReference.get()
+								.requestExecutionSnapshot()));
+				probe.get(1, TimeUnit.SECONDS);
+			} catch (Throwable throwable) {
+				if (probe != null)
+					probe.cancel(true);
+				this.probeFailure.compareAndSet(null, throwable);
+			} finally {
+				synchronized (this.lock) {
+					this.delivering = false;
+				}
+				this.probeCompleted.countDown();
+			}
+		}
+
+		@Override
+		public void endDeferral() {
+			boolean drain;
+			synchronized (this.lock) {
+				if (this.deferralDepth == 0)
+					throw new IllegalStateException("Observer deferral is not active.");
+				this.deferralDepth--;
+				drain = this.deferralDepth == 0;
+			}
+			if (drain)
+				drain();
+		}
+
+		private void awaitProbe() throws InterruptedException {
+			Assertions.assertTrue(this.probeCompleted.await(5, TimeUnit.SECONDS),
+					"Dequeued request-control probe did not run.");
+		}
+
+		private McpRequestExecutionSnapshot probeSnapshot() {
+			return this.probeSnapshot.get();
+		}
+
+		private Throwable probeFailure() {
+			return this.probeFailure.get();
 		}
 	}
 

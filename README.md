@@ -783,14 +783,19 @@ cooperative cancelation, and resource-subscription delivery are implemented
 Phase 5 slices. Deterministic MRTR termination, cross-instance protected-state
 continuation, and residual-shutdown recovery are implemented as well. Resource
 subscriptions use framework-owned listen streams and an application-owned
-local or distributed broadcast publisher. The first Phase 6 observability
-vertical is also implemented: every successfully started listener generation
-emits exactly one matching clean/residual shutdown metric, failed starts emit
-none, cleanup/restart normalization preserves generation ownership, and the
-default collector renders a sparse bounded shutdown counter. Operational trace
-correlation, the remaining comprehensive MCP telemetry, and MCP simulation
-remain open Phase 6 work; applications must not advertise or depend on those
-remaining behaviors yet.
+local or distributed broadcast publisher. Four bounded Phase 6 verticals are
+implemented: shutdown observation, handler-capacity metrics, handler-capacity
+diagnostics, and live stream/subscription diagnostics. Every successfully
+started listener generation emits exactly one matching clean/residual shutdown
+metric, and server-wide handler execution, admitted-queue depth, and queue-full
+rejection transitions feed three label-free default metric families. Immutable
+server diagnostics expose the configured handler bounds, current active/queued
+counts, open request streams, and the subscription subset. The live-stream
+diagnostic slice adds no metric or event dimension. Operational trace
+correlation, the remaining telemetry/event hierarchy, the four still-planned
+protection/trace diagnostic projections, and MCP simulation remain open Phase
+6 work; applications must not advertise or depend on those remaining behaviors
+yet.
 
 The exact pinned 39-scenario MCP suite has completed one clean controlled
 profile-observation run against the packaged fixture: 147 successful outcomes,
@@ -798,15 +803,29 @@ two reviewed skips for truthfully unadvertised mutable prompt/tool lists, one
 reviewed informational JSON-versus-optional-SSE outcome, and no warning,
 failure, or wire-harness error. This is profile-acquisition evidence only. The
 observation did not itself activate the Phase 5 profiles or freeze the API. The
-bounded Phase 5
-cross-feature soak/resource-delta gate is green: full Maven smoke runs pass on
-JDK 21 and JDK 26, and the full JDK 21 nightly profile also passes, with the
+bounded Phase 5 cross-feature soak/resource-delta gate is green: full Maven
+smoke runs pass on JDK 21 and JDK 26, and the full JDK 21 nightly profile also passes, with the
 strict verifier requiring four scenarios and three Surefire suites. The later
 atomic closeout activates all 39 exact profiles, freezes the Phase 5 API, and
 passes a fresh 39-scenario development-candidate verify with all 39 goldens and
-no bad outcome, standard-error output, or non-clean exit. JDK 17/25 CI,
-sustained/fleet/release-candidate work, and the remaining Phase 6 scope remain
-open.
+no bad outcome, standard-error output, or non-clean exit. It remains
+development evidence, not release-candidate provenance.
+
+The focused Phase 6 stream/subscription-diagnostics run passes 48 tests with
+zero failures, zero errors, and zero skips. Full repository runs on JDK 21 and
+JDK 26 each report 1,424 tests, zero failures, zero errors, and four skips. The
+JDK 21 enforced static-analysis profile is green without counting advisory
+warnings; SpotBugs reports zero `BugInstance` values and zero errors. Exact
+API-freeze evidence remains unchanged at 556 incompatibilities, 206 reviewed
+owners, 1,049 Phase 4 records, and 195 Phase 5 records with the prior hashes. Candidate
+binary, source, and Javadoc packages plus the generated Javadoc report are
+green using offline-link resolution. All 167 API-sketch sources compile for
+Java 17 and pass Javadoc doclint on JDK 26. All 104 files from pinned JSON
+Schema commit `0c7b65dc16dd8eaa7bd83e21099c76610c3b246a` validate. These local
+results do not close the remaining Phase 6 telemetry/event hierarchy, four
+protection/trace diagnostic projections, tracing, simulator, sustained/fuzz,
+broader CI/provenance, or API review/freeze
+work. Phase 6 remains provisional and unfrozen.
 
 #### Form Handling
 
@@ -1443,12 +1462,81 @@ SokletConfig config = SokletConfig.withHttpServer(
 Use [`MetricsCollector.SnapshotTextOptions`](https://javadoc.soklet.com/com/soklet/MetricsCollector.SnapshotTextOptions.html) and
 [`MetricsCollector.MetricsFormat`](https://javadoc.soklet.com/com/soklet/MetricsCollector.MetricsFormat.html) to control text output.
 
+`McpServer.getDiagnostics()` provides an immutable point-in-time view of MCP
+handler capacity and live request streams even when metrics are disabled. Its
+six boxed `@NonNull Integer` getters are
+`getRequestHandlerConcurrency()`, `getRequestHandlerQueueCapacity()`,
+`getActiveHandlerExecutions()`, `getQueuedRequests()`,
+`getActiveRequestStreams()`, and `getActiveSubscriptions()`. The configured
+values are positive and stable before start and across stop/restart. Lifecycle
+status, bound address, configured bounds, handler counts, and the paired
+stream/subscription counts are captured atomically by the runtime for the whole
+server; a retained snapshot never changes. Handler counts are nonnegative and
+bounded by their corresponding configuration, queued work implies all handler
+slots are occupied, and
+`0 <= activeSubscriptions <= activeRequestStreams`.
+
+An ordinary request-scoped SSE stream produces pair `1/0`. An isolated
+resource subscription enters both counts when its acknowledgment stream opens,
+producing `1/1` without claiming client receipt. Opening both produces the
+server-wide pair `2/1`. Disconnecting the subscription returns the pair to
+`1/0`, and disconnecting the ordinary stream returns it to `0/0`.
+
+After a completed clean stop both live counts are zero. A completed residual
+stop has queue depth zero but continues to report a non-cooperative handler as
+active until its actual late exit. A transient residual snapshot captured
+during unexpected-failure cleanup may retain the actual bounded queue depth;
+cleanup drains it without promoting work, and a queue-full rejection does not
+change either live handler count. Completed clean and residual-handler stops
+both report stream pair `0/0`, even while a residual handler remains active.
+During internal `FAILED` cleanup, public residual status may transiently retain
+an open subscription pair `1/1`; completed cleanup reports `STOPPED` with
+`0/0`.
+
+The stream/subscription values are diagnostics-only: they add no metric family,
+event type, label, or other observation dimension, and collector reset cannot
+alter them. The exact four remaining planned getters are:
+
+- `getProtectionMode()`, returning `McpProtectionMode`;
+- `isApplicationRequestStateProtectorConfigured()`, returning `Boolean`;
+- `getProtectionKeyRingFingerprint()`, returning
+  `Optional<McpProtectionKeyRingFingerprint>`; and
+- `getTraceCorrelationConfigurationFingerprint()`, returning
+  `Optional<McpTraceCorrelationConfigurationFingerprint>`.
+
+They remain provisional, unimplemented, and unfrozen Phase 6 work.
+
+For MCP handler capacity, `McpMetricsSnapshot` exposes boxed, nonnegative
+`Long` values from `getActiveHandlerExecutions()`, `getHandlerQueueDepth()`,
+and `getHandlerCapacityRejections()`. The corresponding
+`activeHandlerExecutions(Long)`, `handlerQueueDepth(Long)`, and
+`handlerCapacityRejections(Long)` builder methods also use boxed values. A
+configured MCP server renders these exact label-free families, including zero
+values:
+
+- `soklet_mcp_handler_executions_active` (gauge);
+- `soklet_mcp_handler_queue_depth` (gauge); and
+- `soklet_mcp_handler_capacity_rejections_total` (counter).
+
+Only a full admitted handler queue increments the rejection counter. Deadline,
+disconnect, cancelation, and shutdown removal of queued work decrement queue
+depth without counting a rejection. Reset preserves the two live gauges while
+clearing cumulative rejections. A non-cooperative residual handler remains
+active after bounded shutdown until it actually exits, at which point the
+active gauge returns to zero; retained snapshots do not change.
+
+Handler transitions and `McpMetricsEvent.ServerStopped` alone share a deferred,
+server-wide FIFO so collector callbacks run in transition order after internal
+dispatcher, request, and lifecycle locks are released. Other MCP event types
+continue through their existing paths.
+
 For MCP shutdowns, `snapshot().getMcpMetrics().getShutdowns()` is an immutable,
 enum-ordered `Map<McpShutdownOutcome, Long>`. The default collector omits
 unobserved outcomes, returns the map to empty on reset, and emits only
 `soklet_mcp_shutdowns_total{outcome="clean"}` or
-`soklet_mcp_shutdowns_total{outcome="residual_handlers"}`. Remaining MCP metric
-families are still Phase 6 work; do not infer them from this shutdown counter.
+`soklet_mcp_shutdowns_total{outcome="residual_handlers"}`. The remaining MCP
+telemetry/event hierarchy, four protection/trace diagnostic projections,
+tracing, and simulator integration are still Phase 6 work.
 
 You can expose a `/metrics` endpoint by injecting [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html)
 into a [`ResourceMethod`](https://javadoc.soklet.com/com/soklet/ResourceMethod.html):

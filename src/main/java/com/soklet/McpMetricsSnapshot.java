@@ -40,11 +40,29 @@ public final class McpMetricsSnapshot {
 	@NonNull
 	private static final McpMetricsSnapshot EMPTY = builder().build();
 	@NonNull
+	private final Long activeHandlerExecutions;
+	@NonNull
+	private final Long handlerQueueDepth;
+	@NonNull
+	private final Long handlerCapacityRejections;
+	@NonNull
 	private final Map<@NonNull McpShutdownOutcome, @NonNull Long> shutdowns;
 
 	private McpMetricsSnapshot(@NonNull Builder builder) {
 		requireNonNull(builder);
+		this.activeHandlerExecutions = builder.activeHandlerExecutions;
+		this.handlerQueueDepth = builder.handlerQueueDepth;
+		this.handlerCapacityRejections = builder.handlerCapacityRejections;
 		this.shutdowns = copyShutdowns(builder.shutdowns);
+	}
+
+	@NonNull
+	private static Long requireNonNegative(@NonNull Long value,
+			@NonNull String diagnostic) {
+		long requiredValue = requireNonNull(value);
+		if (requiredValue < 0L)
+			throw new IllegalArgumentException(requireNonNull(diagnostic));
+		return requiredValue;
 	}
 
 	@NonNull
@@ -84,6 +102,37 @@ public final class McpMetricsSnapshot {
 	}
 
 	/**
+	 * Returns the number of occupied MCP application-handler execution slots.
+	 *
+	 * @return active handler executions
+	 */
+	@NonNull
+	public Long getActiveHandlerExecutions() {
+		return this.activeHandlerExecutions;
+	}
+
+	/**
+	 * Returns the number of MCP application requests waiting for a handler slot.
+	 *
+	 * @return handler queue depth
+	 */
+	@NonNull
+	public Long getHandlerQueueDepth() {
+		return this.handlerQueueDepth;
+	}
+
+	/**
+	 * Returns the number of MCP application requests rejected because the
+	 * bounded handler queue was full.
+	 *
+	 * @return handler capacity rejections
+	 */
+	@NonNull
+	public Long getHandlerCapacityRejections() {
+		return this.handlerCapacityRejections;
+	}
+
+	/**
 	 * Returns nonnegative shutdown counts grouped by fixed shutdown outcome.
 	 *
 	 * @return immutable, enum-ordered shutdown counts
@@ -101,10 +150,66 @@ public final class McpMetricsSnapshot {
 	@NotThreadSafe
 	public static final class Builder {
 		@NonNull
+		private Long activeHandlerExecutions;
+		@NonNull
+		private Long handlerQueueDepth;
+		@NonNull
+		private Long handlerCapacityRejections;
+		@NonNull
 		private Map<@NonNull McpShutdownOutcome, @NonNull Long> shutdowns;
 
 		private Builder() {
+			this.activeHandlerExecutions = 0L;
+			this.handlerQueueDepth = 0L;
+			this.handlerCapacityRejections = 0L;
 			this.shutdowns = Map.of();
+		}
+
+		/**
+		 * Sets the number of occupied MCP application-handler execution slots.
+		 *
+		 * @param activeHandlerExecutions active handler executions
+		 * @return this builder
+		 * @throws IllegalArgumentException if the count is negative
+		 */
+		@NonNull
+		public Builder activeHandlerExecutions(
+				@NonNull Long activeHandlerExecutions) {
+			this.activeHandlerExecutions = requireNonNegative(
+					activeHandlerExecutions,
+					"Active MCP handler executions must not be negative.");
+			return this;
+		}
+
+		/**
+		 * Sets the number of MCP application requests waiting for a handler slot.
+		 *
+		 * @param handlerQueueDepth handler queue depth
+		 * @return this builder
+		 * @throws IllegalArgumentException if the count is negative
+		 */
+		@NonNull
+		public Builder handlerQueueDepth(@NonNull Long handlerQueueDepth) {
+			this.handlerQueueDepth = requireNonNegative(handlerQueueDepth,
+					"MCP handler queue depth must not be negative.");
+			return this;
+		}
+
+		/**
+		 * Sets the number of MCP application requests rejected because the
+		 * bounded handler queue was full.
+		 *
+		 * @param handlerCapacityRejections handler capacity rejections
+		 * @return this builder
+		 * @throws IllegalArgumentException if the count is negative
+		 */
+		@NonNull
+		public Builder handlerCapacityRejections(
+				@NonNull Long handlerCapacityRejections) {
+			this.handlerCapacityRejections = requireNonNegative(
+					handlerCapacityRejections,
+					"MCP handler capacity rejections must not be negative.");
+			return this;
 		}
 
 		/**

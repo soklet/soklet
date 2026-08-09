@@ -34,11 +34,12 @@ public enum McpServerStatus {
 	STARTED,
 
 	/**
-	 * The listener is stopped, but one or more application-supplied MCP
-	 * request-processing executions remain after the bounded shutdown deadline.
-	 * The compatibility name covers both registered handlers and request pipeline
-	 * callbacks, such as admission, rate-limiting, or request-state protection
-	 * code, that ignore cancellation or interruption.
+	 * The listener is no longer accepting connections, but one or more
+	 * application-supplied MCP request-processing executions remain. This
+	 * includes transient failure cleanup and work that remains after the bounded
+	 * shutdown deadline. The compatibility name covers both registered handlers
+	 * and request pipeline callbacks, such as admission, rate-limiting, or
+	 * request-state protection code.
 	 */
 	STOPPED_WITH_RESIDUAL_HANDLERS
 }

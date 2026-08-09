@@ -120,6 +120,64 @@ record McpHttpServerLifecycleSnapshot(boolean started, boolean stopRequired,
 }
 
 /**
+ * Atomic point-in-time view of MCP listener lifecycle, application
+ * handler-capacity, and live-stream diagnostics.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+@ThreadSafe
+record McpHttpServerDiagnosticsSnapshot(boolean started, boolean stopRequired,
+		@NonNull Optional<@NonNull InetSocketAddress> boundAddress,
+		boolean residualApplicationExecutions, int requestHandlerConcurrency,
+		int requestHandlerQueueCapacity, int activeHandlerExecutions,
+		int queuedRequests, int activeRequestStreams, int activeSubscriptions) {
+	McpHttpServerDiagnosticsSnapshot {
+		requireNonNull(boundAddress);
+		if (started != boundAddress.isPresent())
+			throw new IllegalArgumentException(
+					"A started MCP listener must have exactly one bound address.");
+		if (started && !stopRequired)
+			throw new IllegalArgumentException(
+					"A started MCP listener must require a stop transition.");
+		if (requestHandlerConcurrency < 1)
+			throw new IllegalArgumentException(
+					"Request-handler concurrency must be positive.");
+		if (requestHandlerQueueCapacity < 1)
+			throw new IllegalArgumentException(
+					"Request-handler queue capacity must be positive.");
+		if (activeHandlerExecutions < 0
+				|| activeHandlerExecutions > requestHandlerConcurrency)
+			throw new IllegalArgumentException(
+					"Active handler executions must be between zero and the configured concurrency.");
+		if (queuedRequests < 0 || queuedRequests > requestHandlerQueueCapacity)
+			throw new IllegalArgumentException(
+					"Queued requests must be between zero and the configured queue capacity.");
+		if (!started && !residualApplicationExecutions
+				&& activeHandlerExecutions != 0)
+			throw new IllegalArgumentException(
+					"A non-residual stopped MCP listener snapshot cannot have active handler executions.");
+		if (!started && !residualApplicationExecutions && queuedRequests != 0)
+			throw new IllegalArgumentException(
+					"A non-residual stopped MCP diagnostics snapshot cannot have queued requests.");
+		if (activeRequestStreams < 0)
+			throw new IllegalArgumentException(
+					"Active request streams must be nonnegative.");
+		if (activeSubscriptions < 0
+				|| activeSubscriptions > activeRequestStreams)
+			throw new IllegalArgumentException(
+					"Active subscriptions must be between zero and the active request-stream count.");
+		if (!started && !residualApplicationExecutions
+				&& activeRequestStreams != 0)
+			throw new IllegalArgumentException(
+					"A non-residual stopped MCP diagnostics snapshot cannot have active request streams.");
+		if (!started && !residualApplicationExecutions
+				&& activeSubscriptions != 0)
+			throw new IllegalArgumentException(
+					"A non-residual stopped MCP diagnostics snapshot cannot have active subscriptions.");
+	}
+}
+
+/**
  * Package-private production runtime for MCP Streamable HTTP. It owns a
  * listener that is independent from Soklet's application HTTP server, routes
  * one or more fixed endpoint paths, handles framework-owned discovery, and
@@ -215,6 +273,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	@NonNull
 	private final McpApplicationHandlerExecutorFactory applicationExecutorFactory;
 	@NonNull
+	private final McpApplicationExecutionObserver applicationExecutionObserver;
+	@NonNull
 	private final McpFrameworkRequestStateRuntime requestStateRuntime;
 	@NonNull
 	private final McpSubscriptionRuntimeConfiguration
@@ -229,6 +289,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private final Map<@NonNull MicrohttpRequest, @NonNull RequestControl> requestControls;
 	@NonNull
 	private final AtomicInteger activeIdentifiedRequestExchangeCount;
+	@NonNull
+	private final Object streamDiagnosticsLock;
+	private int activeRequestStreams;
+	private int activeSubscriptions;
 	@NonNull
 	private final Object subscriptionLock;
 	@NonNull
@@ -446,11 +510,37 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			@NonNull McpFrameworkRequestStateRuntime requestStateRuntime,
 			@NonNull McpSubscriptionRuntimeConfiguration
 					subscriptionRuntimeConfiguration) {
+		this(transportConfiguration, endpointBindings, jsonLimits,
+				applicationConfiguration, applicationClock,
+				applicationExecutorFactory, startupDiagnosticConsumer,
+				unexpectedTerminationConsumer,
+				unknownMirroredHeaderNameDiagnosticConsumer, requestStateRuntime,
+				subscriptionRuntimeConfiguration,
+				McpApplicationExecutionObserver.disabledInstance());
+	}
+
+	McpHttpServerRuntime(
+			@NonNull McpHttpTransportConfiguration transportConfiguration,
+			@NonNull List<@NonNull McpHttpEndpointBinding> endpointBindings,
+			@NonNull McpJsonLimits jsonLimits,
+			@NonNull McpApplicationExecutionConfiguration applicationConfiguration,
+			@NonNull McpApplicationClock applicationClock,
+			@NonNull McpApplicationHandlerExecutorFactory applicationExecutorFactory,
+			@NonNull Consumer<@NonNull String> startupDiagnosticConsumer,
+			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer,
+			@NonNull Optional<@NonNull BiConsumer<@NonNull String, @NonNull String>>
+					unknownMirroredHeaderNameDiagnosticConsumer,
+			@NonNull McpFrameworkRequestStateRuntime requestStateRuntime,
+			@NonNull McpSubscriptionRuntimeConfiguration
+					subscriptionRuntimeConfiguration,
+			@NonNull McpApplicationExecutionObserver applicationExecutionObserver) {
 		this.transportConfiguration = requireNonNull(transportConfiguration);
 		this.jsonLimits = requireNonNull(jsonLimits);
 		this.applicationConfiguration = requireNonNull(applicationConfiguration);
 		this.applicationClock = requireNonNull(applicationClock);
 		this.applicationExecutorFactory = requireNonNull(applicationExecutorFactory);
+		this.applicationExecutionObserver = requireNonNull(
+				applicationExecutionObserver);
 		this.requestStateRuntime = requireNonNull(requestStateRuntime);
 		this.subscriptionRuntimeConfiguration = requireNonNull(
 				subscriptionRuntimeConfiguration);
@@ -476,6 +566,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		this.lifecycleLock = new Object();
 		this.requestControls = Collections.synchronizedMap(new IdentityHashMap<>());
 		this.activeIdentifiedRequestExchangeCount = new AtomicInteger();
+		this.streamDiagnosticsLock = new Object();
 		this.subscriptionLock = new Object();
 		this.activeSubscriptionsByEndpointPath = new LinkedHashMap<>();
 		this.activeSubscriptionCountsByPartition = new LinkedHashMap<>();
@@ -585,6 +676,16 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 	@NonNull
 	InetSocketAddress start() throws IOException {
+		this.applicationExecutionObserver.beginDeferral();
+		try {
+			return startWhileMetricsDeferred();
+		} finally {
+			this.applicationExecutionObserver.endDeferral();
+		}
+	}
+
+	@NonNull
+	private InetSocketAddress startWhileMetricsDeferred() throws IOException {
 		InetSocketAddress effectiveAddress;
 
 		synchronized (lifecycleLock) {
@@ -629,7 +730,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				candidateProcessor = newRequestProcessor();
 				candidateApplicationExecution = new McpApplicationExecution(
 						applicationConfiguration, applicationClock,
-						applicationExecutorFactory, this::runProtocolDeadlineCycle);
+						applicationExecutorFactory, this::runProtocolDeadlineCycle,
+						this.applicationExecutionObserver);
 				ThreadPoolExecutor readyProcessor = candidateProcessor;
 				McpApplicationExecution readyApplicationExecution =
 						candidateApplicationExecution;
@@ -914,6 +1016,15 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	}
 
 	boolean stopAndReportResidualApplicationExecutions() {
+		this.applicationExecutionObserver.beginDeferral();
+		try {
+			return stopAndReportResidualApplicationExecutionsWhileMetricsDeferred();
+		} finally {
+			this.applicationExecutionObserver.endDeferral();
+		}
+	}
+
+	private boolean stopAndReportResidualApplicationExecutionsWhileMetricsDeferred() {
 		@Nullable EventLoop eventLoopToStop = null;
 		@Nullable ThreadPoolExecutor processorToStop = null;
 		@Nullable McpApplicationExecution applicationToStop = null;
@@ -1172,15 +1283,86 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					|| !residualSubscriptionSourceRegistrations.isEmpty();
 			Optional<@NonNull InetSocketAddress> effectiveAddress = started
 					? Optional.of(requireNonNull(boundAddress)) : Optional.empty();
-			McpApplicationExecution residualExecution = lifecycleState == LifecycleState.FAILED
+			McpApplicationExecution residualExecution = lifecycleState
+					== LifecycleState.FAILED
 					? applicationExecution : residualApplicationExecution;
-			ThreadPoolExecutor residualProcessor = lifecycleState == LifecycleState.FAILED
+			ThreadPoolExecutor residualProcessor = lifecycleState
+					== LifecycleState.FAILED
 					? requestProcessor : residualRequestProcessor;
 			boolean residualExecutions = (residualExecution != null
 					&& !residualExecution.isTerminated())
 					|| (residualProcessor != null && !residualProcessor.isTerminated());
 			return new McpHttpServerLifecycleSnapshot(started, stopRequired,
 					effectiveAddress, residualExecutions);
+		}
+	}
+
+	@NonNull
+	McpHttpServerDiagnosticsSnapshot diagnosticsSnapshot() {
+		synchronized (lifecycleLock) {
+			residualSubscriptionSourceRegistrations =
+					unclosedSubscriptionSourceRegistrations(
+							residualSubscriptionSourceRegistrations);
+			boolean started = lifecycleState == LifecycleState.STARTED;
+			boolean stopRequired = lifecycleState == LifecycleState.STARTED
+					|| lifecycleState == LifecycleState.STOPPING
+					|| lifecycleState == LifecycleState.FAILED
+					|| (residualEventLoop != null && !residualEventLoop.isTerminated())
+					|| !residualSubscriptionSourceRegistrations.isEmpty();
+			Optional<@NonNull InetSocketAddress> effectiveAddress = started
+					? Optional.of(requireNonNull(boundAddress)) : Optional.empty();
+			boolean currentGenerationResidual = lifecycleState
+					== LifecycleState.STOPPING
+					|| lifecycleState == LifecycleState.FAILED;
+			McpApplicationExecution residualExecution = currentGenerationResidual
+					? applicationExecution : residualApplicationExecution;
+			ThreadPoolExecutor residualProcessor = currentGenerationResidual
+					? requestProcessor : residualRequestProcessor;
+			boolean residualExecutions = (residualExecution != null
+					&& !residualExecution.isTerminated())
+					|| (residualProcessor != null && !residualProcessor.isTerminated());
+			synchronized (streamDiagnosticsLock) {
+				McpApplicationExecution diagnosticsExecution = lifecycleState
+						== LifecycleState.STOPPED
+								? residualApplicationExecution : applicationExecution;
+				McpApplicationExecutionSnapshot applicationSnapshot =
+						diagnosticsExecution == null ? null
+								: diagnosticsExecution.snapshot(
+										activeIdentifiedRequestExchangeCount.get());
+				int requestHandlerConcurrency = applicationSnapshot == null
+						? applicationConfiguration.handlerConcurrency()
+						: applicationSnapshot.configuredHandlerConcurrency();
+				int requestHandlerQueueCapacity = applicationSnapshot == null
+						? applicationConfiguration.handlerQueueCapacity()
+						: applicationSnapshot.configuredHandlerQueueCapacity();
+				int activeHandlerExecutions = applicationSnapshot == null
+						? 0 : applicationSnapshot.activeHandlerSlots();
+				int queuedRequests = applicationSnapshot == null
+						? 0 : applicationSnapshot.queuedRequests();
+				return new McpHttpServerDiagnosticsSnapshot(started, stopRequired,
+						effectiveAddress, residualExecutions,
+						requestHandlerConcurrency, requestHandlerQueueCapacity,
+						activeHandlerExecutions, queuedRequests,
+						activeRequestStreams, activeSubscriptions);
+			}
+		}
+	}
+
+	private void recordStreamDiagnosticsTransition(int requestStreamDelta,
+			int subscriptionDelta) {
+		if (requestStreamDelta == 0 && subscriptionDelta == 0)
+			return;
+		synchronized (streamDiagnosticsLock) {
+			int updatedRequestStreams = Math.addExact(activeRequestStreams,
+					requestStreamDelta);
+			int updatedSubscriptions = Math.addExact(activeSubscriptions,
+					subscriptionDelta);
+			if (updatedRequestStreams < 0 || updatedSubscriptions < 0
+					|| updatedSubscriptions > updatedRequestStreams)
+				throw new IllegalStateException(
+						"MCP active stream diagnostics became inconsistent.");
+			activeRequestStreams = updatedRequestStreams;
+			activeSubscriptions = updatedSubscriptions;
 		}
 	}
 
@@ -1325,6 +1507,18 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	}
 
 	private void handleUnexpectedTermination(@NonNull EventLoop terminatedEventLoop,
+			@NonNull Throwable throwable) {
+		this.applicationExecutionObserver.beginDeferral();
+		try {
+			handleUnexpectedTerminationWhileMetricsDeferred(terminatedEventLoop,
+					throwable);
+		} finally {
+			this.applicationExecutionObserver.endDeferral();
+		}
+	}
+
+	private void handleUnexpectedTerminationWhileMetricsDeferred(
+			@NonNull EventLoop terminatedEventLoop,
 			@NonNull Throwable throwable) {
 		ThreadPoolExecutor processorToStop = null;
 		McpApplicationExecution applicationToStop = null;
@@ -4468,6 +4662,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					openSubscription = true;
 				}
 			}
+			recordStreamDiagnosticsTransition(openRequestStream ? 1 : 0,
+					openSubscription ? 1 : 0);
 			if (observation == null)
 				return;
 			if (openRequestStream) {
@@ -4513,6 +4709,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 							nowNanos - subscriptionOpenedAtNanos));
 				}
 			}
+			recordStreamDiagnosticsTransition(streamDuration == null ? 0 : -1,
+					subscriptionDuration == null ? 0 : -1);
 			if (observation == null)
 				return;
 			if (streamDuration != null) {
@@ -4879,6 +5077,17 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		private void cancel(@NonNull StreamTerminationReason reason,
+				@Nullable Throwable cause) {
+			McpHttpServerRuntime.this.applicationExecutionObserver.beginDeferral();
+			try {
+				cancelWhileMetricsDeferred(reason, cause);
+			} finally {
+				McpHttpServerRuntime.this.applicationExecutionObserver.endDeferral();
+			}
+		}
+
+		private void cancelWhileMetricsDeferred(
+				@NonNull StreamTerminationReason reason,
 				@Nullable Throwable cause) {
 			FutureTask<Void> task;
 			McpRequestSseStream stream;

@@ -44,16 +44,62 @@
   listener generation. The default collector exposes an immutable sparse
   shutdown aggregate and the exact bounded
   `soklet_mcp_shutdowns_total{outcome="clean"|"residual_handlers"}` family.
+- Added server-wide MCP handler execution, admitted-queue, and queue-full-
+  rejection events. `McpMetricsSnapshot` exposes boxed `Long` active-handler,
+  queue-depth, and capacity-rejection values, and the default collector renders
+  the exact label-free `soklet_mcp_handler_executions_active`,
+  `soklet_mcp_handler_queue_depth`, and
+  `soklet_mcp_handler_capacity_rejections_total` families. Reset preserves the
+  two live gauges while clearing cumulative rejections; queued cancelation,
+  deadline, disconnect, and shutdown balance queue depth without incrementing
+  the rejection counter; residual handlers remain active until actual exit.
+  Handler transitions and `ServerStopped` alone share deferred FIFO delivery
+  outside dispatcher, request, runtime, server, and Soklet lifecycle locks.
+- Added an immutable, server-wide handler-capacity and live-stream projection
+  to `McpServerDiagnostics`. Its six boxed `@NonNull Integer` getters are
+  `getRequestHandlerConcurrency()`, `getRequestHandlerQueueCapacity()`,
+  `getActiveHandlerExecutions()`, `getQueuedRequests()`,
+  `getActiveRequestStreams()`, and `getActiveSubscriptions()`. They capture the
+  configured handler bounds, current active/queued counts, open request-scoped
+  SSE streams, and their resource-subscription subset atomically with lifecycle
+  status and bound address. Ordinary, subscription-only, and combined open
+  states produce stream pairs `1/0`, `1/1`, and `2/1`, with
+  `0 <= activeSubscriptions <= activeRequestStreams`. Disconnect cleanup
+  returns the pair through `1/0` to `0/0`; completed clean and residual-handler
+  stops expose `0/0`; and internal `FAILED` cleanup may transiently retain
+  `1/1` under public residual status before reporting `STOPPED` with `0/0`.
+  Retained snapshots never change. The stream counts are diagnostics-only and
+  add no metric or event dimension. The four protection/trace getters reserved
+  by the API sketch remain provisional, unimplemented, and unfrozen.
 
 ### Development Status
 
 - The locally frozen Phase 4 and Phase 5 surfaces implement discovery, tools,
   prompts, resources, progress, cancelation, subscription delivery, multi-
   round-trip execution, and protected request-state execution. All 39 reviewed
-  Phase 5 profiles are active. The first Phase 6 shutdown-observability
-  vertical is implemented and locally green; remaining comprehensive
-  telemetry, handler/queue diagnostics, trace correlation, simulation,
-  sustained gates, and the Phase 6 API review/freeze remain open.
+  Phase 5 profiles are active. The bounded Phase 6 shutdown, handler-capacity,
+  handler-diagnostics, and stream/subscription-diagnostics verticals are
+  implemented and locally green. The focused stream/subscription-diagnostics
+  run passes 48 tests with zero failures, zero errors, and zero skips; full JDK
+  21 and JDK 26 runs each report 1,424 tests, zero failures, zero
+  errors, and four skips. The JDK 21 enforced static-analysis profile is green
+  without counting advisory warnings, and SpotBugs reports zero `BugInstance`
+  values and zero errors. Exact API-freeze evidence remains unchanged at 556
+  incompatibilities, 206 reviewed owners, 1,049 Phase 4 records, and 195 Phase
+  5 records with the prior hashes. Candidate binary, source, and Javadoc packages plus the
+  generated Javadoc report are green using offline-link resolution. All 167
+  API-sketch sources compile for Java 17 and pass Javadoc doclint on JDK 26.
+  All 104 files from pinned JSON Schema commit
+  `0c7b65dc16dd8eaa7bd83e21099c76610c3b246a` validate. Remaining telemetry/event
+  hierarchy, the four planned protection/trace diagnostics
+  (`getProtectionMode()` returning `McpProtectionMode`,
+  `isApplicationRequestStateProtectorConfigured()` returning `Boolean`,
+  `getProtectionKeyRingFingerprint()` returning
+  `Optional<McpProtectionKeyRingFingerprint>`, and
+  `getTraceCorrelationConfigurationFingerprint()` returning
+  `Optional<McpTraceCorrelationConfigurationFingerprint>`), trace correlation,
+  simulation, sustained/fuzz gates, CI/provenance, and the provisional,
+  unfrozen Phase 6 API review/freeze remain open.
 
 ## 3.5.1 (2026-07-13)
 

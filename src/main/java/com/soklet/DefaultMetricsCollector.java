@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -105,8 +106,12 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private final LongAdder sseConnectionsAccepted;
 	private final LongAdder sseConnectionsRejected;
 	private final ConcurrentLruMap<TransportFailureKey, LongAdder> transportFailuresByServerTypeAndReason;
+	private final AtomicLong mcpActiveHandlerExecutions;
+	private final AtomicLong mcpHandlerQueueDepth;
+	private final LongAdder mcpHandlerCapacityRejections;
 	private final Map<McpShutdownOutcome, LongAdder> mcpShutdownsByOutcome;
 	private final AtomicBoolean includeSseMetrics;
+	private final AtomicBoolean includeMcpHandlerMetrics;
 
 	@NonNull
 	public static DefaultMetricsCollector defaultInstance() {
@@ -149,17 +154,22 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.sseConnectionsAccepted = new LongAdder();
 		this.sseConnectionsRejected = new LongAdder();
 		this.transportFailuresByServerTypeAndReason = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
+		this.mcpActiveHandlerExecutions = new AtomicLong();
+		this.mcpHandlerQueueDepth = new AtomicLong();
+		this.mcpHandlerCapacityRejections = new LongAdder();
 		EnumMap<McpShutdownOutcome, LongAdder> mcpShutdowns =
 				new EnumMap<>(McpShutdownOutcome.class);
 		for (McpShutdownOutcome outcome : McpShutdownOutcome.values())
 			mcpShutdowns.put(outcome, new LongAdder());
 		this.mcpShutdownsByOutcome = Collections.unmodifiableMap(mcpShutdowns);
 		this.includeSseMetrics = new AtomicBoolean(false);
+		this.includeMcpHandlerMetrics = new AtomicBoolean(false);
 	}
 
 	void initialize(@NonNull SokletConfig sokletConfig) {
 		requireNonNull(sokletConfig);
 		this.includeSseMetrics.set(sokletConfig.getSseServer().isPresent());
+		this.includeMcpHandlerMetrics.set(sokletConfig.getMcpServer().isPresent());
 	}
 
 	@Override
@@ -677,9 +687,25 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	@Override
 	public void didRecordMcpMetricsEvent(@NonNull McpMetricsEvent event) {
 		requireNonNull(event);
-		if (event instanceof McpMetricsEvent.ServerStopped serverStopped)
+		if (event instanceof McpMetricsEvent.HandlerExecutionStarted) {
+			this.includeMcpHandlerMetrics.set(true);
+			this.mcpActiveHandlerExecutions.incrementAndGet();
+		} else if (event instanceof McpMetricsEvent.HandlerExecutionFinished) {
+			this.includeMcpHandlerMetrics.set(true);
+			this.mcpActiveHandlerExecutions.decrementAndGet();
+		} else if (event instanceof McpMetricsEvent.HandlerQueued) {
+			this.includeMcpHandlerMetrics.set(true);
+			this.mcpHandlerQueueDepth.incrementAndGet();
+		} else if (event instanceof McpMetricsEvent.HandlerDequeued) {
+			this.includeMcpHandlerMetrics.set(true);
+			this.mcpHandlerQueueDepth.decrementAndGet();
+		} else if (event instanceof McpMetricsEvent.HandlerCapacityRejected) {
+			this.includeMcpHandlerMetrics.set(true);
+			this.mcpHandlerCapacityRejections.increment();
+		} else if (event instanceof McpMetricsEvent.ServerStopped serverStopped) {
 			requireNonNull(this.mcpShutdownsByOutcome.get(serverStopped.outcome()))
 					.increment();
+		}
 	}
 
 	@Override
@@ -745,6 +771,17 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				snapshot.getHttpRequestReadFailures(), DefaultMetricsCollector::labelsForRequestReadFailureKey, options);
 		appendCounter(sb, "soklet_http_requests_rejected_total", "Total HTTP requests rejected before handling",
 				snapshot.getHttpRequestRejections(), DefaultMetricsCollector::labelsForRequestRejectionKey, options);
+		if (this.includeMcpHandlerMetrics.get()) {
+			appendGauge(sb, "soklet_mcp_handler_executions_active",
+					"Currently occupied MCP handler-execution slots",
+					snapshot.getMcpMetrics().getActiveHandlerExecutions(), options);
+			appendGauge(sb, "soklet_mcp_handler_queue_depth",
+					"MCP application requests waiting for a handler slot",
+					snapshot.getMcpMetrics().getHandlerQueueDepth(), options);
+			appendCounter(sb, "soklet_mcp_handler_capacity_rejections_total",
+					"Total MCP requests rejected because the handler queue was full",
+					snapshot.getMcpMetrics().getHandlerCapacityRejections(), options);
+		}
 		appendCounter(sb, "soklet_mcp_shutdowns_total", "Total MCP server shutdowns by outcome",
 				snapshot.getMcpMetrics().getShutdowns(),
 				DefaultMetricsCollector::labelsForMcpShutdownOutcome, options);
@@ -982,9 +1019,19 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			if (count != 0L)
 				shutdowns.put(outcome, count);
 		});
-		if (shutdowns.isEmpty())
+		long activeHandlerExecutions = this.mcpActiveHandlerExecutions.get();
+		long handlerQueueDepth = this.mcpHandlerQueueDepth.get();
+		long handlerCapacityRejections =
+				this.mcpHandlerCapacityRejections.sum();
+		if (activeHandlerExecutions == 0L && handlerQueueDepth == 0L
+				&& handlerCapacityRejections == 0L && shutdowns.isEmpty())
 			return McpMetricsSnapshot.emptyInstance();
-		return McpMetricsSnapshot.builder().shutdowns(shutdowns).build();
+		return McpMetricsSnapshot.builder()
+				.activeHandlerExecutions(activeHandlerExecutions)
+				.handlerQueueDepth(handlerQueueDepth)
+				.handlerCapacityRejections(handlerCapacityRejections)
+				.shutdowns(shutdowns)
+				.build();
 	}
 
 
@@ -996,6 +1043,10 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.httpConnectionsRejected.reset();
 		this.sseConnectionsAccepted.reset();
 		this.sseConnectionsRejected.reset();
+		// Live handler gauges describe current dispatcher state rather than
+		// cumulative observations. Preserve them across reset so later balanced
+		// finish/dequeue transitions cannot underflow the new collection window.
+		this.mcpHandlerCapacityRejections.reset();
 		this.mcpShutdownsByOutcome.values().forEach(LongAdder::reset);
 		this.requestsInFlightByIdentity.clear();
 		this.requestsInFlightById.clear();

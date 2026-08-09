@@ -354,7 +354,8 @@ public sealed interface McpMetricsEvent permits
 	}
 
 	/**
-	 * An application handler released its execution slot after actual exit.
+	 * A reserved application-handler execution slot was released after actual
+	 * handler exit or failed executor submission.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */

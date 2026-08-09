@@ -1178,7 +1178,18 @@ final class McpApplicationExecution {
 			@NonNull McpApplicationHandlerExecutorFactory executorFactory,
 			@Nullable McpProtocolDeadlineCycle protocolDeadlineCycle) {
 		this(configuration, clock, executorFactory, protocolDeadlineCycle,
-				McpApplicationRequestInterceptor.passThroughInstance());
+				McpApplicationRequestInterceptor.passThroughInstance(),
+				McpApplicationExecutionObserver.disabledInstance());
+	}
+
+	McpApplicationExecution(
+			@NonNull McpApplicationExecutionConfiguration configuration,
+			@NonNull McpApplicationClock clock,
+			@NonNull McpApplicationHandlerExecutorFactory executorFactory,
+			@Nullable McpProtocolDeadlineCycle protocolDeadlineCycle,
+			@NonNull McpApplicationExecutionObserver observer) {
+		this(configuration, clock, executorFactory, protocolDeadlineCycle,
+				McpApplicationRequestInterceptor.passThroughInstance(), observer);
 	}
 
 	McpApplicationExecution(
@@ -1187,6 +1198,18 @@ final class McpApplicationExecution {
 			@NonNull McpApplicationHandlerExecutorFactory executorFactory,
 			@Nullable McpProtocolDeadlineCycle protocolDeadlineCycle,
 			@NonNull McpApplicationRequestInterceptor requestInterceptor) {
+		this(configuration, clock, executorFactory, protocolDeadlineCycle,
+				requestInterceptor,
+				McpApplicationExecutionObserver.disabledInstance());
+	}
+
+	McpApplicationExecution(
+			@NonNull McpApplicationExecutionConfiguration configuration,
+			@NonNull McpApplicationClock clock,
+			@NonNull McpApplicationHandlerExecutorFactory executorFactory,
+			@Nullable McpProtocolDeadlineCycle protocolDeadlineCycle,
+			@NonNull McpApplicationRequestInterceptor requestInterceptor,
+			@NonNull McpApplicationExecutionObserver observer) {
 		this.configuration = requireNonNull(configuration);
 		this.clock = requireNonNull(clock);
 		this.protocolDeadlineCycle = protocolDeadlineCycle;
@@ -1196,7 +1219,7 @@ final class McpApplicationExecution {
 				"The application handler executor factory returned null.");
 		this.dispatcher = new McpApplicationHandlerDispatcher(
 				configuration.handlerConcurrency(), configuration.handlerQueueCapacity(),
-				handlerExecutor);
+				handlerExecutor, observer);
 		this.executionBoundaryLock = new Object();
 		this.requestsByIdentity = Collections.synchronizedMap(new IdentityHashMap<>());
 		this.retainedExchanges = new ConcurrentHashMap<>();
@@ -1904,15 +1927,20 @@ final class McpApplicationExecution {
 				@Nullable Throwable ignored) {
 			boolean cancelBeforeDispatch;
 			boolean releaseCancellationCallbacks;
-			synchronized (terminalLock) {
-				if (terminalState != TerminalState.OPEN)
-					return;
-				// Retain only the application-visible reason. Transport exceptions can
-				// retain connection internals and are detached with the response lease.
-				releaseCancellationCallbacks = cancellation.fixReason(
-						requireNonNull(reason));
-				terminalState = TerminalState.ABANDONED;
-				cancelBeforeDispatch = dispatcher.cancelBeforeDispatch(ticket());
+			dispatcher.beginObserverDeferral();
+			try {
+				synchronized (terminalLock) {
+					if (terminalState != TerminalState.OPEN)
+						return;
+					// Retain only the application-visible reason. Transport exceptions can
+					// retain connection internals and are detached with the response lease.
+					releaseCancellationCallbacks = cancellation.fixReason(
+							requireNonNull(reason));
+					terminalState = TerminalState.ABANDONED;
+					cancelBeforeDispatch = dispatcher.cancelBeforeDispatch(ticket());
+				}
+			} finally {
+				dispatcher.endObserverDeferral();
 			}
 
 			if (releaseCancellationCallbacks)
@@ -1938,27 +1966,32 @@ final class McpApplicationExecution {
 			McpApplicationResponse response;
 			TransportLease lease;
 			boolean shutdown;
-			synchronized (executionBoundaryLock) {
-				shutdown = stopped.get();
-				if (!shutdown) {
-					synchronized (terminalLock) {
-						if (terminalState != TerminalState.OPEN)
-							return;
-						releaseCancellationCallbacks = cancellation.fixReason(
-								StreamTerminationReason.RESPONSE_TIMEOUT);
-						canceledBeforeDispatch = dispatcher.cancelBeforeDispatch(ticket());
-						lease = requireNonNull(transportLease.get(),
-								"An open exchange must retain its transport lease.");
-						terminalState = TerminalState.RESPONSE_OFFERED;
-						response = canceledBeforeDispatch
-								? McpApplicationResponse.queuedDeadline(request.id())
-								: McpApplicationResponse.activeDeadline();
+			dispatcher.beginObserverDeferral();
+			try {
+				synchronized (executionBoundaryLock) {
+					shutdown = stopped.get();
+					if (!shutdown) {
+						synchronized (terminalLock) {
+							if (terminalState != TerminalState.OPEN)
+								return;
+							releaseCancellationCallbacks = cancellation.fixReason(
+									StreamTerminationReason.RESPONSE_TIMEOUT);
+							canceledBeforeDispatch = dispatcher.cancelBeforeDispatch(ticket());
+							lease = requireNonNull(transportLease.get(),
+									"An open exchange must retain its transport lease.");
+							terminalState = TerminalState.RESPONSE_OFFERED;
+							response = canceledBeforeDispatch
+									? McpApplicationResponse.queuedDeadline(request.id())
+									: McpApplicationResponse.activeDeadline();
+						}
+					} else {
+						canceledBeforeDispatch = false;
+						response = null;
+						lease = null;
 					}
-				} else {
-					canceledBeforeDispatch = false;
-					response = null;
-					lease = null;
 				}
+			} finally {
+				dispatcher.endObserverDeferral();
 			}
 			if (shutdown) {
 				cancel(stoppingReason(), null);

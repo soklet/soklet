@@ -122,6 +122,8 @@ final class McpApplicationHandlerDispatcher {
 	@NonNull
 	private final ExecutorService executorService;
 	@NonNull
+	private final McpApplicationExecutionObserver observer;
+	@NonNull
 	private final Queue<@NonNull Ticket> queue;
 	private int activeSlots;
 	private int maximumObservedActiveSlots;
@@ -130,6 +132,13 @@ final class McpApplicationHandlerDispatcher {
 
 	McpApplicationHandlerDispatcher(int concurrency, int queueCapacity,
 			@NonNull ExecutorService executorService) {
+		this(concurrency, queueCapacity, executorService,
+				McpApplicationExecutionObserver.disabledInstance());
+	}
+
+	McpApplicationHandlerDispatcher(int concurrency, int queueCapacity,
+			@NonNull ExecutorService executorService,
+			@NonNull McpApplicationExecutionObserver observer) {
 		if (concurrency < 1)
 			throw new IllegalArgumentException("Handler concurrency must be positive.");
 
@@ -140,6 +149,7 @@ final class McpApplicationHandlerDispatcher {
 		this.concurrency = concurrency;
 		this.queueCapacity = queueCapacity;
 		this.executorService = requireNonNull(executorService);
+		this.observer = requireNonNull(observer);
 		this.queue = new ArrayDeque<>(queueCapacity);
 		this.accepting = true;
 	}
@@ -148,6 +158,14 @@ final class McpApplicationHandlerDispatcher {
 	Ticket newTicket(@NonNull Work work,
 			@NonNull Consumer<@NonNull Throwable> failureObserver) {
 		return new Ticket(requireNonNull(work), requireNonNull(failureObserver));
+	}
+
+	void beginObserverDeferral() {
+		this.observer.beginDeferral();
+	}
+
+	void endObserverDeferral() {
+		this.observer.endDeferral();
 	}
 
 	@NonNull
@@ -169,6 +187,7 @@ final class McpApplicationHandlerDispatcher {
 			} else if (activeSlots < concurrency) {
 				ticket.state = TicketState.DISPATCHED;
 				activeSlots++;
+				recordHandlerExecutionStarted();
 				maximumObservedActiveSlots = Math.max(maximumObservedActiveSlots,
 						activeSlots);
 				dispatch = true;
@@ -176,15 +195,18 @@ final class McpApplicationHandlerDispatcher {
 			} else if (queue.size() < queueCapacity) {
 				ticket.state = TicketState.QUEUED;
 				queue.add(ticket);
+				recordHandlerQueued();
 				maximumObservedQueueDepth = Math.max(maximumObservedQueueDepth,
 						queue.size());
 				admission = Admission.QUEUED;
 			} else {
 				ticket.state = TicketState.REJECTED;
+				recordHandlerCapacityRejected();
 				admission = Admission.REJECTED;
 			}
 		}
 
+		drainObserver();
 		if (dispatch)
 			dispatch(ticket);
 
@@ -193,22 +215,30 @@ final class McpApplicationHandlerDispatcher {
 
 	boolean cancelBeforeDispatch(@NonNull Ticket ticket) {
 		requireOwnedTicket(ticket);
+		boolean dequeued = false;
+		boolean canceled;
 
 		synchronized (lock) {
 			if (ticket.state == TicketState.NEW) {
 				ticket.state = TicketState.CANCELED;
-				return true;
+				canceled = true;
+			} else if (ticket.state == TicketState.QUEUED) {
+				if (!queue.remove(ticket))
+					throw new IllegalStateException(
+							"Queued ticket is absent from the queue.");
+
+				ticket.state = TicketState.CANCELED;
+				recordHandlerDequeued();
+				dequeued = true;
+				canceled = true;
+			} else {
+				canceled = false;
 			}
-
-			if (ticket.state != TicketState.QUEUED)
-				return false;
-
-			if (!queue.remove(ticket))
-				throw new IllegalStateException("Queued ticket is absent from the queue.");
-
-			ticket.state = TicketState.CANCELED;
-			return true;
 		}
+
+		if (dequeued)
+			drainObserver();
+		return canceled;
 	}
 
 	@NonNull
@@ -223,10 +253,14 @@ final class McpApplicationHandlerDispatcher {
 			canceledTickets = new ArrayList<>(queue);
 			queue.clear();
 
-			for (Ticket ticket : canceledTickets)
+			for (Ticket ticket : canceledTickets) {
 				ticket.state = TicketState.CANCELED;
+				recordHandlerDequeued();
+			}
 		}
 
+		if (!canceledTickets.isEmpty())
+			drainObserver();
 		return List.copyOf(canceledTickets);
 	}
 
@@ -301,14 +335,17 @@ final class McpApplicationHandlerDispatcher {
 
 			ticket.state = TicketState.EXITED;
 			activeSlots--;
+			recordHandlerExecutionFinished();
 			next = promoteNextLocked();
 		}
 
+		drainObserver();
 		if (next != null)
 			dispatch(next);
 	}
 
 	private @Nullable Ticket onSubmissionFailure(@NonNull Ticket ticket) {
+		Ticket next;
 		synchronized (lock) {
 			if (ticket.state != TicketState.DISPATCHED)
 				throw new IllegalStateException(
@@ -316,8 +353,11 @@ final class McpApplicationHandlerDispatcher {
 
 			ticket.state = TicketState.REJECTED;
 			activeSlots--;
-			return promoteNextLocked();
+			recordHandlerExecutionFinished();
+			next = promoteNextLocked();
 		}
+		drainObserver();
+		return next;
 	}
 
 	private @Nullable Ticket promoteNextLocked() {
@@ -326,9 +366,59 @@ final class McpApplicationHandlerDispatcher {
 
 		Ticket next = queue.remove();
 		next.state = TicketState.DISPATCHED;
+		recordHandlerDequeued();
 		activeSlots++;
+		recordHandlerExecutionStarted();
 		maximumObservedActiveSlots = Math.max(maximumObservedActiveSlots, activeSlots);
 		return next;
+	}
+
+	private void recordHandlerExecutionStarted() {
+		try {
+			this.observer.recordHandlerExecutionStarted();
+		} catch (Throwable ignored) {
+			// Observation must not corrupt dispatcher accounting.
+		}
+	}
+
+	private void recordHandlerExecutionFinished() {
+		try {
+			this.observer.recordHandlerExecutionFinished();
+		} catch (Throwable ignored) {
+			// Observation must not corrupt dispatcher accounting.
+		}
+	}
+
+	private void recordHandlerQueued() {
+		try {
+			this.observer.recordHandlerQueued();
+		} catch (Throwable ignored) {
+			// Observation must not corrupt dispatcher accounting.
+		}
+	}
+
+	private void recordHandlerDequeued() {
+		try {
+			this.observer.recordHandlerDequeued();
+		} catch (Throwable ignored) {
+			// Observation must not corrupt dispatcher accounting.
+		}
+	}
+
+	private void recordHandlerCapacityRejected() {
+		try {
+			this.observer.recordHandlerCapacityRejected();
+		} catch (Throwable ignored) {
+			// Observation must not corrupt dispatcher accounting.
+		}
+	}
+
+	private void drainObserver() {
+		try {
+			this.observer.drain();
+		} catch (Throwable ignored) {
+			// Observation must not corrupt dispatcher accounting or dispatch.
+		}
 	}
 
 	private void notifyFailure(@NonNull Ticket ticket, @NonNull Throwable throwable) {

@@ -446,6 +446,52 @@ public final class McpServerRuntimeBridge {
 				corsAuthorizer, corsAuthorizerExplicitlyConfigured,
 				admissionAdapter, requestRateLimitAdapter,
 				unknownMirroredHeaderPolicy,
+				unknownMirroredHeaderNameDiagnostics,
+				unknownMirroredHeaderNameDiagnosticConsumer,
+				requestHandlerConcurrency, requestHandlerQueueCapacity,
+				requestTimeout, requestHandlerExecutorServiceSupplier,
+				startupDiagnosticConsumer, unexpectedTerminationConsumer,
+				requestObservationAdapter, requestStateProtectionPlan,
+				streamQueueCapacity, writeTimeout, keepAliveInterval,
+				shutdownTimeout, maximumSubscriptionsPerPrincipal,
+				maximumSubscriptionDuration,
+				McpApplicationExecutionObserver.disabledInstance());
+	}
+
+	/**
+	 * Creates one production listener projection with application-execution
+	 * observation.
+	 */
+	public McpServerRuntimeBridge(@NonNull String host, int port,
+			@NonNull List<@NonNull EndpointPlan> endpointPlans,
+			@NonNull Set<@NonNull String> allowedHosts, boolean requireOrigin,
+			@NonNull CorsAuthorizer corsAuthorizer,
+			boolean corsAuthorizerExplicitlyConfigured,
+			@NonNull AdmissionAdapter admissionAdapter,
+			@NonNull Optional<@NonNull RateLimitAdapter> requestRateLimitAdapter,
+			com.soklet.@NonNull McpUnknownMirroredHeaderPolicy
+					unknownMirroredHeaderPolicy,
+			boolean unknownMirroredHeaderNameDiagnostics,
+			@NonNull BiConsumer<@NonNull String, @NonNull String>
+					unknownMirroredHeaderNameDiagnosticConsumer,
+			int requestHandlerConcurrency, int requestHandlerQueueCapacity,
+			@NonNull Duration requestTimeout,
+			@NonNull Optional<@NonNull Supplier<@NonNull ExecutorService>>
+					requestHandlerExecutorServiceSupplier,
+			@NonNull Consumer<@NonNull String> startupDiagnosticConsumer,
+			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer,
+			@NonNull RequestObservationAdapter requestObservationAdapter,
+			@NonNull Optional<@NonNull RequestStateProtectionPlan>
+					requestStateProtectionPlan,
+			int streamQueueCapacity, @NonNull Duration writeTimeout,
+			@NonNull Duration keepAliveInterval, @NonNull Duration shutdownTimeout,
+			int maximumSubscriptionsPerPrincipal,
+			@NonNull Duration maximumSubscriptionDuration,
+			@NonNull McpApplicationExecutionObserver applicationExecutionObserver) {
+		this(host, port, endpointPlans, allowedHosts, requireOrigin,
+				corsAuthorizer, corsAuthorizerExplicitlyConfigured,
+				admissionAdapter, requestRateLimitAdapter,
+				unknownMirroredHeaderPolicy,
 				nameDiagnosticConsumer(unknownMirroredHeaderNameDiagnostics,
 						unknownMirroredHeaderNameDiagnosticConsumer),
 				requestHandlerConcurrency, requestHandlerQueueCapacity,
@@ -456,7 +502,8 @@ public final class McpServerRuntimeBridge {
 				new McpSubscriptionRuntimeConfiguration(streamQueueCapacity,
 						writeTimeout, keepAliveInterval, shutdownTimeout,
 						maximumSubscriptionsPerPrincipal,
-						maximumSubscriptionDuration));
+						maximumSubscriptionDuration),
+				requireNonNull(applicationExecutionObserver));
 	}
 
 	@NonNull
@@ -523,6 +570,43 @@ public final class McpServerRuntimeBridge {
 					requestStateProtectionPlan,
 			@NonNull McpSubscriptionRuntimeConfiguration
 					subscriptionRuntimeConfiguration) {
+		this(host, port, endpointPlans, allowedHosts, requireOrigin,
+				corsAuthorizer, corsAuthorizerExplicitlyConfigured,
+				admissionAdapter, requestRateLimitAdapter,
+				unknownMirroredHeaderPolicy,
+				unknownMirroredHeaderNameDiagnosticConsumer,
+				requestHandlerConcurrency, requestHandlerQueueCapacity,
+				requestTimeout, requestHandlerExecutorServiceSupplier,
+				startupDiagnosticConsumer, unexpectedTerminationConsumer,
+				requestObservationAdapter, requestStateProtectionPlan,
+				subscriptionRuntimeConfiguration,
+				McpApplicationExecutionObserver.disabledInstance());
+	}
+
+	private McpServerRuntimeBridge(@NonNull String host, int port,
+			@NonNull List<@NonNull EndpointPlan> endpointPlans,
+			@NonNull Set<@NonNull String> allowedHosts, boolean requireOrigin,
+			@NonNull CorsAuthorizer corsAuthorizer,
+			boolean corsAuthorizerExplicitlyConfigured,
+			@NonNull AdmissionAdapter admissionAdapter,
+			@NonNull Optional<@NonNull RateLimitAdapter> requestRateLimitAdapter,
+			com.soklet.@NonNull McpUnknownMirroredHeaderPolicy
+					unknownMirroredHeaderPolicy,
+			@NonNull Optional<@NonNull BiConsumer<@NonNull String, @NonNull String>>
+					unknownMirroredHeaderNameDiagnosticConsumer,
+			int requestHandlerConcurrency, int requestHandlerQueueCapacity,
+			@NonNull Duration requestTimeout,
+			@NonNull Optional<@NonNull Supplier<@NonNull ExecutorService>>
+					requestHandlerExecutorServiceSupplier,
+			@NonNull Consumer<@NonNull String> startupDiagnosticConsumer,
+			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer,
+			@NonNull Optional<@NonNull RequestObservationAdapter>
+					requestObservationAdapter,
+			@NonNull Optional<@NonNull RequestStateProtectionPlan>
+					requestStateProtectionPlan,
+			@NonNull McpSubscriptionRuntimeConfiguration
+					subscriptionRuntimeConfiguration,
+			@NonNull McpApplicationExecutionObserver applicationExecutionObserver) {
 		requireNonNull(host);
 		List<EndpointPlan> immutableEndpointPlans =
 				List.copyOf(requireNonNull(endpointPlans));
@@ -539,6 +623,7 @@ public final class McpServerRuntimeBridge {
 		requireNonNull(requestObservationAdapter);
 		requireNonNull(requestStateProtectionPlan);
 		requireNonNull(subscriptionRuntimeConfiguration);
+		requireNonNull(applicationExecutionObserver);
 		McpFrameworkRequestStateRuntime requestStateRuntime =
 				new McpFrameworkRequestStateRuntime(requestStateProtectionPlan,
 						Clock.systemUTC());
@@ -583,7 +668,8 @@ public final class McpServerRuntimeBridge {
 				McpApplicationClock.SYSTEM, applicationExecutorFactory,
 				startupDiagnosticConsumer, unexpectedTerminationConsumer,
 				unknownMirroredHeaderNameDiagnosticConsumer,
-				requestStateRuntime, subscriptionRuntimeConfiguration);
+				requestStateRuntime, subscriptionRuntimeConfiguration,
+				applicationExecutionObserver);
 	}
 
 	@NonNull
@@ -972,6 +1058,78 @@ public final class McpServerRuntimeBridge {
 			if (started && !stopRequired)
 				throw new IllegalArgumentException(
 						"A started MCP listener must require a stop transition.");
+		}
+	}
+
+	/**
+	 * Captures lifecycle, handler-capacity, and live-stream diagnostics through
+	 * one runtime lifecycle lock acquisition.
+	 *
+	 * @return atomic runtime diagnostics
+	 */
+	@NonNull
+	public DiagnosticsState getDiagnosticsState() {
+		McpHttpServerDiagnosticsSnapshot snapshot = this.runtime
+				.diagnosticsSnapshot();
+		return new DiagnosticsState(snapshot.started(), snapshot.stopRequired(),
+				snapshot.boundAddress(), snapshot.residualApplicationExecutions(),
+				snapshot.requestHandlerConcurrency(),
+				snapshot.requestHandlerQueueCapacity(),
+				snapshot.activeHandlerExecutions(), snapshot.queuedRequests(),
+				snapshot.activeRequestStreams(), snapshot.activeSubscriptions());
+	}
+
+	/**
+	 * Atomic internal diagnostics projection used by the public server adapter.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	public record DiagnosticsState(boolean started, boolean stopRequired,
+			@NonNull Optional<@NonNull InetSocketAddress> boundAddress,
+			boolean residualHandlers, int requestHandlerConcurrency,
+			int requestHandlerQueueCapacity, int activeHandlerExecutions,
+			int queuedRequests, int activeRequestStreams, int activeSubscriptions) {
+		public DiagnosticsState {
+			requireNonNull(boundAddress);
+			if (started != boundAddress.isPresent())
+				throw new IllegalArgumentException(
+						"A started MCP listener must have exactly one bound address.");
+			if (started && !stopRequired)
+				throw new IllegalArgumentException(
+						"A started MCP listener must require a stop transition.");
+			if (requestHandlerConcurrency < 1)
+				throw new IllegalArgumentException(
+						"Request-handler concurrency must be positive.");
+			if (requestHandlerQueueCapacity < 1)
+				throw new IllegalArgumentException(
+						"Request-handler queue capacity must be positive.");
+			if (activeHandlerExecutions < 0
+					|| activeHandlerExecutions > requestHandlerConcurrency)
+				throw new IllegalArgumentException(
+						"Active handler executions must be between zero and the configured concurrency.");
+			if (queuedRequests < 0 || queuedRequests > requestHandlerQueueCapacity)
+				throw new IllegalArgumentException(
+						"Queued requests must be between zero and the configured queue capacity.");
+			if (!started && !residualHandlers && activeHandlerExecutions != 0)
+				throw new IllegalArgumentException(
+						"A non-residual stopped MCP listener state cannot have active handler executions.");
+			if (!started && !residualHandlers && queuedRequests != 0)
+				throw new IllegalArgumentException(
+						"A non-residual stopped MCP diagnostics state cannot have queued requests.");
+			if (activeRequestStreams < 0)
+				throw new IllegalArgumentException(
+						"Active request streams must be nonnegative.");
+			if (activeSubscriptions < 0
+					|| activeSubscriptions > activeRequestStreams)
+				throw new IllegalArgumentException(
+						"Active subscriptions must be between zero and the active request-stream count.");
+			if (!started && !residualHandlers && activeRequestStreams != 0)
+				throw new IllegalArgumentException(
+						"A non-residual stopped MCP diagnostics state cannot have active request streams.");
+			if (!started && !residualHandlers && activeSubscriptions != 0)
+				throw new IllegalArgumentException(
+						"A non-residual stopped MCP diagnostics state cannot have active subscriptions.");
 		}
 	}
 

@@ -255,9 +255,18 @@ public final class Soklet implements AutoCloseable {
 	 */
 	public void start() {
 		List<Runnable> afterLifecycleUnlock = new ArrayList<>();
-		getLock().lock();
+		McpServer configuredMcpServer = getSokletConfig().getMcpServer()
+				.orElse(null);
+		DefaultMcpServer mcpMetricsServer = configuredMcpServer
+				instanceof DefaultMcpServer defaultMcpServer
+				? defaultMcpServer : null;
+		if (mcpMetricsServer != null)
+			mcpMetricsServer.beginMcpMetricsDeferral();
+		boolean lifecycleLockAcquired = false;
 
 		try {
+			getLock().lock();
+			lifecycleLockAcquired = true;
 			SokletConfig sokletConfig = getSokletConfig();
 			HttpServer httpServer = sokletConfig.getHttpServer().orElse(null);
 			SseServer sseServer = sokletConfig.getSseServer().orElse(null);
@@ -357,8 +366,15 @@ public final class Soklet implements AutoCloseable {
 				throw new RuntimeException(t);
 			}
 		} finally {
-			getLock().unlock();
-			runAfterLifecycleUnlock(afterLifecycleUnlock);
+			try {
+				if (lifecycleLockAcquired) {
+					getLock().unlock();
+					runAfterLifecycleUnlock(afterLifecycleUnlock);
+				}
+			} finally {
+				if (mcpMetricsServer != null)
+					mcpMetricsServer.endMcpMetricsDeferral();
+			}
 		}
 	}
 
@@ -520,11 +536,18 @@ public final class Soklet implements AutoCloseable {
 	 */
 	public void stop() {
 		List<Runnable> afterLifecycleUnlock = new ArrayList<>();
-		getLock().lock();
+		McpServer configuredMcpServer = getSokletConfig().getMcpServer()
+				.orElse(null);
+		DefaultMcpServer mcpMetricsServer = configuredMcpServer
+				instanceof DefaultMcpServer defaultMcpServer
+				? defaultMcpServer : null;
+		if (mcpMetricsServer != null)
+			mcpMetricsServer.beginMcpMetricsDeferral();
+		boolean lifecycleLockAcquired = false;
 
 		try {
-			McpServer configuredMcpServer = getSokletConfig().getMcpServer()
-					.orElse(null);
+			getLock().lock();
+			lifecycleLockAcquired = true;
 			boolean mcpServerRequiresStop = configuredMcpServer
 					instanceof DefaultMcpServer defaultMcpServer
 					&& defaultMcpServer.requiresStop();
@@ -642,10 +665,18 @@ public final class Soklet implements AutoCloseable {
 			}
 		} finally {
 			try {
-				requireNonNull(getAwaitShutdownLatchReference().get()).countDown();
+				if (lifecycleLockAcquired) {
+					try {
+						requireNonNull(getAwaitShutdownLatchReference().get())
+								.countDown();
+					} finally {
+						getLock().unlock();
+						runAfterLifecycleUnlock(afterLifecycleUnlock);
+					}
+				}
 			} finally {
-				getLock().unlock();
-				runAfterLifecycleUnlock(afterLifecycleUnlock);
+				if (mcpMetricsServer != null)
+					mcpMetricsServer.endMcpMetricsDeferral();
 			}
 		}
 	}

@@ -166,6 +166,7 @@ public class McpServerPublicRuntimeTests {
 		Assertions.assertFalse(server.isStarted());
 		Assertions.assertEquals(McpServerStatus.STOPPED, initial.getStatus());
 		Assertions.assertTrue(initial.getBoundAddress().isEmpty());
+		assertHandlerDiagnostics(initial, 32, 128, 0, 0);
 
 		server.stop();
 		server.stop();
@@ -176,12 +177,14 @@ public class McpServerPublicRuntimeTests {
 
 			Assertions.assertTrue(server.isStarted());
 			Assertions.assertEquals(McpServerStatus.STARTED, firstStarted.getStatus());
+			assertHandlerDiagnostics(firstStarted, 32, 128, 0, 0);
 			Assertions.assertEquals(LOOPBACK,
 					firstAddress.getAddress().getHostAddress());
 			Assertions.assertTrue(firstAddress.getPort() > 0);
 			Assertions.assertEquals(McpServerStatus.STOPPED, initial.getStatus(),
 					"A retained pre-start snapshot must not change.");
 			Assertions.assertTrue(initial.getBoundAddress().isEmpty());
+			assertHandlerDiagnostics(initial, 32, 128, 0, 0);
 
 			server.start();
 			Assertions.assertEquals(firstAddress,
@@ -195,10 +198,12 @@ public class McpServerPublicRuntimeTests {
 			Assertions.assertFalse(server.isStarted());
 			Assertions.assertEquals(McpServerStatus.STOPPED, firstStopped.getStatus());
 			Assertions.assertTrue(firstStopped.getBoundAddress().isEmpty());
+			assertHandlerDiagnostics(firstStopped, 32, 128, 0, 0);
 			Assertions.assertEquals(McpServerStatus.STARTED, firstStarted.getStatus(),
 					"A retained started snapshot must not change after stop.");
 			Assertions.assertEquals(firstAddress,
 					firstStarted.getBoundAddress().orElseThrow());
+			assertHandlerDiagnostics(firstStarted, 32, 128, 0, 0);
 
 			server.stop();
 			server.start();
@@ -206,9 +211,11 @@ public class McpServerPublicRuntimeTests {
 			McpServerDiagnostics secondStarted = server.getDiagnostics();
 			int secondPort = secondStarted.getBoundAddress().orElseThrow().getPort();
 			Assertions.assertEquals(McpServerStatus.STARTED, secondStarted.getStatus());
+			assertHandlerDiagnostics(secondStarted, 32, 128, 0, 0);
 			Assertions.assertEquals(McpServerStatus.STOPPED, firstStopped.getStatus(),
 					"A retained stopped snapshot must not change after restart.");
 			Assertions.assertTrue(firstStopped.getBoundAddress().isEmpty());
+			assertHandlerDiagnostics(firstStopped, 32, 128, 0, 0);
 			assertSuccessfulDiscovery(sendDiscovery(secondPort,
 					"second-generation", "{}"), "second-generation");
 		} finally {
@@ -219,22 +226,80 @@ public class McpServerPublicRuntimeTests {
 		}
 
 		Assertions.assertFalse(server.isStarted());
+		McpServerDiagnostics finalSnapshot = server.getDiagnostics();
 		Assertions.assertEquals(McpServerStatus.STOPPED,
-				server.getDiagnostics().getStatus());
+				finalSnapshot.getStatus());
+		assertHandlerDiagnostics(finalSnapshot, 32, 128, 0, 0);
 	}
 
 	@Test
-	public void startedDiagnosticSnapshotRequiresBoundAddress() {
+	public void diagnosticSnapshotValidatesLifecycleHandlerAndStreamTuples() {
 		InetSocketAddress address = new InetSocketAddress(LOOPBACK, 12_345);
 		McpServerDiagnostics started = new DefaultMcpServerDiagnostics(
-				McpServerStatus.STARTED, Optional.of(address));
+				McpServerStatus.STARTED, Optional.of(address), 2, 3, 1, 2, 4, 3);
 
 		Assertions.assertEquals(McpServerStatus.STARTED, started.getStatus());
 		Assertions.assertEquals(address, started.getBoundAddress().orElseThrow());
+		assertDiagnostics(started, 2, 3, 1, 2, 4, 3);
+
+		McpServerDiagnostics residualCleanup = new DefaultMcpServerDiagnostics(
+				McpServerStatus.STOPPED_WITH_RESIDUAL_HANDLERS, Optional.empty(),
+				2, 3, 1, 2, 1, 1);
+		Assertions.assertEquals(McpServerStatus.STOPPED_WITH_RESIDUAL_HANDLERS,
+				residualCleanup.getStatus());
+		assertDiagnostics(residualCleanup, 2, 3, 1, 2, 1, 1);
+
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> new DefaultMcpServerDiagnostics(
-						McpServerStatus.STARTED, Optional.empty()),
+						McpServerStatus.STARTED, Optional.empty(), 2, 3, 0, 0, 0, 0),
 				"A STARTED snapshot without a bound address violates the public contract.");
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> new DefaultMcpServerDiagnostics(
+						McpServerStatus.STOPPED, Optional.of(address), 2, 3, 0, 0, 0, 0));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> new DefaultMcpServerDiagnostics(
+						McpServerStatus.STARTED, Optional.of(address), 0, 3, 0, 0, 0, 0));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> new DefaultMcpServerDiagnostics(
+						McpServerStatus.STARTED, Optional.of(address), 2, 0, 0, 0, 0, 0));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> new DefaultMcpServerDiagnostics(
+						McpServerStatus.STARTED, Optional.of(address), 2, 3, -1, 0, 0, 0));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> new DefaultMcpServerDiagnostics(
+						McpServerStatus.STARTED, Optional.of(address), 2, 3, 3, 0, 0, 0));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> new DefaultMcpServerDiagnostics(
+						McpServerStatus.STARTED, Optional.of(address), 2, 3, 0, -1, 0, 0));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> new DefaultMcpServerDiagnostics(
+						McpServerStatus.STARTED, Optional.of(address), 2, 3, 0, 4, 0, 0));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> new DefaultMcpServerDiagnostics(
+						McpServerStatus.STOPPED, Optional.empty(), 2, 3, 1, 0, 0, 0));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> new DefaultMcpServerDiagnostics(
+						McpServerStatus.STOPPED, Optional.empty(), 2, 3, 0, 1, 0, 0));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> new DefaultMcpServerDiagnostics(
+						McpServerStatus.STARTED, Optional.of(address), 2, 3, 0, 0,
+						-1, 0));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> new DefaultMcpServerDiagnostics(
+						McpServerStatus.STARTED, Optional.of(address), 2, 3, 0, 0,
+						1, -1));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> new DefaultMcpServerDiagnostics(
+						McpServerStatus.STARTED, Optional.of(address), 2, 3, 0, 0,
+						1, 2));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> new DefaultMcpServerDiagnostics(
+						McpServerStatus.STOPPED, Optional.empty(), 2, 3, 0, 0,
+						1, 0));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> new DefaultMcpServerDiagnostics(
+						McpServerStatus.STOPPED, Optional.empty(), 2, 3, 0, 0,
+						1, 1));
 	}
 
 	@Test
@@ -878,6 +943,34 @@ public class McpServerPublicRuntimeTests {
 			Assertions.assertTrue(event.getResourceMethod().isEmpty());
 			Assertions.assertTrue(event.getMarshaledResponse().isEmpty());
 		}
+	}
+
+	private static void assertHandlerDiagnostics(
+			@NonNull McpServerDiagnostics diagnostics,
+			int requestHandlerConcurrency, int requestHandlerQueueCapacity,
+			int activeHandlerExecutions, int queuedRequests) {
+		assertDiagnostics(diagnostics, requestHandlerConcurrency,
+				requestHandlerQueueCapacity, activeHandlerExecutions,
+				queuedRequests, 0, 0);
+	}
+
+	private static void assertDiagnostics(
+			@NonNull McpServerDiagnostics diagnostics,
+			int requestHandlerConcurrency, int requestHandlerQueueCapacity,
+			int activeHandlerExecutions, int queuedRequests,
+			int activeRequestStreams, int activeSubscriptions) {
+		Assertions.assertEquals(Integer.valueOf(requestHandlerConcurrency),
+				diagnostics.getRequestHandlerConcurrency());
+		Assertions.assertEquals(Integer.valueOf(requestHandlerQueueCapacity),
+				diagnostics.getRequestHandlerQueueCapacity());
+		Assertions.assertEquals(Integer.valueOf(activeHandlerExecutions),
+				diagnostics.getActiveHandlerExecutions());
+		Assertions.assertEquals(Integer.valueOf(queuedRequests),
+				diagnostics.getQueuedRequests());
+		Assertions.assertEquals(Integer.valueOf(activeRequestStreams),
+				diagnostics.getActiveRequestStreams());
+		Assertions.assertEquals(Integer.valueOf(activeSubscriptions),
+				diagnostics.getActiveSubscriptions());
 	}
 
 	private static void assertSuccessfulDiscovery(

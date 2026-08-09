@@ -22,9 +22,11 @@ import org.junit.jupiter.api.Test;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.List;
 import java.util.concurrent.AbstractExecutorService;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -34,6 +36,185 @@ import java.util.function.BooleanSupplier;
 
 @NotThreadSafe
 public class McpApplicationHandlerDispatcherTests {
+	@Test
+	public void observer_transitions_are_globally_ordered_and_drained_unlocked()
+			throws Exception {
+		ExecutorService executor = singleThreadExecutor(
+				"mcp-application-observer-order-test");
+		ExecutorService probeExecutor = Executors.newFixedThreadPool(2);
+		AtomicReference<McpApplicationHandlerDispatcher> dispatcherReference =
+				new AtomicReference<>();
+		LockProbingExecutionObserver observer = new LockProbingExecutionObserver(
+				probeExecutor, dispatcherReference);
+		McpApplicationHandlerDispatcher dispatcher =
+				new McpApplicationHandlerDispatcher(1, 1, executor, observer);
+		dispatcherReference.set(dispatcher);
+		CountDownLatch firstEntered = new CountDownLatch(1);
+		CountDownLatch releaseFirst = new CountDownLatch(1);
+		CountDownLatch secondExited = new CountDownLatch(1);
+		AtomicReference<Throwable> failure = new AtomicReference<>();
+		McpApplicationHandlerDispatcher.Ticket first = dispatcher.newTicket(() -> {
+			firstEntered.countDown();
+			releaseFirst.await();
+		}, failure::set);
+		McpApplicationHandlerDispatcher.Ticket second = dispatcher.newTicket(
+				secondExited::countDown, failure::set);
+		McpApplicationHandlerDispatcher.Ticket rejected = dispatcher.newTicket(() -> {
+			throw new AssertionError("Capacity-rejected work ran.");
+		}, failure::set);
+
+		try {
+			Assertions.assertEquals(
+					McpApplicationHandlerDispatcher.Admission.DISPATCHED,
+					dispatcher.admit(first));
+			Assertions.assertTrue(firstEntered.await(3, TimeUnit.SECONDS));
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.Admission.QUEUED,
+					dispatcher.admit(second));
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.Admission.REJECTED,
+					dispatcher.admit(rejected));
+
+			releaseFirst.countDown();
+			Assertions.assertTrue(secondExited.await(3, TimeUnit.SECONDS));
+			awaitCondition(() -> dispatcher.snapshot().activeSlots() == 0);
+			observer.awaitCompletedDrains(5);
+			Assertions.assertNull(observer.probeFailure(),
+					"Observer drain ran while the dispatcher lock was held.");
+			Assertions.assertEquals(List.of(
+					"HandlerExecutionStarted",
+					"HandlerQueued",
+					"HandlerCapacityRejected",
+					"HandlerExecutionFinished",
+					"HandlerDequeued",
+					"HandlerExecutionStarted",
+					"HandlerExecutionFinished"),
+					observer.transitions());
+			Assertions.assertNull(failure.get());
+		} finally {
+			releaseFirst.countDown();
+			stop(dispatcher, executor);
+			probeExecutor.shutdownNow();
+			Assertions.assertTrue(probeExecutor.awaitTermination(
+					3, TimeUnit.SECONDS));
+		}
+	}
+
+	@Test
+	public void queue_removal_is_balanced_and_only_a_full_queue_is_rejected()
+			throws Exception {
+		ExecutorService executor = singleThreadExecutor(
+				"mcp-application-observer-removal-test");
+		RecordingExecutionObserver observer = new RecordingExecutionObserver();
+		McpApplicationHandlerDispatcher dispatcher =
+				new McpApplicationHandlerDispatcher(1, 2, executor, observer);
+		CountDownLatch activeEntered = new CountDownLatch(1);
+		CountDownLatch releaseActive = new CountDownLatch(1);
+		AtomicInteger queuedRuns = new AtomicInteger();
+		AtomicReference<Throwable> failure = new AtomicReference<>();
+		McpApplicationHandlerDispatcher.Ticket active = dispatcher.newTicket(() -> {
+			activeEntered.countDown();
+			releaseActive.await();
+		}, failure::set);
+		McpApplicationHandlerDispatcher.Ticket canceled = dispatcher.newTicket(
+				queuedRuns::incrementAndGet, failure::set);
+		McpApplicationHandlerDispatcher.Ticket stopped = dispatcher.newTicket(
+				queuedRuns::incrementAndGet, failure::set);
+
+		try {
+			Assertions.assertEquals(
+					McpApplicationHandlerDispatcher.Admission.DISPATCHED,
+					dispatcher.admit(active));
+			Assertions.assertTrue(activeEntered.await(3, TimeUnit.SECONDS));
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.Admission.QUEUED,
+					dispatcher.admit(canceled));
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.Admission.QUEUED,
+					dispatcher.admit(stopped));
+			Assertions.assertTrue(dispatcher.cancelBeforeDispatch(canceled));
+			Assertions.assertEquals(List.of(stopped), dispatcher.stopAccepting());
+
+			McpApplicationHandlerDispatcher.Ticket afterStop = dispatcher.newTicket(
+					queuedRuns::incrementAndGet, failure::set);
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.Admission.CLOSED,
+					dispatcher.admit(afterStop));
+			McpApplicationHandlerDispatcher.Ticket canceledBeforeAdmission =
+					dispatcher.newTicket(queuedRuns::incrementAndGet, failure::set);
+			Assertions.assertTrue(dispatcher.cancelBeforeDispatch(
+					canceledBeforeAdmission));
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.Admission.CANCELED,
+					dispatcher.admit(canceledBeforeAdmission));
+
+			releaseActive.countDown();
+			awaitCondition(() -> dispatcher.snapshot().activeSlots() == 0);
+			Assertions.assertEquals(List.of(
+					"HandlerExecutionStarted",
+					"HandlerQueued",
+					"HandlerQueued",
+					"HandlerDequeued",
+					"HandlerDequeued",
+					"HandlerExecutionFinished"),
+					observer.transitions());
+			Assertions.assertEquals(0, queuedRuns.get());
+			Assertions.assertNull(failure.get());
+		} finally {
+			releaseActive.countDown();
+			stop(dispatcher, executor);
+		}
+	}
+
+	@Test
+	public void observer_failures_and_drain_reentrancy_are_contained()
+			throws Exception {
+		ExecutorService executor = singleThreadExecutor(
+				"mcp-application-observer-failure-test");
+		AtomicReference<McpApplicationHandlerDispatcher> dispatcherReference =
+				new AtomicReference<>();
+		FailingReentrantExecutionObserver observer =
+				new FailingReentrantExecutionObserver(dispatcherReference);
+		McpApplicationHandlerDispatcher dispatcher =
+				new McpApplicationHandlerDispatcher(1, 1, executor, observer);
+		dispatcherReference.set(dispatcher);
+		CountDownLatch activeEntered = new CountDownLatch(1);
+		CountDownLatch releaseActive = new CountDownLatch(1);
+		AtomicInteger queuedRuns = new AtomicInteger();
+		AtomicReference<Throwable> workFailure = new AtomicReference<>();
+		McpApplicationHandlerDispatcher.Ticket active = dispatcher.newTicket(() -> {
+			activeEntered.countDown();
+			releaseActive.await();
+		}, workFailure::set);
+		McpApplicationHandlerDispatcher.Ticket canceled = dispatcher.newTicket(
+				queuedRuns::incrementAndGet, workFailure::set);
+		McpApplicationHandlerDispatcher.Ticket rejected = dispatcher.newTicket(
+				queuedRuns::incrementAndGet, workFailure::set);
+
+		try {
+			Assertions.assertEquals(
+					McpApplicationHandlerDispatcher.Admission.DISPATCHED,
+					dispatcher.admit(active));
+			Assertions.assertTrue(activeEntered.await(3, TimeUnit.SECONDS));
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.Admission.QUEUED,
+					dispatcher.admit(canceled));
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.Admission.REJECTED,
+					dispatcher.admit(rejected));
+			Assertions.assertTrue(dispatcher.cancelBeforeDispatch(canceled));
+			releaseActive.countDown();
+			awaitCondition(() -> dispatcher.snapshot().activeSlots() == 0);
+			awaitCondition(() -> observer.successfulDrainReentries() == 5);
+
+			Assertions.assertEquals(5, observer.recordAttempts());
+			Assertions.assertEquals(5, observer.successfulDrainReentries());
+			Assertions.assertEquals(0, queuedRuns.get());
+			Assertions.assertNull(workFailure.get());
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.TicketState.EXITED,
+					active.state());
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.TicketState.CANCELED,
+					canceled.state());
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.TicketState.REJECTED,
+					rejected.state());
+		} finally {
+			releaseActive.countDown();
+			stop(dispatcher, executor);
+		}
+	}
+
 	@Test
 	public void slot_and_queue_bounds_are_exact_and_recover_after_work_exits()
 			throws Exception {
@@ -297,8 +478,9 @@ public class McpApplicationHandlerDispatcherTests {
 	public void submission_failure_releases_the_slot_and_promotes_following_work()
 			throws Exception {
 		RejectSecondSubmissionExecutor executor = new RejectSecondSubmissionExecutor();
+		RecordingExecutionObserver observer = new RecordingExecutionObserver();
 		McpApplicationHandlerDispatcher dispatcher =
-				new McpApplicationHandlerDispatcher(1, 2, executor);
+				new McpApplicationHandlerDispatcher(1, 2, executor, observer);
 		CountDownLatch firstEntered = new CountDownLatch(1);
 		CountDownLatch releaseFirst = new CountDownLatch(1);
 		CountDownLatch thirdRan = new CountDownLatch(1);
@@ -335,6 +517,18 @@ public class McpApplicationHandlerDispatcherTests {
 			Assertions.assertEquals(3, executor.submissionCount());
 			Assertions.assertEquals(1, dispatcher.snapshot().maximumObservedActiveSlots());
 			Assertions.assertEquals(2, dispatcher.snapshot().maximumObservedQueueDepth());
+			Assertions.assertEquals(List.of(
+					"HandlerExecutionStarted",
+					"HandlerQueued",
+					"HandlerQueued",
+					"HandlerExecutionFinished",
+					"HandlerDequeued",
+					"HandlerExecutionStarted",
+					"HandlerExecutionFinished",
+					"HandlerDequeued",
+					"HandlerExecutionStarted",
+					"HandlerExecutionFinished"),
+					observer.transitions());
 			Assertions.assertNull(unexpectedFailure.get());
 		} finally {
 			releaseFirst.countDown();
@@ -402,6 +596,9 @@ public class McpApplicationHandlerDispatcherTests {
 			Assertions.assertThrows(NullPointerException.class,
 					() -> new McpApplicationHandlerDispatcher(1, 1, null));
 			Assertions.assertThrows(NullPointerException.class,
+					() -> new McpApplicationHandlerDispatcher(
+							1, 1, executor, null));
+			Assertions.assertThrows(NullPointerException.class,
 					() -> dispatcher.newTicket(null, failure -> {
 					}));
 			Assertions.assertThrows(NullPointerException.class,
@@ -453,6 +650,167 @@ public class McpApplicationHandlerDispatcherTests {
 			Thread.sleep(10L);
 
 		Assertions.assertTrue(condition.getAsBoolean(), "Condition did not become true in time.");
+	}
+
+	private static class RecordingExecutionObserver
+			implements McpApplicationExecutionObserver {
+		private final List<String> transitions;
+
+		private RecordingExecutionObserver() {
+			this.transitions = new CopyOnWriteArrayList<>();
+		}
+
+		@Override
+		public void beginDeferral() {
+		}
+
+		@Override
+		public void recordHandlerExecutionStarted() {
+			this.transitions.add("HandlerExecutionStarted");
+		}
+
+		@Override
+		public void recordHandlerExecutionFinished() {
+			this.transitions.add("HandlerExecutionFinished");
+		}
+
+		@Override
+		public void recordHandlerQueued() {
+			this.transitions.add("HandlerQueued");
+		}
+
+		@Override
+		public void recordHandlerDequeued() {
+			this.transitions.add("HandlerDequeued");
+		}
+
+		@Override
+		public void recordHandlerCapacityRejected() {
+			this.transitions.add("HandlerCapacityRejected");
+		}
+
+		@Override
+		public void drain() {
+		}
+
+		@Override
+		public void endDeferral() {
+		}
+
+		List<String> transitions() {
+			return List.copyOf(this.transitions);
+		}
+	}
+
+	private static final class LockProbingExecutionObserver
+			extends RecordingExecutionObserver {
+		private final ExecutorService probeExecutor;
+		private final AtomicReference<McpApplicationHandlerDispatcher>
+				dispatcherReference;
+		private final AtomicInteger completedDrains;
+		private final AtomicReference<Throwable> probeFailure;
+
+		private LockProbingExecutionObserver(
+				ExecutorService probeExecutor,
+				AtomicReference<McpApplicationHandlerDispatcher>
+						dispatcherReference) {
+			this.probeExecutor = probeExecutor;
+			this.dispatcherReference = dispatcherReference;
+			this.completedDrains = new AtomicInteger();
+			this.probeFailure = new AtomicReference<>();
+		}
+
+		@Override
+		public void drain() {
+			try {
+				Future<McpApplicationHandlerDispatcher.Snapshot> probe =
+						this.probeExecutor.submit(() ->
+								this.dispatcherReference.get().snapshot());
+				probe.get(1, TimeUnit.SECONDS);
+			} catch (Throwable throwable) {
+				this.probeFailure.compareAndSet(null, throwable);
+			} finally {
+				this.completedDrains.incrementAndGet();
+			}
+		}
+
+		private void awaitCompletedDrains(int expectedCount)
+				throws InterruptedException {
+			awaitCondition(() -> this.completedDrains.get() == expectedCount);
+		}
+
+		private Throwable probeFailure() {
+			return this.probeFailure.get();
+		}
+	}
+
+	private static final class FailingReentrantExecutionObserver
+			implements McpApplicationExecutionObserver {
+		private final AtomicReference<McpApplicationHandlerDispatcher>
+				dispatcherReference;
+		private final AtomicInteger recordAttempts;
+		private final AtomicInteger successfulDrainReentries;
+
+		private FailingReentrantExecutionObserver(
+				AtomicReference<McpApplicationHandlerDispatcher>
+						dispatcherReference) {
+			this.dispatcherReference = dispatcherReference;
+			this.recordAttempts = new AtomicInteger();
+			this.successfulDrainReentries = new AtomicInteger();
+		}
+
+		@Override
+		public void beginDeferral() {
+		}
+
+		@Override
+		public void recordHandlerExecutionStarted() {
+			failRecord();
+		}
+
+		@Override
+		public void recordHandlerExecutionFinished() {
+			failRecord();
+		}
+
+		@Override
+		public void recordHandlerQueued() {
+			failRecord();
+		}
+
+		@Override
+		public void recordHandlerDequeued() {
+			failRecord();
+		}
+
+		@Override
+		public void recordHandlerCapacityRejected() {
+			failRecord();
+		}
+
+		@Override
+		public void drain() {
+			this.dispatcherReference.get().snapshot();
+			this.successfulDrainReentries.incrementAndGet();
+			throw new IllegalStateException("Synthetic observer drain failure.");
+		}
+
+		@Override
+		public void endDeferral() {
+		}
+
+		private void failRecord() {
+			this.recordAttempts.incrementAndGet();
+			throw new IllegalStateException("Synthetic observer record failure.");
+		}
+
+		private int recordAttempts() {
+			return this.recordAttempts.get();
+		}
+
+		private int successfulDrainReentries() {
+			return this.successfulDrainReentries.get();
+		}
 	}
 
 	private static final class ManualExecutorService extends AbstractExecutorService {

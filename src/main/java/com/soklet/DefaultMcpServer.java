@@ -17,10 +17,12 @@
 package com.soklet;
 
 import com.soklet.internal.mcp.protocol.McpJsonLimits;
+import com.soklet.internal.mcp.protocol.McpApplicationExecutionObserver;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.AdmissionInput;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CachePlan;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CacheScope;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.DiagnosticsState;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.EndpointPlan;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.HandlerEntryGuard;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.PromptArgumentPlan;
@@ -58,6 +60,7 @@ import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -65,6 +68,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.ExecutorService;
@@ -129,6 +133,8 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	private final DefaultMcpSecurityControls securityControls;
 	@NonNull
+	private final McpMetricEventDelivery mcpMetricEventDelivery;
+	@NonNull
 	private final McpServerRuntimeBridge runtimeBridge;
 	@NonNull
 	private volatile LifecycleObserver lifecycleObserver;
@@ -185,6 +191,7 @@ final class DefaultMcpServer implements McpServer {
 		this.protectionConfig = protectionConfig;
 		this.securityControls = new DefaultMcpSecurityControls(protectionConfig,
 				traceCorrelationKey);
+		this.mcpMetricEventDelivery = new McpMetricEventDelivery();
 		requireNonNull(unknownMirroredHeaderPolicy);
 		boolean corsAuthorizerExplicitlyConfigured = configuredCorsAuthorizer != null;
 		this.corsAuthorizer = configuredCorsAuthorizer == null
@@ -219,7 +226,56 @@ final class DefaultMcpServer implements McpServer {
 				this.streamQueueCapacity, this.writeTimeout,
 				this.keepAliveInterval, this.shutdownTimeout,
 				this.maximumSubscriptionsPerPrincipal,
-				this.maximumSubscriptionDuration);
+				this.maximumSubscriptionDuration,
+				applicationExecutionObserver());
+	}
+
+	@NonNull
+	private McpApplicationExecutionObserver applicationExecutionObserver() {
+		return new McpApplicationExecutionObserver() {
+			@Override
+			public void beginDeferral() {
+				mcpMetricEventDelivery.beginDeferral();
+			}
+
+			@Override
+			public void recordHandlerExecutionStarted() {
+				mcpMetricEventDelivery.record(
+						new McpMetricsEvent.HandlerExecutionStarted());
+			}
+
+			@Override
+			public void recordHandlerExecutionFinished() {
+				mcpMetricEventDelivery.record(
+						new McpMetricsEvent.HandlerExecutionFinished());
+			}
+
+			@Override
+			public void recordHandlerQueued() {
+				mcpMetricEventDelivery.record(new McpMetricsEvent.HandlerQueued());
+			}
+
+			@Override
+			public void recordHandlerDequeued() {
+				mcpMetricEventDelivery.record(new McpMetricsEvent.HandlerDequeued());
+			}
+
+			@Override
+			public void recordHandlerCapacityRejected() {
+				mcpMetricEventDelivery.record(
+						new McpMetricsEvent.HandlerCapacityRejected());
+			}
+
+			@Override
+			public void drain() {
+				mcpMetricEventDelivery.drain();
+			}
+
+			@Override
+			public void endDeferral() {
+				mcpMetricEventDelivery.endDeferral();
+			}
+		};
 	}
 
 	@NonNull
@@ -323,10 +379,26 @@ final class DefaultMcpServer implements McpServer {
 
 	@Override
 	public void start() {
-		startForSoklet(this::publishServerStoppedMetric);
+		beginMcpMetricsDeferral();
+		try {
+			startForSoklet(this::publishServerStoppedMetric);
+		} finally {
+			endMcpMetricsDeferral();
+		}
 	}
 
 	void startForSoklet(
+			@NonNull Consumer<@NonNull McpShutdownOutcome>
+					stoppedGenerationConsumer) {
+		beginMcpMetricsDeferral();
+		try {
+			startForSokletWhileMetricsDeferred(stoppedGenerationConsumer);
+		} finally {
+			endMcpMetricsDeferral();
+		}
+	}
+
+	private void startForSokletWhileMetricsDeferred(
 			@NonNull Consumer<@NonNull McpShutdownOutcome>
 					stoppedGenerationConsumer) {
 		requireNonNull(stoppedGenerationConsumer);
@@ -380,13 +452,28 @@ final class DefaultMcpServer implements McpServer {
 
 	@Override
 	public void stop() {
-		McpServerStopResult stopResult = stopForSoklet();
-		if (stopResult.listenerGenerationStopped())
-			publishServerStoppedMetric(stopResult.shutdownOutcome());
+		beginMcpMetricsDeferral();
+		try {
+			McpServerStopResult stopResult = stopForSoklet();
+			if (stopResult.listenerGenerationStopped())
+				publishServerStoppedMetric(stopResult.shutdownOutcome());
+		} finally {
+			endMcpMetricsDeferral();
+		}
 	}
 
 	@NonNull
 	McpServerStopResult stopForSoklet() {
+		beginMcpMetricsDeferral();
+		try {
+			return stopForSokletWhileMetricsDeferred();
+		} finally {
+			endMcpMetricsDeferral();
+		}
+	}
+
+	@NonNull
+	private McpServerStopResult stopForSokletWhileMetricsDeferred() {
 		McpShutdownOutcome shutdownOutcome;
 		boolean listenerGenerationStopped = false;
 		synchronized (this.lifecycleLock) {
@@ -437,8 +524,17 @@ final class DefaultMcpServer implements McpServer {
 
 	void publishServerStoppedMetric(
 			@NonNull McpShutdownOutcome shutdownOutcome) {
-		safelyRecordMcpServerMetrics(new McpMetricsEvent.ServerStopped(
-				requireNonNull(shutdownOutcome)));
+		this.mcpMetricEventDelivery.recordAndDrain(
+				new McpMetricsEvent.ServerStopped(
+						requireNonNull(shutdownOutcome)));
+	}
+
+	void beginMcpMetricsDeferral() {
+		this.mcpMetricEventDelivery.beginDeferral();
+	}
+
+	void endMcpMetricsDeferral() {
+		this.mcpMetricEventDelivery.endDeferral();
 	}
 
 	boolean requiresStop() {
@@ -563,14 +659,21 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	public McpServerDiagnostics getDiagnostics() {
 		synchronized (this.lifecycleLock) {
-			RuntimeState runtimeState = this.runtimeBridge.getRuntimeState();
+			DiagnosticsState runtimeState = this.runtimeBridge
+					.getDiagnosticsState();
 			McpServerStatus status = runtimeState.started()
 					? McpServerStatus.STARTED
 					: runtimeState.residualHandlers()
 							? McpServerStatus.STOPPED_WITH_RESIDUAL_HANDLERS
 							: McpServerStatus.STOPPED;
 			return new DefaultMcpServerDiagnostics(status,
-					runtimeState.boundAddress());
+					runtimeState.boundAddress(),
+					runtimeState.requestHandlerConcurrency(),
+					runtimeState.requestHandlerQueueCapacity(),
+					runtimeState.activeHandlerExecutions(),
+					runtimeState.queuedRequests(),
+					runtimeState.activeRequestStreams(),
+					runtimeState.activeSubscriptions());
 		}
 	}
 
@@ -1569,6 +1672,101 @@ final class DefaultMcpServer implements McpServer {
 			// Failure reporting must not interfere with runtime cleanup.
 		}
 	}
+
+	/**
+	 * Serializes handler-accounting and listener-stop metric delivery while
+	 * permitting nested runtime, server, and Soklet lifecycle deferral.
+	 */
+	@ThreadSafe
+	private final class McpMetricEventDelivery {
+		@NonNull
+		private final Object lock;
+		@NonNull
+		private final Queue<@NonNull McpMetricsEvent> pendingEvents;
+		private int deferralDepth;
+		private boolean delivering;
+		private @Nullable Thread deliveryThread;
+
+		private McpMetricEventDelivery() {
+			this.lock = new Object();
+			this.pendingEvents = new ArrayDeque<>();
+		}
+
+		private void beginDeferral() {
+			boolean interrupted = false;
+			Thread currentThread = Thread.currentThread();
+			synchronized (this.lock) {
+				this.deferralDepth++;
+				while (this.delivering && this.deliveryThread != currentThread) {
+					try {
+						this.lock.wait();
+					} catch (InterruptedException exception) {
+						interrupted = true;
+					}
+				}
+			}
+			if (interrupted)
+				currentThread.interrupt();
+		}
+
+		private void record(@NonNull McpMetricsEvent event) {
+			synchronized (this.lock) {
+				this.pendingEvents.add(requireNonNull(event));
+			}
+		}
+
+		private void recordAndDrain(@NonNull McpMetricsEvent event) {
+			record(event);
+			drain();
+		}
+
+		private void drain() {
+			Thread currentThread = Thread.currentThread();
+			synchronized (this.lock) {
+				if (this.deferralDepth != 0 || this.delivering
+						|| this.pendingEvents.isEmpty())
+					return;
+				this.delivering = true;
+				this.deliveryThread = currentThread;
+			}
+
+			try {
+				while (true) {
+					McpMetricsEvent event;
+					synchronized (this.lock) {
+						if (this.deferralDepth != 0
+								|| this.pendingEvents.isEmpty()) {
+							finishDeliveryLocked();
+							return;
+						}
+						event = this.pendingEvents.remove();
+					}
+					safelyRecordMcpServerMetrics(event);
+				}
+			} finally {
+				synchronized (this.lock) {
+					if (this.delivering && this.deliveryThread == currentThread)
+						finishDeliveryLocked();
+				}
+			}
+		}
+
+		private void endDeferral() {
+			synchronized (this.lock) {
+				if (this.deferralDepth == 0)
+					throw new IllegalStateException(
+							"MCP metric delivery deferral is not active.");
+				this.deferralDepth--;
+			}
+			drain();
+		}
+
+		private void finishDeliveryLocked() {
+			this.delivering = false;
+			this.deliveryThread = null;
+			this.lock.notifyAll();
+		}
+	}
 }
 
 /**
@@ -1591,7 +1789,10 @@ record McpServerStopResult(@NonNull McpShutdownOutcome shutdownOutcome,
  */
 @ThreadSafe
 record DefaultMcpServerDiagnostics(@NonNull McpServerStatus status,
-		@NonNull Optional<@NonNull InetSocketAddress> boundAddress)
+		@NonNull Optional<@NonNull InetSocketAddress> boundAddress,
+		int requestHandlerConcurrency, int requestHandlerQueueCapacity,
+		int activeHandlerExecutions, int queuedRequests,
+		int activeRequestStreams, int activeSubscriptions)
 		implements McpServerDiagnostics {
 	DefaultMcpServerDiagnostics {
 		requireNonNull(status);
@@ -1600,6 +1801,38 @@ record DefaultMcpServerDiagnostics(@NonNull McpServerStatus status,
 		if ((status == McpServerStatus.STARTED) != boundAddress.isPresent())
 			throw new IllegalArgumentException(
 					"A STARTED MCP server snapshot must have exactly one bound address.");
+		if (requestHandlerConcurrency < 1)
+			throw new IllegalArgumentException(
+					"Request-handler concurrency must be positive.");
+		if (requestHandlerQueueCapacity < 1)
+			throw new IllegalArgumentException(
+					"Request-handler queue capacity must be positive.");
+		if (activeHandlerExecutions < 0
+				|| activeHandlerExecutions > requestHandlerConcurrency)
+			throw new IllegalArgumentException(
+					"Active handler executions must be between zero and the configured concurrency.");
+		if (queuedRequests < 0 || queuedRequests > requestHandlerQueueCapacity)
+			throw new IllegalArgumentException(
+					"Queued requests must be between zero and the configured queue capacity.");
+		if (status == McpServerStatus.STOPPED && activeHandlerExecutions != 0)
+			throw new IllegalArgumentException(
+					"A non-residual stopped MCP server snapshot cannot have active handler executions.");
+		if (status == McpServerStatus.STOPPED && queuedRequests != 0)
+			throw new IllegalArgumentException(
+					"A non-residual stopped MCP server snapshot cannot have queued requests.");
+		if (activeRequestStreams < 0)
+			throw new IllegalArgumentException(
+					"Active request streams must be nonnegative.");
+		if (activeSubscriptions < 0
+				|| activeSubscriptions > activeRequestStreams)
+			throw new IllegalArgumentException(
+					"Active subscriptions must be between zero and the active request-stream count.");
+		if (status == McpServerStatus.STOPPED && activeRequestStreams != 0)
+			throw new IllegalArgumentException(
+					"A non-residual stopped MCP server snapshot cannot have active request streams.");
+		if (status == McpServerStatus.STOPPED && activeSubscriptions != 0)
+			throw new IllegalArgumentException(
+					"A non-residual stopped MCP server snapshot cannot have active subscriptions.");
 	}
 
 	@Override
@@ -1612,6 +1845,42 @@ record DefaultMcpServerDiagnostics(@NonNull McpServerStatus status,
 	@NonNull
 	public Optional<@NonNull InetSocketAddress> getBoundAddress() {
 		return this.boundAddress;
+	}
+
+	@Override
+	@NonNull
+	public Integer getRequestHandlerConcurrency() {
+		return this.requestHandlerConcurrency;
+	}
+
+	@Override
+	@NonNull
+	public Integer getRequestHandlerQueueCapacity() {
+		return this.requestHandlerQueueCapacity;
+	}
+
+	@Override
+	@NonNull
+	public Integer getActiveHandlerExecutions() {
+		return this.activeHandlerExecutions;
+	}
+
+	@Override
+	@NonNull
+	public Integer getQueuedRequests() {
+		return this.queuedRequests;
+	}
+
+	@Override
+	@NonNull
+	public Integer getActiveRequestStreams() {
+		return this.activeRequestStreams;
+	}
+
+	@Override
+	@NonNull
+	public Integer getActiveSubscriptions() {
+		return this.activeSubscriptions;
 	}
 }
 

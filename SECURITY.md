@@ -135,13 +135,67 @@ retries are forced to private, zero-TTL cache policy; the HTTP transport remains
 `Cache-Control: no-store`.
 
 Progress reporting, cooperative cancelation, and resource-subscription delivery
-are implemented. The first Phase 6 shutdown-observability vertical is also
-implemented: its only metric dimension is the fixed
-`McpShutdownOutcome`-derived `clean`/`residual_handlers` label, and it records no
-endpoint, method, request, principal, URI, header, trace, baggage, state, or
-application-controlled value. This is bounded-label evidence, not completion
-of the broader telemetry-redaction gate. Operational trace correlation,
-remaining comprehensive MCP telemetry, and MCP simulation are still Phase 6
-work; their public descriptors must not be interpreted as active security
+are implemented. Four bounded Phase 6 verticals are also implemented: shutdown
+observation, handler-capacity metrics, handler diagnostics, and live
+stream/subscription diagnostics. Shutdown metrics have only the fixed
+`McpShutdownOutcome`-derived
+`clean`/`residual_handlers` label. The exact handler-capacity families—
+`soklet_mcp_handler_executions_active`, `soklet_mcp_handler_queue_depth`, and
+`soklet_mcp_handler_capacity_rejections_total`—are label-free. They contain
+only server-wide counts and no endpoint, method, request, principal, URI,
+header, trace, baggage, state, or application-controlled value.
+
+The public aggregate represents these nonnegative counts with boxed `Long`
+snapshot getters and builder methods. Reset preserves the live active-handler
+and queue-depth gauges while clearing cumulative queue-full rejections. A
+residual handler remains visible as active after bounded shutdown until it
+actually exits; queued deadline, disconnect, cancelation, and shutdown removal
+are dequeues, not capacity rejections. These semantics prevent reset or late
+exit from manufacturing a negative gauge.
+
+`McpServerDiagnostics` now provides six boxed `@NonNull Integer` values from
+`getRequestHandlerConcurrency()`, `getRequestHandlerQueueCapacity()`,
+`getActiveHandlerExecutions()`, `getQueuedRequests()`,
+`getActiveRequestStreams()`, and `getActiveSubscriptions()` for the configured
+handler bounds, occupied handler slots, physically queued requests, open
+request-scoped SSE streams, and their resource-subscription subset. They are
+server-wide counts with no endpoint, method, identity, request, header, URI,
+trace, state, or application-controlled label or text. A subscription enters
+both stream counts once its acknowledgment stream opens; the values do not
+claim client receipt, and
+`0 <= activeSubscriptions <= activeRequestStreams`.
+
+Lifecycle status, bound address, configured bounds, handler counts, and the
+paired stream/subscription counts are captured atomically by the runtime;
+retained snapshots do not change. Ordinary, subscription-only, and combined
+open states produce `1/0`, `1/1`, and `2/1`. Disconnect cleanup moves `2/1` to
+`1/0` and then `0/0`. Completed clean and residual-handler stops both expose
+stream pair `0/0`, even while a residual handler remains active until actual
+exit. During internal `FAILED` cleanup, public residual status may transiently
+retain `1/1`; completed cleanup exposes `STOPPED` with `0/0`. These diagnostics
+do not expose queue contents, rejection causes, stream contents, or
+subscription filters.
+
+The two live-stream fields add no metric family, event type, label, or other
+observation dimension, and collector reset cannot alter them.
+
+Handler transitions and `McpMetricsEvent.ServerStopped` alone use the shared
+deferred FIFO, which delivers callbacks after dispatcher, request, runtime,
+server, and Soklet lifecycle locks are released and contains collector
+failures. This is bounded-cardinality and callback-containment evidence, not
+completion of the broader telemetry-redaction gate. The exact four remaining
+planned diagnostics are:
+
+- `getProtectionMode()`, returning `McpProtectionMode`;
+- `isApplicationRequestStateProtectorConfigured()`, returning `Boolean`;
+- `getProtectionKeyRingFingerprint()`, returning
+  `Optional<McpProtectionKeyRingFingerprint>`; and
+- `getTraceCorrelationConfigurationFingerprint()`, returning
+  `Optional<McpTraceCorrelationConfigurationFingerprint>`.
+
+They and the remaining telemetry/event hierarchy remain provisional,
+unimplemented, and unfrozen. Operational trace correlation, MCP simulation,
+sustained/fuzz gates, CI/provenance work, and Phase 6 API review/freeze remain
+open; reserved public descriptors must not be interpreted as active security
 controls until the corresponding production behavior is implemented and
 documented.
