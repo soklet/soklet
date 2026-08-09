@@ -9,10 +9,12 @@ the zero-runtime-dependency `com.soklet:soklet` artifact; there is no separate
 This guide describes the implemented, locally frozen Phase 4 and Phase 5
 surfaces, including multi-round-trip request state, progress/cancelation,
 resource subscriptions, deterministic termination, cross-instance state, and
-residual shutdown, plus the five completed bounded Phase 6 shutdown, handler-
-capacity, handler-diagnostics, stream/subscription-diagnostics, and
-protection/trace-diagnostics verticals in the current `3.6.0-SNAPSHOT`. It is
-development documentation, not a release or final conformance claim.
+residual shutdown, plus seven completed bounded Phase 6 verticals covering
+shutdown, handler capacity, handler diagnostics, stream/subscription
+diagnostics, protection/trace diagnostics, serialized semantic-event delivery,
+and the bounded pre-admission metric quartet in the current
+`3.6.0-SNAPSHOT`. It is development documentation, not a release or final
+conformance claim.
 Compile-checked programmatic and annotation-driven applications live outside
 this source repository in the project-root `mcp/examples/phase-4` workspace.
 
@@ -32,10 +34,10 @@ this source repository in the project-root `mcp/examples/phase-4` workspace.
 | Policy | Host and Origin checks, application admission, optional request limiting, mandatory fallback tool limiting for tool-bearing servers, bounded execution, and shared Soklet observation hosts |
 | Schema | Closed, Java-first Soklet MCP Tool Schema Profile 1; no public hand-authored schema registration |
 
-The remaining MCP telemetry/event hierarchy, operational trace correlation,
-and MCP simulation are not implemented yet. Public descriptors already
-reserved for that remaining Phase 6 work are behaviorally neutral and do not
-cause Soklet to advertise those capabilities.
+The remaining MCP transport-event trio, aggregate projections, operational
+trace correlation, and MCP simulation are not implemented yet. Public
+descriptors already reserved for that remaining Phase 6 work are behaviorally
+neutral and do not cause Soklet to advertise those capabilities.
 
 ## Server and request model
 
@@ -768,8 +770,8 @@ used as metric labels or emitted per request. The diagnostics vertical adds no
 metric family, event type, wire field, label, or other observation dimension,
 and collector reset cannot alter it.
 
-The sixth bounded Phase 6 vertical uses one context-aware, server-wide deferred
-FIFO for all 16 semantic event variants currently produced by the runtime:
+The sixth bounded Phase 6 vertical established one context-aware, server-wide
+deferred FIFO for the first 16 semantic event variants produced by the runtime:
 `HandlerExecutionStarted`, `HandlerExecutionFinished`, `HandlerQueued`,
 `HandlerDequeued`, `HandlerCapacityRejected`, `ServerStopped`, the nine
 admitted `RequestStarted`, `RequestFinished`, `RequestStreamOpened`,
@@ -781,29 +783,52 @@ does not duplicate it. Direct restart orders the old generation's
 `ServerStopped` before the new generation's `ServerStarted`; managed startup
 rollback orders that generation's `ServerStarted` before its `ServerStopped`.
 
+The seventh vertical extends that FIFO to 20 produced variants with
+`RequestAccepted`, `RequestRejected`, `ProtocolError`, and
+`UnknownMirroredHeader`. `RequestAccepted` means successful submission to the
+bounded protocol processor. If executor submission rejects, Soklet discards
+the provisional accepted entry and emits only `RequestRejected` before the
+fixed empty HTTP 503 response. A complete malformed request records
+`RequestAccepted`, `ProtocolError(-32700)`, then `RequestRejected`. Strict
+unknown-header and unresolved-method paths record `RequestAccepted`, one
+`UnknownMirroredHeader` per occurrence, their fixed `ProtocolError`, then
+`RequestRejected`. Application-owned rejection codes never become
+`ProtocolError` dimensions.
+
+Produced protocol-error metrics use exactly the fixed codes `-32700`,
+`-32600`, `-32601`, `-32602`, `-32603`, `-32020`, `-32021`, `-32022`,
+`-31999`, and `-31998`. Recording follows successful response encoding. A
+streamed error is provisional until its terminal message is accepted; failed
+terminal reservation discards it. Unknown-header events contain only the
+registered endpoint path and a bounded recognized method or
+`<unrecognized>`. They never contain the header name, value, or a raw
+unrecognized method, and their per-occurrence count is independent of the
+optional name-diagnostic quota.
+
 Collector callbacks are serialized and drain after the relevant dispatcher,
 exchange terminal/execution-boundary, progress-reporter, stream-transition,
 request-control, runtime, MCP-server, and Soklet lifecycle locks or monitors
-are released. Request-scoped collector failures retain the originating
-`Request` for correct failure attribution and are contained without stalling
-the FIFO; server-lifecycle failures remain request-free. While delivery is
-pending, an entry may therefore transiently retain its originating `Request`
-only for the bounded delivery and failure-logging step. That context is never
-rendered or promoted to a metric dimension. The ordering guarantee is FIFO
-metric record/enqueue order; it is not a universal cross-thread causal or per-
-request total-order guarantee for independently racing producers.
+are released. Nonwaiting request-transition deferral preserves reentrant
+collector liveness without moving callbacks under those locks. The four
+pre-admission variants are request-free; only a fixed `ProtocolError` produced
+after admitted request observation carries the exact `McpRequestContext` for
+failure attribution. That context may be retained only for bounded pending
+delivery and failure logging, is never rendered, and is not a metric
+dimension. Collector failures are contained without stalling the FIFO. The
+ordering guarantee is FIFO metric record/enqueue order; it is not a universal
+cross-thread causal or per-request total-order guarantee for independently
+racing producers.
 
 The default collector separately exposes shutdown counts as an immutable,
 enum-ordered `Map<McpShutdownOutcome, Long>`. It omits zero outcomes, returns
 to an empty map after reset, and renders exactly
 `soklet_mcp_shutdowns_total{outcome="clean"|"residual_handlers"}` in
-Prometheus/OpenMetrics text. `ConnectionAccepted`, `ConnectionRejected`,
-`RequestAccepted`, `RequestRejected`, `ProtocolError`,
-`UnknownMirroredHeader`, and `TransportFailure` remain uninstrumented. The
-aggregate families, trace emission and token work, simulator integration,
-broader redaction, sustained and release gates, and Phase 6 review/freeze also
-remain open. This vertical adds no public API, snapshot field, aggregate
-family, label, event variant, or wire dimension.
+Prometheus/OpenMetrics text. Only `ConnectionAccepted`, `ConnectionRejected`,
+and `TransportFailure` remain uninstrumented. The aggregate families, trace
+emission and token work, simulator integration, broader redaction, sustained
+and release gates, and Phase 6 review/freeze also remain open. This seventh
+vertical adds no public API, snapshot field, aggregate family, label, event
+variant, or wire dimension.
 
 `McpServer.stop()` is bounded by the configured shutdown timeout. If an
 application-supplied MCP request-processing execution remains afterward,
@@ -857,9 +882,9 @@ the harness to phase 5. A fresh 39-scenario development-candidate verify passes
 all profiles, validates all 39 goldens, and records no bad outcome, standard-
 error output, or non-clean fixture exit.
 
-The focused Phase 6 semantic-event delivery run passes 96 tests with zero
+The broader focused Phase 6 union passes 158 tests with zero
 failures, zero errors, and zero skips. Final exact-source full repository runs
-on JDK 21 and JDK 26 each report 1,436 tests, zero failures, zero errors, and
+on JDK 21 and JDK 26 each report 1,443 tests, zero failures, zero errors, and
 four skips. The JDK 21 enforced static-analysis profile is green without
 counting advisory warnings; SpotBugs reports zero `BugInstance` values and zero
 errors. Exact
@@ -870,10 +895,10 @@ report are green using offline-link resolution. All 167 API-sketch sources
 compile for Java 17 and pass Javadoc doclint on JDK 26. All 104 files from
 pinned JSON Schema commit `0c7b65dc16dd8eaa7bd83e21099c76610c3b246a`
 validate. These are local development results, not release-candidate
-provenance. The remaining
-Phase 6 aggregate families, the seven uninstrumented event variants, broader
-trace emission/token and redaction work, simulator integration, sustained and
-fuzz gates, broader CI/provenance and release-candidate work, and Phase 6 API
-review/freeze remain open. Phase 6 remains provisional and unfrozen.
+provenance. The remaining Phase 6 aggregate families, the three uninstrumented
+transport-event variants, broader trace emission/token and redaction work,
+simulator integration, sustained and fuzz gates, broader CI/provenance and
+release-candidate work, and Phase 6 API review/freeze remain open. Phase 6
+remains provisional and unfrozen.
 
 Do not treat this snapshot guide as a release-conformance statement.

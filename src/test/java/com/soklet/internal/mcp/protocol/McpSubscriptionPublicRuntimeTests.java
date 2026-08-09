@@ -1442,6 +1442,7 @@ public class McpSubscriptionPublicRuntimeTests {
 					.toList();
 			Assertions.assertEquals(List.of(
 					McpMetricsEvent.ServerStarted.class,
+					McpMetricsEvent.RequestAccepted.class,
 					McpMetricsEvent.RequestStarted.class,
 					McpMetricsEvent.RequestStreamOpened.class,
 					McpMetricsEvent.SubscriptionOpened.class,

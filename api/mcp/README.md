@@ -133,7 +133,7 @@ markers.
 
 ## Current bounded Phase 6 checkpoint
 
-Six bounded Phase 6 verticals are implemented. `McpServerDiagnostics` remains
+Seven bounded Phase 6 verticals are implemented. `McpServerDiagnostics` remains
 the completed protection and trace diagnostics projection.
 `McpServerDiagnostics` now has exactly 12 zero-argument methods: lifecycle
 `getStatus()` and `getBoundAddress()`, plus all ten implemented diagnostic
@@ -183,16 +183,40 @@ metric labels and per-request logs remain necessary. This diagnostics vertical
 adds no metric family, event type, wire field, label, or other observation
 dimension.
 
-The sixth vertical serializes all 16 semantic event variants currently produced
-by the runtime through one context-aware deferred FIFO: the five handler
-transitions, `ServerStopped`, the nine admitted request, stream, subscription,
-cancelation, progress, and keep-alive variants, and exact-once `ServerStarted`.
+The sixth vertical established one context-aware deferred FIFO for the first 16
+semantic event variants produced by the runtime: the five handler transitions,
+`ServerStopped`, the nine admitted request, stream, subscription, cancelation,
+progress, and keep-alive variants, and exact-once `ServerStarted`. The seventh
+extends that same FIFO to 20 produced variants with `RequestAccepted`,
+`RequestRejected`, `ProtocolError`, and `UnknownMirroredHeader`.
+
+`RequestAccepted` is retained only after successful bounded processor
+submission. Executor rejection identity-discards its provisional accepted
+entry, then records only `RequestRejected` before the empty 503 response.
+Malformed complete requests record accepted, fixed `-32700` protocol error, and
+rejected in that order. Strict unknown-header rejection and ignored-header
+unresolved-method handling record accepted, one unknown-header event per
+occurrence, the applicable fixed protocol error, and rejected in FIFO enqueue
+order. Protocol-error production is limited to `-32700`, `-32600`, `-32601`,
+`-32602`, `-32603`, `-32020`, `-32021`, `-32022`, `-31999`, and `-31998`;
+application-owned error codes do not produce this metric event. A fixed error
+is recorded only after successful encoding. A streamed `ErrorResponse` keeps
+its record provisional until terminal acceptance and discards it if terminal
+delivery loses or fails.
+
+Each unknown-header occurrence carries only the endpoint path and a bounded
+recognized method or `<unrecognized>`; it carries no header name or value and
+no raw unrecognized method. Its occurrence count is independent of the
+optional diagnostic-name quota. Pre-admission quartet entries are request-free.
+Only an admitted fixed protocol error recorded after request observation may
+retain the exact public `McpRequestContext` and originating `Request` for
+bounded failure attribution. Pending entries may transiently hold that context
+only for delivery and failure logging, and it is never rendered.
+
 Collector callbacks run after the relevant internal locks or monitors are
-released. Request-scoped failures retain the originating `Request` for exact
-failure attribution; a pending entry may transiently hold that context only for
-the bounded delivery and failure-logging step, and it is never rendered.
-Server-event failures remain request-free and all collector failures are
-contained.
+released. Request-transition deferral is nonwaiting, which preserves liveness
+under reentrant collector callbacks. Server-event failures remain request-free,
+and all collector failures are contained.
 
 Direct restart orders the old generation's `ServerStopped` before the new
 `ServerStarted`; managed startup rollback orders `ServerStarted` before
@@ -201,8 +225,7 @@ universal cross-thread causal or per-request total order for independently
 racing producers. No public API, diagnostics/snapshot field, aggregate family,
 label, event variant, or wire dimension was added.
 
-`ConnectionAccepted`, `ConnectionRejected`, `RequestAccepted`,
-`RequestRejected`, `ProtocolError`, `UnknownMirroredHeader`, and
+Only the transport trio `ConnectionAccepted`, `ConnectionRejected`, and
 `TransportFailure` remain uninstrumented. Aggregate families, trace
 emission/token support, broader redaction, simulator integration,
 sustained/release gates, and Phase 6 review/freeze remain open.
@@ -236,14 +259,14 @@ its exact nullability digest is
 The 556/206/1,049/195 evidence counts are unchanged by these provisional
 verticals.
 
-The final exact-source JDK 21 and JDK 26 test suites each execute 1,436 tests
+The final exact-source JDK 21 and JDK 26 test suites each execute 1,443 tests
 with zero failures, zero errors, and four expected skips. The JDK 21 Error Prone
 profile passes all enforced checks; NullAway remains advisory, and its warnings
 are not counted here. SpotBugs reports zero `BugInstance` values and zero
 errors. The
 focused Phase 5 API-review contract run passes 45 tests with no failure, error,
-or skip. The focused Phase 6 semantic-event delivery run passes 96 tests with
-no failure, error, or skip. Candidate binary, source, and Javadoc
+or skip. The broader focused Phase 6 semantic-event delivery run passes 158
+tests with no failure, error, or skip. Candidate binary, source, and Javadoc
 packages plus the generated Javadoc report are green using offline-link
 resolution. All 167 API-sketch sources compile for Java 17 and pass Javadoc
 doclint on JDK 26. All 104 files from pinned JSON Schema commit

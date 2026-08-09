@@ -783,21 +783,22 @@ cooperative cancelation, and resource-subscription delivery are implemented
 Phase 5 slices. Deterministic MRTR termination, cross-instance protected-state
 continuation, and residual-shutdown recovery are implemented as well. Resource
 subscriptions use framework-owned listen streams and an application-owned
-local or distributed broadcast publisher. Six bounded Phase 6 verticals are
+local or distributed broadcast publisher. Seven bounded Phase 6 verticals are
 implemented: shutdown observation, handler-capacity metrics, handler-capacity
 diagnostics, live stream/subscription diagnostics, protection/trace
-diagnostics, and serialized semantic-event delivery. Every successfully
-started listener generation emits exactly one matching clean/residual shutdown
-metric, and server-wide handler execution, admitted-queue depth, and queue-full
-rejection transitions feed three label-free default metric families. Immutable
-server diagnostics expose the configured handler bounds, current active/queued
-counts, open request streams and subscription subset, effective request-state
-protection mode, custom-protector presence, and secret-free production-ring and
-trace-configuration fingerprints. The diagnostics add no metric, event, or
-wire dimension. Seven event variants, aggregate families, operational trace
-emission/token support, broader redaction, MCP simulation, sustained/release
-gates, and Phase 6 review/freeze remain open; applications must not advertise
-or depend on those remaining behaviors yet.
+diagnostics, serialized semantic-event delivery, and bounded pre-admission
+metrics. Every successfully started listener generation emits exactly one
+matching clean/residual shutdown metric, and server-wide handler execution,
+admitted-queue depth, and queue-full rejection transitions feed three label-
+free default metric families. Immutable server diagnostics expose the
+configured handler bounds, current active/queued counts, open request streams
+and subscription subset, effective request-state protection mode, custom-
+protector presence, and secret-free production-ring and trace-configuration
+fingerprints. The diagnostics add no metric, event, or wire dimension. The
+three transport variants, aggregate families, operational trace emission/token
+support, broader redaction, MCP simulation, sustained/release gates, and Phase
+6 review/freeze remain open; applications must not advertise or depend on
+those remaining behaviors yet.
 
 The exact pinned 39-scenario MCP suite has completed one clean controlled
 profile-observation run against the packaged fixture: 147 successful outcomes,
@@ -813,9 +814,9 @@ passes a fresh 39-scenario development-candidate verify with all 39 goldens and
 no bad outcome, standard-error output, or non-clean exit. It remains
 development evidence, not release-candidate provenance.
 
-The focused Phase 6 semantic-event delivery run passes 96 tests with zero
+The broader focused Phase 6 union passes 158 tests with zero
 failures, zero errors, and zero skips. Final exact-source full repository runs
-on JDK 21 and JDK 26 each report 1,436 tests, zero failures, zero errors, and
+on JDK 21 and JDK 26 each report 1,443 tests, zero failures, zero errors, and
 four skips. The JDK 21 enforced static-analysis profile is green without
 counting advisory
 warnings; SpotBugs reports zero `BugInstance` values and zero errors. Exact
@@ -826,9 +827,10 @@ report are green using offline-link resolution. All 167 API-sketch sources
 compile for Java 17 and pass Javadoc doclint on JDK 26. All 104 files from
 pinned JSON Schema commit `0c7b65dc16dd8eaa7bd83e21099c76610c3b246a`
 validate. These local results do not close the remaining Phase 6 aggregate
-families, seven uninstrumented event variants, broader trace emission/token and
-redaction work, simulator, sustained/fuzz, broader CI/provenance and release-
-candidate work, or API review/freeze. Phase 6 remains provisional and unfrozen.
+families, three uninstrumented transport-event variants, broader trace
+emission/token and redaction work, simulator, sustained/fuzz, broader CI/
+provenance and release-candidate work, or API review/freeze. Phase 6 remains
+provisional and unfrozen.
 
 #### Form Handling
 
@@ -1546,8 +1548,9 @@ clearing cumulative rejections. A non-cooperative residual handler remains
 active after bounded shutdown until it actually exits, at which point the
 active gauge returns to zero; retained snapshots do not change.
 
-One context-aware, server-wide deferred FIFO serializes all 16 semantic event
-variants currently produced by the runtime: the five handler transitions,
+The sixth bounded Phase 6 vertical established one context-aware, server-wide
+deferred FIFO for the first 16 semantic event variants produced by the runtime:
+the five handler transitions,
 `ServerStopped`, admitted `RequestStarted`, `RequestFinished`,
 `RequestStreamOpened`, `RequestStreamClosed`, `SubscriptionOpened`,
 `SubscriptionClosed`, `CancelationSignaled`, `ProgressEmitted`, and
@@ -1556,11 +1559,28 @@ started listener generation. Failed starts leave no phantom `ServerStarted`.
 Direct restart orders the old `ServerStopped` before the new `ServerStarted`,
 while managed startup rollback orders `ServerStarted` before `ServerStopped`.
 
+The seventh vertical extends the same FIFO to 20 produced variants with
+`RequestAccepted`, `RequestRejected`, `ProtocolError`, and
+`UnknownMirroredHeader`. A successful bounded-processor submission emits
+`RequestAccepted`; executor rejection removes that provisional event and emits
+only `RequestRejected` before the fixed empty HTTP 503. Malformed requests
+order accepted, fixed protocol error, then rejected. Strict unknown-header and
+unresolved-method requests additionally emit one unknown-header event per
+occurrence before their fixed protocol error and rejection. Unknown events use
+only the endpoint path and a bounded method or `<unrecognized>`—never a header
+name, value, or raw method—and are independent of optional name-diagnostic
+quota. Application-owned error codes are excluded from protocol-error metrics.
+
+`ProtocolError` uses exactly the fixed codes `-32700`, `-32600`, `-32601`,
+`-32602`, `-32603`, `-32020`, `-32021`, `-32022`, `-31999`, and `-31998`,
+after successful response encoding. A streamed error remains provisional until
+its terminal message is accepted and is discarded on failed reservation.
 Collector callbacks drain after the relevant dispatcher, progress-reporter,
 stream-transition, request-control, runtime, server, and Soklet lifecycle locks
-or monitors are released. A pending request-scoped entry may transiently retain
-its originating `Request` only for the bounded delivery and correctly
-attributed failure-logging step; that context is never rendered. Collector
+or monitors are released, with nonwaiting request-transition deferral
+preserving reentrant liveness. Pre-admission events are request-free. Only an
+admitted fixed protocol error retains its exact request context for bounded
+delivery and failure attribution; that context is never rendered. Collector
 failures are contained and do not stall the FIFO. This guarantees FIFO metric
 record/enqueue order, not a universal cross-thread causal or per-request total
 order between independently racing producers.
@@ -1569,12 +1589,11 @@ For MCP shutdowns, `snapshot().getMcpMetrics().getShutdowns()` is an immutable,
 enum-ordered `Map<McpShutdownOutcome, Long>`. The default collector omits
 unobserved outcomes, returns the map to empty on reset, and emits only
 `soklet_mcp_shutdowns_total{outcome="clean"}` or
-`soklet_mcp_shutdowns_total{outcome="residual_handlers"}`. The seven
-uninstrumented variants remain `ConnectionAccepted`, `ConnectionRejected`,
-`RequestAccepted`, `RequestRejected`, `ProtocolError`,
-`UnknownMirroredHeader`, and `TransportFailure`. Aggregate families, trace
+`soklet_mcp_shutdowns_total{outcome="residual_handlers"}`. The three
+uninstrumented transport variants are `ConnectionAccepted`,
+`ConnectionRejected`, and `TransportFailure`. Aggregate families, trace
 emission/token support, broader redaction, simulator integration,
-sustained/release gates, and Phase 6 review/freeze are still open. This sixth
+sustained/release gates, and Phase 6 review/freeze are still open. This seventh
 vertical adds no public API, snapshot field, aggregate family, label, event
 variant, or wire dimension.
 

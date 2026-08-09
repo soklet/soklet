@@ -135,10 +135,10 @@ retries are forced to private, zero-TTL cache policy; the HTTP transport remains
 `Cache-Control: no-store`.
 
 Progress reporting, cooperative cancelation, and resource-subscription delivery
-are implemented. Six bounded Phase 6 verticals are also implemented: shutdown
+are implemented. Seven bounded Phase 6 verticals are also implemented: shutdown
 observation, handler-capacity metrics, handler diagnostics, live
-stream/subscription diagnostics, protection/trace diagnostics, and serialized
-semantic-event delivery. Shutdown
+stream/subscription diagnostics, protection/trace diagnostics, serialized
+semantic-event delivery, and bounded pre-admission metrics. Shutdown
 metrics have only the fixed
 `McpShutdownOutcome`-derived
 `clean`/`residual_handlers` label. The exact handler-capacity families—
@@ -215,29 +215,41 @@ observable, and rotation can create high-cardinality values. Operators should
 therefore provision high-entropy keys, keep fingerprints out of metric labels,
 and avoid per-request logging or unbounded retention of them.
 
-One context-aware deferred FIFO now serializes the 16 semantic event variants
-currently produced by the runtime: the five handler transitions,
-`ServerStopped`, the nine admitted request, stream, subscription, cancelation,
-progress, and keep-alive variants, and exact-once `ServerStarted`. Collector
-callbacks run after the relevant dispatcher, progress-reporter,
-stream-transition, request-control, runtime, server, and Soklet lifecycle locks
-or monitors are released. Request-scoped collector failures keep the exact
-originating `Request` for attribution and are contained without stalling later
-delivery; server-event failures remain request-free. A pending entry may
-transiently retain that `Request` only for the bounded delivery and failure-
-logging step. It is never rendered, exposed as a label, or promoted to an
-aggregate dimension. This narrow statement does not close the broader secret-
-retention or cardinality review.
+One context-aware deferred FIFO now serializes the 20 semantic event variants
+currently produced by the runtime: the prior 16 handler, lifecycle, admitted
+request, stream, subscription, cancelation, progress, and keep-alive variants,
+plus `RequestAccepted`, `RequestRejected`, `ProtocolError`, and
+`UnknownMirroredHeader`. Collector callbacks run after the relevant dispatcher,
+progress-reporter, stream-transition, request-control, runtime, server, and
+Soklet lifecycle locks or monitors are released. Nonwaiting request-transition
+deferral preserves reentrant collector liveness without moving callbacks under
+those locks.
+
+`ProtocolError` is limited to the fixed `-32700`, `-32600`, `-32601`,
+`-32602`, `-32603`, `-32020`, `-32021`, `-32022`, `-31999`, and `-31998`
+codes after successful encoding; application-owned codes are excluded. A
+streamed error is provisional until its terminal reservation succeeds and is
+discarded otherwise. Each unknown mirrored-header occurrence emits one event
+containing only its finite endpoint path and a bounded recognized method or
+`<unrecognized>`. The event contains no header name, header value, or raw
+unrecognized method, and its count is independent of the optional name-bearing
+diagnostic quota.
+
+All pre-admission events are request-free. Only an admitted fixed
+`ProtocolError` retains its exact originating `Request` for the bounded
+delivery and correctly attributed failure-log step. It is never rendered,
+exposed as a label, or promoted to an aggregate dimension. Collector failures
+are contained without stalling later delivery. This narrow statement does not
+close the broader secret-retention, cardinality, or redaction review.
 
 The FIFO guarantee is metric record/enqueue order, not a universal cross-thread
 causal or per-request total order for independently racing producers. Direct
 restart orders the old generation's `ServerStopped` before the new
 `ServerStarted`; managed startup rollback orders its `ServerStarted` before
-`ServerStopped`. The seven uninstrumented variants remain
-`ConnectionAccepted`, `ConnectionRejected`, `RequestAccepted`,
-`RequestRejected`, `ProtocolError`, `UnknownMirroredHeader`, and
-`TransportFailure`. Aggregate families, trace emission/token support, broader
+`ServerStopped`. The three uninstrumented transport variants are
+`ConnectionAccepted`, `ConnectionRejected`, and `TransportFailure`. Aggregate
+families, trace emission/token support, broader
 redaction, MCP simulation, sustained/release gates, and Phase 6 review/freeze
-remain open. This sixth vertical adds no public API, snapshot field, aggregate
-family, label, event variant, or wire dimension. Phase 6 remains provisional
-and unfrozen.
+remain open. Neither delivery vertical adds a public API, snapshot field,
+aggregate family, label, event variant, or wire dimension. Phase 6 remains
+provisional and unfrozen.

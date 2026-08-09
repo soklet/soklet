@@ -95,16 +95,36 @@
   metric labels or per-request logs. This diagnostics vertical adds no metric,
   event, or wire dimension.
 - Added the sixth bounded Phase 6 vertical: one context-aware deferred FIFO now
-  serializes all 16 semantic event variants currently produced by the runtime—
+  serialized the 16 semantic event variants then produced by the runtime—
   the five handler transitions, `ServerStopped`, nine admitted request, stream,
   subscription, cancelation, progress, and keep-alive variants, and exact-once
   `ServerStarted`. Direct restart reserves old `ServerStopped` before new
   `ServerStarted`, while managed startup rollback records `ServerStarted`
   before `ServerStopped`. The guarantee is FIFO metric record/enqueue order,
-  not a universal cross-thread causal or per-request total order. The seven
-  uninstrumented variants remain `ConnectionAccepted`, `ConnectionRejected`,
-  `RequestAccepted`, `RequestRejected`, `ProtocolError`,
-  `UnknownMirroredHeader`, and `TransportFailure`. This vertical adds no public
+  not a universal cross-thread causal or per-request total order. At that
+  checkpoint, instrumentation had not yet covered `ConnectionAccepted`,
+  `ConnectionRejected`, `RequestAccepted`, `RequestRejected`, `ProtocolError`,
+  `UnknownMirroredHeader`, or `TransportFailure`. This vertical adds no public
+  API, snapshot field, aggregate family, label, event variant, or wire
+  dimension.
+- Added the seventh bounded Phase 6 vertical by extending the same FIFO to the
+  20 semantic variants now produced. Successful bounded-processor submission
+  emits `RequestAccepted`; executor rejection discards that provisional entry
+  and emits only `RequestRejected` before its fixed empty HTTP 503. Malformed,
+  strict unknown-header, and unresolved-method requests preserve exact same-
+  request accepted/error/rejected record order. `ProtocolError` is limited to
+  the ten fixed framework codes `-32700`, `-32600`, `-32601`, `-32602`,
+  `-32603`, `-32020`, `-32021`, `-32022`, `-31999`, and `-31998` after
+  successful encoding; application-owned codes are excluded, and a streamed
+  error whose terminal reservation fails discards its provisional event. Each
+  unknown mirrored-header occurrence records only the finite endpoint and a
+  bounded method or `<unrecognized>`, independently of optional name-
+  diagnostic quota and without the header name, value, or raw method. All
+  pre-admission events are request-free; only admitted fixed errors retain the
+  exact request for bounded delivery/failure attribution. Nonwaiting request-
+  transition deferral preserves reentrant collector liveness. The remaining
+  uninstrumented variants are exactly `ConnectionAccepted`,
+  `ConnectionRejected`, and `TransportFailure`. This vertical adds no public
   API, snapshot field, aggregate family, label, event variant, or wire
   dimension.
 
@@ -113,16 +133,16 @@
 - The locally frozen Phase 4 and Phase 5 surfaces implement discovery, tools,
   prompts, resources, progress, cancelation, subscription delivery, multi-
   round-trip execution, and protected request-state execution. All 39 reviewed
-  Phase 5 profiles are active. Six bounded Phase 6 verticals—shutdown,
+  Phase 5 profiles are active. Seven bounded Phase 6 verticals—shutdown,
   handler-capacity, handler diagnostics, stream/subscription diagnostics,
-  protection/trace diagnostics, and serialized semantic-event delivery—are
-  implemented and locally green. The focused semantic-event delivery run
-  passes 96 tests with zero failures, zero errors, and zero skips; final exact-
-  source JDK 21 and JDK 26 runs each report 1,436 tests, zero failures, zero
-  errors, and four skips. The JDK 21 enforced static-
-  analysis profile is green
-  without counting advisory warnings, and SpotBugs reports zero `BugInstance`
-  values and zero errors. Exact API-freeze evidence remains unchanged at 556
+  protection/trace diagnostics, serialized semantic-event delivery, and
+  bounded pre-admission metrics—are implemented and locally green. The broader
+  focused Phase 6 union passes 158 tests with zero failures, zero errors, and
+  zero skips; final exact-source JDK 21 and JDK 26 runs each report 1,443 tests,
+  zero failures, zero errors, and four skips. The JDK 21 enforced static-
+  analysis profile is green without counting advisory warnings, and SpotBugs
+  reports zero `BugInstance` values and zero errors. Exact API-freeze evidence
+  remains unchanged at 556
   incompatibilities, 206 reviewed owners, 1,049 Phase 4 records, and 195 Phase
   5 records with the prior hashes. Candidate binary, source, and Javadoc
   packages plus the generated Javadoc report are green using offline-link
@@ -130,10 +150,10 @@
   doclint on JDK 26.
   All 104 files from pinned JSON Schema commit
   `0c7b65dc16dd8eaa7bd83e21099c76610c3b246a` validate. Aggregate families, the
-  seven uninstrumented variants, trace emission/token support, broader
-  redaction, simulation, sustained/fuzz gates, CI/provenance and release-
-  candidate work, and the provisional, unfrozen Phase 6 API review/freeze
-  remain open.
+  three uninstrumented transport-event variants, trace emission/token support,
+  broader redaction, simulation, sustained/fuzz gates, CI/provenance and
+  release-candidate work, and the provisional, unfrozen Phase 6 API review/
+  freeze remain open.
 
 ## 3.5.1 (2026-07-13)
 

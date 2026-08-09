@@ -233,6 +233,18 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private static final String JSON_MEDIA_TYPE = "application/json";
 	private static final int SOKLET_RATE_LIMITED = -31999;
 	private static final int SOKLET_STRICT_UNKNOWN_MIRRORED_HEADER = -31998;
+	@NonNull
+	static final Set<@NonNull Integer> PRODUCED_PROTOCOL_ERROR_CODES = Set.of(
+			McpJsonRpcError.PARSE_ERROR,
+			McpJsonRpcError.INVALID_REQUEST,
+			McpJsonRpcError.METHOD_NOT_FOUND,
+			McpJsonRpcError.INVALID_PARAMS,
+			McpJsonRpcError.INTERNAL_ERROR,
+			McpJsonRpcError.HEADER_MISMATCH,
+			McpJsonRpcError.MISSING_REQUIRED_CLIENT_CAPABILITY,
+			McpJsonRpcError.UNSUPPORTED_PROTOCOL_VERSION,
+			SOKLET_RATE_LIMITED,
+			SOKLET_STRICT_UNKNOWN_MIRRORED_HEADER);
 	private static final int APPLICATION_REQUEST_STATE_MAXIMUM_BYTES = 65_536;
 	@NonNull
 	private static final Set<@NonNull String> FRAMEWORK_OWNED_POLICY_HEADERS = Set.of(
@@ -740,6 +752,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					public void handle(@NonNull MicrohttpRequest request,
 							@NonNull Consumer<@NonNull MicrohttpResponse> callback) {
 						if (candidateReadiness.get() != ListenerState.READY) {
+							applicationExecutionObserver.recordRequestRejected();
+							applicationExecutionObserver.drain();
 							callback.accept(emptyResponse(503, "Service Unavailable", List.of()));
 							return;
 						}
@@ -1570,6 +1584,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		requireNonNull(callback);
 
 		if (effectiveAddress == null) {
+			this.applicationExecutionObserver.recordRequestRejected();
+			this.applicationExecutionObserver.drain();
 			callback.accept(emptyResponse(503, "Service Unavailable", List.of()));
 			return;
 		}
@@ -1883,7 +1899,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						capabilityRegistry,
 						endpointPolicy.unknownMirroredHeaderPolicy(),
 						this.unknownMirroredHeaderNameDiagnostics.enabled());
-		recordUnknownMirroredHeaders(customHeaderValidation.unknownHeaderCount());
+		recordUnknownMirroredHeaders(endpointRuntime.path(), wireRequest.method(),
+				customHeaderValidation.unknownHeaderCount());
 		for (String unknownHeaderName : customHeaderValidation.unknownHeaderNames())
 			this.unknownMirroredHeaderNameDiagnostics.observe(endpointRuntime.path(),
 					unknownHeaderName);
@@ -2260,7 +2277,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 		if (!requestControl.protocolProcessingAllowed())
 			return null;
-		requestControl.startObservation(endpointBinding.observationSink(),
+		if (!requestControl.startObservation(endpointBinding.observationSink(),
 				new McpRuntimeRequestInput(sokletRequest, Map.of(),
 						mappedRequest.method(), Optional.of(mappedRequest.id()),
 						requestedProtocolVersion, operationName,
@@ -2270,7 +2287,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						mappedRequest.params().metadata().toJsonObject(),
 						inputResponses,
 						requestState,
-						effectiveIdentity.admittedIdentity()));
+						effectiveIdentity.admittedIdentity())))
+			return null;
 
 		if (endpointPolicy.requestRateLimiter().isPresent()) {
 			McpRateLimitDecision rateLimitDecision;
@@ -2803,12 +2821,19 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		return true;
 	}
 
-	private void recordUnknownMirroredHeaders(int occurrences) {
+	private void recordUnknownMirroredHeaders(@NonNull String endpointPath,
+			@NonNull String jsonRpcMethod, int occurrences) {
+		requireNonNull(endpointPath);
+		requireNonNull(jsonRpcMethod);
 		if (occurrences == 0)
 			return;
 		unknownMirroredHeaderOccurrences.getAndUpdate(current ->
 				current > Long.MAX_VALUE - occurrences
 						? Long.MAX_VALUE : current + occurrences);
+		for (int occurrence = 0; occurrence < occurrences; occurrence++)
+			this.applicationExecutionObserver.recordUnknownMirroredHeader(
+					endpointPath, jsonRpcMethod);
+		this.applicationExecutionObserver.drain();
 	}
 
 	private @Nullable MicrohttpResponse processNotification(
@@ -2869,13 +2894,14 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						admittedIdentity);
 		if (!requestControl.protocolProcessingAllowed())
 			return null;
-		requestControl.startObservation(endpointBinding.observationSink(),
+		if (!requestControl.startObservation(endpointBinding.observationSink(),
 				new McpRuntimeRequestInput(sokletRequest, Map.of(),
 						notification.method(), Optional.empty(), protocolVersion,
 						Optional.empty(), Optional.empty(), McpJsonObject.empty(),
 						notificationMetadata(notification)
 								.orElseGet(McpJsonObject::empty),
-						effectiveIdentity.admittedIdentity()));
+						effectiveIdentity.admittedIdentity())))
+			return null;
 
 		if (endpointPolicy.requestRateLimiter().isPresent()) {
 			McpRateLimitDecision rateLimitDecision;
@@ -2992,7 +3018,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private ApplicationResponseRendering renderApplicationResponse(
 			@NonNull McpApplicationResponse response,
 			@NonNull McpJsonRpcId requestId,
-			@NonNull List<@NonNull Header> additionalHeaders) {
+			@NonNull List<@NonNull Header> additionalHeaders,
+			@Nullable McpRequestContext requestContext) {
 		requireNonNull(response);
 		requireNonNull(requestId);
 		requireNonNull(additionalHeaders);
@@ -3000,17 +3027,25 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		MicrohttpResponse httpResponse;
 		RequestObservationResult observationResult;
 		try {
-			httpResponse = response.message()
-					.map(message -> jsonResponse(response.status(), response.reason(),
-							envelopeCodec.encode(message), additionalHeaders))
-					.orElseGet(() -> emptyResponse(
-							response.status(), response.reason(), additionalHeaders));
+			if (response.message().isPresent()) {
+				McpJsonRpcMessage message = response.message().orElseThrow();
+				byte[] encodedMessage = envelopeCodec.encode(message);
+				if (message instanceof McpJsonRpcMessage.ErrorResponse errorResponse)
+					recordProtocolErrorAfterSuccessfulEncoding(
+							errorResponse.error().code(), requestContext);
+				httpResponse = jsonResponse(response.status(), response.reason(),
+						encodedMessage, additionalHeaders);
+			} else {
+				httpResponse = emptyResponse(response.status(), response.reason(),
+						additionalHeaders);
+			}
 			observationResult = requestObservationResult(response);
 		} catch (Throwable throwable) {
 			McpJsonRpcError error = new McpJsonRpcError(
 					McpJsonRpcError.INTERNAL_ERROR, "Internal error", Optional.empty());
 			httpResponse = jsonRpcError(500, "Internal Server Error",
-					Optional.of(requestId), error, additionalHeaders);
+					Optional.of(requestId), error, additionalHeaders,
+					requestContext);
 			List<Throwable> throwables = new ArrayList<>(response.throwables());
 			throwables.add(throwable);
 			observationResult = new RequestObservationResult(
@@ -3048,7 +3083,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		requestControl.planRequestObservation(new RequestObservationResult(
 				McpRequestOutcome.REJECTED, error, List.of()));
 		return jsonRpcError(503, "Service Unavailable", Optional.of(requestId),
-				error, corsHeaders);
+				error, corsHeaders,
+				requestControl.publicRequestContext().orElse(null));
 	}
 
 	@NonNull
@@ -3063,7 +3099,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				McpRequestOutcome.INTERNAL_ERROR, error,
 				throwable == null ? List.of() : List.of(throwable)));
 		return jsonRpcError(500, "Internal Server Error", Optional.of(requestId),
-				error, corsHeaders);
+				error, corsHeaders,
+				requestControl.publicRequestContext().orElse(null));
 	}
 
 	@NonNull
@@ -3107,7 +3144,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	@NonNull
 	private MicrohttpResponse rateLimited(@NonNull McpJsonRpcId requestId,
 			@NonNull Duration retryAfter,
-			@NonNull List<@NonNull Header> corsHeaders) {
+			@NonNull List<@NonNull Header> corsHeaders,
+			@Nullable McpRequestContext requestContext) {
 		requireNonNull(retryAfter);
 		if (retryAfter.isNegative())
 			throw new IllegalArgumentException("Retry-After must not be negative.");
@@ -3116,7 +3154,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		headers.add(new Header(RETRY_AFTER, retryAfterSeconds(retryAfter)));
 		return jsonRpcError(429, "Too Many Requests", Optional.of(requestId),
 				new McpJsonRpcError(SOKLET_RATE_LIMITED, "Rate limited", Optional.empty()),
-				List.copyOf(headers));
+				List.copyOf(headers), requestContext);
 	}
 
 	@NonNull
@@ -3128,7 +3166,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				"Rate limited", Optional.empty());
 		requestControl.planRequestObservation(new RequestObservationResult(
 				McpRequestOutcome.REJECTED, error, List.of()));
-		return rateLimited(requestId, retryAfter, corsHeaders);
+		return rateLimited(requestId, retryAfter, corsHeaders,
+				requestControl.publicRequestContext().orElse(null));
 	}
 
 	@NonNull
@@ -3713,9 +3752,39 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			@NonNull Optional<@NonNull McpJsonRpcId> id,
 			@NonNull McpJsonRpcError error,
 			@NonNull List<@NonNull Header> additionalHeaders) {
+		return jsonRpcError(status, reason, id, error, additionalHeaders, null);
+	}
+
+	@NonNull
+	private MicrohttpResponse jsonRpcError(int status, @NonNull String reason,
+			@NonNull Optional<@NonNull McpJsonRpcId> id,
+			@NonNull McpJsonRpcError error,
+			@NonNull List<@NonNull Header> additionalHeaders,
+			@Nullable McpRequestContext requestContext) {
 		McpJsonRpcMessage.ErrorResponse response = new McpJsonRpcMessage.ErrorResponse(
 				id, error, McpJsonObject.empty());
-		return jsonResponse(status, reason, envelopeCodec.encode(response), additionalHeaders);
+		byte[] encodedResponse = envelopeCodec.encode(response);
+		recordProtocolErrorAfterSuccessfulEncoding(error.code(), requestContext);
+		return jsonResponse(status, reason, encodedResponse, additionalHeaders);
+	}
+
+	private void recordProtocolErrorAfterSuccessfulEncoding(int code,
+			@Nullable McpRequestContext requestContext) {
+		recordProducedProtocolError(code, requestContext);
+		this.applicationExecutionObserver.drain();
+	}
+
+	private McpApplicationExecutionObserver.@Nullable PendingMetricRecord
+			recordProducedProtocolError(int code,
+					@Nullable McpRequestContext requestContext) {
+		if (!producedProtocolErrorCode(code))
+			return null;
+		return this.applicationExecutionObserver.recordProtocolError(
+				code, requestContext);
+	}
+
+	private static boolean producedProtocolErrorCode(int code) {
+		return PRODUCED_PROTOCOL_ERROR_CODES.contains(code);
 	}
 
 	@NonNull
@@ -4288,6 +4357,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private boolean streamAbortOwned;
 		private boolean canceled;
 		private boolean terminal;
+		private boolean requestObservationReserved;
+		private boolean requestRejectionRecorded;
 
 		private RequestControl(@NonNull MicrohttpRequest request,
 				long deadlineNanos, @NonNull ThreadPoolExecutor processor,
@@ -4530,10 +4601,18 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 		}
 
-		private void startObservation(@NonNull McpRuntimeObservationSink sink,
+		private boolean startObservation(@NonNull McpRuntimeObservationSink sink,
 				@NonNull McpRuntimeRequestInput input) {
 			requireNonNull(sink);
 			requireNonNull(input);
+			synchronized (lock) {
+				if (terminal || canceled)
+					return false;
+				if (requestObservationReserved)
+					throw new IllegalStateException(
+							"MCP request observation cannot start twice.");
+				requestObservationReserved = true;
+			}
 			long startedAtNanos = applicationClock.nanoTime();
 			McpRuntimeRequestObservation observation;
 			Optional<@NonNull McpRequestContext> publicRequestContext;
@@ -4548,14 +4627,24 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 
 			synchronized (lock) {
-				if (requestObservation != null)
-					throw new IllegalStateException(
-							"MCP request observation cannot start twice.");
 				requestObservation = observation;
 				this.publicRequestContext = publicRequestContext;
 				requestObservationStartedAtNanos = startedAtNanos;
 			}
 			drainRequestObservation();
+			return true;
+		}
+
+		private void markTerminalWhileLocked() {
+			if (!Thread.holdsLock(lock))
+				throw new IllegalStateException(
+						"The request-control lock is required to mark a terminal request.");
+			terminal = true;
+			if (!requestObservationReserved && !requestRejectionRecorded) {
+				requestRejectionRecorded = true;
+				McpHttpServerRuntime.this.applicationExecutionObserver
+						.recordRequestRejected();
+			}
 		}
 
 		@NonNull
@@ -4778,15 +4867,21 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		private boolean protocolProcessingAllowed() {
 			ProtocolProcessingReservation reservation;
-			synchronized (lock) {
-				if (canceled || terminal || applicationOwned)
-					return false;
-				reservation = application.reserveProtocolOperationIfRunning(() -> {
-					if (applicationClock.nanoTime() - deadlineNanos >= 0L)
-						return new ProtocolProcessingReservation(
-								false, detachProtocolDeadline(true));
-					return new ProtocolProcessingReservation(true, null);
-				}).orElse(null);
+			McpHttpServerRuntime.this.applicationExecutionObserver
+					.beginRequestTransitionDeferral();
+			try {
+				synchronized (lock) {
+					if (canceled || terminal || applicationOwned)
+						return false;
+					reservation = application.reserveProtocolOperationIfRunning(() -> {
+						if (applicationClock.nanoTime() - deadlineNanos >= 0L)
+							return new ProtocolProcessingReservation(
+									false, detachProtocolDeadline(true));
+						return new ProtocolProcessingReservation(true, null);
+					}).orElse(null);
+				}
+			} finally {
+				McpHttpServerRuntime.this.applicationExecutionObserver.endDeferral();
 			}
 
 			if (reservation == null)
@@ -4812,40 +4907,55 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private void submit(@NonNull FutureTask<@Nullable Void> task) {
 			requireNonNull(task);
 			ProtocolSubmission submission;
-			synchronized (lock) {
-				if (protocolTask != null)
-					throw new IllegalStateException("The protocol task is already bound.");
-				submission = application.reserveProtocolOperationIfRunning(() -> {
-					protocolTask = task;
-					requestControls.put(request, this);
-					application.signalDeadlineTimer();
-					try {
-						processor.execute(task);
-						return new ProtocolSubmission(null);
-					} catch (RejectedExecutionException exception) {
-						protocolTask = null;
-						terminal = true;
-						return new ProtocolSubmission(takeResponseCallback());
-					} catch (RuntimeException | Error failure) {
-						protocolTask = null;
+			McpHttpServerRuntime.this.applicationExecutionObserver
+					.beginRequestTransitionDeferral();
+			try {
+				synchronized (lock) {
+					if (protocolTask != null)
+						throw new IllegalStateException(
+								"The protocol task is already bound.");
+					submission = application.reserveProtocolOperationIfRunning(() -> {
+						protocolTask = task;
+						requestControls.put(request, this);
+						application.signalDeadlineTimer();
+						McpApplicationExecutionObserver.PendingMetricRecord
+								acceptedRecord = McpHttpServerRuntime.this
+										.applicationExecutionObserver.recordRequestAccepted();
+						try {
+							processor.execute(task);
+							return new ProtocolSubmission(null);
+						} catch (RejectedExecutionException exception) {
+							McpHttpServerRuntime.this.applicationExecutionObserver
+									.discardPendingMetric(acceptedRecord);
+							protocolTask = null;
+							markTerminalWhileLocked();
+							return new ProtocolSubmission(takeResponseCallback());
+						} catch (RuntimeException | Error failure) {
+							McpHttpServerRuntime.this.applicationExecutionObserver
+									.discardPendingMetric(acceptedRecord);
+							protocolTask = null;
+							canceled = true;
+							markTerminalWhileLocked();
+							responseCallback = null;
+							requestControls.remove(request, this);
+							task.cancel(true);
+							processor.remove(task);
+							throw failure;
+						}
+					}).orElse(null);
+					if (submission == null) {
 						canceled = true;
-						terminal = true;
+						markTerminalWhileLocked();
 						responseCallback = null;
-						requestControls.remove(request, this);
-						task.cancel(true);
-						processor.remove(task);
-						throw failure;
 					}
-				}).orElse(null);
-				if (submission == null) {
-					canceled = true;
-					terminal = true;
-					responseCallback = null;
 				}
+				if (submission != null && submission.rejectedCallback() != null)
+					requestControls.remove(request, this);
+			} finally {
+				McpHttpServerRuntime.this.applicationExecutionObserver.endDeferral();
 			}
 
 			if (submission != null && submission.rejectedCallback() != null) {
-				requestControls.remove(request, this);
 				deliverResponse(submission.rejectedCallback(),
 						emptyResponse(503, "Service Unavailable", List.of()));
 			}
@@ -4920,35 +5030,41 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		private void completeProtocol(@Nullable MicrohttpResponse response) {
 			ProtocolResponseReservation reservation;
-			synchronized (lock) {
-				if (applicationOwned || terminal)
-					return;
-				if (subscriptionRegistration != null) {
-					protocolTask = null;
-					return;
-				}
+			McpHttpServerRuntime.this.applicationExecutionObserver
+					.beginRequestTransitionDeferral();
+			try {
+				synchronized (lock) {
+					if (applicationOwned || terminal)
+						return;
+					if (subscriptionRegistration != null) {
+						protocolTask = null;
+						return;
+					}
 
-				reservation = application.reserveProtocolOperationIfRunning(() -> {
-					if (!canceled && response != null
-							&& applicationClock.nanoTime() - deadlineNanos >= 0L)
-						return new ProtocolResponseReservation(
-								null, null, detachProtocolDeadline(false));
+					reservation = application.reserveProtocolOperationIfRunning(() -> {
+						if (!canceled && response != null
+								&& applicationClock.nanoTime() - deadlineNanos >= 0L)
+							return new ProtocolResponseReservation(
+									null, null, detachProtocolDeadline(false));
 
-					protocolTask = null;
-					terminal = true;
-					Consumer<MicrohttpResponse> callback = !canceled && response != null
-							? takeResponseCallback() : null;
-					responseCallback = null;
-					releaseIdentifiedRequestExchange();
-					return new ProtocolResponseReservation(callback, response, null);
-				}).orElse(null);
-				if (reservation == null) {
-					protocolTask = null;
-					canceled = true;
-					terminal = true;
-					responseCallback = null;
-					releaseIdentifiedRequestExchange();
+						protocolTask = null;
+						markTerminalWhileLocked();
+						Consumer<MicrohttpResponse> callback = !canceled
+								&& response != null ? takeResponseCallback() : null;
+						responseCallback = null;
+						releaseIdentifiedRequestExchange();
+						return new ProtocolResponseReservation(callback, response, null);
+					}).orElse(null);
+					if (reservation == null) {
+						protocolTask = null;
+						canceled = true;
+						markTerminalWhileLocked();
+						responseCallback = null;
+						releaseIdentifiedRequestExchange();
+					}
 				}
+			} finally {
+				McpHttpServerRuntime.this.applicationExecutionObserver.endDeferral();
 			}
 
 			if (reservation == null) {
@@ -5064,7 +5180,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				protocolTask = null;
 				stream = responseStream;
 				if (stream == null) {
-					terminal = true;
+					markTerminalWhileLocked();
 					callback = takeResponseCallback();
 					releaseIdentifiedRequestExchange();
 				} else
@@ -5073,7 +5189,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 			if (stream == null) {
 				ApplicationResponseRendering rendering = renderApplicationResponse(
-						response, requestId, additionalHeaders);
+						response, requestId, additionalHeaders,
+						publicRequestContext().orElse(null));
 				planRequestObservation(rendering.observationResult());
 				requestControls.remove(request, this);
 				MicrohttpResponse observedResponse = withRequestObservationTermination(
@@ -5090,10 +5207,37 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			if (response.message().isEmpty())
 				return stream.fail(StreamTerminationReason.RESPONSE_TIMEOUT, null);
 
+			McpJsonRpcMessage message = response.message().orElseThrow();
+			McpApplicationExecutionObserver.@Nullable PendingMetricRecord
+					pendingError = null;
+			McpHttpServerRuntime.this.applicationExecutionObserver
+					.beginRequestTransitionDeferral();
 			try {
-				return stream.completeMessage(response.message().orElseThrow());
-			} catch (Throwable throwable) {
-				return stream.fail(StreamTerminationReason.INTERNAL_ERROR, throwable);
+				try {
+					if (message
+							instanceof McpJsonRpcMessage.ErrorResponse errorResponse) {
+						// Validate the exact immutable message before staging its event so
+						// synchronous stream termination cannot overtake ProtocolError.
+						envelopeCodec.encode(message);
+						pendingError = recordProducedProtocolError(
+								errorResponse.error().code(),
+								publicRequestContext().orElse(null));
+					}
+					boolean completed = stream.completeMessage(message);
+					if (!completed && pendingError != null) {
+						McpHttpServerRuntime.this.applicationExecutionObserver
+								.discardPendingMetric(pendingError);
+					}
+					return completed;
+				} catch (Throwable throwable) {
+					if (pendingError != null) {
+						McpHttpServerRuntime.this.applicationExecutionObserver
+								.discardPendingMetric(pendingError);
+					}
+					return stream.fail(StreamTerminationReason.INTERNAL_ERROR, throwable);
+				}
+			} finally {
+				McpHttpServerRuntime.this.applicationExecutionObserver.endDeferral();
 			}
 		}
 
@@ -5134,7 +5278,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		private void cancel(@NonNull StreamTerminationReason reason,
 				@Nullable Throwable cause) {
-			McpHttpServerRuntime.this.applicationExecutionObserver.beginDeferral();
+			McpHttpServerRuntime.this.applicationExecutionObserver
+					.beginRequestTransitionDeferral();
 			try {
 				cancelWhileMetricsDeferred(reason, cause);
 			} finally {
@@ -5174,13 +5319,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					application.cancel(request, requireNonNull(reason), cause);
 					if (!terminal) {
 						applicationOwned = false;
-						terminal = true;
+						markTerminalWhileLocked();
 						responseCallback = null;
 						releaseIdentifiedRequestExchange();
 						remove = true;
 					}
 				} else {
-					terminal = true;
+					markTerminalWhileLocked();
 					responseCallback = null;
 					releaseIdentifiedRequestExchange();
 				}
@@ -5286,14 +5431,20 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				return;
 
 			ProtocolDeadlineExpiration expiration;
-			synchronized (lock) {
-				if (terminal || canceled || applicationOwned)
-					return;
+			McpHttpServerRuntime.this.applicationExecutionObserver
+					.beginRequestTransitionDeferral();
+			try {
+				synchronized (lock) {
+					if (terminal || canceled || applicationOwned)
+						return;
 
-				expiration = application.reserveProtocolOperationIfRunning(
-						() -> detachProtocolDeadline(true)).orElse(null);
-				if (expiration == null)
-					return;
+					expiration = application.reserveProtocolOperationIfRunning(
+							() -> detachProtocolDeadline(true)).orElse(null);
+					if (expiration == null)
+						return;
+				}
+			} finally {
+				McpHttpServerRuntime.this.applicationExecutionObserver.endDeferral();
 			}
 
 			finishProtocolDeadline(expiration);
@@ -5321,7 +5472,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				observedStreamReason = reason == StreamTerminationReason.COMPLETED
 						&& plannedSubscriptionCloseReason != null
 						? plannedSubscriptionCloseReason : reason;
-				terminal = true;
+				markTerminalWhileLocked();
 				protocolTask = null;
 				responseCallback = null;
 				releaseIdentifiedRequestExchange();
@@ -5345,7 +5496,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		@NonNull
 		private ProtocolDeadlineExpiration detachProtocolDeadline(boolean cancelTask) {
 			canceled = true;
-			terminal = true;
+			markTerminalWhileLocked();
 			FutureTask<Void> task = protocolTask;
 			protocolTask = null;
 			Consumer<MicrohttpResponse> callback = takeResponseCallback();
@@ -5387,7 +5538,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						&& plannedRequestObservationResult == null
 						&& requestObservationTerminal == null;
 				if (remove) {
-					terminal = true;
+					markTerminalWhileLocked();
 					responseCallback = null;
 					releaseIdentifiedRequestExchange();
 				}

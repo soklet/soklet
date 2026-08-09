@@ -288,6 +288,7 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 					"One shared FIFO must serialize nested metric callbacks.");
 			Assertions.assertEquals(List.of(
 					McpMetricsEvent.ServerStarted.class,
+					McpMetricsEvent.RequestAccepted.class,
 					McpMetricsEvent.RequestStarted.class,
 					McpMetricsEvent.RequestFinished.class),
 					collector.events().stream().map(Object::getClass).toList(),
@@ -325,6 +326,7 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 			assertSuccessfulDiscovery(response, "failure-context");
 			Assertions.assertEquals(List.of(
 					McpMetricsEvent.ServerStarted.class,
+					McpMetricsEvent.RequestAccepted.class,
 					McpMetricsEvent.RequestStarted.class,
 					McpMetricsEvent.RequestFinished.class),
 					collector.events().stream().map(Object::getClass).toList(),

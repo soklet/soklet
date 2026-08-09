@@ -161,7 +161,7 @@ final class McpApplicationHandlerDispatcher {
 	}
 
 	void beginObserverDeferral() {
-		this.observer.beginDeferral();
+		this.observer.beginRequestTransitionDeferral();
 	}
 
 	void endObserverDeferral() {

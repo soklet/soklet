@@ -18,6 +18,7 @@ package com.soklet;
 
 import com.soklet.internal.mcp.protocol.McpJsonLimits;
 import com.soklet.internal.mcp.protocol.McpApplicationExecutionObserver;
+import com.soklet.internal.mcp.protocol.McpApplicationExecutionObserver.PendingMetricRecord;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.AdmissionInput;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CachePlan;
@@ -237,6 +238,52 @@ final class DefaultMcpServer implements McpServer {
 			@Override
 			public void beginDeferral() {
 				mcpMetricEventDelivery.beginDeferral();
+			}
+
+			@Override
+			public void beginRequestTransitionDeferral() {
+				mcpMetricEventDelivery.beginNonwaitingDeferral();
+			}
+
+			@Override
+			@NonNull
+			public PendingMetricRecord recordRequestAccepted() {
+				return mcpMetricEventDelivery.record(
+						new McpMetricsEvent.RequestAccepted());
+			}
+
+			@Override
+			public void discardPendingMetric(
+					@NonNull PendingMetricRecord pendingMetricRecord) {
+				if (!(requireNonNull(pendingMetricRecord)
+						instanceof McpMetricEventDeliveryEntry entry))
+					throw new IllegalArgumentException(
+							"The pending metric record belongs to another observer.");
+				mcpMetricEventDelivery.discard(entry);
+			}
+
+			@Override
+			public void recordRequestRejected() {
+				mcpMetricEventDelivery.record(
+						new McpMetricsEvent.RequestRejected());
+			}
+
+			@Override
+			@NonNull
+			public PendingMetricRecord recordProtocolError(int code,
+					@Nullable McpRequestContext requestContext) {
+				return mcpMetricEventDelivery.record(
+						new McpMetricsEvent.ProtocolError(code), requestContext);
+			}
+
+			@Override
+			public void recordUnknownMirroredHeader(
+					@NonNull String endpointPath,
+					@NonNull String jsonRpcMethod) {
+				mcpMetricEventDelivery.record(
+						new McpMetricsEvent.UnknownMirroredHeader(
+								requireNonNull(endpointPath),
+								metricMethod(jsonRpcMethod)));
 			}
 
 			@Override
@@ -1715,6 +1762,12 @@ final class DefaultMcpServer implements McpServer {
 				currentThread.interrupt();
 		}
 
+		private void beginNonwaitingDeferral() {
+			synchronized (this.lock) {
+				this.deferralDepth++;
+			}
+		}
+
 		@NonNull
 		private McpMetricEventDeliveryEntry record(
 				@NonNull McpMetricsEvent event) {
@@ -1816,7 +1869,8 @@ final class DefaultMcpServer implements McpServer {
 	@ThreadSafe
 	private record McpMetricEventDeliveryEntry(
 			@NonNull McpMetricsEvent event,
-			@Nullable McpRequestContext requestContext) {
+			@Nullable McpRequestContext requestContext)
+			implements PendingMetricRecord {
 		private McpMetricEventDeliveryEntry {
 			requireNonNull(event);
 		}

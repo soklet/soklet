@@ -17,6 +17,7 @@
 package com.soklet.internal.mcp.protocol;
 
 import com.soklet.CorsAuthorizer;
+import com.soklet.McpMetricsEvent;
 import com.soklet.McpRequestOutcome;
 import com.soklet.StreamTerminationReason;
 import org.junit.jupiter.api.Assertions;
@@ -26,6 +27,7 @@ import org.junit.jupiter.api.Timeout;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.math.BigDecimal;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
@@ -37,6 +39,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -738,6 +741,190 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	@Test
+	public void protocol_processor_submission_records_two_accepted_then_one_rejected_outside_request_control_lock()
+			throws Exception {
+		CountDownLatch firstAdmissionEntered = new CountDownLatch(1);
+		CountDownLatch releaseFirstAdmission = new CountDownLatch(1);
+		AtomicInteger admissions = new AtomicInteger();
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		ExecutorService probeExecutor = Executors.newSingleThreadExecutor();
+		AtomicReference<McpHttpServerRuntime> runtimeReference =
+				new AtomicReference<>();
+		ProtocolSubmissionMetricsObserver observer =
+				new ProtocolSubmissionMetricsObserver(probeExecutor,
+						runtimeReference);
+		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
+				McpImplementationMetadata.withNameAndVersion(
+						"protocol-submission-metrics-test", "3.6.0-SNAPSHOT"))
+				.build();
+		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
+				CorsAuthorizer.rejectAllInstance(), request -> {
+					int admission = admissions.incrementAndGet();
+					if (admission == 1) {
+						firstAdmissionEntered.countDown();
+						try {
+							if (!releaseFirstAdmission.await(10, TimeUnit.SECONDS))
+								throw new AssertionError(
+										"The first protocol admission was not released.");
+						} catch (InterruptedException exception) {
+							Thread.currentThread().interrupt();
+							throw new AssertionError(
+									"The first protocol admission was interrupted.",
+									exception);
+						}
+					}
+					return McpRequestAdmissionDecision.ACCEPT;
+				});
+		McpHttpEndpointBinding binding = new McpHttpEndpointBinding(policy,
+				endpoint, router(invocation -> completeResult(
+						"invocation-" + handlerInvocations.incrementAndGet())));
+		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
+				transportConfiguration(Duration.ofSeconds(5), 1, 1),
+				List.of(binding), McpJsonLimits.productionDefaults(),
+				executionConfiguration(1, 1), McpApplicationClock.SYSTEM,
+				McpApplicationHandlerExecutorFactory.production(),
+				ignored -> {}, ignored -> {}, Optional.empty(),
+				McpFrameworkRequestStateRuntime.disabledInstance(),
+				McpSubscriptionRuntimeConfiguration.productionDefaults(), observer);
+		runtimeReference.set(runtime);
+		ExecutorService clients = Executors.newFixedThreadPool(3);
+
+		try {
+			int port = runtime.start().getPort();
+			Future<RawResponse> active = clients.submit(
+					() -> send(port, "\"submission-active\""));
+			Assertions.assertTrue(firstAdmissionEntered.await(5, TimeUnit.SECONDS),
+					"The first protocol admission did not enter.");
+			Future<RawResponse> queued = clients.submit(
+					() -> send(port, "\"submission-queued\""));
+			observer.awaitAcceptedEvents();
+
+			RawResponse rejected = clients.submit(
+					() -> send(port, "\"submission-rejected\""))
+					.get(5, TimeUnit.SECONDS);
+			observer.awaitRejectedEvent();
+			assertExactEmptyProtocolProcessorRejection(rejected);
+			Assertions.assertEquals(List.of(
+					new McpMetricsEvent.RequestAccepted(),
+					new McpMetricsEvent.RequestAccepted(),
+					new McpMetricsEvent.RequestRejected()),
+					observer.events());
+			Assertions.assertNull(observer.probeFailure(),
+					"Protocol submission metrics were delivered under a request-control lock.");
+			Assertions.assertEquals(3, observer.probeCount());
+			Assertions.assertEquals(1,
+					runtime.requestExecutionSnapshot().queuedProtocolRequests(),
+					"The second accepted request must still occupy the sole queue slot.");
+
+			releaseFirstAdmission.countDown();
+			assertSuccessfulResult(active.get(5, TimeUnit.SECONDS),
+					"\"submission-active\"", "invocation-1");
+			assertSuccessfulResult(queued.get(5, TimeUnit.SECONDS),
+					"\"submission-queued\"", "invocation-2");
+			Assertions.assertEquals(2, admissions.get());
+			Assertions.assertEquals(2, handlerInvocations.get());
+			McpRequestExecutionSnapshot finalSnapshot =
+					runtime.requestExecutionSnapshot();
+			Assertions.assertEquals(0, finalSnapshot.retainedRequestControls());
+			Assertions.assertEquals(0, finalSnapshot.queuedProtocolRequests());
+			Assertions.assertEquals(0,
+					finalSnapshot.activeIdentifiedRequestExchanges());
+		} finally {
+			releaseFirstAdmission.countDown();
+			runtime.close();
+			shutdown(clients);
+			shutdown(probeExecutor);
+		}
+	}
+
+	@Test
+	public void produced_protocol_error_metric_allowlist_is_exact_and_excludes_application_codes() {
+		Set<Integer> expectedCodes = Set.of(
+				McpJsonRpcError.PARSE_ERROR,
+				McpJsonRpcError.INVALID_REQUEST,
+				McpJsonRpcError.METHOD_NOT_FOUND,
+				McpJsonRpcError.INVALID_PARAMS,
+				McpJsonRpcError.INTERNAL_ERROR,
+				McpJsonRpcError.HEADER_MISMATCH,
+				McpJsonRpcError.MISSING_REQUIRED_CLIENT_CAPABILITY,
+				McpJsonRpcError.UNSUPPORTED_PROTOCOL_VERSION,
+				-31_999,
+				-31_998);
+		Assertions.assertEquals(expectedCodes,
+				McpHttpServerRuntime.PRODUCED_PROTOCOL_ERROR_CODES);
+		for (int applicationCode : List.of(1_001, 0, -31_997,
+				Integer.MIN_VALUE, Integer.MAX_VALUE))
+			Assertions.assertFalse(McpHttpServerRuntime
+					.PRODUCED_PROTOCOL_ERROR_CODES.contains(applicationCode));
+		Assertions.assertThrows(UnsupportedOperationException.class,
+				() -> McpHttpServerRuntime.PRODUCED_PROTOCOL_ERROR_CODES.add(1_001));
+	}
+
+	@Test
+	public void failed_stream_terminal_discards_provisional_protocol_error_metric()
+			throws Exception {
+		ControllableClock clock = new ControllableClock();
+		AtomicReference<McpHttpServerRuntime> runtimeReference =
+				new AtomicReference<>();
+		AtomicInteger terminalReservationHooks = new AtomicInteger();
+		ProtocolSubmissionMetricsObserver observer =
+				new ProtocolSubmissionMetricsObserver(1, 0);
+		RuntimeException handlerFailure = new RuntimeException(
+				"expected streamed handler failure");
+		McpRequestSseStream.setTestHooks(() -> {
+			terminalReservationHooks.incrementAndGet();
+			clock.advance(Duration.ofSeconds(2));
+			runtimeReference.get().runApplicationTimerCycle();
+		});
+		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
+				McpImplementationMetadata.withNameAndVersion(
+						"streamed-protocol-error-metrics-test",
+						"3.6.0-SNAPSHOT"))
+				.build();
+		McpApplicationRequestRouter applicationRouter = router(invocation -> {
+			Assertions.assertTrue(invocation.sendNotification(
+					progressNotification("discard-error", 1)));
+			throw handlerFailure;
+		});
+		McpHttpEndpointBinding binding = new McpHttpEndpointBinding(
+				McpHttpEndpointPolicy.forDiscovery(
+						CorsAuthorizer.rejectAllInstance(),
+						request -> McpRequestAdmissionDecision.ACCEPT),
+				endpoint, applicationRouter);
+		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
+				McpHttpTransportConfiguration.productionDefaults(0),
+				List.of(binding), McpJsonLimits.productionDefaults(),
+				new McpApplicationExecutionConfiguration(
+						1, 1, Duration.ofSeconds(1), Duration.ofDays(1)),
+				clock, McpApplicationHandlerExecutorFactory.production(),
+				ignored -> {}, ignored -> {}, Optional.empty(),
+				McpFrameworkRequestStateRuntime.disabledInstance(),
+				McpSubscriptionRuntimeConfiguration.productionDefaults(), observer);
+		runtimeReference.set(runtime);
+
+		try {
+			int port = runtime.start().getPort();
+			try (McpChunkedHttpClient client = McpChunkedHttpClient.postMcp(
+					port, "\"discard-error\"", APPLICATION_METHOD)) {
+				McpChunkedHttpClient.HttpResponseHead head = client.readHead();
+				Assertions.assertEquals(200, head.status(), head.raw());
+				Assertions.assertEquals("text/event-stream",
+						head.singleHeader("Content-Type"));
+				Assertions.assertTrue(client.awaitTransportClosure(),
+						"The deadline-owned stream did not close.");
+			}
+			observer.awaitAcceptedEvents();
+			Assertions.assertEquals(1, terminalReservationHooks.get());
+			Assertions.assertEquals(List.of(
+					new McpMetricsEvent.RequestAccepted()), observer.events(),
+					"An ErrorResponse rejected by the stream must not emit ProtocolError.");
+		} finally {
+			McpRequestSseStream.setTestHooks(null);
+			runtime.close();
+		}
+	}
+
+	@Test
 	public void protocol_processor_backlog_expires_and_releases_canceled_queue_capacity()
 			throws Exception {
 		CountDownLatch firstAdmissionEntered = new CountDownLatch(1);
@@ -1369,6 +1556,15 @@ public class McpHttpServerApplicationExecutionTests {
 				Map.of("value", new McpJsonString(value))));
 	}
 
+	private static McpJsonRpcMessage.Notification progressNotification(
+			String token, int value) {
+		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
+		fields.put("progressToken", new McpJsonString(token));
+		fields.put("progress", new McpJsonNumber(BigDecimal.valueOf(value)));
+		return new McpJsonRpcMessage.Notification("notifications/progress",
+				Optional.of(new McpJsonObject(fields)), McpJsonObject.empty());
+	}
+
 	private static RawResponse send(int port, String idJson) throws Exception {
 		return send(port, idJson, APPLICATION_METHOD);
 	}
@@ -1480,6 +1676,18 @@ public class McpHttpServerApplicationExecutionTests {
 				"An empty deadline response must have no entity metadata.");
 		Assertions.assertFalse(response.hasHeader("Retry-After"),
 				"Retry-After is not part of the fixed deadline response.");
+	}
+
+	private static void assertExactEmptyProtocolProcessorRejection(
+			RawResponse response) {
+		Assertions.assertEquals(503, response.status(), response.bodyText());
+		Assertions.assertEquals("no-store",
+				response.singleHeader("Cache-Control"));
+		Assertions.assertEquals(0, response.body().length);
+		Assertions.assertFalse(response.hasHeader("Content-Type"),
+				"A protocol-processor rejection must have no entity metadata.");
+		Assertions.assertFalse(response.hasHeader("Retry-After"),
+				"Retry-After is not part of the fixed processor rejection.");
 	}
 
 	private static McpRequestExecutionSnapshot awaitRequestSnapshot(
@@ -1644,6 +1852,217 @@ public class McpHttpServerApplicationExecutionTests {
 
 		private Throwable probeFailure() {
 			return this.probeFailure.get();
+		}
+	}
+
+	private static final class ProtocolSubmissionMetricsObserver
+			implements McpApplicationExecutionObserver {
+		private final Object lock = new Object();
+		private final List<PendingSubmissionMetric> pending = new ArrayList<>();
+		private final List<McpMetricsEvent> delivered = new ArrayList<>();
+		private final ExecutorService probeExecutor;
+		private final AtomicReference<McpHttpServerRuntime> runtimeReference;
+		private final AtomicReference<Throwable> probeFailure =
+				new AtomicReference<>();
+		private final AtomicInteger probeCount = new AtomicInteger();
+		private final CountDownLatch acceptedEvents;
+		private final CountDownLatch rejectedEvents;
+		private int deferralDepth;
+		private boolean delivering;
+
+		private ProtocolSubmissionMetricsObserver(
+				ExecutorService probeExecutor,
+				AtomicReference<McpHttpServerRuntime> runtimeReference) {
+			this(probeExecutor, runtimeReference, 2, 1);
+		}
+
+		private ProtocolSubmissionMetricsObserver(int expectedAcceptedEvents,
+				int expectedRejectedEvents) {
+			this(null, null, expectedAcceptedEvents, expectedRejectedEvents);
+		}
+
+		private ProtocolSubmissionMetricsObserver(
+				ExecutorService probeExecutor,
+				AtomicReference<McpHttpServerRuntime> runtimeReference,
+				int expectedAcceptedEvents, int expectedRejectedEvents) {
+			this.probeExecutor = probeExecutor;
+			this.runtimeReference = runtimeReference;
+			this.acceptedEvents = new CountDownLatch(expectedAcceptedEvents);
+			this.rejectedEvents = new CountDownLatch(expectedRejectedEvents);
+		}
+
+		@Override
+		public void beginDeferral() {
+			synchronized (this.lock) {
+				this.deferralDepth++;
+			}
+		}
+
+		@Override
+		public PendingMetricRecord recordRequestAccepted() {
+			return record(new McpMetricsEvent.RequestAccepted());
+		}
+
+		@Override
+		public void discardPendingMetric(
+				PendingMetricRecord pendingMetricRecord) {
+			if (!(pendingMetricRecord
+					instanceof PendingSubmissionMetric pendingMetric))
+				throw new IllegalArgumentException(
+						"The pending metric belongs to another observer.");
+			synchronized (this.lock) {
+				for (int index = 0; index < this.pending.size(); index++) {
+					if (this.pending.get(index) == pendingMetric) {
+						this.pending.remove(index);
+						return;
+					}
+				}
+			}
+			throw new IllegalStateException(
+					"The provisional metric is no longer pending.");
+		}
+
+		@Override
+		public void recordRequestRejected() {
+			record(new McpMetricsEvent.RequestRejected());
+		}
+
+		@Override
+		public PendingMetricRecord recordProtocolError(int code,
+				com.soklet.McpRequestContext requestContext) {
+			return record(new McpMetricsEvent.ProtocolError(code));
+		}
+
+		@Override
+		public void recordUnknownMirroredHeader(String endpointPath,
+				String jsonRpcMethod) {
+			record(new McpMetricsEvent.UnknownMirroredHeader(
+					endpointPath, jsonRpcMethod));
+		}
+
+		private PendingMetricRecord record(McpMetricsEvent event) {
+			PendingSubmissionMetric pendingMetric =
+					new PendingSubmissionMetric(event);
+			synchronized (this.lock) {
+				this.pending.add(pendingMetric);
+			}
+			return pendingMetric;
+		}
+
+		@Override
+		public void recordHandlerExecutionStarted() {
+		}
+
+		@Override
+		public void recordHandlerExecutionFinished() {
+		}
+
+		@Override
+		public void recordHandlerQueued() {
+		}
+
+		@Override
+		public void recordHandlerDequeued() {
+		}
+
+		@Override
+		public void recordHandlerCapacityRejected() {
+		}
+
+		@Override
+		public void drain() {
+			synchronized (this.lock) {
+				if (this.deferralDepth != 0 || this.delivering
+						|| this.pending.isEmpty())
+					return;
+				this.delivering = true;
+			}
+
+			try {
+				while (true) {
+					PendingSubmissionMetric pendingMetric;
+					synchronized (this.lock) {
+						if (this.deferralDepth != 0 || this.pending.isEmpty())
+							return;
+						pendingMetric = this.pending.remove(0);
+					}
+					deliver(pendingMetric.event());
+				}
+			} finally {
+				synchronized (this.lock) {
+					this.delivering = false;
+				}
+			}
+		}
+
+		private void deliver(McpMetricsEvent event) {
+			synchronized (this.lock) {
+				this.delivered.add(event);
+			}
+			if (this.probeExecutor != null) {
+				Future<?> probe = null;
+				try {
+					probe = this.probeExecutor.submit(() ->
+							this.runtimeReference.get()
+									.requestExecutionSnapshot());
+					probe.get(1, TimeUnit.SECONDS);
+					this.probeCount.incrementAndGet();
+				} catch (Throwable throwable) {
+					if (probe != null)
+						probe.cancel(true);
+					this.probeFailure.compareAndSet(null, throwable);
+				}
+			}
+			if (event instanceof McpMetricsEvent.RequestAccepted)
+				this.acceptedEvents.countDown();
+			if (event instanceof McpMetricsEvent.RequestRejected)
+				this.rejectedEvents.countDown();
+		}
+
+		@Override
+		public void endDeferral() {
+			boolean drain;
+			synchronized (this.lock) {
+				if (this.deferralDepth == 0)
+					throw new IllegalStateException(
+							"Observer deferral is not active.");
+				this.deferralDepth--;
+				drain = this.deferralDepth == 0;
+			}
+			if (drain)
+				drain();
+		}
+
+		private void awaitAcceptedEvents() throws InterruptedException {
+			Assertions.assertTrue(this.acceptedEvents.await(5, TimeUnit.SECONDS),
+					"The accepted protocol-submission metrics did not arrive.");
+		}
+
+		private void awaitRejectedEvent() throws InterruptedException {
+			Assertions.assertTrue(this.rejectedEvents.await(5, TimeUnit.SECONDS),
+					"The rejected protocol-submission metric did not arrive.");
+		}
+
+		private List<McpMetricsEvent> events() {
+			synchronized (this.lock) {
+				return List.copyOf(this.delivered);
+			}
+		}
+
+		private Throwable probeFailure() {
+			return this.probeFailure.get();
+		}
+
+		private int probeCount() {
+			return this.probeCount.get();
+		}
+	}
+
+	private record PendingSubmissionMetric(McpMetricsEvent event)
+			implements McpApplicationExecutionObserver.PendingMetricRecord {
+		private PendingSubmissionMetric {
+			if (event == null)
+				throw new NullPointerException("event");
 		}
 	}
 

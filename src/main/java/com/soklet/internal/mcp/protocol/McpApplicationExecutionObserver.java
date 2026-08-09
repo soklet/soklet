@@ -16,21 +16,59 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import com.soklet.McpRequestContext;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Internal two-phase observation boundary for application-dispatch accounting.
- * Record methods are invoked while the dispatcher accounting lock is held and
- * must only enqueue immutable transition state. {@link #drain()} is invoked
- * after that lock is released and may deliver the queued transitions.
+ * Internal two-phase observation boundary for semantic MCP metrics. Record
+ * methods may be invoked while runtime transition locks are held and must only
+ * enqueue immutable transition state. {@link #drain()} is invoked after those
+ * locks are released and may deliver the queued transitions.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 public interface McpApplicationExecutionObserver {
+	/** Opaque identity for a provisionally recorded metric transition. */
+	interface PendingMetricRecord {
+	}
+
 	void beginDeferral();
+
+	default void beginRequestTransitionDeferral() {
+		beginDeferral();
+	}
+
+	@NonNull
+	default PendingMetricRecord recordRequestAccepted() {
+		return DisabledPendingMetricRecord.INSTANCE;
+	}
+
+	default void discardPendingMetric(
+			@NonNull PendingMetricRecord pendingMetricRecord) {
+		if (pendingMetricRecord == null)
+			throw new NullPointerException("pendingMetricRecord");
+	}
+
+	default void recordRequestRejected() {
+	}
+
+	@NonNull
+	default PendingMetricRecord recordProtocolError(int code,
+			@Nullable McpRequestContext requestContext) {
+		return DisabledPendingMetricRecord.INSTANCE;
+	}
+
+	default void recordUnknownMirroredHeader(@NonNull String endpointPath,
+			@NonNull String jsonRpcMethod) {
+		if (endpointPath == null)
+			throw new NullPointerException("endpointPath");
+		if (jsonRpcMethod == null)
+			throw new NullPointerException("jsonRpcMethod");
+	}
 
 	void recordHandlerExecutionStarted();
 
@@ -50,6 +88,12 @@ public interface McpApplicationExecutionObserver {
 	static McpApplicationExecutionObserver disabledInstance() {
 		return DisabledMcpApplicationExecutionObserver.INSTANCE;
 	}
+}
+
+/** Shared no-op provisional metric identity. */
+enum DisabledPendingMetricRecord
+		implements McpApplicationExecutionObserver.PendingMetricRecord {
+	INSTANCE
 }
 
 /**
