@@ -258,12 +258,47 @@ stop/wake,
 remains scoped through sibling cleanup, and precedes old `ServerStopped` and
 new `ServerStarted` before restart returns.
 
+Separate from those eight production observability and diagnostics verticals,
+a bounded Phase 6 MCP fuzz-registration and hardening checkpoint adds five new
+Jazzer methods:
+`McpJsonRpcEnvelopeCodecFuzzTest#decodeClassifiesOrRejectsOnlyWithTypedWireFailure`,
+`McpMirroredHeaderCodecFuzzTest#decodeStringOnlyRejectsWithRedactedIllegalArgumentException`,
+`McpToolSchemaProfileFuzzTest#compileAndEvaluateRemainTypedAndBounded`,
+`McpCursorValidatorFuzzTest#cursorValidationIsUtf8ExactAndTotal`, and
+`McpRequestStatePlaintextCodecFuzzTest#decodeOnlyRejectsWithUniformRedactedIllegalArgumentException`.
+This checkpoint is not a ninth production vertical; the production count
+remains eight. Twenty-one checked-in synthetic text seeds cover the new
+targets, and the nightly workflow now declares 15 total one-method slots, five
+of them new.
+
+The envelope target applies production JSON limits and accepts only classified
+success or typed `McpWireDecodingException`, without an unconditional encode
+round trip. Mirrored-header decoding applies the production default bound and
+only its uniform redacted `IllegalArgumentException`. The Profile 1 target caps
+schema/instance input at 64 KiB and requires stage-typed compilation or
+production-bounded evaluation outcomes. The cursor target caps input at 64
+KiB and cross-checks decoded UTF-8 and raw UTF-16 projections against the JDK
+UTF-8 encoder in `REPORT` mode for a derived 1-to-256-byte limit. The request-
+state plaintext target fixes its binding, clock, request ID, 4,096-byte bound,
+15-minute lifetime, and three-round limit; successful plaintext must re-encode
+byte-exactly, rejection remains uniformly redacted, and terminal-LF copying is
+limited to 4,097 input bytes. The cursor validator is an internal,
+package-private seam shared by incoming and outgoing cursor checks and adds no
+public API.
+
+The seeds are synthetic protocol values rather than captured requests,
+protected deployment state, secrets, credentials, or raw trace context. No
+scheduled or manual coverage-guided nightly run occurred. Deterministic replay
+is not sustained, coverage, corpus-saturation, privacy, security,
+release-readiness, or Phase 6 freeze proof.
+
 These are FIFO record/enqueue-order guarantees, not a universal cross-thread
 causal total order. Default aggregation remains limited to `ServerStopped` and
 the five handler variants. Unresolved aggregate families and `AMB-003`, trace
 emission/token support, broader privacy/cardinality and redaction work,
-simulator integration, fuzz and sustained gates, release-candidate work, and
-Phase 6 review/freeze remain open. The eighth vertical adds no public API,
+simulator integration, coverage-guided and sustained fuzz gates,
+release-candidate work, and Phase 6 review/freeze remain open. The eighth
+vertical adds no public API,
 snapshot field, aggregate family, label, event variant, or wire dimension.
 
 This checkpoint does not freeze Phase 6. `phase-6.includes` remains outside
@@ -295,17 +330,16 @@ its exact nullability digest is
 The 556/206/1,049/195 evidence counts are unchanged by these provisional
 verticals.
 
-The final exact-source JDK 21 and JDK 26 test suites each execute 1,454 tests
-with zero failures, zero errors, and four expected skips. The JDK 21 Error Prone
-profile passes all enforced checks; NullAway remains advisory, and its warnings
-are not counted here. SpotBugs reports zero `BugInstance` values and zero
-errors. The focused Phase 5 API-review contract run passes 45 tests with no
-failure, error,
-or skip. The focused transport-telemetry and adjacent-regression run passes 118
-tests with no failure, error, or skip. Candidate binary, source, and Javadoc
-packages plus the generated Javadoc report are green using offline-link
-resolution. All 167 API-sketch sources compile for Java 17 and pass Javadoc
-doclint on JDK 26. All 104 files from pinned JSON Schema commit
+The focused main regression run passes 27/0/0/0, and the focused five-target
+fuzz run passes 28/0/0/0. Exact-source full main suites on JDK 21 and JDK 26
+each execute 1,456/0/0/4; deterministic full fuzz corpus replay on both JDKs
+executes 127/0/0/0. The JDK 21 Error Prone profile passes all enforced checks;
+NullAway remains advisory, and its warnings are not counted here. SpotBugs
+reports 0/0. The focused Phase 5 API-review contract run passes 45 tests with
+no failure, error, or skip. Candidate binary, source, and Javadoc packages plus
+standalone Javadoc are green using offline-link resolution. All 167 API-sketch
+sources compile for Java 17 and pass Javadoc doclint on JDK 26. All 104 files
+from pinned JSON Schema commit
 `0c7b65dc16dd8eaa7bd83e21099c76610c3b246a` validate. The benchmark module
 compiles 437 Java source files for Java 17 on JDK 21.
 

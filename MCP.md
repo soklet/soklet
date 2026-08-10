@@ -866,6 +866,36 @@ and retains that scope through runtime terminalization and sibling-loop
 cleanup. These are record/enqueue-order guarantees at the owning authorities,
 not a universal cross-thread causal ordering claim.
 
+Separate from those eight production observability and diagnostics verticals,
+a bounded Phase 6 MCP fuzz-registration and hardening checkpoint adds five new
+Jazzer methods:
+`McpJsonRpcEnvelopeCodecFuzzTest#decodeClassifiesOrRejectsOnlyWithTypedWireFailure`,
+`McpMirroredHeaderCodecFuzzTest#decodeStringOnlyRejectsWithRedactedIllegalArgumentException`,
+`McpToolSchemaProfileFuzzTest#compileAndEvaluateRemainTypedAndBounded`,
+`McpCursorValidatorFuzzTest#cursorValidationIsUtf8ExactAndTotal`, and
+`McpRequestStatePlaintextCodecFuzzTest#decodeOnlyRejectsWithUniformRedactedIllegalArgumentException`.
+This is not a ninth production vertical; the completed production-vertical
+count remains eight. Twenty-one checked-in synthetic text seeds cover these
+targets, and the nightly matrix now declares 15 total one-method slots, five of
+them new.
+
+The envelope target uses production JSON limits and either classifies one of
+the four envelope variants or observes only typed `McpWireDecodingException`;
+it deliberately makes no unconditional encode-round-trip claim because
+canonical output can expand. Mirrored-header decoding uses the production
+default bound and permits only its uniform redacted `IllegalArgumentException`.
+The Profile 1 target caps one input at 64 KiB, splits schema and optional
+instance at a literal `---INSTANCE---` line, and requires typed compilation or
+production-bounded evaluation outcomes. Cursor validation caps input at 64
+KiB and cross-checks decoded UTF-8 and raw UTF-16 projections against the JDK
+UTF-8 encoder in `REPORT` mode for a derived 1-to-256-byte limit. Request-state
+plaintext uses a deterministic binding, clock, request ID, 4,096-byte bound,
+15-minute lifetime, and three-round limit; rejection remains uniform and
+redacted, while accepted input must re-encode byte-exactly. Its terminal-LF
+copy is derived only for inputs of at most 4,097 bytes. The cursor helper is an
+internal package-private validation seam shared by incoming and outgoing
+cursors; it adds no public API.
+
 The default collector separately exposes shutdown counts as an immutable,
 enum-ordered `Map<McpShutdownOutcome, Long>`. It omits zero outcomes, returns
 to an empty map after reset, and renders exactly
@@ -873,8 +903,9 @@ to an empty map after reset, and renders exactly
 Prometheus/OpenMetrics text. Default aggregation remains limited to
 `ServerStopped` and the five handler variants. The unresolved aggregate
 families and `AMB-003`, trace emission/token work, broader privacy,
-cardinality, and redaction work, simulator integration, fuzz and sustained
-gates, release-candidate work, and Phase 6 review/freeze remain open. The
+cardinality, and redaction work, simulator integration, scheduled/manual
+coverage-guided and sustained fuzz gates, release-candidate work, and Phase 6
+review/freeze remain open. The
 seventh and eighth delivery verticals add no public API, snapshot field,
 aggregate family, label, event variant, or wire dimension. Phase 6 remains
 provisional and unfrozen.
@@ -931,23 +962,23 @@ the harness to phase 5. A fresh 39-scenario development-candidate verify passes
 all profiles, validates all 39 goldens, and records no bad outcome, standard-
 error output, or non-clean fixture exit.
 
-The focused transport-telemetry and adjacent-regression run passes 118 tests
-with zero failures, zero errors, and zero skips. Final exact-source full
-repository runs on JDK 21 and JDK 26 each report 1,454 tests, zero failures,
-zero errors, and four skips. The JDK 21 enforced static-analysis profile is
-green without counting advisory warnings; SpotBugs reports zero `BugInstance`
-values and zero errors. Exact API-freeze evidence remains unchanged at 556
-incompatibilities, 206 reviewed
-owners, 1,049 Phase 4 records, and 195 Phase 5 records with the prior hashes.
-Candidate binary, source, and Javadoc packages plus the generated Javadoc
-report are green using offline-link resolution. All 167 API-sketch sources
-compile for Java 17 and pass Javadoc doclint on JDK 26. All 104 files from
-pinned JSON Schema commit `0c7b65dc16dd8eaa7bd83e21099c76610c3b246a`
-validate. These are local development results, not release-candidate
-provenance. The remaining Phase 6 aggregate families and `AMB-003`, broader
-trace emission/token, privacy/cardinality, and redaction work, simulator
-integration, sustained and fuzz gates, broader CI/provenance and
-release-candidate work, and Phase 6 API review/freeze remain open. Phase 6
-remains provisional and unfrozen.
+The focused main regression run passes 27/0/0/0, and the focused five-target
+fuzz run passes 28/0/0/0. Exact-source full main suites on JDK 21 and JDK 26
+each report 1,456/0/0/4; deterministic full fuzz corpus replay on both JDKs
+reports 127/0/0/0. The JDK 21 enforced static-analysis profile is green without
+counting advisory warnings; SpotBugs reports 0/0. Exact API-freeze evidence
+remains unchanged at 556 incompatibilities, 206 reviewed owners, 1,049 Phase 4
+records, and 195 Phase 5 records with the prior hashes. Candidate binary,
+source, and Javadoc packages plus standalone Javadoc are green using
+offline-link resolution. All 167 API-sketch sources compile for Java 17 and
+pass Javadoc doclint on JDK 26. All 104 files from pinned JSON Schema commit
+`0c7b65dc16dd8eaa7bd83e21099c76610c3b246a` validate. No scheduled or manual
+coverage-guided nightly fuzz run occurred; deterministic seed replay is not
+sustained, coverage, corpus-saturation, privacy, security, release-readiness,
+or Phase 6 freeze proof. The remaining Phase 6 aggregate families and
+`AMB-003`, broader trace emission/token, privacy/cardinality, and redaction
+work, simulator integration, coverage-guided and sustained fuzz gates, broader
+CI/provenance and release-candidate work, and Phase 6 API review/freeze remain
+open. Phase 6 remains provisional and unfrozen.
 
 Do not treat this snapshot guide as a release-conformance statement.

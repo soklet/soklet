@@ -332,6 +332,16 @@ jobs:
             test_selector: McpJsonCodecFuzzTest#strictJsonFuzzRejectsInvalidBytesOnlyWithIllegalArgumentException
           - target_id: mcp-json-round-trip
             test_selector: McpJsonCodecFuzzTest#strictJsonFuzzRoundTripsStructurally
+          - target_id: mcp-json-rpc-envelope
+            test_selector: McpJsonRpcEnvelopeCodecFuzzTest#decodeClassifiesOrRejectsOnlyWithTypedWireFailure
+          - target_id: mcp-mirrored-header
+            test_selector: McpMirroredHeaderCodecFuzzTest#decodeStringOnlyRejectsWithRedactedIllegalArgumentException
+          - target_id: mcp-profile-1-schema
+            test_selector: McpToolSchemaProfileFuzzTest#compileAndEvaluateRemainTypedAndBounded
+          - target_id: mcp-cursor-validator
+            test_selector: McpCursorValidatorFuzzTest#cursorValidationIsUtf8ExactAndTotal
+          - target_id: mcp-request-state-plaintext
+            test_selector: McpRequestStatePlaintextCodecFuzzTest#decodeOnlyRejectsWithUniformRedactedIllegalArgumentException
     steps:
       - name: Check out
         uses: actions/checkout@v6

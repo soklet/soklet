@@ -32,6 +32,18 @@ The current targets are:
 - `ResponseCookieFuzzTest`
 - `TraceContextFuzzTest`
 - `McpJsonCodecFuzzTest`
+- `McpJsonRpcEnvelopeCodecFuzzTest`
+- `McpMirroredHeaderCodecFuzzTest`
+- `McpToolSchemaProfileFuzzTest`
+- `McpCursorValidatorFuzzTest`
+- `McpRequestStatePlaintextCodecFuzzTest`
+
+The MCP targets use production parser, compiler, evaluator, and validation
+entry points with deterministic configuration. The Profile 1 target bounds a
+single fuzz input to 64 KiB and uses a literal `---INSTANCE---` line to split a
+schema document from an optional instance. This coverage complements the exact
+production-limit unit tests; it does not claim exhaustive fuzzing at every
+configured or hard maximum.
 
 ## Corpus Policy
 
@@ -66,6 +78,12 @@ or both of:
 
 Raw generated corpus entries are useful for exploration, but curated seeds are
 the auditable gate.
+
+MCP corpus seeds are synthetic protocol values only. They must not contain
+captured requests, protected state from a deployment, secrets, credentials,
+raw trace context, or other production data. Passing corpus replay is a parser
+and validator regression gate, not a comprehensive privacy, security, or
+release-readiness result.
 
 ## CI Behavior
 

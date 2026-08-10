@@ -1,0 +1,3 @@
+{"$defs":{"loop":{"$ref":"#/$defs/loop"}},"$ref":"#/$defs/loop"}
+---INSTANCE---
+null

@@ -2065,7 +2065,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				if (fields.containsKey("cursor")) {
 					McpJsonValue cursorValue = fields.get("cursor");
 					if (!(cursorValue instanceof McpJsonString string)
-							|| utf8Size(string.value()) > endpoint.maximumCursorSizeInBytes())
+							|| !McpCursorValidator.fitsWithinUtf8ByteLimit(
+									string.value(), endpoint.maximumCursorSizeInBytes()))
 						return invalidParams(mappedRequest, corsHeaders);
 					cursor = Optional.of(string.value());
 				}
@@ -2751,7 +2752,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		if (resourceListResult && fields.containsKey("nextCursor")) {
 			McpJsonValue cursorValue = fields.get("nextCursor");
 			if (!(cursorValue instanceof McpJsonString string)
-					|| utf8Size(string.value()) > maximumCursorSizeInBytes)
+					|| !McpCursorValidator.fitsWithinUtf8ByteLimit(
+							string.value(), maximumCursorSizeInBytes))
 				throw new IllegalArgumentException(
 						"A resource-list next cursor exceeds its wire bound.");
 		}

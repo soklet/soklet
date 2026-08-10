@@ -1,0 +1,3 @@
+{"anyOf":[{"type":"string"},{"minimum":10}]}
+---INSTANCE---
+5

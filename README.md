@@ -795,12 +795,15 @@ free default metric families. Immutable server diagnostics expose the
 configured handler bounds, current active/queued counts, open request streams
 and subscription subset, effective request-state protection mode, custom-
 protector presence, and secret-free production-ring and trace-configuration
-fingerprints. The diagnostics add no metric, event, or wire dimension. The
-unresolved aggregate families and `AMB-003`, operational trace emission/token
-support, broader privacy/cardinality and redaction work, MCP simulation,
-sustained/fuzz and release-candidate gates, and Phase 6 review/freeze remain
-open; applications must not advertise or depend on those remaining behaviors
-yet.
+fingerprints. The diagnostics add no metric, event, or wire dimension. A
+separate bounded Phase 6 MCP fuzz-registration checkpoint now covers five new
+Jazzer methods with 21 synthetic seeds and expands the nightly matrix to 15
+total one-method slots; it is not a ninth production vertical. The unresolved
+aggregate families and `AMB-003`, operational trace emission/token support,
+broader privacy/cardinality and redaction work, MCP simulation,
+scheduled/manual coverage-guided and sustained fuzz gates, and
+release-candidate and Phase 6 review/freeze work remain open; applications
+must not advertise or depend on those remaining behaviors yet.
 
 The exact pinned 39-scenario MCP suite has completed one clean controlled
 profile-observation run against the packaged fixture: 147 successful outcomes,
@@ -816,23 +819,24 @@ passes a fresh 39-scenario development-candidate verify with all 39 goldens and
 no bad outcome, standard-error output, or non-clean exit. It remains
 development evidence, not release-candidate provenance.
 
-The focused transport-telemetry and adjacent-regression run passes 118 tests
-with zero failures, zero errors, and zero skips. Final exact-source full
-repository runs on JDK 21 and JDK 26 each report 1,454 tests, zero failures,
-zero errors, and four skips. The JDK 21 enforced static-analysis profile is
-green without counting advisory warnings; SpotBugs reports zero `BugInstance`
-values and zero errors. Exact API-freeze evidence remains unchanged at 556
-incompatibilities, 206 reviewed
-owners, 1,049 Phase 4 records, and 195 Phase 5 records with the prior hashes.
-Candidate binary, source, and Javadoc packages plus the generated Javadoc
-report are green using offline-link resolution. All 167 API-sketch sources
-compile for Java 17 and pass Javadoc doclint on JDK 26. All 104 files from
-pinned JSON Schema commit `0c7b65dc16dd8eaa7bd83e21099c76610c3b246a`
-validate. These local results do not close the remaining Phase 6 aggregate
-families and `AMB-003`, broader trace emission/token, privacy/cardinality, and
-redaction work, simulator, sustained/fuzz, broader CI/provenance and release-
-candidate work, or API review/freeze. Phase 6 remains provisional and
-unfrozen.
+The focused main regression run passes 27/0/0/0, and the focused five-target
+fuzz run passes 28/0/0/0. Exact-source full main suites on JDK 21 and JDK 26
+each report 1,456/0/0/4; deterministic full fuzz corpus replay on both JDKs
+reports 127/0/0/0. The JDK 21 enforced static-analysis profile is green without
+counting advisory warnings; SpotBugs reports 0/0. Exact API-freeze evidence
+remains unchanged at 556 incompatibilities, 206 reviewed owners, 1,049 Phase 4
+records, and 195 Phase 5 records with the prior hashes. Candidate binary,
+source, and Javadoc packages plus standalone Javadoc are green using
+offline-link resolution. All 167 API-sketch sources compile for Java 17 and
+pass Javadoc doclint on JDK 26. All 104 files from pinned JSON Schema commit
+`0c7b65dc16dd8eaa7bd83e21099c76610c3b246a` validate. No scheduled or manual
+coverage-guided nightly fuzz run occurred; deterministic seed replay is not
+sustained, coverage, corpus-saturation, privacy, security, release-readiness,
+or Phase 6 freeze proof. The remaining Phase 6 aggregate families and
+`AMB-003`, broader trace emission/token, privacy/cardinality, and redaction
+work, simulator, coverage-guided and sustained fuzz gates, broader
+CI/provenance and release-candidate work, and API review/freeze remain open.
+Phase 6 remains provisional and unfrozen.
 
 #### Form Handling
 
@@ -1621,6 +1625,31 @@ recording precedes stop/wake and remains scoped through sibling cleanup. These
 are FIFO
 record/enqueue-order guarantees, not universal cross-thread causal ordering.
 
+Separate from the eight production observability and diagnostics verticals,
+the bounded Phase 6 MCP fuzz-registration and hardening checkpoint adds
+`McpJsonRpcEnvelopeCodecFuzzTest#decodeClassifiesOrRejectsOnlyWithTypedWireFailure`,
+`McpMirroredHeaderCodecFuzzTest#decodeStringOnlyRejectsWithRedactedIllegalArgumentException`,
+`McpToolSchemaProfileFuzzTest#compileAndEvaluateRemainTypedAndBounded`,
+`McpCursorValidatorFuzzTest#cursorValidationIsUtf8ExactAndTotal`, and
+`McpRequestStatePlaintextCodecFuzzTest#decodeOnlyRejectsWithUniformRedactedIllegalArgumentException`.
+Twenty-one checked-in synthetic text seeds cover those five new Jazzer methods,
+and the nightly workflow declares 15 total one-method slots, five of them new.
+This checkpoint is not a ninth production vertical.
+
+The targets classify a production-limited JSON-RPC envelope or accept only a
+typed `McpWireDecodingException` without requiring unconditional re-encoding;
+bound mirrored-header decoding to its production default and uniform redacted
+`IllegalArgumentException`; and cap Profile 1 schema/instance input at 64 KiB
+while requiring typed compilation or production-bounded evaluation outcomes.
+The cursor target caps input at 64 KiB and cross-checks decoded UTF-8 and raw
+UTF-16 projections with the JDK UTF-8 encoder in `REPORT` mode at a derived
+1-to-256-byte limit. The request-state plaintext target uses a fixed binding,
+clock, request ID, 4,096-byte size, 15-minute lifetime, and three-round limit;
+accepted input re-encodes byte-exactly and rejection stays uniform and
+redacted, with terminal-LF copying limited to at most 4,097 input bytes. The
+cursor validator exposed for this target is package-private and internal, is
+shared by incoming and outgoing cursor checks, and adds no public API.
+
 For MCP shutdowns, `snapshot().getMcpMetrics().getShutdowns()` is an immutable,
 enum-ordered `Map<McpShutdownOutcome, Long>`. The default collector omits
 unobserved outcomes, returns the map to empty on reset, and emits only
@@ -1630,6 +1659,11 @@ remains limited to `ServerStopped` and the five handler variants. Unresolved
 aggregate families and `AMB-003`, trace emission/token support, broader
 privacy/cardinality and redaction work, simulator integration, fuzz and
 sustained gates, release-candidate work, and Phase 6 review/freeze remain open.
+Here, the remaining fuzz work means scheduled/manual coverage-guided and
+sustained execution, not the completed registration and deterministic corpus
+replay checkpoint. No such coverage-guided nightly run has occurred, and the
+replay is not sustained, coverage, corpus-saturation, privacy, security,
+release-readiness, or freeze proof.
 The seventh and eighth verticals add no public API, snapshot field, aggregate
 family, label, event variant, or wire dimension. Phase 6 remains provisional
 and unfrozen.
