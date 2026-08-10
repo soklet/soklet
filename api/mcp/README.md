@@ -133,7 +133,7 @@ markers.
 
 ## Current bounded Phase 6 checkpoint
 
-Seven bounded Phase 6 verticals are implemented. `McpServerDiagnostics` remains
+Eight bounded Phase 6 verticals are implemented. `McpServerDiagnostics` remains
 the completed protection and trace diagnostics projection.
 `McpServerDiagnostics` now has exactly 12 zero-argument methods: lifecycle
 `getStatus()` and `getBoundAddress()`, plus all ten implemented diagnostic
@@ -187,8 +187,9 @@ The sixth vertical established one context-aware deferred FIFO for the first 16
 semantic event variants produced by the runtime: the five handler transitions,
 `ServerStopped`, the nine admitted request, stream, subscription, cancelation,
 progress, and keep-alive variants, and exact-once `ServerStarted`. The seventh
-extends that same FIFO to 20 produced variants with `RequestAccepted`,
-`RequestRejected`, `ProtocolError`, and `UnknownMirroredHeader`.
+extended that same FIFO to the 20 variants produced at that checkpoint with
+`RequestAccepted`, `RequestRejected`, `ProtocolError`, and
+`UnknownMirroredHeader`.
 
 `RequestAccepted` is retained only after successful bounded processor
 submission. Executor rejection identity-discards its provisional accepted
@@ -225,10 +226,45 @@ universal cross-thread causal or per-request total order for independently
 racing producers. No public API, diagnostics/snapshot field, aggregate family,
 label, event variant, or wire dimension was added.
 
-Only the transport trio `ConnectionAccepted`, `ConnectionRejected`, and
-`TransportFailure` remain uninstrumented. Aggregate families, trace
-emission/token support, broader redaction, simulator integration,
-sustained/release gates, and Phase 6 review/freeze remain open.
+The eighth vertical extends the same FIFO to all 23 declared variants with
+`ConnectionAccepted`, `ConnectionRejected`, and `TransportFailure`.
+`ConnectionAccepted` follows operating-system accept and capacity reservation,
+before registration or request processing, so a later setup failure may follow
+it. `ConnectionRejected` means only that an accepted socket encountered the
+configured connection-capacity limit; accept/setup faults instead emit their
+typed transport failure without a capacity rejection.
+
+`TransportFailure` is request-free and carries exactly one bounded enum value:
+`REQUEST_READ_TIMEOUT`, `REQUEST_TOO_LARGE`, `MALFORMED_REQUEST`, `READ_ERROR`,
+`WRITE_ERROR`, `RESPONSE_WRITE_IDLE_TIMEOUT`, `RESPONSE_READY_ERROR`,
+`REQUEST_READ_TIMEOUT_ERROR`, `RESPONSE_WRITE_IDLE_TIMEOUT_ERROR`,
+`ACCEPT_LOOP_ERROR`, `CONNECTION_SETUP_ERROR`, `TASK_ERROR`,
+`TIMEOUT_TASK_ERROR`, `SELECTION_KEY_ERROR`, `REGISTER_ERROR`, `WRITE_TIMEOUT`,
+`EVENT_LOOP_TERMINATED`, or `UNKNOWN`. Neither the event nor its collector-
+failure log retains a remote address, raw request/context, throwable, payload,
+trace token, or other unbounded dimension. Typed low-level authorities select
+the reason without parsing strings.
+
+Typed provisional scopes and a coalescing single-daemon-worker scheduler drain
+after transport locks, never synchronously fall back to collector invocation on
+a connection thread, and preserve a racing signal across executor rejection.
+Blocking lifecycle deferral safely adopts pending delivery. A byte-free idle
+close is quiet while a partial request produces `REQUEST_READ_TIMEOUT`;
+transport-malformed HTTP stays distinct from complete malformed JSON-RPC. The
+request-SSE write-idle winner records one `WRITE_TIMEOUT` before terminals; a
+losing/generic close records no `WRITE_TIMEOUT`, and channel cancelation does
+not synthesize `WRITE_ERROR`. Fatal `EVENT_LOOP_TERMINATED` is recorded before
+stop/wake,
+remains scoped through sibling cleanup, and precedes old `ServerStopped` and
+new `ServerStarted` before restart returns.
+
+These are FIFO record/enqueue-order guarantees, not a universal cross-thread
+causal total order. Default aggregation remains limited to `ServerStopped` and
+the five handler variants. Unresolved aggregate families and `AMB-003`, trace
+emission/token support, broader privacy/cardinality and redaction work,
+simulator integration, fuzz and sustained gates, release-candidate work, and
+Phase 6 review/freeze remain open. The eighth vertical adds no public API,
+snapshot field, aggregate family, label, event variant, or wire dimension.
 
 This checkpoint does not freeze Phase 6. `phase-6.includes` remains outside
 `frozen-phases`, and the diagnostics owner remains provisional and unfrozen.
@@ -259,13 +295,13 @@ its exact nullability digest is
 The 556/206/1,049/195 evidence counts are unchanged by these provisional
 verticals.
 
-The final exact-source JDK 21 and JDK 26 test suites each execute 1,443 tests
+The final exact-source JDK 21 and JDK 26 test suites each execute 1,454 tests
 with zero failures, zero errors, and four expected skips. The JDK 21 Error Prone
 profile passes all enforced checks; NullAway remains advisory, and its warnings
 are not counted here. SpotBugs reports zero `BugInstance` values and zero
-errors. The
-focused Phase 5 API-review contract run passes 45 tests with no failure, error,
-or skip. The broader focused Phase 6 semantic-event delivery run passes 158
+errors. The focused Phase 5 API-review contract run passes 45 tests with no
+failure, error,
+or skip. The focused transport-telemetry and adjacent-regression run passes 118
 tests with no failure, error, or skip. Candidate binary, source, and Javadoc
 packages plus the generated Javadoc report are green using offline-link
 resolution. All 167 API-sketch sources compile for Java 17 and pass Javadoc

@@ -24,6 +24,7 @@ import com.soklet.CorsPreflightResponse;
 import com.soklet.CorsResponse;
 import com.soklet.HttpMethod;
 import com.soklet.MediaRange;
+import com.soklet.MetricsCollector.TransportFailureReason;
 import com.soklet.McpApplicationRequestState;
 import com.soklet.McpFrameworkRequestState;
 import com.soklet.McpRequestContext;
@@ -42,6 +43,7 @@ import com.soklet.internal.microhttp.MicrohttpRequest;
 import com.soklet.internal.microhttp.MicrohttpResponse;
 import com.soklet.internal.microhttp.NoopLogger;
 import com.soklet.internal.microhttp.Options;
+import com.soklet.internal.microhttp.TransportFailureObserver;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -72,7 +74,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
 import java.util.concurrent.FutureTask;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -286,6 +290,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private final McpApplicationHandlerExecutorFactory applicationExecutorFactory;
 	@NonNull
 	private final McpApplicationExecutionObserver applicationExecutionObserver;
+	@NonNull
+	private final TransportMetricDrainScheduler transportMetricDrainScheduler;
+	@NonNull
+	private final TransportFailureObserver transportFailureObserver;
 	@NonNull
 	private final McpFrameworkRequestStateRuntime requestStateRuntime;
 	@NonNull
@@ -553,6 +561,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		this.applicationExecutorFactory = requireNonNull(applicationExecutorFactory);
 		this.applicationExecutionObserver = requireNonNull(
 				applicationExecutionObserver);
+		this.transportMetricDrainScheduler =
+				new TransportMetricDrainScheduler(this.applicationExecutionObserver);
+		this.transportFailureObserver = this::beginTransportFailure;
 		this.requestStateRuntime = requireNonNull(requestStateRuntime);
 		this.subscriptionRuntimeConfiguration = requireNonNull(
 				subscriptionRuntimeConfiguration);
@@ -783,7 +794,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				};
 				Options options = microhttpOptions();
 				candidateEventLoop = new EventLoop(options, NoopLogger.instance(), handler,
-						connectionListener(candidateReadiness));
+						connectionListener(candidateReadiness),
+						this.transportFailureObserver);
 				effectiveAddress = candidateEventLoop.getLocalAddress();
 				candidateAddress.set(effectiveAddress);
 				candidateEventLoop.start();
@@ -1504,10 +1516,19 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 			@Override
 			public void didAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
+				recordConnectionMetric(true);
 			}
 
 			@Override
 			public void didFailToAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
+				recordConnectionMetric(false);
+			}
+
+			@Override
+			public void didFailToAcceptConnection(
+					@Nullable InetSocketAddress remoteAddress,
+					@Nullable Throwable throwable) {
+				// Accept/setup faults are typed transport failures, not capacity rejection.
 			}
 
 			@Override
@@ -1520,15 +1541,78 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		};
 	}
 
+	private void recordConnectionMetric(boolean accepted) {
+		boolean deferred = false;
+		try {
+			this.applicationExecutionObserver.beginRequestTransitionDeferral();
+			deferred = true;
+			if (accepted)
+				this.applicationExecutionObserver.recordConnectionAccepted();
+			else
+				this.applicationExecutionObserver.recordConnectionRejected();
+		} catch (Throwable ignored) {
+			// Metrics observation must not alter connection admission.
+		} finally {
+			if (deferred) {
+				try {
+					this.applicationExecutionObserver
+							.endDeferralForAsynchronousDrain();
+				} catch (Throwable ignored) {
+					// A failed internal observer must not alter connection admission.
+				} finally {
+					this.transportMetricDrainScheduler.schedule();
+				}
+			}
+		}
+	}
+
+	private TransportFailureObserver.@NonNull Observation beginTransportFailure(
+			@NonNull TransportFailureReason reason) {
+		this.applicationExecutionObserver.beginRequestTransitionDeferral();
+		try {
+			McpApplicationExecutionObserver.PendingMetricRecord pendingRecord =
+					this.applicationExecutionObserver.recordTransportFailure(
+							requireNonNull(reason));
+			return new RuntimeTransportFailureObservation(pendingRecord);
+		} catch (RuntimeException | Error failure) {
+			try {
+				this.applicationExecutionObserver.endDeferralForAsynchronousDrain();
+			} finally {
+				this.transportMetricDrainScheduler.schedule();
+			}
+			throw failure;
+		}
+	}
+
+	private void observeTransportFailure(
+			@NonNull TransportFailureReason reason,
+			@NonNull Runnable terminalConsequences) {
+		TransportFailureObserver.@Nullable Observation observation = null;
+		try {
+			observation = this.transportFailureObserver.beginFailure(
+					requireNonNull(reason));
+		} catch (Throwable ignored) {
+			// Metrics observation must not alter a terminal transport transition.
+		}
+		try {
+			requireNonNull(terminalConsequences).run();
+		} finally {
+			if (observation != null) {
+				try {
+					observation.close();
+				} catch (Throwable ignored) {
+					// Metrics observation must not alter the transport transition.
+				}
+			}
+		}
+	}
+
 	private void handleUnexpectedTermination(@NonNull EventLoop terminatedEventLoop,
 			@NonNull Throwable throwable) {
-		this.applicationExecutionObserver.beginDeferral();
-		try {
-			handleUnexpectedTerminationWhileMetricsDeferred(terminatedEventLoop,
-					throwable);
-		} finally {
-			this.applicationExecutionObserver.endDeferral();
-		}
+		// EventLoop's typed transport-failure scope already defers this complete
+		// terminal transition without waiting on an active collector callback.
+		handleUnexpectedTerminationWhileMetricsDeferred(terminatedEventLoop,
+				throwable);
 	}
 
 	private void handleUnexpectedTerminationWhileMetricsDeferred(
@@ -4956,8 +5040,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 
 			if (submission != null && submission.rejectedCallback() != null) {
-				deliverResponse(submission.rejectedCallback(),
+				Throwable deliveryFailure = deliverResponse(
+						submission.rejectedCallback(),
 						emptyResponse(503, "Service Unavailable", List.of()));
+				if (deliveryFailure != null)
+					observeTransportFailure(TransportFailureReason.RESPONSE_READY_ERROR,
+							() -> {});
 			}
 		}
 
@@ -5086,9 +5174,14 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						withRequestObservationTermination(terminalResponse, fallback);
 				Throwable deliveryFailure = deliverResponse(
 						reservation.responseCallback(), observedResponse);
-				if (deliveryFailure != null)
-					finishRequestObservation(McpRequestOutcome.WRITE_FAILED, null,
-							List.of(deliveryFailure));
+				if (deliveryFailure != null) {
+					Throwable requiredFailure = deliveryFailure;
+					observeTransportFailure(
+							TransportFailureReason.RESPONSE_READY_ERROR,
+							() -> finishRequestObservation(
+									McpRequestOutcome.WRITE_FAILED, null,
+									List.of(requiredFailure)));
+				}
 			}
 		}
 
@@ -5152,7 +5245,11 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				try {
 					requireNonNull(callback).accept(stream.response(additionalHeaders));
 				} catch (Throwable throwable) {
-					stream.fail(StreamTerminationReason.WRITE_FAILED, throwable);
+					McpRequestSseStream failedStream = stream;
+					observeTransportFailure(
+							TransportFailureReason.RESPONSE_READY_ERROR,
+							() -> failedStream.fail(
+									StreamTerminationReason.WRITE_FAILED, throwable));
 					return false;
 				}
 				return true;
@@ -5197,9 +5294,14 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						rendering.response(), rendering.observationResult());
 				Throwable deliveryFailure = deliverResponse(requireNonNull(callback),
 						observedResponse);
-				if (deliveryFailure != null)
-					finishRequestObservation(McpRequestOutcome.WRITE_FAILED, null,
-							List.of(deliveryFailure));
+				if (deliveryFailure != null) {
+					Throwable requiredFailure = deliveryFailure;
+					observeTransportFailure(
+							TransportFailureReason.RESPONSE_READY_ERROR,
+							() -> finishRequestObservation(
+									McpRequestOutcome.WRITE_FAILED, null,
+									List.of(requiredFailure)));
+				}
 				return true;
 			}
 			planRequestObservation(requestObservationResult(response));
@@ -5386,9 +5488,36 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					application.recordStreamDeadlineExpiration();
 					return;
 				}
-				if (stream.failIfWriteIdleExpired(nowNanos,
-						transportConfiguration.responseWriteIdleTimeout().toNanos(),
-						StreamTerminationReason.RESPONSE_IDLE_TIMEOUT, null))
+				TransportFailureObserver.@Nullable Observation
+						writeTimeoutObservation = null;
+				boolean writeTimeoutWon = false;
+				try {
+					try {
+						writeTimeoutObservation = transportFailureObserver.beginFailure(
+								TransportFailureReason.WRITE_TIMEOUT);
+					} catch (Throwable ignored) {
+						// Metrics observation must not alter the timer transition.
+					}
+					writeTimeoutWon = stream.failIfWriteIdleExpired(nowNanos,
+							transportConfiguration.responseWriteIdleTimeout().toNanos(),
+							StreamTerminationReason.RESPONSE_IDLE_TIMEOUT, null);
+				} finally {
+					if (writeTimeoutObservation != null) {
+						try {
+							if (!writeTimeoutWon)
+								writeTimeoutObservation.discard();
+						} catch (Throwable ignored) {
+							// Metrics observation must not alter the timer transition.
+						} finally {
+							try {
+								writeTimeoutObservation.close();
+							} catch (Throwable ignored) {
+								// Metrics observation must not alter the timer transition.
+							}
+						}
+					}
+				}
+				if (writeTimeoutWon)
 					return;
 
 				boolean terminateForBackpressure = false;
@@ -5522,9 +5651,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					fallback);
 			Throwable deliveryFailure = deliverResponse(
 					expiration.responseCallback(), response);
-			if (deliveryFailure != null)
-				finishRequestObservation(McpRequestOutcome.WRITE_FAILED, null,
-						List.of(deliveryFailure));
+			if (deliveryFailure != null) {
+				Throwable requiredFailure = deliveryFailure;
+				observeTransportFailure(TransportFailureReason.RESPONSE_READY_ERROR,
+						() -> finishRequestObservation(
+								McpRequestOutcome.WRITE_FAILED, null,
+								List.of(requiredFailure)));
+			}
 		}
 
 		private void applicationTerminated() {
@@ -5595,6 +5728,142 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			if (identifiedRequestExchange) {
 				identifiedRequestExchange = false;
 				activeIdentifiedRequestExchangeCount.decrementAndGet();
+			}
+		}
+	}
+
+	@ThreadSafe
+	private final class RuntimeTransportFailureObservation
+			implements TransportFailureObserver.Observation {
+		private final McpApplicationExecutionObserver.@NonNull PendingMetricRecord
+				pendingRecord;
+		private boolean discarded;
+		private boolean closed;
+
+		private RuntimeTransportFailureObservation(
+				McpApplicationExecutionObserver.@NonNull PendingMetricRecord
+						pendingRecord) {
+			this.pendingRecord = requireNonNull(pendingRecord);
+		}
+
+		@Override
+		public synchronized void discard() {
+			if (this.closed)
+				throw new IllegalStateException(
+						"A closed transport-failure observation cannot be discarded.");
+			if (!this.discarded) {
+				applicationExecutionObserver.discardPendingMetric(this.pendingRecord);
+				this.discarded = true;
+			}
+		}
+
+		@Override
+		public void close() {
+			synchronized (this) {
+				if (this.closed)
+					return;
+				this.closed = true;
+			}
+			try {
+				applicationExecutionObserver.endDeferralForAsynchronousDrain();
+			} finally {
+				transportMetricDrainScheduler.schedule();
+			}
+		}
+	}
+
+	@ThreadSafe
+	static final class TransportMetricDrainScheduler {
+		private static final AtomicLong THREAD_SEQUENCE = new AtomicLong();
+		@NonNull
+		private final McpApplicationExecutionObserver observer;
+		@NonNull
+		private final Executor executor;
+		@NonNull
+		private final Object lock;
+		private long requestedGeneration;
+		private long completedGeneration;
+		private boolean workerScheduled;
+
+		TransportMetricDrainScheduler(
+				@NonNull McpApplicationExecutionObserver observer) {
+			this(observer, newTransportMetricExecutor());
+		}
+
+		TransportMetricDrainScheduler(
+				@NonNull McpApplicationExecutionObserver observer,
+				@NonNull Executor executor) {
+			this.observer = requireNonNull(observer);
+			this.executor = requireNonNull(executor);
+			this.lock = new Object();
+		}
+
+		@NonNull
+		private static Executor newTransportMetricExecutor() {
+			ThreadFactory threadFactory = runnable -> {
+				Thread thread = new Thread(runnable, "soklet-mcp-metrics-"
+						+ THREAD_SEQUENCE.incrementAndGet());
+				thread.setDaemon(true);
+				return thread;
+			};
+			ThreadPoolExecutor executor = new ThreadPoolExecutor(
+					0, 1, 1L, TimeUnit.SECONDS,
+					new LinkedBlockingQueue<>(), threadFactory,
+					new ThreadPoolExecutor.AbortPolicy());
+			executor.allowCoreThreadTimeOut(true);
+			return executor;
+		}
+
+		void schedule() {
+			long attemptedGeneration;
+			synchronized (this.lock) {
+				if (this.requestedGeneration != Long.MAX_VALUE)
+					this.requestedGeneration++;
+				if (this.workerScheduled)
+					return;
+				this.workerScheduled = true;
+				attemptedGeneration = this.requestedGeneration;
+			}
+
+			while (true) {
+				try {
+					this.executor.execute(this::drain);
+					return;
+				} catch (RuntimeException | Error ignored) {
+					long nextAttemptGeneration;
+					synchronized (this.lock) {
+						if (Long.compare(this.requestedGeneration,
+								attemptedGeneration) == 0) {
+							this.workerScheduled = false;
+							return;
+						}
+						nextAttemptGeneration = this.requestedGeneration;
+					}
+					// A signal raced with the rejected submission. Retry that
+					// generation once without delivering on the signaling thread.
+					attemptedGeneration = nextAttemptGeneration;
+				}
+			}
+		}
+
+		private void drain() {
+			while (true) {
+				long targetGeneration;
+				synchronized (this.lock) {
+					targetGeneration = this.requestedGeneration;
+				}
+				try {
+					this.observer.drainAsynchronously();
+				} catch (Throwable ignored) {
+					// An internal observer failure must not strand later drain signals.
+				}
+				synchronized (this.lock) {
+					this.completedGeneration = targetGeneration;
+					if (this.completedGeneration == this.requestedGeneration) {
+						this.workerScheduled = false;
+						return;
+					}
+				}
 			}
 		}
 	}

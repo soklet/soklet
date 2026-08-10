@@ -9,10 +9,11 @@ the zero-runtime-dependency `com.soklet:soklet` artifact; there is no separate
 This guide describes the implemented, locally frozen Phase 4 and Phase 5
 surfaces, including multi-round-trip request state, progress/cancelation,
 resource subscriptions, deterministic termination, cross-instance state, and
-residual shutdown, plus seven completed bounded Phase 6 verticals covering
+residual shutdown, plus eight completed bounded Phase 6 verticals covering
 shutdown, handler capacity, handler diagnostics, stream/subscription
 diagnostics, protection/trace diagnostics, serialized semantic-event delivery,
-and the bounded pre-admission metric quartet in the current
+the bounded pre-admission metric quartet, and connection/transport metric
+delivery in the current
 `3.6.0-SNAPSHOT`. It is development documentation, not a release or final
 conformance claim.
 Compile-checked programmatic and annotation-driven applications live outside
@@ -34,8 +35,8 @@ this source repository in the project-root `mcp/examples/phase-4` workspace.
 | Policy | Host and Origin checks, application admission, optional request limiting, mandatory fallback tool limiting for tool-bearing servers, bounded execution, and shared Soklet observation hosts |
 | Schema | Closed, Java-first Soklet MCP Tool Schema Profile 1; no public hand-authored schema registration |
 
-The remaining MCP transport-event trio, aggregate projections, operational
-trace correlation, and MCP simulation are not implemented yet. Public
+The remaining MCP aggregate projections, operational trace correlation, and
+MCP simulation are not implemented yet. Public
 descriptors already reserved for that remaining Phase 6 work are behaviorally
 neutral and do not cause Soklet to advertise those capabilities.
 
@@ -783,8 +784,8 @@ does not duplicate it. Direct restart orders the old generation's
 `ServerStopped` before the new generation's `ServerStarted`; managed startup
 rollback orders that generation's `ServerStarted` before its `ServerStopped`.
 
-The seventh vertical extends that FIFO to 20 produced variants with
-`RequestAccepted`, `RequestRejected`, `ProtocolError`, and
+The seventh vertical extended that FIFO to the 20 variants produced at that
+checkpoint with `RequestAccepted`, `RequestRejected`, `ProtocolError`, and
 `UnknownMirroredHeader`. `RequestAccepted` means successful submission to the
 bounded protocol processor. If executor submission rejects, Soklet discards
 the provisional accepted entry and emits only `RequestRejected` before the
@@ -819,16 +820,64 @@ ordering guarantee is FIFO metric record/enqueue order; it is not a universal
 cross-thread causal or per-request total-order guarantee for independently
 racing producers.
 
+The eighth bounded Phase 6 vertical adds `ConnectionAccepted`,
+`ConnectionRejected`, and `TransportFailure` to the same FIFO, so the runtime
+now produces and delivers all 23 declared `McpMetricsEvent` variants.
+`ConnectionAccepted` is recorded after the operating system accepts the socket
+and Soklet reserves capacity, but before connection-loop registration or any
+request. A later setup failure may therefore follow it as
+`TransportFailure(CONNECTION_SETUP_ERROR)`. `ConnectionRejected` is reserved
+only for an accepted socket refused because the configured connection limit is
+full; accept-loop and setup faults instead produce their typed transport
+failure and never a capacity rejection.
+
+`TransportFailure` is request-free and carries exactly one of the 18 bounded
+`MetricsCollector.TransportFailureReason` values: `REQUEST_READ_TIMEOUT`,
+`REQUEST_TOO_LARGE`, `MALFORMED_REQUEST`, `READ_ERROR`, `WRITE_ERROR`,
+`RESPONSE_WRITE_IDLE_TIMEOUT`, `RESPONSE_READY_ERROR`,
+`REQUEST_READ_TIMEOUT_ERROR`, `RESPONSE_WRITE_IDLE_TIMEOUT_ERROR`,
+`ACCEPT_LOOP_ERROR`, `CONNECTION_SETUP_ERROR`, `TASK_ERROR`,
+`TIMEOUT_TASK_ERROR`, `SELECTION_KEY_ERROR`, `REGISTER_ERROR`, `WRITE_TIMEOUT`,
+`EVENT_LOOP_TERMINATED`, and `UNKNOWN`. The event and its failure log retain no
+remote address, raw request, request context, throwable, payload, trace token,
+or other unbounded value. Low-level transport authorities select the typed
+reason directly; Soklet does not infer it from exception or log text.
+
+Typed failure scopes stage a reason before a fallible asynchronous transport
+transition, discard it on success, and retain it through synchronous close,
+cancelation, and stream-terminal consequences on failure. A runtime-owned,
+coalescing single-daemon-worker scheduler drains after connection-thread locks
+are released, retries a rejected submission when a signal races it, and never
+runs collector callbacks as a synchronous fallback on the connection thread.
+Blocking lifecycle deferral safely adopts that pending delivery, so fatal
+restart returns only after the old generation records
+`EVENT_LOOP_TERMINATED`, `ServerStopped`, then the new `ServerStarted`.
+
+A byte-free idle connection closes quietly, while a genuinely partial request
+records `REQUEST_READ_TIMEOUT`. Malformed HTTP records `MALFORMED_REQUEST`;
+a complete HTTP request containing malformed JSON instead follows the existing
+`RequestAccepted`, `ProtocolError(-32700)`, `RequestRejected` path. The
+request-SSE write-idle winner records exactly one `WRITE_TIMEOUT` before its
+stream/request terminals; a losing or generic termination records no
+`WRITE_TIMEOUT`, and channel-owned cancelation does not synthesize
+`WRITE_ERROR`. The sole fatal
+event-loop winner records `EVENT_LOOP_TERMINATED` before stop/wake publication
+and retains that scope through runtime terminalization and sibling-loop
+cleanup. These are record/enqueue-order guarantees at the owning authorities,
+not a universal cross-thread causal ordering claim.
+
 The default collector separately exposes shutdown counts as an immutable,
 enum-ordered `Map<McpShutdownOutcome, Long>`. It omits zero outcomes, returns
 to an empty map after reset, and renders exactly
 `soklet_mcp_shutdowns_total{outcome="clean"|"residual_handlers"}` in
-Prometheus/OpenMetrics text. Only `ConnectionAccepted`, `ConnectionRejected`,
-and `TransportFailure` remain uninstrumented. The aggregate families, trace
-emission and token work, simulator integration, broader redaction, sustained
-and release gates, and Phase 6 review/freeze also remain open. This seventh
-vertical adds no public API, snapshot field, aggregate family, label, event
-variant, or wire dimension.
+Prometheus/OpenMetrics text. Default aggregation remains limited to
+`ServerStopped` and the five handler variants. The unresolved aggregate
+families and `AMB-003`, trace emission/token work, broader privacy,
+cardinality, and redaction work, simulator integration, fuzz and sustained
+gates, release-candidate work, and Phase 6 review/freeze remain open. The
+seventh and eighth delivery verticals add no public API, snapshot field,
+aggregate family, label, event variant, or wire dimension. Phase 6 remains
+provisional and unfrozen.
 
 `McpServer.stop()` is bounded by the configured shutdown timeout. If an
 application-supplied MCP request-processing execution remains afterward,
@@ -882,22 +931,22 @@ the harness to phase 5. A fresh 39-scenario development-candidate verify passes
 all profiles, validates all 39 goldens, and records no bad outcome, standard-
 error output, or non-clean fixture exit.
 
-The broader focused Phase 6 union passes 158 tests with zero
-failures, zero errors, and zero skips. Final exact-source full repository runs
-on JDK 21 and JDK 26 each report 1,443 tests, zero failures, zero errors, and
-four skips. The JDK 21 enforced static-analysis profile is green without
-counting advisory warnings; SpotBugs reports zero `BugInstance` values and zero
-errors. Exact
-API-freeze evidence remains unchanged at 556 incompatibilities, 206 reviewed
+The focused transport-telemetry and adjacent-regression run passes 118 tests
+with zero failures, zero errors, and zero skips. Final exact-source full
+repository runs on JDK 21 and JDK 26 each report 1,454 tests, zero failures,
+zero errors, and four skips. The JDK 21 enforced static-analysis profile is
+green without counting advisory warnings; SpotBugs reports zero `BugInstance`
+values and zero errors. Exact API-freeze evidence remains unchanged at 556
+incompatibilities, 206 reviewed
 owners, 1,049 Phase 4 records, and 195 Phase 5 records with the prior hashes.
 Candidate binary, source, and Javadoc packages plus the generated Javadoc
 report are green using offline-link resolution. All 167 API-sketch sources
 compile for Java 17 and pass Javadoc doclint on JDK 26. All 104 files from
 pinned JSON Schema commit `0c7b65dc16dd8eaa7bd83e21099c76610c3b246a`
 validate. These are local development results, not release-candidate
-provenance. The remaining Phase 6 aggregate families, the three uninstrumented
-transport-event variants, broader trace emission/token and redaction work,
-simulator integration, sustained and fuzz gates, broader CI/provenance and
+provenance. The remaining Phase 6 aggregate families and `AMB-003`, broader
+trace emission/token, privacy/cardinality, and redaction work, simulator
+integration, sustained and fuzz gates, broader CI/provenance and
 release-candidate work, and Phase 6 API review/freeze remain open. Phase 6
 remains provisional and unfrozen.
 

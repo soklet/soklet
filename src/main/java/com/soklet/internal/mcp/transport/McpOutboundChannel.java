@@ -17,6 +17,7 @@
 package com.soklet.internal.mcp.transport;
 
 import com.soklet.StreamTerminationReason;
+import com.soklet.StreamingResponseCanceledException;
 import com.soklet.internal.microhttp.WritableSource;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -575,9 +576,7 @@ public final class McpOutboundChannel {
 
 	private void reserveFailure(@NonNull StreamTerminationReason reason,
 			@Nullable Throwable cause) {
-		failure = cause instanceof IOException ioException
-				? ioException
-				: new IOException("MCP response stream terminated: " + reason, cause);
+		failure = new StreamingResponseCanceledException(reason, cause);
 		terminalReserved = true;
 		clearBufferedData();
 		lock.notifyAll();

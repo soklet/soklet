@@ -108,8 +108,9 @@
   API, snapshot field, aggregate family, label, event variant, or wire
   dimension.
 - Added the seventh bounded Phase 6 vertical by extending the same FIFO to the
-  20 semantic variants now produced. Successful bounded-processor submission
-  emits `RequestAccepted`; executor rejection discards that provisional entry
+  20 semantic variants produced at that checkpoint. Successful bounded-
+  processor submission emits `RequestAccepted`; executor rejection discards
+  that provisional entry
   and emits only `RequestRejected` before its fixed empty HTTP 503. Malformed,
   strict unknown-header, and unresolved-method requests preserve exact same-
   request accepted/error/rejected record order. `ProtocolError` is limited to
@@ -122,38 +123,69 @@
   diagnostic quota and without the header name, value, or raw method. All
   pre-admission events are request-free; only admitted fixed errors retain the
   exact request for bounded delivery/failure attribution. Nonwaiting request-
-  transition deferral preserves reentrant collector liveness. The remaining
-  uninstrumented variants are exactly `ConnectionAccepted`,
-  `ConnectionRejected`, and `TransportFailure`. This vertical adds no public
-  API, snapshot field, aggregate family, label, event variant, or wire
+  transition deferral preserves reentrant collector liveness. At that
+  checkpoint, `ConnectionAccepted`, `ConnectionRejected`, and
+  `TransportFailure` remained for the next vertical. This vertical adds no
+  public API, snapshot field, aggregate family, label, event variant, or wire
   dimension.
+- Added the eighth bounded Phase 6 vertical by extending that FIFO to all 23
+  declared variants. `ConnectionAccepted` follows socket accept and capacity
+  reservation but precedes registration/request processing; a later setup
+  failure may follow it. `ConnectionRejected` is exact for an accepted socket
+  refused by the maximum-connection bound, while accept/setup faults produce
+  only their typed `TransportFailure`.
+- `TransportFailure` is request-free and carries only one of the exact 18 fixed
+  reasons: `REQUEST_READ_TIMEOUT`, `REQUEST_TOO_LARGE`, `MALFORMED_REQUEST`,
+  `READ_ERROR`, `WRITE_ERROR`, `RESPONSE_WRITE_IDLE_TIMEOUT`,
+  `RESPONSE_READY_ERROR`, `REQUEST_READ_TIMEOUT_ERROR`,
+  `RESPONSE_WRITE_IDLE_TIMEOUT_ERROR`, `ACCEPT_LOOP_ERROR`,
+  `CONNECTION_SETUP_ERROR`, `TASK_ERROR`, `TIMEOUT_TASK_ERROR`,
+  `SELECTION_KEY_ERROR`, `REGISTER_ERROR`, `WRITE_TIMEOUT`,
+  `EVENT_LOOP_TERMINATED`, and `UNKNOWN`. It retains no remote address, raw
+  request/context, throwable, payload, trace token, or other unbounded value;
+  low-level typed authorities choose the reason without text parsing.
+- Typed provisional failure scopes and a coalescing single-daemon-worker drain
+  keep collector callbacks off connection threads, preserve pending delivery
+  across executor rejection, and safely join lifecycle deferral. Partial
+  request timeout is distinct from quiet byte-free idle close, malformed HTTP
+  from malformed JSON-RPC, and a request-SSE write-timeout winner from a losing
+  or generic close that records no `WRITE_TIMEOUT`. The winner records one
+  `WRITE_TIMEOUT` before terminals without synthetic `WRITE_ERROR`; fatal
+  `EVENT_LOOP_TERMINATED` precedes
+  stop/wake, remains active through sibling cleanup, and orders before old
+  `ServerStopped` and new `ServerStarted` on restart. These remain FIFO record/
+  enqueue-order guarantees, not universal cross-thread causal ordering. The
+  vertical adds no public API, snapshot/aggregate family, label, event variant,
+  or wire dimension.
 
 ### Development Status
 
 - The locally frozen Phase 4 and Phase 5 surfaces implement discovery, tools,
   prompts, resources, progress, cancelation, subscription delivery, multi-
   round-trip execution, and protected request-state execution. All 39 reviewed
-  Phase 5 profiles are active. Seven bounded Phase 6 verticals—shutdown,
+  Phase 5 profiles are active. Eight bounded Phase 6 verticals—shutdown,
   handler-capacity, handler diagnostics, stream/subscription diagnostics,
   protection/trace diagnostics, serialized semantic-event delivery, and
-  bounded pre-admission metrics—are implemented and locally green. The broader
-  focused Phase 6 union passes 158 tests with zero failures, zero errors, and
-  zero skips; final exact-source JDK 21 and JDK 26 runs each report 1,443 tests,
-  zero failures, zero errors, and four skips. The JDK 21 enforced static-
-  analysis profile is green without counting advisory warnings, and SpotBugs
+  bounded pre-admission and transport metrics—are implemented and locally
+  green. The focused transport-telemetry and adjacent-regression run passes 118
+  tests with zero failures, zero errors, and zero skips; final exact-source JDK
+  21 and JDK 26 runs each report 1,454 tests, zero failures, zero errors, and
+  four skips. The JDK 21 enforced static-analysis profile is green without
+  counting advisory warnings, and SpotBugs
   reports zero `BugInstance` values and zero errors. Exact API-freeze evidence
-  remains unchanged at 556
-  incompatibilities, 206 reviewed owners, 1,049 Phase 4 records, and 195 Phase
-  5 records with the prior hashes. Candidate binary, source, and Javadoc
+  remains unchanged at 556 incompatibilities, 206 reviewed owners, 1,049 Phase
+  4 records, and 195 Phase 5 records with the prior hashes. Candidate binary,
+  source, and Javadoc
   packages plus the generated Javadoc report are green using offline-link
   resolution. All 167 API-sketch sources compile for Java 17 and pass Javadoc
   doclint on JDK 26.
   All 104 files from pinned JSON Schema commit
-  `0c7b65dc16dd8eaa7bd83e21099c76610c3b246a` validate. Aggregate families, the
-  three uninstrumented transport-event variants, trace emission/token support,
-  broader redaction, simulation, sustained/fuzz gates, CI/provenance and
-  release-candidate work, and the provisional, unfrozen Phase 6 API review/
-  freeze remain open.
+  `0c7b65dc16dd8eaa7bd83e21099c76610c3b246a` validate. Default aggregation
+  remains limited to `ServerStopped` and five handler variants. Unresolved
+  aggregate families and `AMB-003`, trace emission/token support, broader
+  privacy/cardinality and redaction work, simulation, sustained/fuzz gates,
+  CI/provenance and release-candidate work, and the provisional, unfrozen Phase
+  6 API review/freeze remain open.
 
 ## 3.5.1 (2026-07-13)
 

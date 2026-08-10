@@ -78,7 +78,7 @@ public sealed interface McpMetricsEvent permits
 	}
 
 	/**
-	 * A TCP connection was accepted.
+	 * A successfully accepted TCP connection was admitted within the configured connection-capacity bound.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
@@ -87,7 +87,7 @@ public sealed interface McpMetricsEvent permits
 	}
 
 	/**
-	 * A TCP connection was rejected before request processing.
+	 * A successfully accepted TCP connection was rejected because the configured maximum-connection capacity was full.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */

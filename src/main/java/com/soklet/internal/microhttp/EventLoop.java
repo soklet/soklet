@@ -1,5 +1,6 @@
 package com.soklet.internal.microhttp;
 
+import com.soklet.MetricsCollector.TransportFailureReason;
 import com.soklet.internal.util.AcceptLoopBackoff;
 import org.jspecify.annotations.Nullable;
 
@@ -29,6 +30,7 @@ public class EventLoop {
     private final Options options;
     private final Logger logger;
     private final ConnectionListener connectionListener;
+    private final TransportFailureObserver transportFailureObserver;
 
     private final Selector selector;
     private final AtomicBoolean stopAccepting;
@@ -40,6 +42,11 @@ public class EventLoop {
     private final List<ConnectionEventLoop> connectionEventLoops;
     private final Thread thread;
     private final Object lifecycleLock;
+    private final Object unexpectedTerminationLock;
+    private TransportFailureObserver.@Nullable Observation
+            unexpectedTerminationObservation;
+    private int terminatedConnectionEventLoops;
+    private boolean unexpectedTerminationRuntimeCleanupComplete;
     private boolean started;
     private boolean closedBeforeStart;
 
@@ -74,21 +81,33 @@ public class EventLoop {
     }
 
     public EventLoop(Handler handler) throws IOException {
-        this(Options.builder().build(), NoopLogger.instance(), handler, NoopConnectionListener.instance());
+        this(Options.builder().build(), NoopLogger.instance(), handler,
+                NoopConnectionListener.instance(), TransportFailureObserver.disabledInstance());
     }
 
     public EventLoop(Options options, Handler handler) throws IOException {
-        this(options, NoopLogger.instance(), handler, NoopConnectionListener.instance());
+        this(options, NoopLogger.instance(), handler, NoopConnectionListener.instance(),
+                TransportFailureObserver.disabledInstance());
     }
 
     public EventLoop(Options options, Logger logger, Handler handler) throws IOException {
-        this(options, logger, handler, NoopConnectionListener.instance());
+        this(options, logger, handler, NoopConnectionListener.instance(),
+                TransportFailureObserver.disabledInstance());
     }
 
     public EventLoop(Options options, Logger logger, Handler handler, ConnectionListener connectionListener) throws IOException {
+        this(options, logger, handler, connectionListener,
+                TransportFailureObserver.disabledInstance());
+    }
+
+    public EventLoop(Options options, Logger logger, Handler handler,
+                     ConnectionListener connectionListener,
+                     TransportFailureObserver transportFailureObserver) throws IOException {
         this.options = options;
         this.logger = logger;
         this.connectionListener = connectionListener == null ? NoopConnectionListener.instance() : connectionListener;
+        this.transportFailureObserver = transportFailureObserver == null
+                ? TransportFailureObserver.disabledInstance() : transportFailureObserver;
 
         selector = Selector.open();
         stopAccepting = new AtomicBoolean();
@@ -97,6 +116,7 @@ public class EventLoop {
         unexpectedTerminationNotified = new AtomicBoolean();
         admittedConnections = new AtomicInteger();
         lifecycleLock = new Object();
+        unexpectedTerminationLock = new Object();
 
         AtomicLong connectionCounter = new AtomicLong();
         connectionEventLoops = new ArrayList<>();
@@ -104,7 +124,9 @@ public class EventLoop {
             for (int i = 0; i < options.concurrency(); i++) {
                 connectionEventLoops.add(new ConnectionEventLoop(
                         options, logger, handler, connectionCounter, stopConnections, draining,
-                        this::handleUnexpectedTermination));
+                        this::handleUnexpectedTermination,
+                        this::didTerminateConnectionEventLoop,
+                        this.transportFailureObserver));
             }
         } catch (IOException | RuntimeException | Error throwable) {
             connectionEventLoops.forEach(ConnectionEventLoop::closeBeforeStart);
@@ -220,19 +242,80 @@ public class EventLoop {
     }
 
     private void handleUnexpectedTermination(Throwable throwable) {
+        synchronized (unexpectedTerminationLock) {
+            if (!unexpectedTerminationNotified.compareAndSet(false, true)) {
+                publishUnexpectedTermination();
+                awaitUnexpectedTerminationRuntimeCleanup();
+                return;
+            }
+            unexpectedTerminationObservation =
+                    TransportFailureObservations.beginSafely(
+                            transportFailureObserver,
+                            TransportFailureReason.EVENT_LOOP_TERMINATED);
+        }
+
+        publishUnexpectedTermination();
+        try {
+            try {
+                connectionListener.didTerminateEventLoop(this, throwable);
+            } catch (Throwable ignoredListenerFailure) {
+                // No safe fallback sink is available from an event-loop thread.
+            }
+        } finally {
+            TransportFailureObserver.@Nullable Observation completedObservation;
+            synchronized (unexpectedTerminationLock) {
+                unexpectedTerminationRuntimeCleanupComplete = true;
+                unexpectedTerminationLock.notifyAll();
+                completedObservation =
+                        takeCompletedUnexpectedTerminationObservation();
+            }
+            if (completedObservation != null)
+                completedObservation.close();
+        }
+    }
+
+    private void publishUnexpectedTermination() {
         stopAccepting.set(true);
         stopConnections.set(true);
         selector.wakeup();
         connectionEventLoops.forEach(ConnectionEventLoop::wakeup);
-        if (!unexpectedTerminationNotified.compareAndSet(false, true)) {
-            return;
-        }
+    }
 
-        try {
-            connectionListener.didTerminateEventLoop(this, throwable);
-        } catch (Throwable ignored) {
-            // No safe fallback sink is available from an event-loop thread.
+    private void didTerminateConnectionEventLoop() {
+        TransportFailureObserver.@Nullable Observation completedObservation;
+        synchronized (unexpectedTerminationLock) {
+            terminatedConnectionEventLoops++;
+            completedObservation = takeCompletedUnexpectedTerminationObservation();
         }
+        if (completedObservation != null)
+            completedObservation.close();
+    }
+
+    private void awaitUnexpectedTerminationRuntimeCleanup() {
+        boolean interrupted = false;
+        while (!unexpectedTerminationRuntimeCleanupComplete) {
+            try {
+                unexpectedTerminationLock.wait();
+            } catch (InterruptedException exception) {
+                interrupted = true;
+            }
+        }
+        if (interrupted)
+            Thread.currentThread().interrupt();
+    }
+
+    private TransportFailureObserver.@Nullable Observation
+            takeCompletedUnexpectedTerminationObservation() {
+        if (!unexpectedTerminationRuntimeCleanupComplete
+                || terminatedConnectionEventLoops != connectionEventLoops.size())
+            return null;
+
+        TransportFailureObserver.@Nullable Observation observation =
+                unexpectedTerminationObservation;
+        if (observation == null)
+            return null;
+        unexpectedTerminationObservation = null;
+        return observation;
     }
 
     private void doRun() throws IOException {
@@ -487,14 +570,18 @@ public class EventLoop {
 
     private void handleAcceptFailure(IOException e) {
         long failures = consecutiveAcceptFailures.incrementAndGet();
-        connectionListener.didFailToAcceptConnection(null, e);
+        try (TransportFailureObserver.Observation ignored =
+                     TransportFailureObservations.beginSafely(transportFailureObserver,
+                             TransportFailureReason.ACCEPT_LOOP_ERROR)) {
+            connectionListener.didFailToAcceptConnection(null, e);
 
-        // Coalesce log volume during a sustained failure (e.g. file-descriptor exhaustion):
-        // log the first failure and then only at exponentially-spaced milestones.
-        if (logger.failureEnabled() && AcceptLoopBackoff.shouldLogFailure(failures)) {
-            logger.logFailure(e,
-                    new LogEntry("event", "accept_loop_error"),
-                    new LogEntry("consecutive_failures", Long.toString(failures)));
+            // Coalesce log volume during a sustained failure (e.g. file-descriptor exhaustion):
+            // log the first failure and then only at exponentially-spaced milestones.
+            if (logger.failureEnabled() && AcceptLoopBackoff.shouldLogFailure(failures)) {
+                logger.logFailure(e,
+                        new LogEntry("event", "accept_loop_error"),
+                        new LogEntry("consecutive_failures", Long.toString(failures)));
+            }
         }
 
         backoffAfterAcceptFailure(failures);
@@ -503,12 +590,16 @@ public class EventLoop {
     private void handleConnectionSetupFailure(RuntimeException e) {
         long failures = consecutiveAcceptFailures.incrementAndGet();
 
-        // Coalesce log volume during a sustained failure (e.g. a connection listener that throws
-        // on every accept): log the first failure and then only at exponentially-spaced milestones.
-        if (logger.failureEnabled() && AcceptLoopBackoff.shouldLogFailure(failures)) {
-            logger.logFailure(e,
-                    new LogEntry("event", "connection_setup_error"),
-                    new LogEntry("consecutive_failures", Long.toString(failures)));
+        try (TransportFailureObserver.Observation ignored =
+                     TransportFailureObservations.beginSafely(transportFailureObserver,
+                             TransportFailureReason.CONNECTION_SETUP_ERROR)) {
+            // Coalesce log volume during a sustained failure (e.g. a connection listener that throws
+            // on every accept): log the first failure and then only at exponentially-spaced milestones.
+            if (logger.failureEnabled() && AcceptLoopBackoff.shouldLogFailure(failures)) {
+                logger.logFailure(e,
+                        new LogEntry("event", "connection_setup_error"),
+                        new LogEntry("consecutive_failures", Long.toString(failures)));
+            }
         }
 
         backoffAfterAcceptFailure(failures);

@@ -2073,11 +2073,11 @@ public interface MetricsCollector {
 		 */
 		RESPONSE_WRITE_IDLE_TIMEOUT_ERROR,
 		/**
-		 * A server accept loop failed while accepting or preparing a connection.
+		 * The listening socket failed while attempting to accept a connection.
 		 */
 		ACCEPT_LOOP_ERROR,
 		/**
-		 * An accepted connection could not be prepared before request handling began.
+		 * A successfully accepted socket could not be handed off to a connection event loop before request handling began.
 		 */
 		CONNECTION_SETUP_ERROR,
 		/**

@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Timeout;
 
 import java.io.UncheckedIOException;
 import java.lang.reflect.Field;
+import java.net.Socket;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -238,26 +239,75 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 			Assertions.assertTrue(server.isStarted());
 			Assertions.assertEquals(List.of(
 					new McpMetricsEvent.ServerStarted(),
+					new McpMetricsEvent.TransportFailure(
+							MetricsCollector.TransportFailureReason
+									.EVENT_LOOP_TERMINATED),
 					new McpMetricsEvent.ServerStopped(
 							McpShutdownOutcome.CLEAN),
 					new McpMetricsEvent.ServerStarted()),
-					collector.serverLifecycleEvents(),
-					"The old generation's normalized stop must precede the new start.");
+					collector.events(),
+					"Restart must return only after the fatal transport event, old stop, and new start are delivered in generation order.");
 
 			server.stop();
 			Assertions.assertEquals(List.of(
 					new McpMetricsEvent.ServerStarted(),
+					new McpMetricsEvent.TransportFailure(
+							MetricsCollector.TransportFailureReason
+									.EVENT_LOOP_TERMINATED),
 					new McpMetricsEvent.ServerStopped(
 							McpShutdownOutcome.CLEAN),
 					new McpMetricsEvent.ServerStarted(),
 					new McpMetricsEvent.ServerStopped(
 							McpShutdownOutcome.CLEAN)),
-					collector.serverLifecycleEvents());
+					collector.events());
 		} finally {
 			server.stop();
 			owner.stop();
 			if (bridge.getRuntimeState().stopRequired())
 				bridge.stop();
+		}
+	}
+
+	@Test
+	public void connectionAcceptedDeliveryIsAsynchronousSerializedAndReentrant()
+			throws Exception {
+		AtomicReference<McpServer> serverReference = new AtomicReference<>();
+		ReentrantConnectionCollector collector =
+				new ReentrantConnectionCollector(serverReference,
+						"/mcp/reentrant-connection");
+		McpServer server = server(0, "/mcp/reentrant-connection");
+		Soklet soklet = soklet(server, collector,
+				LifecycleObserver.defaultInstance());
+		serverReference.set(server);
+
+		try {
+			soklet.start();
+			int port = server.getDiagnostics().getBoundAddress()
+					.orElseThrow().getPort();
+			try (Socket ignored = new Socket(HOST, port)) {
+				collector.awaitRequestFinished();
+			}
+
+			Assertions.assertNull(collector.failure(),
+					"The asynchronously reentrant connection callback failed.");
+			assertSuccessfulDiscovery(collector.response(),
+					"reentrant-connection");
+			Assertions.assertTrue(collector.callbackThreadWasDaemon());
+			Assertions.assertTrue(collector.callbackThreadName()
+					.startsWith("soklet-mcp-metrics-"),
+					collector.callbackThreadName());
+			Assertions.assertEquals(1, collector.maximumConcurrentCallbacks(),
+					"Connection and request events must share serialized callback delivery.");
+			Assertions.assertEquals(List.of(
+					McpMetricsEvent.ServerStarted.class,
+					McpMetricsEvent.ConnectionAccepted.class,
+					McpMetricsEvent.ConnectionAccepted.class,
+					McpMetricsEvent.RequestAccepted.class,
+					McpMetricsEvent.RequestStarted.class,
+					McpMetricsEvent.RequestFinished.class),
+					collector.events().stream().map(Object::getClass).toList());
+		} finally {
+			soklet.stop();
 		}
 	}
 
@@ -288,6 +338,7 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 					"One shared FIFO must serialize nested metric callbacks.");
 			Assertions.assertEquals(List.of(
 					McpMetricsEvent.ServerStarted.class,
+					McpMetricsEvent.ConnectionAccepted.class,
 					McpMetricsEvent.RequestAccepted.class,
 					McpMetricsEvent.RequestStarted.class,
 					McpMetricsEvent.RequestFinished.class),
@@ -308,8 +359,10 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 				"expected server metric failure");
 		RuntimeException requestFailure = new RuntimeException(
 				"expected request metric failure");
+		RuntimeException connectionFailure = new RuntimeException(
+				"expected connection metric failure");
 		FailingMetricsCollector collector = new FailingMetricsCollector(
-				serverFailure, requestFailure);
+				serverFailure, connectionFailure, requestFailure);
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver();
 		McpServer server = server(0, "/mcp/failure-context");
 		Soklet soklet = soklet(server, collector, observer);
@@ -326,6 +379,7 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 			assertSuccessfulDiscovery(response, "failure-context");
 			Assertions.assertEquals(List.of(
 					McpMetricsEvent.ServerStarted.class,
+					McpMetricsEvent.ConnectionAccepted.class,
 					McpMetricsEvent.RequestAccepted.class,
 					McpMetricsEvent.RequestStarted.class,
 					McpMetricsEvent.RequestFinished.class),
@@ -336,7 +390,7 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 					.filter(event -> event.getLogEventType()
 							== LogEventType.METRICS_COLLECTOR_FAILED)
 					.toList();
-			Assertions.assertEquals(2, failures.size(), failures.toString());
+			Assertions.assertEquals(3, failures.size(), failures.toString());
 			LogEvent serverLog = failures.stream()
 					.filter(event -> event.getThrowable().orElseThrow()
 							== serverFailure)
@@ -345,7 +399,13 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 					.filter(event -> event.getThrowable().orElseThrow()
 							== requestFailure)
 					.findFirst().orElseThrow();
+			LogEvent connectionLog = failures.stream()
+					.filter(event -> event.getThrowable().orElseThrow()
+							== connectionFailure)
+					.findFirst().orElseThrow();
 			Assertions.assertTrue(serverLog.getRequest().isEmpty());
+			Assertions.assertTrue(connectionLog.getRequest().isEmpty(),
+					"A transport event failure must remain request-free.");
 			Assertions.assertSame(observer.requestContext().getRequest(),
 					requestLog.getRequest().orElseThrow(),
 					"A queued admitted event must retain its exact originating request.");
@@ -608,18 +668,110 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 		}
 	}
 
+	private static final class ReentrantConnectionCollector
+			extends RecordingMetricsCollector {
+		@NonNull
+		private final AtomicReference<McpServer> serverReference;
+		@NonNull
+		private final String endpointPath;
+		@NonNull
+		private final AtomicBoolean invoked = new AtomicBoolean();
+		@NonNull
+		private final AtomicInteger activeCallbacks = new AtomicInteger();
+		@NonNull
+		private final AtomicInteger maximumConcurrentCallbacks =
+				new AtomicInteger();
+		@NonNull
+		private final AtomicReference<Throwable> failure = new AtomicReference<>();
+		@NonNull
+		private final AtomicReference<HttpResponse<String>> response =
+				new AtomicReference<>();
+		@NonNull
+		private final AtomicReference<String> callbackThreadName =
+				new AtomicReference<>();
+		@NonNull
+		private final AtomicBoolean callbackThreadWasDaemon = new AtomicBoolean();
+		@NonNull
+		private final CountDownLatch requestFinished = new CountDownLatch(1);
+
+		private ReentrantConnectionCollector(
+				@NonNull AtomicReference<McpServer> serverReference,
+				@NonNull String endpointPath) {
+			this.serverReference = requireNonNull(serverReference);
+			this.endpointPath = requireNonNull(endpointPath);
+		}
+
+		@Override
+		public void didRecordMcpMetricsEvent(@NonNull McpMetricsEvent event) {
+			int active = this.activeCallbacks.incrementAndGet();
+			this.maximumConcurrentCallbacks.accumulateAndGet(active, Math::max);
+			try {
+				super.didRecordMcpMetricsEvent(event);
+				if (event instanceof McpMetricsEvent.ConnectionAccepted
+						&& this.invoked.compareAndSet(false, true)) {
+					Thread callbackThread = Thread.currentThread();
+					this.callbackThreadName.set(callbackThread.getName());
+					this.callbackThreadWasDaemon.set(callbackThread.isDaemon());
+					try {
+						int port = this.serverReference.get().getDiagnostics()
+								.getBoundAddress().orElseThrow().getPort();
+						this.response.set(sendDiscovery(port, this.endpointPath,
+								"reentrant-connection"));
+					} catch (Throwable throwable) {
+						this.failure.compareAndSet(null, throwable);
+					}
+				}
+				if (event instanceof McpMetricsEvent.RequestFinished)
+					this.requestFinished.countDown();
+			} finally {
+				this.activeCallbacks.decrementAndGet();
+			}
+		}
+
+		private void awaitRequestFinished() throws InterruptedException {
+			Assertions.assertTrue(this.requestFinished.await(5, TimeUnit.SECONDS),
+					"The reentrant connection callback's request did not finish.");
+		}
+
+		private Throwable failure() {
+			return this.failure.get();
+		}
+
+		@NonNull
+		private HttpResponse<String> response() {
+			return requireNonNull(this.response.get());
+		}
+
+		private int maximumConcurrentCallbacks() {
+			return this.maximumConcurrentCallbacks.get();
+		}
+
+		@NonNull
+		private String callbackThreadName() {
+			return requireNonNull(this.callbackThreadName.get());
+		}
+
+		private boolean callbackThreadWasDaemon() {
+			return this.callbackThreadWasDaemon.get();
+		}
+	}
+
 	private static final class FailingMetricsCollector
 			extends RecordingMetricsCollector {
 		@NonNull
 		private final RuntimeException serverFailure;
+		@NonNull
+		private final RuntimeException connectionFailure;
 		@NonNull
 		private final RuntimeException requestFailure;
 		@NonNull
 		private final CountDownLatch requestFinished = new CountDownLatch(1);
 
 		private FailingMetricsCollector(@NonNull RuntimeException serverFailure,
+				@NonNull RuntimeException connectionFailure,
 				@NonNull RuntimeException requestFailure) {
 			this.serverFailure = requireNonNull(serverFailure);
+			this.connectionFailure = requireNonNull(connectionFailure);
 			this.requestFailure = requireNonNull(requestFailure);
 		}
 
@@ -630,6 +782,8 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 				this.requestFinished.countDown();
 			if (event instanceof McpMetricsEvent.ServerStarted)
 				throw this.serverFailure;
+			if (event instanceof McpMetricsEvent.ConnectionAccepted)
+				throw this.connectionFailure;
 			if (event instanceof McpMetricsEvent.RequestStarted)
 				throw this.requestFailure;
 		}

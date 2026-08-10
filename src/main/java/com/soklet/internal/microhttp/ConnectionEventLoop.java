@@ -1,6 +1,8 @@
 package com.soklet.internal.microhttp;
 
+import com.soklet.MetricsCollector.TransportFailureReason;
 import com.soklet.StreamTerminationReason;
+import com.soklet.StreamingResponseCanceledException;
 import org.jspecify.annotations.Nullable;
 
 import java.io.EOFException;
@@ -224,6 +226,8 @@ class ConnectionEventLoop {
     private final AtomicBoolean stop;
     private final AtomicBoolean draining;
     private final Consumer<Throwable> unexpectedTerminationHandler;
+    private final Runnable terminationHandler;
+    private final TransportFailureObserver transportFailureObserver;
     private final byte[] badRequestResponse;
     private final byte[] expectationFailedResponse;
     private final byte[] requestHeaderFieldsTooLargeResponse;
@@ -249,7 +253,9 @@ class ConnectionEventLoop {
             AtomicLong connectionCounter,
             AtomicBoolean stop,
             AtomicBoolean draining,
-            Consumer<Throwable> unexpectedTerminationHandler) throws IOException {
+            Consumer<Throwable> unexpectedTerminationHandler,
+            Runnable terminationHandler,
+            TransportFailureObserver transportFailureObserver) throws IOException {
         this.options = options;
         this.logger = logger;
         this.handler = handler;
@@ -257,6 +263,8 @@ class ConnectionEventLoop {
         this.stop = stop;
         this.draining = draining;
         this.unexpectedTerminationHandler = unexpectedTerminationHandler;
+        this.terminationHandler = terminationHandler;
+        this.transportFailureObserver = transportFailureObserver;
         this.badRequestResponse = rawErrorResponse(400, "Bad Request");
         this.expectationFailedResponse = rawErrorResponse(417, "Expectation Failed");
         this.requestHeaderFieldsTooLargeResponse = rawErrorResponse(
@@ -352,10 +360,17 @@ class ConnectionEventLoop {
             // phase, buffered partial request bytes (including a stalled pipelined request), or bytes that
             // arrived during the wait - is a partial-request timeout and must be recorded; otherwise a
             // slow client could hold connection slots without ever appearing in transport-failure signals.
-            if (requestDataInFlight() && logger.failureEnabled()) {
-                logger.logFailure(
-                        new LogEntry("event", "request_timeout"),
-                        new LogEntry("id", id));
+            if (requestDataInFlight()) {
+                try (TransportFailureObserver.Observation ignored =
+                             beginTransportFailure(TransportFailureReason.REQUEST_READ_TIMEOUT)) {
+                    if (logger.failureEnabled()) {
+                        logger.logFailure(
+                                new LogEntry("event", "request_timeout"),
+                                new LogEntry("id", id));
+                    }
+                    failSafeClose();
+                }
+                return;
             }
             failSafeClose();
         }
@@ -388,41 +403,62 @@ class ConnectionEventLoop {
             try {
                 doOnReadable();
             } catch (RequestTooLargeException e) {
-                if (logger.failureEnabled()) {
-                    logger.logFailure(
-                            new LogEntry("event", "exceed_request_max_close"),
-                            new LogEntry("id", id),
-                            new LogEntry("request_size", Integer.toString(byteTokenizer.size())));
+                try (TransportFailureObserver.Observation ignored =
+                             beginTransportFailure(TransportFailureReason.REQUEST_TOO_LARGE)) {
+                    if (logger.failureEnabled()) {
+                        logger.logFailure(
+                                new LogEntry("event", "exceed_request_max_close"),
+                                new LogEntry("id", id),
+                                new LogEntry("request_size", Integer.toString(byteTokenizer.size())));
+                    }
+                    respondToRequestTooLarge(e);
                 }
-                respondToRequestTooLarge(e);
             } catch (ExpectationFailedException e) {
-                if (logger.failureEnabled()) {
-                    logger.logFailure(e,
-                            new LogEntry("event", "expectation_failed"),
-                            new LogEntry("id", id));
+                try (TransportFailureObserver.Observation ignored =
+                             beginTransportFailure(TransportFailureReason.UNKNOWN)) {
+                    if (logger.failureEnabled()) {
+                        logger.logFailure(e,
+                                new LogEntry("event", "expectation_failed"),
+                                new LogEntry("id", id));
+                    }
+                    respondToExpectationFailed();
                 }
-                respondToExpectationFailed();
             } catch (MalformedRequestException e) {
-                if (logger.failureEnabled()) {
-                    logger.logFailure(e,
-                            new LogEntry("event", "malformed_request"),
-                            new LogEntry("id", id));
+                try (TransportFailureObserver.Observation ignored =
+                             beginTransportFailure(TransportFailureReason.MALFORMED_REQUEST)) {
+                    if (logger.failureEnabled()) {
+                        logger.logFailure(e,
+                                new LogEntry("event", "malformed_request"),
+                                new LogEntry("id", id));
+                    }
+                    respondToMalformedRequest();
                 }
-                respondToMalformedRequest();
             } catch (IOException | RuntimeException e) {
-                if (shouldRecordReadFailure(e) && logger.failureEnabled()) {
-                    logger.logFailure(e,
-                            new LogEntry("event", "read_error"),
-                            new LogEntry("id", id));
-                }
-                InFlightDispatch dispatch = inFlightDispatch;
-                if (dispatch != null && dispatch.shouldMonitorClientDisconnects()) {
-                    failSafeClose(StreamTerminationReason.CLIENT_DISCONNECTED, e);
-                } else if (monitorClientDisconnectsDuringStreamingResponse && writableSource != null) {
-                    failSafeClose(StreamTerminationReason.CLIENT_DISCONNECTED, e);
+                if (shouldRecordReadFailure(e)) {
+                    try (TransportFailureObserver.Observation ignored =
+                                 beginTransportFailure(TransportFailureReason.READ_ERROR)) {
+                        if (logger.failureEnabled()) {
+                            logger.logFailure(e,
+                                    new LogEntry("event", "read_error"),
+                                    new LogEntry("id", id));
+                        }
+                        closeAfterReadFailure(e);
+                    }
                 } else {
-                    failSafeClose();
+                    closeAfterReadFailure(e);
                 }
+            }
+        }
+
+        private void closeAfterReadFailure(Throwable throwable) {
+            InFlightDispatch dispatch = inFlightDispatch;
+            if (dispatch != null && dispatch.shouldMonitorClientDisconnects()) {
+                failSafeClose(StreamTerminationReason.CLIENT_DISCONNECTED, throwable);
+            } else if (monitorClientDisconnectsDuringStreamingResponse
+                    && writableSource != null) {
+                failSafeClose(StreamTerminationReason.CLIENT_DISCONNECTED, throwable);
+            } else {
+                failSafeClose();
             }
         }
 
@@ -459,13 +495,16 @@ class ConnectionEventLoop {
             }
             if (requestParser.parse()) {
                 if (byteTokenizer.position() > options.maxRequestSize()) {
-                    if (logger.failureEnabled()) {
-                        logger.logFailure(
-                                new LogEntry("event", "exceed_request_max_close"),
-                                new LogEntry("id", id),
-                                new LogEntry("request_size", Integer.toString(byteTokenizer.position())));
+                    try (TransportFailureObserver.Observation ignored =
+                                 beginTransportFailure(TransportFailureReason.REQUEST_TOO_LARGE)) {
+                        if (logger.failureEnabled()) {
+                            logger.logFailure(
+                                    new LogEntry("event", "exceed_request_max_close"),
+                                    new LogEntry("id", id),
+                                    new LogEntry("request_size", Integer.toString(byteTokenizer.position())));
+                        }
+                        respondToRequestTooLarge(RequestTooLargeException.Reason.CONTENT);
                     }
-                    respondToRequestTooLarge(RequestTooLargeException.Reason.CONTENT);
                     return;
                 }
                 if (logger.enabled()) {
@@ -477,14 +516,16 @@ class ConnectionEventLoop {
                 onParseRequest();
             } else {
                 if (byteTokenizer.size() > options.maxRequestSize()) {
-                    if (logger.failureEnabled()) {
-                        logger.logFailure(
-                                new LogEntry("event", "exceed_request_max_close"),
-                                new LogEntry("id", id),
-                                new LogEntry("request_size", Integer.toString(byteTokenizer.size())));
+                    try (TransportFailureObserver.Observation ignored =
+                                 beginTransportFailure(TransportFailureReason.REQUEST_TOO_LARGE)) {
+                        if (logger.failureEnabled()) {
+                            logger.logFailure(
+                                    new LogEntry("event", "exceed_request_max_close"),
+                                    new LogEntry("id", id),
+                                    new LogEntry("request_size", Integer.toString(byteTokenizer.size())));
+                        }
+                        respondToRequestTooLarge(RequestTooLargeException.Reason.CONTENT);
                     }
-
-                    respondToRequestTooLarge(RequestTooLargeException.Reason.CONTENT);
                 } else {
                     onPartialRequestParsed();
                 }
@@ -525,13 +566,16 @@ class ConnectionEventLoop {
             }
 
             if (overflowProbe) {
-                if (logger.failureEnabled()) {
-                    logger.logFailure(
-                            new LogEntry("event", "exceed_request_max_close"),
-                            new LogEntry("id", id),
-                            new LogEntry("request_size", Long.toString((long) options.maxRequestSize() + 1L)));
+                try (TransportFailureObserver.Observation ignored =
+                             beginTransportFailure(TransportFailureReason.REQUEST_TOO_LARGE)) {
+                    if (logger.failureEnabled()) {
+                        logger.logFailure(
+                                new LogEntry("event", "exceed_request_max_close"),
+                                new LogEntry("id", id),
+                                new LogEntry("request_size", Long.toString((long) options.maxRequestSize() + 1L)));
+                    }
+                    failSafeClose(StreamTerminationReason.BACKPRESSURE, null);
                 }
-                failSafeClose(StreamTerminationReason.BACKPRESSURE, null);
                 return;
             }
 
@@ -578,14 +622,17 @@ class ConnectionEventLoop {
             }
 
             if (overflowProbe) {
-                if (logger.failureEnabled()) {
-                    logger.logFailure(
-                            new LogEntry("event", "streaming_response_read_limit_close"),
-                            new LogEntry("id", id),
-                            new LogEntry("discarded_bytes",
-                                    Long.toString((long) options.maxRequestSize() + 1L)));
+                try (TransportFailureObserver.Observation ignored =
+                             beginTransportFailure(TransportFailureReason.UNKNOWN)) {
+                    if (logger.failureEnabled()) {
+                        logger.logFailure(
+                                new LogEntry("event", "streaming_response_read_limit_close"),
+                                new LogEntry("id", id),
+                                new LogEntry("discarded_bytes",
+                                        Long.toString((long) options.maxRequestSize() + 1L)));
+                    }
+                    failSafeClose(StreamTerminationReason.BACKPRESSURE, null);
                 }
-                failSafeClose(StreamTerminationReason.BACKPRESSURE, null);
                 return;
             }
 
@@ -685,20 +732,27 @@ class ConnectionEventLoop {
             }
             byteTokenizer.compact();
             requestParser.reset();
+            requestReadTimeoutBodyPhase = false;
+            requestReadTimeoutTokenizerMark = byteTokenizer.totalBytesAdded();
             dispatchRequest(request);
         }
 
         private void dispatchRequest(MicrohttpRequest request) {
             boolean monitorClientDisconnects;
 
-            try {
-                monitorClientDisconnects = handler.monitorClientDisconnectsBeforeResponse(request);
-            } catch (Throwable throwable) {
-                logThrowable(throwable,
-                        new LogEntry("event", "request_disconnect_monitor_error"),
-                        new LogEntry("id", id));
-                failSafeClose(StreamTerminationReason.INTERNAL_ERROR, throwable);
-                return;
+            try (TransportFailureObserver.Observation observation =
+                         beginTransportFailure(TransportFailureReason.UNKNOWN)) {
+                try {
+                    monitorClientDisconnects =
+                            handler.monitorClientDisconnectsBeforeResponse(request);
+                    observation.discard();
+                } catch (Throwable throwable) {
+                    logThrowable(throwable,
+                            new LogEntry("event", "request_disconnect_monitor_error"),
+                            new LogEntry("id", id));
+                    failSafeClose(StreamTerminationReason.INTERNAL_ERROR, throwable);
+                    return;
+                }
             }
 
             InFlightDispatch dispatch = new InFlightDispatch(request, monitorClientDisconnects);
@@ -708,13 +762,17 @@ class ConnectionEventLoop {
                 enableReadInterestForDisconnectMonitoring();
             }
 
-            try {
-                handler.handle(request, response -> onResponse(dispatch, response));
-            } catch (Throwable throwable) {
-                logThrowable(throwable,
-                        new LogEntry("event", "request_handler_error"),
-                        new LogEntry("id", id));
-                failSafeClose(StreamTerminationReason.INTERNAL_ERROR, throwable);
+            try (TransportFailureObserver.Observation observation =
+                         beginTransportFailure(TransportFailureReason.UNKNOWN)) {
+                try {
+                    handler.handle(request, response -> onResponse(dispatch, response));
+                    observation.discard();
+                } catch (Throwable throwable) {
+                    logThrowable(throwable,
+                            new LogEntry("event", "request_handler_error"),
+                            new LogEntry("id", id));
+                    failSafeClose(StreamTerminationReason.INTERNAL_ERROR, throwable);
+                }
             }
         }
 
@@ -723,12 +781,16 @@ class ConnectionEventLoop {
                 ResponseOffer offer = dispatch.offerNullResponse();
 
                 if (offer.disposition == ResponseDisposition.ACCEPTED) {
-                    queueConnectionTask("response_ready_error", () -> {
+                    queueConnectionTask("response_ready_error",
+                            TransportFailureReason.RESPONSE_READY_ERROR, () -> {
                         throw new NullPointerException("Handler response callback received null");
                     });
                     wakeupSelectorForCallback();
                 } else if (offer.disposition == ResponseDisposition.DUPLICATE) {
-                    logDuplicateResponse();
+                    try (TransportFailureObserver.Observation ignored =
+                                 beginDuplicateResponseFailure()) {
+                        // No response body exists to discard on this path.
+                    }
                 }
                 return;
             }
@@ -737,20 +799,31 @@ class ConnectionEventLoop {
 
             if (offer.disposition != ResponseDisposition.ACCEPTED) {
                 if (offer.disposition == ResponseDisposition.DUPLICATE) {
-                    logDuplicateResponse();
+                    try (TransportFailureObserver.Observation ignored =
+                                 beginDuplicateResponseFailure()) {
+                        discardResponse(microhttpResponse, offer.discardReason,
+                                offer.discardCause);
+                    }
+                } else {
+                    discardResponse(microhttpResponse, offer.discardReason,
+                            offer.discardCause);
                 }
-                discardResponse(microhttpResponse, offer.discardReason, offer.discardCause);
                 return;
             }
 
             // enqueuing the callback invocation and waking the selector
             // ensures that the microhttpResponse callback works properly when
             // invoked inline from the event loop thread or a separate background thread
-            queueConnectionTask("response_ready_error", () -> prepareToWriteResponse(dispatch));
+            queueConnectionTask("response_ready_error",
+                    TransportFailureReason.RESPONSE_READY_ERROR,
+                    () -> prepareToWriteResponse(dispatch));
             wakeupSelectorForCallback();
         }
 
-        private void logDuplicateResponse() {
+        private TransportFailureObserver.Observation
+                beginDuplicateResponseFailure() {
+            TransportFailureObserver.Observation observation =
+                    beginTransportFailure(TransportFailureReason.UNKNOWN);
             try {
                 if (logger.failureEnabled()) {
                     logger.logFailure(
@@ -760,6 +833,7 @@ class ConnectionEventLoop {
             } catch (Throwable ignored) {
                 // Logging must not affect callback ownership.
             }
+            return observation;
         }
 
         private void wakeupSelectorForCallback() {
@@ -778,8 +852,17 @@ class ConnectionEventLoop {
             }
 
             if (closed.get()) {
-                cancelDispatch(dispatch, StreamTerminationReason.SERVER_STOPPING, null);
-                discardResponse(microhttpResponse, StreamTerminationReason.SERVER_STOPPING, null);
+                TransportFailureObserver.@Nullable Observation
+                        cancelFailureObservation =
+                        cancelDispatch(dispatch,
+                                StreamTerminationReason.SERVER_STOPPING, null);
+                try {
+                    discardResponse(microhttpResponse,
+                            StreamTerminationReason.SERVER_STOPPING, null);
+                } finally {
+                    if (cancelFailureObservation != null)
+                        cancelFailureObservation.close();
+                }
                 return;
             }
 
@@ -883,10 +966,19 @@ class ConnectionEventLoop {
                 onWritable();
             } catch (Throwable throwable) {
                 if (!committed) {
-                    cancelDispatch(dispatch, StreamTerminationReason.INTERNAL_ERROR, throwable);
-                    if (!bodyOwnershipAttempted) {
-                        responseInDelivery = null;
-                        discardResponse(microhttpResponse, StreamTerminationReason.INTERNAL_ERROR, throwable);
+                    TransportFailureObserver.@Nullable Observation
+                            cancelFailureObservation =
+                            cancelDispatch(dispatch,
+                                    StreamTerminationReason.INTERNAL_ERROR, throwable);
+                    try {
+                        if (!bodyOwnershipAttempted) {
+                            responseInDelivery = null;
+                            discardResponse(microhttpResponse,
+                                    StreamTerminationReason.INTERNAL_ERROR, throwable);
+                        }
+                    } finally {
+                        if (cancelFailureObservation != null)
+                            cancelFailureObservation.close();
                     }
                 }
 
@@ -907,18 +999,24 @@ class ConnectionEventLoop {
                 } else {
                     doOnWritableContinueResponse();
                 }
+            } catch (StreamingResponseCanceledException e) {
+                failSafeClose(e.getCancelationReason(),
+                        e.getCancelationCause().orElse(null));
             } catch (IOException | RuntimeException e) {
-                if (logger.failureEnabled()) {
-                    logger.logFailure(e,
-                            new LogEntry("event", "write_error"),
-                            new LogEntry("id", id));
+                try (TransportFailureObserver.Observation ignored =
+                             beginTransportFailure(TransportFailureReason.WRITE_ERROR)) {
+                    if (logger.failureEnabled()) {
+                        logger.logFailure(e,
+                                new LogEntry("event", "write_error"),
+                                new LogEntry("id", id));
+                    }
+                    failSafeClose(StreamTerminationReason.WRITE_FAILED, e);
                 }
-                failSafeClose(StreamTerminationReason.WRITE_FAILED, e);
             }
         }
 
         private void onWritableSourceReady() {
-            queueConnectionTask("write_error", () -> {
+            queueConnectionTask("write_error", TransportFailureReason.WRITE_ERROR, () -> {
                 if (closed.get() || writableSource == null || !selectionKey.isValid()) {
                     return;
                 }
@@ -1011,12 +1109,15 @@ class ConnectionEventLoop {
                 try {
                     doOnWritableContinueResponse();
                 } catch (IOException e) {
-                    if (logger.failureEnabled()) {
-                        logger.logFailure(e,
-                                new LogEntry("event", "write_error"),
-                                new LogEntry("id", id));
+                    try (TransportFailureObserver.Observation ignored =
+                                 beginTransportFailure(TransportFailureReason.WRITE_ERROR)) {
+                        if (logger.failureEnabled()) {
+                            logger.logFailure(e,
+                                    new LogEntry("event", "write_error"),
+                                    new LogEntry("id", id));
+                        }
+                        failSafeClose();
                     }
-                    failSafeClose();
                 }
                 return;
             }
@@ -1061,13 +1162,16 @@ class ConnectionEventLoop {
             try {
                 if (requestParser.parse()) { // subsequent request in buffer
                     if (byteTokenizer.position() > options.maxRequestSize()) {
-                        if (logger.failureEnabled()) {
-                            logger.logFailure(
-                                    new LogEntry("event", "exceed_request_max_close"),
-                                    new LogEntry("id", id),
-                                    new LogEntry("request_size", Integer.toString(byteTokenizer.position())));
+                        try (TransportFailureObserver.Observation ignored =
+                                     beginTransportFailure(TransportFailureReason.REQUEST_TOO_LARGE)) {
+                            if (logger.failureEnabled()) {
+                                logger.logFailure(
+                                        new LogEntry("event", "exceed_request_max_close"),
+                                        new LogEntry("id", id),
+                                        new LogEntry("request_size", Integer.toString(byteTokenizer.position())));
+                            }
+                            respondToRequestTooLarge(RequestTooLargeException.Reason.CONTENT);
                         }
-                        respondToRequestTooLarge(RequestTooLargeException.Reason.CONTENT);
                         return;
                     }
                     if (logger.enabled()) {
@@ -1081,27 +1185,36 @@ class ConnectionEventLoop {
                     onPartialRequestParsed();
                 }
             } catch (RequestTooLargeException e) {
-                if (logger.failureEnabled()) {
-                    logger.logFailure(
-                            new LogEntry("event", "exceed_request_max_close"),
-                            new LogEntry("id", id),
-                            new LogEntry("request_size", Integer.toString(byteTokenizer.size())));
+                try (TransportFailureObserver.Observation ignored =
+                             beginTransportFailure(TransportFailureReason.REQUEST_TOO_LARGE)) {
+                    if (logger.failureEnabled()) {
+                        logger.logFailure(
+                                new LogEntry("event", "exceed_request_max_close"),
+                                new LogEntry("id", id),
+                                new LogEntry("request_size", Integer.toString(byteTokenizer.size())));
+                    }
+                    respondToRequestTooLarge(e);
                 }
-                respondToRequestTooLarge(e);
             } catch (ExpectationFailedException e) {
-                if (logger.failureEnabled()) {
-                    logger.logFailure(e,
-                            new LogEntry("event", "expectation_failed"),
-                            new LogEntry("id", id));
+                try (TransportFailureObserver.Observation ignored =
+                             beginTransportFailure(TransportFailureReason.UNKNOWN)) {
+                    if (logger.failureEnabled()) {
+                        logger.logFailure(e,
+                                new LogEntry("event", "expectation_failed"),
+                                new LogEntry("id", id));
+                    }
+                    respondToExpectationFailed();
                 }
-                respondToExpectationFailed();
             } catch (MalformedRequestException e) {
-                if (logger.failureEnabled()) {
-                    logger.logFailure(e,
-                            new LogEntry("event", "malformed_request"),
-                            new LogEntry("id", id));
+                try (TransportFailureObserver.Observation ignored =
+                             beginTransportFailure(TransportFailureReason.MALFORMED_REQUEST)) {
+                    if (logger.failureEnabled()) {
+                        logger.logFailure(e,
+                                new LogEntry("event", "malformed_request"),
+                                new LogEntry("id", id));
+                    }
+                    respondToMalformedRequest();
                 }
-                respondToMalformedRequest();
             }
         }
 
@@ -1125,55 +1238,80 @@ class ConnectionEventLoop {
             }
         }
 
-        private void cancelDispatch(InFlightDispatch dispatch, StreamTerminationReason reason,
-                                    @Nullable Throwable cause) {
+        private TransportFailureObserver.@Nullable Observation cancelDispatch(
+                InFlightDispatch dispatch, StreamTerminationReason reason,
+                @Nullable Throwable cause) {
             DispatchCancellation cancellation = dispatch.cancel(reason, cause);
 
             if (cancellation == null) {
-                return;
+                return null;
             }
 
             if (inFlightDispatch == dispatch) {
                 inFlightDispatch = null;
             }
 
+            TransportFailureObserver.Observation failureObservation =
+                    beginTransportFailure(TransportFailureReason.UNKNOWN);
             try {
                 handler.cancel(dispatch.request, reason, cause);
+                failureObservation.discard();
             } catch (Throwable throwable) {
                 logThrowable(throwable,
                         new LogEntry("event", "request_cancel_error"),
                         new LogEntry("id", id));
             }
 
-            if (cancellation.pendingResponse != null) {
-                discardResponse(cancellation.pendingResponse, reason, cause);
+            try {
+                if (cancellation.pendingResponse != null) {
+                    discardResponse(cancellation.pendingResponse, reason, cause);
+                }
+                return failureObservation;
+            } catch (RuntimeException | Error throwable) {
+                failureObservation.close();
+                throw throwable;
             }
         }
 
         private void discardResponse(MicrohttpResponse response, StreamTerminationReason reason,
                                      @Nullable Throwable cause) {
-            Throwable closeFailure = null;
+            @Nullable Throwable closeFailure = null;
+            boolean bodyCloseFailed = false;
+            TransportFailureObserver.Observation failureObservation =
+                    beginTransportFailure(TransportFailureReason.UNKNOWN);
 
             try {
                 response.closeBody(reason, cause);
             } catch (Throwable throwable) {
                 closeFailure = throwable;
+                bodyCloseFailed = true;
                 logThrowable(throwable,
                         new LogEntry("event", "response_discard_error"),
                         new LogEntry("id", id));
             } finally {
-                response.reserveBodyTermination(reason, cause == null ? closeFailure : cause);
-                deliverBodyTermination(response);
+                try {
+                    response.reserveBodyTermination(reason,
+                            cause == null ? closeFailure : cause);
+                    deliverBodyTermination(response);
+                    if (!bodyCloseFailed)
+                        failureObservation.discard();
+                } finally {
+                    failureObservation.close();
+                }
             }
         }
 
         private void deliverBodyTermination(MicrohttpResponse response) {
-            try {
-                response.deliverBodyTermination();
-            } catch (Throwable throwable) {
-                logThrowable(throwable,
-                        new LogEntry("event", "response_termination_listener_error"),
-                        new LogEntry("id", id));
+            try (TransportFailureObserver.Observation observation =
+                         beginTransportFailure(TransportFailureReason.UNKNOWN)) {
+                try {
+                    response.deliverBodyTermination();
+                    observation.discard();
+                } catch (Throwable throwable) {
+                    logThrowable(throwable,
+                            new LogEntry("event", "response_termination_listener_error"),
+                            new LogEntry("id", id));
+                }
             }
         }
 
@@ -1193,10 +1331,15 @@ class ConnectionEventLoop {
             MicrohttpResponse response = responseInDelivery;
             responseInDelivery = null;
             Throwable responseCloseFailure = null;
+            TransportFailureObserver.@Nullable Observation
+                    cancelFailureObservation = null;
+            TransportFailureObserver.@Nullable Observation
+                    responseCloseObservation = null;
 
             try {
                 if (dispatch != null) {
-                    cancelDispatch(dispatch, effectiveReason, cause);
+                    cancelFailureObservation = cancelDispatch(
+                            dispatch, effectiveReason, cause);
                 }
                 if (requestReadTimeoutTask != null) {
                     requestReadTimeoutTask.cancel();
@@ -1206,8 +1349,11 @@ class ConnectionEventLoop {
                 if (writableSource != null) {
                     WritableSource source = writableSource;
                     writableSource = null;
+                    responseCloseObservation = beginTransportFailure(
+                            TransportFailureReason.UNKNOWN);
                     try {
                         source.close(effectiveReason, cause);
+                        responseCloseObservation.discard();
                     } catch (Throwable throwable) {
                         responseCloseFailure = throwable;
                         logThrowable(throwable,
@@ -1218,7 +1364,6 @@ class ConnectionEventLoop {
                 continueResponseBuffer = null;
                 monitorClientDisconnectsDuringStreamingResponse = false;
                 streamingResponseBytesDiscarded = 0;
-            } finally {
                 try {
                     selectionKey.cancel();
                 } finally {
@@ -1226,12 +1371,19 @@ class ConnectionEventLoop {
                     connectionCount.decrementAndGet();
                     admission.release();
                 }
-            }
-
-            if (response != null) {
-                response.reserveBodyTermination(effectiveReason,
-                        cause == null ? responseCloseFailure : cause);
-                deliverBodyTermination(response);
+                if (response != null) {
+                    response.reserveBodyTermination(effectiveReason,
+                            cause == null ? responseCloseFailure : cause);
+                    deliverBodyTermination(response);
+                }
+            } finally {
+                try {
+                    if (responseCloseObservation != null)
+                        responseCloseObservation.close();
+                } finally {
+                    if (cancelFailureObservation != null)
+                        cancelFailureObservation.close();
+                }
             }
         }
 
@@ -1252,7 +1404,10 @@ class ConnectionEventLoop {
 
             requestReadTimeoutBodyPhase = bodyPhase;
             requestReadTimeoutTokenizerMark = byteTokenizer.totalBytesAdded();
-            requestReadTimeoutTask = timeoutQueue.schedule(() -> runConnectionTask("request_timeout_error", this::onRequestReadTimeout), timeout);
+            requestReadTimeoutTask = timeoutQueue.schedule(() -> runConnectionTask(
+                    "request_timeout_error",
+                    TransportFailureReason.REQUEST_READ_TIMEOUT_ERROR,
+                    this::onRequestReadTimeout), timeout);
         }
 
         private boolean shouldRecordReadFailure(Throwable throwable) {
@@ -1266,12 +1421,16 @@ class ConnectionEventLoop {
         }
 
         private void onResponseWriteIdleTimeout() {
-            if (logger.failureEnabled()) {
-                logger.logFailure(
-                        new LogEntry("event", "response_write_idle_timeout"),
-                        new LogEntry("id", id));
+            try (TransportFailureObserver.Observation ignored =
+                         beginTransportFailure(
+                                 TransportFailureReason.RESPONSE_WRITE_IDLE_TIMEOUT)) {
+                if (logger.failureEnabled()) {
+                    logger.logFailure(
+                            new LogEntry("event", "response_write_idle_timeout"),
+                            new LogEntry("id", id));
+                }
+                failSafeClose();
             }
-            failSafeClose();
         }
 
         private void resetResponseWriteIdleTimeoutIfNeeded() {
@@ -1281,7 +1440,9 @@ class ConnectionEventLoop {
 
             cancelResponseWriteIdleTimeout();
             responseWriteIdleTimeoutTask = timeoutQueue.schedule(
-                    () -> runConnectionTask("response_write_idle_timeout_error", this::onResponseWriteIdleTimeout),
+                    () -> runConnectionTask("response_write_idle_timeout_error",
+                            TransportFailureReason.RESPONSE_WRITE_IDLE_TIMEOUT_ERROR,
+                            this::onResponseWriteIdleTimeout),
                     options.responseWriteIdleTimeout());
         }
 
@@ -1292,18 +1453,26 @@ class ConnectionEventLoop {
             }
         }
 
-        private void queueConnectionTask(String failureEvent, ThrowingTask task) {
-            taskQueue.add(() -> runConnectionTask(failureEvent, task));
+        private void queueConnectionTask(String failureEvent,
+                                         TransportFailureReason failureReason,
+                                         ThrowingTask task) {
+            taskQueue.add(() -> runConnectionTask(failureEvent, failureReason, task));
         }
 
-        private void runConnectionTask(String failureEvent, ThrowingTask task) {
-            try {
-                task.run();
-            } catch (Throwable throwable) {
-                logThrowable(throwable,
-                        new LogEntry("event", failureEvent),
-                        new LogEntry("id", id));
-                failSafeClose(StreamTerminationReason.INTERNAL_ERROR, throwable);
+        private void runConnectionTask(String failureEvent,
+                                       TransportFailureReason failureReason,
+                                       ThrowingTask task) {
+            try (TransportFailureObserver.Observation observation =
+                         beginTransportFailure(failureReason)) {
+                try {
+                    task.run();
+                    observation.discard();
+                } catch (Throwable throwable) {
+                    logThrowable(throwable,
+                            new LogEntry("event", failureEvent),
+                            new LogEntry("id", id));
+                    failSafeClose(StreamTerminationReason.INTERNAL_ERROR, throwable);
+                }
             }
         }
 
@@ -1429,25 +1598,33 @@ class ConnectionEventLoop {
     }
 
     void start() {
-        synchronized (lifecycleLock) {
-            if (closedBeforeStart) {
-                return;
-            }
-            if (started) {
-                throw new IllegalStateException("Connection event loop has already been started.");
-            }
+        boolean notifyTermination = false;
+        try {
+            synchronized (lifecycleLock) {
+                if (closedBeforeStart) {
+                    return;
+                }
+                if (started) {
+                    throw new IllegalStateException(
+                            "Connection event loop has already been started.");
+                }
 
-            started = true;
-            try {
-                thread.start();
-            } catch (RuntimeException | Error throwable) {
-                started = false;
-                closedBeforeStart = true;
-                registrationsClosed.set(true);
-                closePendingRegistrations();
-                CloseUtils.closeQuietly(selector);
-                throw throwable;
+                started = true;
+                try {
+                    thread.start();
+                } catch (RuntimeException | Error throwable) {
+                    started = false;
+                    closedBeforeStart = true;
+                    registrationsClosed.set(true);
+                    closePendingRegistrations();
+                    CloseUtils.closeQuietly(selector);
+                    notifyTermination = true;
+                    throw throwable;
+                }
             }
+        } finally {
+            if (notifyTermination)
+                notifyTermination();
         }
     }
 
@@ -1498,26 +1675,30 @@ class ConnectionEventLoop {
             } catch (Throwable ignored) {
                 // No safe fallback sink is available from the connection-event-loop thread.
             }
-            stop.set(true); // stop the world on critical error
             try {
                 unexpectedTerminationHandler.accept(throwable);
             } catch (Throwable ignored) {
                 // The parent event loop owns reporting; no secondary failure may escape here.
             }
         } finally {
-            registrationsClosed.set(true);
-            closePendingRegistrations();
             try {
-                for (SelectionKey selKey : selector.keys()) {
-                    Object attachment = selKey.attachment();
-                    if (attachment instanceof Connection connection) {
-                        connection.failSafeClose(StreamTerminationReason.SERVER_STOPPING, null);
+                registrationsClosed.set(true);
+                closePendingRegistrations();
+                try {
+                    for (SelectionKey selKey : selector.keys()) {
+                        Object attachment = selKey.attachment();
+                        if (attachment instanceof Connection connection) {
+                            connection.failSafeClose(
+                                    StreamTerminationReason.SERVER_STOPPING, null);
+                        }
                     }
+                } catch (ClosedSelectorException ignored) {
+                    // A fatal selector failure may already have closed it.
                 }
-            } catch (ClosedSelectorException ignored) {
-                // A fatal selector failure may already have closed it.
+                CloseUtils.closeQuietly(selector);
+            } finally {
+                notifyTermination();
             }
-            CloseUtils.closeQuietly(selector);
         }
     }
 
@@ -1577,27 +1758,37 @@ class ConnectionEventLoop {
                     Object attachment = selKey.attachment();
                     if (attachment instanceof Connection connection) {
                         if (selKey.isReadable()) {
-                            connection.runConnectionTask("read_error", connection::onReadable);
+                            connection.runConnectionTask("read_error",
+                                    TransportFailureReason.READ_ERROR,
+                                    connection::onReadable);
                         } else if (selKey.isWritable()) {
-                            connection.runConnectionTask("write_error", connection::onWritable);
+                            connection.runConnectionTask("write_error",
+                                    TransportFailureReason.WRITE_ERROR,
+                                    connection::onWritable);
                         }
                     }
                 } catch (Throwable throwable) {
-                    logThrowable(throwable, new LogEntry("event", "selection_key_error"));
-                    Object attachment = selKey.attachment();
-                    if (attachment instanceof Connection connection) {
-                        connection.failSafeClose();
-                    } else {
-                        selKey.cancel();
+                    try (TransportFailureObserver.Observation ignored =
+                                 beginTransportFailure(
+                                         TransportFailureReason.SELECTION_KEY_ERROR)) {
+                        logThrowable(throwable,
+                                new LogEntry("event", "selection_key_error"));
+                        Object attachment = selKey.attachment();
+                        if (attachment instanceof Connection connection) {
+                            connection.failSafeClose();
+                        } else {
+                            selKey.cancel();
+                        }
                     }
                 } finally {
                     it.remove();
                 }
             }
-            timeoutQueue.expired().forEach(task -> runLoopTask(task, "timeout_task_error"));
+            timeoutQueue.expired().forEach(task -> runLoopTask(task,
+                    "timeout_task_error", TransportFailureReason.TIMEOUT_TASK_ERROR));
             Runnable task;
             while ((task = taskQueue.poll()) != null) {
-                runLoopTask(task, "task_error");
+                runLoopTask(task, "task_error", TransportFailureReason.TASK_ERROR);
             }
         }
     }
@@ -1628,16 +1819,20 @@ class ConnectionEventLoop {
             return;
         }
 
-        try {
-            if (stop.get() || draining.get() || registrationsClosed.get()) {
-                pendingRegistration.closeAndRelease();
-                return;
-            }
-
-            doRegister(pendingRegistration);
-        } catch (Throwable throwable) {
-            logThrowable(throwable, new LogEntry("event", "register_error"));
+        if (stop.get() || draining.get() || registrationsClosed.get()) {
             pendingRegistration.closeAndRelease();
+            return;
+        }
+
+        try (TransportFailureObserver.Observation observation =
+                     beginTransportFailure(TransportFailureReason.REGISTER_ERROR)) {
+            try {
+                doRegister(pendingRegistration);
+                observation.discard();
+            } catch (Throwable throwable) {
+                logThrowable(throwable, new LogEntry("event", "register_error"));
+                pendingRegistration.closeAndRelease();
+            }
         }
     }
 
@@ -1732,18 +1927,38 @@ class ConnectionEventLoop {
             closePendingRegistrations();
             CloseUtils.closeQuietly(selector);
         }
+        notifyTermination();
     }
 
     boolean resourcesClosed() {
         return !selector.isOpen();
     }
 
-    private void runLoopTask(Runnable task, String failureEvent) {
+    private void notifyTermination() {
         try {
-            task.run();
-        } catch (Throwable throwable) {
-            logThrowable(throwable, new LogEntry("event", failureEvent));
+            terminationHandler.run();
+        } catch (Throwable ignored) {
+            // Parent lifecycle notification must not escape cleanup.
         }
+    }
+
+    private void runLoopTask(Runnable task, String failureEvent,
+                             TransportFailureReason failureReason) {
+        try (TransportFailureObserver.Observation observation =
+                     beginTransportFailure(failureReason)) {
+            try {
+                task.run();
+                observation.discard();
+            } catch (Throwable throwable) {
+                logThrowable(throwable, new LogEntry("event", failureEvent));
+            }
+        }
+    }
+
+    private TransportFailureObserver.Observation beginTransportFailure(
+            TransportFailureReason reason) {
+        return TransportFailureObservations.beginSafely(
+                transportFailureObserver, reason);
     }
 
     private void logThrowable(Throwable throwable, LogEntry... entries) {

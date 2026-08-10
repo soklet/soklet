@@ -1351,6 +1351,8 @@ public class McpSubscriptionPublicRuntimeTests {
 				maximumConcurrentMetricCallbacks.accumulateAndGet(active, Math::max);
 				try {
 					metrics.add(event);
+					if (event instanceof McpMetricsEvent.RequestFinished)
+						requestFinishedMetric.countDown();
 				} finally {
 					activeMetricCallbacks.decrementAndGet();
 				}
@@ -1362,6 +1364,9 @@ public class McpSubscriptionPublicRuntimeTests {
 		private final AtomicInteger finishes = new AtomicInteger();
 		@NonNull
 		private final CountDownLatch finished = new CountDownLatch(1);
+		@NonNull
+		private final CountDownLatch requestFinishedMetric =
+				new CountDownLatch(1);
 		@NonNull
 		private final AtomicReference<@Nullable McpRequestContext> startedContext =
 				new AtomicReference<>();
@@ -1435,13 +1440,17 @@ public class McpSubscriptionPublicRuntimeTests {
 
 		private void assertStreamMetrics(
 				@NonNull McpStreamTerminationReason expectedReason,
-				@Nullable Boolean expectKeepAlive) {
+				@Nullable Boolean expectKeepAlive) throws InterruptedException {
+			Assertions.assertTrue(this.requestFinishedMetric.await(
+					5, TimeUnit.SECONDS),
+					"The request-finished metric did not arrive.");
 			List<McpMetricsEvent> events = List.copyOf(this.metrics);
 			List<McpMetricsEvent> withoutKeepAlives = events.stream()
 					.filter(event -> !(event instanceof McpMetricsEvent.KeepAliveEmitted))
 					.toList();
 			Assertions.assertEquals(List.of(
 					McpMetricsEvent.ServerStarted.class,
+					McpMetricsEvent.ConnectionAccepted.class,
 					McpMetricsEvent.RequestAccepted.class,
 					McpMetricsEvent.RequestStarted.class,
 					McpMetricsEvent.RequestStreamOpened.class,

@@ -17,7 +17,9 @@
 package com.soklet.internal.mcp.protocol;
 
 import com.soklet.CorsAuthorizer;
+import com.soklet.McpRequestContext;
 import com.soklet.McpRequestOutcome;
+import com.soklet.MetricsCollector;
 import com.soklet.StreamTerminationReason;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.AfterEach;
@@ -27,6 +29,7 @@ import org.junit.jupiter.api.Timeout;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -221,6 +224,7 @@ public class McpHttpServerRequestScopedSseTests {
 	public void response_write_idle_timeout_closes_stream_and_interrupts_handler()
 			throws Exception {
 		ControllableClock clock = new ControllableClock();
+		WriteTimeoutObservation observation = new WriteTimeoutObservation();
 		CountDownLatch handlerInterrupted = new CountDownLatch(1);
 		CountDownLatch emergencyRelease = new CountDownLatch(1);
 		AtomicReference<Optional<StreamTerminationReason>> cancellationReason =
@@ -238,7 +242,8 @@ public class McpHttpServerRequestScopedSseTests {
 		}, clock,
 				transportConfiguration(Duration.ofSeconds(4), Duration.ofSeconds(5)),
 				new McpApplicationExecutionConfiguration(
-						1, 1, Duration.ofDays(1), Duration.ofDays(1)));
+						1, 1, Duration.ofDays(1), Duration.ofDays(1)),
+				observation, observation);
 
 		try {
 			int port = runtime.start().getPort();
@@ -256,11 +261,94 @@ public class McpHttpServerRequestScopedSseTests {
 						"The write-idle timeout did not close the committed stream.");
 				Assertions.assertTrue(handlerInterrupted.await(5, TimeUnit.SECONDS),
 						"The write-idle timeout did not interrupt the handler.");
+					Assertions.assertEquals(
+							Optional.of(StreamTerminationReason.RESPONSE_IDLE_TIMEOUT),
+							cancellationReason.get());
+				}
+			awaitClean(runtime);
+			observation.awaitFinished();
+			runtime.runApplicationTimerCycle();
+			observation.awaitTransportFailureReasons(List.of(
+					MetricsCollector.TransportFailureReason.WRITE_TIMEOUT));
+			Assertions.assertEquals(List.of(
+					MetricsCollector.TransportFailureReason.WRITE_TIMEOUT),
+					observation.transportFailureReasons());
+			Assertions.assertEquals(List.of("stream-opened",
+					"transport-failure:WRITE_TIMEOUT",
+					"stream-closed:RESPONSE_IDLE_TIMEOUT", "request-finished"),
+					observation.order(),
+					"The exact write-idle winner must be recorded once before its close and finish terminals.");
+		} finally {
+			emergencyRelease.countDown();
+			runtime.close();
+		}
+	}
+
+	@Test
+	public void generic_stream_termination_discards_losing_write_timeout()
+			throws Exception {
+		ControllableClock clock = new ControllableClock();
+		WriteTimeoutObservation observation = new WriteTimeoutObservation();
+		AtomicLong hookInvocations = new AtomicLong();
+		McpRequestSseStream.setTestHooks(new McpRequestSseStream.TestHooks() {
+			@Override
+			public void beforeTerminalReservation() {
+			}
+
+			@Override
+			public void beforeWriteIdleFailureAttempt(
+					Runnable competingTermination) {
+				hookInvocations.incrementAndGet();
+				competingTermination.run();
+			}
+		});
+		CountDownLatch handlerInterrupted = new CountDownLatch(1);
+		CountDownLatch emergencyRelease = new CountDownLatch(1);
+		AtomicReference<Optional<StreamTerminationReason>> cancellationReason =
+				new AtomicReference<>(Optional.empty());
+		McpHttpServerRuntime runtime = runtime(invocation -> {
+			invocation.sendNotification(progress("write-idle-loser", 1));
+			try {
+				emergencyRelease.await();
+			} catch (InterruptedException exception) {
+				cancellationReason.set(invocation.cancellationReason());
+				handlerInterrupted.countDown();
+				throw exception;
+			}
+			return completeResult("must-not-be-written");
+		}, clock,
+				transportConfiguration(Duration.ofSeconds(4), Duration.ofSeconds(5)),
+				new McpApplicationExecutionConfiguration(
+						1, 1, Duration.ofDays(1), Duration.ofDays(1)),
+				observation, observation);
+
+		try {
+			int port = runtime.start().getPort();
+			try (McpChunkedHttpClient client = McpChunkedHttpClient.postMcp(
+					port, "\"write-idle-loser\"", APPLICATION_METHOD)) {
+				Assertions.assertEquals("text/event-stream",
+						client.readHead().singleHeader("Content-Type"));
+				Assertions.assertTrue(client.readChunkText().contains(
+						"\"progressToken\":\"write-idle-loser\""));
+
+				clock.advance(Duration.ofSeconds(5));
+				runtime.runApplicationTimerCycle();
+				Assertions.assertTrue(client.awaitTransportClosure());
+				Assertions.assertTrue(handlerInterrupted.await(5, TimeUnit.SECONDS));
 				Assertions.assertEquals(
 						Optional.of(StreamTerminationReason.RESPONSE_IDLE_TIMEOUT),
 						cancellationReason.get());
 			}
 			awaitClean(runtime);
+			observation.awaitFinished();
+			runtime.runApplicationTimerCycle();
+			observation.awaitTransportFailureReasons(List.of());
+			Assertions.assertEquals(1L, hookInvocations.get());
+			Assertions.assertTrue(observation.transportFailureReasons().isEmpty(),
+					"The generic termination winner must discard provisional WRITE_TIMEOUT.");
+			Assertions.assertEquals(List.of("stream-opened",
+					"stream-closed:RESPONSE_IDLE_TIMEOUT", "request-finished"),
+					observation.order());
 		} finally {
 			emergencyRelease.countDown();
 			runtime.close();
@@ -647,6 +735,32 @@ public class McpHttpServerRequestScopedSseTests {
 				ignored -> {}, ignored -> {});
 	}
 
+	private static McpHttpServerRuntime runtime(McpApplicationRequestHandler handler,
+			McpApplicationClock clock,
+			McpHttpTransportConfiguration transportConfiguration,
+			McpApplicationExecutionConfiguration executionConfiguration,
+			McpRuntimeObservationSink observationSink,
+			McpApplicationExecutionObserver executionObserver) {
+		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
+				McpImplementationMetadata.withNameAndVersion(
+						"request-scoped-sse-test", "3.6.0-SNAPSHOT"))
+				.build();
+		McpApplicationRequestRouter router = McpApplicationRequestRouter.fromHandlers(
+				Map.of(APPLICATION_METHOD, handler));
+		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
+				CorsAuthorizer.rejectAllInstance(),
+				request -> McpRequestAdmissionDecision.ACCEPT);
+		McpHttpEndpointBinding binding = new McpHttpEndpointBinding(
+				policy, endpoint, router, observationSink);
+		return new McpHttpServerRuntime(transportConfiguration, List.of(binding),
+				McpJsonLimits.productionDefaults(), executionConfiguration, clock,
+				McpApplicationHandlerExecutorFactory.production(),
+				ignored -> {}, ignored -> {}, Optional.empty(),
+				McpFrameworkRequestStateRuntime.disabledInstance(),
+				McpSubscriptionRuntimeConfiguration.productionDefaults(),
+				executionObserver);
+	}
+
 	private static McpHttpTransportConfiguration transportConfiguration(
 			Duration keepAliveInterval, Duration responseWriteIdleTimeout) {
 		return transportConfiguration(keepAliveInterval,
@@ -710,6 +824,157 @@ public class McpHttpServerRequestScopedSseTests {
 			Thread.sleep(5);
 		} while (System.nanoTime() - deadline < 0L);
 		throw new AssertionError("Timed out waiting for application cleanup: " + latest);
+	}
+
+	private static final class WriteTimeoutObservation
+			implements McpRuntimeObservationSink, McpApplicationExecutionObserver {
+		private final Object lock = new Object();
+		private final List<Object> order = new ArrayList<>();
+		private final CountDownLatch finished = new CountDownLatch(1);
+
+		@Override
+		public McpRuntimeRequestObservation didStartRequest(
+				McpRuntimeRequestInput input) {
+			return new McpRuntimeRequestObservation() {
+				@Override
+				public Optional<McpRequestContext> publicContext() {
+					return Optional.empty();
+				}
+
+				@Override
+				public void didOpenRequestStream() {
+					add("stream-opened");
+				}
+
+				@Override
+				public void didCloseRequestStream(
+						StreamTerminationReason reason, Duration duration) {
+					add("stream-closed:" + reason);
+				}
+
+				@Override
+				public void didFinish(McpRequestOutcome outcome,
+						McpJsonRpcError error, Duration duration,
+						List<Throwable> throwables) {
+					add("request-finished");
+					finished.countDown();
+				}
+			};
+		}
+
+		@Override
+		public PendingMetricRecord recordTransportFailure(
+				MetricsCollector.TransportFailureReason reason) {
+			PendingTransportFailure pending = new PendingTransportFailure(reason);
+			add(pending);
+			return pending;
+		}
+
+		@Override
+		public void discardPendingMetric(PendingMetricRecord pendingMetricRecord) {
+			if (!(pendingMetricRecord instanceof PendingTransportFailure))
+				return;
+			synchronized (this.lock) {
+				if (!this.order.remove(pendingMetricRecord))
+					throw new AssertionError(
+							"The provisional transport failure was not pending.");
+				this.lock.notifyAll();
+			}
+		}
+
+		private void add(Object value) {
+			synchronized (this.lock) {
+				this.order.add(value);
+				this.lock.notifyAll();
+			}
+		}
+
+		private void awaitFinished() throws InterruptedException {
+			Assertions.assertTrue(this.finished.await(5, TimeUnit.SECONDS),
+					"The write-timeout request did not finish.");
+		}
+
+		private List<MetricsCollector.TransportFailureReason>
+				transportFailureReasons() {
+			synchronized (this.lock) {
+				return this.order.stream()
+						.filter(PendingTransportFailure.class::isInstance)
+						.map(PendingTransportFailure.class::cast)
+						.map(PendingTransportFailure::reason)
+						.toList();
+			}
+		}
+
+		private void awaitTransportFailureReasons(
+				List<MetricsCollector.TransportFailureReason> expected)
+				throws InterruptedException {
+			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+			synchronized (this.lock) {
+				while (!transportFailureReasons().equals(expected)) {
+					long remaining = deadline - System.nanoTime();
+					if (remaining <= 0L)
+						throw new AssertionError("Timed out awaiting transport failures "
+								+ expected + "; found "
+								+ transportFailureReasons());
+					TimeUnit.NANOSECONDS.timedWait(this.lock, remaining);
+				}
+			}
+		}
+
+		private List<String> order() {
+			synchronized (this.lock) {
+				return this.order.stream().map(value ->
+						value instanceof PendingTransportFailure pending
+								? "transport-failure:" + pending.reason()
+								: (String) value).toList();
+			}
+		}
+
+		@Override
+		public void beginDeferral() {
+		}
+
+		@Override
+		public void recordHandlerExecutionStarted() {
+		}
+
+		@Override
+		public void recordHandlerExecutionFinished() {
+		}
+
+		@Override
+		public void recordHandlerQueued() {
+		}
+
+		@Override
+		public void recordHandlerDequeued() {
+		}
+
+		@Override
+		public void recordHandlerCapacityRejected() {
+		}
+
+		@Override
+		public void drain() {
+		}
+
+		@Override
+		public void endDeferral() {
+		}
+	}
+
+	private static final class PendingTransportFailure
+			implements McpApplicationExecutionObserver.PendingMetricRecord {
+		private final MetricsCollector.TransportFailureReason reason;
+
+		private PendingTransportFailure(
+				MetricsCollector.TransportFailureReason reason) {
+			this.reason = reason;
+		}
+
+		private MetricsCollector.TransportFailureReason reason() {
+			return this.reason;
+		}
 	}
 
 	private static final class ControllableClock implements McpApplicationClock {

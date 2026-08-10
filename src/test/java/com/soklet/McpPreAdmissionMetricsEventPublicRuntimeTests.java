@@ -130,6 +130,7 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 					"server/discover", Map.of());
 			observer.awaitFinished();
 			observer.awaitMetricFailures();
+			collector.awaitRequestFinishedMetric();
 
 			Assertions.assertEquals(400, malformed.statusCode(),
 					malformed.body());
@@ -492,6 +493,9 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 		@NonNull
 		private final AtomicInteger maximumConcurrentCallbacks =
 				new AtomicInteger();
+		@NonNull
+		private final CountDownLatch requestFinishedMetric =
+				new CountDownLatch(1);
 
 		private FailingContextMetricsCollector(
 				@NonNull RuntimeException preAdmissionFailure,
@@ -507,6 +511,8 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 			this.maximumConcurrentCallbacks.accumulateAndGet(active, Math::max);
 			try {
 				record(event);
+				if (event instanceof McpMetricsEvent.RequestFinished)
+					this.requestFinishedMetric.countDown();
 				if (event instanceof McpMetricsEvent.ProtocolError protocolError
 						&& protocolError.code() == -32_700)
 					throw this.preAdmissionFailure;
@@ -520,6 +526,12 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 
 		private int maximumConcurrentCallbacks() {
 			return this.maximumConcurrentCallbacks.get();
+		}
+
+		private void awaitRequestFinishedMetric() throws InterruptedException {
+			Assertions.assertTrue(this.requestFinishedMetric.await(
+					5, TimeUnit.SECONDS),
+					"The admitted request-finished metric did not arrive.");
 		}
 	}
 

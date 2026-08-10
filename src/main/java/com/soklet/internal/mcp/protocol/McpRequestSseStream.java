@@ -43,6 +43,12 @@ final class McpRequestSseStream {
 	@FunctionalInterface
 	interface TestHooks {
 		void beforeTerminalReservation();
+
+		default void beforeWriteIdleFailureAttempt(
+				@NonNull Runnable competingTermination) {
+			requireNonNull(competingTermination);
+			// No-op outside deterministic race tests.
+		}
 	}
 
 	@NonNull
@@ -133,6 +139,14 @@ final class McpRequestSseStream {
 	boolean failIfWriteIdleExpired(long nowNanos, long timeoutNanos,
 			@NonNull StreamTerminationReason reason,
 			@Nullable Throwable cause) {
+		if (timeoutNanos > 0L) {
+			long deadlineNanos = channel.responseWriteIdleDeadlineNanos(
+					timeoutNanos);
+			if (deadlineNanos != Long.MAX_VALUE
+					&& nowNanos - deadlineNanos >= 0L)
+				testHooks.beforeWriteIdleFailureAttempt(() ->
+						channel.fail(requireNonNull(reason), cause));
+		}
 		return channel.failIfWriteIdleExpired(nowNanos, timeoutNanos,
 				requireNonNull(reason), cause);
 	}

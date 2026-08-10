@@ -269,6 +269,26 @@ final class DefaultMcpServer implements McpServer {
 			}
 
 			@Override
+			public void recordConnectionAccepted() {
+				mcpMetricEventDelivery.record(
+						new McpMetricsEvent.ConnectionAccepted());
+			}
+
+			@Override
+			public void recordConnectionRejected() {
+				mcpMetricEventDelivery.record(
+						new McpMetricsEvent.ConnectionRejected());
+			}
+
+			@Override
+			@NonNull
+			public PendingMetricRecord recordTransportFailure(
+					MetricsCollector.@NonNull TransportFailureReason reason) {
+				return mcpMetricEventDelivery.record(
+						new McpMetricsEvent.TransportFailure(requireNonNull(reason)));
+			}
+
+			@Override
 			@NonNull
 			public PendingMetricRecord recordProtocolError(int code,
 					@Nullable McpRequestContext requestContext) {
@@ -322,6 +342,16 @@ final class DefaultMcpServer implements McpServer {
 			@Override
 			public void endDeferral() {
 				mcpMetricEventDelivery.endDeferral();
+			}
+
+			@Override
+			public void endDeferralForAsynchronousDrain() {
+				mcpMetricEventDelivery.endDeferralForAsynchronousDrain();
+			}
+
+			@Override
+			public void drainAsynchronously() {
+				mcpMetricEventDelivery.drainAsynchronously();
 			}
 		};
 	}
@@ -585,7 +615,7 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	void endMcpMetricsDeferral() {
-		this.mcpMetricEventDelivery.endDeferral();
+		this.mcpMetricEventDelivery.endLifecycleDeferral();
 	}
 
 	boolean requiresStop() {
@@ -1738,6 +1768,7 @@ final class DefaultMcpServer implements McpServer {
 		private final Queue<@NonNull McpMetricEventDeliveryEntry> pendingEvents;
 		private int deferralDepth;
 		private boolean delivering;
+		private boolean asynchronousDrainRequired;
 		private @Nullable Thread deliveryThread;
 
 		private McpMetricEventDelivery() {
@@ -1812,24 +1843,53 @@ final class DefaultMcpServer implements McpServer {
 		}
 
 		private void drain() {
-			Thread currentThread = Thread.currentThread();
-			synchronized (this.lock) {
-				if (this.deferralDepth != 0 || this.delivering
-						|| this.pendingEvents.isEmpty())
-					return;
-				this.delivering = true;
-				this.deliveryThread = currentThread;
-			}
+			drain(false);
+		}
 
+		private void drainAsynchronously() {
+			drain(true);
+		}
+
+		private void drain(boolean asynchronous) {
+			boolean interrupted = false;
+			boolean deliveryClaimed = false;
+			Thread currentThread = Thread.currentThread();
 			try {
+				synchronized (this.lock) {
+					if (asynchronous) {
+						while ((this.deferralDepth != 0 || this.delivering)
+								&& this.deliveryThread != currentThread) {
+							try {
+								this.lock.wait();
+							} catch (InterruptedException exception) {
+								interrupted = true;
+							}
+						}
+						if (this.deferralDepth != 0 || this.delivering)
+							return;
+						this.asynchronousDrainRequired = false;
+					} else if (this.asynchronousDrainRequired
+							|| this.deferralDepth != 0 || this.delivering)
+						return;
+					if (this.pendingEvents.isEmpty())
+						return;
+					this.delivering = true;
+					this.deliveryThread = currentThread;
+					deliveryClaimed = true;
+				}
+
 				while (true) {
 					McpMetricEventDeliveryEntry entry;
 					synchronized (this.lock) {
 						if (this.deferralDepth != 0
+								|| (!asynchronous
+								&& this.asynchronousDrainRequired)
 								|| this.pendingEvents.isEmpty()) {
 							finishDeliveryLocked();
 							return;
 						}
+						if (asynchronous)
+							this.asynchronousDrainRequired = false;
 						entry = this.pendingEvents.remove();
 					}
 					@Nullable McpRequestContext requestContext =
@@ -1841,21 +1901,43 @@ final class DefaultMcpServer implements McpServer {
 								requestContext);
 				}
 			} finally {
-				synchronized (this.lock) {
-					if (this.delivering && this.deliveryThread == currentThread)
-						finishDeliveryLocked();
+				if (deliveryClaimed) {
+					synchronized (this.lock) {
+						if (this.delivering
+								&& this.deliveryThread == currentThread)
+							finishDeliveryLocked();
+					}
 				}
+				if (interrupted)
+					currentThread.interrupt();
 			}
 		}
 
 		private void endDeferral() {
+			if (releaseDeferral(false))
+				drain();
+		}
+
+		private void endLifecycleDeferral() {
+			if (releaseDeferral(false))
+				drain(true);
+		}
+
+		private void endDeferralForAsynchronousDrain() {
+			releaseDeferral(true);
+		}
+
+		private boolean releaseDeferral(boolean requireAsynchronousDrain) {
 			synchronized (this.lock) {
 				if (this.deferralDepth == 0)
 					throw new IllegalStateException(
 							"MCP metric delivery deferral is not active.");
+				if (requireAsynchronousDrain)
+					this.asynchronousDrainRequired = true;
 				this.deferralDepth--;
+				this.lock.notifyAll();
+				return this.deferralDepth == 0;
 			}
-			drain();
 		}
 
 		private void finishDeliveryLocked() {

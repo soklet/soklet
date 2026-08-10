@@ -16,6 +16,7 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import com.soklet.MetricsCollector;
 import com.soklet.McpRequestContext;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -56,6 +57,20 @@ public interface McpApplicationExecutionObserver {
 	default void recordRequestRejected() {
 	}
 
+	default void recordConnectionAccepted() {
+	}
+
+	default void recordConnectionRejected() {
+	}
+
+	@NonNull
+	default PendingMetricRecord recordTransportFailure(
+			MetricsCollector.@NonNull TransportFailureReason reason) {
+		if (reason == null)
+			throw new NullPointerException("reason");
+		return DisabledPendingMetricRecord.INSTANCE;
+	}
+
 	@NonNull
 	default PendingMetricRecord recordProtocolError(int code,
 			@Nullable McpRequestContext requestContext) {
@@ -83,6 +98,14 @@ public interface McpApplicationExecutionObserver {
 	void drain();
 
 	void endDeferral();
+
+	default void endDeferralForAsynchronousDrain() {
+		endDeferral();
+	}
+
+	default void drainAsynchronously() {
+		drain();
+	}
 
 	@NonNull
 	static McpApplicationExecutionObserver disabledInstance() {

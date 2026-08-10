@@ -135,10 +135,11 @@ retries are forced to private, zero-TTL cache policy; the HTTP transport remains
 `Cache-Control: no-store`.
 
 Progress reporting, cooperative cancelation, and resource-subscription delivery
-are implemented. Seven bounded Phase 6 verticals are also implemented: shutdown
+are implemented. Eight bounded Phase 6 verticals are also implemented: shutdown
 observation, handler-capacity metrics, handler diagnostics, live
 stream/subscription diagnostics, protection/trace diagnostics, serialized
-semantic-event delivery, and bounded pre-admission metrics. Shutdown
+semantic-event delivery, bounded pre-admission metrics, and connection/
+transport metric delivery. Shutdown
 metrics have only the fixed
 `McpShutdownOutcome`-derived
 `clean`/`residual_handlers` label. The exact handler-capacity families—
@@ -215,11 +216,11 @@ observable, and rotation can create high-cardinality values. Operators should
 therefore provision high-entropy keys, keep fingerprints out of metric labels,
 and avoid per-request logging or unbounded retention of them.
 
-One context-aware deferred FIFO now serializes the 20 semantic event variants
-currently produced by the runtime: the prior 16 handler, lifecycle, admitted
-request, stream, subscription, cancelation, progress, and keep-alive variants,
-plus `RequestAccepted`, `RequestRejected`, `ProtocolError`, and
-`UnknownMirroredHeader`. Collector callbacks run after the relevant dispatcher,
+One context-aware deferred FIFO now serializes all 23 declared semantic event
+variants produced by the runtime: the prior 20 handler, lifecycle, request,
+stream, subscription, cancelation, progress, keep-alive, protocol, and
+unknown-header variants, plus `ConnectionAccepted`, `ConnectionRejected`, and
+`TransportFailure`. Collector callbacks run after the relevant dispatcher,
 progress-reporter, stream-transition, request-control, runtime, server, and
 Soklet lifecycle locks or monitors are released. Nonwaiting request-transition
 deferral preserves reentrant collector liveness without moving callbacks under
@@ -242,14 +243,64 @@ exposed as a label, or promoted to an aggregate dimension. Collector failures
 are contained without stalling later delivery. This narrow statement does not
 close the broader secret-retention, cardinality, or redaction review.
 
+`ConnectionAccepted` follows operating-system accept and successful capacity
+reservation but precedes connection-loop registration and request parsing. A
+subsequent setup failure may therefore follow it as
+`TransportFailure(CONNECTION_SETUP_ERROR)`. `ConnectionRejected` is emitted
+only for an accepted socket refused at the configured connection-capacity
+limit. An accept or setup throwable is a typed transport failure and never a
+capacity rejection.
+
+Every `TransportFailure` is server-scoped and request-free. Its complete
+bounded vocabulary is `REQUEST_READ_TIMEOUT`, `REQUEST_TOO_LARGE`,
+`MALFORMED_REQUEST`, `READ_ERROR`, `WRITE_ERROR`,
+`RESPONSE_WRITE_IDLE_TIMEOUT`, `RESPONSE_READY_ERROR`,
+`REQUEST_READ_TIMEOUT_ERROR`, `RESPONSE_WRITE_IDLE_TIMEOUT_ERROR`,
+`ACCEPT_LOOP_ERROR`, `CONNECTION_SETUP_ERROR`, `TASK_ERROR`,
+`TIMEOUT_TASK_ERROR`, `SELECTION_KEY_ERROR`, `REGISTER_ERROR`, `WRITE_TIMEOUT`,
+`EVENT_LOOP_TERMINATED`, and `UNKNOWN`. The event and any collector-failure log
+retain only that fixed enum: no remote/socket address, raw request, request
+context, throwable, payload, header, trace token, or provider-controlled text.
+Reasons are selected at typed low-level authorities, not parsed from exception
+or log strings.
+
+Typed provisional scopes keep a reason active through the matching synchronous
+close/cancel/terminal consequences and discard it on successful transitions.
+Their coalescing single-daemon-worker drain never invokes the application
+collector synchronously on a connection thread and preserves pending work
+across a rejected executor submission. Blocking lifecycle adoption preserves
+fatal `EVENT_LOOP_TERMINATED`, old `ServerStopped`, new `ServerStarted` order
+before restart returns.
+
+A byte-free idle close is quiet, but real partial request bytes produce
+`REQUEST_READ_TIMEOUT`. Transport-malformed HTTP produces `MALFORMED_REQUEST`;
+malformed JSON inside a complete HTTP request stays on the bounded JSON-RPC
+protocol-error path. A request-SSE write-idle winner produces exactly one
+`WRITE_TIMEOUT` before stream/request terminals; a losing or generic close
+produces no `WRITE_TIMEOUT`, and intentional channel cancelation does not
+synthesize `WRITE_ERROR`. The sole fatal-loop winner records
+`EVENT_LOOP_TERMINATED`
+before stop/wake and retains its failure scope through sibling-loop cleanup.
+Ordinary clean disconnect and stream backpressure remain represented by their
+existing terminal events rather than an invented transport failure.
+
 The FIFO guarantee is metric record/enqueue order, not a universal cross-thread
 causal or per-request total order for independently racing producers. Direct
 restart orders the old generation's `ServerStopped` before the new
 `ServerStarted`; managed startup rollback orders its `ServerStarted` before
-`ServerStopped`. The three uninstrumented transport variants are
-`ConnectionAccepted`, `ConnectionRejected`, and `TransportFailure`. Aggregate
-families, trace emission/token support, broader
-redaction, MCP simulation, sustained/release gates, and Phase 6 review/freeze
-remain open. Neither delivery vertical adds a public API, snapshot field,
-aggregate family, label, event variant, or wire dimension. Phase 6 remains
-provisional and unfrozen.
+`ServerStopped`. Default aggregation remains limited to `ServerStopped` and the
+five handler variants. Unresolved aggregate families and `AMB-003`, trace
+emission/token support, broader privacy/cardinality and redaction work, MCP
+simulation, fuzz and sustained gates, release-candidate work, and Phase 6
+review/freeze remain open. The delivery verticals add no public API, snapshot
+field, aggregate family, label, event variant, or wire dimension. Phase 6
+remains provisional and unfrozen.
+
+The focused transport-telemetry and adjacent-regression gate passes
+118/0/0/0; exact-source JDK 21 and JDK 26 suites each pass 1,454/0/0/4. Enforced
+JDK 21 static analysis, SpotBugs (zero findings/errors), candidate binary,
+source, and Javadoc packages, and standalone Javadoc are green using
+offline-link resolution. The API counts remain 556/206/1,049/195; all 167 sketch
+sources pass Java 17 compilation and JDK 26 doclint, and 104 pinned schemas
+validate at `0c7b65dc16dd8eaa7bd83e21099c76610c3b246a`. These are development results,
+not release-candidate or Phase 6 freeze evidence.
