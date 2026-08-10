@@ -324,21 +324,51 @@ coverage-guided nightly run occurred, and replay is not sustained, coverage,
 corpus-saturation, privacy, security, release-readiness, or Phase 6 freeze
 proof.
 
+Separate from the eight production observability and diagnostics verticals,
+an internal trace-correlation derivation/capture checkpoint implements the
+frozen token construction. Disabled controls return no token. Enabled controls
+snapshot one complete active key ID and key-material pair under the shared
+security lock, derive after releasing it using HMAC-SHA-256 over UTF-8
+`soklet-mcp-trace-correlation-v1\0` plus the decoded 16-byte trace ID, truncate
+to the first 16 digest bytes, and encode an unpadded 22-character Base64URL
+token. Invalid and all-zero trace IDs are rejected before derivation. Equal
+key/trace inputs agree, changed inputs differ, and concurrent rotation admits
+only coherent old or new `(keyId, token)` pairs. Copied key material and
+explicit derivation buffers are zeroed; the internal carrier retains only the
+nonsecret key ID and token and redacts the token from rendering.
+
+This checkpoint is not a ninth production vertical; the count remains eight.
+`SOK-TRACE-001` and `SOK-TRACE-002` are PARTIAL, `SOK-TRACE-003` remains
+COMPLETE, `SOK-TRACE-004` and `SOK-TRACE-005` remain PLANNED, and
+`SOK-PRIV-001` remains PARTIAL. The package-private seam adds no public API and
+is not integrated into request lifecycles or any structured-log carrier,
+field, emission cadence, or `LogEventType`. It does not enable raw trace-ID
+logging and adds no metric, event, diagnostics/snapshot field, aggregate,
+label, or wire dimension. The token is pseudonymous high-cardinality
+operational metadata, not anonymization or an authentication/authorization
+input. It must remain out of metrics and be handled as sensitive telemetry.
+This is not broader trace/baggage-redaction, cardinality, privacy, security,
+sustained-coverage, release-readiness, or Phase 6 freeze proof.
+
 Default aggregation remains limited to `ServerStopped` and the five handler
-variants. Unresolved aggregate families and `AMB-003`, trace emission/token
-support, broader privacy/cardinality and redaction work, MCP simulation,
+variants. Unresolved aggregate families and `AMB-003`, request-lifecycle trace
+integration, structured-log carrier/emission, raw-ID opt-in,
+broader privacy/cardinality and redaction work, MCP simulation,
 coverage-guided and sustained fuzz gates, release-candidate work, and Phase 6
 review/freeze remain open. The delivery verticals add no public API, snapshot
 field, aggregate family, label, event variant, or wire dimension. Phase 6
 remains provisional and unfrozen.
 
-The focused main regression gate passes 27/0/0/0, and the focused five-target
-fuzz gate passes 28/0/0/0. Exact-source full main suites on JDK 21 and JDK 26
-each pass 1,456/0/0/4; deterministic full fuzz corpus replay on both JDKs
-passes 127/0/0/0. Enforced JDK 21 static analysis is green without an advisory
-warning count; SpotBugs reports 0/0. Candidate binary, source, and Javadoc
+The focused trace-foundation regression gate passes 53/0/0/0. The prior
+focused five-target fuzz gate remains 28/0/0/0 and was not rerun for this
+checkpoint; prior deterministic full fuzz corpus replay on both JDKs remains
+127/0/0/0 and was likewise not rerun. Exact-source full main suites on JDK 21
+and JDK 26 each pass 1,462/0/0/4. Enforced JDK 21 static analysis is green
+without an advisory warning count; SpotBugs reports 0/0. Candidate main,
+source, and Javadoc
 packages plus standalone Javadoc are green using offline-link resolution. The
-API counts remain 556/206/1,049/195; all 167 sketch sources pass Java 17
+API counts and prior hashes remain unchanged at 556/206/1,049/195; all 167
+sketch sources pass Java 17
 compilation and JDK 26 doclint, and 104 pinned schemas validate at
 `0c7b65dc16dd8eaa7bd83e21099c76610c3b246a`. These are development results, not
 privacy, security, release-candidate, or Phase 6 freeze evidence.

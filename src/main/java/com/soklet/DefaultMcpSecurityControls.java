@@ -78,6 +78,27 @@ final class DefaultMcpSecurityControls
 		}
 	}
 
+	/**
+	 * Immutable, secret-free result of one trace-correlation key snapshot and
+	 * token derivation. The pseudonymous token is intentionally redacted from
+	 * diagnostic rendering.
+	 */
+	@ThreadSafe
+	record TraceCorrelationToken(@NonNull String keyId,
+			@NonNull String token) {
+		TraceCorrelationToken {
+			requireNonNull(keyId);
+			requireNonNull(token);
+		}
+
+		@Override
+		@NonNull
+		public String toString() {
+			return "%s{keyId='%s', token=<redacted>}"
+					.formatted(getClass().getSimpleName(), keyId());
+		}
+	}
+
 	@NonNull
 	static final String REQUEST_STATE_PREFIX =
 			"soklet-mcp-request-state-v1.";
@@ -111,6 +132,9 @@ final class DefaultMcpSecurityControls
 	@NonNull
 	private static final String TRACE_ALGORITHM =
 			"soklet-mcp-trace-correlation-v1";
+	@NonNull
+	private static final byte[] TRACE_TOKEN_DOMAIN = bytes(
+			TRACE_ALGORITHM + "\0");
 	@NonNull
 	private static final byte[] PROTECTION_ENTRY_DOMAIN = bytes(
 			"soklet-mcp-key-fingerprint-v1\0");
@@ -557,6 +581,72 @@ final class DefaultMcpSecurityControls
 						"Duplicate MCP trace-correlation key ID with different material.");
 			}
 			this.activeTraceCorrelationKey = copyOf(activeKey);
+		}
+	}
+
+	/**
+	 * Atomically snapshots the active trace-correlation key pair and derives the
+	 * pseudonymous token for a validated trace context. Key material is copied
+	 * while holding the security-control lock, but cryptography is performed
+	 * after releasing it. No key material or trace identifier is retained by the
+	 * returned value.
+	 *
+	 * @param traceContext validated W3C trace context
+	 * @return the key ID and derived token, or an empty optional when trace
+	 *         correlation is disabled
+	 */
+	@NonNull
+	Optional<@NonNull TraceCorrelationToken> deriveTraceCorrelationToken(
+			@NonNull TraceContext traceContext) {
+		requireNonNull(traceContext);
+		String keyId;
+		byte[] keyMaterial;
+
+		synchronized (this.lock) {
+			McpTraceCorrelationKey activeKey = this.activeTraceCorrelationKey;
+			if (activeKey == null)
+				return Optional.empty();
+			keyId = activeKey.getKeyId();
+			keyMaterial = activeKey.copyKeyMaterial();
+		}
+
+		byte[] traceIdBytes = new byte[16];
+		byte[] authenticated = null;
+		byte[] digest = null;
+		byte[] tokenBytes = null;
+		try {
+			String traceId = traceContext.getTraceId();
+			if (traceId.length() != traceIdBytes.length * 2)
+				throw new IllegalArgumentException(
+						"Trace context must contain a validated 16-byte trace identifier.");
+			for (int index = 0; index < traceIdBytes.length; ++index) {
+				int high = Character.digit(traceId.charAt(index * 2), 16);
+				int low = Character.digit(traceId.charAt(index * 2 + 1), 16);
+				if (high < 0 || low < 0)
+					throw new IllegalArgumentException(
+							"Trace context must contain a validated 16-byte trace identifier.");
+				traceIdBytes[index] = (byte) ((high << 4) | low);
+			}
+
+			authenticated = new byte[TRACE_TOKEN_DOMAIN.length
+					+ traceIdBytes.length];
+			System.arraycopy(TRACE_TOKEN_DOMAIN, 0, authenticated, 0,
+					TRACE_TOKEN_DOMAIN.length);
+			System.arraycopy(traceIdBytes, 0, authenticated,
+					TRACE_TOKEN_DOMAIN.length, traceIdBytes.length);
+			digest = hmacSha256(keyMaterial, authenticated);
+			tokenBytes = Arrays.copyOf(digest, 16);
+			return Optional.of(new TraceCorrelationToken(keyId,
+					base64Url(tokenBytes)));
+		} finally {
+			Arrays.fill(keyMaterial, (byte) 0);
+			Arrays.fill(traceIdBytes, (byte) 0);
+			if (authenticated != null)
+				Arrays.fill(authenticated, (byte) 0);
+			if (digest != null)
+				Arrays.fill(digest, (byte) 0);
+			if (tokenBytes != null)
+				Arrays.fill(tokenBytes, (byte) 0);
 		}
 	}
 

@@ -185,6 +185,29 @@
   requests or protected state. No scheduled or manual coverage-guided nightly
   run occurred, and deterministic replay is not sustained, coverage, corpus-
   saturation, privacy, security, release-readiness, or Phase 6 freeze proof.
+- Added a separate internal Phase 6 trace-correlation derivation/capture
+  checkpoint without creating a ninth production vertical; the completed
+  production-vertical count remains eight. Disabled controls return no token.
+  Enabled controls snapshot one complete active key ID and key-material pair
+  under the shared security lock, then derive after releasing it with
+  HMAC-SHA-256 over UTF-8 `soklet-mcp-trace-correlation-v1\0` plus the decoded
+  16-byte trace ID. The first 16 digest bytes become an unpadded 22-character
+  Base64URL token. Invalid/all-zero trace IDs are rejected before derivation;
+  equal key/trace inputs agree, changed inputs differ, and concurrent rotation
+  yields only coherent old or new `(keyId, token)` pairs. Copied key material
+  and explicit derivation buffers are zeroed, and carrier rendering redacts
+  the token.
+- This checkpoint advances `SOK-TRACE-001` and `SOK-TRACE-002` to PARTIAL,
+  leaves `SOK-TRACE-003` COMPLETE, leaves `SOK-TRACE-004` and
+  `SOK-TRACE-005` PLANNED, and leaves `SOK-PRIV-001` PARTIAL. Its
+  package-private seam adds no public API and is not integrated into request
+  lifecycles or a structured-log carrier, field, emission cadence, or
+  `LogEventType`. It enables no raw trace-ID logging and adds no metric, event,
+  diagnostics/snapshot field, aggregate, label, or wire dimension. Tokens are
+  pseudonymous high-cardinality operational metadata, not anonymization or
+  authentication/authorization inputs. This is not broader trace/baggage-
+  redaction, cardinality, privacy, security, sustained-coverage, release-
+  readiness, or Phase 6 freeze proof.
 
 ### Development Status
 
@@ -196,21 +219,24 @@
   protection/trace diagnostics, serialized semantic-event delivery, and
   bounded pre-admission and transport metrics—are implemented and locally
   green. The separate fuzz-registration checkpoint above leaves that count at
-  eight. The focused main regression run passes 27/0/0/0, and the focused
-  five-target fuzz run passes 28/0/0/0. Exact-source full main suites on JDK 21
-  and JDK 26 each report 1,456/0/0/4; deterministic full fuzz corpus replay on
-  both JDKs reports 127/0/0/0. The JDK 21 enforced static-analysis profile is
+  eight, as does the internal trace-correlation checkpoint. The focused trace-
+  foundation regression run passes 53/0/0/0. The prior focused five-target
+  fuzz run remains 28/0/0/0 and was not rerun for this checkpoint; the prior
+  deterministic full fuzz corpus replay on both JDKs remains 127/0/0/0 and was
+  likewise not rerun. Exact-source full main suites on JDK 21 and JDK 26 each
+  report 1,462/0/0/4. The JDK 21 enforced static-analysis profile is
   green without counting advisory warnings, and SpotBugs reports 0/0. Exact
   API-freeze evidence remains unchanged at 556 incompatibilities, 206 reviewed
   owners, 1,049 Phase 4 records, and 195 Phase 5 records with the prior hashes.
-  Candidate binary, source, and Javadoc packages plus standalone Javadoc are
+  Candidate main, source, and Javadoc packages plus standalone Javadoc are
   green using offline-link resolution. All 167 API-sketch sources compile for
   Java 17 and pass Javadoc doclint on JDK 26.
   All 104 files from pinned JSON Schema commit
   `0c7b65dc16dd8eaa7bd83e21099c76610c3b246a` validate. Default aggregation
   remains limited to `ServerStopped` and five handler variants. Unresolved
-  aggregate families and `AMB-003`, trace emission/token support, broader
-  privacy/cardinality and redaction work, simulation, coverage-guided and
+  aggregate families and `AMB-003`, request-lifecycle trace integration,
+  structured-log carrier/emission, raw-ID opt-in, broader privacy/cardinality
+  and redaction work, simulation, coverage-guided and
   sustained fuzz gates,
   CI/provenance and release-candidate work, and the provisional, unfrozen Phase
   6 API review/freeze remain open. Here, remaining fuzz gates mean

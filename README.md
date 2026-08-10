@@ -798,9 +798,11 @@ protector presence, and secret-free production-ring and trace-configuration
 fingerprints. The diagnostics add no metric, event, or wire dimension. A
 separate bounded Phase 6 MCP fuzz-registration checkpoint now covers five new
 Jazzer methods with 21 synthetic seeds and expands the nightly matrix to 15
-total one-method slots; it is not a ninth production vertical. The unresolved
-aggregate families and `AMB-003`, operational trace emission/token support,
-broader privacy/cardinality and redaction work, MCP simulation,
+total one-method slots; it is not a ninth production vertical. The internal
+trace-correlation derivation/capture checkpoint described below also leaves
+the completed production-vertical count at eight. The unresolved aggregate
+families and `AMB-003`, request-lifecycle trace integration and structured-log
+emission, broader privacy/cardinality and redaction work, MCP simulation,
 scheduled/manual coverage-guided and sustained fuzz gates, and
 release-candidate and Phase 6 review/freeze work remain open; applications
 must not advertise or depend on those remaining behaviors yet.
@@ -819,13 +821,15 @@ passes a fresh 39-scenario development-candidate verify with all 39 goldens and
 no bad outcome, standard-error output, or non-clean exit. It remains
 development evidence, not release-candidate provenance.
 
-The focused main regression run passes 27/0/0/0, and the focused five-target
-fuzz run passes 28/0/0/0. Exact-source full main suites on JDK 21 and JDK 26
-each report 1,456/0/0/4; deterministic full fuzz corpus replay on both JDKs
-reports 127/0/0/0. The JDK 21 enforced static-analysis profile is green without
+The focused trace-foundation regression run passes 53/0/0/0. The prior focused
+five-target fuzz run remains 28/0/0/0 and was not rerun for this checkpoint;
+the prior deterministic full fuzz corpus replay on both JDKs remains
+127/0/0/0 and was likewise not rerun. Exact-source full main suites on JDK 21
+and JDK 26 each report 1,462/0/0/4. The JDK 21 enforced static-analysis profile
+is green without
 counting advisory warnings; SpotBugs reports 0/0. Exact API-freeze evidence
 remains unchanged at 556 incompatibilities, 206 reviewed owners, 1,049 Phase 4
-records, and 195 Phase 5 records with the prior hashes. Candidate binary,
+records, and 195 Phase 5 records with the prior hashes. Candidate main,
 source, and Javadoc packages plus standalone Javadoc are green using
 offline-link resolution. All 167 API-sketch sources compile for Java 17 and
 pass Javadoc doclint on JDK 26. All 104 files from pinned JSON Schema commit
@@ -833,8 +837,9 @@ pass Javadoc doclint on JDK 26. All 104 files from pinned JSON Schema commit
 coverage-guided nightly fuzz run occurred; deterministic seed replay is not
 sustained, coverage, corpus-saturation, privacy, security, release-readiness,
 or Phase 6 freeze proof. The remaining Phase 6 aggregate families and
-`AMB-003`, broader trace emission/token, privacy/cardinality, and redaction
-work, simulator, coverage-guided and sustained fuzz gates, broader
+`AMB-003`, request-lifecycle trace integration, structured-log carrier/emission,
+raw-ID opt-in, privacy/cardinality, and redaction work, simulator,
+coverage-guided and sustained fuzz gates, broader
 CI/provenance and release-candidate work, and API review/freeze remain open.
 Phase 6 remains provisional and unfrozen.
 
@@ -1650,14 +1655,40 @@ redacted, with terminal-LF copying limited to at most 4,097 input bytes. The
 cursor validator exposed for this target is package-private and internal, is
 shared by incoming and outgoing cursor checks, and adds no public API.
 
+Separate from the eight production observability and diagnostics verticals,
+an internal trace-correlation derivation/capture checkpoint implements the
+frozen token construction. Disabled controls return no token. Enabled controls
+snapshot one complete active key ID and key-material pair under the shared
+security lock, derive after releasing it with HMAC-SHA-256 over UTF-8
+`soklet-mcp-trace-correlation-v1\0` plus the decoded 16-byte trace ID, truncate
+to the first 16 digest bytes, and encode an unpadded 22-character Base64URL
+token. `TraceContext` rejects invalid and all-zero trace IDs before derivation;
+same key/trace inputs agree, changed key or trace inputs differ, and rotation
+exposes only coherent old or new `(keyId, token)` pairs. Copied key material
+and explicit derivation buffers are zeroed. The internal carrier retains only
+the nonsecret key ID and token and redacts the token from rendering.
+
+This is not a ninth production vertical. `SOK-TRACE-001` and
+`SOK-TRACE-002` are PARTIAL, `SOK-TRACE-003` remains COMPLETE,
+`SOK-TRACE-004` and `SOK-TRACE-005` remain PLANNED, and `SOK-PRIV-001`
+remains PARTIAL. The package-private seam adds no public API and is not yet
+integrated into request lifecycles or a structured-log carrier, field,
+emission cadence, or `LogEventType`. It enables no raw trace-ID logging and
+adds no metric, event, diagnostics/snapshot field, aggregate, label, or wire
+dimension. Tokens are pseudonymous high-cardinality operational metadata, not
+anonymization, authentication, or authorization inputs. This checkpoint is
+not broader trace/baggage-redaction, cardinality, privacy, security, sustained-
+coverage, release-readiness, or Phase 6 freeze proof.
+
 For MCP shutdowns, `snapshot().getMcpMetrics().getShutdowns()` is an immutable,
 enum-ordered `Map<McpShutdownOutcome, Long>`. The default collector omits
 unobserved outcomes, returns the map to empty on reset, and emits only
 `soklet_mcp_shutdowns_total{outcome="clean"}` or
 `soklet_mcp_shutdowns_total{outcome="residual_handlers"}`. Default aggregation
 remains limited to `ServerStopped` and the five handler variants. Unresolved
-aggregate families and `AMB-003`, trace emission/token support, broader
-privacy/cardinality and redaction work, simulator integration, fuzz and
+aggregate families and `AMB-003`, request-lifecycle trace integration,
+structured-log carrier/emission, raw-ID opt-in, broader privacy/cardinality
+and redaction work, simulator integration, fuzz and
 sustained gates, release-candidate work, and Phase 6 review/freeze remain open.
 Here, the remaining fuzz work means scheduled/manual coverage-guided and
 sustained execution, not the completed registration and deterministic corpus

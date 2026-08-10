@@ -292,10 +292,38 @@ scheduled or manual coverage-guided nightly run occurred. Deterministic replay
 is not sustained, coverage, corpus-saturation, privacy, security,
 release-readiness, or Phase 6 freeze proof.
 
+Separate from the eight production observability and diagnostics verticals,
+an internal trace-correlation derivation/capture checkpoint implements the
+frozen token construction. Disabled controls return no token. Enabled controls
+snapshot one complete active key ID and key-material pair under the shared
+security lock, derive after releasing it with HMAC-SHA-256 over UTF-8
+`soklet-mcp-trace-correlation-v1\0` plus the decoded 16-byte trace ID, truncate
+to the first 16 digest bytes, and encode an unpadded 22-character Base64URL
+token. Invalid and all-zero trace IDs are rejected before derivation; equal
+key/trace inputs agree, changed key or trace inputs differ, and concurrent
+rotation exposes only coherent old or new `(keyId, token)` pairs. Copied key
+material and explicit derivation buffers are zeroed, and the internal carrier
+retains only the nonsecret key ID and token while redacting the token from
+rendering.
+
+This checkpoint is not a ninth production vertical. `SOK-TRACE-001` and
+`SOK-TRACE-002` are PARTIAL, `SOK-TRACE-003` remains COMPLETE,
+`SOK-TRACE-004` and `SOK-TRACE-005` remain PLANNED, and `SOK-PRIV-001`
+remains PARTIAL. The nested carrier and derivation method are package-private,
+are absent from `phase-6.includes` and public snapshots, and do not change the
+public API. They are not integrated into request lifecycles or any structured-
+log carrier, field, emission cadence, or `LogEventType`; enable no raw trace-ID
+logging; and add no metric, event, diagnostics/snapshot field, aggregate,
+label, or wire dimension. Tokens are pseudonymous high-cardinality operational
+metadata, not anonymization, authentication, or authorization inputs. This is
+not broader trace/baggage-redaction, cardinality, privacy, security, sustained-
+coverage, release-readiness, or Phase 6 freeze evidence.
+
 These are FIFO record/enqueue-order guarantees, not a universal cross-thread
 causal total order. Default aggregation remains limited to `ServerStopped` and
-the five handler variants. Unresolved aggregate families and `AMB-003`, trace
-emission/token support, broader privacy/cardinality and redaction work,
+the five handler variants. Unresolved aggregate families and `AMB-003`,
+request-lifecycle trace integration, structured-log carrier/emission, raw-ID
+opt-in, broader privacy/cardinality and redaction work,
 simulator integration, coverage-guided and sustained fuzz gates,
 release-candidate work, and Phase 6 review/freeze remain open. The eighth
 vertical adds no public API,
@@ -330,13 +358,15 @@ its exact nullability digest is
 The 556/206/1,049/195 evidence counts are unchanged by these provisional
 verticals.
 
-The focused main regression run passes 27/0/0/0, and the focused five-target
-fuzz run passes 28/0/0/0. Exact-source full main suites on JDK 21 and JDK 26
-each execute 1,456/0/0/4; deterministic full fuzz corpus replay on both JDKs
-executes 127/0/0/0. The JDK 21 Error Prone profile passes all enforced checks;
+The focused trace-foundation regression run passes 53/0/0/0. The prior focused
+five-target fuzz run remains 28/0/0/0 and was not rerun for this checkpoint;
+the prior deterministic full fuzz corpus replay on both JDKs remains
+127/0/0/0 and was likewise not rerun. Exact-source full main suites on JDK 21
+and JDK 26 each execute 1,462/0/0/4. The JDK 21 Error Prone profile passes all
+enforced checks;
 NullAway remains advisory, and its warnings are not counted here. SpotBugs
 reports 0/0. The focused Phase 5 API-review contract run passes 45 tests with
-no failure, error, or skip. Candidate binary, source, and Javadoc packages plus
+no failure, error, or skip. Candidate main, source, and Javadoc packages plus
 standalone Javadoc are green using offline-link resolution. All 167 API-sketch
 sources compile for Java 17 and pass Javadoc doclint on JDK 26. All 104 files
 from pinned JSON Schema commit

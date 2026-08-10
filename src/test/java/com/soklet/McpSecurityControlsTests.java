@@ -24,6 +24,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -46,6 +47,15 @@ public class McpSecurityControlsTests {
 			"K9oRkAG6QKeHW5rCTMNcocxoaQVySSJLmnvXbD4AV90";
 	private static final String TRACE_GOLDEN_FINGERPRINT =
 			"q6lgRnXgzPRK0yoi_va7Qcax0EjCUuFum3A38-Vp4J4";
+	private static final String TRACE_TOKEN_PRIMARY_FULL_HMAC =
+			"6c6143f0a20aaec093178572ace41886"
+			+ "7b3142b9902ab8776b1bb39bee1f9e9f";
+	private static final String TRACE_TOKEN_PRIMARY =
+			"bGFD8KIKrsCTF4VyrOQYhg";
+	private static final String TRACE_TOKEN_ASCII_TRACE_ID =
+			"BWkgOoKAFLrEv3k4LqmfQQ";
+	private static final String TRACE_TOKEN_WITHOUT_DOMAIN_NUL =
+			"hd6yTQT96IhoP-XReBO2rg";
 	private static final String REQUEST_STATE_GOLDEN =
 			"soklet-mcp-request-state-v1."
 			+ "AQZhY3RpdmUYc29rbGV0LW1jcC1wcm90ZWN0aW9uLXYx"
@@ -745,6 +755,144 @@ public class McpSecurityControlsTests {
 	}
 
 	@Test
+	public void disabledTraceCorrelationProducesNoToken() {
+		DefaultMcpSecurityControls controls =
+				new DefaultMcpSecurityControls(null, null);
+
+		Assertions.assertEquals(Optional.empty(),
+				controls.deriveTraceCorrelationToken(traceContext(
+						"000102030405060708090a0b0c0d0e0f")));
+	}
+
+	@Test
+	public void traceTokenMatchesFrozenDecodedIdDomainNulTruncationAndBase64UrlVectors() {
+		DefaultMcpSecurityControls controls =
+				new DefaultMcpSecurityControls(null, traceKey("primary", 0));
+		DefaultMcpSecurityControls.TraceCorrelationToken result = controls
+				.deriveTraceCorrelationToken(traceContext(
+						"000102030405060708090a0b0c0d0e0f"))
+				.orElseThrow();
+
+		Assertions.assertEquals("primary", result.keyId());
+		Assertions.assertEquals(TRACE_TOKEN_PRIMARY, result.token());
+		Assertions.assertNotEquals(TRACE_TOKEN_ASCII_TRACE_ID, result.token(),
+				"The HMAC input must contain decoded trace-ID bytes, not ASCII hex.");
+		Assertions.assertNotEquals(TRACE_TOKEN_WITHOUT_DOMAIN_NUL,
+				result.token(),
+				"The HMAC domain must retain its terminal NUL byte.");
+		Assertions.assertEquals(22, result.token().length());
+		Assertions.assertTrue(result.token().matches("[A-Za-z0-9_-]{22}"));
+		Assertions.assertFalse(result.token().contains("="));
+		Assertions.assertArrayEquals(HexFormat.of().parseHex(
+				TRACE_TOKEN_PRIMARY_FULL_HMAC.substring(0, 32)),
+				Base64.getUrlDecoder().decode(result.token()),
+				"The token must contain exactly the first 16 HMAC bytes.");
+	}
+
+	@Test
+	public void traceTokensAgreeForSameKeyAndTraceAndSeparateDifferentInputs() {
+		TraceContext firstTrace = traceContext(
+				"000102030405060708090a0b0c0d0e0f");
+		TraceContext secondTrace = traceContext(
+				"101112131415161718191a1b1c1d1e1f");
+		DefaultMcpSecurityControls first = new DefaultMcpSecurityControls(null,
+				traceKey("shared", 0));
+		DefaultMcpSecurityControls same = new DefaultMcpSecurityControls(null,
+				traceKey("shared", 0));
+		DefaultMcpSecurityControls differentKey =
+				new DefaultMcpSecurityControls(null, traceKey("different", 32));
+
+		DefaultMcpSecurityControls.TraceCorrelationToken firstResult = first
+				.deriveTraceCorrelationToken(firstTrace).orElseThrow();
+		Assertions.assertEquals(TRACE_TOKEN_PRIMARY, firstResult.token());
+		Assertions.assertEquals(firstResult,
+				same.deriveTraceCorrelationToken(firstTrace).orElseThrow());
+		Assertions.assertEquals("jwPrrpAQQBmfKcF7JYD2-Q", first
+				.deriveTraceCorrelationToken(secondTrace).orElseThrow().token());
+		Assertions.assertEquals("2_eRfLtwlJg84LByr-y33A", differentKey
+				.deriveTraceCorrelationToken(firstTrace).orElseThrow().token());
+		Assertions.assertNotEquals(firstResult.token(), first
+				.deriveTraceCorrelationToken(secondTrace).orElseThrow().token());
+		Assertions.assertNotEquals(firstResult.token(), differentKey
+				.deriveTraceCorrelationToken(firstTrace).orElseThrow().token());
+	}
+
+	@Test
+	public void concurrentTraceRotationsPublishOnlyCoherentKeyTokenPairs()
+			throws Exception {
+		McpTraceCorrelationKey firstKey = traceKey("first", 0);
+		McpTraceCorrelationKey secondKey = traceKey("second", 32);
+		TraceContext traceContext = traceContext(
+				"000102030405060708090a0b0c0d0e0f");
+		DefaultMcpSecurityControls controls =
+				new DefaultMcpSecurityControls(null, firstKey);
+		Set<DefaultMcpSecurityControls.TraceCorrelationToken> expected = Set.of(
+				new DefaultMcpSecurityControls(null, firstKey)
+						.deriveTraceCorrelationToken(traceContext).orElseThrow(),
+				new DefaultMcpSecurityControls(null, secondKey)
+						.deriveTraceCorrelationToken(traceContext).orElseThrow());
+		CountDownLatch start = new CountDownLatch(1);
+		ExecutorService executor = Executors.newFixedThreadPool(5);
+		try {
+			List<Future<?>> futures = new ArrayList<>();
+			futures.add(executor.submit(() -> {
+				start.await();
+				for (int iteration = 0; iteration < 4_000; ++iteration)
+					controls.rotateActiveKey(iteration % 2 == 0
+							? secondKey : firstKey);
+				return null;
+			}));
+			for (int reader = 0; reader < 4; ++reader)
+				futures.add(executor.submit(() -> {
+					start.await();
+					for (int iteration = 0; iteration < 8_000; ++iteration)
+						Assertions.assertTrue(expected.contains(controls
+								.deriveTraceCorrelationToken(traceContext)
+								.orElseThrow()),
+								"A token must use one complete old or new key pair.");
+					return null;
+				}));
+			start.countDown();
+			for (Future<?> future : futures)
+				future.get();
+		} finally {
+			executor.shutdownNow();
+		}
+	}
+
+	@Test
+	public void traceContextRejectsInvalidAndAllZeroIdsBeforeDerivation() {
+		for (String traceId : List.of(
+				"00000000000000000000000000000000",
+				"000102030405060708090a0b0c0d0e",
+				"000102030405060708090a0b0c0d0e0g",
+				"000102030405060708090A0B0C0D0E0F"))
+			Assertions.assertEquals(Optional.empty(), TraceContext.fromHeaderValues(
+					List.of("00-%s-1011121314151617-01".formatted(traceId)),
+					List.of()));
+	}
+
+	@Test
+	public void traceTokenRenderingRedactsTokenRawTraceAndKeyMaterial() {
+		String keyMaterialCanary =
+				"TRACE_KEY_MATERIAL_CANARY_0123456789";
+		String traceIdCanary = "cafebabecafebabecafebabecafebabe";
+		McpTraceCorrelationKey key = McpTraceCorrelationKey.fromIdAndBytes(
+				"render-key", keyMaterialCanary.getBytes(StandardCharsets.UTF_8));
+		DefaultMcpSecurityControls controls =
+				new DefaultMcpSecurityControls(null, key);
+		DefaultMcpSecurityControls.TraceCorrelationToken token = controls
+				.deriveTraceCorrelationToken(traceContext(traceIdCanary))
+				.orElseThrow();
+		String rendering = "%s %s %s".formatted(key, controls, token);
+
+		Assertions.assertFalse(rendering.contains(token.token()));
+		Assertions.assertFalse(rendering.contains(traceIdCanary));
+		Assertions.assertFalse(rendering.contains(keyMaterialCanary));
+		Assertions.assertTrue(token.toString().contains("token=<redacted>"));
+	}
+
+	@Test
 	public void traceRotationIsAtomicRetrySafeAndCrossPurposeDistinct() {
 		DefaultMcpSecurityControls disabled =
 				new DefaultMcpSecurityControls(null, null);
@@ -937,6 +1085,12 @@ public class McpSecurityControlsTests {
 			int firstBindingByte) {
 		return new McpRequestStateProtectionContext("/mcp", "2026-07-28",
 				"tools/call", bytesFrom(firstBindingByte));
+	}
+
+	private static TraceContext traceContext(String traceId) {
+		return TraceContext.fromHeaderValues(List.of(
+				"00-%s-1011121314151617-01".formatted(traceId)), List.of())
+				.orElseThrow();
 	}
 
 	private static DefaultMcpSecurityControls deterministicControls(
