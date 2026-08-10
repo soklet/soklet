@@ -47,6 +47,19 @@ public final class McpMetricsSnapshot {
 	private final Long handlerCapacityRejections;
 	@NonNull
 	private final Map<@NonNull McpShutdownOutcome, @NonNull Long> shutdowns;
+	@NonNull
+	private final Long connectionsAccepted;
+	@NonNull
+	private final Long connectionsRejected;
+	@NonNull
+	private final Map<MetricsCollector.@NonNull TransportFailureReason,
+			@NonNull Long> transportFailures;
+	@NonNull
+	private final Long serverStarts;
+	@NonNull
+	private final Long requestsAccepted;
+	@NonNull
+	private final Long requestsRejected;
 
 	private McpMetricsSnapshot(@NonNull Builder builder) {
 		requireNonNull(builder);
@@ -54,6 +67,12 @@ public final class McpMetricsSnapshot {
 		this.handlerQueueDepth = builder.handlerQueueDepth;
 		this.handlerCapacityRejections = builder.handlerCapacityRejections;
 		this.shutdowns = copyShutdowns(builder.shutdowns);
+		this.connectionsAccepted = builder.connectionsAccepted;
+		this.connectionsRejected = builder.connectionsRejected;
+		this.transportFailures = copyTransportFailures(builder.transportFailures);
+		this.serverStarts = builder.serverStarts;
+		this.requestsAccepted = builder.requestsAccepted;
+		this.requestsRejected = builder.requestsRejected;
 	}
 
 	@NonNull
@@ -77,6 +96,24 @@ public final class McpMetricsSnapshot {
 				throw new IllegalArgumentException(
 						"MCP shutdown counts must not be negative.");
 			copied.put(outcome, count);
+		});
+		return Collections.unmodifiableMap(copied);
+	}
+
+	@NonNull
+	private static Map<MetricsCollector.@NonNull TransportFailureReason,
+			@NonNull Long> copyTransportFailures(
+			@NonNull Map<MetricsCollector.@NonNull TransportFailureReason,
+					@NonNull Long> transportFailures) {
+		EnumMap<MetricsCollector.TransportFailureReason, Long> copied =
+				new EnumMap<>(MetricsCollector.TransportFailureReason.class);
+		requireNonNull(transportFailures).forEach((reason, count) -> {
+			requireNonNull(reason);
+			requireNonNull(count);
+			if (count < 0L)
+				throw new IllegalArgumentException(
+						"MCP transport failure counts must not be negative.");
+			copied.put(reason, count);
 		});
 		return Collections.unmodifiableMap(copied);
 	}
@@ -143,6 +180,73 @@ public final class McpMetricsSnapshot {
 	}
 
 	/**
+	 * Returns the number of successfully accepted MCP connections admitted
+	 * within the configured connection-capacity bound.
+	 *
+	 * @return accepted MCP connections
+	 */
+	@NonNull
+	public Long getConnectionsAccepted() {
+		return this.connectionsAccepted;
+	}
+
+	/**
+	 * Returns the number of MCP connections rejected because the configured
+	 * connection-capacity bound was full.
+	 *
+	 * @return rejected MCP connections
+	 */
+	@NonNull
+	public Long getConnectionsRejected() {
+		return this.connectionsRejected;
+	}
+
+	/**
+	 * Returns nonnegative MCP transport-failure counts grouped by fixed reason.
+	 *
+	 * @return immutable, enum-ordered MCP transport-failure counts
+	 */
+	@NonNull
+	public Map<MetricsCollector.@NonNull TransportFailureReason,
+			@NonNull Long> getTransportFailures() {
+		return this.transportFailures;
+	}
+
+	/**
+	 * Returns the number of successful MCP server starts.
+	 *
+	 * @return successful MCP server starts
+	 */
+	@NonNull
+	public Long getServerStarts() {
+		return this.serverStarts;
+	}
+
+	/**
+	 * Returns the number of MCP requests accepted by the bounded protocol
+	 * processor. Processor acceptance can precede a later pre-admission
+	 * rejection, so this count is independent of {@link #getRequestsRejected()}.
+	 *
+	 * @return accepted MCP requests
+	 */
+	@NonNull
+	public Long getRequestsAccepted() {
+		return this.requestsAccepted;
+	}
+
+	/**
+	 * Returns the number of MCP requests rejected before admitted semantic
+	 * handling. This count is not the complement of
+	 * {@link #getRequestsAccepted()}.
+	 *
+	 * @return rejected MCP requests
+	 */
+	@NonNull
+	public Long getRequestsRejected() {
+		return this.requestsRejected;
+	}
+
+	/**
 	 * Builder for immutable {@link McpMetricsSnapshot} instances.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -157,12 +261,31 @@ public final class McpMetricsSnapshot {
 		private Long handlerCapacityRejections;
 		@NonNull
 		private Map<@NonNull McpShutdownOutcome, @NonNull Long> shutdowns;
+		@NonNull
+		private Long connectionsAccepted;
+		@NonNull
+		private Long connectionsRejected;
+		@NonNull
+		private Map<MetricsCollector.@NonNull TransportFailureReason,
+				@NonNull Long> transportFailures;
+		@NonNull
+		private Long serverStarts;
+		@NonNull
+		private Long requestsAccepted;
+		@NonNull
+		private Long requestsRejected;
 
 		private Builder() {
 			this.activeHandlerExecutions = 0L;
 			this.handlerQueueDepth = 0L;
 			this.handlerCapacityRejections = 0L;
 			this.shutdowns = Map.of();
+			this.connectionsAccepted = 0L;
+			this.connectionsRejected = 0L;
+			this.transportFailures = Map.of();
+			this.serverStarts = 0L;
+			this.requestsAccepted = 0L;
+			this.requestsRejected = 0L;
 		}
 
 		/**
@@ -223,6 +346,95 @@ public final class McpMetricsSnapshot {
 		public Builder shutdowns(
 				@NonNull Map<@NonNull McpShutdownOutcome, @NonNull Long> shutdowns) {
 			this.shutdowns = copyShutdowns(shutdowns);
+			return this;
+		}
+
+		/**
+		 * Sets the number of successfully accepted MCP connections admitted within
+		 * the configured connection-capacity bound.
+		 *
+		 * @param connectionsAccepted accepted MCP connections
+		 * @return this builder
+		 * @throws IllegalArgumentException if the count is negative
+		 */
+		@NonNull
+		public Builder connectionsAccepted(@NonNull Long connectionsAccepted) {
+			this.connectionsAccepted = requireNonNegative(connectionsAccepted,
+					"Accepted MCP connection count must not be negative.");
+			return this;
+		}
+
+		/**
+		 * Sets the number of MCP connections rejected because the configured
+		 * connection-capacity bound was full.
+		 *
+		 * @param connectionsRejected rejected MCP connections
+		 * @return this builder
+		 * @throws IllegalArgumentException if the count is negative
+		 */
+		@NonNull
+		public Builder connectionsRejected(@NonNull Long connectionsRejected) {
+			this.connectionsRejected = requireNonNegative(connectionsRejected,
+					"Rejected MCP connection count must not be negative.");
+			return this;
+		}
+
+		/**
+		 * Sets nonnegative MCP transport-failure counts grouped by fixed reason.
+		 *
+		 * @param transportFailures nonnegative MCP transport-failure counts
+		 * @return this builder
+		 * @throws IllegalArgumentException if any count is negative
+		 */
+		@NonNull
+		public Builder transportFailures(
+				@NonNull Map<MetricsCollector.@NonNull TransportFailureReason,
+						@NonNull Long> transportFailures) {
+			this.transportFailures = copyTransportFailures(transportFailures);
+			return this;
+		}
+
+		/**
+		 * Sets the number of successful MCP server starts.
+		 *
+		 * @param serverStarts successful MCP server starts
+		 * @return this builder
+		 * @throws IllegalArgumentException if the count is negative
+		 */
+		@NonNull
+		public Builder serverStarts(@NonNull Long serverStarts) {
+			this.serverStarts = requireNonNegative(serverStarts,
+					"MCP server start count must not be negative.");
+			return this;
+		}
+
+		/**
+		 * Sets the number of MCP requests accepted by the bounded protocol
+		 * processor.
+		 *
+		 * @param requestsAccepted accepted MCP requests
+		 * @return this builder
+		 * @throws IllegalArgumentException if the count is negative
+		 */
+		@NonNull
+		public Builder requestsAccepted(@NonNull Long requestsAccepted) {
+			this.requestsAccepted = requireNonNegative(requestsAccepted,
+					"Accepted MCP request count must not be negative.");
+			return this;
+		}
+
+		/**
+		 * Sets the number of MCP requests rejected before admitted semantic
+		 * handling.
+		 *
+		 * @param requestsRejected rejected MCP requests
+		 * @return this builder
+		 * @throws IllegalArgumentException if the count is negative
+		 */
+		@NonNull
+		public Builder requestsRejected(@NonNull Long requestsRejected) {
+			this.requestsRejected = requireNonNegative(requestsRejected,
+					"Rejected MCP request count must not be negative.");
 			return this;
 		}
 

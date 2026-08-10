@@ -135,11 +135,12 @@ retries are forced to private, zero-TTL cache policy; the HTTP transport remains
 `Cache-Control: no-store`.
 
 Progress reporting, cooperative cancelation, and resource-subscription delivery
-are implemented. Nine bounded Phase 6 verticals are also implemented: shutdown
+are implemented. Twelve bounded Phase 6 verticals are also implemented: shutdown
 observation, handler-capacity metrics, handler diagnostics, live
 stream/subscription diagnostics, protection/trace diagnostics, serialized
 semantic-event delivery, bounded pre-admission metrics, connection/transport
-metric delivery, and admitted-request trace-token capture. Shutdown
+metric delivery, admitted-request trace-token capture, and the first default
+transport-boundary, server-start, and request-boundary aggregate families. Shutdown
 metrics have only the fixed
 `McpShutdownOutcome`-derived
 `clean`/`residual_handlers` label. The exact handler-capacity families—
@@ -155,6 +156,89 @@ residual handler remains visible as active after bounded shutdown until it
 actually exits; queued deadline, disconnect, cancelation, and shutdown removal
 are dequeues, not capacity rejections. These semantics prevent reset or late
 exit from manufacturing a negative gauge.
+
+The tenth vertical resolved the full `AMB-003` aggregate contract and added
+three provisional `McpMetricsSnapshot` getter/builder pairs for accepted
+connections, capacity-rejected connections, and a sparse fixed-reason
+transport-failure map. The connection counters render without labels,
+including configured zeros. MCP failures reuse
+`soklet_transport_failures_total` with only `server_type="MCP"` and one of the
+18 fixed `TransportFailureReason` names; they do not create a second family.
+At that checkpoint the transport trio brought the aggregate-render count to seven.
+The immutable map is defensive and enum-ordered. Reset clears these cumulative
+values without mutating retained snapshots, and a rejected-all sample filter
+cannot leave orphaned HELP/TYPE metadata.
+
+This aggregation introduces no remote address, network identity, request,
+throwable, header identity/value, trace ID, token, key material, tracestate,
+baggage, or application-controlled label. `ConnectionAccepted` and
+`ConnectionRejected` remain fieldless; `TransportFailure` contributes only its
+fixed reason. It is bounded operational telemetry, not authentication,
+authorization, anonymization, or comprehensive privacy evidence.
+The focused gates are
+`McpTransportMetricsAggregationTests#snapshotContractUsesBoxedConnectionCountsAndImmutableBoundedTransportFailures`,
+`#defaultCollectorAggregatesRendersFiltersAndResetsTransportBoundaryFamilies`,
+`#sharedTransportFamilyCombinesServerTypesWithSingleMetadataBlock`, and
+`#concurrentDirectIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
+
+The eleventh bounded Phase 6 production vertical adds boxed, nonnegative
+`getServerStarts()`/`serverStarts(Long)` to the provisional snapshot and
+aggregates the existing fieldless `ServerStarted` lifecycle event. Its
+authority remains one event per successfully started listener generation:
+failed staged starts and already-started no-ops do not increment; rollback
+retains its successful start before its stop; restart counts the new
+generation. Configured collectors render label-free
+`soklet_mcp_server_starts_total` at zero. Direct `ServerStarted` or
+`ServerStopped` activates the lifecycle subset, including a zero start sample
+for a stop-only fresh collector. Filtering the sample removes its HELP/TYPE
+metadata, reset clears the count while preserving zero-family visibility, and
+retained snapshots remain immutable. Start and shutdown counts are not a
+conservation or complement pair at arbitrary snapshots because a running
+generation has not stopped.
+
+The fieldless event and label-free aggregate retain no request, network
+identity, endpoint, method, outcome, throwable, header, trace ID, token, key,
+tracestate, baggage, or application-controlled dimension. Exact tests are
+`McpServerStartMetricsAggregationTests#snapshotContractUsesBoxedNonnegativeServerStarts`,
+`#defaultCollectorAggregatesConfiguredAndDirectServerStartsAcrossRenderFilterAndReset`,
+and
+`#concurrentDirectServerStartIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
+
+The twelfth bounded Phase 6 production vertical adds the boxed, nonnegative
+`getRequestsAccepted()`/`requestsAccepted(Long)` and
+`getRequestsRejected()`/`requestsRejected(Long)` request-boundary scalars. The
+provisional snapshot now has ten getters and 11 public builder methods
+including `build()`: eight boxed `Long` values and two immutable maps.
+
+Accepted becomes durable only after the bounded protocol processor accepts
+`Executor.execute`; rejection or throw discards the provisional accepted
+identity. Rejected is exact once for a complete Handler request whose terminal
+wins before atomic observation-start reservation. A terminal pre-admission
+path may record both, while execute failure may record rejected without a
+retained accepted event. They are not complementary or conserved and exclude
+early transport/Microhttp failure, post-admission outcome, and handler-capacity
+rejection.
+
+Configured collectors and either directly ingested event activate paired,
+label-free zero-visible families: `soklet_mcp_requests_accepted_total` with
+HELP `Total MCP requests accepted by the bounded protocol processor`, and
+`soklet_mcp_requests_rejected_total` with HELP `Total MCP requests rejected
+before admitted semantic handling`. Filtering removes rejected family metadata
+with its sample. Reset clears both cumulative counts while preserving paired
+visibility; OpenMetrics, retained snapshots, and post-quiescence concurrent
+ingest preserve the same bounds.
+
+The fieldless events and label-free families retain no request, network
+identity, endpoint, method, code, outcome, throwable, header, trace ID, token,
+key, tracestate, baggage, or application-controlled dimension. Exact tests are
+`McpRequestAdmissionMetricsAggregationTests#snapshotContractUsesBoxedNonnegativeRequestAdmissionCounts`,
+`#defaultCollectorAggregatesConfiguredAndDirectRequestAdmissionEventsAcrossRenderFilterAndReset`,
+and
+`#concurrentDirectRequestAdmissionIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
+The exact producer authority is additionally covered by
+`McpHttpServerApplicationExecutionTests#protocol_processor_submission_records_two_accepted_then_one_rejected_outside_request_control_lock`
+and
+`McpPreAdmissionMetricsEventPublicRuntimeTests#acceptedMalformedRequestEmitsExactProtocolErrorThenRejectionWithoutAdmission`.
 
 `McpServerDiagnostics` now declares exactly 12 zero-argument methods:
 `getStatus()` and `getBoundAddress()`, plus all ten implemented diagnostic
@@ -367,7 +451,7 @@ controls retain only the current key and expose no history API. This is not
 comprehensive trace/baggage redaction, cardinality, privacy/security,
 aggregate/`AMB-003`, simulator, release-readiness, or Phase 6 freeze evidence.
 
-A third unnumbered Phase 6 metric-dimensionality checkpoint is covered by
+A third unnumbered Phase 6 metric-dimensionality checkpoint was covered by
 `McpObservabilityPublicApiTests#metricSchemaHasExactFiniteNonTraceDimensions`
 and
 `McpRequestObservationPublicRuntimeTests#distinctTraceMetadataDoesNotCreateMetricDimensionsOrLeakIntoRendering`.
@@ -376,25 +460,26 @@ and permits only endpoint path, bounded method, fixed outcome/reason/code, and
 nonnegative duration components. Production projects registered endpoints,
 recognized methods or `<unrecognized>`, ten fixed codes, and fixed enums;
 public event constructors do not enforce those runtime vocabularies for
-arbitrary application-created values. The MCP snapshot remains exactly three
-boxed `Long` values plus an immutable shutdown map. The default collector
-aggregates only the five handler variants and `ServerStopped`, ignoring and
-retaining none of the other 17 variants.
+arbitrary application-created values. At that checkpoint, the MCP snapshot was
+exactly three boxed `Long` values plus an immutable shutdown map. The default
+collector aggregated only the five handler variants and `ServerStopped`,
+ignoring and retaining none of the other 17 variants.
 
 Sixteen sequential admitted requests with distinct valid MCP and HTTP trace
 IDs, tracestate, baggage, derived tokens, and key canaries do not alter or
 appear in built-in MCP events, snapshot state, metric names/labels,
-filter-observed samples, Prometheus, OpenMetrics, or reset output. The exact
-pre-reset MCP labels are three empty handler-label sets plus shutdown
-`outcome=clean`; post-reset only the three empty sets remain. Nine production
-verticals remain nine, and fuzz registration, dormant derivation, and metric
-dimensionality are three unnumbered checkpoints. `SOK-TRACE-001/002/003`
-remain COMPLETE; `SOK-TRACE-004` remains PLANNED; `SOK-TRACE-005` is PARTIAL
+filter-observed samples, Prometheus, OpenMetrics, or reset output. At that
+checkpoint, the exact pre-reset MCP labels were three empty handler-label sets
+plus shutdown `outcome=clean`; post-reset only the three empty sets remained.
+The production-vertical count remained nine, and fuzz registration, dormant
+derivation, and metric
+dimensionality were three unnumbered checkpoints. `SOK-TRACE-001/002/003`
+were COMPLETE; `SOK-TRACE-004` was PLANNED; `SOK-TRACE-005` was PARTIAL
 for metric-only inventory/default-collector evidence; and `SOK-PRIV-001`
-remains PARTIAL. `SOK-METRIC-001` and `SOK-METRIC-004` remain PARTIAL;
-`AMB-003` remains AMBIGUOUS.
+was PARTIAL. `SOK-METRIC-001` and `SOK-METRIC-004` remained PARTIAL;
+`AMB-003` remained AMBIGUOUS.
 
-This does not cover custom collector storage, rendering, or cardinality;
+That checkpoint did not cover custom collector storage, rendering, or cardinality;
 generic HTTP `MetricsCollector` callbacks receiving a `Request`, request
 target, or `Throwable`; `LogEvent`, application callbacks, handler telemetry,
 or arbitrary application-created event vocabulary; structured logging or
@@ -404,22 +489,62 @@ release-candidate provenance, review, or Phase 6 freeze. No production source,
 public API, API sketch, owner/signature inventory, family, label, event, or
 wire behavior changed.
 
-Default aggregation remains limited to `ServerStopped` and the five handler
-variants. Unresolved aggregate families and `AMB-003`, structured-log
+The transport aggregate is the tenth production vertical, server-start is the
+eleventh, and request-boundary aggregation is the twelfth; all three earlier
+checkpoints remain unnumbered. `McpMetricsSnapshot` now has eight boxed `Long`
+values and two immutable maps, with ten getters and 11 public builder methods
+including `build()`. The default collector aggregates 12 event variants while
+ignoring the remaining 11 across ten rendered aggregate families. The
+16-request gate now has nine exact MCP-prefixed samples before reset and eight
+after reset because the server-start, connection, and request-boundary scalars
+are label-free configured families. Its failure map is empty, and every trace/
+tracestate/baggage/token/key canary remains absent from the built-in MCP and
+shared transport metric surfaces.
+
+The rest of the resolved contract permits only bounded endpoint/method,
+fixed-outcome/reason/code, duration, and label-free scalar dimensions. It
+defines live request/stream/subscription gauges, bounded completion and
+duration families, cancelation/progress counters, start/accept/reject/
+keep-alive scalars, a fixed-code protocol-error map, and an unknown-header map
+that never includes header identity. There are no standalone
+start/finish/open/close counters. Configured scalars render zero; maps and
+histograms are sparse; reset preserves five live gauges and clears cumulative,
+map, and histogram state. The authoritative Phase 6/V10 contract owns the
+exact downstream OpenTelemetry mapping.
+
+`SOK-TRACE-005` remains PARTIAL for metric-only evidence; `SOK-PRIV-001`,
+`SOK-METRIC-001`, and `SOK-METRIC-004` remain PARTIAL. `SOK-METRIC-002`,
+`SOK-METRIC-003`, and `SOK-SHUT-002` remain COMPLETE. `AMB-003` is RESOLVED
+CONTRACT / IMPLEMENTATION PARTIAL;
+unimplemented core families and downstream snapshot-compatible OpenTelemetry
+work remain open.
+This does not constrain custom collectors or application telemetry, promise an
+atomic cross-field snapshot during active concurrent mutation, add structured-
+log or raw-ID emission, complete privacy/cardinality work, or prove simulation,
+sustained, release-readiness, review, or Phase 6 freeze.
+
+Default aggregation now covers `ServerStarted`, `ServerStopped`,
+`RequestAccepted`, `RequestRejected`, the five handler variants, and the
+transport trio. The next aggregate implementation is admitted-request
+lifecycle aggregation for `RequestStarted` and `RequestFinished`. Other
+remaining contract-fixed families and downstream
+OpenTelemetry work, structured-log
 carrier/emission, raw-ID opt-in,
 broader privacy, sustained cardinality, and redaction work, MCP simulation,
 coverage-guided and sustained fuzz gates, release-candidate work, and Phase 6
 review/freeze remain open. The delivery verticals add no public API, snapshot
-field, aggregate family, label, event variant, or wire dimension. Phase 6
-remains provisional and unfrozen.
+field, aggregate family, label, event variant, or wire dimension. The tenth
+added three provisional snapshot getters and three matching builder methods;
+the eleventh adds one getter/builder pair, and the twelfth adds two. None adds
+an event variant or wire dimension. Phase 6 remains provisional and
+unfrozen.
 
-The focused metric-dimensionality and trace-cardinality checkpoint gate passes
-95/0/0/0.
+The focused request-boundary aggregate/adjacent gate passes 70/0/0/0.
 The prior focused five-target fuzz gate remains 28/0/0/0 and was not rerun for this
 checkpoint; prior deterministic full fuzz corpus replay on both JDKs remains
-127/0/0/0 and was likewise not rerun. Exact-source full main suites on JDK 21
-and JDK 26 each pass 1,467/0/0/4. Enforced JDK 21 static analysis is green
-without an advisory warning count; SpotBugs is green. Candidate main,
+127/0/0/0 and was likewise not rerun. Exact-source full main suites on
+Corretto 21.0.11 and 26.0.1 each pass 1,477/0/0/4. Enforced static analysis is
+green with existing advisory diagnostics; SpotBugs reports 0/0. Candidate main,
 source, and Javadoc
 packages plus standalone Javadoc are green using offline-link resolution. The
 API counts and prior hashes remain unchanged at 556/206/1,049/195; all 167

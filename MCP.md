@@ -9,13 +9,15 @@ the zero-runtime-dependency `com.soklet:soklet` artifact; there is no separate
 This guide describes the implemented, locally frozen Phase 4 and Phase 5
 surfaces, including multi-round-trip request state, progress/cancelation,
 resource subscriptions, deterministic termination, cross-instance state, and
-residual shutdown, plus nine completed bounded Phase 6 verticals covering
+residual shutdown, plus twelve completed bounded Phase 6 verticals covering
 shutdown, handler capacity, handler diagnostics, stream/subscription
 diagnostics, protection/trace diagnostics, serialized semantic-event delivery,
 the bounded pre-admission metric quartet, and connection/transport metric
-delivery, followed by admitted-request trace-token capture, in the current
-`3.6.0-SNAPSHOT`. It is development documentation, not a release or final
-conformance claim.
+delivery, followed by admitted-request trace-token capture and the first
+default transport-boundary, server-start, and request-boundary aggregate
+families, in the current
+`3.6.0-SNAPSHOT`.
+It is development documentation, not a release or final conformance claim.
 Compile-checked programmatic and annotation-driven applications live outside
 this source repository in the project-root `mcp/examples/phase-4` workspace.
 
@@ -35,8 +37,9 @@ this source repository in the project-root `mcp/examples/phase-4` workspace.
 | Policy | Host and Origin checks, application admission, optional request limiting, mandatory fallback tool limiting for tool-bearing servers, bounded execution, and shared Soklet observation hosts |
 | Schema | Closed, Java-first Soklet MCP Tool Schema Profile 1; no public hand-authored schema registration |
 
-The remaining MCP aggregate projections, structured trace-log emission and raw
-trace-ID opt-in, and MCP simulation are not implemented yet. Public
+The remaining contract-fixed MCP aggregate projections and downstream
+OpenTelemetry migration, structured trace-log emission and raw trace-ID
+opt-in, and MCP simulation are not implemented yet. Public
 descriptors already reserved for that remaining Phase 6 work are behaviorally
 neutral and do not cause Soklet to advertise those capabilities.
 
@@ -699,6 +702,117 @@ dequeued, but a non-cooperative residual handler remains active until its
 actual late exit, so the active gauge can correctly remain `1` after stop and
 later become `0`. Previously returned snapshots remain immutable.
 
+The tenth bounded Phase 6 production vertical resolved the full `AMB-003`
+aggregate contract and implemented its first new coherent family: the MCP
+transport boundary. At that checkpoint, `McpMetricsSnapshot` exposed five boxed
+nonnegative `Long` values and two immutable fixed-enum maps. The additive
+transport accessors are `getConnectionsAccepted()`,
+`getConnectionsRejected()`, and `getTransportFailures()`; matching builder
+methods are `connectionsAccepted(Long)`, `connectionsRejected(Long)`, and
+`transportFailures(Map<MetricsCollector.TransportFailureReason, Long>)`.
+The transport-failure map is defensive, enum-ordered, sparse in default
+collector snapshots, and rejects null keys/values and negative counts.
+
+`DefaultMetricsCollector` consumes `ConnectionAccepted`,
+`ConnectionRejected`, and `TransportFailure` in addition to the previously
+aggregated five handler variants and `ServerStopped`. At that checkpoint,
+configured MCP collectors had seven rendered aggregate families. They render both
+label-free connection counters even at zero; a direct transport
+event activates the same paired rendering. The exact new families are
+`soklet_mcp_connections_accepted_total` and
+`soklet_mcp_connections_rejected_total`. MCP failures join the existing
+`soklet_transport_failures_total` family with only the fixed labels
+`server_type="MCP"` and `reason="<TransportFailureReason>"`, so mixed HTTP,
+SSE, and MCP samples share one HELP/TYPE block rather than creating a parallel
+MCP family. A filter that rejects every transport-failure sample emits no
+orphaned family metadata. Prometheus and OpenMetrics rendering, all 18 fixed
+reasons, direct and concurrent ingest, reset, and retained immutable snapshots
+are covered by
+`McpTransportMetricsAggregationTests#snapshotContractUsesBoxedConnectionCountsAndImmutableBoundedTransportFailures`,
+`#defaultCollectorAggregatesRendersFiltersAndResetsTransportBoundaryFamilies`,
+`#sharedTransportFamilyCombinesServerTypesWithSingleMetadataBlock`, and
+`#concurrentDirectIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
+
+Reset clears both cumulative connection counters and the sparse MCP failure
+map while preserving configured zero-family visibility; it cannot mutate a
+previously returned snapshot. The two connection events are fieldless, and a
+transport failure contributes only its fixed enum reason. No remote address,
+request, throwable, header, trace ID, correlation token, key material,
+tracestate, baggage, or application-controlled label enters these aggregate
+or default-rendered values.
+
+The eleventh bounded Phase 6 production vertical implements the contract-fixed
+`ServerStarted` scalar. `McpMetricsSnapshot` adds boxed, nonnegative
+`getServerStarts()` and matching `serverStarts(Long)`, bringing the provisional
+surface to exactly eight getters and nine public builder methods including
+`build()`: six boxed `Long` values and two immutable maps.
+`DefaultMetricsCollector` counts the existing fieldless `ServerStarted` event,
+whose lifecycle authority remains one event for each successfully started
+listener generation. A failed staged start contributes none, an already-started
+no-op contributes no duplicate, a managed rollback retains its successful start
+before the matching stop, and a successful restart contributes a fresh start.
+
+Configured collectors render the label-free counter
+`soklet_mcp_server_starts_total` at zero. Either a direct `ServerStarted` or
+`ServerStopped` event activates the same lifecycle family on an uninitialized
+collector; a stop-only observation therefore renders a zero start counter plus
+its shutdown sample. A rejecting filter suppresses the start sample and its
+HELP/TYPE metadata. Reset clears the cumulative start count but preserves
+configured or event-activated zero-family visibility, and it cannot mutate a
+retained snapshot. Starts and shutdown outcomes are not a conservation or
+complement pair at an arbitrary snapshot: a currently running generation has a
+start but no stop yet. The fieldless source event and label-free aggregate
+retain no request, remote address, endpoint, method, outcome, throwable,
+header, trace ID, token, key material, tracestate, baggage, or application
+label. Exact direct, configured, filter, OpenMetrics, reset, retained-snapshot,
+and concurrent-ingest evidence is
+`McpServerStartMetricsAggregationTests#snapshotContractUsesBoxedNonnegativeServerStarts`,
+`#defaultCollectorAggregatesConfiguredAndDirectServerStartsAcrossRenderFilterAndReset`,
+and
+`#concurrentDirectServerStartIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
+
+The twelfth bounded Phase 6 production vertical implements independent
+`RequestAccepted` and `RequestRejected` request-boundary scalars.
+`McpMetricsSnapshot` adds boxed, nonnegative `getRequestsAccepted()` and
+`getRequestsRejected()` plus matching `requestsAccepted(Long)` and
+`requestsRejected(Long)` builder methods. The provisional surface is now
+exactly ten getters and 11 public builder methods including `build()`: eight
+boxed `Long` values and two immutable maps.
+
+`RequestAccepted` is retained only after the bounded protocol processor
+accepts `Executor.execute`; an execute rejection or throw identity-discards
+the provisional accepted entry. `RequestRejected` is recorded exactly once for
+a complete Handler request whose terminal wins before atomic observation-start
+reservation. It can follow accepted on malformed or other terminal
+pre-admission paths, or occur without a retained accepted event after execute
+failure. The counters therefore are neither complements nor a conservation
+equation. They exclude early transport/Microhttp failures, post-admission
+outcomes, and handler-capacity rejection.
+
+Configured MCP collectors render the paired label-free counters
+`soklet_mcp_requests_accepted_total` with HELP text `Total MCP requests accepted
+by the bounded protocol processor` and `soklet_mcp_requests_rejected_total`
+with HELP text `Total MCP requests rejected before admitted semantic handling`,
+including zeros. Either directly ingested event activates both families and
+the unobserved peer remains zero. Per-sample filtering removes a rejected
+family's sample and HELP/TYPE metadata, OpenMetrics terminates normally, and
+reset clears both cumulative values while retaining configured or
+event-activated paired-zero visibility. Previously returned snapshots remain
+immutable, and post-quiescence concurrent direct ingest is lossless.
+
+The source events are fieldless and the rendered counters have no labels. They
+retain no request, remote address, endpoint, method, error code, outcome,
+throwable, header, trace ID, token, key material, tracestate, baggage, or
+application-controlled dimension. Exact aggregate tests are
+`McpRequestAdmissionMetricsAggregationTests#snapshotContractUsesBoxedNonnegativeRequestAdmissionCounts`,
+`#defaultCollectorAggregatesConfiguredAndDirectRequestAdmissionEventsAcrossRenderFilterAndReset`,
+and
+`#concurrentDirectRequestAdmissionIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
+The exact authority paths remain covered by
+`McpHttpServerApplicationExecutionTests#protocol_processor_submission_records_two_accepted_then_one_rejected_outside_request_control_lock`
+and
+`McpPreAdmissionMetricsEventPublicRuntimeTests#acceptedMalformedRequestEmitsExactProtocolErrorThenRejectionWithoutAdmission`.
+
 `McpServer.getDiagnostics()` returns server-wide handler-capacity, live-stream,
 protection, and trace-configuration state without requiring a metrics
 collector. `McpServerDiagnostics` now declares exactly 12 zero-argument
@@ -941,7 +1055,7 @@ security controls retain only the current key and expose no history API. This
 is not comprehensive trace/baggage redaction, cardinality, privacy/security,
 aggregate/`AMB-003`, simulator, release-readiness, or Phase 6 freeze evidence.
 
-A third unnumbered Phase 6 checkpoint now freezes built-in MCP metric
+A third unnumbered Phase 6 checkpoint froze built-in MCP metric
 dimensionality through
 `McpObservabilityPublicApiTests#metricSchemaHasExactFiniteNonTraceDimensions`
 and
@@ -953,29 +1067,29 @@ registered endpoint, a recognized method or `<unrecognized>`, the fixed ten
 protocol codes, and fixed enums. Public event constructors still validate only
 shape, nullability, nonempty routed strings, and nonnegative duration; they do
 not enforce production registration, method vocabulary, or the protocol-code
-allowlist for arbitrary application-created events. `McpMetricsSnapshot`
-remains exactly three boxed `Long` values plus the immutable
-`Map<McpShutdownOutcome, Long>`. `DefaultMetricsCollector` aggregates only the
-five handler variants and `ServerStopped`; a fresh collector ignores and
-retains none of the other 17 variants.
+allowlist for arbitrary application-created events. At that checkpoint,
+`McpMetricsSnapshot` was exactly three boxed `Long` values plus the immutable
+`Map<McpShutdownOutcome, Long>`. `DefaultMetricsCollector` aggregated only the
+five handler variants and `ServerStopped`; a fresh collector ignored and
+retained none of the other 17 variants.
 
 The runtime gate sends 16 sequential admitted requests with distinct valid MCP
 and HTTP trace IDs, tracestate, baggage, key/token canaries, correlation, and
 raw-ID opt-in. Built-in MCP events, snapshot values, metric names and labels,
 Prometheus, OpenMetrics, filter-observed samples, and reset rendering contain
-none of those canaries. Before reset, the exact MCP sample set is the three
-label-free handler samples plus
+none of those canaries. At that checkpoint, before reset, the exact MCP sample
+set was the three label-free handler samples plus
 `soklet_mcp_shutdowns_total{outcome="clean"}`; after reset, only the three
-label-free handler samples remain. Nine production verticals remain nine, and
-the fuzz-registration, dormant derivation, and metric-dimensionality
-checkpoints are the three unnumbered checkpoints. `SOK-TRACE-001`,
-`SOK-TRACE-002`, and `SOK-TRACE-003` remain COMPLETE; `SOK-TRACE-004` remains
-PLANNED; `SOK-TRACE-005` is PARTIAL for metric-dimension inventory and
-default-collector evidence only; and `SOK-PRIV-001` remains PARTIAL.
-`SOK-METRIC-001` and `SOK-METRIC-004` remain PARTIAL; `AMB-003` remains
+label-free handler samples remained. The production-vertical count remained nine,
+and the fuzz-registration, dormant derivation, and metric-dimensionality
+checkpoints were the three unnumbered checkpoints. `SOK-TRACE-001`,
+`SOK-TRACE-002`, and `SOK-TRACE-003` were COMPLETE; `SOK-TRACE-004` was
+PLANNED; `SOK-TRACE-005` was PARTIAL for metric-dimension inventory and
+default-collector evidence only; and `SOK-PRIV-001` was PARTIAL.
+`SOK-METRIC-001` and `SOK-METRIC-004` remained PARTIAL; `AMB-003` remained
 AMBIGUOUS.
 
-This checkpoint changes no production source, public API, API sketch, owner or
+That checkpoint changed no production source, public API, API sketch, owner or
 signature inventory, aggregate family, label, event variant, or wire behavior.
 It does not cover custom collectors; generic HTTP `MetricsCollector` callbacks
 that receive a `Request`, request target, or `Throwable`; `LogEvent`,
@@ -986,20 +1100,62 @@ sustained cardinality, coverage-guided fuzz, corpus saturation, soak,
 simulation, migration, release-candidate provenance, review, or Phase 6
 freeze.
 
+Transport aggregation is the tenth production vertical, server-start
+aggregation is the eleventh, and request-boundary aggregation is the twelfth;
+the three earlier checkpoints remain unnumbered. The snapshot surface now has
+ten getters with ten matching builder properties (plus `build()`): eight boxed
+`Long` values, the immutable shutdown map, and the immutable transport-failure
+map. The default collector aggregates 12 of the 23 event variants and ignores
+the remaining 11 across ten rendered aggregate families. The 16-request
+cardinality gate now observes nine exact MCP-prefixed samples before reset—the
+label-free server-start, connection pair, request-boundary pair, three handler
+samples, and clean shutdown—and eight after reset, with shutdown absent.
+Its transport-failure map remains empty and no trace canary enters the built-in
+MCP or shared transport metric surfaces.
+
+The next contract-fixed aggregate subset is admitted-request lifecycle
+aggregation: `RequestStarted` and `RequestFinished` feed one live request gauge
+plus an endpoint/method/outcome completed counter and duration histogram. Later
+rows use live
+stream and subscription gauges plus termination-keyed duration histograms;
+endpoint/method cancelation and progress counters; a label-free keep-alive
+scalar; a fixed-code protocol-error map; and an endpoint/method unknown-header
+map that never contains header identity. There are no standalone
+start/finish/open/close counters. Configured scalars render zero, maps and
+histograms remain sparse, reset preserves the five live gauges and clears
+cumulative/map/histogram state, and a duration crossing reset retains its
+original start. Exact downstream OpenTelemetry names and attributes remain in
+the authoritative Phase 6/V10 contract rather than being duplicated here.
+
+`SOK-TRACE-005` remains PARTIAL for metric-only evidence, while
+`SOK-PRIV-001`, `SOK-METRIC-001`, and `SOK-METRIC-004` remain PARTIAL.
+`SOK-METRIC-002`, `SOK-METRIC-003`, and `SOK-SHUT-002` remain COMPLETE.
+`AMB-003` is RESOLVED CONTRACT / IMPLEMENTATION PARTIAL: the
+remaining contract-fixed core aggregate families and downstream snapshot-
+compatible OpenTelemetry work are not implemented by this vertical.
+It does not constrain custom collectors or application telemetry, promise an
+atomic cross-field snapshot during active concurrent mutation, add structured-
+log or raw-ID emission, complete trace/privacy/cardinality work, or provide
+simulation, sustained, release-readiness, review, or Phase 6 freeze evidence.
+
 The default collector separately exposes shutdown counts as an immutable,
 enum-ordered `Map<McpShutdownOutcome, Long>`. It omits zero outcomes, returns
 to an empty map after reset, and renders exactly
 `soklet_mcp_shutdowns_total{outcome="clean"|"residual_handlers"}` in
-Prometheus/OpenMetrics text. Default aggregation remains limited to
-`ServerStopped` and the five handler variants. The unresolved aggregate
-families and `AMB-003`, structured-log carrier/emission, raw-ID opt-in,
+Prometheus/OpenMetrics text. Default aggregation now covers `ServerStarted`,
+`ServerStopped`, `RequestAccepted`, `RequestRejected`, the five handler
+variants, and the transport trio. The remaining contract-fixed families and
+downstream OpenTelemetry work, structured-log
+carrier/emission, raw-ID opt-in,
 sustained cardinality, and broader privacy/redaction
 work, simulator integration, scheduled/manual
 coverage-guided and sustained fuzz gates, release-candidate work, and Phase 6
 review/freeze remain open. The
-seventh through ninth verticals add no public API, snapshot field,
-aggregate family, label, event variant, or wire dimension. Phase 6 remains
-provisional and unfrozen.
+seventh through ninth verticals added no public API, snapshot field, aggregate
+family, label, event variant, or wire dimension. The tenth added three
+provisional snapshot getters and three matching builder methods; the eleventh
+adds one provisional getter/builder pair, and the twelfth adds two. None adds
+an event variant or wire dimension. Phase 6 remains provisional and unfrozen.
 
 `McpServer.stop()` is bounded by the configured shutdown timeout. If an
 application-supplied MCP request-processing execution remains afterward,
@@ -1053,14 +1209,13 @@ the harness to phase 5. A fresh 39-scenario development-candidate verify passes
 all profiles, validates all 39 goldens, and records no bad outcome, standard-
 error output, or non-clean fixture exit.
 
-The focused metric-dimensionality and trace-cardinality checkpoint run passes
-95/0/0/0.
+The focused request-boundary aggregate/adjacent gate passes 70/0/0/0.
 The prior focused five-target fuzz run remains 28/0/0/0 and was not rerun for
 this checkpoint;
 the prior deterministic full fuzz corpus replay on both JDKs remains
-127/0/0/0 and was likewise not rerun. Exact-source full main suites on JDK 21
-and JDK 26 each report 1,467/0/0/4. The JDK 21 enforced static-analysis profile
-is green without counting advisory warnings; SpotBugs is green. Exact API-
+127/0/0/0 and was likewise not rerun. Exact-source full main suites on
+Corretto 21.0.11 and 26.0.1 each report 1,477/0/0/4. Enforced static analysis
+is green with existing advisory diagnostics; SpotBugs reports 0/0. Exact API-
 freeze evidence remains unchanged at 556 incompatibilities, 206 reviewed
 owners, 1,049 Phase 4
 records, and 195 Phase 5 records with the prior hashes. Candidate main,
@@ -1070,11 +1225,14 @@ pass Javadoc doclint on JDK 26. All 104 files from pinned JSON Schema commit
 `0c7b65dc16dd8eaa7bd83e21099c76610c3b246a` validate. No scheduled or manual
 coverage-guided nightly fuzz run occurred; deterministic seed replay is not
 sustained, coverage, corpus-saturation, privacy, security, release-readiness,
-or Phase 6 freeze proof. The remaining Phase 6 aggregate families and
-`AMB-003`, structured-log carrier/emission, raw-ID opt-in,
+or Phase 6 freeze proof. The remaining contract-fixed Phase 6 aggregate
+families and downstream OpenTelemetry work, structured-log carrier/emission,
+raw-ID opt-in,
 broader privacy, sustained cardinality, and redaction work, simulator integration,
 coverage-guided and sustained fuzz gates, broader
 CI/provenance and release-candidate work, and Phase 6 API review/freeze remain
-open. Phase 6 remains provisional and unfrozen.
+open. The next aggregate implementation is the contract-fixed admitted-request
+lifecycle family for `RequestStarted` and `RequestFinished`. Phase 6 remains
+provisional and unfrozen.
 
 Do not treat this snapshot guide as a release-conformance statement.

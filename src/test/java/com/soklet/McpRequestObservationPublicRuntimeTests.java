@@ -542,6 +542,8 @@ public class McpRequestObservationPublicRuntimeTests {
 			List<McpMetricsEvent> events = collector.events();
 			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
 					countEvents(events, McpMetricsEvent.RequestAccepted.class));
+			Assertions.assertEquals(0,
+					countEvents(events, McpMetricsEvent.RequestRejected.class));
 			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
 					countEvents(events, McpMetricsEvent.RequestStarted.class));
 			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
@@ -562,6 +564,7 @@ public class McpRequestObservationPublicRuntimeTests {
 			MetricsCollector.Snapshot snapshot = collector.snapshot()
 					.orElseThrow();
 			McpMetricsSnapshot mcpMetrics = snapshot.getMcpMetrics();
+			Assertions.assertEquals(1L, mcpMetrics.getServerStarts());
 			Assertions.assertEquals(0L,
 					mcpMetrics.getActiveHandlerExecutions());
 			Assertions.assertEquals(0L, mcpMetrics.getHandlerQueueDepth());
@@ -569,6 +572,13 @@ public class McpRequestObservationPublicRuntimeTests {
 					mcpMetrics.getHandlerCapacityRejections());
 			Assertions.assertEquals(Map.of(McpShutdownOutcome.CLEAN, 1L),
 					mcpMetrics.getShutdowns());
+			Assertions.assertTrue(mcpMetrics.getConnectionsAccepted() > 0L);
+			Assertions.assertEquals(0L,
+					mcpMetrics.getConnectionsRejected());
+			Assertions.assertTrue(mcpMetrics.getTransportFailures().isEmpty());
+			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
+					mcpMetrics.getRequestsAccepted());
+			Assertions.assertEquals(0L, mcpMetrics.getRequestsRejected());
 			List<String> filteredSamples = new CopyOnWriteArrayList<>();
 			String prometheus = collector.snapshotText(
 					MetricsCollector.SnapshotTextOptions.fromMetricsFormat(
@@ -586,6 +596,11 @@ public class McpRequestObservationPublicRuntimeTests {
 							})
 							.build()).orElseThrow();
 			Set<String> expectedMcpSamples = Set.of(
+					"soklet_mcp_server_starts_total{}",
+					"soklet_mcp_connections_accepted_total{}",
+					"soklet_mcp_connections_rejected_total{}",
+					"soklet_mcp_requests_accepted_total{}",
+					"soklet_mcp_requests_rejected_total{}",
 					"soklet_mcp_handler_executions_active{}",
 					"soklet_mcp_handler_queue_depth{}",
 					"soklet_mcp_handler_capacity_rejections_total{}",
@@ -622,6 +637,11 @@ public class McpRequestObservationPublicRuntimeTests {
 							})
 							.build()).orElseThrow();
 			Set<String> expectedResetMcpSamples = Set.of(
+					"soklet_mcp_server_starts_total{}",
+					"soklet_mcp_connections_accepted_total{}",
+					"soklet_mcp_connections_rejected_total{}",
+					"soklet_mcp_requests_accepted_total{}",
+					"soklet_mcp_requests_rejected_total{}",
 					"soklet_mcp_handler_executions_active{}",
 					"soklet_mcp_handler_queue_depth{}",
 					"soklet_mcp_handler_capacity_rejections_total{}");
@@ -1265,11 +1285,22 @@ public class McpRequestObservationPublicRuntimeTests {
 				values.add(method.getName() + "=" + method.invoke(snapshot));
 		}
 		McpMetricsSnapshot mcpMetrics = snapshot.getMcpMetrics();
+		values.add("mcpServerStarts=" + mcpMetrics.getServerStarts());
 		values.add("mcpActive=" + mcpMetrics.getActiveHandlerExecutions());
 		values.add("mcpQueued=" + mcpMetrics.getHandlerQueueDepth());
 		values.add("mcpRejected="
 				+ mcpMetrics.getHandlerCapacityRejections());
 		values.add("mcpShutdowns=" + mcpMetrics.getShutdowns());
+		values.add("mcpConnectionsAccepted="
+				+ mcpMetrics.getConnectionsAccepted());
+		values.add("mcpConnectionsRejected="
+				+ mcpMetrics.getConnectionsRejected());
+		values.add("mcpTransportFailures="
+				+ mcpMetrics.getTransportFailures());
+		values.add("mcpRequestsAccepted="
+				+ mcpMetrics.getRequestsAccepted());
+		values.add("mcpRequestsRejected="
+				+ mcpMetrics.getRequestsRejected());
 		return values.toString();
 	}
 

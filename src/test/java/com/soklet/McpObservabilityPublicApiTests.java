@@ -124,9 +124,24 @@ public class McpObservabilityPublicApiTests {
 		MetricsCollector.Snapshot empty = MetricsCollector.Snapshot.builder().build();
 		Assertions.assertSame(McpMetricsSnapshot.emptyInstance(),
 				empty.getMcpMetrics());
+		Assertions.assertEquals(0L,
+				empty.getMcpMetrics().getServerStarts());
 		Assertions.assertTrue(empty.getMcpMetrics().getShutdowns().isEmpty());
+		Assertions.assertEquals(0L,
+				empty.getMcpMetrics().getConnectionsAccepted());
+		Assertions.assertEquals(0L,
+				empty.getMcpMetrics().getConnectionsRejected());
+		Assertions.assertTrue(empty.getMcpMetrics().getTransportFailures()
+				.isEmpty());
+		Assertions.assertEquals(0L,
+				empty.getMcpMetrics().getRequestsAccepted());
+		Assertions.assertEquals(0L,
+				empty.getMcpMetrics().getRequestsRejected());
 
 		McpMetricsSnapshot aggregate = McpMetricsSnapshot.builder()
+				.serverStarts(3L)
+				.requestsAccepted(5L)
+				.requestsRejected(1L)
 				.shutdowns(Map.of(McpShutdownOutcome.CLEAN, 2L))
 				.build();
 		MetricsCollector.Snapshot snapshot = MetricsCollector.Snapshot.builder()
@@ -134,6 +149,9 @@ public class McpObservabilityPublicApiTests {
 				.build();
 
 		Assertions.assertSame(aggregate, snapshot.getMcpMetrics());
+		Assertions.assertEquals(3L, aggregate.getServerStarts());
+		Assertions.assertEquals(5L, aggregate.getRequestsAccepted());
+		Assertions.assertEquals(1L, aggregate.getRequestsRejected());
 		Assertions.assertEquals(2L, aggregate.getShutdowns()
 				.get(McpShutdownOutcome.CLEAN));
 		Assertions.assertThrows(UnsupportedOperationException.class,
@@ -272,10 +290,16 @@ public class McpObservabilityPublicApiTests {
 		}
 
 		Map<String, Class<?>> expectedGetters = Map.of(
+				"getServerStarts", Long.class,
 				"getActiveHandlerExecutions", Long.class,
 				"getHandlerQueueDepth", Long.class,
 				"getHandlerCapacityRejections", Long.class,
-				"getShutdowns", Map.class);
+				"getShutdowns", Map.class,
+				"getConnectionsAccepted", Long.class,
+				"getConnectionsRejected", Long.class,
+				"getTransportFailures", Map.class,
+				"getRequestsAccepted", Long.class,
+				"getRequestsRejected", Long.class);
 		Map<String, Class<?>> actualGetters = Arrays.stream(
 				McpMetricsSnapshot.class.getDeclaredMethods())
 				.filter(method -> Modifier.isPublic(method.getModifiers()))
@@ -301,16 +325,28 @@ public class McpObservabilityPublicApiTests {
 		Assertions.assertEquals(0, McpMetricsSnapshot.class.getConstructors().length);
 
 		Map<String, Map.Entry<Class<?>, List<Class<?>>>> expectedBuilderMethods =
-				Map.of(
-						"activeHandlerExecutions", methodSignature(
-								McpMetricsSnapshot.Builder.class, Long.class),
-						"handlerQueueDepth", methodSignature(
-								McpMetricsSnapshot.Builder.class, Long.class),
-						"handlerCapacityRejections", methodSignature(
-								McpMetricsSnapshot.Builder.class, Long.class),
-						"shutdowns", methodSignature(
-								McpMetricsSnapshot.Builder.class, Map.class),
-						"build", methodSignature(McpMetricsSnapshot.class));
+				Map.ofEntries(
+						Map.entry("serverStarts", methodSignature(
+								McpMetricsSnapshot.Builder.class, Long.class)),
+						Map.entry("activeHandlerExecutions", methodSignature(
+								McpMetricsSnapshot.Builder.class, Long.class)),
+						Map.entry("handlerQueueDepth", methodSignature(
+								McpMetricsSnapshot.Builder.class, Long.class)),
+						Map.entry("handlerCapacityRejections", methodSignature(
+								McpMetricsSnapshot.Builder.class, Long.class)),
+						Map.entry("shutdowns", methodSignature(
+								McpMetricsSnapshot.Builder.class, Map.class)),
+						Map.entry("connectionsAccepted", methodSignature(
+								McpMetricsSnapshot.Builder.class, Long.class)),
+						Map.entry("connectionsRejected", methodSignature(
+								McpMetricsSnapshot.Builder.class, Long.class)),
+						Map.entry("transportFailures", methodSignature(
+								McpMetricsSnapshot.Builder.class, Map.class)),
+						Map.entry("requestsAccepted", methodSignature(
+								McpMetricsSnapshot.Builder.class, Long.class)),
+						Map.entry("requestsRejected", methodSignature(
+								McpMetricsSnapshot.Builder.class, Long.class)),
+						Map.entry("build", methodSignature(McpMetricsSnapshot.class)));
 		Map<String, Map.Entry<Class<?>, List<Class<?>>>> actualBuilderMethods =
 				Arrays.stream(McpMetricsSnapshot.Builder.class.getDeclaredMethods())
 						.filter(method -> Modifier.isPublic(method.getModifiers()))
@@ -333,16 +369,16 @@ public class McpObservabilityPublicApiTests {
 				"getShutdowns").getGenericReturnType());
 		assertShutdownMapSignature(McpMetricsSnapshot.Builder.class.getMethod(
 				"shutdowns", Map.class).getGenericParameterTypes()[0]);
+		assertTransportFailureMapSignature(McpMetricsSnapshot.class.getMethod(
+				"getTransportFailures").getGenericReturnType());
+		assertTransportFailureMapSignature(McpMetricsSnapshot.Builder.class
+				.getMethod("transportFailures", Map.class)
+				.getGenericParameterTypes()[0]);
 
 		DefaultMetricsCollector defaultCollector =
 				DefaultMetricsCollector.defaultInstance();
 		Duration duration = Duration.ofMillis(1);
 		List<McpMetricsEvent> nonAggregatedEvents = List.of(
-				new McpMetricsEvent.ServerStarted(),
-				new McpMetricsEvent.ConnectionAccepted(),
-				new McpMetricsEvent.ConnectionRejected(),
-				new McpMetricsEvent.RequestAccepted(),
-				new McpMetricsEvent.RequestRejected(),
 				new McpMetricsEvent.RequestStarted("/registered", "tools/call"),
 				new McpMetricsEvent.RequestFinished("/registered", "tools/call",
 						McpRequestOutcome.COMPLETE, duration),
@@ -360,10 +396,8 @@ public class McpObservabilityPublicApiTests {
 				new McpMetricsEvent.KeepAliveEmitted(),
 				new McpMetricsEvent.ProtocolError(-32600),
 				new McpMetricsEvent.UnknownMirroredHeader(
-						"/registered", "tools/call"),
-				new McpMetricsEvent.TransportFailure(
-						MetricsCollector.TransportFailureReason.WRITE_ERROR));
-		Assertions.assertEquals(17, nonAggregatedEvents.size());
+						"/registered", "tools/call"));
+		Assertions.assertEquals(11, nonAggregatedEvents.size());
 		nonAggregatedEvents.forEach(defaultCollector::didRecordMcpMetricsEvent);
 		Assertions.assertSame(McpMetricsSnapshot.emptyInstance(),
 				defaultCollector.snapshot().orElseThrow().getMcpMetrics());
@@ -468,6 +502,16 @@ public class McpObservabilityPublicApiTests {
 		Assertions.assertEquals(Map.class, parameterizedType.getRawType());
 		Assertions.assertArrayEquals(new Object[]{McpShutdownOutcome.class,
 				Long.class}, parameterizedType.getActualTypeArguments());
+	}
+
+	private static void assertTransportFailureMapSignature(
+			@NonNull Object genericType) {
+		ParameterizedType parameterizedType = Assertions.assertInstanceOf(
+				ParameterizedType.class, genericType);
+		Assertions.assertEquals(Map.class, parameterizedType.getRawType());
+		Assertions.assertArrayEquals(new Object[]{
+				MetricsCollector.TransportFailureReason.class, Long.class
+		}, parameterizedType.getActualTypeArguments());
 	}
 
 	private static void assertNonTraceDimensionName(@NonNull String name) {

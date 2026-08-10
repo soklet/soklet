@@ -110,8 +110,18 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private final AtomicLong mcpHandlerQueueDepth;
 	private final LongAdder mcpHandlerCapacityRejections;
 	private final Map<McpShutdownOutcome, LongAdder> mcpShutdownsByOutcome;
+	private final LongAdder mcpConnectionsAccepted;
+	private final LongAdder mcpConnectionsRejected;
+	private final Map<TransportFailureReason, LongAdder>
+			mcpTransportFailuresByReason;
+	private final LongAdder mcpServerStarts;
+	private final LongAdder mcpRequestsAccepted;
+	private final LongAdder mcpRequestsRejected;
 	private final AtomicBoolean includeSseMetrics;
 	private final AtomicBoolean includeMcpHandlerMetrics;
+	private final AtomicBoolean includeMcpTransportMetrics;
+	private final AtomicBoolean includeMcpServerMetrics;
+	private final AtomicBoolean includeMcpRequestBoundaryMetrics;
 
 	@NonNull
 	public static DefaultMetricsCollector defaultInstance() {
@@ -162,14 +172,34 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		for (McpShutdownOutcome outcome : McpShutdownOutcome.values())
 			mcpShutdowns.put(outcome, new LongAdder());
 		this.mcpShutdownsByOutcome = Collections.unmodifiableMap(mcpShutdowns);
+		this.mcpConnectionsAccepted = new LongAdder();
+		this.mcpConnectionsRejected = new LongAdder();
+		EnumMap<TransportFailureReason, LongAdder> mcpTransportFailures =
+				new EnumMap<>(TransportFailureReason.class);
+		for (TransportFailureReason reason : TransportFailureReason.values())
+			mcpTransportFailures.put(reason, new LongAdder());
+		this.mcpTransportFailuresByReason =
+				Collections.unmodifiableMap(mcpTransportFailures);
+		this.mcpServerStarts = new LongAdder();
+		this.mcpRequestsAccepted = new LongAdder();
+		this.mcpRequestsRejected = new LongAdder();
 		this.includeSseMetrics = new AtomicBoolean(false);
 		this.includeMcpHandlerMetrics = new AtomicBoolean(false);
+		this.includeMcpTransportMetrics = new AtomicBoolean(false);
+		this.includeMcpServerMetrics = new AtomicBoolean(false);
+		this.includeMcpRequestBoundaryMetrics = new AtomicBoolean(false);
 	}
 
 	void initialize(@NonNull SokletConfig sokletConfig) {
 		requireNonNull(sokletConfig);
 		this.includeSseMetrics.set(sokletConfig.getSseServer().isPresent());
 		this.includeMcpHandlerMetrics.set(sokletConfig.getMcpServer().isPresent());
+		this.includeMcpTransportMetrics.set(
+				sokletConfig.getMcpServer().isPresent());
+		this.includeMcpServerMetrics.set(
+				sokletConfig.getMcpServer().isPresent());
+		this.includeMcpRequestBoundaryMetrics.set(
+				sokletConfig.getMcpServer().isPresent());
 	}
 
 	@Override
@@ -687,7 +717,26 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	@Override
 	public void didRecordMcpMetricsEvent(@NonNull McpMetricsEvent event) {
 		requireNonNull(event);
-		if (event instanceof McpMetricsEvent.HandlerExecutionStarted) {
+		if (event instanceof McpMetricsEvent.ServerStarted) {
+			this.includeMcpServerMetrics.set(true);
+			this.mcpServerStarts.increment();
+		} else if (event instanceof McpMetricsEvent.RequestAccepted) {
+			this.includeMcpRequestBoundaryMetrics.set(true);
+			this.mcpRequestsAccepted.increment();
+		} else if (event instanceof McpMetricsEvent.RequestRejected) {
+			this.includeMcpRequestBoundaryMetrics.set(true);
+			this.mcpRequestsRejected.increment();
+		} else if (event instanceof McpMetricsEvent.ConnectionAccepted) {
+			this.includeMcpTransportMetrics.set(true);
+			this.mcpConnectionsAccepted.increment();
+		} else if (event instanceof McpMetricsEvent.ConnectionRejected) {
+			this.includeMcpTransportMetrics.set(true);
+			this.mcpConnectionsRejected.increment();
+		} else if (event instanceof McpMetricsEvent.TransportFailure transportFailure) {
+			this.includeMcpTransportMetrics.set(true);
+			requireNonNull(this.mcpTransportFailuresByReason.get(
+					transportFailure.reason())).increment();
+		} else if (event instanceof McpMetricsEvent.HandlerExecutionStarted) {
 			this.includeMcpHandlerMetrics.set(true);
 			this.mcpActiveHandlerExecutions.incrementAndGet();
 		} else if (event instanceof McpMetricsEvent.HandlerExecutionFinished) {
@@ -703,6 +752,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			this.includeMcpHandlerMetrics.set(true);
 			this.mcpHandlerCapacityRejections.increment();
 		} else if (event instanceof McpMetricsEvent.ServerStopped serverStopped) {
+			this.includeMcpServerMetrics.set(true);
 			requireNonNull(this.mcpShutdownsByOutcome.get(serverStopped.outcome()))
 					.increment();
 		}
@@ -765,12 +815,32 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				snapshot.getHttpConnectionsAccepted(), options);
 		appendCounter(sb, "soklet_http_connections_rejected_total", "Total rejected HTTP connections",
 				snapshot.getHttpConnectionsRejected(), options);
-		appendCounter(sb, "soklet_transport_failures_total", "Total low-level transport failures",
-				snapshot.getTransportFailures(), DefaultMetricsCollector::labelsForTransportFailureKey, options);
+		appendTransportFailures(sb, snapshot.getTransportFailures(),
+				snapshot.getMcpMetrics().getTransportFailures(), options);
 		appendCounter(sb, "soklet_http_request_read_failures_total", "Total HTTP request read failures",
 				snapshot.getHttpRequestReadFailures(), DefaultMetricsCollector::labelsForRequestReadFailureKey, options);
 		appendCounter(sb, "soklet_http_requests_rejected_total", "Total HTTP requests rejected before handling",
 				snapshot.getHttpRequestRejections(), DefaultMetricsCollector::labelsForRequestRejectionKey, options);
+		if (this.includeMcpServerMetrics.get())
+			appendCounter(sb, "soklet_mcp_server_starts_total",
+					"Total successful MCP server starts",
+					snapshot.getMcpMetrics().getServerStarts(), options);
+		if (this.includeMcpRequestBoundaryMetrics.get()) {
+			appendCounter(sb, "soklet_mcp_requests_accepted_total",
+					"Total MCP requests accepted by the bounded protocol processor",
+					snapshot.getMcpMetrics().getRequestsAccepted(), options);
+			appendCounter(sb, "soklet_mcp_requests_rejected_total",
+					"Total MCP requests rejected before admitted semantic handling",
+					snapshot.getMcpMetrics().getRequestsRejected(), options);
+		}
+		if (this.includeMcpTransportMetrics.get()) {
+			appendCounter(sb, "soklet_mcp_connections_accepted_total",
+					"Total accepted MCP connections admitted within the connection-capacity bound",
+					snapshot.getMcpMetrics().getConnectionsAccepted(), options);
+			appendCounter(sb, "soklet_mcp_connections_rejected_total",
+					"Total MCP connections rejected because the connection-capacity bound was full",
+					snapshot.getMcpMetrics().getConnectionsRejected(), options);
+		}
 		if (this.includeMcpHandlerMetrics.get()) {
 			appendGauge(sb, "soklet_mcp_handler_executions_active",
 					"Currently occupied MCP handler-execution slots",
@@ -1019,18 +1089,39 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			if (count != 0L)
 				shutdowns.put(outcome, count);
 		});
+		EnumMap<TransportFailureReason, Long> transportFailures =
+				new EnumMap<>(TransportFailureReason.class);
+		this.mcpTransportFailuresByReason.forEach((reason, counter) -> {
+			long count = counter.sum();
+			if (count != 0L)
+				transportFailures.put(reason, count);
+		});
 		long activeHandlerExecutions = this.mcpActiveHandlerExecutions.get();
 		long handlerQueueDepth = this.mcpHandlerQueueDepth.get();
 		long handlerCapacityRejections =
 				this.mcpHandlerCapacityRejections.sum();
+		long connectionsAccepted = this.mcpConnectionsAccepted.sum();
+		long connectionsRejected = this.mcpConnectionsRejected.sum();
+		long serverStarts = this.mcpServerStarts.sum();
+		long requestsAccepted = this.mcpRequestsAccepted.sum();
+		long requestsRejected = this.mcpRequestsRejected.sum();
 		if (activeHandlerExecutions == 0L && handlerQueueDepth == 0L
-				&& handlerCapacityRejections == 0L && shutdowns.isEmpty())
+				&& handlerCapacityRejections == 0L && shutdowns.isEmpty()
+				&& connectionsAccepted == 0L && connectionsRejected == 0L
+				&& transportFailures.isEmpty() && serverStarts == 0L
+				&& requestsAccepted == 0L && requestsRejected == 0L)
 			return McpMetricsSnapshot.emptyInstance();
 		return McpMetricsSnapshot.builder()
 				.activeHandlerExecutions(activeHandlerExecutions)
 				.handlerQueueDepth(handlerQueueDepth)
 				.handlerCapacityRejections(handlerCapacityRejections)
 				.shutdowns(shutdowns)
+				.connectionsAccepted(connectionsAccepted)
+				.connectionsRejected(connectionsRejected)
+				.transportFailures(transportFailures)
+				.serverStarts(serverStarts)
+				.requestsAccepted(requestsAccepted)
+				.requestsRejected(requestsRejected)
 				.build();
 	}
 
@@ -1048,6 +1139,12 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		// finish/dequeue transitions cannot underflow the new collection window.
 		this.mcpHandlerCapacityRejections.reset();
 		this.mcpShutdownsByOutcome.values().forEach(LongAdder::reset);
+		this.mcpConnectionsAccepted.reset();
+		this.mcpConnectionsRejected.reset();
+		this.mcpTransportFailuresByReason.values().forEach(LongAdder::reset);
+		this.mcpServerStarts.reset();
+		this.mcpRequestsAccepted.reset();
+		this.mcpRequestsRejected.reset();
 		this.requestsInFlightByIdentity.clear();
 		this.requestsInFlightById.clear();
 		this.requestStateByThread.remove();
@@ -1206,6 +1303,42 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		sb.append("# HELP ").append(name).append(' ').append(help).append('\n');
 		sb.append("# TYPE ").append(name).append(" gauge\n");
 		appendSample(sb, name, "", value);
+	}
+
+	private static void appendTransportFailures(@NonNull StringBuilder sb,
+			@NonNull Map<@NonNull TransportFailureKey, @NonNull Long>
+					transportFailures,
+			@NonNull Map<@NonNull TransportFailureReason, @NonNull Long>
+					mcpTransportFailures,
+			@NonNull SnapshotTextOptions options) {
+		requireNonNull(sb);
+		requireNonNull(transportFailures);
+		requireNonNull(mcpTransportFailures);
+		requireNonNull(options);
+
+		if (transportFailures.isEmpty() && mcpTransportFailures.isEmpty())
+			return;
+
+		String name = "soklet_transport_failures_total";
+		StringBuilder metricBody = new StringBuilder();
+		transportFailures.forEach((key, value) -> {
+			LabelSet labels = labelsForTransportFailureKey(key);
+			if (shouldEmitSample(options, name, labels.getLabels()))
+				appendSample(metricBody, name, labels.getEncoded(), value);
+		});
+		mcpTransportFailures.forEach((reason, value) -> {
+			LabelSet labels = labelsForMcpTransportFailureReason(reason);
+			if (shouldEmitSample(options, name, labels.getLabels()))
+				appendSample(metricBody, name, labels.getEncoded(), value);
+		});
+
+		if (metricBody.length() == 0)
+			return;
+
+		sb.append("# HELP ").append(name)
+				.append(" Total low-level transport failures\n");
+		sb.append("# TYPE ").append(name).append(" counter\n");
+		sb.append(metricBody);
 	}
 
 	private static void appendCounter(@NonNull StringBuilder sb,
@@ -1425,6 +1558,17 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		Map<String, String> labels = new LinkedHashMap<>(2);
 		labels.put("server_type", key.serverType().name());
 		labels.put("reason", key.reason().name());
+		return new LabelSet(labels);
+	}
+
+	@NonNull
+	private static LabelSet labelsForMcpTransportFailureReason(
+			@NonNull TransportFailureReason reason) {
+		requireNonNull(reason);
+
+		Map<String, String> labels = new LinkedHashMap<>(2);
+		labels.put("server_type", "MCP");
+		labels.put("reason", reason.name());
 		return new LabelSet(labels);
 	}
 
