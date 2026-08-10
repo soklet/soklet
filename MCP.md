@@ -9,11 +9,11 @@ the zero-runtime-dependency `com.soklet:soklet` artifact; there is no separate
 This guide describes the implemented, locally frozen Phase 4 and Phase 5
 surfaces, including multi-round-trip request state, progress/cancelation,
 resource subscriptions, deterministic termination, cross-instance state, and
-residual shutdown, plus eight completed bounded Phase 6 verticals covering
+residual shutdown, plus nine completed bounded Phase 6 verticals covering
 shutdown, handler capacity, handler diagnostics, stream/subscription
 diagnostics, protection/trace diagnostics, serialized semantic-event delivery,
 the bounded pre-admission metric quartet, and connection/transport metric
-delivery in the current
+delivery, followed by admitted-request trace-token capture, in the current
 `3.6.0-SNAPSHOT`. It is development documentation, not a release or final
 conformance claim.
 Compile-checked programmatic and annotation-driven applications live outside
@@ -35,8 +35,8 @@ this source repository in the project-root `mcp/examples/phase-4` workspace.
 | Policy | Host and Origin checks, application admission, optional request limiting, mandatory fallback tool limiting for tool-bearing servers, bounded execution, and shared Soklet observation hosts |
 | Schema | Closed, Java-first Soklet MCP Tool Schema Profile 1; no public hand-authored schema registration |
 
-The remaining MCP aggregate projections, operational trace correlation, and
-MCP simulation are not implemented yet. Public
+The remaining MCP aggregate projections, structured trace-log emission and raw
+trace-ID opt-in, and MCP simulation are not implemented yet. Public
 descriptors already reserved for that remaining Phase 6 work are behaviorally
 neutral and do not cause Soklet to advertise those capabilities.
 
@@ -866,7 +866,8 @@ and retains that scope through runtime terminalization and sibling-loop
 cleanup. These are record/enqueue-order guarantees at the owning authorities,
 not a universal cross-thread causal ordering claim.
 
-Separate from those eight production observability and diagnostics verticals,
+Separate from the first eight production observability and diagnostics
+verticals,
 a bounded Phase 6 MCP fuzz-registration and hardening checkpoint adds five new
 Jazzer methods:
 `McpJsonRpcEnvelopeCodecFuzzTest#decodeClassifiesOrRejectsOnlyWithTypedWireFailure`,
@@ -874,8 +875,8 @@ Jazzer methods:
 `McpToolSchemaProfileFuzzTest#compileAndEvaluateRemainTypedAndBounded`,
 `McpCursorValidatorFuzzTest#cursorValidationIsUtf8ExactAndTotal`, and
 `McpRequestStatePlaintextCodecFuzzTest#decodeOnlyRejectsWithUniformRedactedIllegalArgumentException`.
-This is not a ninth production vertical; the completed production-vertical
-count remains eight. Twenty-one checked-in synthetic text seeds cover these
+This fuzz checkpoint is unnumbered; at that point the completed production-
+vertical count remained eight. Twenty-one checked-in synthetic text seeds cover these
 targets, and the nightly matrix now declares 15 total one-method slots, five of
 them new.
 
@@ -896,9 +897,9 @@ copy is derived only for inputs of at most 4,097 bytes. The cursor helper is an
 internal package-private validation seam shared by incoming and outgoing
 cursors; it adds no public API.
 
-Separate from the eight production observability and diagnostics verticals,
-an internal trace-correlation derivation/capture checkpoint now implements the
-frozen token construction. Disabled controls return no token. Enabled controls
+An unnumbered internal trace-correlation derivation checkpoint first implemented the
+frozen token construction. Trace correlation is disabled by default, and
+disabled controls capture no token. Enabled controls
 snapshot one complete active key ID and key-material pair under the shared
 security lock, then perform HMAC-SHA-256 after releasing that lock over UTF-8
 `soklet-mcp-trace-correlation-v1\0` followed by the decoded 16-byte trace ID.
@@ -910,17 +911,80 @@ inputs differ, and concurrent rotation exposes only coherent old or new
 zeroed, and the internal carrier retains only the nonsecret key ID and token
 while redacting the token from diagnostic rendering.
 
-This checkpoint is not a ninth production vertical; the count remains eight.
-`SOK-TRACE-001` and `SOK-TRACE-002` are PARTIAL, `SOK-TRACE-003` remains
-COMPLETE, `SOK-TRACE-004` and `SOK-TRACE-005` remain PLANNED, and
-`SOK-PRIV-001` remains PARTIAL. The package-private seam adds no public API and
-is not integrated into the request lifecycle or any structured-log carrier,
-field, emission cadence, or `LogEventType`. It does not enable raw trace-ID
-logging, and adds no metric, event, diagnostics/snapshot field, aggregate,
-label, or wire dimension. Tokens are pseudonymous high-cardinality operational
-metadata, not anonymization, authentication, or authorization inputs. This is
-not broader trace/baggage-redaction, cardinality, privacy, security, sustained-
-coverage, release-readiness, or Phase 6 freeze evidence.
+The ninth bounded production vertical now invokes that derivation exactly once
+for each admitted semantic request, before lifecycle and handler observation.
+Only a valid MCP `_meta.traceparent` is eligible; disabled correlation,
+invalid or all-zero MCP trace context, absent metadata, and a physical HTTP
+trace header without valid MCP metadata all produce no carrier. The lifecycle
+observer, interceptor, handler, and terminal callback share the same immutable
+request context and hidden carrier. A request captured before rotation retains
+its complete old `(keyId, token)` pair through terminal observation, while a
+fresh request after rotation adopts the new pair. The raw-validated-trace-ID
+option neither enables correlation nor changes token derivation. The final
+package-private carrier retains only the nonsecret key ID and pseudonymous
+token, not raw trace context or key material, and redacts the token from
+rendering.
+
+This request integration is the ninth vertical. At that point, the prior fuzz
+and dormant derivation checkpoints remained unnumbered;
+`SOK-TRACE-001`, `SOK-TRACE-002`, and `SOK-TRACE-003` were COMPLETE;
+`SOK-TRACE-004` and `SOK-TRACE-005` were PLANNED; and `SOK-PRIV-001` was
+PARTIAL. No public API or API-sketch source changed. There is no structured-log
+carrier, field, emission point, cadence,
+or new `LogEventType`; raw trace-ID logging remains unimplemented. The vertical
+adds no metric, event, diagnostics/snapshot field, aggregate, label, or wire
+dimension. Tokens remain pseudonymous high-cardinality operational metadata,
+not anonymization, authentication, or authorization inputs. The carrier is not
+cleared at finish, and no GC or application-reference lifetime is promised;
+it naturally remains with an application-retained request context while core
+security controls retain only the current key and expose no history API. This
+is not comprehensive trace/baggage redaction, cardinality, privacy/security,
+aggregate/`AMB-003`, simulator, release-readiness, or Phase 6 freeze evidence.
+
+A third unnumbered Phase 6 checkpoint now freezes built-in MCP metric
+dimensionality through
+`McpObservabilityPublicApiTests#metricSchemaHasExactFiniteNonTraceDimensions`
+and
+`McpRequestObservationPublicRuntimeTests#distinctTraceMetadataDoesNotCreateMetricDimensionsOrLeakIntoRendering`.
+The sealed event hierarchy remains exactly 23 record variants, 11 fieldless;
+its other components remain only endpoint path, bounded method, fixed outcome,
+reason or protocol code, and nonnegative duration. Production supplies a
+registered endpoint, a recognized method or `<unrecognized>`, the fixed ten
+protocol codes, and fixed enums. Public event constructors still validate only
+shape, nullability, nonempty routed strings, and nonnegative duration; they do
+not enforce production registration, method vocabulary, or the protocol-code
+allowlist for arbitrary application-created events. `McpMetricsSnapshot`
+remains exactly three boxed `Long` values plus the immutable
+`Map<McpShutdownOutcome, Long>`. `DefaultMetricsCollector` aggregates only the
+five handler variants and `ServerStopped`; a fresh collector ignores and
+retains none of the other 17 variants.
+
+The runtime gate sends 16 sequential admitted requests with distinct valid MCP
+and HTTP trace IDs, tracestate, baggage, key/token canaries, correlation, and
+raw-ID opt-in. Built-in MCP events, snapshot values, metric names and labels,
+Prometheus, OpenMetrics, filter-observed samples, and reset rendering contain
+none of those canaries. Before reset, the exact MCP sample set is the three
+label-free handler samples plus
+`soklet_mcp_shutdowns_total{outcome="clean"}`; after reset, only the three
+label-free handler samples remain. Nine production verticals remain nine, and
+the fuzz-registration, dormant derivation, and metric-dimensionality
+checkpoints are the three unnumbered checkpoints. `SOK-TRACE-001`,
+`SOK-TRACE-002`, and `SOK-TRACE-003` remain COMPLETE; `SOK-TRACE-004` remains
+PLANNED; `SOK-TRACE-005` is PARTIAL for metric-dimension inventory and
+default-collector evidence only; and `SOK-PRIV-001` remains PARTIAL.
+`SOK-METRIC-001` and `SOK-METRIC-004` remain PARTIAL; `AMB-003` remains
+AMBIGUOUS.
+
+This checkpoint changes no production source, public API, API sketch, owner or
+signature inventory, aggregate family, label, event variant, or wire behavior.
+It does not cover custom collectors; generic HTTP `MetricsCollector` callbacks
+that receive a `Request`, request target, or `Throwable`; `LogEvent`,
+application callbacks, handler telemetry, or arbitrary application-created
+event vocabulary; structured-log fields/emission or raw-ID logging; future
+aggregate families or `AMB-003`; comprehensive trace/baggage redaction; or
+sustained cardinality, coverage-guided fuzz, corpus saturation, soak,
+simulation, migration, release-candidate provenance, review, or Phase 6
+freeze.
 
 The default collector separately exposes shutdown counts as an immutable,
 enum-ordered `Map<McpShutdownOutcome, Long>`. It omits zero outcomes, returns
@@ -928,12 +992,12 @@ to an empty map after reset, and renders exactly
 `soklet_mcp_shutdowns_total{outcome="clean"|"residual_handlers"}` in
 Prometheus/OpenMetrics text. Default aggregation remains limited to
 `ServerStopped` and the five handler variants. The unresolved aggregate
-families and `AMB-003`, request-lifecycle trace integration, structured-log
-carrier/emission, raw-ID opt-in, cardinality, and broader privacy/redaction
+families and `AMB-003`, structured-log carrier/emission, raw-ID opt-in,
+sustained cardinality, and broader privacy/redaction
 work, simulator integration, scheduled/manual
 coverage-guided and sustained fuzz gates, release-candidate work, and Phase 6
 review/freeze remain open. The
-seventh and eighth delivery verticals add no public API, snapshot field,
+seventh through ninth verticals add no public API, snapshot field,
 aggregate family, label, event variant, or wire dimension. Phase 6 remains
 provisional and unfrozen.
 
@@ -989,14 +1053,16 @@ the harness to phase 5. A fresh 39-scenario development-candidate verify passes
 all profiles, validates all 39 goldens, and records no bad outcome, standard-
 error output, or non-clean fixture exit.
 
-The focused trace-foundation regression run passes 53/0/0/0. The prior focused
-five-target fuzz run remains 28/0/0/0 and was not rerun for this checkpoint;
+The focused metric-dimensionality and trace-cardinality checkpoint run passes
+95/0/0/0.
+The prior focused five-target fuzz run remains 28/0/0/0 and was not rerun for
+this checkpoint;
 the prior deterministic full fuzz corpus replay on both JDKs remains
 127/0/0/0 and was likewise not rerun. Exact-source full main suites on JDK 21
-and JDK 26 each report 1,462/0/0/4. The JDK 21 enforced static-analysis profile
-is green without
-counting advisory warnings; SpotBugs reports 0/0. Exact API-freeze evidence
-remains unchanged at 556 incompatibilities, 206 reviewed owners, 1,049 Phase 4
+and JDK 26 each report 1,467/0/0/4. The JDK 21 enforced static-analysis profile
+is green without counting advisory warnings; SpotBugs is green. Exact API-
+freeze evidence remains unchanged at 556 incompatibilities, 206 reviewed
+owners, 1,049 Phase 4
 records, and 195 Phase 5 records with the prior hashes. Candidate main,
 source, and Javadoc packages plus standalone Javadoc are green using
 offline-link resolution. All 167 API-sketch sources compile for Java 17 and
@@ -1005,8 +1071,8 @@ pass Javadoc doclint on JDK 26. All 104 files from pinned JSON Schema commit
 coverage-guided nightly fuzz run occurred; deterministic seed replay is not
 sustained, coverage, corpus-saturation, privacy, security, release-readiness,
 or Phase 6 freeze proof. The remaining Phase 6 aggregate families and
-`AMB-003`, request-lifecycle trace integration, structured-log carrier/emission,
-raw-ID opt-in, privacy/cardinality, and redaction work, simulator integration,
+`AMB-003`, structured-log carrier/emission, raw-ID opt-in,
+broader privacy, sustained cardinality, and redaction work, simulator integration,
 coverage-guided and sustained fuzz gates, broader
 CI/provenance and release-candidate work, and Phase 6 API review/freeze remain
 open. Phase 6 remains provisional and unfrozen.

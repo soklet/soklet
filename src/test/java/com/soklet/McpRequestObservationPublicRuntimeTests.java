@@ -28,9 +28,16 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.HexFormat;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
@@ -49,6 +56,19 @@ public class McpRequestObservationPublicRuntimeTests {
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final String JSON_MEDIA_TYPE = "application/json";
 	private static final String TOOL_NAME = "observation.echo";
+	private static final String MCP_TRACEPARENT =
+			"00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";
+	private static final String HTTP_TRACEPARENT =
+			"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00";
+	private static final String FIRST_TRACE_TOKEN =
+			"btKe431RVT8H4xxLhBXgUg";
+	private static final String SECOND_TRACE_TOKEN =
+			"w8jQllzQpqZSIXnjPwzWIA";
+	private static final int TRACE_CARDINALITY_REQUEST_COUNT = 16;
+	private static final String TRACE_CARDINALITY_KEY_ID =
+			"metric-key-id-canary";
+	private static final String TRACE_CARDINALITY_KEY_MATERIAL =
+			"metric-key-material-canary-00000";
 
 	@Test
 	public void admittedDiscoveryPublishesLifecycleAndMetricsWithoutInterception()
@@ -131,6 +151,495 @@ public class McpRequestObservationPublicRuntimeTests {
 					interceptorContext.get());
 			Assertions.assertSame(observer.startedContext.get(), handlerContext.get());
 			assertSingleCompleteMetrics(collector, "tools/call");
+		} finally {
+			soklet.stop();
+		}
+	}
+
+	@Test
+	public void eachAdmittedRequestCapturesOneTokenAndRetainsItAcrossRotation()
+			throws Exception {
+		CountDownLatch firstHandlerEntered = new CountDownLatch(1);
+		CountDownLatch releaseFirstHandler = new CountDownLatch(1);
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		List<DefaultMcpRequestContext> handlerContexts =
+				new CopyOnWriteArrayList<>();
+		TraceRecordingLifecycleObserver observer =
+				new TraceRecordingLifecycleObserver(2);
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName(TOOL_NAME)
+				.jsonArguments()
+				.handler((context, call, features) -> {
+					DefaultMcpRequestContext internalContext =
+							Assertions.assertInstanceOf(
+									DefaultMcpRequestContext.class, context);
+					handlerContexts.add(internalContext);
+					if (handlerInvocations.incrementAndGet() == 1) {
+						firstHandlerEntered.countDown();
+						if (!releaseFirstHandler.await(5, TimeUnit.SECONDS))
+							throw new IllegalStateException(
+									"Timed out awaiting the trace-rotation release.");
+					}
+					return McpCompleteResult.fromToolText("trace-captured");
+				})
+				.build();
+		McpEndpoint endpoint = endpointBuilder("trace-retention-test")
+				.tool(tool)
+				.build();
+		McpServer server = serverBuilder(endpoint)
+				.traceCorrelationKey(traceKey("trace-first", 0))
+				.build();
+		Soklet soklet = managedSoklet(server, List.of(observer),
+				new RecordingMetricsCollector());
+
+		try {
+			soklet.start();
+			int port = server.getDiagnostics().getBoundAddress()
+					.orElseThrow().getPort();
+			CompletableFuture<HttpResponse<String>> firstResponse = sendAsync(
+					port, toolRequestWithTrace("trace-first", TOOL_NAME,
+							MCP_TRACEPARENT), "tools/call", Optional.of(TOOL_NAME),
+					Optional.empty());
+			Assertions.assertTrue(firstHandlerEntered.await(5, TimeUnit.SECONDS),
+					"The first trace-capture handler did not start.");
+
+			Assertions.assertEquals(1, observer.startedContexts.size());
+			DefaultMcpRequestContext firstContext =
+					observer.startedContexts.get(0);
+			Assertions.assertSame(firstContext, handlerContexts.get(0));
+			DefaultMcpSecurityControls.TraceCorrelationToken firstToken =
+					firstContext.traceCorrelationToken().orElseThrow();
+			Assertions.assertEquals("trace-first", firstToken.keyId());
+			Assertions.assertEquals(FIRST_TRACE_TOKEN, firstToken.token());
+			Assertions.assertSame(firstToken, handlerContexts.get(0)
+					.traceCorrelationToken().orElseThrow());
+
+			server.getTraceCorrelation().rotateActiveKey(
+					traceKey("trace-second", 32));
+			Assertions.assertEquals(Optional.of("trace-second"),
+					server.getTraceCorrelation().getActiveKeyId());
+			Assertions.assertSame(firstToken,
+					firstContext.traceCorrelationToken().orElseThrow());
+			releaseFirstHandler.countDown();
+			HttpResponse<String> first = firstResponse.get(5, TimeUnit.SECONDS);
+			assertSuccess(first, "trace-first");
+			observer.awaitFirstFinished();
+			Assertions.assertSame(firstContext,
+					observer.finishedContexts.get(0));
+			Assertions.assertSame(firstToken, observer.finishedContexts.get(0)
+					.traceCorrelationToken().orElseThrow());
+
+			HttpResponse<String> second = send(port,
+					toolRequestWithTrace("trace-second", TOOL_NAME,
+							MCP_TRACEPARENT), "tools/call", Optional.of(TOOL_NAME));
+			assertSuccess(second, "trace-second");
+			observer.awaitAllFinished();
+			Assertions.assertEquals(2, observer.startedContexts.size());
+			Assertions.assertEquals(2, observer.finishedContexts.size());
+			Assertions.assertEquals(2, handlerContexts.size());
+			DefaultMcpRequestContext secondContext =
+					observer.startedContexts.get(1);
+			Assertions.assertSame(secondContext, handlerContexts.get(1));
+			Assertions.assertSame(secondContext,
+					observer.finishedContexts.get(1));
+			DefaultMcpSecurityControls.TraceCorrelationToken secondToken =
+					secondContext.traceCorrelationToken().orElseThrow();
+			Assertions.assertEquals("trace-second", secondToken.keyId());
+			Assertions.assertEquals(SECOND_TRACE_TOKEN, secondToken.token());
+			Assertions.assertSame(secondToken, handlerContexts.get(1)
+					.traceCorrelationToken().orElseThrow());
+			Assertions.assertSame(secondToken, observer.finishedContexts.get(1)
+					.traceCorrelationToken().orElseThrow());
+			Assertions.assertNotSame(firstToken, secondToken);
+		} finally {
+			releaseFirstHandler.countDown();
+			soklet.stop();
+		}
+	}
+
+	@Test
+	public void traceCaptureUsesOnlyValidMcpMetadataWithoutHttpFallback()
+			throws Exception {
+		TraceRecordingLifecycleObserver observer =
+				new TraceRecordingLifecycleObserver(4);
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName(TOOL_NAME)
+				.jsonArguments()
+				.handler((context, call, features) -> {
+					handlerInvocations.incrementAndGet();
+					return McpCompleteResult.fromToolText("trace-source-checked");
+				})
+				.build();
+		McpEndpoint endpoint = endpointBuilder("trace-source-test")
+				.tool(tool)
+				.build();
+		McpServer server = serverBuilder(endpoint)
+				.traceCorrelationKey(traceKey("trace-first", 0))
+				.build();
+		Soklet soklet = managedSoklet(server, List.of(observer),
+				new RecordingMetricsCollector());
+
+		try {
+			soklet.start();
+			int port = server.getDiagnostics().getBoundAddress()
+					.orElseThrow().getPort();
+			assertSuccess(sendWithHttpTraceparent(port,
+					toolRequestWithTrace("trace-valid", TOOL_NAME,
+							MCP_TRACEPARENT), HTTP_TRACEPARENT), "trace-valid");
+			assertSuccess(sendWithHttpTraceparent(port,
+					toolRequestWithTrace("trace-invalid", TOOL_NAME,
+							MCP_TRACEPARENT.toUpperCase()), HTTP_TRACEPARENT),
+					"trace-invalid");
+			assertSuccess(sendWithHttpTraceparent(port,
+					toolRequestWithTrace("trace-zero", TOOL_NAME,
+							"00-00000000000000000000000000000000-"
+									+ "b7ad6b7169203331-01"), HTTP_TRACEPARENT),
+					"trace-zero");
+			assertSuccess(sendWithHttpTraceparent(port,
+					toolRequest("trace-absent", TOOL_NAME), HTTP_TRACEPARENT),
+					"trace-absent");
+			observer.awaitAllFinished();
+
+			Assertions.assertEquals(4, handlerInvocations.get());
+			Assertions.assertEquals(4, observer.startedContexts.size());
+			for (DefaultMcpRequestContext context : observer.startedContexts)
+				Assertions.assertEquals(
+						"4bf92f3577b34da6a3ce929d0e0e4736",
+						context.getRequest().getTraceContext().orElseThrow()
+								.getTraceId());
+			DefaultMcpRequestContext valid = observer.startedContexts.get(0);
+			Assertions.assertEquals("0af7651916cd43dd8448eb211c80319c",
+					valid.getTraceContext().orElseThrow().getTraceId());
+			DefaultMcpSecurityControls.TraceCorrelationToken validToken =
+					valid.traceCorrelationToken().orElseThrow();
+			Assertions.assertEquals("trace-first", validToken.keyId());
+			Assertions.assertEquals(FIRST_TRACE_TOKEN, validToken.token());
+			for (int index = 1; index < observer.startedContexts.size(); ++index) {
+				DefaultMcpRequestContext context =
+						observer.startedContexts.get(index);
+				Assertions.assertTrue(context.getTraceContext().isEmpty());
+				Assertions.assertTrue(context.traceCorrelationToken().isEmpty());
+			}
+		} finally {
+			soklet.stop();
+		}
+	}
+
+	@Test
+	public void disabledCorrelationAndRawIdOptInRemainIndependentAndCarrierRenderingIsRedacted()
+			throws Exception {
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName(TOOL_NAME)
+				.jsonArguments()
+				.handler((context, call, features) ->
+						McpCompleteResult.fromToolText("raw-id-independent"))
+				.build();
+		McpEndpoint endpoint = endpointBuilder("raw-id-independence-test")
+				.tool(tool)
+				.build();
+
+		TraceRecordingLifecycleObserver disabledObserver =
+				new TraceRecordingLifecycleObserver(1);
+		McpServer disabledServer = serverBuilder(endpoint)
+				.logRawValidatedTraceIds(true)
+				.build();
+		Soklet disabledSoklet = managedSoklet(disabledServer,
+				List.of(disabledObserver), new RecordingMetricsCollector());
+		try {
+			disabledSoklet.start();
+			int port = disabledServer.getDiagnostics().getBoundAddress()
+					.orElseThrow().getPort();
+			assertSuccess(send(port, toolRequestWithTrace("trace-disabled",
+					TOOL_NAME, MCP_TRACEPARENT), "tools/call",
+					Optional.of(TOOL_NAME)), "trace-disabled");
+			disabledObserver.awaitAllFinished();
+			DefaultMcpRequestContext context =
+					disabledObserver.startedContexts.get(0);
+			Assertions.assertTrue(context.getTraceContext().isPresent());
+			Assertions.assertTrue(context.traceCorrelationToken().isEmpty());
+			Assertions.assertTrue(disabledObserver.logEvents.isEmpty(),
+					disabledObserver.logEvents.toString());
+		} finally {
+			disabledSoklet.stop();
+		}
+
+		TraceRecordingLifecycleObserver enabledObserver =
+				new TraceRecordingLifecycleObserver(1);
+		McpServer enabledServer = serverBuilder(endpoint)
+				.traceCorrelationKey(traceKey("trace-first", 0))
+				.logRawValidatedTraceIds(true)
+				.build();
+		Soklet enabledSoklet = managedSoklet(enabledServer,
+				List.of(enabledObserver), new RecordingMetricsCollector());
+		try {
+			enabledSoklet.start();
+			int port = enabledServer.getDiagnostics().getBoundAddress()
+					.orElseThrow().getPort();
+			assertSuccess(send(port, toolRequestWithTrace("trace-enabled",
+					TOOL_NAME, MCP_TRACEPARENT), "tools/call",
+					Optional.of(TOOL_NAME)), "trace-enabled");
+			enabledObserver.awaitAllFinished();
+			DefaultMcpSecurityControls.TraceCorrelationToken token =
+					enabledObserver.startedContexts.get(0)
+							.traceCorrelationToken().orElseThrow();
+			Assertions.assertEquals("trace-first", token.keyId());
+			Assertions.assertEquals(FIRST_TRACE_TOKEN, token.token());
+			Assertions.assertFalse(token.toString().contains(token.token()));
+			Assertions.assertFalse(token.toString().contains(
+					"0af7651916cd43dd8448eb211c80319c"));
+			Assertions.assertTrue(token.toString().contains("token=<redacted>"));
+			Assertions.assertTrue(enabledObserver.logEvents.isEmpty(),
+					enabledObserver.logEvents.toString());
+		} finally {
+			enabledSoklet.stop();
+		}
+	}
+
+	@Test
+	public void distinctTraceMetadataDoesNotCreateMetricDimensionsOrLeakIntoRendering()
+			throws Exception {
+		TraceRecordingLifecycleObserver observer =
+				new TraceRecordingLifecycleObserver(
+						TRACE_CARDINALITY_REQUEST_COUNT);
+		RecordingDefaultMetricsCollector collector =
+				new RecordingDefaultMetricsCollector(
+						TRACE_CARDINALITY_REQUEST_COUNT);
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName(TOOL_NAME)
+				.jsonArguments()
+				.handler((context, call, features) ->
+						McpCompleteResult.fromToolText("metric-cardinality-checked"))
+				.build();
+		McpEndpoint endpoint = endpointBuilder("metric-cardinality-test")
+				.tool(tool)
+				.build();
+		byte[] keyMaterial = TRACE_CARDINALITY_KEY_MATERIAL.getBytes(
+				StandardCharsets.UTF_8);
+		Assertions.assertEquals(32, keyMaterial.length);
+		McpTraceCorrelationKey traceKey =
+				McpTraceCorrelationKey.fromIdAndBytes(
+						TRACE_CARDINALITY_KEY_ID, keyMaterial);
+		Set<String> sensitiveCanaries = new LinkedHashSet<>();
+		sensitiveCanaries.add(TRACE_CARDINALITY_KEY_ID);
+		sensitiveCanaries.add(TRACE_CARDINALITY_KEY_MATERIAL);
+		sensitiveCanaries.add(HexFormat.of().formatHex(keyMaterial));
+		sensitiveCanaries.add(Base64.getEncoder().withoutPadding()
+				.encodeToString(keyMaterial));
+		Arrays.fill(keyMaterial, (byte) 0);
+		McpServer server = serverBuilder(endpoint)
+				.traceCorrelationKey(traceKey)
+				.logRawValidatedTraceIds(true)
+				.build();
+		Soklet soklet = managedSoklet(server, List.of(observer), collector);
+		List<String> mcpTraceIds = new java.util.ArrayList<>();
+		List<String> httpTraceIds = new java.util.ArrayList<>();
+		List<String> mcpTracestates = new java.util.ArrayList<>();
+		List<String> httpTracestates = new java.util.ArrayList<>();
+		List<String> mcpBaggage = new java.util.ArrayList<>();
+		List<String> httpBaggage = new java.util.ArrayList<>();
+
+		try {
+			soklet.start();
+			int port = server.getDiagnostics().getBoundAddress()
+					.orElseThrow().getPort();
+			for (int index = 0; index < TRACE_CARDINALITY_REQUEST_COUNT;
+					++index) {
+				String suffix = String.format(Locale.ROOT, "%02x", index);
+				String requestId = "metric-request-id-canary-" + suffix;
+				String mcpTraceId = String.format(Locale.ROOT,
+						"a1%030x", index + 1);
+				String mcpParentId = String.format(Locale.ROOT,
+						"b1%014x", index + 1);
+				String httpTraceId = String.format(Locale.ROOT,
+						"c1%030x", index + 1);
+				String httpParentId = String.format(Locale.ROOT,
+						"d1%014x", index + 1);
+				String mcpTraceparent = "00-" + mcpTraceId + "-"
+						+ mcpParentId + "-01";
+				String httpTraceparent = "00-" + httpTraceId + "-"
+						+ httpParentId + "-00";
+				String mcpTracestateKey = "mcpvendor";
+				String mcpTracestateValue = "mcpstatecanary" + suffix;
+				String mcpTracestate = mcpTracestateKey + "="
+						+ mcpTracestateValue;
+				String httpTracestateKey = "httpvendor";
+				String httpTracestateValue = "httpstatecanary" + suffix;
+				String httpTracestate = httpTracestateKey + "="
+						+ httpTracestateValue;
+				String mcpBaggageKey = "mcpbag" + suffix;
+				String mcpBaggageValueToken = "mcpbagvaluecanary" + suffix;
+				String mcpBaggageValue = mcpBaggageKey + "="
+						+ mcpBaggageValueToken;
+				String httpBaggageKey = "httpbag" + suffix;
+				String httpBaggageValueToken =
+						"httpbagvaluecanary" + suffix;
+				String httpBaggageValue = httpBaggageKey + "="
+						+ httpBaggageValueToken;
+				mcpTraceIds.add(mcpTraceId);
+				httpTraceIds.add(httpTraceId);
+				mcpTracestates.add(mcpTracestate);
+				httpTracestates.add(httpTracestate);
+				mcpBaggage.add(mcpBaggageValue);
+				httpBaggage.add(httpBaggageValue);
+				sensitiveCanaries.addAll(List.of(requestId, mcpTraceId,
+						mcpParentId, mcpTraceparent, httpTraceId,
+						httpParentId, httpTraceparent, mcpTracestateKey,
+						mcpTracestateValue, mcpTracestate,
+						httpTracestateKey, httpTracestateValue,
+						httpTracestate, mcpBaggageKey,
+						mcpBaggageValueToken, mcpBaggageValue,
+						httpBaggageKey, httpBaggageValueToken,
+						httpBaggageValue));
+
+				HttpResponse<String> response = sendWithTraceMetadata(port,
+						toolRequestWithTraceMetadata(requestId, TOOL_NAME,
+								mcpTraceparent, mcpTracestate,
+								mcpBaggageValue), httpTraceparent,
+						httpTracestate, httpBaggageValue);
+				assertSuccess(response, requestId);
+			}
+			observer.awaitAllFinished();
+			collector.awaitRequestFinishes();
+			soklet.stop();
+			collector.awaitServerStopped();
+
+			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
+					observer.startedContexts.size());
+			Set<String> derivedTokens = new LinkedHashSet<>();
+			for (int index = 0; index < TRACE_CARDINALITY_REQUEST_COUNT;
+					++index) {
+				DefaultMcpRequestContext context =
+						observer.startedContexts.get(index);
+				Assertions.assertSame(context,
+						observer.finishedContexts.get(index));
+				Assertions.assertEquals(mcpTraceIds.get(index),
+						context.getTraceContext().orElseThrow().getTraceId());
+				Assertions.assertEquals(mcpTracestates.get(index),
+						context.getTraceContext().orElseThrow()
+								.toTracestateHeaderValue().orElseThrow());
+				String suffix = String.format(Locale.ROOT, "%02x", index);
+				Assertions.assertEquals("mcpbagvaluecanary" + suffix,
+						context.getBaggage().get("mcpbag" + suffix));
+				Assertions.assertEquals(httpTraceIds.get(index),
+						context.getRequest().getTraceContext().orElseThrow()
+								.getTraceId());
+				Assertions.assertEquals(httpTracestates.get(index),
+						context.getRequest().getTraceContext().orElseThrow()
+								.toTracestateHeaderValue().orElseThrow());
+				Assertions.assertEquals(Set.of(httpBaggage.get(index)),
+						context.getRequest().getHeaders().get("baggage"));
+				DefaultMcpSecurityControls.TraceCorrelationToken token =
+						context.traceCorrelationToken().orElseThrow();
+				Assertions.assertEquals(TRACE_CARDINALITY_KEY_ID,
+						token.keyId());
+				derivedTokens.add(token.token());
+				sensitiveCanaries.add(token.token());
+			}
+			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
+					derivedTokens.size());
+
+			List<McpMetricsEvent> events = collector.events();
+			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
+					countEvents(events, McpMetricsEvent.RequestAccepted.class));
+			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
+					countEvents(events, McpMetricsEvent.RequestStarted.class));
+			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
+					countEvents(events,
+							McpMetricsEvent.HandlerExecutionStarted.class));
+			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
+					countEvents(events,
+							McpMetricsEvent.HandlerExecutionFinished.class));
+			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
+					countEvents(events, McpMetricsEvent.RequestFinished.class));
+			Assertions.assertEquals(1,
+					countEvents(events, McpMetricsEvent.ServerStarted.class));
+			Assertions.assertEquals(1,
+					countEvents(events, McpMetricsEvent.ServerStopped.class));
+			for (McpMetricsEvent event : events)
+				assertFiniteMetricProjection(event);
+
+			MetricsCollector.Snapshot snapshot = collector.snapshot()
+					.orElseThrow();
+			McpMetricsSnapshot mcpMetrics = snapshot.getMcpMetrics();
+			Assertions.assertEquals(0L,
+					mcpMetrics.getActiveHandlerExecutions());
+			Assertions.assertEquals(0L, mcpMetrics.getHandlerQueueDepth());
+			Assertions.assertEquals(0L,
+					mcpMetrics.getHandlerCapacityRejections());
+			Assertions.assertEquals(Map.of(McpShutdownOutcome.CLEAN, 1L),
+					mcpMetrics.getShutdowns());
+			List<String> filteredSamples = new CopyOnWriteArrayList<>();
+			String prometheus = collector.snapshotText(
+					MetricsCollector.SnapshotTextOptions.fromMetricsFormat(
+							MetricsCollector.MetricsFormat.PROMETHEUS))
+					.orElseThrow();
+			String filteredPrometheus = collector.snapshotText(
+					MetricsCollector.SnapshotTextOptions.withMetricsFormat(
+							MetricsCollector.MetricsFormat.PROMETHEUS)
+							.metricFilter(sample -> {
+								if (!sample.getName().startsWith("soklet_mcp_"))
+									return false;
+								filteredSamples.add(sample.getName()
+										+ sample.getLabels());
+								return true;
+							})
+							.build()).orElseThrow();
+			Set<String> expectedMcpSamples = Set.of(
+					"soklet_mcp_handler_executions_active{}",
+					"soklet_mcp_handler_queue_depth{}",
+					"soklet_mcp_handler_capacity_rejections_total{}",
+					"soklet_mcp_shutdowns_total{outcome=clean}");
+			Assertions.assertEquals(expectedMcpSamples.size(),
+					filteredSamples.size(), filteredSamples.toString());
+			Assertions.assertEquals(expectedMcpSamples,
+					Set.copyOf(filteredSamples));
+			String openMetrics = collector.snapshotText(
+					MetricsCollector.SnapshotTextOptions.fromMetricsFormat(
+							MetricsCollector.MetricsFormat.OPEN_METRICS_1_0))
+					.orElseThrow();
+			Assertions.assertTrue(openMetrics.endsWith("# EOF\n"));
+
+			collector.reset();
+			MetricsCollector.Snapshot resetSnapshot = collector.snapshot()
+					.orElseThrow();
+			Assertions.assertSame(McpMetricsSnapshot.emptyInstance(),
+					resetSnapshot.getMcpMetrics());
+			String resetPrometheus = collector.snapshotText(
+					MetricsCollector.SnapshotTextOptions.fromMetricsFormat(
+							MetricsCollector.MetricsFormat.PROMETHEUS))
+					.orElseThrow();
+			List<String> resetFilteredSamples = new CopyOnWriteArrayList<>();
+			String resetFilteredPrometheus = collector.snapshotText(
+					MetricsCollector.SnapshotTextOptions.withMetricsFormat(
+							MetricsCollector.MetricsFormat.PROMETHEUS)
+							.metricFilter(sample -> {
+								if (!sample.getName().startsWith("soklet_mcp_"))
+									return false;
+								resetFilteredSamples.add(sample.getName()
+										+ sample.getLabels());
+								return true;
+							})
+							.build()).orElseThrow();
+			Set<String> expectedResetMcpSamples = Set.of(
+					"soklet_mcp_handler_executions_active{}",
+					"soklet_mcp_handler_queue_depth{}",
+					"soklet_mcp_handler_capacity_rejections_total{}");
+			Assertions.assertEquals(expectedResetMcpSamples.size(),
+					resetFilteredSamples.size(), resetFilteredSamples.toString());
+			Assertions.assertEquals(expectedResetMcpSamples,
+					Set.copyOf(resetFilteredSamples));
+			String resetOpenMetrics = collector.snapshotText(
+					MetricsCollector.SnapshotTextOptions.fromMetricsFormat(
+							MetricsCollector.MetricsFormat.OPEN_METRICS_1_0))
+					.orElseThrow();
+			String builtInRendering = String.join("\n",
+					events.toString(), renderSnapshotValues(snapshot),
+					prometheus, filteredPrometheus, filteredSamples.toString(),
+					openMetrics, renderSnapshotValues(resetSnapshot),
+					resetPrometheus, resetFilteredPrometheus,
+					resetFilteredSamples.toString(), resetOpenMetrics);
+			assertNoSensitiveCanaries(builtInRendering, sensitiveCanaries);
 		} finally {
 			soklet.stop();
 		}
@@ -505,6 +1014,36 @@ public class McpRequestObservationPublicRuntimeTests {
 	}
 
 	@NonNull
+	private static CompletableFuture<HttpResponse<String>> sendAsync(int port,
+			@NonNull String body, @NonNull String method,
+			@NonNull Optional<@NonNull String> operationName,
+			@NonNull Optional<@NonNull String> httpTraceparent) {
+		HttpRequest.Builder request = HttpRequest.newBuilder()
+				.uri(URI.create("http://" + LOOPBACK + ":" + port + MCP_PATH))
+				.timeout(Duration.ofSeconds(5))
+				.header("Content-Type", JSON_MEDIA_TYPE + "; charset=UTF-8")
+				.header("Accept", JSON_MEDIA_TYPE + ", text/event-stream")
+				.header("MCP-Protocol-Version", PROTOCOL_VERSION)
+				.header("Mcp-Method", method);
+		operationName.ifPresent(value -> request.header("Mcp-Name", value));
+		httpTraceparent.ifPresent(value -> request.header("traceparent", value));
+		return HttpClient.newBuilder()
+				.connectTimeout(Duration.ofSeconds(5))
+				.version(HttpClient.Version.HTTP_1_1)
+				.build()
+				.sendAsync(request.POST(HttpRequest.BodyPublishers.ofString(
+						body, StandardCharsets.UTF_8)).build(),
+						HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+	}
+
+	@NonNull
+	private static HttpResponse<String> sendWithHttpTraceparent(int port,
+			@NonNull String body, @NonNull String traceparent) throws Exception {
+		return sendAsync(port, body, "tools/call", Optional.of(TOOL_NAME),
+				Optional.of(traceparent)).get(5, TimeUnit.SECONDS);
+	}
+
+	@NonNull
 	private static String discoverRequest(@NonNull String id) {
 		return request(id, "server/discover", "");
 	}
@@ -514,6 +1053,51 @@ public class McpRequestObservationPublicRuntimeTests {
 			@NonNull String toolName) {
 		return request(id, "tools/call", ",\"name\":\"" + toolName
 				+ "\",\"arguments\":{}");
+	}
+
+	@NonNull
+	private static String toolRequestWithTrace(@NonNull String id,
+			@NonNull String toolName, @NonNull String traceparent) {
+		return request(id, "tools/call",
+				",\"traceparent\":\"" + traceparent + "\"",
+				",\"name\":\"" + toolName + "\",\"arguments\":{}");
+	}
+
+	@NonNull
+	private static String toolRequestWithTraceMetadata(@NonNull String id,
+			@NonNull String toolName, @NonNull String traceparent,
+			@NonNull String tracestate, @NonNull String baggage) {
+		return request(id, "tools/call",
+				",\"traceparent\":\"" + traceparent + "\""
+						+ ",\"tracestate\":\"" + tracestate + "\""
+						+ ",\"baggage\":\"" + baggage + "\"",
+				",\"name\":\"" + toolName + "\",\"arguments\":{}");
+	}
+
+	@NonNull
+	private static HttpResponse<String> sendWithTraceMetadata(int port,
+			@NonNull String body, @NonNull String traceparent,
+			@NonNull String tracestate, @NonNull String baggage) throws Exception {
+		HttpRequest request = HttpRequest.newBuilder()
+				.uri(URI.create("http://" + LOOPBACK + ":" + port + MCP_PATH))
+				.timeout(Duration.ofSeconds(5))
+				.header("Content-Type", JSON_MEDIA_TYPE + "; charset=UTF-8")
+				.header("Accept", JSON_MEDIA_TYPE + ", text/event-stream")
+				.header("MCP-Protocol-Version", PROTOCOL_VERSION)
+				.header("Mcp-Method", "tools/call")
+				.header("Mcp-Name", TOOL_NAME)
+				.header("traceparent", traceparent)
+				.header("tracestate", tracestate)
+				.header("baggage", baggage)
+				.POST(HttpRequest.BodyPublishers.ofString(
+						body, StandardCharsets.UTF_8))
+				.build();
+		return HttpClient.newBuilder()
+				.connectTimeout(Duration.ofSeconds(5))
+				.version(HttpClient.Version.HTTP_1_1)
+				.build()
+				.send(request, HttpResponse.BodyHandlers.ofString(
+						StandardCharsets.UTF_8));
 	}
 
 	@NonNull
@@ -540,6 +1124,15 @@ public class McpRequestObservationPublicRuntimeTests {
 				+ "\"io.modelcontextprotocol/clientCapabilities\":{}"
 				+ additionalMetadata + "}"
 				+ additionalParameters + "}}";
+	}
+
+	@NonNull
+	private static McpTraceCorrelationKey traceKey(@NonNull String keyId,
+			int firstByte) {
+		byte[] keyMaterial = new byte[32];
+		for (int index = 0; index < keyMaterial.length; ++index)
+			keyMaterial[index] = (byte) (firstByte + index);
+		return McpTraceCorrelationKey.fromIdAndBytes(keyId, keyMaterial);
 	}
 
 	private static void assertSuccess(@NonNull HttpResponse<String> response,
@@ -622,6 +1215,129 @@ public class McpRequestObservationPublicRuntimeTests {
 					event.getThrowable().orElseThrow());
 	}
 
+	private static long countEvents(@NonNull List<@NonNull McpMetricsEvent> events,
+			@NonNull Class<? extends McpMetricsEvent> eventType) {
+		return events.stream().filter(eventType::isInstance).count();
+	}
+
+	private static void assertFiniteMetricProjection(
+			@NonNull McpMetricsEvent event) throws ReflectiveOperationException {
+		Set<Integer> protocolErrorCodes = Set.of(-32700, -32600, -32601,
+				-32602, -32603, -32020, -32021, -32022, -31999, -31998);
+		for (java.lang.reflect.RecordComponent component
+				: event.getClass().getRecordComponents()) {
+			Object value = component.getAccessor().invoke(event);
+			Assertions.assertNotNull(value, component.toString());
+			switch (component.getName()) {
+				case "endpointPath" -> Assertions.assertEquals(MCP_PATH, value);
+				case "jsonRpcMethod" ->
+						Assertions.assertEquals("tools/call", value);
+				case "outcome" -> Assertions.assertTrue(
+						value instanceof McpRequestOutcome
+								|| value instanceof McpShutdownOutcome,
+						value.toString());
+				case "reason" -> Assertions.assertTrue(
+						value instanceof McpStreamTerminationReason
+								|| value instanceof
+								MetricsCollector.TransportFailureReason,
+						value.toString());
+				case "duration" -> Assertions.assertFalse(
+						((Duration) value).isNegative(), value.toString());
+				case "code" -> Assertions.assertTrue(
+						protocolErrorCodes.contains((Integer) value),
+						value.toString());
+				default -> Assertions.fail(
+						"Unexpected built-in metric dimension: "
+								+ component.getName());
+			}
+		}
+	}
+
+	@NonNull
+	private static String renderSnapshotValues(
+			MetricsCollector.@NonNull Snapshot snapshot) throws Exception {
+		List<String> values = new java.util.ArrayList<>();
+		for (java.lang.reflect.Method method
+				: MetricsCollector.Snapshot.class.getDeclaredMethods()) {
+			if (java.lang.reflect.Modifier.isPublic(method.getModifiers())
+					&& method.getParameterCount() == 0
+					&& method.getName().startsWith("get"))
+				values.add(method.getName() + "=" + method.invoke(snapshot));
+		}
+		McpMetricsSnapshot mcpMetrics = snapshot.getMcpMetrics();
+		values.add("mcpActive=" + mcpMetrics.getActiveHandlerExecutions());
+		values.add("mcpQueued=" + mcpMetrics.getHandlerQueueDepth());
+		values.add("mcpRejected="
+				+ mcpMetrics.getHandlerCapacityRejections());
+		values.add("mcpShutdowns=" + mcpMetrics.getShutdowns());
+		return values.toString();
+	}
+
+	private static void assertNoSensitiveCanaries(@NonNull String rendering,
+			@NonNull Set<@NonNull String> sensitiveCanaries) {
+		int index = 0;
+		for (String canary : sensitiveCanaries) {
+			int canaryIndex = index++;
+			Assertions.assertFalse(rendering.contains(canary),
+					() -> "Built-in metric rendering leaked sensitive canary "
+							+ canaryIndex + ".");
+		}
+	}
+
+	private static final class TraceRecordingLifecycleObserver
+			implements LifecycleObserver {
+		private final CountDownLatch firstFinished = new CountDownLatch(1);
+		private final CountDownLatch allFinished;
+		private final List<DefaultMcpRequestContext> startedContexts =
+				new CopyOnWriteArrayList<>();
+		private final List<DefaultMcpRequestContext> finishedContexts =
+				new CopyOnWriteArrayList<>();
+		private final List<LogEvent> logEvents = new CopyOnWriteArrayList<>();
+
+		private TraceRecordingLifecycleObserver(int expectedRequests) {
+			if (expectedRequests < 1)
+				throw new IllegalArgumentException(
+						"At least one trace-capture request is required.");
+			this.allFinished = new CountDownLatch(expectedRequests);
+		}
+
+		@Override
+		public void didStartMcpRequestHandling(
+				@NonNull McpRequestContext context) {
+			this.startedContexts.add(Assertions.assertInstanceOf(
+					DefaultMcpRequestContext.class, context));
+		}
+
+		@Override
+		public void didFinishMcpRequestHandling(
+				@NonNull McpRequestContext context,
+				@NonNull McpRequestOutcome outcome,
+				@Nullable McpJsonRpcError error,
+				@NonNull Duration duration,
+				@NonNull List<@NonNull Throwable> throwables) {
+			this.finishedContexts.add(Assertions.assertInstanceOf(
+					DefaultMcpRequestContext.class, context));
+			if (this.finishedContexts.size() == 1)
+				this.firstFinished.countDown();
+			this.allFinished.countDown();
+		}
+
+		@Override
+		public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+			this.logEvents.add(logEvent);
+		}
+
+		private void awaitFirstFinished() throws InterruptedException {
+			Assertions.assertTrue(this.firstFinished.await(5, TimeUnit.SECONDS),
+					"The first trace-capture request did not finish.");
+		}
+
+		private void awaitAllFinished() throws InterruptedException {
+			Assertions.assertTrue(this.allFinished.await(5, TimeUnit.SECONDS),
+					"The trace-capture requests did not all finish.");
+		}
+	}
+
 	private static final class RecordingLifecycleObserver
 			implements LifecycleObserver {
 		private final AtomicInteger starts = new AtomicInteger();
@@ -697,6 +1413,65 @@ public class McpRequestObservationPublicRuntimeTests {
 					.filter(McpMetricsEvent.RequestFinished.class::isInstance)
 					.map(McpMetricsEvent.RequestFinished.class::cast)
 					.toList();
+		}
+	}
+
+	private static final class RecordingDefaultMetricsCollector
+			implements MetricsCollector {
+		private final DefaultMetricsCollector delegate =
+				DefaultMetricsCollector.defaultInstance();
+		private final List<McpMetricsEvent> events =
+				new CopyOnWriteArrayList<>();
+		private final CountDownLatch requestFinishes;
+		private final CountDownLatch serverStopped = new CountDownLatch(1);
+
+		private RecordingDefaultMetricsCollector(int expectedRequestFinishes) {
+			this.requestFinishes = new CountDownLatch(expectedRequestFinishes);
+		}
+
+		@Override
+		public void didRecordMcpMetricsEvent(@NonNull McpMetricsEvent event) {
+			McpMetricsEvent requiredEvent =
+					java.util.Objects.requireNonNull(event);
+			this.events.add(requiredEvent);
+			this.delegate.didRecordMcpMetricsEvent(requiredEvent);
+			if (requiredEvent instanceof McpMetricsEvent.RequestFinished)
+				this.requestFinishes.countDown();
+			if (requiredEvent instanceof McpMetricsEvent.ServerStopped)
+				this.serverStopped.countDown();
+		}
+
+		@Override
+		@NonNull
+		public Optional<Snapshot> snapshot() {
+			return this.delegate.snapshot();
+		}
+
+		@Override
+		@NonNull
+		public Optional<String> snapshotText(
+				@NonNull SnapshotTextOptions options) {
+			return this.delegate.snapshotText(options);
+		}
+
+		@Override
+		public void reset() {
+			this.delegate.reset();
+		}
+
+		@NonNull
+		private List<McpMetricsEvent> events() {
+			return List.copyOf(this.events);
+		}
+
+		private void awaitRequestFinishes() throws InterruptedException {
+			Assertions.assertTrue(this.requestFinishes.await(5, TimeUnit.SECONDS),
+					"The 16 request-finished metric events did not arrive.");
+		}
+
+		private void awaitServerStopped() throws InterruptedException {
+			Assertions.assertTrue(this.serverStopped.await(5, TimeUnit.SECONDS),
+					"The server-stopped metric event did not arrive.");
 		}
 	}
 }

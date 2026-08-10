@@ -133,7 +133,7 @@ markers.
 
 ## Current bounded Phase 6 checkpoint
 
-Eight bounded Phase 6 verticals are implemented. `McpServerDiagnostics` remains
+Nine bounded Phase 6 verticals are implemented. `McpServerDiagnostics` remains
 the completed protection and trace diagnostics projection.
 `McpServerDiagnostics` now has exactly 12 zero-argument methods: lifecycle
 `getStatus()` and `getBoundAddress()`, plus all ten implemented diagnostic
@@ -258,7 +258,8 @@ stop/wake,
 remains scoped through sibling cleanup, and precedes old `ServerStopped` and
 new `ServerStarted` before restart returns.
 
-Separate from those eight production observability and diagnostics verticals,
+Separate from the first eight production observability and diagnostics
+verticals,
 a bounded Phase 6 MCP fuzz-registration and hardening checkpoint adds five new
 Jazzer methods:
 `McpJsonRpcEnvelopeCodecFuzzTest#decodeClassifiesOrRejectsOnlyWithTypedWireFailure`,
@@ -266,8 +267,8 @@ Jazzer methods:
 `McpToolSchemaProfileFuzzTest#compileAndEvaluateRemainTypedAndBounded`,
 `McpCursorValidatorFuzzTest#cursorValidationIsUtf8ExactAndTotal`, and
 `McpRequestStatePlaintextCodecFuzzTest#decodeOnlyRejectsWithUniformRedactedIllegalArgumentException`.
-This checkpoint is not a ninth production vertical; the production count
-remains eight. Twenty-one checked-in synthetic text seeds cover the new
+This fuzz checkpoint remains unnumbered; at that point the production count
+remained eight. Twenty-one checked-in synthetic text seeds cover the new
 targets, and the nightly workflow now declares 15 total one-method slots, five
 of them new.
 
@@ -292,9 +293,9 @@ scheduled or manual coverage-guided nightly run occurred. Deterministic replay
 is not sustained, coverage, corpus-saturation, privacy, security,
 release-readiness, or Phase 6 freeze proof.
 
-Separate from the eight production observability and diagnostics verticals,
-an internal trace-correlation derivation/capture checkpoint implements the
-frozen token construction. Disabled controls return no token. Enabled controls
+An unnumbered internal trace-correlation derivation checkpoint implements the
+frozen token construction. Trace correlation is disabled by default, and
+disabled controls capture no token. Enabled controls
 snapshot one complete active key ID and key-material pair under the shared
 security lock, derive after releasing it with HMAC-SHA-256 over UTF-8
 `soklet-mcp-trace-correlation-v1\0` plus the decoded 16-byte trace ID, truncate
@@ -306,27 +307,80 @@ material and explicit derivation buffers are zeroed, and the internal carrier
 retains only the nonsecret key ID and token while redacting the token from
 rendering.
 
-This checkpoint is not a ninth production vertical. `SOK-TRACE-001` and
-`SOK-TRACE-002` are PARTIAL, `SOK-TRACE-003` remains COMPLETE,
-`SOK-TRACE-004` and `SOK-TRACE-005` remain PLANNED, and `SOK-PRIV-001`
-remains PARTIAL. The nested carrier and derivation method are package-private,
-are absent from `phase-6.includes` and public snapshots, and do not change the
-public API. They are not integrated into request lifecycles or any structured-
-log carrier, field, emission cadence, or `LogEventType`; enable no raw trace-ID
-logging; and add no metric, event, diagnostics/snapshot field, aggregate,
-label, or wire dimension. Tokens are pseudonymous high-cardinality operational
-metadata, not anonymization, authentication, or authorization inputs. This is
-not broader trace/baggage-redaction, cardinality, privacy, security, sustained-
-coverage, release-readiness, or Phase 6 freeze evidence.
+The ninth bounded production vertical now captures one carrier exactly once
+for each admitted semantic request before lifecycle and handler observation.
+Only a valid MCP `_meta.traceparent` is eligible. Disabled correlation,
+invalid or all-zero MCP trace context, absent metadata, and valid physical HTTP
+trace without valid MCP metadata all produce no carrier. Lifecycle,
+interceptor, handler, and terminal observation share the same immutable
+request context and carrier. A pre-rotation request retains its old
+`(keyId, token)` through terminal observation, while a fresh post-rotation
+request adopts the new pair. Raw validated trace-ID opt-in neither enables nor
+changes correlation. The hidden final carrier retains only nonsecret key ID
+and token, never raw trace context or key material, and redacts the token from
+rendering.
+
+At that point, following the ninth vertical, the prior fuzz and dormant
+derivation checkpoints remained unnumbered. `SOK-TRACE-001`, `SOK-TRACE-002`,
+and `SOK-TRACE-003` were COMPLETE; `SOK-TRACE-004` and `SOK-TRACE-005` were
+PLANNED; and `SOK-PRIV-001` was PARTIAL. The carrier, accessor, and construction
+path are package-private, absent from `phase-6.includes` and public snapshots, and add no public
+API or API-sketch source. No structured-log carrier, field, emission point,
+cadence, or new `LogEventType` exists; raw trace-ID logging remains
+unimplemented. No metric, event, diagnostics/snapshot field, aggregate, label,
+or wire dimension was added. Tokens remain pseudonymous high-cardinality
+operational metadata, not anonymization, authentication, or authorization
+inputs. The carrier is not finish-cleared and has no GC or application-
+reference lifetime guarantee; an application-retained context naturally
+retains it, while core controls retain only the current key and expose no
+history API. This is not comprehensive trace/baggage redaction, cardinality,
+privacy/security, aggregate/`AMB-003`, simulator, release-readiness, or Phase 6
+freeze evidence.
+
+A third unnumbered Phase 6 checkpoint is covered by
+`McpObservabilityPublicApiTests#metricSchemaHasExactFiniteNonTraceDimensions`
+and
+`McpRequestObservationPublicRuntimeTests#distinctTraceMetadataDoesNotCreateMetricDimensionsOrLeakIntoRendering`.
+The exact sealed inventory remains 23 event records, including 11 fieldless
+variants; all other components are endpoint path, bounded method, fixed
+outcome/reason/code, or nonnegative duration. Production supplies registered
+endpoints, recognized methods or `<unrecognized>`, ten fixed codes, and fixed
+enums. Public record constructors still accept arbitrary application-created
+nonempty routed strings and non-null codes. The snapshot remains three boxed
+`Long` values plus immutable `Map<McpShutdownOutcome, Long>`; the default
+collector aggregates only five handler variants and `ServerStopped`, ignoring
+and retaining none of the other 17 variants.
+
+The runtime gate sends 16 sequential admitted requests carrying distinct valid
+MCP and HTTP trace IDs, tracestate, baggage, derived tokens, and key canaries.
+None appears in built-in MCP event/snapshot state, metric names or labels,
+filter-observed samples, Prometheus, OpenMetrics, or reset output. Exactly
+three label-free handler samples plus clean shutdown appear before reset;
+exactly the three label-free samples remain afterward. Nine production
+verticals remain nine, and fuzz registration, dormant derivation, and metric
+dimensionality are the three unnumbered checkpoints. `SOK-TRACE-001/002/003`
+remain COMPLETE; `SOK-TRACE-004` remains PLANNED; `SOK-TRACE-005` is PARTIAL
+for metric-dimension inventory/default-collector evidence only; and
+`SOK-PRIV-001` remains PARTIAL. `SOK-METRIC-001` and `SOK-METRIC-004`
+remain PARTIAL; `AMB-003` remains AMBIGUOUS.
+
+This checkpoint changes no production source, public API or sketch, owner or
+signature inventory, metric family, label, event, or wire behavior. It does
+not cover custom collectors; generic HTTP `MetricsCollector` callbacks that
+receive a `Request`, request target, or `Throwable`; `LogEvent`, application
+callbacks, handler telemetry, or arbitrary application-created event
+vocabulary; structured logging or raw-ID emission; future aggregates;
+comprehensive trace/baggage redaction; sustained cardinality, fuzz, or soak;
+simulator, migration, release-candidate provenance, review, or Phase 6 freeze.
 
 These are FIFO record/enqueue-order guarantees, not a universal cross-thread
 causal total order. Default aggregation remains limited to `ServerStopped` and
 the five handler variants. Unresolved aggregate families and `AMB-003`,
-request-lifecycle trace integration, structured-log carrier/emission, raw-ID
-opt-in, broader privacy/cardinality and redaction work,
+structured-log carrier/emission, raw-ID opt-in, broader privacy, sustained
+cardinality, and redaction work,
 simulator integration, coverage-guided and sustained fuzz gates,
-release-candidate work, and Phase 6 review/freeze remain open. The eighth
-vertical adds no public API,
+release-candidate work, and Phase 6 review/freeze remain open. The seventh
+through ninth verticals add no public API,
 snapshot field, aggregate family, label, event variant, or wire dimension.
 
 This checkpoint does not freeze Phase 6. `phase-6.includes` remains outside
@@ -358,14 +412,16 @@ its exact nullability digest is
 The 556/206/1,049/195 evidence counts are unchanged by these provisional
 verticals.
 
-The focused trace-foundation regression run passes 53/0/0/0. The prior focused
-five-target fuzz run remains 28/0/0/0 and was not rerun for this checkpoint;
+The focused metric-dimensionality and trace-cardinality checkpoint run passes
+95/0/0/0.
+The prior focused five-target fuzz run remains 28/0/0/0 and was not rerun for
+this checkpoint;
 the prior deterministic full fuzz corpus replay on both JDKs remains
 127/0/0/0 and was likewise not rerun. Exact-source full main suites on JDK 21
-and JDK 26 each execute 1,462/0/0/4. The JDK 21 Error Prone profile passes all
+and JDK 26 each execute 1,467/0/0/4. The JDK 21 Error Prone profile passes all
 enforced checks;
 NullAway remains advisory, and its warnings are not counted here. SpotBugs
-reports 0/0. The focused Phase 5 API-review contract run passes 45 tests with
+is green. The focused Phase 5 API-review contract run passes 45 tests with
 no failure, error, or skip. Candidate main, source, and Javadoc packages plus
 standalone Javadoc are green using offline-link resolution. All 167 API-sketch
 sources compile for Java 17 and pass Javadoc doclint on JDK 26. All 104 files

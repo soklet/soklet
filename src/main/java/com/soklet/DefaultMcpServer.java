@@ -1562,7 +1562,7 @@ final class DefaultMcpServer implements McpServer {
 	private RequestObservation didStartRequestObservation(
 			@NonNull RequestObservationInput input) {
 		DefaultMcpRequestContext context = new DefaultMcpRequestContext(
-				requireNonNull(input));
+				requireNonNull(input), this.securityControls);
 		LifecycleObserver observer = this.lifecycleObserver;
 		List<Throwable> startThrowables = new ArrayList<>();
 
@@ -2244,6 +2244,10 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 	private final Optional<@NonNull McpLogLevel> deprecatedLogLevel;
 	@NonNull
 	private final McpRequestPropagation requestPropagation;
+	@NonNull
+	private final Optional<
+			DefaultMcpSecurityControls.@NonNull TraceCorrelationToken>
+			traceCorrelationToken;
 
 	@SuppressWarnings("deprecation")
 	DefaultMcpRequestContext(@NonNull ToolInvocation invocation) {
@@ -2255,7 +2259,7 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 				invocation.requestMetadata(),
 				invocation.requestContext().getInputResponses(),
 				invocation.requestContext().getRequestState(),
-				invocation.admissionIdentity());
+				invocation.admissionIdentity(), Optional.empty());
 	}
 
 	@SuppressWarnings("deprecation")
@@ -2268,7 +2272,7 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 				invocation.requestMetadata(),
 				invocation.requestContext().getInputResponses(),
 				invocation.requestContext().getRequestState(),
-				invocation.admissionIdentity());
+				invocation.admissionIdentity(), Optional.empty());
 	}
 
 	@SuppressWarnings("deprecation")
@@ -2281,7 +2285,7 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 				invocation.requestMetadata(),
 				invocation.requestContext().getInputResponses(),
 				invocation.requestContext().getRequestState(),
-				invocation.admissionIdentity());
+				invocation.admissionIdentity(), Optional.empty());
 	}
 
 	@SuppressWarnings("deprecation")
@@ -2294,18 +2298,31 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 				invocation.requestMetadata(),
 				invocation.requestContext().getInputResponses(),
 				invocation.requestContext().getRequestState(),
-				invocation.admissionIdentity());
+				invocation.admissionIdentity(), Optional.empty());
 	}
 
 	@SuppressWarnings("deprecation")
 	DefaultMcpRequestContext(@NonNull RequestObservationInput input) {
+		this(input, Optional.empty());
+	}
+
+	@SuppressWarnings("deprecation")
+	DefaultMcpRequestContext(@NonNull RequestObservationInput input,
+			@NonNull DefaultMcpSecurityControls securityControls) {
+		this(input, Optional.of(requireNonNull(securityControls)));
+	}
+
+	@SuppressWarnings("deprecation")
+	private DefaultMcpRequestContext(@NonNull RequestObservationInput input,
+			@NonNull Optional<@NonNull DefaultMcpSecurityControls>
+					securityControls) {
 		this(requireNonNull(input).request(), input.endpoint(),
 				input.endpointPathParameters(), input.jsonRpcMethod(),
 				input.requestId(), input.protocolVersion(), input.operationName(),
 				input.clientInformation(), input.clientCapabilities(),
 				input.requestMetadata(), input.inputResponses(),
 				input.requestState(),
-				input.admissionIdentity());
+				input.admissionIdentity(), requireNonNull(securityControls));
 	}
 
 	@SuppressWarnings("deprecation")
@@ -2321,7 +2338,9 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 			@NonNull McpJsonObject requestMetadata,
 			@NonNull McpInputResponses inputResponses,
 			@NonNull Optional<@NonNull McpRequestState> requestState,
-			@NonNull McpAdmissionIdentity admissionIdentity) {
+			@NonNull McpAdmissionIdentity admissionIdentity,
+			@NonNull Optional<@NonNull DefaultMcpSecurityControls>
+					securityControls) {
 		this.request = requireNonNull(request);
 		this.endpoint = requireNonNull(endpoint);
 		this.endpointPathParameters = Map.copyOf(
@@ -2346,6 +2365,9 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 						value.toUpperCase(Locale.ROOT)));
 		this.requestPropagation = McpRequestPropagation.fromMetadata(
 				requestMetadata);
+		this.traceCorrelationToken = requireNonNull(securityControls)
+				.flatMap(controls -> this.requestPropagation.traceContext()
+						.flatMap(controls::deriveTraceCorrelationToken));
 	}
 
 	@Override public @NonNull Request getRequest() {
@@ -2392,6 +2414,11 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 	}
 	@Override public @NonNull Optional<@NonNull TraceContext> getTraceContext() {
 		return this.requestPropagation.traceContext();
+	}
+	@NonNull
+	Optional<DefaultMcpSecurityControls.@NonNull TraceCorrelationToken>
+	traceCorrelationToken() {
+		return this.traceCorrelationToken;
 	}
 	@Override public @NonNull Map<@NonNull String, @NonNull String> getBaggage() {
 		return this.requestPropagation.baggage();

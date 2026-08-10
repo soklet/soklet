@@ -135,11 +135,11 @@ retries are forced to private, zero-TTL cache policy; the HTTP transport remains
 `Cache-Control: no-store`.
 
 Progress reporting, cooperative cancelation, and resource-subscription delivery
-are implemented. Eight bounded Phase 6 verticals are also implemented: shutdown
+are implemented. Nine bounded Phase 6 verticals are also implemented: shutdown
 observation, handler-capacity metrics, handler diagnostics, live
 stream/subscription diagnostics, protection/trace diagnostics, serialized
-semantic-event delivery, bounded pre-admission metrics, and connection/
-transport metric delivery. Shutdown
+semantic-event delivery, bounded pre-admission metrics, connection/transport
+metric delivery, and admitted-request trace-token capture. Shutdown
 metrics have only the fixed
 `McpShutdownOutcome`-derived
 `clean`/`residual_handlers` label. The exact handler-capacity families—
@@ -290,7 +290,8 @@ restart orders the old generation's `ServerStopped` before the new
 `ServerStarted`; managed startup rollback orders its `ServerStarted` before
 `ServerStopped`.
 
-Separate from the eight production observability and diagnostics verticals, a
+Separate from the first eight production observability and diagnostics
+verticals, a
 bounded Phase 6 MCP fuzz-registration and hardening checkpoint adds five new
 Jazzer methods:
 `McpJsonRpcEnvelopeCodecFuzzTest#decodeClassifiesOrRejectsOnlyWithTypedWireFailure`,
@@ -299,8 +300,8 @@ Jazzer methods:
 `McpCursorValidatorFuzzTest#cursorValidationIsUtf8ExactAndTotal`, and
 `McpRequestStatePlaintextCodecFuzzTest#decodeOnlyRejectsWithUniformRedactedIllegalArgumentException`.
 21 checked-in synthetic text seeds cover those targets, and the nightly matrix
-declares 15 total one-method slots, five of them new. This is not a ninth
-production vertical.
+declares 15 total one-method slots, five of them new. This fuzz checkpoint
+remains unnumbered; it is not the ninth production vertical described below.
 
 Envelope decoding uses production JSON limits and admits only a classified
 envelope or typed `McpWireDecodingException`, without an unconditional
@@ -324,9 +325,9 @@ coverage-guided nightly run occurred, and replay is not sustained, coverage,
 corpus-saturation, privacy, security, release-readiness, or Phase 6 freeze
 proof.
 
-Separate from the eight production observability and diagnostics verticals,
-an internal trace-correlation derivation/capture checkpoint implements the
-frozen token construction. Disabled controls return no token. Enabled controls
+An unnumbered internal trace-correlation derivation checkpoint implements the
+frozen token construction. Trace correlation is disabled by default, and
+disabled controls capture no token. Enabled controls
 snapshot one complete active key ID and key-material pair under the shared
 security lock, derive after releasing it using HMAC-SHA-256 over UTF-8
 `soklet-mcp-trace-correlation-v1\0` plus the decoded 16-byte trace ID, truncate
@@ -337,34 +338,88 @@ only coherent old or new `(keyId, token)` pairs. Copied key material and
 explicit derivation buffers are zeroed; the internal carrier retains only the
 nonsecret key ID and token and redacts the token from rendering.
 
-This checkpoint is not a ninth production vertical; the count remains eight.
-`SOK-TRACE-001` and `SOK-TRACE-002` are PARTIAL, `SOK-TRACE-003` remains
-COMPLETE, `SOK-TRACE-004` and `SOK-TRACE-005` remain PLANNED, and
-`SOK-PRIV-001` remains PARTIAL. The package-private seam adds no public API and
-is not integrated into request lifecycles or any structured-log carrier,
-field, emission cadence, or `LogEventType`. It does not enable raw trace-ID
-logging and adds no metric, event, diagnostics/snapshot field, aggregate,
-label, or wire dimension. The token is pseudonymous high-cardinality
-operational metadata, not anonymization or an authentication/authorization
-input. It must remain out of metrics and be handled as sensitive telemetry.
-This is not broader trace/baggage-redaction, cardinality, privacy, security,
-sustained-coverage, release-readiness, or Phase 6 freeze proof.
+The ninth bounded production vertical captures one carrier exactly once for
+each admitted semantic request before lifecycle and handler observation. Only
+a valid MCP `_meta.traceparent` is eligible. Disabled correlation, invalid or
+all-zero MCP trace context, absent metadata, and a valid physical HTTP trace
+header without valid MCP metadata all produce no carrier. Lifecycle,
+interceptor, handler, and terminal observation share the same immutable
+request context and carrier. A pre-rotation request retains its old
+`(keyId, token)` through terminal observation; a fresh post-rotation request
+uses the new pair. Raw validated trace-ID opt-in neither enables correlation
+nor changes the token. The hidden final carrier retains only nonsecret key ID
+and token, never raw trace context or key material, and redacts the token from
+rendering.
+
+At that point, following the ninth vertical, the prior fuzz and dormant
+derivation checkpoints remained unnumbered. `SOK-TRACE-001`, `SOK-TRACE-002`,
+and `SOK-TRACE-003` were COMPLETE; `SOK-TRACE-004` and `SOK-TRACE-005` were
+PLANNED; and `SOK-PRIV-001` was PARTIAL. No public API or API-sketch source
+changed. No structured-log
+carrier, field, emission point, cadence, or new `LogEventType` exists, and raw
+trace-ID logging remains unimplemented. No metric, event, diagnostics/snapshot
+field, aggregate, label, or wire dimension was added. The token remains
+pseudonymous high-cardinality sensitive telemetry, not anonymization or an
+authentication/authorization input, and must stay out of metrics. The carrier
+is not cleared at finish and has no GC or application-reference lifetime
+guarantee; an application-retained context naturally retains it while core
+controls retain only the current key and expose no history API. This is not
+comprehensive trace/baggage redaction, cardinality, privacy/security,
+aggregate/`AMB-003`, simulator, release-readiness, or Phase 6 freeze evidence.
+
+A third unnumbered Phase 6 metric-dimensionality checkpoint is covered by
+`McpObservabilityPublicApiTests#metricSchemaHasExactFiniteNonTraceDimensions`
+and
+`McpRequestObservationPublicRuntimeTests#distinctTraceMetadataDoesNotCreateMetricDimensionsOrLeakIntoRendering`.
+It freezes the exact 23 event-record schemas, including 11 fieldless variants,
+and permits only endpoint path, bounded method, fixed outcome/reason/code, and
+nonnegative duration components. Production projects registered endpoints,
+recognized methods or `<unrecognized>`, ten fixed codes, and fixed enums;
+public event constructors do not enforce those runtime vocabularies for
+arbitrary application-created values. The MCP snapshot remains exactly three
+boxed `Long` values plus an immutable shutdown map. The default collector
+aggregates only the five handler variants and `ServerStopped`, ignoring and
+retaining none of the other 17 variants.
+
+Sixteen sequential admitted requests with distinct valid MCP and HTTP trace
+IDs, tracestate, baggage, derived tokens, and key canaries do not alter or
+appear in built-in MCP events, snapshot state, metric names/labels,
+filter-observed samples, Prometheus, OpenMetrics, or reset output. The exact
+pre-reset MCP labels are three empty handler-label sets plus shutdown
+`outcome=clean`; post-reset only the three empty sets remain. Nine production
+verticals remain nine, and fuzz registration, dormant derivation, and metric
+dimensionality are three unnumbered checkpoints. `SOK-TRACE-001/002/003`
+remain COMPLETE; `SOK-TRACE-004` remains PLANNED; `SOK-TRACE-005` is PARTIAL
+for metric-only inventory/default-collector evidence; and `SOK-PRIV-001`
+remains PARTIAL. `SOK-METRIC-001` and `SOK-METRIC-004` remain PARTIAL;
+`AMB-003` remains AMBIGUOUS.
+
+This does not cover custom collector storage, rendering, or cardinality;
+generic HTTP `MetricsCollector` callbacks receiving a `Request`, request
+target, or `Throwable`; `LogEvent`, application callbacks, handler telemetry,
+or arbitrary application-created event vocabulary; structured logging or
+raw-ID emission; future aggregate families; comprehensive trace/baggage
+redaction; sustained cardinality, fuzz, or soak; simulation, migration,
+release-candidate provenance, review, or Phase 6 freeze. No production source,
+public API, API sketch, owner/signature inventory, family, label, event, or
+wire behavior changed.
 
 Default aggregation remains limited to `ServerStopped` and the five handler
-variants. Unresolved aggregate families and `AMB-003`, request-lifecycle trace
-integration, structured-log carrier/emission, raw-ID opt-in,
-broader privacy/cardinality and redaction work, MCP simulation,
+variants. Unresolved aggregate families and `AMB-003`, structured-log
+carrier/emission, raw-ID opt-in,
+broader privacy, sustained cardinality, and redaction work, MCP simulation,
 coverage-guided and sustained fuzz gates, release-candidate work, and Phase 6
 review/freeze remain open. The delivery verticals add no public API, snapshot
 field, aggregate family, label, event variant, or wire dimension. Phase 6
 remains provisional and unfrozen.
 
-The focused trace-foundation regression gate passes 53/0/0/0. The prior
-focused five-target fuzz gate remains 28/0/0/0 and was not rerun for this
+The focused metric-dimensionality and trace-cardinality checkpoint gate passes
+95/0/0/0.
+The prior focused five-target fuzz gate remains 28/0/0/0 and was not rerun for this
 checkpoint; prior deterministic full fuzz corpus replay on both JDKs remains
 127/0/0/0 and was likewise not rerun. Exact-source full main suites on JDK 21
-and JDK 26 each pass 1,462/0/0/4. Enforced JDK 21 static analysis is green
-without an advisory warning count; SpotBugs reports 0/0. Candidate main,
+and JDK 26 each pass 1,467/0/0/4. Enforced JDK 21 static analysis is green
+without an advisory warning count; SpotBugs is green. Candidate main,
 source, and Javadoc
 packages plus standalone Javadoc are green using offline-link resolution. The
 API counts and prior hashes remain unchanged at 556/206/1,049/195; all 167
