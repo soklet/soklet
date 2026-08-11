@@ -123,12 +123,16 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			LongAdder> mcpRequestsByOutcome;
 	private final ConcurrentLruMap<McpMetricsSnapshot.RequestOutcomeKey,
 			Histogram> mcpRequestDurationsByOutcome;
+	private final AtomicLong mcpActiveRequestStreams;
+	private final ConcurrentLruMap<McpMetricsSnapshot.RequestStreamTerminationKey,
+			Histogram> mcpRequestStreamDurationsByReason;
 	private final AtomicBoolean includeSseMetrics;
 	private final AtomicBoolean includeMcpHandlerMetrics;
 	private final AtomicBoolean includeMcpTransportMetrics;
 	private final AtomicBoolean includeMcpServerMetrics;
 	private final AtomicBoolean includeMcpRequestBoundaryMetrics;
 	private final AtomicBoolean includeMcpRequestLifecycleMetrics;
+	private final AtomicBoolean includeMcpRequestStreamLifecycleMetrics;
 
 	@NonNull
 	public static DefaultMetricsCollector defaultInstance() {
@@ -195,12 +199,16 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
 		this.mcpRequestDurationsByOutcome =
 				new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
+		this.mcpActiveRequestStreams = new AtomicLong();
+		this.mcpRequestStreamDurationsByReason =
+				new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
 		this.includeSseMetrics = new AtomicBoolean(false);
 		this.includeMcpHandlerMetrics = new AtomicBoolean(false);
 		this.includeMcpTransportMetrics = new AtomicBoolean(false);
 		this.includeMcpServerMetrics = new AtomicBoolean(false);
 		this.includeMcpRequestBoundaryMetrics = new AtomicBoolean(false);
 		this.includeMcpRequestLifecycleMetrics = new AtomicBoolean(false);
+		this.includeMcpRequestStreamLifecycleMetrics = new AtomicBoolean(false);
 	}
 
 	void initialize(@NonNull SokletConfig sokletConfig) {
@@ -214,6 +222,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.includeMcpRequestBoundaryMetrics.set(
 				sokletConfig.getMcpServer().isPresent());
 		this.includeMcpRequestLifecycleMetrics.set(
+				sokletConfig.getMcpServer().isPresent());
+		this.includeMcpRequestStreamLifecycleMetrics.set(
 				sokletConfig.getMcpServer().isPresent());
 	}
 
@@ -756,6 +766,20 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			histogramFor(this.mcpRequestDurationsByOutcome, key,
 					HTTP_LATENCY_BUCKETS_NANOS)
 					.record(requestFinished.duration().toNanos());
+		} else if (event instanceof McpMetricsEvent.RequestStreamOpened) {
+			this.includeMcpRequestStreamLifecycleMetrics.set(true);
+			this.mcpActiveRequestStreams.incrementAndGet();
+		} else if (event instanceof McpMetricsEvent.RequestStreamClosed requestStreamClosed) {
+			this.includeMcpRequestStreamLifecycleMetrics.set(true);
+			this.mcpActiveRequestStreams.decrementAndGet();
+			McpMetricsSnapshot.RequestStreamTerminationKey key =
+					new McpMetricsSnapshot.RequestStreamTerminationKey(
+							requestStreamClosed.endpointPath(),
+							requestStreamClosed.jsonRpcMethod(),
+							requestStreamClosed.reason());
+			histogramFor(this.mcpRequestStreamDurationsByReason, key,
+					SSE_STREAM_DURATION_BUCKETS_NANOS)
+					.record(requestStreamClosed.duration().toNanos());
 		} else if (event instanceof McpMetricsEvent.ConnectionAccepted) {
 			this.includeMcpTransportMetrics.set(true);
 			this.mcpConnectionsAccepted.increment();
@@ -876,6 +900,16 @@ final class DefaultMetricsCollector implements MetricsCollector {
 					"MCP request duration in nanoseconds",
 					snapshot.getMcpMetrics().getRequestDurations(),
 					DefaultMetricsCollector::labelsForMcpRequestOutcomeKey,
+					options);
+		}
+		if (this.includeMcpRequestStreamLifecycleMetrics.get()) {
+			appendGauge(sb, "soklet_mcp_request_streams_active",
+					"Currently active MCP request streams",
+					snapshot.getMcpMetrics().getActiveRequestStreams(), options);
+			appendHistogram(sb, "soklet_mcp_request_stream_duration_nanos",
+					"MCP request-stream duration in nanoseconds",
+					snapshot.getMcpMetrics().getRequestStreamDurations(),
+					DefaultMetricsCollector::labelsForMcpRequestStreamTerminationKey,
 					options);
 		}
 		if (this.includeMcpTransportMetrics.get()) {
@@ -1155,13 +1189,18 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				snapshotCounterMap(this.mcpRequestsByOutcome);
 		Map<McpMetricsSnapshot.RequestOutcomeKey, HistogramSnapshot>
 				requestDurations = snapshotMap(this.mcpRequestDurationsByOutcome);
+		long activeRequestStreams = this.mcpActiveRequestStreams.get();
+		Map<McpMetricsSnapshot.RequestStreamTerminationKey, HistogramSnapshot>
+				requestStreamDurations =
+				snapshotMap(this.mcpRequestStreamDurationsByReason);
 		if (activeHandlerExecutions == 0L && handlerQueueDepth == 0L
 				&& handlerCapacityRejections == 0L && shutdowns.isEmpty()
 				&& connectionsAccepted == 0L && connectionsRejected == 0L
 				&& transportFailures.isEmpty() && serverStarts == 0L
 				&& requestsAccepted == 0L && requestsRejected == 0L
 				&& activeRequests == 0L && requests.isEmpty()
-				&& requestDurations.isEmpty())
+				&& requestDurations.isEmpty() && activeRequestStreams == 0L
+				&& requestStreamDurations.isEmpty())
 			return McpMetricsSnapshot.emptyInstance();
 		return McpMetricsSnapshot.builder()
 				.activeHandlerExecutions(activeHandlerExecutions)
@@ -1177,6 +1216,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				.activeRequests(activeRequests)
 				.requests(requests)
 				.requestDurations(requestDurations)
+				.activeRequestStreams(activeRequestStreams)
+				.requestStreamDurations(requestStreamDurations)
 				.build();
 	}
 
@@ -1202,6 +1243,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.mcpRequestsRejected.reset();
 		this.mcpRequestsByOutcome.clear();
 		this.mcpRequestDurationsByOutcome.clear();
+		this.mcpRequestStreamDurationsByReason.clear();
 		this.requestsInFlightByIdentity.clear();
 		this.requestsInFlightById.clear();
 		this.requestStateByThread.remove();
@@ -1670,6 +1712,18 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		labels.put("endpoint", key.endpointPath());
 		labels.put("method", key.jsonRpcMethod());
 		labels.put("outcome", key.outcome().name().toLowerCase(Locale.ROOT));
+		return new LabelSet(labels);
+	}
+
+	@NonNull
+	private static LabelSet labelsForMcpRequestStreamTerminationKey(
+			McpMetricsSnapshot.@NonNull RequestStreamTerminationKey key) {
+		requireNonNull(key);
+
+		Map<String, String> labels = new LinkedHashMap<>(3);
+		labels.put("endpoint", key.endpointPath());
+		labels.put("method", key.jsonRpcMethod());
+		labels.put("reason", key.reason().name().toLowerCase(Locale.ROOT));
 		return new LabelSet(labels);
 	}
 

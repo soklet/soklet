@@ -9,13 +9,13 @@ the zero-runtime-dependency `com.soklet:soklet` artifact; there is no separate
 This guide describes the implemented, locally frozen Phase 4 and Phase 5
 surfaces, including multi-round-trip request state, progress/cancelation,
 resource subscriptions, deterministic termination, cross-instance state, and
-residual shutdown, plus thirteen completed bounded Phase 6 verticals covering
+residual shutdown, plus fourteen completed bounded Phase 6 verticals covering
 shutdown, handler capacity, handler diagnostics, stream/subscription
 diagnostics, protection/trace diagnostics, serialized semantic-event delivery,
 the bounded pre-admission metric quartet, and connection/transport metric
 delivery, followed by admitted-request trace-token capture and the first
-default transport-boundary, server-start, request-boundary, and admitted-
-request lifecycle aggregate families, in the current
+default transport-boundary, server-start, request-boundary, admitted-request,
+and request-stream lifecycle aggregate families, in the current
 `3.6.0-SNAPSHOT`.
 It is development documentation, not a release or final conformance claim.
 Compile-checked programmatic and annotation-driven applications live outside
@@ -865,6 +865,65 @@ The producer authority and real-listener cardinality boundary remain covered by
 `#admissionRejectionDoesNotPublishAdmittedRequestObservation`, and
 `#distinctTraceMetadataDoesNotCreateMetricDimensionsOrLeakIntoRendering`.
 
+The fourteenth bounded Phase 6 production vertical implements request-stream
+lifecycle aggregation. `McpMetricsSnapshot` adds boxed, nonnegative
+`getActiveRequestStreams()` and immutable
+`Map<RequestStreamTerminationKey, HistogramSnapshot>
+getRequestStreamDurations()`, with matching `activeRequestStreams(Long)` and
+`requestStreamDurations(Map)` builder methods. The public nested, thread-safe
+`RequestStreamTerminationKey(endpointPath, jsonRpcMethod, reason)` rejects
+null or empty routed strings and a null fixed `McpStreamTerminationReason`;
+public construction does not validate registry membership. The provisional
+snapshot now has 15 getters and 16 public builder methods including `build()`:
+ten boxed `Long` values and five immutable maps.
+
+Exact delivered `RequestStreamOpened` increments
+`soklet_mcp_request_streams_active`; exact terminal `RequestStreamClosed`
+decrements it and records `soklet_mcp_request_stream_duration_nanos`. The
+stream-transition authority records open before accepted progress/keepalive
+observations and records the single close before terminal `RequestFinished`;
+this is FIFO record/enqueue order, not a universal cross-thread total order.
+The HELP text is respectively `Currently active MCP request streams` and `MCP
+request-stream duration in nanoseconds`. Histogram samples use only bounded
+`endpoint`, `method`, and lower-snake `reason` labels for the ten fixed
+termination reasons: `completed`, `client_disconnected`, `request_canceled`,
+`deadline_exceeded`, `write_failed`, `backpressure`, `server_stopped`,
+`simulator_capture_item_limit_exceeded`,
+`simulator_capture_byte_limit_exceeded`, and `internal_error`. Inclusive
+boundaries are 1, 5, 10, 30, 60, 120, 300, 600, 1,800, 3,600, 7,200, and
+14,400 seconds plus overflow. There are no standalone stream-open or
+stream-close counters.
+
+Configured collectors and either direct stream event activate the live gauge;
+configured empty state renders gauge zero, while the duration histogram stays
+sparse and emits no orphan HELP/TYPE metadata when empty or fully filtered.
+Prometheus and OpenMetrics filters operate per sample. `reset()` preserves the
+live stream gauge but clears duration histograms; a stream opened before reset
+and closed afterward records its full original duration. Retained snapshots
+and maps are immutable, and balanced post-quiescence concurrent ingest is
+lossless.
+
+Runtime-produced keys contain only a registered endpoint path, a recognized
+method or `<unrecognized>`, and a fixed reason. No request or network identity,
+error detail, throwable, header, trace ID, token, key material, tracestate,
+baggage, or application telemetry enters these built-in aggregate dimensions.
+This does not constrain custom collectors, generic HTTP/SSE metrics, logs,
+application-created events/keys, or application telemetry; promise an atomic
+cross-field snapshot or concurrent-reset semantics; repair unmatched manual
+events; equate the aggregate with diagnostics; break out the subscription
+subset; promise canonical map/text order; add OpenTelemetry or trace emission;
+or prove sustained, simulator, release-readiness, privacy, or Phase 6 freeze.
+Exact focused evidence is
+`McpRequestStreamLifecycleMetricsAggregationTests#snapshotContractUsesReferenceTypedImmutableRequestStreamLifecycleState`,
+`#defaultCollectorAggregatesRendersAndFiltersRequestStreamLifecycleFamilies`,
+`#resetPreservesActiveRequestStreamsAndLateCloseRecordsFullOriginalDuration`,
+and
+`#concurrentBalancedRequestStreamLifecycleIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
+Bounded live authority remains covered by
+`McpProgressPublicRuntimeTests#disconnectCancelsSameFeatureInstanceAndRunsCallback`
+and
+`McpSubscriptionPublicRuntimeTests#configuredMaximumDurationPublishesExactLifecycleAndMetrics`.
+
 `McpServer.getDiagnostics()` returns server-wide handler-capacity, live-stream,
 protection, and trace-configuration state without requiring a metrics
 collector. `McpServerDiagnostics` now declares exactly 12 zero-argument
@@ -1153,23 +1212,22 @@ simulation, migration, release-candidate provenance, review, or Phase 6
 freeze.
 
 Transport aggregation is the tenth production vertical, server-start
-aggregation is the eleventh, request-boundary aggregation is the twelfth, and
-admitted-request lifecycle aggregation is the thirteenth; the three earlier
-checkpoints remain unnumbered. The snapshot surface now has 13 getters with 13
-matching builder properties (plus `build()`): nine boxed `Long` values and four
-immutable maps. The default collector aggregates 14 of the 23 event variants
-and ignores the remaining nine across 13 rendered aggregate families. The
-16-request cardinality gate now observes 28 exact MCP-prefixed samples before
-reset, including the active gauge plus one completed counter, 15 duration
-buckets, count, and sum for the single complete request key; nine remain after
-reset, when the sparse completed families and shutdown are absent.
+aggregation is the eleventh, request-boundary aggregation is the twelfth,
+admitted-request lifecycle aggregation is the thirteenth, and request-stream
+lifecycle aggregation is the fourteenth; the three earlier checkpoints remain
+unnumbered. The snapshot surface now has 15 getters with 15 matching builder
+properties (plus `build()`): ten boxed `Long` values and five immutable maps.
+The default collector aggregates 16 of the 23 event variants and ignores the
+remaining seven across 15 rendered aggregate families. The 16-request
+cardinality gate now observes 29 exact MCP-prefixed samples before reset and
+ten after reset: the configured zero request-stream gauge is the only new
+sample on this nonstreaming path, and its sparse duration histogram is absent.
 Its transport-failure map remains empty and no trace canary enters the built-in
 MCP or shared transport metric surfaces.
 
-The next contract-fixed aggregate subset is request-stream lifecycle
-aggregation: `RequestStreamOpened` and `RequestStreamClosed` feed a live stream
-gauge plus an endpoint/method/reason duration histogram. Later rows use live
-subscription gauges plus termination-keyed duration histograms;
+The next contract-fixed aggregate subset is subscription lifecycle
+aggregation: `SubscriptionOpened` and `SubscriptionClosed` feed a live
+subscription gauge plus an endpoint/reason duration histogram. Later rows use
 endpoint/method cancelation and progress counters; a label-free keep-alive
 scalar; a fixed-code protocol-error map; and an endpoint/method unknown-header
 map that never contains header identity. There are no standalone
@@ -1196,7 +1254,8 @@ to an empty map after reset, and renders exactly
 `soklet_mcp_shutdowns_total{outcome="clean"|"residual_handlers"}` in
 Prometheus/OpenMetrics text. Default aggregation now covers `ServerStarted`,
 `ServerStopped`, `RequestAccepted`, `RequestRejected`, `RequestStarted`,
-`RequestFinished`, the five handler variants, and the transport trio. The
+`RequestFinished`, `RequestStreamOpened`, `RequestStreamClosed`, the five
+handler variants, and the transport trio. The
 remaining contract-fixed families and
 downstream OpenTelemetry work, structured-log
 carrier/emission, raw-ID opt-in,
@@ -1207,9 +1266,10 @@ review/freeze remain open. The
 seventh through ninth verticals added no public API, snapshot field, aggregate
 family, label, event variant, or wire dimension. The tenth added three
 provisional snapshot getters and three matching builder methods; the eleventh
-adds one provisional getter/builder pair, the twelfth adds two, and the
-thirteenth adds three plus `RequestOutcomeKey`. None adds an event variant or
-wire dimension. Phase 6 remains provisional and unfrozen.
+adds one provisional getter/builder pair, the twelfth adds two, the thirteenth
+adds three plus `RequestOutcomeKey`, and the fourteenth adds two plus
+`RequestStreamTerminationKey`. None adds an event variant or wire dimension.
+Phase 6 remains provisional and unfrozen.
 
 `McpServer.stop()` is bounded by the configured shutdown timeout. If an
 application-supplied MCP request-processing execution remains afterward,
@@ -1263,16 +1323,17 @@ the harness to phase 5. A fresh 39-scenario development-candidate verify passes
 all profiles, validates all 39 goldens, and records no bad outcome, standard-
 error output, or non-clean fixture exit.
 
-The focused admitted-request lifecycle aggregate/adjacent gate passes
-72/0/0/0.
+The focused request-stream lifecycle aggregate/adjacent gate passes
+58/0/0/0.
 The prior focused five-target fuzz run remains 28/0/0/0 and was not rerun for
 this checkpoint;
 the prior deterministic full fuzz corpus replay on both JDKs remains
 127/0/0/0 and was likewise not rerun. Exact-source full main suites on
-Corretto 21.0.11 and 26.0.1 each report 1,481/0/0/4. Enforced static analysis
+Corretto 21.0.11 and 26.0.1 each report 1,485/0/0/4. Enforced static analysis
 is green with existing advisory diagnostics; SpotBugs reports 0/0. Exact API-
-freeze evidence reports 556 incompatibilities and 207 reviewed current-side
-API owners, including the provisional `RequestOutcomeKey`; the unchanged
+freeze evidence reports 556 incompatibilities and 208 reviewed current-side
+API owners. The 30-entry provisional inventory includes `RequestOutcomeKey`
+and `RequestStreamTerminationKey`; the unchanged
 frozen inventories remain 1,049 Phase 4 records and 195 Phase 5 records with
 the prior hashes. Candidate main,
 source, and Javadoc packages plus standalone Javadoc are green using
@@ -1287,8 +1348,8 @@ raw-ID opt-in,
 broader privacy, sustained cardinality, and redaction work, simulator integration,
 coverage-guided and sustained fuzz gates, broader
 CI/provenance and release-candidate work, and Phase 6 API review/freeze remain
-open. The next aggregate implementation is the contract-fixed request-stream
-lifecycle family for `RequestStreamOpened` and `RequestStreamClosed`. Phase 6 remains
-provisional and unfrozen.
+open. The next aggregate implementation is the contract-fixed subscription
+lifecycle family for `SubscriptionOpened` and `SubscriptionClosed`. Phase 6
+remains provisional and unfrozen.
 
 Do not treat this snapshot guide as a release-conformance statement.

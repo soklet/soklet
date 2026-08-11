@@ -595,6 +595,10 @@ public class McpRequestObservationPublicRuntimeTests {
 			Assertions.assertTrue(requestDurations.getMin() >= 0L);
 			Assertions.assertTrue(requestDurations.getMax()
 					>= requestDurations.getMin());
+			Assertions.assertEquals(0L,
+					mcpMetrics.getActiveRequestStreams());
+			Assertions.assertTrue(
+					mcpMetrics.getRequestStreamDurations().isEmpty());
 			List<String> filteredSamples = new CopyOnWriteArrayList<>();
 			String prometheus = collector.snapshotText(
 					MetricsCollector.SnapshotTextOptions.fromMetricsFormat(
@@ -622,6 +626,7 @@ public class McpRequestObservationPublicRuntimeTests {
 					"soklet_mcp_handler_capacity_rejections_total{}",
 					"soklet_mcp_shutdowns_total{outcome=clean}",
 					"soklet_mcp_requests_active{}",
+					"soklet_mcp_request_streams_active{}",
 					"soklet_mcp_requests_total{endpoint=/mcp, method=tools/call, outcome=complete}",
 					"soklet_mcp_request_duration_nanos_count{endpoint=/mcp, method=tools/call, outcome=complete}",
 					"soklet_mcp_request_duration_nanos_sum{endpoint=/mcp, method=tools/call, outcome=complete}"));
@@ -633,7 +638,7 @@ public class McpRequestObservationPublicRuntimeTests {
 				expectedMcpSamples.add(
 						"soklet_mcp_request_duration_nanos_bucket{endpoint=/mcp, method=tools/call, outcome=complete, le="
 								+ upperBound + "}");
-			Assertions.assertEquals(28, expectedMcpSamples.size());
+			Assertions.assertEquals(29, expectedMcpSamples.size());
 			Assertions.assertEquals(expectedMcpSamples.size(),
 					filteredSamples.size(), filteredSamples.toString());
 			Assertions.assertEquals(expectedMcpSamples,
@@ -674,8 +679,9 @@ public class McpRequestObservationPublicRuntimeTests {
 					"soklet_mcp_handler_executions_active{}",
 					"soklet_mcp_handler_queue_depth{}",
 					"soklet_mcp_handler_capacity_rejections_total{}",
-					"soklet_mcp_requests_active{}");
-			Assertions.assertEquals(9, expectedResetMcpSamples.size());
+					"soklet_mcp_requests_active{}",
+					"soklet_mcp_request_streams_active{}");
+			Assertions.assertEquals(10, expectedResetMcpSamples.size());
 			Assertions.assertEquals(expectedResetMcpSamples.size(),
 					resetFilteredSamples.size(), resetFilteredSamples.toString());
 			Assertions.assertEquals(expectedResetMcpSamples,
@@ -1040,6 +1046,8 @@ public class McpRequestObservationPublicRuntimeTests {
 				.lifecycleObservers(observers)
 				.metricsCollector(collector)
 				.build();
+		if (collector instanceof RecordingDefaultMetricsCollector recording)
+			recording.initialize(config);
 		return Soklet.fromConfig(config);
 	}
 
@@ -1336,6 +1344,10 @@ public class McpRequestObservationPublicRuntimeTests {
 		values.add("mcpRequests=" + mcpMetrics.getRequests());
 		values.add("mcpRequestDurations="
 				+ mcpMetrics.getRequestDurations());
+		values.add("mcpActiveRequestStreams="
+				+ mcpMetrics.getActiveRequestStreams());
+		values.add("mcpRequestStreamDurations="
+				+ mcpMetrics.getRequestStreamDurations());
 		return values.toString();
 	}
 
@@ -1493,6 +1505,10 @@ public class McpRequestObservationPublicRuntimeTests {
 
 		private RecordingDefaultMetricsCollector(int expectedRequestFinishes) {
 			this.requestFinishes = new CountDownLatch(expectedRequestFinishes);
+		}
+
+		private void initialize(@NonNull SokletConfig config) {
+			this.delegate.initialize(config);
 		}
 
 		@Override

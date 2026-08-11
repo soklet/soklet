@@ -68,6 +68,11 @@ public final class McpMetricsSnapshot {
 	@NonNull
 	private final Map<@NonNull RequestOutcomeKey,
 			MetricsCollector.@NonNull HistogramSnapshot> requestDurations;
+	@NonNull
+	private final Long activeRequestStreams;
+	@NonNull
+	private final Map<@NonNull RequestStreamTerminationKey,
+			MetricsCollector.@NonNull HistogramSnapshot> requestStreamDurations;
 
 	private McpMetricsSnapshot(@NonNull Builder builder) {
 		requireNonNull(builder);
@@ -84,6 +89,9 @@ public final class McpMetricsSnapshot {
 		this.activeRequests = builder.activeRequests;
 		this.requests = copyRequests(builder.requests);
 		this.requestDurations = copyRequestDurations(builder.requestDurations);
+		this.activeRequestStreams = builder.activeRequestStreams;
+		this.requestStreamDurations =
+				copyRequestStreamDurations(builder.requestStreamDurations);
 	}
 
 	@NonNull
@@ -152,6 +160,20 @@ public final class McpMetricsSnapshot {
 		Map<RequestOutcomeKey, MetricsCollector.HistogramSnapshot> copied =
 				new LinkedHashMap<>();
 		requireNonNull(requestDurations).forEach((key, histogram) ->
+				copied.put(requireNonNull(key), requireNonNull(histogram)));
+		return Collections.unmodifiableMap(copied);
+	}
+
+	@NonNull
+	private static Map<@NonNull RequestStreamTerminationKey,
+			MetricsCollector.@NonNull HistogramSnapshot>
+	copyRequestStreamDurations(
+			@NonNull Map<@NonNull RequestStreamTerminationKey,
+					MetricsCollector.@NonNull HistogramSnapshot>
+					requestStreamDurations) {
+		Map<RequestStreamTerminationKey, MetricsCollector.HistogramSnapshot>
+				copied = new LinkedHashMap<>();
+		requireNonNull(requestStreamDurations).forEach((key, histogram) ->
 				copied.put(requireNonNull(key), requireNonNull(histogram)));
 		return Collections.unmodifiableMap(copied);
 	}
@@ -318,6 +340,29 @@ public final class McpMetricsSnapshot {
 	}
 
 	/**
+	 * Returns the number of currently active MCP request streams.
+	 *
+	 * @return active MCP request streams
+	 */
+	@NonNull
+	public Long getActiveRequestStreams() {
+		return this.activeRequestStreams;
+	}
+
+	/**
+	 * Returns request-stream duration histograms grouped by bounded endpoint,
+	 * method, and fixed termination reason dimensions.
+	 *
+	 * @return immutable request-stream duration histograms
+	 */
+	@NonNull
+	public Map<@NonNull RequestStreamTerminationKey,
+			MetricsCollector.@NonNull HistogramSnapshot>
+	getRequestStreamDurations() {
+		return this.requestStreamDurations;
+	}
+
+	/**
 	 * Key for completed-request and request-duration aggregates.
 	 *
 	 * @param endpointPath registered endpoint-path declaration
@@ -344,6 +389,36 @@ public final class McpMetricsSnapshot {
 				throw new IllegalArgumentException(
 						"JSON-RPC method must not be empty.");
 			requireNonNull(outcome);
+		}
+	}
+
+	/**
+	 * Key for request-stream duration aggregates.
+	 *
+	 * @param endpointPath registered endpoint-path declaration
+	 * @param jsonRpcMethod bounded JSON-RPC method dimension
+	 * @param reason fixed request-stream termination reason
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	public record RequestStreamTerminationKey(@NonNull String endpointPath,
+			@NonNull String jsonRpcMethod,
+			@NonNull McpStreamTerminationReason reason) {
+		/**
+		 * Creates a request-stream termination aggregate key.
+		 *
+		 * @param endpointPath registered endpoint-path declaration
+		 * @param jsonRpcMethod bounded JSON-RPC method dimension
+		 * @param reason fixed request-stream termination reason
+		 */
+		public RequestStreamTerminationKey {
+			if (requireNonNull(endpointPath).isEmpty())
+				throw new IllegalArgumentException(
+						"Endpoint path must not be empty.");
+			if (requireNonNull(jsonRpcMethod).isEmpty())
+				throw new IllegalArgumentException(
+						"JSON-RPC method must not be empty.");
+			requireNonNull(reason);
 		}
 	}
 
@@ -382,6 +457,11 @@ public final class McpMetricsSnapshot {
 		@NonNull
 		private Map<@NonNull RequestOutcomeKey,
 				MetricsCollector.@NonNull HistogramSnapshot> requestDurations;
+		@NonNull
+		private Long activeRequestStreams;
+		@NonNull
+		private Map<@NonNull RequestStreamTerminationKey,
+				MetricsCollector.@NonNull HistogramSnapshot> requestStreamDurations;
 
 		private Builder() {
 			this.activeHandlerExecutions = 0L;
@@ -397,6 +477,8 @@ public final class McpMetricsSnapshot {
 			this.activeRequests = 0L;
 			this.requests = Map.of();
 			this.requestDurations = Map.of();
+			this.activeRequestStreams = 0L;
+			this.requestStreamDurations = Map.of();
 		}
 
 		/**
@@ -590,6 +672,37 @@ public final class McpMetricsSnapshot {
 				@NonNull Map<@NonNull RequestOutcomeKey,
 						MetricsCollector.@NonNull HistogramSnapshot> requestDurations) {
 			this.requestDurations = copyRequestDurations(requestDurations);
+			return this;
+		}
+
+		/**
+		 * Sets the number of currently active MCP request streams.
+		 *
+		 * @param activeRequestStreams active MCP request streams
+		 * @return this builder
+		 * @throws IllegalArgumentException if the count is negative
+		 */
+		@NonNull
+		public Builder activeRequestStreams(@NonNull Long activeRequestStreams) {
+			this.activeRequestStreams = requireNonNegative(activeRequestStreams,
+					"Active MCP request-stream count must not be negative.");
+			return this;
+		}
+
+		/**
+		 * Sets request-stream duration histograms grouped by bounded endpoint,
+		 * method, and fixed termination reason dimensions.
+		 *
+		 * @param requestStreamDurations request-stream duration histograms
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder requestStreamDurations(
+				@NonNull Map<@NonNull RequestStreamTerminationKey,
+						MetricsCollector.@NonNull HistogramSnapshot>
+						requestStreamDurations) {
+			this.requestStreamDurations =
+					copyRequestStreamDurations(requestStreamDurations);
 			return this;
 		}
 

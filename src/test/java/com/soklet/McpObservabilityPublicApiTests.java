@@ -302,7 +302,9 @@ public class McpObservabilityPublicApiTests {
 				Map.entry("getRequestsRejected", Long.class),
 				Map.entry("getActiveRequests", Long.class),
 				Map.entry("getRequests", Map.class),
-				Map.entry("getRequestDurations", Map.class));
+				Map.entry("getRequestDurations", Map.class),
+				Map.entry("getActiveRequestStreams", Long.class),
+				Map.entry("getRequestStreamDurations", Map.class));
 		Map<String, Class<?>> actualGetters = Arrays.stream(
 				McpMetricsSnapshot.class.getDeclaredMethods())
 				.filter(method -> Modifier.isPublic(method.getModifiers()))
@@ -355,6 +357,10 @@ public class McpObservabilityPublicApiTests {
 								McpMetricsSnapshot.Builder.class, Map.class)),
 						Map.entry("requestDurations", methodSignature(
 								McpMetricsSnapshot.Builder.class, Map.class)),
+						Map.entry("activeRequestStreams", methodSignature(
+								McpMetricsSnapshot.Builder.class, Long.class)),
+						Map.entry("requestStreamDurations", methodSignature(
+								McpMetricsSnapshot.Builder.class, Map.class)),
 						Map.entry("build", methodSignature(McpMetricsSnapshot.class)));
 		Map<String, Map.Entry<Class<?>, List<Class<?>>>> actualBuilderMethods =
 				Arrays.stream(McpMetricsSnapshot.Builder.class.getDeclaredMethods())
@@ -388,10 +394,6 @@ public class McpObservabilityPublicApiTests {
 				DefaultMetricsCollector.defaultInstance();
 		Duration duration = Duration.ofMillis(1);
 		List<McpMetricsEvent> nonAggregatedEvents = List.of(
-				new McpMetricsEvent.RequestStreamOpened(
-						"/registered", "tools/call"),
-				new McpMetricsEvent.RequestStreamClosed("/registered", "tools/call",
-						McpStreamTerminationReason.COMPLETED, duration),
 				new McpMetricsEvent.SubscriptionOpened("/registered"),
 				new McpMetricsEvent.SubscriptionClosed("/registered",
 						McpStreamTerminationReason.COMPLETED, duration),
@@ -403,7 +405,7 @@ public class McpObservabilityPublicApiTests {
 				new McpMetricsEvent.ProtocolError(-32600),
 				new McpMetricsEvent.UnknownMirroredHeader(
 						"/registered", "tools/call"));
-		Assertions.assertEquals(9, nonAggregatedEvents.size());
+		Assertions.assertEquals(7, nonAggregatedEvents.size());
 		nonAggregatedEvents.forEach(defaultCollector::didRecordMcpMetricsEvent);
 		Assertions.assertSame(McpMetricsSnapshot.emptyInstance(),
 				defaultCollector.snapshot().orElseThrow().getMcpMetrics());
