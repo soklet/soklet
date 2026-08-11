@@ -24,5 +24,6 @@ com.soklet.McpMetricsEvent$TransportFailure
 com.soklet.McpMetricsEvent$UnknownMirroredHeader
 com.soklet.McpMetricsSnapshot
 com.soklet.McpMetricsSnapshot$Builder
+com.soklet.McpMetricsSnapshot$RequestOutcomeKey
 com.soklet.McpRequestOutcome
 com.soklet.McpStreamTerminationReason

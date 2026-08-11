@@ -579,6 +579,22 @@ public class McpRequestObservationPublicRuntimeTests {
 			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
 					mcpMetrics.getRequestsAccepted());
 			Assertions.assertEquals(0L, mcpMetrics.getRequestsRejected());
+			McpMetricsSnapshot.RequestOutcomeKey requestOutcomeKey =
+					new McpMetricsSnapshot.RequestOutcomeKey(MCP_PATH,
+							"tools/call", McpRequestOutcome.COMPLETE);
+			Assertions.assertEquals(0L, mcpMetrics.getActiveRequests());
+			Assertions.assertEquals(Map.of(requestOutcomeKey,
+					(long) TRACE_CARDINALITY_REQUEST_COUNT),
+					mcpMetrics.getRequests());
+			MetricsCollector.HistogramSnapshot requestDurations =
+					mcpMetrics.getRequestDurations().get(requestOutcomeKey);
+			Assertions.assertNotNull(requestDurations);
+			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
+					requestDurations.getCount());
+			Assertions.assertTrue(requestDurations.getSum() >= 0L);
+			Assertions.assertTrue(requestDurations.getMin() >= 0L);
+			Assertions.assertTrue(requestDurations.getMax()
+					>= requestDurations.getMin());
 			List<String> filteredSamples = new CopyOnWriteArrayList<>();
 			String prometheus = collector.snapshotText(
 					MetricsCollector.SnapshotTextOptions.fromMetricsFormat(
@@ -595,7 +611,7 @@ public class McpRequestObservationPublicRuntimeTests {
 								return true;
 							})
 							.build()).orElseThrow();
-			Set<String> expectedMcpSamples = Set.of(
+			Set<String> expectedMcpSamples = new LinkedHashSet<>(Set.of(
 					"soklet_mcp_server_starts_total{}",
 					"soklet_mcp_connections_accepted_total{}",
 					"soklet_mcp_connections_rejected_total{}",
@@ -604,7 +620,20 @@ public class McpRequestObservationPublicRuntimeTests {
 					"soklet_mcp_handler_executions_active{}",
 					"soklet_mcp_handler_queue_depth{}",
 					"soklet_mcp_handler_capacity_rejections_total{}",
-					"soklet_mcp_shutdowns_total{outcome=clean}");
+					"soklet_mcp_shutdowns_total{outcome=clean}",
+					"soklet_mcp_requests_active{}",
+					"soklet_mcp_requests_total{endpoint=/mcp, method=tools/call, outcome=complete}",
+					"soklet_mcp_request_duration_nanos_count{endpoint=/mcp, method=tools/call, outcome=complete}",
+					"soklet_mcp_request_duration_nanos_sum{endpoint=/mcp, method=tools/call, outcome=complete}"));
+			for (String upperBound : List.of("1000000", "2000000",
+					"5000000", "10000000", "25000000", "50000000",
+					"100000000", "200000000", "400000000",
+					"800000000", "1500000000", "3000000000",
+					"7000000000", "15000000000", "+Inf"))
+				expectedMcpSamples.add(
+						"soklet_mcp_request_duration_nanos_bucket{endpoint=/mcp, method=tools/call, outcome=complete, le="
+								+ upperBound + "}");
+			Assertions.assertEquals(28, expectedMcpSamples.size());
 			Assertions.assertEquals(expectedMcpSamples.size(),
 					filteredSamples.size(), filteredSamples.toString());
 			Assertions.assertEquals(expectedMcpSamples,
@@ -644,7 +673,9 @@ public class McpRequestObservationPublicRuntimeTests {
 					"soklet_mcp_requests_rejected_total{}",
 					"soklet_mcp_handler_executions_active{}",
 					"soklet_mcp_handler_queue_depth{}",
-					"soklet_mcp_handler_capacity_rejections_total{}");
+					"soklet_mcp_handler_capacity_rejections_total{}",
+					"soklet_mcp_requests_active{}");
+			Assertions.assertEquals(9, expectedResetMcpSamples.size());
 			Assertions.assertEquals(expectedResetMcpSamples.size(),
 					resetFilteredSamples.size(), resetFilteredSamples.toString());
 			Assertions.assertEquals(expectedResetMcpSamples,
@@ -1301,6 +1332,10 @@ public class McpRequestObservationPublicRuntimeTests {
 				+ mcpMetrics.getRequestsAccepted());
 		values.add("mcpRequestsRejected="
 				+ mcpMetrics.getRequestsRejected());
+		values.add("mcpActiveRequests=" + mcpMetrics.getActiveRequests());
+		values.add("mcpRequests=" + mcpMetrics.getRequests());
+		values.add("mcpRequestDurations="
+				+ mcpMetrics.getRequestDurations());
 		return values.toString();
 	}
 

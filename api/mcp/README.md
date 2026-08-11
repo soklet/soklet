@@ -36,10 +36,10 @@ scope has exactly one owner:
 | `phase-4.includes` | 133 | frozen Phase 4 types and shared hosts |
 | `phase-5.includes` | 39 | frozen Phase 5 types |
 | `phase-6.includes` | 6 | Phase 6-owned types; not yet frozen |
-| `provisional.includes` | 28 | owner not yet assigned to a frozen phase |
+| `provisional.includes` | 29 | owner not yet assigned to a frozen phase |
 | `non-mcp-public-api.allowlist` | 0 | reviewed unrelated API deltas |
 
-The 206-entry union is sorted, nonoverlapping, and exact. Ownership records
+The 207-entry union is sorted, nonoverlapping, and exact. Ownership records
 when a type is intended to stabilize; it does not itself freeze the type.
 `McpPublicApiInventoryTests` is a fast, independent source/class-tree guard
 for exported MCP types, reviewed shared hosts, sorting, overlap, and existence.
@@ -133,7 +133,7 @@ markers.
 
 ## Current bounded Phase 6 checkpoint
 
-Twelve bounded Phase 6 verticals are implemented. `McpServerDiagnostics` remains
+Thirteen bounded Phase 6 verticals are implemented. `McpServerDiagnostics` remains
 the completed protection and trace diagnostics projection.
 `McpServerDiagnostics` now has exactly 12 zero-argument methods: lifecycle
 `getStatus()` and `getBoundAddress()`, plus all ten implemented diagnostic
@@ -428,11 +428,11 @@ seven MCP-prefixed samples before reset and six after. Exact coverage is
 and
 `#concurrentDirectServerStartIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
 
-The twelfth vertical adds boxed, nonnegative `getRequestsAccepted()` and
+The twelfth vertical added boxed, nonnegative `getRequestsAccepted()` and
 `getRequestsRejected()` with matching `requestsAccepted(Long)` and
-`requestsRejected(Long)`. The provisional snapshot now has ten getters and 11
-public builder methods including `build()`: eight boxed `Long` values and two
-immutable maps.
+`requestsRejected(Long)`. At that checkpoint the provisional snapshot had ten
+getters and 11 public builder methods including `build()`: eight boxed `Long`
+values and two immutable maps.
 
 `RequestAccepted` becomes durable only after the bounded processor accepts
 `Executor.execute`; rejection or throw identity-discards the provisional
@@ -461,11 +461,50 @@ Exact producer authority is also covered by
 and
 `McpPreAdmissionMetricsEventPublicRuntimeTests#acceptedMalformedRequestEmitsExactProtocolErrorThenRejectionWithoutAdmission`.
 
-The fieldless events and label-free families retain no request, remote
-identity, endpoint, method, code, outcome, throwable, header, trace ID, token,
-key, tracestate, baggage, or application label. The default collector now
-aggregates 12 of 23 variants and ignores 11 across ten text families. The
-16-request gate has nine MCP-prefixed samples before reset and eight after.
+The thirteenth vertical implements admitted-request lifecycle aggregation.
+Boxed, nonnegative `getActiveRequests()`, immutable `getRequests()` and
+`getRequestDurations()` maps, and matching builder methods expand the
+provisional snapshot to 13 getters and 14 public builder methods including
+`build()`: nine boxed `Long` values and four maps. The new public, thread-safe
+`McpMetricsSnapshot.RequestOutcomeKey(endpointPath, jsonRpcMethod, outcome)`
+rejects nulls and empty routed strings but does not validate registry
+membership. Built-in keys contain only a registered endpoint, recognized
+method or `<unrecognized>`, and fixed outcome; count and histogram maps are
+independently sparse.
+
+Exact `RequestStarted`/`RequestFinished` delivery drives the active gauge
+`soklet_mcp_requests_active`, completed counter `soklet_mcp_requests_total`,
+and `soklet_mcp_request_duration_nanos` histogram. Completed samples use only
+`endpoint`, `method`, and lower-snake `outcome`; histogram boundaries are 1, 2,
+5, 10, 25, 50, 100, 200, 400, 800, 1,500, 3,000, 7,000, and 15,000
+milliseconds plus overflow. No standalone start/finish counters exist.
+Configured empty state renders only gauge zero; sparse families and HELP/TYPE
+metadata remain absent when empty or fully filtered. Reset preserves active
+state, clears completed maps/histograms, and a request crossing reset records
+its full original duration. Retained snapshots are immutable; balanced
+post-quiescence concurrent ingest is lossless.
+
+No request/network identity, raw unrecognized method, error detail, throwable,
+header, trace/token/key, tracestate, baggage, or application telemetry enters
+these built-in dimensions. This does not constrain custom collectors, generic
+HTTP metrics callbacks, logs, application-created events/keys, or telemetry;
+promise cross-field atomicity during mutation; or repair unmatched manual
+events. Exact tests are
+`McpRequestLifecycleMetricsAggregationTests#snapshotContractUsesReferenceTypedImmutableRequestLifecycleState`,
+`#defaultCollectorAggregatesRendersAndFiltersRequestLifecycleFamilies`,
+`#resetPreservesActiveRequestsAndLateFinishRecordsFullOriginalDuration`, and
+`#concurrentBalancedRequestLifecycleIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
+Authority/cardinality tests include
+`McpRequestObservationPublicRuntimeTests#admittedDiscoveryPublishesLifecycleAndMetricsWithoutInterception`,
+`#admissionRejectionDoesNotPublishAdmittedRequestObservation`, and
+`#distinctTraceMetadataDoesNotCreateMetricDimensionsOrLeakIntoRendering`.
+
+The fieldless request-boundary events and label-free families retain no request,
+remote identity, endpoint, method, code, outcome, throwable, header, trace ID,
+token, key, tracestate, baggage, or application label. With the lifecycle vertical,
+the default collector now aggregates 14 of 23 variants and ignores nine across
+13 text families. The 16-request gate has 28 MCP-prefixed samples before reset
+and nine after.
 
 The rest of the resolved contract defines bounded scalar, live-gauge,
 endpoint/method/outcome/reason/code map, and duration-histogram families, with
@@ -486,19 +525,20 @@ sustained, release-readiness, review, or Phase 6 freeze.
 
 These are FIFO record/enqueue-order guarantees, not a universal cross-thread
 causal total order. Default aggregation now covers `ServerStarted`,
-`ServerStopped`, `RequestAccepted`, `RequestRejected`, the five handler
-variants, and the transport trio. The next aggregate implementation is
-admitted-request lifecycle aggregation for `RequestStarted` and
-`RequestFinished`. Other remaining contract-fixed families
-and downstream OpenTelemetry work,
+`ServerStopped`, `RequestAccepted`, `RequestRejected`, `RequestStarted`,
+`RequestFinished`, the five handler variants, and the transport trio. The next
+aggregate implementation is request-stream lifecycle aggregation for
+`RequestStreamOpened` and `RequestStreamClosed`. Other remaining contract-fixed
+families and downstream OpenTelemetry work,
 structured-log carrier/emission, raw-ID opt-in, broader privacy, sustained
 cardinality, and redaction work,
 simulator integration, coverage-guided and sustained fuzz gates,
 release-candidate work, and Phase 6 review/freeze remain open. The seventh
 through ninth verticals added no public API, snapshot field, aggregate family,
 label, event variant, or wire dimension. The tenth added three provisional
-getter/builder pairs, the eleventh adds one, and the twelfth adds two; none adds
-an event variant or wire dimension.
+getter/builder pairs, the eleventh adds one, the twelfth adds two, and the
+thirteenth adds three plus `RequestOutcomeKey`; none adds an event variant or
+wire dimension.
 
 This checkpoint does not freeze Phase 6. `phase-6.includes` remains outside
 `frozen-phases`, and the diagnostics owner remains provisional and unfrozen.
@@ -519,22 +559,25 @@ evidence is written under `target/japicmp/` and
 
 CI runs the aggregate on JDK 17; the scripts themselves use the
 caller-selected JDK. On the exact current source, the aggregate gate is green
-for 556 incompatibility records, 206 reviewed owners, 1,049 frozen Phase 4
-signatures, and 195 frozen Phase 5 signatures. The Phase 5 snapshot contains 195
-records (39 classes, six constructors, 15 fields, and 135 methods), with
+for 556 incompatibility records and 207 reviewed current-side API owners,
+including provisional `RequestOutcomeKey`; the unchanged frozen inventories
+contain 1,049 Phase 4 signatures and 195 Phase 5 signatures. The Phase 5
+snapshot contains 195 records (39 classes, six constructors, 15 fields, and
+135 methods), with
 SHA-256
 `c6862ed49a9bc9565ba2284190c49605928270fb8a6fb73f75070452f909e75f`;
 its exact nullability digest is
 `d52a424ac33e679e0a0632004ac931e59966b68641659e254214964d9144f8c7`.
-The 556/206/1,049/195 evidence counts are unchanged by these provisional
-verticals.
+The frozen counts and hashes are unchanged by these provisional verticals; the
+reviewed current-side owner count increased for the new provisional key type.
 
-The focused request-boundary aggregate/adjacent gate passes 70/0/0/0.
+The focused admitted-request lifecycle aggregate/adjacent gate passes
+72/0/0/0.
 The prior focused five-target fuzz run remains 28/0/0/0 and was not rerun for
 this checkpoint;
 the prior deterministic full fuzz corpus replay on both JDKs remains
 127/0/0/0 and was likewise not rerun. Exact-source full main suites on
-Corretto 21.0.11 and 26.0.1 each execute 1,477/0/0/4. Enforced static analysis
+Corretto 21.0.11 and 26.0.1 each execute 1,481/0/0/4. Enforced static analysis
 is green with existing advisory diagnostics. SpotBugs reports 0/0. The focused
 Phase 5 API-review contract run passes 45 tests with
 no failure, error, or skip. Candidate main, source, and Javadoc packages plus

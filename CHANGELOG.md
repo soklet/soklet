@@ -340,18 +340,50 @@
   method, code, outcome, throwable, header, trace/token/key, tracestate,
   baggage, or application-controlled dimension. The twelfth vertical adds two
   provisional getter/builder pairs but no event variant or wire dimension.
+- Added the thirteenth bounded Phase 6 production vertical for admitted-request
+  lifecycle aggregation. Boxed, nonnegative `getActiveRequests()`, immutable
+  `getRequests()` and `getRequestDurations()` maps, and matching builder methods
+  expand the provisional snapshot to 13 getters and 14 public builder methods
+  including `build()`: nine boxed `Long` values and four maps. The public,
+  thread-safe `RequestOutcomeKey(endpointPath, jsonRpcMethod, outcome)` rejects
+  null/empty shape but does not validate registry membership; built-in keys use
+  only registered endpoint, recognized method or `<unrecognized>`, and fixed
+  outcome. The two sparse maps remain independent.
+- Existing exact `RequestStarted`/`RequestFinished` authority now drives
+  `soklet_mcp_requests_active`, `soklet_mcp_requests_total`, and
+  `soklet_mcp_request_duration_nanos`. Completed samples use only bounded
+  `endpoint`, `method`, and lower-snake `outcome`; durations use the 14 HTTP
+  millisecond boundaries plus overflow. There are no standalone start/finish
+  counters. Configured empty state renders gauge zero; sparse completed
+  families emit neither samples nor orphan HELP/TYPE metadata when empty or
+  fully filtered. Reset preserves the live gauge, clears maps/histograms, and a
+  crossing request retains its full original duration. Retained snapshots are
+  immutable and balanced concurrent ingest is lossless after quiescence.
+- These built-in families retain no request/network identity, raw unrecognized
+  method, error detail, throwable, header, trace/token/key, tracestate, baggage,
+  or application telemetry. They do not constrain custom collectors, generic
+  HTTP metrics, logs, application-created events/keys, or telemetry; promise
+  cross-field atomicity during mutation; or repair unmatched manual events.
+  Exact coverage is
+  `McpRequestLifecycleMetricsAggregationTests#snapshotContractUsesReferenceTypedImmutableRequestLifecycleState`,
+  `#defaultCollectorAggregatesRendersAndFiltersRequestLifecycleFamilies`,
+  `#resetPreservesActiveRequestsAndLateFinishRecordsFullOriginalDuration`, and
+  `#concurrentBalancedRequestLifecycleIngestIsLosslessAndRetainedSnapshotsRemainImmutable`,
+  with authority/cardinality evidence in
+  `McpRequestObservationPublicRuntimeTests#admittedDiscoveryPublishesLifecycleAndMetricsWithoutInterception`,
+  `#admissionRejectionDoesNotPublishAdmittedRequestObservation`, and
+  `#distinctTraceMetadataDoesNotCreateMetricDimensionsOrLeakIntoRendering`.
 - The remaining resolved core contract uses bounded label-free scalars, five
   live gauges, fixed endpoint/method/outcome/reason/code maps and duration
   histograms, no standalone start/finish/open/close counters, and no
   unknown-header identity. Configured scalars render zero; maps/histograms are
   sparse; reset preserves live gauges and clears cumulative state. Exact
   downstream OpenTelemetry mapping remains authoritative in the Phase 6/V10
-  contract. `AMB-003` is RESOLVED CONTRACT / IMPLEMENTATION PARTIAL; 12 of 23
-  variants are default-aggregated across ten text families, and the other 11
+  contract. `AMB-003` is RESOLVED CONTRACT / IMPLEMENTATION PARTIAL; 14 of 23
+  variants are default-aggregated across 13 text families, and the other nine
   contract-fixed variants plus downstream OpenTelemetry work remain
-  unimplemented. The next aggregate
-  subset is admitted-request lifecycle aggregation for `RequestStarted` and
-  `RequestFinished`.
+  unimplemented. The next aggregate subset is request-stream lifecycle
+  aggregation for `RequestStreamOpened` and `RequestStreamClosed`.
 - The transport aggregate retains no remote address, request, throwable,
   header, trace ID, token, key material, tracestate, baggage, or application-
   controlled label. This vertical adds no event variant or wire dimension and
@@ -367,31 +399,33 @@
 - The locally frozen Phase 4 and Phase 5 surfaces implement discovery, tools,
   prompts, resources, progress, cancelation, subscription delivery, multi-
   round-trip execution, and protected request-state execution. All 39 reviewed
-  Phase 5 profiles are active. Twelve bounded Phase 6 verticals—shutdown,
+  Phase 5 profiles are active. Thirteen bounded Phase 6 verticals—shutdown,
   handler-capacity, handler diagnostics, stream/subscription diagnostics,
   protection/trace diagnostics, serialized semantic-event delivery, and
   bounded pre-admission and transport metrics, admitted-request trace-token
   capture, transport-boundary aggregation, server-start aggregation, and
-  request-boundary aggregation—are
+  request-boundary and admitted-request lifecycle aggregation—are
   implemented and locally green. The separate fuzz-
   registration, dormant derivation, and metric-dimensionality checkpoints
-  remain unnumbered. The focused request-boundary aggregate/adjacent gate passes
-  70/0/0/0. The
+  remain unnumbered. The focused admitted-request lifecycle aggregate/adjacent
+  gate passes 72/0/0/0. The
   prior focused five-target fuzz run remains 28/0/0/0 and was not rerun for
   this checkpoint; the prior
   deterministic full fuzz corpus replay on both JDKs remains 127/0/0/0 and was
   likewise not rerun. Exact-source full main suites on Corretto 21.0.11 and
-  26.0.1 each report 1,477/0/0/4. Enforced static analysis is green with
+  26.0.1 each report 1,481/0/0/4. Enforced static analysis is green with
   existing advisory diagnostics, and SpotBugs reports 0/0. Exact
-  API-freeze evidence remains unchanged at 556 incompatibilities, 206 reviewed
-  owners, 1,049 Phase 4 records, and 195 Phase 5 records with the prior hashes.
+  API-freeze evidence reports 556 incompatibilities and 207 reviewed current-
+  side owners, including provisional `RequestOutcomeKey`; the frozen 1,049
+  Phase 4 and 195 Phase 5 inventories and prior hashes remain unchanged.
   Candidate main, source, and Javadoc packages plus standalone Javadoc are
   green using offline-link resolution. All 167 API-sketch sources compile for
   Java 17 and pass Javadoc doclint on JDK 26.
   All 104 files from pinned JSON Schema commit
   `0c7b65dc16dd8eaa7bd83e21099c76610c3b246a` validate. Default aggregation
   now covers `ServerStarted`, `ServerStopped`, `RequestAccepted`,
-  `RequestRejected`, five handler variants, and the transport trio.
+  `RequestRejected`, `RequestStarted`, `RequestFinished`, five handler variants,
+  and the transport trio.
   Remaining contract-fixed families and downstream OpenTelemetry work,
   structured-log carrier/emission, raw-ID
   opt-in, broader privacy, sustained cardinality, and redaction work,

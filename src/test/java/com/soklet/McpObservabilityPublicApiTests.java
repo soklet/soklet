@@ -289,17 +289,20 @@ public class McpObservabilityPublicApiTests {
 					});
 		}
 
-		Map<String, Class<?>> expectedGetters = Map.of(
-				"getServerStarts", Long.class,
-				"getActiveHandlerExecutions", Long.class,
-				"getHandlerQueueDepth", Long.class,
-				"getHandlerCapacityRejections", Long.class,
-				"getShutdowns", Map.class,
-				"getConnectionsAccepted", Long.class,
-				"getConnectionsRejected", Long.class,
-				"getTransportFailures", Map.class,
-				"getRequestsAccepted", Long.class,
-				"getRequestsRejected", Long.class);
+		Map<String, Class<?>> expectedGetters = Map.ofEntries(
+				Map.entry("getServerStarts", Long.class),
+				Map.entry("getActiveHandlerExecutions", Long.class),
+				Map.entry("getHandlerQueueDepth", Long.class),
+				Map.entry("getHandlerCapacityRejections", Long.class),
+				Map.entry("getShutdowns", Map.class),
+				Map.entry("getConnectionsAccepted", Long.class),
+				Map.entry("getConnectionsRejected", Long.class),
+				Map.entry("getTransportFailures", Map.class),
+				Map.entry("getRequestsAccepted", Long.class),
+				Map.entry("getRequestsRejected", Long.class),
+				Map.entry("getActiveRequests", Long.class),
+				Map.entry("getRequests", Map.class),
+				Map.entry("getRequestDurations", Map.class));
 		Map<String, Class<?>> actualGetters = Arrays.stream(
 				McpMetricsSnapshot.class.getDeclaredMethods())
 				.filter(method -> Modifier.isPublic(method.getModifiers()))
@@ -346,6 +349,12 @@ public class McpObservabilityPublicApiTests {
 								McpMetricsSnapshot.Builder.class, Long.class)),
 						Map.entry("requestsRejected", methodSignature(
 								McpMetricsSnapshot.Builder.class, Long.class)),
+						Map.entry("activeRequests", methodSignature(
+								McpMetricsSnapshot.Builder.class, Long.class)),
+						Map.entry("requests", methodSignature(
+								McpMetricsSnapshot.Builder.class, Map.class)),
+						Map.entry("requestDurations", methodSignature(
+								McpMetricsSnapshot.Builder.class, Map.class)),
 						Map.entry("build", methodSignature(McpMetricsSnapshot.class)));
 		Map<String, Map.Entry<Class<?>, List<Class<?>>>> actualBuilderMethods =
 				Arrays.stream(McpMetricsSnapshot.Builder.class.getDeclaredMethods())
@@ -379,9 +388,6 @@ public class McpObservabilityPublicApiTests {
 				DefaultMetricsCollector.defaultInstance();
 		Duration duration = Duration.ofMillis(1);
 		List<McpMetricsEvent> nonAggregatedEvents = List.of(
-				new McpMetricsEvent.RequestStarted("/registered", "tools/call"),
-				new McpMetricsEvent.RequestFinished("/registered", "tools/call",
-						McpRequestOutcome.COMPLETE, duration),
 				new McpMetricsEvent.RequestStreamOpened(
 						"/registered", "tools/call"),
 				new McpMetricsEvent.RequestStreamClosed("/registered", "tools/call",
@@ -397,7 +403,7 @@ public class McpObservabilityPublicApiTests {
 				new McpMetricsEvent.ProtocolError(-32600),
 				new McpMetricsEvent.UnknownMirroredHeader(
 						"/registered", "tools/call"));
-		Assertions.assertEquals(11, nonAggregatedEvents.size());
+		Assertions.assertEquals(9, nonAggregatedEvents.size());
 		nonAggregatedEvents.forEach(defaultCollector::didRecordMcpMetricsEvent);
 		Assertions.assertSame(McpMetricsSnapshot.emptyInstance(),
 				defaultCollector.snapshot().orElseThrow().getMcpMetrics());

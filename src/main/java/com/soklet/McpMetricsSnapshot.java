@@ -22,6 +22,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static java.util.Objects.requireNonNull;
@@ -60,6 +61,13 @@ public final class McpMetricsSnapshot {
 	private final Long requestsAccepted;
 	@NonNull
 	private final Long requestsRejected;
+	@NonNull
+	private final Long activeRequests;
+	@NonNull
+	private final Map<@NonNull RequestOutcomeKey, @NonNull Long> requests;
+	@NonNull
+	private final Map<@NonNull RequestOutcomeKey,
+			MetricsCollector.@NonNull HistogramSnapshot> requestDurations;
 
 	private McpMetricsSnapshot(@NonNull Builder builder) {
 		requireNonNull(builder);
@@ -73,6 +81,9 @@ public final class McpMetricsSnapshot {
 		this.serverStarts = builder.serverStarts;
 		this.requestsAccepted = builder.requestsAccepted;
 		this.requestsRejected = builder.requestsRejected;
+		this.activeRequests = builder.activeRequests;
+		this.requests = copyRequests(builder.requests);
+		this.requestDurations = copyRequestDurations(builder.requestDurations);
 	}
 
 	@NonNull
@@ -115,6 +126,33 @@ public final class McpMetricsSnapshot {
 						"MCP transport failure counts must not be negative.");
 			copied.put(reason, count);
 		});
+		return Collections.unmodifiableMap(copied);
+	}
+
+	@NonNull
+	private static Map<@NonNull RequestOutcomeKey, @NonNull Long> copyRequests(
+			@NonNull Map<@NonNull RequestOutcomeKey, @NonNull Long> requests) {
+		Map<RequestOutcomeKey, Long> copied = new LinkedHashMap<>();
+		requireNonNull(requests).forEach((key, count) -> {
+			requireNonNull(key);
+			requireNonNull(count);
+			if (count < 0L)
+				throw new IllegalArgumentException(
+						"MCP completed request counts must not be negative.");
+			copied.put(key, count);
+		});
+		return Collections.unmodifiableMap(copied);
+	}
+
+	@NonNull
+	private static Map<@NonNull RequestOutcomeKey,
+			MetricsCollector.@NonNull HistogramSnapshot> copyRequestDurations(
+			@NonNull Map<@NonNull RequestOutcomeKey,
+					MetricsCollector.@NonNull HistogramSnapshot> requestDurations) {
+		Map<RequestOutcomeKey, MetricsCollector.HistogramSnapshot> copied =
+				new LinkedHashMap<>();
+		requireNonNull(requestDurations).forEach((key, histogram) ->
+				copied.put(requireNonNull(key), requireNonNull(histogram)));
 		return Collections.unmodifiableMap(copied);
 	}
 
@@ -247,6 +285,69 @@ public final class McpMetricsSnapshot {
 	}
 
 	/**
+	 * Returns the number of currently active admitted MCP requests.
+	 *
+	 * @return active admitted MCP requests
+	 */
+	@NonNull
+	public Long getActiveRequests() {
+		return this.activeRequests;
+	}
+
+	/**
+	 * Returns nonnegative completed-request counts grouped by bounded endpoint,
+	 * method, and terminal outcome dimensions.
+	 *
+	 * @return immutable completed-request counts
+	 */
+	@NonNull
+	public Map<@NonNull RequestOutcomeKey, @NonNull Long> getRequests() {
+		return this.requests;
+	}
+
+	/**
+	 * Returns request-duration histograms grouped by bounded endpoint, method,
+	 * and terminal outcome dimensions.
+	 *
+	 * @return immutable request-duration histograms
+	 */
+	@NonNull
+	public Map<@NonNull RequestOutcomeKey,
+			MetricsCollector.@NonNull HistogramSnapshot> getRequestDurations() {
+		return this.requestDurations;
+	}
+
+	/**
+	 * Key for completed-request and request-duration aggregates.
+	 *
+	 * @param endpointPath registered endpoint-path declaration
+	 * @param jsonRpcMethod bounded JSON-RPC method dimension
+	 * @param outcome fixed terminal request outcome
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	public record RequestOutcomeKey(@NonNull String endpointPath,
+			@NonNull String jsonRpcMethod,
+			@NonNull McpRequestOutcome outcome) {
+		/**
+		 * Creates a request-outcome aggregate key.
+		 *
+		 * @param endpointPath registered endpoint-path declaration
+		 * @param jsonRpcMethod bounded JSON-RPC method dimension
+		 * @param outcome fixed terminal request outcome
+		 */
+		public RequestOutcomeKey {
+			if (requireNonNull(endpointPath).isEmpty())
+				throw new IllegalArgumentException(
+						"Endpoint path must not be empty.");
+			if (requireNonNull(jsonRpcMethod).isEmpty())
+				throw new IllegalArgumentException(
+						"JSON-RPC method must not be empty.");
+			requireNonNull(outcome);
+		}
+	}
+
+	/**
 	 * Builder for immutable {@link McpMetricsSnapshot} instances.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -274,6 +375,13 @@ public final class McpMetricsSnapshot {
 		private Long requestsAccepted;
 		@NonNull
 		private Long requestsRejected;
+		@NonNull
+		private Long activeRequests;
+		@NonNull
+		private Map<@NonNull RequestOutcomeKey, @NonNull Long> requests;
+		@NonNull
+		private Map<@NonNull RequestOutcomeKey,
+				MetricsCollector.@NonNull HistogramSnapshot> requestDurations;
 
 		private Builder() {
 			this.activeHandlerExecutions = 0L;
@@ -286,6 +394,9 @@ public final class McpMetricsSnapshot {
 			this.serverStarts = 0L;
 			this.requestsAccepted = 0L;
 			this.requestsRejected = 0L;
+			this.activeRequests = 0L;
+			this.requests = Map.of();
+			this.requestDurations = Map.of();
 		}
 
 		/**
@@ -435,6 +546,50 @@ public final class McpMetricsSnapshot {
 		public Builder requestsRejected(@NonNull Long requestsRejected) {
 			this.requestsRejected = requireNonNegative(requestsRejected,
 					"Rejected MCP request count must not be negative.");
+			return this;
+		}
+
+		/**
+		 * Sets the number of currently active admitted MCP requests.
+		 *
+		 * @param activeRequests active admitted MCP requests
+		 * @return this builder
+		 * @throws IllegalArgumentException if the count is negative
+		 */
+		@NonNull
+		public Builder activeRequests(@NonNull Long activeRequests) {
+			this.activeRequests = requireNonNegative(activeRequests,
+					"Active MCP request count must not be negative.");
+			return this;
+		}
+
+		/**
+		 * Sets nonnegative completed-request counts grouped by bounded endpoint,
+		 * method, and terminal outcome dimensions.
+		 *
+		 * @param requests completed-request counts
+		 * @return this builder
+		 * @throws IllegalArgumentException if any count is negative
+		 */
+		@NonNull
+		public Builder requests(
+				@NonNull Map<@NonNull RequestOutcomeKey, @NonNull Long> requests) {
+			this.requests = copyRequests(requests);
+			return this;
+		}
+
+		/**
+		 * Sets request-duration histograms grouped by bounded endpoint, method,
+		 * and terminal outcome dimensions.
+		 *
+		 * @param requestDurations request-duration histograms
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder requestDurations(
+				@NonNull Map<@NonNull RequestOutcomeKey,
+						MetricsCollector.@NonNull HistogramSnapshot> requestDurations) {
+			this.requestDurations = copyRequestDurations(requestDurations);
 			return this;
 		}
 
