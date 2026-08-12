@@ -1,6 +1,7 @@
 # Soklet Soak Tests
 
-Resource-leak probes for live loopback transports.
+Resource-leak probes for live loopback transports and the off-network MCP
+simulator.
 
 The harness loads one immutable workload profile from
 `src/test/resources/com/soklet/soak-profiles/`. Run the short `smoke` profile
@@ -26,10 +27,12 @@ protection. The nightly profile increases operation counts, concurrency,
 timeouts, shutdown cycles, and explicit resource-delta thresholds.
 
 Every profile probes file-descriptor, thread, heap, and active-gauge leaks by
-driving repeated live loopback transport activity and then asserting resources
-return near a warmed, scenario-specific baseline. The HTTP and SSE scenarios
-use their running-idle baselines; the MCP scenario uses a stopped/warmed
-baseline so listener and executor resources are measured across restarts.
+driving repeated live loopback or off-network simulator activity and then
+asserting resources return near a warmed, scenario-specific baseline. The HTTP
+and SSE scenarios use their running-idle baselines; the live MCP and simulator
+scenarios use stopped/warmed baselines. The simulator scenario never binds a
+listener, so its file-descriptor observation is a leak guard rather than socket
+or kernel-transport fidelity evidence.
 `SOKLET_SOAK_PROFILE` accepts exactly `smoke` or `nightly`; an omitted value
 selects `smoke` for local convenience.
 
@@ -39,6 +42,17 @@ stream, subscription, lifecycle, and process-resource accounting to return to
 its expected baseline. Its `mcp.*` profile keys freeze client/cycle counts,
 handler and stream bounds, subscription bounds, request/write/shutdown timing,
 shutdown cycles, and resource-delta tolerances for both profiles.
+
+The mandatory `MCP off-network simulator churn` scenario uses those same
+profile bounds without sockets or sleeps. Concurrent clients within sequential
+simulator scopes rotate deterministically through JSON, progress SSE,
+subscription, MRTR, explicit cancellation, item-limit, byte-limit, and
+cancel-versus-terminal cases. Smoke executes 24 cycles and nightly executes
+200. Each run also holds and explicitly releases one non-cooperative handler to
+prove bounded scope cleanup, restart exclusion while residual work remains, and
+recovery before the final resource snapshot. This is bounded simulator soak
+evidence, not slow-reader, write-idle, kernel-backpressure, release-duration, or
+corpus-saturation evidence.
 
 ## CI Profiles
 
@@ -67,9 +81,10 @@ Surefire still writes its normal test output to
 `soak/target/surefire-reports/`. Every CI soak job starts with `clean`, then
 `scripts/verify-soak-evidence.mjs` proves that the selected profile resource
 and SHA-256 match, the canonical configuration is byte-exact, and exactly the
-four HTTP-abort, HTTP-churn, SSE-churn, and MCP Phase 5 cross-feature scenarios
-passed. It also requires the exact three expected Surefire XML reports, exact
-test counts, zero failures/errors/skips, and no stale XML report. Only then does
+five HTTP-abort, HTTP-churn, SSE-churn, MCP Phase 5 cross-feature, and off-network
+MCP simulator scenarios passed. It also requires the exact three expected
+Surefire XML reports, exact five-test count, zero failures/errors/skips, and no
+stale XML report. Only then does
 CI upload the
 Markdown report and Surefire directory; missing or inconsistent evidence fails
 the job. The custom report is the human-readable artifact to attach to release

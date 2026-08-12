@@ -558,6 +558,18 @@ public class McpRequestObservationPublicRuntimeTests {
 					countEvents(events, McpMetricsEvent.ServerStarted.class));
 			Assertions.assertEquals(1,
 					countEvents(events, McpMetricsEvent.ServerStopped.class));
+			Assertions.assertEquals(0,
+					countEvents(events,
+							McpMetricsEvent.CancelationSignaled.class));
+			Assertions.assertEquals(0,
+					countEvents(events, McpMetricsEvent.ProgressEmitted.class));
+			Assertions.assertEquals(0,
+					countEvents(events, McpMetricsEvent.KeepAliveEmitted.class));
+			Assertions.assertEquals(0,
+					countEvents(events, McpMetricsEvent.ProtocolError.class));
+			Assertions.assertEquals(0,
+					countEvents(events,
+							McpMetricsEvent.UnknownMirroredHeader.class));
 			for (McpMetricsEvent event : events)
 				assertFiniteMetricProjection(event);
 
@@ -599,6 +611,17 @@ public class McpRequestObservationPublicRuntimeTests {
 					mcpMetrics.getActiveRequestStreams());
 			Assertions.assertTrue(
 					mcpMetrics.getRequestStreamDurations().isEmpty());
+			Assertions.assertEquals(0L,
+					mcpMetrics.getActiveSubscriptions());
+			Assertions.assertTrue(
+					mcpMetrics.getSubscriptionDurations().isEmpty());
+			Assertions.assertTrue(
+					mcpMetrics.getCancelationsSignaled().isEmpty());
+			Assertions.assertTrue(mcpMetrics.getProgressEmitted().isEmpty());
+			Assertions.assertEquals(0L, mcpMetrics.getKeepAlivesEmitted());
+			Assertions.assertTrue(mcpMetrics.getProtocolErrors().isEmpty());
+			Assertions.assertTrue(
+					mcpMetrics.getUnknownMirroredHeaders().isEmpty());
 			List<String> filteredSamples = new CopyOnWriteArrayList<>();
 			String prometheus = collector.snapshotText(
 					MetricsCollector.SnapshotTextOptions.fromMetricsFormat(
@@ -627,6 +650,8 @@ public class McpRequestObservationPublicRuntimeTests {
 					"soklet_mcp_shutdowns_total{outcome=clean}",
 					"soklet_mcp_requests_active{}",
 					"soklet_mcp_request_streams_active{}",
+					"soklet_mcp_subscriptions_active{}",
+					"soklet_mcp_keep_alives_emitted_total{}",
 					"soklet_mcp_requests_total{endpoint=/mcp, method=tools/call, outcome=complete}",
 					"soklet_mcp_request_duration_nanos_count{endpoint=/mcp, method=tools/call, outcome=complete}",
 					"soklet_mcp_request_duration_nanos_sum{endpoint=/mcp, method=tools/call, outcome=complete}"));
@@ -638,7 +663,7 @@ public class McpRequestObservationPublicRuntimeTests {
 				expectedMcpSamples.add(
 						"soklet_mcp_request_duration_nanos_bucket{endpoint=/mcp, method=tools/call, outcome=complete, le="
 								+ upperBound + "}");
-			Assertions.assertEquals(29, expectedMcpSamples.size());
+			Assertions.assertEquals(31, expectedMcpSamples.size());
 			Assertions.assertEquals(expectedMcpSamples.size(),
 					filteredSamples.size(), filteredSamples.toString());
 			Assertions.assertEquals(expectedMcpSamples,
@@ -680,8 +705,10 @@ public class McpRequestObservationPublicRuntimeTests {
 					"soklet_mcp_handler_queue_depth{}",
 					"soklet_mcp_handler_capacity_rejections_total{}",
 					"soklet_mcp_requests_active{}",
-					"soklet_mcp_request_streams_active{}");
-			Assertions.assertEquals(10, expectedResetMcpSamples.size());
+					"soklet_mcp_request_streams_active{}",
+					"soklet_mcp_subscriptions_active{}",
+					"soklet_mcp_keep_alives_emitted_total{}");
+			Assertions.assertEquals(12, expectedResetMcpSamples.size());
 			Assertions.assertEquals(expectedResetMcpSamples.size(),
 					resetFilteredSamples.size(), resetFilteredSamples.toString());
 			Assertions.assertEquals(expectedResetMcpSamples,
@@ -1348,6 +1375,19 @@ public class McpRequestObservationPublicRuntimeTests {
 				+ mcpMetrics.getActiveRequestStreams());
 		values.add("mcpRequestStreamDurations="
 				+ mcpMetrics.getRequestStreamDurations());
+		values.add("mcpActiveSubscriptions="
+				+ mcpMetrics.getActiveSubscriptions());
+		values.add("mcpSubscriptionDurations="
+				+ mcpMetrics.getSubscriptionDurations());
+		values.add("mcpCancelationsSignaled="
+				+ mcpMetrics.getCancelationsSignaled());
+		values.add("mcpProgressEmitted="
+				+ mcpMetrics.getProgressEmitted());
+		values.add("mcpKeepAlivesEmitted="
+				+ mcpMetrics.getKeepAlivesEmitted());
+		values.add("mcpProtocolErrors=" + mcpMetrics.getProtocolErrors());
+		values.add("mcpUnknownMirroredHeaders="
+				+ mcpMetrics.getUnknownMirroredHeaders());
 		return values.toString();
 	}
 

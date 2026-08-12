@@ -83,6 +83,9 @@ public class McpPublicApiReflectionContractTests {
 			Path.of("api/mcp/provisional.includes"));
 	private static final int PHASE_FOUR_TYPE_COUNT = 133;
 	private static final int PHASE_FIVE_TYPE_COUNT = 39;
+	private static final int PHASE_SIX_TYPE_COUNT = 15;
+	private static final int PROVISIONAL_TYPE_COUNT = 32;
+	private static final int CURRENT_MCP_TYPE_COUNT = 219;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
 			"c10d11f1c510b5219f819d19ff4dec687eec4fbfb13006b988366253eec70cab";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
@@ -199,6 +202,51 @@ public class McpPublicApiReflectionContractTests {
 			throws Exception {
 		Assertions.assertEquals(PHASE_FIVE_TYPE_COUNT, phaseFiveTypes().size(),
 				"The reviewed Phase 5 owner count changed");
+	}
+
+	@Test
+	public void phaseSixSimulatorInventoryAndSharedHostDescriptorsAreExact()
+			throws Exception {
+		List<String> expectedPhaseSixTypes = List.of(
+				"com.soklet.McpServerDiagnostics",
+				"com.soklet.McpServerStatus",
+				"com.soklet.McpShutdownOutcome",
+				"com.soklet.McpSimulation",
+				"com.soklet.McpSimulationBodyMode",
+				"com.soklet.McpSimulationCompletion",
+				"com.soklet.McpSimulationOptions",
+				"com.soklet.McpSimulationOptions$Builder",
+				"com.soklet.McpSimulationResponse",
+				"com.soklet.McpSimulationStreamItem",
+				"com.soklet.McpSimulationStreamItemType",
+				"com.soklet.McpTraceCorrelation",
+				"com.soklet.McpTraceCorrelationConfigurationFingerprint",
+				"com.soklet.McpTraceCorrelationKey",
+				"com.soklet.Simulator");
+		Path phaseSixIncludes = Path.of("api/mcp/phase-6.includes");
+		List<String> actualPhaseSixTypes = includeTypeNames(phaseSixIncludes);
+		Assertions.assertEquals(PHASE_SIX_TYPE_COUNT,
+				actualPhaseSixTypes.size());
+		Assertions.assertEquals(expectedPhaseSixTypes, actualPhaseSixTypes,
+				"The unfrozen Phase 6 simulator owner inventory changed");
+
+		Assertions.assertEquals(PROVISIONAL_TYPE_COUNT,
+				includeTypeNames(Path.of("api/mcp/provisional.includes")).size(),
+				"The provisional owner inventory changed");
+		Assertions.assertEquals(CURRENT_MCP_TYPE_COUNT,
+				allReviewedOwnerNames().size(),
+				"The reviewed current MCP owner union changed");
+
+		Method defaultStart = assertInstanceMethod(Simulator.class,
+				"startMcpRequest", McpSimulation.class, MethodShape.ABSTRACT,
+				false, Request.class);
+		Method configuredStart = assertInstanceMethod(Simulator.class,
+				"startMcpRequest", McpSimulation.class, MethodShape.ABSTRACT,
+				false, Request.class, McpSimulationOptions.class);
+		assertErasedGenericSignature(defaultStart);
+		assertErasedGenericSignature(configuredStart);
+		assertParameterNames(defaultStart, "request");
+		assertParameterNames(configuredStart, "request", "options");
 	}
 
 	@Test
@@ -773,11 +821,7 @@ public class McpPublicApiReflectionContractTests {
 
 	private static List<Class<?>> phaseTypes(Path includes, int expectedCount,
 			String phase) throws Exception {
-		List<String> typeNames = Files.readAllLines(includes,
-				StandardCharsets.UTF_8).stream()
-				.map(String::trim)
-				.filter(line -> !line.isEmpty() && !line.startsWith("#"))
-				.toList();
+		List<String> typeNames = includeTypeNames(includes);
 
 		Assertions.assertEquals(expectedCount, typeNames.size(),
 				"The reviewed " + phase + " type count changed");
@@ -794,6 +838,13 @@ public class McpPublicApiReflectionContractTests {
 			types.add(Class.forName(typeName, false, classLoader));
 
 		return List.copyOf(types);
+	}
+
+	private static List<String> includeTypeNames(Path includes) throws Exception {
+		return Files.readAllLines(includes, StandardCharsets.UTF_8).stream()
+				.map(String::trim)
+				.filter(line -> !line.isEmpty() && !line.startsWith("#"))
+				.toList();
 	}
 
 	private static void assertSealedHierarchy(List<Class<?>> types,
@@ -852,6 +903,13 @@ public class McpPublicApiReflectionContractTests {
 		for (String typeName : typeNames)
 			types.add(Class.forName(typeName, false, classLoader));
 		return List.copyOf(types);
+	}
+
+	private static Set<String> allReviewedOwnerNames() throws Exception {
+		LinkedHashSet<String> typeNames = new LinkedHashSet<>();
+		for (Path includes : MCP_API_INCLUDES)
+			typeNames.addAll(includeTypeNames(includes));
+		return Set.copyOf(typeNames);
 	}
 
 	private static boolean isNonSealed(Class<?> type) {

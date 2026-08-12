@@ -306,6 +306,7 @@ jobs:
     name: Nightly Fuzzing (JDK 25, ${{ matrix.target_id }})
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       # Jazzer/JUnit can run only one @FuzzTest per JVM when JAZZER_FUZZ=1.
       # Keep each target in its own Maven invocation so every parser gets a nightly slot.
@@ -342,6 +343,8 @@ jobs:
             test_selector: McpCursorValidatorFuzzTest#cursorValidationIsUtf8ExactAndTotal
           - target_id: mcp-request-state-plaintext
             test_selector: McpRequestStatePlaintextCodecFuzzTest#decodeOnlyRejectsWithUniformRedactedIllegalArgumentException
+          - target_id: mcp-simulation-capture
+            test_selector: McpSimulationCaptureFuzzTest#captureStateMachineRemainsBoundedTerminalAndIdempotent
     steps:
       - name: Check out
         uses: actions/checkout@v6

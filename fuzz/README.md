@@ -37,13 +37,20 @@ The current targets are:
 - `McpToolSchemaProfileFuzzTest`
 - `McpCursorValidatorFuzzTest`
 - `McpRequestStatePlaintextCodecFuzzTest`
+- `McpSimulationCaptureFuzzTest`
 
-The MCP targets use production parser, compiler, evaluator, and validation
+These 15 classes expose 16 coverage-guided `@FuzzTest` methods. The MCP targets
+use production parser, compiler, evaluator, validation, and simulator-capture
 entry points with deterministic configuration. The Profile 1 target bounds a
 single fuzz input to 64 KiB and uses a literal `---INSTANCE---` line to split a
-schema document from an optional instance. This coverage complements the exact
-production-limit unit tests; it does not claim exhaustive fuzzing at every
-configured or hard maximum.
+schema document from an optional instance. The simulator target likewise
+bounds input to 64 KiB, interprets at most 64 actions with payloads no larger
+than 256 bytes, and derives item and cumulative-byte limits of 1..16 and
+1..4,096. Its six synthetic ASCII seeds raise the MCP corpus from 21 to 27 and
+exercise JSON completion, SSE terminal duplication and coalescing, item-first
+and cumulative-byte rejection, cancel idempotence, and first-terminal
+stability. This coverage complements the exact production-limit unit tests; it
+does not claim exhaustive fuzzing at every configured or hard maximum.
 
 ## Corpus Policy
 
@@ -96,8 +103,9 @@ mvn -B -ntp -f fuzz/pom.xml test
 The scheduled nightly run, or a manual workflow dispatch, uses a matrix with
 one Maven invocation per `@FuzzTest` method. Jazzer's JUnit integration runs
 only one coverage-guided fuzz test per JVM when `JAZZER_FUZZ=1`, so each target
-needs its own matrix slot. Each slot restores the latest generated Jazzer
-corpus, runs coverage-guided fuzzing, uploads artifacts, and saves a
+needs its own matrix slot. The current matrix has 16 slots, runs each target for
+five minutes, and bounds each job to 15 minutes. Each slot restores the latest
+generated Jazzer corpus, runs coverage-guided fuzzing, uploads artifacts, and saves a
 target-specific corpus cache under a run-specific key. The key rotates on every
 run so nightly exploration can compound over time; restore keys keep each
 target seeded from the newest available corpus for the branch.

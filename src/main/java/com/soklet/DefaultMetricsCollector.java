@@ -126,6 +126,17 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private final AtomicLong mcpActiveRequestStreams;
 	private final ConcurrentLruMap<McpMetricsSnapshot.RequestStreamTerminationKey,
 			Histogram> mcpRequestStreamDurationsByReason;
+	private final AtomicLong mcpActiveSubscriptions;
+	private final ConcurrentLruMap<McpMetricsSnapshot.SubscriptionTerminationKey,
+			Histogram> mcpSubscriptionDurationsByReason;
+	private final ConcurrentLruMap<McpMetricsSnapshot.EndpointMethodKey,
+			LongAdder> mcpCancelationsSignaledByEndpointAndMethod;
+	private final ConcurrentLruMap<McpMetricsSnapshot.EndpointMethodKey,
+			LongAdder> mcpProgressEmittedByEndpointAndMethod;
+	private final LongAdder mcpKeepAlivesEmitted;
+	private final ConcurrentLruMap<Integer, LongAdder> mcpProtocolErrorsByCode;
+	private final ConcurrentLruMap<McpMetricsSnapshot.EndpointMethodKey,
+			LongAdder> mcpUnknownMirroredHeadersByEndpointAndMethod;
 	private final AtomicBoolean includeSseMetrics;
 	private final AtomicBoolean includeMcpHandlerMetrics;
 	private final AtomicBoolean includeMcpTransportMetrics;
@@ -133,6 +144,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private final AtomicBoolean includeMcpRequestBoundaryMetrics;
 	private final AtomicBoolean includeMcpRequestLifecycleMetrics;
 	private final AtomicBoolean includeMcpRequestStreamLifecycleMetrics;
+	private final AtomicBoolean includeMcpSubscriptionLifecycleMetrics;
+	private final AtomicBoolean includeMcpKeepAliveMetrics;
 
 	@NonNull
 	public static DefaultMetricsCollector defaultInstance() {
@@ -202,6 +215,18 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.mcpActiveRequestStreams = new AtomicLong();
 		this.mcpRequestStreamDurationsByReason =
 				new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
+		this.mcpActiveSubscriptions = new AtomicLong();
+		this.mcpSubscriptionDurationsByReason =
+				new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
+		this.mcpCancelationsSignaledByEndpointAndMethod =
+				new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
+		this.mcpProgressEmittedByEndpointAndMethod =
+				new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
+		this.mcpKeepAlivesEmitted = new LongAdder();
+		this.mcpProtocolErrorsByCode =
+				new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
+		this.mcpUnknownMirroredHeadersByEndpointAndMethod =
+				new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
 		this.includeSseMetrics = new AtomicBoolean(false);
 		this.includeMcpHandlerMetrics = new AtomicBoolean(false);
 		this.includeMcpTransportMetrics = new AtomicBoolean(false);
@@ -209,6 +234,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.includeMcpRequestBoundaryMetrics = new AtomicBoolean(false);
 		this.includeMcpRequestLifecycleMetrics = new AtomicBoolean(false);
 		this.includeMcpRequestStreamLifecycleMetrics = new AtomicBoolean(false);
+		this.includeMcpSubscriptionLifecycleMetrics = new AtomicBoolean(false);
+		this.includeMcpKeepAliveMetrics = new AtomicBoolean(false);
 	}
 
 	void initialize(@NonNull SokletConfig sokletConfig) {
@@ -224,6 +251,10 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.includeMcpRequestLifecycleMetrics.set(
 				sokletConfig.getMcpServer().isPresent());
 		this.includeMcpRequestStreamLifecycleMetrics.set(
+				sokletConfig.getMcpServer().isPresent());
+		this.includeMcpSubscriptionLifecycleMetrics.set(
+				sokletConfig.getMcpServer().isPresent());
+		this.includeMcpKeepAliveMetrics.set(
 				sokletConfig.getMcpServer().isPresent());
 	}
 
@@ -780,6 +811,49 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			histogramFor(this.mcpRequestStreamDurationsByReason, key,
 					SSE_STREAM_DURATION_BUCKETS_NANOS)
 					.record(requestStreamClosed.duration().toNanos());
+		} else if (event instanceof McpMetricsEvent.SubscriptionOpened) {
+			this.includeMcpSubscriptionLifecycleMetrics.set(true);
+			this.mcpActiveSubscriptions.incrementAndGet();
+		} else if (event instanceof McpMetricsEvent.SubscriptionClosed subscriptionClosed) {
+			this.includeMcpSubscriptionLifecycleMetrics.set(true);
+			this.mcpActiveSubscriptions.decrementAndGet();
+			McpMetricsSnapshot.SubscriptionTerminationKey key =
+					new McpMetricsSnapshot.SubscriptionTerminationKey(
+							subscriptionClosed.endpointPath(),
+							subscriptionClosed.reason());
+			histogramFor(this.mcpSubscriptionDurationsByReason, key,
+					SSE_STREAM_DURATION_BUCKETS_NANOS)
+					.record(subscriptionClosed.duration().toNanos());
+		} else if (event instanceof McpMetricsEvent.CancelationSignaled
+				cancelationSignaled) {
+			McpMetricsSnapshot.EndpointMethodKey key =
+					new McpMetricsSnapshot.EndpointMethodKey(
+							cancelationSignaled.endpointPath(),
+							cancelationSignaled.jsonRpcMethod());
+			counterFor(this.mcpCancelationsSignaledByEndpointAndMethod, key)
+					.increment();
+		} else if (event instanceof McpMetricsEvent.ProgressEmitted
+				progressEmitted) {
+			McpMetricsSnapshot.EndpointMethodKey key =
+					new McpMetricsSnapshot.EndpointMethodKey(
+							progressEmitted.endpointPath(),
+							progressEmitted.jsonRpcMethod());
+			counterFor(this.mcpProgressEmittedByEndpointAndMethod, key)
+					.increment();
+		} else if (event instanceof McpMetricsEvent.KeepAliveEmitted) {
+			this.includeMcpKeepAliveMetrics.set(true);
+			this.mcpKeepAlivesEmitted.increment();
+		} else if (event instanceof McpMetricsEvent.ProtocolError protocolError) {
+			counterFor(this.mcpProtocolErrorsByCode, protocolError.code())
+					.increment();
+		} else if (event instanceof McpMetricsEvent.UnknownMirroredHeader
+				unknownMirroredHeader) {
+			McpMetricsSnapshot.EndpointMethodKey key =
+					new McpMetricsSnapshot.EndpointMethodKey(
+							unknownMirroredHeader.endpointPath(),
+							unknownMirroredHeader.jsonRpcMethod());
+			counterFor(this.mcpUnknownMirroredHeadersByEndpointAndMethod, key)
+					.increment();
 		} else if (event instanceof McpMetricsEvent.ConnectionAccepted) {
 			this.includeMcpTransportMetrics.set(true);
 			this.mcpConnectionsAccepted.increment();
@@ -912,6 +986,36 @@ final class DefaultMetricsCollector implements MetricsCollector {
 					DefaultMetricsCollector::labelsForMcpRequestStreamTerminationKey,
 					options);
 		}
+		if (this.includeMcpSubscriptionLifecycleMetrics.get()) {
+			appendGauge(sb, "soklet_mcp_subscriptions_active",
+					"Currently active MCP subscriptions",
+					snapshot.getMcpMetrics().getActiveSubscriptions(), options);
+			appendHistogram(sb, "soklet_mcp_subscription_duration_nanos",
+					"MCP subscription duration in nanoseconds",
+					snapshot.getMcpMetrics().getSubscriptionDurations(),
+					DefaultMetricsCollector::labelsForMcpSubscriptionTerminationKey,
+					options);
+		}
+		appendCounter(sb, "soklet_mcp_cancelations_signaled_total",
+				"Total cooperative MCP request cancelations signaled by endpoint and method",
+				snapshot.getMcpMetrics().getCancelationsSignaled(),
+				DefaultMetricsCollector::labelsForMcpEndpointMethodKey, options);
+		appendCounter(sb, "soklet_mcp_progress_emitted_total",
+				"Total MCP progress notifications accepted for delivery by endpoint and method",
+				snapshot.getMcpMetrics().getProgressEmitted(),
+				DefaultMetricsCollector::labelsForMcpEndpointMethodKey, options);
+		if (this.includeMcpKeepAliveMetrics.get())
+			appendCounter(sb, "soklet_mcp_keep_alives_emitted_total",
+					"Total MCP keep-alive comments accepted for delivery",
+					snapshot.getMcpMetrics().getKeepAlivesEmitted(), options);
+		appendCounter(sb, "soklet_mcp_protocol_errors_total",
+				"Total client-visible MCP protocol errors by fixed code",
+				snapshot.getMcpMetrics().getProtocolErrors(),
+				DefaultMetricsCollector::labelsForMcpProtocolErrorCode, options);
+		appendCounter(sb, "soklet_mcp_unknown_mirrored_headers_total",
+				"Total unknown MCP mirrored-header occurrences by endpoint and method",
+				snapshot.getMcpMetrics().getUnknownMirroredHeaders(),
+				DefaultMetricsCollector::labelsForMcpEndpointMethodKey, options);
 		if (this.includeMcpTransportMetrics.get()) {
 			appendCounter(sb, "soklet_mcp_connections_accepted_total",
 					"Total accepted MCP connections admitted within the connection-capacity bound",
@@ -1193,6 +1297,20 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		Map<McpMetricsSnapshot.RequestStreamTerminationKey, HistogramSnapshot>
 				requestStreamDurations =
 				snapshotMap(this.mcpRequestStreamDurationsByReason);
+		long activeSubscriptions = this.mcpActiveSubscriptions.get();
+		Map<McpMetricsSnapshot.SubscriptionTerminationKey, HistogramSnapshot>
+				subscriptionDurations =
+				snapshotMap(this.mcpSubscriptionDurationsByReason);
+		Map<McpMetricsSnapshot.EndpointMethodKey, Long> cancelationsSignaled =
+				snapshotCounterMap(this.mcpCancelationsSignaledByEndpointAndMethod);
+		Map<McpMetricsSnapshot.EndpointMethodKey, Long> progressEmitted =
+				snapshotCounterMap(this.mcpProgressEmittedByEndpointAndMethod);
+		long keepAlivesEmitted = this.mcpKeepAlivesEmitted.sum();
+		Map<Integer, Long> protocolErrors =
+				snapshotCounterMap(this.mcpProtocolErrorsByCode);
+		Map<McpMetricsSnapshot.EndpointMethodKey, Long> unknownMirroredHeaders =
+				snapshotCounterMap(
+						this.mcpUnknownMirroredHeadersByEndpointAndMethod);
 		if (activeHandlerExecutions == 0L && handlerQueueDepth == 0L
 				&& handlerCapacityRejections == 0L && shutdowns.isEmpty()
 				&& connectionsAccepted == 0L && connectionsRejected == 0L
@@ -1200,7 +1318,11 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				&& requestsAccepted == 0L && requestsRejected == 0L
 				&& activeRequests == 0L && requests.isEmpty()
 				&& requestDurations.isEmpty() && activeRequestStreams == 0L
-				&& requestStreamDurations.isEmpty())
+				&& requestStreamDurations.isEmpty() && activeSubscriptions == 0L
+				&& subscriptionDurations.isEmpty()
+				&& cancelationsSignaled.isEmpty() && progressEmitted.isEmpty()
+				&& keepAlivesEmitted == 0L && protocolErrors.isEmpty()
+				&& unknownMirroredHeaders.isEmpty())
 			return McpMetricsSnapshot.emptyInstance();
 		return McpMetricsSnapshot.builder()
 				.activeHandlerExecutions(activeHandlerExecutions)
@@ -1218,6 +1340,13 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				.requestDurations(requestDurations)
 				.activeRequestStreams(activeRequestStreams)
 				.requestStreamDurations(requestStreamDurations)
+				.activeSubscriptions(activeSubscriptions)
+				.subscriptionDurations(subscriptionDurations)
+				.cancelationsSignaled(cancelationsSignaled)
+				.progressEmitted(progressEmitted)
+				.keepAlivesEmitted(keepAlivesEmitted)
+				.protocolErrors(protocolErrors)
+				.unknownMirroredHeaders(unknownMirroredHeaders)
 				.build();
 	}
 
@@ -1244,6 +1373,12 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.mcpRequestsByOutcome.clear();
 		this.mcpRequestDurationsByOutcome.clear();
 		this.mcpRequestStreamDurationsByReason.clear();
+		this.mcpSubscriptionDurationsByReason.clear();
+		this.mcpCancelationsSignaledByEndpointAndMethod.clear();
+		this.mcpProgressEmittedByEndpointAndMethod.clear();
+		this.mcpKeepAlivesEmitted.reset();
+		this.mcpProtocolErrorsByCode.clear();
+		this.mcpUnknownMirroredHeadersByEndpointAndMethod.clear();
 		this.requestsInFlightByIdentity.clear();
 		this.requestsInFlightById.clear();
 		this.requestStateByThread.remove();
@@ -1724,6 +1859,36 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		labels.put("endpoint", key.endpointPath());
 		labels.put("method", key.jsonRpcMethod());
 		labels.put("reason", key.reason().name().toLowerCase(Locale.ROOT));
+		return new LabelSet(labels);
+	}
+
+	@NonNull
+	private static LabelSet labelsForMcpSubscriptionTerminationKey(
+			McpMetricsSnapshot.@NonNull SubscriptionTerminationKey key) {
+		requireNonNull(key);
+
+		Map<String, String> labels = new LinkedHashMap<>(2);
+		labels.put("endpoint", key.endpointPath());
+		labels.put("reason", key.reason().name().toLowerCase(Locale.ROOT));
+		return new LabelSet(labels);
+	}
+
+	@NonNull
+	private static LabelSet labelsForMcpEndpointMethodKey(
+			McpMetricsSnapshot.@NonNull EndpointMethodKey key) {
+		requireNonNull(key);
+
+		Map<String, String> labels = new LinkedHashMap<>(2);
+		labels.put("endpoint", key.endpointPath());
+		labels.put("method", key.jsonRpcMethod());
+		return new LabelSet(labels);
+	}
+
+	@NonNull
+	private static LabelSet labelsForMcpProtocolErrorCode(
+			@NonNull Integer code) {
+		Map<String, String> labels = new LinkedHashMap<>(1);
+		labels.put("code", requireNonNull(code).toString());
 		return new LabelSet(labels);
 	}
 

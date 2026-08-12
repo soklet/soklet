@@ -45,11 +45,13 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static java.util.Objects.requireNonNull;
@@ -59,8 +61,8 @@ import static java.util.Objects.requireNonNull;
  * churn, cooperative cancelation, and restart cleanup.
  * <p>
  * {@code SOKLET_SOAK_PROFILE} selects the checked-in smoke or nightly workload
- * profile. The test intentionally speaks MCP over raw loopback sockets so it
- * exercises only Soklet's public application APIs and its real HTTP transport.
+ * profile. Live-listener coverage speaks MCP over raw loopback sockets, while
+ * simulator coverage exercises the same public application APIs off-network.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -72,6 +74,15 @@ public class McpCrossFeatureSoakTests {
 	private static final String PROGRESS_TOOL = "soak.progress";
 	private static final String PROTECTED_TOOL = "soak.protected-state";
 	private static final String BLOCKING_TOOL = "soak.blocking";
+	private static final String SIMULATOR_JSON_TOOL = "soak.simulator-json";
+	private static final String SIMULATOR_CAPTURE_TOOL =
+			"soak.simulator-capture";
+	private static final String SIMULATOR_RESIDUAL_TOOL =
+			"soak.simulator-residual";
+	private static final int SIMULATOR_CASE_COUNT = 8;
+	private static final int SIMULATOR_STREAM_ITEM_CAPACITY = 4;
+	private static final int SIMULATOR_MAXIMUM_CAPTURED_BYTES = 4_096;
+	private static final Duration ZERO_TIMEOUT = Duration.ZERO;
 	private static final URI RESOURCE_URI = URI.create("soak://resource/current");
 	private static final URI IGNORED_RESOURCE_URI =
 			URI.create("soak://resource/ignored");
@@ -205,6 +216,139 @@ public class McpCrossFeatureSoakTests {
 		}
 	}
 
+	@Test
+	public void mcpSimulatorChurnReturnsResourcesToBaselineAfterCancellationAndScopeCleanup()
+			throws Exception {
+		long startedAt = System.nanoTime();
+		SoakState state = new SoakState();
+		CountingSubscriptionPublisher publisher =
+				new CountingSubscriptionPublisher();
+		CountingMcpMetricsCollector metricsCollector =
+				new CountingMcpMetricsCollector();
+		CountingLifecycle lifecycle = new CountingLifecycle();
+		McpServer mcpServer = mcpServer(state, publisher);
+		SokletConfig config = SokletConfig.withMcpServer(mcpServer)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.metricsCollector(metricsCollector)
+				.lifecycleObserver(lifecycle)
+				.build();
+		AtomicIntegerArray caseCounts =
+				new AtomicIntegerArray(SIMULATOR_CASE_COUNT);
+		int workloadCycles = PROFILE.concurrentClients()
+				* PROFILE.cyclesPerClient();
+		int expectedPerCase = workloadCycles / SIMULATOR_CASE_COUNT;
+		SoakResourceSnapshot baseline;
+		SoakResourceSnapshot finalSnapshot;
+
+		Assertions.assertEquals(0, workloadCycles % SIMULATOR_CASE_COUNT,
+				"The checked-in soak profiles must exercise every simulator case equally.");
+		try {
+			// Warm all deterministic paths and the executor before measuring the
+			// stopped, off-network resource baseline.
+			Soklet.runSimulator(config, simulator -> {
+				try {
+					for (int caseIndex = 0; caseIndex < SIMULATOR_CASE_COUNT;
+							caseIndex++)
+						performSimulatorCase(simulator, caseIndex,
+								"warmup-" + caseIndex, state, publisher);
+				} catch (Exception e) {
+					throw new AssertionError("Unable to warm simulator soak paths.", e);
+				}
+			});
+			awaitSimulatorIdle("simulator warmup", metricsCollector, state,
+					PROFILE.settleTimeout());
+			assertSimulatorStoppedAndDrained(mcpServer, state, publisher,
+					metricsCollector, lifecycle);
+			baseline = SoakResourceSnapshot.captureAfterGc();
+
+			AtomicReference<RunResult> runResult = new AtomicReference<>();
+			Soklet.runSimulator(config, simulator -> {
+				try {
+					runResult.set(runConcurrent(PROFILE.concurrentClients(),
+							PROFILE.cyclesPerClient(), (clientIndex, iteration) -> {
+						int ordinal = clientIndex * PROFILE.cyclesPerClient()
+								+ iteration;
+						int caseIndex = ordinal % SIMULATOR_CASE_COUNT;
+						performSimulatorCase(simulator, caseIndex,
+								"measured-%d-%d".formatted(clientIndex,
+										iteration), state, publisher);
+						caseCounts.incrementAndGet(caseIndex);
+					}));
+				} catch (Exception e) {
+					throw new AssertionError("Unable to run simulator soak workload.", e);
+				}
+			});
+			RunResult completedRun = requireNonNull(runResult.get(),
+					"The simulator workload did not publish a result.");
+			Assertions.assertTrue(completedRun.failures().isEmpty(),
+					() -> "Unexpected MCP simulator churn failures: "
+							+ completedRun.failures());
+			Assertions.assertEquals(workloadCycles, completedRun.completed());
+			for (int caseIndex = 0; caseIndex < SIMULATOR_CASE_COUNT;
+					caseIndex++)
+				Assertions.assertEquals(expectedPerCase, caseCounts.get(caseIndex),
+						"Unexpected execution count for simulator case " + caseIndex);
+
+			awaitSimulatorIdle("measured simulator churn", metricsCollector,
+					state, PROFILE.settleTimeout());
+			performSimulatorResidualWave(config, mcpServer, state,
+					metricsCollector);
+			awaitSimulatorIdle("post-residual simulator recovery",
+					metricsCollector, state, PROFILE.settleTimeout());
+			assertSimulatorStoppedAndDrained(mcpServer, state, publisher,
+					metricsCollector, lifecycle);
+			finalSnapshot = SoakResourceSnapshot.assertReturnsNear(
+					"MCP off-network simulator churn", baseline,
+					PROFILE.settleTimeout(), PROFILE.resourceTolerance());
+			SoakReport.recordPassedScenario(
+					"MCP off-network simulator churn",
+					"clients=%d, cyclesPerClient=%d, cases=%d, streamItemQueueCapacity=%d, maximumCapturedBytes=%d, residualWaves=1"
+							.formatted(PROFILE.concurrentClients(),
+									PROFILE.cyclesPerClient(), SIMULATOR_CASE_COUNT,
+									SIMULATOR_STREAM_ITEM_CAPACITY,
+									SIMULATOR_MAXIMUM_CAPTURED_BYTES),
+					Duration.ofNanos(System.nanoTime() - startedAt),
+					baseline,
+					finalSnapshot,
+					PROFILE.resourceTolerance(),
+					SoakReport.observations(
+							"Completed simulator feature cycles",
+							Integer.toString(workloadCycles),
+							"Executions per deterministic case",
+							Integer.toString(expectedPerCase),
+							"MCP requests started/finished",
+							metricsCollector.requestsStarted() + "/"
+									+ metricsCollector.requestsFinished(),
+							"MCP streams opened/closed",
+							metricsCollector.streamsOpened() + "/"
+									+ metricsCollector.streamsClosed(),
+							"MCP subscriptions opened/closed",
+							metricsCollector.subscriptionsOpened() + "/"
+									+ metricsCollector.subscriptionsClosed(),
+							"MCP handler executions started/finished",
+							metricsCollector.handlerExecutionsStarted() + "/"
+									+ metricsCollector.handlerExecutionsFinished(),
+							"Residual cleanup waves", "1",
+							"Server/connection/transport metric events",
+							Integer.toString(
+									metricsCollector.transportBoundaryEvents()),
+							"MCP server lifecycle callbacks",
+							lifecycle.serversStarted() + "/"
+									+ lifecycle.serversStopped(),
+							"Final MCP status",
+							mcpServer.getDiagnostics().getStatus().name(),
+							"Active publisher registrations",
+							Integer.toString(publisher.activeRegistrationCount()),
+							"Open client sockets",
+							Integer.toString(state.openClientSockets.get()),
+							"Settle timeout", PROFILE.settleTimeout().toString()));
+		} finally {
+			state.releaseAllBlockingHandlers();
+			state.releaseResidualHandler();
+			mcpServer.stop();
+		}
+	}
+
 	@NonNull
 	private static McpServer mcpServer(@NonNull SoakState state,
 			@NonNull CountingSubscriptionPublisher publisher) {
@@ -324,6 +468,47 @@ public class McpCrossFeatureSoakTests {
 					return McpCompleteResult.fromToolText("blocking request released");
 				})
 				.build();
+		McpToolRegistration<McpJsonObject> simulatorJsonTool =
+				McpToolRegistration.withName(SIMULATOR_JSON_TOOL)
+						.jsonArguments()
+						.handler((request, call, features) ->
+								McpCompleteResult.fromToolText(
+										"off-network simulator JSON complete"))
+						.build();
+		McpToolRegistration<McpJsonObject> simulatorCaptureTool =
+				McpToolRegistration.withName(SIMULATOR_CAPTURE_TOOL)
+						.jsonArguments()
+						.handler((request, call, features) -> {
+							String mode = requireJsonString(call.getArguments(), "mode");
+							McpProgressReporter reporter =
+									features.require(McpProgressReporter.class);
+							if ("item".equals(mode)) {
+								for (int index = 1; index <= 5; index++)
+									reporter.report(McpProgressUpdate
+											.withProgress((double) index).build());
+							} else if ("byte".equals(mode)) {
+								String message = "x".repeat(3_000);
+								reporter.report(McpProgressUpdate.withProgress(1.0d)
+										.message(message).build());
+								reporter.report(McpProgressUpdate.withProgress(2.0d)
+										.message(message).build());
+							} else {
+								throw new IllegalArgumentException(
+										"Unknown simulator capture mode.");
+							}
+							return McpCompleteResult.fromToolText(
+									"capture producer completed");
+						})
+						.build();
+		McpToolRegistration<McpJsonObject> simulatorResidualTool =
+				McpToolRegistration.withName(SIMULATOR_RESIDUAL_TOOL)
+						.jsonArguments()
+						.handler((request, call, features) -> {
+							state.runResidualHandler();
+							return McpCompleteResult.fromToolText(
+									"residual handler released");
+						})
+						.build();
 		McpResourceRegistration resource = McpResourceRegistration
 				.withUriAndName(RESOURCE_URI, "MCP soak resource")
 				.handler((request, read, features) ->
@@ -345,6 +530,9 @@ public class McpCrossFeatureSoakTests {
 				.tool(progressTool)
 				.tool(protectedTool)
 				.tool(blockingTool)
+				.tool(simulatorJsonTool)
+				.tool(simulatorCaptureTool)
+				.tool(simulatorResidualTool)
 				.resource(resource)
 				.subscriptions(subscriptions)
 				.build();
@@ -377,6 +565,448 @@ public class McpCrossFeatureSoakTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
+	}
+
+	private static void performSimulatorCase(@NonNull Simulator simulator,
+			int caseIndex, @NonNull String cycleId, @NonNull SoakState state,
+			@NonNull CountingSubscriptionPublisher publisher) throws Exception {
+		requireNonNull(simulator);
+		requireNonNull(cycleId);
+		requireNonNull(state);
+		requireNonNull(publisher);
+		switch (caseIndex) {
+			case 0 -> performSimulatorJson(simulator, cycleId + "-json");
+			case 1 -> performSimulatorProgress(simulator, cycleId + "-progress");
+			case 2 -> performSimulatorSubscription(simulator,
+					cycleId + "-subscription", publisher);
+			case 3 -> performSimulatorProtectedRoundTrip(simulator,
+					cycleId + "-protected");
+			case 4 -> performSimulatorCancel(simulator,
+					cycleId + "-cancel", state);
+			case 5 -> performSimulatorItemLimit(simulator,
+					cycleId + "-item-limit");
+			case 6 -> performSimulatorByteLimit(simulator,
+					cycleId + "-byte-limit");
+			case 7 -> performSimulatorCancelTerminalRace(simulator,
+					cycleId + "-race", state);
+			default -> throw new IllegalArgumentException(
+					"Unknown simulator soak case " + caseIndex);
+		}
+	}
+
+	private static void performSimulatorJson(@NonNull Simulator simulator,
+			@NonNull String id) throws Exception {
+		try (McpSimulation simulation = simulator.startMcpRequest(
+				simulatorToolRequest(id, SIMULATOR_JSON_TOOL, "{}", null,
+						null, null), simulatorOptions())) {
+			McpSimulationResponse response = awaitSimulatorResponse(simulation);
+			Assertions.assertEquals(200, response.getStatusCode());
+			Assertions.assertEquals(McpSimulationBodyMode.JSON,
+					response.getBodyMode());
+			String body = new String(response.getBody().orElseThrow(),
+					StandardCharsets.UTF_8);
+			assertContains(body, "\"id\":" + jsonString(id),
+					"simulator JSON request ID");
+			assertContains(body, "off-network simulator JSON complete",
+					"simulator JSON result");
+			Assertions.assertEquals(McpStreamTerminationReason.COMPLETED,
+					awaitSimulatorCompletion(simulation).getReason());
+			Assertions.assertTrue(simulation.nextStreamItem(ZERO_TIMEOUT).isEmpty());
+		}
+	}
+
+	private static void performSimulatorProgress(@NonNull Simulator simulator,
+			@NonNull String id) throws Exception {
+		try (McpSimulation simulation = simulator.startMcpRequest(
+				simulatorToolRequest(id, PROGRESS_TOOL, "{}", id + "-token",
+						null, null), simulatorOptions())) {
+			Assertions.assertEquals(McpSimulationBodyMode.SERVER_SENT_EVENTS,
+					awaitSimulatorResponse(simulation).getBodyMode());
+			List<McpSimulationStreamItem> items = new ArrayList<>();
+			for (int index = 0; index < 4; index++)
+				items.add(awaitSimulatorItem(simulation));
+			Assertions.assertEquals(McpStreamTerminationReason.COMPLETED,
+					awaitSimulatorCompletion(simulation).getReason());
+			Assertions.assertTrue(simulation.nextStreamItem(ZERO_TIMEOUT).isEmpty());
+			Assertions.assertTrue(items.get(0).getMessage().isPresent());
+			Assertions.assertTrue(items.get(3).getMessage().isPresent());
+		}
+	}
+
+	private static void performSimulatorSubscription(
+			@NonNull Simulator simulator, @NonNull String id,
+			@NonNull CountingSubscriptionPublisher publisher) throws Exception {
+		URI resourceUri = URI.create("soak://simulator/" + id);
+		try (McpSimulation simulation = simulator.startMcpRequest(
+				simulatorSubscriptionRequest(id, resourceUri), simulatorOptions())) {
+			Assertions.assertEquals(McpSimulationBodyMode.SERVER_SENT_EVENTS,
+					awaitSimulatorResponse(simulation).getBodyMode());
+			McpSimulationStreamItem acknowledgment =
+					awaitSimulatorItem(simulation);
+			assertContains(new String(acknowledgment.getEncodedBytes(),
+					StandardCharsets.UTF_8),
+					"notifications/subscriptions/acknowledged",
+					"simulator subscription acknowledgement");
+			publisher.publishResourceUpdated(resourceUri);
+			McpSimulationStreamItem event = awaitSimulatorItem(simulation);
+			String eventBytes = new String(event.getEncodedBytes(),
+					StandardCharsets.UTF_8);
+			assertContains(eventBytes, "notifications/resources/updated",
+					"simulator subscription event");
+			assertContains(eventBytes, resourceUri.toString(),
+					"simulator subscribed resource URI");
+			simulation.cancel();
+			Assertions.assertEquals(McpStreamTerminationReason.CLIENT_DISCONNECTED,
+					awaitSimulatorCompletion(simulation).getReason());
+			Assertions.assertTrue(simulation.nextStreamItem(ZERO_TIMEOUT).isEmpty());
+		}
+	}
+
+	private static void performSimulatorProtectedRoundTrip(
+			@NonNull Simulator simulator, @NonNull String idPrefix) throws Exception {
+		String capabilities = "{\"elicitation\":{\"form\":{}}}";
+		String initialId = idPrefix + "-initial";
+		String initialBody;
+		try (McpSimulation initial = simulator.startMcpRequest(
+				simulatorToolRequest(initialId, PROTECTED_TOOL, "{}", null,
+						null, null, capabilities), simulatorOptions())) {
+			McpSimulationResponse response = awaitSimulatorResponse(initial);
+			Assertions.assertEquals(McpSimulationBodyMode.JSON,
+					response.getBodyMode());
+			initialBody = new String(response.getBody().orElseThrow(),
+					StandardCharsets.UTF_8);
+			assertContains(initialBody, "\"resultType\":\"input_required\"",
+					"simulator input-required result");
+			Assertions.assertEquals(McpStreamTerminationReason.COMPLETED,
+					awaitSimulatorCompletion(initial).getReason());
+		}
+
+		String requestState = extractJsonStringMember(initialBody,
+				"requestState");
+		String inputResponses = "{\"approval\":{\"action\":\"accept\","
+				+ "\"content\":{\"answer\":\"approved\"}}}";
+		String retryId = idPrefix + "-retry";
+		try (McpSimulation retry = simulator.startMcpRequest(
+				simulatorToolRequest(retryId, PROTECTED_TOOL, "{}", null,
+						inputResponses, requestState, capabilities),
+				simulatorOptions())) {
+			String retryBody = new String(
+					awaitSimulatorResponse(retry).getBody().orElseThrow(),
+					StandardCharsets.UTF_8);
+			assertContains(retryBody, "\"id\":" + jsonString(retryId),
+					"simulator protected retry request ID");
+			assertContains(retryBody, "protected request state accepted",
+					"simulator protected retry result");
+			Assertions.assertEquals(McpStreamTerminationReason.COMPLETED,
+					awaitSimulatorCompletion(retry).getReason());
+		}
+	}
+
+	private static void performSimulatorCancel(@NonNull Simulator simulator,
+			@NonNull String id, @NonNull SoakState state) throws Exception {
+		String invocation = id + "-invocation";
+		BlockingObservation observation = state.prepareBlocking(invocation);
+		try (McpSimulation simulation = simulator.startMcpRequest(
+				simulatorToolRequest(id, BLOCKING_TOOL,
+						"{\"invocation\":" + jsonString(invocation) + "}",
+						id + "-token", null, null), simulatorOptions())) {
+			Assertions.assertTrue(observation.handlerStarted.await(
+					PROFILE.settleTimeout().toMillis(), TimeUnit.MILLISECONDS));
+			Assertions.assertEquals(McpSimulationBodyMode.SERVER_SENT_EVENTS,
+					awaitSimulatorResponse(simulation).getBodyMode());
+			awaitSimulatorItem(simulation);
+			simulation.cancel();
+			observation.awaitCanceledAndExited(PROFILE.settleTimeout(),
+					StreamTerminationReason.CLIENT_DISCONNECTED);
+			Assertions.assertEquals(McpStreamTerminationReason.CLIENT_DISCONNECTED,
+					awaitSimulatorCompletion(simulation).getReason());
+		} finally {
+			observation.release.countDown();
+			state.removeBlocking(invocation, observation);
+		}
+	}
+
+	private static void performSimulatorItemLimit(@NonNull Simulator simulator,
+			@NonNull String id) throws Exception {
+		try (McpSimulation simulation = simulator.startMcpRequest(
+				simulatorToolRequest(id, SIMULATOR_CAPTURE_TOOL,
+						"{\"mode\":\"item\"}", id + "-token", null, null),
+				simulatorOptions())) {
+			Assertions.assertEquals(McpSimulationBodyMode.SERVER_SENT_EVENTS,
+					awaitSimulatorResponse(simulation).getBodyMode());
+			Assertions.assertEquals(McpStreamTerminationReason
+						.SIMULATOR_CAPTURE_ITEM_LIMIT_EXCEEDED,
+					awaitSimulatorCompletion(simulation).getReason());
+			for (int index = 0; index < SIMULATOR_STREAM_ITEM_CAPACITY; index++)
+				awaitSimulatorItem(simulation);
+			Assertions.assertTrue(simulation.nextStreamItem(ZERO_TIMEOUT).isEmpty());
+		}
+	}
+
+	private static void performSimulatorByteLimit(@NonNull Simulator simulator,
+			@NonNull String id) throws Exception {
+		try (McpSimulation simulation = simulator.startMcpRequest(
+				simulatorToolRequest(id, SIMULATOR_CAPTURE_TOOL,
+						"{\"mode\":\"byte\"}", id + "-token", null, null),
+				simulatorOptions())) {
+			Assertions.assertEquals(McpSimulationBodyMode.SERVER_SENT_EVENTS,
+					awaitSimulatorResponse(simulation).getBodyMode());
+			Assertions.assertEquals(McpStreamTerminationReason
+						.SIMULATOR_CAPTURE_BYTE_LIMIT_EXCEEDED,
+					awaitSimulatorCompletion(simulation).getReason());
+			McpSimulationStreamItem retained = awaitSimulatorItem(simulation);
+			Assertions.assertTrue(retained.getEncodedBytes().length
+					<= SIMULATOR_MAXIMUM_CAPTURED_BYTES);
+			Assertions.assertTrue(simulation.nextStreamItem(ZERO_TIMEOUT).isEmpty());
+		}
+	}
+
+	private static void performSimulatorCancelTerminalRace(
+			@NonNull Simulator simulator, @NonNull String id,
+			@NonNull SoakState state) throws Exception {
+		String invocation = id + "-invocation";
+		BlockingObservation observation = state.prepareBlocking(invocation);
+		try (McpSimulation simulation = simulator.startMcpRequest(
+				simulatorToolRequest(id, BLOCKING_TOOL,
+						"{\"invocation\":" + jsonString(invocation) + "}",
+						id + "-token", null, null), simulatorOptions())) {
+			Assertions.assertTrue(observation.handlerStarted.await(
+					PROFILE.settleTimeout().toMillis(), TimeUnit.MILLISECONDS));
+			awaitSimulatorResponse(simulation);
+			awaitSimulatorItem(simulation);
+			CyclicBarrier barrier = new CyclicBarrier(2);
+			AtomicReference<Throwable> cancelFailure = new AtomicReference<>();
+			AtomicReference<Throwable> terminalFailure = new AtomicReference<>();
+			Thread cancelThread = new Thread(() -> {
+				try {
+					barrier.await();
+					simulation.cancel();
+				} catch (Throwable throwable) {
+					cancelFailure.set(throwable);
+				}
+			}, "mcp-simulator-soak-cancel");
+			Thread terminalThread = new Thread(() -> {
+				try {
+					barrier.await();
+					observation.release.countDown();
+				} catch (Throwable throwable) {
+					terminalFailure.set(throwable);
+				}
+			}, "mcp-simulator-soak-terminal");
+			cancelThread.start();
+			terminalThread.start();
+			joinSimulatorRaceThread(cancelThread);
+			joinSimulatorRaceThread(terminalThread);
+			Assertions.assertNull(cancelFailure.get());
+			Assertions.assertNull(terminalFailure.get());
+			Assertions.assertTrue(observation.handlerExited.await(
+					PROFILE.settleTimeout().toMillis(), TimeUnit.MILLISECONDS));
+			McpStreamTerminationReason reason =
+					awaitSimulatorCompletion(simulation).getReason();
+			Assertions.assertTrue(reason == McpStreamTerminationReason.COMPLETED
+					|| reason == McpStreamTerminationReason.CLIENT_DISCONNECTED,
+					"The cancel/terminal race must publish one coherent winner.");
+			int remainingItems = 0;
+			while (simulation.nextStreamItem(ZERO_TIMEOUT).isPresent())
+				remainingItems++;
+			Assertions.assertEquals(
+					reason == McpStreamTerminationReason.COMPLETED ? 1 : 0,
+					remainingItems);
+		} finally {
+			observation.release.countDown();
+			state.removeBlocking(invocation, observation);
+		}
+	}
+
+	private static void performSimulatorResidualWave(@NonNull SokletConfig config,
+			@NonNull McpServer mcpServer, @NonNull SoakState state,
+			@NonNull CountingMcpMetricsCollector metricsCollector)
+			throws Exception {
+		AtomicReference<Simulator> escapedSimulator = new AtomicReference<>();
+		AtomicReference<McpSimulation> escapedSimulation = new AtomicReference<>();
+		IllegalStateException cleanupFailure = Assertions.assertThrows(
+				IllegalStateException.class, () -> Soklet.runSimulator(config,
+						simulator -> {
+							escapedSimulator.set(simulator);
+							escapedSimulation.set(simulator.startMcpRequest(
+									simulatorToolRequest("residual", SIMULATOR_RESIDUAL_TOOL,
+											"{}", null, null, null),
+									simulatorOptions()));
+							try {
+								Assertions.assertTrue(state.residualHandlerStarted.await(
+										PROFILE.settleTimeout().toMillis(),
+										TimeUnit.MILLISECONDS));
+							} catch (InterruptedException e) {
+								Thread.currentThread().interrupt();
+								throw new AssertionError(e);
+							}
+						}));
+		Assertions.assertFalse(cleanupFailure.getMessage() == null
+				|| cleanupFailure.getMessage().isBlank(),
+				"Residual simulator cleanup must remain diagnosable.");
+		Simulator retainedSimulator = escapedSimulator.get();
+		McpSimulation retainedSimulation = escapedSimulation.get();
+		Assertions.assertNotNull(retainedSimulator);
+		Assertions.assertNotNull(retainedSimulation);
+		Assertions.assertThrows(IllegalStateException.class,
+				() -> retainedSimulator.startMcpRequest(simulatorToolRequest(
+						"residual-rejected", SIMULATOR_JSON_TOOL, "{}", null,
+						null, null)));
+		Assertions.assertThrows(IllegalStateException.class, mcpServer::start,
+				"Live start must reject residual simulator work before binding.");
+		assertStopped(mcpServer);
+		Assertions.assertEquals(0,
+				mcpServer.getDiagnostics().getActiveHandlerExecutions());
+		Assertions.assertTrue(metricsCollector.handlerExecutionsStarted()
+				> metricsCollector.handlerExecutionsFinished(),
+				"Residual simulator work must remain accounted internally.");
+		state.releaseResidualHandler();
+		Assertions.assertTrue(state.residualHandlerExited.await(
+				PROFILE.settleTimeout().toMillis(), TimeUnit.MILLISECONDS));
+		awaitSimulatorIdle("released residual simulator handler",
+				metricsCollector, state, PROFILE.settleTimeout());
+		Assertions.assertTrue(retainedSimulation.isComplete());
+		Assertions.assertEquals(McpStreamTerminationReason.CLIENT_DISCONNECTED,
+				awaitSimulatorCompletion(retainedSimulation).getReason());
+
+		// A new private generation must be available after the retained handler
+		// actually exits; this remains off-network and leaves diagnostics stopped.
+		Soklet.runSimulator(config, simulator -> {
+			try {
+				performSimulatorJson(simulator, "post-residual-recovery");
+			} catch (Exception e) {
+				throw new AssertionError("Simulator did not recover after residual work.",
+						e);
+			}
+		});
+		assertStopped(mcpServer);
+	}
+
+	@NonNull
+	private static McpSimulationOptions simulatorOptions() {
+		return McpSimulationOptions.builder()
+				.streamItemQueueCapacity(SIMULATOR_STREAM_ITEM_CAPACITY)
+				.maximumCapturedBytes(SIMULATOR_MAXIMUM_CAPTURED_BYTES)
+				.build();
+	}
+
+	@NonNull
+	private static Request simulatorToolRequest(@NonNull String id,
+			@NonNull String toolName, @NonNull String argumentsJson,
+			@Nullable String progressToken, @Nullable String inputResponsesJson,
+			@Nullable String requestState) {
+		return simulatorToolRequest(id, toolName, argumentsJson, progressToken,
+				inputResponsesJson, requestState, "{}");
+	}
+
+	@NonNull
+	private static Request simulatorToolRequest(@NonNull String id,
+			@NonNull String toolName, @NonNull String argumentsJson,
+			@Nullable String progressToken, @Nullable String inputResponsesJson,
+			@Nullable String requestState, @NonNull String capabilitiesJson) {
+		String body = toolCallBody(id, toolName, argumentsJson, capabilitiesJson,
+				progressToken, inputResponsesJson, requestState);
+		return Request.withPath(HttpMethod.POST, MCP_PATH)
+				.headers(Map.of(
+						"Host", Set.of(LOOPBACK + ":0"),
+						"Content-Type",
+						Set.of("application/json; charset=UTF-8"),
+						"Accept",
+						Set.of("application/json, text/event-stream"),
+						"MCP-Protocol-Version", Set.of(PROTOCOL_VERSION),
+						"Mcp-Method", Set.of("tools/call"),
+						"Mcp-Name", Set.of(toolName)))
+				.body(body.getBytes(StandardCharsets.UTF_8))
+				.build();
+	}
+
+	@NonNull
+	private static Request simulatorSubscriptionRequest(@NonNull String id,
+			@NonNull URI resourceUri) {
+		String notifications = "{\"resourcesListChanged\":false,"
+				+ "\"resourceSubscriptions\":["
+				+ jsonString(resourceUri.toString()) + "]}";
+		return Request.withPath(HttpMethod.POST, MCP_PATH)
+				.headers(Map.of(
+						"Host", Set.of(LOOPBACK + ":0"),
+						"Content-Type",
+						Set.of("application/json; charset=UTF-8"),
+						"Accept",
+						Set.of("application/json, text/event-stream"),
+						"MCP-Protocol-Version", Set.of(PROTOCOL_VERSION),
+						"Mcp-Method", Set.of("subscriptions/listen")))
+				.body(subscriptionBody(id, notifications)
+						.getBytes(StandardCharsets.UTF_8))
+				.build();
+	}
+
+	@NonNull
+	private static McpSimulationResponse awaitSimulatorResponse(
+			@NonNull McpSimulation simulation) throws InterruptedException {
+		return simulation.awaitResponse(PROFILE.settleTimeout())
+				.orElseThrow(() -> new AssertionError(
+						"Timed out awaiting an MCP simulator response."));
+	}
+
+	@NonNull
+	private static McpSimulationStreamItem awaitSimulatorItem(
+			@NonNull McpSimulation simulation) throws InterruptedException {
+		return simulation.nextStreamItem(PROFILE.settleTimeout())
+				.orElseThrow(() -> new AssertionError(
+						"Timed out awaiting an MCP simulator stream item."));
+	}
+
+	@NonNull
+	private static McpSimulationCompletion awaitSimulatorCompletion(
+			@NonNull McpSimulation simulation) throws InterruptedException {
+		return simulation.awaitCompletion(PROFILE.settleTimeout())
+				.orElseThrow(() -> new AssertionError(
+						"Timed out awaiting MCP simulator completion."));
+	}
+
+	private static void joinSimulatorRaceThread(@NonNull Thread thread)
+			throws InterruptedException {
+		thread.join(PROFILE.settleTimeout().toMillis());
+		Assertions.assertFalse(thread.isAlive(),
+				"Simulator race participant did not terminate.");
+	}
+
+	private static void awaitSimulatorIdle(@NonNull String scenario,
+			@NonNull CountingMcpMetricsCollector metrics,
+			@NonNull SoakState state, @NonNull Duration timeout)
+			throws InterruptedException {
+		Assertions.assertTrue(metrics.awaitBalanced(timeout),
+				() -> scenario + " did not balance MCP metric transitions: "
+						+ metrics.describe(state));
+		Assertions.assertEquals(0, state.activeBlockingHandlers.get());
+		Assertions.assertEquals(0, state.activeResidualHandlers.get());
+	}
+
+	private static void assertSimulatorStoppedAndDrained(
+			@NonNull McpServer mcpServer, @NonNull SoakState state,
+			@NonNull CountingSubscriptionPublisher publisher,
+			@NonNull CountingMcpMetricsCollector metrics,
+			@NonNull CountingLifecycle lifecycle) {
+		assertStopped(mcpServer);
+		McpServerDiagnostics diagnostics = mcpServer.getDiagnostics();
+		Assertions.assertEquals(0, diagnostics.getActiveHandlerExecutions());
+		Assertions.assertEquals(0, diagnostics.getQueuedRequests());
+		Assertions.assertEquals(0, diagnostics.getActiveRequestStreams());
+		Assertions.assertEquals(0, diagnostics.getActiveSubscriptions());
+		Assertions.assertEquals(0, state.activeBlockingHandlers.get());
+		Assertions.assertEquals(0, state.activeResidualHandlers.get());
+		Assertions.assertEquals(0, state.openClientSockets.get());
+		Assertions.assertEquals(0, publisher.activeRegistrationCount());
+		Assertions.assertEquals(metrics.requestsStarted(),
+				metrics.requestsFinished());
+		Assertions.assertEquals(metrics.streamsOpened(), metrics.streamsClosed());
+		Assertions.assertEquals(metrics.subscriptionsOpened(),
+				metrics.subscriptionsClosed());
+		Assertions.assertEquals(metrics.handlerExecutionsStarted(),
+				metrics.handlerExecutionsFinished());
+		Assertions.assertEquals(0, metrics.transportBoundaryEvents());
+		Assertions.assertEquals(0, lifecycle.serversStarted());
+		Assertions.assertEquals(0, lifecycle.serversStopped());
 	}
 
 	private static void performFeatureCycle(int port, @NonNull String cycleId,
@@ -1023,6 +1653,7 @@ public class McpCrossFeatureSoakTests {
 		private final AtomicInteger blockingCallbacks = new AtomicInteger();
 		private final AtomicInteger blockingExits = new AtomicInteger();
 		private final AtomicInteger activeBlockingHandlers = new AtomicInteger();
+		private final AtomicInteger activeResidualHandlers = new AtomicInteger();
 		private final AtomicInteger openClientSockets = new AtomicInteger();
 		private final AtomicInteger clientDisconnectCancelations =
 				new AtomicInteger();
@@ -1030,11 +1661,28 @@ public class McpCrossFeatureSoakTests {
 				new AtomicInteger();
 		private final ConcurrentHashMap<String, BlockingObservation>
 				blockingByInvocation = new ConcurrentHashMap<>();
+		private final CountDownLatch residualHandlerStarted = new CountDownLatch(1);
+		private final CountDownLatch residualHandlerRelease = new CountDownLatch(1);
+		private final CountDownLatch residualHandlerExited = new CountDownLatch(1);
+
+		@NonNull
+		private BlockingObservation prepareBlocking(@NonNull String invocation) {
+			BlockingObservation observation = new BlockingObservation(invocation);
+			if (this.blockingByInvocation.putIfAbsent(invocation, observation) != null)
+				throw new IllegalStateException(
+						"Duplicate prepared blocking invocation " + invocation);
+			return observation;
+		}
 
 		@NonNull
 		private BlockingObservation beginBlocking(@NonNull String invocation) {
-			BlockingObservation observation = new BlockingObservation(invocation);
-			if (this.blockingByInvocation.putIfAbsent(invocation, observation) != null)
+			BlockingObservation candidate = new BlockingObservation(invocation);
+			candidate.claimed.set(true);
+			BlockingObservation prepared =
+					this.blockingByInvocation.putIfAbsent(invocation, candidate);
+			BlockingObservation observation = prepared == null ? candidate : prepared;
+			if (prepared != null
+					&& !observation.claimed.compareAndSet(false, true))
 				throw new IllegalStateException(
 						"Duplicate blocking invocation " + invocation);
 			this.blockingInvocations.incrementAndGet();
@@ -1077,6 +1725,30 @@ public class McpCrossFeatureSoakTests {
 			this.blockingByInvocation.values().forEach(
 					observation -> observation.release.countDown());
 		}
+
+		private void runResidualHandler() {
+			this.activeResidualHandlers.incrementAndGet();
+			this.residualHandlerStarted.countDown();
+			boolean interrupted = false;
+			try {
+				while (this.residualHandlerRelease.getCount() != 0) {
+					try {
+						this.residualHandlerRelease.await();
+					} catch (InterruptedException e) {
+						interrupted = true;
+					}
+				}
+			} finally {
+				this.activeResidualHandlers.decrementAndGet();
+				this.residualHandlerExited.countDown();
+				if (interrupted)
+					Thread.currentThread().interrupt();
+			}
+		}
+
+		private void releaseResidualHandler() {
+			this.residualHandlerRelease.countDown();
+		}
 	}
 
 	@ThreadSafe
@@ -1094,6 +1766,7 @@ public class McpCrossFeatureSoakTests {
 		@NonNull
 		private final AtomicReference<StreamTerminationReason> reason =
 				new AtomicReference<>();
+		private final AtomicBoolean claimed = new AtomicBoolean();
 
 		private BlockingObservation(@NonNull String invocation) {
 			this.invocation = requireNonNull(invocation);
@@ -1178,6 +1851,8 @@ public class McpCrossFeatureSoakTests {
 	private static final class CountingMcpMetricsCollector
 			implements MetricsCollector {
 		@NonNull
+		private final Object balanceLock = new Object();
+		@NonNull
 		private final AtomicInteger requestsStarted = new AtomicInteger();
 		@NonNull
 		private final AtomicInteger requestsFinished = new AtomicInteger();
@@ -1194,28 +1869,50 @@ public class McpCrossFeatureSoakTests {
 		@NonNull
 		private final AtomicInteger progressEvents = new AtomicInteger();
 		@NonNull
+		private final AtomicInteger handlerExecutionsStarted = new AtomicInteger();
+		@NonNull
+		private final AtomicInteger handlerExecutionsFinished = new AtomicInteger();
+		@NonNull
+		private final AtomicInteger transportBoundaryEvents = new AtomicInteger();
+		@NonNull
 		private final Queue<McpStreamTerminationReason> subscriptionCloseReasons =
 				new ConcurrentLinkedQueue<>();
 
 		@Override
 		public void didRecordMcpMetricsEvent(@NonNull McpMetricsEvent event) {
-			if (event instanceof McpMetricsEvent.RequestStarted)
-				this.requestsStarted.incrementAndGet();
-			else if (event instanceof McpMetricsEvent.RequestFinished)
-				this.requestsFinished.incrementAndGet();
-			else if (event instanceof McpMetricsEvent.RequestStreamOpened)
-				this.streamsOpened.incrementAndGet();
-			else if (event instanceof McpMetricsEvent.RequestStreamClosed)
-				this.streamsClosed.incrementAndGet();
-			else if (event instanceof McpMetricsEvent.SubscriptionOpened)
-				this.subscriptionsOpened.incrementAndGet();
-			else if (event instanceof McpMetricsEvent.SubscriptionClosed closed) {
-				this.subscriptionsClosed.incrementAndGet();
-				this.subscriptionCloseReasons.add(closed.reason());
-			} else if (event instanceof McpMetricsEvent.CancelationSignaled)
-				this.cancelationSignals.incrementAndGet();
-			else if (event instanceof McpMetricsEvent.ProgressEmitted)
-				this.progressEvents.incrementAndGet();
+			try {
+				if (event instanceof McpMetricsEvent.RequestStarted)
+					this.requestsStarted.incrementAndGet();
+				else if (event instanceof McpMetricsEvent.RequestFinished)
+					this.requestsFinished.incrementAndGet();
+				else if (event instanceof McpMetricsEvent.RequestStreamOpened)
+					this.streamsOpened.incrementAndGet();
+				else if (event instanceof McpMetricsEvent.RequestStreamClosed)
+					this.streamsClosed.incrementAndGet();
+				else if (event instanceof McpMetricsEvent.SubscriptionOpened)
+					this.subscriptionsOpened.incrementAndGet();
+				else if (event instanceof McpMetricsEvent.SubscriptionClosed closed) {
+					this.subscriptionsClosed.incrementAndGet();
+					this.subscriptionCloseReasons.add(closed.reason());
+				} else if (event instanceof McpMetricsEvent.CancelationSignaled)
+					this.cancelationSignals.incrementAndGet();
+				else if (event instanceof McpMetricsEvent.ProgressEmitted)
+					this.progressEvents.incrementAndGet();
+				else if (event instanceof McpMetricsEvent.HandlerExecutionStarted)
+					this.handlerExecutionsStarted.incrementAndGet();
+				else if (event instanceof McpMetricsEvent.HandlerExecutionFinished)
+					this.handlerExecutionsFinished.incrementAndGet();
+				else if (event instanceof McpMetricsEvent.ServerStarted
+						|| event instanceof McpMetricsEvent.ServerStopped
+						|| event instanceof McpMetricsEvent.ConnectionAccepted
+						|| event instanceof McpMetricsEvent.ConnectionRejected
+						|| event instanceof McpMetricsEvent.TransportFailure)
+					this.transportBoundaryEvents.incrementAndGet();
+			} finally {
+				synchronized (this.balanceLock) {
+					this.balanceLock.notifyAll();
+				}
+			}
 		}
 
 		private int requestsStarted() {
@@ -1250,6 +1947,46 @@ public class McpCrossFeatureSoakTests {
 			return this.progressEvents.get();
 		}
 
+		private int handlerExecutionsStarted() {
+			return this.handlerExecutionsStarted.get();
+		}
+
+		private int handlerExecutionsFinished() {
+			return this.handlerExecutionsFinished.get();
+		}
+
+		private int transportBoundaryEvents() {
+			return this.transportBoundaryEvents.get();
+		}
+
+		private boolean awaitBalanced(@NonNull Duration timeout)
+				throws InterruptedException {
+			long timeoutNanos;
+			try {
+				timeoutNanos = requireNonNull(timeout).toNanos();
+			} catch (ArithmeticException ignored) {
+				timeoutNanos = Long.MAX_VALUE;
+			}
+			long startedAt = System.nanoTime();
+			synchronized (this.balanceLock) {
+				long remaining = timeoutNanos;
+				while (!isBalanced() && remaining > 0L) {
+					TimeUnit.NANOSECONDS.timedWait(this.balanceLock, remaining);
+					long elapsed = System.nanoTime() - startedAt;
+					remaining = elapsed >= timeoutNanos ? 0L
+							: timeoutNanos - elapsed;
+				}
+				return isBalanced();
+			}
+		}
+
+		private boolean isBalanced() {
+			return requestsStarted() == requestsFinished()
+					&& streamsOpened() == streamsClosed()
+					&& subscriptionsOpened() == subscriptionsClosed()
+					&& handlerExecutionsStarted() == handlerExecutionsFinished();
+		}
+
 		@NonNull
 		private List<McpStreamTerminationReason> subscriptionCloseReasons() {
 			return List.copyOf(this.subscriptionCloseReasons);
@@ -1257,11 +1994,15 @@ public class McpCrossFeatureSoakTests {
 
 		@NonNull
 		private String describe(@NonNull SoakState state) {
-			return "requests=%d/%d streams=%d/%d subscriptions=%d/%d activeBlocking=%d openClientSockets=%d"
+			return ("requests=%d/%d streams=%d/%d subscriptions=%d/%d "
+					+ "handlers=%d/%d activeBlocking=%d activeResidual=%d "
+					+ "openClientSockets=%d")
 					.formatted(requestsStarted(), requestsFinished(),
 							streamsOpened(), streamsClosed(), subscriptionsOpened(),
 							subscriptionsClosed(),
+							handlerExecutionsStarted(), handlerExecutionsFinished(),
 							state.activeBlockingHandlers.get(),
+							state.activeResidualHandlers.get(),
 							state.openClientSockets.get());
 		}
 	}

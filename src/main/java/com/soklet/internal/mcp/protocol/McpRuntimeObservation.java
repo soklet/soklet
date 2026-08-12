@@ -19,6 +19,7 @@ package com.soklet.internal.mcp.protocol;
 import com.soklet.McpRequestContext;
 import com.soklet.McpRequestOutcome;
 import com.soklet.McpRequestState;
+import com.soklet.McpStreamTerminationReason;
 import com.soklet.Request;
 import com.soklet.StreamTerminationReason;
 import org.jspecify.annotations.NonNull;
@@ -76,6 +77,14 @@ interface McpRuntimeRequestObservation {
 		requireNonNull(duration);
 	}
 
+	default void didCloseRequestStream(@NonNull StreamTerminationReason reason,
+			@Nullable McpStreamTerminationReason exactReason,
+			@NonNull Duration duration) {
+		requireNonNull(reason);
+		requireNonNull(duration);
+		didCloseRequestStream(reason, duration);
+	}
+
 	default void didOpenSubscription() {
 	}
 
@@ -83,6 +92,14 @@ interface McpRuntimeRequestObservation {
 			@NonNull Duration duration) {
 		requireNonNull(reason);
 		requireNonNull(duration);
+	}
+
+	default void didCloseSubscription(@NonNull StreamTerminationReason reason,
+			@Nullable McpStreamTerminationReason exactReason,
+			@NonNull Duration duration) {
+		requireNonNull(reason);
+		requireNonNull(duration);
+		didCloseSubscription(reason, duration);
 	}
 
 	default void didEmitKeepAlive() {

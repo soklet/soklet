@@ -43,6 +43,8 @@ import com.soklet.McpRequestRejection;
 import com.soklet.McpRequestState;
 import com.soklet.McpRequestStateMode;
 import com.soklet.McpRequestStateProtectionException;
+import com.soklet.McpSimulation;
+import com.soklet.McpSimulationOptions;
 import com.soklet.McpStreamTerminationReason;
 import com.soklet.McpSubscriptionConfig;
 import com.soklet.McpSubscriptionEvent;
@@ -934,6 +936,15 @@ public final class McpServerRuntimeBridge {
 				}
 
 				@Override
+				public void didCloseRequestStream(
+						@NonNull StreamTerminationReason reason,
+						@Nullable McpStreamTerminationReason exactReason,
+						@NonNull Duration duration) {
+					publicObservation.didCloseRequestStream(exactReason == null
+							? toPublic(reason) : exactReason, duration);
+				}
+
+				@Override
 				public void didOpenSubscription() {
 					publicObservation.didOpenSubscription();
 				}
@@ -944,6 +955,15 @@ public final class McpServerRuntimeBridge {
 						@NonNull Duration duration) {
 					publicObservation.didCloseSubscription(
 							toPublic(reason), duration);
+				}
+
+				@Override
+				public void didCloseSubscription(
+						@NonNull StreamTerminationReason reason,
+						@Nullable McpStreamTerminationReason exactReason,
+						@NonNull Duration duration) {
+					publicObservation.didCloseSubscription(exactReason == null
+							? toPublic(reason) : exactReason, duration);
 				}
 
 				@Override
@@ -1008,6 +1028,11 @@ public final class McpServerRuntimeBridge {
 		return this.runtime.start();
 	}
 
+	@NonNull
+	public SimulationSession openSimulationSession() {
+		return new SimulationSession(this.runtime.openSimulationSession());
+	}
+
 	public void stop() {
 		this.runtime.stop();
 	}
@@ -1027,6 +1052,29 @@ public final class McpServerRuntimeBridge {
 
 	public boolean hasResidualHandlers() {
 		return getRuntimeState().residualHandlers();
+	}
+
+	/** Internal bridge for one off-network simulator scope. */
+	@ThreadSafe
+	public static final class SimulationSession implements AutoCloseable {
+		private final McpHttpServerRuntime.@NonNull SimulationSession delegate;
+
+		private SimulationSession(
+				McpHttpServerRuntime.@NonNull SimulationSession delegate) {
+			this.delegate = requireNonNull(delegate);
+		}
+
+		@NonNull
+		public McpSimulation start(@NonNull Request request,
+				@NonNull McpSimulationOptions options) {
+			return this.delegate.start(requireNonNull(request),
+					requireNonNull(options));
+		}
+
+		@Override
+		public void close() {
+			this.delegate.close();
+		}
 	}
 
 	/**
@@ -3052,6 +3100,12 @@ public final class McpServerRuntimeBridge {
 	@NonNull
 	private static McpStreamTerminationReason toPublic(
 			@NonNull StreamTerminationReason reason) {
+		return toPublicTerminationReason(reason);
+	}
+
+	@NonNull
+	static McpStreamTerminationReason toPublicTerminationReason(
+			@NonNull StreamTerminationReason reason) {
 		return switch (requireNonNull(reason)) {
 			case COMPLETED -> McpStreamTerminationReason.COMPLETED;
 			case CLIENT_DISCONNECTED ->
@@ -3154,7 +3208,7 @@ public final class McpServerRuntimeBridge {
 	}
 
 	@NonNull
-	private static McpJsonValue toPublic(
+	static McpJsonValue toPublic(
 			com.soklet.internal.mcp.protocol.@NonNull McpJsonValue value) {
 		if (value instanceof com.soklet.internal.mcp.protocol.McpJsonString string)
 			return new McpJsonString(string.value());

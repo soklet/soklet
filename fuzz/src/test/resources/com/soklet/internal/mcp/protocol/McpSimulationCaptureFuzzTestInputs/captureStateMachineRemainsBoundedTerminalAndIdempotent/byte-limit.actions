@@ -1,0 +1,37 @@
+limits 16 4096
+sse
+offer-size 256
+poll
+offer-size 256
+poll
+offer-size 256
+poll
+offer-size 256
+poll
+offer-size 256
+poll
+offer-size 256
+poll
+offer-size 256
+poll
+offer-size 256
+poll
+offer-size 256
+poll
+offer-size 256
+poll
+offer-size 256
+poll
+offer-size 256
+poll
+offer-size 256
+poll
+offer-size 256
+poll
+offer-size 256
+poll
+offer-size 256
+poll
+offer-size 1
+finish CANCELED
+poll

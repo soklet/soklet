@@ -49,6 +49,7 @@ public class McpPublicApiInventoryTests {
 			"com.soklet.MetricsCollector",
 			"com.soklet.MetricsCollector$Snapshot",
 			"com.soklet.MetricsCollector$Snapshot$Builder",
+			"com.soklet.Simulator",
 			"com.soklet.SokletConfig",
 			"com.soklet.SokletConfig$Builder",
 			"com.soklet.SokletConfig$Copier");

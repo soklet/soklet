@@ -31,6 +31,9 @@ import com.soklet.McpRequestContext;
 import com.soklet.McpRequestOutcome;
 import com.soklet.McpRequestState;
 import com.soklet.McpRequestStateMode;
+import com.soklet.McpSimulation;
+import com.soklet.McpSimulationOptions;
+import com.soklet.McpStreamTerminationReason;
 import com.soklet.Request;
 import com.soklet.StatusCode;
 import com.soklet.StreamTerminationReason;
@@ -208,6 +211,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			"Cannot start MCP server while residual subscription event-source "
 					+ "registrations remain";
 	@NonNull
+	static final String SIMULATION_REQUIRES_STOPPED_SERVER =
+			"MCP simulation requires a stopped server with no residual handler executions.";
+	@NonNull
+	static final String SIMULATION_SHUTDOWN_TIMED_OUT =
+			"MCP simulator shutdown timed out with residual handler executions.";
+	@NonNull
 	private static final Consumer<@NonNull String> DEFAULT_STARTUP_DIAGNOSTIC_CONSUMER =
 			diagnostic -> System.err.printf("%s%n", diagnostic);
 	@NonNull
@@ -349,6 +358,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private @Nullable ThreadPoolExecutor residualRequestProcessor;
 	private @Nullable McpApplicationExecution applicationExecution;
 	private @Nullable McpApplicationExecution residualApplicationExecution;
+	private @Nullable SimulationGeneration simulationGeneration;
+	private @Nullable ThreadPoolExecutor residualSimulationRequestProcessor;
+	private @Nullable McpApplicationExecution residualSimulationApplicationExecution;
+	@NonNull
+	private List<@NonNull SubscriptionSourceRegistrationControl>
+			residualSimulationSubscriptionSourceRegistrations;
 	private @Nullable InetSocketAddress boundAddress;
 	private @Nullable AtomicReference<@NonNull ListenerState> currentReadiness;
 
@@ -597,6 +612,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		this.subscriptionsAccepting = false;
 		this.subscriptionSourceRegistrations = List.of();
 		this.residualSubscriptionSourceRegistrations = List.of();
+		this.residualSimulationSubscriptionSourceRegistrations = List.of();
 		this.processorThreadSequence = new AtomicLong();
 		this.subscriptionCloseThreadSequence = new AtomicLong();
 		this.unknownMirroredHeaderOccurrences = new AtomicLong();
@@ -698,6 +714,161 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	}
 
 	@NonNull
+	SimulationSession openSimulationSession() {
+		SimulationGeneration generation;
+		synchronized (lifecycleLock) {
+			reapSimulationResidualsWhileLocked();
+			reapLiveResidualsForSimulationWhileLocked();
+			if (lifecycleState != LifecycleState.STOPPED
+					|| simulationGeneration != null
+					|| residualRequestProcessor != null
+					|| residualApplicationExecution != null
+					|| residualEventLoop != null
+					|| !residualSubscriptionSourceRegistrations.isEmpty()
+					|| residualSimulationRequestProcessor != null
+					|| residualSimulationApplicationExecution != null
+					|| !residualSimulationSubscriptionSourceRegistrations.isEmpty())
+				throw new IllegalStateException(SIMULATION_REQUIRES_STOPPED_SERVER);
+
+			ThreadPoolExecutor processor = newRequestProcessor();
+			McpApplicationExecution application = new McpApplicationExecution(
+					applicationConfiguration, applicationClock,
+					applicationExecutorFactory, this::runProtocolDeadlineCycle,
+					this.applicationExecutionObserver);
+			List<SubscriptionSourceRegistrationControl> registrations =
+					new ArrayList<>();
+			try {
+				application.start();
+				subscribeToSubscriptionEventSources(registrations);
+				startAcceptingSubscriptions();
+				generation = new SimulationGeneration(processor, application,
+						InetSocketAddress.createUnresolved(
+								transportConfiguration.host(),
+								transportConfiguration.port()), registrations);
+				simulationGeneration = generation;
+			} catch (RuntimeException | Error failure) {
+				stopAcceptingSubscriptions();
+				application.stop(StreamTerminationReason.CLIENT_DISCONNECTED);
+				processor.shutdownNow();
+				beginClosingSubscriptionEventSourceRegistrations(registrations);
+				throw failure;
+			}
+		}
+		return new SimulationSession(generation);
+	}
+
+	private void reapLiveResidualsForSimulationWhileLocked() {
+		if (!Thread.holdsLock(lifecycleLock))
+			throw new IllegalStateException("The MCP lifecycle lock is required.");
+		if (residualRequestProcessor != null
+				&& residualRequestProcessor.isTerminated())
+			residualRequestProcessor = null;
+		if (residualApplicationExecution != null
+				&& residualApplicationExecution.isTerminated())
+			residualApplicationExecution = null;
+		if (residualEventLoop != null && residualEventLoop.isTerminated())
+			residualEventLoop = null;
+		residualSubscriptionSourceRegistrations =
+				unclosedSubscriptionSourceRegistrations(
+						residualSubscriptionSourceRegistrations);
+	}
+
+	private void reapSimulationResidualsWhileLocked() {
+		if (!Thread.holdsLock(lifecycleLock))
+			throw new IllegalStateException("The MCP lifecycle lock is required.");
+		if (residualSimulationRequestProcessor != null
+				&& residualSimulationRequestProcessor.isTerminated())
+			residualSimulationRequestProcessor = null;
+		if (residualSimulationApplicationExecution != null
+				&& residualSimulationApplicationExecution.isTerminated())
+			residualSimulationApplicationExecution = null;
+		residualSimulationSubscriptionSourceRegistrations =
+				unclosedSubscriptionSourceRegistrations(
+						residualSimulationSubscriptionSourceRegistrations);
+	}
+
+	private void closeSimulationGeneration(
+			@NonNull SimulationGeneration generation) {
+		requireNonNull(generation);
+		synchronized (lifecycleLock) {
+			if (simulationGeneration != generation)
+				return;
+			generation.beginClosing();
+		}
+
+		for (McpSimulationRuntime simulation : generation.activeSimulations())
+			simulation.cancel();
+
+		boolean interrupted = Thread.interrupted();
+		boolean applicationTerminated = false;
+		SubscriptionRegistrationCloseOutcome subscriptionCloseOutcome =
+				new SubscriptionRegistrationCloseOutcome(generation.registrations());
+		long shutdownStartedAt = System.nanoTime();
+		long shutdownTimeoutNanos = transportConfiguration.shutdownTimeout().toNanos();
+		try {
+			stopAcceptingSubscriptions();
+			SubscriptionRegistrationCloseBatch closeBatch =
+					beginClosingSubscriptionEventSourceRegistrations(
+							generation.registrations());
+			generation.application().stop(
+					StreamTerminationReason.CLIENT_DISCONNECTED);
+			cancelAllRequests(StreamTerminationReason.CLIENT_DISCONNECTED, null);
+			generation.processor().shutdownNow();
+			cancelAllRequests(StreamTerminationReason.CLIENT_DISCONNECTED, null);
+
+			while (!generation.processor().isTerminated()) {
+				long remaining = remainingShutdownNanos(shutdownStartedAt,
+						shutdownTimeoutNanos);
+				if (remaining <= 0L)
+					break;
+				try {
+					generation.processor().awaitTermination(remaining,
+							TimeUnit.NANOSECONDS);
+				} catch (InterruptedException exception) {
+					interrupted = true;
+				}
+			}
+
+			while (!applicationTerminated) {
+				long remaining = remainingShutdownNanos(shutdownStartedAt,
+						shutdownTimeoutNanos);
+				if (remaining <= 0L)
+					break;
+				try {
+					applicationTerminated = generation.application()
+							.awaitTermination(Duration.ofNanos(remaining));
+				} catch (InterruptedException exception) {
+					interrupted = true;
+				}
+			}
+			subscriptionCloseOutcome = awaitSubscriptionEventSourceRegistrations(
+					closeBatch, shutdownStartedAt, shutdownTimeoutNanos);
+		} finally {
+			synchronized (lifecycleLock) {
+				if (simulationGeneration == generation)
+					simulationGeneration = null;
+				residualSimulationRequestProcessor =
+						generation.processor().isTerminated()
+								? null : generation.processor();
+				residualSimulationApplicationExecution = applicationTerminated
+						|| generation.application().isTerminated()
+						? null : generation.application();
+				residualSimulationSubscriptionSourceRegistrations =
+						unclosedSubscriptionSourceRegistrations(
+								subscriptionCloseOutcome.residualRegistrations());
+				lifecycleLock.notifyAll();
+			}
+			if (interrupted)
+				Thread.currentThread().interrupt();
+		}
+
+		if (residualSimulationRequestProcessor != null
+				|| residualSimulationApplicationExecution != null
+				|| !residualSimulationSubscriptionSourceRegistrations.isEmpty())
+			throw new IllegalStateException(SIMULATION_SHUTDOWN_TIMED_OUT);
+	}
+
+	@NonNull
 	InetSocketAddress start() throws IOException {
 		this.applicationExecutionObserver.beginDeferral();
 		try {
@@ -712,6 +883,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		InetSocketAddress effectiveAddress;
 
 		synchronized (lifecycleLock) {
+			reapSimulationResidualsWhileLocked();
+			if (simulationGeneration != null
+					|| residualSimulationRequestProcessor != null
+					|| residualSimulationApplicationExecution != null
+					|| !residualSimulationSubscriptionSourceRegistrations.isEmpty())
+				throw new IllegalStateException(SIMULATION_REQUIRES_STOPPED_SERVER);
 			if (lifecycleState != LifecycleState.STOPPED)
 				throw new IllegalStateException("The MCP HTTP server is not stopped.");
 			if (residualRequestProcessor != null) {
@@ -1326,6 +1503,17 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	@NonNull
 	McpHttpServerDiagnosticsSnapshot diagnosticsSnapshot() {
 		synchronized (lifecycleLock) {
+			reapSimulationResidualsWhileLocked();
+			if (simulationGeneration != null
+					|| residualSimulationRequestProcessor != null
+					|| residualSimulationApplicationExecution != null
+					|| !residualSimulationSubscriptionSourceRegistrations.isEmpty()) {
+				return new McpHttpServerDiagnosticsSnapshot(false, false,
+						Optional.empty(), false,
+						applicationConfiguration.handlerConcurrency(),
+						applicationConfiguration.handlerQueueCapacity(),
+						0, 0, 0, 0);
+			}
 			residualSubscriptionSourceRegistrations =
 					unclosedSubscriptionSourceRegistrations(
 							residualSubscriptionSourceRegistrations);
@@ -1664,29 +1852,66 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			@Nullable InetSocketAddress effectiveAddress,
 			@NonNull MicrohttpRequest request,
 			@NonNull Consumer<@NonNull MicrohttpResponse> callback) {
-		requireNonNull(request);
-		requireNonNull(callback);
-
 		if (effectiveAddress == null) {
 			this.applicationExecutionObserver.recordRequestRejected();
 			this.applicationExecutionObserver.drain();
-			callback.accept(emptyResponse(503, "Service Unavailable", List.of()));
+			requireNonNull(callback).accept(emptyResponse(
+					503, "Service Unavailable", List.of()));
 			return;
 		}
+		submitRequest(processor, application, effectiveAddress, request, null,
+				null, callback);
+	}
+
+	@NonNull
+	private RequestControl submitSimulationRequest(
+			@NonNull SimulationGeneration generation,
+			@NonNull Request publicRequest,
+			@NonNull McpSimulationRuntime simulation) {
+		Request requiredRequest = requireNonNull(publicRequest);
+		List<Header> headers = new ArrayList<>();
+		requiredRequest.getHeaders().forEach((name, values) ->
+				values.forEach(value -> headers.add(new Header(name, value))));
+		MicrohttpRequest request = new MicrohttpRequest(
+				requiredRequest.getHttpMethod().name(),
+				requiredRequest.getRawPathAndQuery(), "HTTP/1.1",
+				List.copyOf(headers),
+				requiredRequest.getBody().orElseGet(() -> EMPTY_BODY),
+				requiredRequest.isContentTooLarge(),
+				requiredRequest.getRemoteAddress().orElse(null));
+		return submitRequest(generation.processor(), generation.application(),
+				generation.effectiveAddress(), request, requiredRequest, simulation,
+				simulation::acceptResponse);
+	}
+
+	@NonNull
+	private RequestControl submitRequest(@NonNull ThreadPoolExecutor processor,
+			@NonNull McpApplicationExecution application,
+			@Nullable InetSocketAddress effectiveAddress,
+			@NonNull MicrohttpRequest request,
+			@Nullable Request publicRequest,
+			@Nullable McpSimulationRuntime simulation,
+			@NonNull Consumer<@NonNull MicrohttpResponse> callback) {
+		requireNonNull(request);
+		requireNonNull(callback);
+
+		InetSocketAddress requiredAddress = requireNonNull(effectiveAddress,
+				"An MCP request generation requires an effective address.");
 
 		// nanoTime may wrap; every comparison uses subtraction and the configured
 		// positive duration is constrained to the signed nanosecond range.
 		long deadlineNanos = applicationClock.nanoTime()
 				+ applicationConfiguration.requestDeadline().toNanos();
 		RequestControl requestControl = new RequestControl(request, deadlineNanos,
-				processor, application, callback);
+				processor, application, publicRequest, simulation, callback);
 		FutureTask<Void> task = new FutureTask<>(() -> {
-			MicrohttpResponse response = processRequest(effectiveAddress, request,
+			MicrohttpResponse response = processRequest(requiredAddress, request,
 					requestControl, application);
 			requestControl.completeProtocol(response);
 			return null;
 		});
 		requestControl.submit(task);
+		return requestControl;
 	}
 
 	private void cancelRequest(@NonNull MicrohttpRequest request,
@@ -1930,7 +2155,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					: emptyResponse(403, "Forbidden", List.of());
 		}
 
-		Request sokletRequest = toSokletRequest(request, httpMethod.orElseThrow());
+		Request sokletRequest = requestControl.publicRequest == null
+				? toSokletRequest(request, httpMethod.orElseThrow())
+				: requestControl.publicRequest;
 		if (!requestControl.protocolProcessingAllowed())
 			return null;
 		if (httpMethod.orElseThrow() == HttpMethod.OPTIONS)
@@ -3949,9 +4176,17 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		Set<String> allowedHosts = new LinkedHashSet<>();
 
 		InetAddress address = effectiveAddress.getAddress();
-		if (address != null && address.isLoopbackAddress()) {
+		boolean loopback = address != null && address.isLoopbackAddress();
+		if (address == null && effectiveAddress.isUnresolved()) {
+			String host = effectiveAddress.getHostString();
+			loopback = "localhost".equalsIgnoreCase(host)
+					|| "::1".equals(host) || "[::1]".equals(host)
+					|| host.startsWith("127.");
+		}
+		if (loopback) {
 			addNormalizedHost(allowedHosts, effectiveAddress.getHostString());
-			addNormalizedHost(allowedHosts, address.getHostAddress());
+			if (address != null)
+				addNormalizedHost(allowedHosts, address.getHostAddress());
 			addNormalizedHost(allowedHosts, transportConfiguration.host());
 		}
 
@@ -4408,6 +4643,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private final ThreadPoolExecutor processor;
 		@NonNull
 		private final McpApplicationExecution application;
+		private final @Nullable Request publicRequest;
+		private final @Nullable McpSimulationRuntime simulation;
 		@NonNull
 		private final Object lock;
 		@NonNull
@@ -4449,11 +4686,15 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private RequestControl(@NonNull MicrohttpRequest request,
 				long deadlineNanos, @NonNull ThreadPoolExecutor processor,
 				@NonNull McpApplicationExecution application,
+				@Nullable Request publicRequest,
+				@Nullable McpSimulationRuntime simulation,
 				@NonNull Consumer<@NonNull MicrohttpResponse> responseCallback) {
 			this.request = requireNonNull(request);
 			this.deadlineNanos = deadlineNanos;
 			this.processor = requireNonNull(processor);
 			this.application = requireNonNull(application);
+			this.publicRequest = publicRequest;
+			this.simulation = simulation;
 			this.lock = new Object();
 			this.streamObservationTransitionLock = new Object();
 			this.responseCallback = requireNonNull(responseCallback);
@@ -4745,11 +4986,16 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				@NonNull List<@NonNull Throwable> throwables) {
 			requireNonNull(outcome);
 			requireNonNull(throwables);
+			boolean firstTerminal = false;
 			synchronized (lock) {
-				if (requestObservationTerminal == null)
+				if (requestObservationTerminal == null) {
 					requestObservationTerminal = new RequestObservationTerminal(
 							outcome, error, applicationClock.nanoTime(), throwables);
+					firstTerminal = true;
+				}
 			}
+			if (firstTerminal && simulation != null)
+				simulation.didFinishRequest(outcome, throwables);
 			drainRequestObservation();
 		}
 
@@ -4878,10 +5124,15 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		private void markStreamClosed(@NonNull StreamTerminationReason reason) {
+			markStreamClosed(reason, null);
+		}
+
+		private void markStreamClosed(@NonNull StreamTerminationReason reason,
+				@Nullable McpStreamTerminationReason exactReason) {
 			requireNonNull(reason);
 			try {
 				synchronized (streamObservationTransitionLock) {
-					markStreamClosedInOrder(reason);
+					markStreamClosedInOrder(reason, exactReason);
 				}
 			} finally {
 				drainApplicationExecutionObservation();
@@ -4889,7 +5140,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		private void markStreamClosedInOrder(
-				@NonNull StreamTerminationReason reason) {
+				@NonNull StreamTerminationReason reason,
+				@Nullable McpStreamTerminationReason exactReason) {
 			McpRuntimeRequestObservation observation;
 			Duration streamDuration = null;
 			Duration subscriptionDuration = null;
@@ -4914,14 +5166,15 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				return;
 			if (streamDuration != null) {
 				try {
-					observation.didCloseRequestStream(reason, streamDuration);
+					observation.didCloseRequestStream(reason, exactReason,
+							streamDuration);
 				} catch (Throwable ignored) {
 					// Observation failures must not alter stream cleanup behavior.
 				}
 			}
 			if (subscriptionDuration != null) {
 				try {
-					observation.didCloseSubscription(reason,
+					observation.didCloseSubscription(reason, exactReason,
 							subscriptionDuration);
 				} catch (Throwable ignored) {
 					// Observation failures must not alter subscription cleanup behavior.
@@ -5042,10 +5295,14 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 
 			if (submission != null && submission.rejectedCallback() != null) {
+				MicrohttpResponse response = emptyResponse(
+						503, "Service Unavailable", List.of());
 				Throwable deliveryFailure = deliverResponse(
-						submission.rejectedCallback(),
-						emptyResponse(503, "Service Unavailable", List.of()));
-				if (deliveryFailure != null)
+						submission.rejectedCallback(), response);
+				if (simulation != null)
+					finishDeliveredSimulationResponse(
+							requestObservationResult(response), deliveryFailure);
+				else if (deliveryFailure != null)
 					observeTransportFailure(TransportFailureReason.RESPONSE_READY_ERROR,
 							() -> {});
 			}
@@ -5176,7 +5433,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						withRequestObservationTermination(terminalResponse, fallback);
 				Throwable deliveryFailure = deliverResponse(
 						reservation.responseCallback(), observedResponse);
-				if (deliveryFailure != null) {
+				if (simulation != null) {
+					finishDeliveredSimulationResponse(fallback, deliveryFailure);
+				} else if (deliveryFailure != null) {
 					Throwable requiredFailure = deliveryFailure;
 					observeTransportFailure(
 							TransportFailureReason.RESPONSE_READY_ERROR,
@@ -5296,7 +5555,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						rendering.response(), rendering.observationResult());
 				Throwable deliveryFailure = deliverResponse(requireNonNull(callback),
 						observedResponse);
-				if (deliveryFailure != null) {
+				if (simulation != null) {
+					finishDeliveredSimulationResponse(
+							rendering.observationResult(), deliveryFailure);
+				} else if (deliveryFailure != null) {
 					Throwable requiredFailure = deliveryFailure;
 					observeTransportFailure(
 							TransportFailureReason.RESPONSE_READY_ERROR,
@@ -5347,6 +5609,11 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		@NonNull
 		private McpRequestSseStream newResponseStream() {
+			if (simulation != null) {
+				McpRequestSseStream.Listener listener = this::streamTerminated;
+				return new McpRequestSseStream(envelopeCodec,
+						simulation.openChannel(listener));
+			}
 			return new McpRequestSseStream(
 					transportConfiguration.streamQueueCapacity(),
 					jsonLimits,
@@ -5367,7 +5634,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						@Override
 						public void didTerminate(@NonNull StreamTerminationReason reason,
 								@Nullable Throwable cause) {
-							streamTerminated(reason, cause);
+							streamTerminated(reason, null, cause);
 						}
 					});
 		}
@@ -5376,7 +5643,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private Optional<McpOutboundChannel.@NonNull Snapshot> streamSnapshot() {
 			synchronized (lock) {
 				return responseStream == null ? Optional.empty()
-						: Optional.of(responseStream.snapshot());
+						: responseStream.snapshot();
 			}
 		}
 
@@ -5391,7 +5658,18 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 		}
 
-		private void cancelWhileMetricsDeferred(
+		private boolean cancelFromSimulation(
+				@NonNull StreamTerminationReason reason) {
+			McpHttpServerRuntime.this.applicationExecutionObserver
+					.beginRequestTransitionDeferral();
+			try {
+				return cancelWhileMetricsDeferred(reason, null);
+			} finally {
+				McpHttpServerRuntime.this.applicationExecutionObserver.endDeferral();
+			}
+		}
+
+		private boolean cancelWhileMetricsDeferred(
 				@NonNull StreamTerminationReason reason,
 				@Nullable Throwable cause) {
 			FutureTask<Void> task;
@@ -5401,11 +5679,15 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			boolean remove;
 			synchronized (lock) {
 				if (terminal)
-					return;
+					return false;
 
 				canceled = true;
 				cancellationReason = reason;
 				cancellationCause = cause;
+				if (simulation != null
+						&& reason == StreamTerminationReason.CLIENT_DISCONNECTED)
+					simulation.reserveRuntimeReason(
+							McpStreamTerminationReason.CLIENT_DISCONNECTED);
 				task = protocolTask;
 				protocolTask = null;
 				stream = responseStream;
@@ -5456,6 +5738,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				finishRequestObservation(result.outcome(), result.error(),
 						result.throwables());
 			}
+			return true;
 		}
 
 		private void onTimer(long nowNanos) {
@@ -5582,6 +5865,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		private void streamTerminated(@NonNull StreamTerminationReason reason,
+				@Nullable McpStreamTerminationReason exactReason,
 				@Nullable Throwable cause) {
 			requireNonNull(reason);
 			boolean cancelApplication;
@@ -5611,10 +5895,15 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 			if (subscription != null)
 				removeSubscription(this, subscription);
-			markStreamClosed(observedStreamReason);
+			markStreamClosed(observedStreamReason, exactReason);
 			requestControls.remove(request, this);
 			if (reason == StreamTerminationReason.COMPLETED)
 				finishPlannedRequestObservation(requestObservationResult(reason, cause));
+			else if (exactReason == McpStreamTerminationReason
+					.SIMULATOR_CAPTURE_ITEM_LIMIT_EXCEEDED
+					|| exactReason == McpStreamTerminationReason
+					.SIMULATOR_CAPTURE_BYTE_LIMIT_EXCEEDED)
+				finishRequestObservation(McpRequestOutcome.CANCELED, null, List.of());
 			else {
 				RequestObservationResult result = requestObservationResult(reason, cause);
 				finishRequestObservation(result.outcome(), result.error(),
@@ -5653,7 +5942,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					fallback);
 			Throwable deliveryFailure = deliverResponse(
 					expiration.responseCallback(), response);
-			if (deliveryFailure != null) {
+			if (simulation != null) {
+				finishDeliveredSimulationResponse(fallback, deliveryFailure);
+			} else if (deliveryFailure != null) {
 				Throwable requiredFailure = deliveryFailure;
 				observeTransportFailure(TransportFailureReason.RESPONSE_READY_ERROR,
 						() -> finishRequestObservation(
@@ -5724,6 +6015,27 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				// A reserved terminal outcome remains authoritative on delivery failure.
 				return throwable;
 			}
+		}
+
+		private void finishDeliveredSimulationResponse(
+				@NonNull RequestObservationResult fallback,
+				@Nullable Throwable deliveryFailure) {
+			McpSimulationRuntime activeSimulation = simulation;
+			if (activeSimulation == null)
+				return;
+			if (deliveryFailure != null) {
+				finishRequestObservation(McpRequestOutcome.WRITE_FAILED, null,
+						List.of(deliveryFailure));
+				return;
+			}
+			McpStreamTerminationReason reason = activeSimulation
+					.nonStreamingReason().orElse(McpStreamTerminationReason.COMPLETED);
+			if (reason == McpStreamTerminationReason
+					.SIMULATOR_CAPTURE_BYTE_LIMIT_EXCEEDED) {
+				finishRequestObservation(McpRequestOutcome.CANCELED, null, List.of());
+				return;
+			}
+			finishPlannedRequestObservation(requireNonNull(fallback));
 		}
 
 		private void releaseIdentifiedRequestExchange() {
@@ -6198,6 +6510,123 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		@NonNull
 		private String path() {
 			return this.binding.endpointPolicy().path();
+		}
+	}
+
+	@ThreadSafe
+	final class SimulationSession implements AutoCloseable {
+		@NonNull
+		private final SimulationGeneration generation;
+		@NonNull
+		private final AtomicBoolean closed;
+
+		private SimulationSession(@NonNull SimulationGeneration generation) {
+			this.generation = requireNonNull(generation);
+			this.closed = new AtomicBoolean();
+		}
+
+		@NonNull
+		McpSimulation start(@NonNull Request request,
+				@NonNull McpSimulationOptions options) {
+			if (closed.get())
+				throw new IllegalStateException(SIMULATION_REQUIRES_STOPPED_SERVER);
+			McpSimulationRuntime simulation = new McpSimulationRuntime(
+					requireNonNull(options), generation::removeCompletedSimulations);
+			synchronized (generation.simulations) {
+				if (closed.get() || generation.closing())
+					throw new IllegalStateException(SIMULATION_REQUIRES_STOPPED_SERVER);
+				generation.simulations.add(simulation);
+				try {
+					RequestControl control = submitSimulationRequest(generation,
+							requireNonNull(request), simulation);
+					simulation.bindController(control::cancelFromSimulation);
+					return simulation;
+				} catch (RuntimeException | Error failure) {
+					generation.simulations.remove(simulation);
+					throw failure;
+				}
+			}
+		}
+
+		@Override
+		public void close() {
+			if (closed.compareAndSet(false, true))
+				closeSimulationGeneration(generation);
+		}
+	}
+
+	@ThreadSafe
+	private static final class SimulationGeneration {
+		@NonNull
+		private final ThreadPoolExecutor processor;
+		@NonNull
+		private final McpApplicationExecution application;
+		@NonNull
+		private final InetSocketAddress effectiveAddress;
+		@NonNull
+		private final List<@NonNull SubscriptionSourceRegistrationControl>
+				registrations;
+		@NonNull
+		private final Set<@NonNull McpSimulationRuntime> simulations;
+		@NonNull
+		private final AtomicBoolean closing;
+
+		private SimulationGeneration(@NonNull ThreadPoolExecutor processor,
+				@NonNull McpApplicationExecution application,
+				@NonNull InetSocketAddress effectiveAddress,
+				@NonNull List<@NonNull SubscriptionSourceRegistrationControl>
+						registrations) {
+			this.processor = requireNonNull(processor);
+			this.application = requireNonNull(application);
+			this.effectiveAddress = requireNonNull(effectiveAddress);
+			this.registrations = List.copyOf(requireNonNull(registrations));
+			this.simulations = Collections.synchronizedSet(
+					Collections.newSetFromMap(new IdentityHashMap<>()));
+			this.closing = new AtomicBoolean();
+		}
+
+		@NonNull
+		private ThreadPoolExecutor processor() {
+			return this.processor;
+		}
+
+		@NonNull
+		private McpApplicationExecution application() {
+			return this.application;
+		}
+
+		@NonNull
+		private InetSocketAddress effectiveAddress() {
+			return this.effectiveAddress;
+		}
+
+		@NonNull
+		private List<@NonNull SubscriptionSourceRegistrationControl>
+		registrations() {
+			return this.registrations;
+		}
+
+		private void removeCompletedSimulations() {
+			synchronized (this.simulations) {
+				this.simulations.removeIf(simulation -> simulation.isComplete());
+			}
+		}
+
+		@NonNull
+		private List<@NonNull McpSimulationRuntime> activeSimulations() {
+			synchronized (this.simulations) {
+				return List.copyOf(this.simulations);
+			}
+		}
+
+		private void beginClosing() {
+			synchronized (this.simulations) {
+				this.closing.set(true);
+			}
+		}
+
+		private boolean closing() {
+			return this.closing.get();
 		}
 	}
 

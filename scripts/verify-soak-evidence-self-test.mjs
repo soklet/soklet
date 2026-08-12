@@ -26,6 +26,7 @@ const scenarios = [
   'concurrent SSE churn',
   'HTTP abort churn',
   'MCP Phase 5 cross-feature churn',
+  'MCP off-network simulator churn',
   'concurrent HTTP churn',
 ];
 
@@ -41,7 +42,10 @@ const suites = [
   {
     filename: 'TEST-com.soklet.McpCrossFeatureSoakTests.xml',
     name: 'com.soklet.McpCrossFeatureSoakTests',
-    testCases: ['mcpCrossFeatureChurnReturnsResourcesToBaselineAfterCancellationAndShutdown'],
+    testCases: [
+      'mcpCrossFeatureChurnReturnsResourcesToBaselineAfterCancellationAndShutdown',
+      'mcpSimulatorChurnReturnsResourcesToBaselineAfterCancellationAndScopeCleanup',
+    ],
   },
   {
     filename: 'TEST-com.soklet.RealtimeTransportSoakTests.xml',
@@ -100,7 +104,7 @@ try {
   writeValidFixture();
   const verified = verifySoakEvidence(profileName, fixtureRoot);
   assert.equal(verified.profileName, profileName);
-  assert.equal(verified.scenarios.length, 4);
+  assert.equal(verified.scenarios.length, 5);
 
   const reportPath = fixturePath('soak/target/soak-report.md');
   let restore = overwrite(reportPath, (report) => report.replace('- Profile: smoke', '- Profile: nightly'));

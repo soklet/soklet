@@ -15,10 +15,11 @@
     <!--
         Standalone module (no parent, not listed in the root pom), built like the fuzz module:
         build-helper adds ../src/main/java as a source root so the soak tests exercise the real
-        core sources rather than a published artifact. Tests stand up a REAL loopback server (not
-        the off-network simulator) so the NIO/socket layer - where a file-descriptor or channel
-        leak would actually live - is exercised, then assert that file descriptors and Soklet's
-        own active-resource gauges return to baseline after load stops.
+        core sources rather than a published artifact. The HTTP, SSE, and live MCP scenarios stand
+        up REAL loopback servers so the NIO/socket layer is exercised. A separate off-network MCP
+        simulator scenario exercises simulator generations, capture, cancellation, and cleanup
+        without claiming socket fidelity. Every scenario asserts that file descriptors and
+        Soklet's own active-resource gauges return to its warmed baseline after load stops.
 
         SOKLET_SOAK_PROFILE selects one of the checked-in smoke or nightly workload
         profiles. An omitted value defaults to smoke for local use; every CI job selects one

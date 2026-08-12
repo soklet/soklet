@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.TreeMap;
 
 import static java.util.Objects.requireNonNull;
 
@@ -73,6 +74,23 @@ public final class McpMetricsSnapshot {
 	@NonNull
 	private final Map<@NonNull RequestStreamTerminationKey,
 			MetricsCollector.@NonNull HistogramSnapshot> requestStreamDurations;
+	@NonNull
+	private final Long activeSubscriptions;
+	@NonNull
+	private final Map<@NonNull SubscriptionTerminationKey,
+			MetricsCollector.@NonNull HistogramSnapshot> subscriptionDurations;
+	@NonNull
+	private final Map<@NonNull EndpointMethodKey, @NonNull Long>
+			cancelationsSignaled;
+	@NonNull
+	private final Map<@NonNull EndpointMethodKey, @NonNull Long> progressEmitted;
+	@NonNull
+	private final Long keepAlivesEmitted;
+	@NonNull
+	private final Map<@NonNull Integer, @NonNull Long> protocolErrors;
+	@NonNull
+	private final Map<@NonNull EndpointMethodKey, @NonNull Long>
+			unknownMirroredHeaders;
 
 	private McpMetricsSnapshot(@NonNull Builder builder) {
 		requireNonNull(builder);
@@ -92,6 +110,19 @@ public final class McpMetricsSnapshot {
 		this.activeRequestStreams = builder.activeRequestStreams;
 		this.requestStreamDurations =
 				copyRequestStreamDurations(builder.requestStreamDurations);
+		this.activeSubscriptions = builder.activeSubscriptions;
+		this.subscriptionDurations =
+				copySubscriptionDurations(builder.subscriptionDurations);
+		this.cancelationsSignaled = copyEndpointMethodCounts(
+				builder.cancelationsSignaled,
+				"MCP cancelation-signaled counts must not be negative.");
+		this.progressEmitted = copyEndpointMethodCounts(builder.progressEmitted,
+				"MCP progress-emitted counts must not be negative.");
+		this.keepAlivesEmitted = builder.keepAlivesEmitted;
+		this.protocolErrors = copyProtocolErrorCounts(builder.protocolErrors);
+		this.unknownMirroredHeaders = copyEndpointMethodCounts(
+				builder.unknownMirroredHeaders,
+				"MCP unknown mirrored-header counts must not be negative.");
 	}
 
 	@NonNull
@@ -175,6 +206,52 @@ public final class McpMetricsSnapshot {
 				copied = new LinkedHashMap<>();
 		requireNonNull(requestStreamDurations).forEach((key, histogram) ->
 				copied.put(requireNonNull(key), requireNonNull(histogram)));
+		return Collections.unmodifiableMap(copied);
+	}
+
+	@NonNull
+	private static Map<@NonNull SubscriptionTerminationKey,
+			MetricsCollector.@NonNull HistogramSnapshot>
+	copySubscriptionDurations(
+			@NonNull Map<@NonNull SubscriptionTerminationKey,
+					MetricsCollector.@NonNull HistogramSnapshot>
+					subscriptionDurations) {
+		Map<SubscriptionTerminationKey, MetricsCollector.HistogramSnapshot>
+				copied = new LinkedHashMap<>();
+		requireNonNull(subscriptionDurations).forEach((key, histogram) ->
+				copied.put(requireNonNull(key), requireNonNull(histogram)));
+		return Collections.unmodifiableMap(copied);
+	}
+
+	@NonNull
+	private static Map<@NonNull EndpointMethodKey, @NonNull Long>
+	copyEndpointMethodCounts(
+			@NonNull Map<@NonNull EndpointMethodKey, @NonNull Long> counts,
+			@NonNull String diagnostic) {
+		Map<EndpointMethodKey, Long> copied = new LinkedHashMap<>();
+		requireNonNull(counts).forEach((key, count) -> {
+			requireNonNull(key);
+			requireNonNull(count);
+			if (count < 0L)
+				throw new IllegalArgumentException(requireNonNull(diagnostic));
+			copied.put(key, count);
+		});
+		return Collections.unmodifiableMap(copied);
+	}
+
+	@NonNull
+	private static Map<@NonNull Integer, @NonNull Long>
+	copyProtocolErrorCounts(
+			@NonNull Map<@NonNull Integer, @NonNull Long> protocolErrors) {
+		Map<Integer, Long> copied = new TreeMap<>();
+		requireNonNull(protocolErrors).forEach((code, count) -> {
+			requireNonNull(code);
+			requireNonNull(count);
+			if (count < 0L)
+				throw new IllegalArgumentException(
+						"MCP protocol-error counts must not be negative.");
+			copied.put(code, count);
+		});
 		return Collections.unmodifiableMap(copied);
 	}
 
@@ -363,6 +440,109 @@ public final class McpMetricsSnapshot {
 	}
 
 	/**
+	 * Returns the number of currently active MCP subscriptions.
+	 *
+	 * @return active MCP subscriptions
+	 */
+	@NonNull
+	public Long getActiveSubscriptions() {
+		return this.activeSubscriptions;
+	}
+
+	/**
+	 * Returns subscription-duration histograms grouped by bounded endpoint and
+	 * fixed termination reason dimensions.
+	 *
+	 * @return immutable subscription-duration histograms
+	 */
+	@NonNull
+	public Map<@NonNull SubscriptionTerminationKey,
+			MetricsCollector.@NonNull HistogramSnapshot> getSubscriptionDurations() {
+		return this.subscriptionDurations;
+	}
+
+	/**
+	 * Returns cooperative request-cancelation signals grouped by bounded
+	 * endpoint and method dimensions.
+	 *
+	 * @return immutable cancelation-signaled counts
+	 */
+	@NonNull
+	public Map<@NonNull EndpointMethodKey, @NonNull Long>
+	getCancelationsSignaled() {
+		return this.cancelationsSignaled;
+	}
+
+	/**
+	 * Returns progress notifications accepted for delivery grouped by bounded
+	 * endpoint and method dimensions.
+	 *
+	 * @return immutable progress-emitted counts
+	 */
+	@NonNull
+	public Map<@NonNull EndpointMethodKey, @NonNull Long> getProgressEmitted() {
+		return this.progressEmitted;
+	}
+
+	/**
+	 * Returns the number of MCP keep-alive comments accepted for delivery.
+	 *
+	 * @return keep-alive comments accepted for delivery
+	 */
+	@NonNull
+	public Long getKeepAlivesEmitted() {
+		return this.keepAlivesEmitted;
+	}
+
+	/**
+	 * Returns client-visible MCP protocol errors grouped by error code.
+	 *
+	 * @return immutable protocol-error counts
+	 */
+	@NonNull
+	public Map<@NonNull Integer, @NonNull Long> getProtocolErrors() {
+		return this.protocolErrors;
+	}
+
+	/**
+	 * Returns unknown mirrored-header occurrences grouped by bounded endpoint
+	 * and method dimensions.
+	 *
+	 * @return immutable unknown mirrored-header counts
+	 */
+	@NonNull
+	public Map<@NonNull EndpointMethodKey, @NonNull Long>
+	getUnknownMirroredHeaders() {
+		return this.unknownMirroredHeaders;
+	}
+
+	/**
+	 * Key for endpoint-and-method counter aggregates.
+	 *
+	 * @param endpointPath registered endpoint-path declaration
+	 * @param jsonRpcMethod bounded JSON-RPC method dimension
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	public record EndpointMethodKey(@NonNull String endpointPath,
+			@NonNull String jsonRpcMethod) {
+		/**
+		 * Creates an endpoint-and-method aggregate key.
+		 *
+		 * @param endpointPath registered endpoint-path declaration
+		 * @param jsonRpcMethod bounded JSON-RPC method dimension
+		 */
+		public EndpointMethodKey {
+			if (requireNonNull(endpointPath).isEmpty())
+				throw new IllegalArgumentException(
+						"Endpoint path must not be empty.");
+			if (requireNonNull(jsonRpcMethod).isEmpty())
+				throw new IllegalArgumentException(
+						"JSON-RPC method must not be empty.");
+		}
+	}
+
+	/**
 	 * Key for completed-request and request-duration aggregates.
 	 *
 	 * @param endpointPath registered endpoint-path declaration
@@ -423,6 +603,30 @@ public final class McpMetricsSnapshot {
 	}
 
 	/**
+	 * Key for subscription-duration aggregates.
+	 *
+	 * @param endpointPath registered endpoint-path declaration
+	 * @param reason fixed subscription termination reason
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	public record SubscriptionTerminationKey(@NonNull String endpointPath,
+			@NonNull McpStreamTerminationReason reason) {
+		/**
+		 * Creates a subscription termination aggregate key.
+		 *
+		 * @param endpointPath registered endpoint-path declaration
+		 * @param reason fixed subscription termination reason
+		 */
+		public SubscriptionTerminationKey {
+			if (requireNonNull(endpointPath).isEmpty())
+				throw new IllegalArgumentException(
+						"Endpoint path must not be empty.");
+			requireNonNull(reason);
+		}
+	}
+
+	/**
 	 * Builder for immutable {@link McpMetricsSnapshot} instances.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -462,6 +666,23 @@ public final class McpMetricsSnapshot {
 		@NonNull
 		private Map<@NonNull RequestStreamTerminationKey,
 				MetricsCollector.@NonNull HistogramSnapshot> requestStreamDurations;
+		@NonNull
+		private Long activeSubscriptions;
+		@NonNull
+		private Map<@NonNull SubscriptionTerminationKey,
+				MetricsCollector.@NonNull HistogramSnapshot> subscriptionDurations;
+		@NonNull
+		private Map<@NonNull EndpointMethodKey, @NonNull Long>
+				cancelationsSignaled;
+		@NonNull
+		private Map<@NonNull EndpointMethodKey, @NonNull Long> progressEmitted;
+		@NonNull
+		private Long keepAlivesEmitted;
+		@NonNull
+		private Map<@NonNull Integer, @NonNull Long> protocolErrors;
+		@NonNull
+		private Map<@NonNull EndpointMethodKey, @NonNull Long>
+				unknownMirroredHeaders;
 
 		private Builder() {
 			this.activeHandlerExecutions = 0L;
@@ -479,6 +700,13 @@ public final class McpMetricsSnapshot {
 			this.requestDurations = Map.of();
 			this.activeRequestStreams = 0L;
 			this.requestStreamDurations = Map.of();
+			this.activeSubscriptions = 0L;
+			this.subscriptionDurations = Map.of();
+			this.cancelationsSignaled = Map.of();
+			this.progressEmitted = Map.of();
+			this.keepAlivesEmitted = 0L;
+			this.protocolErrors = Map.of();
+			this.unknownMirroredHeaders = Map.of();
 		}
 
 		/**
@@ -703,6 +931,119 @@ public final class McpMetricsSnapshot {
 						requestStreamDurations) {
 			this.requestStreamDurations =
 					copyRequestStreamDurations(requestStreamDurations);
+			return this;
+		}
+
+		/**
+		 * Sets the number of currently active MCP subscriptions.
+		 *
+		 * @param activeSubscriptions active MCP subscriptions
+		 * @return this builder
+		 * @throws IllegalArgumentException if the count is negative
+		 */
+		@NonNull
+		public Builder activeSubscriptions(@NonNull Long activeSubscriptions) {
+			this.activeSubscriptions = requireNonNegative(activeSubscriptions,
+					"Active MCP subscription count must not be negative.");
+			return this;
+		}
+
+		/**
+		 * Sets subscription-duration histograms grouped by bounded endpoint and
+		 * fixed termination reason dimensions.
+		 *
+		 * @param subscriptionDurations subscription-duration histograms
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder subscriptionDurations(
+				@NonNull Map<@NonNull SubscriptionTerminationKey,
+						MetricsCollector.@NonNull HistogramSnapshot>
+						subscriptionDurations) {
+			this.subscriptionDurations =
+					copySubscriptionDurations(subscriptionDurations);
+			return this;
+		}
+
+		/**
+		 * Sets nonnegative cooperative request-cancelation signals grouped by
+		 * bounded endpoint and method dimensions.
+		 *
+		 * @param cancelationsSignaled cancelation-signaled counts
+		 * @return this builder
+		 * @throws IllegalArgumentException if any count is negative
+		 */
+		@NonNull
+		public Builder cancelationsSignaled(
+				@NonNull Map<@NonNull EndpointMethodKey, @NonNull Long>
+						cancelationsSignaled) {
+			this.cancelationsSignaled = copyEndpointMethodCounts(
+					cancelationsSignaled,
+					"MCP cancelation-signaled counts must not be negative.");
+			return this;
+		}
+
+		/**
+		 * Sets nonnegative progress notifications accepted for delivery grouped by
+		 * bounded endpoint and method dimensions.
+		 *
+		 * @param progressEmitted progress-emitted counts
+		 * @return this builder
+		 * @throws IllegalArgumentException if any count is negative
+		 */
+		@NonNull
+		public Builder progressEmitted(
+				@NonNull Map<@NonNull EndpointMethodKey, @NonNull Long>
+						progressEmitted) {
+			this.progressEmitted = copyEndpointMethodCounts(progressEmitted,
+					"MCP progress-emitted counts must not be negative.");
+			return this;
+		}
+
+		/**
+		 * Sets the number of MCP keep-alive comments accepted for delivery.
+		 *
+		 * @param keepAlivesEmitted keep-alive comments accepted for delivery
+		 * @return this builder
+		 * @throws IllegalArgumentException if the count is negative
+		 */
+		@NonNull
+		public Builder keepAlivesEmitted(@NonNull Long keepAlivesEmitted) {
+			this.keepAlivesEmitted = requireNonNegative(keepAlivesEmitted,
+					"MCP keep-alive emitted count must not be negative.");
+			return this;
+		}
+
+		/**
+		 * Sets nonnegative client-visible MCP protocol-error counts grouped by
+		 * error code.
+		 *
+		 * @param protocolErrors protocol-error counts
+		 * @return this builder
+		 * @throws IllegalArgumentException if any count is negative
+		 */
+		@NonNull
+		public Builder protocolErrors(
+				@NonNull Map<@NonNull Integer, @NonNull Long> protocolErrors) {
+			this.protocolErrors = copyProtocolErrorCounts(protocolErrors);
+			return this;
+		}
+
+		/**
+		 * Sets nonnegative unknown mirrored-header occurrences grouped by bounded
+		 * endpoint and method dimensions.
+		 *
+		 * @param unknownMirroredHeaders unknown mirrored-header counts
+		 * @return this builder
+		 * @throws IllegalArgumentException if any count is negative
+		 */
+		@NonNull
+		public Builder unknownMirroredHeaders(
+				@NonNull Map<@NonNull EndpointMethodKey, @NonNull Long>
+						unknownMirroredHeaders) {
+			this.unknownMirroredHeaders = copyEndpointMethodCounts(
+					unknownMirroredHeaders,
+					"MCP unknown mirrored-header counts must not be negative.");
 			return this;
 		}
 

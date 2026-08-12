@@ -783,14 +783,16 @@ cooperative cancelation, and resource-subscription delivery are implemented
 Phase 5 slices. Deterministic MRTR termination, cross-instance protected-state
 continuation, and residual-shutdown recovery are implemented as well. Resource
 subscriptions use framework-owned listen streams and an application-owned
-local or distributed broadcast publisher. Fourteen bounded Phase 6 verticals are
+local or distributed broadcast publisher. Twenty-one bounded Phase 6 verticals are
 implemented: shutdown observation, handler-capacity metrics, handler-capacity
 diagnostics, live stream/subscription diagnostics, protection/trace
 diagnostics, serialized semantic-event delivery, and bounded pre-admission
 metrics, followed by connection/transport metric delivery, admitted-request
 trace-token capture, and the first default transport-boundary, server-start,
-request-boundary, admitted-request lifecycle, and request-stream lifecycle
-aggregate families. Every successfully
+request-boundary, admitted-request lifecycle, request-stream lifecycle,
+subscription lifecycle, progress/cancelation, keep-alive, and protocol-error/
+unknown-header aggregate families, followed by downstream OpenTelemetry metric
+mapping and modern admitted-request spans. Every successfully
 started listener generation emits exactly one
 matching clean/residual shutdown metric, and server-wide handler execution,
 admitted-queue depth, and queue-full rejection transitions feed three label-
@@ -811,15 +813,80 @@ inputs. The tenth vertical resolves the `AMB-003` contract and implements the
 transport trio; the eleventh implements the `ServerStarted` scalar; and the
 twelfth implements the `RequestAccepted`/`RequestRejected` request-boundary
 pair; the thirteenth implements admitted-request lifecycle aggregation for
-`RequestStarted`/`RequestFinished`; and the fourteenth implements request-stream
-lifecycle aggregation for `RequestStreamOpened`/`RequestStreamClosed`. The next
-aggregate subset is subscription lifecycle aggregation for
-`SubscriptionOpened`/`SubscriptionClosed`. Other contract-fixed
-core families and downstream OpenTelemetry work remain open. Structured-log emission and raw-
-ID opt-in, broader privacy and sustained-cardinality work, MCP simulation,
-scheduled/manual coverage-guided and sustained fuzz gates, and
+`RequestStarted`/`RequestFinished`; the fourteenth implements request-stream
+lifecycle aggregation for `RequestStreamOpened`/`RequestStreamClosed`; and the
+fifteenth implements subscription lifecycle aggregation for
+`SubscriptionOpened`/`SubscriptionClosed`; the sixteenth implements
+independent `CancelationSignaled`/`ProgressEmitted` counters using
+`EndpointMethodKey`; and the seventeenth implements the label-free
+`KeepAliveEmitted` counter. The eighteenth implements the final core
+`ProtocolError`/`UnknownMirroredHeader` aggregate pair, completing all 23
+variants. The nineteenth maps the full frozen matrix into downstream
+`soklet-otel` metrics while removing obsolete pre-3.6 MCP tracing surfaces;
+the twentieth adds modern admitted-request MCP spans without restoring the
+obsolete session model; the twenty-first adds bounded off-network MCP
+simulation through the shared `Simulator` host. Structured-log emission and
+raw-ID opt-in, broader privacy and sustained-cardinality work, the strict local
+39-scenario simulator driver, scheduled/manual coverage-guided and sustained fuzz gates, and
 release-candidate and Phase 6 review/freeze work remain open; applications
 must not advertise or depend on those remaining behaviors yet.
+
+**Fourth unnumbered Phase 6 every-operation simulator, bounded capture-fuzz,
+and off-network soak hardening checkpoint.** It hardens the V21 simulator with no
+production or public-API drift and leaves the numbered-vertical count at 21.
+`McpSimulatorEveryOperationTests#recognizedRequestMethodsReplayExactJsonOrSseShapes`
+reports nine dynamic request cases covering discovery, both tool operations,
+both prompt operations, all three resource operations, and subscription
+listen. `#cancellationNotificationIsAcceptedAndIgnoredWithoutTerminatingItsTargetSimulation`
+freezes `notifications/cancelled` as accepted and semantically ignored, while
+`#concurrentRecognizedOperationReplayIsIsolatedAndExactlyDrained` proves
+deterministic concurrent isolation and exact drain. The 11-case class freezes
+exact status, headers, canonical JSON/SSE, lifecycle, metrics, `STOPPED`
+diagnostics, and absence of server/connection/transport events; the six-class
+operation selector passes 57/0/0/0.
+
+The same checkpoint adds internal capture-state-machine-only fuzz coverage in
+`McpSimulationCaptureFuzzTest#captureStateMachineRemainsBoundedTerminalAndIdempotent`
+and `#curatedSeedsReachJsonSseLimitCancelAndCompletionBranches`, with six
+synthetic ASCII seeds: `json-complete.actions`, `sse-terminal.actions`,
+`item-limit.actions`, `byte-limit.actions`, `cancel.actions`, and
+`duplicate-terminal.actions`. The focused target passes 8/0/0/0 and the full
+deterministic fuzz replay passes 135/0/0/0 across 16 methods, 15 classes, and
+27 MCP seeds. A five-second coverage-guided launch was host-blocked before
+target execution and is not coverage evidence; the target's declared
+`maxDuration=2m` is a registration bound, not executed-run evidence.
+
+`McpCrossFeatureSoakTests#mcpSimulatorChurnReturnsResourcesToBaselineAfterCancellationAndScopeCleanup`
+passes a fixed 24-cycle smoke workload over eight cases repeated three times,
+with item/byte bounds 4/4,096 and one residual cleanup/recovery wave. Its exact
+balances are requests 38/38, streams 24/24, subscriptions 4/4, and handlers
+34/34, with residual 1, transport failures 0, listener lifecycle callbacks 0,
+and final `STOPPED`. The full JDK 26 smoke profile passes 5/0/0/0 across three
+suites/five scenarios; its verifier hash is
+`eaa1f52aad86dc2765200273a468801e938f5a6be1719845358c9aa57879bcd6`.
+The broadened JDK 26 selector passes 226/0/0/0. Clean exact-source full suites
+on Corretto 21.0.11 and 26.0.1 each pass 1,539/0/0/4 across 166 suites,
+compiling 440 main and 176 test Java sources. A separate local JDK 26 nightly-
+shaped execution passes 5/0/0/0 with verifier SHA-256
+`a20a70d6adb1fd2cb5909be76b219e38fc112524a12fc06552b26bdd8ec76d99`.
+Its 200 cycles run the eight cases 25 times and balance requests 236/236,
+streams 156/156, subscriptions 26/26, and handlers 210/210, with residual 1,
+transport 0, listener lifecycle 0, final `STOPPED`, file-descriptor delta 0,
+heap delta +15,272 bytes, and thread delta -1. This local nightly-shaped run
+is not scheduled CI, sustained, fleet, or release-candidate evidence. V21
+static-analysis, SpotBugs, packaging/Javadoc, API-verifier, sketch, and schema
+results are carried forward and were not rerun for this checkpoint.
+`SOK-SIM-001` remains COMPLETE
+BOUNDED PHASE 6 IMPLEMENTATION EVIDENCE and now includes deterministic
+every-operation evidence. The ledger is 21 numbered verticals plus four
+unnumbered checkpoints. The strict local 39-scenario simulator driver,
+scheduled/long fuzz and soak, live-network fidelity, comprehensive privacy and
+security, release provenance, and Phase 6 review/freeze remain open.
+`SOK-VALID-002` and `SOK-PRIV-001` advance narrowly but remain PARTIAL; all
+other statuses remain unchanged. The next slice is a strict, sorted 39-row
+LOCAL off-network driver tied byte-for-row and name-for-name to
+`conformance/official/scenarios.json`; it is not the official CLI or a live-
+network run.
 
 The exact pinned 39-scenario MCP suite has completed one clean controlled
 profile-observation run against the packaged fixture: 147 successful outcomes,
@@ -835,32 +902,30 @@ passes a fresh 39-scenario development-candidate verify with all 39 goldens and
 no bad outcome, standard-error output, or non-clean exit. It remains
 development evidence, not release-candidate provenance.
 
-The focused request-stream lifecycle aggregate/adjacent gate passes
-58/0/0/0.
-The prior focused five-target fuzz run remains 28/0/0/0 and was not rerun for
-this checkpoint;
-the prior deterministic full fuzz corpus replay on both JDKs remains
-127/0/0/0 and was likewise not rerun. Exact-source full main suites on
-Corretto 21.0.11 and 26.0.1 each report 1,485/0/0/4. Enforced static analysis
-is green with existing advisory diagnostics; SpotBugs reports 0/0. Exact API-
-freeze evidence reports 556 incompatibilities and 208 reviewed current-side
-API owners. The 30-entry provisional inventory includes `RequestOutcomeKey`
-and `RequestStreamTerminationKey`; the frozen inventories
-remain unchanged at 1,049 Phase 4 records and 195 Phase 5 records with the
-prior hashes. Candidate main,
-source, and Javadoc packages plus standalone Javadoc are green using
-offline-link resolution. All 167 API-sketch sources compile for Java 17 and
-pass Javadoc doclint on JDK 26. All 104 files from pinned JSON Schema commit
-`0c7b65dc16dd8eaa7bd83e21099c76610c3b246a` validate. No scheduled or manual
-coverage-guided nightly fuzz run occurred; deterministic seed replay is not
-sustained, coverage, corpus-saturation, privacy, security, release-readiness,
-or Phase 6 freeze proof. The remaining contract-fixed Phase 6 aggregate
-families and downstream OpenTelemetry work, structured-log carrier/emission,
-raw-ID opt-in,
-  broader privacy, sustained cardinality, and redaction work, simulator,
-coverage-guided and sustained fuzz gates, broader
-CI/provenance and release-candidate work, and Phase 6 review/freeze remain open.
-Phase 6 remains provisional and unfrozen.
+At the V21 boundary, the focused five-class simulator/API gate passed
+46/0/0/0 and its broadened adjacent authority selector passed 215/0/0/0.
+Clean exact-source full suites on
+Corretto 21.0.11 and 26.0.1 each pass 1,528/0/0/4 across 165 suites, compiling
+440 main and 175 test Java sources. Enforced static analysis is green with
+existing advisory diagnostics; SpotBugs reports 0/0. Candidate main, sources,
+and Javadoc JARs plus standalone Javadoc are green using offline-link
+resolution. The API verifier is green for 558 incompatibility records, 15
+Phase 6 owners, 32 provisional owners, and a 219-owner reviewed union. The
+frozen 1,049 Phase 4 and 195 Phase 5 inventories and prior hashes remain
+unchanged. All 167 API-sketch sources compile for Java 17 and pass Javadoc
+doclint on JDK 26. All 104 pinned-schema files validate.
+
+The V20 downstream focus at 23/0/0/0 and full `soklet-otel` module suite at
+36/0/0/0 on each JDK were carried forward and not rerun for V21. The prior
+focused five-target fuzz run remains 28/0/0/0 and the deterministic full fuzz
+corpus replay remains 127/0/0/0 on both JDKs; neither was rerun. No scheduled
+or manual coverage-guided nightly fuzz run occurred. Deterministic replay is
+not sustained, coverage, corpus-saturation, privacy, security, release-
+readiness, or Phase 6 freeze proof. Structured-log carrier/emission, raw-ID
+opt-in, broader privacy, sustained cardinality, and redaction work, the strict
+local 39-scenario simulator driver, coverage-guided and sustained fuzz gates, broader CI/provenance and release-candidate
+work, and Phase 6 review/freeze remain open. Phase 6 remains provisional and
+unfrozen.
 
 #### Form Handling
 
@@ -1441,7 +1506,7 @@ public class HelloResource {
 
 Perform tests:
 
-Soklet's [`Simulator`](https://javadoc.soklet.com/com/soklet/Simulator.html) is available via [`Soklet`](https://javadoc.soklet.com/com/soklet/Soklet.html) to exercise full request/response flows without binding a port.
+Soklet's [`Simulator`](https://javadoc.soklet.com/com/soklet/Simulator.html) is available via [`Soklet`](https://javadoc.soklet.com/com/soklet/Soklet.html) to exercise full request/response flows without binding a port. Its modern `startMcpRequest(...)` methods run an asynchronous MCP POST through the real processor and lifecycle while retaining bounded JSON or exact SSE capture off-network; they do not start the configured MCP listener or change public server diagnostics.
 
 ```java
 @Test
@@ -1767,6 +1832,391 @@ Live authority is additionally covered by
 and
 `McpSubscriptionPublicRuntimeTests#configuredMaximumDurationPublishesExactLifecycleAndMetrics`.
 
+The fifteenth bounded Phase 6 vertical implements subscription lifecycle
+aggregation. The provisional snapshot adds boxed, nonnegative
+`getActiveSubscriptions()`, immutable `getSubscriptionDurations()`, and
+matching `activeSubscriptions(Long)`/`subscriptionDurations(Map)` builders.
+The new public, thread-safe
+`SubscriptionTerminationKey(endpointPath, reason)` validates non-null/nonempty
+shape but not application-created registry membership. The current surface is
+17 getters and 18 public builder methods including `build()`: 11 boxed `Long`
+values and six immutable maps.
+
+Exact `SubscriptionOpened`/`SubscriptionClosed` delivery drives the gauge
+`soklet_mcp_subscriptions_active` (HELP `Currently active MCP subscriptions`)
+and histogram `soklet_mcp_subscription_duration_nanos` (HELP `MCP subscription
+duration in nanoseconds`). Dimensions are only bounded `endpoint` and
+lower-snake `reason`. The ten reasons are `completed`, `client_disconnected`,
+`request_canceled`, `deadline_exceeded`, `write_failed`, `backpressure`,
+`server_stopped`, `simulator_capture_item_limit_exceeded`,
+`simulator_capture_byte_limit_exceeded`, and `internal_error`; the 13 buckets
+are 1, 5, 10, 30, 60, 120, 300, 600, 1,800, 3,600, 7,200, and 14,400 seconds
+plus overflow. No standalone open/close counters exist.
+
+Produced order is `RequestStreamOpened`, `SubscriptionOpened`, then at
+termination `RequestStreamClosed`, `SubscriptionClosed`, and
+`RequestFinished`. This is FIFO record/enqueue order, not universal
+cross-thread ordering or an atomic relationship between gauges. Configured
+collectors and either direct subscription event activate gauge-zero visibility;
+the histogram remains sparse without orphan HELP/TYPE metadata when empty or
+fully filtered. Prometheus/OpenMetrics, reset preserving the gauge while
+clearing histograms, full duration across reset, retained immutability, and
+balanced post-quiescence concurrency are covered.
+
+Built-in keys retain only registered endpoint and fixed reason—never method,
+resource URI, subscription filter, request/network identity, error detail,
+throwable, header, trace/token/key, tracestate, baggage, or application
+telemetry. This does not constrain custom collectors, generic HTTP/SSE metrics,
+logs, application-created events/keys, or telemetry; promise cross-field or
+concurrent-reset atomicity, repair unmatched manual events, equate metrics with
+diagnostics, promise canonical order or conservation with stream gauges, add
+OpenTelemetry/trace emission, or prove sustained, simulator, comprehensive
+privacy, release-readiness, or Phase 6 freeze. Exact tests are
+`McpSubscriptionLifecycleMetricsAggregationTests#snapshotContractUsesReferenceTypedImmutableSubscriptionLifecycleState`,
+`#defaultCollectorAggregatesRendersAndFiltersSubscriptionLifecycleFamilies`,
+`#resetPreservesActiveSubscriptionsAndLateCloseRecordsFullOriginalDuration`,
+and
+`#concurrentBalancedSubscriptionLifecycleIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
+Live authority is additionally covered by
+`McpSubscriptionPublicRuntimeTests#configuredMaximumDurationPublishesExactLifecycleAndMetrics`
+and `#clientDisconnectReleasesStateAndPublishesExactlyOnce`.
+
+The sixteenth bounded Phase 6 vertical implements independent progress and
+cooperative-cancelation counters. The provisional snapshot adds immutable
+`Map<EndpointMethodKey, Long> getCancelationsSignaled()` and
+`getProgressEmitted()`, with matching `cancelationsSignaled(Map)` and
+`progressEmitted(Map)` builders. The public, thread-safe
+`EndpointMethodKey(endpointPath, jsonRpcMethod)` rejects null/empty shape while
+accepting arbitrary nonempty application-created values. The current surface
+is 19 getters and 20 public builder methods including `build()`: 11 boxed
+`Long` values and eight immutable maps.
+
+`CancelationSignaled` drives
+`soklet_mcp_cancelations_signaled_total{endpoint,method}` with HELP `Total
+cooperative MCP request cancelations signaled by endpoint and method`;
+`ProgressEmitted` drives
+`soklet_mcp_progress_emitted_total{endpoint,method}` with HELP `Total MCP
+progress notifications accepted for delivery by endpoint and method`. They are
+independent counters, not complements or a conservation equation. The labeled
+families remain strictly sparse: configuration alone emits no sample or
+HELP/TYPE metadata, and a direct event populates only its own family. Filters
+receive exactly `endpoint` and `method`, fully rejected families leave no
+orphan metadata, OpenMetrics retains one EOF, and reset clears both maps.
+Snapshots defensively copy and preserve explicit application zeros; retained
+maps remain immutable and post-quiescence concurrent direct ingest is
+lossless.
+
+Live authority is
+`McpProgressPublicRuntimeTests#disconnectCancelsSameFeatureInstanceAndRunsCallback`:
+two accepted progress events, one cooperative-cancelation event, serialized
+collector delivery outside the reporter monitor, and no post-cancel progress.
+It does not impose cancelation-before-terminal cross-thread ordering. Built-in
+keys retain only registered endpoint and bounded method, never progress
+token/value/total/message, cancelation reason, request/network identity,
+throwable, header, trace/token/key, tracestate, baggage, or application
+telemetry. This does not constrain custom collectors, generic HTTP/SSE metrics,
+logs, application-created events/keys, or telemetry; promise cross-map or
+concurrent-reset atomicity, canonical order, OpenTelemetry/trace emission,
+comprehensive privacy, sustained/simulator evidence, release readiness, or
+Phase 6 freeze. Exact tests are
+`McpProgressAndCancelationMetricsAggregationTests#snapshotContractUsesSharedImmutableEndpointMethodCounterMaps`,
+`#defaultCollectorAggregatesRendersAndFiltersProgressAndCancelationFamilies`,
+`#resetClearsSparseProgressAndCancelationCountersWithoutLeavingFamilyMetadata`,
+and
+`#concurrentDirectProgressAndCancelationIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
+
+The seventeenth bounded Phase 6 vertical implements fieldless keep-alive
+aggregation. Boxed, nonnegative `@NonNull Long getKeepAlivesEmitted()` and
+matching `keepAlivesEmitted(Long)` expand the provisional snapshot to 20
+getters and 21 public builder methods including `build()`: 12 boxed `Long`
+values and eight immutable maps.
+
+Each exact `KeepAliveEmitted` accepted by the shared semantic-event FIFO drives
+the label-free `soklet_mcp_keep_alives_emitted_total` counter with HELP `Total
+MCP keep-alive comments accepted for delivery`. Configured MCP and a direct
+event both activate the family; configured and post-reset state render zero.
+Prometheus/OpenMetrics filters see an empty label map, full rejection leaves no
+sample or orphan HELP/TYPE metadata, and reset preserves visibility while
+clearing the cumulative count. Retained snapshots remain immutable, and
+post-quiescence concurrent direct ingest is lossless.
+
+Live authority is bounded by
+`McpSubscriptionPublicRuntimeTests#keepAliveAcceptanceSharesStreamTransitionWithCloseObservation`
+and
+`McpSubscriptionRuntimeBoundaryTests#maximumDurationIsAbsoluteAcrossKeepAlivesAndEvents`.
+They freeze accepted wire-observation/stream-transition order and the
+exact-one keep-alive boundary in deterministic fixtures; the metric does not
+count timer attempts or prove client/intermediary receipt, and has no
+conservation relationship with stream, subscription, or terminal events. The
+fieldless built-in event retains no request, endpoint, method, remote identity,
+duration, reason, throwable, header, trace ID/token/key, tracestate, baggage,
+or application label. Exact tests are
+`McpKeepAliveMetricsAggregationTests#snapshotContractUsesBoxedNonnegativeKeepAliveCount`,
+`#defaultCollectorAggregatesConfiguredAndDirectKeepAlivesAcrossRenderFilterAndReset`,
+and
+`#concurrentDirectKeepAliveIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
+This does not constrain custom collectors, generic HTTP/SSE metrics, logs, or
+application telemetry; promise universal cross-thread ordering, delivery or
+receipt, cross-field/concurrent-reset atomicity, OpenTelemetry/trace emission,
+comprehensive privacy, sustained/simulator evidence, release readiness, or
+Phase 6 freeze.
+
+The eighteenth bounded Phase 6 production vertical completes core default MCP
+aggregation with immutable `Map<Integer, Long> getProtocolErrors()` and
+`Map<EndpointMethodKey, Long> getUnknownMirroredHeaders()`, plus matching
+`protocolErrors(Map)` and `unknownMirroredHeaders(Map)` builder methods. The
+provisional snapshot now has 22 getters and 23 public builder methods including
+`build()`: 12 boxed `Long` values and ten maps. The three fuzz, dormant-
+derivation, and metric-dimensionality checkpoints remain separately
+unnumbered.
+
+`DefaultMetricsCollector` renders
+`soklet_mcp_protocol_errors_total{code}` with HELP `Total client-visible MCP
+protocol errors by fixed code` and
+`soklet_mcp_unknown_mirrored_headers_total{endpoint,method}` with HELP `Total
+unknown MCP mirrored-header occurrences by endpoint and method`. Both are
+strictly sparse and independent: configuration alone emits no sample or
+HELP/TYPE metadata, one event populates only its own family, complete filter
+rejection leaves no orphan metadata, OpenMetrics retains one EOF, and reset
+removes both families. Snapshots are defensive and immutable, explicit public
+zeros survive construction, and post-quiescence concurrent direct ingestion
+is lossless.
+
+Framework production is narrower than public/manual value construction. Live
+protocol errors use exactly `-32700`, `-32600`, `-32601`, `-32602`, `-32603`,
+`-32020`, `-32021`, `-32022`, `-31999`, and `-31998`, only after successful
+client-visible encoding or accepted streamed-terminal reservation. Failed
+provisional terminals are discarded; application codes, tool-result `isError`,
+and empty-notification HTTP errors are excluded. Unknown-header events occur
+once per occurrence under IGNORE or REJECT and retain only registered endpoint
+plus a recognized core method or `<unrecognized>`, never header name/value or
+raw unrecognized method. Pre-admission errors are request-free; only admitted
+fixed errors use the exact admitted context for bounded delivery/failure
+attribution.
+
+The two default maps independently retain at most 8,192 keys. Public builder
+maps remain uncapped value carriers and accept arbitrary non-null `Integer`
+codes and structurally valid nonempty `EndpointMethodKey` values with
+nonnegative counts, including explicit zero. Protocol maps use natural Integer
+order; no canonical `EndpointMethodKey` order is promised. Built-in dimensions
+contain no header identity, request, throwable, payload, remote identity, trace
+ID/token/key material, tracestate, baggage, or generic application label.
+
+Exact tests are
+`McpProtocolAndUnknownHeaderMetricsAggregationTests#snapshotContractUsesImmutableProtocolAndUnknownHeaderCounterMaps`,
+`#defaultCollectorAggregatesRendersAndFiltersProtocolAndUnknownHeaderFamilies`,
+`#resetClearsSparseProtocolAndUnknownHeaderCountersWithoutLeavingFamilyMetadata`,
+`#manualDimensionRetentionIsIndependentlyBoundedPerFamily`, and
+`#concurrentDirectProtocolAndUnknownHeaderIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
+Live authority is covered by
+`McpPreAdmissionMetricsEventPublicRuntimeTests#acceptedMalformedRequestEmitsExactProtocolErrorThenRejectionWithoutAdmission`,
+`#applicationCodesAreExcludedWhileAdmittedFixedErrorsRetainExactRequestContext`,
+`#unknownHeaderOccurrencesAreExactRedactedAndMethodBoundedAcrossPolicies`,
+`#preAdmissionQuartetDeliveryIsReentrantAndSerializedWithoutCrossRequestOrderClaim`,
+`McpHttpServerApplicationExecutionTests#produced_protocol_error_metric_allowlist_is_exact_and_excludes_application_codes`,
+and `#failed_stream_terminal_discards_provisional_protocol_error_metric`.
+Accepted/unknown/error/rejected and admitted started/error/finished sequences
+promise FIFO record/enqueue order only, not universal cross-thread ordering or
+conservation.
+
+This constrains built-in MCP event, snapshot, and default-renderer surfaces,
+not arbitrary public/manual vocabulary, custom collectors, generic HTTP
+callbacks, logs, `Request`, `Throwable`, or application telemetry. It adds no
+structured/raw-ID emission, downstream OpenTelemetry mapping, sustained/soak,
+simulator or release-candidate proof, and does not freeze Phase 6.
+
+The nineteenth bounded Phase 6 production vertical implements the frozen
+downstream metric matrix in unreleased
+`com.soklet:soklet-otel:1.4.0-SNAPSHOT`, whose default core baseline is
+`com.soklet:soklet:3.6.0-SNAPSHOT`. All 23 `McpMetricsEvent` variants map to
+exactly 22 OpenTelemetry instruments: 21 MCP-specific instruments plus the
+existing shared transport-failure counter. The mapping uses seven fixed MCP
+attributes, lower-snake enum values, the exact 14 request-duration and 12
+long-lived-duration finite bucket boundaries in seconds, and the shared
+transport attributes `soklet.server.type="mcp"` and
+`soklet.failure.reason`. It never adds `error.type` to an MCP transport
+failure, and HTTP metric naming strategy choices do not rename MCP metrics.
+
+The required 3.6 migration removes obsolete MCP request/session/SSE span
+callbacks, the four legacy `soklet.mcp.sessions.*`/session-duration
+instruments, three MCP span-policy knobs, and two MCP span-naming methods. At
+that V19 boundary, the reviewed downstream public diff was exactly 15 removed
+legacy methods plus the new `didRecordMcpMetricsEvent(McpMetricsEvent)`
+callback. Modern MCP lifecycle callbacks then remained inherited no-ops, so
+that metric slice emitted no replacement MCP spans; HTTP and SSE tracing
+remained intact. A 1.3.1 consumer
+that needs the old 3.5.1 MCP tracing model must remain on that historical
+artifact pair until it deliberately migrates.
+
+For framework-produced events, the integration adds no dedicated attribute
+for a trace or raw request ID, progress token/value, header name/value, request
+object, throwable, operation/resource URI, principal/address, tracestate,
+baggage, or generic label bag. Manual public event dimensions remain
+application-controlled and may contain sensitive text; applications own their
+confidentiality and cardinality, and OpenTelemetry SDK series retention
+remains SDK-owned. This slice does not claim default-
+snapshot/reset/filter/OpenMetrics parity, an SDK series cap, cross-instrument
+atomicity or conservation, structured-log emission, modern MCP spans,
+sustained cardinality, simulator/release evidence, or Phase 6 freeze.
+
+Exact tests are
+`OpenTelemetryMetricsCollectorTests#allTwentyThreeMcpEventsMapToExactTwentyTwoInstrumentsAndTransitions`,
+`#mcpInstrumentContractUsesExactKindsUnitsAttributesAndBuckets`,
+`#mcpEnumAndManualDimensionsUseExactTypedVocabularyWithoutSensitiveAttributes`,
+`#mcpSchemaIgnoresHttpNamingStrategyRemovesLegacySessionsAndPreservesFailureBoundary`,
+`#handlesConcurrentMcpMetricEventsWithoutLoss`, and
+`OpenTelemetryLifecycleObserverTests#legacyMcpSessionTracingSurfacesRemainAbsentAndModernRequestCallbacksAreImplemented`.
+At that point, the complete module suite passed 28/0/0/0 on both JDK 21 and
+JDK 26, and main,
+sources, Javadoc, and standalone Javadoc packaging is green. Core inventories
+remain unchanged: 23/23 event variants and 22 text families, 22 snapshot
+getters and 23 builder methods, the exact 31/12 cardinality projection, and
+the 32-entry provisional/210-owner union. At that V19 boundary, modern
+`McpRequestContext` span parenting, naming, policy, and terminal behavior were
+the next contract slice.
+
+The twentieth bounded Phase 6 production vertical implements those modern
+admitted-request spans in the same unreleased
+`com.soklet:soklet-otel:1.4.0-SNAPSHOT` against
+`com.soklet:soklet:3.6.0-SNAPSHOT`. Boxed
+`SpanPolicy.recordMcpRequestSpans()` and its builder method default to `true`.
+The additive default
+`SpanNamingStrategy.mcpRequestSpanName(McpRequestContext)` preserves existing
+three-method implementations. Default names are `MCP <method>` for the exact
+ten core methods; every other raw context method is `<unrecognized>` in the
+name and `rpc.method`, with no original-method attribute. Custom naming remains
+application-owned and may inspect the raw context method.
+
+One SERVER span covers each admitted request or notification through any
+request stream or subscription to its exact terminal lifecycle callback. Its
+only remote parent is validated MCP `_meta.traceparent`/`tracestate`; physical
+HTTP headers, ambient OpenTelemetry context, and baggage never backfill it.
+Start attributes are exactly `soklet.server.type="mcp"`,
+`rpc.system.name="jsonrpc"`, bounded `rpc.method`, and
+`soklet.mcp.endpoint`. Existing `client.address` and `soklet.request.id`
+controls remain off by default and, when enabled, use only the physical server
+request—not the JSON-RPC ID.
+
+Finish always records lower-snake `soklet.mcp.request.outcome`. A non-null
+JSON-RPC error records string `rpc.response.status_code` and `error.type` as
+the same decimal code and marks ERROR. Without an error, rejected,
+application/protocol/internal errors, deadline exceeded, and write failure are
+ERROR with lower-snake outcome `error.type`; complete, input-required,
+canceled, and client-disconnected remain UNSET without it. Lifecycle
+throwables produce no exception event, status, attribute, message, data, or
+stack material. Exact duration controls the end timestamp, with plain-end
+fallback for overflowing manual duration arithmetic.
+
+Disabled policy emits nothing. Missing/late finishes are no-ops; duplicate
+direct starts plainly end the older state, close plainly drains active states,
+and a post-publication closed recheck removes and ends the exact state that
+raced close. Failures are contained and concurrent contexts stay isolated.
+Built-in projection excludes JSON-RPC IDs, request metadata, operation/path/
+capability/admission data, baggage, physical HTTP trace headers, error
+message/data, throwables, and exception events, except for the intentional MCP
+parent and explicitly opted-in physical address/request ID. This adds no
+session, stream, or subscription span and proves no custom-namer safety,
+structured logging, raw-ID emission, comprehensive privacy, sustained
+cardinality, simulator/release readiness, or Phase 6 freeze.
+
+Exact V20 tests are
+`OpenTelemetryMcpLifecycleObserverTests#mcpMetadataTraceContextIsTheOnlyRemoteParentAndPreservesTraceState`,
+`#mcpSpanUsesExactDefaultAndCustomNamesAttributesAndTerminalSemantics`,
+`#allMcpRequestOutcomesMapToExactStatusAndErrorVocabulary`,
+`#mcpRequestSpanStaysOpenUntilTerminalFinishAcrossStreamAndSubscriptionLifetimes`,
+`#mcpPolicyAndNamingAreModernAdditiveAndLegacySessionControlsRemainAbsent`,
+`#mcpTelemetryFailuresAreContainedAndReleaseStateExactlyOnce`,
+`#concurrentMcpSpansRemainContextIsolatedAndCloseDrainsEveryState`,
+`#mcpSpanProjectionExcludesSensitiveContextAndHttpFallbackCanaries`, and
+`OpenTelemetryLifecycleObserverTests#legacyMcpSessionTracingSurfacesRemainAbsentAndModernRequestCallbacksAreImplemented`.
+Core authority is
+`McpRequestObservationPublicRuntimeTests#successfulToolSharesOneContextAndFinishesExactlyOnce`,
+`#traceCaptureUsesOnlyValidMcpMetadataWithoutHttpFallback`,
+`#handlerFailurePublishesExactInternalErrorAndImmutableThrowable`,
+`#unsupportedNotificationRetainsRawLifecycleMethodAndBoundsMetrics`,
+`#throwingObservationCallbacksAreContainedLoggedAndPartitioned`,
+`McpRequestPropagationTests#validatedMetadataReachesAdmissionAndToolHandlersInsteadOfHttpTraceHeaders`,
+`#invalidOrMistypedMetadataIsOmittedWithoutFallingBackToHttpHeaders`,
+`#baggageParsingIsBoundedDecodedAndImmutable`,
+`McpSubscriptionPublicRuntimeTests#configuredMaximumDurationPublishesExactLifecycleAndMetrics`,
+and `#clientDisconnectReleasesStateAndPublishesExactlyOnce`.
+
+V20 leaves the core 23/23 variants, 22 text families, 22 snapshot getters,
+23 builder methods, 12 boxed `Long` values, ten maps, 31/12 canary projection,
+32 provisional owners, and 210-owner union unchanged. It adds five declared
+downstream methods relative to V19; the reviewed historical-to-current diff is
+13 removals/four additions. `MCP-BASE-026` is COMPLETE. `AMB-003` remains
+RESOLVED CONTRACT 2026-08-10 / CORE IMPLEMENTATION COMPLETE / DOWNSTREAM
+METRIC IMPLEMENTATION COMPLETE; `SOK-METRIC-001`, `SOK-METRIC-004`, metric-
+only `SOK-TRACE-005`, and `SOK-PRIV-001` remain PARTIAL;
+`SOK-TRACE-004` remains PLANNED. At that V20 boundary, MCP simulator
+integration was next.
+
+The twenty-first bounded Phase 6 production vertical implements that simulator
+integration through the existing shared `Simulator` host. Its two abstract
+`startMcpRequest(...)` methods return a thread-safe `McpSimulation`; seven new
+top-level simulation types and `McpSimulationOptions.Builder` define immutable
+responses, completion, exact SSE items, body/item enums, and positive capture
+bounds. Defaults are 128 pending SSE items and 10,485,760 cumulative bytes.
+
+The simulation is asynchronous and off-network but uses the real MCP
+processor, application, stream/subscription, lifecycle, metrics, and terminal
+authority. It binds no socket, leaves listener status `STOPPED`, bound address
+empty and diagnostics zero, and emits no server/connection/transport event.
+The supplied Host, Origin, headers, and body are not repaired. Effective policy
+uses the configured host and literal port, so port `0` requires an authority
+such as `127.0.0.1:0`; no Host is synthesized.
+
+Repeatable response/completion waits and destructive FIFO item reads expose
+defensive JSON/empty-body copies, exact unchunked SSE frames, and immutable
+completion. A captured terminal JSON frame consumes one ordinary item and is
+also available as completion `terminalMessage` at no second cost. Item capacity
+is checked before cumulative bytes; equality is allowed, an offending frame is
+excluded, dequeue refunds only a queue slot, and bytes never refund. JSON or
+pre-response SSE overflow retains the response head and exact item/byte reason.
+The admitted request finishes `CANCELED` with coarse token reason
+`SIMULATOR_LIMIT_EXCEEDED`, not a protocol or transport failure.
+
+Cancel, close, and scope exit publish `CLIENT_DISCONNECTED` only if they win
+the shared terminal reservation. Cleanup is bounded and idempotent; residual
+noncooperative work blocks new simulation and live start until release, while
+escaped handles stay readable. Waits reject null/negative values, support zero
+polling and overflow-safe large durations, and preserve interruption without
+canceling. Accepted JSON, malformed/rejected requests, streams,
+subscriptions, keep-alives, and a distinct-ID two-request `input_required`
+continuation use the same path. Ordering is FIFO per request, not a universal
+cross-request order.
+
+Request headers/body and completion Throwables remain caller-sensitive.
+Collections and byte arrays are immutable/defensively copied and carrier
+rendering is redacted, but accessors do not establish confidentiality.
+Representative exact citations from the full 46-test simulator/API gate are
+`McpSimulationPublicApiTests#simulationSurfaceHasExactReferenceNullabilityAndClosedEnums`,
+`McpPublicApiReflectionContractTests#phaseSixSimulatorInventoryAndSharedHostDescriptorsAreExact`,
+`McpSimulatorPublicRuntimeTests#startMcpRequestRejectsMissingServerConfiguration`,
+`#defaultLoopbackHostPolicyRequiresLiteralConfiguredPortZero`,
+`#multiRoundTripSimulationContinuesInputRequiredStateToDistinctCompletedRequest`,
+`#subscriptionReplayPreservesAcknowledgmentEventAndCancelationOrder`,
+`#mcpSimulationCompletionRetainsStreamCaptureFailures`,
+`#noncooperativeSimulationCleanupIsBoundedAndPreservesSuppression`,
+`#waitOperationsHandleZeroTimeoutInterruptionAndCompletionIdempotently`, and
+`McpSimulationCaptureRuntimeTests#cancelAndTerminalRacePublishesOneCoherentFirstWinner`.
+
+V21 brings `phase-6.includes` to 15 owners, retains 32 provisional owners, and
+brings the reviewed union to 219. The compatibility set is 558 records with
+SHA-256
+`d40004fa92cc5d095404de2133cf04fcd2b5574e9326eb680f571a017ef33671`;
+frozen Phase 4/5 counts and hashes remain unchanged. Core metrics remain 23/23
+events into 22 families, 22 snapshot getters/23 builder methods, 12 boxed
+`Long` values plus ten maps, and the 31/12 canary projection.
+
+`SOK-SIM-001` is COMPLETE BOUNDED PHASE 6 IMPLEMENTATION EVIDENCE. Every-
+operation simulator coverage, the 39-scenario suite through simulation,
+stress/soak, sustained fuzz, live-network fidelity, comprehensive privacy/
+security, release provenance, and Phase 6 freeze remain open. Other statuses
+are unchanged. The next bounded work is the first complete release-workflow
+dry run and the remaining sustained, review, and freeze gates.
+
 The sixth bounded Phase 6 vertical established one context-aware, server-wide
 deferred FIFO for the first 16 semantic event variants produced by the runtime:
 the five handler transitions,
@@ -1947,39 +2397,43 @@ freeze.
 
 Transport aggregation is the tenth production vertical, server-start is the
 eleventh, request-boundary aggregation is the twelfth, admitted-request
-lifecycle aggregation is the thirteenth, and request-stream lifecycle
-aggregation is the fourteenth; the three earlier checkpoints remain
-unnumbered. The snapshot now has 15 getters and 16 public builder methods
-including `build()`: ten boxed `Long` values and five maps. The default
-collector aggregates 16 event variants and ignores the remaining seven across
-15 text families. Under the same nonstreaming 16-request gate, the exact
-MCP-prefixed sample set has 29 samples before reset and ten after reset; only
-the configured zero active-stream gauge is added, while stream histograms stay
-sparse. The MCP failure map is empty
+lifecycle aggregation is the thirteenth, request-stream lifecycle aggregation
+is the fourteenth, subscription lifecycle aggregation is the fifteenth,
+progress/cancelation aggregation is the sixteenth, keep-alive aggregation is
+the seventeenth, and protocol/error-header aggregation is the eighteenth; the
+downstream OpenTelemetry metric migration is the nineteenth, modern
+admitted-request spans are the twentieth, and bounded off-network MCP
+simulation is the twenty-first. The three earlier
+checkpoints remain unnumbered. The snapshot remains at 22 getters
+and 23 public builder methods including `build()`: 12 boxed `Long` values and
+ten maps. The default collector aggregates the full 23/23 event variants across 22 text
+families, leaving zero core events unaggregated. The nonsubscription 16-request
+gate remains exactly 31 MCP-prefixed samples before reset and 12 after reset
+because both final map families are sparse on that clean path. The MCP failure map is empty
 on that clean path,
 and the built-in MCP plus shared transport rendering continues to exclude every
 trace/tracestate/baggage/token/key canary.
 
-The next resolved aggregate subset is subscription lifecycle aggregation:
-`SubscriptionOpened`/`SubscriptionClosed` feed a live subscription gauge plus
-an endpoint/reason duration histogram. Later rows specify endpoint/method cancelation
-and progress counters; a keep-alive scalar; a fixed-code protocol-error map;
-and an endpoint/method unknown-header map with no header identity. It defines no
+The final resolved aggregate subset now implements a fixed-code protocol-error
+map and endpoint/method unknown-header map with no header identity. It defines no
 standalone start/finish/open/close counters. Configured scalars render zero,
 maps/histograms are sparse, and reset preserves five live gauges while clearing
-cumulative/map/histogram state. Exact downstream OpenTelemetry mapping remains
-in the authoritative Phase 6/V10 contract.
+cumulative/map/histogram state. The downstream implementation now maps the
+same 23 transitions to 22 OpenTelemetry instruments without changing this
+core snapshot or text contract.
 
 `SOK-TRACE-005` remains PARTIAL for metric-only evidence; `SOK-PRIV-001`,
-`SOK-METRIC-001`, and `SOK-METRIC-004` remain PARTIAL;
+`MCP-HTTP-020`, `SOK-METRIC-001`, and `SOK-METRIC-004` remain PARTIAL;
 `SOK-METRIC-002`, `SOK-METRIC-003`, and `SOK-SHUT-002` remain COMPLETE.
-`AMB-003` is RESOLVED CONTRACT / IMPLEMENTATION PARTIAL;
-remaining core families and downstream snapshot-compatible OpenTelemetry work
-remain open.
+`AMB-003` is RESOLVED CONTRACT 2026-08-10 / CORE IMPLEMENTATION COMPLETE /
+DOWNSTREAM METRIC IMPLEMENTATION COMPLETE. `MCP-BASE-026` is COMPLETE.
+`SOK-TRACE-004` remains PLANNED; modern spans do not implement structured
+trace-log emission.
 The vertical does not constrain custom collectors or application telemetry,
 promise an atomic cross-field snapshot during active concurrent mutation, add
 structured-log or raw-ID emission, complete privacy/cardinality work, or prove
-simulation, sustained, release-readiness, review, or Phase 6 freeze.
+every-operation simulation, sustained, release-readiness, review, or Phase 6
+freeze.
 
 For MCP shutdowns, `snapshot().getMcpMetrics().getShutdowns()` is an immutable,
 enum-ordered `Map<McpShutdownOutcome, Long>`. The default collector omits
@@ -1988,12 +2442,12 @@ unobserved outcomes, returns the map to empty on reset, and emits only
 `soklet_mcp_shutdowns_total{outcome="residual_handlers"}`. Default aggregation
 now covers `ServerStarted`, `ServerStopped`, `RequestAccepted`,
 `RequestRejected`, `RequestStarted`, `RequestFinished`,
-`RequestStreamOpened`, `RequestStreamClosed`, the five handler variants, and
-the transport trio.
-Remaining contract-fixed aggregates and downstream OpenTelemetry work,
-structured-log carrier/emission, raw-ID
-opt-in, broader privacy, sustained cardinality, and redaction work, simulator
-integration, fuzz and
+`RequestStreamOpened`, `RequestStreamClosed`, the five handler variants,
+`SubscriptionOpened`, `SubscriptionClosed`, `CancelationSignaled`,
+`ProgressEmitted`, `KeepAliveEmitted`, `ProtocolError`,
+`UnknownMirroredHeader`, and the transport trio.
+Structured-log carrier/emission, raw-ID
+opt-in, broader privacy, sustained cardinality, and redaction work, fuzz and
 sustained gates, release-candidate work, and Phase 6 review/freeze remain open.
 Here, the remaining fuzz work means scheduled/manual coverage-guided and
 sustained execution, not the completed registration and deterministic corpus
@@ -2005,7 +2459,17 @@ aggregate family, label, event variant, or wire dimension. The tenth added
 three provisional snapshot getters and three matching builder methods; the
 eleventh adds one getter/builder pair, the twelfth adds two, the thirteenth adds
 three plus `RequestOutcomeKey`, and the fourteenth adds two plus
-`RequestStreamTerminationKey`. None adds an event variant or wire dimension.
+`RequestStreamTerminationKey`; the fifteenth adds two plus
+`SubscriptionTerminationKey`; and the sixteenth adds two plus
+`EndpointMethodKey`; the seventeenth adds one provisional getter/builder pair;
+and the eighteenth adds two provisional map getter/builder pairs.
+The nineteenth changes only the downstream `soklet-otel` artifact and adds no
+core event variant, snapshot member, owner, label, or wire dimension.
+The twentieth also changes only that downstream artifact and adds five declared
+methods relative to V19, with no core inventory change.
+The twenty-first adds seven top-level public simulation types,
+`McpSimulationOptions.Builder`, and two abstract methods to `Simulator`, while
+leaving the metric/snapshot/canary inventories unchanged.
 Phase 6 remains provisional and unfrozen.
 
 You can expose a `/metrics` endpoint by injecting [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html)

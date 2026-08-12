@@ -1,0 +1,9 @@
+limits 4 4096
+sse
+terminal first
+finish COMPLETE
+terminal late
+fail
+cancel
+close
+finish INTERNAL_ERROR

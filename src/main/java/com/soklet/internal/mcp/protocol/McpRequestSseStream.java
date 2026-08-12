@@ -18,6 +18,7 @@ package com.soklet.internal.mcp.protocol;
 
 import com.soklet.StreamTerminationReason;
 import com.soklet.internal.mcp.transport.McpOutboundChannel;
+import com.soklet.McpStreamTerminationReason;
 import com.soklet.internal.microhttp.Header;
 import com.soklet.internal.microhttp.MicrohttpResponse;
 import com.soklet.internal.microhttp.StreamingMicrohttpResponses;
@@ -27,7 +28,9 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
@@ -40,6 +43,68 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class McpRequestSseStream {
+	enum FrameType {
+		JSON_MESSAGE,
+		KEEP_ALIVE_COMMENT
+	}
+
+	record Frame(@NonNull FrameType type,
+			@Nullable McpJsonRpcMessage message, byte @NonNull [] encodedBytes) {
+		Frame {
+			requireNonNull(type);
+			encodedBytes = Arrays.copyOf(requireNonNull(encodedBytes),
+					encodedBytes.length);
+			if ((type == FrameType.JSON_MESSAGE) != (message != null))
+				throw new IllegalArgumentException(
+						"Only JSON-message frames carry an MCP message.");
+			if (encodedBytes.length == 0)
+				throw new IllegalArgumentException("SSE frames must not be empty.");
+		}
+
+		@Override
+		public byte @NonNull [] encodedBytes() {
+			return Arrays.copyOf(this.encodedBytes, this.encodedBytes.length);
+		}
+	}
+
+	interface Channel {
+		@NonNull
+		MicrohttpResponse response(@NonNull List<@NonNull Header> headers);
+
+		void enqueue(@NonNull Frame frame) throws InterruptedException;
+
+		McpOutboundChannel.@NonNull OfferResult offer(@NonNull Frame frame);
+
+		McpOutboundChannel.@NonNull OfferResult offerCoalescing(
+				@NonNull Frame frame, @NonNull Object coalescingKey);
+
+		boolean complete(@NonNull Frame terminalFrame);
+
+		boolean fail(@NonNull StreamTerminationReason reason,
+				@Nullable Throwable cause);
+
+		boolean failIfDeadlineExpired(long nowNanos, long deadlineNanos,
+				@NonNull StreamTerminationReason reason, @Nullable Throwable cause);
+
+		boolean failIfWriteIdleExpired(long nowNanos, long timeoutNanos,
+				@NonNull StreamTerminationReason reason, @Nullable Throwable cause);
+
+		long responseWriteIdleDeadlineNanos(long timeoutNanos);
+
+		void close(@NonNull StreamTerminationReason reason,
+				@Nullable Throwable cause);
+
+		@NonNull
+		Optional<McpOutboundChannel.@NonNull Snapshot> snapshot();
+
+		boolean isTerminalWritten();
+	}
+
+	interface Listener {
+		void didTerminate(@NonNull StreamTerminationReason reason,
+				@Nullable McpStreamTerminationReason observationReason,
+				@Nullable Throwable cause);
+	}
 	@FunctionalInterface
 	interface TestHooks {
 		void beforeTerminalReservation();
@@ -67,7 +132,7 @@ final class McpRequestSseStream {
 	@NonNull
 	private final McpJsonRpcEnvelopeCodec envelopeCodec;
 	@NonNull
-	private final McpOutboundChannel channel;
+	private final Channel channel;
 
 	McpRequestSseStream(int frameCapacity, @NonNull McpJsonLimits jsonLimits,
 			@NonNull McpJsonRpcEnvelopeCodec envelopeCodec,
@@ -77,9 +142,14 @@ final class McpRequestSseStream {
 		this.envelopeCodec = requireNonNull(envelopeCodec);
 		int maximumFrameBytes = Math.addExact(jsonLimits.maximumOutputBytes(),
 				MESSAGE_PREFIX.length + MESSAGE_SUFFIX.length);
-		this.channel = new McpOutboundChannel(frameCapacity, maximumFrameBytes,
-				maximumFrameBytes, requireNonNull(clock)::nanoTime,
-				requireNonNull(listener));
+		this.channel = new TransportChannel(frameCapacity, maximumFrameBytes,
+				requireNonNull(clock), requireNonNull(listener));
+	}
+
+	McpRequestSseStream(@NonNull McpJsonRpcEnvelopeCodec envelopeCodec,
+			@NonNull Channel channel) {
+		this.envelopeCodec = requireNonNull(envelopeCodec);
+		this.channel = requireNonNull(channel);
 	}
 
 	@NonNull
@@ -90,8 +160,7 @@ final class McpRequestSseStream {
 		headers.add(new Header("Cache-Control", "no-store"));
 		headers.add(new Header("X-Accel-Buffering", "no"));
 		headers.addAll(additionalHeaders);
-		return StreamingMicrohttpResponses.withWritableSourceBody(
-				200, "OK", List.copyOf(headers), channel::newWritableSource);
+		return channel.response(List.copyOf(headers));
 	}
 
 	void enqueueMessage(@NonNull McpJsonRpcMessage message) throws InterruptedException {
@@ -110,7 +179,7 @@ final class McpRequestSseStream {
 	}
 
 	boolean completeMessage(@NonNull McpJsonRpcMessage message) {
-		byte[] terminalFrame = frame(requireNonNull(message));
+		Frame terminalFrame = frame(requireNonNull(message));
 		testHooks.beforeTerminalReservation();
 		return channel.complete(terminalFrame);
 	}
@@ -121,7 +190,8 @@ final class McpRequestSseStream {
 	}
 
 	McpOutboundChannel.@NonNull OfferResult offerKeepAlive() {
-		return channel.offer(KEEP_ALIVE);
+		return channel.offer(new Frame(FrameType.KEEP_ALIVE_COMMENT, null,
+				KEEP_ALIVE));
 	}
 
 	boolean fail(@NonNull StreamTerminationReason reason,
@@ -156,7 +226,7 @@ final class McpRequestSseStream {
 		channel.close(requireNonNull(reason), cause);
 	}
 
-	McpOutboundChannel.@NonNull Snapshot snapshot() {
+	Optional<McpOutboundChannel.@NonNull Snapshot> snapshot() {
 		return channel.snapshot();
 	}
 
@@ -164,7 +234,7 @@ final class McpRequestSseStream {
 		return channel.isTerminalWritten();
 	}
 
-	private byte @NonNull [] frame(@NonNull McpJsonRpcMessage message) {
+	private @NonNull Frame frame(@NonNull McpJsonRpcMessage message) {
 		byte[] json = envelopeCodec.encode(message);
 		byte[] frame = new byte[MESSAGE_PREFIX.length + json.length
 				+ MESSAGE_SUFFIX.length];
@@ -172,6 +242,94 @@ final class McpRequestSseStream {
 		System.arraycopy(json, 0, frame, MESSAGE_PREFIX.length, json.length);
 		System.arraycopy(MESSAGE_SUFFIX, 0, frame,
 				MESSAGE_PREFIX.length + json.length, MESSAGE_SUFFIX.length);
-		return frame;
+		return new Frame(FrameType.JSON_MESSAGE, message, frame);
+	}
+
+	@ThreadSafe
+	private static final class TransportChannel implements Channel {
+		@NonNull
+		private final McpOutboundChannel delegate;
+
+		private TransportChannel(int frameCapacity, int maximumFrameBytes,
+				@NonNull McpApplicationClock clock,
+				McpOutboundChannel.@NonNull Listener listener) {
+			this.delegate = new McpOutboundChannel(frameCapacity,
+					maximumFrameBytes, maximumFrameBytes,
+					requireNonNull(clock)::nanoTime, requireNonNull(listener));
+		}
+
+		@Override
+		@NonNull
+		public MicrohttpResponse response(@NonNull List<@NonNull Header> headers) {
+			return StreamingMicrohttpResponses.withWritableSourceBody(
+					200, "OK", List.copyOf(requireNonNull(headers)),
+					this.delegate::newWritableSource);
+		}
+
+		@Override
+		public void enqueue(@NonNull Frame frame) throws InterruptedException {
+			this.delegate.enqueue(requireNonNull(frame).encodedBytes());
+		}
+
+		@Override
+		public McpOutboundChannel.@NonNull OfferResult offer(
+				@NonNull Frame frame) {
+			return this.delegate.offer(requireNonNull(frame).encodedBytes());
+		}
+
+		@Override
+		public McpOutboundChannel.@NonNull OfferResult offerCoalescing(
+				@NonNull Frame frame, @NonNull Object coalescingKey) {
+			return this.delegate.offerCoalescing(
+					requireNonNull(frame).encodedBytes(), requireNonNull(coalescingKey));
+		}
+
+		@Override
+		public boolean complete(@NonNull Frame terminalFrame) {
+			return this.delegate.complete(
+					requireNonNull(terminalFrame).encodedBytes());
+		}
+
+		@Override
+		public boolean fail(@NonNull StreamTerminationReason reason,
+				@Nullable Throwable cause) {
+			return this.delegate.fail(requireNonNull(reason), cause);
+		}
+
+		@Override
+		public boolean failIfDeadlineExpired(long nowNanos, long deadlineNanos,
+				@NonNull StreamTerminationReason reason, @Nullable Throwable cause) {
+			return this.delegate.failIfDeadlineExpired(nowNanos, deadlineNanos,
+					requireNonNull(reason), cause);
+		}
+
+		@Override
+		public boolean failIfWriteIdleExpired(long nowNanos, long timeoutNanos,
+				@NonNull StreamTerminationReason reason, @Nullable Throwable cause) {
+			return this.delegate.failIfWriteIdleExpired(nowNanos, timeoutNanos,
+					requireNonNull(reason), cause);
+		}
+
+		@Override
+		public long responseWriteIdleDeadlineNanos(long timeoutNanos) {
+			return this.delegate.responseWriteIdleDeadlineNanos(timeoutNanos);
+		}
+
+		@Override
+		public void close(@NonNull StreamTerminationReason reason,
+				@Nullable Throwable cause) {
+			this.delegate.close(requireNonNull(reason), cause);
+		}
+
+		@Override
+		@NonNull
+		public Optional<McpOutboundChannel.@NonNull Snapshot> snapshot() {
+			return Optional.of(this.delegate.snapshot());
+		}
+
+		@Override
+		public boolean isTerminalWritten() {
+			return this.delegate.isTerminalWritten();
+		}
 	}
 }

@@ -16,6 +16,8 @@
 
 package com.soklet;
 
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SimulationSession;
+
 import com.soklet.SseRequestResult.HandshakeAccepted;
 import com.soklet.SseRequestResult.HandshakeRejected;
 import com.soklet.annotation.SseEventSource;
@@ -1816,8 +1818,23 @@ public final class Soklet implements AutoCloseable {
 				});
 
 			// Create and provide simulator
-			Simulator simulator = new DefaultSimulator(mockServer, mockSseServer, simulatorOptions);
-			simulatorConsumer.accept(simulator);
+			DefaultMcpServer mcpServer = sokletConfig.getMcpServer()
+					.filter(DefaultMcpServer.class::isInstance)
+					.map(DefaultMcpServer.class::cast)
+					.orElse(null);
+			DefaultSimulator simulator = new DefaultSimulator(mockServer,
+					mockSseServer, simulatorOptions, mcpServer);
+			try {
+				simulatorConsumer.accept(simulator);
+			} catch (RuntimeException | Error failure) {
+				try {
+					simulator.closeScope();
+				} catch (RuntimeException | Error cleanupFailure) {
+					failure.addSuppressed(cleanupFailure);
+				}
+				throw failure;
+			}
+			simulator.closeScope();
 		} finally {
 			// Always restore to real implementations
 			if (serverProxy != null)
@@ -1851,6 +1868,11 @@ public final class Soklet implements AutoCloseable {
 		private MockSseServer sseServer;
 		@NonNull
 		private final SimulatorOptions simulatorOptions;
+		private final @Nullable DefaultMcpServer mcpServer;
+		@NonNull
+		private final Object mcpSimulationLock;
+		private @Nullable SimulationSession mcpSimulationSession;
+		private boolean closed;
 
 		public DefaultSimulator(@Nullable MockHttpServer server,
 														@Nullable MockSseServer sseServer) {
@@ -1858,11 +1880,59 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		public DefaultSimulator(@Nullable MockHttpServer server,
-														@Nullable MockSseServer sseServer,
-														@NonNull SimulatorOptions simulatorOptions) {
+												@Nullable MockSseServer sseServer,
+												@NonNull SimulatorOptions simulatorOptions) {
+			this(server, sseServer, simulatorOptions, null);
+		}
+
+		DefaultSimulator(@Nullable MockHttpServer server,
+				@Nullable MockSseServer sseServer,
+				@NonNull SimulatorOptions simulatorOptions,
+				@Nullable DefaultMcpServer mcpServer) {
 			this.server = server;
 			this.sseServer = sseServer;
 			this.simulatorOptions = requireNonNull(simulatorOptions);
+			this.mcpServer = mcpServer;
+			this.mcpSimulationLock = new Object();
+		}
+
+		@Override
+		@NonNull
+		public McpSimulation startMcpRequest(@NonNull Request request) {
+			return startMcpRequest(requireNonNull(request),
+					McpSimulationOptions.defaultInstance());
+		}
+
+		@Override
+		@NonNull
+		public McpSimulation startMcpRequest(@NonNull Request request,
+				@NonNull McpSimulationOptions options) {
+			synchronized (this.mcpSimulationLock) {
+				if (this.closed)
+					throw new IllegalStateException(
+							"The MCP simulator scope is closed.");
+				if (this.mcpServer == null)
+					throw new IllegalStateException(
+							"You must specify a McpServer in your SokletConfig to simulate MCP requests");
+				if (this.mcpSimulationSession == null)
+					this.mcpSimulationSession = this.mcpServer
+							.openSimulationSession();
+				return this.mcpSimulationSession.start(requireNonNull(request),
+						requireNonNull(options));
+			}
+		}
+
+		private void closeScope() {
+			SimulationSession session;
+			synchronized (this.mcpSimulationLock) {
+				if (this.closed)
+					return;
+				this.closed = true;
+				session = this.mcpSimulationSession;
+				this.mcpSimulationSession = null;
+			}
+			if (session != null)
+				session.close();
 		}
 
 		@NonNull

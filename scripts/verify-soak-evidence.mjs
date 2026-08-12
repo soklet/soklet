@@ -9,6 +9,7 @@ const PROFILE_NAMES = new Set(['smoke', 'nightly']);
 const EXPECTED_SCENARIOS = new Set([
   'HTTP abort churn',
   'MCP Phase 5 cross-feature churn',
+  'MCP off-network simulator churn',
   'concurrent HTTP churn',
   'concurrent SSE churn',
 ]);
@@ -23,9 +24,10 @@ const EXPECTED_SUITES = new Map([
   }],
   ['TEST-com.soklet.McpCrossFeatureSoakTests.xml', {
     name: 'com.soklet.McpCrossFeatureSoakTests',
-    tests: 1,
+    tests: 2,
     testCases: new Set([
       'mcpCrossFeatureChurnReturnsResourcesToBaselineAfterCancellationAndShutdown',
+      'mcpSimulatorChurnReturnsResourcesToBaselineAfterCancellationAndScopeCleanup',
     ]),
   }],
   ['TEST-com.soklet.RealtimeTransportSoakTests.xml', {
@@ -194,7 +196,7 @@ export function verifySoakEvidence(profileName, projectRoot = defaultProjectRoot
   }));
 
   if (headings.length !== EXPECTED_SCENARIOS.size + 1)
-    fail(`Expected one configuration section and exactly four scenario sections, found ${headings.length}`);
+    fail(`Expected one configuration section and exactly ${EXPECTED_SCENARIOS.size} scenario sections, found ${headings.length}`);
 
   if (headings[0].name !== 'Canonical Configuration')
     fail('Canonical Configuration must be the first level-two report section');

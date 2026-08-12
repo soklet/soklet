@@ -1,6 +1,15 @@
 com.soklet.McpServerDiagnostics
 com.soklet.McpServerStatus
 com.soklet.McpShutdownOutcome
+com.soklet.McpSimulation
+com.soklet.McpSimulationBodyMode
+com.soklet.McpSimulationCompletion
+com.soklet.McpSimulationOptions
+com.soklet.McpSimulationOptions$Builder
+com.soklet.McpSimulationResponse
+com.soklet.McpSimulationStreamItem
+com.soklet.McpSimulationStreamItemType
 com.soklet.McpTraceCorrelation
 com.soklet.McpTraceCorrelationConfigurationFingerprint
 com.soklet.McpTraceCorrelationKey
+com.soklet.Simulator

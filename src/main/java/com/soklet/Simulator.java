@@ -19,6 +19,7 @@ package com.soklet;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.function.Consumer;
 
 /**
@@ -102,7 +103,31 @@ import java.util.function.Consumer;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 public interface Simulator {
+	/**
+	 * Starts an asynchronous, off-network MCP POST simulation using default
+	 * bounded capture options.
+	 *
+	 * @param request request to simulate
+	 * @return simulation handle
+	 * @throws NullPointerException if {@code request} is null
+	 */
+	@NonNull
+	McpSimulation startMcpRequest(@NonNull Request request);
+
+	/**
+	 * Starts an asynchronous, off-network MCP POST simulation.
+	 *
+	 * @param request request to simulate
+	 * @param options bounded response-capture options
+	 * @return simulation handle
+	 * @throws NullPointerException if either argument is null
+	 */
+	@NonNull
+	McpSimulation startMcpRequest(@NonNull Request request,
+			@NonNull McpSimulationOptions options);
+
 	/**
 	 * Given a request that would normally be handled by your standard {@link HttpServer}, process it and return response data (both logical {@link Response}, if present, and the {@link MarshaledResponse} bytes to be sent over the wire) as well as the matching <em>Resource Method</em>, if available.
 	 * <p>

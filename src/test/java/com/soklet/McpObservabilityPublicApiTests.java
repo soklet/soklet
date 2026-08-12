@@ -304,20 +304,29 @@ public class McpObservabilityPublicApiTests {
 				Map.entry("getRequests", Map.class),
 				Map.entry("getRequestDurations", Map.class),
 				Map.entry("getActiveRequestStreams", Long.class),
-				Map.entry("getRequestStreamDurations", Map.class));
+				Map.entry("getRequestStreamDurations", Map.class),
+				Map.entry("getActiveSubscriptions", Long.class),
+				Map.entry("getSubscriptionDurations", Map.class),
+				Map.entry("getCancelationsSignaled", Map.class),
+				Map.entry("getProgressEmitted", Map.class),
+				Map.entry("getKeepAlivesEmitted", Long.class),
+				Map.entry("getProtocolErrors", Map.class),
+				Map.entry("getUnknownMirroredHeaders", Map.class));
 		Map<String, Class<?>> actualGetters = Arrays.stream(
 				McpMetricsSnapshot.class.getDeclaredMethods())
 				.filter(method -> Modifier.isPublic(method.getModifiers()))
-				.filter(method -> !Modifier.isStatic(method.getModifiers()))
-				.collect(Collectors.toUnmodifiableMap(Method::getName,
-						Method::getReturnType));
+					.filter(method -> !Modifier.isStatic(method.getModifiers()))
+					.collect(Collectors.toUnmodifiableMap(Method::getName,
+							Method::getReturnType));
+		Assertions.assertEquals(22, actualGetters.size());
 		Assertions.assertEquals(expectedGetters, actualGetters);
 		for (String getterName : expectedGetters.keySet()) {
 			Method getter = McpMetricsSnapshot.class.getMethod(getterName);
 			Assertions.assertEquals(0, getter.getParameterCount());
 			Assertions.assertTrue(getter.getAnnotatedReturnType()
 					.isAnnotationPresent(NonNull.class));
-			assertNonTraceDimensionName(getterName);
+			if (!getterName.equals("getUnknownMirroredHeaders"))
+				assertNonTraceDimensionName(getterName);
 		}
 		Assertions.assertEquals(Map.of(
 				"emptyInstance", McpMetricsSnapshot.class,
@@ -361,6 +370,20 @@ public class McpObservabilityPublicApiTests {
 								McpMetricsSnapshot.Builder.class, Long.class)),
 						Map.entry("requestStreamDurations", methodSignature(
 								McpMetricsSnapshot.Builder.class, Map.class)),
+						Map.entry("activeSubscriptions", methodSignature(
+								McpMetricsSnapshot.Builder.class, Long.class)),
+						Map.entry("subscriptionDurations", methodSignature(
+								McpMetricsSnapshot.Builder.class, Map.class)),
+						Map.entry("cancelationsSignaled", methodSignature(
+								McpMetricsSnapshot.Builder.class, Map.class)),
+						Map.entry("progressEmitted", methodSignature(
+								McpMetricsSnapshot.Builder.class, Map.class)),
+						Map.entry("keepAlivesEmitted", methodSignature(
+								McpMetricsSnapshot.Builder.class, Long.class)),
+						Map.entry("protocolErrors", methodSignature(
+								McpMetricsSnapshot.Builder.class, Map.class)),
+						Map.entry("unknownMirroredHeaders", methodSignature(
+								McpMetricsSnapshot.Builder.class, Map.class)),
 						Map.entry("build", methodSignature(McpMetricsSnapshot.class)));
 		Map<String, Map.Entry<Class<?>, List<Class<?>>>> actualBuilderMethods =
 				Arrays.stream(McpMetricsSnapshot.Builder.class.getDeclaredMethods())
@@ -368,6 +391,7 @@ public class McpObservabilityPublicApiTests {
 						.collect(Collectors.toUnmodifiableMap(Method::getName,
 								method -> methodSignature(method.getReturnType(),
 										method.getParameterTypes())));
+		Assertions.assertEquals(23, actualBuilderMethods.size());
 		Assertions.assertEquals(expectedBuilderMethods, actualBuilderMethods);
 		for (Method method : McpMetricsSnapshot.Builder.class.getDeclaredMethods()) {
 			if (!Modifier.isPublic(method.getModifiers()))
@@ -377,7 +401,8 @@ public class McpObservabilityPublicApiTests {
 			Arrays.stream(method.getAnnotatedParameterTypes()).forEach(
 					parameter -> Assertions.assertTrue(
 							parameter.isAnnotationPresent(NonNull.class)));
-			assertNonTraceDimensionName(method.getName());
+			if (!method.getName().equals("unknownMirroredHeaders"))
+				assertNonTraceDimensionName(method.getName());
 		}
 
 		assertShutdownMapSignature(McpMetricsSnapshot.class.getMethod(
@@ -389,23 +414,22 @@ public class McpObservabilityPublicApiTests {
 		assertTransportFailureMapSignature(McpMetricsSnapshot.Builder.class
 				.getMethod("transportFailures", Map.class)
 				.getGenericParameterTypes()[0]);
+		assertCounterMapSignature(McpMetricsSnapshot.class.getMethod(
+				"getProtocolErrors").getGenericReturnType(), Integer.class);
+		assertCounterMapSignature(McpMetricsSnapshot.Builder.class.getMethod(
+				"protocolErrors", Map.class).getGenericParameterTypes()[0],
+				Integer.class);
+		assertCounterMapSignature(McpMetricsSnapshot.class.getMethod(
+				"getUnknownMirroredHeaders").getGenericReturnType(),
+				McpMetricsSnapshot.EndpointMethodKey.class);
+		assertCounterMapSignature(McpMetricsSnapshot.Builder.class.getMethod(
+				"unknownMirroredHeaders", Map.class).getGenericParameterTypes()[0],
+				McpMetricsSnapshot.EndpointMethodKey.class);
 
 		DefaultMetricsCollector defaultCollector =
 				DefaultMetricsCollector.defaultInstance();
-		Duration duration = Duration.ofMillis(1);
-		List<McpMetricsEvent> nonAggregatedEvents = List.of(
-				new McpMetricsEvent.SubscriptionOpened("/registered"),
-				new McpMetricsEvent.SubscriptionClosed("/registered",
-						McpStreamTerminationReason.COMPLETED, duration),
-				new McpMetricsEvent.CancelationSignaled(
-						"/registered", "tools/call"),
-				new McpMetricsEvent.ProgressEmitted(
-						"/registered", "tools/call"),
-				new McpMetricsEvent.KeepAliveEmitted(),
-				new McpMetricsEvent.ProtocolError(-32600),
-				new McpMetricsEvent.UnknownMirroredHeader(
-						"/registered", "tools/call"));
-		Assertions.assertEquals(7, nonAggregatedEvents.size());
+		List<McpMetricsEvent> nonAggregatedEvents = List.of();
+		Assertions.assertEquals(0, nonAggregatedEvents.size());
 		nonAggregatedEvents.forEach(defaultCollector::didRecordMcpMetricsEvent);
 		Assertions.assertSame(McpMetricsSnapshot.emptyInstance(),
 				defaultCollector.snapshot().orElseThrow().getMcpMetrics());
@@ -520,6 +544,15 @@ public class McpObservabilityPublicApiTests {
 		Assertions.assertArrayEquals(new Object[]{
 				MetricsCollector.TransportFailureReason.class, Long.class
 		}, parameterizedType.getActualTypeArguments());
+	}
+
+	private static void assertCounterMapSignature(@NonNull Object genericType,
+			@NonNull Class<?> keyType) {
+		ParameterizedType parameterizedType = Assertions.assertInstanceOf(
+				ParameterizedType.class, genericType);
+		Assertions.assertEquals(Map.class, parameterizedType.getRawType());
+		Assertions.assertArrayEquals(new Object[]{keyType, Long.class},
+				parameterizedType.getActualTypeArguments());
 	}
 
 	private static void assertNonTraceDimensionName(@NonNull String name) {

@@ -42,6 +42,7 @@ import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ResourceListInvoc
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ResourceListPlan;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ResourcePlan;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RuntimeState;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SimulationSession;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestError;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestObservation;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestObservationInput;
@@ -453,6 +454,13 @@ final class DefaultMcpServer implements McpServer {
 		SokletConfig configuration = requireNonNull(sokletConfig);
 		this.lifecycleObserver = configuration.getAggregateLifecycleObserver();
 		this.metricsCollector = configuration.getMetricsCollector();
+	}
+
+	@NonNull
+	SimulationSession openSimulationSession() {
+		synchronized (this.lifecycleLock) {
+			return this.runtimeBridge.openSimulationSession();
+		}
 	}
 
 	@Override
