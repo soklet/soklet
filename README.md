@@ -646,286 +646,54 @@ public void sseTest() {
 
 #### Model Context Protocol (MCP)
 
-Soklet 3.6.0 implements the MCP `2026-07-28` server protocol through
-[`McpServer`](https://javadoc.soklet.com/com/soklet/McpServer.html). An MCP
-server always listens on its own port, independent of Soklet's standard HTTP
-and SSE servers. The protocol is stateless: a client may make
-`server/discover` its first request, there is no initialization or session
-lifecycle, and every request carries its own protocol metadata and client
-capabilities. Soklet derives the capabilities it advertises from the endpoint's
-registered operations. The complete current behavior and operational contract
-are documented in the [MCP guide](MCP.md).
+> **Unreleased API:** This section describes `3.6.0-SNAPSHOT`. The `3.5.1`
+> artifact shown above contains the older, incompatible MCP API.
 
-> **Unreleased API:** this section describes `3.6.0-SNAPSHOT`. The 3.5.1
-> installation shown above contains the older, incompatible MCP API.
+Soklet 3.6.0 targets the MCP `2026-07-28` server protocol with a dedicated,
+stateless `McpServer`. MCP owns a listener and port separate from Soklet's
+ordinary HTTP and SSE servers, can host multiple exact endpoint paths, and
+derives each endpoint's advertised capabilities from its registered
+operations.
 
-Complete compile-checked programmatic and annotation-driven applications are
-kept outside the source repository in the project-root
-`mcp/examples/phase-4` workspace. They each register a tool, prompt, and
-resource and start MCP on a dedicated port. The annotation-driven form runs
-[`SokletProcessor`](https://javadoc.soklet.com/com/soklet/SokletProcessor.html)
-with parameter names retained and loads its generated endpoint through
-`McpHandlerResolver.fromClasses(...)`; the programmatic form builds the same
-immutable endpoint and registration model directly.
+Define endpoints with the compile-time-processed `@McpServerEndpoint`,
+`@McpTool`, `@McpPrompt`, `@McpResource`, and `@McpListResources` annotations,
+or assemble the same immutable model programmatically. The public API covers:
 
-Programmatic tools use a staged builder so their schema and handler cannot
-drift apart:
+- Java-derived tool input and output schemas, typed or JSON arguments, and
+  validated structured results;
+- prompts, exact and templated resources, custom resource pagination, and
+  protocol cache hints;
+- multi-round input requests with application- or framework-protected state;
+- request-scoped progress, cooperative cancelation, and resource
+  subscriptions;
+- admission, rate limiting, bounded handler execution, interception, output
+  sanitization, and Host/Origin policy; and
+- lifecycle and metrics hooks, downstream OpenTelemetry integration, and
+  bounded off-network simulation.
 
-- `types(arguments, result)` derives and enforces input and output schemas and
-  adapts an ordinary Java result to a complete MCP result.
-- `argumentType(arguments)` derives typed inputs for an advanced handler that
-  returns `McpOperationResult` directly.
-- `jsonArguments()` supplies immutable `McpJsonObject` arguments and publishes
-  the fixed `{"type":"object"}` input schema.
-
-Typed derivation is the only application-facing schema-authoring path in
-3.6.0. It uses the closed Soklet MCP Tool Schema Profile 1, based on JSON Schema
-Draft 2020-12. Soklet rejects unsupported Java shapes and schema constructs at
-registration or compilation; it does not expose hand-authored schemas and does
-not claim complete Draft 2020-12 support.
-
-MCP's three application primitives serve different purposes:
-
-- **Tools** perform actions. Soklet validates and converts their JSON arguments,
-  invokes the selected application handler, and validates structured output.
-- **Prompts** are named, discoverable templates that turn string arguments into
-  ordered user/assistant content messages.
-- **Resources** expose application data by exact URI or bounded RFC 6570 Level 1
-  URI template. With no custom `resources/list` handler, exact registrations
-  form one static page and templates are listed separately. A custom
-  [`McpResourceListHandler`](https://javadoc.soklet.com/com/soklet/McpResourceListHandler.html)
-  is the sole authority for every page; Soklet passes its opaque cursor through
-  but does not create, sign, persist, or interpret it.
-
-Important operational defaults and boundaries:
-
-- Every server requires an admission policy. A tool-bearing server must also
-  resolve a tool limiter; a request-wide limiter is optional. `McpRateLimiter`
-  is a thread-safe application SPI, so a deployment may use Redis or another
-  distributed system instead of the finite in-JVM convenience implementation.
-- The MCP listener binds to `127.0.0.1` by default. Containers that need a
-  reachable listener must set `host(...)` deliberately and retain an explicit
-  Host allowlist. TLS termination and network exposure belong at the proxy or
-  load-balancer boundary.
-- A present `Origin` is rejected by default through the shared
-  [`CorsAuthorizer`](https://javadoc.soklet.com/com/soklet/CorsAuthorizer.html);
-  an absent Origin is allowed by default. Host validation is independent and
-  runs before protocol parsing or application work.
-- Handlers are synchronous. The defaults permit 32 active handlers and 128
-  queued requests with a 60-second absolute request timeout. A custom executor
-  does not bypass those bounds. Disconnect, deadline, shutdown, and stream
-  backpressure signal the handler's cooperative `CancelationToken`, but cannot
-  forcibly stop non-cooperative application code. Bounded shutdown reports
-  `RESIDUAL_HANDLERS` while any application-supplied MCP request-processing
-  execution remains and rejects restart until that work actually exits.
-- [`McpHandlerInterceptor`](https://javadoc.soklet.com/com/soklet/McpHandlerInterceptor.html)
-  wraps every application-owned tool, prompt, resource-read, and custom
-  resource-list handler. Framework-owned discovery and static catalogs bypass
-  it. MCP server/request observation reuses Soklet's existing
-  `LifecycleObserver` and `MetricsCollector` hosts.
-- MCP responses carry protocol cache hints while transport responses remain
-  `Cache-Control: no-store`. Application-owned resource-list cursors are bounded
-  by UTF-8 size and must themselves preserve integrity, authorization,
-  snapshot, and fleet-portability semantics.
-
-Every application handler can retrieve its request-scoped cancelation token;
-a progress reporter is available only when the request carries a valid MCP
-progress token and no conditional-capability decision requires the response to
-remain uncommitted:
+A minimal loopback configuration for an annotation-driven, tool-bearing
+endpoint looks like this:
 
 ```java
-CancelationToken cancelation =
-    features.require(CancelationToken.class);
+McpServer mcpServer = McpServer.withPort(8081)
+  .handlerResolver(McpHandlerResolver.fromClasses(CatalogMcpEndpoint.class))
+  .requestAdmissionPolicy(McpRequestAdmissionPolicy.acceptAllInstance())
+  .toolRateLimiter(McpRateLimiter.fromInMemoryDefaults())
+  .build();
 
-features.find(McpProgressReporter.class).ifPresent(reporter ->
-    reporter.report(McpProgressUpdate.withProgress(50.0d)
-        .total(100.0d)
-        .message("Halfway")
-        .build()));
-
-cancelation.throwIfCanceled();
+SokletConfig config = SokletConfig.withMcpServer(mcpServer).build();
 ```
 
-Soklet echoes string and integer progress tokens exactly, coalesces equal
-progress values, rejects decreases while the invocation is active, and writes
-accepted updates synchronously through the bounded request SSE queue. Progress
-never extends the absolute request deadline. Annotated tool, prompt, resource,
-and resource-list methods may directly inject `CancelationToken` and
-`Optional<McpProgressReporter>`; those are the same instances exposed through
-`McpInvocationFeatures`. A bare progress-reporter parameter is invalid because
-the feature is conditional. Accepted progress and cancelation signals also
-reach the shared metrics host with bounded endpoint-path and JSON-RPC-method
-dimensions.
+`acceptAllInstance()` and the in-memory limiter are convenient development
+defaults, not production authentication or fleet-wide rate limiting. Every
+server requires an admission policy, and every tool-bearing server requires a
+fallback tool limiter. The listener binds to `127.0.0.1` by default; configure
+`host(...)`, `allowedHosts(...)`, authentication/admission, and TLS termination
+deliberately before exposing it remotely.
 
-Tools, prompts, and resource reads may return `McpInputRequiredResult` after
-declaring their possible client requests with `mayRequestInput(...)` (or
-`@McpMayRequestInput`). Retries expose the client's `inputResponses` through
-`McpRequestContext`. An operation may also select one request-state contract:
-
-- `APPLICATION_PROTECTED` passes a nonempty opaque string through exactly;
-  the application owns its confidentiality, integrity, expiry, authorization
-  binding, replay policy, and fleet portability.
-- `FRAMEWORK_PROTECTED` lets the application work with `McpJsonValue` state
-  while Soklet canonicalizes, binds, protects, expires, and round-limits its
-  wire representation. It requires `McpServer.Builder.protectionConfig(...)`
-  using a production key ring, explicit development-ephemeral protection, or
-  a thread-safe custom `McpRequestStateProtector`.
-
-Framework-protected state can continue on another server instance when both
-instances share production protection material and admission resolves the
-retry to the same authorization partition. Wrong material under the same key
-ID or a different partition fails before application observation. Development-
-ephemeral state is intentionally process-local.
-
-See the [MCP guide](MCP.md#multi-round-trip-input-and-request-state) for the
-declaration, protection, error, and retry-cache contracts. Progress reporting,
-cooperative cancelation, and resource-subscription delivery are implemented
-Phase 5 slices. Deterministic MRTR termination, cross-instance protected-state
-continuation, and residual-shutdown recovery are implemented as well. Resource
-subscriptions use framework-owned listen streams and an application-owned
-local or distributed broadcast publisher. Twenty-one bounded Phase 6 verticals are
-implemented: shutdown observation, handler-capacity metrics, handler-capacity
-diagnostics, live stream/subscription diagnostics, protection/trace
-diagnostics, serialized semantic-event delivery, and bounded pre-admission
-metrics, followed by connection/transport metric delivery, admitted-request
-trace-token capture, and the first default transport-boundary, server-start,
-request-boundary, admitted-request lifecycle, request-stream lifecycle,
-subscription lifecycle, progress/cancelation, keep-alive, and protocol-error/
-unknown-header aggregate families, followed by downstream OpenTelemetry metric
-mapping and modern admitted-request spans. Every successfully
-started listener generation emits exactly one
-matching clean/residual shutdown metric, and server-wide handler execution,
-admitted-queue depth, and queue-full rejection transitions feed three label-
-free default metric families. Immutable server diagnostics expose the
-configured handler bounds, current active/queued counts, open request streams
-and subscription subset, effective request-state protection mode, custom-
-protector presence, and secret-free production-ring and trace-configuration
-fingerprints. The diagnostics add no metric, event, or wire dimension. A
-separate bounded Phase 6 MCP fuzz-registration checkpoint now covers five new
-Jazzer methods with 21 synthetic seeds and expands the nightly matrix to 15
-total one-method slots; it remains an unnumbered checkpoint. The internal
-trace-correlation derivation checkpoint is likewise unnumbered; the subsequent
-admitted-request capture integration is the ninth production vertical. A
-third unnumbered metric-dimensionality checkpoint froze the exact 23-event
-schema, then-current four-field MCP snapshot, 17 then-ignored nonaggregated
-variants, and default-render cardinality under 16 distinct trace-metadata
-inputs. The tenth vertical resolves the `AMB-003` contract and implements the
-transport trio; the eleventh implements the `ServerStarted` scalar; and the
-twelfth implements the `RequestAccepted`/`RequestRejected` request-boundary
-pair; the thirteenth implements admitted-request lifecycle aggregation for
-`RequestStarted`/`RequestFinished`; the fourteenth implements request-stream
-lifecycle aggregation for `RequestStreamOpened`/`RequestStreamClosed`; and the
-fifteenth implements subscription lifecycle aggregation for
-`SubscriptionOpened`/`SubscriptionClosed`; the sixteenth implements
-independent `CancelationSignaled`/`ProgressEmitted` counters using
-`EndpointMethodKey`; and the seventeenth implements the label-free
-`KeepAliveEmitted` counter. The eighteenth implements the final core
-`ProtocolError`/`UnknownMirroredHeader` aggregate pair, completing all 23
-variants. The nineteenth maps the full frozen matrix into downstream
-`soklet-otel` metrics while removing obsolete pre-3.6 MCP tracing surfaces;
-the twentieth adds modern admitted-request MCP spans without restoring the
-obsolete session model; the twenty-first adds bounded off-network MCP
-simulation through the shared `Simulator` host. Structured-log emission and
-raw-ID opt-in, broader privacy and sustained-cardinality work, the strict local
-39-scenario simulator driver, scheduled/manual coverage-guided and sustained fuzz gates, and
-release-candidate and Phase 6 review/freeze work remain open; applications
-must not advertise or depend on those remaining behaviors yet.
-
-**Fourth unnumbered Phase 6 every-operation simulator, bounded capture-fuzz,
-and off-network soak hardening checkpoint.** It hardens the V21 simulator with no
-production or public-API drift and leaves the numbered-vertical count at 21.
-`McpSimulatorEveryOperationTests#recognizedRequestMethodsReplayExactJsonOrSseShapes`
-reports nine dynamic request cases covering discovery, both tool operations,
-both prompt operations, all three resource operations, and subscription
-listen. `#cancellationNotificationIsAcceptedAndIgnoredWithoutTerminatingItsTargetSimulation`
-freezes `notifications/cancelled` as accepted and semantically ignored, while
-`#concurrentRecognizedOperationReplayIsIsolatedAndExactlyDrained` proves
-deterministic concurrent isolation and exact drain. The 11-case class freezes
-exact status, headers, canonical JSON/SSE, lifecycle, metrics, `STOPPED`
-diagnostics, and absence of server/connection/transport events; the six-class
-operation selector passes 57/0/0/0.
-
-The same checkpoint adds internal capture-state-machine-only fuzz coverage in
-`McpSimulationCaptureFuzzTest#captureStateMachineRemainsBoundedTerminalAndIdempotent`
-and `#curatedSeedsReachJsonSseLimitCancelAndCompletionBranches`, with six
-synthetic ASCII seeds: `json-complete.actions`, `sse-terminal.actions`,
-`item-limit.actions`, `byte-limit.actions`, `cancel.actions`, and
-`duplicate-terminal.actions`. The focused target passes 8/0/0/0 and the full
-deterministic fuzz replay passes 135/0/0/0 across 16 methods, 15 classes, and
-27 MCP seeds. A five-second coverage-guided launch was host-blocked before
-target execution and is not coverage evidence; the target's declared
-`maxDuration=2m` is a registration bound, not executed-run evidence.
-
-`McpCrossFeatureSoakTests#mcpSimulatorChurnReturnsResourcesToBaselineAfterCancellationAndScopeCleanup`
-passes a fixed 24-cycle smoke workload over eight cases repeated three times,
-with item/byte bounds 4/4,096 and one residual cleanup/recovery wave. Its exact
-balances are requests 38/38, streams 24/24, subscriptions 4/4, and handlers
-34/34, with residual 1, transport failures 0, listener lifecycle callbacks 0,
-and final `STOPPED`. The full JDK 26 smoke profile passes 5/0/0/0 across three
-suites/five scenarios; its verifier hash is
-`eaa1f52aad86dc2765200273a468801e938f5a6be1719845358c9aa57879bcd6`.
-The broadened JDK 26 selector passes 226/0/0/0. Clean exact-source full suites
-on Corretto 21.0.11 and 26.0.1 each pass 1,539/0/0/4 across 166 suites,
-compiling 440 main and 176 test Java sources. A separate local JDK 26 nightly-
-shaped execution passes 5/0/0/0 with verifier SHA-256
-`a20a70d6adb1fd2cb5909be76b219e38fc112524a12fc06552b26bdd8ec76d99`.
-Its 200 cycles run the eight cases 25 times and balance requests 236/236,
-streams 156/156, subscriptions 26/26, and handlers 210/210, with residual 1,
-transport 0, listener lifecycle 0, final `STOPPED`, file-descriptor delta 0,
-heap delta +15,272 bytes, and thread delta -1. This local nightly-shaped run
-is not scheduled CI, sustained, fleet, or release-candidate evidence. V21
-static-analysis, SpotBugs, packaging/Javadoc, API-verifier, sketch, and schema
-results are carried forward and were not rerun for this checkpoint.
-`SOK-SIM-001` remains COMPLETE
-BOUNDED PHASE 6 IMPLEMENTATION EVIDENCE and now includes deterministic
-every-operation evidence. The ledger is 21 numbered verticals plus four
-unnumbered checkpoints. The strict local 39-scenario simulator driver,
-scheduled/long fuzz and soak, live-network fidelity, comprehensive privacy and
-security, release provenance, and Phase 6 review/freeze remain open.
-`SOK-VALID-002` and `SOK-PRIV-001` advance narrowly but remain PARTIAL; all
-other statuses remain unchanged. The next slice is a strict, sorted 39-row
-LOCAL off-network driver tied byte-for-row and name-for-name to
-`conformance/official/scenarios.json`; it is not the official CLI or a live-
-network run.
-
-The exact pinned 39-scenario MCP suite has completed one clean controlled
-profile-observation run against the packaged fixture: 147 successful outcomes,
-two reviewed skips for truthfully unadvertised mutable prompt/tool lists, one
-reviewed informational JSON-versus-optional-SSE outcome, and no warning,
-failure, or wire-harness error. This is profile-acquisition evidence only. The
-observation did not itself activate the Phase 5 profiles or freeze the API. The
-bounded Phase 5 cross-feature soak/resource-delta gate is green: full Maven
-smoke runs pass on JDK 21 and JDK 26, and the full JDK 21 nightly profile also passes, with the
-strict verifier requiring four scenarios and three Surefire suites. The later
-atomic closeout activates all 39 exact profiles, freezes the Phase 5 API, and
-passes a fresh 39-scenario development-candidate verify with all 39 goldens and
-no bad outcome, standard-error output, or non-clean exit. It remains
-development evidence, not release-candidate provenance.
-
-At the V21 boundary, the focused five-class simulator/API gate passed
-46/0/0/0 and its broadened adjacent authority selector passed 215/0/0/0.
-Clean exact-source full suites on
-Corretto 21.0.11 and 26.0.1 each pass 1,528/0/0/4 across 165 suites, compiling
-440 main and 175 test Java sources. Enforced static analysis is green with
-existing advisory diagnostics; SpotBugs reports 0/0. Candidate main, sources,
-and Javadoc JARs plus standalone Javadoc are green using offline-link
-resolution. The API verifier is green for 558 incompatibility records, 15
-Phase 6 owners, 32 provisional owners, and a 219-owner reviewed union. The
-frozen 1,049 Phase 4 and 195 Phase 5 inventories and prior hashes remain
-unchanged. All 167 API-sketch sources compile for Java 17 and pass Javadoc
-doclint on JDK 26. All 104 pinned-schema files validate.
-
-The V20 downstream focus at 23/0/0/0 and full `soklet-otel` module suite at
-36/0/0/0 on each JDK were carried forward and not rerun for V21. The prior
-focused five-target fuzz run remains 28/0/0/0 and the deterministic full fuzz
-corpus replay remains 127/0/0/0 on both JDKs; neither was rerun. No scheduled
-or manual coverage-guided nightly fuzz run occurred. Deterministic replay is
-not sustained, coverage, corpus-saturation, privacy, security, release-
-readiness, or Phase 6 freeze proof. Structured-log carrier/emission, raw-ID
-opt-in, broader privacy, sustained cardinality, and redaction work, the strict
-local 39-scenario simulator driver, coverage-guided and sustained fuzz gates, broader CI/provenance and release-candidate
-work, and Phase 6 review/freeze remain open. Phase 6 remains provisional and
-unfrozen.
+See the [complete MCP guide](https://www.soklet.com/docs/mcp) for endpoint
+authoring, configuration, protocol behavior, security, observability, testing,
+and a map of the public API.
 
 #### Form Handling
 

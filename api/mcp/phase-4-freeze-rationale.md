@@ -4,6 +4,8 @@ Date: 2026-08-06
 
 Post-freeze correction reviewed: 2026-08-07
 
+Localization host amendment reviewed: 2026-08-12
+
 This record approves the Phase 4 public/protected API snapshot for Soklet
 `3.6.0-SNAPSHOT`. The comparison baseline is released Soklet `3.5.1`, and the
 comparison tool is japicmp `0.26.1`. It records a scoped API decision; it is
@@ -11,9 +13,12 @@ not a Phase 5/6 implementation, full conformance, or release-candidate claim.
 
 ## Compatibility and report model
 
-The reviewed current incompatibility set contains exactly 556 canonical
-symbols and has SHA-256
+At the 2026-08-07 wrapper correction, the reviewed incompatibility set
+contained exactly 556 canonical symbols and had SHA-256
 `c3313a6f690429f833f4b8e09ab84e92ab187255ab83f5944818c68cdd6dfe8e`.
+After the later Phase 5/6 additions and the localization host amendment, the
+current reviewed set contains exactly 559 canonical symbols and has SHA-256
+`c0c4b4c68d93e77500b4ffeae07d1cb0bea46bf858c917ef44bbaa6adb61fee4`.
 `target/japicmp/mcp-api-diff.xml` is the modified-only report used to derive
 that set. It deliberately omits compatible unchanged/restored containers.
 
@@ -24,7 +29,7 @@ is absent from modified-only output. The aggregate verifier first proves that
 the reports have the same baseline and current archives, then applies their
 separate roles.
 
-The exact reviewed owner universe is:
+The exact reviewed owner universe at the original Phase 4 review was:
 
 - 133 Phase 4 owners;
 - 39 Phase 5 owners;
@@ -39,18 +44,18 @@ real API.
 
 ## Frozen Phase 4 snapshot
 
-`phase-4.signatures.jsonl` contains exactly 1,049 canonical records:
+`phase-4.signatures.jsonl` contains exactly 1,052 canonical records:
 
 - 133 classes;
 - 10 constructors;
 - 78 fields; and
-- 828 methods.
+- 831 methods.
 
 The reviewed file's SHA-256 is
-`89d96458cee33f96b6eef3be4b971cbf887f087f6a604b8f0e7041891b8530b5`.
+`8b5b689525176f63de24d81ce01d26b16b5c27c32c4e5e13f06757d388768bbc`.
 The independent reflection contract freezes the Phase 4 JSpecify type-use
 layout with SHA-256
-`c10d11f1c510b5219f819d19ff4dec687eec4fbfb13006b988366253eec70cab`.
+`627be93f6c759e194645c022ab854c2fde73d916b4c787f05e7c18b49cbfb197`.
 
 ### Post-freeze wrapper correction
 
@@ -61,11 +66,34 @@ Because the MCP API is still unreleased in 3.6.0, the Phase 4 surface was
 deliberately corrected rather than preserving the inconsistency.
 
 Exactly 49 Phase 4 signatures changed from primitive scalars to non-null
-reference wrappers. The regenerated snapshot still contains the same 1,049
-records with the same class, constructor, field, and method counts. Five of the
+reference wrappers. At that correction, the regenerated snapshot still
+contained the same 1,049 records with the same class, constructor, field, and
+method counts. Five of the
 49 corrections restore wrapper signatures already present in released 3.5.1,
 which reduces the reviewed baseline incompatibility set from 561 to 556
 records. Review found no unrelated signature delta.
+
+### Localization host amendment
+
+The 2026-08-12 L1 localization review deliberately reopened three descriptors
+on frozen Phase 4 hosts while the new localization-owned types remain
+unfrozen in Phase 6:
+
+- compatible default `McpHandlerInvocation.getFeatures()` preserves the
+  functional-interface shape and exposes the exact invocation feature carrier
+  from the built-in runtime continuation;
+- abstract `McpServer.getLocalizationControl()` adds the sole new current
+  source incompatibility (`METHOD_ADDED_TO_INTERFACE`, binary compatible and
+  source incompatible); and
+- concrete `McpServer.Builder.localizer(McpLocalizer)` installs the immutable
+  server localization policy.
+
+The generated Phase 4 candidate differs from the previous snapshot by exactly
+those three method IDs, with no removal or changed record. It therefore moves
+from 1,049 to 1,052 records and from 828 to 831 methods while retaining 133
+classes, ten constructors, and 78 fields. The generated incompatibility set
+differs by exactly the one abstract interface method. The Phase 5 195-record
+snapshot and its nullability digest are unchanged.
 
 The snapshot includes every final descriptor that a later phase needs on a
 Phase 4-owned host:
@@ -78,6 +106,8 @@ Phase 4-owned host:
 - server protection-control and trace-correlation accessors;
 - builder inputs for protection configuration, the dedicated trace key, and
   raw-validated-trace-ID logging;
+- the server localizer input and localization-control accessor, plus the
+  interceptor continuation's invocation-feature accessor;
 - stream-queue, write-timeout, keep-alive, shutdown-timeout,
   per-principal-subscription, and subscription-duration controls; and
 - the existing lifecycle/metrics shared-host attachment descriptors.
@@ -92,12 +122,13 @@ The six operational defaults are positive and finite:
 - maximum subscription duration: 24 hours.
 
 At the Phase 4 freeze, the referenced Phase 5/6 types' own members remained
-unfrozen until their owning phases froze. Phase 5 later froze under its own snapshot;
-Phase 6 remains unfrozen. Their Phase 4 attachments are behaviorally neutral:
-they do not
-advertise a later capability, subscribe to an event publisher, execute MRTR,
-protect request state, or perform trace correlation merely because the final
-descriptor exists.
+unfrozen until their owning phases froze. Phase 5 later froze under its own
+snapshot; Phase 6 remains unfrozen. At the L1 localization boundary, the new
+localization attachments are behaviorally neutral with respect to MCP wire
+output. The other later-phase attachments retain their reviewed activation
+rules: a descriptor alone does not advertise a later capability, subscribe to
+an event publisher, execute MRTR, protect request state, or perform trace
+correlation.
 
 The reviewed surface deliberately excludes an initial-protection-config
 getter, configurable invalid-trace-context policy, a server-level server-
@@ -133,11 +164,14 @@ proves the active request has acquired its slot before opening the queued
 connection. The focused 30-case containment suite and subsequent complete JDK
 21 and JDK 26 suites passed; no production scheduling change was made.
 
-The later wrapper review regenerated the current 556-record compatibility
-set, the 1,049-record Phase 4 signature snapshot, and the exact JSpecify
-nullability digest recorded above. This rationale does not infer a fresh full
-package, static-analysis, benchmark, or official-conformance run from those API
-artifact checks.
+The later wrapper review regenerated the then-current 556-record compatibility
+set and 1,049-record Phase 4 signature snapshot. The localization amendment
+then regenerated the 559-record current set and the 1,052-record Phase 4
+snapshot, with the exact current JSpecify digest recorded above. The focused
+L1 API, extraction, interception, inventory, Javadoc, source-convention, and
+unchanged-wire golden tests passed. This rationale does not infer a fresh full
+package, static-analysis, benchmark, or official-conformance run from those
+focused API artifact checks.
 
 ## Evidence that remains open
 

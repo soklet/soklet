@@ -180,21 +180,6 @@ public final class McpConformanceFixture {
 		CorsAuthorizer corsAuthorizer = CorsAuthorizer.fromWhitelistAuthorizer(
 				origin -> origin.equals("http://" + LOOPBACK + ":"
 						+ effectivePort.get()));
-		McpEndpoint endpoint = endpointForScenario(arguments[1]);
-		McpRateLimiter allowLimiter = context ->
-				McpRateLimitDecision.fromAllowed();
-		McpServer mcpServer = McpServer.withPort(0)
-				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
-				.requestRateLimiter(allowLimiter)
-				.toolRateLimiter(allowLimiter)
-				.protectionConfig(REQUEST_STATE_PROTECTION)
-				.corsAuthorizer(corsAuthorizer)
-				.absentOriginPolicy(McpAbsentOriginPolicy.ALLOW)
-				.allowedHosts(Set.of(LOOPBACK))
-				.build();
 		LifecycleObserver lifecycleObserver = new LifecycleObserver() {
 			@Override
 			public void didStopMcpServer(McpServer server,
@@ -202,10 +187,9 @@ public final class McpConformanceFixture {
 				shutdownOutcome.set(outcome);
 			}
 		};
-		SokletConfig config = SokletConfig.withMcpServer(mcpServer)
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.lifecycleObserver(lifecycleObserver)
-				.build();
+		SokletConfig config = configForScenario(arguments[1], corsAuthorizer,
+				lifecycleObserver);
+		McpServer mcpServer = config.getMcpServer().orElseThrow();
 
 		try (Soklet soklet = Soklet.fromConfig(config)) {
 			soklet.start();
@@ -233,6 +217,41 @@ public final class McpConformanceFixture {
 					"The public MCP conformance fixture did not shut down cleanly.");
 
 		writeControlLine("{\"format\":1,\"event\":\"stopped\",\"clean\":true}");
+	}
+
+	static SokletConfig simulationConfigForScenario(String scenario) {
+		return configForScenario(scenario,
+				CorsAuthorizer.fromWhitelistAuthorizer(origin ->
+						origin.equals("http://" + LOOPBACK + ":0")),
+				LifecycleObserver.defaultInstance());
+	}
+
+	private static SokletConfig configForScenario(String scenario,
+			CorsAuthorizer corsAuthorizer,
+			LifecycleObserver lifecycleObserver) {
+		if (!SUPPORTED_SCENARIOS.contains(scenario))
+			throw new IllegalArgumentException(
+					"Unsupported MCP conformance scenario: " + scenario);
+
+		McpEndpoint endpoint = endpointForScenario(scenario);
+		McpRateLimiter allowLimiter = context ->
+				McpRateLimitDecision.fromAllowed();
+		McpServer mcpServer = McpServer.withPort(0)
+				.host(LOOPBACK)
+				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
+				.requestAdmissionPolicy(
+						McpRequestAdmissionPolicy.acceptAllInstance())
+				.requestRateLimiter(allowLimiter)
+				.toolRateLimiter(allowLimiter)
+				.protectionConfig(REQUEST_STATE_PROTECTION)
+				.corsAuthorizer(corsAuthorizer)
+				.absentOriginPolicy(McpAbsentOriginPolicy.ALLOW)
+				.allowedHosts(Set.of(LOOPBACK))
+				.build();
+		return SokletConfig.withMcpServer(mcpServer)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(lifecycleObserver)
+				.build();
 	}
 
 	static McpEndpoint endpointForScenario(String scenario) {

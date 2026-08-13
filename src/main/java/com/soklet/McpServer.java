@@ -165,6 +165,19 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 	McpTraceCorrelation getTraceCorrelation();
 
 	/**
+	 * Returns this server's localization control plane.
+	 * <p>
+	 * The handle reports disabled state when no localizer was supplied.
+	 * Catalog-change signaling is local to this server instance; distributed
+	 * applications invoke it on every applicable instance after atomically
+	 * installing a new immutable translation snapshot.
+	 *
+	 * @return this server's localization control plane
+	 */
+	@NonNull
+	McpLocalizationControl getLocalizationControl();
+
+	/**
 	 * Captures immutable point-in-time server diagnostics.
 	 *
 	 * @return diagnostics snapshot
@@ -265,6 +278,8 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		private McpProtectionConfig protectionConfig;
 		@Nullable
 		private McpTraceCorrelationKey traceCorrelationKey;
+		@Nullable
+		private McpLocalizer localizer;
 		@NonNull
 		private Set<@NonNull String> allowedHosts;
 
@@ -549,6 +564,21 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		}
 
 		/**
+		 * Enables request-scoped localization of framework-owned MCP presentation
+		 * text. Omission preserves the canonical source text and existing wire
+		 * behavior.
+		 *
+		 * @param localizer immutable localization behavior and policy
+		 * @return this builder
+		 * @throws NullPointerException if {@code localizer} is null
+		 */
+		@NonNull
+		public Builder localizer(@NonNull McpLocalizer localizer) {
+			this.localizer = requireNonNull(localizer);
+			return this;
+		}
+
+		/**
 		 * Sets the required authentication, authorization, and admission policy.
 		 * Applications deliberately allowing anonymous access may use
 		 * {@link McpRequestAdmissionPolicy#acceptAllInstance()}.
@@ -791,7 +821,8 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		 *                               than the write timeout, resolver or admission
 		 *                               policy is absent, a configured limiter name is
 		 *                               unknown, or tools exist without a fallback
-		 *                               tool limiter
+		 *                               tool limiter, or a configured localization
+		 *                               response exceeds its provider-lookup limit
 		 */
 		@NonNull
 		public McpServer build() {
@@ -835,7 +866,7 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 					this.allowedHosts,
 					this.requestRateLimiter, this.toolRateLimiter,
 					this.rateLimiterRegistry, this.protectionConfig,
-					this.traceCorrelationKey);
+					this.traceCorrelationKey, this.localizer);
 		}
 
 		private void requireRegisteredLimiter(@NonNull String name,

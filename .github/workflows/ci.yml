@@ -235,6 +235,15 @@ jobs:
             "${GITHUB_WORKSPACE}/target/conformance/public-fixture" \
             > target/conformance/official/public-fixture-classpath.txt
 
+      - name: Run strict local off-network MCP simulator scenarios
+        shell: bash
+        run: |
+          set -euo pipefail
+          node conformance/official/local-simulator-self-test.mjs
+          node conformance/official/run-local-simulator.mjs \
+            --classpath "$(cat target/conformance/official/public-fixture-classpath.txt)" \
+            --project-root "${GITHUB_WORKSPACE}"
+
       - name: Check out pinned official MCP conformance suite
         uses: actions/checkout@v6
         with:

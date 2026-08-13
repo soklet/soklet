@@ -810,16 +810,51 @@
   Javadoc, API-verifier, sketch, and schema results were carried forward and
   not rerun for this checkpoint.
 - `SOK-SIM-001` remains COMPLETE BOUNDED PHASE 6 IMPLEMENTATION EVIDENCE and
-  now includes deterministic every-operation evidence. The current ledger is
+  now includes deterministic every-operation evidence. At that fourth
+  checkpoint, the ledger was
   21 numbered verticals plus four unnumbered checkpoints. The strict local
   39-scenario driver, every parameter/error permutation, live-network fidelity,
   scheduled/manual and sustained fuzz, corpus saturation, long/fleet soak,
   comprehensive privacy/security, release provenance, and Phase 6 review/
   freeze remain open. `SOK-VALID-002` and `SOK-PRIV-001` advance narrowly but
-  remain PARTIAL; all other statuses remain unchanged. The next slice is a
-  strict, sorted 39-row LOCAL off-network driver tied byte-for-row and name-
-  for-name to `conformance/official/scenarios.json`; it is not the official CLI
-  or a live-network run.
+  remain PARTIAL; all other statuses remained unchanged. The next slice was a
+  strict 39-row LOCAL off-network driver tied byte-for-row and name-for-name to
+  the pinned `CLI/scenarios.json` manifest ordinal order; it was not the
+  official CLI or a live-network run.
+- Added the **fifth unnumbered Phase 6 candidate-artifact/public-API-only local
+  39-row simulator-driver checkpoint**. It adds no production source, public
+  API/sketch, owner/signature inventory, metric/event/snapshot surface, wire
+  behavior, or numbered vertical; the production count remains 21.
+- Added `conformance/official/run-local-simulator.mjs`, which validates and
+  follows pinned `CLI/scenarios.json` manifest ordinal order for the exact 39
+  active `RUN` rows at ordinals 1 and 3 through 40. It invokes
+  `McpLocalSimulatorScenarioDriver#runManifestRowsOffNetwork` against only the
+  compiled fixture classes and candidate JAR. Each row receives a fresh
+  scenario configuration and simulator scope and performs bounded public-API
+  work. The package-private fixture source helper
+  `McpConformanceFixture#simulationConfigForScenario` supplies the registrations
+  without adding production API.
+- The wrapper byte-compares exactly one
+  `PASS\t<ordinal>\t<name>\n` record per row in manifest ordinal order and
+  requires empty standard error and a clean exit. Corretto 21 and 26 each pass
+  39/39 after `--release 17 -Xlint:all -Werror` fixture/driver compilation,
+  the fixture contract main, and a `jdeps` gate rejecting
+  `com.soklet.internal`. The adversarial
+  `conformance/official/local-simulator-self-test.mjs` rejects reorder,
+  duplicate, missing, spawn error, nonzero exit, signal, standard error,
+  wrong output, `FAIL`, CRLF, and unterminated output.
+- The current ledger is 21 numbered production verticals plus five unnumbered
+  checkpoints. API evidence remains 558 records with the same hash and
+  15/32/219 Phase 6/provisional/reviewed owners; metric, snapshot, and canary
+  surfaces remain 23/23 events, 22 families, 22 getters/23 builder methods,
+  and 31/12 samples. `SOK-SIM-001` remains COMPLETE BOUNDED PHASE 6
+  IMPLEMENTATION EVIDENCE and all other status rows remain unchanged. This
+  local driver is not the official CLI, does not replay the official expected-
+  check multiset, opens no live network path, and does not prove listener/
+  kernel behavior, backpressure, write-idle handling, release provenance,
+  sustained operation, comprehensive privacy/security, or Phase 6 review/
+  freeze. Scheduled coverage-guided fuzz and sustained soak/stress are next,
+  followed by structured-log, privacy, and API review/freeze work.
 
 ### Development Status
 
@@ -837,8 +872,9 @@
   migration, modern admitted-request spans, and bounded off-network MCP
   simulation—are implemented and locally
   green. The separate fuzz-
-  registration, dormant derivation, metric-dimensionality, and simulator
-  hardening checkpoints are the four unnumbered checkpoints. The nonstreaming 16-request
+  registration, dormant derivation, metric-dimensionality, simulator
+  hardening, and local 39-row driver checkpoints are the five unnumbered
+  checkpoints. The nonstreaming 16-request
   cardinality gate observes 31 exact MCP-prefixed samples before reset and 12
   after reset because configured MCP renders the keep-alive scalar at zero.
   The current operation selector passes 57/0/0/0 and the broadened JDK 26
@@ -863,11 +899,13 @@
   `RequestStreamOpened`, `RequestStreamClosed`, five handler variants,
   `SubscriptionOpened`, `SubscriptionClosed`, `CancelationSignaled`,
   `ProgressEmitted`, `KeepAliveEmitted`, `ProtocolError`,
-  `UnknownMirroredHeader`, and the transport trio. The first complete release-
-  workflow dry run is next; other downstream work,
+  `UnknownMirroredHeader`, and the transport trio. The candidate-artifact,
+  public-API-only local driver passes all 39 active manifest rows on Corretto
+  21 and 26. Scheduled coverage-guided fuzz and sustained soak/stress are next;
+  other downstream work,
   structured-log carrier/emission, raw-ID
   opt-in, broader privacy, sustained cardinality, and redaction work,
-  the strict local 39-scenario simulator driver, coverage-guided and sustained fuzz gates,
+  coverage-guided and sustained fuzz gates,
   CI/provenance and release-candidate work, and the provisional, unfrozen Phase
   6 API review/freeze remain open. Here, remaining fuzz gates mean
   scheduled/manual coverage-guided and sustained execution; no such nightly

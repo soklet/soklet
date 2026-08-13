@@ -59,6 +59,8 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 		List<String> stages = Collections.synchronizedList(new ArrayList<>());
 		Map<String, McpRequestContext> interceptorContexts =
 				new ConcurrentHashMap<>();
+		Map<String, McpInvocationFeatures> interceptorFeatures =
+				new ConcurrentHashMap<>();
 		AtomicReference<McpEndpoint> expectedEndpoint = new AtomicReference<>();
 		AtomicInteger interceptorInvocations = new AtomicInteger();
 
@@ -68,6 +70,8 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				.handler((request, call, features) -> {
 					Assertions.assertSame(interceptorContexts.get("tools/call"),
 							request);
+					Assertions.assertSame(interceptorFeatures.get("tools/call"),
+							features);
 					stages.add("handler:tools/call");
 					return McpCompleteResult.fromToolText("tool-original");
 				})
@@ -77,6 +81,8 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				.handler((request, promptGet, features) -> {
 					Assertions.assertSame(interceptorContexts.get("prompts/get"),
 							request);
+					Assertions.assertSame(interceptorFeatures.get("prompts/get"),
+							features);
 					stages.add("handler:prompts/get");
 					return McpCompleteResult.fromPromptOutput(
 							McpPromptOutput.fromMessages(
@@ -89,6 +95,8 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				.handler((request, read, features) -> {
 					Assertions.assertSame(interceptorContexts.get("resources/read"),
 							request);
+					Assertions.assertSame(interceptorFeatures.get("resources/read"),
+							features);
 					stages.add("handler:resources/read");
 					return completeText(read.getUri(), "resource-original");
 				})
@@ -103,6 +111,8 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				.resourceListHandler((request, list, features) -> {
 					Assertions.assertSame(interceptorContexts.get("resources/list"),
 							request);
+					Assertions.assertSame(interceptorFeatures.get("resources/list"),
+							features);
 					stages.add("handler:resources/list");
 					return McpResourcePage.builder()
 							.resources(list.getRegisteredResourceDescriptors())
@@ -128,6 +138,9 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					Assertions.assertEquals(expectedOperation,
 							context.getOperationName());
 					interceptorContexts.put(method, context);
+					McpInvocationFeatures features = invocation.getFeatures();
+					Assertions.assertSame(features, invocation.getFeatures());
+					interceptorFeatures.put(method, features);
 					stages.add("before:" + method);
 					McpOperationResult result = invocation.invoke();
 					stages.add("after:" + method);
@@ -215,8 +228,11 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 		McpServer server = serverBuilder(endpoint)
 				.handlerInterceptor((context, invocation) -> switch (
 						context.getOperationName().orElseThrow()) {
-					case "short-circuit" ->
-							McpCompleteResult.fromToolText("short-circuited");
+					case "short-circuit" -> {
+						McpInvocationFeatures features = invocation.getFeatures();
+						Assertions.assertSame(features, invocation.getFeatures());
+						yield McpCompleteResult.fromToolText("short-circuited");
+					}
 					case "wrong-result" -> McpResourcePage.builder().build();
 					case "null-result" -> null;
 					case "throwing" -> throw new IllegalStateException(
@@ -340,7 +356,10 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 			handlerInvocations.put(toolName, new AtomicInteger());
 		AtomicReference<McpHandlerInvocation> retainedInvocation =
 				new AtomicReference<>();
-		AtomicReference<Throwable> wrongThreadFailure = new AtomicReference<>();
+		AtomicReference<Throwable> wrongThreadFeatureFailure =
+				new AtomicReference<>();
+		AtomicReference<Throwable> wrongThreadInvocationFailure =
+				new AtomicReference<>();
 
 		McpEndpoint.Builder endpointBuilder = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
@@ -360,6 +379,8 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				.handlerInterceptor((context, invocation) -> switch (
 						context.getOperationName().orElseThrow()) {
 					case "one-shot" -> {
+						McpInvocationFeatures features = invocation.getFeatures();
+						Assertions.assertSame(features, invocation.getFeatures());
 						McpOperationResult result = invocation.invoke();
 						Assertions.assertThrows(IllegalStateException.class,
 								invocation::invoke);
@@ -368,16 +389,23 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					case "wrong-thread" -> {
 						Thread thread = new Thread(() -> {
 							try {
+								invocation.getFeatures();
+							} catch (Throwable throwable) {
+								wrongThreadFeatureFailure.set(throwable);
+							}
+							try {
 								invocation.invoke();
 							} catch (Throwable throwable) {
-								wrongThreadFailure.set(throwable);
+								wrongThreadInvocationFailure.set(throwable);
 							}
 						}, "mcp-handler-interceptor-wrong-thread-test");
 						thread.start();
 						thread.join(TimeUnit.SECONDS.toMillis(5));
 						Assertions.assertFalse(thread.isAlive());
 						Assertions.assertInstanceOf(IllegalStateException.class,
-								wrongThreadFailure.get());
+								wrongThreadFeatureFailure.get());
+						Assertions.assertInstanceOf(IllegalStateException.class,
+								wrongThreadInvocationFailure.get());
 						Assertions.assertEquals(0,
 								handlerInvocations.get("wrong-thread").get());
 						yield invocation.invoke();
@@ -405,6 +433,8 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				Assertions.assertEquals(1, count.get());
 			Assertions.assertThrows(IllegalStateException.class,
 					() -> retainedInvocation.get().invoke());
+			Assertions.assertThrows(IllegalStateException.class,
+					() -> retainedInvocation.get().getFeatures());
 			Assertions.assertEquals(1,
 					handlerInvocations.get("retained").get());
 		} finally {

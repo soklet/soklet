@@ -83,11 +83,11 @@ public class McpPublicApiReflectionContractTests {
 			Path.of("api/mcp/provisional.includes"));
 	private static final int PHASE_FOUR_TYPE_COUNT = 133;
 	private static final int PHASE_FIVE_TYPE_COUNT = 39;
-	private static final int PHASE_SIX_TYPE_COUNT = 15;
+	private static final int PHASE_SIX_TYPE_COUNT = 33;
 	private static final int PROVISIONAL_TYPE_COUNT = 32;
-	private static final int CURRENT_MCP_TYPE_COUNT = 219;
+	private static final int CURRENT_MCP_TYPE_COUNT = 237;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"c10d11f1c510b5219f819d19ff4dec687eec4fbfb13006b988366253eec70cab";
+			"627be93f6c759e194645c022ab854c2fde73d916b4c787f05e7c18b49cbfb197";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
 			"d52a424ac33e679e0a0632004ac931e59966b68641659e254214964d9144f8c7";
 	private static final Map<String, Object> PHASE_FOUR_PRIMITIVE_CONSTANTS =
@@ -205,9 +205,25 @@ public class McpPublicApiReflectionContractTests {
 	}
 
 	@Test
-	public void phaseSixSimulatorInventoryAndSharedHostDescriptorsAreExact()
+	public void phaseSixInventoryAndSharedHostDescriptorsAreExact()
 			throws Exception {
 		List<String> expectedPhaseSixTypes = List.of(
+				"com.soklet.McpLocalizableText",
+				"com.soklet.McpLocalizationCatalog",
+				"com.soklet.McpLocalizationContext",
+				"com.soklet.McpLocalizationContextProvider",
+				"com.soklet.McpLocalizationControl",
+				"com.soklet.McpLocalizationFailurePolicy",
+				"com.soklet.McpLocalizationRequest",
+				"com.soklet.McpLocalizationResult",
+				"com.soklet.McpLocalizationResult$Failure",
+				"com.soklet.McpLocalizationResult$Fallback",
+				"com.soklet.McpLocalizationResult$Localized",
+				"com.soklet.McpLocalizationResult$UseDefaultText",
+				"com.soklet.McpLocalizationRevision",
+				"com.soklet.McpLocalizer",
+				"com.soklet.McpLocalizer$Builder",
+				"com.soklet.McpLocalizer$ContextProviderStage",
 				"com.soklet.McpServerDiagnostics",
 				"com.soklet.McpServerStatus",
 				"com.soklet.McpShutdownOutcome",
@@ -219,6 +235,8 @@ public class McpPublicApiReflectionContractTests {
 				"com.soklet.McpSimulationResponse",
 				"com.soklet.McpSimulationStreamItem",
 				"com.soklet.McpSimulationStreamItemType",
+				"com.soklet.McpTextCoordinate",
+				"com.soklet.McpTextCoordinate$Kind",
 				"com.soklet.McpTraceCorrelation",
 				"com.soklet.McpTraceCorrelationConfigurationFingerprint",
 				"com.soklet.McpTraceCorrelationKey",
@@ -228,7 +246,7 @@ public class McpPublicApiReflectionContractTests {
 		Assertions.assertEquals(PHASE_SIX_TYPE_COUNT,
 				actualPhaseSixTypes.size());
 		Assertions.assertEquals(expectedPhaseSixTypes, actualPhaseSixTypes,
-				"The unfrozen Phase 6 simulator owner inventory changed");
+				"The unfrozen Phase 6 owner inventory changed");
 
 		Assertions.assertEquals(PROVISIONAL_TYPE_COUNT,
 				includeTypeNames(Path.of("api/mcp/provisional.includes")).size(),
@@ -247,6 +265,20 @@ public class McpPublicApiReflectionContractTests {
 		assertErasedGenericSignature(configuredStart);
 		assertParameterNames(defaultStart, "request");
 		assertParameterNames(configuredStart, "request", "options");
+
+		Method localizer = assertInstanceMethod(McpServer.Builder.class,
+				"localizer", McpServer.Builder.class, MethodShape.CONCRETE,
+				false, McpLocalizer.class);
+		Method localizationControl = assertInstanceMethod(McpServer.class,
+				"getLocalizationControl", McpLocalizationControl.class,
+				MethodShape.ABSTRACT, false);
+		Method invocationFeatures = assertInstanceMethod(
+				McpHandlerInvocation.class, "getFeatures",
+				McpInvocationFeatures.class, MethodShape.DEFAULT, false);
+		assertErasedGenericSignature(localizer);
+		assertErasedGenericSignature(localizationControl);
+		assertErasedGenericSignature(invocationFeatures);
+		assertParameterNames(localizer, "localizer");
 	}
 
 	@Test

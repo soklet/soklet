@@ -1817,8 +1817,8 @@ not scheduled CI, sustained, fleet, or release-candidate evidence. The V21 stati
 analysis, SpotBugs, packaging/Javadoc, API-verifier, sketch, and schema results
 are carried forward and were not rerun for this checkpoint.
 
-The current ledger is therefore 21 numbered production verticals plus four
-unnumbered checkpoints: fuzz registration, dormant trace derivation, metric
+At that fourth checkpoint, the ledger was 21 numbered production verticals
+plus four unnumbered checkpoints: fuzz registration, dormant trace derivation, metric
 dimensionality, and this simulator every-operation/fuzz/smoke hardening
 checkpoint. `SOK-SIM-001` remains COMPLETE BOUNDED PHASE 6 IMPLEMENTATION
 EVIDENCE and now includes deterministic every-operation evidence. This does
@@ -1827,11 +1827,52 @@ live-network fidelity, scheduled/manual or sustained coverage-guided fuzz,
 corpus saturation, long or fleet soak, comprehensive privacy/security,
 release-candidate provenance, or Phase 6 review/freeze. `SOK-VALID-002` and
 `SOK-PRIV-001` advance narrowly but remain PARTIAL; all
-other statuses remain unchanged. The next slice is a strict, sorted 39-row
-LOCAL off-network driver tied byte-for-row and name-for-name to
-`conformance/official/scenarios.json`; it is not the official CLI or a live-
-network run.
+other statuses remained unchanged. The next slice was a strict 39-row LOCAL
+off-network driver tied byte-for-row and name-for-name to the pinned
+`CLI/scenarios.json` manifest ordinal order; it was not the official CLI or a
+live-network run.
 Phase 6 remains provisional and unfrozen.
+
+**Fifth unnumbered Phase 6 candidate-artifact/public-API-only local 39-row
+simulator-driver checkpoint.** `conformance/official/run-local-simulator.mjs`
+validates and follows the pinned `CLI/scenarios.json` manifest ordinal order,
+covering the exact 39 active `RUN` rows at ordinals 1 and 3 through 40. It
+passes each ordinal/name pair to
+`McpLocalSimulatorScenarioDriver#runManifestRowsOffNetwork`, which creates a
+fresh scenario configuration and `Soklet.runSimulator(...)` scope for every
+row and performs bounded public-API work across stateless-server, tools,
+schema, progress, prompts, resources, DNS, cache, header, and all 14
+multi-round-trip rows. The package-private fixture source helper
+`McpConformanceFixture#simulationConfigForScenario` supplies the same
+scenario-specific registrations without entering production code.
+
+The wrapper runs with only the compiled fixture classes and candidate JAR on
+the class path. It byte-compares exactly one
+`PASS\t<ordinal>\t<name>\n` record per manifest row, in manifest ordinal
+order, while requiring empty standard error and a clean exit. On both
+Corretto 21 and 26, the fixture and driver compile with
+`--release 17 -Xlint:all -Werror`, the fixture contract main passes, `jdeps`
+finds no `com.soklet.internal` dependency, and the driver passes 39/39.
+`conformance/official/local-simulator-self-test.mjs` also rejects reordered,
+duplicate, missing, failed-spawn, nonzero-exit, signaled, standard-error,
+wrong-output, `FAIL`, CRLF, and unterminated-result cases.
+
+This fifth checkpoint changes no production source, public API or sketch,
+owner/signature inventory, metric/event/snapshot surface, wire behavior, or
+numbered vertical. The ledger is 21 numbered production verticals plus five
+unnumbered checkpoints. API evidence remains 558 records with the same
+comparison hash and 15 Phase 6 owners, 32 provisional owners, and a 219-owner
+reviewed union; the 23/23 event, 22-family, 22-getter/23-builder, and 31/12
+canary surfaces are unchanged. `SOK-SIM-001` remains COMPLETE BOUNDED PHASE 6
+IMPLEMENTATION EVIDENCE, and all other status rows remain unchanged.
+
+This local driver is not the official CLI, does not replay the official
+expected-check multiset, and opens no live network path. It therefore does not
+prove listener/kernel behavior, socket backpressure or write-idle handling,
+release provenance, sustained operation, comprehensive privacy/security, or
+Phase 6 review/freeze. Next are scheduled coverage-guided fuzz and sustained
+soak/stress gates, followed by structured-log, privacy, and API review/freeze
+work. Phase 6 remains provisional and unfrozen.
 
 `McpServer.stop()` is bounded by the configured shutdown timeout. If an
 application-supplied MCP request-processing execution remains afterward,

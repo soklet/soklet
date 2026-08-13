@@ -133,8 +133,14 @@ final class DefaultMcpServer implements McpServer {
 	private final CorsAuthorizer corsAuthorizer;
 	@Nullable
 	private final McpProtectionConfig protectionConfig;
+	@Nullable
+	private final McpLocalizer localizer;
+	@Nullable
+	private final McpCanonicalLocalizationPlan localizationPlan;
 	@NonNull
 	private final DefaultMcpSecurityControls securityControls;
+	@NonNull
+	private final McpLocalizationControl localizationControl;
 	@NonNull
 	private final McpMetricEventDelivery mcpMetricEventDelivery;
 	@NonNull
@@ -172,7 +178,8 @@ final class DefaultMcpServer implements McpServer {
 			@Nullable McpRateLimiter toolRateLimiter,
 			@NonNull McpRateLimiterRegistry rateLimiterRegistry,
 			@Nullable McpProtectionConfig protectionConfig,
-			@Nullable McpTraceCorrelationKey traceCorrelationKey) {
+			@Nullable McpTraceCorrelationKey traceCorrelationKey,
+			@Nullable McpLocalizer localizer) {
 		this.lifecycleLock = new Object();
 		this.maximumCursorSizeInBytes = maximumCursorSizeInBytes;
 		this.maximumSubscriptionsPerPrincipal =
@@ -192,8 +199,15 @@ final class DefaultMcpServer implements McpServer {
 		this.toolRateLimiter = toolRateLimiter;
 		this.rateLimiterRegistry = requireNonNull(rateLimiterRegistry);
 		this.protectionConfig = protectionConfig;
+		this.localizer = localizer;
+		this.localizationPlan = localizer == null ? null
+				: DefaultMcpLocalizationCatalogExtractor.plan(
+						handlerResolver,
+						localizer.getMaximumLocalizableTextCountPerResponse());
 		this.securityControls = new DefaultMcpSecurityControls(protectionConfig,
 				traceCorrelationKey);
+		this.localizationControl = new DefaultMcpLocalizationControl(
+				localizer != null);
 		this.mcpMetricEventDelivery = new McpMetricEventDelivery();
 		requireNonNull(unknownMirroredHeaderPolicy);
 		boolean corsAuthorizerExplicitlyConfigured = configuredCorsAuthorizer != null;
@@ -707,9 +721,25 @@ final class DefaultMcpServer implements McpServer {
 		return this.securityControls;
 	}
 
+	@Override
+	@NonNull
+	public McpLocalizationControl getLocalizationControl() {
+		return this.localizationControl;
+	}
+
 	@NonNull
 	Optional<@NonNull McpProtectionConfig> protectionConfig() {
 		return Optional.ofNullable(this.protectionConfig);
+	}
+
+	@NonNull
+	Optional<@NonNull McpLocalizer> localizer() {
+		return Optional.ofNullable(this.localizer);
+	}
+
+	@NonNull
+	Optional<@NonNull McpCanonicalLocalizationPlan> localizationPlan() {
+		return Optional.ofNullable(this.localizationPlan);
 	}
 
 	int streamQueueCapacity() {
@@ -871,6 +901,7 @@ final class DefaultMcpServer implements McpServer {
 		McpOperationResult result;
 		try {
 			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
+					invocationFeatures,
 					() -> tool.invoke(
 							requestContext, invocation.rawArguments(),
 							invocationFeatures));
@@ -919,6 +950,7 @@ final class DefaultMcpServer implements McpServer {
 		McpOperationResult result;
 		try {
 			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
+					invocationFeatures,
 					() -> prompt.invoke(
 							requestContext, invocation.rawArguments(),
 							invocationFeatures));
@@ -951,6 +983,7 @@ final class DefaultMcpServer implements McpServer {
 		McpOperationResult result;
 		try {
 			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
+					invocationFeatures,
 					() -> {
 						try {
 							return requireNonNull(
@@ -987,29 +1020,47 @@ final class DefaultMcpServer implements McpServer {
 	private McpOperationResult interceptHandler(
 			@NonNull McpRequestContext requestContext,
 			@NonNull HandlerEntryGuard handlerEntryGuard,
+			@NonNull McpInvocationFeatures invocationFeatures,
 			@NonNull McpHandlerInvocation downstream) throws Exception {
 		requireNonNull(requestContext);
 		requireNonNull(handlerEntryGuard);
+		requireNonNull(invocationFeatures);
 		requireNonNull(downstream);
 		AtomicBoolean active = new AtomicBoolean(true);
 		AtomicBoolean invoked = new AtomicBoolean();
 		Thread interceptorThread = Thread.currentThread();
 		McpOperationResult result;
 		try {
-			result = this.handlerInterceptor.interceptHandler(requestContext, () -> {
-				if (!active.get())
-					throw new IllegalStateException(
-							"An MCP interceptor continuation cannot be invoked after interception returns.");
-				if (Thread.currentThread() != interceptorThread)
-					throw new IllegalStateException(
-							"An MCP interceptor continuation must be invoked on the interceptor thread.");
-				if (!invoked.compareAndSet(false, true))
-					throw new IllegalStateException(
-							"An MCP interceptor continuation may be invoked only once.");
-				handlerEntryGuard.requireEntry();
-				return requireNonNull(downstream.invoke(),
-						"The MCP downstream handler returned null.");
-			});
+			result = this.handlerInterceptor.interceptHandler(requestContext,
+					new McpHandlerInvocation() {
+						private void requireActiveThread() {
+							if (!active.get())
+								throw new IllegalStateException(
+										"An MCP interceptor continuation cannot be used after interception returns.");
+							if (Thread.currentThread() != interceptorThread)
+								throw new IllegalStateException(
+										"An MCP interceptor continuation must be used on the interceptor thread.");
+						}
+
+						@Override
+						@NonNull
+						public McpInvocationFeatures getFeatures() {
+							requireActiveThread();
+							return invocationFeatures;
+						}
+
+						@Override
+						@NonNull
+						public McpOperationResult invoke() throws Exception {
+							requireActiveThread();
+							if (!invoked.compareAndSet(false, true))
+								throw new IllegalStateException(
+										"An MCP interceptor continuation may be invoked only once.");
+							handlerEntryGuard.requireEntry();
+							return requireNonNull(downstream.invoke(),
+									"The MCP downstream handler returned null.");
+						}
+					});
 		} finally {
 			active.set(false);
 		}
@@ -1029,6 +1080,7 @@ final class DefaultMcpServer implements McpServer {
 		McpOperationResult result;
 		try {
 			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
+					invocationFeatures,
 					() -> {
 						try {
 							return requireNonNull(

@@ -3,7 +3,7 @@
 This directory contains the reviewed, repository-owned evidence for Soklet's
 MCP public/protected API. The [Phase 4 freeze rationale](phase-4-freeze-rationale.md)
 records the 2026-08-06 decision and the subsequently reviewed wrapper
-correction. The external
+correction and 2026-08-12 localization host amendment. The external
 [Phase 5 API-review checkpoint](../../../mcp/PHASE_5_API_REVIEW_CHECKPOINT_2026-08-08.md)
 records review approval for the candidate, and the
 [Phase 5 freeze rationale](phase-5-freeze-rationale.md) records its exact
@@ -13,9 +13,9 @@ records the atomic profile activation and fresh official-suite result.
 
 `current-incompatibilities.jsonl` is the canonical set of incompatibilities
 between the released `com.soklet:soklet:3.5.1` artifact and the current
-3.6.0 source tree. It currently contains 558 records and has
+3.6.0 source tree. It currently contains 559 records and has
 SHA-256
-`d40004fa92cc5d095404de2133cf04fcd2b5574e9326eb680f571a017ef33671`.
+`c0c4b4c68d93e77500b4ffeae07d1cb0bea46bf858c917ef44bbaa6adb61fee4`.
 The API-diff gate regenerates the set and compares it in both directions, so
 an unexpected addition, removal, or changed record fails.
 
@@ -35,11 +35,11 @@ scope has exactly one owner:
 | --- | ---: | --- |
 | `phase-4.includes` | 133 | frozen Phase 4 types and shared hosts |
 | `phase-5.includes` | 39 | frozen Phase 5 types |
-| `phase-6.includes` | 15 | Phase 6-owned types; not yet frozen |
+| `phase-6.includes` | 33 | Phase 6-owned types; not yet frozen |
 | `provisional.includes` | 32 | owner not yet assigned to a frozen phase |
 | `non-mcp-public-api.allowlist` | 0 | reviewed unrelated API deltas |
 
-The 219-entry union is sorted, nonoverlapping, and exact. Ownership records
+The 237-entry union is sorted, nonoverlapping, and exact. Ownership records
 when a type is intended to stabilize; it does not itself freeze the type.
 `McpPublicApiInventoryTests` is a fast, independent source/class-tree guard
 for exported MCP types, reviewed shared hosts, sorting, overlap, and existence.
@@ -105,21 +105,31 @@ separate evidence is recorded below.
 
 `frozen-phases` contains the contiguous, sorted prefix of frozen phases. It
 currently contains Phase 4 and Phase 5. `phase-4.signatures.jsonl` freezes
-1,049 canonical records across all 133 selected owners: 133 classes, 10
-constructors, 78 fields, and 828 methods. Its SHA-256 is
-`89d96458cee33f96b6eef3be4b971cbf887f087f6a604b8f0e7041891b8530b5`.
+1,052 canonical records across all 133 selected owners: 133 classes, 10
+constructors, 78 fields, and 831 methods. Its SHA-256 is
+`8b5b689525176f63de24d81ce01d26b16b5c27c32c4e5e13f06757d388768bbc`.
 `phase-5.signatures.jsonl` freezes 195 canonical records across all 39
 selected owners: 39 classes, six constructors, 15 fields, and 135 methods.
 Its SHA-256 is
 `c6862ed49a9bc9565ba2284190c49605928270fb8a6fb73f75070452f909e75f`.
 
-The snapshot includes a deliberate post-freeze correction to Soklet's
+The snapshot includes a deliberate 2026-08-07 post-freeze correction to Soklet's
 unreleased `3.6.0` MCP API: 49 Phase 4 scalar signatures now use non-null
 reference wrappers instead of primitives. Five of those corrections restore
 the wrapper signatures already present in 3.5.1, so the reviewed baseline
 incompatibility set decreased from 561 to 556 records. Regeneration found no
-unrelated signature delta; the Phase 4 snapshot retains the same 1,049 records
-and component counts.
+unrelated signature delta; at that correction the Phase 4 snapshot retained
+the same 1,049 records and component counts.
+
+A second reviewed amendment on 2026-08-12 adds exactly three descriptors to
+frozen Phase 4 hosts: default `McpHandlerInvocation.getFeatures()`, abstract
+`McpServer.getLocalizationControl()`, and concrete
+`McpServer.Builder.localizer(McpLocalizer)`. The generated snapshot has no
+other delta. The one abstract interface method is the sole additional current
+source incompatibility; the default interface and concrete builder methods are
+compatible additions. The Phase 5 snapshot and nullability digest are
+unchanged. See the dated amendment in the
+[Phase 4 freeze rationale](phase-4-freeze-rationale.md).
 
 The snapshots protect the complete public/protected signatures of every
 selected Phase 4 and Phase 5 owner, including shared hosts. A descriptor on one of those
@@ -139,6 +149,21 @@ admitted-request spans; the twenty-first adds bounded off-network MCP
 simulation. V19 and V20 leave the core owner inventory unchanged; V21 assigns
 the shared `Simulator`, seven top-level simulation types, and
 `McpSimulationOptions.Builder` to Phase 6.
+
+The separate [MCP localization implementation
+plan](../../../mcp/MCP_LOCALIZATION_IMPLEMENTATION_PLAN.md) has completed its
+L1 production increment. Eleven top-level localization types and seven nested
+owners now provide immutable configuration, request-context SPI, closed
+results, revisions, stable text coordinates, catalog extraction, and local
+control-plane shapes. Construction-time extraction operates on the final
+`McpHandlerResolver`, produces deterministic opaque external keys and
+schema-aware response-local slot plans, enforces bounded callback counts, and
+preserves the application-owned custom resource-list boundary. The built-in
+interceptor continuation now exposes the exact downstream invocation-feature
+carrier with its existing thread, one-shot, and call-lifetime rules. L1 does
+not invoke a localization provider or alter MCP wire output; request-time
+rendering begins in L2. These 18 owners grow `phase-6.includes` to 33 and the
+exact reviewed union to 237, but Phase 6 remains unfrozen.
 `McpServerDiagnostics` remains
 the completed protection and trace diagnostics projection.
 `McpServerDiagnostics` now has exactly 12 zero-argument methods: lifecycle
@@ -890,7 +915,7 @@ remains application-owned.
 
 Representative exact citations from the full 46-test simulator/API gate are
 `McpSimulationPublicApiTests#simulationSurfaceHasExactReferenceNullabilityAndClosedEnums`,
-`McpPublicApiReflectionContractTests#phaseSixSimulatorInventoryAndSharedHostDescriptorsAreExact`,
+`McpPublicApiReflectionContractTests#phaseSixInventoryAndSharedHostDescriptorsAreExact`,
 `McpSimulatorPublicRuntimeTests#startMcpRequestRejectsMissingServerConfiguration`,
 `#defaultLoopbackHostPolicyRequiresLiteralConfiguredPortZero`,
 `#multiRoundTripSimulationContinuesInputRequiredStateToDistinctCompletedRequest`,
@@ -900,11 +925,13 @@ Representative exact citations from the full 46-test simulator/API gate are
 `#waitOperationsHandleZeroTimeoutInterruptionAndCompletionIdempotently`, and
 `McpSimulationCaptureRuntimeTests#cancelAndTerminalRacePublishesOneCoherentFirstWinner`.
 
-`phase-6.includes` now has 15 owners, `provisional.includes` remains at 32,
-and the reviewed union has 219. The canonical comparison has 558 records and
+At the V21 boundary, `phase-6.includes` had 15 owners,
+`provisional.includes` had 32, and the reviewed union had 219. The canonical
+comparison had 558 records and
 SHA-256
 `d40004fa92cc5d095404de2133cf04fcd2b5574e9326eb680f571a017ef33671`.
-Frozen Phase 4/5 inventories remain 1,049/195 with unchanged hashes. The core
+At that boundary, frozen Phase 4/5 inventories remained 1,049/195 with
+unchanged hashes. The core
 metric surface is unchanged at 23/23 events, 22 families, 22 snapshot getters,
 23 builder methods, 12 boxed `Long` values plus ten maps, and 31/12 canary
 samples.
@@ -964,18 +991,56 @@ release-candidate evidence. V21 static-analysis, SpotBugs, packaging/Javadoc,
 API-verifier, sketch, and schema evidence is carried forward and was not rerun
 for this checkpoint.
 
-The current ledger remains 21 numbered production verticals and now has four
-unnumbered checkpoints. `SOK-SIM-001` remains COMPLETE BOUNDED PHASE 6
+At that fourth checkpoint, the ledger remained 21 numbered production
+verticals and had four unnumbered checkpoints. `SOK-SIM-001` remains COMPLETE BOUNDED PHASE 6
 IMPLEMENTATION EVIDENCE and now includes deterministic every-operation
 evidence. This is not the strict local 39-scenario driver, every parameter/
 error permutation, live-network fidelity, scheduled/manual or sustained
 coverage-guided fuzz, corpus saturation, long/fleet soak, comprehensive
 privacy/security, release provenance, or Phase 6 review/freeze.
 `SOK-VALID-002` and `SOK-PRIV-001` advance narrowly but remain PARTIAL; all
-other statuses remain unchanged. The next slice is a strict, sorted 39-row
-LOCAL off-network driver tied byte-for-row and name-for-name to
-`conformance/official/scenarios.json`; it is not the official CLI or a live-
-network run.
+other statuses remained unchanged. The next slice was a strict 39-row LOCAL
+off-network driver tied byte-for-row and name-for-name to the pinned
+`CLI/scenarios.json` manifest ordinal order; it was not the official CLI or a
+live-network run.
+
+**Fifth unnumbered Phase 6 candidate-artifact/public-API-only local 39-row
+simulator-driver checkpoint.** `conformance/official/run-local-simulator.mjs`
+validates and follows pinned `CLI/scenarios.json` manifest ordinal order for
+the exact 39 active `RUN` rows at ordinals 1 and 3 through 40. Using only the
+compiled fixture classes and candidate JAR, it invokes
+`McpLocalSimulatorScenarioDriver#runManifestRowsOffNetwork`. Each ordinal/name
+pair gets a fresh scenario configuration and simulator scope and performs
+bounded public-API work. The package-private fixture source symbol
+`McpConformanceFixture#simulationConfigForScenario` supplies the registrations
+without extending the public or production surface.
+
+The wrapper byte-compares exactly one
+`PASS\t<ordinal>\t<name>\n` record per row in manifest ordinal order and
+requires empty standard error and a clean exit. On Corretto 21 and 26, the
+fixture and driver compile with `--release 17 -Xlint:all -Werror`, the fixture
+contract main passes, `jdeps` finds no `com.soklet.internal` dependency, and
+all 39 rows pass. The adversarial
+`conformance/official/local-simulator-self-test.mjs` rejects reordered,
+duplicate, missing, failed-spawn, nonzero-exit, signaled, standard-error,
+wrong-output, `FAIL`, CRLF, and unterminated transcripts.
+
+No production source, public API or sketch, owner/signature inventory,
+metric/event/snapshot surface, wire behavior, or numbered vertical changes.
+At that fifth checkpoint, the ledger was 21 numbered production verticals plus
+five unnumbered checkpoints. The API comparison remained 558 records with the
+same hash and had 15 Phase 6 owners, 32 provisional owners, and a 219-owner
+reviewed union. The
+23/23-event, 22-family, 22-getter/23-builder, and 31/12-canary surfaces remain
+unchanged. `SOK-SIM-001` stays COMPLETE BOUNDED PHASE 6 IMPLEMENTATION
+EVIDENCE; all other status rows stay unchanged.
+
+This is not the official CLI or an official expected-check multiset replay,
+and it opens no live network path. It does not prove listener/kernel behavior,
+socket backpressure or write-idle handling, release provenance, sustained
+operation, comprehensive privacy/security, or Phase 6 review/freeze. Next are
+scheduled coverage-guided fuzz and sustained soak/stress gates, followed by
+structured-log, privacy, and API review/freeze work.
 
 The fieldless request-boundary events and label-free families retain no request,
 remote identity, endpoint, method, code, outcome, throwable, header, trace ID,
@@ -1001,8 +1066,8 @@ IMPLEMENTATION COMPLETE.
 `MCP-HTTP-020` remains PARTIAL.
 This does not constrain custom collectors or application telemetry, promise an
 atomic cross-field snapshot during active concurrent mutation, add structured-
-log or raw-ID emission, complete privacy/cardinality work, or prove the strict
-local 39-row driver, every parameter/error variant, sustained operation,
+log or raw-ID emission, complete privacy/cardinality work, or prove every
+parameter/error variant, sustained operation,
 release-readiness, review, or Phase 6 freeze.
 
 These are FIFO record/enqueue-order guarantees, not a universal cross-thread
@@ -1013,8 +1078,7 @@ handler variants, `SubscriptionOpened`, `SubscriptionClosed`,
 `CancelationSignaled`, `ProgressEmitted`, `KeepAliveEmitted`, `ProtocolError`,
 `UnknownMirroredHeader`, and the transport trio. Other downstream work,
 structured-log carrier/emission, raw-ID opt-in, broader privacy, sustained
-cardinality, and redaction work, the strict local 39-row simulator driver,
-coverage-guided and sustained fuzz gates,
+cardinality, and redaction work, coverage-guided and sustained fuzz gates,
 release-candidate work, and Phase 6 review/freeze remain open. The seventh
 through ninth verticals added no public API, snapshot field, aggregate family,
 label, event variant, or wire dimension. The tenth added three provisional
@@ -1052,20 +1116,32 @@ evidence is written under `target/japicmp/` and
 
 CI runs the aggregate on JDK 17; the scripts themselves use the
 caller-selected JDK. On the exact current source, the aggregate gate is green
-for 558 incompatibility records and 219 reviewed current-side API owners. The
+for 559 incompatibility records and 237 reviewed current-side API owners. The
 32-entry provisional inventory includes `EndpointMethodKey`,
 `RequestOutcomeKey`, `RequestStreamTerminationKey`, and
 `SubscriptionTerminationKey`; the unchanged
 frozen inventories
-contain 1,049 Phase 4 signatures and 195 Phase 5 signatures. The Phase 5
+contain 1,052 Phase 4 signatures and 195 Phase 5 signatures. The Phase 5
 snapshot contains 195 records (39 classes, six constructors, 15 fields, and
 135 methods), with
 SHA-256
 `c6862ed49a9bc9565ba2284190c49605928270fb8a6fb73f75070452f909e75f`;
 its exact nullability digest is
 `d52a424ac33e679e0a0632004ac931e59966b68641659e254214964d9144f8c7`.
-The frozen counts and hashes are unchanged. Phase 6 now owns 15 types and the
-provisional inventory remains at 32.
+The Phase 5 count and hash are unchanged. Phase 6 now owns 33 types and the
+provisional inventory remains at 32. The amended Phase 4 snapshot has SHA-256
+`8b5b689525176f63de24d81ce01d26b16b5c27c32c4e5e13f06757d388768bbc`;
+its exact nullability digest is
+`627be93f6c759e194645c022ab854c2fde73d916b4c787f05e7c18b49cbfb197`.
+
+For the exact 2026-08-12 L1 localization tree, a clean Corretto 26 verify
+passes 1,554/0/0/4 after compiling 456 main and 179 test sources. The JDK 21
+Error Prone/NullAway profile passes with the existing advisory-warning
+inventory, and SpotBugs reports zero bugs and zero errors. The 181-source
+Java-17 API sketch and Javadoc/doclint smoke pass, as does the adapter proof
+against 60 real Lokalized sources plus three adapter sources. Exact-tree JDK
+17/25 CI, request-time localization, and candidate-artifact Lokalized
+validation remain open.
 
 At the V21 boundary, the focused simulator/API gate passed 46/0/0/0 and the
 broadened adjacent authority selector passed 215/0/0/0. Clean exact-source

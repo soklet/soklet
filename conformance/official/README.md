@@ -124,6 +124,10 @@ sh conformance/official/build-public-fixture.sh \
   /absolute/project/target/soklet-3.6.0-SNAPSHOT.jar \
   /absolute/project/target/conformance/public-fixture \
   > target/conformance/official/public-fixture-classpath.txt
+node conformance/official/local-simulator-self-test.mjs
+node conformance/official/run-local-simulator.mjs \
+  --classpath "$(cat target/conformance/official/public-fixture-classpath.txt)" \
+  --project-root /absolute/project
 node conformance/official/self-test.mjs --suite-dir /absolute/pinned-suite
 node conformance/official/runner-self-test.mjs
 mkdir -p target/conformance/official/phase-5
@@ -136,15 +140,27 @@ node conformance/official/run.mjs \
   --mode verify
 ```
 
-`build-public-fixture.sh` requires an empty fixture-classes directory,
+`build-public-fixture.sh` requires empty fixture and test-class directories,
 compiles the fixture and its one same-package schema helper with the candidate
 JAR as their only Soklet compile dependency, explicitly disables annotation
 processing because the fixture uses programmatic registration, and uses
 `jdeps` to reject any compiled dependency on `com.soklet.internal`. It also
 compiles and runs a separate standalone public-API contract test for the exact
 Phase 5 registrations, declarations, handler branches, and application-state
-transitions; those test classes are not added to the emitted fixture runtime
-classpath.
+transitions. The test output also contains a public-API-only local simulator
+driver. `run-local-simulator.mjs` derives the 39 RUN rows from the pinned
+`scenarios.json` manifest in exact CLI ordinal order, executes every row
+off-network against the packaged candidate, and byte-compares the driver's 39
+PASS records. The driver covers real fixture handlers, response and SSE shapes,
+Host/Origin/header policy, progress isolation, protected multi-round state, and
+stopped/unbound diagnostics without opening a socket. Its classes are never
+added to the emitted live-fixture runtime classpath.
+
+The local simulator replay is a candidate-artifact development checkpoint. It
+does not invoke the official CLI, replay the official expected-check multiset,
+exercise kernel transport/backpressure/write-idle behavior, or establish
+release-candidate provenance. Those remain responsibilities of the pinned live
+verification and later release gates.
 `run.mjs` independently requires the exact fixture-classes/candidate-JAR pair
 in that order and refuses missing, substituted, symlinked, or exploded main/test
 class paths. The work directory must be empty.

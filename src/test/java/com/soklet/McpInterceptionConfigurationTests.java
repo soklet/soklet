@@ -41,11 +41,14 @@ public class McpInterceptionConfigurationTests {
 		McpToolOutput expectedOutput = McpToolOutput.fromText("expected");
 		AtomicBoolean invoked = new AtomicBoolean();
 
+		McpHandlerInvocation invocation = () -> {
+			invoked.set(true);
+			return expectedResult;
+		};
+		Assertions.assertTrue(invocation.getFeatures()
+				.find(McpLocalizationContext.class).isEmpty());
 		McpOperationResult actualResult = interceptor.interceptHandler(request,
-				() -> {
-					invoked.set(true);
-					return expectedResult;
-				});
+				invocation);
 		McpToolOutput actualOutput = sanitizer.sanitize(request, "tool",
 				McpJsonObject.builder().build(), expectedOutput);
 

@@ -759,17 +759,56 @@ API-verifier, sketch, and schema evidence is carried forward and was not rerun
 for this checkpoint.
 
 `SOK-SIM-001` remains COMPLETE BOUNDED PHASE 6 IMPLEMENTATION EVIDENCE and now
-includes deterministic every-operation evidence. The current ledger is 21
-numbered verticals plus four unnumbered checkpoints. These bounded results are
+includes deterministic every-operation evidence. At that fourth checkpoint,
+the ledger was 21 numbered verticals plus four unnumbered checkpoints. These bounded results are
 not the strict local 39-scenario driver, every parameter/error permutation,
 live-network fidelity, scheduled/manual or sustained coverage-guided fuzz,
 corpus saturation, long/fleet soak, comprehensive privacy/security, release-
 candidate provenance, or Phase 6 review/freeze. `SOK-VALID-002` and
 `SOK-PRIV-001` advance narrowly but remain PARTIAL; all
-other statuses remain unchanged. The next slice is a strict, sorted 39-row
-LOCAL off-network driver tied byte-for-row and name-for-name to
-`conformance/official/scenarios.json`; it is not the official CLI or a live-
-network run.
+other statuses remained unchanged. The next slice was a strict 39-row LOCAL
+off-network driver tied byte-for-row and name-for-name to the pinned
+`CLI/scenarios.json` manifest ordinal order; it was not the official CLI or a
+live-network run.
+
+**Fifth unnumbered Phase 6 candidate-artifact/public-API-only local 39-row
+simulator-driver checkpoint.** `conformance/official/run-local-simulator.mjs`
+validates the exact active set and preserves pinned `CLI/scenarios.json`
+manifest ordinal order: 39 `RUN` rows at ordinals 1 and 3 through 40. It passes
+those ordinal/name pairs to
+`McpLocalSimulatorScenarioDriver#runManifestRowsOffNetwork` with only the
+compiled fixture classes and candidate JAR on the class path. Every row uses a
+fresh scenario configuration and simulator scope and performs bounded public-
+API operations; package-private fixture source helper
+`McpConformanceFixture#simulationConfigForScenario` provides the registrations
+without creating a production entry point.
+
+The wrapper byte-compares exactly one
+`PASS\t<ordinal>\t<name>\n` record per row in manifest ordinal order and
+requires empty standard error and a clean exit. Corretto 21 and 26 both compile
+the fixture and driver with `--release 17 -Xlint:all -Werror`, pass the fixture
+contract main, pass a `jdeps` rejection gate for `com.soklet.internal`, and
+execute 39/39 rows. The adversarial
+`conformance/official/local-simulator-self-test.mjs` rejects reordered,
+duplicate, missing, failed-spawn, nonzero-exit, signaled, standard-error,
+wrong-output, `FAIL`, CRLF, and unterminated transcripts.
+
+This fifth checkpoint changes no production source, public API or sketch,
+owner/signature inventory, metric/event/snapshot surface, wire behavior, or
+numbered vertical. The ledger is 21 numbered production verticals plus five
+unnumbered checkpoints. The API comparison remains 558 records with its same
+hash and 15/32/219 Phase 6/provisional/reviewed owners; the 23/23 event,
+22-family, 22-getter/23-builder, and 31/12 canary surfaces remain unchanged.
+`SOK-SIM-001` stays COMPLETE BOUNDED PHASE 6 IMPLEMENTATION EVIDENCE; all
+other status rows stay unchanged.
+
+This is not the official CLI or an official expected-check multiset replay,
+and it opens no live network path. It does not exercise listener/kernel
+behavior, socket backpressure or write-idle handling, or establish release
+provenance, sustained-operation, comprehensive privacy/security, or Phase 6
+review/freeze evidence. Next are scheduled coverage-guided fuzz and sustained
+soak/stress gates, followed by structured-log, privacy, and API review/freeze
+work. Phase 6 remains provisional and unfrozen.
 
 `McpServerDiagnostics` now declares exactly 12 zero-argument methods:
 `getStatus()` and `getBoundAddress()`, plus all ten implemented diagnostic

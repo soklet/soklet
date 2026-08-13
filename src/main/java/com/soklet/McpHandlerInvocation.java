@@ -19,6 +19,7 @@ package com.soklet;
 import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.NotThreadSafe;
+import java.util.Map;
 
 /**
  * One-shot continuation supplied to an {@link McpHandlerInterceptor}.
@@ -34,6 +35,23 @@ import javax.annotation.concurrent.NotThreadSafe;
 @NotThreadSafe
 @FunctionalInterface
 public interface McpHandlerInvocation {
+	/**
+	 * Returns the exact feature lookup supplied to the downstream handler.
+	 * <p>
+	 * The runtime implementation returns one stable instance for this
+	 * interception call, allowing a short-circuit result to use the same
+	 * localization context, cancelation token, and applicable progress reporter
+	 * as downstream handling. The default empty lookup preserves compatibility
+	 * for application test continuations. This value has the same thread and
+	 * call-lifetime bound as the continuation and must not be retained.
+	 *
+	 * @return non-null invocation feature lookup
+	 */
+	@NonNull
+	default McpInvocationFeatures getFeatures() {
+		return McpInvocationFeatures.fromFeatures(Map.of());
+	}
+
 	/**
 	 * Invokes the next stage exactly once.
 	 *
