@@ -160,7 +160,28 @@ record McpHttpEndpointPolicy(@NonNull String path,
 		@NonNull Optional<@NonNull McpRateLimiter> requestRateLimiter,
 		@NonNull McpApplicationRequestInterceptor requestInterceptor,
 		@NonNull McpUnknownMirroredHeaderPolicy unknownMirroredHeaderPolicy,
-		boolean corsAuthorizerExplicitlyConfigured) {
+		boolean corsAuthorizerExplicitlyConfigured,
+		@NonNull Optional<@NonNull McpRuntimeCatalogLocalizer> catalogLocalizer,
+		boolean localizationEnabled) {
+	/**
+	 * Keeps every existing construction site source-compatible: localization is
+	 * absent unless a localizer was configured on the server.
+	 */
+	McpHttpEndpointPolicy(@NonNull String path,
+			@NonNull Set<@NonNull String> allowedHosts,
+			@NonNull McpAbsentOriginPolicy absentOriginPolicy,
+			@NonNull CorsAuthorizer corsAuthorizer,
+			@NonNull McpRequestAdmissionPolicy requestAdmissionPolicy,
+			@NonNull Optional<@NonNull McpRateLimiter> requestRateLimiter,
+			@NonNull McpApplicationRequestInterceptor requestInterceptor,
+			@NonNull McpUnknownMirroredHeaderPolicy unknownMirroredHeaderPolicy,
+			boolean corsAuthorizerExplicitlyConfigured) {
+		this(path, allowedHosts, absentOriginPolicy, corsAuthorizer,
+				requestAdmissionPolicy, requestRateLimiter, requestInterceptor,
+				unknownMirroredHeaderPolicy, corsAuthorizerExplicitlyConfigured,
+				Optional.empty(), false);
+	}
+
 	McpHttpEndpointPolicy(@NonNull String path,
 			@NonNull Set<@NonNull String> allowedHosts,
 			@NonNull McpAbsentOriginPolicy absentOriginPolicy,
@@ -246,7 +267,26 @@ record McpHttpEndpointPolicy(@NonNull String path,
 		return new McpHttpEndpointPolicy(path, allowedHosts, absentOriginPolicy,
 				corsAuthorizer, requestAdmissionPolicy,
 				Optional.of(requireNonNull(requestRateLimiter)), requestInterceptor,
-				unknownMirroredHeaderPolicy, corsAuthorizerExplicitlyConfigured);
+				unknownMirroredHeaderPolicy, corsAuthorizerExplicitlyConfigured,
+				catalogLocalizer, localizationEnabled);
+	}
+
+	@NonNull
+	McpHttpEndpointPolicy withCatalogLocalizer(
+			@NonNull McpRuntimeCatalogLocalizer catalogLocalizer) {
+		return new McpHttpEndpointPolicy(path, allowedHosts, absentOriginPolicy,
+				corsAuthorizer, requestAdmissionPolicy, requestRateLimiter,
+				requestInterceptor, unknownMirroredHeaderPolicy,
+				corsAuthorizerExplicitlyConfigured,
+				Optional.of(requireNonNull(catalogLocalizer)), localizationEnabled);
+	}
+
+	@NonNull
+	McpHttpEndpointPolicy withLocalizationEnabled() {
+		return new McpHttpEndpointPolicy(path, allowedHosts, absentOriginPolicy,
+				corsAuthorizer, requestAdmissionPolicy, requestRateLimiter,
+				requestInterceptor, unknownMirroredHeaderPolicy,
+				corsAuthorizerExplicitlyConfigured, catalogLocalizer, true);
 	}
 
 	@NonNull
@@ -255,7 +295,8 @@ record McpHttpEndpointPolicy(@NonNull String path,
 		return new McpHttpEndpointPolicy(path, allowedHosts, absentOriginPolicy,
 				corsAuthorizer, requestAdmissionPolicy, requestRateLimiter,
 				requireNonNull(requestInterceptor), unknownMirroredHeaderPolicy,
-				corsAuthorizerExplicitlyConfigured);
+				corsAuthorizerExplicitlyConfigured, catalogLocalizer,
+				localizationEnabled);
 	}
 
 	@NonNull
@@ -264,7 +305,8 @@ record McpHttpEndpointPolicy(@NonNull String path,
 		return new McpHttpEndpointPolicy(path, allowedHosts, absentOriginPolicy,
 				corsAuthorizer, requestAdmissionPolicy, requestRateLimiter,
 				requestInterceptor, requireNonNull(unknownMirroredHeaderPolicy),
-				corsAuthorizerExplicitlyConfigured);
+				corsAuthorizerExplicitlyConfigured, catalogLocalizer,
+				localizationEnabled);
 	}
 
 	@Override
@@ -275,6 +317,7 @@ record McpHttpEndpointPolicy(@NonNull String path,
 				+ ", absentOriginPolicy=" + absentOriginPolicy
 				+ ", requestRateLimiterPresent=" + requestRateLimiter.isPresent()
 				+ ", unknownMirroredHeaderPolicy=" + unknownMirroredHeaderPolicy
+				+ ", catalogLocalizerPresent=" + catalogLocalizer.isPresent()
 				+ "]";
 	}
 }

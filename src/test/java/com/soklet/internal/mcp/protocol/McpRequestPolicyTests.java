@@ -174,7 +174,8 @@ public class McpRequestPolicyTests {
 		Assertions.assertEquals(
 				"McpHttpEndpointPolicy[path=/mcp, allowedHostCount=0, "
 						+ "absentOriginPolicy=ALLOW, requestRateLimiterPresent=true, "
-						+ "unknownMirroredHeaderPolicy=IGNORE]",
+						+ "unknownMirroredHeaderPolicy=IGNORE, "
+						+ "catalogLocalizerPresent=false]",
 				policy.toString());
 		Assertions.assertFalse(policy.toString().contains("secret"));
 	}

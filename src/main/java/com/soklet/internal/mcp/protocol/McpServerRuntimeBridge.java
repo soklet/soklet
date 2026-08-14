@@ -71,6 +71,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
+import java.util.function.BooleanSupplier;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -866,6 +867,11 @@ public final class McpServerRuntimeBridge {
 				McpApplicationRequestInterceptor.passThroughInstance(),
 				unknownMirroredHeaderPolicy,
 				corsAuthorizerExplicitlyConfigured);
+		if (endpointPlan.catalogLocalizer().isPresent())
+			endpointPolicy = endpointPolicy.withCatalogLocalizer(
+					endpointPlan.catalogLocalizer().orElseThrow());
+		if (endpointPlan.localizationEnabled())
+			endpointPolicy = endpointPolicy.withLocalizationEnabled();
 		if (requestRateLimitAdapter.isPresent()) {
 			RateLimitAdapter adapter = requestRateLimitAdapter.orElseThrow();
 			endpointPolicy = endpointPolicy.withRequestRateLimiter(context ->
@@ -1191,7 +1197,9 @@ public final class McpServerRuntimeBridge {
 			@NonNull List<@NonNull ToolPlan> toolPlans,
 			@NonNull List<@NonNull PromptPlan> promptPlans,
 			@NonNull List<@NonNull ResourcePlan> resourcePlans,
-			@NonNull ResourceListPlan resourceListPlan) {
+			@NonNull ResourceListPlan resourceListPlan,
+			@NonNull Optional<@NonNull McpRuntimeCatalogLocalizer> catalogLocalizer,
+			boolean localizationEnabled) {
 		/** Validates and snapshots one endpoint plan. */
 		public EndpointPlan {
 			requireNonNull(endpoint);
@@ -1199,6 +1207,17 @@ public final class McpServerRuntimeBridge {
 			promptPlans = List.copyOf(requireNonNull(promptPlans));
 			resourcePlans = List.copyOf(requireNonNull(resourcePlans));
 			requireNonNull(resourceListPlan);
+			requireNonNull(catalogLocalizer);
+		}
+
+		/** Plans an endpoint with localization disabled. */
+		public EndpointPlan(@NonNull McpEndpoint endpoint,
+				@NonNull List<@NonNull ToolPlan> toolPlans,
+				@NonNull List<@NonNull PromptPlan> promptPlans,
+				@NonNull List<@NonNull ResourcePlan> resourcePlans,
+				@NonNull ResourceListPlan resourceListPlan) {
+			this(endpoint, toolPlans, promptPlans, resourcePlans, resourceListPlan,
+					Optional.empty(), false);
 		}
 	}
 
@@ -1520,7 +1539,8 @@ public final class McpServerRuntimeBridge {
 			@NonNull Map<@NonNull String, @NonNull String> templateVariables,
 			@NonNull CancelationToken cancelationToken,
 			@NonNull Optional<@NonNull ProgressEmitter> progressEmitter,
-			@NonNull HandlerEntryGuard handlerEntryGuard) {
+			@NonNull HandlerEntryGuard handlerEntryGuard,
+			@NonNull BooleanSupplier pastDeadline) {
 		/**
 		 * Creates a legacy internal invocation without transport-owned progress or
 		 * mutable cancellation state.
@@ -1542,7 +1562,7 @@ public final class McpServerRuntimeBridge {
 					jsonRpcMethod, requestId, protocolVersion, operationName,
 					clientInformation, clientCapabilitiesJson, requestMetadata,
 					admissionIdentity, uri, templateVariables,
-					INACTIVE_CANCELATION_TOKEN, Optional.empty(), handlerEntryGuard);
+					INACTIVE_CANCELATION_TOKEN, Optional.empty(), handlerEntryGuard, () -> false);
 		}
 
 		/** Validates and snapshots the erased invocation. */
@@ -1568,6 +1588,7 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(cancelationToken);
 			requireNonNull(progressEmitter);
 			requireNonNull(handlerEntryGuard);
+			requireNonNull(pastDeadline);
 		}
 	}
 
@@ -1591,7 +1612,8 @@ public final class McpServerRuntimeBridge {
 			@NonNull List<@NonNull McpJsonObject> registeredResourceDescriptors,
 			@NonNull CancelationToken cancelationToken,
 			@NonNull Optional<@NonNull ProgressEmitter> progressEmitter,
-			@NonNull HandlerEntryGuard handlerEntryGuard) {
+			@NonNull HandlerEntryGuard handlerEntryGuard,
+			@NonNull BooleanSupplier pastDeadline) {
 		/**
 		 * Creates a legacy internal invocation without transport-owned progress or
 		 * mutable cancellation state.
@@ -1613,7 +1635,7 @@ public final class McpServerRuntimeBridge {
 					jsonRpcMethod, requestId, protocolVersion, clientInformation,
 					clientCapabilitiesJson, requestMetadata, admissionIdentity, cursor,
 					registeredResourceDescriptors, INACTIVE_CANCELATION_TOKEN,
-					Optional.empty(), handlerEntryGuard);
+					Optional.empty(), handlerEntryGuard, () -> false);
 		}
 
 		/** Validates and snapshots the erased invocation. */
@@ -1638,6 +1660,7 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(cancelationToken);
 			requireNonNull(progressEmitter);
 			requireNonNull(handlerEntryGuard);
+			requireNonNull(pastDeadline);
 		}
 	}
 
@@ -1843,7 +1866,8 @@ public final class McpServerRuntimeBridge {
 			@NonNull McpJsonObject rawArguments,
 			@NonNull CancelationToken cancelationToken,
 			@NonNull Optional<@NonNull ProgressEmitter> progressEmitter,
-			@NonNull HandlerEntryGuard handlerEntryGuard) {
+			@NonNull HandlerEntryGuard handlerEntryGuard,
+			@NonNull BooleanSupplier pastDeadline) {
 		/**
 		 * Creates a legacy internal invocation without transport-owned progress or
 		 * mutable cancellation state.
@@ -1864,7 +1888,7 @@ public final class McpServerRuntimeBridge {
 					jsonRpcMethod, requestId, protocolVersion, operationName,
 					clientInformation, clientCapabilitiesJson, requestMetadata,
 					admissionIdentity, rawArguments, INACTIVE_CANCELATION_TOKEN,
-					Optional.empty(), handlerEntryGuard);
+					Optional.empty(), handlerEntryGuard, () -> false);
 		}
 
 		public ToolInvocation {
@@ -1888,6 +1912,7 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(cancelationToken);
 			requireNonNull(progressEmitter);
 			requireNonNull(handlerEntryGuard);
+			requireNonNull(pastDeadline);
 		}
 
 		@Override
@@ -1922,7 +1947,8 @@ public final class McpServerRuntimeBridge {
 			@NonNull McpJsonObject rawArguments,
 			@NonNull CancelationToken cancelationToken,
 			@NonNull Optional<@NonNull ProgressEmitter> progressEmitter,
-			@NonNull HandlerEntryGuard handlerEntryGuard) {
+			@NonNull HandlerEntryGuard handlerEntryGuard,
+			@NonNull BooleanSupplier pastDeadline) {
 		/**
 		 * Creates a legacy internal invocation without transport-owned progress or
 		 * mutable cancellation state.
@@ -1943,7 +1969,7 @@ public final class McpServerRuntimeBridge {
 					jsonRpcMethod, requestId, protocolVersion, operationName,
 					clientInformation, clientCapabilitiesJson, requestMetadata,
 					admissionIdentity, rawArguments, INACTIVE_CANCELATION_TOKEN,
-					Optional.empty(), handlerEntryGuard);
+					Optional.empty(), handlerEntryGuard, () -> false);
 		}
 
 		public PromptInvocation {
@@ -1967,6 +1993,7 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(cancelationToken);
 			requireNonNull(progressEmitter);
 			requireNonNull(handlerEntryGuard);
+			requireNonNull(pastDeadline);
 		}
 
 		@Override
@@ -2642,7 +2669,8 @@ public final class McpServerRuntimeBridge {
 				(McpJsonObject) toPublic(arguments),
 				invocation.cancelationToken(),
 				progressEmitterFor(invocation, inputRequestPlan),
-				invocation::requireHandlerEntry);
+				invocation::requireHandlerEntry,
+				invocation.pastDeadline());
 		ToolInvocationResult result = requireNonNull(
 				toolPlan.invoker().invoke(toolInvocation),
 				"The MCP tool invoker returned null.");
@@ -2758,7 +2786,8 @@ public final class McpServerRuntimeBridge {
 				(McpJsonObject) toPublic(arguments),
 				invocation.cancelationToken(),
 				progressEmitterFor(invocation, inputRequestPlan),
-				invocation::requireHandlerEntry);
+				invocation::requireHandlerEntry,
+				invocation.pastDeadline());
 		PromptInvocationResult result = requireNonNull(
 				promptPlan.invoker().invoke(promptInvocation),
 				"The MCP prompt invoker returned null.");
@@ -2812,7 +2841,8 @@ public final class McpServerRuntimeBridge {
 				internalInvocation.uri(), internalInvocation.templateVariables(),
 				invocation.cancelationToken(),
 				progressEmitterFor(invocation, inputRequestPlan),
-				invocation::requireHandlerEntry);
+				invocation::requireHandlerEntry,
+				invocation.pastDeadline());
 		ResourceInvocationResult result = requireNonNull(
 				resourcePlan.invoker().invoke(resourceInvocation),
 				"The MCP resource invoker returned null.");
@@ -2863,7 +2893,8 @@ public final class McpServerRuntimeBridge {
 				internalInvocation.cursor(), registeredDescriptors,
 				invocation.cancelationToken(),
 				progressEmitterFor(invocation, McpInputRequestPlan.empty()),
-				invocation::requireHandlerEntry);
+				invocation::requireHandlerEntry,
+				invocation.pastDeadline());
 		ResourceListInvocationResult result = requireNonNull(
 				resourceListPlan.invoker().orElseThrow().invoke(listInvocation),
 				"The MCP resource-list invoker returned null.");

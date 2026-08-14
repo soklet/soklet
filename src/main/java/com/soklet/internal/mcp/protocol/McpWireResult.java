@@ -17,6 +17,7 @@
 package com.soklet.internal.mcp.protocol;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
@@ -47,14 +48,41 @@ final class McpWireResult {
 	private final McpJsonObject fields;
 	@NonNull
 	private final Optional<@NonNull McpResultMetadata> metadata;
+	@Nullable
+	private final McpJsonObject precomputedJsonObject;
 
 	private McpWireResult(@NonNull McpResultType resultType,
 			@NonNull McpJsonObject fields,
 			@NonNull Optional<@NonNull McpResultMetadata> metadata) {
+		this(resultType, fields, metadata, null);
+	}
+
+	private McpWireResult(@NonNull McpResultType resultType,
+			@NonNull McpJsonObject fields,
+			@NonNull Optional<@NonNull McpResultMetadata> metadata,
+			@Nullable McpJsonObject precomputedJsonObject) {
 		this.resultType = requireNonNull(resultType);
 		this.fields = McpProtocolSupport.requireExtensionFields(
 				fields, Set.of("resultType", "_meta"));
 		this.metadata = requireNonNull(metadata);
+		this.precomputedJsonObject = precomputedJsonObject;
+	}
+
+	/**
+	 * Returns a result that publishes {@code precomputedJsonObject} verbatim.
+	 * <p>
+	 * Localized rendering replaces framework-owned strings in the fully composed
+	 * result document, so the composed form is carried directly rather than
+	 * recomposed from parts. Envelope composition is unchanged, which is what
+	 * keeps the non-localized path byte-identical.
+	 */
+	@NonNull
+	static McpWireResult withPrecomputedJsonObject(@NonNull McpWireResult source,
+			@NonNull McpJsonObject precomputedJsonObject) {
+		requireNonNull(source);
+		requireNonNull(precomputedJsonObject);
+		return new McpWireResult(source.resultType, source.fields, source.metadata,
+				precomputedJsonObject);
 	}
 
 	@NonNull
@@ -130,6 +158,9 @@ final class McpWireResult {
 
 	@NonNull
 	McpJsonObject toJsonObject() {
+		if (precomputedJsonObject != null)
+			return precomputedJsonObject;
+
 		Map<String, McpJsonValue> values = new LinkedHashMap<>(fields.members());
 		values.put("resultType", new McpJsonString(resultType.wireValue()));
 		metadata.filter(value -> !value.isEmpty())

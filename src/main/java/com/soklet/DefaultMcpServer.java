@@ -19,6 +19,8 @@ package com.soklet;
 import com.soklet.internal.mcp.protocol.McpJsonLimits;
 import com.soklet.internal.mcp.protocol.McpApplicationExecutionObserver;
 import com.soklet.internal.mcp.protocol.McpApplicationExecutionObserver.PendingMetricRecord;
+import com.soklet.internal.mcp.protocol.McpLocalizationContextUnavailableException;
+import com.soklet.internal.mcp.protocol.McpRuntimeCatalogLocalizer;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.AdmissionInput;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.CachePlan;
@@ -75,6 +77,7 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.ExecutorService;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -454,14 +457,158 @@ final class DefaultMcpServer implements McpServer {
 				.map(DefaultMcpServer::toResourceDescriptor)
 				.toList();
 		ResourceListPlan resourceListPlan = new ResourceListPlan(
-				toCachePlan(endpoint.getResourcesListCachePolicy()),
-				toCachePlan(endpoint.getResourceTemplatesListCachePolicy()),
+				effectiveCachePlan(endpoint.getResourcesListCachePolicy()),
+				effectiveCachePlan(endpoint.getResourceTemplatesListCachePolicy()),
 				this.maximumCursorSizeInBytes,
 				endpoint.getResourceListHandler().map(handler -> invocation ->
 						invokeResourceList(handler, registeredResourceDescriptors,
 								invocation)));
 		return new EndpointPlan(endpoint, toolPlans, promptPlans, resourcePlans,
-				resourceListPlan);
+				resourceListPlan, catalogLocalizer(endpoint),
+				this.localizer != null);
+	}
+
+	/**
+	 * Builds this endpoint's catalog localizer, or empty when no localizer is
+	 * configured or this endpoint publishes no localizable text.
+	 */
+	@NonNull
+	private Optional<@NonNull McpRuntimeCatalogLocalizer> catalogLocalizer(
+			@NonNull McpEndpoint endpoint) {
+		McpLocalizer configuredLocalizer = this.localizer;
+		McpCanonicalLocalizationPlan plan = this.localizationPlan;
+
+		if (configuredLocalizer == null || plan == null)
+			return Optional.empty();
+
+		Optional<McpCanonicalLocalizationPlan.EndpointPlan> endpointPlan =
+				plan.endpoints().stream()
+						.filter(candidate -> candidate.endpointPath()
+								.equals(endpoint.getPath()))
+						.findFirst();
+
+		return endpointPlan.map(resolved ->
+				input -> localizeCatalog(configuredLocalizer, resolved, input));
+	}
+
+	/**
+	 * Creates exactly one localization context for this response and renders it.
+	 * <p>
+	 * The absolute request boundary is checked immediately before and after
+	 * provider work, so a request that has already become terminal never reaches
+	 * application code. A response kind with no planned slots needs no context at
+	 * all and publishes canonically.
+	 */
+	private McpRuntimeCatalogLocalizer.@NonNull Outcome localizeCatalog(
+			@NonNull McpLocalizer configuredLocalizer,
+			McpCanonicalLocalizationPlan.@NonNull EndpointPlan endpointPlan,
+			McpRuntimeCatalogLocalizer.@NonNull Input input) {
+		Optional<McpCanonicalLocalizationPlan.ResponsePlan> responsePlan =
+				endpointPlan.response(toPlanResponseKind(input.responseKind()));
+
+		if (responsePlan.isEmpty())
+			return McpRuntimeCatalogLocalizer.Outcome.canonical(
+					input.canonicalDocument());
+
+		// Terminal work before any provider call publishes canonically: no
+		// provider ran, so there is no localization failure to classify.
+		if (input.terminalBoundary().getAsBoolean())
+			return McpRuntimeCatalogLocalizer.Outcome.canonical(
+					input.canonicalDocument());
+
+		McpLocalizationRequest localizationRequest =
+				new DefaultMcpLocalizationRequest(input.requestContext(),
+						McpLocaleSupport.boundedLanguageRanges(
+								input.acceptLanguageValues()),
+						null,
+						input.resourceListCursor().isEmpty() ? null
+								: input.resourceListCursor().get(0),
+						configuredLocalizer.getFallbackLocale());
+		McpLocalizationContext context;
+
+		try {
+			context = requireNonNull(configuredLocalizer.getContextProvider()
+					.createContext(localizationRequest),
+					"The MCP localization context provider returned null.");
+		} catch (Throwable exception) {
+			// The whole throwable - Errors and sneaky-thrown checked exceptions
+			// included - is untrusted localization data and is never forwarded to
+			// any framework-owned surface.
+			if (exception instanceof InterruptedException)
+				Thread.currentThread().interrupt();
+
+			return localizationFailure(configuredLocalizer, input);
+		}
+
+		if (input.terminalBoundary().getAsBoolean())
+			return localizationFailure(configuredLocalizer, input);
+
+		McpLocalizationRenderer.Outcome outcome = McpLocalizationRenderer.render(
+				input.canonicalDocument(), input.canonicalEncodedBytes(),
+				input.envelopeBytes(), input.maximumResponseBytes(),
+				input.maximumReplacementCharacters(),
+				responsePlan.orElseThrow().slots(), context,
+				configuredLocalizer.getFailurePolicy(),
+				() -> input.terminalBoundary().getAsBoolean(),
+				document -> input.encodedLength().applyAsLong(document));
+
+		return switch (outcome.disposition()) {
+			case LOCALIZED -> new McpRuntimeCatalogLocalizer.Outcome(
+					McpRuntimeCatalogLocalizer.Disposition.LOCALIZED,
+					outcome.document(),
+					contentLanguageTag(outcome.selectedLocale()));
+			// A per-field intentional fallback still renders the representation
+			// for the selected locale, so the selected tag applies.
+			case CANONICAL -> new McpRuntimeCatalogLocalizer.Outcome(
+					McpRuntimeCatalogLocalizer.Disposition.CANONICAL,
+					input.canonicalDocument(),
+					contentLanguageTag(outcome.selectedLocale()));
+			// Whole-response canonical fallback is the configured fallback
+			// locale's representation.
+			case DEFAULT_TEXT -> new McpRuntimeCatalogLocalizer.Outcome(
+					McpRuntimeCatalogLocalizer.Disposition.CANONICAL,
+					input.canonicalDocument(),
+					contentLanguageTag(configuredLocalizer.getFallbackLocale()));
+			case FAIL_REQUEST -> new McpRuntimeCatalogLocalizer.Outcome(
+					McpRuntimeCatalogLocalizer.Disposition.FAIL_REQUEST,
+					input.canonicalDocument(), Optional.empty());
+		};
+	}
+
+	@NonNull
+	private static Optional<@NonNull String> contentLanguageTag(
+			@Nullable Locale locale) {
+		return locale == null ? Optional.empty()
+				: Optional.of(locale.toLanguageTag());
+	}
+
+	private static McpRuntimeCatalogLocalizer.@NonNull Outcome localizationFailure(
+			@NonNull McpLocalizer configuredLocalizer,
+			McpRuntimeCatalogLocalizer.@NonNull Input input) {
+		return configuredLocalizer.getFailurePolicy()
+				== McpLocalizationFailurePolicy.USE_DEFAULT_TEXT
+				? new McpRuntimeCatalogLocalizer.Outcome(
+						McpRuntimeCatalogLocalizer.Disposition.CANONICAL,
+						input.canonicalDocument(), contentLanguageTag(
+								configuredLocalizer.getFallbackLocale()))
+				: new McpRuntimeCatalogLocalizer.Outcome(
+						McpRuntimeCatalogLocalizer.Disposition.FAIL_REQUEST,
+						input.canonicalDocument(), Optional.empty());
+	}
+
+	private static McpCanonicalLocalizationPlan.@NonNull ResponseKind toPlanResponseKind(
+			McpRuntimeCatalogLocalizer.@NonNull ResponseKind responseKind) {
+		return switch (responseKind) {
+			case DISCOVERY -> McpCanonicalLocalizationPlan.ResponseKind.DISCOVERY;
+			case TOOLS_LIST -> McpCanonicalLocalizationPlan.ResponseKind.TOOLS_LIST;
+			case PROMPTS_LIST -> McpCanonicalLocalizationPlan.ResponseKind.PROMPTS_LIST;
+			case RESOURCES_LIST ->
+					McpCanonicalLocalizationPlan.ResponseKind.RESOURCES_LIST;
+			case RESOURCE_TEMPLATES_LIST ->
+					McpCanonicalLocalizationPlan.ResponseKind.RESOURCE_TEMPLATES_LIST;
+			case SUBSCRIPTION_TERMINAL ->
+					McpCanonicalLocalizationPlan.ResponseKind.SUBSCRIPTION_TERMINAL;
+		};
 	}
 
 	void initialize(@NonNull SokletConfig sokletConfig) {
@@ -843,10 +990,27 @@ final class DefaultMcpServer implements McpServer {
 		}
 		return new ResourcePlan(addressKind, address, resource.getName(),
 				resourceDescriptorFields(resource), resource.getMetadata(),
-				toCachePlan(resource.getCachePolicy()),
+				effectiveCachePlan(resource.getCachePolicy()),
 				resource.getInputRequestDeclarations(),
 				resource.getRequestStateMode(),
 				invocation -> invokeResource(resource, invocation));
+	}
+
+	/**
+	 * Resolves one configured cache policy to its effective plan.
+	 * <p>
+	 * With a configured localizer there is no in-protocol locale cache
+	 * dimension, so every cacheable localized-capable result is conservatively
+	 * private with a zero TTL. The downgrade is monotonic: an application
+	 * result cannot widen it, because the clamped plan is what every later
+	 * validation compares against.
+	 */
+	@NonNull
+	private CachePlan effectiveCachePlan(@NonNull McpCachePolicy cachePolicy) {
+		if (this.localizer != null)
+			return new CachePlan(0L, CacheScope.PRIVATE);
+
+		return toCachePlan(cachePolicy);
 	}
 
 	@NonNull
@@ -897,7 +1061,8 @@ final class DefaultMcpServer implements McpServer {
 		McpRequestContext requestContext = invocation.requestContext();
 		McpInvocationFeatures invocationFeatures = invocationFeatures(
 				requestContext, invocation.endpoint(), invocation.jsonRpcMethod(),
-				invocation.cancelationToken(), invocation.progressEmitter());
+				invocation.cancelationToken(), invocation.progressEmitter(),
+				invocation.pastDeadline());
 		McpOperationResult result;
 		try {
 			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
@@ -946,7 +1111,8 @@ final class DefaultMcpServer implements McpServer {
 		McpRequestContext requestContext = invocation.requestContext();
 		McpInvocationFeatures invocationFeatures = invocationFeatures(
 				requestContext, invocation.endpoint(), invocation.jsonRpcMethod(),
-				invocation.cancelationToken(), invocation.progressEmitter());
+				invocation.cancelationToken(), invocation.progressEmitter(),
+				invocation.pastDeadline());
 		McpOperationResult result;
 		try {
 			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
@@ -979,7 +1145,8 @@ final class DefaultMcpServer implements McpServer {
 		McpRequestContext requestContext = invocation.requestContext();
 		McpInvocationFeatures invocationFeatures = invocationFeatures(
 				requestContext, invocation.endpoint(), invocation.jsonRpcMethod(),
-				invocation.cancelationToken(), invocation.progressEmitter());
+				invocation.cancelationToken(), invocation.progressEmitter(),
+				invocation.pastDeadline());
 		McpOperationResult result;
 		try {
 			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
@@ -1076,7 +1243,8 @@ final class DefaultMcpServer implements McpServer {
 		McpRequestContext requestContext = invocation.requestContext();
 		McpInvocationFeatures invocationFeatures = invocationFeatures(
 				requestContext, invocation.endpoint(), invocation.jsonRpcMethod(),
-				invocation.cancelationToken(), invocation.progressEmitter());
+				invocation.cancelationToken(), invocation.progressEmitter(),
+				invocation.pastDeadline(), invocation.cursor());
 		McpOperationResult result;
 		try {
 			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
@@ -1113,7 +1281,20 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpRequestContext requestContext,
 			@NonNull McpEndpoint endpoint, @NonNull String jsonRpcMethod,
 			@NonNull CancelationToken cancelationToken,
-			@NonNull Optional<@NonNull ProgressEmitter> progressEmitter) {
+			@NonNull Optional<@NonNull ProgressEmitter> progressEmitter,
+			@NonNull BooleanSupplier pastDeadline) {
+		return invocationFeatures(requestContext, endpoint, jsonRpcMethod,
+				cancelationToken, progressEmitter, pastDeadline,
+				Optional.empty());
+	}
+
+	private McpInvocationFeatures invocationFeatures(
+			@NonNull McpRequestContext requestContext,
+			@NonNull McpEndpoint endpoint, @NonNull String jsonRpcMethod,
+			@NonNull CancelationToken cancelationToken,
+			@NonNull Optional<@NonNull ProgressEmitter> progressEmitter,
+			@NonNull BooleanSupplier pastDeadline,
+			@NonNull Optional<@NonNull String> resourceListCursor) {
 		requireNonNull(requestContext);
 		String endpointPath = requireNonNull(endpoint).getPath();
 		String boundedMethod = metricMethod(jsonRpcMethod);
@@ -1128,7 +1309,69 @@ final class DefaultMcpServer implements McpServer {
 		emitter.ifPresent(value -> features.put(McpProgressReporter.class,
 				new DefaultMcpProgressReporter(token, value,
 						requestContext, endpointPath, boundedMethod)));
+		// Created after queue admission and the handler slot, immediately before
+		// the interceptor, so rejected/dequeued work never calls the provider.
+		applicationLocalizationContext(requestContext, token, pastDeadline,
+				resourceListCursor)
+				.ifPresent(context ->
+						features.put(McpLocalizationContext.class, context));
 		return McpInvocationFeatures.fromFeatures(features);
+	}
+
+	/**
+	 * Creates the request-scoped localization context for one handler-family
+	 * invocation, or empty when no localizer is configured.
+	 * <p>
+	 * A creation failure - including a canceled boundary - always fails the
+	 * invocation before interceptor or handler entry: Soklet cannot fabricate
+	 * the application's context subtype, so neither failure policy applies.
+	 *
+	 * @throws McpLocalizationContextUnavailableException on any creation failure;
+	 *         the provider throwable is discarded as untrusted localization data
+	 */
+	@NonNull
+	private Optional<@NonNull McpLocalizationContext>
+			applicationLocalizationContext(
+					@NonNull McpRequestContext requestContext,
+					@NonNull CancelationToken token,
+					@NonNull BooleanSupplier pastDeadline,
+					@NonNull Optional<@NonNull String> resourceListCursor) {
+		McpLocalizer configuredLocalizer = this.localizer;
+
+		if (configuredLocalizer == null)
+			return Optional.empty();
+
+		// The absolute deadline is read directly, so an expired request stops
+		// here rather than at the next asynchronous deadline sweep.
+		if (token.isCanceled() || pastDeadline.getAsBoolean())
+			throw new McpLocalizationContextUnavailableException();
+
+		McpLocalizationRequest localizationRequest =
+				new DefaultMcpLocalizationRequest(requestContext,
+						McpLocaleSupport.boundedLanguageRanges(requestContext
+								.getRequest().getHeaders().get("Accept-Language")),
+						null, resourceListCursor.orElse(null),
+						configuredLocalizer.getFallbackLocale());
+		McpLocalizationContext context;
+
+		try {
+			context = requireNonNull(configuredLocalizer.getContextProvider()
+					.createContext(localizationRequest),
+					"The MCP localization context provider returned null.");
+		} catch (Throwable exception) {
+			// The whole throwable - Errors and sneaky-thrown checked exceptions
+			// included - is untrusted localization data and is never forwarded to
+			// any framework-owned surface.
+			if (exception instanceof InterruptedException)
+				Thread.currentThread().interrupt();
+
+			throw new McpLocalizationContextUnavailableException();
+		}
+
+		if (token.isCanceled() || pastDeadline.getAsBoolean())
+			throw new McpLocalizationContextUnavailableException();
+
+		return Optional.of(context);
 	}
 
 	/**

@@ -44,6 +44,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
+import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 import static java.util.Objects.requireNonNull;
@@ -835,6 +836,8 @@ final class McpApplicationInvocation {
 	private final McpApplicationNotificationWriter notificationWriter;
 	@NonNull
 	private final McpApplicationHandlerEntryGuard handlerEntryGuard;
+	@NonNull
+	private final BooleanSupplier pastDeadline;
 
 	McpApplicationInvocation(@Nullable Request sokletRequest,
 			@Nullable McpRequestContext publicRequestContext,
@@ -845,7 +848,7 @@ final class McpApplicationInvocation {
 			@NonNull McpApplicationHandlerEntryGuard handlerEntryGuard) {
 		this(sokletRequest, publicRequestContext, request, admissionIdentity,
 				Optional.empty(), cancellation, notificationWriter,
-				handlerEntryGuard);
+				handlerEntryGuard, () -> false);
 	}
 
 	McpApplicationInvocation(@Nullable Request sokletRequest,
@@ -856,7 +859,8 @@ final class McpApplicationInvocation {
 					frameworkRequestStateContinuation,
 			@NonNull McpApplicationCancellation cancellation,
 			@NonNull McpApplicationNotificationWriter notificationWriter,
-			@NonNull McpApplicationHandlerEntryGuard handlerEntryGuard) {
+			@NonNull McpApplicationHandlerEntryGuard handlerEntryGuard,
+			@NonNull BooleanSupplier pastDeadline) {
 		this.sokletRequest = sokletRequest;
 		this.publicRequestContext = publicRequestContext;
 		this.request = requireNonNull(request);
@@ -866,6 +870,13 @@ final class McpApplicationInvocation {
 		this.cancellation = requireNonNull(cancellation);
 		this.notificationWriter = requireNonNull(notificationWriter);
 		this.handlerEntryGuard = requireNonNull(handlerEntryGuard);
+		this.pastDeadline = requireNonNull(pastDeadline);
+	}
+
+	/** @return whether the request's absolute deadline has already passed */
+	@NonNull
+	BooleanSupplier pastDeadline() {
+		return pastDeadline;
 	}
 
 	McpJsonRpcMessage.@NonNull Request request() {
@@ -1680,7 +1691,8 @@ final class McpApplicationExecution {
 						sokletRequest, publicRequestContext, request,
 						admissionIdentity, frameworkRequestStateContinuation,
 						cancellation,
-						this::writeNotification, this::requirePublicHandlerEntry);
+						this::writeNotification, this::requirePublicHandlerEntry,
+						() -> clock.nanoTime() - deadlineNanos >= 0);
 				AtomicBoolean handlerInvoked = new AtomicBoolean();
 				AtomicBoolean interceptorActive = new AtomicBoolean(true);
 				Thread interceptorThread = Thread.currentThread();
@@ -1723,6 +1735,13 @@ final class McpApplicationExecution {
 				if (!cancellation.isCancellationRequested())
 					respond(McpApplicationResponse.internalError(
 							request.id(), 503, "Service Unavailable"));
+			} catch (McpLocalizationContextUnavailableException exception) {
+				// Context-creation failure uses the fixed internal error with an
+				// EMPTY throwable list: the underlying provider throwable is
+				// untrusted localization data and was already discarded.
+				if (!cancellation.isCancellationRequested())
+					respond(McpApplicationResponse.internalError(
+							request.id(), 500, "Internal Server Error"));
 			} catch (InterruptedException exception) {
 				Thread.currentThread().interrupt();
 				if (!cancellation.isCancellationRequested())

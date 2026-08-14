@@ -29,9 +29,6 @@ import java.io.StringWriter;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -42,7 +39,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -56,6 +55,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class McpLocalizationCatalogExtractionTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
+	private static final String WIRE_PATH = "/localization/wire";
+	private static final String JSON_MEDIA_TYPE = "application/json";
+	private static final Duration SIMULATOR_WAIT = Duration.ofSeconds(5);
 
 	@Test
 	void extractsEveryProgrammaticSurfaceAndPreservesCanonicalObjects() {
@@ -305,8 +307,7 @@ class McpLocalizationCatalogExtractionTests {
 	}
 
 	@Test
-	void configuredLocalizerIsProviderInertAndWireIdenticalToGolden()
-			throws Exception {
+	void configuredLocalizerRendersDefaultTextWireIdenticalToGolden() {
 		AtomicInteger contextInvocations = new AtomicInteger();
 		AtomicInteger localizationInvocations = new AtomicInteger();
 		McpLocalizer localizer = McpLocalizer
@@ -321,23 +322,47 @@ class McpLocalizationCatalogExtractionTests {
 		McpServer baseline = wireServerBuilder(resolver).build();
 		McpServer localized = wireServerBuilder(resolver).localizer(localizer)
 				.build();
+		int discoverySlotCount = ((DefaultMcpServer) localized).localizationPlan()
+				.orElseThrow().endpoints().get(0)
+				.response(McpCanonicalLocalizationPlan.ResponseKind.DISCOVERY)
+				.orElseThrow().slots().size();
+		assertFalse(baseline.getLocalizationControl().isEnabled());
+		assertTrue(localized.getLocalizationControl().isEnabled());
 		assertEquals(0, contextInvocations.get());
 		assertEquals(0, localizationInvocations.get());
 
 		WireResponse baselineResponse = captureDiscovery(baseline);
 		WireResponse localizedResponse = captureDiscovery(localized);
 		assertEquals(baselineResponse.statusCode(), localizedResponse.statusCode());
-		assertEquals(baselineResponse.headers(), localizedResponse.headers());
 		assertArrayEquals(baselineResponse.body(), localizedResponse.body());
 		assertEquals(200, localizedResponse.statusCode());
-		assertEquals("application/json; charset=UTF-8",
-				localizedResponse.headers().get("content-type").get(0));
-		assertEquals("no-store",
-				localizedResponse.headers().get("cache-control").get(0));
+		// Without a localizer the headers are the historical exact set; with one,
+		// the representation varies by Accept-Language and an all-default render
+		// is still the selected locale's representation.
+		assertEquals(Map.of(
+				"Cache-Control", Set.of("no-store"),
+				"Content-Type", Set.of(JSON_MEDIA_TYPE)),
+				baselineResponse.headers());
+		assertEquals(Map.of(
+				"Cache-Control", Set.of("no-store"),
+				"Content-Type", Set.of(JSON_MEDIA_TYPE),
+				"Vary", Set.of("Accept-Language"),
+				"Content-Language", Set.of("en")),
+				localizedResponse.headers());
+		assertEquals(List.of("Cache-Control", "Content-Type", "Vary",
+				"Content-Language"),
+				List.copyOf(localizedResponse.headers().keySet()));
 		assertArrayEquals(discoveryGolden().getBytes(StandardCharsets.UTF_8),
 				localizedResponse.body());
-		assertEquals(0, contextInvocations.get());
-		assertEquals(0, localizationInvocations.get());
+		// L2 renders through the provider. Construction alone must still not call
+		// it, one context is created per localizable response, and every planned
+		// discovery slot is offered exactly once per response.
+		assertEquals(1, contextInvocations.get(),
+				"Exactly one context for the localized response, and none for the "
+						+ "unconfigured baseline.");
+		assertEquals(discoverySlotCount, localizationInvocations.get(),
+				"Every planned slot must be offered exactly once per response.");
+		assertTrue(localized.getLocalizationControl().isEnabled());
 	}
 
 	private static McpLocalizationContext localizationContext(
@@ -357,7 +382,7 @@ class McpLocalizationCatalogExtractionTests {
 	}
 
 	private static McpEndpoint wireEndpoint() {
-		return McpEndpoint.withPath("/localization/wire")
+		return McpEndpoint.withPath(WIRE_PATH)
 				.serverInformation(McpImplementation
 						.withNameAndVersion("localization-wire", "1.0")
 						.title("Canonical title")
@@ -378,45 +403,116 @@ class McpLocalizationCatalogExtractionTests {
 				.allowedHosts(Set.of(LOOPBACK));
 	}
 
-	private static WireResponse captureDiscovery(McpServer server)
-			throws Exception {
+	/**
+	 * Replays canonical discovery entirely off-network through
+	 * {@link Soklet#runSimulator}, so no listener socket is ever bound and the
+	 * server under test stays {@link McpServerStatus#STOPPED} throughout.
+	 */
+	private static WireResponse captureDiscovery(McpServer server) {
+		OffNetworkMetrics metrics = new OffNetworkMetrics();
+		SokletConfig config = SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.metricsCollector(metrics)
+				.build();
+		AtomicReference<WireResponse> captured = new AtomicReference<>();
+
+		assertServerNeverListened(server);
+		Soklet.runSimulator(config, simulator -> {
+			assertServerNeverListened(server);
+			McpSimulation simulation = simulator.startMcpRequest(discoveryRequest());
+			McpSimulationResponse response = awaitSimulatorResponse(simulation);
+			assertEquals(McpSimulationBodyMode.JSON, response.getBodyMode());
+			captured.set(new WireResponse(response.getStatusCode(),
+					response.getHeaders(), response.getBody().orElseThrow()));
+			assertEquals(McpStreamTerminationReason.COMPLETED,
+					awaitSimulatorCompletion(simulation).getReason());
+			assertServerNeverListened(server);
+		});
+		assertServerNeverListened(server);
+		metrics.assertNoListenerSocketActivity();
+		return captured.get();
+	}
+
+	private static Request discoveryRequest() {
+		String body = "{\"jsonrpc\":\"2.0\","
+				+ "\"id\":\"localization-inert\","
+				+ "\"method\":\"server/discover\",\"params\":{\"_meta\":{"
+				+ "\"io.modelcontextprotocol/protocolVersion\":\""
+				+ PROTOCOL_VERSION + "\","
+				+ "\"io.modelcontextprotocol/clientCapabilities\":{}}}}";
+		return Request.withPath(HttpMethod.POST, WIRE_PATH)
+				.headers(Map.of(
+						"Host", Set.of(LOOPBACK + ":0"),
+						"Content-Type", Set.of(JSON_MEDIA_TYPE + "; charset=UTF-8"),
+						"Accept", Set.of(JSON_MEDIA_TYPE + ", text/event-stream"),
+						"MCP-Protocol-Version", Set.of(PROTOCOL_VERSION),
+						"Mcp-Method", Set.of("server/discover")))
+				.body(body.getBytes(StandardCharsets.UTF_8))
+				.build();
+	}
+
+	private static void assertServerNeverListened(McpServer server) {
+		assertFalse(server.isStarted());
+		McpServerDiagnostics diagnostics = server.getDiagnostics();
+		assertEquals(McpServerStatus.STOPPED, diagnostics.getStatus());
+		assertTrue(diagnostics.getBoundAddress().isEmpty());
+		assertEquals(0, diagnostics.getActiveHandlerExecutions());
+		assertEquals(0, diagnostics.getQueuedRequests());
+		assertEquals(0, diagnostics.getActiveRequestStreams());
+		assertEquals(0, diagnostics.getActiveSubscriptions());
+	}
+
+	private static McpSimulationResponse awaitSimulatorResponse(
+			McpSimulation simulation) {
 		try {
-			server.start();
-			int port = server.getDiagnostics().getBoundAddress().orElseThrow()
-					.getPort();
-			String requestBody = "{\"jsonrpc\":\"2.0\","
-					+ "\"id\":\"localization-inert\","
-					+ "\"method\":\"server/discover\",\"params\":{\"_meta\":{"
-					+ "\"io.modelcontextprotocol/protocolVersion\":\""
-					+ PROTOCOL_VERSION + "\","
-					+ "\"io.modelcontextprotocol/clientCapabilities\":{}}}}";
-			HttpRequest request = HttpRequest.newBuilder()
-					.uri(URI.create("http://" + LOOPBACK + ":" + port
-							+ "/localization/wire"))
-					.timeout(Duration.ofSeconds(5))
-					.header("Content-Type", "application/json; charset=UTF-8")
-					.header("Accept", "application/json, text/event-stream")
-					.header("MCP-Protocol-Version", PROTOCOL_VERSION)
-					.header("Mcp-Method", "server/discover")
-					.POST(HttpRequest.BodyPublishers.ofString(requestBody,
-							StandardCharsets.UTF_8))
-					.build();
-			HttpResponse<byte[]> response = HttpClient.newBuilder()
-					.connectTimeout(Duration.ofSeconds(5))
-					.build().send(request,
-							HttpResponse.BodyHandlers.ofByteArray());
-			return new WireResponse(response.statusCode(),
-					response.headers().map(), response.body());
-		} finally {
-			server.stop();
+			return simulation.awaitResponse(SIMULATOR_WAIT).orElseThrow(() ->
+					new AssertionError("Timed out awaiting simulator response."));
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new AssertionError(e);
+		}
+	}
+
+	private static McpSimulationCompletion awaitSimulatorCompletion(
+			McpSimulation simulation) {
+		try {
+			return simulation.awaitCompletion(SIMULATOR_WAIT).orElseThrow(() ->
+					new AssertionError("Timed out awaiting simulator completion."));
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new AssertionError(e);
+		}
+	}
+
+	/** Fails if any listener-socket or transport activity is ever recorded. */
+	private static final class OffNetworkMetrics implements MetricsCollector {
+		private final List<McpMetricsEvent> events = new CopyOnWriteArrayList<>();
+
+		@Override
+		public void didRecordMcpMetricsEvent(McpMetricsEvent event) {
+			this.events.add(event);
+		}
+
+		private void assertNoListenerSocketActivity() {
+			assertTrue(this.events.stream().anyMatch(event ->
+					event instanceof McpMetricsEvent.RequestFinished),
+					"Collector observed no request activity: " + this.events);
+			assertTrue(this.events.stream().noneMatch(event ->
+					event instanceof McpMetricsEvent.ServerStarted
+							|| event instanceof McpMetricsEvent.ServerStopped
+							|| event instanceof McpMetricsEvent.ConnectionAccepted
+							|| event instanceof McpMetricsEvent.ConnectionRejected
+							|| event instanceof McpMetricsEvent.TransportFailure),
+					this.events.toString());
 		}
 	}
 
 	private static String discoveryGolden() {
 		return "{\"jsonrpc\":\"2.0\",\"id\":\"localization-inert\","
 				+ "\"result\":{\"supportedVersions\":[\"2026-07-28\"],"
-				+ "\"capabilities\":{},\"ttlMs\":0,\"cacheScope\":\"private\","
+				+ "\"capabilities\":{},"
 				+ "\"instructions\":\"Use canonical instructions.\","
+				+ "\"ttlMs\":0,\"cacheScope\":\"private\","
 				+ "\"resultType\":\"complete\",\"_meta\":{"
 				+ "\"io.modelcontextprotocol/serverInfo\":{"
 				+ "\"name\":\"localization-wire\",\"version\":\"1.0\","
@@ -562,7 +658,7 @@ class McpLocalizationCatalogExtractionTests {
 	}
 
 	private record WireResponse(int statusCode,
-			Map<String, List<String>> headers, byte[] body) {}
+			Map<String, Set<String>> headers, byte[] body) {}
 
 	private record ParityArguments(
 			@McpToolArgument(name = "query", title = "Search query",

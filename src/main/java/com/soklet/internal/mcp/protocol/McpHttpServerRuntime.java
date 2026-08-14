@@ -76,6 +76,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.FutureTask;
@@ -282,7 +283,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	@NonNull
 	private final McpJsonLimits jsonLimits;
 	@NonNull
+	private final McpJsonCodec jsonCodec;
+	@NonNull
 	private final McpJsonRpcEnvelopeCodec envelopeCodec;
+	@NonNull
+	private final ConcurrentHashMap<@NonNull String, @NonNull Long>
+			canonicalCatalogDocumentBytes = new ConcurrentHashMap<>();
 	@NonNull
 	private final McpRequestWireMapper requestWireMapper;
 	@NonNull
@@ -591,6 +597,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					+ "the strict JSON input limit.");
 
 		McpJsonCodec jsonCodec = new McpJsonCodec(jsonLimits);
+		this.jsonCodec = jsonCodec;
 		this.envelopeCodec = new McpJsonRpcEnvelopeCodec(jsonCodec);
 		this.requestWireMapper = new McpRequestWireMapper(jsonLimits);
 		this.mirroredHeaderCodec = new McpMirroredHeaderCodec(Math.min(
@@ -2168,9 +2175,16 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		if (corsAuthorization.rejection().isPresent())
 			return corsAuthorization.rejection().orElseThrow();
 
-		List<Header> corsHeaders = corsAuthorization.response()
+		List<Header> authorizedCorsHeaders = corsAuthorization.response()
 				.map(response -> corsHeaders(request, response))
 				.orElseGet(List::of);
+		// Provider selection policy is application-owned and opaque, so every
+		// non-preflight response from a localization-enabled endpoint varies by
+		// Accept-Language - success, sanitized error, rejection, deadline, and
+		// subscription stream-opening alike.
+		List<Header> corsHeaders = endpointPolicy.localizationEnabled()
+				? withAcceptLanguageVary(authorizedCorsHeaders)
+				: authorizedCorsHeaders;
 		if (!requestControl.updateDeadlineResponseHeaders(corsHeaders))
 			return null;
 		if (!requestControl.protocolProcessingAllowed())
@@ -2648,48 +2662,47 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			SubscriptionOpenResult openResult = requestControl.openSubscription(
 					endpointRuntime.path(), endpoint,
 					effectiveIdentity.authorizationPartition(), mappedRequest.id(),
-					acceptedSubscriptionFilter.orElseThrow(), corsHeaders);
+					acceptedSubscriptionFilter.orElseThrow(), corsHeaders,
+					endpointPolicy, sokletRequest);
 			if (openResult == SubscriptionOpenResult.CAPACITY_REJECTED)
 				return observedSubscriptionCapacityRejected(requestControl,
 						mappedRequest.id(), corsHeaders);
+			if (openResult == SubscriptionOpenResult.LOCALIZATION_FAILED)
+				return observedPolicyHookInternalError(requestControl,
+						mappedRequest.id(), corsHeaders, null);
 			if (openResult == SubscriptionOpenResult.SERVER_STOPPING)
 				requestControl.cancel(StreamTerminationReason.SERVER_STOPPING, null);
 			return null;
 		}
 
 		if (discoveryRequest) {
-			McpJsonRpcMessage.ResultResponse response = new McpJsonRpcMessage.ResultResponse(
-					mappedRequest.id(), capabilityRegistry.discoverResult().toWireResult(),
-					McpJsonObject.empty());
-			return jsonResponse(200, "OK", envelopeCodec.encode(response), corsHeaders);
+			return catalogResponse(capabilityRegistry.discoverResult().toWireResult(),
+					McpRuntimeCatalogLocalizer.ResponseKind.DISCOVERY, mappedRequest.id(),
+					endpointPolicy, requestControl, sokletRequest, corsHeaders);
 		}
 
 		if (toolsListRequest) {
-			McpJsonRpcMessage.ResultResponse response = new McpJsonRpcMessage.ResultResponse(
-					mappedRequest.id(), capabilityRegistry.toolsListResult(),
-					McpJsonObject.empty());
-			return jsonResponse(200, "OK", envelopeCodec.encode(response), corsHeaders);
+			return catalogResponse(capabilityRegistry.toolsListResult(),
+					McpRuntimeCatalogLocalizer.ResponseKind.TOOLS_LIST, mappedRequest.id(),
+					endpointPolicy, requestControl, sokletRequest, corsHeaders);
 		}
 
 		if (promptsListRequest) {
-			McpJsonRpcMessage.ResultResponse response = new McpJsonRpcMessage.ResultResponse(
-					mappedRequest.id(), capabilityRegistry.promptsListResult(),
-					McpJsonObject.empty());
-			return jsonResponse(200, "OK", envelopeCodec.encode(response), corsHeaders);
+			return catalogResponse(capabilityRegistry.promptsListResult(),
+					McpRuntimeCatalogLocalizer.ResponseKind.PROMPTS_LIST, mappedRequest.id(),
+					endpointPolicy, requestControl, sokletRequest, corsHeaders);
 		}
 
 		if (resourcesListRequest && !endpoint.customResourceListHandler()) {
-			McpJsonRpcMessage.ResultResponse response = new McpJsonRpcMessage.ResultResponse(
-					mappedRequest.id(), capabilityRegistry.resourcesListResult(),
-					McpJsonObject.empty());
-			return jsonResponse(200, "OK", envelopeCodec.encode(response), corsHeaders);
+			return catalogResponse(capabilityRegistry.resourcesListResult(),
+					McpRuntimeCatalogLocalizer.ResponseKind.RESOURCES_LIST, mappedRequest.id(),
+					endpointPolicy, requestControl, sokletRequest, corsHeaders);
 		}
 
 		if (resourceTemplatesListRequest) {
-			McpJsonRpcMessage.ResultResponse response = new McpJsonRpcMessage.ResultResponse(
-					mappedRequest.id(), capabilityRegistry.resourceTemplatesListResult(),
-					McpJsonObject.empty());
-			return jsonResponse(200, "OK", envelopeCodec.encode(response), corsHeaders);
+			return catalogResponse(capabilityRegistry.resourceTemplatesListResult(),
+					McpRuntimeCatalogLocalizer.ResponseKind.RESOURCE_TEMPLATES_LIST, mappedRequest.id(),
+					endpointPolicy, requestControl, sokletRequest, corsHeaders);
 		}
 
 		McpApplicationRequestHandler resolvedApplicationHandler =
@@ -3366,6 +3379,175 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		return new ApplicationResponseRendering(httpResponse, observationResult);
+	}
+
+	/**
+	 * Publishes one framework-owned catalog response, localizing it first when a
+	 * localizer is configured.
+	 * <p>
+	 * Without a localizer this is exactly the original canonical encode, so the
+	 * wire bytes and the work done to produce them are both unchanged.
+	 */
+	@NonNull
+	private MicrohttpResponse catalogResponse(@NonNull McpWireResult canonicalResult,
+			McpRuntimeCatalogLocalizer.@NonNull ResponseKind responseKind,
+			@NonNull McpJsonRpcId requestId,
+			@NonNull McpHttpEndpointPolicy endpointPolicy,
+			@NonNull RequestControl requestControl, @NonNull Request sokletRequest,
+			@NonNull List<@NonNull Header> corsHeaders) {
+		byte[] canonicalEncoded = envelopeCodec.encode(
+				new McpJsonRpcMessage.ResultResponse(requestId, canonicalResult,
+						McpJsonObject.empty()));
+		Optional<McpRuntimeCatalogLocalizer> catalogLocalizer =
+				endpointPolicy.catalogLocalizer();
+		McpRequestContext requestContext =
+				requestControl.publicRequestContext().orElse(null);
+
+		if (catalogLocalizer.isEmpty() || requestContext == null)
+			return jsonResponse(200, "OK", canonicalEncoded, corsHeaders);
+
+		McpJsonObject canonicalDocument = canonicalResult.toJsonObject();
+		// Canonical documents are stable per binding, so their encoded length is
+		// measured once per catalog rather than once per request.
+		long canonicalDocumentBytes = canonicalCatalogDocumentBytes.computeIfAbsent(
+				endpointPolicy.path() + '|' + responseKind,
+				key -> (long) jsonCodec.toUtf8Bytes(canonicalDocument).length);
+		McpRuntimeCatalogLocalizer.Outcome outcome;
+
+		try {
+			outcome = requireNonNull(catalogLocalizer.orElseThrow().localizeCatalog(
+					new McpRuntimeCatalogLocalizer.Input(endpointPolicy.path(),
+							responseKind, requestContext, canonicalDocument,
+							canonicalDocumentBytes,
+							canonicalEncoded.length - canonicalDocumentBytes,
+							jsonLimits.maximumOutputBytes(),
+							jsonLimits.maximumStringLengthInCharacters(),
+							document -> jsonCodec.toUtf8Bytes(document).length,
+							acceptLanguageValues(sokletRequest), List.of(),
+							requestControl::isTerminalCanceledOrPastDeadline)),
+					"The MCP catalog localizer returned null.");
+		} catch (RuntimeException exception) {
+			return observedPolicyHookInternalError(requestControl, requestId,
+					corsHeaders, exception);
+		}
+
+		List<Header> responseHeaders = withContentLanguage(corsHeaders,
+				outcome.contentLanguage());
+
+		return switch (outcome.disposition()) {
+			case CANONICAL -> jsonResponse(200, "OK", canonicalEncoded,
+					responseHeaders);
+			case LOCALIZED -> jsonResponse(200, "OK", envelopeCodec.encode(
+					new McpJsonRpcMessage.ResultResponse(requestId,
+							McpWireResult.withPrecomputedJsonObject(canonicalResult,
+									outcome.document()), McpJsonObject.empty())),
+					responseHeaders);
+			case FAIL_REQUEST -> observedPolicyHookInternalError(requestControl,
+					requestId, corsHeaders, null);
+		};
+	}
+
+	@NonNull
+	private static List<@NonNull Header> withContentLanguage(
+			@NonNull List<@NonNull Header> headers,
+			@NonNull Optional<@NonNull String> contentLanguage) {
+		if (contentLanguage.isEmpty())
+			return headers;
+
+		List<Header> merged = new ArrayList<>(headers.size() + 1);
+		merged.addAll(headers);
+		merged.add(new Header("Content-Language", contentLanguage.orElseThrow()));
+		return List.copyOf(merged);
+	}
+
+	/**
+	 * Localizes one subscription's terminal metadata before response commitment.
+	 * The subscription identifier is part of the document, so the canonical
+	 * length is measured per pre-render rather than cached per catalog.
+	 */
+	private McpRuntimeCatalogLocalizer.@NonNull Outcome localizeSubscriptionTerminal(
+			@NonNull McpHttpEndpointPolicy endpointPolicy,
+			@NonNull Request sokletRequest, @NonNull McpJsonRpcId subscriptionId,
+			@NonNull McpNormalizedEndpoint endpoint,
+			@NonNull RequestControl requestControl) {
+		McpJsonRpcMessage.ResultResponse canonicalResponse =
+				subscriptionTerminalResponse(subscriptionId, endpoint);
+		byte[] canonicalEncoded = envelopeCodec.encode(canonicalResponse);
+		McpJsonObject canonicalDocument = canonicalResponse.result().toJsonObject();
+		long canonicalDocumentBytes =
+				jsonCodec.toUtf8Bytes(canonicalDocument).length;
+		McpRequestContext requestContext =
+				requestControl.publicRequestContext().orElseThrow();
+
+		return requireNonNull(endpointPolicy.catalogLocalizer().orElseThrow()
+				.localizeCatalog(new McpRuntimeCatalogLocalizer.Input(
+						endpointPolicy.path(),
+						McpRuntimeCatalogLocalizer.ResponseKind.SUBSCRIPTION_TERMINAL,
+						requestContext, canonicalDocument, canonicalDocumentBytes,
+						canonicalEncoded.length - canonicalDocumentBytes,
+						jsonLimits.maximumOutputBytes(),
+						jsonLimits.maximumStringLengthInCharacters(),
+						document -> jsonCodec.toUtf8Bytes(document).length,
+						acceptLanguageValues(sokletRequest), List.of(),
+						requestControl::isTerminalCanceledOrPastDeadline)),
+				"The MCP catalog localizer returned null.");
+	}
+
+	/**
+	 * Merges {@code Accept-Language} into the response's {@code Vary} tokens
+	 * case-insensitively, preserving any existing CORS {@code Origin} value and
+	 * never duplicating a token.
+	 */
+	@NonNull
+	private static List<@NonNull Header> withAcceptLanguageVary(
+			@NonNull List<@NonNull Header> headers) {
+		List<Header> merged = new ArrayList<>(headers.size() + 1);
+		boolean varyHandled = false;
+
+		for (Header header : headers) {
+			if (!varyHandled && "Vary".equalsIgnoreCase(header.name())) {
+				varyHandled = true;
+				merged.add(containsHeaderToken(header.value(), "Accept-Language")
+						? header
+						: new Header(header.name(),
+								header.value() + ", Accept-Language"));
+			} else {
+				merged.add(header);
+			}
+		}
+
+		if (!varyHandled)
+			merged.add(new Header("Vary", "Accept-Language"));
+
+		return List.copyOf(merged);
+	}
+
+	private static boolean containsHeaderToken(@NonNull String value,
+			@NonNull String token) {
+		int start = 0;
+
+		while (start <= value.length()) {
+			int comma = value.indexOf(',', start);
+			int end = comma < 0 ? value.length() : comma;
+
+			if (value.substring(start, end).trim().equalsIgnoreCase(token))
+				return true;
+
+			if (comma < 0)
+				return false;
+
+			start = comma + 1;
+		}
+
+		return false;
+	}
+
+	@NonNull
+	private static List<@NonNull String> acceptLanguageValues(
+			@NonNull Request sokletRequest) {
+		// The stored set is insertion-ordered; List.copyOf preserves that order.
+		Set<String> values = sokletRequest.getHeaders().get("Accept-Language");
+		return values == null ? List.of() : List.copyOf(values);
 	}
 
 	@NonNull
@@ -4661,6 +4843,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private @Nullable SubscriptionStreamFailure pendingSubscriptionStreamFailure;
 		@NonNull
 		private Optional<@NonNull McpRequestContext> publicRequestContext;
+		private McpJsonRpcMessage.@Nullable ResultResponse preRenderedSubscriptionTerminal;
 		private @Nullable RequestObservationResult plannedRequestObservationResult;
 		private @Nullable RequestObservationTerminal requestObservationTerminal;
 		private long requestObservationStartedAtNanos;
@@ -4716,13 +4899,60 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				@NonNull McpEffectivePartition authorizationPartition,
 				@NonNull McpJsonRpcId subscriptionId,
 				@NonNull AcceptedSubscriptionFilter filter,
-				@NonNull List<@NonNull Header> additionalHeaders) {
+				@NonNull List<@NonNull Header> additionalHeaders,
+				@NonNull McpHttpEndpointPolicy endpointPolicy,
+				@NonNull Request sokletRequest) {
 			requireNonNull(additionalHeaders);
+			// Two-phase when a localizer is configured: reserve only the cap,
+			// release every lock, retain the original request deadline, create
+			// the context and pre-render the localized terminal metadata, and
+			// only then materialize and commit the stream. The rendered stream
+			// deadline extension therefore follows successful pre-render.
+			boolean localizeTerminal = endpointPolicy.catalogLocalizer().isPresent()
+					&& publicRequestContext().isPresent();
+			SubscriptionRegistration capReservation = null;
+			McpJsonRpcMessage.ResultResponse localizedTerminal = null;
+
+			if (localizeTerminal) {
+				SubscriptionCapReservation cap = reserveSubscriptionCap(
+						endpointPath, endpoint, authorizationPartition,
+						subscriptionId, filter);
+
+				if (cap.result() != SubscriptionOpenResult.OPENED)
+					return cap.result();
+
+				capReservation = requireNonNull(cap.registration());
+				McpRuntimeCatalogLocalizer.Outcome outcome;
+
+				try {
+					outcome = localizeSubscriptionTerminal(endpointPolicy,
+							sokletRequest, subscriptionId, endpoint, this);
+				} catch (RuntimeException exception) {
+					outcome = null;
+				}
+
+				if (outcome == null || outcome.disposition()
+						== McpRuntimeCatalogLocalizer.Disposition.FAIL_REQUEST) {
+					// This method still solely owns the unmaterialized cap, so
+					// the rollback happens exactly once.
+					removeSubscription(this, capReservation);
+					return SubscriptionOpenResult.LOCALIZATION_FAILED;
+				}
+
+				if (outcome.disposition()
+						== McpRuntimeCatalogLocalizer.Disposition.LOCALIZED)
+					localizedTerminal = new McpJsonRpcMessage.ResultResponse(
+							subscriptionId, McpWireResult.withPrecomputedJsonObject(
+									subscriptionTerminalResponse(subscriptionId,
+											endpoint).result(), outcome.document()),
+							McpJsonObject.empty());
+			}
 			SubscriptionOpenReservation reservation;
 			try {
 				synchronized (streamObservationTransitionLock) {
 					reservation = reserveSubscriptionOpen(endpointPath, endpoint,
-							authorizationPartition, subscriptionId, filter);
+							authorizationPartition, subscriptionId, filter,
+							capReservation);
 					if (reservation.result() != SubscriptionOpenResult.OPENED)
 						return reservation.result();
 					markStreamOpenedInOrder(true);
@@ -4747,10 +4977,45 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			synchronized (lock) {
 				if (!terminal && !canceled && !streamAbortOwned
 						&& responseStream == stream
-						&& subscriptionRegistration == registration)
+						&& subscriptionRegistration == registration) {
+					preRenderedSubscriptionTerminal = localizedTerminal;
 					activateSubscription(this, registration);
+				}
 			}
 			return SubscriptionOpenResult.OPENED;
+		}
+
+		/**
+		 * Reserves only the per-principal and server subscription capacity, so
+		 * localized terminal pre-render can run between cap reservation and
+		 * stream materialization without any framework lock held.
+		 */
+		@NonNull
+		private SubscriptionCapReservation reserveSubscriptionCap(
+				@NonNull String endpointPath,
+				@NonNull McpNormalizedEndpoint endpoint,
+				@NonNull McpEffectivePartition authorizationPartition,
+				@NonNull McpJsonRpcId subscriptionId,
+				@NonNull AcceptedSubscriptionFilter filter) {
+			synchronized (lock) {
+				if (canceled || terminal || applicationOwned || subscriptionOwned)
+					return new SubscriptionCapReservation(
+							SubscriptionOpenResult.TERMINATED, null);
+				SubscriptionRegistrationAttempt registrationAttempt = registerSubscription(
+						this, endpointPath, endpoint, authorizationPartition,
+						subscriptionId, filter);
+				if (registrationAttempt.result()
+						== SubscriptionRegistrationResult.NOT_ACCEPTING)
+					return new SubscriptionCapReservation(
+							SubscriptionOpenResult.SERVER_STOPPING, null);
+				if (registrationAttempt.result()
+						== SubscriptionRegistrationResult.CAPACITY_REJECTED)
+					return new SubscriptionCapReservation(
+							SubscriptionOpenResult.CAPACITY_REJECTED, null);
+				return new SubscriptionCapReservation(
+						SubscriptionOpenResult.OPENED,
+						requireNonNull(registrationAttempt.registration()));
+			}
 		}
 
 		@NonNull
@@ -4759,27 +5024,36 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				@NonNull McpNormalizedEndpoint endpoint,
 				@NonNull McpEffectivePartition authorizationPartition,
 				@NonNull McpJsonRpcId subscriptionId,
-				@NonNull AcceptedSubscriptionFilter filter) {
+				@NonNull AcceptedSubscriptionFilter filter,
+				@Nullable SubscriptionRegistration preReservedRegistration) {
 			SubscriptionRegistration registration;
 			synchronized (lock) {
-				if (canceled || terminal || applicationOwned || subscriptionOwned)
+				if (canceled || terminal || applicationOwned || subscriptionOwned) {
+					if (preReservedRegistration != null)
+						removeSubscription(this, preReservedRegistration);
+
 					return new SubscriptionOpenReservation(
 							SubscriptionOpenResult.TERMINATED,
 							null, null, null);
-				SubscriptionRegistrationAttempt registrationAttempt = registerSubscription(
-						this, endpointPath, endpoint, authorizationPartition,
-						subscriptionId, filter);
-				if (registrationAttempt.result()
-						== SubscriptionRegistrationResult.NOT_ACCEPTING)
-					return new SubscriptionOpenReservation(
-							SubscriptionOpenResult.SERVER_STOPPING,
-							null, null, null);
-				if (registrationAttempt.result()
-						== SubscriptionRegistrationResult.CAPACITY_REJECTED)
-					return new SubscriptionOpenReservation(
-							SubscriptionOpenResult.CAPACITY_REJECTED,
-							null, null, null);
-				registration = requireNonNull(registrationAttempt.registration());
+				}
+				if (preReservedRegistration != null) {
+					registration = preReservedRegistration;
+				} else {
+					SubscriptionRegistrationAttempt registrationAttempt = registerSubscription(
+							this, endpointPath, endpoint, authorizationPartition,
+							subscriptionId, filter);
+					if (registrationAttempt.result()
+							== SubscriptionRegistrationResult.NOT_ACCEPTING)
+						return new SubscriptionOpenReservation(
+								SubscriptionOpenResult.SERVER_STOPPING,
+								null, null, null);
+					if (registrationAttempt.result()
+							== SubscriptionRegistrationResult.CAPACITY_REJECTED)
+						return new SubscriptionOpenReservation(
+								SubscriptionOpenResult.CAPACITY_REJECTED,
+								null, null, null);
+					registration = requireNonNull(registrationAttempt.registration());
+				}
 				try {
 					McpRequestSseStream stream = newResponseStream();
 					McpOutboundChannel.OfferResult result = stream.offerMessage(
@@ -4880,6 +5154,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			requireNonNull(closeReason);
 			McpRequestSseStream stream;
 			SubscriptionRegistration registration = null;
+			McpJsonRpcMessage.ResultResponse preRendered = null;
 			SubscriptionStreamFailure pendingFailure;
 			synchronized (lock) {
 				pendingFailure = pendingSubscriptionStreamFailure;
@@ -4897,6 +5172,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					streamTerminalResponseOwned = true;
 					stream = responseStream;
 					registration = subscriptionRegistration;
+					preRendered = preRenderedSubscriptionTerminal;
+					preRenderedSubscriptionTerminal = null;
 				}
 			}
 			if (pendingFailure != null) {
@@ -4907,9 +5184,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					McpRequestOutcome.COMPLETE, null, List.of()));
 			SubscriptionRegistration resolvedRegistration = requireNonNull(registration);
 			try {
-				if (!stream.completeMessage(subscriptionTerminalResponse(
-						resolvedRegistration.subscriptionId(),
-						resolvedRegistration.endpoint())))
+				if (!stream.completeMessage(preRendered != null ? preRendered
+						: subscriptionTerminalResponse(
+								resolvedRegistration.subscriptionId(),
+								resolvedRegistration.endpoint())))
 					stream.fail(StreamTerminationReason.INTERNAL_ERROR, null);
 			} catch (Throwable throwable) {
 				stream.fail(StreamTerminationReason.INTERNAL_ERROR, throwable);
@@ -4978,6 +5256,18 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private Optional<@NonNull McpRequestContext> publicRequestContext() {
 			synchronized (lock) {
 				return publicRequestContext;
+			}
+		}
+
+		/**
+		 * Whether this request is terminal, canceled, or past its absolute
+		 * deadline. The deadline is read directly so provider callbacks stop at
+		 * actual expiry rather than at the next asynchronous deadline sweep.
+		 */
+		private boolean isTerminalCanceledOrPastDeadline() {
+			synchronized (lock) {
+				return terminal || canceled
+						|| applicationClock.nanoTime() - deadlineNanos >= 0;
 			}
 		}
 
@@ -5695,6 +5985,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				subscriptionRegistration = null;
 				pendingSubscriptionStreamFailure = null;
 				subscriptionOwned = false;
+				preRenderedSubscriptionTerminal = null;
 				completedStream = stream != null && stream.isTerminalWritten();
 				remove = !applicationOwned;
 				if (applicationOwned) {
@@ -5884,6 +6175,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				subscription = subscriptionRegistration;
 				subscriptionRegistration = null;
 				pendingSubscriptionStreamFailure = null;
+				preRenderedSubscriptionTerminal = null;
 				observedStreamReason = reason == StreamTerminationReason.COMPLETED
 						&& plannedSubscriptionCloseReason != null
 						? plannedSubscriptionCloseReason : reason;
@@ -6186,7 +6478,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		OPENED,
 		CAPACITY_REJECTED,
 		SERVER_STOPPING,
-		TERMINATED
+		TERMINATED,
+		LOCALIZATION_FAILED
 	}
 
 	private enum SubscriptionRegistrationResult {
@@ -6204,6 +6497,17 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					!= (registration != null))
 				throw new IllegalArgumentException(
 						"Only a registered MCP subscription may retain registration state.");
+		}
+	}
+
+	private record SubscriptionCapReservation(
+			@NonNull SubscriptionOpenResult result,
+			@Nullable SubscriptionRegistration registration) {
+		private SubscriptionCapReservation {
+			requireNonNull(result);
+			if ((result == SubscriptionOpenResult.OPENED) == (registration == null))
+				throw new IllegalArgumentException(
+						"Exactly an opened MCP subscription cap retains its registration.");
 		}
 	}
 

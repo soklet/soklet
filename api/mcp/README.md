@@ -1134,13 +1134,21 @@ provisional inventory remains at 32. The amended Phase 4 snapshot has SHA-256
 its exact nullability digest is
 `627be93f6c759e194645c022ab854c2fde73d916b4c787f05e7c18b49cbfb197`.
 
-For the exact 2026-08-12 L1 localization tree, a clean Corretto 26 verify
-passes 1,554/0/0/4 after compiling 456 main and 179 test sources. The JDK 21
+The L1-exit checkpoint tree passed a clean Corretto 26 verify at 1,557/0/0/4
+over 456 main and 179 test sources. The exact 2026-08-13 L2 framework-catalog
+completed-L2 localization tree (request-scoped context creation for framework
+catalogs, all four handler families, and subscription terminal pre-render;
+fail-atomic rendering for all five framework catalogs; no new public
+`com.soklet` types; freeze gate unchanged) passed 1,620/0/0/4 over 462 main
+and 186 test sources, and the L3 HTTP/cache-boundary tree (private/zero
+clamping, `Content-Language`, the non-preflight `Vary` merge, and
+application-boundary proofs) passes 1,624/0/0/4 after compiling 462 main and
+187 test sources. The JDK 21
 Error Prone/NullAway profile passes with the existing advisory-warning
 inventory, and SpotBugs reports zero bugs and zero errors. The 181-source
 Java-17 API sketch and Javadoc/doclint smoke pass, as does the adapter proof
 against 60 real Lokalized sources plus three adapter sources. Exact-tree JDK
-17/25 CI, request-time localization, and candidate-artifact Lokalized
+17/25 CI, L4-L8 localization work, and candidate-artifact Lokalized
 validation remain open.
 
 At the V21 boundary, the focused simulator/API gate passed 46/0/0/0 and the

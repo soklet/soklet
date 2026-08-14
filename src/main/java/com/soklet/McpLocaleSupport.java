@@ -17,9 +17,12 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.Collection;
 import java.util.IllformedLocaleException;
+import java.util.List;
 import java.util.Locale;
 
 import static java.util.Objects.requireNonNull;
@@ -32,8 +35,67 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 final class McpLocaleSupport {
 	private static final int MAXIMUM_LANGUAGE_TAG_BYTES = 255;
+	private static final int MAXIMUM_ACCEPT_LANGUAGE_CODE_UNITS = 4_096;
+	private static final int MAXIMUM_LANGUAGE_RANGES = 32;
 
 	private McpLocaleSupport() {
+	}
+
+	/**
+	 * Derives the bounded effective client language preference view from raw
+	 * {@code Accept-Language} header values.
+	 * <p>
+	 * The combined input is bounded to 4,096 UTF-16 code units before parsing and
+	 * the parsed result is bounded to 32 ranges after JDK alias expansion. Neither
+	 * bound truncates: missing, blank, malformed, or over-limit input becomes an
+	 * empty list, which reaches the provider's own fallback behavior. Zero-weight
+	 * exclusions are preserved exactly as parsed.
+	 * <p>
+	 * This deliberately does not delegate to the general-purpose
+	 * {@code Request.getLanguageRanges()} accessor, which parses before applying
+	 * any count bound and would defeat this request-path containment rule.
+	 *
+	 * @param rawAcceptLanguageValues raw header values, or {@code null}
+	 * @return immutable bounded language ranges, possibly empty
+	 */
+	@NonNull
+	static List<Locale.@NonNull LanguageRange> boundedLanguageRanges(
+			@Nullable Collection<@NonNull String> rawAcceptLanguageValues) {
+		if (rawAcceptLanguageValues == null || rawAcceptLanguageValues.isEmpty())
+			return List.of();
+
+		StringBuilder combined = new StringBuilder();
+
+		for (String rawAcceptLanguageValue : rawAcceptLanguageValues) {
+			if (rawAcceptLanguageValue == null)
+				continue;
+
+			if (combined.length() > 0)
+				combined.append(',');
+
+			combined.append(rawAcceptLanguageValue);
+
+			// Bail before materializing more than the bound permits.
+			if (combined.length() > MAXIMUM_ACCEPT_LANGUAGE_CODE_UNITS)
+				return List.of();
+		}
+
+		if (combined.isEmpty() || combined.toString().isBlank())
+			return List.of();
+
+		List<Locale.LanguageRange> languageRanges;
+
+		try {
+			languageRanges = Locale.LanguageRange.parse(combined.toString());
+		} catch (RuntimeException ignored) {
+			// Malformed input is indistinguishable from absent input by contract.
+			return List.of();
+		}
+
+		if (languageRanges.size() > MAXIMUM_LANGUAGE_RANGES)
+			return List.of();
+
+		return List.copyOf(languageRanges);
 	}
 
 	@NonNull
