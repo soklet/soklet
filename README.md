@@ -691,6 +691,12 @@ fallback tool limiter. The listener binds to `127.0.0.1` by default; configure
 `host(...)`, `allowedHosts(...)`, authentication/admission, and TLS termination
 deliberately before exposing it remotely.
 
+Framework-owned catalog text - server, tool, prompt, resource, and schema
+titles and descriptions - can be localized per request through a
+library-neutral seam that keeps Soklet free of any translation dependency.
+Omitting a localizer leaves wire output byte-identical. See
+[MCP localization](https://www.soklet.com/docs/mcp-localization).
+
 See the [complete MCP guide](https://www.soklet.com/docs/mcp) for endpoint
 authoring, configuration, protocol behavior, security, observability, testing,
 and a map of the public API.

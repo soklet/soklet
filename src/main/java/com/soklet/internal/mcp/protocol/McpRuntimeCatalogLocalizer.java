@@ -22,6 +22,7 @@ import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.BooleanSupplier;
 import java.util.function.ToLongFunction;
 
@@ -42,7 +43,6 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-@FunctionalInterface
 public interface McpRuntimeCatalogLocalizer {
 	/** Which framework-owned catalog response is being rendered. */
 	enum ResponseKind {
@@ -150,4 +150,14 @@ public interface McpRuntimeCatalogLocalizer {
 	 */
 	@NonNull
 	Outcome localizeCatalog(@NonNull Input input);
+
+	/**
+	 * Names the framework catalog response kinds this endpoint actually
+	 * localizes, so list-change advertisement, subscription filters, and
+	 * invalidation delivery stay truthful per surface.
+	 *
+	 * @return immutable localized response kinds; never {@code null}
+	 */
+	@NonNull
+	Set<@NonNull ResponseKind> localizedResponseKinds();
 }

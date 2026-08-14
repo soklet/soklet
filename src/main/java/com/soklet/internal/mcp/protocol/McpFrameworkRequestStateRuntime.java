@@ -127,7 +127,8 @@ final class McpFrameworkRequestStateRuntime {
 			@NonNull McpJsonRpcId currentRequestId,
 			@NonNull McpJsonValue state,
 			@NonNull Optional<@NonNull McpFrameworkRequestStateContinuation>
-					priorContinuation)
+					priorContinuation,
+			@NonNull Optional<@NonNull String> selectedLocale)
 			throws McpRequestStateUnavailableException {
 		RequestStateProtectionPlan plan = requirePlan();
 		McpRequestStateBinding binding = McpRequestStateBinding.create(
@@ -142,12 +143,16 @@ final class McpFrameworkRequestStateRuntime {
 					.compareTo(prior.expiresAt()) >= 0)
 				throw new IllegalArgumentException(
 						"Expired framework request state cannot be re-emitted.");
+			// Carry-forward keeps the original continuation's language exactly;
+			// the current selection was already enforced equal on open.
 			continuation = prior.next(state, currentRequestId,
 					plan.maximumRequestStateRounds());
 		} else {
+			// A localized flow mints version 2 from its first input_required
+			// round; without localization the exact version-1 bytes persist.
 			continuation = McpFrameworkRequestStateContinuation.initial(
 					state, now, plan.maximumRequestStateLifetime(),
-					currentRequestId);
+					currentRequestId, selectedLocale.orElse(null));
 		}
 
 		byte[] plaintext = McpRequestStatePlaintextCodec.encode(

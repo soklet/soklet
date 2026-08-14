@@ -38,13 +38,23 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class McpRequestStatePlaintextCodec {
-	private static final int VERSION = 1;
+	private static final int VERSION_1 = 1;
+	private static final int VERSION_2 = 2;
 	private static final int SHA_256_BYTES = 32;
 	private static final int SHA_256_BASE64URL_CHARACTERS = 43;
-	private static final Set<@NonNull String> FIELDS = Set.of(
+	private static final int MAXIMUM_SELECTED_LOCALE_BYTES = 255;
+	private static final Set<@NonNull String> VERSION_1_FIELDS = Set.of(
 			"version", "bindingDigest", "issuedAtEpochSecond",
 			"issuedAtNanoAdjustment", "expiresAtEpochSecond",
 			"expiresAtNanoAdjustment", "round", "originatingRequestId", "state");
+	@NonNull
+	private static final Set<@NonNull String> VERSION_2_FIELDS;
+
+	static {
+		Set<String> version2Fields = new java.util.HashSet<>(VERSION_1_FIELDS);
+		version2Fields.add("selectedLocale");
+		VERSION_2_FIELDS = Set.copyOf(version2Fields);
+	}
 
 	private McpRequestStatePlaintextCodec() {
 	}
@@ -60,8 +70,16 @@ final class McpRequestStatePlaintextCodec {
 		validateConfiguration(maximumDecodedBytes, maximumLifetime, maximumRounds);
 		validateContinuation(continuation, maximumLifetime, maximumRounds);
 
+		String selectedLocale = continuation.selectedLocale();
+
+		if (selectedLocale != null)
+			requireCanonicalSelectedLocale(selectedLocale);
+
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
-		fields.put("version", new McpJsonNumber(VERSION));
+		// A continuation without a selected locale emits the exact version-1
+		// bytes, so localization-disabled emission never changes goldens.
+		fields.put("version", new McpJsonNumber(
+				selectedLocale == null ? VERSION_1 : VERSION_2));
 		fields.put("bindingDigest", new McpJsonString(
 				encodeDigest(binding.digest())));
 		fields.put("issuedAtEpochSecond", new McpJsonNumber(
@@ -76,6 +94,10 @@ final class McpRequestStatePlaintextCodec {
 		fields.put("originatingRequestId",
 				continuation.originatingRequestId().toJsonValue());
 		fields.put("state", continuation.state());
+
+		if (selectedLocale != null)
+			fields.put("selectedLocale", new McpJsonString(selectedLocale));
+
 		return McpRequestStateCanonicalJson.canonicalize(
 				new McpJsonObject(fields), maximumDecodedBytes);
 	}
@@ -115,12 +137,25 @@ final class McpRequestStatePlaintextCodec {
 				plaintext, maximumDecodedBytes);
 		if (!(parsed instanceof McpJsonObject object))
 			throw invalidPlaintext();
-		if (!object.members().keySet().equals(FIELDS))
+		boolean version2 = object.members().keySet().equals(VERSION_2_FIELDS);
+		if (!version2 && !object.members().keySet().equals(VERSION_1_FIELDS))
 			throw invalidPlaintext();
 
 		Map<String, McpJsonValue> fields = object.members();
-		if (requireInt(fields, "version") != VERSION)
+		// The version discriminator and the field set must agree exactly: a
+		// version-1 object smuggling selectedLocale, or a version-2 object
+		// missing it, is tampering rather than a format variant.
+		if (requireInt(fields, "version") != (version2 ? VERSION_2 : VERSION_1))
 			throw invalidPlaintext();
+		String selectedLocale = null;
+		if (version2) {
+			selectedLocale = requireString(fields, "selectedLocale");
+			try {
+				requireCanonicalSelectedLocale(selectedLocale);
+			} catch (RuntimeException exception) {
+				throw invalidPlaintext();
+			}
+		}
 		byte[] encodedBindingDigest = decodeDigest(
 				requireString(fields, "bindingDigest"));
 		if (!MessageDigest.isEqual(encodedBindingDigest, binding.digest()))
@@ -137,13 +172,49 @@ final class McpRequestStatePlaintextCodec {
 				requireField(fields, "originatingRequestId"));
 		McpFrameworkRequestStateContinuation continuation =
 				new McpFrameworkRequestStateContinuation(issuedAt, expiresAt,
-						round, originatingRequestId, requireField(fields, "state"));
+						round, originatingRequestId, requireField(fields, "state"),
+						selectedLocale);
 		validateContinuation(continuation, maximumLifetime, maximumRounds);
 		if (McpRequestStateTimestamp.fromInstant(now).compareTo(expiresAt) >= 0)
 			throw invalidPlaintext();
 		if (originatingRequestId.equals(currentRequestId))
 			throw invalidPlaintext();
 		return continuation;
+	}
+
+	/**
+	 * Requires a canonical non-root ASCII BCP 47 tag of at most 255 bytes,
+	 * mirroring the public localization locale rules exactly.
+	 */
+	private static void requireCanonicalSelectedLocale(@NonNull String tag) {
+		requireNonNull(tag);
+
+		if (tag.isEmpty() || tag.length() > MAXIMUM_SELECTED_LOCALE_BYTES)
+			throw new IllegalArgumentException(
+					"Request-state selected locale must be 1-255 bytes.");
+
+		for (int index = 0; index < tag.length(); ++index)
+			if (tag.charAt(index) > 0x7F)
+				throw new IllegalArgumentException(
+						"Request-state selected locale must be ASCII.");
+
+		if (tag.equalsIgnoreCase("und")
+				|| tag.regionMatches(true, 0, "und-", 0, 4))
+			throw new IllegalArgumentException(
+					"Request-state selected locale must not be root.");
+
+		java.util.Locale locale = java.util.Locale.forLanguageTag(tag);
+
+		if (!tag.equals(locale.toLanguageTag()))
+			throw new IllegalArgumentException(
+					"Request-state selected locale must be canonical.");
+
+		try {
+			new java.util.Locale.Builder().setLocale(locale).build();
+		} catch (java.util.IllformedLocaleException exception) {
+			throw new IllegalArgumentException(
+					"Request-state selected locale must be well-formed.");
+		}
 	}
 
 	private static void validateConfiguration(int maximumDecodedBytes,

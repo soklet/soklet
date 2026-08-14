@@ -602,7 +602,8 @@ public class McpMultiRoundTripTerminationRaceTests {
 			String originatingId) throws McpRequestStateUnavailableException {
 		return stateRuntime.seal(PATH, PROTOCOL_VERSION, METHOD, Optional.empty(),
 				operationParams(false), stringId(originatingId),
-				new McpJsonString("shared-authenticated-state"), Optional.empty());
+				new McpJsonString("shared-authenticated-state"), Optional.empty(),
+				Optional.empty());
 	}
 
 	private static McpWireResult sealInputRequired(
@@ -615,7 +616,8 @@ public class McpMultiRoundTripTerminationRaceTests {
 				invocation.admissionIdentity().authorizationPartition()
 						.applicationKey(),
 				request.params().toJsonObject(), request.id(), state,
-				invocation.frameworkRequestStateContinuation());
+				invocation.frameworkRequestStateContinuation(),
+				Optional.ofNullable(invocation.selectedLocale().get()));
 		return McpWireResult.inputRequired(METHOD, Optional.empty(),
 				Optional.of(protectedState), Optional.empty(), McpJsonObject.empty());
 	}

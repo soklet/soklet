@@ -643,7 +643,11 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			McpHttpEndpointPolicy endpointPolicy = binding.endpointPolicy();
 			validateConfiguredAllowedHosts(endpointPolicy);
 			EndpointRuntime endpointRuntime = new EndpointRuntime(binding,
-					McpServerCapabilityRegistry.fromEndpoint(binding.endpoint()));
+					McpServerCapabilityRegistry.fromEndpoint(binding.endpoint(),
+							endpointPolicy.catalogLocalizer()
+									.map(McpRuntimeCatalogLocalizer
+											::localizedResponseKinds)
+									.orElseGet(Set::of)));
 			if (endpointsByPath.putIfAbsent(endpointRuntime.path(), endpointRuntime)
 					!= null)
 				throw new IllegalArgumentException("Duplicate MCP HTTP endpoint path '"
@@ -2345,7 +2349,11 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			try {
 				acceptedSubscriptionFilter = Optional.of(
 						parseAcceptedSubscriptionFilter(mappedRequest,
-								endpoint.subscriptions().orElseThrow()));
+								endpoint.subscriptions().orElseThrow(),
+								endpointPolicy.catalogLocalizer()
+										.map(McpRuntimeCatalogLocalizer
+												::localizedResponseKinds)
+										.orElseGet(Set::of)));
 			} catch (IllegalArgumentException exception) {
 				return invalidParams(mappedRequest, corsHeaders);
 			}
@@ -2754,7 +2762,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	@NonNull
 	private AcceptedSubscriptionFilter parseAcceptedSubscriptionFilter(
 			McpJsonRpcMessage.@NonNull Request request,
-			@NonNull McpNormalizedSubscriptionConfiguration configuration) {
+			@NonNull McpNormalizedSubscriptionConfiguration configuration,
+			@NonNull Set<McpRuntimeCatalogLocalizer.@NonNull ResponseKind>
+					localizedResponseKinds) {
 		Map<String, McpJsonValue> requestFields =
 				requireNonNull(request).params().fields().members();
 		McpJsonValue notificationsValue = requestFields.get("notifications");
@@ -2763,10 +2773,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					"Subscription notifications must be an object.");
 
 		Map<String, McpJsonValue> fields = notifications.members();
-		// Tool and prompt filters are recognized and type-checked even though
-		// Soklet's immutable catalogs never advertise or acknowledge them.
-		optionalSubscriptionBoolean(fields, "toolsListChanged");
-		optionalSubscriptionBoolean(fields, "promptsListChanged");
+		// Canonical registrations are immutable, but localized presentation is
+		// not: tool and prompt list-change filters are accepted exactly when the
+		// corresponding localized catalog exists.
+		boolean toolsListChangedRequested = optionalSubscriptionBoolean(
+				fields, "toolsListChanged");
+		boolean promptsListChangedRequested = optionalSubscriptionBoolean(
+				fields, "promptsListChanged");
 		boolean resourcesListChangedRequested = optionalSubscriptionBoolean(
 				fields, "resourcesListChanged");
 		boolean resourceSubscriptionsRequested =
@@ -2793,12 +2806,27 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		Set<McpResourceNotificationType> supported =
 				requireNonNull(configuration).notificationTypes();
+		boolean acceptToolsListChanged = toolsListChangedRequested
+				&& localizedResponseKinds.contains(
+						McpRuntimeCatalogLocalizer.ResponseKind.TOOLS_LIST);
+		boolean acceptPromptsListChanged = promptsListChangedRequested
+				&& localizedResponseKinds.contains(
+						McpRuntimeCatalogLocalizer.ResponseKind.PROMPTS_LIST);
+		// The application publisher and the framework localization source
+		// compose: either one truthfully supports the resources family.
 		boolean acceptResourcesListChanged = resourcesListChangedRequested
-				&& supported.contains(
-						McpResourceNotificationType.RESOURCES_LIST_CHANGED);
+				&& (supported.contains(
+						McpResourceNotificationType.RESOURCES_LIST_CHANGED)
+						|| localizedResponseKinds.contains(
+								McpRuntimeCatalogLocalizer.ResponseKind
+										.RESOURCES_LIST)
+						|| localizedResponseKinds.contains(
+								McpRuntimeCatalogLocalizer.ResponseKind
+										.RESOURCE_TEMPLATES_LIST));
 		boolean acceptResourceSubscriptions = resourceSubscriptionsRequested
 				&& supported.contains(McpResourceNotificationType.RESOURCE_UPDATED);
-		return new AcceptedSubscriptionFilter(acceptResourcesListChanged,
+		return new AcceptedSubscriptionFilter(acceptToolsListChanged,
+				acceptPromptsListChanged, acceptResourcesListChanged,
 				acceptResourceSubscriptions,
 				acceptResourceSubscriptions ? requestedResources : List.of());
 	}
@@ -2819,6 +2847,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			@NonNull McpJsonRpcId subscriptionId,
 			@NonNull AcceptedSubscriptionFilter filter) {
 		Map<String, McpJsonValue> accepted = new LinkedHashMap<>();
+		if (filter.toolsListChanged())
+			accepted.put("toolsListChanged", McpJsonBoolean.TRUE);
+		if (filter.promptsListChanged())
+			accepted.put("promptsListChanged", McpJsonBoolean.TRUE);
 		if (filter.resourcesListChanged())
 			accepted.put("resourcesListChanged", McpJsonBoolean.TRUE);
 		if (filter.resourceSubscriptionsIncluded()) {
@@ -2832,6 +2864,14 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		params.put("notifications", new McpJsonObject(accepted));
 		return new McpJsonRpcMessage.Notification(
 				"notifications/subscriptions/acknowledged",
+				Optional.of(new McpJsonObject(params)), McpJsonObject.empty());
+	}
+
+	private McpJsonRpcMessage.@NonNull Notification listChangedNotification(
+			@NonNull McpJsonRpcId subscriptionId, @NonNull String method) {
+		Map<String, McpJsonValue> params = new LinkedHashMap<>();
+		params.put("_meta", subscriptionMetadata(subscriptionId));
+		return new McpJsonRpcMessage.Notification(method,
 				Optional.of(new McpJsonObject(params)), McpJsonObject.empty());
 	}
 
@@ -5085,7 +5125,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			requireNonNull(event);
 			McpRequestSseStream stream;
 			SubscriptionRegistration registration;
-			Object coalescingKey;
+			List<Object> coalescingKeys = new ArrayList<>(3);
 			synchronized (lock) {
 				if (!subscriptionOwned || canceled || terminal
 						|| streamAbortOwned || streamTerminalResponseOwned
@@ -5096,35 +5136,73 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				if (event instanceof McpSubscriptionEventSource.Event.ResourcesListChanged) {
 					if (!registration.filter().resourcesListChanged())
 						return;
-					coalescingKey = SubscriptionEventKey.RESOURCES_LIST_CHANGED;
+					coalescingKeys.add(SubscriptionEventKey.RESOURCES_LIST_CHANGED);
 				} else if (event instanceof McpSubscriptionEventSource.Event.ResourceUpdated updated) {
 					if (!registration.filter().contains(updated.resourceUri()))
 						return;
-					coalescingKey = new SubscriptionEventKey(updated.resourceUri());
+					coalescingKeys.add(new SubscriptionEventKey(updated.resourceUri()));
+				} else if (event instanceof McpSubscriptionEventSource.Event
+						.LocalizationCatalogsChanged invalidation) {
+					// The invalidation always releases derived localized render
+					// state, so a long stream never retains an obsolete
+					// translation graph even when its filters accept nothing.
+					preRenderedSubscriptionTerminal = null;
+					if (invalidation.tools()
+							&& registration.filter().toolsListChanged())
+						coalescingKeys.add(SubscriptionEventKey.TOOLS_LIST_CHANGED);
+					if (invalidation.prompts()
+							&& registration.filter().promptsListChanged())
+						coalescingKeys.add(
+								SubscriptionEventKey.PROMPTS_LIST_CHANGED);
+					if (invalidation.resources()
+							&& registration.filter().resourcesListChanged())
+						coalescingKeys.add(
+								SubscriptionEventKey.RESOURCES_LIST_CHANGED);
+					if (coalescingKeys.isEmpty())
+						return;
 				} else {
 					return;
 				}
 				stream = responseStream;
 			}
 
-			McpOutboundChannel.OfferResult result;
-			try {
-				result = stream.offerCoalescingMessage(
-						subscriptionNotification(registration.subscriptionId(), event),
-						coalescingKey);
-			} catch (IllegalArgumentException exception) {
-				scheduleSubscriptionStreamFailure(stream,
-						StreamTerminationReason.BACKPRESSURE, exception);
-				return;
-			} catch (Throwable throwable) {
-				scheduleSubscriptionStreamFailure(stream,
-						StreamTerminationReason.INTERNAL_ERROR, throwable);
-				return;
-			}
-			if (result == McpOutboundChannel.OfferResult.FULL
-					|| result == McpOutboundChannel.OfferResult.TOO_LARGE) {
-				scheduleSubscriptionStreamFailure(stream,
-						StreamTerminationReason.BACKPRESSURE, null);
+			for (Object coalescingKey : coalescingKeys) {
+				McpJsonRpcMessage.Notification notification;
+				if (coalescingKey == SubscriptionEventKey.TOOLS_LIST_CHANGED)
+					notification = listChangedNotification(
+							registration.subscriptionId(),
+							"notifications/tools/list_changed");
+				else if (coalescingKey == SubscriptionEventKey.PROMPTS_LIST_CHANGED)
+					notification = listChangedNotification(
+							registration.subscriptionId(),
+							"notifications/prompts/list_changed");
+				else if (coalescingKey == SubscriptionEventKey.RESOURCES_LIST_CHANGED)
+					notification = listChangedNotification(
+							registration.subscriptionId(),
+							"notifications/resources/list_changed");
+				else
+					notification = subscriptionNotification(
+							registration.subscriptionId(), event);
+
+				McpOutboundChannel.OfferResult result;
+				try {
+					result = stream.offerCoalescingMessage(notification,
+							coalescingKey);
+				} catch (IllegalArgumentException exception) {
+					scheduleSubscriptionStreamFailure(stream,
+							StreamTerminationReason.BACKPRESSURE, exception);
+					return;
+				} catch (Throwable throwable) {
+					scheduleSubscriptionStreamFailure(stream,
+							StreamTerminationReason.INTERNAL_ERROR, throwable);
+					return;
+				}
+				if (result == McpOutboundChannel.OfferResult.FULL
+						|| result == McpOutboundChannel.OfferResult.TOO_LARGE) {
+					scheduleSubscriptionStreamFailure(stream,
+							StreamTerminationReason.BACKPRESSURE, null);
+					return;
+				}
 			}
 		}
 
@@ -6546,7 +6624,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 	}
 
-	private record AcceptedSubscriptionFilter(boolean resourcesListChanged,
+	private record AcceptedSubscriptionFilter(boolean toolsListChanged,
+			boolean promptsListChanged, boolean resourcesListChanged,
 			boolean resourceSubscriptionsIncluded,
 			@NonNull List<@NonNull SubscriptionResource> resourceSubscriptions) {
 		private AcceptedSubscriptionFilter {
@@ -6582,6 +6661,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private record SubscriptionEventKey(@NonNull URI resourceUri) {
 		@NonNull
 		private static final Object RESOURCES_LIST_CHANGED = new Object();
+		@NonNull
+		private static final Object TOOLS_LIST_CHANGED = new Object();
+		@NonNull
+		private static final Object PROMPTS_LIST_CHANGED = new Object();
 
 		private SubscriptionEventKey {
 			requireNonNull(resourceUri);

@@ -81,10 +81,26 @@ final class McpServerCapabilityRegistry {
 	@NonNull
 	static McpServerCapabilityRegistry fromEndpoint(
 			@NonNull McpNormalizedEndpoint endpoint) {
-		return new McpServerCapabilityRegistry(endpoint);
+		return new McpServerCapabilityRegistry(endpoint, Set.of());
 	}
 
-	private McpServerCapabilityRegistry(@NonNull McpNormalizedEndpoint endpoint) {
+	/**
+	 * Builds the registry with truthful localized list-change advertisement:
+	 * only families whose localized catalog exists - and only when the endpoint
+	 * supports {@code subscriptions/listen} at all - gain the flag.
+	 */
+	@NonNull
+	static McpServerCapabilityRegistry fromEndpoint(
+			@NonNull McpNormalizedEndpoint endpoint,
+			@NonNull Set<McpRuntimeCatalogLocalizer.@NonNull ResponseKind>
+					localizedResponseKinds) {
+		return new McpServerCapabilityRegistry(endpoint, localizedResponseKinds);
+	}
+
+	private McpServerCapabilityRegistry(@NonNull McpNormalizedEndpoint endpoint,
+			@NonNull Set<McpRuntimeCatalogLocalizer.@NonNull ResponseKind>
+					localizedResponseKinds) {
+		requireNonNull(localizedResponseKinds);
 		requireNonNull(endpoint);
 		this.tools = namesOf(endpoint.tools());
 		this.prompts = namesOf(endpoint.prompts());
@@ -113,21 +129,36 @@ final class McpServerCapabilityRegistry {
 		this.resourceTemplatesListResult = resourceTemplatesListResult(
 				resourceTemplateDescriptors, endpoint.resourceTemplatesListCachePolicy());
 
-		Optional<McpImmutableCatalogCapability> toolsCapability = tools.isEmpty()
+		boolean subscriptionsSupported = endpoint.subscriptions().isPresent();
+		Optional<McpCatalogCapability> toolsCapability = tools.isEmpty()
 				? Optional.empty()
-				: Optional.of(McpImmutableCatalogCapability.INSTANCE);
-		Optional<McpImmutableCatalogCapability> promptsCapability = prompts.isEmpty()
+				: Optional.of(subscriptionsSupported && localizedResponseKinds
+						.contains(McpRuntimeCatalogLocalizer.ResponseKind.TOOLS_LIST)
+						? McpCatalogCapability.LIST_CHANGED
+						: McpCatalogCapability.IMMUTABLE);
+		Optional<McpCatalogCapability> promptsCapability = prompts.isEmpty()
 				? Optional.empty()
-				: Optional.of(McpImmutableCatalogCapability.INSTANCE);
+				: Optional.of(subscriptionsSupported && localizedResponseKinds
+						.contains(
+								McpRuntimeCatalogLocalizer.ResponseKind.PROMPTS_LIST)
+						? McpCatalogCapability.LIST_CHANGED
+						: McpCatalogCapability.IMMUTABLE);
 		Optional<McpResourceCapability> resourcesCapability;
 
 		if (endpoint.hasResourceSurface()) {
 			Set<McpResourceNotificationType> notificationTypes = endpoint.subscriptions()
 					.map(McpNormalizedSubscriptionConfiguration::notificationTypes)
 					.orElseGet(Set::of);
+			boolean localizedResourceCatalog = subscriptionsSupported
+					&& (localizedResponseKinds.contains(
+							McpRuntimeCatalogLocalizer.ResponseKind.RESOURCES_LIST)
+							|| localizedResponseKinds.contains(
+									McpRuntimeCatalogLocalizer.ResponseKind
+											.RESOURCE_TEMPLATES_LIST));
 			resourcesCapability = Optional.of(new McpResourceCapability(
 					notificationTypes.contains(
-							McpResourceNotificationType.RESOURCES_LIST_CHANGED),
+							McpResourceNotificationType.RESOURCES_LIST_CHANGED)
+							|| localizedResourceCatalog,
 					notificationTypes.contains(
 							McpResourceNotificationType.RESOURCE_UPDATED)));
 		} else {
@@ -441,8 +472,8 @@ enum McpOperationKind {
  */
 @ThreadSafe
 record McpServerCapabilities(
-		@NonNull Optional<@NonNull McpImmutableCatalogCapability> tools,
-		@NonNull Optional<@NonNull McpImmutableCatalogCapability> prompts,
+		@NonNull Optional<@NonNull McpCatalogCapability> tools,
+		@NonNull Optional<@NonNull McpCatalogCapability> prompts,
 		@NonNull Optional<@NonNull McpResourceCapability> resources) {
 	McpServerCapabilities {
 		requireNonNull(tools);
@@ -464,12 +495,21 @@ record McpServerCapabilities(
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-enum McpImmutableCatalogCapability {
-	INSTANCE;
+record McpCatalogCapability(boolean listChanged) {
+	@NonNull
+	static final McpCatalogCapability IMMUTABLE = new McpCatalogCapability(false);
+	@NonNull
+	static final McpCatalogCapability LIST_CHANGED =
+			new McpCatalogCapability(true);
 
 	@NonNull
 	McpJsonObject toJsonObject() {
-		return McpJsonObject.empty();
+		if (!listChanged)
+			return McpJsonObject.empty();
+
+		Map<String, McpJsonValue> values = new LinkedHashMap<>();
+		values.put("listChanged", McpJsonBoolean.TRUE);
+		return new McpJsonObject(values);
 	}
 }
 

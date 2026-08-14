@@ -17,6 +17,7 @@
 package com.soklet.internal.mcp.protocol;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
@@ -36,7 +37,8 @@ record McpFrameworkRequestStateContinuation(
 		@NonNull McpRequestStateTimestamp expiresAt,
 		int round,
 		@NonNull McpJsonRpcId originatingRequestId,
-		@NonNull McpJsonValue state) {
+		@NonNull McpJsonValue state,
+		@Nullable String selectedLocale) {
 	McpFrameworkRequestStateContinuation {
 		requireNonNull(issuedAt);
 		requireNonNull(expiresAt);
@@ -50,12 +52,37 @@ record McpFrameworkRequestStateContinuation(
 					"Request-state round must be positive.");
 	}
 
+	/** Creates a version-1 continuation with no selected locale. */
+	McpFrameworkRequestStateContinuation(
+			@NonNull McpRequestStateTimestamp issuedAt,
+			@NonNull McpRequestStateTimestamp expiresAt,
+			int round,
+			@NonNull McpJsonRpcId originatingRequestId,
+			@NonNull McpJsonValue state) {
+		this(issuedAt, expiresAt, round, originatingRequestId, state, null);
+	}
+
 	@NonNull
 	static McpFrameworkRequestStateContinuation initial(
 			@NonNull McpJsonValue state,
 			@NonNull Instant now,
 			@NonNull Duration maximumLifetime,
 			@NonNull McpJsonRpcId currentRequestId) {
+		return initial(state, now, maximumLifetime, currentRequestId, null);
+	}
+
+	/**
+	 * Creates the first round of a continuation. A present selected locale
+	 * marks a localized flow and is carried forward verbatim on every later
+	 * round, so one continuation observes exactly one language.
+	 */
+	@NonNull
+	static McpFrameworkRequestStateContinuation initial(
+			@NonNull McpJsonValue state,
+			@NonNull Instant now,
+			@NonNull Duration maximumLifetime,
+			@NonNull McpJsonRpcId currentRequestId,
+			@Nullable String selectedLocale) {
 		requireNonNull(state);
 		requireNonNull(now);
 		requireNonNull(currentRequestId);
@@ -63,7 +90,7 @@ record McpFrameworkRequestStateContinuation(
 				McpRequestStateTimestamp.fromInstant(now);
 		return new McpFrameworkRequestStateContinuation(
 				issuedAt, issuedAt.plus(maximumLifetime), 1,
-				currentRequestId, state);
+				currentRequestId, state, selectedLocale);
 	}
 
 	@NonNull
@@ -79,8 +106,10 @@ record McpFrameworkRequestStateContinuation(
 		if (round >= maximumRounds)
 			throw new IllegalArgumentException(
 					"Request-state has reached its maximum round.");
+		// The original selected locale is carried forward exactly: a later
+		// round can never renegotiate the continuation's language.
 		return new McpFrameworkRequestStateContinuation(
 				issuedAt, expiresAt, Math.addExact(round, 1),
-				currentRequestId, nextState);
+				currentRequestId, nextState, selectedLocale);
 	}
 }

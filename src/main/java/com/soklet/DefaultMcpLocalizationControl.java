@@ -21,16 +21,21 @@ import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Inert localization control used until runtime invalidation wiring lands.
+ * Server-owned localization control: enabled state plus coarse catalog
+ * invalidation publication to the active runtime generation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 final class DefaultMcpLocalizationControl implements McpLocalizationControl {
 	private final boolean enabled;
+	@NonNull
+	private final Runnable invalidationPublisher;
 
-	DefaultMcpLocalizationControl(boolean enabled) {
+	DefaultMcpLocalizationControl(boolean enabled,
+			@NonNull Runnable invalidationPublisher) {
 		this.enabled = enabled;
+		this.invalidationPublisher = invalidationPublisher;
 	}
 
 	@Override
@@ -43,5 +48,7 @@ final class DefaultMcpLocalizationControl implements McpLocalizationControl {
 	public void catalogsChanged() {
 		if (!this.enabled)
 			throw new IllegalStateException("MCP localization is disabled.");
+
+		this.invalidationPublisher.run();
 	}
 }

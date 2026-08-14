@@ -126,6 +126,36 @@ class McpLocalizationPreferenceTests {
 	}
 
 	@Test
+	void wildcardAndEqualWeightInputsSurviveDerivationUnchanged() {
+		// A wildcard is a legitimate range the provider may act on; Soklet does
+		// not filter or reorder it away.
+		assertEquals(List.of("*"),
+				McpLocaleSupport.boundedLanguageRanges(orderedValues("*"))
+						.stream().map(Locale.LanguageRange::getRange).toList());
+
+		List<Locale.LanguageRange> mixed = McpLocaleSupport.boundedLanguageRanges(
+				orderedValues("fr-CA;q=0.5, *;q=0.1, en-US"));
+		assertEquals(List.of("en-us", "fr-ca", "*"), mixed.stream()
+				.map(Locale.LanguageRange::getRange).toList());
+
+		// Equal weights are preserved with no documented ordering guarantee, so
+		// the contract only requires that every requested range survives at its
+		// exact weight. The JDK may add equivalents (de-DE also yields de-dd),
+		// which is expansion rather than reordering.
+		List<Locale.LanguageRange> equalWeights =
+				McpLocaleSupport.boundedLanguageRanges(
+						orderedValues("de-DE;q=0.7, fr-CA;q=0.7, es-ES;q=0.7"));
+		Set<String> derived = equalWeights.stream()
+				.map(Locale.LanguageRange::getRange)
+				.collect(java.util.stream.Collectors.toSet());
+		assertTrue(derived.containsAll(Set.of("de-de", "fr-ca", "es-es")),
+				derived.toString());
+		assertTrue(equalWeights.stream()
+				.allMatch(range -> range.getWeight() == 0.7d),
+				equalWeights.toString());
+	}
+
+	@Test
 	void theDerivedPreferenceViewIsImmutable() {
 		List<Locale.LanguageRange> ranges =
 				McpLocaleSupport.boundedLanguageRanges(orderedValues("en-US"));

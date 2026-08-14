@@ -257,7 +257,8 @@ public class McpFrameworkRequestStateRuntimeTests {
 			Optional<McpFrameworkRequestStateContinuation> prior)
 			throws McpRequestStateUnavailableException {
 		return runtime.seal(ENDPOINT_PATH, PROTOCOL_VERSION, METHOD,
-				AUTHORIZATION_PARTITION, parameters(), requestId, state, prior);
+				AUTHORIZATION_PARTITION, parameters(), requestId, state, prior,
+				Optional.empty());
 	}
 
 	private static McpFrameworkRequestStateRuntime.OpenedState open(

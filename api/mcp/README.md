@@ -163,7 +163,8 @@ interceptor continuation now exposes the exact downstream invocation-feature
 carrier with its existing thread, one-shot, and call-lifetime rules. L1 does
 not invoke a localization provider or alter MCP wire output; request-time
 rendering begins in L2. These 18 owners grow `phase-6.includes` to 33 and the
-exact reviewed union to 237, but Phase 6 remains unfrozen.
+exact reviewed union to 237. Phase 6 is now frozen: see the
+[Phase 6 freeze rationale](phase-6-freeze-rationale.md).
 `McpServerDiagnostics` remains
 the completed protection and trace diagnostics projection.
 `McpServerDiagnostics` now has exactly 12 zero-argument methods: lifecycle
@@ -1097,8 +1098,10 @@ The twenty-first adds seven top-level simulation types,
 `McpSimulationOptions.Builder`, and two abstract `Simulator` methods while
 leaving the metric/snapshot/canary inventories unchanged.
 
-This checkpoint does not freeze Phase 6. `phase-6.includes` remains outside
-`frozen-phases`; all Phase 6-owned and provisional surfaces remain unfrozen.
+Phase 6 was frozen on 2026-08-14 after the localization program's L8 review.
+`frozen-phases` now lists the contiguous sorted prefix `4`, `5`, `6`, and
+`phase-6.signatures.jsonl` is verified bidirectionally on every run alongside
+the Phase 4 and Phase 5 snapshots. Provisional surfaces remain unfrozen.
 
 ## Running the gates
 
@@ -1128,8 +1131,13 @@ SHA-256
 `c6862ed49a9bc9565ba2284190c49605928270fb8a6fb73f75070452f909e75f`;
 its exact nullability digest is
 `d52a424ac33e679e0a0632004ac931e59966b68641659e254214964d9144f8c7`.
-The Phase 5 count and hash are unchanged. Phase 6 now owns 33 types and the
-provisional inventory remains at 32. The amended Phase 4 snapshot has SHA-256
+The Phase 5 count and hash are unchanged. Phase 6 owns 33 types and is frozen:
+`phase-6.signatures.jsonl` has exactly 181 records - 33 classes, five
+constructors, 19 fields, and 124 methods - with SHA-256
+`7f6c76e62a5f6e20c6c8f6b9599ed7c4d84c169d2896fcefdfd9744c9627b2bc`
+and exact nullability digest
+`1a1b18a9f24a4c28ef15b51545163f7140c1661515669fbaa3dcf32befdaddc8`.
+The provisional inventory remains at 32. The amended Phase 4 snapshot has SHA-256
 `8b5b689525176f63de24d81ce01d26b16b5c27c32c4e5e13f06757d388768bbc`;
 its exact nullability digest is
 `627be93f6c759e194645c022ab854c2fde73d916b4c787f05e7c18b49cbfb197`.
@@ -1142,14 +1150,31 @@ fail-atomic rendering for all five framework catalogs; no new public
 `com.soklet` types; freeze gate unchanged) passed 1,620/0/0/4 over 462 main
 and 186 test sources, and the L3 HTTP/cache-boundary tree (private/zero
 clamping, `Content-Language`, the non-preflight `Vary` merge, and
-application-boundary proofs) passes 1,624/0/0/4 after compiling 462 main and
-187 test sources. The JDK 21
+application-boundary proofs) passed 1,624/0/0/4 over 462 main and 187 test
+sources, and the L4 MRTR-continuity tree (version-2 `selectedLocale` request
+state with exact `20 + N` accounting, byte-identical version-1 emission when
+localization is absent, retry-time exact-locale enforcement, and
+cross-instance continuity; operational note: deploy version-2 readers
+everywhere before enabling any localized emitter, since a
+localization-disabled reader fails sanitized rather than downgrading) passes
+1,635/0/0/4 over 462 main and 189 test sources, and the L5 reload-control
+tree (composed framework/application catalog-change delivery, truthful
+per-family list-change advertisement, stale pre-render release, node-local
+generation-fenced `catalogsChanged()`) passed 1,641/0/0/4 over 463 main and
+190 test sources, and the L6-core tree (localization-primitive fuzzing, full
+preference corpora, provider inertness for non-admitted work, zero-cardinality
+tag flood, and selection-versus-invalidation races) passes 1,647/0/0/4 after
+compiling 463 main and 191 test sources, alongside 139 fuzz-module seed tests.
+The JDK 21
 Error Prone/NullAway profile passes with the existing advisory-warning
 inventory, and SpotBugs reports zero bugs and zero errors. The 181-source
 Java-17 API sketch and Javadoc/doclint smoke pass, as does the adapter proof
 against 60 real Lokalized sources plus three adapter sources. Exact-tree JDK
-17/25 CI, L4-L8 localization work, and candidate-artifact Lokalized
-validation remain open.
+17/25 CI, the remaining L6 soak/fleet-orchestration legs, the L7 ToyStore
+proof and public Javadoc publication, and L8 freeze/release evidence remain
+open. Candidate-artifact validation is green: `mcp/design/candidate-artifact/`
+compiles and runs downstream localization examples against the published jar
+alone and enforces zero runtime dependencies.
 
 At the V21 boundary, the focused simulator/API gate passed 46/0/0/0 and the
 broadened adjacent authority selector passed 215/0/0/0. Clean exact-source

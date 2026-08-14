@@ -90,6 +90,8 @@ public class McpPublicApiReflectionContractTests {
 			"627be93f6c759e194645c022ab854c2fde73d916b4c787f05e7c18b49cbfb197";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
 			"d52a424ac33e679e0a0632004ac931e59966b68641659e254214964d9144f8c7";
+	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
+			"1a1b18a9f24a4c28ef15b51545163f7140c1661515669fbaa3dcf32befdaddc8";
 	private static final Map<String, Object> PHASE_FOUR_PRIMITIVE_CONSTANTS =
 			Map.of(
 					"com.soklet.McpAdmissionIdentity#MAXIMUM_PARTITION_KEY_UTF_8_BYTES",
@@ -416,6 +418,14 @@ public class McpPublicApiReflectionContractTests {
 		assertNullabilityLayout(phaseFiveTypes(),
 				PHASE_FIVE_NULLABILITY_SHA_256,
 				"PHASE_FIVE_NULLABILITY_SHA_256", "Phase 5");
+	}
+
+	@Test
+	public void phaseSixJSpecifyNullabilityLayoutRemainsExact()
+			throws Exception {
+		assertNullabilityLayout(phaseSixTypes(),
+				PHASE_SIX_NULLABILITY_SHA_256,
+				"PHASE_SIX_NULLABILITY_SHA_256", "Phase 6");
 	}
 
 	@Test
@@ -849,6 +859,11 @@ public class McpPublicApiReflectionContractTests {
 	private static List<Class<?>> phaseFiveTypes() throws Exception {
 		return phaseTypes(PHASE_FIVE_INCLUDES, PHASE_FIVE_TYPE_COUNT,
 				"Phase 5");
+	}
+
+	private static List<Class<?>> phaseSixTypes() throws Exception {
+		return phaseTypes(Path.of("api/mcp/phase-6.includes"),
+				PHASE_SIX_TYPE_COUNT, "Phase 6");
 	}
 
 	private static List<Class<?>> phaseTypes(Path includes, int expectedCount,

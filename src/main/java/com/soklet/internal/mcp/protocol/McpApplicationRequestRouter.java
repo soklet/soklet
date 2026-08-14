@@ -838,6 +838,9 @@ final class McpApplicationInvocation {
 	private final McpApplicationHandlerEntryGuard handlerEntryGuard;
 	@NonNull
 	private final BooleanSupplier pastDeadline;
+	@NonNull
+	private final AtomicReference<@Nullable String> selectedLocale =
+			new AtomicReference<>();
 
 	McpApplicationInvocation(@Nullable Request sokletRequest,
 			@Nullable McpRequestContext publicRequestContext,
@@ -877,6 +880,16 @@ final class McpApplicationInvocation {
 	@NonNull
 	BooleanSupplier pastDeadline() {
 		return pastDeadline;
+	}
+
+	/**
+	 * Invocation-scoped slot for the validated canonical selected language tag.
+	 * The public layer writes it exactly once at localization-context creation;
+	 * framework-protected sealing reads it to mint version-2 state.
+	 */
+	@NonNull
+	AtomicReference<@Nullable String> selectedLocale() {
+		return selectedLocale;
 	}
 
 	McpJsonRpcMessage.@NonNull Request request() {

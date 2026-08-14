@@ -66,7 +66,16 @@ record McpSubscriptionEventSource(@NonNull Object identity,
 
 	@ThreadSafe
 	sealed interface Event permits Event.ResourcesListChanged,
-			Event.ResourceUpdated {
+			Event.ResourceUpdated, Event.LocalizationCatalogsChanged {
+		/**
+		 * Framework-owned coarse localization catalog invalidation. Carries
+		 * only which notification families apply - never localized text,
+		 * locale, revision, key, coordinate, tenant, or principal.
+		 */
+		record LocalizationCatalogsChanged(boolean tools, boolean prompts,
+				boolean resources) implements Event {
+		}
+
 		record ResourcesListChanged() implements Event {
 		}
 
