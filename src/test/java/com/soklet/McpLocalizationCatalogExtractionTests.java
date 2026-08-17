@@ -62,11 +62,11 @@ class McpLocalizationCatalogExtractionTests {
 	@Test
 	void extractsEveryProgrammaticSurfaceAndPreservesCanonicalObjects() {
 		McpEndpoint endpoint = endpoint(false);
-		McpHandlerResolver resolver = McpHandlerResolver.fromEndpoints(
+		McpEndpointRegistry registry = McpEndpointRegistry.fromEndpoints(
 				List.of(endpoint));
 
 		McpCanonicalLocalizationPlan plan =
-				DefaultMcpLocalizationCatalogExtractor.plan(resolver, 100);
+				DefaultMcpLocalizationCatalogExtractor.plan(registry, 100);
 		List<McpLocalizableText> texts = plan.texts();
 		List<String> externalKeys = texts.stream()
 				.map(text -> text.getCoordinate().toExternalKey()).toList();
@@ -126,7 +126,7 @@ class McpLocalizationCatalogExtractionTests {
 	void customListOwnsExactDescriptorsButNotStaticTemplates() {
 		McpCanonicalLocalizationPlan plan =
 				DefaultMcpLocalizationCatalogExtractor.plan(
-						McpHandlerResolver.fromEndpoints(List.of(endpoint(true))), 100);
+						McpEndpointRegistry.fromEndpoints(List.of(endpoint(true))), 100);
 
 		assertTrue(plan.endpoints().get(0)
 				.response(McpCanonicalLocalizationPlan.ResponseKind.RESOURCES_LIST)
@@ -143,18 +143,18 @@ class McpLocalizationCatalogExtractionTests {
 
 	@Test
 	void rejectsConstructionOverBudgetAndUnequalCoordinateCollision() {
-		McpHandlerResolver resolver = McpHandlerResolver.fromEndpoints(
+		McpEndpointRegistry registry = McpEndpointRegistry.fromEndpoints(
 				List.of(endpoint(false)));
 
 		IllegalStateException budget = assertThrows(IllegalStateException.class,
-				() -> DefaultMcpLocalizationCatalogExtractor.plan(resolver, 2));
+				() -> DefaultMcpLocalizationCatalogExtractor.plan(registry, 2));
 		assertTrue(budget.getMessage().contains("callback limit"));
 		assertThrows(IllegalArgumentException.class,
-				() -> DefaultMcpLocalizationCatalogExtractor.plan(resolver, 0));
+				() -> DefaultMcpLocalizationCatalogExtractor.plan(registry, 0));
 		assertThrows(IllegalArgumentException.class,
-				() -> DefaultMcpLocalizationCatalogExtractor.plan(resolver, 100_001));
+				() -> DefaultMcpLocalizationCatalogExtractor.plan(registry, 100_001));
 		IllegalStateException collision = assertThrows(IllegalStateException.class,
-				() -> DefaultMcpLocalizationCatalogExtractor.extract(resolver,
+				() -> DefaultMcpLocalizationCatalogExtractor.extract(registry,
 						ignored -> "forced-collision"));
 		assertEquals("Unequal MCP text coordinates produced the same external key.",
 				collision.getMessage());
@@ -190,7 +190,7 @@ class McpLocalizationCatalogExtractionTests {
 				.build();
 		McpCanonicalLocalizationPlan plan =
 				DefaultMcpLocalizationCatalogExtractor.plan(
-						McpHandlerResolver.fromEndpoints(List.of(subscribed)), 10);
+						McpEndpointRegistry.fromEndpoints(List.of(subscribed)), 10);
 
 		assertEquals(List.of(
 				"/_meta/io.modelcontextprotocol~1serverInfo/title",
@@ -205,7 +205,7 @@ class McpLocalizationCatalogExtractionTests {
 
 	@Test
 	void publicFactoryDelegatesToFinalResolverExtraction() {
-		McpHandlerResolver programmatic = McpHandlerResolver.fromEndpoints(List.of(
+		McpEndpointRegistry programmatic = McpEndpointRegistry.fromEndpoints(List.of(
 				McpEndpoint.withPath("/generated/catalog")
 						.serverInformation(McpImplementation
 								.withNameAndVersion("generated", "1")
@@ -215,7 +215,7 @@ class McpLocalizationCatalogExtractionTests {
 						.instructions("Generated instructions")
 						.tool(McpToolRegistration.withName("generated.search")
 								.argumentType(GeneratedArguments.class)
-								.handler((request, call, features) ->
+								.handler((request, arguments, features) ->
 										McpCompleteResult.fromToolText("unused"))
 								.title("Generated tool")
 								.description("Generated tool description")
@@ -235,12 +235,12 @@ class McpLocalizationCatalogExtractionTests {
 						.build()));
 
 		assertEquals(DefaultMcpLocalizationCatalogExtractor.extract(programmatic),
-				McpLocalizationCatalog.fromHandlerResolver(programmatic).getTexts());
+				McpLocalizationCatalog.fromEndpointRegistry(programmatic).getTexts());
 	}
 
 	@Test
 	void serverConstructionRetainsPlanAndRejectsOverBudgetResponse() {
-		McpHandlerResolver resolver = McpHandlerResolver.fromEndpoints(List.of(
+		McpEndpointRegistry registry = McpEndpointRegistry.fromEndpoints(List.of(
 				wireEndpoint()));
 		McpLocalizer bounded = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
 				.contextProvider(request -> localizationContext(
@@ -249,7 +249,7 @@ class McpLocalizationCatalogExtractionTests {
 				.build();
 
 		IllegalStateException exception = assertThrows(IllegalStateException.class,
-				() -> wireServerBuilder(resolver).localizer(bounded).build());
+				() -> wireServerBuilder(registry).localizer(bounded).build());
 		assertTrue(exception.getMessage().contains("callback limit"));
 
 		McpLocalizer sufficient = McpLocalizer
@@ -258,17 +258,17 @@ class McpLocalizationCatalogExtractionTests {
 						new AtomicInteger()))
 				.maximumLocalizableTextCountPerResponse(3)
 				.build();
-		DefaultMcpServer server = (DefaultMcpServer) wireServerBuilder(resolver)
+		DefaultMcpServer server = (DefaultMcpServer) wireServerBuilder(registry)
 				.localizer(sufficient).build();
 		McpCanonicalLocalizationPlan plan = server.localizationPlan()
 				.orElseThrow();
-		assertEquals(McpLocalizationCatalog.fromHandlerResolver(resolver).getTexts(),
+		assertEquals(McpLocalizationCatalog.fromEndpointRegistry(registry).getTexts(),
 				plan.texts());
 		assertEquals(3, plan.endpoints().get(0)
 				.response(McpCanonicalLocalizationPlan.ResponseKind.DISCOVERY)
 				.orElseThrow().slots().size());
 
-		DefaultMcpServer disabled = (DefaultMcpServer) wireServerBuilder(resolver)
+		DefaultMcpServer disabled = (DefaultMcpServer) wireServerBuilder(registry)
 				.build();
 		assertTrue(disabled.localizationPlan().isEmpty());
 	}
@@ -292,15 +292,15 @@ class McpLocalizationCatalogExtractionTests {
 				McpLocalizationCatalogExtractionTests.class.getClassLoader())) {
 			Class<?> endpointClass = Class.forName(
 					"example.LocalizedCatalogEndpoint", false, classLoader);
-			McpHandlerResolver generated = McpHandlerResolver.fromClasses(
+			McpEndpointRegistry generated = McpEndpointRegistry.fromClasses(
 					endpointClass);
-			McpHandlerResolver programmatic = McpHandlerResolver.fromEndpoints(
+			McpEndpointRegistry programmatic = McpEndpointRegistry.fromEndpoints(
 					List.of(parityEndpoint()));
 
 			List<McpLocalizableText> generatedTexts = McpLocalizationCatalog
-					.fromHandlerResolver(generated).getTexts();
+					.fromEndpointRegistry(generated).getTexts();
 			List<McpLocalizableText> programmaticTexts = McpLocalizationCatalog
-					.fromHandlerResolver(programmatic).getTexts();
+					.fromEndpointRegistry(programmatic).getTexts();
 			assertFalse(generatedTexts.isEmpty());
 			assertEquals(programmaticTexts, generatedTexts);
 		}
@@ -317,10 +317,10 @@ class McpLocalizationCatalogExtractionTests {
 					return localizationContext(localizationInvocations);
 				})
 				.build();
-		McpHandlerResolver resolver = McpHandlerResolver.fromEndpoints(List.of(
+		McpEndpointRegistry registry = McpEndpointRegistry.fromEndpoints(List.of(
 				wireEndpoint()));
-		McpServer baseline = wireServerBuilder(resolver).build();
-		McpServer localized = wireServerBuilder(resolver).localizer(localizer)
+		McpServer baseline = wireServerBuilder(registry).build();
+		McpServer localized = wireServerBuilder(registry).localizer(localizer)
 				.build();
 		int discoverySlotCount = ((DefaultMcpServer) localized).localizationPlan()
 				.orElseThrow().endpoints().get(0)
@@ -376,7 +376,7 @@ class McpLocalizationCatalogExtractionTests {
 			@Override
 			public McpLocalizationResult localize(McpLocalizableText text) {
 				localizationInvocations.incrementAndGet();
-				return McpLocalizationResult.fromDefaultText();
+				return McpLocalizationResult.useDefaultText();
 			}
 		};
 	}
@@ -393,12 +393,12 @@ class McpLocalizationCatalogExtractionTests {
 	}
 
 	private static McpServer.Builder wireServerBuilder(
-			McpHandlerResolver resolver) {
+			McpEndpointRegistry registry) {
 		return McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(resolver)
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
+				.endpointRegistry(registry)
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
 	}
@@ -521,7 +521,7 @@ class McpLocalizationCatalogExtractionTests {
 	}
 
 	private static McpEndpoint parityEndpoint() {
-		McpResourceHandler resourceHandler = (request, resource, features) ->
+		McpResourceReadHandler resourceHandler = (request, resource, features) ->
 				McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
 						.content(McpTextResourceContents.withUriAndText(
 								URI.create("catalog://unused"), "unused").build())
@@ -535,7 +535,7 @@ class McpLocalizationCatalogExtractionTests {
 				.instructions("Use catalog.search.")
 				.tool(McpToolRegistration.withName("catalog.search")
 						.types(ParityArguments.class, ParityResult.class)
-						.handler((request, call, features) ->
+						.handler((request, arguments, features) ->
 								new ParityResult("unused"))
 						.title("Catalog search")
 						.description("Searches the catalog")
@@ -685,7 +685,7 @@ class McpLocalizationCatalogExtractionTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("catalog.search")
 				.conformanceInputSchema(inputSchema)
-				.handler((request, call, features) ->
+				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("unused"))
 				.title("Tool title")
 				.description("Tool description")
@@ -695,7 +695,7 @@ class McpLocalizationCatalogExtractionTests {
 		McpToolRegistration<EmptyArguments> outputTool = McpToolRegistration
 				.withName("catalog.output")
 				.types(EmptyArguments.class, OutputArguments.class)
-				.handler((request, call, features) ->
+				.handler((request, arguments, features) ->
 						new OutputArguments("value"))
 				.build();
 		McpPromptRegistration prompt = McpPromptRegistration
@@ -710,7 +710,7 @@ class McpLocalizationCatalogExtractionTests {
 						.description("Topic description")
 						.build())
 				.build();
-		McpResourceHandler resourceHandler = (request, resource, features) ->
+		McpResourceReadHandler resourceHandler = (request, resource, features) ->
 				McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
 						.content(McpTextResourceContents.withUriAndText(
 								URI.create("catalog://unused"), "unused").build())

@@ -22,7 +22,7 @@ import com.soklet.McpClientCapability;
 import com.soklet.McpCompleteResult;
 import com.soklet.McpEndpoint;
 import com.soklet.McpFrameworkRequestState;
-import com.soklet.McpHandlerResolver;
+import com.soklet.McpEndpointRegistry;
 import com.soklet.McpImplementation;
 import com.soklet.McpInputRequest;
 import com.soklet.McpInputRequestDeclaration;
@@ -41,7 +41,7 @@ import com.soklet.McpProgressReporter;
 import com.soklet.McpProgressUpdate;
 import com.soklet.McpProtectionConfig;
 import com.soklet.McpRateLimitDecision;
-import com.soklet.McpRequestAdmissionPolicy;
+import com.soklet.McpAdmissionController;
 import com.soklet.McpRequestStateMode;
 import com.soklet.McpRequestStateProtectionContext;
 import com.soklet.McpRequestStateProtectionException;
@@ -144,8 +144,8 @@ public class McpFinalTagGoldenWireProductionTests {
 				.build();
 		McpServer server = McpServer.withPort(0)
 				.host("127.0.0.1")
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(McpRequestAdmissionPolicy.acceptAllInstance())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))
 				.build();
@@ -227,8 +227,8 @@ public class McpFinalTagGoldenWireProductionTests {
 				.build();
 		McpServer server = McpServer.withPort(0)
 				.host("127.0.0.1")
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(McpRequestAdmissionPolicy.acceptAllInstance())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))
 				.build();
@@ -320,7 +320,7 @@ public class McpFinalTagGoldenWireProductionTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("golden.input-required")
 				.jsonArguments()
-				.handler((request, call, features) ->
+				.handler((request, arguments, features) ->
 						McpInputRequiredResult.builder()
 								.inputRequest("form", McpInputRequest
 										.fromDeclaration(form, formParams))
@@ -340,7 +340,7 @@ public class McpFinalTagGoldenWireProductionTests {
 		McpToolRegistration<McpJsonObject> inputResponsesTool = McpToolRegistration
 				.withName("golden.input-responses")
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					McpJsonObject response = Assertions.assertInstanceOf(
 							McpJsonObject.class, request.getInputResponses()
 									.find("approval").orElseThrow());
@@ -367,9 +367,9 @@ public class McpFinalTagGoldenWireProductionTests {
 				.build();
 		McpServer server = McpServer.withPort(0)
 				.host("127.0.0.1")
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(McpRequestAdmissionPolicy.acceptAllInstance())
-				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(McpAdmissionController.acceptAllInstance())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))
 				.build();
@@ -406,7 +406,7 @@ public class McpFinalTagGoldenWireProductionTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("golden.progress")
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					McpProgressReporter reporter =
 							features.require(McpProgressReporter.class);
 					reporter.report(McpProgressUpdate.withProgress(0.0d)
@@ -425,9 +425,9 @@ public class McpFinalTagGoldenWireProductionTests {
 				.build();
 		McpServer server = McpServer.withPort(0)
 				.host("127.0.0.1")
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(McpRequestAdmissionPolicy.acceptAllInstance())
-				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(McpAdmissionController.acceptAllInstance())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))
 				.build();
@@ -499,9 +499,9 @@ public class McpFinalTagGoldenWireProductionTests {
 				.build();
 		McpServer server = McpServer.withPort(0)
 				.host("127.0.0.1")
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(McpRequestAdmissionPolicy.acceptAllInstance())
-				.requestRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(McpAdmissionController.acceptAllInstance())
+				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))
 				.build();
@@ -581,7 +581,7 @@ public class McpFinalTagGoldenWireProductionTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("golden.protected-state")
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					if (request.getRequestState().isEmpty()) {
 						Assertions.assertTrue(
 								request.getInputResponses().asMap().isEmpty());
@@ -637,9 +637,9 @@ public class McpFinalTagGoldenWireProductionTests {
 				.build();
 		McpServer server = McpServer.withPort(0)
 				.host("127.0.0.1")
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(McpRequestAdmissionPolicy.acceptAllInstance())
-				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(McpAdmissionController.acceptAllInstance())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.protectionConfig(McpProtectionConfig.withRequestStateProtector(
 						new DeterministicGoldenRequestStateProtector()).build())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())

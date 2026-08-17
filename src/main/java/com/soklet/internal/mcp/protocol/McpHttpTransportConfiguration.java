@@ -156,7 +156,7 @@ record McpHttpEndpointPolicy(@NonNull String path,
 		@NonNull Set<@NonNull String> allowedHosts,
 		@NonNull McpAbsentOriginPolicy absentOriginPolicy,
 		@NonNull CorsAuthorizer corsAuthorizer,
-		@NonNull McpRequestAdmissionPolicy requestAdmissionPolicy,
+		@NonNull McpProtocolAdmissionController protocolAdmissionController,
 		@NonNull Optional<@NonNull McpRateLimiter> requestRateLimiter,
 		@NonNull McpApplicationRequestInterceptor requestInterceptor,
 		@NonNull McpUnknownMirroredHeaderPolicy unknownMirroredHeaderPolicy,
@@ -171,13 +171,13 @@ record McpHttpEndpointPolicy(@NonNull String path,
 			@NonNull Set<@NonNull String> allowedHosts,
 			@NonNull McpAbsentOriginPolicy absentOriginPolicy,
 			@NonNull CorsAuthorizer corsAuthorizer,
-			@NonNull McpRequestAdmissionPolicy requestAdmissionPolicy,
+			@NonNull McpProtocolAdmissionController protocolAdmissionController,
 			@NonNull Optional<@NonNull McpRateLimiter> requestRateLimiter,
 			@NonNull McpApplicationRequestInterceptor requestInterceptor,
 			@NonNull McpUnknownMirroredHeaderPolicy unknownMirroredHeaderPolicy,
 			boolean corsAuthorizerExplicitlyConfigured) {
 		this(path, allowedHosts, absentOriginPolicy, corsAuthorizer,
-				requestAdmissionPolicy, requestRateLimiter, requestInterceptor,
+				protocolAdmissionController, requestRateLimiter, requestInterceptor,
 				unknownMirroredHeaderPolicy, corsAuthorizerExplicitlyConfigured,
 				Optional.empty(), false);
 	}
@@ -186,12 +186,12 @@ record McpHttpEndpointPolicy(@NonNull String path,
 			@NonNull Set<@NonNull String> allowedHosts,
 			@NonNull McpAbsentOriginPolicy absentOriginPolicy,
 			@NonNull CorsAuthorizer corsAuthorizer,
-			@NonNull McpRequestAdmissionPolicy requestAdmissionPolicy,
+			@NonNull McpProtocolAdmissionController protocolAdmissionController,
 			@NonNull Optional<@NonNull McpRateLimiter> requestRateLimiter,
 			@NonNull McpApplicationRequestInterceptor requestInterceptor,
 			@NonNull McpUnknownMirroredHeaderPolicy unknownMirroredHeaderPolicy) {
 		this(path, allowedHosts, absentOriginPolicy, corsAuthorizer,
-				requestAdmissionPolicy, requestRateLimiter, requestInterceptor,
+				protocolAdmissionController, requestRateLimiter, requestInterceptor,
 				unknownMirroredHeaderPolicy, true);
 	}
 
@@ -199,11 +199,11 @@ record McpHttpEndpointPolicy(@NonNull String path,
 			@NonNull Set<@NonNull String> allowedHosts,
 			@NonNull McpAbsentOriginPolicy absentOriginPolicy,
 			@NonNull CorsAuthorizer corsAuthorizer,
-			@NonNull McpRequestAdmissionPolicy requestAdmissionPolicy,
+			@NonNull McpProtocolAdmissionController protocolAdmissionController,
 			@NonNull Optional<@NonNull McpRateLimiter> requestRateLimiter,
 			@NonNull McpApplicationRequestInterceptor requestInterceptor) {
 		this(path, allowedHosts, absentOriginPolicy, corsAuthorizer,
-				requestAdmissionPolicy, requestRateLimiter, requestInterceptor,
+				protocolAdmissionController, requestRateLimiter, requestInterceptor,
 				McpUnknownMirroredHeaderPolicy.IGNORE);
 	}
 
@@ -211,9 +211,9 @@ record McpHttpEndpointPolicy(@NonNull String path,
 			@NonNull Set<@NonNull String> allowedHosts,
 			@NonNull McpAbsentOriginPolicy absentOriginPolicy,
 			@NonNull CorsAuthorizer corsAuthorizer,
-			@NonNull McpRequestAdmissionPolicy requestAdmissionPolicy) {
+			@NonNull McpProtocolAdmissionController protocolAdmissionController) {
 		this(path, allowedHosts, absentOriginPolicy, corsAuthorizer,
-				requestAdmissionPolicy, Optional.empty(),
+				protocolAdmissionController, Optional.empty(),
 				McpApplicationRequestInterceptor.passThroughInstance());
 	}
 
@@ -234,7 +234,7 @@ record McpHttpEndpointPolicy(@NonNull String path,
 		allowedHosts = Set.copyOf(copiedHosts);
 		requireNonNull(absentOriginPolicy);
 		requireNonNull(corsAuthorizer);
-		requireNonNull(requestAdmissionPolicy);
+		requireNonNull(protocolAdmissionController);
 		requireNonNull(requestRateLimiter);
 		requireNonNull(requestInterceptor);
 		requireNonNull(unknownMirroredHeaderPolicy);
@@ -247,17 +247,17 @@ record McpHttpEndpointPolicy(@NonNull String path,
 
 	@NonNull
 	static McpHttpEndpointPolicy forDiscovery(@NonNull CorsAuthorizer corsAuthorizer,
-			@NonNull McpRequestAdmissionPolicy requestAdmissionPolicy) {
+			@NonNull McpProtocolAdmissionController protocolAdmissionController) {
 		return new McpHttpEndpointPolicy("/mcp", Set.of(),
-				McpAbsentOriginPolicy.ALLOW, corsAuthorizer, requestAdmissionPolicy);
+				McpAbsentOriginPolicy.ALLOW, corsAuthorizer, protocolAdmissionController);
 	}
 
 	@NonNull
 	static McpHttpEndpointPolicy forDiscoveryWithDefaultCorsAuthorizer(
-			@NonNull McpRequestAdmissionPolicy requestAdmissionPolicy) {
+			@NonNull McpProtocolAdmissionController protocolAdmissionController) {
 		return new McpHttpEndpointPolicy("/mcp", Set.of(),
 				McpAbsentOriginPolicy.ALLOW, CorsAuthorizer.rejectAllInstance(),
-				requireNonNull(requestAdmissionPolicy), Optional.empty(),
+				requireNonNull(protocolAdmissionController), Optional.empty(),
 				McpApplicationRequestInterceptor.passThroughInstance(),
 				McpUnknownMirroredHeaderPolicy.IGNORE, false);
 	}
@@ -265,7 +265,7 @@ record McpHttpEndpointPolicy(@NonNull String path,
 	@NonNull
 	McpHttpEndpointPolicy withRequestRateLimiter(@NonNull McpRateLimiter requestRateLimiter) {
 		return new McpHttpEndpointPolicy(path, allowedHosts, absentOriginPolicy,
-				corsAuthorizer, requestAdmissionPolicy,
+				corsAuthorizer, protocolAdmissionController,
 				Optional.of(requireNonNull(requestRateLimiter)), requestInterceptor,
 				unknownMirroredHeaderPolicy, corsAuthorizerExplicitlyConfigured,
 				catalogLocalizer, localizationEnabled);
@@ -275,7 +275,7 @@ record McpHttpEndpointPolicy(@NonNull String path,
 	McpHttpEndpointPolicy withCatalogLocalizer(
 			@NonNull McpRuntimeCatalogLocalizer catalogLocalizer) {
 		return new McpHttpEndpointPolicy(path, allowedHosts, absentOriginPolicy,
-				corsAuthorizer, requestAdmissionPolicy, requestRateLimiter,
+				corsAuthorizer, protocolAdmissionController, requestRateLimiter,
 				requestInterceptor, unknownMirroredHeaderPolicy,
 				corsAuthorizerExplicitlyConfigured,
 				Optional.of(requireNonNull(catalogLocalizer)), localizationEnabled);
@@ -284,7 +284,7 @@ record McpHttpEndpointPolicy(@NonNull String path,
 	@NonNull
 	McpHttpEndpointPolicy withLocalizationEnabled() {
 		return new McpHttpEndpointPolicy(path, allowedHosts, absentOriginPolicy,
-				corsAuthorizer, requestAdmissionPolicy, requestRateLimiter,
+				corsAuthorizer, protocolAdmissionController, requestRateLimiter,
 				requestInterceptor, unknownMirroredHeaderPolicy,
 				corsAuthorizerExplicitlyConfigured, catalogLocalizer, true);
 	}
@@ -293,7 +293,7 @@ record McpHttpEndpointPolicy(@NonNull String path,
 	McpHttpEndpointPolicy withRequestInterceptor(
 			@NonNull McpApplicationRequestInterceptor requestInterceptor) {
 		return new McpHttpEndpointPolicy(path, allowedHosts, absentOriginPolicy,
-				corsAuthorizer, requestAdmissionPolicy, requestRateLimiter,
+				corsAuthorizer, protocolAdmissionController, requestRateLimiter,
 				requireNonNull(requestInterceptor), unknownMirroredHeaderPolicy,
 				corsAuthorizerExplicitlyConfigured, catalogLocalizer,
 				localizationEnabled);
@@ -303,7 +303,7 @@ record McpHttpEndpointPolicy(@NonNull String path,
 	McpHttpEndpointPolicy withUnknownMirroredHeaderPolicy(
 			@NonNull McpUnknownMirroredHeaderPolicy unknownMirroredHeaderPolicy) {
 		return new McpHttpEndpointPolicy(path, allowedHosts, absentOriginPolicy,
-				corsAuthorizer, requestAdmissionPolicy, requestRateLimiter,
+				corsAuthorizer, protocolAdmissionController, requestRateLimiter,
 				requestInterceptor, requireNonNull(unknownMirroredHeaderPolicy),
 				corsAuthorizerExplicitlyConfigured, catalogLocalizer,
 				localizationEnabled);

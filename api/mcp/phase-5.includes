@@ -34,6 +34,6 @@ com.soklet.McpSubscriptionEvent$ResourceUpdated
 com.soklet.McpSubscriptionEvent$ResourcesListChanged
 com.soklet.McpSubscriptionEventListener
 com.soklet.McpSubscriptionEventPublisher
-com.soklet.McpSubscriptionEventSubscription
+com.soklet.McpSubscriptionEventRegistration
 com.soklet.McpSubscriptionNotificationType
 com.soklet.annotation.McpMayRequestInput

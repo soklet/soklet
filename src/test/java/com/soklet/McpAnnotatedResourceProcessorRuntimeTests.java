@@ -115,18 +115,18 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				}
 			};
 
-			McpHandlerResolver resolver = McpHandlerResolver.fromClasses(
+			McpEndpointRegistry registry = McpEndpointRegistry.fromClasses(
 					instanceProvider, endpointClass);
-			McpEndpoint endpoint = resolver.getEndpoints().get(0);
+			McpEndpoint endpoint = registry.getEndpoints().get(0);
 			Assertions.assertEquals(0, providedInstances.get());
 			Assertions.assertEquals(Duration.ofMillis(300), endpoint
-					.getResourcesListCachePolicy().getTimeToLive());
+					.getResourceListCachePolicy().getTimeToLive());
 			Assertions.assertEquals(McpCacheScope.PUBLIC, endpoint
-					.getResourcesListCachePolicy().getScope());
+					.getResourceListCachePolicy().getScope());
 			Assertions.assertEquals(Duration.ofMillis(450), endpoint
-					.getResourceTemplatesListCachePolicy().getTimeToLive());
+					.getResourceTemplateListCachePolicy().getTimeToLive());
 			Assertions.assertEquals(McpCacheScope.PRIVATE, endpoint
-					.getResourceTemplatesListCachePolicy().getScope());
+					.getResourceTemplateListCachePolicy().getScope());
 			Assertions.assertEquals(2, endpoint.getResources().size());
 
 			McpResourceRegistration exact = endpoint.getResources().stream()
@@ -355,7 +355,7 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				import com.soklet.McpResourcePage;
 				import com.soklet.McpResourceReadContext;
 				import com.soklet.McpTextResourceContents;
-				import com.soklet.annotation.McpListResources;
+				import com.soklet.annotation.McpResourceList;
 				import com.soklet.annotation.McpResource;
 				import com.soklet.annotation.McpResourceUriParameter;
 				import com.soklet.annotation.McpServerEndpoint;
@@ -365,9 +365,9 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				    path = "/resources/mcp",
 				    name = "resource-catalog",
 				    version = "3.6.0-SNAPSHOT",
-				    resourcesListCacheTtlMs = 300,
-				    resourcesListCacheScope = McpCacheScope.PUBLIC,
-				    resourceTemplatesListCacheTtlMs = 450)
+				    resourceListCacheTtlMs = 300,
+				    resourceListCacheScope = McpCacheScope.PUBLIC,
+				    resourceTemplateListCacheTtlMs = 450)
 				public final class ResourceEndpoint {
 				  public ResourceEndpoint() {}
 
@@ -423,7 +423,7 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				    return McpCompleteResult.fromResourceOutput(output);
 				  }
 
-				  @McpListResources
+				  @McpResourceList
 				  public McpResourcePage resources(
 				      McpInvocationFeatures features,
 				      CancelationToken cancelationToken,

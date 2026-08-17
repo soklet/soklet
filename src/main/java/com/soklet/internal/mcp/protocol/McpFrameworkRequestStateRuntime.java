@@ -143,10 +143,11 @@ final class McpFrameworkRequestStateRuntime {
 					.compareTo(prior.expiresAt()) >= 0)
 				throw new IllegalArgumentException(
 						"Expired framework request state cannot be re-emitted.");
-			// Carry-forward keeps the original continuation's language exactly;
-			// the current selection was already enforced equal on open.
+			// A version-2 continuation keeps its original language exactly; the
+			// current selection was already enforced equal on open. A version-1
+			// continuation upgrades when its first localized round re-emits state.
 			continuation = prior.next(state, currentRequestId,
-					plan.maximumRequestStateRounds());
+					plan.maximumRequestStateRounds(), selectedLocale.orElse(null));
 		} else {
 			// A localized flow mints version 2 from its first input_required
 			// round; without localization the exact version-1 bytes persist.

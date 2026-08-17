@@ -35,6 +35,14 @@ import static java.util.Objects.requireNonNull;
  * class. Assignable supertypes and subtypes are not searched. Feature types
  * are added without changing handler or context signatures.
  *
+ * <p>Soklet supplies one {@link CancelationToken} for every selected MCP
+ * application handler. Its cancellation reason, when present, is one fixed
+ * {@link StreamTerminationReason} value; the framework-supplied MCP token does
+ * not expose an underlying throwable through
+ * {@link CancelationToken#getCancelationCause()}. Applications may record the
+ * fixed reason under their own logging policy, but should never substitute an
+ * untrusted free-form cause or use cancellation details as metric dimensions.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe

@@ -32,7 +32,7 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 @FunctionalInterface
-public interface McpResourceHandler {
+public interface McpResourceReadHandler {
 	/**
 	 * Reads one resource.
 	 *

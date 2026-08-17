@@ -128,7 +128,26 @@ record McpRuntimeRequestInput(@NonNull Request request,
 		@NonNull McpJsonObject requestMetadata,
 		@NonNull McpJsonObject inputResponses,
 		@NonNull Optional<@NonNull McpRequestState> requestState,
+		@NonNull List<@NonNull String> acceptLanguageValues,
 		@NonNull McpAdmissionIdentity admissionIdentity) {
+	McpRuntimeRequestInput(@NonNull Request request,
+			@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
+			@NonNull String jsonRpcMethod,
+			@NonNull Optional<@NonNull McpJsonRpcId> requestId,
+			@NonNull String protocolVersion,
+			@NonNull Optional<@NonNull String> operationName,
+			@NonNull Optional<@NonNull McpImplementationMetadata> clientInformation,
+			@NonNull McpJsonObject clientCapabilities,
+			@NonNull McpJsonObject requestMetadata,
+			@NonNull McpJsonObject inputResponses,
+			@NonNull Optional<@NonNull McpRequestState> requestState,
+			@NonNull McpAdmissionIdentity admissionIdentity) {
+		this(request, endpointPathParameters, jsonRpcMethod, requestId,
+				protocolVersion, operationName, clientInformation,
+				clientCapabilities, requestMetadata, inputResponses, requestState,
+				acceptLanguageValues(request), admissionIdentity);
+	}
+
 	McpRuntimeRequestInput(@NonNull Request request,
 			@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
 			@NonNull String jsonRpcMethod,
@@ -143,7 +162,7 @@ record McpRuntimeRequestInput(@NonNull Request request,
 		this(request, endpointPathParameters, jsonRpcMethod, requestId,
 				protocolVersion, operationName, clientInformation,
 				clientCapabilities, requestMetadata, inputResponses,
-				Optional.empty(), admissionIdentity);
+				Optional.empty(), acceptLanguageValues(request), admissionIdentity);
 	}
 
 	McpRuntimeRequestInput(@NonNull Request request,
@@ -159,7 +178,7 @@ record McpRuntimeRequestInput(@NonNull Request request,
 		this(request, endpointPathParameters, jsonRpcMethod, requestId,
 				protocolVersion, operationName, clientInformation,
 				clientCapabilities, requestMetadata, McpJsonObject.empty(),
-				Optional.empty(), admissionIdentity);
+				Optional.empty(), acceptLanguageValues(request), admissionIdentity);
 	}
 
 	McpRuntimeRequestInput {
@@ -175,7 +194,17 @@ record McpRuntimeRequestInput(@NonNull Request request,
 		requireNonNull(requestMetadata);
 		requireNonNull(inputResponses);
 		requireNonNull(requestState);
+		acceptLanguageValues = List.copyOf(
+				requireNonNull(acceptLanguageValues));
 		requireNonNull(admissionIdentity);
+	}
+
+	@NonNull
+	private static List<@NonNull String> acceptLanguageValues(
+			@NonNull Request request) {
+		java.util.Set<String> values = requireNonNull(request)
+				.getHeaders().get("Accept-Language");
+		return values == null ? List.of() : List.copyOf(values);
 	}
 }
 

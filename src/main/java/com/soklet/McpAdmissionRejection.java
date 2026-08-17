@@ -35,7 +35,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public final class McpRequestRejection {
+public final class McpAdmissionRejection {
 	private final int statusCode;
 	@NonNull
 	private final McpJsonRpcError jsonRpcError;
@@ -56,7 +56,7 @@ public final class McpRequestRejection {
 		return new Builder().statusCode(statusCode).jsonRpcError(jsonRpcError);
 	}
 
-	private McpRequestRejection(@NonNull Builder builder) {
+	private McpAdmissionRejection(@NonNull Builder builder) {
 		this.statusCode = builder.statusCode;
 		if (this.statusCode < 400 || this.statusCode > 599)
 			throw new IllegalArgumentException(
@@ -87,7 +87,7 @@ public final class McpRequestRejection {
 	}
 
 	/**
-	 * Mutable builder for an immutable {@link McpRequestRejection}.
+	 * Mutable builder for an immutable {@link McpAdmissionRejection}.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
@@ -142,8 +142,8 @@ public final class McpRequestRejection {
 
 		/** @return immutable rejection */
 		@NonNull
-		public McpRequestRejection build() {
-			return new McpRequestRejection(this);
+		public McpAdmissionRejection build() {
+			return new McpAdmissionRejection(this);
 		}
 	}
 }

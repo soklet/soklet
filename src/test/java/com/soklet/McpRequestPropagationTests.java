@@ -79,7 +79,7 @@ class McpRequestPropagationTests {
 		McpToolRegistration<McpJsonObject> registration =
 				McpToolRegistration.withName("propagation")
 						.jsonArguments()
-						.handler((handlerRequest, call, features) -> {
+						.handler((handlerRequest, arguments, features) -> {
 							assertEquals(traceContext,
 									handlerRequest.getTraceContext().orElseThrow());
 							assertEquals("Amélie",

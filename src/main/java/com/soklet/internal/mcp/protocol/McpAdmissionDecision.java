@@ -328,7 +328,7 @@ sealed interface McpAdmissionDecision
 	}
 
 	@NonNull
-	static Rejected rejected(@NonNull McpRequestRejection rejection) {
+	static Rejected rejected(@NonNull McpAdmissionRejection rejection) {
 		return new Rejected(rejection);
 	}
 
@@ -338,7 +338,7 @@ sealed interface McpAdmissionDecision
 		}
 	}
 
-	record Rejected(@NonNull McpRequestRejection rejection) implements McpAdmissionDecision {
+	record Rejected(@NonNull McpAdmissionRejection rejection) implements McpAdmissionDecision {
 		public Rejected {
 			requireNonNull(rejection);
 		}
@@ -357,7 +357,7 @@ final class McpRequestAdmissionDecision {
 	static final McpAdmissionDecision ACCEPT = McpAdmissionDecision.acceptedAnonymous();
 	@NonNull
 	static final McpAdmissionDecision REJECT = McpAdmissionDecision.rejected(
-			new McpRequestRejection(403,
+			new McpAdmissionRejection(403,
 					new McpJsonRpcError(1_000,
 							"Request rejected", Optional.empty()), Map.of()));
 
@@ -370,12 +370,12 @@ final class McpRequestAdmissionDecision {
  */
 @ThreadSafe
 @FunctionalInterface
-interface McpRequestAdmissionPolicy {
+interface McpProtocolAdmissionController {
 	@NonNull
 	McpAdmissionDecision admit(@NonNull McpAdmissionContext context) throws Exception;
 
 	@NonNull
-	static McpRequestAdmissionPolicy acceptAllInstance() {
+	static McpProtocolAdmissionController acceptAllInstance() {
 		return ignored -> McpAdmissionDecision.acceptedAnonymous();
 	}
 }
@@ -384,9 +384,9 @@ interface McpRequestAdmissionPolicy {
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-record McpRequestRejection(int statusCode, @NonNull McpJsonRpcError jsonRpcError,
+record McpAdmissionRejection(int statusCode, @NonNull McpJsonRpcError jsonRpcError,
 		@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
-	McpRequestRejection {
+	McpAdmissionRejection {
 		if (statusCode < 400 || statusCode > 599)
 			throw new IllegalArgumentException(
 					"Admission rejection status must be between 400 and 599.");
@@ -401,7 +401,7 @@ record McpRequestRejection(int statusCode, @NonNull McpJsonRpcError jsonRpcError
 	@Override
 	@NonNull
 	public String toString() {
-		return "McpRequestRejection[statusCode=" + statusCode
+		return "McpAdmissionRejection[statusCode=" + statusCode
 				+ ", jsonRpcErrorCode=" + jsonRpcError.code()
 				+ ", headerCount=" + headers.size() + "]";
 	}

@@ -71,7 +71,7 @@ public final class McpResourceRegistration {
 	@NonNull
 	private final McpJsonObject metadata;
 	@NonNull
-	private final McpResourceHandler handler;
+	private final McpResourceReadHandler handler;
 
 	/**
 	 * Begins a staged exact-resource registration.
@@ -227,7 +227,7 @@ public final class McpResourceRegistration {
 
 	/** @return resource-read handler */
 	@NonNull
-	public McpResourceHandler getHandler() {
+	public McpResourceReadHandler getHandler() {
 		return this.handler;
 	}
 
@@ -315,7 +315,7 @@ public final class McpResourceRegistration {
 		 * @return exact-resource optional-metadata builder
 		 */
 		@NonNull
-		public ExactBuilder handler(@NonNull McpResourceHandler handler) {
+		public ExactBuilder handler(@NonNull McpResourceReadHandler handler) {
 			return new ExactBuilder(new BuilderState(this.uri, null,
 					this.name, requireNonNull(handler)));
 		}
@@ -346,7 +346,7 @@ public final class McpResourceRegistration {
 		 * @return template-resource optional-metadata builder
 		 */
 		@NonNull
-		public TemplateBuilder handler(@NonNull McpResourceHandler handler) {
+		public TemplateBuilder handler(@NonNull McpResourceReadHandler handler) {
 			return new TemplateBuilder(new BuilderState(null,
 					this.uriTemplate, this.name, requireNonNull(handler)));
 		}
@@ -635,11 +635,11 @@ public final class McpResourceRegistration {
 		@NonNull
 		private McpJsonObject metadata = McpJsonObject.emptyInstance();
 		@NonNull
-		private final McpResourceHandler handler;
+		private final McpResourceReadHandler handler;
 
 		private BuilderState(@Nullable URI uri,
 				@Nullable String uriTemplate, @NonNull String name,
-				@NonNull McpResourceHandler handler) {
+				@NonNull McpResourceReadHandler handler) {
 			if ((uri == null) == (uriTemplate == null))
 				throw new IllegalArgumentException(
 						"Exactly one MCP resource address must be supplied.");

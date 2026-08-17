@@ -34,7 +34,7 @@ import java.util.Map;
  */
 @NotThreadSafe
 @FunctionalInterface
-public interface McpHandlerInvocation {
+public interface McpHandlerContinuation {
 	/**
 	 * Returns the exact feature lookup supplied to the downstream handler.
 	 * <p>
@@ -62,5 +62,5 @@ public interface McpHandlerInvocation {
 	 * @throws Exception if downstream validation or application handling fails
 	 */
 	@NonNull
-	McpOperationResult invoke() throws Exception;
+	McpOperationResult proceed() throws Exception;
 }

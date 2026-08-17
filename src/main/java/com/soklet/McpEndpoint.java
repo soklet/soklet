@@ -58,9 +58,9 @@ public final class McpEndpoint {
 	@Nullable
 	private final McpResourceListHandler resourceListHandler;
 	@NonNull
-	private final McpCachePolicy resourcesListCachePolicy;
+	private final McpCachePolicy resourceListCachePolicy;
 	@NonNull
-	private final McpCachePolicy resourceTemplatesListCachePolicy;
+	private final McpCachePolicy resourceTemplateListCachePolicy;
 	@Nullable
 	private final String toolRateLimiterName;
 	@Nullable
@@ -96,9 +96,9 @@ public final class McpEndpoint {
 		this.prompts = List.copyOf(builder.prompts);
 		this.resources = List.copyOf(builder.resources);
 		this.resourceListHandler = builder.resourceListHandler;
-		this.resourcesListCachePolicy = builder.resourcesListCachePolicy;
-		this.resourceTemplatesListCachePolicy =
-				builder.resourceTemplatesListCachePolicy;
+		this.resourceListCachePolicy = builder.resourceListCachePolicy;
+		this.resourceTemplateListCachePolicy =
+				builder.resourceTemplateListCachePolicy;
 		this.toolRateLimiterName = builder.toolRateLimiterName;
 		this.toolRateLimiter = builder.toolRateLimiter;
 		this.subscriptions = builder.subscriptions;
@@ -143,9 +143,9 @@ public final class McpEndpoint {
 		this.prompts = endpoint.prompts;
 		this.resources = endpoint.resources;
 		this.resourceListHandler = endpoint.resourceListHandler;
-		this.resourcesListCachePolicy = endpoint.resourcesListCachePolicy;
-		this.resourceTemplatesListCachePolicy =
-				endpoint.resourceTemplatesListCachePolicy;
+		this.resourceListCachePolicy = endpoint.resourceListCachePolicy;
+		this.resourceTemplateListCachePolicy =
+				endpoint.resourceTemplateListCachePolicy;
 		this.toolRateLimiterName = endpoint.toolRateLimiterName;
 		this.toolRateLimiter = endpoint.toolRateLimiter;
 		this.subscriptions = requireNonNull(subscriptions);
@@ -248,8 +248,8 @@ public final class McpEndpoint {
 	 * @return resources-list cache policy
 	 */
 	@NonNull
-	public McpCachePolicy getResourcesListCachePolicy() {
-		return this.resourcesListCachePolicy;
+	public McpCachePolicy getResourceListCachePolicy() {
+		return this.resourceListCachePolicy;
 	}
 
 	/**
@@ -258,8 +258,8 @@ public final class McpEndpoint {
 	 * @return resource-template-list cache policy
 	 */
 	@NonNull
-	public McpCachePolicy getResourceTemplatesListCachePolicy() {
-		return this.resourceTemplatesListCachePolicy;
+	public McpCachePolicy getResourceTemplateListCachePolicy() {
+		return this.resourceTemplateListCachePolicy;
 	}
 
 	/**
@@ -348,9 +348,9 @@ public final class McpEndpoint {
 		@Nullable
 		private McpResourceListHandler resourceListHandler;
 		@NonNull
-		private McpCachePolicy resourcesListCachePolicy;
+		private McpCachePolicy resourceListCachePolicy;
 		@NonNull
-		private McpCachePolicy resourceTemplatesListCachePolicy;
+		private McpCachePolicy resourceTemplateListCachePolicy;
 		@Nullable
 		private String toolRateLimiterName;
 		@Nullable
@@ -364,9 +364,9 @@ public final class McpEndpoint {
 			this.tools = new ArrayList<>();
 			this.prompts = new ArrayList<>();
 			this.resources = new ArrayList<>();
-			this.resourcesListCachePolicy =
+			this.resourceListCachePolicy =
 					McpCachePolicy.privateNoCacheInstance();
-			this.resourceTemplatesListCachePolicy =
+			this.resourceTemplateListCachePolicy =
 					McpCachePolicy.privateNoCacheInstance();
 		}
 
@@ -530,9 +530,9 @@ public final class McpEndpoint {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder resourcesListCachePolicy(
+		public Builder resourceListCachePolicy(
 				@NonNull McpCachePolicy cachePolicy) {
-			this.resourcesListCachePolicy = requireNonNull(cachePolicy);
+			this.resourceListCachePolicy = requireNonNull(cachePolicy);
 			return this;
 		}
 
@@ -545,9 +545,9 @@ public final class McpEndpoint {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder resourceTemplatesListCachePolicy(
+		public Builder resourceTemplateListCachePolicy(
 				@NonNull McpCachePolicy cachePolicy) {
-			this.resourceTemplatesListCachePolicy = requireNonNull(cachePolicy);
+			this.resourceTemplateListCachePolicy = requireNonNull(cachePolicy);
 			return this;
 		}
 

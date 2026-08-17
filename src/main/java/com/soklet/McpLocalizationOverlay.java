@@ -21,6 +21,7 @@ import com.soklet.internal.mcp.protocol.McpJsonObject;
 import com.soklet.internal.mcp.protocol.McpJsonString;
 import com.soklet.internal.mcp.protocol.McpJsonValue;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.ArrayList;
@@ -72,68 +73,90 @@ final class McpLocalizationOverlay {
 		requireNonNull(document, "document");
 		requireNonNull(replacements, "replacements");
 
-		McpJsonValue result = document;
+		ReplacementTrieNode replacementTrie = new ReplacementTrieNode();
 
-		for (Replacement replacement : replacements)
-			result = replaceAt(result, parsePointer(replacement.targetPointer()), 0,
-					replacement);
+		for (Replacement replacement : replacements) {
+			List<String> tokens = parsePointer(replacement.targetPointer());
 
-		return (McpJsonObject) result;
+			// A replacement can only change a string's value, never the shape of
+			// the document. Validating against the canonical tree therefore
+			// preserves the errors and input order of sequential application while
+			// allowing all valid paths to be compiled before rebuilding anything.
+			validateTarget(document, tokens, replacement);
+			replacementTrie.add(tokens, replacement);
+		}
+
+		return replacementTrie.children().isEmpty() ? document
+				: (McpJsonObject) overlay(document, replacementTrie);
+	}
+
+	private static void validateTarget(@NonNull McpJsonValue document,
+			@NonNull List<@NonNull String> tokens,
+			@NonNull Replacement replacement) {
+		McpJsonValue node = document;
+
+		for (String token : tokens) {
+			if (node instanceof McpJsonObject object) {
+				node = object.members().get(token);
+
+				if (node == null)
+					throw missingTarget(replacement);
+			} else if (node instanceof McpJsonArray array) {
+				int elementIndex = parseElementIndex(token, replacement);
+
+				if (elementIndex >= array.values().size())
+					throw missingTarget(replacement);
+
+				node = array.values().get(elementIndex);
+			} else {
+				throw missingTarget(replacement);
+			}
+		}
+
+		if (!(node instanceof McpJsonString))
+			throw new IllegalStateException(String.format(
+					"Localization target %s is not a JSON string.",
+					replacement.targetPointer()));
 	}
 
 	@NonNull
-	private static McpJsonValue replaceAt(@NonNull McpJsonValue node,
-			@NonNull List<@NonNull String> tokens, int tokenIndex,
-			@NonNull Replacement replacement) {
-		if (tokenIndex == tokens.size()) {
-			if (!(node instanceof McpJsonString))
-				throw new IllegalStateException(String.format(
-						"Localization target %s is not a JSON string.",
-						replacement.targetPointer()));
+	private static McpJsonValue overlay(@NonNull McpJsonValue node,
+			@NonNull ReplacementTrieNode replacementTrie) {
+		Replacement replacement = replacementTrie.replacement();
 
+		if (replacement != null)
 			return new McpJsonString(replacement.text());
-		}
-
-		String token = tokens.get(tokenIndex);
 
 		if (node instanceof McpJsonObject object) {
-			McpJsonValue child = object.members().get(token);
-
-			if (child == null)
-				throw missingTarget(replacement);
-
-			McpJsonValue replaced = replaceAt(child, tokens, tokenIndex + 1,
-					replacement);
-
-			if (replaced == child)
-				return node;
-
-			// LinkedHashMap.put on an existing key keeps its original position.
 			Map<String, McpJsonValue> members =
-					new LinkedHashMap<>(object.members());
-			members.put(token, replaced);
+					new LinkedHashMap<>(object.members().size());
+
+			for (Map.Entry<String, McpJsonValue> entry
+					: object.members().entrySet()) {
+				ReplacementTrieNode childTrie =
+						replacementTrie.children().get(entry.getKey());
+				members.put(entry.getKey(), childTrie == null ? entry.getValue()
+						: overlay(entry.getValue(), childTrie));
+			}
+
 			return new McpJsonObject(members);
 		}
 
 		if (node instanceof McpJsonArray array) {
-			int elementIndex = parseElementIndex(token, replacement);
-
-			if (elementIndex >= array.values().size())
-				throw missingTarget(replacement);
-
-			McpJsonValue child = array.values().get(elementIndex);
-			McpJsonValue replaced = replaceAt(child, tokens, tokenIndex + 1,
-					replacement);
-
-			if (replaced == child)
-				return node;
-
 			List<McpJsonValue> values = new ArrayList<>(array.values());
-			values.set(elementIndex, replaced);
+
+			for (Map.Entry<String, ReplacementTrieNode> entry
+					: replacementTrie.children().entrySet()) {
+				int elementIndex = Integer.parseInt(entry.getKey());
+				values.set(elementIndex, overlay(values.get(elementIndex),
+						entry.getValue()));
+			}
+
 			return new McpJsonArray(values);
 		}
 
-		throw missingTarget(replacement);
+		throw new IllegalStateException(
+				"Localization replacement trie does not match the document.");
 	}
 
 	private static int parseElementIndex(@NonNull String token,
@@ -185,5 +208,39 @@ final class McpLocalizationOverlay {
 		// RFC 6901 requires ~1 before ~0 so an encoded "~1" survives intact.
 		return token.indexOf('~') < 0 ? token
 				: token.replace("~1", "/").replace("~0", "~");
+	}
+
+	/** Mutable only while a request-local replacement plan is compiled. */
+	private static final class ReplacementTrieNode {
+		@NonNull
+		private final Map<@NonNull String, @NonNull ReplacementTrieNode> children;
+		@Nullable
+		private Replacement replacement;
+
+		private ReplacementTrieNode() {
+			this.children = new LinkedHashMap<>();
+		}
+
+		private void add(@NonNull List<@NonNull String> tokens,
+				@NonNull Replacement replacement) {
+			ReplacementTrieNode node = this;
+
+			for (String token : tokens)
+				node = node.children.computeIfAbsent(token,
+						ignored -> new ReplacementTrieNode());
+
+			// Repeated pointers retain sequential semantics: the last text wins.
+			node.replacement = replacement;
+		}
+
+		@NonNull
+		private Map<@NonNull String, @NonNull ReplacementTrieNode> children() {
+			return children;
+		}
+
+		@Nullable
+		private Replacement replacement() {
+			return replacement;
+		}
 	}
 }

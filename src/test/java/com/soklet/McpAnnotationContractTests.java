@@ -17,7 +17,7 @@
 package com.soklet;
 
 import com.soklet.annotation.McpHeader;
-import com.soklet.annotation.McpListResources;
+import com.soklet.annotation.McpResourceList;
 import com.soklet.annotation.McpMayRequestInput;
 import com.soklet.annotation.McpPrompt;
 import com.soklet.annotation.McpPromptArgument;
@@ -66,7 +66,7 @@ public class McpAnnotationContractTests {
 		assertAnnotationContract(McpResource.class, ElementType.METHOD);
 		assertAnnotationContract(McpResourceUriParameter.class,
 				ElementType.PARAMETER);
-		assertAnnotationContract(McpListResources.class, ElementType.METHOD);
+		assertAnnotationContract(McpResourceList.class, ElementType.METHOD);
 		assertAnnotationContract(McpMayRequestInput.class);
 	}
 
@@ -74,9 +74,9 @@ public class McpAnnotationContractTests {
 	public void annotationElementsAreLimitedToReviewedMcpVerticals() {
 		Assertions.assertEquals(Set.of("path", "name", "version", "title",
 				"description", "websiteUrl", "instructions", "toolRateLimiter",
-				"resourcesListCacheTtlMs", "resourcesListCacheScope",
-				"resourceTemplatesListCacheTtlMs",
-				"resourceTemplatesListCacheScope"),
+				"resourceListCacheTtlMs", "resourceListCacheScope",
+				"resourceTemplateListCacheTtlMs",
+				"resourceTemplateListCacheScope"),
 				elementNames(McpServerEndpoint.class));
 		Assertions.assertEquals(Set.of("name", "title", "description",
 				"rateLimiter", "mirrorStructuredContentAsText",
@@ -96,7 +96,7 @@ public class McpAnnotationContractTests {
 				elementNames(McpResource.class));
 		Assertions.assertEquals(Set.of("value"),
 				elementNames(McpResourceUriParameter.class));
-		Assertions.assertEquals(Set.of(), elementNames(McpListResources.class));
+		Assertions.assertEquals(Set.of(), elementNames(McpResourceList.class));
 	}
 
 	@Test
@@ -111,13 +111,13 @@ public class McpAnnotationContractTests {
 		Assertions.assertEquals("", endpoint.websiteUrl());
 		Assertions.assertEquals("", endpoint.instructions());
 		Assertions.assertEquals("", endpoint.toolRateLimiter());
-		Assertions.assertEquals(0, endpoint.resourcesListCacheTtlMs());
+		Assertions.assertEquals(0, endpoint.resourceListCacheTtlMs());
 		Assertions.assertEquals(McpCacheScope.PRIVATE,
-				endpoint.resourcesListCacheScope());
+				endpoint.resourceListCacheScope());
 		Assertions.assertEquals(0,
-				endpoint.resourceTemplatesListCacheTtlMs());
+				endpoint.resourceTemplateListCacheTtlMs());
 		Assertions.assertEquals(McpCacheScope.PRIVATE,
-				endpoint.resourceTemplatesListCacheScope());
+				endpoint.resourceTemplateListCacheScope());
 
 		Method method = MinimalEndpoint.class.getDeclaredMethod("search",
 				String.class);
@@ -189,7 +189,7 @@ public class McpAnnotationContractTests {
 		Assertions.assertEquals("", uriParameter.value());
 		Assertions.assertNotNull(MinimalEndpoint.class.getDeclaredMethod(
 				"listResources", McpResourceListContext.class)
-				.getAnnotation(McpListResources.class));
+				.getAnnotation(McpResourceList.class));
 
 		McpTool multiRoundTripTool = MinimalEndpoint.class
 				.getDeclaredMethod("deleteItem")
@@ -277,7 +277,7 @@ public class McpAnnotationContractTests {
 					.build();
 		}
 
-		@McpListResources
+		@McpResourceList
 		public McpResourcePage listResources(McpResourceListContext list) {
 			return McpResourcePage.builder()
 					.resources(list.getRegisteredResourceDescriptors())

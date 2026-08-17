@@ -49,11 +49,11 @@ class McpToolRegistrationTests {
 		McpToolRegistration<Arguments> registration =
 				McpToolRegistration.withName("catalog.search")
 						.types(Arguments.class, Result.class)
-						.handler((request, call, features) -> {
-							rawArguments.set(call.getRawArguments());
-							assertEquals(" exact ", call.getArguments().query());
+						.handler((request, arguments, features) -> {
+							rawArguments.set(arguments.getRawArguments());
+							assertEquals(" exact ", arguments.getArguments().query());
 							assertEquals(List.of(2, 5),
-									call.getArguments().pageSizes());
+									arguments.getArguments().pageSizes());
 							return new Result(List.of(new Item("a", 7)));
 						})
 						.title("Catalog search")
@@ -104,7 +104,7 @@ class McpToolRegistrationTests {
 		McpToolRegistration<MirroredArguments> registration =
 				McpToolRegistration.withName("mirrored")
 						.argumentType(MirroredArguments.class)
-						.handler((request, call, features) ->
+						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("done"))
 						.build();
 		McpJsonObject inputSchema = registration.getInputSchema().getDocument();
@@ -138,28 +138,28 @@ class McpToolRegistrationTests {
 
 	@Test
 	void allClassAndTypeReferenceCombinationsAreAvailable() {
-		TypeReference<Arguments> arguments =
+		TypeReference<Arguments> argumentType =
 				new TypeReference<>() {};
 		TypeReference<List<Item>> results =
 				new TypeReference<>() {};
 
 		assertEquals(Result.class, McpToolRegistration.withName("one")
 				.types(Arguments.class, Result.class)
-				.handler((request, call, features) ->
+				.handler((request, arguments, features) ->
 						new Result(List.of()))
 				.build().getOutputType().orElseThrow());
 		assertEquals(results.getType(), McpToolRegistration.withName("two")
 				.types(Arguments.class, results)
-				.handler((request, call, features) -> List.of())
+				.handler((request, arguments, features) -> List.of())
 				.build().getOutputType().orElseThrow());
-		assertEquals(arguments.getType(), McpToolRegistration.withName("three")
-				.types(arguments, Result.class)
-				.handler((request, call, features) ->
+		assertEquals(argumentType.getType(), McpToolRegistration.withName("three")
+				.types(argumentType, Result.class)
+				.handler((request, arguments, features) ->
 						new Result(List.of()))
 				.build().getArgumentType());
 		assertEquals(results.getType(), McpToolRegistration.withName("four")
-				.types(arguments, results)
-				.handler((request, call, features) -> List.of())
+				.types(argumentType, results)
+				.handler((request, arguments, features) -> List.of())
 				.build().getOutputType().orElseThrow());
 	}
 
@@ -169,29 +169,29 @@ class McpToolRegistrationTests {
 		McpToolRegistration<Arguments> advanced =
 				McpToolRegistration.withName("advanced")
 						.argumentType(Arguments.class)
-						.handler((request, call, features) ->
+						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText(
-										call.getArguments().query()))
+										arguments.getArguments().query()))
 						.mirrorStructuredContentAsText(false)
 						.build();
 		McpToolRegistration<McpJsonObject> raw =
 				McpToolRegistration.withName("raw")
 						.jsonArguments()
-						.handler((request, call, features) ->
+						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolStructuredContent(
-										call.getArguments()))
+										arguments.getArguments()))
 						.build();
 		McpJsonObject input = argumentsJson();
 		assertThrows(NullPointerException.class, () -> McpToolRegistration
 				.withName("advanced-null-mirror")
 				.argumentType(Arguments.class)
-				.handler((request, call, features) ->
+				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("done"))
 				.mirrorStructuredContentAsText(null));
 		assertThrows(NullPointerException.class, () -> McpToolRegistration
 				.withName("typed-null-mirror")
 				.types(Arguments.class, Result.class)
-				.handler((request, call, features) -> new Result(List.of()))
+				.handler((request, arguments, features) -> new Result(List.of()))
 				.mirrorStructuredContentAsText(null));
 
 		McpCompleteResult advancedResult =
@@ -233,7 +233,7 @@ class McpToolRegistrationTests {
 		McpToolRegistration<Arguments> nullResult =
 				McpToolRegistration.withName("null-result")
 						.types(Arguments.class, Result.class)
-						.handler((request, call, features) -> null)
+						.handler((request, arguments, features) -> null)
 						.build();
 		assertThrows(NullPointerException.class, () -> nullResult.invoke(
 				requestContext(), argumentsJson(),
@@ -247,7 +247,7 @@ class McpToolRegistrationTests {
 		McpToolRegistration<Arguments> registration =
 				McpToolRegistration.withName("failure-classification")
 						.argumentType(Arguments.class)
-						.handler((request, call, features) -> {
+						.handler((request, arguments, features) -> {
 							throw expectedApplicationFailure;
 						})
 						.build();
@@ -298,8 +298,8 @@ class McpToolRegistrationTests {
 		McpToolRegistration<McpJsonObject> registration =
 				McpToolRegistration.withName("conformance_schema")
 						.conformanceInputSchema(inputSchema)
-						.handler((request, call, features) -> {
-							decodedArguments.set(call.getArguments());
+						.handler((request, arguments, features) -> {
+							decodedArguments.set(arguments.getArguments());
 							return McpCompleteResult.fromToolText("done");
 						})
 						.build();
@@ -342,11 +342,11 @@ class McpToolRegistrationTests {
 	@Test
 	void rateLimiterSelectionIsLastCallWins() {
 		McpRateLimiter direct =
-				context -> McpRateLimitDecision.fromAllowed();
+				context -> McpRateLimitDecision.allowed();
 		McpToolRegistration<Arguments> named =
 				McpToolRegistration.withName("named")
 						.argumentType(Arguments.class)
-						.handler((request, call, features) ->
+						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("done"))
 						.rateLimiter(direct)
 						.rateLimiter("distributed")
@@ -354,7 +354,7 @@ class McpToolRegistrationTests {
 		McpToolRegistration<Arguments> directLast =
 				McpToolRegistration.withName("direct")
 						.argumentType(Arguments.class)
-						.handler((request, call, features) ->
+						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("done"))
 						.rateLimiter("distributed")
 						.rateLimiter(direct)
@@ -368,7 +368,7 @@ class McpToolRegistrationTests {
 		assertThrows(IllegalArgumentException.class, () ->
 				McpToolRegistration.withName("blank-limiter")
 						.argumentType(Arguments.class)
-						.handler((request, call, features) ->
+						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("done"))
 						.rateLimiter(" "));
 	}

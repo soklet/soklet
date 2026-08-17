@@ -36,22 +36,22 @@ public final class McpLocalizationCatalog {
 
 	/**
 	 * Extracts the canonical localizable catalog from the final endpoint
-	 * resolver. Annotated, generated, and programmatic registrations therefore
+	 * registry. Annotated, generated, and programmatic registrations therefore
 	 * share one extraction authority. Extraction rejects an external-key
 	 * collision between unequal coordinates instead of silently merging fields.
 	 *
-	 * @param handlerResolver final immutable handler resolver
+	 * @param endpointRegistry final immutable endpoint registry
 	 * @return deterministic localization catalog
-	 * @throws NullPointerException if {@code handlerResolver} is null
+	 * @throws NullPointerException if {@code endpointRegistry} is null
 	 * @throws IllegalStateException if unequal coordinates produce the same
 	 * external key
 	 */
 	@NonNull
-	public static McpLocalizationCatalog fromHandlerResolver(
-			@NonNull McpHandlerResolver handlerResolver) {
+	public static McpLocalizationCatalog fromEndpointRegistry(
+			@NonNull McpEndpointRegistry endpointRegistry) {
 		return new McpLocalizationCatalog(
 				DefaultMcpLocalizationCatalogExtractor.extract(
-						requireNonNull(handlerResolver)));
+						requireNonNull(endpointRegistry)));
 	}
 
 	private McpLocalizationCatalog(

@@ -125,9 +125,9 @@ final class McpServerCapabilityRegistry {
 		this.toolsListResult = toolsListResult(endpoint.tools());
 		this.promptsListResult = promptsListResult(endpoint.prompts());
 		this.resourcesListResult = resourcesListResult(exactResourceDescriptors,
-				endpoint.resourcesListCachePolicy());
+				endpoint.resourceListCachePolicy());
 		this.resourceTemplatesListResult = resourceTemplatesListResult(
-				resourceTemplateDescriptors, endpoint.resourceTemplatesListCachePolicy());
+				resourceTemplateDescriptors, endpoint.resourceTemplateListCachePolicy());
 
 		boolean subscriptionsSupported = endpoint.subscriptions().isPresent();
 		Optional<McpCatalogCapability> toolsCapability = tools.isEmpty()

@@ -19,13 +19,13 @@ package com.soklet.internal.mcp.protocol;
 import com.soklet.CorsAuthorizer;
 import com.soklet.McpCompleteResult;
 import com.soklet.McpEndpoint;
-import com.soklet.McpHandlerResolver;
+import com.soklet.McpEndpointRegistry;
 import com.soklet.McpImplementation;
 import com.soklet.McpJsonObject;
 import com.soklet.McpProgressReporter;
 import com.soklet.McpProgressUpdate;
 import com.soklet.McpRateLimitDecision;
-import com.soklet.McpRequestAdmissionPolicy;
+import com.soklet.McpAdmissionController;
 import com.soklet.McpResourceOutput;
 import com.soklet.McpResourceRegistration;
 import com.soklet.McpServer;
@@ -35,7 +35,7 @@ import com.soklet.McpSubscriptionConfig;
 import com.soklet.McpSubscriptionEvent;
 import com.soklet.McpSubscriptionEventListener;
 import com.soklet.McpSubscriptionEventPublisher;
-import com.soklet.McpSubscriptionEventSubscription;
+import com.soklet.McpSubscriptionEventRegistration;
 import com.soklet.McpSubscriptionNotificationType;
 import com.soklet.McpTextResourceContents;
 import com.soklet.McpToolHandler;
@@ -83,7 +83,7 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 			throws Exception {
 		CountDownLatch releaseHandler = new CountDownLatch(1);
 		CountDownLatch handlerInterrupted = new CountDownLatch(1);
-		McpEndpoint toolEndpoint = toolEndpoint((request, call, features) -> {
+		McpEndpoint toolEndpoint = toolEndpoint((request, arguments, features) -> {
 			features.require(McpProgressReporter.class).report(
 					McpProgressUpdate.withProgress(1.0d).build());
 			try {
@@ -167,7 +167,7 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 		CountDownLatch releaseHandler = new CountDownLatch(1);
 		CountDownLatch handlerInterrupted = new CountDownLatch(1);
 		CountDownLatch handlerExited = new CountDownLatch(1);
-		McpEndpoint endpoint = toolEndpoint((request, call, features) -> {
+		McpEndpoint endpoint = toolEndpoint((request, arguments, features) -> {
 			features.require(McpProgressReporter.class).report(
 					McpProgressUpdate.withProgress(1.0d).build());
 			try {
@@ -300,7 +300,7 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 		McpSubscriptionEventPublisher publisher = new McpSubscriptionEventPublisher() {
 			@Override
 			@NonNull
-			public McpSubscriptionEventSubscription subscribe(
+			public McpSubscriptionEventRegistration subscribe(
 					@NonNull McpSubscriptionEventListener listener) {
 				return () -> {};
 			}
@@ -342,11 +342,11 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 			@NonNull Duration shutdownTimeout) {
 		return McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(endpoints))
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
-				.requestRateLimiter(context -> McpRateLimitDecision.fromAllowed())
-				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints))
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
+				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.requestHandlerConcurrency(2)

@@ -68,10 +68,10 @@ class McpLocalizationHandlerRuntimeTests {
 					return context;
 				})
 				.build();
-		McpHandlerInterceptor interceptor = (context, invocation) -> {
-			interceptorObserved.set(invocation.getFeatures()
+		McpHandlerInterceptor interceptor = (context, continuation) -> {
+			interceptorObserved.set(continuation.getFeatures()
 					.find(McpLocalizationContext.class).orElse(null));
-			return invocation.invoke();
+			return continuation.proceed();
 		};
 		McpEndpoint endpoint = endpoint(features -> handlerObserved.set(
 				features.find(McpLocalizationContext.class).orElse(null)));
@@ -114,9 +114,9 @@ class McpLocalizationHandlerRuntimeTests {
 					throw new AssertionError("secret-provider-detail");
 				})
 				.build();
-		McpHandlerInterceptor interceptor = (context, invocation) -> {
+		McpHandlerInterceptor interceptor = (context, continuation) -> {
 			interceptorInvocations.incrementAndGet();
-			return invocation.invoke();
+			return continuation.proceed();
 		};
 		McpEndpoint endpoint = endpoint(features ->
 				handlerInvocations.incrementAndGet());
@@ -240,7 +240,7 @@ class McpLocalizationHandlerRuntimeTests {
 
 			@Override
 			public McpLocalizationResult localize(McpLocalizableText text) {
-				return McpLocalizationResult.fromDefaultText();
+				return McpLocalizationResult.useDefaultText();
 			}
 		};
 	}
@@ -256,7 +256,7 @@ class McpLocalizationHandlerRuntimeTests {
 						.withNameAndVersion("handler-context", "1.0").build())
 				.tool(McpToolRegistration.withName("context.tool")
 						.jsonArguments()
-						.handler((request, call, features) -> {
+						.handler((request, arguments, features) -> {
 							probe.observe(features);
 							return McpCompleteResult.fromToolText("tool complete");
 						})
@@ -277,10 +277,10 @@ class McpLocalizationHandlerRuntimeTests {
 			List<Throwable> observedThrowables) {
 		McpServer.Builder builder = McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(McpRequestAdmissionPolicy.acceptAllInstance())
-				.requestRateLimiter(context -> McpRateLimitDecision.fromAllowed())
-				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(McpAdmissionController.acceptAllInstance())
+				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
 

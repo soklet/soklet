@@ -51,7 +51,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> ordinaryTool = McpToolRegistration
 				.withName("ordinary")
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					stages.add("handler:ordinary");
 					return McpCompleteResult.fromToolText("UNSANITIZED-ORDINARY");
 				})
@@ -59,12 +59,12 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> shortCircuitedTool = McpToolRegistration
 				.withName("short-circuited")
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					shortCircuitedHandlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText("HANDLER-MUST-NOT-RUN");
 				})
 				.build();
-		McpHandlerInterceptor interceptor = (context, invocation) -> {
+		McpHandlerInterceptor interceptor = (context, continuation) -> {
 			String operation = context.getOperationName().orElseThrow();
 			stages.add("interceptor-before:" + operation);
 			McpOperationResult result;
@@ -72,7 +72,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 				result = McpCompleteResult.fromToolText(
 						"UNSANITIZED-SHORT-CIRCUIT");
 			else
-				result = invocation.invoke();
+				result = continuation.proceed();
 			stages.add("interceptor-after:" + operation);
 			return result;
 		};
@@ -137,13 +137,13 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 		McpToolRegistration<TypedArguments> tool = McpToolRegistration
 				.withName("typed")
 				.types(TypedArguments.class, TypedResult.class)
-				.handler((request, call, features) ->
+				.handler((request, arguments, features) ->
 						new TypedResult("ORIGINAL-TYPED-VALUE"))
 				.build();
 		McpToolRegistration<TypedArguments> toolWithoutMirror = McpToolRegistration
 				.withName("typed-without-mirror")
 				.types(TypedArguments.class, TypedResult.class)
-				.handler((request, call, features) ->
+				.handler((request, arguments, features) ->
 						new TypedResult("ORIGINAL-TYPED-VALUE"))
 				.mirrorStructuredContentAsText(false)
 				.build();
@@ -275,7 +275,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(toolName)
 				.jsonArguments()
-				.handler((request, call, features) ->
+				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText(handlerSecret))
 				.build();
 		McpServer server = server(List.of(tool),
@@ -308,14 +308,14 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 				.build();
 		return McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(
-						McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
+				.endpointRegistry(
+						McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
 				.requestRateLimiter(
-						context -> McpRateLimitDecision.fromAllowed())
+						context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(
-						context -> McpRateLimitDecision.fromAllowed())
+						context -> McpRateLimitDecision.allowed())
 				.handlerInterceptor(interceptor)
 				.toolOutputSanitizer(sanitizer)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())

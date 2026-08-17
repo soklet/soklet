@@ -20,7 +20,7 @@ import com.soklet.annotation.DELETE;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.HEAD;
 import com.soklet.annotation.McpHeader;
-import com.soklet.annotation.McpListResources;
+import com.soklet.annotation.McpResourceList;
 import com.soklet.annotation.McpPrompt;
 import com.soklet.annotation.McpPromptArgument;
 import com.soklet.annotation.McpResource;
@@ -342,7 +342,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		out.add(McpPromptArgument.class.getCanonicalName());
 		out.add(McpResource.class.getCanonicalName());
 		out.add(McpResourceUriParameter.class.getCanonicalName());
-		out.add(McpListResources.class.getCanonicalName());
+		out.add(McpResourceList.class.getCanonicalName());
 		// Keep the processor active when a touched type removes its final Soklet
 		// annotation so stale generated index rows can still be pruned.
 		out.add("*");
@@ -508,7 +508,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		TypeElement resourceUriParameterAnnotation = elements.getTypeElement(
 				McpResourceUriParameter.class.getCanonicalName());
 		TypeElement listResourcesAnnotation = elements.getTypeElement(
-				McpListResources.class.getCanonicalName());
+				McpResourceList.class.getCanonicalName());
 		if (endpointAnnotation == null || toolAnnotation == null
 				|| argumentAnnotation == null || headerAnnotation == null
 				|| promptAnnotation == null
@@ -742,13 +742,13 @@ public final class SokletProcessor extends AbstractProcessor {
 				listResourcesAnnotation)) {
 			if (element.getKind() != ElementKind.METHOD) {
 				mcpError(element,
-						"Soklet: @McpListResources can only be applied to methods.");
+						"Soklet: @McpResourceList can only be applied to methods.");
 				continue;
 			}
 			Element owner = element.getEnclosingElement();
 			if (findAnnotation(owner, endpointAnnotation) == null)
 				mcpError(element,
-						"Soklet: @McpListResources methods must be declared directly by an @McpServerEndpoint class.");
+						"Soklet: @McpResourceList methods must be declared directly by an @McpServerEndpoint class.");
 		}
 
 		for (Element element : roundEnv.getElementsAnnotatedWith(
@@ -907,14 +907,14 @@ public final class SokletProcessor extends AbstractProcessor {
 		String websiteUrl = annotationString(annotation, "websiteUrl");
 		String instructions = annotationString(annotation, "instructions");
 		String toolRateLimiter = annotationString(annotation, "toolRateLimiter");
-		long resourcesListCacheTtlMs = annotationLong(annotation,
-				"resourcesListCacheTtlMs");
-		String resourcesListCacheScope = annotationEnumConstantName(annotation,
-				"resourcesListCacheScope");
-		long resourceTemplatesListCacheTtlMs = annotationLong(annotation,
-				"resourceTemplatesListCacheTtlMs");
-		String resourceTemplatesListCacheScope = annotationEnumConstantName(
-				annotation, "resourceTemplatesListCacheScope");
+		long resourceListCacheTtlMs = annotationLong(annotation,
+				"resourceListCacheTtlMs");
+		String resourceListCacheScope = annotationEnumConstantName(annotation,
+				"resourceListCacheScope");
+		long resourceTemplateListCacheTtlMs = annotationLong(annotation,
+				"resourceTemplateListCacheTtlMs");
+		String resourceTemplateListCacheScope = annotationEnumConstantName(
+				annotation, "resourceTemplateListCacheScope");
 		if (name.isBlank())
 			mcpError(endpointType,
 					"Soklet: MCP implementation name must not be blank.");
@@ -924,10 +924,10 @@ public final class SokletProcessor extends AbstractProcessor {
 		if (!toolRateLimiter.isEmpty() && toolRateLimiter.isBlank())
 			mcpError(endpointType,
 					"Soklet: MCP endpoint tool rate-limiter name must not be blank.");
-		if (resourcesListCacheTtlMs < 0)
+		if (resourceListCacheTtlMs < 0)
 			mcpError(endpointType,
 					"Soklet: MCP resources-list cache TTL must not be negative.");
-		if (resourceTemplatesListCacheTtlMs < 0)
+		if (resourceTemplateListCacheTtlMs < 0)
 			mcpError(endpointType,
 					"Soklet: MCP resource-template-list cache TTL must not be negative.");
 		if (!websiteUrl.isBlank()) {
@@ -995,7 +995,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				if (model != null) {
 					if (resourceList != null)
 						mcpError(enclosed,
-								"Soklet: An annotated MCP endpoint may declare at most one @McpListResources method.");
+								"Soklet: An annotated MCP endpoint may declare at most one @McpResourceList method.");
 					else
 						resourceList = model;
 				}
@@ -1067,9 +1067,9 @@ public final class SokletProcessor extends AbstractProcessor {
 				endpointType.getQualifiedName().toString(), endpointBinaryName,
 				providerSimpleName, providerBinaryName, path, name, version,
 				title, description, websiteUrl, instructions, toolRateLimiter,
-				resourcesListCacheTtlMs, resourcesListCacheScope,
-				resourceTemplatesListCacheTtlMs,
-				resourceTemplatesListCacheScope, List.copyOf(tools),
+				resourceListCacheTtlMs, resourceListCacheScope,
+				resourceTemplateListCacheTtlMs,
+				resourceTemplateListCacheScope, List.copyOf(tools),
 				List.copyOf(prompts), List.copyOf(resources), resourceList);
 	}
 
@@ -1623,11 +1623,11 @@ public final class SokletProcessor extends AbstractProcessor {
 	private McpResourceListModel validateMcpResourceList(
 			@NonNull ExecutableElement method) {
 		int errorsBefore = mcpProcessingErrorCount;
-		validateConcreteMcpHandlerMethod(method, "@McpListResources");
+		validateConcreteMcpHandlerMethod(method, "@McpResourceList");
 		if (mcpResourcePageType == null || !types.isSameType(
 				method.getReturnType(), mcpResourcePageType))
 			mcpError(method,
-					"Soklet: @McpListResources method return type must be exactly McpResourcePage.");
+					"Soklet: @McpResourceList method return type must be exactly McpResourcePage.");
 
 		List<McpResourceListParameterBinding> bindings = new ArrayList<>();
 		boolean requestContextSeen = false;
@@ -1639,26 +1639,26 @@ public final class SokletProcessor extends AbstractProcessor {
 			if (isExactType(parameter.asType(), mcpRequestContextType)) {
 				if (requestContextSeen)
 					mcpError(parameter,
-							"Soklet: An @McpListResources method may inject McpRequestContext at most once.");
+							"Soklet: An @McpResourceList method may inject McpRequestContext at most once.");
 				requestContextSeen = true;
 				bindings.add(McpResourceListParameterBinding.REQUEST_CONTEXT);
 			} else if (isExactType(parameter.asType(),
 					mcpInvocationFeaturesType)) {
 				if (invocationFeaturesSeen)
 					mcpError(parameter,
-							"Soklet: An @McpListResources method may inject McpInvocationFeatures at most once.");
+							"Soklet: An @McpResourceList method may inject McpInvocationFeatures at most once.");
 				invocationFeaturesSeen = true;
 				bindings.add(McpResourceListParameterBinding.INVOCATION_FEATURES);
 			} else if (isExactType(parameter.asType(), cancelationTokenType)) {
 				if (cancelationTokenSeen)
 					mcpError(parameter,
-							"Soklet: An @McpListResources method may inject CancelationToken at most once.");
+							"Soklet: An @McpResourceList method may inject CancelationToken at most once.");
 				cancelationTokenSeen = true;
 				bindings.add(McpResourceListParameterBinding.CANCELATION_TOKEN);
 			} else if (isOptionalMcpProgressReporter(parameter.asType())) {
 				if (progressReporterSeen)
 					mcpError(parameter,
-							"Soklet: An @McpListResources method may inject Optional<McpProgressReporter> at most once.");
+							"Soklet: An @McpResourceList method may inject Optional<McpProgressReporter> at most once.");
 				progressReporterSeen = true;
 				bindings.add(McpResourceListParameterBinding.PROGRESS_REPORTER);
 			} else if (isExactType(parameter.asType(),
@@ -1669,17 +1669,17 @@ public final class SokletProcessor extends AbstractProcessor {
 					mcpResourceListContextType)) {
 				if (resourceListContextSeen)
 					mcpError(parameter,
-							"Soklet: An @McpListResources method must inject McpResourceListContext exactly once.");
+							"Soklet: An @McpResourceList method must inject McpResourceListContext exactly once.");
 				resourceListContextSeen = true;
 				bindings.add(McpResourceListParameterBinding.RESOURCE_LIST_CONTEXT);
 			} else {
 				mcpError(parameter,
-						"Soklet: @McpListResources parameters must be McpRequestContext, McpResourceListContext, McpInvocationFeatures, CancelationToken, or Optional<McpProgressReporter>.");
+						"Soklet: @McpResourceList parameters must be McpRequestContext, McpResourceListContext, McpInvocationFeatures, CancelationToken, or Optional<McpProgressReporter>.");
 			}
 		}
 		if (!resourceListContextSeen)
 			mcpError(method,
-					"Soklet: An @McpListResources method must inject McpResourceListContext exactly once.");
+					"Soklet: An @McpResourceList method must inject McpResourceListContext exactly once.");
 
 		if (mcpProcessingErrorCount != errorsBefore)
 			return null;
@@ -2151,20 +2151,20 @@ public final class SokletProcessor extends AbstractProcessor {
 				endpoint.instructions());
 		appendOptionalBuilderCall(source, "endpointBuilder", "toolRateLimiter",
 				endpoint.toolRateLimiter());
-		if (endpoint.resourcesListCacheTtlMs() != 0
-				|| !"PRIVATE".equals(endpoint.resourcesListCacheScope()))
-			source.append("\t\tendpointBuilder.resourcesListCachePolicy(")
+		if (endpoint.resourceListCacheTtlMs() != 0
+				|| !"PRIVATE".equals(endpoint.resourceListCacheScope()))
+			source.append("\t\tendpointBuilder.resourceListCachePolicy(")
 					.append(cachePolicyExpression(
-							endpoint.resourcesListCacheTtlMs(),
-							endpoint.resourcesListCacheScope()))
+							endpoint.resourceListCacheTtlMs(),
+							endpoint.resourceListCacheScope()))
 					.append(");\n");
-		if (endpoint.resourceTemplatesListCacheTtlMs() != 0
+		if (endpoint.resourceTemplateListCacheTtlMs() != 0
 				|| !"PRIVATE".equals(
-						endpoint.resourceTemplatesListCacheScope()))
-			source.append("\t\tendpointBuilder.resourceTemplatesListCachePolicy(")
+						endpoint.resourceTemplateListCacheScope()))
+			source.append("\t\tendpointBuilder.resourceTemplateListCachePolicy(")
 					.append(cachePolicyExpression(
-							endpoint.resourceTemplatesListCacheTtlMs(),
-							endpoint.resourceTemplatesListCacheScope()))
+							endpoint.resourceTemplateListCacheTtlMs(),
+							endpoint.resourceTemplateListCacheScope()))
 					.append(");\n");
 
 		for (int index = 0; index < endpoint.tools().size(); ++index) {
@@ -2177,7 +2177,7 @@ public final class SokletProcessor extends AbstractProcessor {
 					.append(".class, ")
 					.append(resultTypeExpression(tool.method().getReturnType()))
 					.append(")\n")
-					.append("\t\t\t\t.handler((request, call, features) -> ")
+					.append("\t\t\t\t.handler((request, arguments, features) -> ")
 					.append("instanceProvider.provide(")
 					.append(endpoint.endpointQualifiedName()).append(".class).")
 					.append(tool.method().getSimpleName()).append('(')
@@ -2364,7 +2364,7 @@ public final class SokletProcessor extends AbstractProcessor {
 						"features.require(com.soklet.CancelationToken.class)";
 				case PROGRESS_REPORTER ->
 						"features.find(com.soklet.McpProgressReporter.class)";
-				case TOOL_ARGUMENT -> "call.getArguments()."
+				case TOOL_ARGUMENT -> "arguments.getArguments()."
 						+ binding.carrierName() + "()";
 			});
 		}
@@ -3802,9 +3802,9 @@ public final class SokletProcessor extends AbstractProcessor {
 			String providerSimpleName, String providerBinaryName, String path,
 			String name, String version, String title, String description,
 			String websiteUrl, String instructions, String toolRateLimiter,
-			long resourcesListCacheTtlMs, String resourcesListCacheScope,
-			long resourceTemplatesListCacheTtlMs,
-			String resourceTemplatesListCacheScope,
+			long resourceListCacheTtlMs, String resourceListCacheScope,
+			long resourceTemplateListCacheTtlMs,
+			String resourceTemplateListCacheScope,
 			List<McpToolModel> tools, List<McpPromptModel> prompts,
 			List<McpResourceModel> resources,
 			@Nullable McpResourceListModel resourceList) {}

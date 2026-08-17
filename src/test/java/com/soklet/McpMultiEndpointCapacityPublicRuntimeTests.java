@@ -71,11 +71,11 @@ public class McpMultiEndpointCapacityPublicRuntimeTests {
 				"multi-endpoint-second-capacity", secondTool);
 		McpServer server = McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
 						List.of(firstEndpoint, secondEndpoint)))
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
-				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.requestHandlerConcurrency(1)
@@ -161,7 +161,7 @@ public class McpMultiEndpointCapacityPublicRuntimeTests {
 			@NonNull AtomicInteger maximumActiveHandlers) {
 		return McpToolRegistration.withName(name)
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					invocations.incrementAndGet();
 					int active = activeHandlers.incrementAndGet();
 					maximumActiveHandlers.accumulateAndGet(active, Math::max);

@@ -77,7 +77,7 @@ public interface McpLocalizationContext {
 	 * it must not perform remote I/O or unbounded loading.
 	 * <p>
 	 * An implementation reports an unexpected lookup failure with
-	 * {@link McpLocalizationResult#fromFailure()}; it must not throw to report an
+	 * {@link McpLocalizationResult#failure()}; it must not throw to report an
 	 * operational lookup failure. If an unchecked contract violation nevertheless
 	 * escapes while Soklet invokes this callback, Soklet treats it as untrusted
 	 * localization data and does not forward it through framework-owned

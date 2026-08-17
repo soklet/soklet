@@ -128,6 +128,33 @@ public class McpFrameworkRequestStateRuntimeTests {
 	}
 
 	@Test
+	public void localizedReemissionUpgradesVersionOneAndPinsTheLocale()
+			throws Exception {
+		MutableClock clock = new MutableClock(INITIAL_TIME);
+		RecordingAdapter adapter = new RecordingAdapter();
+		McpFrameworkRequestStateRuntime runtime = runtime(clock, adapter);
+		String firstProtectedState = seal(runtime, stringId("request-1"),
+				new McpJsonString("one"), Optional.empty());
+		clock.set(INITIAL_TIME.plusSeconds(1L));
+		McpFrameworkRequestStateContinuation versionOne = open(runtime,
+				stringId("request-2"), firstProtectedState).continuation();
+		Assertions.assertNull(versionOne.selectedLocale());
+
+		String upgradedState = runtime.seal(ENDPOINT_PATH, PROTOCOL_VERSION, METHOD,
+				AUTHORIZATION_PARTITION, parameters(), stringId("request-2"),
+				new McpJsonString("two"), Optional.of(versionOne),
+				Optional.of("fr-CA"));
+		clock.set(INITIAL_TIME.plusSeconds(2L));
+		McpFrameworkRequestStateContinuation upgraded = open(runtime,
+				stringId("request-3"), upgradedState).continuation();
+
+		Assertions.assertEquals(2, upgraded.round());
+		Assertions.assertEquals("fr-CA", upgraded.selectedLocale());
+		Assertions.assertEquals(versionOne.issuedAt(), upgraded.issuedAt());
+		Assertions.assertEquals(versionOne.expiresAt(), upgraded.expiresAt());
+	}
+
+	@Test
 	public void exactExpiryRejectsOpenAndReemissionBeforeAdapterSeal()
 			throws Exception {
 		MutableClock clock = new MutableClock(INITIAL_TIME);

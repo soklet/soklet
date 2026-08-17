@@ -43,13 +43,13 @@ public interface McpCompleteToolHandler<A, R> {
 	 * Handles one tool invocation.
 	 *
 	 * @param request request metadata
-	 * @param call converted and raw tool arguments
+	 * @param arguments converted and raw tool arguments
 	 * @param features invocation-scoped optional features
 	 * @return non-null structured result
 	 * @throws Exception if application handling fails
 	 */
 	@NonNull
 	R handle(@NonNull McpRequestContext request,
-			@NonNull McpToolCallContext<A> call,
+			@NonNull McpToolArguments<A> arguments,
 			@NonNull McpInvocationFeatures features) throws Exception;
 }

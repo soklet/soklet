@@ -95,7 +95,8 @@ final class McpLocalizationRenderer {
 	 * @param canonicalEncodedBytes precomputed encoded length of that document
 	 * @param envelopeBytes exact request-specific envelope and request-ID bytes
 	 * @param maximumResponseBytes production response ceiling
-	 * @param maximumReplacementCharacters production JSON string character limit
+	 * @param maximumReplacementCharacters stricter of the production decoded-string
+	 *        and serialized-token character limits
 	 * @param slots precompiled slots for this response, in plan order
 	 * @param context request-scoped provider context
 	 * @param failurePolicy configured whole-response failure behavior
@@ -128,8 +129,7 @@ final class McpLocalizationRenderer {
 		if (terminalBoundary.isTerminal())
 			return failed(canonicalDocument, failurePolicy);
 
-		// The selected locale is provider data: it must be canonical and non-root,
-		// and a Fallback that resolves to it is a contract violation.
+		// The selected locale is provider data: it must be canonical and non-root.
 		Locale selectedLocale;
 
 		try {
@@ -172,14 +172,6 @@ final class McpLocalizationRenderer {
 
 			if (result instanceof McpLocalizationResult.Localized localized) {
 				replacementText = localized.text();
-			} else if (result instanceof McpLocalizationResult.Fallback fallback) {
-				// A fallback that resolved to the selected locale is not a
-				// fallback; the contract makes it invalid rather than a synonym
-				// for Localized.
-				if (fallback.resolvedLocale().equals(selectedLocale))
-					return failed(canonicalDocument, failurePolicy);
-
-				replacementText = fallback.text();
 			} else if (result instanceof McpLocalizationResult.UseDefaultText) {
 				continue;
 			} else {
@@ -187,11 +179,17 @@ final class McpLocalizationRenderer {
 				return failed(canonicalDocument, failurePolicy);
 			}
 
-			// Reject before retention when the replacement can never encode: the
-			// production writer enforces a character limit the byte budget alone
-			// does not imply.
-			if (replacementText.length() > maximumReplacementCharacters)
+			// Reject before retention when the replacement can never encode. The
+			// production writer independently bounds decoded characters and serialized
+			// token characters; escaping means neither is implied by the byte ceiling.
+			try {
+				if (replacementText.length() > maximumReplacementCharacters
+						|| McpLocalizationByteAccounting.serializedTokenCharacters(
+								replacementText) > maximumReplacementCharacters)
+					return failed(canonicalDocument, failurePolicy);
+			} catch (RuntimeException exception) {
 				return failed(canonicalDocument, failurePolicy);
+			}
 
 			String defaultText = slot.text().getDefaultText();
 

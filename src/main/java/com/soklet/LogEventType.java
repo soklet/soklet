@@ -217,5 +217,35 @@ public enum LogEventType {
 	/**
 	 * Indicates an internal {@link SseServer} error occurred.
 	 */
-	SSE_SERVER_INTERNAL_ERROR
+	SSE_SERVER_INTERNAL_ERROR,
+	/**
+	 * Indicates that an admitted MCP request reached its exactly-once finish
+	 * authority with enabled trace-correlation fields. Exactly one event is
+	 * attempted when a pseudonymous correlation token or separately opted-in raw
+	 * validated trace ID is available; no event is attempted otherwise.
+	 *
+	 * <p>The {@link LogEvent#getMessage()} value is bounded ASCII with one of
+	 * these exact, stable field orders:</p>
+	 * <pre>{@code
+	 * tokenFormat=soklet-mcp-trace-correlation-v1;keyId=<key-id>;token=<token>
+	 * tokenFormat=soklet-mcp-trace-correlation-v1;keyId=<key-id>;token=<token>;traceId=<trace-id>
+	 * traceId=<trace-id>
+	 * }</pre>
+	 * The key ID is a 1-64-byte ASCII HTTP token, the pseudonymous token is 22
+	 * unpadded Base64URL characters, and the trace ID is 32 lowercase hexadecimal
+	 * characters. Those alphabets exclude the {@code ';'} and {@code '='}
+	 * delimiters, so consumers may parse fields without an escaping convention.
+	 * The maximum message length is 184 characters.
+	 *
+	 * <p>Correlation-token emission is controlled by
+	 * {@link McpServer.Builder#traceCorrelationKey(McpTraceCorrelationKey)}. The
+	 * raw trace ID is client-controlled, sensitive, and high-cardinality; it is
+	 * present only under the independent
+	 * {@link McpServer.Builder#logRawValidatedTraceIds(Boolean)} opt-in. Neither
+	 * form is added to metric dimensions, exception messages, or conformance
+	 * artifacts. The event never carries the full {@code traceparent}, parent/span
+	 * ID, trace flags, {@code tracestate}, or {@code baggage}, and its throwable,
+	 * request, resource method, and marshaled response are absent.</p>
+	 */
+	MCP_TRACE_CORRELATION
 }

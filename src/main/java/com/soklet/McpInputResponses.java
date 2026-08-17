@@ -37,6 +37,14 @@ import static java.util.Objects.requireNonNull;
  * Soklet's closed intrinsic MCP binding and is provided both to live request
  * contexts and to application-created test fixtures.
  *
+ * <p>Soklet validates that each wire value belongs to the open MCP
+ * {@code InputResponse} union. Applications must still correlate a response
+ * key with the request they emitted, branch explicitly on elicitation
+ * {@code accept}, {@code decline}, and {@code cancel} actions, and validate
+ * accepted form content against the exact requested schema before causing a
+ * side effect. Typed lookup converts a value; it does not establish that
+ * request-specific correlation or policy.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe

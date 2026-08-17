@@ -18,7 +18,7 @@ package com.soklet.internal.mcp.generated;
 
 import com.soklet.InstanceProvider;
 import com.soklet.McpCompleteResult;
-import com.soklet.McpHandlerResolver;
+import com.soklet.McpEndpointRegistry;
 import com.soklet.McpInvocationFeatures;
 import com.soklet.McpJsonObject;
 import com.soklet.McpLocalSubscriptionEventPublisher;
@@ -26,7 +26,7 @@ import com.soklet.McpOperationResult;
 import com.soklet.McpRequestContext;
 import com.soklet.McpSubscriptionConfig;
 import com.soklet.McpSubscriptionNotificationType;
-import com.soklet.McpToolCallContext;
+import com.soklet.McpToolArguments;
 import com.soklet.McpToolHandler;
 import com.soklet.McpToolRegistration;
 import org.jspecify.annotations.NonNull;
@@ -156,11 +156,11 @@ public class McpGeneratedEndpointProviderLoaderTests {
 			ClassLoader previous = Thread.currentThread().getContextClassLoader();
 			try {
 				Thread.currentThread().setContextClassLoader(classLoader);
-				McpHandlerResolver resolver = McpHandlerResolver
+				McpEndpointRegistry registry = McpEndpointRegistry
 						.fromClasspathIntrospection(instanceProvider);
-				assertEquals(List.of("/a", "/b"), endpointPaths(resolver));
+				assertEquals(List.of("/a", "/b"), endpointPaths(registry));
 				assertEquals(0, instanceProvider.invocationCount());
-				resolver.getEndpoints().forEach(endpoint -> {
+				registry.getEndpoints().forEach(endpoint -> {
 					endpoint.getTools().forEach(tool -> {
 						tool.getInputSchema().getDocument();
 						tool.getOutputSchema().orElseThrow().getDocument();
@@ -184,7 +184,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 			CountingInstanceProvider instanceProvider =
 					new CountingInstanceProvider();
 
-			McpHandlerResolver resolver = McpHandlerResolver.fromClasses(
+			McpEndpointRegistry registry = McpEndpointRegistry.fromClasses(
 					instanceProvider, endpointB, endpointA);
 			McpSubscriptionConfig subscriptions = McpSubscriptionConfig
 					.withEventPublisher(
@@ -192,17 +192,17 @@ public class McpGeneratedEndpointProviderLoaderTests {
 					.notificationType(
 							McpSubscriptionNotificationType.RESOURCE_UPDATED)
 					.build();
-			McpHandlerResolver overlaid = resolver.withSubscriptions(endpointB,
+			McpEndpointRegistry overlaid = registry.withSubscriptions(endpointB,
 					subscriptions);
 
-			assertEquals(List.of("/b", "/a"), endpointPaths(resolver));
-			assertTrue(resolver.getEndpoints().get(0).getSubscriptions().isEmpty());
+			assertEquals(List.of("/b", "/a"), endpointPaths(registry));
+			assertTrue(registry.getEndpoints().get(0).getSubscriptions().isEmpty());
 			assertSame(subscriptions, overlaid.getEndpoints().get(0)
 					.getSubscriptions().orElseThrow());
-			assertSame(resolver.getEndpoints().get(1),
+			assertSame(registry.getEndpoints().get(1),
 					overlaid.getEndpoints().get(1));
 			assertThrows(IllegalArgumentException.class,
-					() -> resolver.withSubscriptions(samePathImpostor,
+					() -> registry.withSubscriptions(samePathImpostor,
 							subscriptions));
 			assertEquals(0, instanceProvider.invocationCount());
 		}
@@ -221,14 +221,14 @@ public class McpGeneratedEndpointProviderLoaderTests {
 
 			IllegalArgumentException duplicate = assertThrows(
 					IllegalArgumentException.class,
-					() -> McpHandlerResolver.fromClasses(instanceProvider,
+					() -> McpEndpointRegistry.fromClasses(instanceProvider,
 							endpointA, endpointA));
 			assertTrue(duplicate.getMessage().contains(
 					"Duplicate annotated MCP endpoint class"));
 
 			IllegalArgumentException missing = assertThrows(
 					IllegalArgumentException.class,
-					() -> McpHandlerResolver.fromClasses(instanceProvider,
+					() -> McpEndpointRegistry.fromClasses(instanceProvider,
 							unindexed));
 			assertTrue(missing.getMessage().contains(
 					"No generated MCP endpoint descriptor exists"));
@@ -372,7 +372,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 			Class<?> endpointB = Class.forName(ENDPOINT_B, false, classLoader);
 			IllegalArgumentException selectedFailure = assertThrows(
 					IllegalArgumentException.class,
-					() -> McpHandlerResolver.fromClasses(endpointA, endpointB));
+					() -> McpEndpointRegistry.fromClasses(endpointA, endpointB));
 			assertTrue(selectedFailure.getMessage().contains(
 					"Duplicate MCP endpoint path"));
 
@@ -381,7 +381,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				Thread.currentThread().setContextClassLoader(classLoader);
 				IllegalStateException classpathFailure = assertThrows(
 						IllegalStateException.class,
-						McpHandlerResolver::fromClasspathIntrospection);
+						McpEndpointRegistry::fromClasspathIntrospection);
 				assertTrue(classpathFailure.getMessage().contains(
 						"descriptors conflict"));
 				assertInstanceOf(IllegalArgumentException.class,
@@ -453,9 +453,9 @@ public class McpGeneratedEndpointProviderLoaderTests {
 			ClassLoader previous = Thread.currentThread().getContextClassLoader();
 			try {
 				Thread.currentThread().setContextClassLoader(classLoader);
-				McpHandlerResolver resolver = McpHandlerResolver
+				McpEndpointRegistry registry = McpEndpointRegistry
 						.fromClasspathIntrospection(instanceProvider);
-				McpToolRegistration<?> tool = resolver.getEndpoints().get(0)
+				McpToolRegistration<?> tool = registry.getEndpoints().get(0)
 						.getTools().get(0);
 				assertEquals(0, instanceProvider.invocationCount());
 
@@ -463,11 +463,11 @@ public class McpGeneratedEndpointProviderLoaderTests {
 						ENDPOINT_A + "$Arguments", true, classLoader);
 				Constructor<?> constructor = argumentsClass.getConstructor(
 						String.class);
-				Object arguments = constructor.newInstance("value");
-				McpToolCallContext<Object> call = new McpToolCallContext<>() {
+				Object convertedArguments = constructor.newInstance("value");
+				McpToolArguments<Object> arguments = new McpToolArguments<>() {
 					@Override
 					public Object getArguments() {
-						return arguments;
+						return convertedArguments;
 					}
 
 					@Override
@@ -480,10 +480,10 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				McpInvocationFeatures features = McpInvocationFeatures
 						.fromFeatures(Map.of());
 
-				McpOperationResult first = handler.handle(request, call, features);
+				McpOperationResult first = handler.handle(request, arguments, features);
 				assertInstanceOf(McpCompleteResult.class, first);
 				assertEquals(1, instanceProvider.invocationCount());
-				McpOperationResult second = handler.handle(request, call, features);
+				McpOperationResult second = handler.handle(request, arguments, features);
 				assertInstanceOf(McpCompleteResult.class, second);
 				assertEquals(2, instanceProvider.invocationCount());
 			} finally {
@@ -494,8 +494,8 @@ public class McpGeneratedEndpointProviderLoaderTests {
 
 	@NonNull
 	private static List<@NonNull String> endpointPaths(
-			@NonNull McpHandlerResolver resolver) {
-		return resolver.getEndpoints().stream()
+			@NonNull McpEndpointRegistry registry) {
+		return registry.getEndpoints().stream()
 				.map(endpoint -> endpoint.getPath())
 				.collect(Collectors.toUnmodifiableList());
 	}
@@ -620,8 +620,8 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				      McpToolRegistration<EndpointA.Arguments> tool =
 				          McpToolRegistration.withName("tool-a")
 				              .types(EndpointA.Arguments.class, EndpointA.Result.class)
-				              .handler((request, call, features) -> instanceProvider
-				                  .provide(EndpointA.class).invoke(call.getArguments()))
+				              .handler((request, arguments, features) -> instanceProvider
+				                  .provide(EndpointA.class).invoke(arguments.getArguments()))
 				              .build();
 				      return McpEndpoint.withPath("/a")
 				          .serverInformation(McpImplementation
@@ -641,8 +641,8 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				      McpToolRegistration<EndpointB.Arguments> tool =
 				          McpToolRegistration.withName("tool-b")
 				              .types(EndpointB.Arguments.class, EndpointB.Result.class)
-				              .handler((request, call, features) -> instanceProvider
-				                  .provide(EndpointB.class).invoke(call.getArguments()))
+				              .handler((request, arguments, features) -> instanceProvider
+				                  .provide(EndpointB.class).invoke(arguments.getArguments()))
 				              .build();
 				      return McpEndpoint.withPath("/b")
 				          .serverInformation(McpImplementation

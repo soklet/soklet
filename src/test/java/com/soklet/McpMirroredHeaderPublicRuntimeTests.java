@@ -286,13 +286,13 @@ public class McpMirroredHeaderPublicRuntimeTests {
 		McpEndpoint tenantEndpoint = endpoint("/tenant",
 				McpToolRegistration.withName("tenant.lookup")
 						.argumentType(TenantArguments.class)
-						.handler((request, call, features) ->
+						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("tenant"))
 						.build());
 		McpEndpoint regionEndpoint = endpoint("/region",
 				McpToolRegistration.withName("region.lookup")
 						.argumentType(RegionArguments.class)
-						.handler((request, call, features) ->
+						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("region"))
 						.build());
 		McpServer server = serverBuilder(
@@ -322,9 +322,9 @@ public class McpMirroredHeaderPublicRuntimeTests {
 			AtomicReference<MirroredArguments> observed) {
 		return McpToolRegistration.withName(name)
 				.argumentType(MirroredArguments.class)
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					handlers.incrementAndGet();
-					observed.set(call.getArguments());
+					observed.set(arguments.getArguments());
 					return McpCompleteResult.fromToolText("done");
 				})
 				.build();
@@ -344,12 +344,12 @@ public class McpMirroredHeaderPublicRuntimeTests {
 			AtomicInteger admissions, CorsAuthorizer corsAuthorizer) {
 		return McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(endpoints))
-				.requestAdmissionPolicy(context -> {
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints))
+				.admissionController(context -> {
 					admissions.incrementAndGet();
-					return McpAdmissionDecision.fromAnonymousIdentity();
+					return McpAdmissionDecision.accepted();
 				})
-				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(corsAuthorizer)
 				.allowedHosts(Set.of(LOOPBACK));
 	}

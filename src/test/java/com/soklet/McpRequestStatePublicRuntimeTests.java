@@ -76,7 +76,7 @@ public class McpRequestStatePublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(APPLICATION_TOOL)
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					handlerContexts.add(request);
 					int invocation = handlerInvocations.incrementAndGet();
 					if (invocation == 1) {
@@ -103,9 +103,9 @@ public class McpRequestStatePublicRuntimeTests {
 		McpServer server = serverBuilder(endpoint)
 				.protectionConfig(McpProtectionConfig
 						.withRequestStateProtector(protector).build())
-				.handlerInterceptor((context, invocation) -> {
+				.handlerInterceptor((context, continuation) -> {
 					interceptorContexts.add(context);
-					return invocation.invoke();
+					return continuation.proceed();
 				})
 				.build();
 		McpServerDiagnostics configuredDiagnostics = server.getDiagnostics();
@@ -191,7 +191,7 @@ public class McpRequestStatePublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(FRAMEWORK_TOOL)
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					if (request.getRequestState().isEmpty())
 						return McpInputRequiredResult.builder()
@@ -226,9 +226,9 @@ public class McpRequestStatePublicRuntimeTests {
 		McpServer server = serverBuilder(endpoint)
 				.protectionConfig(McpProtectionConfig
 						.withRequestStateProtector(protector).build())
-				.handlerInterceptor((context, invocation) -> {
+				.handlerInterceptor((context, continuation) -> {
 					interceptorInvocations.incrementAndGet();
-					return invocation.invoke();
+					return continuation.proceed();
 				})
 				.build();
 
@@ -278,7 +278,7 @@ public class McpRequestStatePublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(FRAMEWORK_TOOL)
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					if (request.getRequestState().isEmpty())
 						return McpInputRequiredResult.builder()
@@ -310,13 +310,13 @@ public class McpRequestStatePublicRuntimeTests {
 				"fleet-key", "0123456789abcdef0123456789abcdef");
 		McpProtectionKeyRing mismatchedKeyRing = productionKeyRing(
 				"fleet-key", "fedcba9876543210fedcba9876543210");
-		McpRequestAdmissionPolicy sharedPartition =
-				partitionedAdmissionPolicy("tenant-alpha");
-		McpRequestAdmissionPolicy mismatchedPartition =
-				partitionedAdmissionPolicy("tenant-beta");
-		McpHandlerInterceptor interceptor = (context, invocation) -> {
+		McpAdmissionController sharedPartition =
+				partitionedAdmissionController("tenant-alpha");
+		McpAdmissionController mismatchedPartition =
+				partitionedAdmissionController("tenant-beta");
+		McpHandlerInterceptor interceptor = (context, continuation) -> {
 			interceptorInvocations.incrementAndGet();
-			return invocation.invoke();
+			return continuation.proceed();
 		};
 
 		McpServer emittingServer = stateServer(endpoint, sharedKeyRing,
@@ -397,7 +397,7 @@ public class McpRequestStatePublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(FRAMEWORK_TOOL)
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText("must not run");
 				})
@@ -408,15 +408,15 @@ public class McpRequestStatePublicRuntimeTests {
 				.tool(tool)
 				.build();
 		McpServer server = serverBuilder(endpoint)
-				.requestAdmissionPolicy(context -> {
+				.admissionController(context -> {
 					admissionInvocations.incrementAndGet();
-					return McpAdmissionDecision.fromAnonymousIdentity();
+					return McpAdmissionDecision.accepted();
 				})
 				.protectionConfig(McpProtectionConfig
 						.withRequestStateProtector(protector).build())
-				.handlerInterceptor((context, invocation) -> {
+				.handlerInterceptor((context, continuation) -> {
 					interceptorInvocations.incrementAndGet();
-					return invocation.invoke();
+					return continuation.proceed();
 				})
 				.build();
 
@@ -555,20 +555,20 @@ public class McpRequestStatePublicRuntimeTests {
 	private static McpServer.Builder serverBuilder(McpEndpoint endpoint) {
 		return McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
-				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
 	}
 
 	private static McpServer stateServer(McpEndpoint endpoint,
 			McpProtectionKeyRing keyRing,
-			McpRequestAdmissionPolicy admissionPolicy,
+			McpAdmissionController admissionController,
 			McpHandlerInterceptor interceptor) {
 		return serverBuilder(endpoint)
-				.requestAdmissionPolicy(admissionPolicy)
+				.admissionController(admissionController)
 				.protectionConfig(McpProtectionConfig.withKeyRing(keyRing).build())
 				.handlerInterceptor(interceptor)
 				.build();
@@ -582,9 +582,9 @@ public class McpRequestStatePublicRuntimeTests {
 				.build();
 	}
 
-	private static McpRequestAdmissionPolicy partitionedAdmissionPolicy(
+	private static McpAdmissionController partitionedAdmissionController(
 			String authorizationPartition) {
-		return ignored -> McpAdmissionDecision.fromAcceptedIdentity(
+		return ignored -> McpAdmissionDecision.accepted(
 				McpAdmissionIdentity.withRateLimitPartitionKey(
 						"rate-" + authorizationPartition)
 						.authorizationPartitionKey(authorizationPartition)
@@ -596,7 +596,7 @@ public class McpRequestStatePublicRuntimeTests {
 			McpRequestStateMode requestStateMode) {
 		return McpToolRegistration.withName(name)
 				.jsonArguments()
-				.handler((request, call, features) ->
+				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("complete"))
 				.requestStateMode(requestStateMode)
 				.build();

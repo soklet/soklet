@@ -38,8 +38,9 @@ The current targets are:
 - `McpCursorValidatorFuzzTest`
 - `McpRequestStatePlaintextCodecFuzzTest`
 - `McpSimulationCaptureFuzzTest`
+- `McpLocalizationFuzzTest`
 
-These 15 classes expose 16 coverage-guided `@FuzzTest` methods. The MCP targets
+These 16 classes expose 19 coverage-guided `@FuzzTest` methods. The MCP targets
 use production parser, compiler, evaluator, validation, and simulator-capture
 entry points with deterministic configuration. The Profile 1 target bounds a
 single fuzz input to 64 KiB and uses a literal `---INSTANCE---` line to split a
@@ -103,7 +104,7 @@ mvn -B -ntp -f fuzz/pom.xml test
 The scheduled nightly run, or a manual workflow dispatch, uses a matrix with
 one Maven invocation per `@FuzzTest` method. Jazzer's JUnit integration runs
 only one coverage-guided fuzz test per JVM when `JAZZER_FUZZ=1`, so each target
-needs its own matrix slot. The current matrix has 16 slots, runs each target for
+needs its own matrix slot. The current matrix has 19 slots, runs each target for
 five minutes, and bounds each job to 15 minutes. Each slot restores the latest
 generated Jazzer corpus, runs coverage-guided fuzzing, uploads artifacts, and saves a
 target-specific corpus cache under a run-specific key. The key rotates on every

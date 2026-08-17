@@ -429,9 +429,9 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 				.toList();
 		return McpServer.withPort(port)
 				.host(HOST)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(endpoints))
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints))
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST))
 				.build();

@@ -46,7 +46,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Implementations must be safe for concurrent invocation. Each supplied
  * continuation remains synchronous, one-shot, and bound to the invoking
- * thread as documented by {@link McpHandlerInvocation}.
+ * thread as documented by {@link McpHandlerContinuation}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -57,13 +57,13 @@ public interface McpHandlerInterceptor {
 	 * Intercepts one application-owned MCP handler invocation.
 	 *
 	 * @param context immutable request context
-	 * @param invocation synchronous one-shot downstream continuation
+	 * @param continuation synchronous one-shot downstream continuation
 	 * @return recognized, non-null, method-compatible handler result
 	 * @throws Exception if application interception fails
 	 */
 	@NonNull
 	McpOperationResult interceptHandler(@NonNull McpRequestContext context,
-			@NonNull McpHandlerInvocation invocation) throws Exception;
+			@NonNull McpHandlerContinuation continuation) throws Exception;
 
 	/**
 	 * Returns the shared interceptor that invokes the downstream continuation
@@ -95,9 +95,9 @@ final class DefaultMcpHandlerInterceptor implements McpHandlerInterceptor {
 	@NonNull
 	public McpOperationResult interceptHandler(
 			@NonNull McpRequestContext context,
-			@NonNull McpHandlerInvocation invocation) throws Exception {
+			@NonNull McpHandlerContinuation continuation) throws Exception {
 		requireNonNull(context);
-		return requireNonNull(requireNonNull(invocation).invoke(),
-				"The MCP handler invocation returned null.");
+		return requireNonNull(requireNonNull(continuation).proceed(),
+				"The MCP handler continuation returned null.");
 	}
 }

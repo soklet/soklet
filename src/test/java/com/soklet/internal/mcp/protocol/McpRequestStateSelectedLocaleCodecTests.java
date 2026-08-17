@@ -149,7 +149,19 @@ public class McpRequestStateSelectedLocaleCodecTests {
 						new McpJsonString("round-two"))),
 				new McpJsonRpcId.StringId("request-2"), MAXIMUM_ROUNDS)
 				.selectedLocale(),
-				"A version-1 flow never upgrades mid-continuation.");
+				"An unlocalized version-1 flow remains version 1.");
+
+		McpFrameworkRequestStateContinuation upgraded = versionOne.next(
+				new McpJsonObject(Map.of("phase",
+						new McpJsonString("round-two"))),
+				new McpJsonRpcId.StringId("request-2"), MAXIMUM_ROUNDS,
+				"fr-CA");
+		Assertions.assertEquals("fr-CA", upgraded.selectedLocale(),
+				"The first localized re-emission must upgrade version-1 state.");
+		Assertions.assertThrows(IllegalArgumentException.class, () -> upgraded.next(
+				new McpJsonString("round-three"),
+				new McpJsonRpcId.StringId("request-3"), MAXIMUM_ROUNDS + 1,
+				"de"));
 	}
 
 	private static void assertRejected(String canonicalJson) {

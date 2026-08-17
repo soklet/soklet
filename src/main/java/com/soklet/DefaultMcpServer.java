@@ -120,9 +120,9 @@ final class DefaultMcpServer implements McpServer {
 	private final Duration writeTimeout;
 	private final boolean logRawValidatedTraceIds;
 	@NonNull
-	private final McpHandlerResolver handlerResolver;
+	private final McpEndpointRegistry endpointRegistry;
 	@NonNull
-	private final McpRequestAdmissionPolicy requestAdmissionPolicy;
+	private final McpAdmissionController admissionController;
 	@NonNull
 	private final McpHandlerInterceptor handlerInterceptor;
 	@NonNull
@@ -168,8 +168,8 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull Duration shutdownTimeout,
 			int maximumSubscriptionsPerPrincipal,
 			@NonNull Duration maximumSubscriptionDuration,
-			@NonNull McpHandlerResolver handlerResolver,
-			@NonNull McpRequestAdmissionPolicy requestAdmissionPolicy,
+			@NonNull McpEndpointRegistry endpointRegistry,
+			@NonNull McpAdmissionController admissionController,
 			@NonNull McpHandlerInterceptor handlerInterceptor,
 			@NonNull McpToolOutputSanitizer toolOutputSanitizer,
 			@Nullable CorsAuthorizer configuredCorsAuthorizer,
@@ -195,8 +195,8 @@ final class DefaultMcpServer implements McpServer {
 		this.shutdownTimeout = requireNonNull(shutdownTimeout);
 		this.writeTimeout = requireNonNull(writeTimeout);
 		this.logRawValidatedTraceIds = logRawValidatedTraceIds;
-		this.handlerResolver = requireNonNull(handlerResolver);
-		this.requestAdmissionPolicy = requireNonNull(requestAdmissionPolicy);
+		this.endpointRegistry = requireNonNull(endpointRegistry);
+		this.admissionController = requireNonNull(admissionController);
 		this.handlerInterceptor = requireNonNull(handlerInterceptor);
 		this.toolOutputSanitizer = requireNonNull(toolOutputSanitizer);
 		this.requestRateLimiter = requestRateLimiter;
@@ -206,7 +206,7 @@ final class DefaultMcpServer implements McpServer {
 		this.localizer = localizer;
 		this.localizationPlan = localizer == null ? null
 				: DefaultMcpLocalizationCatalogExtractor.plan(
-						handlerResolver,
+						endpointRegistry,
 						localizer.getMaximumLocalizableTextCountPerResponse());
 		this.securityControls = new DefaultMcpSecurityControls(protectionConfig,
 				traceCorrelationKey);
@@ -221,7 +221,7 @@ final class DefaultMcpServer implements McpServer {
 		this.metricsCollector = MetricsCollector.disabledInstance();
 		this.lastShutdownOutcome = McpShutdownOutcome.CLEAN;
 		this.listenerGenerationStopPending = false;
-		List<EndpointPlan> endpointPlans = handlerResolver.getEndpoints().stream()
+		List<EndpointPlan> endpointPlans = endpointRegistry.getEndpoints().stream()
 				.map(this::toEndpointPlan)
 				.toList();
 		validateRequestStateProtection(endpointPlans, protectionConfig);
@@ -231,7 +231,7 @@ final class DefaultMcpServer implements McpServer {
 		this.runtimeBridge = new McpServerRuntimeBridge(host, port, endpointPlans,
 				allowedHosts, absentOriginPolicy == McpAbsentOriginPolicy.REQUIRE_ORIGIN,
 				this.corsAuthorizer, corsAuthorizerExplicitlyConfigured,
-				input -> this.requestAdmissionPolicy.admit(
+				input -> this.admissionController.admit(
 						new DefaultMcpAdmissionContext(input)),
 				Optional.ofNullable(this.requestRateLimiter)
 						.map(DefaultMcpServer::toRateLimitAdapter),
@@ -458,8 +458,8 @@ final class DefaultMcpServer implements McpServer {
 				.map(DefaultMcpServer::toResourceDescriptor)
 				.toList();
 		ResourceListPlan resourceListPlan = new ResourceListPlan(
-				effectiveCachePlan(endpoint.getResourcesListCachePolicy()),
-				effectiveCachePlan(endpoint.getResourceTemplatesListCachePolicy()),
+				effectiveCachePlan(endpoint.getResourceListCachePolicy()),
+				effectiveCachePlan(endpoint.getResourceTemplateListCachePolicy()),
 				this.maximumCursorSizeInBytes,
 				endpoint.getResourceListHandler().map(handler -> invocation ->
 						invokeResourceList(handler, registeredResourceDescriptors,
@@ -599,8 +599,8 @@ final class DefaultMcpServer implements McpServer {
 					McpRuntimeCatalogLocalizer.Disposition.LOCALIZED,
 					outcome.document(),
 					contentLanguageTag(outcome.selectedLocale()));
-			// A per-field intentional fallback still renders the representation
-			// for the selected locale, so the selected tag applies.
+			// A successful no-op resolution or intentional per-field default-text
+			// choice still renders the representation for the selected locale.
 			case CANONICAL -> new McpRuntimeCatalogLocalizer.Outcome(
 					McpRuntimeCatalogLocalizer.Disposition.CANONICAL,
 					input.canonicalDocument(),
@@ -846,14 +846,14 @@ final class DefaultMcpServer implements McpServer {
 
 	@Override
 	@NonNull
-	public McpHandlerResolver getHandlerResolver() {
-		return this.handlerResolver;
+	public McpEndpointRegistry getEndpointRegistry() {
+		return this.endpointRegistry;
 	}
 
 	@Override
 	@NonNull
-	public McpRequestAdmissionPolicy getRequestAdmissionPolicy() {
-		return this.requestAdmissionPolicy;
+	public McpAdmissionController getAdmissionController() {
+		return this.admissionController;
 	}
 
 	@Override
@@ -906,7 +906,7 @@ final class DefaultMcpServer implements McpServer {
 
 	@Override
 	@NonNull
-	public McpTraceCorrelation getTraceCorrelation() {
+	public McpTraceCorrelationControl getTraceCorrelationControl() {
 		return this.securityControls;
 	}
 
@@ -997,7 +997,7 @@ final class DefaultMcpServer implements McpServer {
 		McpRateLimiter resolvedRateLimiter = resolveToolRateLimiter(endpoint, tool);
 		return new ToolPlan(tool.getName(), tool.getInputSchema().getDocument(),
 				tool.getMirroredHeaderPlan(),
-				tool.getOutputSchema().map(McpSchema::getDocument),
+				tool.getOutputSchema().map(McpToolSchema::getDocument),
 				toolDescriptorFields(tool), tool.getMetadata(),
 				tool.isStructuredContentTextMirroringEnabled(),
 				toRateLimitAdapter(resolvedRateLimiter),
@@ -1233,18 +1233,18 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpRequestContext requestContext,
 			@NonNull HandlerEntryGuard handlerEntryGuard,
 			@NonNull McpInvocationFeatures invocationFeatures,
-			@NonNull McpHandlerInvocation downstream) throws Exception {
+			@NonNull McpHandlerContinuation continuation) throws Exception {
 		requireNonNull(requestContext);
 		requireNonNull(handlerEntryGuard);
 		requireNonNull(invocationFeatures);
-		requireNonNull(downstream);
+		requireNonNull(continuation);
 		AtomicBoolean active = new AtomicBoolean(true);
 		AtomicBoolean invoked = new AtomicBoolean();
 		Thread interceptorThread = Thread.currentThread();
 		McpOperationResult result;
 		try {
 			result = this.handlerInterceptor.interceptHandler(requestContext,
-					new McpHandlerInvocation() {
+					new McpHandlerContinuation() {
 						private void requireActiveThread() {
 							if (!active.get())
 								throw new IllegalStateException(
@@ -1263,13 +1263,13 @@ final class DefaultMcpServer implements McpServer {
 
 						@Override
 						@NonNull
-						public McpOperationResult invoke() throws Exception {
+						public McpOperationResult proceed() throws Exception {
 							requireActiveThread();
 							if (!invoked.compareAndSet(false, true))
 								throw new IllegalStateException(
 										"An MCP interceptor continuation may be invoked only once.");
 							handlerEntryGuard.requireEntry();
-							return requireNonNull(downstream.invoke(),
+							return requireNonNull(continuation.proceed(),
 									"The MCP downstream handler returned null.");
 						}
 					});
@@ -1407,8 +1407,11 @@ final class DefaultMcpServer implements McpServer {
 
 		McpLocalizationRequest localizationRequest =
 				new DefaultMcpLocalizationRequest(requestContext,
-						McpLocaleSupport.boundedLanguageRanges(requestContext
-								.getRequest().getHeaders().get("Accept-Language")),
+						McpLocaleSupport.boundedLanguageRanges(
+								requestContext instanceof DefaultMcpRequestContext context
+										? context.acceptLanguageValues()
+										: DefaultMcpRequestContext.acceptLanguageValues(
+												requestContext.getRequest())),
 						continuationLocale.map(Locale::forLanguageTag)
 								.orElse(null),
 						resourceListCursor.orElse(null),
@@ -1942,6 +1945,11 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull RequestObservationInput input) {
 		DefaultMcpRequestContext context = new DefaultMcpRequestContext(
 				requireNonNull(input), this.securityControls);
+		Optional<McpTraceLogRecord> traceLogRecord = McpTraceLogRecord.capture(
+				context.traceCorrelationToken(),
+				this.logRawValidatedTraceIds
+						? context.getTraceContext().map(TraceContext::getTraceId)
+						: Optional.empty());
 		LifecycleObserver observer = this.lifecycleObserver;
 		List<Throwable> startThrowables = new ArrayList<>();
 
@@ -1995,6 +2003,10 @@ final class DefaultMcpServer implements McpServer {
 								input.endpoint().getPath(),
 								metricMethod(input.jsonRpcMethod()),
 								outcome, duration), context);
+				traceLogRecord.ifPresent(record -> safelyLogRequestObservation(
+						observer, LogEvent.with(
+								LogEventType.MCP_TRACE_CORRELATION,
+								record.toLogMessage()).build(), null));
 				try {
 					observer.didFinishMcpRequestHandling(context, outcome,
 							publicError, duration, immutableThrowables);
@@ -2624,6 +2636,8 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 	@NonNull
 	private final McpRequestPropagation requestPropagation;
 	@NonNull
+	private final List<@NonNull String> acceptLanguageValues;
+	@NonNull
 	private final Optional<
 			DefaultMcpSecurityControls.@NonNull TraceCorrelationToken>
 			traceCorrelationToken;
@@ -2701,7 +2715,8 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 				input.clientInformation(), input.clientCapabilities(),
 				input.requestMetadata(), input.inputResponses(),
 				input.requestState(),
-				input.admissionIdentity(), requireNonNull(securityControls));
+				input.admissionIdentity(), input.acceptLanguageValues(),
+				requireNonNull(securityControls));
 	}
 
 	@SuppressWarnings("deprecation")
@@ -2720,6 +2735,29 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 			@NonNull McpAdmissionIdentity admissionIdentity,
 			@NonNull Optional<@NonNull DefaultMcpSecurityControls>
 					securityControls) {
+		this(request, endpoint, endpointPathParameters, jsonRpcMethod, requestId,
+				protocolVersion, operationName, clientInformation,
+				clientCapabilitiesJson, requestMetadata, inputResponses, requestState,
+				admissionIdentity, acceptLanguageValues(request), securityControls);
+	}
+
+	@SuppressWarnings("deprecation")
+	private DefaultMcpRequestContext(@NonNull Request request,
+			@NonNull McpEndpoint endpoint,
+			@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
+			@NonNull String jsonRpcMethod,
+			@NonNull Optional<@NonNull McpRequestId> requestId,
+			@NonNull String protocolVersion,
+			@NonNull Optional<@NonNull String> operationName,
+			@NonNull Optional<@NonNull McpImplementation> clientInformation,
+			@NonNull McpJsonObject clientCapabilitiesJson,
+			@NonNull McpJsonObject requestMetadata,
+			@NonNull McpInputResponses inputResponses,
+			@NonNull Optional<@NonNull McpRequestState> requestState,
+			@NonNull McpAdmissionIdentity admissionIdentity,
+			@NonNull List<@NonNull String> acceptLanguageValues,
+			@NonNull Optional<@NonNull DefaultMcpSecurityControls>
+					securityControls) {
 		this.request = requireNonNull(request);
 		this.endpoint = requireNonNull(endpoint);
 		this.endpointPathParameters = Map.copyOf(
@@ -2733,6 +2771,8 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 		this.inputResponses = requireNonNull(inputResponses);
 		this.requestState = requireNonNull(requestState);
 		this.admissionIdentity = requireNonNull(admissionIdentity);
+		this.acceptLanguageValues = List.copyOf(
+				requireNonNull(acceptLanguageValues));
 		this.clientCapabilities = McpClientCapabilities.fromJson(
 				clientCapabilitiesJson);
 		this.deprecatedLogLevel = requestMetadata
@@ -2747,6 +2787,19 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 		this.traceCorrelationToken = requireNonNull(securityControls)
 				.flatMap(controls -> this.requestPropagation.traceContext()
 						.flatMap(controls::deriveTraceCorrelationToken));
+	}
+
+	@NonNull
+	static List<@NonNull String> acceptLanguageValues(
+			@NonNull Request request) {
+		Set<String> values = requireNonNull(request)
+				.getHeaders().get("Accept-Language");
+		return values == null ? List.of() : List.copyOf(values);
+	}
+
+	@NonNull
+	List<@NonNull String> acceptLanguageValues() {
+		return this.acceptLanguageValues;
 	}
 
 	@Override public @NonNull Request getRequest() {

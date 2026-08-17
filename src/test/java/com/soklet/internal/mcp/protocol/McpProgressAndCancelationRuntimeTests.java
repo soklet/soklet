@@ -17,6 +17,7 @@
 package com.soklet.internal.mcp.protocol;
 
 import com.soklet.StreamTerminationReason;
+import com.soklet.StreamingResponseCanceledException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -31,6 +32,42 @@ import java.util.concurrent.atomic.AtomicReference;
 
 @NotThreadSafe
 public class McpProgressAndCancelationRuntimeTests {
+	@Test
+	public void every_cancelation_category_is_bounded_observable_and_carries_no_framework_cause()
+			throws Exception {
+		for (StreamTerminationReason reason : StreamTerminationReason.values()) {
+			if (reason == StreamTerminationReason.COMPLETED)
+				continue;
+
+			McpApplicationCancellationState cancellation =
+					new McpApplicationCancellationState();
+			AtomicReference<StreamTerminationReason> observedReason =
+					new AtomicReference<>();
+			AtomicReference<Optional<Throwable>> observedCause =
+					new AtomicReference<>();
+			cancellation.onCancel(() -> {
+				observedReason.set(cancellation.getCancelationReason().orElseThrow());
+				observedCause.set(cancellation.getCancelationCause());
+			});
+
+			Assertions.assertTrue(cancellation.cancel(reason), reason.name());
+			Assertions.assertSame(reason, observedReason.get(), reason.name());
+			Assertions.assertEquals(Optional.empty(), observedCause.get(),
+					reason.name());
+			StreamingResponseCanceledException exception =
+					Assertions.assertThrows(
+							StreamingResponseCanceledException.class,
+							cancellation::throwIfCanceled, reason.name());
+			Assertions.assertSame(reason, exception.getCancelationReason(),
+					reason.name());
+			Assertions.assertTrue(exception.getCancelationCause().isEmpty(),
+					reason.name());
+			Assertions.assertEquals(
+					"Streaming response was canceled: " + reason.name(),
+					exception.getMessage(), reason.name());
+		}
+	}
+
 	@Test
 	public void cancelation_token_fixes_first_reason_and_contains_callbacks()
 			throws Exception {

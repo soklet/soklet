@@ -197,14 +197,14 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 		AtomicInteger firstInvocations = new AtomicInteger();
 		AtomicInteger secondInvocations = new AtomicInteger();
 		McpEndpoint firstEndpoint = endpoint("/mcp/diagnostics-first",
-				"diagnostics.first", (request, call, features) -> {
+				"diagnostics.first", (request, arguments, features) -> {
 					firstInvocations.incrementAndGet();
 					firstEntered.countDown();
 					releaseFirst.await();
 					return McpCompleteResult.fromToolText("first");
 				});
 		McpEndpoint secondEndpoint = endpoint("/mcp/diagnostics-second",
-				"diagnostics.second", (request, call, features) -> {
+				"diagnostics.second", (request, arguments, features) -> {
 					secondInvocations.incrementAndGet();
 					secondEntered.countDown();
 					releaseSecond.await();
@@ -297,7 +297,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 		CountDownLatch activeExited = new CountDownLatch(1);
 		AtomicInteger invocations = new AtomicInteger();
 		McpEndpoint endpoint = endpoint("/mcp/diagnostics-residual",
-				"diagnostics.residual", (request, call, features) -> {
+				"diagnostics.residual", (request, arguments, features) -> {
 					invocations.incrementAndGet();
 					activeEntered.countDown();
 					try {
@@ -532,11 +532,11 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 			@NonNull Duration shutdownTimeout) {
 		return McpServer.withPort(0)
 				.host(HOST)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
 						List.copyOf(requireNonNull(endpoints))))
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
-				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST))
 				.requestHandlerConcurrency(concurrency)

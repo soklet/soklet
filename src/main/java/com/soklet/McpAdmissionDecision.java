@@ -23,7 +23,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Immutable accepted or rejected MCP request-admission decision. Decision
+ * Immutable accepted or rejected MCP admission decision. Decision
  * carriers are safe for concurrent access; application-owned values reachable
  * through an accepted identity retain their own thread-safety contracts.
  *
@@ -39,7 +39,7 @@ public sealed interface McpAdmissionDecision permits McpAdmissionDecision.Accept
 	 * @return accepted decision
 	 */
 	@NonNull
-	static Accepted fromAcceptedIdentity(@NonNull McpAdmissionIdentity identity) {
+	static Accepted accepted(@NonNull McpAdmissionIdentity identity) {
 		return new Accepted(identity);
 	}
 
@@ -49,8 +49,8 @@ public sealed interface McpAdmissionDecision permits McpAdmissionDecision.Accept
 	 * @return anonymous accepted decision
 	 */
 	@NonNull
-	static Accepted fromAnonymousIdentity() {
-		return fromAcceptedIdentity(McpAdmissionIdentity.anonymousInstance());
+	static Accepted accepted() {
+		return accepted(McpAdmissionIdentity.anonymousInstance());
 	}
 
 	/**
@@ -60,7 +60,7 @@ public sealed interface McpAdmissionDecision permits McpAdmissionDecision.Accept
 	 * @return rejected decision
 	 */
 	@NonNull
-	static Rejected fromRejection(@NonNull McpRequestRejection rejection) {
+	static Rejected rejected(@NonNull McpAdmissionRejection rejection) {
 		return new Rejected(rejection);
 	}
 
@@ -89,7 +89,7 @@ public sealed interface McpAdmissionDecision permits McpAdmissionDecision.Accept
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record Rejected(@NonNull McpRequestRejection rejection) implements McpAdmissionDecision {
+	record Rejected(@NonNull McpAdmissionRejection rejection) implements McpAdmissionDecision {
 		/**
 		 * Creates a rejected decision.
 		 *

@@ -84,7 +84,7 @@ public class McpInputResponsesPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					assertExactInputResponses(request);
 					Assertions.assertSame(interceptorContexts.get(TOOL_NAME),
 							request);
@@ -132,13 +132,13 @@ public class McpInputResponsesPublicRuntimeTests {
 				.resource(resource)
 				.build();
 		McpServer server = serverBuilder(endpoint)
-				.handlerInterceptor((context, invocation) -> {
+				.handlerInterceptor((context, continuation) -> {
 					String operation = context.getOperationName().orElseThrow();
 					assertExactInputResponses(context);
 					Assertions.assertSame(observer.startedContexts.get(operation),
 							context);
 					interceptorContexts.put(operation, context);
-					return invocation.invoke();
+					return continuation.proceed();
 				})
 				.build();
 		Soklet soklet = managedSoklet(server, observer, collector);
@@ -207,7 +207,7 @@ public class McpInputResponsesPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("none.tool")
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					toolInvocations.incrementAndGet();
 					Assertions.assertTrue(request.getRequestState().isEmpty());
 					McpJsonObject response = Assertions.assertInstanceOf(
@@ -293,7 +293,7 @@ public class McpInputResponsesPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("retry.missing")
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					if (request.getInputResponses().find("approval").isEmpty()) {
 						Assertions.assertTrue(request.getInputResponses()
@@ -355,7 +355,7 @@ public class McpInputResponsesPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText("must not run");
 				})
@@ -387,17 +387,17 @@ public class McpInputResponsesPublicRuntimeTests {
 				.resource(resource)
 				.build();
 		McpServer server = serverBuilder(endpoint)
-				.requestAdmissionPolicy(context -> {
+				.admissionController(context -> {
 					admissionInvocations.incrementAndGet();
-					return McpAdmissionDecision.fromAnonymousIdentity();
+					return McpAdmissionDecision.accepted();
 				})
 				.requestRateLimiter(context -> {
 					requestLimiterInvocations.incrementAndGet();
-					return McpRateLimitDecision.fromAllowed();
+					return McpRateLimitDecision.allowed();
 				})
 				.toolRateLimiter(context -> {
 					toolLimiterInvocations.incrementAndGet();
-					return McpRateLimitDecision.fromAllowed();
+					return McpRateLimitDecision.allowed();
 				})
 				.toolOutputSanitizer((request, toolName, rawArguments, output) -> {
 					sanitizerInvocations.incrementAndGet();
@@ -512,10 +512,10 @@ public class McpInputResponsesPublicRuntimeTests {
 			@NonNull McpEndpoint endpoint) {
 		return McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
-				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
 	}

@@ -83,15 +83,15 @@ public class McpPublicApiReflectionContractTests {
 			Path.of("api/mcp/provisional.includes"));
 	private static final int PHASE_FOUR_TYPE_COUNT = 133;
 	private static final int PHASE_FIVE_TYPE_COUNT = 39;
-	private static final int PHASE_SIX_TYPE_COUNT = 33;
-	private static final int PROVISIONAL_TYPE_COUNT = 32;
-	private static final int CURRENT_MCP_TYPE_COUNT = 237;
+	private static final int PHASE_SIX_TYPE_COUNT = 64;
+	private static final int PROVISIONAL_TYPE_COUNT = 0;
+	private static final int CURRENT_MCP_TYPE_COUNT = 236;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"627be93f6c759e194645c022ab854c2fde73d916b4c787f05e7c18b49cbfb197";
+			"d55b5e00570ca13de3168c2e77deb65003ae26d8e991a6eef96f21fa5f958d08";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
-			"d52a424ac33e679e0a0632004ac931e59966b68641659e254214964d9144f8c7";
+			"a9c0a9311b6b0dff74b2813383b903a01dc185cbf7155c009edf1f6fb8e0d304";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
-			"1a1b18a9f24a4c28ef15b51545163f7140c1661515669fbaa3dcf32befdaddc8";
+			"6fa774d10bf9c8a6ab4274f7989ef55eb8032d37a7d58e8a6243c4123706edc9";
 	private static final Map<String, Object> PHASE_FOUR_PRIMITIVE_CONSTANTS =
 			Map.of(
 					"com.soklet.McpAdmissionIdentity#MAXIMUM_PARTITION_KEY_UTF_8_BYTES",
@@ -219,13 +219,43 @@ public class McpPublicApiReflectionContractTests {
 				"com.soklet.McpLocalizationRequest",
 				"com.soklet.McpLocalizationResult",
 				"com.soklet.McpLocalizationResult$Failure",
-				"com.soklet.McpLocalizationResult$Fallback",
 				"com.soklet.McpLocalizationResult$Localized",
 				"com.soklet.McpLocalizationResult$UseDefaultText",
 				"com.soklet.McpLocalizationRevision",
 				"com.soklet.McpLocalizer",
 				"com.soklet.McpLocalizer$Builder",
 				"com.soklet.McpLocalizer$ContextProviderStage",
+				"com.soklet.McpMetricsEvent",
+				"com.soklet.McpMetricsEvent$CancelationSignaled",
+				"com.soklet.McpMetricsEvent$ConnectionAccepted",
+				"com.soklet.McpMetricsEvent$ConnectionRejected",
+				"com.soklet.McpMetricsEvent$HandlerCapacityRejected",
+				"com.soklet.McpMetricsEvent$HandlerDequeued",
+				"com.soklet.McpMetricsEvent$HandlerExecutionFinished",
+				"com.soklet.McpMetricsEvent$HandlerExecutionStarted",
+				"com.soklet.McpMetricsEvent$HandlerQueued",
+				"com.soklet.McpMetricsEvent$KeepAliveEmitted",
+				"com.soklet.McpMetricsEvent$ProgressEmitted",
+				"com.soklet.McpMetricsEvent$ProtocolError",
+				"com.soklet.McpMetricsEvent$RequestAccepted",
+				"com.soklet.McpMetricsEvent$RequestFinished",
+				"com.soklet.McpMetricsEvent$RequestRejected",
+				"com.soklet.McpMetricsEvent$RequestStarted",
+				"com.soklet.McpMetricsEvent$RequestStreamClosed",
+				"com.soklet.McpMetricsEvent$RequestStreamOpened",
+				"com.soklet.McpMetricsEvent$ServerStarted",
+				"com.soklet.McpMetricsEvent$ServerStopped",
+				"com.soklet.McpMetricsEvent$SubscriptionClosed",
+				"com.soklet.McpMetricsEvent$SubscriptionOpened",
+				"com.soklet.McpMetricsEvent$TransportFailure",
+				"com.soklet.McpMetricsEvent$UnknownMirroredHeader",
+				"com.soklet.McpMetricsSnapshot",
+				"com.soklet.McpMetricsSnapshot$Builder",
+				"com.soklet.McpMetricsSnapshot$EndpointMethodKey",
+				"com.soklet.McpMetricsSnapshot$RequestOutcomeKey",
+				"com.soklet.McpMetricsSnapshot$RequestStreamTerminationKey",
+				"com.soklet.McpMetricsSnapshot$SubscriptionTerminationKey",
+				"com.soklet.McpRequestOutcome",
 				"com.soklet.McpServerDiagnostics",
 				"com.soklet.McpServerStatus",
 				"com.soklet.McpShutdownOutcome",
@@ -237,10 +267,11 @@ public class McpPublicApiReflectionContractTests {
 				"com.soklet.McpSimulationResponse",
 				"com.soklet.McpSimulationStreamItem",
 				"com.soklet.McpSimulationStreamItemType",
+				"com.soklet.McpStreamTerminationReason",
 				"com.soklet.McpTextCoordinate",
 				"com.soklet.McpTextCoordinate$Kind",
-				"com.soklet.McpTraceCorrelation",
 				"com.soklet.McpTraceCorrelationConfigurationFingerprint",
+				"com.soklet.McpTraceCorrelationControl",
 				"com.soklet.McpTraceCorrelationKey",
 				"com.soklet.Simulator");
 		Path phaseSixIncludes = Path.of("api/mcp/phase-6.includes");
@@ -248,7 +279,7 @@ public class McpPublicApiReflectionContractTests {
 		Assertions.assertEquals(PHASE_SIX_TYPE_COUNT,
 				actualPhaseSixTypes.size());
 		Assertions.assertEquals(expectedPhaseSixTypes, actualPhaseSixTypes,
-				"The unfrozen Phase 6 owner inventory changed");
+				"The frozen Phase 6 owner inventory changed");
 
 		Assertions.assertEquals(PROVISIONAL_TYPE_COUNT,
 				includeTypeNames(Path.of("api/mcp/provisional.includes")).size(),
@@ -275,7 +306,7 @@ public class McpPublicApiReflectionContractTests {
 				"getLocalizationControl", McpLocalizationControl.class,
 				MethodShape.ABSTRACT, false);
 		Method invocationFeatures = assertInstanceMethod(
-				McpHandlerInvocation.class, "getFeatures",
+				McpHandlerContinuation.class, "getFeatures",
 				McpInvocationFeatures.class, MethodShape.DEFAULT, false);
 		assertErasedGenericSignature(localizer);
 		assertErasedGenericSignature(localizationControl);
@@ -432,15 +463,15 @@ public class McpPublicApiReflectionContractTests {
 	public void extensionPointParameterNamesRetainTheirDocumentedOrder()
 			throws Exception {
 		assertParameterNames(McpToolHandler.class.getMethod("handle",
-				McpRequestContext.class, McpToolCallContext.class,
-				McpInvocationFeatures.class), "request", "call", "features");
+				McpRequestContext.class, McpToolArguments.class,
+				McpInvocationFeatures.class), "request", "arguments", "features");
 		assertParameterNames(McpCompleteToolHandler.class.getMethod("handle",
-				McpRequestContext.class, McpToolCallContext.class,
-				McpInvocationFeatures.class), "request", "call", "features");
+				McpRequestContext.class, McpToolArguments.class,
+				McpInvocationFeatures.class), "request", "arguments", "features");
 		assertParameterNames(McpPromptHandler.class.getMethod("handle",
 				McpRequestContext.class, McpPromptGetContext.class,
 				McpInvocationFeatures.class), "request", "prompt", "features");
-		assertParameterNames(McpResourceHandler.class.getMethod("handle",
+		assertParameterNames(McpResourceReadHandler.class.getMethod("handle",
 				McpRequestContext.class, McpResourceReadContext.class,
 				McpInvocationFeatures.class), "request", "resource", "features");
 		assertParameterNames(McpResourceListHandler.class.getMethod("handle",
@@ -448,8 +479,8 @@ public class McpPublicApiReflectionContractTests {
 				McpInvocationFeatures.class), "request", "list", "features");
 		assertParameterNames(McpHandlerInterceptor.class.getMethod(
 				"interceptHandler", McpRequestContext.class,
-				McpHandlerInvocation.class), "context", "invocation");
-		assertParameterNames(McpRequestAdmissionPolicy.class.getMethod("admit",
+				McpHandlerContinuation.class), "context", "continuation");
+		assertParameterNames(McpAdmissionController.class.getMethod("admit",
 				McpAdmissionContext.class), "context");
 		assertParameterNames(McpRateLimiter.class.getMethod("acquire",
 				McpRateLimitContext.class), "context");
@@ -605,10 +636,10 @@ public class McpPublicApiReflectionContractTests {
 				McpSubscriptionConfig.class));
 
 		Method resolverSubscriptions = assertInstanceMethod(
-				McpHandlerResolver.class, "withSubscriptions",
-				McpHandlerResolver.class, MethodShape.ABSTRACT, false,
+				McpEndpointRegistry.class, "withSubscriptions",
+				McpEndpointRegistry.class, MethodShape.ABSTRACT, false,
 				Class.class, McpSubscriptionConfig.class);
-		Assertions.assertEquals(McpHandlerResolver.class,
+		Assertions.assertEquals(McpEndpointRegistry.class,
 				resolverSubscriptions.getGenericReturnType());
 		Type[] resolverParameterTypes =
 				resolverSubscriptions.getGenericParameterTypes();
@@ -634,7 +665,7 @@ public class McpPublicApiReflectionContractTests {
 				"getProtectionControl", McpProtectionControl.class,
 				MethodShape.ABSTRACT, false));
 		assertErasedGenericSignature(assertInstanceMethod(McpServer.class,
-				"getTraceCorrelation", McpTraceCorrelation.class,
+				"getTraceCorrelationControl", McpTraceCorrelationControl.class,
 				MethodShape.ABSTRACT, false));
 		assertErasedGenericSignature(assertInstanceMethod(McpServer.Builder.class,
 				"protectionConfig", McpServer.Builder.class,

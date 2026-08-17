@@ -97,6 +97,16 @@ class McpLocalizationHttpBoundaryTests {
 						Set.of(), null));
 		assertFalse(plainError.headers().containsKey("Vary"),
 				plainError.headers().toString());
+
+		// CORS rejection occurs before semantic decoding and the ordinary shared
+		// header path; endpoint-level response decoration must still apply Vary.
+		Capture corsRejection = capture(localizer(),
+				CorsAuthorizer.rejectAllInstance(),
+				request("server/discover", "early-cors", null, "", Set.of(),
+						"https://rejected.example"));
+		assertEquals(403, corsRejection.statusCode());
+		assertEquals(Set.of("Accept-Language"),
+				corsRejection.headers().get("Vary"), corsRejection.toString());
 	}
 
 	@Test
@@ -111,13 +121,48 @@ class McpLocalizationHttpBoundaryTests {
 	}
 
 	@Test
+	void admissionRejectionVaryFieldsNormalizeWithoutLosingWildcardSemantics() {
+		McpAdmissionRejection wildcard = McpAdmissionRejection
+				.withStatusCodeAndError(403,
+						McpJsonRpcError.fromApplication(-31_001, "denied"))
+				.header("Vary", "*")
+				.build();
+		Capture wildcardCapture = capture(localizer(),
+				CorsAuthorizer.acceptAllInstance(),
+				request("server/discover", "vary-wildcard", null, "", Set.of(),
+						"https://cors.example"),
+				context -> McpAdmissionDecision.rejected(wildcard));
+
+		assertEquals(403, wildcardCapture.statusCode());
+		assertEquals(Set.of("*"), wildcardCapture.headers().get("Vary"),
+				wildcardCapture.headers().toString());
+
+		McpAdmissionRejection duplicateTokens = McpAdmissionRejection
+				.withStatusCodeAndError(403,
+						McpJsonRpcError.fromApplication(-31_002, "denied"))
+				.header("Vary",
+						"X-Tenant, accept-language, ORIGIN, x-tenant")
+				.build();
+		Capture normalizedCapture = capture(localizer(),
+				CorsAuthorizer.acceptAllInstance(),
+				request("server/discover", "vary-normalized", null, "", Set.of(),
+						"https://cors.example"),
+				context -> McpAdmissionDecision.rejected(duplicateTokens));
+
+		assertEquals(403, normalizedCapture.statusCode());
+		assertEquals(Set.of("Origin, Accept-Language, X-Tenant"),
+				normalizedCapture.headers().get("Vary"),
+				normalizedCapture.headers().toString());
+	}
+
+	@Test
 	void dynamicApplicationOutputIsNeverPostProcessed() {
 		// The handler emits text that looks exactly like localizable JSON and
 		// also localizes for itself from the exact provider context.
 		AtomicReference<Locale> observedLocale = new AtomicReference<>();
 		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
 				.contextProvider(request -> context(Locale.FRENCH,
-						text -> McpLocalizationResult.fromLocalizedText(
+						text -> McpLocalizationResult.localized(
 								"FR:" + text.getDefaultText())))
 				.build();
 
@@ -140,7 +185,7 @@ class McpLocalizationHttpBoundaryTests {
 	private static McpLocalizer localizer() {
 		return McpLocalizer.withFallbackLocale(Locale.ENGLISH)
 				.contextProvider(request -> context(Locale.FRENCH,
-						text -> McpLocalizationResult.fromDefaultText()))
+						text -> McpLocalizationResult.useDefaultText()))
 				.build();
 	}
 
@@ -166,20 +211,36 @@ class McpLocalizationHttpBoundaryTests {
 	private static Capture capture(McpLocalizer localizer,
 			CorsAuthorizer corsAuthorizer, Request request) {
 		return capture(localizer, corsAuthorizer, request,
+				McpAdmissionController.acceptAllInstance(),
 				new AtomicReference<>());
 	}
 
 	private static Capture capture(McpLocalizer localizer,
 			CorsAuthorizer corsAuthorizer, Request request,
 			AtomicReference<Locale> observedLocale) {
+		return capture(localizer, corsAuthorizer, request,
+				McpAdmissionController.acceptAllInstance(), observedLocale);
+	}
+
+	private static Capture capture(McpLocalizer localizer,
+			CorsAuthorizer corsAuthorizer, Request request,
+			McpAdmissionController admissionController) {
+		return capture(localizer, corsAuthorizer, request, admissionController,
+				new AtomicReference<>());
+	}
+
+	private static Capture capture(McpLocalizer localizer,
+			CorsAuthorizer corsAuthorizer, Request request,
+			McpAdmissionController admissionController,
+			AtomicReference<Locale> observedLocale) {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation
 						.withNameAndVersion("localization-http", "1.0")
 						.title("Canonical title")
 						.build())
-				.resourcesListCachePolicy(McpCachePolicy.fromPublicTimeToLive(
+				.resourceListCachePolicy(McpCachePolicy.fromPublicTimeToLive(
 						Duration.ofSeconds(60)))
-				.resourceTemplatesListCachePolicy(McpCachePolicy
+				.resourceTemplateListCachePolicy(McpCachePolicy
 						.fromPublicTimeToLive(Duration.ofSeconds(60)))
 				.resource(McpResourceRegistration.withUriAndName(
 						URI.create("http://cache/text"), "text")
@@ -228,16 +289,16 @@ class McpLocalizationHttpBoundaryTests {
 						.build())
 				.tool(McpToolRegistration.withName("cache.tool")
 						.jsonArguments()
-						.handler((toolRequest, call, features) ->
+						.handler((toolRequest, arguments, features) ->
 								McpCompleteResult.fromToolText("unused"))
 						.build())
 				.build();
 		McpServer.Builder builder = McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(McpRequestAdmissionPolicy.acceptAllInstance())
-				.requestRateLimiter(context -> McpRateLimitDecision.fromAllowed())
-				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(admissionController)
+				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(corsAuthorizer)
 				.allowedHosts(Set.of(LOOPBACK));
 

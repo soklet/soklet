@@ -387,7 +387,7 @@ public class McpSecurityControlsTests {
 						.getReturnType());
 		Assertions.assertEquals(Boolean.class, McpProtectionControl.class
 				.getMethod("removeVerificationKey", String.class).getReturnType());
-		Assertions.assertEquals(Boolean.class, McpTraceCorrelation.class
+		Assertions.assertEquals(Boolean.class, McpTraceCorrelationControl.class
 				.getMethod("isEnabled").getReturnType());
 	}
 

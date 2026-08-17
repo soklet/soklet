@@ -537,7 +537,7 @@ public class McpSimulatorEveryOperationTests {
 					? null : new CountDownLatch(1);
 			McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 					.withName(TOOL_NAME).jsonArguments()
-					.handler((request, call, features) -> {
+					.handler((request, arguments, features) -> {
 						this.handlerCalls.incrementAndGet();
 						if (blockingTool) {
 							CancelationToken token = features.require(CancelationToken.class);
@@ -587,8 +587,8 @@ public class McpSimulatorEveryOperationTests {
 					.build();
 			this.server = McpServer.withPort(0)
 					.host(LOOPBACK)
-					.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-					.requestAdmissionPolicy(context -> {
+					.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+					.admissionController(context -> {
 						if (this.concurrentAdmissions != null) {
 							this.concurrentAdmissions.countDown();
 							if (this.concurrentAdmissions.getCount() == 0)
@@ -596,13 +596,13 @@ public class McpSimulatorEveryOperationTests {
 							Assertions.assertTrue(awaitLatch(
 									this.releaseConcurrentAdmissions));
 						}
-						return McpAdmissionDecision.fromAnonymousIdentity();
+						return McpAdmissionDecision.accepted();
 					})
-					.requestRateLimiter(context -> McpRateLimitDecision.fromAllowed())
-					.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
-					.handlerInterceptor((context, invocation) -> {
+					.requestRateLimiter(context -> McpRateLimitDecision.allowed())
+					.toolRateLimiter(context -> McpRateLimitDecision.allowed())
+					.handlerInterceptor((context, continuation) -> {
 						this.interceptorCalls.incrementAndGet();
-						return invocation.invoke();
+						return continuation.proceed();
 					})
 					.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
 					.allowedHosts(Set.of(LOOPBACK))

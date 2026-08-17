@@ -18,7 +18,7 @@ package com.soklet.internal.mcp.generated;
 
 import com.soklet.InstanceProvider;
 import com.soklet.McpEndpoint;
-import com.soklet.McpSchema;
+import com.soklet.McpToolSchema;
 import com.soklet.McpToolRegistration;
 import com.soklet.internal.mcp.protocol.McpJsonCodec;
 import com.soklet.internal.mcp.protocol.McpJsonLimits;
@@ -54,7 +54,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * Strict runtime loader for generated MCP endpoint providers.
  *
- * <p>This type is public only because the core public resolver delegates to an
+ * <p>This type is public only because the core public registry delegates to an
  * internal package. It is not part of Soklet's supported public API or
  * published Javadocs.</p>
  *
@@ -375,7 +375,7 @@ public final class McpGeneratedEndpointProviderLoader {
 		for (int index = 0; index < tools.size(); index++) {
 			McpToolRegistration<?> tool = tools.get(index);
 			int digestIndex = index * 3;
-			McpSchema outputSchema = tool.getOutputSchema()
+			McpToolSchema outputSchema = tool.getOutputSchema()
 					.orElseThrow(() -> schemaMismatch(entry));
 			if (!tool.getName().equals(schemaDigests[digestIndex])
 					|| !schemaDigest(tool.getInputSchema()).equals(
@@ -395,7 +395,7 @@ public final class McpGeneratedEndpointProviderLoader {
 	}
 
 	@NonNull
-	private static String schemaDigest(@NonNull McpSchema schema) {
+	private static String schemaDigest(@NonNull McpToolSchema schema) {
 		byte[] canonicalBytes = new McpJsonCodec(
 				McpJsonLimits.productionDefaults()).toUtf8Bytes(
 				toInternal(schema.getDocument()));

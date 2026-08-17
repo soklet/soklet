@@ -144,6 +144,20 @@ class McpLocalizationByteAccountingTests {
 				.replacementByteDelta("a longer default", "x") < 0);
 	}
 
+	@Test
+	void serializedTokenCharacterPredictionMatchesProductionEscaping() {
+		assertEquals(0, McpLocalizationByteAccounting
+				.serializedTokenCharacters(""));
+		assertEquals(3, McpLocalizationByteAccounting
+				.serializedTokenCharacters("abc"));
+		assertEquals(2, McpLocalizationByteAccounting
+				.serializedTokenCharacters("\n"));
+		assertEquals(6, McpLocalizationByteAccounting
+				.serializedTokenCharacters("\0"));
+		assertEquals(2, McpLocalizationByteAccounting
+				.serializedTokenCharacters(EMOJI));
+	}
+
 	private static long encodedLength(String value) {
 		// The internal writer is what actually produces response bytes; the
 		// same-named public value type is a different hierarchy.

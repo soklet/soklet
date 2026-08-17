@@ -701,7 +701,7 @@ public class McpShutdownObservabilityTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(toolName)
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					handlerEntered.countDown();
 					try {
 						while (releaseHandler.getCount() != 0L) {
@@ -724,10 +724,10 @@ public class McpShutdownObservabilityTests {
 				.build();
 		McpServer server = McpServer.withPort(0)
 				.host(HOST)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
-				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST))
 				.requestHandlerConcurrency(1)
@@ -858,10 +858,10 @@ public class McpShutdownObservabilityTests {
 			@Nullable Duration shutdownTimeout) {
 		McpServer.Builder builder = McpServer.withPort(0)
 				.host(HOST)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
 						List.copyOf(requireNonNull(endpoints))))
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST));
 		if (shutdownTimeout != null)
@@ -1103,7 +1103,7 @@ public class McpShutdownObservabilityTests {
 
 		@Override
 		@NonNull
-		public McpSubscriptionEventSubscription subscribe(
+		public McpSubscriptionEventRegistration subscribe(
 				@NonNull McpSubscriptionEventListener listener) {
 			requireNonNull(listener);
 			this.subscribeAttempts.incrementAndGet();
@@ -1142,7 +1142,7 @@ public class McpShutdownObservabilityTests {
 
 		@Override
 		@NonNull
-		public McpSubscriptionEventSubscription subscribe(
+		public McpSubscriptionEventRegistration subscribe(
 				@NonNull McpSubscriptionEventListener listener) {
 			requireNonNull(listener);
 			return () -> {
@@ -1198,7 +1198,7 @@ public class McpShutdownObservabilityTests {
 
 		@Override
 		@NonNull
-		public McpSubscriptionEventSubscription subscribe(
+		public McpSubscriptionEventRegistration subscribe(
 				@NonNull McpSubscriptionEventListener listener) {
 			requireNonNull(listener);
 			if (this.subscribeAttempts.incrementAndGet() == 1)

@@ -78,9 +78,9 @@ public class McpRequestObservationPublicRuntimeTests {
 		AtomicInteger interceptorInvocations = new AtomicInteger();
 		McpEndpoint endpoint = endpointBuilder("discovery-observation-test").build();
 		McpServer server = serverBuilder(endpoint)
-				.handlerInterceptor((context, invocation) -> {
+				.handlerInterceptor((context, continuation) -> {
 					interceptorInvocations.incrementAndGet();
-					return invocation.invoke();
+					return continuation.proceed();
 				})
 				.build();
 		Soklet soklet = managedSoklet(server, List.of(observer), collector);
@@ -115,7 +115,7 @@ public class McpRequestObservationPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
 				.jsonArguments()
-				.handler((context, call, features) -> {
+				.handler((context, arguments, features) -> {
 					handlerContext.set(context);
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText("observed");
@@ -125,9 +125,9 @@ public class McpRequestObservationPublicRuntimeTests {
 				.tool(tool)
 				.build();
 		McpServer server = serverBuilder(endpoint)
-				.handlerInterceptor((context, invocation) -> {
+				.handlerInterceptor((context, continuation) -> {
 					interceptorContext.set(context);
-					return invocation.invoke();
+					return continuation.proceed();
 				})
 				.build();
 		Soklet soklet = managedSoklet(server, List.of(observer), collector);
@@ -169,7 +169,7 @@ public class McpRequestObservationPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
 				.jsonArguments()
-				.handler((context, call, features) -> {
+				.handler((context, arguments, features) -> {
 					DefaultMcpRequestContext internalContext =
 							Assertions.assertInstanceOf(
 									DefaultMcpRequestContext.class, context);
@@ -214,10 +214,10 @@ public class McpRequestObservationPublicRuntimeTests {
 			Assertions.assertSame(firstToken, handlerContexts.get(0)
 					.traceCorrelationToken().orElseThrow());
 
-			server.getTraceCorrelation().rotateActiveKey(
+			server.getTraceCorrelationControl().rotateActiveKey(
 					traceKey("trace-second", 32));
 			Assertions.assertEquals(Optional.of("trace-second"),
-					server.getTraceCorrelation().getActiveKeyId());
+					server.getTraceCorrelationControl().getActiveKeyId());
 			Assertions.assertSame(firstToken,
 					firstContext.traceCorrelationToken().orElseThrow());
 			releaseFirstHandler.countDown();
@@ -228,6 +228,11 @@ public class McpRequestObservationPublicRuntimeTests {
 					observer.finishedContexts.get(0));
 			Assertions.assertSame(firstToken, observer.finishedContexts.get(0)
 					.traceCorrelationToken().orElseThrow());
+			Assertions.assertEquals(1, observer.logEvents.size(),
+					observer.logEvents.toString());
+			assertTraceLogEvent(observer.logEvents.get(0),
+					"tokenFormat=soklet-mcp-trace-correlation-v1;"
+							+ "keyId=trace-first;token=" + FIRST_TRACE_TOKEN);
 
 			HttpResponse<String> second = send(port,
 					toolRequestWithTrace("trace-second", TOOL_NAME,
@@ -251,6 +256,11 @@ public class McpRequestObservationPublicRuntimeTests {
 			Assertions.assertSame(secondToken, observer.finishedContexts.get(1)
 					.traceCorrelationToken().orElseThrow());
 			Assertions.assertNotSame(firstToken, secondToken);
+			Assertions.assertEquals(2, observer.logEvents.size(),
+					observer.logEvents.toString());
+			assertTraceLogEvent(observer.logEvents.get(1),
+					"tokenFormat=soklet-mcp-trace-correlation-v1;"
+							+ "keyId=trace-second;token=" + SECOND_TRACE_TOKEN);
 		} finally {
 			releaseFirstHandler.countDown();
 			soklet.stop();
@@ -266,7 +276,7 @@ public class McpRequestObservationPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
 				.jsonArguments()
-				.handler((context, call, features) -> {
+				.handler((context, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpCompleteResult.fromToolText("trace-source-checked");
 				})
@@ -276,6 +286,7 @@ public class McpRequestObservationPublicRuntimeTests {
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.traceCorrelationKey(traceKey("trace-first", 0))
+				.logRawValidatedTraceIds(true)
 				.build();
 		Soklet soklet = managedSoklet(server, List.of(observer),
 				new RecordingMetricsCollector());
@@ -321,47 +332,78 @@ public class McpRequestObservationPublicRuntimeTests {
 				Assertions.assertTrue(context.getTraceContext().isEmpty());
 				Assertions.assertTrue(context.traceCorrelationToken().isEmpty());
 			}
+			Assertions.assertEquals(1, observer.logEvents.size(),
+					observer.logEvents.toString());
+			assertTraceLogEvent(observer.logEvents.get(0),
+					"tokenFormat=soklet-mcp-trace-correlation-v1;"
+							+ "keyId=trace-first;token=" + FIRST_TRACE_TOKEN
+							+ ";traceId=0af7651916cd43dd8448eb211c80319c");
 		} finally {
 			soklet.stop();
 		}
 	}
 
 	@Test
-	public void disabledCorrelationAndRawIdOptInRemainIndependentAndCarrierRenderingIsRedacted()
+	public void defaultOffAndIndependentRawIdOptInHaveExactLogContracts()
 			throws Exception {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
 				.jsonArguments()
-				.handler((context, call, features) ->
+				.handler((context, arguments, features) ->
 						McpCompleteResult.fromToolText("raw-id-independent"))
 				.build();
 		McpEndpoint endpoint = endpointBuilder("raw-id-independence-test")
 				.tool(tool)
 				.build();
 
-		TraceRecordingLifecycleObserver disabledObserver =
+		TraceRecordingLifecycleObserver defaultObserver =
 				new TraceRecordingLifecycleObserver(1);
-		McpServer disabledServer = serverBuilder(endpoint)
-				.logRawValidatedTraceIds(true)
-				.build();
-		Soklet disabledSoklet = managedSoklet(disabledServer,
-				List.of(disabledObserver), new RecordingMetricsCollector());
+		McpServer defaultServer = serverBuilder(endpoint).build();
+		Soklet defaultSoklet = managedSoklet(defaultServer,
+				List.of(defaultObserver), new RecordingMetricsCollector());
 		try {
-			disabledSoklet.start();
-			int port = disabledServer.getDiagnostics().getBoundAddress()
+			defaultSoklet.start();
+			int port = defaultServer.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
-			assertSuccess(send(port, toolRequestWithTrace("trace-disabled",
+			assertSuccess(send(port, toolRequestWithTrace("trace-default",
 					TOOL_NAME, MCP_TRACEPARENT), "tools/call",
-					Optional.of(TOOL_NAME)), "trace-disabled");
-			disabledObserver.awaitAllFinished();
+					Optional.of(TOOL_NAME)), "trace-default");
+			defaultObserver.awaitAllFinished();
 			DefaultMcpRequestContext context =
-					disabledObserver.startedContexts.get(0);
+					defaultObserver.startedContexts.get(0);
 			Assertions.assertTrue(context.getTraceContext().isPresent());
 			Assertions.assertTrue(context.traceCorrelationToken().isEmpty());
-			Assertions.assertTrue(disabledObserver.logEvents.isEmpty(),
-					disabledObserver.logEvents.toString());
+			Assertions.assertTrue(defaultObserver.logEvents.isEmpty(),
+					defaultObserver.logEvents.toString());
 		} finally {
-			disabledSoklet.stop();
+			defaultSoklet.stop();
+		}
+
+		TraceRecordingLifecycleObserver rawObserver =
+				new TraceRecordingLifecycleObserver(1);
+		McpServer rawServer = serverBuilder(endpoint)
+				.logRawValidatedTraceIds(true)
+				.build();
+		Soklet rawSoklet = managedSoklet(rawServer,
+				List.of(rawObserver), new RecordingMetricsCollector());
+		try {
+			rawSoklet.start();
+			int port = rawServer.getDiagnostics().getBoundAddress()
+					.orElseThrow().getPort();
+			assertSuccess(send(port, toolRequestWithTrace("trace-raw",
+					TOOL_NAME, MCP_TRACEPARENT), "tools/call",
+					Optional.of(TOOL_NAME)), "trace-raw");
+			rawObserver.awaitAllFinished();
+			DefaultMcpRequestContext context =
+					rawObserver.startedContexts.get(0);
+			Assertions.assertTrue(context.getTraceContext().isPresent());
+			Assertions.assertTrue(context.traceCorrelationToken().isEmpty());
+			Assertions.assertEquals(1, rawObserver.logEvents.size(),
+					rawObserver.logEvents.toString());
+			assertTraceLogEvent(rawObserver.logEvents.get(0),
+					"traceId=0af7651916cd43dd8448eb211c80319c");
+		} finally {
+			rawSoklet.stop();
 		}
 
 		TraceRecordingLifecycleObserver enabledObserver =
@@ -389,8 +431,12 @@ public class McpRequestObservationPublicRuntimeTests {
 			Assertions.assertFalse(token.toString().contains(
 					"0af7651916cd43dd8448eb211c80319c"));
 			Assertions.assertTrue(token.toString().contains("token=<redacted>"));
-			Assertions.assertTrue(enabledObserver.logEvents.isEmpty(),
+			Assertions.assertEquals(1, enabledObserver.logEvents.size(),
 					enabledObserver.logEvents.toString());
+			assertTraceLogEvent(enabledObserver.logEvents.get(0),
+					"tokenFormat=soklet-mcp-trace-correlation-v1;"
+							+ "keyId=trace-first;token=" + FIRST_TRACE_TOKEN
+							+ ";traceId=0af7651916cd43dd8448eb211c80319c");
 		} finally {
 			enabledSoklet.stop();
 		}
@@ -408,7 +454,7 @@ public class McpRequestObservationPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
 				.jsonArguments()
-				.handler((context, call, features) ->
+				.handler((context, arguments, features) ->
 						McpCompleteResult.fromToolText("metric-cardinality-checked"))
 				.build();
 		McpEndpoint endpoint = endpointBuilder("metric-cardinality-test")
@@ -507,6 +553,7 @@ public class McpRequestObservationPublicRuntimeTests {
 			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
 					observer.startedContexts.size());
 			Set<String> derivedTokens = new LinkedHashSet<>();
+			List<String> expectedTraceLogMessages = new java.util.ArrayList<>();
 			for (int index = 0; index < TRACE_CARDINALITY_REQUEST_COUNT;
 					++index) {
 				DefaultMcpRequestContext context =
@@ -535,9 +582,19 @@ public class McpRequestObservationPublicRuntimeTests {
 						token.keyId());
 				derivedTokens.add(token.token());
 				sensitiveCanaries.add(token.token());
+				expectedTraceLogMessages.add(
+						"tokenFormat=soklet-mcp-trace-correlation-v1;keyId="
+								+ TRACE_CARDINALITY_KEY_ID + ";token="
+								+ token.token() + ";traceId="
+								+ mcpTraceIds.get(index));
 			}
 			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
 					derivedTokens.size());
+			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
+					observer.logEvents.size(), observer.logEvents.toString());
+			for (int index = 0; index < observer.logEvents.size(); ++index)
+				assertTraceLogEvent(observer.logEvents.get(index),
+						expectedTraceLogMessages.get(index));
 
 			List<McpMetricsEvent> events = collector.events();
 			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
@@ -739,7 +796,7 @@ public class McpRequestObservationPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
 				.jsonArguments()
-				.handler((context, call, features) -> {
+				.handler((context, arguments, features) -> {
 					handlerContext.set(context);
 					return McpCompleteResult.fromToolText("log-level-observed");
 				})
@@ -782,7 +839,7 @@ public class McpRequestObservationPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
 				.jsonArguments()
-				.handler((context, call, features) -> {
+				.handler((context, arguments, features) -> {
 					throw handlerFailure;
 				})
 				.build();
@@ -831,7 +888,7 @@ public class McpRequestObservationPublicRuntimeTests {
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver();
 		RecordingMetricsCollector collector = new RecordingMetricsCollector();
 		McpEndpoint endpoint = endpointBuilder("rejected-observation-test").build();
-		McpRequestRejection rejection = McpRequestRejection
+		McpAdmissionRejection rejection = McpAdmissionRejection
 				.withStatusCodeAndError(401,
 						McpJsonRpcError.fromApplication(1_001,
 								"Authentication required"))
@@ -839,9 +896,9 @@ public class McpRequestObservationPublicRuntimeTests {
 				.build();
 		McpServer server = McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(context ->
-						McpAdmissionDecision.fromRejection(rejection))
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(context ->
+						McpAdmissionDecision.rejected(rejection))
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
@@ -879,7 +936,7 @@ public class McpRequestObservationPublicRuntimeTests {
 				.requestRateLimiter(context -> {
 					Assertions.assertEquals(McpRateLimitTarget.REQUEST,
 							context.getTarget());
-					return McpRateLimitDecision.fromDenied(Duration.ofMillis(1));
+					return McpRateLimitDecision.denied(Duration.ofMillis(1));
 				})
 				.build();
 		Soklet soklet = managedSoklet(server, List.of(observer), collector);
@@ -924,7 +981,7 @@ public class McpRequestObservationPublicRuntimeTests {
 		McpEndpoint endpoint = endpointBuilder(
 				"unsupported-notification-observation-test").build();
 		McpServer server = serverBuilder(endpoint)
-				.requestRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.build();
 		Soklet soklet = managedSoklet(server, List.of(observer), collector);
 
@@ -1056,10 +1113,10 @@ public class McpRequestObservationPublicRuntimeTests {
 			@NonNull McpEndpoint endpoint) {
 		return McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
-				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
 	}
@@ -1230,6 +1287,17 @@ public class McpRequestObservationPublicRuntimeTests {
 				response.headers().firstValue("Cache-Control").orElseThrow());
 		Assertions.assertTrue(response.body().contains(
 				"\"id\":\"" + expectedId + "\""), response.body());
+	}
+
+	private static void assertTraceLogEvent(@NonNull LogEvent event,
+			@NonNull String expectedMessage) {
+		Assertions.assertEquals(LogEventType.MCP_TRACE_CORRELATION,
+				event.getLogEventType());
+		Assertions.assertEquals(expectedMessage, event.getMessage());
+		Assertions.assertTrue(event.getThrowable().isEmpty());
+		Assertions.assertTrue(event.getRequest().isEmpty());
+		Assertions.assertTrue(event.getResourceMethod().isEmpty());
+		Assertions.assertTrue(event.getMarshaledResponse().isEmpty());
 	}
 
 	private static void assertSingleCompleteLifecycle(

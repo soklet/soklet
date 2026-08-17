@@ -41,7 +41,7 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 final class SoakProfiles {
 	private static final String PROFILE_ENVIRONMENT_VARIABLE = "SOKLET_SOAK_PROFILE";
-	private static final Set<String> PROFILE_NAMES = Set.of("smoke", "nightly");
+	private static final Set<String> PROFILE_NAMES = Set.of("smoke", "nightly", "release");
 	private static final Set<String> REQUIRED_KEYS = Set.of(
 			"http.abortConnectTimeoutMillis",
 			"http.abortIterationsPerClient",
@@ -153,6 +153,9 @@ final class SoakProfiles {
 
 		if (!configuration.endsWith("\n"))
 			throw new IllegalStateException("Soak profile must end with LF: " + resourceName);
+
+		if (configuration.indexOf('\r') >= 0)
+			throw new IllegalStateException("Soak profile must use LF line endings: " + resourceName);
 
 		List<String> lines = configuration.lines().toList();
 		List<String> sortedLines = lines.stream().sorted().toList();

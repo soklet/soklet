@@ -105,18 +105,18 @@ public class McpPromptPublicRuntimeTests {
 				.build();
 		McpServer server = McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(context -> {
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(context -> {
 					stages.add("admission:"
 							+ context.getOperationName().orElse("-"));
-					return McpAdmissionDecision.fromAnonymousIdentity();
+					return McpAdmissionDecision.accepted();
 				})
 				.requestRateLimiter(context -> {
 					Assertions.assertEquals(McpRateLimitTarget.REQUEST,
 							context.getTarget());
 					stages.add("request:"
 							+ context.getOperationName().orElse("-"));
-					return McpRateLimitDecision.fromAllowed();
+					return McpRateLimitDecision.allowed();
 				})
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))

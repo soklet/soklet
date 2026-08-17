@@ -200,28 +200,37 @@ public class McpTransportContainmentSpikeTests {
 		try {
 			runtime.start();
 
-			try (RawHttpClient first = RawHttpClient.post(runtime.port(), "/request", "first");
-					RawHttpClient second = RawHttpClient.post(runtime.port(), "/request", "second")) {
+			try (RawHttpClient first = RawHttpClient.post(
+					runtime.port(), "/request", "first")) {
 				await(firstStarted, "first request did not acquire the only handler slot");
 				assertStreamingHead(first.readHead());
-				McpTransportRuntime.Snapshot saturated = awaitSnapshot(
-						runtime,
-						value -> value.dispatcher().activeSlots() == 1 && value.dispatcher().queueDepth() == 1,
-						"one active plus one queued request was not observed");
-				Assertions.assertEquals(1, saturated.dispatcher().maximumObservedActiveSlots());
-				Assertions.assertEquals(1, saturated.dispatcher().maximumObservedQueueDepth());
 
-				try (RawHttpClient rejected = RawHttpClient.post(runtime.port(), "/request", "third")) {
-					assertUnavailable(rejected, "third");
+				try (RawHttpClient second = RawHttpClient.post(
+						runtime.port(), "/request", "second")) {
+					McpTransportRuntime.Snapshot saturated = awaitSnapshot(
+							runtime,
+							value -> value.dispatcher().activeSlots() == 1
+									&& value.dispatcher().queueDepth() == 1,
+							"one active plus one queued request was not observed");
+					Assertions.assertEquals(1,
+							saturated.dispatcher().maximumObservedActiveSlots());
+					Assertions.assertEquals(1,
+							saturated.dispatcher().maximumObservedQueueDepth());
+
+					try (RawHttpClient rejected = RawHttpClient.post(
+							runtime.port(), "/request", "third")) {
+						assertUnavailable(rejected, "third");
+					}
+
+					Assertions.assertEquals(1L, runtime.snapshot().rejectedRequests());
+					Assertions.assertEquals(1L, runtime.snapshot().cleanupCount());
+					releaseFirst.countDown();
+					assertTerminalResult(first, "first-result");
+					await(secondStarted,
+							"queued request did not acquire the released slot");
+					assertStreamingHead(second.readHead());
+					assertTerminalResult(second, "second-result");
 				}
-
-				Assertions.assertEquals(1L, runtime.snapshot().rejectedRequests());
-				Assertions.assertEquals(1L, runtime.snapshot().cleanupCount());
-				releaseFirst.countDown();
-				assertTerminalResult(first, "first-result");
-				await(secondStarted, "queued request did not acquire the released slot");
-				assertStreamingHead(second.readHead());
-				assertTerminalResult(second, "second-result");
 			}
 
 			assertSuccessfulRequest(runtime.port(), "recovery", "recovery-result");
@@ -529,24 +538,31 @@ public class McpTransportContainmentSpikeTests {
 		try {
 			runtime.start();
 
-			try (RawHttpClient committed = RawHttpClient.post(runtime.port(), "/request", "committed");
-					RawHttpClient queued = RawHttpClient.post(runtime.port(), "/request", "queued")) {
+			try (RawHttpClient committed = RawHttpClient.post(
+					runtime.port(), "/request", "committed")) {
 				await(committedStarted, "committed handler did not start");
 				assertStreamingHead(committed.readHead());
-				awaitSnapshot(
-						runtime,
-						value -> value.dispatcher().queueDepth() == 1,
-						"deadline candidate did not remain queued");
-				clock.advance(requestDeadline.plusNanos(1));
-				runtime.runTimerCycle();
 
-				assertUnavailable(queued, "queued");
-				Assertions.assertEquals(
-						sse("error", "Request deadline exceeded"),
-						committed.readChunkText());
-				Assertions.assertNull(committed.readChunk(), "committed deadline emitted more than one terminal");
-				await(committedInterrupted, "committed deadline did not signal handler interruption");
-				Assertions.assertFalse(queuedRan.get(), "expired queued request reached application code");
+				try (RawHttpClient queued = RawHttpClient.post(
+						runtime.port(), "/request", "queued")) {
+					awaitSnapshot(
+							runtime,
+							value -> value.dispatcher().queueDepth() == 1,
+							"deadline candidate did not remain queued");
+					clock.advance(requestDeadline.plusNanos(1));
+					runtime.runTimerCycle();
+
+					assertUnavailable(queued, "queued");
+					Assertions.assertEquals(
+							sse("error", "Request deadline exceeded"),
+							committed.readChunkText());
+					Assertions.assertNull(committed.readChunk(),
+							"committed deadline emitted more than one terminal");
+					await(committedInterrupted,
+							"committed deadline did not signal handler interruption");
+					Assertions.assertFalse(queuedRan.get(),
+							"expired queued request reached application code");
+				}
 			}
 
 			McpTransportRuntime.Snapshot cleaned = awaitSnapshot(

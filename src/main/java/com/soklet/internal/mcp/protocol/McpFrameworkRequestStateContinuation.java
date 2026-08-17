@@ -98,6 +98,19 @@ record McpFrameworkRequestStateContinuation(
 			@NonNull McpJsonValue nextState,
 			@NonNull McpJsonRpcId currentRequestId,
 			int maximumRounds) {
+		return next(nextState, currentRequestId, maximumRounds, null);
+	}
+
+	/**
+	 * Advances this continuation and, only for a version-1 continuation, pins the
+	 * locale selected by the first localized round that re-emits state.
+	 */
+	@NonNull
+	McpFrameworkRequestStateContinuation next(
+			@NonNull McpJsonValue nextState,
+			@NonNull McpJsonRpcId currentRequestId,
+			int maximumRounds,
+			@Nullable String newlySelectedLocale) {
 		requireNonNull(nextState);
 		requireNonNull(currentRequestId);
 		if (maximumRounds < 1)
@@ -106,10 +119,18 @@ record McpFrameworkRequestStateContinuation(
 		if (round >= maximumRounds)
 			throw new IllegalArgumentException(
 					"Request-state has reached its maximum round.");
-		// The original selected locale is carried forward exactly: a later
-		// round can never renegotiate the continuation's language.
+		if (selectedLocale != null && newlySelectedLocale != null
+				&& !selectedLocale.equals(newlySelectedLocale))
+			throw new IllegalArgumentException(
+					"Request-state locale cannot change between rounds.");
+
+		// A v2 locale is carried forward exactly. A v1 continuation upgrades at
+		// the first localized re-emission, after which it follows the same rule.
+		String effectiveLocale = selectedLocale == null
+				? newlySelectedLocale
+				: selectedLocale;
 		return new McpFrameworkRequestStateContinuation(
 				issuedAt, expiresAt, Math.addExact(round, 1),
-				currentRequestId, nextState, selectedLocale);
+				currentRequestId, nextState, effectiveLocale);
 	}
 }

@@ -60,7 +60,7 @@ import static java.util.Objects.requireNonNull;
  * Longer-running live-listener soak coverage for MCP Phase 5 cross-feature
  * churn, cooperative cancelation, and restart cleanup.
  * <p>
- * {@code SOKLET_SOAK_PROFILE} selects the checked-in smoke or nightly workload
+ * {@code SOKLET_SOAK_PROFILE} selects the checked-in smoke, nightly, or release workload
  * profile. Live-listener coverage speaks MCP over raw loopback sockets, while
  * simulator coverage exercises the same public application APIs off-network.
  *
@@ -369,7 +369,7 @@ public class McpCrossFeatureSoakTests {
 		McpToolRegistration<McpJsonObject> progressTool = McpToolRegistration
 				.withName(PROGRESS_TOOL)
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					state.progressInvocations.incrementAndGet();
 					McpProgressReporter reporter =
 							features.require(McpProgressReporter.class);
@@ -392,7 +392,7 @@ public class McpCrossFeatureSoakTests {
 		McpToolRegistration<McpJsonObject> protectedTool = McpToolRegistration
 				.withName(PROTECTED_TOOL)
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					if (request.getRequestState().isEmpty()) {
 						if (!request.getInputResponses().asMap().isEmpty())
 							throw new IllegalStateException(
@@ -436,8 +436,8 @@ public class McpCrossFeatureSoakTests {
 		McpToolRegistration<McpJsonObject> blockingTool = McpToolRegistration
 				.withName(BLOCKING_TOOL)
 				.jsonArguments()
-				.handler((request, call, features) -> {
-					String invocation = requireJsonString(call.getArguments(),
+				.handler((request, arguments, features) -> {
+					String invocation = requireJsonString(arguments.getArguments(),
 							"invocation");
 					CancelationToken token = features.require(CancelationToken.class);
 					BlockingObservation observation =
@@ -471,15 +471,15 @@ public class McpCrossFeatureSoakTests {
 		McpToolRegistration<McpJsonObject> simulatorJsonTool =
 				McpToolRegistration.withName(SIMULATOR_JSON_TOOL)
 						.jsonArguments()
-						.handler((request, call, features) ->
+						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText(
 										"off-network simulator JSON complete"))
 						.build();
 		McpToolRegistration<McpJsonObject> simulatorCaptureTool =
 				McpToolRegistration.withName(SIMULATOR_CAPTURE_TOOL)
 						.jsonArguments()
-						.handler((request, call, features) -> {
-							String mode = requireJsonString(call.getArguments(), "mode");
+						.handler((request, arguments, features) -> {
+							String mode = requireJsonString(arguments.getArguments(), "mode");
 							McpProgressReporter reporter =
 									features.require(McpProgressReporter.class);
 							if ("item".equals(mode)) {
@@ -503,7 +503,7 @@ public class McpCrossFeatureSoakTests {
 		McpToolRegistration<McpJsonObject> simulatorResidualTool =
 				McpToolRegistration.withName(SIMULATOR_RESIDUAL_TOOL)
 						.jsonArguments()
-						.handler((request, call, features) -> {
+						.handler((request, arguments, features) -> {
 							state.runResidualHandler();
 							return McpCompleteResult.fromToolText(
 									"residual handler released");
@@ -539,11 +539,11 @@ public class McpCrossFeatureSoakTests {
 
 		return McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
-				.requestRateLimiter(context -> McpRateLimitDecision.fromAllowed())
-				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
+				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.protectionConfig(McpProtectionConfig.withKeyRing(
 						McpProtectionKeyRing.withActiveKey(
 								McpProtectionKey.fromIdAndBytes("soak-v1",
@@ -1803,15 +1803,15 @@ public class McpCrossFeatureSoakTests {
 
 		@Override
 		@NonNull
-		public McpSubscriptionEventSubscription subscribe(
+		public McpSubscriptionEventRegistration subscribe(
 				@NonNull McpSubscriptionEventListener listener) {
-			McpSubscriptionEventSubscription subscription =
+			McpSubscriptionEventRegistration registration =
 					this.delegate.subscribe(listener);
 			this.subscribes.incrementAndGet();
 			AtomicBoolean open = new AtomicBoolean(true);
 			return () -> {
 				if (open.compareAndSet(true, false)) {
-					subscription.close();
+					registration.close();
 					this.closes.incrementAndGet();
 				}
 			};

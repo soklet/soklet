@@ -28,7 +28,7 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Extracts canonical localizable fields from the final immutable endpoint
- * resolver and builds response-local copy-on-write slot plans. Nothing in this
+ * registry and builds response-local copy-on-write slot plans. Nothing in this
  * class creates request context, invokes application code, or changes wire
  * output.
  *
@@ -51,45 +51,45 @@ final class DefaultMcpLocalizationCatalogExtractor {
 	 */
 	@NonNull
 	static List<@NonNull McpLocalizableText> extract(
-			@NonNull McpHandlerResolver handlerResolver) {
-		return build(handlerResolver, Integer.MAX_VALUE,
+			@NonNull McpEndpointRegistry endpointRegistry) {
+		return build(endpointRegistry, Integer.MAX_VALUE,
 				McpTextCoordinate::toExternalKey).texts();
 	}
 
 	/** Builds plans and validates every response against the configured budget. */
 	@NonNull
 	static McpCanonicalLocalizationPlan plan(
-			@NonNull McpHandlerResolver handlerResolver,
+			@NonNull McpEndpointRegistry endpointRegistry,
 			int maximumLocalizableTextCountPerResponse) {
 		if (maximumLocalizableTextCountPerResponse < 1
 				|| maximumLocalizableTextCountPerResponse
 				> MAXIMUM_SUPPORTED_CALLBACK_COUNT)
 			throw new IllegalArgumentException(
 					"Maximum localizable text count per response must be between 1 and 100000.");
-		return build(handlerResolver, maximumLocalizableTextCountPerResponse,
+		return build(endpointRegistry, maximumLocalizableTextCountPerResponse,
 				McpTextCoordinate::toExternalKey);
 	}
 
 	/** Collision-test seam; production always uses the coordinate's v1 key. */
 	@NonNull
 	static List<@NonNull McpLocalizableText> extract(
-			@NonNull McpHandlerResolver handlerResolver,
+			@NonNull McpEndpointRegistry endpointRegistry,
 			@NonNull ExternalKeyFactory externalKeyFactory) {
-		return build(handlerResolver, Integer.MAX_VALUE,
+		return build(endpointRegistry, Integer.MAX_VALUE,
 				externalKeyFactory).texts();
 	}
 
 	@NonNull
 	private static McpCanonicalLocalizationPlan build(
-			@NonNull McpHandlerResolver handlerResolver,
+			@NonNull McpEndpointRegistry endpointRegistry,
 			int maximumLocalizableTextCountPerResponse,
 			@NonNull ExternalKeyFactory externalKeyFactory) {
-		requireNonNull(handlerResolver);
+		requireNonNull(endpointRegistry);
 		CatalogAccumulator catalog = new CatalogAccumulator(externalKeyFactory);
 		List<McpCanonicalLocalizationPlan.EndpointPlan> endpointPlans =
 				new ArrayList<>();
 
-		for (McpEndpoint endpoint : handlerResolver.getEndpoints()) {
+		for (McpEndpoint endpoint : endpointRegistry.getEndpoints()) {
 			List<McpCanonicalLocalizationPlan.ResponsePlan> responses =
 					new ArrayList<>();
 			List<McpCanonicalLocalizationPlan.Slot> discovery =

@@ -163,7 +163,7 @@ final class DefaultMcpRateLimiter implements McpRateLimiter {
 			if (this.buckets.size() >= this.maximumRetainedPartitions)
 				reclaimOneFullBucket(nowNanos);
 			if (this.buckets.size() >= this.maximumRetainedPartitions)
-				return McpRateLimitDecision.fromDenied(
+				return McpRateLimitDecision.denied(
 						minimumTimeUntilReclaimable(nowNanos));
 
 			Bucket newBucket = new Bucket(this.capacityUnits, nowNanos);
@@ -262,12 +262,12 @@ final class DefaultMcpRateLimiter implements McpRateLimiter {
 
 			if (this.availableUnits.compareTo(tokenUnit) >= 0) {
 				this.availableUnits = this.availableUnits.subtract(tokenUnit);
-				return McpRateLimitDecision.fromAllowed();
+				return McpRateLimitDecision.allowed();
 			}
 
 			BigInteger missingUnits = tokenUnit.subtract(this.availableUnits);
 			long retryNanos = ceilingDivide(missingUnits, refillTokens).longValueExact();
-			return McpRateLimitDecision.fromDenied(Duration.ofNanos(retryNanos));
+			return McpRateLimitDecision.denied(Duration.ofNanos(retryNanos));
 		}
 
 		private synchronized boolean isFull(long nowNanos,

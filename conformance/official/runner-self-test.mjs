@@ -9,6 +9,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  symlinkSync,
   truncateSync,
   writeFileSync,
 } from 'node:fs';
@@ -25,8 +26,11 @@ import {
 	runBoundedCommand,
   runOfficialConformance,
   RunnerCancelledError,
+  verifyExplicitReleaseCandidate,
   verifyPublicFixtureClasspath,
+  verifyReleaseCandidateManifest,
 } from './run.mjs';
+import { sha256 } from './verify.mjs';
 
 class ReadinessAwaitingChildSupervisor extends ChildSupervisor {
   #readinessPath;
@@ -55,6 +59,7 @@ boundedCollectorStopsRetainingAfterOverflow();
 await boundedCommandDrainsPipesAndReportsOutputLimit();
 await timedOutCommandThatExitsZeroRemainsTimedOut();
 publicFixtureClasspathRequiresExactCandidateBoundary();
+releaseCandidateProvenanceIsFailClosed();
 resultTreeTraversalIsBounded();
 observationDraftPreservesCompleteMultisetsAndSkipReasons();
 await supervisorCancelsEveryChildAndRejectsLaterSpawns();
@@ -62,6 +67,7 @@ if (process.platform !== 'win32') await supervisorCancelsOrdinaryDescendants();
 await failedSpawnDoesNotWaitForTerminationTimeouts();
 await installedSignalHandlerRequestsBoundedCancellation();
 await earlyFailureWritesDurableEvidence();
+await incompleteReleaseEvidenceStaysFalse();
 
 console.log('Official MCP conformance runner self-test passed.');
 
@@ -160,6 +166,18 @@ function publicFixtureClasspathRequiresExactCandidateBoundary() {
       fixtureClasses,
       candidateJar,
     });
+		const releaseCandidateJar = resolve(scratch, 'release/soklet-3.6.0.jar');
+		mkdirSync(resolve(releaseCandidateJar, '..'), { recursive: true });
+		writeFileSync(releaseCandidateJar, 'release-candidate');
+		const releaseClasspath = [fixtureClasses, releaseCandidateJar].join(delimiter);
+		assert.deepEqual(
+			verifyPublicFixtureClasspath(releaseClasspath, scratch, releaseCandidateJar),
+			{ fixtureClasses, candidateJar: releaseCandidateJar },
+		);
+		assert.throws(
+			() => verifyPublicFixtureClasspath(classpath, scratch, releaseCandidateJar),
+			/validated release-candidate JAR/,
+		);
     assert.throws(() => verifyPublicFixtureClasspath(
       ['target/soklet-3.6.0-SNAPSHOT.jar',
         'target/conformance/public-fixture/classes'].join(delimiter),
@@ -179,6 +197,135 @@ function publicFixtureClasspathRequiresExactCandidateBoundary() {
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
+}
+
+function releaseCandidateProvenanceIsFailClosed() {
+	const scratch = mkdtempSync(resolve(tmpdir(), 'soklet-mcp-release-self-test-'));
+	const commit = '1'.repeat(40);
+	const suiteCommit = '2'.repeat(40);
+	const pins = {
+		protocolVersion: '2026-07-28',
+		officialConformanceSuite: { commit: suiteCommit },
+	};
+	const pom = resolve(scratch, 'soklet-3.6.0.pom');
+	const mainJar = resolve(scratch, 'soklet-3.6.0.jar');
+	const sourcesJar = resolve(scratch, 'soklet-3.6.0-sources.jar');
+	const javadocJar = resolve(scratch, 'soklet-3.6.0-javadoc.jar');
+	const manifestPath = resolve(scratch, 'release-candidate.json');
+	const pomBytes = Buffer.from([
+		'<?xml version="1.0" encoding="UTF-8"?>',
+		'<project xmlns="http://maven.apache.org/POM/4.0.0">',
+		'  <modelVersion>4.0.0</modelVersion>',
+		'  <groupId>com.soklet</groupId>',
+		'  <artifactId>soklet</artifactId>',
+		'  <version>3.6.0</version>',
+		'  <packaging>jar</packaging>',
+		'</project>',
+		'',
+	].join('\n'));
+	const jarBytes = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00]);
+	try {
+		writeFileSync(pom, pomBytes);
+		writeFileSync(mainJar, jarBytes);
+		writeFileSync(sourcesJar, Buffer.concat([jarBytes, Buffer.from('sources')]));
+		writeFileSync(javadocJar, Buffer.concat([jarBytes, Buffer.from('javadoc')]));
+		const manifest = {
+			formatVersion: 1,
+			candidateCommit: commit,
+			protocolVersion: pins.protocolVersion,
+			suiteCommit,
+			coordinates: {
+				groupId: 'com.soklet',
+				artifactId: 'soklet',
+				version: '3.6.0',
+			},
+			artifacts: {
+				pom: { path: pom, sha256: sha256(pomBytes) },
+				mainJar: { path: mainJar, sha256: sha256(jarBytes) },
+				sourcesJar: {
+					path: sourcesJar,
+					sha256: sha256(Buffer.concat([jarBytes, Buffer.from('sources')])),
+				},
+				javadocJar: {
+					path: javadocJar,
+					sha256: sha256(Buffer.concat([jarBytes, Buffer.from('javadoc')])),
+				},
+			},
+		};
+		const manifestBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
+		writeFileSync(manifestPath, manifestBytes);
+		const manifestSha256 = sha256(manifestBytes);
+		const verified = verifyReleaseCandidateManifest(
+			manifestPath, manifestSha256, commit, pins,
+		);
+		assert.equal(verified.candidateJar, mainJar);
+		assert.equal(verified.evidence.source, 'reviewed-manifest');
+		assert.equal(verified.evidence.manifestSha256, manifestSha256);
+		assert.equal(verified.evidence.artifacts.mainJar.sha256, sha256(jarBytes));
+
+		const explicit = verifyExplicitReleaseCandidate(manifest, pins);
+		assert.equal(explicit.evidence.source, 'explicit-artifacts');
+		assert.equal(explicit.evidence.manifestSha256, null);
+		const nonJarBytes = Buffer.from('not a jar');
+		writeFileSync(sourcesJar, nonJarBytes);
+		assert.throws(() => verifyExplicitReleaseCandidate({
+			...manifest,
+			artifacts: {
+				...manifest.artifacts,
+				sourcesJar: { path: sourcesJar, sha256: sha256(nonJarBytes) },
+			},
+		}, pins), /sourcesJar must be a JAR\/ZIP file/);
+		writeFileSync(sourcesJar, Buffer.concat([jarBytes, Buffer.from('sources')]));
+
+		writeFileSync(mainJar, Buffer.concat([jarBytes, Buffer.from('tampered')]));
+		assert.throws(() => verifyReleaseCandidateManifest(
+			manifestPath, manifestSha256, commit, pins,
+		), /mainJar SHA-256 mismatch/);
+		writeFileSync(mainJar, jarBytes);
+
+		rmSync(javadocJar);
+		assert.throws(() => verifyReleaseCandidateManifest(
+			manifestPath, manifestSha256, commit, pins,
+		), /javadocJar does not exist/);
+		writeFileSync(javadocJar, Buffer.concat([jarBytes, Buffer.from('javadoc')]));
+
+		if (process.platform !== 'win32') {
+			const linkedManifest = resolve(scratch, 'linked-release-candidate.json');
+			symlinkSync(manifestPath, linkedManifest);
+			assert.throws(() => verifyReleaseCandidateManifest(
+				linkedManifest, manifestSha256, commit, pins,
+			), /manifest must be a regular non-symbolic-link file/i);
+			rmSync(sourcesJar);
+			symlinkSync(mainJar, sourcesJar);
+			assert.throws(() => verifyReleaseCandidateManifest(
+				manifestPath, manifestSha256, commit, pins,
+			), /sourcesJar must be a regular non-symbolic-link file/);
+			rmSync(sourcesJar);
+			writeFileSync(sourcesJar, Buffer.concat([jarBytes, Buffer.from('sources')]));
+		}
+
+		const nonCanonicalManifest = Buffer.from(`${JSON.stringify(manifest)}\n`);
+		writeFileSync(manifestPath, nonCanonicalManifest);
+		assert.throws(() => verifyReleaseCandidateManifest(
+			manifestPath, sha256(nonCanonicalManifest), commit, pins,
+		), /must be canonical two-space JSON/);
+		writeFileSync(manifestPath, manifestBytes);
+
+		writeFileSync(manifestPath, `${JSON.stringify({ ...manifest, candidateCommit: '3'.repeat(40) }, null, 2)}\n`);
+		assert.throws(() => verifyReleaseCandidateManifest(
+			manifestPath, manifestSha256, commit, pins,
+		), /manifest SHA-256 mismatch/);
+		writeFileSync(manifestPath, manifestBytes);
+		assert.throws(() => verifyReleaseCandidateManifest(
+			manifestPath, manifestSha256, '4'.repeat(40), pins,
+		), /does not match expected commit/);
+		assert.throws(() => verifyReleaseCandidateManifest(
+			manifestPath, manifestSha256, commit,
+			{ ...pins, protocolVersion: '2025-11-25' },
+		), /does not match pinned/);
+	} finally {
+		rmSync(scratch, { recursive: true, force: true });
+	}
 }
 
 function resultTreeTraversalIsBounded() {
@@ -377,6 +524,9 @@ async function earlyFailureWritesDurableEvidence() {
     assert.equal(evidence.status, 'FAILED');
 	assert.equal(evidence.phase, 7);
 	assert.equal(evidence.mode, 'verify');
+	assert.equal(evidence.evidenceClass, 'CANDIDATE_ARTIFACT_DEVELOPMENT_ONLY');
+	assert.equal(evidence.releaseCandidateEvidence, false);
+	assert.equal(Object.hasOwn(evidence, 'releaseCandidateProvenance'), false);
     assert.equal(evidence.suiteCommit, null);
     assert.deepEqual(evidence.scenarios, []);
 	assert.match(evidence.failure, /Verification must target current implementation Phase/);
@@ -388,4 +538,34 @@ async function earlyFailureWritesDurableEvidence() {
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
+}
+
+async function incompleteReleaseEvidenceStaysFalse() {
+	const scratch = mkdtempSync(resolve(tmpdir(), 'soklet-mcp-release-evidence-self-test-'));
+	const workDirectory = resolve(scratch, 'evidence');
+	const processObject = new EventEmitter();
+	processObject.exitCode = undefined;
+	try {
+		await assert.rejects(() => runOfficialConformance({
+			suiteDirectory: scratch,
+			workDirectory,
+			classpath: 'unused',
+			projectRoot: scratch,
+			javaExecutable: 'java',
+			phase: 5,
+			mode: 'release',
+		}, { processObject }), /requires --candidate-commit/);
+
+		const evidence = JSON.parse(readFileSync(resolve(workDirectory, 'evidence.json'), 'utf8'));
+		assert.equal(evidence.status, 'FAILED');
+		assert.equal(evidence.mode, 'release');
+		assert.equal(evidence.evidenceClass, 'IMMUTABLE_RELEASE_CANDIDATE');
+		assert.equal(evidence.releaseCandidateEvidence, false);
+		assert.equal(evidence.releaseCandidateProvenance, null);
+		assert.deepEqual(evidence.scenarios, []);
+		assert.match(evidence.failure, /requires --candidate-commit/);
+		assert.deepEqual(readdirSync(workDirectory).sort(), ['evidence.json']);
+	} finally {
+		rmSync(scratch, { recursive: true, force: true });
+	}
 }

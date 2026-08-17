@@ -54,7 +54,7 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 				.build();
 		assertSecurityDiagnostics(traceOnly.getDiagnostics(),
 				McpProtectionMode.NO_FRAMEWORK_KEYS, false, Optional.empty(),
-				traceOnly.getTraceCorrelation().getConfigurationFingerprint());
+				traceOnly.getTraceCorrelationControl().getConfigurationFingerprint());
 
 		McpRequestStateProtector protector = protector("custom-protector");
 		McpServer custom = serverBuilder("custom")
@@ -109,7 +109,7 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 					Optional.of(initialProtection), Optional.of(initialTrace));
 
 			server.getProtectionControl().activateStagedKey("protection-b");
-			server.getTraceCorrelation().rotateActiveKey(
+			server.getTraceCorrelationControl().rotateActiveKey(
 					traceKey("trace-b", 4));
 			McpProtectionKeyRingFingerprint rotatedProtection =
 					protectionFingerprint(server);
@@ -178,10 +178,10 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 
 		McpTraceCorrelationConfigurationFingerprint traceAFingerprint =
 				traceFingerprint(server);
-		server.getTraceCorrelation().rotateActiveKey(traceB);
+		server.getTraceCorrelationControl().rotateActiveKey(traceB);
 		McpTraceCorrelationConfigurationFingerprint traceBFingerprint =
 				traceFingerprint(server);
-		server.getTraceCorrelation().rotateActiveKey(traceA);
+		server.getTraceCorrelationControl().rotateActiveKey(traceA);
 		Set<McpTraceCorrelationConfigurationFingerprint> traceFingerprints =
 				Set.of(traceAFingerprint, traceBFingerprint);
 
@@ -204,7 +204,7 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 			futures.add(executor.submit(() -> {
 				start.await();
 				for (int iteration = 0; iteration < 500; ++iteration)
-					server.getTraceCorrelation().rotateActiveKey(
+					server.getTraceCorrelationControl().rotateActiveKey(
 							iteration % 2 == 0 ? traceB : traceA);
 				return null;
 			}));
@@ -311,7 +311,7 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 
 	private static McpTraceCorrelationConfigurationFingerprint traceFingerprint(
 			McpServer server) {
-		return server.getTraceCorrelation().getConfigurationFingerprint()
+		return server.getTraceCorrelationControl().getConfigurationFingerprint()
 				.orElseThrow();
 	}
 
@@ -364,9 +364,9 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 				.build();
 		return McpServer.withPort(0)
 				.host(HOST)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST));
 	}

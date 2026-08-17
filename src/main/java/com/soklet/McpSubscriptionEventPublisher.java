@@ -51,7 +51,7 @@ public interface McpSubscriptionEventPublisher {
 	 * @return an idempotently closable listener registration
 	 */
 	@NonNull
-	McpSubscriptionEventSubscription subscribe(
+	McpSubscriptionEventRegistration subscribe(
 			@NonNull McpSubscriptionEventListener listener);
 
 	/**

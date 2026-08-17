@@ -130,7 +130,7 @@ public class McpRequestPolicyTests {
 
 	@Test
 	public void endpoint_policy_diagnostics_never_stringify_application_hooks() {
-		McpRequestAdmissionPolicy admissionPolicy = new McpRequestAdmissionPolicy() {
+		McpProtocolAdmissionController protocolAdmissionController = new McpProtocolAdmissionController() {
 			@Override
 			public McpAdmissionDecision admit(McpAdmissionContext context) {
 				return McpAdmissionDecision.acceptedAnonymous();
@@ -167,7 +167,7 @@ public class McpRequestPolicyTests {
 					}
 				};
 		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
-				CorsAuthorizer.rejectAllInstance(), admissionPolicy)
+				CorsAuthorizer.rejectAllInstance(), protocolAdmissionController)
 				.withRequestRateLimiter(limiter)
 				.withRequestInterceptor(interceptor);
 
@@ -183,11 +183,11 @@ public class McpRequestPolicyTests {
 	@Test
 	public void endpoint_policy_copies_preserve_cors_authorizer_provenance() {
 		CorsAuthorizer rejectAll = CorsAuthorizer.rejectAllInstance();
-		McpRequestAdmissionPolicy admissionPolicy =
+		McpProtocolAdmissionController protocolAdmissionController =
 				ignored -> McpAdmissionDecision.acceptedAnonymous();
 		McpHttpEndpointPolicy omitted =
 				McpHttpEndpointPolicy.forDiscoveryWithDefaultCorsAuthorizer(
-						admissionPolicy)
+						protocolAdmissionController)
 						.withRequestRateLimiter(ignored -> McpRateLimitDecision.allowed())
 						.withRequestInterceptor(
 								McpApplicationRequestInterceptor.passThroughInstance())
@@ -198,7 +198,7 @@ public class McpRequestPolicyTests {
 		Assertions.assertFalse(omitted.corsAuthorizerExplicitlyConfigured());
 
 		McpHttpEndpointPolicy explicit = McpHttpEndpointPolicy.forDiscovery(
-				rejectAll, admissionPolicy)
+				rejectAll, protocolAdmissionController)
 				.withRequestRateLimiter(ignored -> McpRateLimitDecision.allowed())
 				.withRequestInterceptor(
 						McpApplicationRequestInterceptor.passThroughInstance())
@@ -212,7 +212,7 @@ public class McpRequestPolicyTests {
 				IllegalArgumentException.class,
 				() -> new McpHttpEndpointPolicy("/mcp", Set.of(),
 						McpAbsentOriginPolicy.ALLOW, CorsAuthorizer.acceptAllInstance(),
-						admissionPolicy, Optional.empty(),
+						protocolAdmissionController, Optional.empty(),
 						McpApplicationRequestInterceptor.passThroughInstance(),
 						McpUnknownMirroredHeaderPolicy.IGNORE, false));
 		Assertions.assertEquals(
@@ -225,7 +225,7 @@ public class McpRequestPolicyTests {
 		List<String> values = new ArrayList<>(List.of("Bearer realm=secret-realm"));
 		Map<String, List<String>> headers = new LinkedHashMap<>();
 		headers.put("WWW-Authenticate", values);
-		McpRequestRejection rejection = new McpRequestRejection(401,
+		McpAdmissionRejection rejection = new McpAdmissionRejection(401,
 				new McpJsonRpcError(1_001, "Authentication required",
 						java.util.Optional.empty()), headers);
 
@@ -236,7 +236,7 @@ public class McpRequestPolicyTests {
 		Assertions.assertFalse(rejection.headers().containsKey("X-Late"));
 		Assertions.assertFalse(rejection.toString().contains("secret-realm"));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new McpRequestRejection(399, rejection.jsonRpcError(), Map.of()));
+				() -> new McpAdmissionRejection(399, rejection.jsonRpcError(), Map.of()));
 	}
 
 	@Test

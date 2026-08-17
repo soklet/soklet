@@ -66,7 +66,7 @@ public final class McpLocalSubscriptionEventPublisher
 	 */
 	@Override
 	@NonNull
-	public McpSubscriptionEventSubscription subscribe(
+	public McpSubscriptionEventRegistration subscribe(
 			@NonNull McpSubscriptionEventListener listener) {
 		Registration registration = new Registration(this,
 				requireNonNull(listener));
@@ -112,7 +112,7 @@ public final class McpLocalSubscriptionEventPublisher
 	 */
 	@ThreadSafe
 	private static final class Registration
-			implements McpSubscriptionEventSubscription {
+			implements McpSubscriptionEventRegistration {
 		@NonNull
 		private final McpLocalSubscriptionEventPublisher publisher;
 		@NonNull

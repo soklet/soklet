@@ -187,7 +187,7 @@ public class McpHttpServerNotificationTests {
 				CorsAuthorizer.rejectAllInstance(), ignored -> {
 					admissions.incrementAndGet();
 					if (rejectAdmission.get())
-						return McpAdmissionDecision.rejected(new McpRequestRejection(
+						return McpAdmissionDecision.rejected(new McpAdmissionRejection(
 								401, new McpJsonRpcError(1_001,
 								"Authentication required", Optional.empty()), Map.of()));
 					return McpAdmissionDecision.acceptedAnonymous();
@@ -399,7 +399,7 @@ public class McpHttpServerNotificationTests {
 		AtomicInteger limiterInvocations = new AtomicInteger();
 		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
 				CorsAuthorizer.rejectAllInstance(), ignored -> McpAdmissionDecision.rejected(
-						new McpRequestRejection(401,
+						new McpAdmissionRejection(401,
 								new McpJsonRpcError(1_001, "Authentication required",
 										Optional.empty()),
 								Map.of("WWW-Authenticate",
@@ -505,7 +505,7 @@ public class McpHttpServerNotificationTests {
 						notification("future/event", null),
 						McpHttpEndpointPolicy.forDiscovery(corsAuthorizer,
 								ignored -> McpAdmissionDecision.rejected(
-										new McpRequestRejection(401,
+										new McpAdmissionRejection(401,
 												new McpJsonRpcError(1_001,
 														"Authentication required",
 														Optional.empty()),
@@ -596,7 +596,7 @@ public class McpHttpServerNotificationTests {
 		for (NotificationAdmissionHardeningCase testCase : cases) {
 			McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
 					CorsAuthorizer.rejectAllInstance(),
-					ignored -> McpAdmissionDecision.rejected(new McpRequestRejection(
+					ignored -> McpAdmissionDecision.rejected(new McpAdmissionRejection(
 							401, testCase.error(), testCase.headers())));
 			McpHttpServerRuntime runtime = runtime(policy);
 			try {

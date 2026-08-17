@@ -155,8 +155,8 @@ public class SokletConfigTests {
 				.build();
 
 		return McpServer.withPort(0)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(McpRequestAdmissionPolicy.acceptAllInstance())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(McpAdmissionController.acceptAllInstance())
 				.build();
 	}
 

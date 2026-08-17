@@ -64,9 +64,9 @@ public class McpResourceProtocolTests {
 				.exactResource(first)
 				.exactResource(second)
 				.resourceTemplate(template)
-				.resourcesListCachePolicy(
+				.resourceListCachePolicy(
 						new McpResourceCachePolicy(1_000L, McpCacheScope.PUBLIC))
-				.resourceTemplatesListCachePolicy(
+				.resourceTemplateListCachePolicy(
 						new McpResourceCachePolicy(2_000L, McpCacheScope.PRIVATE))
 				.build();
 		McpServerCapabilityRegistry registry =
@@ -158,7 +158,7 @@ public class McpResourceProtocolTests {
 				.exactResource("catalog://items/1")
 				.customResourceListHandler()
 				.maximumCursorSizeInBytes(8)
-				.resourcesListCachePolicy(
+				.resourceListCachePolicy(
 						new McpResourceCachePolicy(99L, McpCacheScope.PRIVATE))
 				.build();
 		McpApplicationResourceListRoute listRoute = new McpApplicationResourceListRoute(
@@ -328,7 +328,7 @@ public class McpResourceProtocolTests {
 		McpServerRuntimeBridge bridge = new McpServerRuntimeBridge(
 				"127.0.0.1", 0, publicEndpoint, Set.of("127.0.0.1"), false,
 				CorsAuthorizer.rejectAllInstance(), true,
-				ignored -> com.soklet.McpAdmissionDecision.fromAnonymousIdentity(),
+				ignored -> com.soklet.McpAdmissionDecision.accepted(),
 				Optional.empty(), List.of(), List.of(), List.of(resourcePlan),
 				Optional.of(listPlan), ignored -> {}, ignored -> {},
 				McpRequestObservationTestSupport.noOpAdapter());
@@ -570,10 +570,10 @@ public class McpResourceProtocolTests {
 
 	private static McpHttpServerRuntime runtime(McpNormalizedEndpoint endpoint,
 			McpApplicationRequestRouter router,
-			McpRequestAdmissionPolicy admissionPolicy,
+			McpProtocolAdmissionController protocolAdmissionController,
 			Optional<McpRateLimiter> requestRateLimiter) {
 		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
-				CorsAuthorizer.rejectAllInstance(), admissionPolicy);
+				CorsAuthorizer.rejectAllInstance(), protocolAdmissionController);
 		if (requestRateLimiter.isPresent())
 			policy = policy.withRequestRateLimiter(requestRateLimiter.orElseThrow());
 		return new McpHttpServerRuntime(

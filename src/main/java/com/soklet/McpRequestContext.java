@@ -154,7 +154,7 @@ public interface McpRequestContext {
 	@NonNull
 	Map<@NonNull String, @NonNull String> getBaggage();
 
-	/** @return identity accepted by the request-admission policy */
+	/** @return identity accepted by the admission controller */
 	@NonNull
 	McpAdmissionIdentity getAdmissionIdentity();
 }

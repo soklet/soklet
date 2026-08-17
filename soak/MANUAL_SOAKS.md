@@ -14,6 +14,17 @@ SOKLET_SOAK_PROFILE=nightly mvn -B -ntp -f soak/pom.xml clean test
 node scripts/verify-soak-evidence.mjs nightly
 ```
 
+Release evidence uses the checked-in release profile at the exact release
+commit, with a 60-minute outer job timeout:
+
+```sh
+SOKLET_SOAK_PROFILE=release mvn -B -ntp -f soak/pom.xml clean test
+node scripts/verify-soak-evidence.mjs release
+```
+
+Running these commands does not by itself create durable release evidence; the
+verified report and Surefire files must be retained and bound to the commit.
+
 A durable summary added here should record:
 
 - the exact Soklet commit SHA

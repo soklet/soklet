@@ -99,20 +99,20 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 						admittedFailure);
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver(2);
 		AtomicInteger admissionCalls = new AtomicInteger();
-		McpRequestRejection applicationRejection = McpRequestRejection
+		McpAdmissionRejection applicationRejection = McpAdmissionRejection
 				.withStatusCodeAndError(401,
 						McpJsonRpcError.fromApplication(1_001,
 								"Authentication required"))
 				.header("WWW-Authenticate", "Bearer realm=soklet-mcp")
 				.build();
 		McpServer server = serverBuilder(endpoint("fixed-error-context-test"))
-				.requestAdmissionPolicy(context ->
+				.admissionController(context ->
 						admissionCalls.getAndIncrement() == 0
-								? McpAdmissionDecision.fromRejection(
+								? McpAdmissionDecision.rejected(
 										applicationRejection)
-								: McpAdmissionDecision.fromAnonymousIdentity())
+								: McpAdmissionDecision.accepted())
 				.requestRateLimiter(context ->
-						McpRateLimitDecision.fromDenied(Duration.ofMillis(1)))
+						McpRateLimitDecision.denied(Duration.ofMillis(1)))
 				.build();
 		Soklet soklet = managedSoklet(server, collector, observer);
 
@@ -313,9 +313,9 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 		RecordingMetricsCollector collector = new RecordingMetricsCollector(1);
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver(0);
 		McpServer server = serverBuilder(endpoint("unknown-header-metrics-test"))
-				.requestAdmissionPolicy(context -> {
+				.admissionController(context -> {
 					admissions.incrementAndGet();
-					return McpAdmissionDecision.fromAnonymousIdentity();
+					return McpAdmissionDecision.accepted();
 				})
 				.unknownMirroredHeaderPolicy(policy)
 				.build();
@@ -370,11 +370,11 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 			@NonNull McpEndpoint endpoint) {
 		return McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
 				.requestRateLimiter(context ->
-						McpRateLimitDecision.fromAllowed())
+						McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
 	}

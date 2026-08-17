@@ -5,10 +5,75 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const PROFILE_NAMES = new Set(['smoke', 'nightly']);
+const PROFILE_NAMES = new Set(['smoke', 'nightly', 'release']);
+const EXPECTED_PROFILE_KEYS = new Set([
+  'http.abortConnectTimeoutMillis',
+  'http.abortIterationsPerClient',
+  'http.cleanRequestsPerClient',
+  'http.concurrentClients',
+  'http.resourceTolerance.maxHeapGrowthBytes',
+  'http.resourceTolerance.maxLiveThreadGrowth',
+  'http.resourceTolerance.maxOpenFileDescriptorGrowth',
+  'http.runTimeoutMillis',
+  'http.serverConcurrency',
+  'http.settleTimeoutMillis',
+  'http.socketPendingConnectionLimit',
+  'mcp.clientSocketTimeoutMillis',
+  'mcp.concurrentClients',
+  'mcp.cyclesPerClient',
+  'mcp.keepAliveIntervalMillis',
+  'mcp.maximumSubscriptionDurationMillis',
+  'mcp.maximumSubscriptionsPerPrincipal',
+  'mcp.requestHandlerConcurrency',
+  'mcp.requestHandlerQueueCapacity',
+  'mcp.requestTimeoutMillis',
+  'mcp.resourceTolerance.maxHeapGrowthBytes',
+  'mcp.resourceTolerance.maxLiveThreadGrowth',
+  'mcp.resourceTolerance.maxOpenFileDescriptorGrowth',
+  'mcp.runTimeoutMillis',
+  'mcp.settleTimeoutMillis',
+  'mcp.shutdownCycles',
+  'mcp.shutdownTimeoutMillis',
+  'mcp.streamQueueCapacity',
+  'mcp.writeTimeoutMillis',
+  'realtime.clientSocketTimeoutMillis',
+  'realtime.concurrentClients',
+  'realtime.resourceTolerance.maxHeapGrowthBytes',
+  'realtime.resourceTolerance.maxLiveThreadGrowth',
+  'realtime.resourceTolerance.maxOpenFileDescriptorGrowth',
+  'realtime.runTimeoutMillis',
+  'realtime.settleTimeoutMillis',
+  'realtime.sseConcurrentConnectionLimit',
+  'realtime.sseInterStreamPauseMillis',
+  'realtime.sseStreamsPerClient',
+]);
+const INTEGER_PROFILE_KEYS = new Set([
+  'http.abortConnectTimeoutMillis',
+  'http.abortIterationsPerClient',
+  'http.cleanRequestsPerClient',
+  'http.concurrentClients',
+  'http.resourceTolerance.maxLiveThreadGrowth',
+  'http.serverConcurrency',
+  'http.socketPendingConnectionLimit',
+  'mcp.concurrentClients',
+  'mcp.cyclesPerClient',
+  'mcp.maximumSubscriptionsPerPrincipal',
+  'mcp.requestHandlerConcurrency',
+  'mcp.requestHandlerQueueCapacity',
+  'mcp.resourceTolerance.maxLiveThreadGrowth',
+  'mcp.shutdownCycles',
+  'mcp.streamQueueCapacity',
+  'realtime.concurrentClients',
+  'realtime.resourceTolerance.maxLiveThreadGrowth',
+  'realtime.sseConcurrentConnectionLimit',
+  'realtime.sseStreamsPerClient',
+]);
+const MAXIMUM_JAVA_INTEGER = 2_147_483_647n;
+const MAXIMUM_JAVA_LONG = 9_223_372_036_854_775_807n;
 const EXPECTED_SCENARIOS = new Set([
   'HTTP abort churn',
   'MCP Phase 5 cross-feature churn',
+  'MCP localization render and invalidation churn',
   'MCP off-network simulator churn',
   'concurrent HTTP churn',
   'concurrent SSE churn',
@@ -28,6 +93,13 @@ const EXPECTED_SUITES = new Map([
     testCases: new Set([
       'mcpCrossFeatureChurnReturnsResourcesToBaselineAfterCancellationAndShutdown',
       'mcpSimulatorChurnReturnsResourcesToBaselineAfterCancellationAndScopeCleanup',
+    ]),
+  }],
+  ['TEST-com.soklet.McpLocalizationSoakTests.xml', {
+    name: 'com.soklet.McpLocalizationSoakTests',
+    tests: 1,
+    testCases: new Set([
+      'localizationRenderAndInvalidationChurnReturnsResourcesToBaseline',
     ]),
   }],
   ['TEST-com.soklet.RealtimeTransportSoakTests.xml', {
@@ -74,6 +146,92 @@ function equalSets(actual, expected) {
   return actual.size === expected.size && [...actual].every((value) => expected.has(value));
 }
 
+function requireProfileName(profileName) {
+  if (!PROFILE_NAMES.has(profileName))
+    fail(`Profile must be exactly one of: ${[...PROFILE_NAMES].join(', ')}`);
+}
+
+function parseProfileConfiguration(profileName, profilePath, profileBytes) {
+  const configuration = profileBytes.toString('utf8');
+
+  if (!configuration.endsWith('\n'))
+    fail(`Soak profile must end with LF: ${profilePath}`);
+
+  if (configuration.includes('\r'))
+    fail(`Soak profile must use LF line endings: ${profilePath}`);
+
+  const lines = configuration.slice(0, -1).split('\n');
+  const sortedLines = [...lines].sort();
+
+  if (lines.length === 0 || lines.some((line) => line === ''))
+    fail(`Soak profile must contain only non-empty property lines: ${profilePath}`);
+
+  if (lines.some((line, index) => line !== sortedLines[index]))
+    fail(`Soak profile keys must be sorted: ${profilePath}`);
+
+  const values = new Map();
+
+  for (const line of lines) {
+    const equals = line.indexOf('=');
+
+    if (equals <= 0 || equals === line.length - 1 || line.indexOf('=', equals + 1) !== -1)
+      fail(`Malformed soak profile line in ${profilePath}: ${line}`);
+
+    const key = line.slice(0, equals);
+    const value = line.slice(equals + 1);
+
+    if (values.has(key))
+      fail(`Duplicate soak profile key in ${profilePath}: ${key}`);
+
+    if (!/^[1-9][0-9]*$/.test(value))
+      fail(`Soak profile value must be a positive decimal integer: ${key}=${value}`);
+
+    const numericValue = BigInt(value);
+    const maximum = INTEGER_PROFILE_KEYS.has(key) ? MAXIMUM_JAVA_INTEGER : MAXIMUM_JAVA_LONG;
+
+    if (numericValue > maximum)
+      fail(`Soak profile value exceeds its Java numeric bound: ${key}=${value}`);
+
+    values.set(key, value);
+  }
+
+  const actualKeys = new Set(values.keys());
+
+  if (!equalSets(actualKeys, EXPECTED_PROFILE_KEYS)) {
+    const missing = [...EXPECTED_PROFILE_KEYS].filter((key) => !actualKeys.has(key)).sort();
+    const unexpected = [...actualKeys].filter((key) => !EXPECTED_PROFILE_KEYS.has(key)).sort();
+    fail(`Invalid ${profileName} soak profile keys; missing=${missing.join(',') || '<none>'} unexpected=${unexpected.join(',') || '<none>'}`);
+  }
+
+  return { configuration, values };
+}
+
+export function verifySoakProfile(profileName, projectRoot = defaultProjectRoot) {
+  requireProfileName(profileName);
+
+  const profileResource = `/com/soklet/soak-profiles/${profileName}.properties`;
+  const profilePath = resolve(
+    projectRoot,
+    `soak/src/test/resources/com/soklet/soak-profiles/${profileName}.properties`,
+  );
+  const profileBytes = readRequired(profilePath, 'checked-in soak profile');
+  const { configuration, values } = parseProfileConfiguration(
+    profileName,
+    profilePath,
+    profileBytes,
+  );
+
+  return {
+    profileName,
+    profileResource,
+    profilePath,
+    profileBytes,
+    configuration,
+    values,
+    profileSha256: createHash('sha256').update(profileBytes).digest('hex'),
+  };
+}
+
 function parseAttributes(source, description) {
   const attributes = new Map();
   const pattern = /([A-Za-z_:][A-Za-z0-9_.:-]*)="([^"]*)"/g;
@@ -106,6 +264,79 @@ function numericAttribute(attributes, name, description) {
     fail(`Invalid ${description} ${name} attribute: ${value ?? '<missing>'}`);
 
   return Number(value);
+}
+
+function observation(section, name) {
+  const prefix = `- ${name}: `;
+  const values = section.split('\n')
+    .filter((line) => line.startsWith(prefix))
+    .map((line) => line.slice(prefix.length));
+
+  if (values.length !== 1 || values[0] === '')
+    fail(`Expected exactly one non-empty '${name}' observation, found: ${values.join(' | ') || '<none>'}`);
+
+  return values[0];
+}
+
+function positiveIntegerObservation(section, name) {
+  const value = observation(section, name);
+
+  if (!/^[1-9][0-9]*$/.test(value))
+    fail(`Expected '${name}' to be a positive integer, found: ${value}`);
+
+  return Number(value);
+}
+
+function verifyLocalizationScenario(section) {
+  const localizedResponses = positiveIntegerObservation(
+    section,
+    'Localized catalog responses',
+  );
+  const subscriptionTerminals = positiveIntegerObservation(
+    section,
+    'Subscription terminals pre-rendered',
+  );
+  const contexts = positiveIntegerObservation(
+    section,
+    'Localization contexts created',
+  );
+  const lookups = positiveIntegerObservation(
+    section,
+    'Localization lookups completed',
+  );
+  const preferenceMatches = positiveIntegerObservation(
+    section,
+    'Bounded locale preferences matched',
+  );
+
+  if (subscriptionTerminals !== 1)
+    fail(`Expected exactly one pre-rendered subscription terminal, found: ${subscriptionTerminals}`);
+
+  if (contexts !== localizedResponses + subscriptionTerminals)
+    fail('Localization context cardinality does not match rendered responses plus the subscription terminal');
+
+  if (lookups !== contexts)
+    fail('Localization lookup cardinality does not match context cardinality');
+
+  if (preferenceMatches !== contexts)
+    fail('Bounded locale-preference evidence does not match context cardinality');
+
+  const invalidations = observation(
+    section,
+    'Catalog invalidations requested/delivered',
+  ).match(/^([1-9][0-9]*)\/([1-9][0-9]*)$/);
+
+  if (invalidations === null || invalidations[1] !== invalidations[2])
+    fail('Catalog invalidation evidence must be a positive balanced requested/delivered pair');
+
+  if (observation(
+    section,
+    'Final active handlers/queued/streams/subscriptions',
+  ) !== '0/0/0/0')
+    fail('Localization runtime resources did not return to zero');
+
+  if (observation(section, 'Final MCP status') !== 'STOPPED')
+    fail('Localization MCP server did not finish stopped');
 }
 
 function verifySurefireSuite(xmlPath, expected) {
@@ -158,19 +389,11 @@ function verifySurefireSuite(xmlPath, expected) {
 }
 
 export function verifySoakEvidence(profileName, projectRoot = defaultProjectRoot) {
-  if (!PROFILE_NAMES.has(profileName))
-    fail(`Profile must be exactly one of: ${[...PROFILE_NAMES].join(', ')}`);
-
-  const profileResource = `/com/soklet/soak-profiles/${profileName}.properties`;
-  const profilePath = resolve(
-    projectRoot,
-    `soak/src/test/resources/com/soklet/soak-profiles/${profileName}.properties`,
-  );
+  const profile = verifySoakProfile(profileName, projectRoot);
+  const { profileBytes, profileResource, profileSha256 } = profile;
   const reportPath = resolve(projectRoot, 'soak/target/soak-report.md');
   const surefireDirectory = resolve(projectRoot, 'soak/target/surefire-reports');
-  const profileBytes = readRequired(profilePath, 'checked-in soak profile');
   const report = readRequired(reportPath, 'soak Markdown report').toString('utf8');
-  const profileSha256 = createHash('sha256').update(profileBytes).digest('hex');
 
   assertOnlyMetadataLine(report, '- Profile: ', `- Profile: ${profileName}`, 'profile identity');
   assertOnlyMetadataLine(
@@ -215,6 +438,9 @@ export function verifySoakEvidence(profileName, projectRoot = defaultProjectRoot
 
     if (results.length !== 1 || results[0] !== 'PASS')
       fail(`Expected exactly one PASS result for scenario ${heading.name}, found: ${results.join(', ') || '<none>'}`);
+
+    if (heading.name === 'MCP localization render and invalidation churn')
+      verifyLocalizationScenario(section);
   }
 
   if (!existsSync(surefireDirectory))
@@ -247,7 +473,7 @@ function isDirectExecution() {
 
 if (isDirectExecution()) {
   if (process.argv.length !== 3) {
-    console.error('Usage: node scripts/verify-soak-evidence.mjs <smoke|nightly>');
+    console.error('Usage: node scripts/verify-soak-evidence.mjs <smoke|nightly|release>');
     process.exitCode = 1;
   } else {
     try {

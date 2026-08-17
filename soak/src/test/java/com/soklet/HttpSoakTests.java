@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Longer-running HTTP resource-leak soak tests.
  * <p>
  * Workload settings come from the checked-in profile selected by
- * {@code SOKLET_SOAK_PROFILE=smoke|nightly}.
+ * {@code SOKLET_SOAK_PROFILE=smoke|nightly|release}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

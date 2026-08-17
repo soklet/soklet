@@ -61,12 +61,17 @@ class McpLocalizationSubscriptionRuntimeTests {
 				.contextProvider(request -> {
 					contexts.incrementAndGet();
 					return context(text -> McpLocalizationResult
-							.fromLocalizedText("FR:" + text.getDefaultText()));
+							.localized("FR:" + text.getDefaultText()));
 				})
 				.build();
 
-		List<String> frames = subscribeAndDrain(localizer, 2, response ->
-				contextsAtResponse.set(contexts.get()));
+		List<String> frames = subscribeAndDrain(localizer, 2, response -> {
+			contextsAtResponse.set(contexts.get());
+			assertEquals(Set.of("fr"),
+					response.getHeaders().get("Content-Language"));
+			assertEquals(Set.of("Accept-Language"),
+					response.getHeaders().get("Vary"));
+		});
 
 		assertEquals(1, contexts.get(),
 				"Exactly one context per subscription open.");
@@ -88,10 +93,12 @@ class McpLocalizationSubscriptionRuntimeTests {
 	void useDefaultTextPreRenderFailurePublishesTheCanonicalTerminal() {
 		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
 				.contextProvider(request -> context(text ->
-						McpLocalizationResult.fromFailure()))
+						McpLocalizationResult.failure()))
 				.build();
 
-		List<String> frames = subscribeAndDrain(localizer, 2, response -> {});
+		List<String> frames = subscribeAndDrain(localizer, 2, response ->
+				assertEquals(Set.of("en"),
+						response.getHeaders().get("Content-Language")));
 
 		String terminal = frames.get(frames.size() - 1);
 		assertTrue(terminal.contains("\"title\":\"Canonical title\""), terminal);
@@ -230,8 +237,8 @@ class McpLocalizationSubscriptionRuntimeTests {
 				.build();
 		McpServer server = McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(McpRequestAdmissionPolicy.acceptAllInstance())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.maximumSubscriptionsPerPrincipal(maximumSubscriptionsPerPrincipal)

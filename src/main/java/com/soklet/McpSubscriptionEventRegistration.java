@@ -37,7 +37,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public interface McpSubscriptionEventSubscription extends AutoCloseable {
+public interface McpSubscriptionEventRegistration extends AutoCloseable {
 	/** Idempotently unregisters the associated listener. */
 	@Override
 	void close();

@@ -37,7 +37,7 @@ public sealed interface McpRateLimitDecision
 	 * @return an allowed decision
 	 */
 	@NonNull
-	static Allowed fromAllowed() {
+	static Allowed allowed() {
 		return new Allowed();
 	}
 
@@ -48,7 +48,7 @@ public sealed interface McpRateLimitDecision
 	 * @return a denied decision
 	 */
 	@NonNull
-	static Denied fromDenied(@NonNull Duration retryAfter) {
+	static Denied denied(@NonNull Duration retryAfter) {
 		return new Denied(retryAfter);
 	}
 

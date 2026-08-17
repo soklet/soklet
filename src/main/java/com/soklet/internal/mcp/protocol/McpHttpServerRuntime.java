@@ -338,6 +338,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			activeSubscriptionCountsByPartition;
 	@NonNull
 	private final Set<@NonNull RequestControl> pendingSubscriptions;
+	@NonNull
+	private final Map<@NonNull String, @NonNull Object>
+			localizationInvalidationTokens;
 	private boolean subscriptionsAccepting;
 	@NonNull
 	private final List<@NonNull SubscriptionSourceGroup> subscriptionSourceGroups;
@@ -616,6 +619,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		this.activeSubscriptionsByEndpointPath = new LinkedHashMap<>();
 		this.activeSubscriptionCountsByPartition = new LinkedHashMap<>();
 		this.pendingSubscriptions = new LinkedHashSet<>();
+		this.localizationInvalidationTokens = new LinkedHashMap<>();
+		for (String endpointPath : this.endpointsByPath.keySet())
+			this.localizationInvalidationTokens.put(endpointPath, new Object());
 		this.subscriptionsAccepting = false;
 		this.subscriptionSourceRegistrations = List.of();
 		this.residualSubscriptionSourceRegistrations = List.of();
@@ -672,13 +678,18 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					groupsInEndpointOrder.add(group);
 				}
 				group.endpointPaths().add(endpointRuntime.path());
+				if (source.endpointSubscriber().isPresent())
+					group.endpointSources().add(new EndpointSubscriptionSource(
+							endpointRuntime.path(),
+							source.endpointSubscriber().orElseThrow()));
 			});
 		}
 		List<SubscriptionSourceGroup> groups = new ArrayList<>(
 				groupsInEndpointOrder.size());
 		for (MutableSubscriptionSourceGroup group : groupsInEndpointOrder)
 			groups.add(new SubscriptionSourceGroup(group.source(),
-					Set.copyOf(group.endpointPaths())));
+					Set.copyOf(group.endpointPaths()),
+					List.copyOf(group.endpointSources())));
 		return List.copyOf(groups);
 	}
 
@@ -953,7 +964,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						if (candidateReadiness.get() != ListenerState.READY) {
 							applicationExecutionObserver.recordRequestRejected();
 							applicationExecutionObserver.drain();
-							callback.accept(emptyResponse(503, "Service Unavailable", List.of()));
+							List<Header> headers = localizationVaryRequired(request)
+									? withAcceptLanguageVary(List.of()) : List.of();
+							callback.accept(emptyResponse(
+									503, "Service Unavailable", headers));
 							return;
 						}
 
@@ -1057,26 +1071,42 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					registrations) {
 		requireNonNull(registrations);
 		for (SubscriptionSourceGroup group : subscriptionSourceGroups) {
-			SubscriptionEventSourceGeneration generation =
-					new SubscriptionEventSourceGeneration();
-			SubscriptionEventListenerFence listenerFence =
-					new SubscriptionEventListenerFence(generation, event -> {
-						try {
-							publishSubscriptionEvent(group.endpointPaths(), event,
-									generation);
-						} catch (Throwable ignored) {
-							// Runtime fan-out must never escape into an application publisher.
-						}
-					});
-			try {
-				Registration registration = group.source().subscribe(
-						listenerFence::onEvent);
-				registrations.add(new SubscriptionSourceRegistrationControl(
-						registration, listenerFence));
-			} catch (RuntimeException | Error failure) {
-				listenerFence.deactivate();
-				throw failure;
-			}
+			subscribeToSubscriptionEventSource(registrations,
+					group.endpointPaths(), group.source().subscriber());
+			for (EndpointSubscriptionSource endpointSource : group.endpointSources())
+				subscribeToSubscriptionEventSource(registrations,
+					Set.of(endpointSource.endpointPath()),
+					endpointSource.subscriber());
+		}
+	}
+
+	private void subscribeToSubscriptionEventSource(
+			@NonNull List<@NonNull SubscriptionSourceRegistrationControl>
+					registrations,
+			@NonNull Set<@NonNull String> endpointPaths,
+			McpSubscriptionEventSource.@NonNull Subscriber subscriber) {
+		SubscriptionEventSourceGeneration generation =
+				new SubscriptionEventSourceGeneration();
+		SubscriptionEventListenerFence listenerFence =
+				new SubscriptionEventListenerFence(generation, event -> {
+					try {
+						publishSubscriptionEvent(endpointPaths, event,
+								generation);
+					} catch (Throwable ignored) {
+						// Runtime fan-out must never escape into an application publisher.
+					}
+				});
+		try {
+			Registration registration = requireNonNull(subscriber).subscribe(
+					listenerFence::onEvent);
+			if (registration == null)
+				throw new NullPointerException(
+						"An MCP subscription event source returned a null registration.");
+			registrations.add(new SubscriptionSourceRegistrationControl(
+					registration, listenerFence));
+		} catch (RuntimeException | Error failure) {
+			listenerFence.deactivate();
+			throw failure;
 		}
 	}
 
@@ -1866,8 +1896,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		if (effectiveAddress == null) {
 			this.applicationExecutionObserver.recordRequestRejected();
 			this.applicationExecutionObserver.drain();
+			List<Header> headers = localizationVaryRequired(request)
+					? withAcceptLanguageVary(List.of()) : List.of();
 			requireNonNull(callback).accept(emptyResponse(
-					503, "Service Unavailable", List.of()));
+					503, "Service Unavailable", headers));
 			return;
 		}
 		submitRequest(processor, application, effectiveAddress, request, null,
@@ -2000,19 +2032,44 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 	}
 
-	private boolean activateSubscription(@NonNull RequestControl control,
-			@NonNull SubscriptionRegistration registration) {
+	private boolean subscriptionMayCommit(@NonNull RequestControl control) {
+		requireNonNull(control);
+		synchronized (subscriptionLock) {
+			return subscriptionsAccepting && pendingSubscriptions.contains(control);
+		}
+	}
+
+	@NonNull
+	@SuppressWarnings("ReferenceEquality")
+	private SubscriptionActivationResult activateSubscription(
+			@NonNull RequestControl control,
+			@NonNull SubscriptionRegistration registration,
+			@Nullable Object expectedLocalizationInvalidationToken) {
 		requireNonNull(control);
 		requireNonNull(registration);
 		synchronized (subscriptionLock) {
-			if (!subscriptionsAccepting || !pendingSubscriptions.remove(control))
-				return false;
-			if (!activeSubscriptionsByEndpointPath.computeIfAbsent(
+			if (!pendingSubscriptions.remove(control))
+				return SubscriptionActivationResult.NOT_ACTIVATED;
+			boolean activated = activeSubscriptionsByEndpointPath.computeIfAbsent(
 					registration.endpointPath(), ignored -> new LinkedHashSet<>())
-					.add(control))
+					.add(control);
+			if (!activated)
 				throw new IllegalStateException(
 						"An MCP subscription cannot activate twice.");
-			return true;
+			return expectedLocalizationInvalidationToken == null
+					|| localizationInvalidationTokens.get(registration.endpointPath())
+					== expectedLocalizationInvalidationToken
+					? SubscriptionActivationResult.ACTIVATED_CURRENT_LOCALIZATION
+					: SubscriptionActivationResult.ACTIVATED_STALE_LOCALIZATION;
+		}
+	}
+
+	@NonNull
+	private Object localizationInvalidationToken(
+			@NonNull String endpointPath) {
+		synchronized (subscriptionLock) {
+			return requireNonNull(localizationInvalidationTokens.get(
+					requireNonNull(endpointPath)));
 		}
 	}
 
@@ -2055,6 +2112,11 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		synchronized (subscriptionLock) {
 			if (!generation.active())
 				return;
+			if (event instanceof McpSubscriptionEventSource.Event
+					.LocalizationCatalogsChanged)
+				for (String endpointPath : endpointPaths)
+					if (localizationInvalidationTokens.containsKey(endpointPath))
+						localizationInvalidationTokens.put(endpointPath, new Object());
 			for (String endpointPath : endpointPaths) {
 				Set<RequestControl> endpointSubscriptions =
 						activeSubscriptionsByEndpointPath.get(endpointPath);
@@ -2111,13 +2173,15 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			@NonNull RequestControl requestControl,
 			@NonNull McpApplicationExecution application) {
 		try {
-			return processRequestSafely(effectiveAddress, request,
+			MicrohttpResponse response = processRequestSafely(effectiveAddress, request,
 					requestControl, application);
+			return response == null ? null : requestControl.decorateResponse(response);
 		} catch (Throwable throwable) {
 			requestControl.planRequestObservation(new RequestObservationResult(
 					McpRequestOutcome.INTERNAL_ERROR, null,
 					List.of(throwable)));
-			return emptyResponse(500, "Internal Server Error", List.of());
+			return requestControl.decorateResponse(
+					emptyResponse(500, "Internal Server Error", List.of()));
 		}
 	}
 
@@ -2186,9 +2250,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		// non-preflight response from a localization-enabled endpoint varies by
 		// Accept-Language - success, sanitized error, rejection, deadline, and
 		// subscription stream-opening alike.
-		List<Header> corsHeaders = endpointPolicy.localizationEnabled()
-				? withAcceptLanguageVary(authorizedCorsHeaders)
-				: authorizedCorsHeaders;
+		List<Header> corsHeaders = requestControl.decorateResponseHeaders(
+				authorizedCorsHeaders);
 		if (!requestControl.updateDeadlineResponseHeaders(corsHeaders))
 			return null;
 		if (!requestControl.protocolProcessingAllowed())
@@ -2326,8 +2389,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 									new McpApplicationResourceListInvocation(invocation,
 											resolvedCursor,
 											capabilityRegistry.exactResourceDescriptors(),
-											endpoint.resourcesListCachePolicy())),
-							endpoint.resourcesListCachePolicy(), true, false,
+											endpoint.resourceListCachePolicy())),
+							endpoint.resourceListCachePolicy(), true, false,
 							endpoint.maximumCursorSizeInBytes(), applicationRouter));
 			} else {
 				// The framework-owned fallback is exactly one static page. Every
@@ -2555,7 +2618,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				Optional.of(mappedRequest.params().metadata().toJsonObject()));
 		McpAdmissionDecision admissionDecision;
 		try {
-			admissionDecision = endpointPolicy.requestAdmissionPolicy().admit(admissionContext);
+			admissionDecision = endpointPolicy.protocolAdmissionController().admit(admissionContext);
 		} catch (Throwable throwable) {
 			return policyHookInternalError(mappedRequest.id(), corsHeaders);
 		}
@@ -2616,12 +2679,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						mappedRequest.method(), Optional.of(mappedRequest.id()),
 						requestedProtocolVersion, operationName,
 						mappedRequest.params().metadata().clientInformation(),
-						mappedRequest.params().metadata().clientCapabilities()
-								.toJsonObject(),
-						mappedRequest.params().metadata().toJsonObject(),
-						inputResponses,
-						requestState,
-						effectiveIdentity.admittedIdentity())))
+					mappedRequest.params().metadata().clientCapabilities()
+							.toJsonObject(),
+					mappedRequest.params().metadata().toJsonObject(),
+					inputResponses,
+					requestState,
+					requestControl.acceptLanguageValues(),
+					effectiveIdentity.admittedIdentity())))
 			return null;
 
 		if (endpointPolicy.requestRateLimiter().isPresent()) {
@@ -2671,7 +2735,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					endpointRuntime.path(), endpoint,
 					effectiveIdentity.authorizationPartition(), mappedRequest.id(),
 					acceptedSubscriptionFilter.orElseThrow(), corsHeaders,
-					endpointPolicy, sokletRequest);
+					endpointPolicy);
 			if (openResult == SubscriptionOpenResult.CAPACITY_REJECTED)
 				return observedSubscriptionCapacityRejected(requestControl,
 						mappedRequest.id(), corsHeaders);
@@ -2686,31 +2750,31 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		if (discoveryRequest) {
 			return catalogResponse(capabilityRegistry.discoverResult().toWireResult(),
 					McpRuntimeCatalogLocalizer.ResponseKind.DISCOVERY, mappedRequest.id(),
-					endpointPolicy, requestControl, sokletRequest, corsHeaders);
+					endpointPolicy, requestControl, corsHeaders);
 		}
 
 		if (toolsListRequest) {
 			return catalogResponse(capabilityRegistry.toolsListResult(),
 					McpRuntimeCatalogLocalizer.ResponseKind.TOOLS_LIST, mappedRequest.id(),
-					endpointPolicy, requestControl, sokletRequest, corsHeaders);
+					endpointPolicy, requestControl, corsHeaders);
 		}
 
 		if (promptsListRequest) {
 			return catalogResponse(capabilityRegistry.promptsListResult(),
 					McpRuntimeCatalogLocalizer.ResponseKind.PROMPTS_LIST, mappedRequest.id(),
-					endpointPolicy, requestControl, sokletRequest, corsHeaders);
+					endpointPolicy, requestControl, corsHeaders);
 		}
 
 		if (resourcesListRequest && !endpoint.customResourceListHandler()) {
 			return catalogResponse(capabilityRegistry.resourcesListResult(),
 					McpRuntimeCatalogLocalizer.ResponseKind.RESOURCES_LIST, mappedRequest.id(),
-					endpointPolicy, requestControl, sokletRequest, corsHeaders);
+					endpointPolicy, requestControl, corsHeaders);
 		}
 
 		if (resourceTemplatesListRequest) {
 			return catalogResponse(capabilityRegistry.resourceTemplatesListResult(),
 					McpRuntimeCatalogLocalizer.ResponseKind.RESOURCE_TEMPLATES_LIST, mappedRequest.id(),
-					endpointPolicy, requestControl, sokletRequest, corsHeaders);
+					endpointPolicy, requestControl, corsHeaders);
 		}
 
 		McpApplicationRequestHandler resolvedApplicationHandler =
@@ -3237,7 +3301,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				Optional.empty(), notificationMetadata(notification));
 		McpAdmissionDecision admissionDecision;
 		try {
-			admissionDecision = endpointPolicy.requestAdmissionPolicy().admit(admissionContext);
+			admissionDecision = endpointPolicy.protocolAdmissionController().admit(admissionContext);
 		} catch (Throwable throwable) {
 			return emptyResponse(500, "Internal Server Error", corsHeaders);
 		}
@@ -3266,6 +3330,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						Optional.empty(), Optional.empty(), McpJsonObject.empty(),
 						notificationMetadata(notification)
 								.orElseGet(McpJsonObject::empty),
+						McpJsonObject.empty(), Optional.empty(),
+						requestControl.acceptLanguageValues(),
 						effectiveIdentity.admittedIdentity())))
 			return null;
 
@@ -3433,7 +3499,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			McpRuntimeCatalogLocalizer.@NonNull ResponseKind responseKind,
 			@NonNull McpJsonRpcId requestId,
 			@NonNull McpHttpEndpointPolicy endpointPolicy,
-			@NonNull RequestControl requestControl, @NonNull Request sokletRequest,
+			@NonNull RequestControl requestControl,
 			@NonNull List<@NonNull Header> corsHeaders) {
 		byte[] canonicalEncoded = envelopeCodec.encode(
 				new McpJsonRpcMessage.ResultResponse(requestId, canonicalResult,
@@ -3461,9 +3527,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 							canonicalDocumentBytes,
 							canonicalEncoded.length - canonicalDocumentBytes,
 							jsonLimits.maximumOutputBytes(),
-							jsonLimits.maximumStringLengthInCharacters(),
+							maximumLocalizedReplacementCharacters(),
 							document -> jsonCodec.toUtf8Bytes(document).length,
-							acceptLanguageValues(sokletRequest), List.of(),
+							requestControl.acceptLanguageValues(), List.of(),
 							requestControl::isTerminalCanceledOrPastDeadline)),
 					"The MCP catalog localizer returned null.");
 		} catch (RuntimeException exception) {
@@ -3507,7 +3573,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	 */
 	private McpRuntimeCatalogLocalizer.@NonNull Outcome localizeSubscriptionTerminal(
 			@NonNull McpHttpEndpointPolicy endpointPolicy,
-			@NonNull Request sokletRequest, @NonNull McpJsonRpcId subscriptionId,
+			@NonNull McpJsonRpcId subscriptionId,
 			@NonNull McpNormalizedEndpoint endpoint,
 			@NonNull RequestControl requestControl) {
 		McpJsonRpcMessage.ResultResponse canonicalResponse =
@@ -3526,68 +3592,71 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						requestContext, canonicalDocument, canonicalDocumentBytes,
 						canonicalEncoded.length - canonicalDocumentBytes,
 						jsonLimits.maximumOutputBytes(),
-						jsonLimits.maximumStringLengthInCharacters(),
+						maximumLocalizedReplacementCharacters(),
 						document -> jsonCodec.toUtf8Bytes(document).length,
-						acceptLanguageValues(sokletRequest), List.of(),
+						requestControl.acceptLanguageValues(), List.of(),
 						requestControl::isTerminalCanceledOrPastDeadline)),
 				"The MCP catalog localizer returned null.");
 	}
 
 	/**
-	 * Merges {@code Accept-Language} into the response's {@code Vary} tokens
-	 * case-insensitively, preserving any existing CORS {@code Origin} value and
-	 * never duplicating a token.
+	 * Normalizes every response {@code Vary} field into one duplicate-free token
+	 * list and merges {@code Accept-Language} into it. A wildcard overrides every
+	 * named token and remains exactly {@code *}.
 	 */
 	@NonNull
 	private static List<@NonNull Header> withAcceptLanguageVary(
 			@NonNull List<@NonNull Header> headers) {
-		List<Header> merged = new ArrayList<>(headers.size() + 1);
-		boolean varyHandled = false;
+		LinkedHashMap<String, String> tokens = new LinkedHashMap<>();
+		String varyName = "Vary";
+		boolean foundVary = false;
+		boolean wildcard = false;
 
 		for (Header header : headers) {
-			if (!varyHandled && "Vary".equalsIgnoreCase(header.name())) {
-				varyHandled = true;
-				merged.add(containsHeaderToken(header.value(), "Accept-Language")
-						? header
-						: new Header(header.name(),
-								header.value() + ", Accept-Language"));
-			} else {
-				merged.add(header);
+			if (!"Vary".equalsIgnoreCase(header.name()))
+				continue;
+			if (!foundVary) {
+				foundVary = true;
+				varyName = header.name();
+			}
+			for (String value : header.value().split(",", -1)) {
+				String token = value.trim();
+				if (token.isEmpty())
+					continue;
+				if ("*".equals(token)) {
+					wildcard = true;
+					continue;
+				}
+				tokens.putIfAbsent(token.toLowerCase(Locale.ROOT), token);
 			}
 		}
 
-		if (!varyHandled)
-			merged.add(new Header("Vary", "Accept-Language"));
+		if (!wildcard)
+			tokens.putIfAbsent("accept-language", "Accept-Language");
 
-		return List.copyOf(merged);
-	}
-
-	private static boolean containsHeaderToken(@NonNull String value,
-			@NonNull String token) {
-		int start = 0;
-
-		while (start <= value.length()) {
-			int comma = value.indexOf(',', start);
-			int end = comma < 0 ? value.length() : comma;
-
-			if (value.substring(start, end).trim().equalsIgnoreCase(token))
-				return true;
-
-			if (comma < 0)
-				return false;
-
-			start = comma + 1;
+		String normalizedValue = wildcard ? "*"
+				: String.join(", ", tokens.values());
+		List<Header> normalized = new ArrayList<>(headers.size() + 1);
+		boolean emittedVary = false;
+		for (Header header : headers) {
+			if ("Vary".equalsIgnoreCase(header.name())) {
+				if (!emittedVary) {
+					normalized.add(new Header(varyName, normalizedValue));
+					emittedVary = true;
+				}
+			} else {
+				normalized.add(header);
+			}
 		}
+		if (!emittedVary)
+			normalized.add(new Header(varyName, normalizedValue));
 
-		return false;
+		return List.copyOf(normalized);
 	}
 
-	@NonNull
-	private static List<@NonNull String> acceptLanguageValues(
-			@NonNull Request sokletRequest) {
-		// The stored set is insertion-ordered; List.copyOf preserves that order.
-		Set<String> values = sokletRequest.getHeaders().get("Accept-Language");
-		return values == null ? List.of() : List.copyOf(values);
+	private long maximumLocalizedReplacementCharacters() {
+		return Math.min(jsonLimits.maximumStringLengthInCharacters(),
+				jsonLimits.maximumTokenLengthInCharacters());
 	}
 
 	@NonNull
@@ -3640,7 +3709,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 	@NonNull
 	private MicrohttpResponse admissionRejection(@NonNull McpJsonRpcId requestId,
-			@NonNull McpRequestRejection rejection,
+			@NonNull McpAdmissionRejection rejection,
 			@NonNull List<@NonNull Header> corsHeaders) {
 		requireNonNull(requestId);
 		requireNonNull(rejection);
@@ -3660,7 +3729,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 	@NonNull
 	private MicrohttpResponse notificationAdmissionRejection(
-			@NonNull McpRequestRejection rejection,
+			@NonNull McpAdmissionRejection rejection,
 			@NonNull List<@NonNull Header> corsHeaders) {
 		requireNonNull(rejection);
 		requireNonNull(corsHeaders);
@@ -4639,6 +4708,26 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		return List.copyOf(values);
 	}
 
+	/** Preserves physical field-value order and duplicates without parsing. */
+	@NonNull
+	private List<@NonNull String> physicalHeaderValues(
+			@NonNull MicrohttpRequest request, @NonNull String name) {
+		List<String> values = new ArrayList<>();
+		for (Header header : requireNonNull(request).headers())
+			if (requireNonNull(name).equalsIgnoreCase(header.name()))
+				values.add(header.value());
+		return List.copyOf(values);
+	}
+
+	private boolean localizationVaryRequired(@NonNull MicrohttpRequest request) {
+		if ("OPTIONS".equals(requireNonNull(request).method()))
+			return false;
+		EndpointRuntime endpointRuntime = this.endpointsByPath.get(
+				requestPath(request.uri()));
+		return endpointRuntime != null && endpointRuntime.binding()
+				.endpointPolicy().localizationEnabled();
+	}
+
 	@NonNull
 	private Optional<@NonNull String> singleHeader(@NonNull MicrohttpRequest request,
 			@NonNull String name) {
@@ -4868,6 +4957,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private final @Nullable Request publicRequest;
 		private final @Nullable McpSimulationRuntime simulation;
 		@NonNull
+		private final List<@NonNull String> acceptLanguageValues;
+		private final boolean acceptLanguageVaryRequired;
+		@NonNull
 		private final Object lock;
 		@NonNull
 		private final Object streamObservationTransitionLock;
@@ -4918,11 +5010,37 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			this.application = requireNonNull(application);
 			this.publicRequest = publicRequest;
 			this.simulation = simulation;
+			this.acceptLanguageValues = physicalHeaderValues(request,
+					"Accept-Language");
+			this.acceptLanguageVaryRequired = localizationVaryRequired(request);
 			this.lock = new Object();
 			this.streamObservationTransitionLock = new Object();
 			this.responseCallback = requireNonNull(responseCallback);
 			this.publicRequestContext = Optional.empty();
-			this.deadlineResponseHeaders = List.of();
+			this.deadlineResponseHeaders = decorateResponseHeaders(List.of());
+		}
+
+		@NonNull
+		private List<@NonNull String> acceptLanguageValues() {
+			return this.acceptLanguageValues;
+		}
+
+		@NonNull
+		private List<@NonNull Header> decorateResponseHeaders(
+				@NonNull List<@NonNull Header> headers) {
+			return this.acceptLanguageVaryRequired
+					? withAcceptLanguageVary(requireNonNull(headers))
+					: requireNonNull(headers);
+		}
+
+		@NonNull
+		private MicrohttpResponse decorateResponse(
+				@NonNull MicrohttpResponse response) {
+			MicrohttpResponse requiredResponse = requireNonNull(response);
+			return this.acceptLanguageVaryRequired
+					? requiredResponse.withHeaders(withAcceptLanguageVary(
+							requiredResponse.headers()))
+					: requiredResponse;
 		}
 
 		private long deadlineNanos() {
@@ -4940,8 +5058,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				@NonNull McpJsonRpcId subscriptionId,
 				@NonNull AcceptedSubscriptionFilter filter,
 				@NonNull List<@NonNull Header> additionalHeaders,
-				@NonNull McpHttpEndpointPolicy endpointPolicy,
-				@NonNull Request sokletRequest) {
+				@NonNull McpHttpEndpointPolicy endpointPolicy) {
 			requireNonNull(additionalHeaders);
 			// Two-phase when a localizer is configured: reserve only the cap,
 			// release every lock, retain the original request deadline, create
@@ -4951,7 +5068,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			boolean localizeTerminal = endpointPolicy.catalogLocalizer().isPresent()
 					&& publicRequestContext().isPresent();
 			SubscriptionRegistration capReservation = null;
+			Object localizationInvalidationToken = null;
 			McpJsonRpcMessage.ResultResponse localizedTerminal = null;
+			Optional<String> contentLanguage = Optional.empty();
 
 			if (localizeTerminal) {
 				SubscriptionCapReservation cap = reserveSubscriptionCap(
@@ -4962,11 +5081,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					return cap.result();
 
 				capReservation = requireNonNull(cap.registration());
+				localizationInvalidationToken = requireNonNull(
+						cap.localizationInvalidationToken());
 				McpRuntimeCatalogLocalizer.Outcome outcome;
 
 				try {
 					outcome = localizeSubscriptionTerminal(endpointPolicy,
-							sokletRequest, subscriptionId, endpoint, this);
+							subscriptionId, endpoint, this);
 				} catch (RuntimeException exception) {
 					outcome = null;
 				}
@@ -4978,6 +5099,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					removeSubscription(this, capReservation);
 					return SubscriptionOpenResult.LOCALIZATION_FAILED;
 				}
+				contentLanguage = outcome.contentLanguage();
 
 				if (outcome.disposition()
 						== McpRuntimeCatalogLocalizer.Disposition.LOCALIZED)
@@ -5010,7 +5132,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			SubscriptionRegistration registration = requireNonNull(
 					reservation.registration());
 			try {
-				callback.accept(stream.response(additionalHeaders));
+				callback.accept(stream.response(withContentLanguage(
+						additionalHeaders, contentLanguage)));
 			} catch (Throwable throwable) {
 				stream.fail(StreamTerminationReason.WRITE_FAILED, throwable);
 			}
@@ -5018,8 +5141,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				if (!terminal && !canceled && !streamAbortOwned
 						&& responseStream == stream
 						&& subscriptionRegistration == registration) {
-					preRenderedSubscriptionTerminal = localizedTerminal;
-					activateSubscription(this, registration);
+					SubscriptionActivationResult activation = activateSubscription(
+							this, registration, localizationInvalidationToken);
+					if (activation != SubscriptionActivationResult.NOT_ACTIVATED)
+						preRenderedSubscriptionTerminal = activation
+								== SubscriptionActivationResult
+								.ACTIVATED_CURRENT_LOCALIZATION
+								? localizedTerminal : null;
 				}
 			}
 			return SubscriptionOpenResult.OPENED;
@@ -5040,21 +5168,22 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			synchronized (lock) {
 				if (canceled || terminal || applicationOwned || subscriptionOwned)
 					return new SubscriptionCapReservation(
-							SubscriptionOpenResult.TERMINATED, null);
+							SubscriptionOpenResult.TERMINATED, null, null);
 				SubscriptionRegistrationAttempt registrationAttempt = registerSubscription(
 						this, endpointPath, endpoint, authorizationPartition,
 						subscriptionId, filter);
 				if (registrationAttempt.result()
 						== SubscriptionRegistrationResult.NOT_ACCEPTING)
 					return new SubscriptionCapReservation(
-							SubscriptionOpenResult.SERVER_STOPPING, null);
+							SubscriptionOpenResult.SERVER_STOPPING, null, null);
 				if (registrationAttempt.result()
 						== SubscriptionRegistrationResult.CAPACITY_REJECTED)
 					return new SubscriptionCapReservation(
-							SubscriptionOpenResult.CAPACITY_REJECTED, null);
+							SubscriptionOpenResult.CAPACITY_REJECTED, null, null);
 				return new SubscriptionCapReservation(
 						SubscriptionOpenResult.OPENED,
-						requireNonNull(registrationAttempt.registration()));
+						requireNonNull(registrationAttempt.registration()),
+						localizationInvalidationToken(endpointPath));
 			}
 		}
 
@@ -5093,6 +5222,16 @@ final class McpHttpServerRuntime implements AutoCloseable {
 								SubscriptionOpenResult.CAPACITY_REJECTED,
 								null, null, null);
 					registration = requireNonNull(registrationAttempt.registration());
+				}
+				// This is the last shutdown-admission check before materialization.
+				// The request-control lock remains held while stream state is installed,
+				// so a shutdown that races after this point snapshots the still-pending
+				// control and cannot complete it before that state is coherent.
+				if (!subscriptionMayCommit(this)) {
+					removeSubscription(this, registration);
+					return new SubscriptionOpenReservation(
+							SubscriptionOpenResult.SERVER_STOPPING,
+							null, null, null);
 				}
 				try {
 					McpRequestSseStream stream = newResponseStream();
@@ -5663,8 +5802,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 
 			if (submission != null && submission.rejectedCallback() != null) {
-				MicrohttpResponse response = emptyResponse(
-						503, "Service Unavailable", List.of());
+				MicrohttpResponse response = decorateResponse(emptyResponse(
+						503, "Service Unavailable", List.of()));
 				Throwable deliveryFailure = deliverResponse(
 						submission.rejectedCallback(), response);
 				if (simulation != null)
@@ -6560,6 +6699,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		LOCALIZATION_FAILED
 	}
 
+	private enum SubscriptionActivationResult {
+		ACTIVATED_CURRENT_LOCALIZATION,
+		ACTIVATED_STALE_LOCALIZATION,
+		NOT_ACTIVATED
+	}
+
 	private enum SubscriptionRegistrationResult {
 		REGISTERED,
 		CAPACITY_REJECTED,
@@ -6580,12 +6725,15 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 	private record SubscriptionCapReservation(
 			@NonNull SubscriptionOpenResult result,
-			@Nullable SubscriptionRegistration registration) {
+			@Nullable SubscriptionRegistration registration,
+			@Nullable Object localizationInvalidationToken) {
 		private SubscriptionCapReservation {
 			requireNonNull(result);
-			if ((result == SubscriptionOpenResult.OPENED) == (registration == null))
+			boolean opened = result == SubscriptionOpenResult.OPENED;
+			if (opened != (registration != null)
+					|| opened != (localizationInvalidationToken != null))
 				throw new IllegalArgumentException(
-						"Exactly an opened MCP subscription cap retains its registration.");
+						"Exactly an opened MCP subscription cap retains registration and invalidation state.");
 		}
 	}
 
@@ -6673,10 +6821,20 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 	private record SubscriptionSourceGroup(
 			@NonNull McpSubscriptionEventSource source,
-			@NonNull Set<@NonNull String> endpointPaths) {
+			@NonNull Set<@NonNull String> endpointPaths,
+			@NonNull List<@NonNull EndpointSubscriptionSource> endpointSources) {
 		private SubscriptionSourceGroup {
 			requireNonNull(source);
 			endpointPaths = Set.copyOf(requireNonNull(endpointPaths));
+			endpointSources = List.copyOf(requireNonNull(endpointSources));
+		}
+	}
+
+	private record EndpointSubscriptionSource(@NonNull String endpointPath,
+			McpSubscriptionEventSource.@NonNull Subscriber subscriber) {
+		private EndpointSubscriptionSource {
+			requireNonNull(endpointPath);
+			requireNonNull(subscriber);
 		}
 	}
 
@@ -6685,11 +6843,14 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private final McpSubscriptionEventSource source;
 		@NonNull
 		private final Set<@NonNull String> endpointPaths;
+		@NonNull
+		private final List<@NonNull EndpointSubscriptionSource> endpointSources;
 
 		private MutableSubscriptionSourceGroup(
 				@NonNull McpSubscriptionEventSource source) {
 			this.source = requireNonNull(source);
 			this.endpointPaths = new LinkedHashSet<>();
+			this.endpointSources = new ArrayList<>();
 		}
 
 		@NonNull
@@ -6700,6 +6861,11 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		@NonNull
 		private Set<@NonNull String> endpointPaths() {
 			return endpointPaths;
+		}
+
+		@NonNull
+		private List<@NonNull EndpointSubscriptionSource> endpointSources() {
+			return endpointSources;
 		}
 	}
 

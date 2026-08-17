@@ -100,7 +100,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 					"@com.soklet.annotation.McpHeader(\"Tenant\")"),
 					generatedSource);
 			Assertions.assertTrue(generatedSource.contains(
-					"search(request, features.require(com.soklet.CancelationToken.class), call.getArguments().argument0(), call.getArguments().argument1(), features.find(com.soklet.McpProgressReporter.class), features)"),
+					"search(request, features.require(com.soklet.CancelationToken.class), arguments.getArguments().argument0(), arguments.getArguments().argument1(), features.find(com.soklet.McpProgressReporter.class), features)"),
 					generatedSource);
 			Assertions.assertTrue(generatedSource.contains(
 					"compose(request, features.require(com.soklet.CancelationToken.class), prompt.findArgument(\"subject\").orElseThrow(), prompt.findArgument(\"tone\"), features.find(com.soklet.McpProgressReporter.class), features)"),
@@ -126,11 +126,11 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 					}
 				};
 
-				McpHandlerResolver resolver = McpHandlerResolver.fromClasses(
+				McpEndpointRegistry registry = McpEndpointRegistry.fromClasses(
 						instanceProvider, endpointClass);
 				Assertions.assertNull(System.getProperty(INITIALIZED_PROPERTY));
 				Assertions.assertEquals(0, providedInstances.get());
-				McpEndpoint endpoint = resolver.getEndpoints().get(0);
+				McpEndpoint endpoint = registry.getEndpoints().get(0);
 				McpPromptRegistration prompt = endpoint.getPrompts().get(0);
 				Assertions.assertEquals("catalog.compose", prompt.getName());
 				Assertions.assertEquals("Catalog composer",
@@ -175,35 +175,36 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				Assertions.assertEquals(0, providedInstances.get());
 
 				McpRateLimiter allow = context ->
-						McpRateLimitDecision.fromAllowed();
+						McpRateLimitDecision.allowed();
 				Assertions.assertThrows(IllegalStateException.class,
-						() -> serverBuilder(resolver, allow,
-								McpRequestAdmissionPolicy.acceptAllInstance()).build());
+						() -> serverBuilder(registry, allow,
+								McpAdmissionController.acceptAllInstance()).build());
 				AtomicInteger admissionInvocations = new AtomicInteger();
 				AtomicInteger endpointLimiterInvocations = new AtomicInteger();
 				AtomicInteger toolLimiterInvocations = new AtomicInteger();
 				AtomicInteger fallbackLimiterInvocations = new AtomicInteger();
 				AtomicInteger handlerInterceptorInvocations = new AtomicInteger();
-				McpRateLimiterRegistry registry = McpRateLimiterRegistry.builder()
+					McpRateLimiterRegistry rateLimiterRegistry =
+							McpRateLimiterRegistry.builder()
 						.rateLimiter("catalog-endpoint", context -> {
 							endpointLimiterInvocations.incrementAndGet();
-							return McpRateLimitDecision.fromAllowed();
+							return McpRateLimitDecision.allowed();
 						})
 						.rateLimiter("catalog-tool", context -> {
 							toolLimiterInvocations.incrementAndGet();
-							return McpRateLimitDecision.fromAllowed();
+							return McpRateLimitDecision.allowed();
 						})
 						.build();
-				McpServer server = serverBuilder(resolver, context -> {
+					McpServer server = serverBuilder(registry, context -> {
 					fallbackLimiterInvocations.incrementAndGet();
-					return McpRateLimitDecision.fromAllowed();
+					return McpRateLimitDecision.allowed();
 				}, context -> {
 					admissionInvocations.incrementAndGet();
-					return McpAdmissionDecision.fromAnonymousIdentity();
-				}).rateLimiterRegistry(registry)
-						.handlerInterceptor((context, invocation) -> {
+					return McpAdmissionDecision.accepted();
+					}).rateLimiterRegistry(rateLimiterRegistry)
+						.handlerInterceptor((context, continuation) -> {
 							handlerInterceptorInvocations.incrementAndGet();
-							return invocation.invoke();
+							return continuation.proceed();
 						})
 						.build();
 				try {
@@ -347,13 +348,13 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 	}
 
 	private static McpServer.@NonNull Builder serverBuilder(
-			@NonNull McpHandlerResolver resolver,
+			@NonNull McpEndpointRegistry registry,
 			@NonNull McpRateLimiter fallbackToolLimiter,
-			@NonNull McpRequestAdmissionPolicy requestAdmissionPolicy) {
+			@NonNull McpAdmissionController admissionController) {
 		return McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(resolver)
-				.requestAdmissionPolicy(requestAdmissionPolicy)
+				.endpointRegistry(registry)
+				.admissionController(admissionController)
 				.toolRateLimiter(fallbackToolLimiter)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));

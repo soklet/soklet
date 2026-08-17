@@ -59,7 +59,7 @@ class McpLocalizationRenderingRuntimeTests {
 	void localizedTextReplacesEveryPlannedDiscoverySlotOnTheWire() {
 		AtomicInteger contexts = new AtomicInteger();
 		String body = discover(localizer(contexts, Locale.FRENCH,
-				text -> McpLocalizationResult.fromLocalizedText(
+				text -> McpLocalizationResult.localized(
 						"FR:" + text.getDefaultText())), Set.of());
 
 		assertTrue(body.contains("\"title\":\"FR:Canonical title\""), body);
@@ -76,8 +76,8 @@ class McpLocalizationRenderingRuntimeTests {
 		AtomicInteger localizeCalls = new AtomicInteger();
 		String body = discover(localizer(new AtomicInteger(), Locale.FRENCH,
 				text -> localizeCalls.incrementAndGet() == 1
-						? McpLocalizationResult.fromLocalizedText("FR:first")
-						: McpLocalizationResult.fromFailure()), Set.of());
+						? McpLocalizationResult.localized("FR:first")
+						: McpLocalizationResult.failure()), Set.of());
 
 		// The first slot succeeded, so a partial overlay existed and was discarded.
 		assertFalse(body.contains("FR:first"), body);
@@ -125,7 +125,7 @@ class McpLocalizationRenderingRuntimeTests {
 					assertTrue(request.getResourceListCursor().isEmpty(),
 							"Discovery carries no resource-list cursor.");
 					return context(Locale.FRENCH,
-							text -> McpLocalizationResult.fromDefaultText());
+							text -> McpLocalizationResult.useDefaultText());
 				}).build(), Set.of("fr-CA;q=0.8, en-US"));
 
 		assertEquals(List.of("en-us", "fr-ca"), observed.get().stream()
@@ -142,7 +142,7 @@ class McpLocalizationRenderingRuntimeTests {
 				.contextProvider(request -> {
 					observed.set(request.getLanguageRanges());
 					return context(Locale.FRENCH,
-							text -> McpLocalizationResult.fromDefaultText());
+							text -> McpLocalizationResult.useDefaultText());
 				}).build(), Set.of("en-US" + " ".repeat(4_092)));
 
 		assertEquals(List.of(), observed.get(),
@@ -179,7 +179,7 @@ class McpLocalizationRenderingRuntimeTests {
 	void everyNonDiscoveryCatalogRendersItsPlannedSlotsLocalized() {
 		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
 				.contextProvider(request -> context(Locale.FRENCH,
-						text -> McpLocalizationResult.fromLocalizedText(
+						text -> McpLocalizationResult.localized(
 								"FR:" + text.getDefaultText())))
 				.build();
 
@@ -218,7 +218,7 @@ class McpLocalizationRenderingRuntimeTests {
 	void aLocalizedResponseKeepsTheCanonicalStatusAndHeaders() {
 		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
 				.contextProvider(request -> context(Locale.FRENCH,
-						text -> McpLocalizationResult.fromLocalizedText(
+						text -> McpLocalizationResult.localized(
 								"FR:" + text.getDefaultText())))
 				.build();
 		Capture capture = capture(richEndpoint(), localizer, "server/discover",
@@ -283,7 +283,7 @@ class McpLocalizationRenderingRuntimeTests {
 				McpLocalizer.withFallbackLocale(Locale.ENGLISH)
 						.contextProvider(request -> context(Locale.FRENCH, text -> {
 							localizeCalls.incrementAndGet();
-							return McpLocalizationResult.fromLocalizedText(
+							return McpLocalizationResult.localized(
 									threeMegabytes);
 						}))
 						.build(),
@@ -308,7 +308,7 @@ class McpLocalizationRenderingRuntimeTests {
 				.contextProvider(request -> {
 					observed.set(request.getLanguageRanges());
 					return context(Locale.FRENCH,
-							text -> McpLocalizationResult.fromDefaultText());
+							text -> McpLocalizationResult.useDefaultText());
 				}).build(), "server/discover", values);
 
 		// First occurrence wins in Locale.LanguageRange.parse, so the q=0
@@ -331,7 +331,7 @@ class McpLocalizationRenderingRuntimeTests {
 						.contextProvider(request -> {
 							contexts.incrementAndGet();
 							return context(Locale.FRENCH,
-									text -> McpLocalizationResult.fromDefaultText());
+									text -> McpLocalizationResult.useDefaultText());
 						})
 						.build(),
 				"server/discover", Set.of());
@@ -347,9 +347,9 @@ class McpLocalizationRenderingRuntimeTests {
 		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
 				.contextProvider(request -> context(Locale.FRENCH,
 						text -> "localize".equals(mode.get())
-								? McpLocalizationResult.fromLocalizedText(
+								? McpLocalizationResult.localized(
 										"FR:" + text.getDefaultText())
-								: McpLocalizationResult.fromDefaultText()))
+								: McpLocalizationResult.useDefaultText()))
 				.build();
 
 		McpEndpoint endpoint = richEndpoint();
@@ -388,7 +388,7 @@ class McpLocalizationRenderingRuntimeTests {
 						} catch (InterruptedException e) {
 							Thread.currentThread().interrupt();
 						}
-						return McpLocalizationResult.fromLocalizedText(
+						return McpLocalizationResult.localized(
 								"FR:" + text.getDefaultText());
 					});
 					contexts.add(context);
@@ -477,10 +477,10 @@ class McpLocalizationRenderingRuntimeTests {
 			McpLocalizer localizer) {
 		McpServer.Builder builder = McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(McpRequestAdmissionPolicy.acceptAllInstance())
-				.requestRateLimiter(context -> McpRateLimitDecision.fromAllowed())
-				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(McpAdmissionController.acceptAllInstance())
+				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
 
@@ -504,7 +504,7 @@ class McpLocalizationRenderingRuntimeTests {
 								.build())
 						.build())
 				.build();
-		McpResourceHandler resourceHandler = (request, resource, features) ->
+		McpResourceReadHandler resourceHandler = (request, resource, features) ->
 				McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
 						.content(McpTextResourceContents.withUriAndText(
 								URI.create("render://unused"), "unused").build())
@@ -518,7 +518,7 @@ class McpLocalizationRenderingRuntimeTests {
 				.instructions("Endpoint instructions")
 				.tool(McpToolRegistration.withName("render.search")
 						.conformanceInputSchema(inputSchema)
-						.handler((request, call, features) ->
+						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("unused"))
 						.title("Tool title")
 						.description("Tool description")
@@ -609,8 +609,8 @@ class McpLocalizationRenderingRuntimeTests {
 				.build();
 		McpServer server = McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(McpRequestAdmissionPolicy.acceptAllInstance())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.localizer(localizer)

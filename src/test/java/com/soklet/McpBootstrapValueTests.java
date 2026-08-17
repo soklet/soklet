@@ -107,10 +107,10 @@ public class McpBootstrapValueTests {
 		Assertions.assertThrows(NullPointerException.class,
 				() -> McpJsonRpcError.fromApplication(null, "failure"));
 		Assertions.assertThrows(NullPointerException.class,
-				() -> McpRequestRejection.withStatusCodeAndError(null,
+				() -> McpAdmissionRejection.withStatusCodeAndError(null,
 						McpJsonRpcError.fromApplication(1_000, "failure")));
 		Assertions.assertThrows(NullPointerException.class,
-				() -> McpRequestRejection.withStatusCodeAndError(400,
+				() -> McpAdmissionRejection.withStatusCodeAndError(400,
 						McpJsonRpcError.fromApplication(1_000, "failure"))
 						.statusCode(null));
 	}
@@ -165,31 +165,31 @@ public class McpBootstrapValueTests {
 		McpEndpoint catalog = endpoint("/catalog");
 		McpEndpoint inventory = endpoint("/inventory");
 		List<McpEndpoint> mutableEndpoints = new ArrayList<>(List.of(catalog));
-		McpHandlerResolver resolver = McpHandlerResolver.fromEndpoints(mutableEndpoints);
+		McpEndpointRegistry registry = McpEndpointRegistry.fromEndpoints(mutableEndpoints);
 
 		mutableEndpoints.add(inventory);
-		Assertions.assertEquals(List.of(catalog), resolver.getEndpoints());
+		Assertions.assertEquals(List.of(catalog), registry.getEndpoints());
 		Assertions.assertThrows(UnsupportedOperationException.class,
-				() -> resolver.getEndpoints().add(inventory));
+				() -> registry.getEndpoints().add(inventory));
 
-		McpHandlerResolver expandedResolver = resolver.withEndpoint(inventory);
-		Assertions.assertEquals(List.of(catalog), resolver.getEndpoints());
+		McpEndpointRegistry expandedRegistry = registry.withEndpoint(inventory);
+		Assertions.assertEquals(List.of(catalog), registry.getEndpoints());
 		Assertions.assertEquals(List.of(catalog, inventory),
-				expandedResolver.getEndpoints());
+				expandedRegistry.getEndpoints());
 	}
 
 	@Test
 	public void resolverRequiresEndpointsWithDistinctNormalizedPaths() {
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> McpHandlerResolver.fromEndpoints(List.of()));
+				() -> McpEndpointRegistry.fromEndpoints(List.of()));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> McpHandlerResolver.fromEndpoints(
+				() -> McpEndpointRegistry.fromEndpoints(
 						List.of(endpoint("/mcp"), endpoint("/mcp/"))));
 
-		McpHandlerResolver resolver = McpHandlerResolver.fromEndpoints(
+		McpEndpointRegistry registry = McpEndpointRegistry.fromEndpoints(
 				List.of(endpoint("/mcp")));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> resolver.withEndpoint(endpoint("/mcp//")));
+				() -> registry.withEndpoint(endpoint("/mcp//")));
 	}
 
 	@Test

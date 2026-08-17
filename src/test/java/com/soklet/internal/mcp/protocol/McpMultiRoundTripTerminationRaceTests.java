@@ -555,7 +555,7 @@ public class McpMultiRoundTripTerminationRaceTests {
 								McpRequestStateMode.FRAMEWORK_PROTECTED)));
 		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
 				CorsAuthorizer.rejectAllInstance(),
-				McpRequestAdmissionPolicy.acceptAllInstance())
+				McpProtocolAdmissionController.acceptAllInstance())
 				.withRequestInterceptor((invocation, downstream) -> {
 					interceptors.incrementAndGet();
 					return downstream.invoke();

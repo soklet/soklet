@@ -235,6 +235,12 @@ jobs:
             "${GITHUB_WORKSPACE}/target/conformance/public-fixture" \
             > target/conformance/official/public-fixture-classpath.txt
 
+      - name: Verify candidate-artifact localization API
+        shell: bash
+        run: >-
+          verification/localization/verify.sh
+          "${GITHUB_WORKSPACE}/target/soklet-3.6.0-SNAPSHOT.jar"
+
       - name: Run strict local off-network MCP simulator scenarios
         shell: bash
         run: |
@@ -266,14 +272,16 @@ jobs:
         working-directory: .mcp-conformance-source
         run: |
           mkdir -p "${RUNNER_TEMP}/soklet-mcp-npm-cache"
+          touch "${RUNNER_TEMP}/soklet-mcp-user.npmrc" \
+            "${RUNNER_TEMP}/soklet-mcp-global.npmrc"
           env -i \
             PATH="${PATH}" \
             LANG=C.UTF-8 \
             CI=true \
             NO_COLOR=1 \
             npm_config_cache="${RUNNER_TEMP}/soklet-mcp-npm-cache" \
-            npm_config_userconfig=/dev/null \
-            npm_config_globalconfig=/dev/null \
+            npm_config_userconfig="${RUNNER_TEMP}/soklet-mcp-user.npmrc" \
+            npm_config_globalconfig="${RUNNER_TEMP}/soklet-mcp-global.npmrc" \
             npm ci --ignore-scripts
           env -i \
             PATH="${PATH}" \
@@ -281,8 +289,8 @@ jobs:
             CI=true \
             NO_COLOR=1 \
             npm_config_cache="${RUNNER_TEMP}/soklet-mcp-npm-cache" \
-            npm_config_userconfig=/dev/null \
-            npm_config_globalconfig=/dev/null \
+            npm_config_userconfig="${RUNNER_TEMP}/soklet-mcp-user.npmrc" \
+            npm_config_globalconfig="${RUNNER_TEMP}/soklet-mcp-global.npmrc" \
             npm run build
 
       - name: Self-test Soklet conformance infrastructure
@@ -318,7 +326,7 @@ jobs:
     timeout-minutes: 15
     strategy:
       # Jazzer/JUnit can run only one @FuzzTest per JVM when JAZZER_FUZZ=1.
-      # Keep each target in its own Maven invocation so every parser gets a nightly slot.
+      # Keep each target in its own Maven invocation so every fuzz target gets a nightly slot.
       fail-fast: false
       matrix:
         include:
@@ -354,6 +362,12 @@ jobs:
             test_selector: McpRequestStatePlaintextCodecFuzzTest#decodeOnlyRejectsWithUniformRedactedIllegalArgumentException
           - target_id: mcp-simulation-capture
             test_selector: McpSimulationCaptureFuzzTest#captureStateMachineRemainsBoundedTerminalAndIdempotent
+          - target_id: mcp-localization-byte-accounting
+            test_selector: McpLocalizationFuzzTest#replacementByteAccountingMatchesTheProductionEncoder
+          - target_id: mcp-localization-preferences
+            test_selector: McpLocalizationFuzzTest#boundedPreferenceDerivationIsTotalAndNeverTruncates
+          - target_id: mcp-localization-overlay
+            test_selector: McpLocalizationFuzzTest#overlayPointerHandlingIsTotalAndNonMutating
     steps:
       - name: Check out
         uses: actions/checkout@v6

@@ -21,7 +21,7 @@
         without claiming socket fidelity. Every scenario asserts that file descriptors and
         Soklet's own active-resource gauges return to its warmed baseline after load stops.
 
-        SOKLET_SOAK_PROFILE selects one of the checked-in smoke or nightly workload
+        SOKLET_SOAK_PROFILE selects one of the checked-in smoke, nightly, or release workload
         profiles. An omitted value defaults to smoke for local use; every CI job selects one
         explicitly and publishes both the profile checksum and canonical settings in its report.
     -->

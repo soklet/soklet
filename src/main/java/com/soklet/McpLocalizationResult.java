@@ -19,7 +19,6 @@ package com.soklet;
 import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
-import java.util.Locale;
 
 import static java.util.Objects.requireNonNull;
 
@@ -31,11 +30,12 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public sealed interface McpLocalizationResult
 		permits McpLocalizationResult.Localized,
-		McpLocalizationResult.Fallback,
 		McpLocalizationResult.UseDefaultText,
 		McpLocalizationResult.Failure {
 	/**
-	 * Creates a translation resolved in the context locale.
+	 * Creates text successfully resolved for the localization context. The
+	 * provider owns locale matching and fallback, so the text may come from the
+	 * selected locale, a parent locale, or a localization-library fallback.
 	 *
 	 * @param text localized nonblank text
 	 * @return localized result
@@ -43,30 +43,13 @@ public sealed interface McpLocalizationResult
 	 * @throws IllegalArgumentException if {@code text} is blank
 	 */
 	@NonNull
-	static Localized fromLocalizedText(@NonNull String text) {
+	static Localized localized(@NonNull String text) {
 		return new Localized(text);
-	}
-
-	/**
-	 * Creates a translation resolved through another locale.
-	 *
-	 * @param text localized nonblank text
-	 * @param resolvedLocale actual canonical non-root locale
-	 * @return fallback result
-	 * @throws NullPointerException if either argument is null
-	 * @throws IllegalArgumentException if {@code text} is blank or
-	 * {@code resolvedLocale} is not a canonical, non-root BCP 47 locale of at
-	 * most 255 ASCII bytes
-	 */
-	@NonNull
-	static Fallback fromFallbackText(@NonNull String text,
-			@NonNull Locale resolvedLocale) {
-		return new Fallback(text, resolvedLocale);
 	}
 
 	/** @return result requesting the canonical default field */
 	@NonNull
-	static UseDefaultText fromDefaultText() {
+	static UseDefaultText useDefaultText() {
 		return new UseDefaultText();
 	}
 
@@ -78,12 +61,15 @@ public sealed interface McpLocalizationResult
 	 * @return failure result
 	 */
 	@NonNull
-	static Failure fromFailure() {
+	static Failure failure() {
 		return new Failure();
 	}
 
 	/**
-	 * Text resolved in the context locale.
+	 * Text successfully resolved for the localization context. Resolution may
+	 * use the selected locale, a parent locale, or a localization-library
+	 * fallback; Soklet does not require or retain per-field resolution
+	 * provenance.
 	 *
 	 * @param text localized nonblank text
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -107,43 +93,6 @@ public sealed interface McpLocalizationResult
 		@NonNull
 		public final String toString() {
 			return "Localized{text=<redacted>}";
-		}
-	}
-
-	/**
-	 * Text resolved from a locale other than the context locale. This may be a
-	 * parent locale or a provider/library terminal fallback locale. It is
-	 * independent of the localizer's configured default-text fallback locale.
-	 * Soklet rejects this result if {@code resolvedLocale} equals the selected
-	 * context locale.
-	 *
-	 * @param text localized nonblank text
-	 * @param resolvedLocale actual canonical non-root locale
-	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
-	 */
-	@ThreadSafe
-	record Fallback(@NonNull String text, @NonNull Locale resolvedLocale)
-			implements McpLocalizationResult {
-		/**
-		 * Validates the fallback text and locale.
-		 *
-		 * @param text localized nonblank text
-		 * @param resolvedLocale actual canonical non-root locale
-		 */
-		public Fallback {
-			requireNonNull(text);
-			resolvedLocale = McpLocaleSupport.requireCanonicalCatalogLocale(
-					resolvedLocale, "resolvedLocale");
-			if (text.isBlank())
-				throw new IllegalArgumentException(
-						"Localized MCP text must not be blank.");
-		}
-
-		/** @return redacted diagnostic rendering */
-		@Override
-		@NonNull
-		public final String toString() {
-			return "Fallback{text=<redacted>, resolvedLocale=<redacted>}";
 		}
 	}
 

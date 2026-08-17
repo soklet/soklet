@@ -20,34 +20,34 @@ import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
 
+import static java.util.Objects.requireNonNull;
+
 /**
- * Shallowly immutable arguments for one MCP tool invocation.
- * <p>
- * The context carrier is safe for concurrent access. The converted argument
- * value is application-defined and retains its own mutability and thread-safety
- * contract; this type's {@link ThreadSafe} annotation does not make that value
- * thread-safe.
+ * Immutable schema generated under Soklet MCP Tool Schema Profile 1.
  *
- * @param <A> bound argument type
+ * <p>Applications may inspect a generated schema but cannot construct,
+ * compile, or replace one. Profile 1 is a closed generation and validation
+ * profile based on JSON Schema Draft 2020-12, not a complete Draft 2020-12
+ * implementation.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public interface McpToolCallContext<A> {
-	/**
-	 * Returns arguments converted to the registration's declared Java type. The
-	 * returned application value retains its own mutability and thread-safety
-	 * contract.
-	 *
-	 * @return converted arguments
-	 */
+public final class McpToolSchema {
 	@NonNull
-	A getArguments();
+	private final McpJsonObject document;
+
+	McpToolSchema(@NonNull McpJsonObject document) {
+		this.document = requireNonNull(document);
+	}
 
 	/**
-	 * Returns the validated immutable JSON object received on the wire.
+	 * Returns the preserved schema document published on the MCP wire.
 	 *
-	 * @return raw arguments
+	 * @return immutable schema object
 	 */
 	@NonNull
-	McpJsonObject getRawArguments();
+	public McpJsonObject getDocument() {
+		return this.document;
+	}
 }

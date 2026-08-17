@@ -20,7 +20,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -31,10 +36,18 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -58,7 +71,7 @@ class McpLocalizationReloadRuntimeTests {
 	@Test
 	void catalogsChangedDeliversOneCoarseInvalidationPerLocalizedFamily() {
 		McpServer server = server(true, localizer(
-				text -> McpLocalizationResult.fromDefaultText()));
+				text -> McpLocalizationResult.useDefaultText()));
 
 		List<String> frames = new ArrayList<>();
 		Soklet.runSimulator(config(server), simulator -> {
@@ -117,7 +130,7 @@ class McpLocalizationReloadRuntimeTests {
 						.build())
 				.build();
 		McpServer server = server(endpoint, localizer(
-				text -> McpLocalizationResult.fromDefaultText()));
+				text -> McpLocalizationResult.useDefaultText()));
 
 		Soklet.runSimulator(config(server), simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(
@@ -146,7 +159,7 @@ class McpLocalizationReloadRuntimeTests {
 	@Test
 	void discoveryAdvertisesListChangedOnlyForLocalizedCatalogsWithSubscriptions() {
 		String localized = discoveryBody(server(true, localizer(
-				text -> McpLocalizationResult.fromDefaultText())));
+				text -> McpLocalizationResult.useDefaultText())));
 		assertTrue(localized.contains("\"tools\":{\"listChanged\":true}"),
 				localized);
 		assertTrue(localized.contains("\"prompts\":{\"listChanged\":true}"),
@@ -161,7 +174,7 @@ class McpLocalizationReloadRuntimeTests {
 		// Without subscriptions/listen there is no delivery channel, so a
 		// localized catalog still advertises nothing.
 		String noSubscriptions = discoveryBody(server(false, localizer(
-				text -> McpLocalizationResult.fromDefaultText())));
+				text -> McpLocalizationResult.useDefaultText())));
 		assertTrue(noSubscriptions.contains("\"tools\":{}"), noSubscriptions);
 		assertTrue(noSubscriptions.contains("\"prompts\":{}"), noSubscriptions);
 	}
@@ -169,7 +182,7 @@ class McpLocalizationReloadRuntimeTests {
 	@Test
 	void aStaleLocalizedTerminalIsReleasedByInvalidation() {
 		McpServer server = server(true, localizer(
-				text -> McpLocalizationResult.fromLocalizedText(
+				text -> McpLocalizationResult.localized(
 						"FR:" + text.getDefaultText())));
 		AtomicReference<McpSimulation> escaped = new AtomicReference<>();
 
@@ -203,9 +216,185 @@ class McpLocalizationReloadRuntimeTests {
 	}
 
 	@Test
+	void invalidationDuringTerminalPreRenderCannotInstallTheOldSnapshot() {
+		AtomicReference<String> snapshot = new AtomicReference<>("OLD:");
+		CountDownLatch contextCaptured = new CountDownLatch(1);
+		CountDownLatch releaseContext = new CountDownLatch(1);
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
+				.contextProvider(request -> {
+					String captured = snapshot.get();
+					contextCaptured.countDown();
+					await(releaseContext);
+					return new McpLocalizationContext() {
+						@Override public Locale getLocale() {
+							return Locale.CANADA_FRENCH;
+						}
+						@Override public McpLocalizationResult localize(
+								McpLocalizableText text) {
+							return McpLocalizationResult.localized(
+									captured + text.getDefaultText());
+						}
+					};
+				})
+				.build();
+		McpServer server = server(true, localizer);
+		AtomicReference<McpSimulation> escaped = new AtomicReference<>();
+
+		Soklet.runSimulator(config(server), simulator -> {
+			McpSimulation simulation = simulator.startMcpRequest(
+					subscriptionRequest("open-race",
+							"\"resourcesListChanged\":true"));
+			escaped.set(simulation);
+			try {
+				await(contextCaptured);
+				snapshot.set("NEW:");
+				server.getLocalizationControl().catalogsChanged();
+			} finally {
+				releaseContext.countDown();
+			}
+			nextFrame(simulation);
+			try {
+				assertEquals(McpStreamTerminationReason.COMPLETED,
+						simulation.awaitCompletion(WAIT).orElseThrow(() ->
+								new AssertionError("Timed out.")).getReason());
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				throw new AssertionError(e);
+			}
+		});
+
+		List<String> frames = drain(escaped.get());
+		String terminal = frames.get(frames.size() - 1);
+		assertTrue(terminal.contains("\"title\":\"Canonical title\""), terminal);
+		assertFalse(terminal.contains("OLD:"), terminal);
+	}
+
+	@Test
+	void shutdownDuringTerminalPreRenderCannotCommitARejectedSubscription()
+			throws Exception {
+		CountDownLatch contextCaptured = new CountDownLatch(1);
+		CountDownLatch releaseContext = new CountDownLatch(1);
+		BlockingShutdownExecutorService handlerExecutor =
+				new BlockingShutdownExecutorService();
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
+				.contextProvider(request -> {
+					contextCaptured.countDown();
+					await(releaseContext);
+					return new McpLocalizationContext() {
+						@Override public Locale getLocale() {
+							return Locale.CANADA_FRENCH;
+						}
+						@Override public McpLocalizationResult localize(
+								McpLocalizableText text) {
+							return McpLocalizationResult.useDefaultText();
+						}
+					};
+				})
+				.build();
+		McpServer server = server(true, localizer,
+				Optional.of(handlerExecutor));
+		CountDownLatch requestFinished = new CountDownLatch(1);
+		AtomicReference<McpRequestOutcome> requestOutcome = new AtomicReference<>();
+		LifecycleObserver observer = new LifecycleObserver() {
+			@Override
+			public void didFinishMcpRequestHandling(McpRequestContext context,
+					McpRequestOutcome outcome, McpJsonRpcError error,
+					Duration duration, List<Throwable> throwables) {
+				requestOutcome.set(outcome);
+				requestFinished.countDown();
+			}
+		};
+		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(observer)
+				.build());
+		AtomicReference<Throwable> stopFailure = new AtomicReference<>();
+		Thread stopThread = new Thread(() -> {
+			try {
+				soklet.stop();
+			} catch (Throwable throwable) {
+				stopFailure.set(throwable);
+			}
+		}, "mcp-localization-stop-race");
+		CompletableFuture<HttpResponse<InputStream>> responseFuture = null;
+		boolean stopStarted = false;
+
+		try {
+			soklet.start();
+			int port = server.getDiagnostics().getBoundAddress()
+					.orElseThrow().getPort();
+			Request publicRequest = subscriptionRequest("shutdown-open-race",
+					"\"resourcesListChanged\":true");
+			String body = new String(publicRequest.getBody().orElseThrow(),
+					StandardCharsets.UTF_8);
+			HttpRequest httpRequest = HttpRequest.newBuilder(URI.create(
+					"http://" + LOOPBACK + ':' + port + MCP_PATH))
+					.timeout(WAIT.multipliedBy(2L))
+					.header("Content-Type", "application/json; charset=UTF-8")
+					.header("Accept", "application/json, text/event-stream")
+					.header("MCP-Protocol-Version", PROTOCOL_VERSION)
+					.header("Mcp-Method", "subscriptions/listen")
+					.POST(HttpRequest.BodyPublishers.ofString(body))
+					.build();
+			responseFuture = HttpClient.newHttpClient().sendAsync(httpRequest,
+					HttpResponse.BodyHandlers.ofInputStream());
+			await(contextCaptured);
+			stopThread.start();
+			stopStarted = true;
+
+			// Application-executor shutdown happens after subscription acceptance
+			// closes. Holding it here makes that otherwise tiny interleaving exact.
+			await(handlerExecutor.shutdownStarted());
+			releaseContext.countDown();
+			await(requestFinished);
+			assertEquals(McpRequestOutcome.CANCELED, requestOutcome.get());
+			handlerExecutor.releaseShutdown();
+			stopThread.join(WAIT.toMillis());
+			assertFalse(stopThread.isAlive(), "Server stop did not finish.");
+			if (stopFailure.get() != null)
+				throw new AssertionError("Server stop failed.", stopFailure.get());
+
+			try {
+				HttpResponse<InputStream> response = responseFuture
+						.orTimeout(WAIT.toMillis(), TimeUnit.MILLISECONDS)
+						.join();
+				try (InputStream ignored = response.body()) {
+					assertNotEquals(200, response.statusCode(),
+							"Shutdown must not commit an SSE head after acceptance closes.");
+				}
+			} catch (CompletionException exception) {
+				// A connection closed without a response is the expected alternative.
+				assertTrue(exception.getCause() instanceof IOException,
+						() -> "Expected a connection failure, but received "
+								+ exception.getCause());
+			}
+		} finally {
+			releaseContext.countDown();
+			handlerExecutor.releaseShutdown();
+			if (stopStarted) {
+				try {
+					stopThread.join(WAIT.toMillis());
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+					throw new AssertionError(e);
+				}
+			}
+			soklet.stop();
+			if (responseFuture != null)
+				responseFuture.cancel(true);
+		}
+
+		assertFalse(stopThread.isAlive(), "Server stop did not finish.");
+		if (stopFailure.get() != null)
+			throw new AssertionError("Server stop failed.", stopFailure.get());
+		assertEquals(0, server.getDiagnostics().getActiveSubscriptions());
+	}
+
+	@Test
 	void generationsFenceDeliveryAndDisabledControlStillThrows() {
 		McpServer localized = server(true, localizer(
-				text -> McpLocalizationResult.fromDefaultText()));
+				text -> McpLocalizationResult.useDefaultText()));
 
 		// No active listener or simulator generation: accepted as a no-op.
 		localized.getLocalizationControl().catalogsChanged();
@@ -219,9 +408,9 @@ class McpLocalizationReloadRuntimeTests {
 	@Test
 	void twoNodesInvalidateIndependently() {
 		McpServer first = server(true, localizer(
-				text -> McpLocalizationResult.fromDefaultText()));
+				text -> McpLocalizationResult.useDefaultText()));
 		McpServer second = server(true, localizer(
-				text -> McpLocalizationResult.fromDefaultText()));
+				text -> McpLocalizationResult.useDefaultText()));
 
 		Soklet.runSimulator(config(first), firstSimulator ->
 				Soklet.runSimulator(config(second), secondSimulator -> {
@@ -249,6 +438,168 @@ class McpLocalizationReloadRuntimeTests {
 				}));
 	}
 
+	@Test
+	void mixedLocalizedEndpointsShareOnePublisherAndFanOutToEveryEndpoint() {
+		CountingPublisher publisher = new CountingPublisher();
+		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
+				.withEventPublisher(publisher)
+				.notificationTypes(EnumSet.of(
+						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
+				.build();
+		List<McpEndpoint> endpoints = List.of(
+				sharedPublisherEndpoint("/localization/shared-one", "One", subscriptions),
+				sharedPublisherEndpoint("/localization/shared-two", "Two", subscriptions),
+				sharedPublisherEndpoint("/localization/shared-plain", null, subscriptions));
+		McpServer server = McpServer.withPort(0)
+				.host(LOOPBACK)
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints))
+				.admissionController(McpAdmissionController.acceptAllInstance())
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.allowedHosts(Set.of(LOOPBACK))
+				.localizer(localizer(text ->
+						McpLocalizationResult.useDefaultText()))
+				.build();
+
+		Soklet.runSimulator(config(server), simulator -> {
+			List<McpSimulation> simulations = List.of(
+					simulator.startMcpRequest(request(
+							"/localization/shared-one", "shared-one",
+							"subscriptions/listen",
+							",\"notifications\":{\"resourcesListChanged\":true}")),
+					simulator.startMcpRequest(request(
+							"/localization/shared-two", "shared-two",
+							"subscriptions/listen",
+							",\"notifications\":{\"resourcesListChanged\":true}")),
+					simulator.startMcpRequest(request(
+							"/localization/shared-plain", "shared-plain",
+							"subscriptions/listen",
+							",\"notifications\":{\"resourcesListChanged\":true}")));
+			for (McpSimulation simulation : simulations)
+				assertTrue(nextFrame(simulation)
+						.contains("\"resourcesListChanged\":true"));
+			assertEquals(1, publisher.subscriptionCount(),
+					"Shared application publisher must register once per server generation.");
+
+			publisher.publishResourcesListChanged();
+			for (McpSimulation simulation : simulations)
+				assertTrue(nextFrame(simulation)
+						.contains("notifications/resources/list_changed"));
+		});
+
+		assertEquals(1, publisher.closeCount());
+	}
+
+	private static McpEndpoint sharedPublisherEndpoint(String path,
+			String title, McpSubscriptionConfig subscriptions) {
+		McpImplementation.Builder information = McpImplementation
+				.withNameAndVersion(path.substring(path.lastIndexOf('/') + 1), "1.0");
+		if (title != null)
+			information.title(title);
+		return McpEndpoint.withPath(path)
+				.serverInformation(information.build())
+				.resource(McpResourceRegistration.withUriAndName(
+						URI.create("shared:" + path), "shared")
+						.handler((request, resource, features) ->
+								McpCompleteResult.fromResourceOutput(
+										McpResourceOutput.builder()
+												.content(McpTextResourceContents
+														.withUriAndText(resource.getUri(),
+																"unused")
+														.build())
+												.build()))
+						.build())
+				.subscriptions(subscriptions)
+				.build();
+	}
+
+	private static final class CountingPublisher
+			implements McpSubscriptionEventPublisher {
+		private final AtomicInteger subscriptions = new AtomicInteger();
+		private final AtomicInteger closes = new AtomicInteger();
+		private final CopyOnWriteArrayList<McpSubscriptionEventListener> listeners =
+				new CopyOnWriteArrayList<>();
+
+		@Override
+		public McpSubscriptionEventRegistration subscribe(
+				McpSubscriptionEventListener listener) {
+			java.util.Objects.requireNonNull(listener);
+			listeners.add(listener);
+			subscriptions.incrementAndGet();
+			AtomicBoolean closed = new AtomicBoolean();
+			return () -> {
+				if (closed.compareAndSet(false, true)) {
+					listeners.remove(listener);
+					closes.incrementAndGet();
+				}
+			};
+		}
+
+		@Override
+		public void publish(McpSubscriptionEvent event) {
+			java.util.Objects.requireNonNull(event);
+			for (McpSubscriptionEventListener listener : listeners)
+				listener.onEvent(event);
+		}
+
+		private int subscriptionCount() {
+			return subscriptions.get();
+		}
+
+		private int closeCount() {
+			return closes.get();
+		}
+	}
+
+	private static final class BlockingShutdownExecutorService
+			extends java.util.concurrent.AbstractExecutorService {
+		private final java.util.concurrent.ExecutorService delegate =
+				java.util.concurrent.Executors.newSingleThreadExecutor();
+		private final CountDownLatch shutdownStarted = new CountDownLatch(1);
+		private final CountDownLatch releaseShutdown = new CountDownLatch(1);
+
+		@Override
+		public void shutdown() {
+			this.shutdownStarted.countDown();
+			await(this.releaseShutdown);
+			this.delegate.shutdown();
+		}
+
+		@Override
+		public List<Runnable> shutdownNow() {
+			this.releaseShutdown.countDown();
+			return this.delegate.shutdownNow();
+		}
+
+		@Override
+		public boolean isShutdown() {
+			return this.delegate.isShutdown();
+		}
+
+		@Override
+		public boolean isTerminated() {
+			return this.delegate.isTerminated();
+		}
+
+		@Override
+		public boolean awaitTermination(long timeout,
+				java.util.concurrent.TimeUnit unit) throws InterruptedException {
+			return this.delegate.awaitTermination(timeout, unit);
+		}
+
+		@Override
+		public void execute(Runnable command) {
+			this.delegate.execute(command);
+		}
+
+		private CountDownLatch shutdownStarted() {
+			return this.shutdownStarted;
+		}
+
+		private void releaseShutdown() {
+			this.releaseShutdown.countDown();
+		}
+	}
+
 	private static McpLocalizer localizer(
 			java.util.function.Function<McpLocalizableText,
 					McpLocalizationResult> provider) {
@@ -270,6 +621,12 @@ class McpLocalizationReloadRuntimeTests {
 
 	private static McpServer server(boolean subscriptions,
 			McpLocalizer localizer) {
+		return server(subscriptions, localizer, Optional.empty());
+	}
+
+	private static McpServer server(boolean subscriptions,
+			McpLocalizer localizer,
+			Optional<java.util.concurrent.ExecutorService> handlerExecutor) {
 		McpEndpoint.Builder builder = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation
 						.withNameAndVersion("localization-reload", "1.0")
@@ -278,7 +635,7 @@ class McpLocalizationReloadRuntimeTests {
 						.build())
 				.tool(McpToolRegistration.withName("reload.tool")
 						.jsonArguments()
-						.handler((request, call, features) ->
+						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("unused"))
 						.title("Tool title")
 						.build())
@@ -305,23 +662,31 @@ class McpLocalizationReloadRuntimeTests {
 		if (subscriptions)
 			builder.subscriptions(subscriptions());
 
-		return server(builder.build(), localizer);
+		return server(builder.build(), localizer, handlerExecutor);
 	}
 
 	private static McpServer server(McpEndpoint endpoint,
 			McpLocalizer localizer) {
+		return server(endpoint, localizer, Optional.empty());
+	}
+
+	private static McpServer server(McpEndpoint endpoint,
+			McpLocalizer localizer,
+			Optional<java.util.concurrent.ExecutorService> handlerExecutor) {
 		McpServer.Builder builder = McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(McpRequestAdmissionPolicy.acceptAllInstance())
-				.requestRateLimiter(context -> McpRateLimitDecision.fromAllowed())
-				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(McpAdmissionController.acceptAllInstance())
+				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.maximumSubscriptionDuration(Duration.ofMillis(400));
 
 		if (localizer != null)
 			builder.localizer(localizer);
+		handlerExecutor.ifPresent(executor -> builder
+				.requestHandlerExecutorServiceSupplier(() -> executor));
 
 		return builder.build();
 	}
@@ -398,6 +763,16 @@ class McpLocalizationReloadRuntimeTests {
 		}
 	}
 
+	private static void await(CountDownLatch latch) {
+		try {
+			if (!latch.await(WAIT.toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS))
+				throw new AssertionError("Timed out.");
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new AssertionError(e);
+		}
+	}
+
 	private static List<String> drain(McpSimulation simulation) {
 		List<String> frames = new ArrayList<>();
 
@@ -422,6 +797,11 @@ class McpLocalizationReloadRuntimeTests {
 
 	private static Request request(String id, String method,
 			String additionalParameters) {
+		return request(MCP_PATH, id, method, additionalParameters);
+	}
+
+	private static Request request(String path, String id, String method,
+			String additionalParameters) {
 		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"" + id
 				+ "\",\"method\":\"" + method + "\",\"params\":{\"_meta\":{"
 				+ "\"io.modelcontextprotocol/protocolVersion\":\""
@@ -434,7 +814,7 @@ class McpLocalizationReloadRuntimeTests {
 		headers.put("Accept", Set.of("application/json, text/event-stream"));
 		headers.put("MCP-Protocol-Version", Set.of(PROTOCOL_VERSION));
 		headers.put("Mcp-Method", Set.of(method));
-		return Request.withPath(HttpMethod.POST, MCP_PATH)
+		return Request.withPath(HttpMethod.POST, path)
 				.headers(headers)
 				.body(body.getBytes(StandardCharsets.UTF_8))
 				.build();

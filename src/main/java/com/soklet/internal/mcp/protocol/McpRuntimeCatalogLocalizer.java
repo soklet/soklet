@@ -98,7 +98,8 @@ public interface McpRuntimeCatalogLocalizer {
 	 * @param canonicalEncodedBytes encoded length of the canonical document
 	 * @param envelopeBytes exact request-specific envelope and request-ID bytes
 	 * @param maximumResponseBytes production response ceiling
-	 * @param maximumReplacementCharacters production JSON string character limit
+	 * @param maximumReplacementCharacters stricter of the production decoded-string
+	 *        and serialized-token character limits
 	 * @param encodedLength exact encoded length under the production encoder
 	 * @param acceptLanguageValues raw unparsed {@code Accept-Language} values, in
 	 *        exact wire encounter order

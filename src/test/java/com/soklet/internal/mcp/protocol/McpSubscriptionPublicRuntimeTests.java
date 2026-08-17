@@ -22,12 +22,12 @@ import com.soklet.McpAdmissionDecision;
 import com.soklet.McpAdmissionIdentity;
 import com.soklet.McpCompleteResult;
 import com.soklet.McpEndpoint;
-import com.soklet.McpHandlerResolver;
+import com.soklet.McpEndpointRegistry;
 import com.soklet.McpImplementation;
 import com.soklet.McpJsonRpcError;
 import com.soklet.McpMetricsEvent;
 import com.soklet.McpRateLimitDecision;
-import com.soklet.McpRequestAdmissionPolicy;
+import com.soklet.McpAdmissionController;
 import com.soklet.McpRequestContext;
 import com.soklet.McpRequestOutcome;
 import com.soklet.McpResourceOutput;
@@ -38,7 +38,7 @@ import com.soklet.McpSubscriptionConfig;
 import com.soklet.McpSubscriptionEvent;
 import com.soklet.McpSubscriptionEventListener;
 import com.soklet.McpSubscriptionEventPublisher;
-import com.soklet.McpSubscriptionEventSubscription;
+import com.soklet.McpSubscriptionEventRegistration;
 import com.soklet.McpSubscriptionNotificationType;
 import com.soklet.McpTextResourceContents;
 import com.soklet.MetricsCollector;
@@ -184,11 +184,11 @@ public class McpSubscriptionPublicRuntimeTests {
 			throws Exception {
 		RecordingPublisher publisher = new RecordingPublisher();
 		AtomicInteger admissionCalls = new AtomicInteger();
-		McpRequestAdmissionPolicy admissionPolicy = context -> {
+		McpAdmissionController admissionController = context -> {
 			admissionCalls.incrementAndGet();
-			return McpRequestAdmissionPolicy.acceptAllInstance().admit(context);
+			return McpAdmissionController.acceptAllInstance().admit(context);
 		};
-		McpServer server = server(MCP_PATH, publisher, admissionPolicy,
+		McpServer server = server(MCP_PATH, publisher, admissionController,
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED,
 				McpSubscriptionNotificationType.RESOURCE_UPDATED);
 
@@ -239,19 +239,19 @@ public class McpSubscriptionPublicRuntimeTests {
 		AtomicInteger interceptorCalls = new AtomicInteger();
 		McpServer allowed = serverBuilder(List.of(endpoint), context -> {
 			admissionCalls.incrementAndGet();
-			return McpRequestAdmissionPolicy.acceptAllInstance().admit(context);
+			return McpAdmissionController.acceptAllInstance().admit(context);
 		})
 				.requestRateLimiter(context -> {
 					requestLimiterCalls.incrementAndGet();
-					return McpRateLimitDecision.fromAllowed();
+					return McpRateLimitDecision.allowed();
 				})
 				.toolRateLimiter(context -> {
 					toolLimiterCalls.incrementAndGet();
-					return McpRateLimitDecision.fromAllowed();
+					return McpRateLimitDecision.allowed();
 				})
-				.handlerInterceptor((context, invocation) -> {
+				.handlerInterceptor((context, continuation) -> {
 					interceptorCalls.incrementAndGet();
-					return invocation.invoke();
+					return continuation.proceed();
 				})
 				.build();
 
@@ -277,11 +277,11 @@ public class McpSubscriptionPublicRuntimeTests {
 		AtomicInteger deniedLimiterCalls = new AtomicInteger();
 		McpServer denied = serverBuilder(List.of(endpoint), context -> {
 			deniedAdmissionCalls.incrementAndGet();
-			return McpRequestAdmissionPolicy.acceptAllInstance().admit(context);
+			return McpAdmissionController.acceptAllInstance().admit(context);
 		})
 				.requestRateLimiter(context -> {
 					deniedLimiterCalls.incrementAndGet();
-					return McpRateLimitDecision.fromDenied(Duration.ofMillis(1));
+					return McpRateLimitDecision.denied(Duration.ofMillis(1));
 				})
 				.build();
 		try {
@@ -312,7 +312,7 @@ public class McpSubscriptionPublicRuntimeTests {
 		McpEndpoint endpoint = endpoint(MCP_PATH, publisher,
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED);
 		McpServer server = serverBuilder(List.of(endpoint),
-				McpRequestAdmissionPolicy.acceptAllInstance())
+				McpAdmissionController.acceptAllInstance())
 				.requestHandlerConcurrency(1)
 				.requestHandlerQueueCapacity(1)
 				.build();
@@ -365,7 +365,7 @@ public class McpSubscriptionPublicRuntimeTests {
 		McpEndpoint endpoint = endpoint(MCP_PATH, publisher,
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED);
 		McpServer server = serverBuilder(List.of(endpoint),
-				McpRequestAdmissionPolicy.acceptAllInstance())
+				McpAdmissionController.acceptAllInstance())
 				.maximumSubscriptionsPerPrincipal(1)
 				.build();
 		McpChunkedHttpClient first = null;
@@ -401,7 +401,7 @@ public class McpSubscriptionPublicRuntimeTests {
 		RecordingPublisher publisher = new RecordingPublisher();
 		McpEndpoint endpoint = endpoint(MCP_PATH, publisher,
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED);
-		McpRequestAdmissionPolicy partitionedAdmission = context -> {
+		McpAdmissionController partitionedAdmission = context -> {
 			String tenant = context.getRequest().getHeader("X-Test-Tenant")
 					.orElseThrow();
 			McpAdmissionIdentity identity = McpAdmissionIdentity
@@ -409,7 +409,7 @@ public class McpSubscriptionPublicRuntimeTests {
 					.authorizationPartitionKey("authorization-" + tenant)
 					.principal(tenant)
 					.build();
-			return McpAdmissionDecision.fromAcceptedIdentity(identity);
+			return McpAdmissionDecision.accepted(identity);
 		};
 		McpServer server = serverBuilder(List.of(endpoint), partitionedAdmission)
 				.maximumSubscriptionsPerPrincipal(1)
@@ -545,7 +545,7 @@ public class McpSubscriptionPublicRuntimeTests {
 		McpEndpoint endpoint = endpoint(MCP_PATH, publisher,
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED);
 		McpServer server = serverBuilder(List.of(endpoint),
-				McpRequestAdmissionPolicy.acceptAllInstance())
+				McpAdmissionController.acceptAllInstance())
 				.maximumSubscriptionsPerPrincipal(1)
 				.build();
 		McpChunkedHttpClient client = null;
@@ -603,7 +603,7 @@ public class McpSubscriptionPublicRuntimeTests {
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED);
 		SubscriptionObservations observations = new SubscriptionObservations();
 		McpServer server = serverBuilder(List.of(endpoint),
-				McpRequestAdmissionPolicy.acceptAllInstance())
+				McpAdmissionController.acceptAllInstance())
 				.writeTimeout(Duration.ofSeconds(2))
 				.keepAliveInterval(Duration.ofMillis(100))
 				.maximumSubscriptionDuration(Duration.ofSeconds(1))
@@ -648,7 +648,7 @@ public class McpSubscriptionPublicRuntimeTests {
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED);
 		SubscriptionObservations observations = new SubscriptionObservations();
 		McpServer server = serverBuilder(List.of(endpoint),
-				McpRequestAdmissionPolicy.acceptAllInstance()).build();
+				McpAdmissionController.acceptAllInstance()).build();
 		Soklet soklet = managedSoklet(server, observations);
 		McpChunkedHttpClient client = null;
 
@@ -685,7 +685,7 @@ public class McpSubscriptionPublicRuntimeTests {
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED);
 		SubscriptionObservations observations = new SubscriptionObservations();
 		McpServer server = serverBuilder(List.of(endpoint),
-				McpRequestAdmissionPolicy.acceptAllInstance())
+				McpAdmissionController.acceptAllInstance())
 				.writeTimeout(Duration.ofHours(2))
 				.keepAliveInterval(Duration.ofHours(1))
 				.build();
@@ -758,7 +758,7 @@ public class McpSubscriptionPublicRuntimeTests {
 		BlockingStreamOpenCollector blockingCollector =
 				new BlockingStreamOpenCollector();
 		McpServer server = serverBuilder(List.of(endpoint),
-				McpRequestAdmissionPolicy.acceptAllInstance())
+				McpAdmissionController.acceptAllInstance())
 				.streamQueueCapacity(4)
 				.build();
 		Soklet soklet = managedSoklet(server,
@@ -813,7 +813,7 @@ public class McpSubscriptionPublicRuntimeTests {
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED,
 				McpSubscriptionNotificationType.RESOURCE_UPDATED);
 		McpServer server = serverBuilder(List.of(endpoint),
-				McpRequestAdmissionPolicy.acceptAllInstance())
+				McpAdmissionController.acceptAllInstance())
 				.streamQueueCapacity(1)
 				.maximumSubscriptionsPerPrincipal(1)
 				.build();
@@ -1062,35 +1062,35 @@ public class McpSubscriptionPublicRuntimeTests {
 			McpSubscriptionNotificationType first,
 			McpSubscriptionNotificationType... remaining) {
 		return server(path, publisher,
-				McpRequestAdmissionPolicy.acceptAllInstance(), first, remaining);
+				McpAdmissionController.acceptAllInstance(), first, remaining);
 	}
 
 	private static McpServer server(String path,
 			McpSubscriptionEventPublisher publisher,
-			McpRequestAdmissionPolicy admissionPolicy,
+			McpAdmissionController admissionController,
 			McpSubscriptionNotificationType first,
 			McpSubscriptionNotificationType... remaining) {
 		return server(List.of(endpoint(path, publisher, first, remaining)),
-				admissionPolicy);
+				admissionController);
 	}
 
 	private static McpServer server(List<McpEndpoint> endpoints) {
-		return server(endpoints, McpRequestAdmissionPolicy.acceptAllInstance());
+		return server(endpoints, McpAdmissionController.acceptAllInstance());
 	}
 
 	private static McpServer server(List<McpEndpoint> endpoints,
-			McpRequestAdmissionPolicy admissionPolicy) {
-		return serverBuilder(endpoints, admissionPolicy).build();
+			McpAdmissionController admissionController) {
+		return serverBuilder(endpoints, admissionController).build();
 	}
 
 	private static McpServer.Builder serverBuilder(List<McpEndpoint> endpoints,
-			McpRequestAdmissionPolicy admissionPolicy) {
+			McpAdmissionController admissionController) {
 		return McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(endpoints))
-				.requestAdmissionPolicy(admissionPolicy)
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints))
+				.admissionController(admissionController)
 				.requestRateLimiter(context ->
-						McpRateLimitDecision.fromAllowed())
+						McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
 	}
@@ -1272,7 +1272,7 @@ public class McpSubscriptionPublicRuntimeTests {
 
 		@Override
 		@NonNull
-		public McpSubscriptionEventSubscription subscribe(
+		public McpSubscriptionEventRegistration subscribe(
 				@NonNull McpSubscriptionEventListener listener) {
 			Registration registration = new Registration(listener);
 			this.registrations.add(registration);
@@ -1305,7 +1305,7 @@ public class McpSubscriptionPublicRuntimeTests {
 
 		@ThreadSafe
 		private final class Registration
-				implements McpSubscriptionEventSubscription {
+				implements McpSubscriptionEventRegistration {
 			@NonNull
 			private final McpSubscriptionEventListener listener;
 			@NonNull

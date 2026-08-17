@@ -39,7 +39,7 @@ import com.soklet.McpJsonValue;
 import com.soklet.McpRequestContext;
 import com.soklet.McpRequestId;
 import com.soklet.McpRequestOutcome;
-import com.soklet.McpRequestRejection;
+import com.soklet.McpAdmissionRejection;
 import com.soklet.McpRequestState;
 import com.soklet.McpRequestStateMode;
 import com.soklet.McpRequestStateProtectionException;
@@ -49,7 +49,7 @@ import com.soklet.McpStreamTerminationReason;
 import com.soklet.McpSubscriptionConfig;
 import com.soklet.McpSubscriptionEvent;
 import com.soklet.McpSubscriptionEventPublisher;
-import com.soklet.McpSubscriptionEventSubscription;
+import com.soklet.McpSubscriptionEventRegistration;
 import com.soklet.McpSubscriptionNotificationType;
 import com.soklet.Request;
 import com.soklet.StreamTerminationReason;
@@ -824,10 +824,10 @@ public final class McpServerRuntimeBridge {
 		}
 
 		ResourceListPlan resourceListPlan = endpointPlan.resourceListPlan();
-		endpointBuilder.resourcesListCachePolicy(toInternal(
-				resourceListPlan.resourcesListCachePolicy()));
-		endpointBuilder.resourceTemplatesListCachePolicy(toInternal(
-				resourceListPlan.resourceTemplatesListCachePolicy()));
+		endpointBuilder.resourceListCachePolicy(toInternal(
+				resourceListPlan.resourceListCachePolicy()));
+		endpointBuilder.resourceTemplateListCachePolicy(toInternal(
+				resourceListPlan.resourceTemplateListCachePolicy()));
 		endpointBuilder.maximumCursorSizeInBytes(
 				resourceListPlan.maximumCursorSizeInBytes());
 		Map<String, McpApplicationResourceReadRoute> exactResourceRoutes =
@@ -885,7 +885,7 @@ public final class McpServerRuntimeBridge {
 				});
 		McpNormalizedEndpoint endpoint = endpointBuilder.build();
 
-		McpRequestAdmissionPolicy internalAdmissionPolicy = context -> {
+		McpProtocolAdmissionController protocolAdmissionController = context -> {
 			AdmissionInput input = new AdmissionInput(context.request(), publicEndpoint,
 					context.endpointPathParameters(), context.jsonRpcMethod(),
 					context.notification(),
@@ -898,7 +898,7 @@ public final class McpServerRuntimeBridge {
 							(McpJsonObject) toPublic(value)));
 			McpAdmissionDecision decision = requireNonNull(
 					admissionAdapter.admit(input),
-					"The MCP request-admission policy returned null.");
+					"The MCP admission controller returned null.");
 			return toInternal(decision);
 		};
 
@@ -906,7 +906,7 @@ public final class McpServerRuntimeBridge {
 				publicEndpoint.getPath(), allowedHosts,
 				requireOrigin ? McpAbsentOriginPolicy.REQUIRE_ORIGIN
 						: McpAbsentOriginPolicy.ALLOW,
-				corsAuthorizer, internalAdmissionPolicy, Optional.empty(),
+				corsAuthorizer, protocolAdmissionController, Optional.empty(),
 				McpApplicationRequestInterceptor.passThroughInstance(),
 				unknownMirroredHeaderPolicy,
 				corsAuthorizerExplicitlyConfigured);
@@ -917,9 +917,10 @@ public final class McpServerRuntimeBridge {
 			endpointPolicy = endpointPolicy.withLocalizationEnabled();
 		if (endpointPlan.catalogLocalizer().isPresent()
 				&& subscriptionEventSource.isPresent()) {
-			// The framework catalog-change source composes with the application
-			// publisher through one shared per-endpoint source, so both ride the
-			// identical generation, filter, coalescing, and shutdown machinery.
+			// Retain the application publisher's identity/subscriber so endpoints
+			// sharing it still create exactly one application registration. The
+			// framework publisher is an endpoint-local supplemental source that rides
+			// the same generation, filter, coalescing, and shutdown machinery.
 			Set<McpRuntimeCatalogLocalizer.ResponseKind> localizedKinds =
 					endpointPlan.catalogLocalizer().orElseThrow()
 							.localizedResponseKinds();
@@ -928,19 +929,8 @@ public final class McpServerRuntimeBridge {
 			McpSubscriptionEventSource applicationSource =
 					subscriptionEventSource.orElseThrow();
 			subscriptionEventSource = Optional.of(new McpSubscriptionEventSource(
-					new Object(), listener -> {
-						McpSubscriptionEventSource.Registration application =
-								applicationSource.subscribe(listener);
-						McpSubscriptionEventSource.Registration framework =
-								frameworkPublisher.subscribe(listener);
-						return () -> {
-							try {
-								framework.close();
-							} finally {
-								application.close();
-							}
-						};
-					}));
+					applicationSource.identity(), applicationSource.subscriber(),
+					Optional.of(frameworkPublisher::subscribe)));
 			localizedEndpointInvalidations.add(new LocalizedEndpointInvalidation(
 					frameworkPublisher,
 					new McpSubscriptionEventSource.Event.LocalizationCatalogsChanged(
@@ -987,6 +977,7 @@ public final class McpServerRuntimeBridge {
 							(McpJsonObject) toPublic(input.requestMetadata()),
 							toPublicInputResponses(input.inputResponses()),
 							input.requestState(),
+							input.acceptLanguageValues(),
 							toPublic(input.admissionIdentity()))),
 					"The MCP request-observation adapter returned null.");
 			return new McpRuntimeRequestObservation() {
@@ -1070,7 +1061,7 @@ public final class McpServerRuntimeBridge {
 		requireNonNull(configuration);
 		McpSubscriptionEventPublisher publisher = configuration.getEventPublisher();
 		return new McpSubscriptionEventSource(publisher, listener -> {
-			McpSubscriptionEventSubscription registration = requireNonNull(
+			McpSubscriptionEventRegistration registration = requireNonNull(
 					publisher.subscribe(event -> {
 						try {
 							listener.onEvent(toInternal(requireNonNull(event)));
@@ -1542,14 +1533,14 @@ public final class McpServerRuntimeBridge {
 	 */
 	@ThreadSafe
 	public record ResourceListPlan(
-			@NonNull CachePlan resourcesListCachePolicy,
-			@NonNull CachePlan resourceTemplatesListCachePolicy,
+			@NonNull CachePlan resourceListCachePolicy,
+			@NonNull CachePlan resourceTemplateListCachePolicy,
 			int maximumCursorSizeInBytes,
 			@NonNull Optional<@NonNull ResourceListInvoker> invoker) {
 		/** Validates the endpoint resource-list plan. */
 		public ResourceListPlan {
-			requireNonNull(resourcesListCachePolicy);
-			requireNonNull(resourceTemplatesListCachePolicy);
+			requireNonNull(resourceListCachePolicy);
+			requireNonNull(resourceTemplateListCachePolicy);
 			if (maximumCursorSizeInBytes < 1)
 				throw new IllegalArgumentException(
 						"Maximum cursor size must be positive.");
@@ -2573,7 +2564,28 @@ public final class McpServerRuntimeBridge {
 			@NonNull McpJsonObject requestMetadata,
 			@NonNull McpInputResponses inputResponses,
 			@NonNull Optional<@NonNull McpRequestState> requestState,
+			@NonNull List<@NonNull String> acceptLanguageValues,
 			@NonNull McpAdmissionIdentity admissionIdentity) {
+		/** Creates an observation input without raw-header provenance. */
+		public RequestObservationInput(@NonNull Request request,
+				@NonNull McpEndpoint endpoint,
+				@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
+				@NonNull String jsonRpcMethod,
+				@NonNull Optional<@NonNull McpRequestId> requestId,
+				@NonNull String protocolVersion,
+				@NonNull Optional<@NonNull String> operationName,
+				@NonNull Optional<@NonNull McpImplementation> clientInformation,
+				@NonNull McpJsonObject clientCapabilities,
+				@NonNull McpJsonObject requestMetadata,
+				@NonNull McpInputResponses inputResponses,
+				@NonNull Optional<@NonNull McpRequestState> requestState,
+				@NonNull McpAdmissionIdentity admissionIdentity) {
+			this(request, endpoint, endpointPathParameters, jsonRpcMethod, requestId,
+					protocolVersion, operationName, clientInformation,
+					clientCapabilities, requestMetadata, inputResponses, requestState,
+					acceptLanguageValues(request), admissionIdentity);
+		}
+
 		/** Creates an observation input without request state. */
 		public RequestObservationInput(@NonNull Request request,
 				@NonNull McpEndpoint endpoint,
@@ -2590,7 +2602,7 @@ public final class McpServerRuntimeBridge {
 			this(request, endpoint, endpointPathParameters, jsonRpcMethod, requestId,
 					protocolVersion, operationName, clientInformation,
 					clientCapabilities, requestMetadata, inputResponses,
-					Optional.empty(), admissionIdentity);
+					Optional.empty(), acceptLanguageValues(request), admissionIdentity);
 		}
 
 		/** Creates an observation input without multi-round-trip responses. */
@@ -2609,6 +2621,7 @@ public final class McpServerRuntimeBridge {
 					protocolVersion, operationName, clientInformation,
 					clientCapabilities, requestMetadata,
 					McpInputResponses.emptyInstance(), Optional.empty(),
+					acceptLanguageValues(request),
 					admissionIdentity);
 		}
 
@@ -2627,7 +2640,17 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(requestMetadata);
 			requireNonNull(inputResponses);
 			requireNonNull(requestState);
+			acceptLanguageValues = List.copyOf(
+					requireNonNull(acceptLanguageValues));
 			requireNonNull(admissionIdentity);
+		}
+
+		@NonNull
+		private static List<@NonNull String> acceptLanguageValues(
+				@NonNull Request request) {
+			Set<String> values = requireNonNull(request)
+					.getHeaders().get("Accept-Language");
+			return values == null ? List.of() : List.copyOf(values);
 		}
 	}
 
@@ -3328,13 +3351,13 @@ public final class McpServerRuntimeBridge {
 		return builder.build();
 	}
 
-	private static com.soklet.internal.mcp.protocol.@NonNull McpRequestRejection toInternal(
-			@NonNull McpRequestRejection rejection) {
+	private static com.soklet.internal.mcp.protocol.@NonNull McpAdmissionRejection toInternal(
+			@NonNull McpAdmissionRejection rejection) {
 		Map<String, List<String>> headers = new LinkedHashMap<>();
 		rejection.getHeaders().forEach((name, values) ->
 				headers.put(name, List.copyOf(values)));
 		com.soklet.McpJsonRpcError error = rejection.getJsonRpcError();
-		return new com.soklet.internal.mcp.protocol.McpRequestRejection(
+		return new com.soklet.internal.mcp.protocol.McpAdmissionRejection(
 				rejection.getStatusCode(),
 				new com.soklet.internal.mcp.protocol.McpJsonRpcError(
 						error.getCode(), error.getMessage(), error.getData().map(

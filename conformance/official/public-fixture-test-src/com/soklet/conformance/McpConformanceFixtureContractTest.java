@@ -32,7 +32,7 @@ import com.soklet.McpPromptRegistration;
 import com.soklet.McpRequestContext;
 import com.soklet.McpRequestState;
 import com.soklet.McpRequestStateMode;
-import com.soklet.McpToolCallContext;
+import com.soklet.McpToolArguments;
 import com.soklet.McpToolRegistration;
 
 import java.lang.reflect.Proxy;
@@ -272,7 +272,7 @@ public final class McpConformanceFixtureContractTest {
 	private static McpOperationResult invokeTool(String scenario, String name,
 			McpRequestContext context) throws Exception {
 		return tool(McpConformanceFixture.endpointForScenario(scenario), name)
-				.getHandler().handle(context, toolContext(), NO_FEATURES);
+				.getHandler().handle(context, toolArguments(), NO_FEATURES);
 	}
 
 	@SuppressWarnings("unchecked")
@@ -297,8 +297,8 @@ public final class McpConformanceFixtureContractTest {
 				});
 	}
 
-	private static McpToolCallContext<McpJsonObject> toolContext() {
-		return new McpToolCallContext<>() {
+	private static McpToolArguments<McpJsonObject> toolArguments() {
+		return new McpToolArguments<>() {
 			@Override
 			public McpJsonObject getArguments() {
 				return McpJsonObject.emptyInstance();

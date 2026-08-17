@@ -365,7 +365,7 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.McpResourceOutput;
 						import com.soklet.McpResourcePage;
 						import com.soklet.McpResourceReadContext;
-						import com.soklet.annotation.McpListResources;
+						import com.soklet.annotation.McpResourceList;
 						import com.soklet.annotation.McpPrompt;
 						import com.soklet.annotation.McpResource;
 						import com.soklet.annotation.McpServerEndpoint;
@@ -404,7 +404,7 @@ public class McpAnnotationProcessorValidationTests {
 						    return null;
 						  }
 
-						  @McpListResources
+						  @McpResourceList
 						  public McpResourcePage resources(
 						      CancelationToken cancelationToken,
 						      McpResourceListContext list,
@@ -437,7 +437,7 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.McpResourceListContext;
 						import com.soklet.McpResourceOutput;
 						import com.soklet.McpResourcePage;
-						import com.soklet.annotation.McpListResources;
+						import com.soklet.annotation.McpResourceList;
 						import com.soklet.annotation.McpPrompt;
 						import com.soklet.annotation.McpPromptArgument;
 						import com.soklet.annotation.McpResource;
@@ -482,7 +482,7 @@ public class McpAnnotationProcessorValidationTests {
 						    return null;
 						  }
 
-						  @McpListResources
+						  @McpResourceList
 						  public McpResourcePage resources(
 						      McpResourceListContext list,
 						      CancelationToken firstCancelation,
@@ -504,7 +504,7 @@ public class McpAnnotationProcessorValidationTests {
 
 		assertThat(compilation).failed();
 		for (String operation : List.of("@McpTool", "@McpPrompt",
-				"@McpResource", "@McpListResources")) {
+				"@McpResource", "@McpResourceList")) {
 			assertThat(compilation).hadErrorContaining(operation
 					+ " method may inject CancelationToken at most once")
 					.inFile(source);
@@ -534,7 +534,7 @@ public class McpAnnotationProcessorValidationTests {
 				"Every non-context @McpResource parameter must be annotated")
 				.inFile(source);
 		assertThat(compilation).hadErrorContaining(
-				"@McpListResources parameters must be McpRequestContext")
+				"@McpResourceList parameters must be McpRequestContext")
 				.inFile(source);
 	}
 
@@ -672,7 +672,7 @@ public class McpAnnotationProcessorValidationTests {
 						import com.soklet.McpResourceListContext;
 						import com.soklet.McpResourceOutput;
 						import com.soklet.McpResourcePage;
-						import com.soklet.annotation.McpListResources;
+						import com.soklet.annotation.McpResourceList;
 						import com.soklet.annotation.McpResource;
 						import com.soklet.annotation.McpServerEndpoint;
 						import com.soklet.annotation.McpTool;
@@ -691,17 +691,17 @@ public class McpAnnotationProcessorValidationTests {
 						  @McpResource(uri = "test://duplicate", name = "second")
 						  public McpResourceOutput second() { return null; }
 
-						  @McpListResources
+						  @McpResourceList
 						  public McpResourcePage firstList(McpResourceListContext list) {
 						    return null;
 						  }
 
-						  @McpListResources
+						  @McpResourceList
 						  public McpResourcePage secondList(McpResourceListContext list) {
 						    return null;
 						  }
 
-						  @McpListResources
+						  @McpResourceList
 						  public String invalidList() { return "invalid"; }
 
 						  @McpResource(uri = "test://both", name = "both")
@@ -723,9 +723,9 @@ public class McpAnnotationProcessorValidationTests {
 		assertThat(compilation).hadErrorContaining(
 				"Duplicate MCP resource address").inFile(source);
 		assertThat(compilation).hadErrorContaining(
-				"at most one @McpListResources method").inFile(source);
+				"at most one @McpResourceList method").inFile(source);
 		assertThat(compilation).hadErrorContaining(
-				"@McpListResources method return type must be exactly McpResourcePage")
+				"@McpResourceList method return type must be exactly McpResourcePage")
 				.inFile(source);
 		assertThat(compilation).hadErrorContaining(
 				"must inject McpResourceListContext exactly once")

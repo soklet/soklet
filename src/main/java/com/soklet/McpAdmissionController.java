@@ -21,16 +21,18 @@ import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Thread-safe authentication, authorization, and admission hook for MCP requests.
- * Soklet may invoke one policy instance concurrently for independent requests.
+ * Thread-safe authentication, authorization, and admission controller for MCP
+ * requests and notifications. Soklet may invoke one controller instance
+ * concurrently for independent messages.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 @FunctionalInterface
-public interface McpRequestAdmissionPolicy {
+public interface McpAdmissionController {
 	/**
-	 * Makes the admission decision for one structurally valid request.
+	 * Makes the admission decision for one structurally valid request or
+	 * notification.
 	 *
 	 * @param context bounded pre-handler admission context
 	 * @return a non-null accepted or rejected decision
@@ -40,33 +42,34 @@ public interface McpRequestAdmissionPolicy {
 	McpAdmissionDecision admit(@NonNull McpAdmissionContext context) throws Exception;
 
 	/**
-	 * Returns the shared policy that accepts every request as anonymous.
+	 * Returns the shared controller that accepts every request or notification
+	 * as anonymous.
 	 *
-	 * @return shared accept-all policy
+	 * @return shared accept-all controller
 	 */
 	@NonNull
-	static McpRequestAdmissionPolicy acceptAllInstance() {
-		return AcceptAllMcpRequestAdmissionPolicy.INSTANCE;
+	static McpAdmissionController acceptAllInstance() {
+		return AcceptAllMcpAdmissionController.INSTANCE;
 	}
 }
 
 /**
- * Thread-safe accept-all MCP request-admission policy.
+ * Thread-safe accept-all MCP admission controller.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-final class AcceptAllMcpRequestAdmissionPolicy implements McpRequestAdmissionPolicy {
+final class AcceptAllMcpAdmissionController implements McpAdmissionController {
 	@NonNull
-	static final AcceptAllMcpRequestAdmissionPolicy INSTANCE =
-			new AcceptAllMcpRequestAdmissionPolicy();
+	static final AcceptAllMcpAdmissionController INSTANCE =
+			new AcceptAllMcpAdmissionController();
 
-	private AcceptAllMcpRequestAdmissionPolicy() {
+	private AcceptAllMcpAdmissionController() {
 	}
 
 	@Override
 	@NonNull
 	public McpAdmissionDecision admit(@NonNull McpAdmissionContext context) {
-		return McpAdmissionDecision.fromAnonymousIdentity();
+		return McpAdmissionDecision.accepted();
 	}
 }

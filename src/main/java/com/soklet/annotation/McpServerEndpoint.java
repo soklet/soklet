@@ -113,7 +113,7 @@ public @interface McpServerEndpoint {
 	 *
 	 * @return nonnegative whole-millisecond time to live
 	 */
-	long resourcesListCacheTtlMs() default 0;
+	long resourceListCacheTtlMs() default 0;
 
 	/**
 	 * The fixed cache scope for every {@code resources/list} page.
@@ -121,7 +121,7 @@ public @interface McpServerEndpoint {
 	 * @return resources-list cache scope
 	 */
 	@NonNull
-	McpCacheScope resourcesListCacheScope() default McpCacheScope.PRIVATE;
+	McpCacheScope resourceListCacheScope() default McpCacheScope.PRIVATE;
 
 	/**
 	 * The default cache time to live for
@@ -129,7 +129,7 @@ public @interface McpServerEndpoint {
 	 *
 	 * @return nonnegative whole-millisecond time to live
 	 */
-	long resourceTemplatesListCacheTtlMs() default 0;
+	long resourceTemplateListCacheTtlMs() default 0;
 
 	/**
 	 * The fixed cache scope for {@code resources/templates/list}.
@@ -137,6 +137,6 @@ public @interface McpServerEndpoint {
 	 * @return resource-template-list cache scope
 	 */
 	@NonNull
-	McpCacheScope resourceTemplatesListCacheScope()
+	McpCacheScope resourceTemplateListCacheScope()
 			default McpCacheScope.PRIVATE;
 }

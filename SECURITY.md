@@ -34,10 +34,10 @@ authorizes it; omitting an authorizer is reject-all for present origins. Do not
 treat browser CORS response headers as a substitute for authentication or
 network isolation.
 
-Every MCP server requires an explicit `McpRequestAdmissionPolicy`. Production
+Every MCP server requires an explicit `McpAdmissionController`. Production
 applications should authenticate and authorize there and return stable,
 bounded rate-limit and authorization partition keys in the accepted
-`McpAdmissionIdentity`. `McpRequestAdmissionPolicy.acceptAllInstance()` is an
+`McpAdmissionIdentity`. `McpAdmissionController.acceptAllInstance()` is an
 explicit anonymous policy, not a production authentication mechanism.
 Client information, client capabilities, request `_meta`, and advertised
 server information are self-reported or informational metadata. Never use
@@ -77,6 +77,22 @@ capabilities are checked only when emitted, but still before output parameters,
 metadata, request state, or a custom protector is processed. Client
 `inputResponses` remain untrusted input and must be authorized and validated in
 the handler even after Soklet validates their protocol shape.
+
+In particular, applications must correlate each response key with the request
+they emitted, distinguish missing, `accept`, `decline`, and `cancel` outcomes,
+and validate accepted form content against the exact requested schema and
+business policy before a side effect. Form elicitation must reject semantic
+secret fields such as passwords, keys, tokens, and payment credentials rather
+than assuming structural schema validation can classify them. URL-mode flows
+should use a server-owned HTTPS destination with an opaque state handle bound
+to the verified initiating user; do not put identity, credentials, userinfo, a
+pre-authenticated bearer capability, query data, or fragments in the emitted
+URL. Applications also own sensitive-data classification and finite iteration
+limits for sampling, plus `toRealPath()`-based containment, symlink policy, and
+authorization for returned roots. The public-API-only
+[MCP input-security patterns](src/test/java/examples/mcp/McpInputSecurityApplicationPatternsTests.java)
+exercise each of these fail-closed boundaries without claiming a universal
+semantic classifier or a real downstream authorization deployment.
 
 Request-state protection has two distinct trust boundaries:
 
@@ -134,8 +150,34 @@ Input-required results have no protocol cache hints, and completed resource
 retries are forced to private, zero-TTL cache policy; the HTTP transport remains
 `Cache-Control: no-store`.
 
-Progress reporting, cooperative cancelation, and resource-subscription delivery
-are implemented. Twenty-one bounded Phase 6 verticals are also implemented: shutdown
+Progress reporting, cooperative cancelation, localization, and resource-
+subscription delivery are implemented. Every selected MCP application handler
+receives one framework token whose cancellation category is a fixed
+`StreamTerminationReason`; the framework supplies no underlying cause through
+`CancelationToken.getCancelationCause()` or
+`StreamingResponseCanceledException`. An application may retain that fixed
+category under its own policy, but must not substitute attacker-controlled
+free-form text or make a cancellation detail a metric dimension. Incoming HTTP
+`notifications/cancelled` is a compatibility no-op after admission and request
+limiting; disconnect, deadline, shutdown, and response-stream failure drive
+cooperative cancellation on this transport. The exact
+`McpProgressAndCancelationRuntimeTests#every_cancelation_category_is_bounded_observable_and_carries_no_framework_cause`
+gate iterates every non-`COMPLETED` category and proves the fixed reason, empty
+cause, and bounded exception message.
+
+Trace correlation is default-off. With a configured trace-correlation key,
+Soklet attempts one bounded `MCP_TRACE_CORRELATION` log record at the admitted
+request's exactly-once finish authority; a separate
+`logRawValidatedTraceIds(true)` opt-in may add only the validated lowercase MCP
+trace ID. The event never carries the full `traceparent`, parent/span ID, trace
+flags, `tracestate`, baggage, request, throwable, method, or marshaled response,
+and trace values never become built-in metric dimensions. The pseudonymous
+token and any opted-in raw ID are still sensitive, high-cardinality correlation
+data. Restrict log access and retention, and do not treat validation or
+pseudonymization as authentication or anonymization.
+
+All 64 Phase 6 owners are now frozen and the provisional inventory is empty.
+Twenty-one bounded Phase 6 verticals are also implemented: shutdown
 observation, handler-capacity metrics, handler diagnostics, live
 stream/subscription diagnostics, protection/trace diagnostics, serialized
 semantic-event delivery, bounded pre-admission metrics, connection/transport
@@ -515,11 +557,11 @@ Their accepted/unknown/error/rejected and admitted started/error/finished orders
 are FIFO record/enqueue order, not universal cross-thread order or a
 conservation equation.
 
-This checkpoint does not constrain arbitrary manual vocabulary, custom
-collectors, generic HTTP callbacks, `LogEvent`, `Request`, `Throwable`, or
-application telemetry; add structured/raw-ID emission or downstream
-OpenTelemetry mapping; prove sustained, soak, simulator or release-candidate
-behavior; or freeze Phase 6.
+At that checkpoint, the vertical did not constrain arbitrary manual
+vocabulary, custom collectors, generic HTTP callbacks, `LogEvent`, `Request`,
+`Throwable`, or application telemetry; add structured/raw-ID emission or
+downstream OpenTelemetry mapping; prove sustained, soak, simulator or release-
+candidate behavior; or freeze Phase 6.
 
 The nineteenth bounded Phase 6 production vertical implements the frozen MCP
 metric matrix in `soklet-otel:1.4.0-SNAPSHOT` against
@@ -610,7 +652,7 @@ span names and application-supplied JSON-RPC error codes exposed through
 `rpc.response.status_code` and `error.type` are application-owned for
 confidentiality and cardinality. No session/stream/subscription span, custom-namer safety,
 structured/raw-ID emission, comprehensive privacy, sustained cardinality,
-simulator/release, or Phase 6 freeze is claimed.
+simulator/release, or Phase 6 freeze was claimed at that V20 checkpoint.
 
 Exact V20 tests are
 `OpenTelemetryMcpLifecycleObserverTests#mcpMetadataTraceContextIsTheOnlyRemoteParentAndPreservesTraceState`,
@@ -634,13 +676,13 @@ Core authority is
 `McpSubscriptionPublicRuntimeTests#configuredMaximumDurationPublishesExactLifecycleAndMetrics`,
 and `#clientDisconnectReleasesStateAndPublishesExactlyOnce`.
 
-V20 changes only the downstream artifact and leaves all core inventories
-unchanged. Five declared downstream methods are added relative to V19; the
-reviewed `1.3.1` to current diff is 13 removals and four additions.
-`MCP-BASE-026` is COMPLETE. `AMB-003` remains resolved/core-complete/downstream-
+At the V20 boundary, only the downstream artifact changed and all core
+inventories were unchanged. Five declared downstream methods were added
+relative to V19; the reviewed `1.3.1` to then-current diff was 13 removals and
+four additions. `MCP-BASE-026` was COMPLETE. `AMB-003` was resolved/core-complete/downstream-
 metric-complete; `SOK-METRIC-001`, `SOK-METRIC-004`, metric-only
-`SOK-TRACE-005`, and `SOK-PRIV-001` remain PARTIAL; `SOK-TRACE-004` remains
-PLANNED. At that V20 boundary, MCP simulator integration was next.
+`SOK-TRACE-005`, and `SOK-PRIV-001` remained PARTIAL; `SOK-TRACE-004`
+remained PLANNED. MCP simulator integration was next.
 
 The twenty-first bounded Phase 6 production vertical implements modern MCP
 simulation through the shared `Simulator` without binding a socket. The two
@@ -694,19 +736,19 @@ Representative exact citations from the full 46-test simulator/API gate are
 `#waitOperationsHandleZeroTimeoutInterruptionAndCompletionIdempotently`, and
 `McpSimulationCaptureRuntimeTests#cancelAndTerminalRacePublishesOneCoherentFirstWinner`.
 
-V21 has 15 Phase 6 owners, 32 provisional owners, and a 219-owner union. The
-canonical comparison has 558 records and SHA-256
+At the V21 boundary, Phase 6 had 15 owners, the provisional inventory had 32,
+and the reviewed union had 219. The canonical comparison had 558 records and SHA-256
 `d40004fa92cc5d095404de2133cf04fcd2b5574e9326eb680f571a017ef33671`;
-frozen Phase 4/5 inventories and hashes are unchanged. Core metric and canary
-state remains 23/23 events, 22 families, 22 snapshot getters/23 builder
+frozen Phase 4/5 inventories and hashes were unchanged. Core metric and canary
+state remained 23/23 events, 22 families, 22 snapshot getters/23 builder
 methods, 12 boxed `Long` values plus ten maps, and 31/12 samples.
 
 At the V21 boundary, `SOK-SIM-001` was COMPLETE BOUNDED PHASE 6
 IMPLEMENTATION EVIDENCE but was not yet every-operation or 39-scenario
 simulator proof, live-network fidelity, stress/
 soak or sustained fuzz evidence, comprehensive privacy/security, release-
-candidate provenance, or Phase 6 freeze. Other statuses remain unchanged; the
-next bounded work is the complete release-workflow dry run and remaining
+candidate provenance, or Phase 6 freeze. Other statuses remained unchanged; the
+next bounded work was the complete release-workflow dry run and remaining
 sustained, privacy, review, and freeze gates.
 
 **Fourth unnumbered Phase 6 every-operation simulator, bounded capture-fuzz,
@@ -758,14 +800,14 @@ release-candidate evidence. V21 static-analysis, SpotBugs, packaging/Javadoc,
 API-verifier, sketch, and schema evidence is carried forward and was not rerun
 for this checkpoint.
 
-`SOK-SIM-001` remains COMPLETE BOUNDED PHASE 6 IMPLEMENTATION EVIDENCE and now
-includes deterministic every-operation evidence. At that fourth checkpoint,
-the ledger was 21 numbered verticals plus four unnumbered checkpoints. These bounded results are
-not the strict local 39-scenario driver, every parameter/error permutation,
+At that fourth checkpoint, `SOK-SIM-001` was COMPLETE BOUNDED PHASE 6
+IMPLEMENTATION EVIDENCE and included deterministic every-operation evidence.
+The ledger was 21 numbered verticals plus four unnumbered checkpoints. Those
+bounded results were not the strict local 39-scenario driver, every parameter/error permutation,
 live-network fidelity, scheduled/manual or sustained coverage-guided fuzz,
 corpus saturation, long/fleet soak, comprehensive privacy/security, release-
 candidate provenance, or Phase 6 review/freeze. `SOK-VALID-002` and
-`SOK-PRIV-001` advance narrowly but remain PARTIAL; all
+`SOK-PRIV-001` advanced narrowly but remained PARTIAL; all
 other statuses remained unchanged. The next slice was a strict 39-row LOCAL
 off-network driver tied byte-for-row and name-for-name to the pinned
 `CLI/scenarios.json` manifest ordinal order; it was not the official CLI or a
@@ -796,19 +838,20 @@ wrong-output, `FAIL`, CRLF, and unterminated transcripts.
 This fifth checkpoint changes no production source, public API or sketch,
 owner/signature inventory, metric/event/snapshot surface, wire behavior, or
 numbered vertical. The ledger is 21 numbered production verticals plus five
-unnumbered checkpoints. The API comparison remains 558 records with its same
-hash and 15/32/219 Phase 6/provisional/reviewed owners; the 23/23 event,
-22-family, 22-getter/23-builder, and 31/12 canary surfaces remain unchanged.
-`SOK-SIM-001` stays COMPLETE BOUNDED PHASE 6 IMPLEMENTATION EVIDENCE; all
-other status rows stay unchanged.
+unnumbered checkpoints. The API comparison was 558 records with its same
+hash and at that checkpoint had 15/32/219 Phase 6/provisional/reviewed owners;
+the 23/23 event,
+22-family, 22-getter/23-builder, and 31/12 canary surfaces were unchanged.
+`SOK-SIM-001` was COMPLETE BOUNDED PHASE 6 IMPLEMENTATION EVIDENCE; all other
+status rows were unchanged.
 
-This is not the official CLI or an official expected-check multiset replay,
-and it opens no live network path. It does not exercise listener/kernel
+That fifth checkpoint was not the official CLI or an official expected-check
+multiset replay, and it opened no live network path. It did not exercise listener/kernel
 behavior, socket backpressure or write-idle handling, or establish release
 provenance, sustained-operation, comprehensive privacy/security, or Phase 6
 review/freeze evidence. Next are scheduled coverage-guided fuzz and sustained
 soak/stress gates, followed by structured-log, privacy, and API review/freeze
-work. Phase 6 remains provisional and unfrozen.
+work. Phase 6 remained provisional and unfrozen at that checkpoint.
 
 `McpServerDiagnostics` now declares exactly 12 zero-argument methods:
 `getStatus()` and `getBoundAddress()`, plus all ten implemented diagnostic
@@ -1009,9 +1052,9 @@ At that point, following the ninth vertical, the prior fuzz and dormant
 derivation checkpoints remained unnumbered. `SOK-TRACE-001`, `SOK-TRACE-002`,
 and `SOK-TRACE-003` were COMPLETE; `SOK-TRACE-004` and `SOK-TRACE-005` were
 PLANNED; and `SOK-PRIV-001` was PARTIAL. No public API or API-sketch source
-changed. No structured-log
-carrier, field, emission point, cadence, or new `LogEventType` exists, and raw
-trace-ID logging remains unimplemented. No metric, event, diagnostics/snapshot
+changed. No structured-log carrier, field, emission point, cadence, or new
+`LogEventType` existed, and raw trace-ID logging was unimplemented at that
+checkpoint. No metric, event, diagnostics/snapshot
 field, aggregate, label, or wire dimension was added. The token remains
 pseudonymous high-cardinality sensitive telemetry, not anonymization or an
 authentication/authorization input, and must stay out of metrics. The carrier
@@ -1091,14 +1134,13 @@ histograms are sparse; reset preserves five live gauges and clears cumulative,
 map, and histogram state. The downstream implementation now maps the same 23
 transitions to 22 instruments without changing this core contract.
 
-`SOK-TRACE-005` remains PARTIAL for metric-only evidence; `SOK-PRIV-001`,
-`MCP-HTTP-020`, `SOK-METRIC-001`, and `SOK-METRIC-004` remain PARTIAL.
-`SOK-METRIC-002`,
-`SOK-METRIC-003`, and `SOK-SHUT-002` remain COMPLETE. `AMB-003` is RESOLVED
-CONTRACT 2026-08-10 / CORE IMPLEMENTATION COMPLETE / DOWNSTREAM METRIC
-IMPLEMENTATION COMPLETE. `MCP-BASE-026` is COMPLETE.
-`SOK-TRACE-004` remains PLANNED.
-This does not constrain custom collectors or application telemetry, promise an
+At that aggregate checkpoint, `SOK-TRACE-005` remained PARTIAL for metric-only
+evidence; `SOK-PRIV-001`, `MCP-HTTP-020`, `SOK-METRIC-001`, and
+`SOK-METRIC-004` remained PARTIAL; and `SOK-METRIC-002`, `SOK-METRIC-003`, and
+`SOK-SHUT-002` were COMPLETE. `AMB-003` was RESOLVED CONTRACT 2026-08-10 /
+CORE IMPLEMENTATION COMPLETE / DOWNSTREAM METRIC IMPLEMENTATION COMPLETE,
+`MCP-BASE-026` was COMPLETE, and `SOK-TRACE-004` remained PLANNED. That
+checkpoint did not constrain custom collectors or application telemetry, promise an
 atomic cross-field snapshot during active concurrent mutation, add structured-
 log or raw-ID emission, complete privacy/cardinality work, or prove every-
 operation simulation, sustained, release-readiness, review, or Phase 6 freeze.
@@ -1108,12 +1150,11 @@ Default aggregation now covers `ServerStarted`, `ServerStopped`,
 `RequestStreamOpened`, `RequestStreamClosed`, the five handler variants,
 `SubscriptionOpened`, `SubscriptionClosed`, `CancelationSignaled`,
 `ProgressEmitted`, `KeepAliveEmitted`, `ProtocolError`,
-`UnknownMirroredHeader`, and the transport trio. Other downstream work,
-structured-log
-carrier/emission, raw-ID opt-in,
+`UnknownMirroredHeader`, and the transport trio. At that checkpoint, other
+downstream work, structured-log carrier/emission, raw-ID opt-in,
 broader privacy, sustained cardinality, and redaction work,
 coverage-guided and sustained fuzz gates, release-candidate work, and Phase 6
-review/freeze remain open. The delivery verticals add no public API, snapshot
+review/freeze remained open. The delivery verticals added no public API, snapshot
 field, aggregate family, label, event variant, or wire dimension. The tenth
 added three provisional snapshot getters and three matching builder methods;
 the eleventh adds one getter/builder pair, the twelfth adds two, the thirteenth
@@ -1129,8 +1170,7 @@ methods relative to V19, with no core inventory change.
 The twenty-first adds seven top-level public simulation types,
 `McpSimulationOptions.Builder`, and two abstract methods to `Simulator`, with no
 core metric, snapshot, family, or canary change.
-Phase 6 remains provisional and
-unfrozen.
+Phase 6 remained provisional and unfrozen at that historical checkpoint.
 
 At the V21 boundary, the focused five-class simulator/API gate passed
 46/0/0/0, and the broadened adjacent authority selector passed 215/0/0/0.
@@ -1147,7 +1187,44 @@ Java 17 compilation and JDK 26 doclint, and 104 pinned schemas validate at
 
 The V20 downstream focus at 23/0/0/0 and full `soklet-otel` suite at 36/0/0/0
 on each JDK were carried forward and not rerun for V21. The prior focused fuzz
-gate remains 28/0/0/0 and deterministic full corpus replay remains 127/0/0/0
+gate remained 28/0/0/0 and deterministic full corpus replay remained 127/0/0/0
 on both JDKs; neither was rerun. These are bounded development results, not
 every-operation simulator, sustained fuzz/soak, privacy, security, live-network
 fidelity, release-candidate, or Phase 6 freeze evidence.
+
+## Current API and release-security state
+
+The current owner inventory is 133 Phase 4, 39 Phase 5, and 64 Phase 6 (236
+total), with all three phases frozen and no provisional owner. The implemented
+structured-log boundary completes the bounded `MCP_TRACE_CORRELATION` carrier
+and separate raw-ID opt-in, but operator access, storage, retention, and
+sustained cardinality/drain evidence remain outside that implementation proof.
+Custom collectors, generic HTTP callbacks, application telemetry, and
+application-constructed metric dimensions remain application-owned privacy and
+cardinality surfaces.
+
+Release validation is fail-closed and has no publish or signing authority. The
+checked-in workflow requires an immutable clean candidate commit, checksum-
+matched POM/main/sources/Javadocs artifacts, an isolated Maven installation,
+the release soak, official release-mode conformance, localization verification,
+and exact pinned downstream/interop evidence before it can assemble a PASS
+manifest. It has not produced release evidence. Final local checks pass core
+clean verify at 1,667/0/0/4 over 464 main and 193 test sources, JDK 21 static-
+analysis `BUILD SUCCESS`, SpotBugs 0, Javadocs, API 564/236 with
+1,053/195/420 records, fuzz replay 139/139, smoke
+soak 6/6 plus verifier, candidate localization, artifact-backed simulator
+39/39, pinned live official CLI 39/39, site lint/build, and OpenTelemetry 36/36.
+The checksum-
+pinned TypeScript and Go harnesses are `READY` and green against the local
+snapshot. Both servlet candidate matrices pass 158/158 locally, but their
+version-property edits remain uncommitted. ToyStore's completed local migration
+passes 13/13, including five MCP tests, while its old manifest pin stays blocked
+until a reviewed commit and immutable-candidate/JDK-25 validation. Barebones
+compiles, but its live proof remains `UNVERIFIED` because an unrelated Docker
+process owns port 8080; the hook fails closed. The current `soklet-otel` and
+website migrations are not represented by clean committed pins.
+Scheduled/nightly and sustained fuzz-soak history, real multi-node localization
+orchestration, public Javadocs, release scans, and immutable candidate
+conformance/provenance also remain open. See
+[release/README.md](release/README.md) for the exact validator contract and
+current fail-closed statuses.

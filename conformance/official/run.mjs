@@ -10,13 +10,14 @@ import {
   renameSync,
   writeFileSync,
 } from 'node:fs';
-import { delimiter, isAbsolute, resolve } from 'node:path';
+import { basename, delimiter, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { adjudicateChecks } from './adjudicate.mjs';
 import { validateFinalTagWire } from './validate-final-tag-wire.mjs';
 import {
   activeScenarios,
   officialScenarioArguments,
+  sha256,
   verifyListedInventory,
   verifyManifestSet,
   verifyOfficialSuite,
@@ -33,6 +34,9 @@ const maximumResultDirectoryDepth = 8;
 const maximumResultFileBytes = 8 * 1024 * 1024;
 const maximumResultTreeBytes = 16 * 1024 * 1024;
 const maximumChecksFileBytes = 8 * 1024 * 1024;
+const maximumReleaseManifestBytes = 1024 * 1024;
+const maximumCandidatePomBytes = 1024 * 1024;
+const maximumCandidateJarBytes = 128 * 1024 * 1024;
 
 export async function runOfficialConformance(options, { processObject = process } = {}) {
 	prepareEmptyWorkDirectory(options.workDirectory);
@@ -42,24 +46,44 @@ export async function runOfficialConformance(options, { processObject = process 
 	const evidence = createInitialEvidence(options.phase, mode);
   const evidencePath = resolve(options.workDirectory, 'evidence.json');
   let reportedFailure;
+  let releaseCandidate;
+  let releasePins;
 
   try {
     writeJsonAtomically(evidencePath, evidence);
     supervisor.throwIfCancellationRequested();
 		const { pins, selection, expectedChecks } = verifyManifestSet();
 		const observing = mode === 'observe';
+		const releasing = mode === 'release';
 		if (observing) {
 			if (options.phase !== selection.currentImplementationPhase + 1)
 				throw new Error(
 					`Profile observation must target Phase ${selection.currentImplementationPhase + 1}`,
 				);
-		} else if (mode !== 'verify'
+		} else if (!['verify', 'release'].includes(mode)
 				|| options.phase !== selection.currentImplementationPhase) {
 			throw new Error(
 				`Verification must target current implementation Phase ${selection.currentImplementationPhase}`,
 			);
 		}
-		verifyPublicFixtureClasspath(options.classpath, options.projectRoot);
+		let scenarioOptions = options;
+		if (releasing) {
+			releasePins = pins;
+			releaseCandidate = verifyReleaseCandidateOptions(options, pins);
+			verifyPublicFixtureClasspath(
+				options.classpath, options.projectRoot, releaseCandidate.candidateJar,
+			);
+			await verifyProjectCheckout(options.projectRoot, options.candidateCommit, supervisor);
+			verifyCandidatePomMatchesCheckout(releaseCandidate, options.projectRoot);
+			evidence.releaseCandidateProvenance = releaseCandidate.evidence;
+			scenarioOptions = Object.freeze({
+				...options,
+				releaseCandidate,
+				releasePins: pins,
+			});
+		} else {
+			verifyPublicFixtureClasspath(options.classpath, options.projectRoot);
+		}
     evidence.suiteCommit = pins.officialConformanceSuite.commit;
     evidence.protocolVersion = pins.protocolVersion;
     persistEvidence(evidencePath, evidence);
@@ -79,6 +103,12 @@ export async function runOfficialConformance(options, { processObject = process 
       throw new Error(`Unable to determine the pinned npm version: ${diagnostic}`);
     }
     verifyToolchain(pins, npmResult.stdout.trim());
+		if (releasing) {
+			await verifyProjectCheckout(options.projectRoot, options.candidateCommit, supervisor);
+			assertReleaseCandidateUnchanged(scenarioOptions);
+			evidence.releaseCandidateEvidence = true;
+			persistEvidence(evidencePath, evidence);
+		}
     supervisor.throwIfCancellationRequested();
 
     const entryPoint = resolve(options.suiteDirectory, pins.officialConformanceSuite.entryPoint);
@@ -123,7 +153,7 @@ export async function runOfficialConformance(options, { processObject = process 
 			evidence.scenarios.push(await runScenario({
           ordinal: index + 1,
           scenario,
-          options,
+          options: scenarioOptions,
           entryPoint,
           pins,
           expectedChecks,
@@ -138,15 +168,33 @@ export async function runOfficialConformance(options, { processObject = process 
     }
 
     if (runFailure !== undefined) throw runFailure;
+		if (releasing)
+			await verifyProjectCheckout(options.projectRoot, options.candidateCommit, supervisor);
+		if (releasing) assertReleaseCandidateUnchanged(scenarioOptions);
 		evidence.status = observing ? 'OBSERVED' : 'PASSED';
     evidence.failure = null;
     persistEvidence(evidencePath, evidence);
 		console.log(observing
 			? `Observed official MCP Phase ${options.phase} profiles for review: `
 				+ `${scenarios.map((scenario) => scenario.name).join(', ')}.`
-			: `Official MCP Phase ${options.phase} development check passed: `
-				+ `${scenarios.map((scenario) => scenario.name).join(', ')}.`);
+			: releasing
+				? `Official MCP Phase ${options.phase} release-candidate check passed: `
+					+ `${scenarios.map((scenario) => scenario.name).join(', ')}.`
+				: `Official MCP Phase ${options.phase} development check passed: `
+					+ `${scenarios.map((scenario) => scenario.name).join(', ')}.`);
   } catch (error) {
+		if (mode === 'release' && releaseCandidate !== undefined && releasePins !== undefined) {
+			try {
+				assertReleaseCandidateUnchanged(Object.freeze({
+					...options,
+					releaseCandidate,
+					releasePins,
+				}));
+				await verifyProjectCheckout(options.projectRoot, options.candidateCommit, supervisor);
+			} catch {
+				evidence.releaseCandidateEvidence = false;
+			}
+		}
     const failure = supervisor.cancellationRequested
       ? new RunnerCancelledError(supervisor.cancellationSignal, { cause: error })
       : error;
@@ -192,6 +240,51 @@ export async function runOfficialConformance(options, { processObject = process 
       throw failure;
     }
   }
+}
+
+async function verifyProjectCheckout(projectRoot, expectedCommit, supervisor) {
+  const result = await runBoundedCommand(
+    'git', [
+      '-c', `safe.directory=${resolve(projectRoot)}`,
+      'rev-parse', '--verify', 'HEAD^{commit}',
+    ],
+    {
+      timeoutMilliseconds: 10_000,
+      workingDirectory: projectRoot,
+      supervisor,
+    },
+  );
+  if (result.timedOut)
+    throw new Error('Candidate checkout commit verification timed out');
+  if (result.outputFailure !== null)
+    throw new Error(`Candidate checkout commit output was invalid: ${result.outputFailure}`);
+  if (result.status !== 0)
+    throw new Error(`Unable to resolve candidate checkout commit: ${result.stderr}`);
+  if (result.stdout !== `${expectedCommit}\n`) {
+    throw new Error(
+      `Candidate checkout commit does not match expected commit ${expectedCommit}: `
+        + result.stdout.trim(),
+    );
+  }
+  const status = await runBoundedCommand(
+    'git', [
+      '-c', `safe.directory=${resolve(projectRoot)}`,
+      'status', '--porcelain=v1', '--untracked-files=all', '--ignore-submodules=none',
+    ],
+    {
+      timeoutMilliseconds: 10_000,
+      workingDirectory: projectRoot,
+      supervisor,
+    },
+  );
+  if (status.timedOut)
+    throw new Error('Candidate checkout cleanliness verification timed out');
+  if (status.outputFailure !== null)
+    throw new Error(`Candidate checkout status output was invalid: ${status.outputFailure}`);
+  if (status.status !== 0)
+    throw new Error(`Unable to verify candidate checkout cleanliness: ${status.stderr}`);
+  if (status.stdout !== '')
+    throw new Error('Candidate checkout must have no tracked or untracked changes');
 }
 
 async function runScenario({
@@ -352,7 +445,10 @@ function observedSkipReason(check) {
 }
 
 function startFixture(scenarioName, options, supervisor) {
-  verifyPublicFixtureClasspath(options.classpath, options.projectRoot);
+  if (options.releaseCandidate !== undefined) assertReleaseCandidateUnchanged(options);
+  verifyPublicFixtureClasspath(
+    options.classpath, options.projectRoot, options.releaseCandidate?.candidateJar,
+  );
   const child = supervisor.spawn(
     options.javaExecutable,
     ['-cp', options.classpath, fixtureMain, '--scenario', scenarioName],
@@ -369,10 +465,12 @@ function startFixture(scenarioName, options, supervisor) {
   return { child, lines, stderr, supervisor };
 }
 
-export function verifyPublicFixtureClasspath(classpath, projectRoot) {
+export function verifyPublicFixtureClasspath(classpath, projectRoot, expectedCandidateJar) {
   const root = resolve(projectRoot);
   const fixtureClasses = resolve(root, 'target/conformance/public-fixture/classes');
-  const candidateJar = resolve(root, 'target/soklet-3.6.0-SNAPSHOT.jar');
+  const candidateJar = expectedCandidateJar === undefined
+    ? resolve(root, 'target/soklet-3.6.0-SNAPSHOT.jar')
+    : resolve(expectedCandidateJar);
   const fixtureMainClass = resolve(
     fixtureClasses, 'com/soklet/conformance/McpConformanceFixture.class',
   );
@@ -390,12 +488,321 @@ export function verifyPublicFixtureClasspath(classpath, projectRoot) {
       || candidateStats === null || !candidateStats.isFile()
       || candidateStats.isSymbolicLink()) {
     throw new Error(
-      'Public MCP fixture classpath must be exactly '
-        + 'target/conformance/public-fixture/classes followed by '
-        + 'target/soklet-3.6.0-SNAPSHOT.jar',
+      expectedCandidateJar === undefined
+        ? 'Public MCP fixture classpath must be exactly '
+          + 'target/conformance/public-fixture/classes followed by '
+          + 'target/soklet-3.6.0-SNAPSHOT.jar'
+        : 'Public MCP fixture classpath must be exactly '
+          + 'target/conformance/public-fixture/classes followed by the validated '
+          + `release-candidate JAR ${candidateJar}`,
     );
   }
   return Object.freeze({ fixtureClasses, candidateJar });
+}
+
+export function verifyReleaseCandidateManifest(
+  manifestPath,
+  expectedManifestSha256,
+  expectedCandidateCommit,
+  pins,
+) {
+  requireSha256(expectedManifestSha256, 'Reviewed release manifest SHA-256');
+  requireCommit(expectedCandidateCommit, 'Expected candidate commit');
+  const absoluteManifestPath = requireAbsolutePath(manifestPath, 'Release manifest');
+  const manifestBytes = readRealFile(
+    absoluteManifestPath, 'Release manifest', maximumReleaseManifestBytes,
+  );
+  const actualManifestSha256 = sha256(manifestBytes);
+  if (actualManifestSha256 !== expectedManifestSha256) {
+    throw new Error(
+      `Release manifest SHA-256 mismatch: expected ${expectedManifestSha256}, `
+        + `found ${actualManifestSha256}`,
+    );
+  }
+  const manifest = parseCanonicalManifest(manifestBytes);
+  requireExactKeys(manifest, [
+    'formatVersion',
+    'candidateCommit',
+    'protocolVersion',
+    'suiteCommit',
+    'coordinates',
+    'artifacts',
+  ], 'Release manifest');
+  if (manifest.formatVersion !== 1)
+    throw new Error('Release manifest formatVersion must be 1');
+  if (manifest.candidateCommit !== expectedCandidateCommit) {
+    throw new Error(
+      `Release manifest candidate commit ${manifest.candidateCommit} does not match `
+        + `expected commit ${expectedCandidateCommit}`,
+    );
+  }
+  const verified = verifyReleaseCandidateDescriptor(manifest, pins, {
+    source: 'reviewed-manifest',
+    manifestSha256: actualManifestSha256,
+  });
+  if (Object.values(verified.artifactPaths).includes(absoluteManifestPath))
+    throw new Error('Release manifest must be distinct from every candidate artifact');
+  return verified;
+}
+
+export function verifyExplicitReleaseCandidate(descriptor, pins) {
+  return verifyReleaseCandidateDescriptor(descriptor, pins, {
+    source: 'explicit-artifacts',
+    manifestSha256: null,
+  });
+}
+
+function verifyReleaseCandidateOptions(options, pins) {
+  const hasManifestInput = options.releaseManifest !== undefined
+    || options.releaseManifestSha256 !== undefined;
+  const directInputs = [
+    options.candidatePom,
+    options.candidatePomSha256,
+    options.candidateJar,
+    options.candidateJarSha256,
+    options.candidateSourcesJar,
+    options.candidateSourcesJarSha256,
+    options.candidateJavadocJar,
+    options.candidateJavadocJarSha256,
+  ];
+  const hasDirectInput = directInputs.some((value) => value !== undefined);
+  if (hasManifestInput && hasDirectInput) {
+    throw new Error(
+      'Release mode accepts either one reviewed manifest or explicit artifacts, not both',
+    );
+  }
+  if (options.candidateCommit === undefined)
+    throw new Error('Release mode requires --candidate-commit');
+  if (hasManifestInput) {
+    if (options.releaseManifest === undefined || options.releaseManifestSha256 === undefined) {
+      throw new Error(
+        'Release mode requires both --release-manifest and --release-manifest-sha256',
+      );
+    }
+    return verifyReleaseCandidateManifest(
+      options.releaseManifest,
+      options.releaseManifestSha256,
+      options.candidateCommit,
+      pins,
+    );
+  }
+  if (directInputs.some((value) => value === undefined)) {
+    throw new Error(
+      'Release mode requires a reviewed manifest or all four explicit artifacts and hashes',
+    );
+  }
+  return verifyExplicitReleaseCandidate({
+    formatVersion: 1,
+    candidateCommit: options.candidateCommit,
+    protocolVersion: pins.protocolVersion,
+    suiteCommit: pins.officialConformanceSuite.commit,
+    coordinates: {
+      groupId: 'com.soklet',
+      artifactId: 'soklet',
+      version: '3.6.0',
+    },
+    artifacts: {
+      pom: { path: options.candidatePom, sha256: options.candidatePomSha256 },
+      mainJar: { path: options.candidateJar, sha256: options.candidateJarSha256 },
+      sourcesJar: {
+        path: options.candidateSourcesJar,
+        sha256: options.candidateSourcesJarSha256,
+      },
+      javadocJar: {
+        path: options.candidateJavadocJar,
+        sha256: options.candidateJavadocJarSha256,
+      },
+    },
+  }, pins);
+}
+
+function verifyReleaseCandidateDescriptor(descriptor, pins, { source, manifestSha256 }) {
+  requireExactKeys(descriptor, [
+    'formatVersion',
+    'candidateCommit',
+    'protocolVersion',
+    'suiteCommit',
+    'coordinates',
+    'artifacts',
+  ], 'Release candidate descriptor');
+  if (descriptor.formatVersion !== 1)
+    throw new Error('Release candidate descriptor formatVersion must be 1');
+  requireCommit(descriptor.candidateCommit, 'Release candidate commit');
+  if (descriptor.protocolVersion !== pins.protocolVersion) {
+    throw new Error(
+      `Release candidate protocol ${descriptor.protocolVersion} does not match pinned `
+        + `${pins.protocolVersion}`,
+    );
+  }
+  if (descriptor.suiteCommit !== pins.officialConformanceSuite.commit) {
+    throw new Error(
+      `Release candidate suite commit ${descriptor.suiteCommit} does not match pinned `
+        + `${pins.officialConformanceSuite.commit}`,
+    );
+  }
+  requireExactKeys(
+    descriptor.coordinates, ['groupId', 'artifactId', 'version'], 'Candidate coordinates',
+  );
+  const coordinates = descriptor.coordinates;
+  if (coordinates.groupId !== 'com.soklet'
+      || coordinates.artifactId !== 'soklet'
+      || coordinates.version !== '3.6.0') {
+    throw new Error('Release candidate coordinates must be com.soklet:soklet:3.6.0');
+  }
+  requireExactKeys(
+    descriptor.artifacts, ['pom', 'mainJar', 'sourcesJar', 'javadocJar'],
+    'Candidate artifacts',
+  );
+
+  const artifactPaths = {};
+  const evidenceArtifacts = {};
+  const seenPaths = new Set();
+  let pomBytes;
+  for (const name of ['pom', 'mainJar', 'sourcesJar', 'javadocJar']) {
+    const artifact = descriptor.artifacts[name];
+    requireExactKeys(artifact, ['path', 'sha256'], `Candidate ${name}`);
+    requireSha256(artifact.sha256, `Candidate ${name} SHA-256`);
+    const path = requireAbsolutePath(artifact.path, `Candidate ${name}`);
+    if (!seenPaths.add(path))
+      throw new Error(`Candidate artifacts must have distinct paths: ${path}`);
+    const bytes = readRealFile(
+      path,
+      `Candidate ${name}`,
+      name === 'pom' ? maximumCandidatePomBytes : maximumCandidateJarBytes,
+    );
+    const actualSha256 = sha256(bytes);
+    if (actualSha256 !== artifact.sha256) {
+      throw new Error(
+        `Candidate ${name} SHA-256 mismatch: expected ${artifact.sha256}, `
+          + `found ${actualSha256}`,
+      );
+    }
+    if (name === 'pom') pomBytes = bytes;
+    else if (bytes.length < 4
+        || bytes[0] !== 0x50 || bytes[1] !== 0x4b
+        || bytes[2] !== 0x03 || bytes[3] !== 0x04)
+      throw new Error(`Candidate ${name} must be a JAR/ZIP file`);
+    artifactPaths[name] = path;
+    evidenceArtifacts[name] = Object.freeze({
+      fileName: basename(path),
+      bytes: bytes.length,
+      sha256: actualSha256,
+    });
+  }
+  verifyCandidatePomCoordinates(pomBytes, coordinates);
+  const evidence = Object.freeze({
+    formatVersion: 1,
+    source,
+    manifestSha256,
+    candidateCommit: descriptor.candidateCommit,
+    coordinates: Object.freeze({ ...coordinates }),
+    protocolVersion: descriptor.protocolVersion,
+    suiteCommit: descriptor.suiteCommit,
+    artifacts: Object.freeze(evidenceArtifacts),
+  });
+  return Object.freeze({
+    candidateJar: artifactPaths.mainJar,
+    artifactPaths: Object.freeze(artifactPaths),
+    evidence,
+  });
+}
+
+function assertReleaseCandidateUnchanged(options) {
+  const current = verifyReleaseCandidateOptions(options, options.releasePins);
+  if (JSON.stringify(current.evidence) !== JSON.stringify(options.releaseCandidate.evidence)
+      || current.candidateJar !== options.releaseCandidate.candidateJar) {
+    throw new Error('Release candidate provenance changed during conformance execution');
+  }
+}
+
+function verifyCandidatePomMatchesCheckout(releaseCandidate, projectRoot) {
+  const checkoutPom = readRealFile(
+    resolve(projectRoot, 'pom.xml'), 'Candidate checkout POM', maximumCandidatePomBytes,
+  );
+  const checkoutSha256 = sha256(checkoutPom);
+  const artifactSha256 = releaseCandidate.evidence.artifacts.pom.sha256;
+  if (checkoutSha256 !== artifactSha256) {
+    throw new Error(
+      `Candidate POM does not match the exact checkout pom.xml: `
+        + `expected ${checkoutSha256}, found ${artifactSha256}`,
+    );
+  }
+}
+
+function verifyCandidatePomCoordinates(bytes, coordinates) {
+  const text = bytes.toString('utf8');
+  if (Buffer.from(text, 'utf8').compare(bytes) !== 0)
+    throw new Error('Candidate POM must be UTF-8');
+  if (text.includes('<!DOCTYPE'))
+    throw new Error('Candidate POM must not contain a document type declaration');
+  const header = /<project\b[^>]*>\s*<modelVersion>\s*4\.0\.0\s*<\/modelVersion>\s*<groupId>\s*([^<\s]+)\s*<\/groupId>\s*<artifactId>\s*([^<\s]+)\s*<\/artifactId>\s*<version>\s*([^<\s]+)\s*<\/version>\s*<packaging>\s*jar\s*<\/packaging>/s.exec(text);
+  if (header === null)
+    throw new Error('Candidate POM must declare direct Maven coordinates and JAR packaging');
+  const [, groupId, artifactId, version] = header;
+  if (groupId !== coordinates.groupId
+      || artifactId !== coordinates.artifactId
+      || version !== coordinates.version) {
+    throw new Error(
+      `Candidate POM coordinates ${groupId}:${artifactId}:${version} do not match `
+        + `${coordinates.groupId}:${coordinates.artifactId}:${coordinates.version}`,
+    );
+  }
+}
+
+function parseCanonicalManifest(bytes) {
+  const text = bytes.toString('utf8');
+  if (Buffer.from(text, 'utf8').compare(bytes) !== 0)
+    throw new Error('Release manifest must be UTF-8');
+  if (text.includes('\r') || !text.endsWith('\n'))
+    throw new Error('Release manifest must use LF and end in LF');
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    throw new Error('Release manifest is not valid JSON', { cause: error });
+  }
+  if (`${JSON.stringify(parsed, null, 2)}\n` !== text) {
+    throw new Error(
+      'Release manifest must be canonical two-space JSON with no duplicate keys',
+    );
+  }
+  return parsed;
+}
+
+function readRealFile(path, description, maximumBytes) {
+  if (!existsSync(path)) throw new Error(`${description} does not exist: ${path}`);
+  const stats = lstatSync(path);
+  if (!stats.isFile() || stats.isSymbolicLink())
+    throw new Error(`${description} must be a regular non-symbolic-link file: ${path}`);
+  if (stats.size === 0) throw new Error(`${description} must not be empty: ${path}`);
+  if (stats.size > maximumBytes)
+    throw new Error(`${description} exceeds ${maximumBytes} bytes: ${path}`);
+  return readFileSync(path);
+}
+
+function requireAbsolutePath(path, description) {
+  if (typeof path !== 'string' || path.length === 0 || !isAbsolute(path))
+    throw new Error(`${description} path must be absolute`);
+  return resolve(path);
+}
+
+function requireSha256(value, description) {
+  if (typeof value !== 'string' || !/^[0-9a-f]{64}$/.test(value))
+    throw new Error(`${description} must be 64 lowercase hexadecimal characters`);
+}
+
+function requireCommit(value, description) {
+  if (typeof value !== 'string' || !/^[0-9a-f]{40}$/.test(value))
+    throw new Error(`${description} must be a full lowercase hexadecimal Git commit`);
+}
+
+function requireExactKeys(value, expected, description) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value))
+    throw new Error(`${description} must be an object`);
+  const actual = Object.keys(value).sort();
+  const wanted = [...expected].sort();
+  if (JSON.stringify(actual) !== JSON.stringify(wanted))
+    throw new Error(`${description} must contain exactly ${wanted.join(', ')}`);
 }
 
 async function stopFixture(fixture, scenarioDirectory) {
@@ -899,11 +1306,13 @@ function writeJsonAtomically(path, value) {
 }
 
 function createInitialEvidence(phase, mode) {
-	return {
+	const evidence = {
 		formatVersion: 1,
 		evidenceClass: mode === 'observe'
 			? 'PROFILE_OBSERVATION_ONLY'
-			: 'CANDIDATE_ARTIFACT_DEVELOPMENT_ONLY',
+			: mode === 'release'
+				? 'IMMUTABLE_RELEASE_CANDIDATE'
+				: 'CANDIDATE_ARTIFACT_DEVELOPMENT_ONLY',
 		releaseCandidateEvidence: false,
     status: 'PREPARING',
     suiteCommit: null,
@@ -914,6 +1323,8 @@ function createInitialEvidence(phase, mode) {
     scenarios: [],
     failure: null,
   };
+	if (mode === 'release') evidence.releaseCandidateProvenance = null;
+	return evidence;
 }
 
 function persistEvidence(path, evidence) {
@@ -931,7 +1342,11 @@ function parseArguments(args) {
     const name = args[index];
     const value = args[index + 1];
 		if (!['--suite-dir', '--work-dir', '--classpath', '--project-root', '--java', '--phase',
-			'--mode']
+			'--mode', '--candidate-commit', '--release-manifest', '--release-manifest-sha256',
+			'--candidate-pom', '--candidate-pom-sha256', '--candidate-jar',
+			'--candidate-jar-sha256', '--candidate-sources-jar',
+			'--candidate-sources-jar-sha256', '--candidate-javadoc-jar',
+			'--candidate-javadoc-jar-sha256']
       .includes(name) || value === undefined || values.has(name)) {
       usage();
     }
@@ -949,6 +1364,27 @@ function parseArguments(args) {
 		javaExecutable: values.get('--java') ?? 'java',
 		phase: Number(values.get('--phase') ?? '5'),
 		mode: values.get('--mode') ?? 'verify',
+		candidateCommit: values.get('--candidate-commit'),
+		releaseManifest: values.has('--release-manifest')
+			? resolve(values.get('--release-manifest'))
+			: undefined,
+		releaseManifestSha256: values.get('--release-manifest-sha256'),
+		candidatePom: values.has('--candidate-pom')
+			? resolve(values.get('--candidate-pom'))
+			: undefined,
+		candidatePomSha256: values.get('--candidate-pom-sha256'),
+		candidateJar: values.has('--candidate-jar')
+			? resolve(values.get('--candidate-jar'))
+			: undefined,
+		candidateJarSha256: values.get('--candidate-jar-sha256'),
+		candidateSourcesJar: values.has('--candidate-sources-jar')
+			? resolve(values.get('--candidate-sources-jar'))
+			: undefined,
+		candidateSourcesJarSha256: values.get('--candidate-sources-jar-sha256'),
+		candidateJavadocJar: values.has('--candidate-javadoc-jar')
+			? resolve(values.get('--candidate-javadoc-jar'))
+			: undefined,
+		candidateJavadocJarSha256: values.get('--candidate-javadoc-jar-sha256'),
   });
 }
 
@@ -957,7 +1393,13 @@ function usage() {
     'Usage: node conformance/official/run.mjs '
       + '--suite-dir <built-suite> --work-dir <empty-absolute-directory> '
       + '--classpath <fixture-classes-and-candidate-jar> [--project-root <root>] '
-			+ '[--java <java>] [--phase <phase>] [--mode verify|observe]',
+			+ '[--java <java>] [--phase <phase>] [--mode verify|observe|release] '
+			+ '[--candidate-commit <full-sha> '
+			+ '(--release-manifest <json> --release-manifest-sha256 <sha256> | '
+			+ '--candidate-pom <pom> --candidate-pom-sha256 <sha256> '
+			+ '--candidate-jar <jar> --candidate-jar-sha256 <sha256> '
+			+ '--candidate-sources-jar <jar> --candidate-sources-jar-sha256 <sha256> '
+			+ '--candidate-javadoc-jar <jar> --candidate-javadoc-jar-sha256 <sha256>)]',
   );
   process.exit(64);
 }

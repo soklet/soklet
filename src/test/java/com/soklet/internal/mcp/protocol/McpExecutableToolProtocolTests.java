@@ -236,7 +236,7 @@ public class McpExecutableToolProtocolTests {
 				false, CorsAuthorizer.rejectAllInstance(), true, input -> {
 					String operationName = input.operationName().orElse("-");
 					stages.add("admission:" + operationName);
-					return McpAdmissionDecision.fromAnonymousIdentity();
+					return McpAdmissionDecision.accepted();
 				}, Optional.of(input -> {
 					String operationName = input.operationName().orElse("-");
 					stages.add("request:" + operationName);

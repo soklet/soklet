@@ -86,7 +86,7 @@ class McpLocalizationAdversarialTests {
 		AtomicInteger contexts = new AtomicInteger();
 		McpServer server = serverBuilder(contexts, null)
 				.requestRateLimiter(context -> McpRateLimitDecision
-						.fromDenied(Duration.ofSeconds(30)))
+						.denied(Duration.ofSeconds(30)))
 				.build();
 
 		Capture capture = call(server, request("rate-limited", "server/discover",
@@ -102,8 +102,8 @@ class McpLocalizationAdversarialTests {
 	void admissionRejectedWorkNeverInvokesTheProvider() {
 		AtomicInteger contexts = new AtomicInteger();
 		McpServer server = serverBuilder(contexts, null)
-				.requestAdmissionPolicy(context -> McpAdmissionDecision
-						.fromRejection(McpRequestRejection.withStatusCodeAndError(403,
+				.admissionController(context -> McpAdmissionDecision
+						.rejected(McpAdmissionRejection.withStatusCodeAndError(403,
 								McpJsonRpcError.fromApplication(-31000, "denied"))
 								.build()))
 				.build();
@@ -224,7 +224,7 @@ class McpLocalizationAdversarialTests {
 				.instructions("Canonical instructions.")
 				.tool(McpToolRegistration.withName("adversarial.tool")
 						.jsonArguments()
-						.handler((request, call, features) ->
+						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("unused"))
 						.title("Tool title")
 						.build())
@@ -243,10 +243,10 @@ class McpLocalizationAdversarialTests {
 				.build();
 		return McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(McpRequestAdmissionPolicy.acceptAllInstance())
-				.requestRateLimiter(context -> McpRateLimitDecision.fromAllowed())
-				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(McpAdmissionController.acceptAllInstance())
+				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.localizer(McpLocalizer.withFallbackLocale(Locale.ENGLISH)
@@ -263,7 +263,7 @@ class McpLocalizationAdversarialTests {
 								@Override
 								public McpLocalizationResult localize(
 										McpLocalizableText text) {
-									return McpLocalizationResult.fromDefaultText();
+									return McpLocalizationResult.useDefaultText();
 								}
 							};
 						})

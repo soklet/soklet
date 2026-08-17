@@ -79,11 +79,11 @@ public class McpMultiEndpointPublicRuntimeTests {
 				.build();
 		McpServer server = McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
 						List.of(firstEndpoint, secondEndpoint)))
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
-				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
@@ -182,19 +182,19 @@ public class McpMultiEndpointPublicRuntimeTests {
 				.build();
 		McpServer server = McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
 						List.of(firstEndpoint, secondEndpoint)))
-				.requestAdmissionPolicy(context -> {
+				.admissionController(context -> {
 					admittedEndpoints.add(context.getEndpoint());
-					return McpAdmissionDecision.fromAnonymousIdentity();
+					return McpAdmissionDecision.accepted();
 				})
 				.requestRateLimiter(context -> {
 					requestLimitedEndpoints.add(context.getEndpoint());
-					return McpRateLimitDecision.fromAllowed();
+					return McpRateLimitDecision.allowed();
 				})
 				.toolRateLimiter(context -> {
 					toolLimitedEndpoints.add(context.getEndpoint());
-					return McpRateLimitDecision.fromAllowed();
+					return McpRateLimitDecision.allowed();
 				})
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
@@ -257,10 +257,10 @@ public class McpMultiEndpointPublicRuntimeTests {
 				.build();
 		McpServer server = McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
 						List.of(firstEndpoint, secondEndpoint)))
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
@@ -338,7 +338,7 @@ public class McpMultiEndpointPublicRuntimeTests {
 			@NonNull AtomicReference<McpEndpoint> observedEndpoint) {
 		return McpToolRegistration.withName(TOOL_NAME)
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					invocations.incrementAndGet();
 					observedEndpoint.set(request.getEndpoint());
 					return McpCompleteResult.fromToolText(result);

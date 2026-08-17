@@ -244,7 +244,7 @@ public class McpHandlerMetricsObservabilityTests {
 		CountDownLatch releaseFirst = new CountDownLatch(1);
 		AtomicInteger invocations = new AtomicInteger();
 		McpEndpoint firstEndpoint = endpoint("/mcp/capacity-first",
-				"metrics.first", (request, call, features) -> {
+				"metrics.first", (request, arguments, features) -> {
 					int invocation = invocations.incrementAndGet();
 					if (invocation == 1) {
 						firstEntered.countDown();
@@ -253,7 +253,7 @@ public class McpHandlerMetricsObservabilityTests {
 					return McpCompleteResult.fromToolText("first-" + invocation);
 				});
 		McpEndpoint secondEndpoint = endpoint("/mcp/capacity-second",
-				"metrics.second", (request, call, features) -> {
+				"metrics.second", (request, arguments, features) -> {
 					invocations.incrementAndGet();
 					return McpCompleteResult.fromToolText("second");
 				});
@@ -331,7 +331,7 @@ public class McpHandlerMetricsObservabilityTests {
 		CountDownLatch activeExited = new CountDownLatch(1);
 		AtomicInteger invocations = new AtomicInteger();
 		McpEndpoint endpoint = endpoint("/mcp/deadline", "metrics.deadline",
-				(request, call, features) -> {
+				(request, arguments, features) -> {
 					invocations.incrementAndGet();
 					activeEntered.countDown();
 					try {
@@ -436,7 +436,7 @@ public class McpHandlerMetricsObservabilityTests {
 		CountDownLatch releaseActive = new CountDownLatch(1);
 		AtomicInteger invocations = new AtomicInteger();
 		McpEndpoint endpoint = endpoint("/mcp/disconnect", "metrics.disconnect",
-				(request, call, features) -> {
+				(request, arguments, features) -> {
 					invocations.incrementAndGet();
 					activeEntered.countDown();
 					releaseActive.await();
@@ -527,7 +527,7 @@ public class McpHandlerMetricsObservabilityTests {
 		CountDownLatch activeExited = new CountDownLatch(1);
 		AtomicInteger invocations = new AtomicInteger();
 		McpEndpoint endpoint = endpoint("/mcp/residual-handler",
-				"metrics.residual", (request, call, features) -> {
+				"metrics.residual", (request, arguments, features) -> {
 					invocations.incrementAndGet();
 					activeEntered.countDown();
 					try {
@@ -632,7 +632,7 @@ public class McpHandlerMetricsObservabilityTests {
 		CountDownLatch activeExited = new CountDownLatch(1);
 		CountDownLatch emergencyRelease = new CountDownLatch(1);
 		McpEndpoint endpoint = endpoint("/mcp/managed-lock-probe",
-				"metrics.managed-lock-probe", (request, call, features) -> {
+				"metrics.managed-lock-probe", (request, arguments, features) -> {
 					activeEntered.countDown();
 					try {
 						emergencyRelease.await();
@@ -711,7 +711,7 @@ public class McpHandlerMetricsObservabilityTests {
 		CountDownLatch activeExited = new CountDownLatch(1);
 		CountDownLatch emergencyRelease = new CountDownLatch(1);
 		McpEndpoint endpoint = endpoint("/mcp/unexpected-lock-probe",
-				"metrics.unexpected-lock-probe", (request, call, features) -> {
+				"metrics.unexpected-lock-probe", (request, arguments, features) -> {
 					activeEntered.countDown();
 					try {
 						awaitIgnoringInterrupts(emergencyRelease,
@@ -826,7 +826,7 @@ public class McpHandlerMetricsObservabilityTests {
 				new RecordingMetricsCollector(expectedFailure);
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver();
 		McpEndpoint endpoint = endpoint("/mcp/failing-handler-metrics",
-				"metrics.failure", (request, call, features) ->
+				"metrics.failure", (request, arguments, features) ->
 						McpCompleteResult.fromToolText("complete"));
 		McpServer server = serverFor(List.of(endpoint), 1, 1,
 				Duration.ofSeconds(5), Duration.ofSeconds(1));
@@ -1119,11 +1119,11 @@ public class McpHandlerMetricsObservabilityTests {
 			@NonNull Duration shutdownTimeout) {
 		return McpServer.withPort(0)
 				.host(HOST)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
 						List.copyOf(requireNonNull(endpoints))))
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
-				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST))
 				.requestHandlerConcurrency(handlerConcurrency)

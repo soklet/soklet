@@ -23,7 +23,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Immutable, bounded context supplied to an MCP request-admission policy.
+ * Immutable, bounded context supplied to an MCP admission controller.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

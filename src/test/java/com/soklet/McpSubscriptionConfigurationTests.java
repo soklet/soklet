@@ -103,9 +103,9 @@ public class McpSubscriptionConfigurationTests {
 				McpLocalSubscriptionEventPublisher.fromDefaults();
 		List<McpSubscriptionEvent> firstEvents = new ArrayList<>();
 		List<McpSubscriptionEvent> secondEvents = new ArrayList<>();
-		McpSubscriptionEventSubscription first = publisher.subscribe(
+		McpSubscriptionEventRegistration first = publisher.subscribe(
 				firstEvents::add);
-		McpSubscriptionEventSubscription second = publisher.subscribe(
+		McpSubscriptionEventRegistration second = publisher.subscribe(
 				secondEvents::add);
 
 		publisher.publishResourcesListChanged();
@@ -128,10 +128,10 @@ public class McpSubscriptionConfigurationTests {
 				McpLocalSubscriptionEventPublisher.fromDefaults();
 		IllegalStateException failure = new IllegalStateException("listener failed");
 		AtomicInteger successfulDeliveries = new AtomicInteger();
-		McpSubscriptionEventSubscription failing = publisher.subscribe(event -> {
+		McpSubscriptionEventRegistration failing = publisher.subscribe(event -> {
 			throw failure;
 		});
-		McpSubscriptionEventSubscription succeeding = publisher.subscribe(
+		McpSubscriptionEventRegistration succeeding = publisher.subscribe(
 				event -> successfulDeliveries.incrementAndGet());
 
 		Assertions.assertSame(failure, Assertions.assertThrows(
@@ -153,9 +153,9 @@ public class McpSubscriptionConfigurationTests {
 				McpLocalSubscriptionEventPublisher.fromDefaults();
 		List<McpSubscriptionEvent> firstEvents = new CopyOnWriteArrayList<>();
 		List<McpSubscriptionEvent> secondEvents = new CopyOnWriteArrayList<>();
-		McpSubscriptionEventSubscription first = publisher.subscribe(
+		McpSubscriptionEventRegistration first = publisher.subscribe(
 				firstEvents::add);
-		McpSubscriptionEventSubscription second = publisher.subscribe(
+		McpSubscriptionEventRegistration second = publisher.subscribe(
 				secondEvents::add);
 		int eventCount = 32;
 		Set<McpSubscriptionEvent> expectedEvents = new HashSet<>();
@@ -202,7 +202,7 @@ public class McpSubscriptionConfigurationTests {
 		CountDownLatch listenerEntered = new CountDownLatch(1);
 		CountDownLatch releaseListener = new CountDownLatch(1);
 		AtomicInteger deliveries = new AtomicInteger();
-		McpSubscriptionEventSubscription subscription = publisher.subscribe(event -> {
+		McpSubscriptionEventRegistration registration = publisher.subscribe(event -> {
 			deliveries.incrementAndGet();
 			listenerEntered.countDown();
 			try {
@@ -219,7 +219,7 @@ public class McpSubscriptionConfigurationTests {
 			Future<?> publish = executor.submit(
 					publisher::publishResourcesListChanged);
 			Assertions.assertTrue(listenerEntered.await(5, TimeUnit.SECONDS));
-			subscription.close();
+			registration.close();
 			Assertions.assertFalse(publish.isDone());
 			releaseListener.countDown();
 			publish.get(5, TimeUnit.SECONDS);
@@ -228,7 +228,7 @@ public class McpSubscriptionConfigurationTests {
 			Assertions.assertEquals(1, deliveries.get());
 		} finally {
 			releaseListener.countDown();
-			subscription.close();
+			registration.close();
 			executor.shutdownNow();
 			Assertions.assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
 		}
@@ -319,7 +319,7 @@ public class McpSubscriptionConfigurationTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("copy-tool")
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					throw new AssertionError("The copy fixture must not execute.");
 				})
 				.build();
@@ -339,12 +339,12 @@ public class McpSubscriptionConfigurationTests {
 		McpResourceListHandler resourceListHandler = (request, list, features) -> {
 			throw new AssertionError("The copy fixture must not execute.");
 		};
-		McpCachePolicy resourcesListCachePolicy =
+		McpCachePolicy resourceListCachePolicy =
 				McpCachePolicy.fromPrivateTimeToLive(Duration.ofSeconds(7));
-		McpCachePolicy resourceTemplatesListCachePolicy =
+		McpCachePolicy resourceTemplateListCachePolicy =
 				McpCachePolicy.fromPublicTimeToLive(Duration.ofSeconds(11));
 		McpRateLimiter directToolRateLimiter = context ->
-				McpRateLimitDecision.fromAllowed();
+				McpRateLimitDecision.allowed();
 		McpEndpoint generated = McpEndpoint.withPath("/generated")
 				.serverInformation(serverInformation())
 				.includeServerInformation(false)
@@ -353,9 +353,9 @@ public class McpSubscriptionConfigurationTests {
 				.prompt(prompt)
 				.resource(resource)
 				.resourceListHandler(resourceListHandler)
-				.resourcesListCachePolicy(resourcesListCachePolicy)
-				.resourceTemplatesListCachePolicy(
-						resourceTemplatesListCachePolicy)
+				.resourceListCachePolicy(resourceListCachePolicy)
+				.resourceTemplateListCachePolicy(
+						resourceTemplateListCachePolicy)
 				.toolRateLimiter(directToolRateLimiter)
 				.build();
 		McpEndpoint namedLimiter = McpEndpoint.withPath("/named-limiter")
@@ -367,7 +367,7 @@ public class McpSubscriptionConfigurationTests {
 		generatedEndpoints.put(GeneratedEndpoint.class, generated);
 		generatedEndpoints.put(NamedLimiterGeneratedEndpoint.class,
 				namedLimiter);
-		McpHandlerResolver resolver = new DefaultMcpHandlerResolver(
+		McpEndpointRegistry registry = new DefaultMcpEndpointRegistry(
 				generatedEndpoints).withEndpoint(other);
 		McpSubscriptionConfig subscriptions = configuration(
 				McpSubscriptionNotificationType.RESOURCE_UPDATED);
@@ -375,16 +375,16 @@ public class McpSubscriptionConfigurationTests {
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED);
 
 		Assertions.assertFalse(GENERATED_ENDPOINT_INITIALIZED.get());
-		McpHandlerResolver directOverlaid = resolver.withSubscriptions(
+		McpEndpointRegistry directOverlaid = registry.withSubscriptions(
 				GeneratedEndpoint.class, subscriptions);
-		McpHandlerResolver overlaid = directOverlaid.withSubscriptions(
+		McpEndpointRegistry overlaid = directOverlaid.withSubscriptions(
 				NamedLimiterGeneratedEndpoint.class, namedSubscriptions);
 		Assertions.assertFalse(GENERATED_ENDPOINT_INITIALIZED.get());
 
 		McpEndpoint replaced = overlaid.getEndpoints().get(0);
 		McpEndpoint namedReplaced = overlaid.getEndpoints().get(1);
 		Assertions.assertEquals(List.of(generated, namedLimiter, other),
-				resolver.getEndpoints());
+				registry.getEndpoints());
 		Assertions.assertTrue(generated.getSubscriptions().isEmpty());
 		Assertions.assertTrue(namedLimiter.getSubscriptions().isEmpty());
 		Assertions.assertNotSame(generated, replaced);
@@ -402,10 +402,10 @@ public class McpSubscriptionConfigurationTests {
 		Assertions.assertSame(generated.getResources(), replaced.getResources());
 		Assertions.assertEquals(generated.getResourceListHandler(),
 				replaced.getResourceListHandler());
-		Assertions.assertSame(generated.getResourcesListCachePolicy(),
-				replaced.getResourcesListCachePolicy());
-		Assertions.assertSame(generated.getResourceTemplatesListCachePolicy(),
-				replaced.getResourceTemplatesListCachePolicy());
+		Assertions.assertSame(generated.getResourceListCachePolicy(),
+				replaced.getResourceListCachePolicy());
+		Assertions.assertSame(generated.getResourceTemplateListCachePolicy(),
+				replaced.getResourceTemplateListCachePolicy());
 		Assertions.assertEquals(generated.getToolRateLimiterName(),
 				replaced.getToolRateLimiterName());
 		Assertions.assertEquals(generated.getToolRateLimiter(),
@@ -431,10 +431,10 @@ public class McpSubscriptionConfigurationTests {
 	public void resolverOverlayRequiresAnOwnedGeneratedEndpoint() {
 		McpSubscriptionConfig subscriptions = configuration(
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED);
-		McpHandlerResolver programmatic = McpHandlerResolver.fromEndpoints(
+		McpEndpointRegistry programmatic = McpEndpointRegistry.fromEndpoints(
 				List.of(endpoint("/generated")));
 		McpEndpoint generatedEndpoint = endpoint("/generated");
-		McpHandlerResolver generated = new DefaultMcpHandlerResolver(
+		McpEndpointRegistry generated = new DefaultMcpEndpointRegistry(
 				Map.of(GeneratedEndpoint.class, generatedEndpoint));
 
 		Assertions.assertThrows(IllegalArgumentException.class,

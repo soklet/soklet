@@ -52,7 +52,7 @@ class McpResourceRegistrationTests {
 		McpJsonObject metadata = McpJsonObject.builder()
 				.put("owner", "catalog")
 				.build();
-		McpResourceHandler handler = resourceHandler();
+		McpResourceReadHandler handler = resourceHandler();
 		McpResourceRegistration resource = McpResourceRegistration
 				.withUriAndName(uri, "catalog-item")
 				.handler(handler)
@@ -85,7 +85,7 @@ class McpResourceRegistrationTests {
 
 	@Test
 	void templateRegistrationHasNoSizeBuilderAndSharesCommonMetadata() {
-		McpResourceHandler handler = resourceHandler();
+		McpResourceReadHandler handler = resourceHandler();
 		Object exactBuilder = McpResourceRegistration
 				.withUriAndName(URI.create("catalog://items/42"), "exact")
 				.handler(handler);
@@ -157,7 +157,7 @@ class McpResourceRegistrationTests {
 
 	@Test
 	void validatesAddressesNamesMimeTypesSizesDurationsAndErrors() {
-		McpResourceHandler handler = resourceHandler();
+		McpResourceReadHandler handler = resourceHandler();
 
 		assertThrows(IllegalArgumentException.class, () -> McpResourceRegistration
 				.withUriAndName(URI.create("relative"), "resource"));
@@ -227,15 +227,15 @@ class McpResourceRegistrationTests {
 				.resource(exact)
 				.resources(List.of(template))
 				.resourceListHandler(listHandler)
-				.resourcesListCachePolicy(listPolicy)
-				.resourceTemplatesListCachePolicy(templatePolicy)
+				.resourceListCachePolicy(listPolicy)
+				.resourceTemplateListCachePolicy(templatePolicy)
 				.build();
 
 		assertEquals(List.of(exact, template), endpoint.getResources());
 		assertSame(listHandler, endpoint.getResourceListHandler().orElseThrow());
-		assertSame(listPolicy, endpoint.getResourcesListCachePolicy());
+		assertSame(listPolicy, endpoint.getResourceListCachePolicy());
 		assertSame(templatePolicy,
-				endpoint.getResourceTemplatesListCachePolicy());
+				endpoint.getResourceTemplateListCachePolicy());
 		assertThrows(UnsupportedOperationException.class,
 				() -> endpoint.getResources().clear());
 		assertThrows(IllegalStateException.class, () -> endpointBuilder()
@@ -244,9 +244,9 @@ class McpResourceRegistrationTests {
 
 		McpEndpoint defaults = endpointBuilder().build();
 		assertSame(McpCachePolicy.privateNoCacheInstance(),
-				defaults.getResourcesListCachePolicy());
+				defaults.getResourceListCachePolicy());
 		assertSame(McpCachePolicy.privateNoCacheInstance(),
-				defaults.getResourceTemplatesListCachePolicy());
+				defaults.getResourceTemplateListCachePolicy());
 	}
 
 	@Test
@@ -272,18 +272,18 @@ class McpResourceRegistrationTests {
 
 	@Test
 	void serverCursorLimitDefaultsTo4096AndMustBePositive() {
-		McpHandlerResolver resolver = McpHandlerResolver.fromEndpoints(
+		McpEndpointRegistry registry = McpEndpointRegistry.fromEndpoints(
 				List.of(endpointBuilder().build()));
 		McpServer defaultServer = McpServer.withPort(0)
-				.handlerResolver(resolver)
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
+				.endpointRegistry(registry)
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
 				.build();
 		McpServer customServer = McpServer.withPort(0)
 				.maximumCursorSizeInBytes(17)
-				.handlerResolver(resolver)
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
+				.endpointRegistry(registry)
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
 				.build();
 
 		assertEquals(Integer.valueOf(4_096),
@@ -298,7 +298,7 @@ class McpResourceRegistrationTests {
 				() -> McpServer.withPort(0).maximumCursorSizeInBytes(null));
 	}
 
-	private static McpResourceHandler resourceHandler() {
+	private static McpResourceReadHandler resourceHandler() {
 		return (request, resource, features) ->
 				McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
 						.content(McpTextResourceContents

@@ -199,6 +199,8 @@ public class McpObservabilityPublicApiTests {
 						"LIFECYCLE_OBSERVER_DID_FINISH_MCP_REQUEST_HANDLING_FAILED"));
 		Assertions.assertSame(LogEventType.MCP_UNKNOWN_MIRRORED_HEADER,
 				LogEventType.valueOf("MCP_UNKNOWN_MIRRORED_HEADER"));
+		Assertions.assertSame(LogEventType.MCP_TRACE_CORRELATION,
+				LogEventType.valueOf("MCP_TRACE_CORRELATION"));
 	}
 
 	@Test

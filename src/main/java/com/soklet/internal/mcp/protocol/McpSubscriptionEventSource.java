@@ -20,6 +20,7 @@ import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
+import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
@@ -32,10 +33,17 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 record McpSubscriptionEventSource(@NonNull Object identity,
-		@NonNull Subscriber subscriber) {
+		@NonNull Subscriber subscriber,
+		@NonNull Optional<@NonNull Subscriber> endpointSubscriber) {
+	McpSubscriptionEventSource(@NonNull Object identity,
+			@NonNull Subscriber subscriber) {
+		this(identity, subscriber, Optional.empty());
+	}
+
 	McpSubscriptionEventSource {
 		requireNonNull(identity);
 		requireNonNull(subscriber);
+		requireNonNull(endpointSubscriber);
 	}
 
 	@NonNull

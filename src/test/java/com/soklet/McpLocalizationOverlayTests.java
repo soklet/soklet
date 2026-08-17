@@ -30,6 +30,8 @@ import org.junit.jupiter.api.Test;
 import javax.annotation.concurrent.ThreadSafe;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeout;
 
 /**
  * Copy-on-write overlay behavior: exact targeting, structural sharing, byte
@@ -139,6 +142,61 @@ class McpLocalizationOverlayTests {
 
 		assertEquals("third", stringAt(replaced, "/instructions"));
 		assertEquals("second", stringAt(replaced, "/tools/0/title"));
+	}
+
+	@Test
+	void manyReplacementsUnderOneLargeContainerRemainLinear() {
+		int propertyCount = 4_096;
+		Map<String, McpJsonValue> properties =
+				new LinkedHashMap<>(propertyCount);
+		List<McpLocalizationOverlay.Replacement> replacements =
+				new ArrayList<>(propertyCount);
+
+		for (int index = 0; index < propertyCount; ++index) {
+			String propertyName = "property-" + index;
+			properties.put(propertyName, new McpJsonObject(members(
+					"title", new McpJsonString("Original " + index),
+					"constant", new McpJsonString("Shared"))));
+			replacements.add(replacement(
+					"/properties/" + propertyName + "/title",
+					"Translated " + index));
+		}
+
+		McpJsonObject untouched = new McpJsonObject(members(
+				"value", new McpJsonString("Canonical")));
+		McpJsonObject canonicalProperties = new McpJsonObject(properties);
+		McpJsonObject document = new McpJsonObject(members(
+				"properties", canonicalProperties,
+				"untouched", untouched));
+		McpJsonObject replaced = assertTimeout(Duration.ofSeconds(5),
+				() -> McpLocalizationOverlay.withReplacements(document,
+						replacements));
+		McpJsonObject replacedProperties =
+				(McpJsonObject) replaced.members().get("properties");
+
+		assertEquals(List.copyOf(canonicalProperties.members().keySet()),
+				List.copyOf(replacedProperties.members().keySet()),
+				"The large container's member order must remain unchanged.");
+		assertEquals("Translated 0", stringAt(replaced,
+				"/properties/property-0/title"));
+		assertEquals("Translated 2048", stringAt(replaced,
+				"/properties/property-2048/title"));
+		assertEquals("Translated 4095", stringAt(replaced,
+				"/properties/property-4095/title"));
+		assertEquals("Original 0", stringAt(document,
+				"/properties/property-0/title"));
+		assertSame(untouched, replaced.members().get("untouched"));
+	}
+
+	@Test
+	void firstInvalidReplacementStillDeterminesTheFailure() {
+		IllegalStateException exception = assertThrows(IllegalStateException.class,
+				() -> McpLocalizationOverlay.withReplacements(catalog(), List.of(
+						replacement("/tools/9/title", "missing first"),
+						replacement("not-a-pointer", "malformed later"))));
+
+		assertEquals("Localization target /tools/9/title does not exist.",
+				exception.getMessage());
 	}
 
 	@Test

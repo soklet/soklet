@@ -41,14 +41,14 @@ public class McpInterceptionConfigurationTests {
 		McpToolOutput expectedOutput = McpToolOutput.fromText("expected");
 		AtomicBoolean invoked = new AtomicBoolean();
 
-		McpHandlerInvocation invocation = () -> {
+		McpHandlerContinuation continuation = () -> {
 			invoked.set(true);
 			return expectedResult;
 		};
-		Assertions.assertTrue(invocation.getFeatures()
+		Assertions.assertTrue(continuation.getFeatures()
 				.find(McpLocalizationContext.class).isEmpty());
 		McpOperationResult actualResult = interceptor.interceptHandler(request,
-				invocation);
+				continuation);
 		McpToolOutput actualOutput = sanitizer.sanitize(request, "tool",
 				McpJsonObject.builder().build(), expectedOutput);
 
@@ -64,7 +64,7 @@ public class McpInterceptionConfigurationTests {
 	@Test
 	public void builderPublishesDefaultsAndConfiguredHookIdentities() {
 		McpServer defaultServer = serverBuilder().build();
-		McpHandlerInterceptor interceptor = (request, invocation) ->
+		McpHandlerInterceptor interceptor = (request, continuation) ->
 				McpCompleteResult.fromToolText("intercepted");
 		McpToolOutputSanitizer sanitizer =
 				(request, toolName, rawArguments, output) ->
@@ -102,9 +102,9 @@ public class McpInterceptionConfigurationTests {
 						"interception-tests", "3.6.0-SNAPSHOT").build())
 				.build();
 		return McpServer.withPort(0)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance());
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(
+						McpAdmissionController.acceptAllInstance());
 	}
 
 	private static McpRequestContext requestContext() {

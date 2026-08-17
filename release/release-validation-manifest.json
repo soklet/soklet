@@ -1,0 +1,215 @@
+{
+  "formatVersion": 1,
+  "candidate": {
+    "artifactId": "soklet",
+    "groupId": "com.soklet",
+    "packaging": "jar",
+    "version": "3.6.0"
+  },
+  "promotion": {
+    "helper": {
+      "path": "scripts/release-promotion.mjs",
+      "sha256": "2b9662c461214c2da18b5939bb8ffaba2f4cbb85256e4f8327a9ce2dc069fee4"
+    },
+    "wrapper": {
+      "path": "scripts/promote-release-candidate.sh",
+      "sha256": "ab1a2e481ec1ba2df16e57a52fb4f1d16f4f7f22448e41ecd3a24ef2a279277f"
+    }
+  },
+  "toolchains": {
+    "go": {
+      "archive": "go1.25.12.linux-amd64.tar.gz",
+      "archiveSha256": "234828b7a89e0e303d2556310ee549fbcf253d28de937bac3da13d6294262ac1",
+      "distributionUrl": "https://go.dev/dl/go1.25.12.linux-amd64.tar.gz",
+      "version": "1.25.12"
+    },
+    "java": {
+      "archive": "amazon-corretto-17.0.20.8.1-linux-x64.tar.gz",
+      "archiveSha256": "89b50d4ef5d27ce1f8e5cad616525e14f7665b7b4a1ffca85381b0e21401034f",
+      "distribution": "corretto",
+      "distributionUrl": "https://corretto.aws/downloads/resources/17.0.20.8.1/amazon-corretto-17.0.20.8.1-linux-x64.tar.gz",
+      "runtimeVersion": "17.0.20+8-LTS",
+      "vendorVersion": "Corretto-17.0.20.8.1",
+      "version": "17.0.20"
+    },
+    "maven": {
+      "archive": "apache-maven-3.9.16-bin.tar.gz",
+      "archiveSha512": "831a8591fe20c8243b1dbe7d71e3244f31d1665b0804b2e825e38cbbe5ce0cafb8338851f90780735568773e0a6cd07bbec107cda0b896b008b861075358b6f6",
+      "distributionUrl": "https://dlcdn.apache.org/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.tar.gz",
+      "installFileGoal": "org.apache.maven.plugins:maven-install-plugin:3.1.4:install-file",
+      "version": "3.9.16"
+    },
+    "nodePin": {
+      "path": "conformance/official/upstream-pins.json",
+      "sha256": "fb39d00d27982b1d52aac593e9a809006e02c56ed4bf125d0da83523576553a2"
+    },
+    "releaseSoakTimeoutSeconds": 3600,
+    "toystoreJava": {
+      "archive": "amazon-corretto-25.0.4.7.1-linux-x64.tar.gz",
+      "archiveSha256": "1d03a3bd5091728492d92f0ef341aca7d8885ece9a150119558f3e3d62b58745",
+      "distribution": "corretto",
+      "distributionUrl": "https://corretto.aws/downloads/resources/25.0.4.7.1/amazon-corretto-25.0.4.7.1-linux-x64.tar.gz",
+      "runtimeVersion": "25.0.4+7-LTS",
+      "vendorVersion": "Corretto-25.0.4.7.1",
+      "version": "25.0.4"
+    }
+  },
+  "gates": [
+    {
+      "access": "LOCAL_CHECKOUT",
+      "artifactChecksum": null,
+      "artifactIdentity": "com.soklet:soklet:3.6.0",
+      "commit": null,
+      "id": "candidate-build",
+      "kind": "SOURCE",
+      "reason": "",
+      "repository": null,
+      "status": "READY",
+      "versionProperty": null
+    },
+    {
+      "access": "LOCAL_CHECKOUT",
+      "artifactChecksum": null,
+      "artifactIdentity": "org.apache.maven.plugins:maven-install-plugin:3.1.4",
+      "commit": null,
+      "id": "isolated-install",
+      "kind": "CANDIDATE_ARTIFACT",
+      "reason": "",
+      "repository": null,
+      "status": "READY",
+      "versionProperty": null
+    },
+    {
+      "access": "LOCAL_CHECKOUT",
+      "artifactChecksum": null,
+      "artifactIdentity": "SOKLET_SOAK_PROFILE=release",
+      "commit": null,
+      "id": "release-soak",
+      "kind": "SOURCE",
+      "reason": "",
+      "repository": null,
+      "status": "READY",
+      "versionProperty": null
+    },
+    {
+      "access": "PUBLIC_READ_ONLY",
+      "artifactChecksum": null,
+      "artifactIdentity": "@modelcontextprotocol/conformance:0.2.0-alpha.10-descriptive",
+      "commit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+      "id": "candidate-conformance",
+      "kind": "CANDIDATE_ARTIFACT",
+      "reason": "",
+      "repository": "https://github.com/modelcontextprotocol/conformance.git",
+      "status": "READY",
+      "versionProperty": null
+    },
+    {
+      "access": "LOCAL_CHECKOUT",
+      "artifactChecksum": null,
+      "artifactIdentity": "verification/localization/generic-provider",
+      "commit": null,
+      "id": "candidate-localization",
+      "kind": "CANDIDATE_ARTIFACT",
+      "reason": "",
+      "repository": null,
+      "status": "READY",
+      "versionProperty": null
+    },
+    {
+      "access": "PUBLIC_READ_ONLY",
+      "artifactChecksum": null,
+      "artifactIdentity": "soklet/barebones-app-source",
+      "commit": "0665e2808ecae930d73a59e91d47cc58bed1e9b5",
+      "id": "barebones-app",
+      "kind": "DOWNSTREAM",
+      "reason": "The pinned clean checkout has not yet been revalidated against the final 3.6.0 artifact.",
+      "repository": "https://github.com/soklet/barebones-app.git",
+      "status": "UNVERIFIED",
+      "versionProperty": null
+    },
+    {
+      "access": "PUBLIC_READ_ONLY",
+      "artifactChecksum": null,
+      "artifactIdentity": "com.soklet:soklet-servlet-javax:1.2.0",
+      "commit": "8bab7a04fc2b45eee1c50e9b989a7963eb2b9a9c",
+      "id": "soklet-servlet-javax",
+      "kind": "DOWNSTREAM",
+      "reason": "The default-version and candidate-version matrix has not yet been run at this pin.",
+      "repository": "https://github.com/soklet/soklet-servlet-javax.git",
+      "status": "UNVERIFIED",
+      "versionProperty": "soklet.version"
+    },
+    {
+      "access": "PUBLIC_READ_ONLY",
+      "artifactChecksum": null,
+      "artifactIdentity": "com.soklet:soklet-servlet-jakarta:1.2.0",
+      "commit": "5fadb19dbbbf11a8b74164eb9c9980d7c16b4f13",
+      "id": "soklet-servlet-jakarta",
+      "kind": "DOWNSTREAM",
+      "reason": "The default-version and candidate-version matrix has not yet been run at this pin.",
+      "repository": "https://github.com/soklet/soklet-servlet-jakarta.git",
+      "status": "UNVERIFIED",
+      "versionProperty": "soklet.version"
+    },
+    {
+      "access": "PUBLIC_READ_ONLY",
+      "artifactChecksum": null,
+      "artifactIdentity": "com.soklet:toystore:1.0.0",
+      "commit": "209781472b2d308cbc5538f2a7f956bc97b399b7",
+      "id": "toystore-app",
+      "kind": "DOWNSTREAM",
+      "reason": "The completed local 3.6 MCP migration is uncommitted and is intentionally not represented by this pre-migration pin.",
+      "repository": "https://github.com/soklet/toystore-app.git",
+      "status": "BLOCKED_UNCOMMITTED_LOCAL_MIGRATION",
+      "versionProperty": "soklet.version"
+    },
+    {
+      "access": "PUBLIC_READ_ONLY",
+      "artifactChecksum": null,
+      "artifactIdentity": "com.soklet:soklet-otel:1.4.0-SNAPSHOT",
+      "commit": "d4a55b486c4b35a4d1b972ec9c5b4aa9d8d56020",
+      "id": "soklet-otel",
+      "kind": "DOWNSTREAM",
+      "reason": "The current MCP migration is uncommitted locally and is intentionally not represented by this pin.",
+      "repository": "https://github.com/soklet/soklet-otel.git",
+      "status": "BLOCKED_UNCOMMITTED_LOCAL_MIGRATION",
+      "versionProperty": "soklet.version"
+    },
+    {
+      "access": "PUBLIC_READ_ONLY",
+      "artifactChecksum": null,
+      "artifactIdentity": "revetware/soklet.com-source",
+      "commit": "7717cea81776a1f6567f428cb0518702159fd5bc",
+      "id": "soklet-website",
+      "kind": "DOWNSTREAM",
+      "reason": "The current MCP documentation migration is uncommitted locally and is intentionally not represented by this pin.",
+      "repository": "https://github.com/revetware/soklet.com.git",
+      "status": "BLOCKED_UNCOMMITTED_LOCAL_MIGRATION",
+      "versionProperty": null
+    },
+    {
+      "access": "PUBLIC_READ_ONLY",
+      "artifactChecksum": "sha512-8f1OghQ2rjzIOfqgUCP+8GiUWqRs89njoWLNqAe8kWmDePv3s1fZXseej+QXemssEuuOvLLmLO/kqM3IQHtISw==",
+      "artifactIdentity": "npm:@modelcontextprotocol/client@2.0.0",
+      "commit": "cc4b41617ce3601b1290d67216ea0b194a3cd9ac",
+      "id": "typescript-interop",
+      "kind": "INTEROPERABILITY",
+      "reason": "",
+      "repository": "https://github.com/modelcontextprotocol/typescript-sdk.git",
+      "status": "READY",
+      "versionProperty": null
+    },
+    {
+      "access": "PUBLIC_READ_ONLY",
+      "artifactChecksum": "h1:yqjY2dsbKAC0LSuWZVBMrHgiG8ukXv6NRo0JiALay44=",
+      "artifactIdentity": "github.com/modelcontextprotocol/go-sdk@v1.7.0",
+      "commit": "bc72835f62eb94d0fb484439f886b6885b075f36",
+      "id": "go-interop",
+      "kind": "INTEROPERABILITY",
+      "reason": "",
+      "repository": "https://github.com/modelcontextprotocol/go-sdk.git",
+      "status": "READY",
+      "versionProperty": null
+    }
+  ]
+}

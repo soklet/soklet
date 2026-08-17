@@ -390,7 +390,7 @@ class McpMultiRoundTripDescriptorTests {
 		McpToolRegistration.Builder<McpJsonObject> toolBuilder =
 				McpToolRegistration.withName("catalog.delete")
 						.jsonArguments()
-						.handler((request, call, features) ->
+						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("done"));
 		McpPromptRegistration.Builder promptBuilder = McpPromptRegistration
 				.withName("confirm")
@@ -436,7 +436,7 @@ class McpMultiRoundTripDescriptorTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("catalog.delete")
 				.jsonArguments()
-				.handler((request, call, features) ->
+				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("done"))
 				.mayRequestInput(mutableDeclarations)
 				.mayRequestInput(roots)
@@ -483,14 +483,14 @@ class McpMultiRoundTripDescriptorTests {
 		McpToolRegistration<Arguments> complete = McpToolRegistration
 				.withName("catalog.get")
 				.types(Arguments.class, CompleteOutput.class)
-				.handler((request, call, features) ->
-						new CompleteOutput(call.getArguments().identifier()))
+				.handler((request, arguments, features) ->
+						new CompleteOutput(arguments.getArguments().identifier()))
 				.build();
 		Object completeBuilder = McpToolRegistration
 				.withName("catalog.other")
 				.types(Arguments.class, CompleteOutput.class)
-				.handler((request, call, features) ->
-						new CompleteOutput(call.getArguments().identifier()));
+				.handler((request, arguments, features) ->
+						new CompleteOutput(arguments.getArguments().identifier()));
 		McpPromptRegistration prompt = McpPromptRegistration
 				.withName("plain")
 				.handler((request, get, features) ->
@@ -536,7 +536,7 @@ class McpMultiRoundTripDescriptorTests {
 				McpJsonObject.builder().put("future", true).build());
 	}
 
-	private static McpResourceHandler resourceHandler() {
+	private static McpResourceReadHandler resourceHandler() {
 		return (request, resource, features) ->
 				McpCompleteResult.fromResourceOutput(McpResourceOutput.builder()
 						.content(McpTextResourceContents.withUriAndText(

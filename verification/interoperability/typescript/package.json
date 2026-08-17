@@ -1,0 +1,13 @@
+{
+  "name": "soklet-mcp-typescript-interoperability",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "engines": {
+    "node": "26.5.0",
+    "npm": "11.17.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.0.0"
+  }
+}

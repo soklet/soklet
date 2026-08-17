@@ -20,7 +20,7 @@ import com.soklet.CancelationToken;
 import com.soklet.CorsAuthorizer;
 import com.soklet.McpCompleteResult;
 import com.soklet.McpEndpoint;
-import com.soklet.McpHandlerResolver;
+import com.soklet.McpEndpointRegistry;
 import com.soklet.McpImplementation;
 import com.soklet.McpInputRequest;
 import com.soklet.McpInputRequestDeclaration;
@@ -31,7 +31,7 @@ import com.soklet.McpMetricsEvent;
 import com.soklet.McpProgressReporter;
 import com.soklet.McpProgressUpdate;
 import com.soklet.McpRateLimitDecision;
-import com.soklet.McpRequestAdmissionPolicy;
+import com.soklet.McpAdmissionController;
 import com.soklet.McpServer;
 import com.soklet.McpToolHandler;
 import com.soklet.McpToolRegistration;
@@ -81,7 +81,7 @@ public class McpProgressPublicRuntimeTests {
 				new AtomicReference<>();
 		AtomicReference<CancelationToken> terminalToken = new AtomicReference<>();
 		McpToolRegistration<McpJsonObject> progressTool = tool("progress.exact",
-				(request, call, features) -> {
+				(request, arguments, features) -> {
 					CancelationToken cancelation =
 							features.require(CancelationToken.class);
 					Assertions.assertSame(cancelation,
@@ -144,7 +144,7 @@ public class McpProgressPublicRuntimeTests {
 	public void floatingPointProgressTotalAndMessagePreserveExactWireValues()
 			throws Exception {
 		McpToolRegistration<McpJsonObject> progressTool = tool("progress.float",
-				(request, call, features) -> {
+				(request, arguments, features) -> {
 					features.require(McpProgressReporter.class).report(
 							McpProgressUpdate.withProgress(12.5)
 									.total(100.25)
@@ -184,7 +184,7 @@ public class McpProgressPublicRuntimeTests {
 			throws Exception {
 		AtomicReference<CancelationToken> observedToken = new AtomicReference<>();
 		McpToolRegistration<McpJsonObject> tool = tool("progress.no-token",
-				(request, call, features) -> {
+				(request, arguments, features) -> {
 					CancelationToken token = features.require(CancelationToken.class);
 					Assertions.assertSame(token,
 							features.find(CancelationToken.class).orElseThrow());
@@ -226,7 +226,7 @@ public class McpProgressPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> complete =
 				McpToolRegistration.withName("progress.conditional-complete")
 						.jsonArguments()
-						.handler((request, call, features) -> {
+						.handler((request, arguments, features) -> {
 							if (request.getClientCapabilities().supports(
 									com.soklet.McpClientCapability.ROOTS)) {
 								features.require(McpProgressReporter.class).report(
@@ -243,7 +243,7 @@ public class McpProgressPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> input =
 				McpToolRegistration.withName("progress.conditional-input")
 						.jsonArguments()
-						.handler((request, call, features) -> {
+						.handler((request, arguments, features) -> {
 							inputReporterSuppressed.set(features
 									.find(McpProgressReporter.class).isEmpty());
 							return McpInputRequiredResult.builder()
@@ -360,7 +360,7 @@ public class McpProgressPublicRuntimeTests {
 				new AtomicReference<>();
 		AtomicBoolean callbackSawCanceled = new AtomicBoolean();
 		McpToolRegistration<McpJsonObject> tool = tool("progress.cancel",
-				(request, call, features) -> {
+				(request, arguments, features) -> {
 					CancelationToken token = features.require(CancelationToken.class);
 					Assertions.assertSame(token,
 							features.require(CancelationToken.class));
@@ -541,12 +541,12 @@ public class McpProgressPublicRuntimeTests {
 				.build();
 		return McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
 				.requestRateLimiter(context ->
-						McpRateLimitDecision.fromAllowed())
-				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+						McpRateLimitDecision.allowed())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();

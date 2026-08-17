@@ -56,9 +56,9 @@ final class McpNormalizedEndpoint {
 	private final List<@NonNull McpNormalizedOperation> resourceTemplates;
 	private final boolean customResourceListHandler;
 	@NonNull
-	private final McpResourceCachePolicy resourcesListCachePolicy;
+	private final McpResourceCachePolicy resourceListCachePolicy;
 	@NonNull
-	private final McpResourceCachePolicy resourceTemplatesListCachePolicy;
+	private final McpResourceCachePolicy resourceTemplateListCachePolicy;
 	private final int maximumCursorSizeInBytes;
 	@NonNull
 	private final Optional<@NonNull McpNormalizedSubscriptionConfiguration> subscriptions;
@@ -88,8 +88,8 @@ final class McpNormalizedEndpoint {
 				this.resourceTemplates);
 		validateDistinctResources(this.exactResources, this.resourceTemplates);
 		this.customResourceListHandler = builder.customResourceListHandler;
-		this.resourcesListCachePolicy = builder.resourcesListCachePolicy;
-		this.resourceTemplatesListCachePolicy = builder.resourceTemplatesListCachePolicy;
+		this.resourceListCachePolicy = builder.resourceListCachePolicy;
+		this.resourceTemplateListCachePolicy = builder.resourceTemplateListCachePolicy;
 		this.maximumCursorSizeInBytes = builder.maximumCursorSizeInBytes;
 		this.subscriptions = builder.subscriptions;
 
@@ -147,13 +147,13 @@ final class McpNormalizedEndpoint {
 	}
 
 	@NonNull
-	McpResourceCachePolicy resourcesListCachePolicy() {
-		return resourcesListCachePolicy;
+	McpResourceCachePolicy resourceListCachePolicy() {
+		return resourceListCachePolicy;
 	}
 
 	@NonNull
-	McpResourceCachePolicy resourceTemplatesListCachePolicy() {
-		return resourceTemplatesListCachePolicy;
+	McpResourceCachePolicy resourceTemplateListCachePolicy() {
+		return resourceTemplateListCachePolicy;
 	}
 
 	int maximumCursorSizeInBytes() {
@@ -295,9 +295,9 @@ final class McpNormalizedEndpoint {
 		private final List<@NonNull McpNormalizedOperation> resourceTemplates;
 		private boolean customResourceListHandler;
 		@NonNull
-		private McpResourceCachePolicy resourcesListCachePolicy;
+		private McpResourceCachePolicy resourceListCachePolicy;
 		@NonNull
-		private McpResourceCachePolicy resourceTemplatesListCachePolicy;
+		private McpResourceCachePolicy resourceTemplateListCachePolicy;
 		private int maximumCursorSizeInBytes;
 		@NonNull
 		private Optional<@NonNull McpNormalizedSubscriptionConfiguration> subscriptions;
@@ -312,8 +312,8 @@ final class McpNormalizedEndpoint {
 			this.prompts = new ArrayList<>();
 			this.exactResources = new ArrayList<>();
 			this.resourceTemplates = new ArrayList<>();
-			this.resourcesListCachePolicy = McpResourceCachePolicy.privateNoCache();
-			this.resourceTemplatesListCachePolicy =
+			this.resourceListCachePolicy = McpResourceCachePolicy.privateNoCache();
+			this.resourceTemplateListCachePolicy =
 					McpResourceCachePolicy.privateNoCache();
 			this.maximumCursorSizeInBytes = 4_096;
 			this.subscriptions = Optional.empty();
@@ -427,17 +427,17 @@ final class McpNormalizedEndpoint {
 		}
 
 		@NonNull
-		Builder resourcesListCachePolicy(
-				@NonNull McpResourceCachePolicy resourcesListCachePolicy) {
-			this.resourcesListCachePolicy = requireNonNull(resourcesListCachePolicy);
+		Builder resourceListCachePolicy(
+				@NonNull McpResourceCachePolicy resourceListCachePolicy) {
+			this.resourceListCachePolicy = requireNonNull(resourceListCachePolicy);
 			return this;
 		}
 
 		@NonNull
-		Builder resourceTemplatesListCachePolicy(
-				@NonNull McpResourceCachePolicy resourceTemplatesListCachePolicy) {
-			this.resourceTemplatesListCachePolicy =
-					requireNonNull(resourceTemplatesListCachePolicy);
+		Builder resourceTemplateListCachePolicy(
+				@NonNull McpResourceCachePolicy resourceTemplateListCachePolicy) {
+			this.resourceTemplateListCachePolicy =
+					requireNonNull(resourceTemplateListCachePolicy);
 			return this;
 		}
 

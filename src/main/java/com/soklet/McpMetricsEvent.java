@@ -29,10 +29,13 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * The hierarchy deliberately has no generic value, label map, or bag of
  * optional fields. Each event exposes only the dimensions meaningful for its
- * transition. Endpoint paths are finite registered declarations and method
- * values are recognized names or {@link #UNRECOGNIZED_JSON_RPC_METHOD}; no raw
+ * transition. Framework-produced endpoint paths are finite registered
+ * declarations, and framework-produced method values are recognized names or
+ * {@link #UNRECOGNIZED_JSON_RPC_METHOD}. Public event constructors enforce
+ * only the documented value shape; applications that construct events
+ * directly own the confidentiality and cardinality of those values. No raw
  * unrecognized method, operation name, resource URI, principal, header, trace
- * data, argument, or result is a built-in metric dimension.
+ * data, argument, or result is a framework-produced built-in metric dimension.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

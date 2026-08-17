@@ -51,7 +51,7 @@ public final class McpToolRegistration<A> {
 	private static final Pattern NAME_PATTERN =
 			Pattern.compile("[A-Za-z0-9_.-]+");
 	@NonNull
-	private static final McpSchema JSON_OBJECT_SCHEMA = new McpSchema(
+	private static final McpToolSchema JSON_OBJECT_SCHEMA = new McpToolSchema(
 			McpJsonObject.builder().put("type", "object").build());
 	@NonNull
 	private static final McpMirroredHeaderPlan EMPTY_MIRRORED_HEADER_PLAN =
@@ -68,13 +68,13 @@ public final class McpToolRegistration<A> {
 	@NonNull
 	private final Type argumentType;
 	@NonNull
-	private final McpSchema inputSchema;
+	private final McpToolSchema inputSchema;
 	@NonNull
 	private final McpMirroredHeaderPlan mirroredHeaderPlan;
 	@Nullable
 	private final Type outputType;
 	@Nullable
-	private final McpSchema outputSchema;
+	private final McpToolSchema outputSchema;
 	@Nullable
 	private final McpRuntimeTypedSchemaBridge<?> outputSchemaBridge;
 	@Nullable
@@ -170,7 +170,7 @@ public final class McpToolRegistration<A> {
 
 	/** @return generated or fixed input schema */
 	@NonNull
-	public McpSchema getInputSchema() {
+	public McpToolSchema getInputSchema() {
 		return this.inputSchema;
 	}
 
@@ -185,7 +185,7 @@ public final class McpToolRegistration<A> {
 
 	/** @return generated output schema for a typed-completion registration */
 	@NonNull
-	public Optional<@NonNull McpSchema> getOutputSchema() {
+	public Optional<@NonNull McpToolSchema> getOutputSchema() {
 		return Optional.ofNullable(this.outputSchema);
 	}
 
@@ -303,9 +303,9 @@ public final class McpToolRegistration<A> {
 		} catch (IllegalArgumentException exception) {
 			throw new McpInvalidToolArgumentsException(exception);
 		}
-		McpToolCallContext<A> call =
-				new DefaultToolCallContext<>(arguments, rawArguments);
-		return requireNonNull(this.handler.handle(request, call, features),
+		McpToolArguments<A> toolArguments =
+				new DefaultToolArguments<>(arguments, rawArguments);
+		return requireNonNull(this.handler.handle(request, toolArguments, features),
 				"The MCP tool handler returned null.");
 	}
 
@@ -474,7 +474,7 @@ public final class McpToolRegistration<A> {
 					McpRuntimeToolInputSchemaBridge.compileToolInput(
 							requireNonNull(inputSchema));
 			return new OperationHandlerStage<>(this.name, McpJsonObject.class,
-					new McpSchema(bridge.getSchemaDocument()),
+					new McpToolSchema(bridge.getSchemaDocument()),
 					bridge.getMirroredHeaderPlan(), bridge::decode);
 		}
 
@@ -497,8 +497,8 @@ public final class McpToolRegistration<A> {
 			requireNonNull(argumentType);
 			McpRuntimeTypedSchemaBridge<T> inputBridge =
 					McpRuntimeTypedSchemaBridge.compileToolInput(argumentType);
-			McpSchema inputSchema =
-					new McpSchema(inputBridge.getSchemaDocument());
+			McpToolSchema inputSchema =
+					new McpToolSchema(inputBridge.getSchemaDocument());
 			return new OperationHandlerStage<>(this.name, argumentType,
 					inputSchema, inputBridge.getMirroredHeaderPlan(),
 					inputBridge::decode);
@@ -546,9 +546,9 @@ public final class McpToolRegistration<A> {
 		public CompleteBuilder<A, R> handler(
 				@NonNull McpCompleteToolHandler<A, R> handler) {
 			requireNonNull(handler);
-			McpToolHandler<A> normalizedHandler = (request, call, features) -> {
+			McpToolHandler<A> normalizedHandler = (request, arguments, features) -> {
 				R result = requireNonNull(
-						handler.handle(request, call, features),
+						handler.handle(request, arguments, features),
 						"The MCP complete tool handler returned null.");
 				McpJsonValue structuredContent =
 						this.outputBridge.encodeForDeferredValidation(result);
@@ -557,10 +557,10 @@ public final class McpToolRegistration<A> {
 			};
 			RegistrationState<A> state = new RegistrationState<>(this.name,
 					this.argumentType,
-					new McpSchema(this.inputBridge.getSchemaDocument()),
+					new McpToolSchema(this.inputBridge.getSchemaDocument()),
 					this.inputBridge.getMirroredHeaderPlan(),
 					this.resultType,
-					new McpSchema(this.outputBridge.getSchemaDocument()),
+					new McpToolSchema(this.outputBridge.getSchemaDocument()),
 					this.outputBridge,
 					normalizedHandler, this.inputBridge::decode);
 			return new CompleteBuilder<>(state);
@@ -580,14 +580,14 @@ public final class McpToolRegistration<A> {
 		@NonNull
 		private final Type argumentType;
 		@NonNull
-		private final McpSchema inputSchema;
+		private final McpToolSchema inputSchema;
 		@NonNull
 		private final McpMirroredHeaderPlan mirroredHeaderPlan;
 		@NonNull
 		private final ArgumentDecoder<A> argumentDecoder;
 
 		private OperationHandlerStage(@NonNull String name,
-				@NonNull Type argumentType, @NonNull McpSchema inputSchema,
+				@NonNull Type argumentType, @NonNull McpToolSchema inputSchema,
 				@NonNull McpMirroredHeaderPlan mirroredHeaderPlan,
 				@NonNull ArgumentDecoder<A> argumentDecoder) {
 			this.name = requireNonNull(name);
@@ -896,14 +896,14 @@ public final class McpToolRegistration<A> {
 	}
 
 	@ThreadSafe
-	private static final class DefaultToolCallContext<A>
-			implements McpToolCallContext<A> {
+	private static final class DefaultToolArguments<A>
+			implements McpToolArguments<A> {
 		@NonNull
 		private final A arguments;
 		@NonNull
 		private final McpJsonObject rawArguments;
 
-		private DefaultToolCallContext(@NonNull A arguments,
+		private DefaultToolArguments(@NonNull A arguments,
 				@NonNull McpJsonObject rawArguments) {
 			this.arguments = requireNonNull(arguments);
 			this.rawArguments = requireNonNull(rawArguments);
@@ -929,13 +929,13 @@ public final class McpToolRegistration<A> {
 		@NonNull
 		private final Type argumentType;
 		@NonNull
-		private final McpSchema inputSchema;
+		private final McpToolSchema inputSchema;
 		@NonNull
 		private final McpMirroredHeaderPlan mirroredHeaderPlan;
 		@Nullable
 		private final Type outputType;
 		@Nullable
-		private final McpSchema outputSchema;
+		private final McpToolSchema outputSchema;
 		@Nullable
 		private final McpRuntimeTypedSchemaBridge<?> outputSchemaBridge;
 		@NonNull
@@ -964,9 +964,9 @@ public final class McpToolRegistration<A> {
 		private McpJsonObject metadata = McpJsonObject.emptyInstance();
 
 		private RegistrationState(@NonNull String name,
-				@NonNull Type argumentType, @NonNull McpSchema inputSchema,
+				@NonNull Type argumentType, @NonNull McpToolSchema inputSchema,
 				@NonNull McpMirroredHeaderPlan mirroredHeaderPlan,
-				@Nullable Type outputType, @Nullable McpSchema outputSchema,
+				@Nullable Type outputType, @Nullable McpToolSchema outputSchema,
 				@Nullable McpRuntimeTypedSchemaBridge<?> outputSchemaBridge,
 				@NonNull McpToolHandler<A> handler,
 				@NonNull ArgumentDecoder<A> argumentDecoder) {

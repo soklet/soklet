@@ -35,7 +35,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * An immutable registry of MCP endpoints and their handlers.
  * <p>
- * Resolver methods preserve endpoint registration order. Every resolver
+ * Registry methods preserve endpoint registration order. Every registry
  * contains at least one endpoint, and no two endpoints may have the same
  * normalized path.
  * <p>
@@ -47,7 +47,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public interface McpHandlerResolver {
+public interface McpEndpointRegistry {
 	/**
 	 * The endpoints in deterministic registration order.
 	 *
@@ -57,18 +57,18 @@ public interface McpHandlerResolver {
 	List<@NonNull McpEndpoint> getEndpoints();
 
 	/**
-	 * Returns a resolver containing the current endpoints followed by the given
+	 * Returns a registry containing the current endpoints followed by the given
 	 * endpoint.
 	 *
 	 * @param endpoint the endpoint to append
-	 * @return a new immutable resolver
+	 * @return a new immutable registry
 	 * @throws IllegalArgumentException if the endpoint path is already registered
 	 */
 	@NonNull
-	McpHandlerResolver withEndpoint(@NonNull McpEndpoint endpoint);
+	McpEndpointRegistry withEndpoint(@NonNull McpEndpoint endpoint);
 
 	/**
-	 * Returns a resolver whose generated endpoint for the supplied annotated
+	 * Returns a registry whose generated endpoint for the supplied annotated
 	 * class carries the given resource-subscription configuration.
 	 * <p>
 	 * Soklet selects the already-generated endpoint by the exact loaded
@@ -80,13 +80,13 @@ public interface McpHandlerResolver {
 	 * @param annotatedEndpointClass annotated endpoint class whose generated
 	 *                               endpoint is selected
 	 * @param subscriptions resource-subscription configuration
-	 * @return a new immutable resolver
-	 * @throws IllegalArgumentException if this resolver did not load a generated
+	 * @return a new immutable registry
+	 * @throws IllegalArgumentException if this registry did not load a generated
 	 *                                  endpoint for the exact supplied class
 	 * @throws NullPointerException if either argument is null
 	 */
 	@NonNull
-	McpHandlerResolver withSubscriptions(
+	McpEndpointRegistry withSubscriptions(
 			@NonNull Class<?> annotatedEndpointClass,
 			@NonNull McpSubscriptionConfig subscriptions);
 
@@ -99,13 +99,13 @@ public interface McpHandlerResolver {
 	 * {@link InstanceProvider#defaultInstance()} when they are invoked. Soklet
 	 * does not retain or close the returned endpoint instance.
 	 *
-	 * @return an immutable resolver ordered by endpoint binary name
+	 * @return an immutable registry ordered by endpoint binary name
 	 * @throws IllegalStateException if no generated descriptor is found or an
 	 *                               index or provider is malformed, conflicting,
 	 *                               or cannot be loaded
 	 */
 	@NonNull
-	static McpHandlerResolver fromClasspathIntrospection() {
+	static McpEndpointRegistry fromClasspathIntrospection() {
 		return fromClasspathIntrospection(InstanceProvider.defaultInstance());
 	}
 
@@ -120,21 +120,21 @@ public interface McpHandlerResolver {
 	 * neither caches nor closes them.
 	 *
 	 * @param instanceProvider application endpoint-instance provider
-	 * @return an immutable resolver ordered by endpoint binary name
+	 * @return an immutable registry ordered by endpoint binary name
 	 * @throws IllegalStateException if no generated descriptor is found or an
 	 *                               index or provider is malformed, conflicting,
 	 *                               or cannot be loaded
 	 * @throws NullPointerException if the provider is null
 	 */
 	@NonNull
-	static McpHandlerResolver fromClasspathIntrospection(
+	static McpEndpointRegistry fromClasspathIntrospection(
 			@NonNull InstanceProvider instanceProvider) {
 		requireNonNull(instanceProvider);
 		ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
 		if (classLoader == null)
-			classLoader = McpHandlerResolver.class.getClassLoader();
+			classLoader = McpEndpointRegistry.class.getClassLoader();
 		try {
-			return new DefaultMcpHandlerResolver(
+			return new DefaultMcpEndpointRegistry(
 					McpGeneratedEndpointProviderLoader.loadAllWithProvenance(
 							classLoader,
 							instanceProvider));
@@ -153,7 +153,7 @@ public interface McpHandlerResolver {
 	 * instance.
 	 *
 	 * @param endpointClasses one or more annotated endpoint classes
-	 * @return an immutable resolver in the supplied order
+	 * @return an immutable registry in the supplied order
 	 * @throws IllegalArgumentException if no classes are supplied, a class is
 	 *                                  duplicated, or a class has no generated
 	 *                                  descriptor, or two selected endpoints
@@ -163,7 +163,7 @@ public interface McpHandlerResolver {
 	 * @throws NullPointerException if the array or one of its classes is null
 	 */
 	@NonNull
-	static McpHandlerResolver fromClasses(
+	static McpEndpointRegistry fromClasses(
 			@NonNull Class<?> @NonNull ... endpointClasses) {
 		return fromClasses(InstanceProvider.defaultInstance(), endpointClasses);
 	}
@@ -179,7 +179,7 @@ public interface McpHandlerResolver {
 	 *
 	 * @param instanceProvider application endpoint-instance provider
 	 * @param endpointClasses one or more annotated endpoint classes
-	 * @return an immutable resolver in the supplied order
+	 * @return an immutable registry in the supplied order
 	 * @throws IllegalArgumentException if no classes are supplied, a class is
 	 *                                  duplicated, or a class has no generated
 	 *                                  descriptor, or two selected endpoints
@@ -190,56 +190,56 @@ public interface McpHandlerResolver {
 	 *                              is null
 	 */
 	@NonNull
-	static McpHandlerResolver fromClasses(
+	static McpEndpointRegistry fromClasses(
 			@NonNull InstanceProvider instanceProvider,
 			@NonNull Class<?> @NonNull ... endpointClasses) {
 		requireNonNull(instanceProvider);
 		requireNonNull(endpointClasses);
-		return new DefaultMcpHandlerResolver(
+		return new DefaultMcpEndpointRegistry(
 				McpGeneratedEndpointProviderLoader.loadClassesWithProvenance(
 						Arrays.asList(endpointClasses.clone()), instanceProvider));
 	}
 
 	/**
-	 * Creates an immutable resolver from endpoints in registration order.
+	 * Creates an immutable registry from endpoints in registration order.
 	 *
 	 * @param endpoints one or more endpoints
-	 * @return an immutable handler resolver
+	 * @return an immutable endpoint registry
 	 * @throws IllegalArgumentException if no endpoints are supplied or two
 	 *                                  endpoints have the same normalized path
 	 */
 	@NonNull
-	static McpHandlerResolver fromEndpoints(
+	static McpEndpointRegistry fromEndpoints(
 			@NonNull Collection<@NonNull McpEndpoint> endpoints) {
-		return new DefaultMcpHandlerResolver(endpoints);
+		return new DefaultMcpEndpointRegistry(endpoints);
 	}
 }
 
 /**
- * Package-private immutable {@link McpHandlerResolver} implementation.
+ * Package-private immutable {@link McpEndpointRegistry} implementation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-final class DefaultMcpHandlerResolver implements McpHandlerResolver {
+final class DefaultMcpEndpointRegistry implements McpEndpointRegistry {
 	@NonNull
 	private final List<@NonNull McpEndpoint> endpoints;
 	@NonNull
 	private final Map<@NonNull Class<?>, @NonNull McpEndpoint>
 			generatedEndpoints;
 
-	DefaultMcpHandlerResolver(
+	DefaultMcpEndpointRegistry(
 			@NonNull Collection<@NonNull McpEndpoint> endpoints) {
 		this(endpoints, Map.of());
 	}
 
-	DefaultMcpHandlerResolver(
+	DefaultMcpEndpointRegistry(
 			@NonNull Map<@NonNull Class<?>, @NonNull McpEndpoint>
 					generatedEndpoints) {
 		this(generatedEndpoints.values(), generatedEndpoints);
 	}
 
-	private DefaultMcpHandlerResolver(
+	private DefaultMcpEndpointRegistry(
 			@NonNull Collection<@NonNull McpEndpoint> endpoints,
 			@NonNull Map<@NonNull Class<?>, @NonNull McpEndpoint>
 					generatedEndpoints) {
@@ -287,17 +287,17 @@ final class DefaultMcpHandlerResolver implements McpHandlerResolver {
 
 	@Override
 	@NonNull
-	public McpHandlerResolver withEndpoint(@NonNull McpEndpoint endpoint) {
+	public McpEndpointRegistry withEndpoint(@NonNull McpEndpoint endpoint) {
 		requireNonNull(endpoint);
 		List<@NonNull McpEndpoint> endpoints = new ArrayList<>(getEndpoints());
 		endpoints.add(endpoint);
-		return new DefaultMcpHandlerResolver(endpoints,
+		return new DefaultMcpEndpointRegistry(endpoints,
 				this.generatedEndpoints);
 	}
 
 	@Override
 	@NonNull
-	public McpHandlerResolver withSubscriptions(
+	public McpEndpointRegistry withSubscriptions(
 			@NonNull Class<?> annotatedEndpointClass,
 			@NonNull McpSubscriptionConfig subscriptions) {
 		requireNonNull(annotatedEndpointClass);
@@ -319,7 +319,7 @@ final class DefaultMcpHandlerResolver implements McpHandlerResolver {
 				Map<Class<?>, McpEndpoint> generatedEndpoints =
 						new IdentityHashMap<>(this.generatedEndpoints);
 				generatedEndpoints.put(annotatedEndpointClass, replacedEndpoint);
-				return new DefaultMcpHandlerResolver(endpoints,
+				return new DefaultMcpEndpointRegistry(endpoints,
 						generatedEndpoints);
 			}
 		}

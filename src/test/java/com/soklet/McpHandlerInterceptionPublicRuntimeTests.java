@@ -67,7 +67,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					Assertions.assertSame(interceptorContexts.get("tools/call"),
 							request);
 					Assertions.assertSame(interceptorFeatures.get("tools/call"),
@@ -121,7 +121,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				.build();
 		expectedEndpoint.set(endpoint);
 		McpServer server = serverBuilder(endpoint)
-				.handlerInterceptor((context, invocation) -> {
+				.handlerInterceptor((context, continuation) -> {
 					interceptorInvocations.incrementAndGet();
 					Assertions.assertSame(expectedEndpoint.get(), context.getEndpoint());
 					Assertions.assertTrue(
@@ -138,11 +138,11 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					Assertions.assertEquals(expectedOperation,
 							context.getOperationName());
 					interceptorContexts.put(method, context);
-					McpInvocationFeatures features = invocation.getFeatures();
-					Assertions.assertSame(features, invocation.getFeatures());
+					McpInvocationFeatures features = continuation.getFeatures();
+					Assertions.assertSame(features, continuation.getFeatures());
 					interceptorFeatures.put(method, features);
 					stages.add("before:" + method);
-					McpOperationResult result = invocation.invoke();
+					McpOperationResult result = continuation.proceed();
 					stages.add("after:" + method);
 					if (method.equals("tools/call"))
 						return McpCompleteResult.fromToolText("tool-transformed");
@@ -216,7 +216,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 						.build())
 				.tool(McpToolRegistration.withName("short-circuit")
 						.argumentType(RequiredArguments.class)
-						.handler((request, call, features) -> {
+						.handler((request, arguments, features) -> {
 							shortCircuitHandlerInvocations.incrementAndGet();
 							return McpCompleteResult.fromToolText("must-not-run");
 						})
@@ -226,18 +226,18 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				.tool(rawTool("throwing"))
 				.build();
 		McpServer server = serverBuilder(endpoint)
-				.handlerInterceptor((context, invocation) -> switch (
+				.handlerInterceptor((context, continuation) -> switch (
 						context.getOperationName().orElseThrow()) {
 					case "short-circuit" -> {
-						McpInvocationFeatures features = invocation.getFeatures();
-						Assertions.assertSame(features, invocation.getFeatures());
+						McpInvocationFeatures features = continuation.getFeatures();
+						Assertions.assertSame(features, continuation.getFeatures());
 						yield McpCompleteResult.fromToolText("short-circuited");
 					}
 					case "wrong-result" -> McpResourcePage.builder().build();
 					case "null-result" -> null;
 					case "throwing" -> throw new IllegalStateException(
 							"interceptor-secret-must-not-leak");
-					default -> invocation.invoke();
+					default -> continuation.proceed();
 				})
 				.build();
 
@@ -281,9 +281,9 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 						.build())
 				.build();
 		McpServer server = serverBuilder(endpoint)
-				.handlerInterceptor((context, invocation) -> {
+				.handlerInterceptor((context, continuation) -> {
 					interceptorInvocations.incrementAndGet();
-					return invocation.invoke();
+					return continuation.proceed();
 				})
 				.build();
 
@@ -320,7 +320,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 						McpResourcePage.builder().build())
 				.build();
 		McpServer server = serverBuilder(endpoint)
-				.handlerInterceptor((context, invocation) -> {
+				.handlerInterceptor((context, continuation) -> {
 					throw new McpJsonRpcException(McpJsonRpcError.fromApplication(
 							1_001, "interceptor-secret-must-not-leak"));
 				})
@@ -354,7 +354,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 		Map<String, AtomicInteger> handlerInvocations = new ConcurrentHashMap<>();
 		for (String toolName : List.of("one-shot", "wrong-thread", "retained"))
 			handlerInvocations.put(toolName, new AtomicInteger());
-		AtomicReference<McpHandlerInvocation> retainedInvocation =
+		AtomicReference<McpHandlerContinuation> retainedContinuation =
 				new AtomicReference<>();
 		AtomicReference<Throwable> wrongThreadFeatureFailure =
 				new AtomicReference<>();
@@ -368,7 +368,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 		for (String toolName : handlerInvocations.keySet()) {
 			endpointBuilder.tool(McpToolRegistration.withName(toolName)
 					.jsonArguments()
-					.handler((request, call, features) -> {
+					.handler((request, arguments, features) -> {
 						handlerInvocations.get(toolName).incrementAndGet();
 						return McpCompleteResult.fromToolText(toolName + "-handled");
 					})
@@ -376,25 +376,25 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 		}
 		McpEndpoint endpoint = endpointBuilder.build();
 		McpServer server = serverBuilder(endpoint)
-				.handlerInterceptor((context, invocation) -> switch (
+				.handlerInterceptor((context, continuation) -> switch (
 						context.getOperationName().orElseThrow()) {
 					case "one-shot" -> {
-						McpInvocationFeatures features = invocation.getFeatures();
-						Assertions.assertSame(features, invocation.getFeatures());
-						McpOperationResult result = invocation.invoke();
+						McpInvocationFeatures features = continuation.getFeatures();
+						Assertions.assertSame(features, continuation.getFeatures());
+						McpOperationResult result = continuation.proceed();
 						Assertions.assertThrows(IllegalStateException.class,
-								invocation::invoke);
+								continuation::proceed);
 						yield result;
 					}
 					case "wrong-thread" -> {
 						Thread thread = new Thread(() -> {
 							try {
-								invocation.getFeatures();
+								continuation.getFeatures();
 							} catch (Throwable throwable) {
 								wrongThreadFeatureFailure.set(throwable);
 							}
 							try {
-								invocation.invoke();
+								continuation.proceed();
 							} catch (Throwable throwable) {
 								wrongThreadInvocationFailure.set(throwable);
 							}
@@ -408,11 +408,11 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 								wrongThreadInvocationFailure.get());
 						Assertions.assertEquals(0,
 								handlerInvocations.get("wrong-thread").get());
-						yield invocation.invoke();
+						yield continuation.proceed();
 					}
 					case "retained" -> {
-						retainedInvocation.set(invocation);
-						yield invocation.invoke();
+						retainedContinuation.set(continuation);
+						yield continuation.proceed();
 					}
 					default -> throw new AssertionError("Unexpected tool");
 				})
@@ -432,9 +432,9 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 			for (AtomicInteger count : handlerInvocations.values())
 				Assertions.assertEquals(1, count.get());
 			Assertions.assertThrows(IllegalStateException.class,
-					() -> retainedInvocation.get().invoke());
+					() -> retainedContinuation.get().proceed());
 			Assertions.assertThrows(IllegalStateException.class,
-					() -> retainedInvocation.get().getFeatures());
+					() -> retainedContinuation.get().getFeatures());
 			Assertions.assertEquals(1,
 					handlerInvocations.get("retained").get());
 		} finally {
@@ -455,7 +455,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 						.build())
 				.tool(McpToolRegistration.withName("late")
 						.jsonArguments()
-						.handler((request, call, features) -> {
+						.handler((request, arguments, features) -> {
 							handlerInvocations.incrementAndGet();
 							return McpCompleteResult.fromToolText("too-late");
 						})
@@ -463,7 +463,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.requestTimeout(Duration.ofMillis(50))
-				.handlerInterceptor((context, invocation) -> {
+				.handlerInterceptor((context, continuation) -> {
 					interceptorInvocations.incrementAndGet();
 					long finish = System.nanoTime()
 							+ TimeUnit.MILLISECONDS.toNanos(250);
@@ -475,7 +475,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 						}
 					}
 					try {
-						return invocation.invoke();
+						return continuation.proceed();
 					} catch (Exception exception) {
 						lateContinuationFailure.set(exception);
 						throw exception;
@@ -511,7 +511,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 	private static McpToolRegistration<McpJsonObject> rawTool(String name) {
 		return McpToolRegistration.withName(name)
 				.jsonArguments()
-				.handler((request, call, features) ->
+				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText(name + "-handled"))
 				.build();
 	}
@@ -527,10 +527,10 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 	private static McpServer.Builder serverBuilder(McpEndpoint endpoint) {
 		return McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
-				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
 	}

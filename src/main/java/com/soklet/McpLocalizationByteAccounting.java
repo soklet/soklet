@@ -94,6 +94,52 @@ final class McpLocalizationByteAccounting {
 	}
 
 	/**
+	 * Returns the number of characters in the serialized JSON string token,
+	 * excluding the two enclosing quotes.
+	 * <p>
+	 * This is deliberately separate from the UTF-8 byte count: a C0 control
+	 * character is one decoded character, six serialized token characters, and
+	 * six encoded bytes. The production writer enforces its token-character
+	 * ceiling independently from both decoded length and response bytes.
+	 *
+	 * @param value string to measure
+	 * @return exact serialized token-character count, excluding quotes
+	 * @throws IllegalArgumentException if the string contains an unpaired surrogate
+	 */
+	static long serializedTokenCharacters(@NonNull String value) {
+		requireNonNull(value, "value");
+		long characters = 0;
+
+		for (int index = 0; index < value.length(); ++index) {
+			char character = value.charAt(index);
+
+			switch (character) {
+				case '"', '\\', '\b', '\f', '\n', '\r', '\t' -> characters += 2;
+				default -> {
+					if (character < 0x20) {
+						characters += 6;
+					} else if (Character.isHighSurrogate(character)) {
+						if (index + 1 >= value.length()
+								|| !Character.isLowSurrogate(value.charAt(index + 1)))
+							throw new IllegalArgumentException(
+									"JSON string contains an unpaired high surrogate.");
+
+						++index;
+						characters += 2;
+					} else if (Character.isLowSurrogate(character)) {
+						throw new IllegalArgumentException(
+								"JSON string contains an unpaired low surrogate.");
+					} else {
+						characters += 1;
+					}
+				}
+			}
+		}
+
+		return characters;
+	}
+
+	/**
 	 * Returns the signed change in encoded response bytes from replacing
 	 * {@code defaultText} with {@code replacementText} at one localization slot.
 	 *

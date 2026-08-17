@@ -1,0 +1,103 @@
+name: Release Candidate Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_commit:
+        description: Full immutable Soklet candidate commit SHA
+        required: true
+        type: string
+
+concurrency:
+  group: release-validation-${{ inputs.candidate_commit }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate immutable candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Check out exact candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          clean: true
+          fetch-depth: 1
+          persist-credentials: false
+          ref: ${{ inputs.candidate_commit }}
+
+      - name: Install checksum-pinned Node and npm
+        shell: bash
+        run: >-
+          bash conformance/official/scripts/install-pinned-node-linux-x64.sh
+          "${RUNNER_TEMP}" "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/release-validation-node-distribution.txt"
+
+      - name: Install checksum-pinned Corretto 25 for ToyStore
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-corretto-linux-x64.sh
+          toystoreJava "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/release-validation-toystore-java-distribution.txt"
+
+      - name: Install checksum-pinned Corretto 17 for candidate validation
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-corretto-linux-x64.sh
+          java "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/release-validation-java-distribution.txt"
+
+      - name: Install checksum-pinned Maven
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-maven-linux-x64.sh
+          "${RUNNER_TEMP}" "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/release-validation-maven-distribution.txt"
+
+      - name: Install checksum-pinned Go
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-go-linux-x64.sh
+          "${RUNNER_TEMP}" "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/release-validation-go-distribution.txt"
+
+      - name: Self-test release evidence gates
+        run: |
+          node scripts/release-validation-self-test.mjs
+          node scripts/verify-surefire-reports-self-test.mjs
+
+      - name: Validate exact release candidate
+        shell: bash
+        env:
+          SOKLET_CANDIDATE_COMMIT: ${{ inputs.candidate_commit }}
+          SOKLET_RELEASE_GO_DISTRIBUTION_EVIDENCE: ${{ runner.temp }}/release-validation-go-distribution.txt
+          SOKLET_RELEASE_JAVA_DISTRIBUTION_EVIDENCE: ${{ runner.temp }}/release-validation-java-distribution.txt
+          SOKLET_RELEASE_MAVEN_DISTRIBUTION_EVIDENCE: ${{ runner.temp }}/release-validation-maven-distribution.txt
+          SOKLET_RELEASE_NODE_DISTRIBUTION_EVIDENCE: ${{ runner.temp }}/release-validation-node-distribution.txt
+          SOKLET_RELEASE_TOYSTORE_JAVA_DISTRIBUTION_EVIDENCE: ${{ runner.temp }}/release-validation-toystore-java-distribution.txt
+        run: scripts/validate-release-candidate.sh "$SOKLET_CANDIDATE_COMMIT"
+
+      - name: Upload release-validation evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: release-validation-${{ inputs.candidate_commit }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 90
+          path: |
+            target/release-validation/evidence
+            ${{ runner.temp }}/release-validation-node-distribution.txt
+            ${{ runner.temp }}/release-validation-maven-distribution.txt
+            ${{ runner.temp }}/release-validation-go-distribution.txt
+            ${{ runner.temp }}/release-validation-java-distribution.txt
+            ${{ runner.temp }}/release-validation-toystore-java-distribution.txt
+            target/soklet-3.6.0.jar
+            target/soklet-3.6.0-sources.jar
+            target/soklet-3.6.0-javadoc.jar
+            pom.xml
+            soak/target/soak-report.md
+            soak/target/surefire-reports
+            target/conformance/official/release

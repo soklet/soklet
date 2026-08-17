@@ -40,7 +40,7 @@ public final class McpOfficialSchemaConformanceTool {
 	public static McpToolRegistration<McpJsonObject> create() {
 		return McpToolRegistration.withName(TOOL_NAME)
 				.conformanceInputSchema(inputSchema())
-				.handler((request, call, features) ->
+				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("Schema input accepted."))
 				.description("Tool with JSON Schema 2020-12 features")
 				.build();

@@ -18,8 +18,13 @@ package com.soklet;
 
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestObservationInput;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.io.ByteArrayOutputStream;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -27,6 +32,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -44,7 +50,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
+@Timeout(30)
 class McpLocalizationPreferenceTests {
+	private static final String LOOPBACK = "127.0.0.1";
+	private static final String PROTOCOL_VERSION = "2026-07-28";
+
 	@Test
 	void absentBlankAndMalformedInputAllCollapseToTheEmptyPreference() {
 		assertEquals(List.of(), McpLocaleSupport.boundedLanguageRanges(null));
@@ -79,6 +89,118 @@ class McpLocalizationPreferenceTests {
 
 		assertEquals(List.of("en-us", "fr-ca"),
 				ranges.stream().map(Locale.LanguageRange::getRange).toList());
+	}
+
+	@Test
+	void observationContextRetainsPhysicalHeaderOrderAndDuplicates() {
+		List<String> physicalValues = List.of(
+				"fr-CA;q=0", "en-US", "fr-CA;q=1");
+		DefaultMcpRequestContext context = new DefaultMcpRequestContext(
+				new RequestObservationInput(
+						Request.withPath(HttpMethod.POST, "/mcp").build(),
+						McpEndpoint.withPath("/mcp").serverInformation(
+								McpImplementation.withNameAndVersion(
+										"physical-preference", "1").build()).build(),
+						Map.of(), "tools/call",
+						Optional.of(McpRequestId.fromString("request")),
+						"2026-07-28", Optional.of("lookup"), Optional.empty(),
+						McpJsonObject.emptyInstance(), McpJsonObject.emptyInstance(),
+						McpInputResponses.emptyInstance(), Optional.empty(),
+						physicalValues, McpAdmissionIdentity.anonymousInstance()));
+
+		assertEquals(physicalValues, context.acceptLanguageValues());
+		assertEquals(List.of("en-us", "fr-ca"),
+				McpLocaleSupport.boundedLanguageRanges(
+						context.acceptLanguageValues()).stream()
+						.map(Locale.LanguageRange::getRange).toList());
+	}
+
+	@Test
+	void physicalDuplicateHeaderFieldsReachTheProviderInWireOrder()
+			throws Exception {
+		AtomicReference<List<Locale.LanguageRange>> observedRanges =
+				new AtomicReference<>();
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
+				.contextProvider(request -> {
+					observedRanges.set(List.copyOf(request.getLanguageRanges()));
+					return new McpLocalizationContext() {
+						@Override
+						public Locale getLocale() {
+							return Locale.ENGLISH;
+						}
+
+						@Override
+						public McpLocalizationResult localize(
+								McpLocalizableText text) {
+							return McpLocalizationResult.useDefaultText();
+						}
+					};
+				})
+				.build();
+		String path = "/localization/physical-preference";
+		McpEndpoint endpoint = McpEndpoint.withPath(path)
+				.serverInformation(McpImplementation
+						.withNameAndVersion("physical-preference", "1")
+						.title("Localized surface")
+						.build())
+				.build();
+		McpServer server = McpServer.withPort(0)
+				.host(LOOPBACK)
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(McpAdmissionController.acceptAllInstance())
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.allowedHosts(Set.of(LOOPBACK))
+				.localizer(localizer)
+				.build();
+		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
+
+		try {
+			soklet.start();
+			int port = server.getDiagnostics().getBoundAddress()
+					.orElseThrow().getPort();
+			byte[] body = ("{\"jsonrpc\":\"2.0\",\"id\":\"physical\","
+					+ "\"method\":\"server/discover\",\"params\":{\"_meta\":{"
+					+ "\"io.modelcontextprotocol/protocolVersion\":\""
+					+ PROTOCOL_VERSION + "\","
+					+ "\"io.modelcontextprotocol/clientCapabilities\":{}}}}")
+					.getBytes(StandardCharsets.UTF_8);
+			String requestHead = "POST " + path + " HTTP/1.1\r\n"
+					+ "Host: " + LOOPBACK + ':' + port + "\r\n"
+					+ "Content-Type: application/json; charset=UTF-8\r\n"
+					+ "Accept: application/json, text/event-stream\r\n"
+					+ "MCP-Protocol-Version: " + PROTOCOL_VERSION + "\r\n"
+					+ "Mcp-Method: server/discover\r\n"
+					+ "Accept-Language: fr-CA;q=0\r\n"
+					+ "Accept-Language: en-US\r\n"
+					+ "Accept-Language: fr-CA;q=1\r\n"
+					+ "Content-Length: " + body.length + "\r\n"
+					+ "Connection: close\r\n\r\n";
+
+			try (Socket socket = new Socket()) {
+				socket.connect(new InetSocketAddress(LOOPBACK, port), 3_000);
+				socket.setSoTimeout(5_000);
+				socket.getOutputStream().write(
+						requestHead.getBytes(StandardCharsets.ISO_8859_1));
+				socket.getOutputStream().write(body);
+				socket.getOutputStream().flush();
+				ByteArrayOutputStream response = new ByteArrayOutputStream();
+				socket.getInputStream().transferTo(response);
+				String responseText = response.toString(
+						StandardCharsets.ISO_8859_1);
+				assertTrue(responseText.startsWith("HTTP/1.1 200"), responseText);
+			}
+		} finally {
+			soklet.stop();
+		}
+
+		List<Locale.LanguageRange> ranges = observedRanges.get();
+		assertEquals(List.of("en-us", "fr-ca"), ranges.stream()
+				.map(Locale.LanguageRange::getRange).toList());
+		assertEquals(List.of(1.0d, 0.0d), ranges.stream()
+				.map(Locale.LanguageRange::getWeight).toList(),
+				"The first physical duplicate controls the repeated range's weight.");
 	}
 
 	@Test

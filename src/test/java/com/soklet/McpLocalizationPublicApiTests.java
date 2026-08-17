@@ -68,10 +68,9 @@ public class McpLocalizationPublicApiTests {
 						"getRevision()",
 						"localize(com.soklet.McpLocalizableText)")),
 				Map.entry(McpLocalizationResult.class, Set.of(
-						"fromDefaultText()",
-						"fromFailure()",
-						"fromFallbackText(java.lang.String,java.util.Locale)",
-						"fromLocalizedText(java.lang.String)")),
+						"useDefaultText()",
+						"failure()",
+						"localized(java.lang.String)")),
 				Map.entry(McpLocalizationRevision.class, Set.of(
 						"equals(java.lang.Object)",
 						"fromValue(java.lang.String)",
@@ -79,7 +78,7 @@ public class McpLocalizationPublicApiTests {
 						"hashCode()",
 						"toString()")),
 				Map.entry(McpLocalizationCatalog.class, Set.of(
-						"fromHandlerResolver(com.soklet.McpHandlerResolver)",
+						"fromEndpointRegistry(com.soklet.McpEndpointRegistry)",
 						"getTexts()")),
 				Map.entry(McpLocalizationControl.class, Set.of(
 						"catalogsChanged()", "isEnabled()")),
@@ -107,13 +106,10 @@ public class McpLocalizationPublicApiTests {
 		Assertions.assertTrue(McpLocalizationResult.class.isSealed());
 		Assertions.assertEquals(Set.of(
 				McpLocalizationResult.Localized.class,
-				McpLocalizationResult.Fallback.class,
 				McpLocalizationResult.UseDefaultText.class,
 				McpLocalizationResult.Failure.class),
 				Set.of(McpLocalizationResult.class.getPermittedSubclasses()));
 		assertRecordComponents(McpLocalizationResult.Localized.class, "text");
-		assertRecordComponents(McpLocalizationResult.Fallback.class, "text",
-				"resolvedLocale");
 		assertRecordComponents(McpLocalizationResult.UseDefaultText.class);
 		assertRecordComponents(McpLocalizationResult.Failure.class);
 		Assertions.assertArrayEquals(new McpLocalizationFailurePolicy[]{
@@ -142,7 +138,6 @@ public class McpLocalizationPublicApiTests {
 				McpLocalizationContext.class,
 				McpLocalizationResult.class,
 				McpLocalizationResult.Localized.class,
-				McpLocalizationResult.Fallback.class,
 				McpLocalizationResult.UseDefaultText.class,
 				McpLocalizationResult.Failure.class,
 				McpLocalizationRevision.class,
@@ -257,47 +252,30 @@ public class McpLocalizationPublicApiTests {
 				Locale.forLanguageTag("und-Latn"))) {
 			Assertions.assertThrows(IllegalArgumentException.class,
 					() -> McpLocalizer.withFallbackLocale(invalid));
-			Assertions.assertThrows(IllegalArgumentException.class,
-					() -> McpLocalizationResult.fromFallbackText(
-							"translation", invalid));
 		}
 	}
 
 	@Test
 	public void localizationResultsValidateValuesAndRedactSensitiveText() {
 		McpLocalizationResult.Localized localized =
-				McpLocalizationResult.fromLocalizedText("translated secret");
-		McpLocalizationResult.Fallback fallback =
-				McpLocalizationResult.fromFallbackText(
-						"fallback secret", Locale.FRENCH);
+				McpLocalizationResult.localized("translated secret");
 		McpLocalizationResult.UseDefaultText defaultText =
-				McpLocalizationResult.fromDefaultText();
+				McpLocalizationResult.useDefaultText();
 		McpLocalizationResult.Failure failure =
-				McpLocalizationResult.fromFailure();
+				McpLocalizationResult.failure();
 
 		Assertions.assertEquals("translated secret", localized.text());
-		Assertions.assertEquals("fallback secret", fallback.text());
-		Assertions.assertEquals(Locale.FRENCH, fallback.resolvedLocale());
 		Assertions.assertEquals(new McpLocalizationResult.UseDefaultText(),
 				defaultText);
 		Assertions.assertEquals(new McpLocalizationResult.Failure(), failure);
 		Assertions.assertFalse(localized.toString().contains("translated secret"));
-		Assertions.assertFalse(fallback.toString().contains("fallback secret"));
-		Assertions.assertFalse(fallback.toString().contains("fr"));
 		Assertions.assertEquals(0, failure.getClass().getRecordComponents().length);
 
 		Assertions.assertThrows(NullPointerException.class,
-				() -> McpLocalizationResult.fromLocalizedText(null));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> McpLocalizationResult.fromFallbackText(null, Locale.FRENCH));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> McpLocalizationResult.fromFallbackText("text", null));
+				() -> McpLocalizationResult.localized(null));
 		for (String blank : List.of("", " ", "\t\n")) {
 			Assertions.assertThrows(IllegalArgumentException.class,
-					() -> McpLocalizationResult.fromLocalizedText(blank));
-			Assertions.assertThrows(IllegalArgumentException.class,
-					() -> McpLocalizationResult.fromFallbackText(
-							blank, Locale.FRENCH));
+					() -> McpLocalizationResult.localized(blank));
 		}
 	}
 
@@ -349,16 +327,16 @@ public class McpLocalizationPublicApiTests {
 
 	@Test
 	public void catalogAndServerHostSeamsAreInertButUsable() {
-		McpHandlerResolver resolver = resolver();
+		McpEndpointRegistry registry = endpointRegistry();
 		McpLocalizationCatalog catalog =
-				McpLocalizationCatalog.fromHandlerResolver(resolver);
+				McpLocalizationCatalog.fromEndpointRegistry(registry);
 		Assertions.assertTrue(catalog.getTexts().isEmpty());
 		Assertions.assertThrows(UnsupportedOperationException.class,
 				() -> catalog.getTexts().add(null));
 		Assertions.assertThrows(NullPointerException.class,
-				() -> McpLocalizationCatalog.fromHandlerResolver(null));
+				() -> McpLocalizationCatalog.fromEndpointRegistry(null));
 
-		McpServer disabled = serverBuilder(resolver).build();
+		McpServer disabled = serverBuilder(registry).build();
 		McpLocalizationControl disabledControl =
 				disabled.getLocalizationControl();
 		Assertions.assertSame(disabledControl,
@@ -371,7 +349,7 @@ public class McpLocalizationPublicApiTests {
 		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
 				.contextProvider(request -> context(Locale.ENGLISH))
 				.build();
-		McpServer enabled = serverBuilder(resolver).localizer(localizer).build();
+		McpServer enabled = serverBuilder(registry).localizer(localizer).build();
 		McpLocalizationControl enabledControl = enabled.getLocalizationControl();
 		Assertions.assertSame(enabledControl, enabled.getLocalizationControl());
 		Assertions.assertNotSame(disabledControl, enabledControl);
@@ -384,18 +362,18 @@ public class McpLocalizationPublicApiTests {
 		Assertions.assertDoesNotThrow(
 				enabledControl::catalogsChanged);
 
-		McpServer anotherEnabled = serverBuilder(resolver)
+		McpServer anotherEnabled = serverBuilder(registry)
 				.localizer(localizer).build();
 		Assertions.assertNotSame(enabledControl,
 				anotherEnabled.getLocalizationControl());
 		Assertions.assertTrue(anotherEnabled.getLocalizationControl().isEnabled());
 
 		Assertions.assertThrows(NullPointerException.class,
-				() -> serverBuilder(resolver).localizer(null));
-		McpHandlerInvocation invocation = () -> {
+				() -> serverBuilder(registry).localizer(null));
+		McpHandlerContinuation continuation = () -> {
 			throw new AssertionError("The default feature lookup must not invoke.");
 		};
-		Assertions.assertTrue(invocation.getFeatures()
+		Assertions.assertTrue(continuation.getFeatures()
 				.find(McpLocalizationContext.class).isEmpty());
 	}
 
@@ -408,24 +386,24 @@ public class McpLocalizationPublicApiTests {
 
 			@Override
 			public McpLocalizationResult localize(McpLocalizableText text) {
-				return McpLocalizationResult.fromDefaultText();
+				return McpLocalizationResult.useDefaultText();
 			}
 		};
 	}
 
-	private static McpHandlerResolver resolver() {
+	private static McpEndpointRegistry endpointRegistry() {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
 				.serverInformation(McpImplementation.withNameAndVersion(
 						"localization-api-test", "3.6.0-SNAPSHOT").build())
 				.build();
-		return McpHandlerResolver.fromEndpoints(List.of(endpoint));
+		return McpEndpointRegistry.fromEndpoints(List.of(endpoint));
 	}
 
-	private static McpServer.Builder serverBuilder(McpHandlerResolver resolver) {
+	private static McpServer.Builder serverBuilder(McpEndpointRegistry registry) {
 		return McpServer.withPort(0)
-				.handlerResolver(resolver)
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance());
+				.endpointRegistry(registry)
+				.admissionController(
+						McpAdmissionController.acceptAllInstance());
 	}
 
 	private static Set<String> publicDeclaredMethods(Class<?> type) {

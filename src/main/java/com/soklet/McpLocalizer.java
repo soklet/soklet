@@ -30,10 +30,9 @@ import static java.util.Objects.requireNonNull;
  * The configured fallback locale is the language of every canonical
  * annotation and builder string hosted by the server and the locale of
  * canonical default text. It is independent of a provider or localization
- * library's terminal fallback locale and distinct from the actual locale in a
- * field-level {@link McpLocalizationResult.Fallback}. The application-owned
- * context provider performs request-specific locale selection and captures one
- * immutable translation snapshot.
+ * library's terminal fallback locale. The application-owned context provider
+ * performs request-specific locale selection and fallback resolution and
+ * captures one immutable translation snapshot.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

@@ -78,14 +78,14 @@ public class McpSimulatorPublicRuntimeTests {
 		RecordingMetrics metrics = new RecordingMetrics();
 		ServerLifecycleProbe lifecycle = new ServerLifecycleProbe();
 		McpToolRegistration<McpJsonObject> tool = tool("blocking",
-				(request, call, features) -> {
+				(request, arguments, features) -> {
 					handlerEntered.countDown();
 					awaitLatch(releaseHandler);
 					return McpCompleteResult.fromToolText("released");
 				});
 		McpServer server = server(List.of(tool), context -> {
 			admittedRequest.set(context.getRequest());
-			return McpAdmissionDecision.fromAnonymousIdentity();
+			return McpAdmissionDecision.accepted();
 		});
 		SokletConfig config = config(server, metrics, lifecycle);
 		String origin = "https://simulator.example";
@@ -151,7 +151,7 @@ public class McpSimulatorPublicRuntimeTests {
 	public void defaultLoopbackHostPolicyRequiresLiteralConfiguredPortZero() {
 		AtomicInteger handlerCalls = new AtomicInteger();
 		McpToolRegistration<McpJsonObject> tool = tool("default-loopback",
-				(request, call, features) -> {
+				(request, arguments, features) -> {
 					handlerCalls.incrementAndGet();
 					return McpCompleteResult.fromToolText("default host accepted");
 				});
@@ -162,10 +162,10 @@ public class McpSimulatorPublicRuntimeTests {
 				.build();
 		McpServer server = McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(McpRequestAdmissionPolicy.acceptAllInstance())
-				.requestRateLimiter(context -> McpRateLimitDecision.fromAllowed())
-				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(McpAdmissionController.acceptAllInstance())
+				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
 				.build();
 		SokletConfig config = config(server, MetricsCollector.defaultInstance(),
@@ -196,7 +196,7 @@ public class McpSimulatorPublicRuntimeTests {
 	public void synchronousJsonSimulationUsesRealProtocolLifecycleMetricsAndBodyMode() {
 		RecordingMetrics metrics = new RecordingMetrics();
 		McpServer server = server(List.of(tool("complete",
-				(request, call, features) ->
+				(request, arguments, features) ->
 						McpCompleteResult.fromToolText("json complete"))));
 		SokletConfig config = config(server, metrics,
 				LifecycleObserver.defaultInstance());
@@ -257,16 +257,16 @@ public class McpSimulatorPublicRuntimeTests {
 	public void malformedAndRejectedSimulationsPreserveProtocolPrecedenceWithoutAdmission() {
 		AtomicInteger admissionCalls = new AtomicInteger();
 		RecordingMetrics metrics = new RecordingMetrics(2);
-		McpRequestRejection rejection = McpRequestRejection
+		McpAdmissionRejection rejection = McpAdmissionRejection
 				.withStatusCodeAndError(401, McpJsonRpcError.fromApplication(1_001,
 						"Simulator admission rejected"))
 				.header("WWW-Authenticate", "Bearer realm=soklet-mcp-simulator")
 				.build();
 		McpServer server = server(List.of(tool("complete",
-				(request, call, features) ->
+				(request, arguments, features) ->
 						McpCompleteResult.fromToolText("must not run"))), context -> {
 			admissionCalls.incrementAndGet();
-			return McpAdmissionDecision.fromRejection(rejection);
+			return McpAdmissionDecision.rejected(rejection);
 		});
 		SokletConfig config = config(server, metrics,
 				LifecycleObserver.defaultInstance());
@@ -283,7 +283,7 @@ public class McpSimulatorPublicRuntimeTests {
 			Assertions.assertEquals(McpStreamTerminationReason.COMPLETED,
 					awaitCompletion(malformed).getReason());
 			Assertions.assertEquals(0, admissionCalls.get(),
-					"Malformed input must fail before admission policy evaluation.");
+					"Malformed input must fail before admission controller evaluation.");
 
 			McpSimulation rejected = simulator.startMcpRequest(request(
 					"admission-rejected", "complete", null, LOOPBACK + ":0",
@@ -329,7 +329,7 @@ public class McpSimulatorPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("multi-round-trip")
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					handlerContexts.add(request);
 					if (handlerCalls.incrementAndGet() == 1) {
 						Assertions.assertEquals(McpRequestId.fromString("mrtr-initial"),
@@ -412,7 +412,7 @@ public class McpSimulatorPublicRuntimeTests {
 	@Test
 	public void mcpSimulationBuffersStreamItemsAndClosesExplicitly() {
 		McpServer server = server(List.of(tool("progress",
-				(request, call, features) -> {
+				(request, arguments, features) -> {
 					features.require(McpProgressReporter.class).report(
 							McpProgressUpdate.withProgress(1.0d).build());
 					return McpCompleteResult.fromToolText("stream complete");
@@ -470,7 +470,7 @@ public class McpSimulatorPublicRuntimeTests {
 		AtomicReference<StreamTerminationReason> cancelationReason =
 				new AtomicReference<>();
 		McpServer server = server(List.of(tool("open-stream",
-				(request, call, features) -> {
+				(request, arguments, features) -> {
 					CancelationToken token = features.require(CancelationToken.class);
 					token.onCancel(() -> {
 						cancelationReason.set(token.getCancelationReason().orElse(null));
@@ -533,7 +533,7 @@ public class McpSimulatorPublicRuntimeTests {
 				.subscriptions(subscriptions)
 				.build();
 		McpServer server = baseServerBuilder(List.of(endpoint),
-				McpRequestAdmissionPolicy.acceptAllInstance(),
+				McpAdmissionController.acceptAllInstance(),
 				Duration.ofMillis(250)).build();
 		SokletConfig config = config(server, metrics,
 				LifecycleObserver.defaultInstance());
@@ -613,7 +613,7 @@ public class McpSimulatorPublicRuntimeTests {
 		RuntimeException applicationFailure = new RuntimeException(
 				"simulator-throwable-secret-canary");
 		McpToolRegistration<McpJsonObject> limited = tool("limited",
-				(request, call, features) -> {
+				(request, arguments, features) -> {
 					CancelationToken observed = features.require(CancelationToken.class);
 					token.set(observed);
 				observed.onCancel(() -> tokenReasons.add(observed
@@ -627,13 +627,13 @@ public class McpSimulatorPublicRuntimeTests {
 					return McpCompleteResult.fromToolText("not captured");
 				});
 		McpToolRegistration<McpJsonObject> failing = tool("failing",
-				(request, call, features) -> {
+				(request, arguments, features) -> {
 					features.require(McpProgressReporter.class).report(
 							McpProgressUpdate.withProgress(1.0d).build());
 					throw applicationFailure;
 				});
 		McpServer server = server(List.of(limited, failing),
-				McpRequestAdmissionPolicy.acceptAllInstance());
+				McpAdmissionController.acceptAllInstance());
 		SokletConfig config = config(server, metrics,
 				LifecycleObserver.defaultInstance());
 		Request request = request("item-limit", "limited", "\"item-token\"",
@@ -737,7 +737,7 @@ public class McpSimulatorPublicRuntimeTests {
 		AtomicReference<McpSimulation> escapedSimulation = new AtomicReference<>();
 		AtomicReference<Simulator> escapedSimulator = new AtomicReference<>();
 		McpServer server = server(List.of(tool("scope-cancel",
-				(request, call, features) -> {
+				(request, arguments, features) -> {
 					CancelationToken token = features.require(CancelationToken.class);
 					token.onCancel(() -> {
 						tokenReason.set(token.getCancelationReason().orElse(null));
@@ -773,7 +773,7 @@ public class McpSimulatorPublicRuntimeTests {
 		CountDownLatch releaseHandler = new CountDownLatch(1);
 		CountDownLatch handlerExited = new CountDownLatch(1);
 		McpToolRegistration<McpJsonObject> tool = tool("noncooperative",
-				(request, call, features) -> {
+				(request, arguments, features) -> {
 					handlerEntered.countDown();
 					boolean interrupted = false;
 					try {
@@ -792,7 +792,7 @@ public class McpSimulatorPublicRuntimeTests {
 					}
 				});
 		McpServer server = server(List.of(tool),
-				McpRequestAdmissionPolicy.acceptAllInstance(),
+				McpAdmissionController.acceptAllInstance(),
 				Duration.ofMillis(50));
 		SokletConfig config = config(server, MetricsCollector.defaultInstance(),
 				LifecycleObserver.defaultInstance());
@@ -833,7 +833,7 @@ public class McpSimulatorPublicRuntimeTests {
 		CountDownLatch itemEmitted = new CountDownLatch(1);
 		CountDownLatch releaseHandler = new CountDownLatch(1);
 		McpServer server = server(List.of(tool("waits",
-				(request, call, features) -> {
+				(request, arguments, features) -> {
 					features.require(McpProgressReporter.class).report(
 							McpProgressUpdate.withProgress(1.0d).build());
 					itemEmitted.countDown();
@@ -911,7 +911,7 @@ public class McpSimulatorPublicRuntimeTests {
 		int requestCount = 16;
 		AtomicInteger handlerCalls = new AtomicInteger();
 		McpServer server = server(List.of(tool("concurrent",
-				(request, call, features) -> McpCompleteResult.fromToolText(
+				(request, arguments, features) -> McpCompleteResult.fromToolText(
 						"result-" + handlerCalls.incrementAndGet()))));
 		SokletConfig config = config(server, MetricsCollector.defaultInstance(),
 				LifecycleObserver.defaultInstance());
@@ -962,38 +962,38 @@ public class McpSimulatorPublicRuntimeTests {
 
 	private static McpServer server(
 			@NonNull List<@NonNull McpToolRegistration<?>> tools) {
-		return server(tools, McpRequestAdmissionPolicy.acceptAllInstance());
+		return server(tools, McpAdmissionController.acceptAllInstance());
 	}
 
 	private static McpServer server(
 			@NonNull List<@NonNull McpToolRegistration<?>> tools,
-			@NonNull McpRequestAdmissionPolicy admissionPolicy) {
-		return server(tools, admissionPolicy, Duration.ofMillis(250));
+			@NonNull McpAdmissionController admissionController) {
+		return server(tools, admissionController, Duration.ofMillis(250));
 	}
 
 	private static McpServer server(
 			@NonNull List<@NonNull McpToolRegistration<?>> tools,
-			@NonNull McpRequestAdmissionPolicy admissionPolicy,
+			@NonNull McpAdmissionController admissionController,
 			@NonNull Duration shutdownTimeout) {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
 						"simulator-public-runtime-test", "3.6.0-SNAPSHOT").build())
 				.tools(tools)
 				.build();
-		return baseServerBuilder(List.of(endpoint), admissionPolicy,
+		return baseServerBuilder(List.of(endpoint), admissionController,
 				shutdownTimeout).build();
 	}
 
 	private static McpServer.Builder baseServerBuilder(
 			@NonNull List<@NonNull McpEndpoint> endpoints,
-			@NonNull McpRequestAdmissionPolicy admissionPolicy,
+			@NonNull McpAdmissionController admissionController,
 			@NonNull Duration shutdownTimeout) {
 		return McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(endpoints))
-				.requestAdmissionPolicy(admissionPolicy)
-				.requestRateLimiter(context -> McpRateLimitDecision.fromAllowed())
-				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints))
+				.admissionController(admissionController)
+				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.shutdownTimeout(shutdownTimeout);

@@ -40,10 +40,12 @@ all 23 owned scenarios through one common fullest-truthful Phase 4 fixture.
 Each scenario receives a fresh deterministic JVM; the fixture never changes
 its advertised capabilities to suit the selected scenario.
 
-The fixture is a candidate-artifact-only black box. It compiles and runs
-against packaged `target/soklet-3.6.0-SNAPSHOT.jar`, and its runtime classpath
-contains only fixture classes plus that JAR, never `target/classes` or
-`target/test-classes`. Normal configuration and handlers use public APIs.
+The fixture is a candidate-artifact-only black box. Development verification
+compiles and runs against packaged `target/soklet-3.6.0-SNAPSHOT.jar`; release
+verification instead uses the explicit checksum-locked main JAR. Its runtime
+classpath contains only fixture classes plus the selected JAR, never
+`target/classes` or `target/test-classes`. Normal configuration and handlers
+use public APIs.
 One audited same-package, package-private seam registers and enforces the exact
 official JSON Schema fixture because Soklet intentionally has no public
 hand-authored-schema API. The fixture imports no `com.soklet.internal` type.
@@ -140,6 +142,95 @@ node conformance/official/run.mjs \
   --mode verify
 ```
 
+## Immutable release-candidate verification
+
+`--mode release` executes the same current Phase 5 selection and exact frozen
+profiles as `--mode verify`, but it fails before starting the fixture unless it
+can bind the run to the final `com.soklet:soklet:3.6.0` POM, main JAR, sources
+JAR, Javadocs JAR, candidate commit, protocol pin, and official-suite pin.
+Release mode never accepts a snapshot coordinate. It does not rebuild any
+candidate artifact.
+
+The preferred input is a separately reviewed, checksum-addressed manifest.
+The manifest itself must be a regular non-symlink file, canonical two-space
+JSON with one trailing LF, and its independently supplied SHA-256 must match.
+Every artifact path is absolute and every hash is lowercase SHA-256:
+
+```json
+{
+  "formatVersion": 1,
+  "candidateCommit": "0123456789abcdef0123456789abcdef01234567",
+  "protocolVersion": "2026-07-28",
+  "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
+  "coordinates": {
+    "groupId": "com.soklet",
+    "artifactId": "soklet",
+    "version": "3.6.0"
+  },
+  "artifacts": {
+    "pom": {
+      "path": "/absolute/candidate/soklet-3.6.0.pom",
+      "sha256": "<64-lowercase-hex>"
+    },
+    "mainJar": {
+      "path": "/absolute/candidate/soklet-3.6.0.jar",
+      "sha256": "<64-lowercase-hex>"
+    },
+    "sourcesJar": {
+      "path": "/absolute/candidate/soklet-3.6.0-sources.jar",
+      "sha256": "<64-lowercase-hex>"
+    },
+    "javadocJar": {
+      "path": "/absolute/candidate/soklet-3.6.0-javadoc.jar",
+      "sha256": "<64-lowercase-hex>"
+    }
+  }
+}
+```
+
+Compile the unpublished fixture against that same main JAR, then pass the
+workflow-trigger candidate commit and the reviewed manifest digest explicitly.
+The project root must be a clean Git checkout whose exact `HEAD` equals that
+commit; tracked or untracked changes fail the release run, and the supplied
+candidate POM must be byte-identical to that checkout's `pom.xml`:
+
+```sh
+sh conformance/official/build-public-fixture.sh \
+  /absolute/candidate/soklet-3.6.0.jar \
+  /absolute/project/target/conformance/public-fixture \
+  > /absolute/project/target/conformance/official/release-fixture-classpath.txt
+node conformance/official/run.mjs \
+  --suite-dir /absolute/pinned-suite \
+  --work-dir /absolute/project/target/conformance/official/release-phase-5 \
+  --classpath "$(cat /absolute/project/target/conformance/official/release-fixture-classpath.txt)" \
+  --project-root /absolute/project \
+  --phase 5 \
+  --mode release \
+  --candidate-commit 0123456789abcdef0123456789abcdef01234567 \
+  --release-manifest /absolute/evidence/release-candidate.json \
+  --release-manifest-sha256 '<reviewed-manifest-sha256>'
+```
+
+An orchestrator that already owns four independently reviewed artifact hashes
+may omit the manifest and supply the corresponding `--candidate-pom`,
+`--candidate-jar`, `--candidate-sources-jar`, and
+`--candidate-javadoc-jar` paths together with each matching
+`--candidate-*-sha256` option.
+Mixing manifest and explicit-artifact inputs or omitting any member fails.
+
+The runner rejects missing, empty, substituted, duplicate, or symlinked files,
+hash mismatches, missing JAR/ZIP signatures, POM-coordinate mismatches, and
+candidate, protocol, or suite-pin mismatches. Manifest/POM inputs are bounded
+at 1 MiB and each JAR at 128 MiB. It revalidates the complete candidate before
+every fixture launch and once after all scenarios. Only complete provenance
+sets `releaseCandidateEvidence: true`; the evidence records the commit,
+coordinates, pins, file names, sizes, and hashes. A later provenance mismatch
+sets it back to false and fails the run. Release evidence uses class
+`IMMUTABLE_RELEASE_CANDIDATE`; a successful gate still requires terminal
+`status: PASSED`. This mode supplies the conformance runner half of the release
+gate; the release orchestrator still owns the
+isolated repository, build, signing, downstream, and publication evidence.
+
 `build-public-fixture.sh` requires empty fixture and test-class directories,
 compiles the fixture and its one same-package schema helper with the candidate
 JAR as their only Soklet compile dependency, explicitly disables annotation
@@ -162,8 +253,9 @@ exercise kernel transport/backpressure/write-idle behavior, or establish
 release-candidate provenance. Those remain responsibilities of the pinned live
 verification and later release gates.
 `run.mjs` independently requires the exact fixture-classes/candidate-JAR pair
-in that order and refuses missing, substituted, symlinked, or exploded main/test
-class paths. The work directory must be empty.
+in that order: the fixed snapshot path in development mode or the validated
+main-JAR path in release mode. It refuses missing, substituted, symlinked, or
+exploded main/test class paths. The work directory must be empty.
 
 The runner verifies the live 40-name CLI inventory and both reviewed digests
 before starting a server. It invokes each active row by exact name and version,
@@ -262,6 +354,17 @@ final frozen Phase 4 source passed the same exact gate on 2026-08-07, including
 all 81 expected outcome occurrences and 22 independently validated golden
 messages. This remains candidate-development evidence rather than
 release-candidate evidence.
+
+## Current local development revalidation
+
+The final 2026-08-15 local artifact-backed replay is green through both
+independent paths: `run-local-simulator.mjs` passes 39/39 in exact manifest
+order, and the pinned live official CLI passes the same 39 active profiles.
+The fixture is built against the packaged snapshot artifact rather than a
+source-tree Soklet classpath. These results are development evidence only;
+they do not set `releaseCandidateEvidence: true` and do not replace the
+required release-mode run against checksum-matched immutable JAR, POM,
+sources, and Javadocs artifacts.
 
 ## Updating a pin
 

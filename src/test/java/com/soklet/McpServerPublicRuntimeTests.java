@@ -97,10 +97,10 @@ public class McpServerPublicRuntimeTests {
 
 		List<ExecutorService> suppliedExecutors = new ArrayList<>();
 		McpServer server = McpServer.withPort(0)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
 						List.of(newEndpoint())))
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.requestHandlerConcurrency(3)
 				.requestHandlerQueueCapacity(7)
@@ -137,10 +137,10 @@ public class McpServerPublicRuntimeTests {
 		ExecutorService shutDownExecutor = Executors.newSingleThreadExecutor();
 		shutDownExecutor.shutdown();
 		McpServer invalidServer = McpServer.withPort(0)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
 						List.of(newEndpoint())))
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.requestHandlerExecutorServiceSupplier(() -> shutDownExecutor)
 				.build();
@@ -160,7 +160,7 @@ public class McpServerPublicRuntimeTests {
 	public void directPortZeroLifecyclePublishesImmutableDiagnosticSnapshots()
 			throws Exception {
 		McpServer server = newMcpServer(0,
-				McpRequestAdmissionPolicy.acceptAllInstance(), true);
+				McpAdmissionController.acceptAllInstance(), true);
 		McpServerDiagnostics initial = server.getDiagnostics();
 
 		Assertions.assertFalse(server.isStarted());
@@ -372,7 +372,7 @@ public class McpServerPublicRuntimeTests {
 		McpServerRuntimeBridge bridge = new McpServerRuntimeBridge(
 				LOOPBACK, 0, newEndpoint(), Set.of(LOOPBACK), false,
 				CorsAuthorizer.rejectAllInstance(), true,
-				ignored -> McpAdmissionDecision.fromAnonymousIdentity(), ignored -> {});
+				ignored -> McpAdmissionDecision.accepted(), ignored -> {});
 
 		try {
 			RuntimeState initiallyStopped = bridge.getRuntimeState();
@@ -405,7 +405,7 @@ public class McpServerPublicRuntimeTests {
 			throws Exception {
 		List<LogEvent> events = new ArrayList<>();
 		McpServer server = newMcpServer(0,
-				McpRequestAdmissionPolicy.acceptAllInstance(), true);
+				McpAdmissionController.acceptAllInstance(), true);
 		Soklet soklet = mcpOnlySoklet(server, new LifecycleObserver() {
 			@Override
 			public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
@@ -449,7 +449,7 @@ public class McpServerPublicRuntimeTests {
 	public void directStartNormalizesUnexpectedMcpListenerTerminationForRestart()
 			throws Exception {
 		McpServer server = newMcpServer(0,
-				McpRequestAdmissionPolicy.acceptAllInstance(), true);
+				McpAdmissionController.acceptAllInstance(), true);
 		Soklet soklet = mcpOnlySoklet(server, quietLifecycleObserver());
 		McpServerRuntimeBridge bridge = runtimeBridge(server);
 
@@ -492,7 +492,7 @@ public class McpServerPublicRuntimeTests {
 				.instructions("Use the public discovery endpoint.")
 				.build();
 		McpServer server = newMcpServer(0, endpoint,
-				McpRequestAdmissionPolicy.acceptAllInstance(), true);
+				McpAdmissionController.acceptAllInstance(), true);
 
 		try {
 			server.start();
@@ -531,7 +531,7 @@ public class McpServerPublicRuntimeTests {
 		McpSubscriptionEventPublisher publisher =
 				new McpSubscriptionEventPublisher() {
 					@Override
-					public McpSubscriptionEventSubscription subscribe(
+					public McpSubscriptionEventRegistration subscribe(
 							@NonNull McpSubscriptionEventListener listener) {
 						listenerRegistrations.incrementAndGet();
 						AtomicInteger closed = new AtomicInteger();
@@ -569,7 +569,7 @@ public class McpServerPublicRuntimeTests {
 				.subscriptions(subscriptions)
 				.build();
 		McpServer server = newMcpServer(0, endpoint,
-				McpRequestAdmissionPolicy.acceptAllInstance(), true);
+				McpAdmissionController.acceptAllInstance(), true);
 
 		Assertions.assertEquals(0, listenerRegistrations.get());
 		Assertions.assertEquals(0, listenerRegistrationCloses.get());
@@ -612,7 +612,7 @@ public class McpServerPublicRuntimeTests {
 				.includeServerInformation(false)
 				.build();
 		McpServer server = newMcpServer(0, endpoint,
-				McpRequestAdmissionPolicy.acceptAllInstance(), true);
+				McpAdmissionController.acceptAllInstance(), true);
 
 		try {
 			server.start();
@@ -634,7 +634,7 @@ public class McpServerPublicRuntimeTests {
 			throws Exception {
 		AtomicInteger admissions = new AtomicInteger();
 		AtomicReference<McpAdmissionContext> observedContext = new AtomicReference<>();
-		McpRequestRejection rejection = McpRequestRejection
+		McpAdmissionRejection rejection = McpAdmissionRejection
 				.withStatusCodeAndError(401, McpJsonRpcError.fromApplication(1_001,
 						"Temporarily unavailable",
 						McpJsonObject.builder().put("reason", "maintenance").build()))
@@ -644,7 +644,7 @@ public class McpServerPublicRuntimeTests {
 		McpServer server = newMcpServer(0, endpoint, context -> {
 			admissions.incrementAndGet();
 			observedContext.set(context);
-			return McpAdmissionDecision.fromRejection(rejection);
+			return McpAdmissionDecision.rejected(rejection);
 		}, true);
 
 		try {
@@ -694,7 +694,7 @@ public class McpServerPublicRuntimeTests {
 			occupied.bind(new InetSocketAddress(LOOPBACK, 0));
 			port = occupied.getLocalPort();
 			server = newMcpServer(port,
-					McpRequestAdmissionPolicy.acceptAllInstance(), true);
+					McpAdmissionController.acceptAllInstance(), true);
 
 			Assertions.assertThrows(UncheckedIOException.class, server::start);
 			Assertions.assertFalse(server.isStarted());
@@ -720,7 +720,7 @@ public class McpServerPublicRuntimeTests {
 			throws Exception {
 		List<LogEvent> events = new ArrayList<>();
 		McpServer server = newMcpServer(0,
-				McpRequestAdmissionPolicy.acceptAllInstance(), false);
+				McpAdmissionController.acceptAllInstance(), false);
 		Soklet soklet = mcpOnlySoklet(server, new LifecycleObserver() {
 			@Override
 			public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
@@ -754,7 +754,7 @@ public class McpServerPublicRuntimeTests {
 		CountDownLatch releaseDiagnostic = new CountDownLatch(1);
 		AtomicReference<Throwable> startFailure = new AtomicReference<>();
 		McpServer server = newMcpServer(port,
-				McpRequestAdmissionPolicy.acceptAllInstance(), false);
+				McpAdmissionController.acceptAllInstance(), false);
 		Soklet soklet = mcpOnlySoklet(server, new LifecycleObserver() {
 			@Override
 			public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
@@ -820,7 +820,7 @@ public class McpServerPublicRuntimeTests {
 			throws Exception {
 		List<LogEvent> events = new ArrayList<>();
 		McpServer server = newMcpServer(0,
-				McpRequestAdmissionPolicy.acceptAllInstance(), true);
+				McpAdmissionController.acceptAllInstance(), true);
 		Soklet soklet = mcpOnlySoklet(server, new LifecycleObserver() {
 			@Override
 			public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
@@ -845,7 +845,7 @@ public class McpServerPublicRuntimeTests {
 			throws Exception {
 		AtomicInteger attempts = new AtomicInteger();
 		McpServer server = newMcpServer(0,
-				McpRequestAdmissionPolicy.acceptAllInstance(), false);
+				McpAdmissionController.acceptAllInstance(), false);
 		Soklet soklet = mcpOnlySoklet(server, new LifecycleObserver() {
 			@Override
 			public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
@@ -875,7 +875,7 @@ public class McpServerPublicRuntimeTests {
 		int httpPort = findFreePort();
 		HttpServer httpServer = HttpServer.withPort(httpPort).host(LOOPBACK).build();
 		McpServer mcpServer = newMcpServer(0,
-				McpRequestAdmissionPolicy.acceptAllInstance(), true);
+				McpAdmissionController.acceptAllInstance(), true);
 		SokletConfig config = SokletConfig.withHttpServer(httpServer)
 				.mcpServer(mcpServer)
 				.resourceMethodResolver(ResourceMethodResolver
@@ -903,19 +903,19 @@ public class McpServerPublicRuntimeTests {
 
 	@NonNull
 	private static McpServer newMcpServer(int port,
-			@NonNull McpRequestAdmissionPolicy admissionPolicy,
+			@NonNull McpAdmissionController admissionController,
 			boolean configureCorsAuthorizer) {
-		return newMcpServer(port, newEndpoint(), admissionPolicy,
+		return newMcpServer(port, newEndpoint(), admissionController,
 				configureCorsAuthorizer);
 	}
 
 	@NonNull
 	private static McpServer newMcpServer(int port, @NonNull McpEndpoint endpoint,
-			@NonNull McpRequestAdmissionPolicy admissionPolicy,
+			@NonNull McpAdmissionController admissionController,
 			boolean configureCorsAuthorizer) {
 		McpServer.Builder builder = McpServer.withPort(port)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(admissionPolicy);
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(admissionController);
 		if (configureCorsAuthorizer)
 			builder.corsAuthorizer(CorsAuthorizer.rejectAllInstance());
 		return builder.build();

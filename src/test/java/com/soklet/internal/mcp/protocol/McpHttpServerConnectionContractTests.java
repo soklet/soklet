@@ -118,14 +118,14 @@ public class McpHttpServerConnectionContractTests {
 						"connection-tool-test", "3.6.0-SNAPSHOT"))
 				.tool(tool)
 				.build();
-		McpRequestAdmissionPolicy admissionPolicy = context -> {
+		McpProtocolAdmissionController protocolAdmissionController = context -> {
 			authorizations.add(context.request().getHeader("Authorization"));
 			hosts.add(context.request().getHeader("Host").orElseThrow());
 			return McpAdmissionDecision.acceptedAnonymous();
 		};
 		McpHttpEndpointPolicy endpointPolicy = new McpHttpEndpointPolicy(
 				"/mcp", Set.of("localhost"), McpAbsentOriginPolicy.ALLOW,
-				CorsAuthorizer.rejectAllInstance(), admissionPolicy);
+				CorsAuthorizer.rejectAllInstance(), protocolAdmissionController);
 		McpApplicationRequestRouter router = McpApplicationRequestRouter.fromHandlers(
 				Map.of(CALL_TOOL, ignored -> {
 					handlers.incrementAndGet();

@@ -125,7 +125,7 @@ public class McpHttpServerPolicyPipelineTests {
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
 				CorsAuthorizer.rejectAllInstance(), ignored -> McpAdmissionDecision.rejected(
-						new McpRequestRejection(401,
+						new McpAdmissionRejection(401,
 								new McpJsonRpcError(1_001,
 										"Authentication required", Optional.empty()),
 								Map.of("WWW-Authenticate",
@@ -224,7 +224,7 @@ public class McpHttpServerPolicyPipelineTests {
 						McpHttpEndpointPolicy.forDiscovery(
 								CorsAuthorizer.rejectAllInstance(),
 								ignored -> McpAdmissionDecision.rejected(
-										new McpRequestRejection(403,
+										new McpAdmissionRejection(403,
 												new McpJsonRpcError(
 														McpJsonRpcError.INTERNAL_ERROR,
 														"reserved", Optional.empty()),
@@ -237,7 +237,7 @@ public class McpHttpServerPolicyPipelineTests {
 						McpHttpEndpointPolicy.forDiscovery(
 								CorsAuthorizer.rejectAllInstance(),
 								ignored -> McpAdmissionDecision.rejected(
-										new McpRequestRejection(401,
+										new McpAdmissionRejection(401,
 												new McpJsonRpcError(1_001,
 														"blocked", Optional.empty()),
 												Map.of("X-Unsafe",
@@ -436,7 +436,7 @@ public class McpHttpServerPolicyPipelineTests {
 		return McpHttpEndpointPolicy.forDiscovery(
 				CorsAuthorizer.rejectAllInstance(),
 				ignored -> McpAdmissionDecision.rejected(
-						new McpRequestRejection(401,
+						new McpAdmissionRejection(401,
 								new McpJsonRpcError(errorCode,
 										"blocked", Optional.empty()), headers)));
 	}

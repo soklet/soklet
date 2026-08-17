@@ -66,7 +66,7 @@ class McpServerFutureConfigurationTests {
 		assertEquals(Duration.ofSeconds(12),
 				configured.maximumSubscriptionDuration());
 		assertTrue(configured.logRawValidatedTraceIds());
-		assertFalse(configured.getTraceCorrelation().isEnabled());
+		assertFalse(configured.getTraceCorrelationControl().isEnabled());
 	}
 
 	@Test
@@ -120,16 +120,16 @@ class McpServerFutureConfigurationTests {
 
 		assertEquals(McpProtectionMode.NO_FRAMEWORK_KEYS,
 				server.getProtectionControl().getProtectionMode());
-		assertSame(server.getProtectionControl(), server.getTraceCorrelation());
+		assertSame(server.getProtectionControl(), server.getTraceCorrelationControl());
 		assertTrue(((DefaultMcpServer) server).protectionConfig().isEmpty());
 		assertTrue(server.getProtectionControl().getKeyRingSnapshot().isEmpty());
-		assertFalse(server.getTraceCorrelation().isEnabled());
-		assertTrue(server.getTraceCorrelation().getActiveKeyId().isEmpty());
+		assertFalse(server.getTraceCorrelationControl().isEnabled());
+		assertTrue(server.getTraceCorrelationControl().getActiveKeyId().isEmpty());
 		assertThrows(IllegalStateException.class,
 				() -> server.getProtectionControl().stageVerificationKey(
 						protectionKey("disabled", 1)));
 		assertThrows(IllegalStateException.class,
-				() -> server.getTraceCorrelation().rotateActiveKey(
+				() -> server.getTraceCorrelationControl().rotateActiveKey(
 						traceKey("disabled", 2)));
 	}
 
@@ -152,19 +152,19 @@ class McpServerFutureConfigurationTests {
 				second.getProtectionControl());
 		assertEquals("active-a", first.getProtectionControl()
 				.getKeyRingSnapshot().orElseThrow().getActiveKeyId());
-		assertEquals("trace-c", first.getTraceCorrelation()
+		assertEquals("trace-c", first.getTraceCorrelationControl()
 				.getActiveKeyId().orElseThrow());
 
 		first.getProtectionControl().rotateTo(protectionKey("active-d", 4));
-		first.getTraceCorrelation().rotateActiveKey(traceKey("trace-e", 5));
+		first.getTraceCorrelationControl().rotateActiveKey(traceKey("trace-e", 5));
 
 		assertEquals("active-d", first.getProtectionControl()
 				.getKeyRingSnapshot().orElseThrow().getActiveKeyId());
-		assertEquals("trace-e", first.getTraceCorrelation()
+		assertEquals("trace-e", first.getTraceCorrelationControl()
 				.getActiveKeyId().orElseThrow());
 		assertEquals("active-a", second.getProtectionControl()
 				.getKeyRingSnapshot().orElseThrow().getActiveKeyId());
-		assertEquals("trace-c", second.getTraceCorrelation()
+		assertEquals("trace-c", second.getTraceCorrelationControl()
 				.getActiveKeyId().orElseThrow());
 	}
 
@@ -196,9 +196,9 @@ class McpServerFutureConfigurationTests {
 						"future-configuration-tests", "3.6.0-SNAPSHOT").build())
 				.build();
 		return McpServer.withPort(0)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance());
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(
+						McpAdmissionController.acceptAllInstance());
 	}
 
 	private static McpProtectionKey protectionKey(String id, int fill) {

@@ -60,20 +60,20 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 	@NonNull Boolean isStarted();
 
 	/**
-	 * Returns the immutable endpoint resolver.
+	 * Returns the immutable endpoint registry.
 	 *
-	 * @return handler resolver
+	 * @return endpoint registry
 	 */
 	@NonNull
-	McpHandlerResolver getHandlerResolver();
+	McpEndpointRegistry getEndpointRegistry();
 
 	/**
-	 * Returns the required request-admission policy.
+	 * Returns the required admission controller.
 	 *
-	 * @return admission policy
+	 * @return admission controller
 	 */
 	@NonNull
-	McpRequestAdmissionPolicy getRequestAdmissionPolicy();
+	McpAdmissionController getAdmissionController();
 
 	/**
 	 * Returns the server-level application-handler interceptor. When omitted
@@ -162,7 +162,7 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 	 * @return server-owned trace-correlation control
 	 */
 	@NonNull
-	McpTraceCorrelation getTraceCorrelation();
+	McpTraceCorrelationControl getTraceCorrelationControl();
 
 	/**
 	 * Returns this server's localization control plane.
@@ -253,9 +253,9 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		@Nullable
 		private Supplier<@NonNull ExecutorService> requestHandlerExecutorServiceSupplier;
 		@Nullable
-		private McpHandlerResolver handlerResolver;
+		private McpEndpointRegistry endpointRegistry;
 		@Nullable
-		private McpRequestAdmissionPolicy requestAdmissionPolicy;
+		private McpAdmissionController admissionController;
 		@NonNull
 		private McpHandlerInterceptor handlerInterceptor;
 		@NonNull
@@ -552,14 +552,14 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		}
 
 		/**
-		 * Sets the endpoint and handler resolver.
+		 * Sets the endpoint registry.
 		 *
-		 * @param handlerResolver resolver containing at least one endpoint
+		 * @param endpointRegistry registry containing at least one endpoint
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder handlerResolver(@NonNull McpHandlerResolver handlerResolver) {
-			this.handlerResolver = requireNonNull(handlerResolver);
+		public Builder endpointRegistry(@NonNull McpEndpointRegistry endpointRegistry) {
+			this.endpointRegistry = requireNonNull(endpointRegistry);
 			return this;
 		}
 
@@ -579,17 +579,17 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		}
 
 		/**
-		 * Sets the required authentication, authorization, and admission policy.
+		 * Sets the required authentication, authorization, and admission controller.
 		 * Applications deliberately allowing anonymous access may use
-		 * {@link McpRequestAdmissionPolicy#acceptAllInstance()}.
+		 * {@link McpAdmissionController#acceptAllInstance()}.
 		 *
-		 * @param requestAdmissionPolicy admission policy
+		 * @param admissionController admission controller
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder requestAdmissionPolicy(
-				@NonNull McpRequestAdmissionPolicy requestAdmissionPolicy) {
-			this.requestAdmissionPolicy = requireNonNull(requestAdmissionPolicy);
+		public Builder admissionController(
+				@NonNull McpAdmissionController admissionController) {
+			this.admissionController = requireNonNull(admissionController);
 			return this;
 		}
 
@@ -754,7 +754,11 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		/**
 		 * Enables pseudonymous trace correlation with exactly one initial active
 		 * key. Omission leaves correlation disabled. The configured key is copied
-		 * into server-owned state.
+		 * into server-owned state. A request carrying validated MCP trace metadata
+		 * then produces a bounded {@link LogEventType#MCP_TRACE_CORRELATION} event
+		 * at its exactly-once finish authority. The event carries the non-secret key
+		 * ID, token-format version, and pseudonymous token, but no raw trace ID unless
+		 * {@link #logRawValidatedTraceIds(Boolean)} is enabled independently.
 		 *
 		 * @param traceCorrelationKey initial trace-correlation key
 		 * @return this builder
@@ -768,8 +772,18 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 
 		/**
 		 * Enables or disables the separate high-cardinality, log-only opt-in for
-		 * raw validated trace IDs. The default is {@code false}. This never enables
-		 * pseudonymous correlation and never controls metric dimensions.
+		 * raw validated trace IDs. The default is {@code false}. When enabled, only
+		 * the 32-character trace ID from validated MCP request metadata may appear in
+		 * {@link LogEventType#MCP_TRACE_CORRELATION}; Soklet never falls back to the
+		 * HTTP request trace context and never logs the full {@code traceparent},
+		 * parent/span ID, trace flags, {@code tracestate}, or {@code baggage}. This
+		 * never enables pseudonymous correlation and never controls metric dimensions.
+		 *
+		 * <p>A validated trace ID remains client-controlled, sensitive cross-system
+		 * correlation data; validation does not establish trust. Operators must
+		 * restrict log access and retention to the minimum required for the intended
+		 * APM join and account for the identifier's high cardinality and correlation
+		 * reach.</p>
 		 *
 		 * @param enabled whether raw validated trace IDs may appear in logs
 		 * @return this builder
@@ -818,8 +832,8 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		 *
 		 * @return configured server
 		 * @throws IllegalStateException if the keep-alive interval is not shorter
-		 *                               than the write timeout, resolver or admission
-		 *                               policy is absent, a configured limiter name is
+		 *                               than the write timeout, registry or admission
+		 *                               controller is absent, a configured limiter name is
 		 *                               unknown, or tools exist without a fallback
 		 *                               tool limiter, or a configured localization
 		 *                               response exceeds its provider-lookup limit
@@ -829,17 +843,17 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 			if (this.keepAliveInterval.compareTo(this.writeTimeout) >= 0)
 				throw new IllegalStateException(
 						"The MCP keep-alive interval must be shorter than the write timeout.");
-			if (this.handlerResolver == null)
-				throw new IllegalStateException("An MCP handler resolver must be configured.");
-			if (this.requestAdmissionPolicy == null)
+			if (this.endpointRegistry == null)
+				throw new IllegalStateException("An MCP endpoint registry must be configured.");
+			if (this.admissionController == null)
 				throw new IllegalStateException(
-						"An MCP request-admission policy must be configured.");
-			boolean toolsPresent = this.handlerResolver.getEndpoints().stream()
+						"An MCP admission controller must be configured.");
+			boolean toolsPresent = this.endpointRegistry.getEndpoints().stream()
 					.anyMatch(endpoint -> !endpoint.getTools().isEmpty());
 			if (toolsPresent && this.toolRateLimiter == null)
 				throw new IllegalStateException(
 						"An MCP tool rate limiter must be configured when tools are registered.");
-			for (McpEndpoint endpoint : this.handlerResolver.getEndpoints()) {
+			for (McpEndpoint endpoint : this.endpointRegistry.getEndpoints()) {
 				endpoint.getToolRateLimiterName().ifPresent(name ->
 						requireRegisteredLimiter(name,
 								"endpoint " + endpoint.getPath()));
@@ -857,8 +871,8 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 					this.keepAliveInterval, this.shutdownTimeout,
 					this.maximumSubscriptionsPerPrincipal,
 					this.maximumSubscriptionDuration,
-					this.handlerResolver,
-					this.requestAdmissionPolicy, this.handlerInterceptor,
+					this.endpointRegistry,
+					this.admissionController, this.handlerInterceptor,
 					this.toolOutputSanitizer, this.corsAuthorizer,
 					this.absentOriginPolicy, this.unknownMirroredHeaderPolicy,
 					this.unknownMirroredHeaderNameDiagnostics,

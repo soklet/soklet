@@ -74,7 +74,7 @@ public class McpInputRequiredPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("input-tool")
 				.jsonArguments()
-				.handler((request, call, features) ->
+				.handler((request, arguments, features) ->
 						McpInputRequiredResult.builder()
 								.inputRequest("approval", McpInputRequest
 										.fromDeclaration(form, toolFormParams))
@@ -120,9 +120,9 @@ public class McpInputRequiredPublicRuntimeTests {
 				.resource(resource)
 				.build();
 		McpServer server = server(endpoint,
-				McpRequestAdmissionPolicy.acceptAllInstance(),
-				context -> McpRateLimitDecision.fromAllowed(),
-				context -> McpRateLimitDecision.fromAllowed(),
+				McpAdmissionController.acceptAllInstance(),
+				context -> McpRateLimitDecision.allowed(),
+				context -> McpRateLimitDecision.allowed(),
 				(request, toolName, rawArguments, output) -> {
 					sanitizerInvocations.incrementAndGet();
 					return output;
@@ -257,7 +257,7 @@ public class McpInputRequiredPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("valid-form-input")
 				.jsonArguments()
-				.handler((request, call, features) -> inputRequired(
+				.handler((request, arguments, features) -> inputRequired(
 						"form", form, formParams))
 				.mayRequestInput(form)
 				.build();
@@ -282,9 +282,9 @@ public class McpInputRequiredPublicRuntimeTests {
 				.resource(resource)
 				.build();
 		McpServer server = server(endpoint,
-				McpRequestAdmissionPolicy.acceptAllInstance(),
-				context -> McpRateLimitDecision.fromAllowed(),
-				context -> McpRateLimitDecision.fromAllowed(),
+				McpAdmissionController.acceptAllInstance(),
+				context -> McpRateLimitDecision.allowed(),
+				context -> McpRateLimitDecision.allowed(),
 				(request, toolName, rawArguments, output) -> {
 					sanitizerInvocations.incrementAndGet();
 					return output;
@@ -404,7 +404,7 @@ public class McpInputRequiredPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("invalid-form-input")
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpInputRequiredResult.builder()
 							.inputRequest("valid-first", McpInputRequest
@@ -455,9 +455,9 @@ public class McpInputRequiredPublicRuntimeTests {
 				.resource(resource)
 				.build();
 		McpServer server = server(endpoint,
-				McpRequestAdmissionPolicy.acceptAllInstance(),
-				context -> McpRateLimitDecision.fromAllowed(),
-				context -> McpRateLimitDecision.fromAllowed(),
+				McpAdmissionController.acceptAllInstance(),
+				context -> McpRateLimitDecision.allowed(),
+				context -> McpRateLimitDecision.allowed(),
 				(request, toolName, rawArguments, output) -> {
 					sanitizerInvocations.incrementAndGet();
 					return output;
@@ -513,7 +513,7 @@ public class McpInputRequiredPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> required = McpToolRegistration
 				.withName("required-roots")
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					requiredHandlerInvocations.incrementAndGet();
 					return inputRequired("roots", requiredRoots,
 							McpJsonObject.emptyInstance());
@@ -523,7 +523,7 @@ public class McpInputRequiredPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> conditionalComplete =
 				McpToolRegistration.withName("conditional-complete")
 						.jsonArguments()
-						.handler((request, call, features) -> {
+						.handler((request, arguments, features) -> {
 							conditionalCompleteHandlerInvocations.incrementAndGet();
 							return McpCompleteResult.fromToolText("complete");
 						})
@@ -532,7 +532,7 @@ public class McpInputRequiredPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> conditionalInput = McpToolRegistration
 				.withName("conditional-input")
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					conditionalInputHandlerInvocations.incrementAndGet();
 					return inputRequired("roots", conditionalRoots,
 							McpJsonObject.emptyInstance());
@@ -544,13 +544,13 @@ public class McpInputRequiredPublicRuntimeTests {
 				.build();
 		McpServer server = server(endpoint, context -> {
 			admissionInvocations.incrementAndGet();
-			return McpAdmissionDecision.fromAnonymousIdentity();
+			return McpAdmissionDecision.accepted();
 		}, context -> {
 			requestLimiterInvocations.incrementAndGet();
-			return McpRateLimitDecision.fromAllowed();
+			return McpRateLimitDecision.allowed();
 		}, context -> {
 			toolLimiterInvocations.incrementAndGet();
-			return McpRateLimitDecision.fromAllowed();
+			return McpRateLimitDecision.allowed();
 		}, (request, toolName, rawArguments, output) -> {
 			sanitizerInvocations.incrementAndGet();
 			return output;
@@ -628,7 +628,7 @@ public class McpInputRequiredPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("conditional-malformed-input")
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpInputRequiredResult.builder()
 							.inputRequest("undeclared-" + inputKeySecret,
@@ -643,9 +643,9 @@ public class McpInputRequiredPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = endpointBuilder().tool(tool).build();
 		McpServer server = server(endpoint,
-				McpRequestAdmissionPolicy.acceptAllInstance(),
-				context -> McpRateLimitDecision.fromAllowed(),
-				context -> McpRateLimitDecision.fromAllowed(),
+				McpAdmissionController.acceptAllInstance(),
+				context -> McpRateLimitDecision.allowed(),
+				context -> McpRateLimitDecision.allowed(),
 				(request, toolName, rawArguments, output) -> {
 					sanitizerInvocations.incrementAndGet();
 					return output;
@@ -700,7 +700,7 @@ public class McpInputRequiredPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("undeclared-input")
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpInputRequiredResult.builder()
 							.inputRequest("secret-key", McpInputRequest
@@ -717,9 +717,9 @@ public class McpInputRequiredPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = endpointBuilder().tool(tool).build();
 		McpServer server = server(endpoint,
-				McpRequestAdmissionPolicy.acceptAllInstance(),
-				context -> McpRateLimitDecision.fromAllowed(),
-				context -> McpRateLimitDecision.fromAllowed(),
+				McpAdmissionController.acceptAllInstance(),
+				context -> McpRateLimitDecision.allowed(),
+				context -> McpRateLimitDecision.allowed(),
 				(request, toolName, rawArguments, output) -> {
 					sanitizerInvocations.incrementAndGet();
 					return output;
@@ -757,15 +757,15 @@ public class McpInputRequiredPublicRuntimeTests {
 	}
 
 	private static McpServer server(McpEndpoint endpoint,
-			McpRequestAdmissionPolicy admissionPolicy,
+			McpAdmissionController admissionController,
 			McpRateLimiter requestRateLimiter,
 			McpRateLimiter toolRateLimiter,
 			McpToolOutputSanitizer sanitizer) {
 		return McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(
-						McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(admissionPolicy)
+				.endpointRegistry(
+						McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(admissionController)
 				.requestRateLimiter(requestRateLimiter)
 				.toolRateLimiter(toolRateLimiter)
 				.toolOutputSanitizer(sanitizer)

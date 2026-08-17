@@ -68,7 +68,7 @@ public class McpTypedToolPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("bounded")
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					int invocation = handlerInvocations.incrementAndGet();
 					int active = activeHandlers.incrementAndGet();
 					maximumActiveHandlers.accumulateAndGet(active, Math::max);
@@ -92,13 +92,13 @@ public class McpTypedToolPublicRuntimeTests {
 				.build();
 		McpServer server = McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(
-						McpRequestAdmissionPolicy.acceptAllInstance())
-				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
-				.handlerInterceptor((context, invocation) -> {
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
+				.handlerInterceptor((context, continuation) -> {
 					handlerInterceptorInvocations.incrementAndGet();
-					return invocation.invoke();
+					return continuation.proceed();
 				})
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
@@ -183,12 +183,12 @@ public class McpTypedToolPublicRuntimeTests {
 		McpToolRegistration<SearchArguments> tool = McpToolRegistration
 				.withName(TOOL_NAME)
 				.types(SearchArguments.class, SearchResult.class)
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					stages.add("handler:" + TOOL_NAME);
 					handlerInvocations.incrementAndGet();
 					observedRequest.set(request);
-					observedArguments.set(call.getArguments());
-					observedRawArguments.set(call.getRawArguments());
+					observedArguments.set(arguments.getArguments());
+					observedRawArguments.set(arguments.getRawArguments());
 					return new SearchResult(List.of(new SearchItem("a", 7)));
 				})
 				.title("Catalog search")
@@ -203,29 +203,29 @@ public class McpTypedToolPublicRuntimeTests {
 			Assertions.assertEquals(McpRateLimitTarget.REQUEST,
 					context.getTarget());
 			stages.add("request:" + context.getOperationName().orElse("-"));
-			return McpRateLimitDecision.fromAllowed();
+			return McpRateLimitDecision.allowed();
 		};
 		McpRateLimiter toolRateLimiter = context -> {
 			Assertions.assertEquals(McpRateLimitTarget.TOOL, context.getTarget());
 			Assertions.assertEquals(TOOL_NAME,
 					context.getOperationName().orElseThrow());
 			stages.add("tool:" + context.getOperationName().orElseThrow());
-			return McpRateLimitDecision.fromAllowed();
+			return McpRateLimitDecision.allowed();
 		};
 		McpServer server = McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(context -> {
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(context -> {
 					stages.add("admission:"
 							+ context.getOperationName().orElse("-"));
-					return McpAdmissionDecision.fromAnonymousIdentity();
+					return McpAdmissionDecision.accepted();
 				})
 				.requestRateLimiter(requestRateLimiter)
 				.toolRateLimiter(toolRateLimiter)
-				.handlerInterceptor((context, invocation) -> {
+				.handlerInterceptor((context, continuation) -> {
 					String operation = context.getOperationName().orElseThrow();
 					stages.add("interceptor-before:" + operation);
-					McpOperationResult result = invocation.invoke();
+					McpOperationResult result = continuation.proceed();
 					stages.add("interceptor-after:" + operation);
 					return result;
 				})
@@ -348,7 +348,7 @@ public class McpTypedToolPublicRuntimeTests {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName("propagation")
 				.jsonArguments()
-				.handler((request, call, features) -> {
+				.handler((request, arguments, features) -> {
 					handlerTraceContext.set(request.getTraceContext().orElseThrow());
 					handlerHttpTraceContext.set(
 							request.getRequest().getTraceContext().orElseThrow());
@@ -363,14 +363,14 @@ public class McpTypedToolPublicRuntimeTests {
 				.build();
 		McpServer server = McpServer.withPort(0)
 				.host(LOOPBACK)
-				.handlerResolver(McpHandlerResolver.fromEndpoints(List.of(endpoint)))
-				.requestAdmissionPolicy(context -> {
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(context -> {
 					admissionTraceContext.set(
 							context.getTraceContext().orElseThrow());
-					return McpAdmissionDecision.fromAnonymousIdentity();
+					return McpAdmissionDecision.accepted();
 				})
-				.requestRateLimiter(context -> McpRateLimitDecision.fromAllowed())
-				.toolRateLimiter(context -> McpRateLimitDecision.fromAllowed())
+				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();

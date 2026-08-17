@@ -36,7 +36,7 @@ public class McpRateLimiterTests {
 	@Test
 	public void customLimiterIsDirectlyUsableAsAFunctionalInterface()
 			throws Exception {
-		McpRateLimitDecision expected = McpRateLimitDecision.fromAllowed();
+		McpRateLimitDecision expected = McpRateLimitDecision.allowed();
 		McpRateLimiter limiter = context -> expected;
 
 		Assertions.assertSame(expected, limiter.acquire(context(
@@ -106,7 +106,7 @@ public class McpRateLimiterTests {
 
 	@Test
 	public void rateLimiterRegistryIsImmutableAndRejectsBadNames() {
-		McpRateLimiter limiter = context -> McpRateLimitDecision.fromAllowed();
+		McpRateLimiter limiter = context -> McpRateLimitDecision.allowed();
 		McpRateLimiterRegistry registry = McpRateLimiterRegistry.builder()
 				.rateLimiter("shared", limiter)
 				.build();
@@ -126,9 +126,9 @@ public class McpRateLimiterTests {
 	@Test
 	public void deniedDecisionRejectsNegativeRetryDelay() {
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				McpRateLimitDecision.fromDenied(Duration.ofNanos(-1)));
+				McpRateLimitDecision.denied(Duration.ofNanos(-1)));
 		Assertions.assertEquals(Duration.ZERO,
-				McpRateLimitDecision.fromDenied(Duration.ZERO).retryAfter());
+				McpRateLimitDecision.denied(Duration.ZERO).retryAfter());
 	}
 
 	@Test

@@ -47,7 +47,7 @@ import java.util.function.Supplier;
 /**
  * Longer-running SSE resource-leak soak tests.
  * <p>
- * {@code SOKLET_SOAK_PROFILE} selects the checked-in smoke or nightly workload profile.
+ * {@code SOKLET_SOAK_PROFILE} selects the checked-in smoke, nightly, or release workload profile.
  * An omitted value defaults to smoke for local use.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>

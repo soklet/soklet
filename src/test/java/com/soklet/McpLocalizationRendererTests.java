@@ -52,7 +52,7 @@ class McpLocalizationRendererTests {
 	@Test
 	void everyLocalizedSlotIsAppliedToTheCandidate() {
 		McpLocalizationRenderer.Outcome outcome = render(GENEROUS_CEILING,
-				text -> McpLocalizationResult.fromLocalizedText(
+				text -> McpLocalizationResult.localized(
 						"L:" + text.getDefaultText()));
 
 		assertEquals(McpLocalizationRenderer.Disposition.LOCALIZED,
@@ -64,22 +64,10 @@ class McpLocalizationRendererTests {
 	}
 
 	@Test
-	void fallbackResultsSupplyTheirTextJustLikeLocalizedResults() {
-		McpLocalizationRenderer.Outcome outcome = render(GENEROUS_CEILING,
-				text -> McpLocalizationResult.fromFallbackText(
-						"F:" + text.getDefaultText(), Locale.ENGLISH));
-
-		assertEquals(McpLocalizationRenderer.Disposition.LOCALIZED,
-				outcome.disposition());
-		assertEquals("F:Canonical instructions",
-				stringAt(outcome.document(), "instructions"));
-	}
-
-	@Test
 	void anAllDefaultTextRenderReturnsTheCanonicalInstanceForByteParity() {
 		McpJsonObject canonical = catalog();
 		McpLocalizationRenderer.Outcome outcome = render(canonical,
-				GENEROUS_CEILING, text -> McpLocalizationResult.fromDefaultText());
+				GENEROUS_CEILING, text -> McpLocalizationResult.useDefaultText());
 
 		assertEquals(McpLocalizationRenderer.Disposition.CANONICAL,
 				outcome.disposition());
@@ -91,7 +79,7 @@ class McpLocalizationRendererTests {
 	void aReplacementIdenticalToTheDefaultKeepsTheCanonicalInstance() {
 		McpJsonObject canonical = catalog();
 		McpLocalizationRenderer.Outcome outcome = render(canonical,
-				GENEROUS_CEILING, text -> McpLocalizationResult.fromLocalizedText(
+				GENEROUS_CEILING, text -> McpLocalizationResult.localized(
 						text.getDefaultText()));
 
 		assertEquals(McpLocalizationRenderer.Disposition.CANONICAL,
@@ -107,7 +95,7 @@ class McpLocalizationRendererTests {
 				GENEROUS_CEILING, McpLocalizationFailurePolicy.USE_DEFAULT_TEXT,
 				() -> false, text -> {
 					observed.add(text.getDefaultText());
-					return McpLocalizationResult.fromFailure();
+					return McpLocalizationResult.failure();
 				});
 
 		assertEquals(McpLocalizationRenderer.Disposition.DEFAULT_TEXT,
@@ -117,7 +105,7 @@ class McpLocalizationRendererTests {
 
 		McpLocalizationRenderer.Outcome failRequest = render(catalog(),
 				GENEROUS_CEILING, McpLocalizationFailurePolicy.FAIL_REQUEST,
-				() -> false, text -> McpLocalizationResult.fromFailure());
+				() -> false, text -> McpLocalizationResult.failure());
 
 		assertEquals(McpLocalizationRenderer.Disposition.FAIL_REQUEST,
 				failRequest.disposition());
@@ -147,7 +135,7 @@ class McpLocalizationRendererTests {
 				GENEROUS_CEILING, McpLocalizationFailurePolicy.USE_DEFAULT_TEXT,
 				() -> true, text -> {
 					observed.add(text.getDefaultText());
-					return McpLocalizationResult.fromLocalizedText("never");
+					return McpLocalizationResult.localized("never");
 				});
 
 		assertEquals(McpLocalizationRenderer.Disposition.DEFAULT_TEXT,
@@ -165,7 +153,7 @@ class McpLocalizationRendererTests {
 				() -> terminal[0], text -> {
 					observed.add(text.getDefaultText());
 					terminal[0] = true;
-					return McpLocalizationResult.fromLocalizedText("late");
+					return McpLocalizationResult.localized("late");
 				});
 
 		assertEquals(McpLocalizationRenderer.Disposition.DEFAULT_TEXT,
@@ -185,7 +173,7 @@ class McpLocalizationRendererTests {
 				McpLocalizationFailurePolicy.USE_DEFAULT_TEXT, () -> false,
 				text -> {
 					observed.add(text.getDefaultText());
-					return McpLocalizationResult.fromLocalizedText("never");
+					return McpLocalizationResult.localized("never");
 				});
 
 		assertEquals(McpLocalizationRenderer.Disposition.DEFAULT_TEXT,
@@ -206,7 +194,7 @@ class McpLocalizationRendererTests {
 				McpLocalizationFailurePolicy.USE_DEFAULT_TEXT, () -> false,
 				text -> {
 					observed.add(text.getDefaultText());
-					return McpLocalizationResult.fromLocalizedText(
+					return McpLocalizationResult.localized(
 							text.getDefaultText() + "0123456789");
 				});
 
@@ -226,7 +214,7 @@ class McpLocalizationRendererTests {
 		McpLocalizationRenderer.Outcome outcome = render(canonical,
 				canonicalBytes + ENVELOPE_BYTES,
 				McpLocalizationFailurePolicy.FAIL_REQUEST, () -> false,
-				text -> McpLocalizationResult.fromLocalizedText(
+				text -> McpLocalizationResult.localized(
 						"Canonical instructions".equals(text.getDefaultText())
 								? "x"
 								: text.getDefaultText() + "ABCDEFGHIJKLMNOPQRSTU"));
@@ -245,7 +233,7 @@ class McpLocalizationRendererTests {
 					catalog(), CODEC.toUtf8Bytes(catalog()).length, ENVELOPE_BYTES,
 					GENEROUS_CEILING, MAXIMUM_REPLACEMENT_CHARACTERS, slots(),
 					localeContext(invalid,
-							text -> McpLocalizationResult.fromLocalizedText("never")),
+							text -> McpLocalizationResult.localized("never")),
 					McpLocalizationFailurePolicy.USE_DEFAULT_TEXT, () -> false,
 					document -> CODEC.toUtf8Bytes(document).length);
 
@@ -295,27 +283,6 @@ class McpLocalizationRendererTests {
 	}
 
 	@Test
-	void aSameLocaleFallbackIsRejectedAsAWholeResponseFailure() {
-		McpLocalizationRenderer.Outcome outcome = render(catalog(),
-				GENEROUS_CEILING, McpLocalizationFailurePolicy.USE_DEFAULT_TEXT,
-				() -> false, text -> McpLocalizationResult.fromFallbackText(
-						"F:" + text.getDefaultText(), Locale.FRENCH));
-
-		assertEquals(McpLocalizationRenderer.Disposition.DEFAULT_TEXT,
-				outcome.disposition(),
-				"The shared context selects FRENCH, so a FRENCH fallback is "
-						+ "a contract violation rather than a replacement.");
-
-		McpLocalizationRenderer.Outcome differentLocale = render(catalog(),
-				GENEROUS_CEILING, McpLocalizationFailurePolicy.USE_DEFAULT_TEXT,
-				() -> false, text -> McpLocalizationResult.fromFallbackText(
-						"F:" + text.getDefaultText(), Locale.GERMAN));
-
-		assertEquals(McpLocalizationRenderer.Disposition.LOCALIZED,
-				differentLocale.disposition());
-	}
-
-	@Test
 	void aReplacementOverTheCharacterLimitFailsBeforeRetentionAndLaterSlots() {
 		List<String> observed = new ArrayList<>();
 
@@ -323,7 +290,7 @@ class McpLocalizationRendererTests {
 				catalog(), CODEC.toUtf8Bytes(catalog()).length, ENVELOPE_BYTES,
 				GENEROUS_CEILING, 8L, slots(), context(text -> {
 					observed.add(text.getDefaultText());
-					return McpLocalizationResult.fromLocalizedText("123456789");
+					return McpLocalizationResult.localized("123456789");
 				}), McpLocalizationFailurePolicy.USE_DEFAULT_TEXT, () -> false,
 				document -> CODEC.toUtf8Bytes(document).length);
 
@@ -332,6 +299,26 @@ class McpLocalizationRendererTests {
 		assertEquals(1, observed.size(),
 				"A nine-character replacement against an eight-character limit "
 						+ "must stop scheduling every later slot.");
+	}
+
+	@Test
+	void anEscapeExpandedTokenOverTheLimitStopsLaterSlotsBeforeFinalEncoding() {
+		List<String> observed = new ArrayList<>();
+		String escapeHeavy = "\0".repeat(3);
+
+		McpLocalizationRenderer.Outcome outcome = McpLocalizationRenderer.render(
+				catalog(), CODEC.toUtf8Bytes(catalog()).length, ENVELOPE_BYTES,
+				GENEROUS_CEILING, 17L, slots(), context(text -> {
+					observed.add(text.getDefaultText());
+					return McpLocalizationResult.localized(escapeHeavy);
+				}), McpLocalizationFailurePolicy.USE_DEFAULT_TEXT, () -> false,
+				document -> CODEC.toUtf8Bytes(document).length);
+
+		assertEquals(McpLocalizationRenderer.Disposition.DEFAULT_TEXT,
+				outcome.disposition());
+		assertEquals(1, observed.size(),
+				"Three decoded characters expand to eighteen token characters, "
+						+ "so the second provider callback must never run.");
 	}
 
 	private static McpLocalizationContext localeContext(Locale locale,

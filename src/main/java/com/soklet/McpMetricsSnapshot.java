@@ -31,9 +31,11 @@ import static java.util.Objects.requireNonNull;
 /**
  * Immutable aggregate of collected MCP metrics.
  * <p>
- * The complete metric family is provisional until MCP telemetry is finalized.
  * An empty instance permits the shared {@link MetricsCollector.Snapshot}
- * attachment to remain non-null when no MCP metrics have been observed.
+ * attachment to remain non-null when no MCP metrics have been observed. The
+ * fixed core families deliberately expose no generic label map; applications
+ * that construct custom event values remain responsible for the
+ * confidentiality and cardinality of those values.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

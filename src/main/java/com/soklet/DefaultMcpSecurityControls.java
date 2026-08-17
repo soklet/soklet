@@ -50,7 +50,7 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class DefaultMcpSecurityControls
-		implements McpProtectionControl, McpTraceCorrelation {
+		implements McpProtectionControl, McpTraceCorrelationControl {
 	/**
 	 * Immutable, secret-free projection of protection and trace-correlation
 	 * diagnostics captured at one security-control linearization point.
