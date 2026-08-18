@@ -12,6 +12,7 @@ const driverRelativePath =
   'com/soklet/conformance/McpLocalSimulatorScenarioDriver.class';
 const timeoutMilliseconds = 120_000;
 const maximumOutputBytes = 1024 * 1024;
+const maximumDiagnosticCharacters = 16 * 1024;
 
 export function localSimulatorRows(selection) {
   const scenarios = activeScenarios(selection, 5);
@@ -44,17 +45,29 @@ export function expectedLocalSimulatorOutput(rows) {
 export function verifyLocalSimulatorDriverResult(result, expectedOutput) {
   if (result.error !== undefined)
     throw new Error('Local simulator driver could not execute', { cause: result.error });
-  if (result.status !== 0 || result.signal !== null)
-    throw new Error(
-      `Local simulator driver exited status=${result.status} signal=${result.signal}`,
-    );
   const stdout = exactUtf8(result.stdout, 'stdout');
   const stderr = exactUtf8(result.stderr, 'stderr');
+  if (result.status !== 0 || result.signal !== null) {
+    throw new Error(
+      `Local simulator driver exited status=${result.status} signal=${result.signal}`
+        + `\nstdout:\n${diagnosticText(stdout)}`
+        + `\nstderr:\n${diagnosticText(stderr)}`,
+    );
+  }
   if (stderr.length !== 0)
     throw new Error('Local simulator driver wrote unexpected stderr');
   if (!stdout.equals(expectedOutput))
     throw new Error('Local simulator driver output differs from the exact 39-row projection');
   return stdout;
+}
+
+function diagnosticText(value) {
+  const text = value.toString('utf8');
+  if (text.length === 0)
+    return '<empty>';
+  if (text.length <= maximumDiagnosticCharacters)
+    return text;
+  return `${text.slice(0, maximumDiagnosticCharacters)}\n<truncated>`;
 }
 
 export function runLocalSimulator(options, { spawn = spawnSync } = {}) {

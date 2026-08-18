@@ -475,7 +475,7 @@ public class SokletMcpLifecycleTests {
 	private static SokletConfig mixedTransportConfig(
 			@NonNull LifecycleObserver lifecycleObserver) {
 		return SokletConfig.withHttpServer(HttpServer.withPort(0).build())
-				.sseServer(SseServer.withPort(0).build())
+				.sseServer(new LifecycleSseServer())
 				.mcpServer(newMcpServer())
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromClasses(Set.of(MixedTransportResource.class)))
@@ -560,6 +560,39 @@ public class SokletMcpLifecycleTests {
 			if (this.startAttempts == 1)
 				throw new IllegalStateException("expected first SSE start failure");
 
+			this.started = true;
+		}
+
+		@Override
+		public void stop() {
+			this.started = false;
+		}
+
+		@Override
+		@NonNull
+		public Boolean isStarted() {
+			return this.started;
+		}
+
+		@Override
+		@NonNull
+		public Optional<? extends SseBroadcaster> acquireBroadcaster(
+				@Nullable ResourcePath resourcePath) {
+			return Optional.empty();
+		}
+
+		@Override
+		public void initialize(@NonNull SokletConfig sokletConfig,
+				@NonNull RequestHandler requestHandler) {
+			// No initialization state is needed for this lifecycle fixture.
+		}
+	}
+
+	private static final class LifecycleSseServer implements SseServer {
+		private boolean started;
+
+		@Override
+		public void start() {
 			this.started = true;
 		}
 

@@ -12,6 +12,8 @@ Final greenfield API polish amendment reviewed: 2026-08-17
 
 Greenfield public-record elimination amendment reviewed: 2026-08-18
 
+Greenfield typed-request-state amendment reviewed: 2026-08-18
+
 This record approves the Phase 5 public/protected API snapshot for Soklet
 `3.6.0-SNAPSHOT`. The comparison baseline is released Soklet `3.5.1`, and the
 comparison tool is japicmp `0.26.1`. It records a compatibility decision; it
@@ -39,11 +41,12 @@ The matching full japicmp report establishes an exact owner universe of:
 - 206 owners in total.
 
 That list is the original Phase 5 checkpoint. The current exact owner
-partition is 133 Phase 4, 39 Phase 5, 65 Phase 6, zero provisional, and 237
+partition is 133 Phase 4, 36 Phase 5, 65 Phase 6, zero provisional, and 234
 total.
 
-The 39 Phase 5 owners are the exact sorted entries in `phase-5.includes`.
-At this checkpoint, the Phase 4 snapshot and its 133-owner inventory were
+The 36 current Phase 5 owners are the exact sorted entries in
+`phase-5.includes`. At the original Phase 5 checkpoint, the Phase 4 snapshot
+and its 133-owner inventory were
 unchanged, while Phase 6 and provisional owners remained unfrozen. Phase 6
 later froze under its own snapshot; the reviewed telemetry amendment then
 moved every former provisional owner into Phase 6 and emptied the provisional
@@ -57,26 +60,28 @@ records with SHA-256
 The 2026-08-18 public-record elimination amendment retains the owner partition
 and advances the current compatibility set to 565 records with SHA-256
 `3269b4a73d42c035a90735336462aaeb98bf6809d003fa858dbfa4a839e4c2e2`.
+The subsequent typed-request-state amendment removes three greenfield Phase 5
+carrier owners without changing that released-3.5.1 comparison.
 
 ## Frozen Phase 5 snapshot
 
-`phase-5.signatures.jsonl` contains exactly 191 canonical records:
+`phase-5.signatures.jsonl` contains exactly 179 canonical records:
 
-- 39 classes;
+- 36 classes;
 - zero constructors;
 - 15 fields; and
-- 137 methods.
+- 128 methods.
 
 The reviewed file's SHA-256 is
-`ea6d46dc055a57b2d31820cb937d89fe42bac5665c18c5fdb83eea75e79c82f5`.
+`96f56fc34f81a9302d1387d437bee4caa36e465a07a40a8577eed4bd4313e5e4`.
 The independent reflection contract freezes the Phase 5 JSpecify type-use
 layout with SHA-256
-`9c8c02a4eca29166a6a92956fa58033ea94939e6d7deef9e23a7ecd6d5babd3e`.
-The 39-entry `phase-5.includes` inventory has SHA-256
-`696d63fb09f9f8ff9c3d1af2cf52ea49532cc9b3e15a81584abaa5dbda7031fe`.
+`6569e3b106ae11e1d30da66c045d1a9bc23aa65016f36052df6b19fc320c06d9`.
+The 36-entry `phase-5.includes` inventory has SHA-256
+`2009a66e210e89c43e157df0498b357a5e29fc8bc7144ca373ad07c57d1fce2a`.
 
 Immediately before the snapshot was checked in, a fresh extraction from the
-current full japicmp report produced the same 191 records and was byte-for-
+current full japicmp report produced the same 179 records and was byte-for-
 byte identical to the reviewed candidate. The aggregate freeze gate compares
 the Phase 4, Phase 5, and now Phase 6 snapshots bidirectionally on every run.
 
@@ -197,9 +202,9 @@ SHA-256
 `ea6d46dc055a57b2d31820cb937d89fe42bac5665c18c5fdb83eea75e79c82f5`.
 The reflection/nullability digest is
 `9c8c02a4eca29166a6a92956fa58033ea94939e6d7deef9e23a7ecd6d5babd3e`.
-The complete current owner and signature partitions are 133/39/65/0 and
-1,047/191/422. The same amendment makes the already-final Phase 4-owned
-`McpCachePolicy` constructor private. The sole public constructor across all
+At that amendment checkpoint, the complete owner and signature partitions were
+133/39/65/0 and 1,047/191/422. The same amendment makes the already-final
+Phase 4-owned `McpCachePolicy` constructor private. The sole public constructor across all
 three frozen phases is the throwable
 `McpJsonRpcException(McpJsonRpcError)` constructor; non-throwable values are
 factory- or builder-owned.
@@ -211,19 +216,56 @@ No converted Phase 5 value adds a net incompatibility; the sole net-new entry
 is the Phase 4-owned `McpPromptMessage` superclass change from
 `java.lang.Record` to `java.lang.Object`.
 
-The exact post-amendment tree passes a clean Corretto 26 verify with 1,671
-tests, zero failures, zero errors, and four intentional skips; JDK 21 static
+The exact public-record-amendment tree passed a clean Corretto 26 verify with
+1,671 tests, zero failures, zero errors, and four intentional skips; JDK 21 static
 analysis succeeds, SpotBugs reports zero findings, the aggregate freeze gate
 verifies all 565 compatibility records and 1,047/191/422 signatures, and the
 maintained 182-source Java 17 API sketch passes compilation and Javadoc
 doclint.
 
+## 2026-08-18 greenfield typed-request-state amendment
+
+The subsequent greenfield review removes the public sealed `McpRequestState`
+carrier family, including the Phase 5-owned `McpApplicationRequestState` and
+`McpFrameworkRequestState`, without aliases. Handlers and input-required
+results expose application state directly as `Optional<String>` and framework
+state directly as `Optional<McpJsonValue>` through
+`getApplicationRequestState()` and `getFrameworkRequestState()`.
+
+The builders retain `applicationRequestState(String)` and
+`frameworkRequestState(McpJsonValue)`. The two forms remain mutually exclusive
+and last-call-wins, but callers no longer construct an otherwise throwaway
+wrapper object. Removing the carrier family deletes three owners and 13
+signature records. Replacing `McpInputRequiredResult.getRequestState()` with
+the two typed result getters adds one method, for a net Phase 5 change from 191
+to 179 records.
+
+The current Phase 5 snapshot contains 36 classes, zero constructors, 15
+fields, and 128 methods, with signature SHA-256
+`96f56fc34f81a9302d1387d437bee4caa36e465a07a40a8577eed4bd4313e5e4`,
+reflection/nullability digest
+`6569e3b106ae11e1d30da66c045d1a9bc23aa65016f36052df6b19fc320c06d9`,
+and include SHA-256
+`2009a66e210e89c43e157df0498b357a5e29fc8bc7144ca373ad07c57d1fce2a`.
+The complete owner and signature partitions are 133/36/65/0 (234 total) and
+1,048/179/422. Phase 6 descriptors are unchanged. The compatibility ledger
+remains exactly 565 records with SHA-256
+`3269b4a73d42c035a90735336462aaeb98bf6809d003fa858dbfa4a839e4c2e2`
+because the removed family and changed host descriptors are unreleased
+greenfield additions relative to 3.5.1. The focused reflection/inventory
+contract passes 24/24 and the aggregate freeze gate verifies the exact updated
+partitions. Fresh Corretto 26 clean verify passes 1,673 tests with zero
+failures, zero errors, and four intentional skips over 462 main and 193 test
+sources, and builds the main, sources, and Javadoc artifacts; the maintained
+179-source Java 17 API sketch passes compilation, Javadoc doclint, and its
+localization smoke test.
+
 ## Reviewed contract
 
 The snapshot freezes the implemented progress, cooperative-cancelation,
-resource-subscription, MRTR/input-response, and application/framework request-
-state API families. The cross-cutting review also fixed the following public
-contracts:
+resource-subscription, MRTR/input-response, and directly typed
+application/framework request-state APIs. The cross-cutting review also fixed
+the following public contracts:
 
 - MCP scalar signatures use non-null reference types such as `Integer`,
   `Long`, `Boolean`, and `Double`; primitives remain available to internal
@@ -231,8 +273,9 @@ contracts:
 - Protection-provider selection is exclusive at construction. Key-ring,
   custom-protector, and development-ephemeral factories select the provider;
   their builder can tune limits but cannot replace it.
-- Sensitive request-state, input-parameter, and resource-update renderings
-  are exact and redacted rather than exposing their values.
+- Soklet-owned request-state diagnostics remain redacted. At the deliberate
+  handler/result boundary, application `String` and framework `McpJsonValue`
+  state are directly accessible without a public carrier wrapper.
 - Subscription close is idempotent and registration-scoped. A delivery
   already selected or in flight may begin or finish after `close()` returns,
   but no later delivery may be selected for that registration.
@@ -241,10 +284,10 @@ contracts:
   changing the Phase 4-frozen request-context surface.
 
 The exact reflection and source contracts cover non-signature details:
-39 owners, sealed permits, enum order, value-class construction and getter
-names, SPI parameter names, public string constants, the `McpMayRequestInput`
-annotation, JSpecify nullability, standard author tags, and exact thread-safety
-markers.
+36 owners, sealed permits, enum order, value-class construction and typed
+request-state getter names, SPI parameter names, public string constants, the
+`McpMayRequestInput` annotation, JSpecify nullability, standard author tags,
+and exact thread-safety markers.
 
 ## Review evidence and boundary
 

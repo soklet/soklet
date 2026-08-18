@@ -38,6 +38,33 @@ assert.deepEqual(verifyLocalSimulatorDriverResult({
   stdout: expected,
 }, expected), expected);
 
+assert.throws(() => verifyLocalSimulatorDriverResult({
+  error: undefined,
+  signal: null,
+  status: 1,
+  stderr: Buffer.from('java.lang.AssertionError: scenario 12 failed\n'),
+  stdout: Buffer.from('PASS\t1\tserver-stateless\n'),
+}, expected), (error) => {
+  assert.match(error.message, /exited status=1 signal=null/);
+  assert.match(error.message, /stdout:\nPASS\t1\tserver-stateless/);
+  assert.match(error.message,
+    /stderr:\njava\.lang\.AssertionError: scenario 12 failed/);
+  return true;
+});
+
+const oversizedDiagnostic = 'x'.repeat(17 * 1024);
+assert.throws(() => verifyLocalSimulatorDriverResult({
+  error: undefined,
+  signal: null,
+  status: 1,
+  stderr: Buffer.alloc(0),
+  stdout: Buffer.from(oversizedDiagnostic),
+}, expected), (error) => {
+  assert.ok(error.message.length < oversizedDiagnostic.length);
+  assert.match(error.message, /stdout:\nx+\n<truncated>\nstderr:\n<empty>$/);
+  return true;
+});
+
 const reordered = structuredClone(selection);
 [reordered.scenarios[0], reordered.scenarios[2]] =
   [reordered.scenarios[2], reordered.scenarios[0]];

@@ -21,7 +21,6 @@ import com.soklet.McpBlobResourceContents;
 import com.soklet.McpClientCapability;
 import com.soklet.McpCompleteResult;
 import com.soklet.McpEndpoint;
-import com.soklet.McpFrameworkRequestState;
 import com.soklet.McpEndpointRegistry;
 import com.soklet.McpImplementation;
 import com.soklet.McpInputRequest;
@@ -582,7 +581,7 @@ public class McpFinalTagGoldenWireProductionTests {
 				.withName("golden.protected-state")
 				.jsonArguments()
 				.handler((request, arguments, features) -> {
-					if (request.getRequestState().isEmpty()) {
+					if (request.getFrameworkRequestState().isEmpty()) {
 						Assertions.assertTrue(
 								request.getInputResponses().asMap().isEmpty());
 						return McpInputRequiredResult.builder()
@@ -601,11 +600,9 @@ public class McpFinalTagGoldenWireProductionTests {
 								.build();
 					}
 
-					McpFrameworkRequestState state = Assertions.assertInstanceOf(
-							McpFrameworkRequestState.class,
-							request.getRequestState().orElseThrow());
 					McpJsonObject stateValue = Assertions.assertInstanceOf(
-							McpJsonObject.class, state.getValue());
+							McpJsonObject.class,
+							request.getFrameworkRequestState().orElseThrow());
 					Assertions.assertEquals("awaiting-approval",
 							Assertions.assertInstanceOf(McpJsonString.class,
 									stateValue.find("phase").orElseThrow()).getValue());

@@ -18,7 +18,6 @@ package com.soklet.internal.mcp.protocol;
 
 import com.soklet.McpRequestContext;
 import com.soklet.McpRequestOutcome;
-import com.soklet.McpRequestState;
 import com.soklet.McpStreamTerminationReason;
 import com.soklet.Request;
 import com.soklet.StreamTerminationReason;
@@ -127,7 +126,7 @@ record McpRuntimeRequestInput(@NonNull Request request,
 		@NonNull McpJsonObject clientCapabilities,
 		@NonNull McpJsonObject requestMetadata,
 		@NonNull McpJsonObject inputResponses,
-		@NonNull Optional<@NonNull McpRequestState> requestState,
+		@NonNull Optional<@NonNull McpRuntimeRequestState> requestState,
 		@NonNull List<@NonNull String> acceptLanguageValues,
 		@NonNull McpAdmissionIdentity admissionIdentity) {
 	McpRuntimeRequestInput(@NonNull Request request,
@@ -140,7 +139,7 @@ record McpRuntimeRequestInput(@NonNull Request request,
 			@NonNull McpJsonObject clientCapabilities,
 			@NonNull McpJsonObject requestMetadata,
 			@NonNull McpJsonObject inputResponses,
-			@NonNull Optional<@NonNull McpRequestState> requestState,
+			@NonNull Optional<@NonNull McpRuntimeRequestState> requestState,
 			@NonNull McpAdmissionIdentity admissionIdentity) {
 		this(request, endpointPathParameters, jsonRpcMethod, requestId,
 				protocolVersion, operationName, clientInformation,

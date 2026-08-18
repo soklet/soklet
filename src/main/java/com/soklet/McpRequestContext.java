@@ -107,15 +107,30 @@ public interface McpRequestContext {
 	}
 
 	/**
-	 * Returns verified request state supplied with a multi-round-trip retry.
+	 * Returns verified framework-protected JSON state supplied with a
+	 * multi-round-trip retry.
 	 *
 	 * <p>The default preserves compatibility for request-context
 	 * implementations that do not yet supply multi-round-trip data.
 	 *
-	 * @return request state, or empty when none was supplied
+	 * @return verified framework-protected state, or empty when absent
 	 */
 	@NonNull
-	default Optional<@NonNull McpRequestState> getRequestState() {
+	default Optional<@NonNull McpJsonValue> getFrameworkRequestState() {
+		return Optional.empty();
+	}
+
+	/**
+	 * Returns application-protected opaque state supplied with a
+	 * multi-round-trip retry.
+	 *
+	 * <p>The default preserves compatibility for request-context
+	 * implementations that do not yet supply multi-round-trip data.
+	 *
+	 * @return application-protected state, or empty when absent
+	 */
+	@NonNull
+	default Optional<@NonNull String> getApplicationRequestState() {
 		return Optional.empty();
 	}
 

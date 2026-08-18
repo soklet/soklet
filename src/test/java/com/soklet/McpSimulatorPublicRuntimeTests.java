@@ -334,18 +334,21 @@ public class McpSimulatorPublicRuntimeTests {
 					if (handlerCalls.incrementAndGet() == 1) {
 						Assertions.assertEquals(McpRequestId.fromString("mrtr-initial"),
 								request.getRequestId().orElseThrow());
-						Assertions.assertTrue(request.getRequestState().isEmpty());
+						Assertions.assertTrue(
+								request.getApplicationRequestState().isEmpty());
+						Assertions.assertTrue(
+								request.getFrameworkRequestState().isEmpty());
 						return McpInputRequiredResult.builder()
 								.applicationRequestState(requestState)
 								.build();
 					}
 					Assertions.assertEquals(McpRequestId.fromString("mrtr-continued"),
 							request.getRequestId().orElseThrow());
-					McpApplicationRequestState continuedState =
-							Assertions.assertInstanceOf(
-									McpApplicationRequestState.class,
-									request.getRequestState().orElseThrow());
-					Assertions.assertEquals(requestState, continuedState.getValue());
+					String continuedState =
+							request.getApplicationRequestState().orElseThrow();
+					Assertions.assertEquals(requestState, continuedState);
+					Assertions.assertTrue(
+							request.getFrameworkRequestState().isEmpty());
 					return McpCompleteResult.fromToolText("continued complete");
 				})
 				.requestStateMode(McpRequestStateMode.APPLICATION_PROTECTED)

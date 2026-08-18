@@ -27,21 +27,55 @@ import java.util.Optional;
 @NotThreadSafe
 public class McpRequestStateContextPlumbingTests {
 	@Test
-	public void observation_request_state_projects_into_the_public_context() {
-		McpApplicationRequestState requestState =
-				McpApplicationRequestState.fromValue("opaque-state");
+	public void observation_application_request_state_projects_into_the_public_context() {
+		String requestState = "opaque-state";
+		RequestObservationInput input = new RequestObservationInput(
+				request(), endpoint(), Map.of(), "tools/call",
+				Optional.of(McpRequestId.fromString("request")), "2026-07-28",
+				Optional.of("lookup"), Optional.empty(),
+				McpJsonObject.emptyInstance(), McpJsonObject.emptyInstance(),
+				McpInputResponses.emptyInstance(), Optional.empty(),
+				Optional.of(requestState),
+				McpAdmissionIdentity.anonymousInstance());
+
+		DefaultMcpRequestContext context = new DefaultMcpRequestContext(input);
+
+		Assertions.assertSame(requestState,
+				context.getApplicationRequestState().orElseThrow());
+		Assertions.assertTrue(context.getFrameworkRequestState().isEmpty());
+	}
+
+	@Test
+	public void observation_framework_request_state_projects_into_the_public_context() {
+		McpJsonObject requestState = McpJsonObject.builder()
+				.put("round", 2)
+				.build();
 		RequestObservationInput input = new RequestObservationInput(
 				request(), endpoint(), Map.of(), "tools/call",
 				Optional.of(McpRequestId.fromString("request")), "2026-07-28",
 				Optional.of("lookup"), Optional.empty(),
 				McpJsonObject.emptyInstance(), McpJsonObject.emptyInstance(),
 				McpInputResponses.emptyInstance(), Optional.of(requestState),
-				McpAdmissionIdentity.anonymousInstance());
+				Optional.empty(), McpAdmissionIdentity.anonymousInstance());
 
 		DefaultMcpRequestContext context = new DefaultMcpRequestContext(input);
 
 		Assertions.assertSame(requestState,
-				context.getRequestState().orElseThrow());
+				context.getFrameworkRequestState().orElseThrow());
+		Assertions.assertTrue(context.getApplicationRequestState().isEmpty());
+	}
+
+	@Test
+	public void observation_input_rejects_both_request_state_kinds() {
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> new RequestObservationInput(
+						request(), endpoint(), Map.of(), "tools/call",
+						Optional.of(McpRequestId.fromString("request")),
+						"2026-07-28", Optional.of("lookup"), Optional.empty(),
+						McpJsonObject.emptyInstance(), McpJsonObject.emptyInstance(),
+						McpInputResponses.emptyInstance(),
+						Optional.of(McpJsonNull.INSTANCE), Optional.of("opaque"),
+						McpAdmissionIdentity.anonymousInstance()));
 	}
 
 	@Test
@@ -56,7 +90,8 @@ public class McpRequestStateContextPlumbingTests {
 
 		DefaultMcpRequestContext context = new DefaultMcpRequestContext(input);
 
-		Assertions.assertTrue(context.getRequestState().isEmpty());
+		Assertions.assertTrue(context.getFrameworkRequestState().isEmpty());
+		Assertions.assertTrue(context.getApplicationRequestState().isEmpty());
 	}
 
 	private static Request request() {

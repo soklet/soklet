@@ -22,6 +22,8 @@ Final greenfield API polish amendment reviewed: 2026-08-17
 
 Greenfield public-record elimination amendment reviewed: 2026-08-18
 
+Greenfield typed-request-state amendment reviewed: 2026-08-18
+
 This record approves the Phase 4 public/protected API snapshot for Soklet
 `3.6.0-SNAPSHOT`. The comparison baseline is released Soklet `3.5.1`, and the
 comparison tool is japicmp `0.26.1`. It records a scoped API decision; it is
@@ -34,7 +36,8 @@ contained exactly 556 canonical symbols and had SHA-256
 `c3313a6f690429f833f4b8e09ab84e92ab187255ab83f5944818c68cdd6dfe8e`.
 After the later Phase 5/6 additions, localization and trace-log host
 amendments, the naming reviews through the final greenfield polish, and the
-greenfield public-record elimination amendment, the current reviewed set
+greenfield public-record elimination and typed-request-state amendments, the
+current reviewed set
 contains exactly 565 canonical symbols and has SHA-256
 `3269b4a73d42c035a90735336462aaeb98bf6809d003fa858dbfa4a839e4c2e2`.
 `target/japicmp/mcp-api-diff.xml` is the modified-only report used to derive
@@ -62,27 +65,29 @@ simulation descriptors landed.
 
 After the telemetry, greenfield cohesion, localization-result simplification,
 localization-context builder, final API-polish, and public-record elimination
-amendments, the current exact owner partition is 133 Phase 4, 39 Phase 5, 65
-Phase 6, zero provisional, and 237 total. The cohesion naming amendment was
+amendments, the current exact owner partition is 133 Phase 4, 36 Phase 5, 65
+Phase 6, zero provisional, and 234 total. The cohesion naming amendment was
 one-for-one within each phase; the result simplification removed one redundant
 Phase 6 nested owner, the context amendment added the framework-owned nested
 builder, and converting records to final classes plus privatizing the
-`McpCachePolicy` constructor did not change ownership.
+`McpCachePolicy` constructor did not change ownership. The typed-state
+amendment subsequently removed three Phase 5 carrier owners and did not change
+Phase 4 or Phase 6 ownership.
 
 ## Frozen Phase 4 snapshot
 
-`phase-4.signatures.jsonl` contains exactly 1,047 canonical records:
+`phase-4.signatures.jsonl` contains exactly 1,048 canonical records:
 
 - 133 classes;
 - one constructor;
 - 79 fields; and
-- 834 methods.
+- 835 methods.
 
 The reviewed file's SHA-256 is
-`dc733de19433200065526bd02f985b56ca69f658aefd116e80446b5c885f035b`.
+`0efe130ce6da63230f2bbf5f4c50889209a53bd49995f7da1a42ff713c7f60d4`.
 The independent reflection contract freezes the Phase 4 JSpecify type-use
 layout with SHA-256
-`581038cefbc8e65845e38001632ed0678a83efe55446e4f25f233e874eef3f39`.
+`1d33a5deb35adb467feccac10ffce635eae903437a096ed63a8c17a1b57d2309`.
 The 133-entry `phase-4.includes` inventory has SHA-256
 `8c0c7f3a0b17cd824d292969b1dd4eb4b52bc64929f65b562a197e8dcf510b6b`.
 
@@ -384,8 +389,8 @@ SHA-256
 `dc733de19433200065526bd02f985b56ca69f658aefd116e80446b5c885f035b`.
 Its reflection/nullability digest is
 `581038cefbc8e65845e38001632ed0678a83efe55446e4f25f233e874eef3f39`.
-The complete owner and signature partitions are now 133/39/65/0 and
-1,047/191/422.
+At that amendment checkpoint, the complete owner and signature partitions were
+133/39/65/0 and 1,047/191/422.
 
 The released-3.5.1 compatibility ledger now contains 565 records with SHA-256
 `3269b4a73d42c035a90735336462aaeb98bf6809d003fa858dbfa4a839e4c2e2`.
@@ -394,12 +399,45 @@ from `java.lang.Record` to `java.lang.Object`; the former `role()` and
 `content()` record-component changes are now method removals rather than new
 compatibility entries.
 
-The exact post-amendment tree passes a clean Corretto 26 verify with 1,671
-tests, zero failures, zero errors, and four intentional skips; JDK 21 static
+The exact public-record-amendment tree passed a clean Corretto 26 verify with
+1,671 tests, zero failures, zero errors, and four intentional skips; JDK 21 static
 analysis succeeds, SpotBugs reports zero findings, the aggregate freeze gate
 verifies all 565 compatibility records and 1,047/191/422 signatures, and the
 maintained 182-source Java 17 API sketch passes compilation and Javadoc
 doclint.
+
+### 2026-08-18 greenfield typed-request-state amendment
+
+The subsequent greenfield review removes the public sealed `McpRequestState`
+carrier family, including `McpApplicationRequestState` and
+`McpFrameworkRequestState`, without aliases. Applications no longer construct
+throwaway wrapper values: request contexts expose application state directly
+as `Optional<String>` through `getApplicationRequestState()` and framework
+state directly as `Optional<McpJsonValue>` through
+`getFrameworkRequestState()`.
+
+On the Phase 4-owned `McpRequestContext`, the two typed default getters replace
+the former single `getRequestState()` default getter. The owner count remains
+133, while the snapshot gains one method and now contains exactly 1,048
+records - 133 classes, one constructor, 79 fields, and 835 methods - with
+SHA-256
+`0efe130ce6da63230f2bbf5f4c50889209a53bd49995f7da1a42ff713c7f60d4`.
+Its reflection/nullability digest is
+`1d33a5deb35adb467feccac10ffce635eae903437a096ed63a8c17a1b57d2309`.
+
+Phase 5 removes the three carrier owners and their 13 signature records, then
+adds one net host method by replacing one result getter with the same two typed
+getters. The complete current owner and signature partitions are therefore
+133/36/65/0 (234 total) and 1,048/179/422. Phase 6 descriptors are unchanged.
+The compatibility ledger remains exactly 565 records with SHA-256
+`3269b4a73d42c035a90735336462aaeb98bf6809d003fa858dbfa4a839e4c2e2`
+because every affected descriptor is an unreleased greenfield addition
+relative to 3.5.1. The focused reflection/inventory contract passes 24/24 and
+the aggregate freeze gate verifies the exact updated partitions. Fresh
+Corretto 26 clean verify passes 1,673 tests with zero failures, zero errors,
+and four intentional skips over 462 main and 193 test sources, and builds the
+main, sources, and Javadoc artifacts; the maintained 179-source Java 17 API
+sketch passes compilation, Javadoc doclint, and its localization smoke test.
 
 The snapshot includes every final descriptor that a later phase needs on a
 Phase 4-owned host:
@@ -408,7 +446,8 @@ Phase 4-owned host:
   endpoint-class overlay through `McpEndpointRegistry`;
 - the mandatory admission controller, its server getter, and its builder
   input;
-- request-context input responses and request state;
+- request-context input responses and directly typed application/framework
+  request-state accessors;
 - tool, prompt, and resource registration input declarations and request-state
   mode, plus the equivalent handler-annotation elements and defaults;
 - server protection-control and trace-correlation accessors;

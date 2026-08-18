@@ -21,14 +21,12 @@ import com.soklet.CancelationToken;
 import com.soklet.CorsAuthorizer;
 import com.soklet.McpAdmissionDecision;
 import com.soklet.McpAdmissionIdentity;
-import com.soklet.McpApplicationRequestState;
 import com.soklet.McpClientCapability;
 import com.soklet.McpEndpoint;
 import com.soklet.McpImplementation;
 import com.soklet.McpInputRequest;
 import com.soklet.McpInputRequiredResult;
 import com.soklet.McpInputResponses;
-import com.soklet.McpFrameworkRequestState;
 import com.soklet.McpJsonArray;
 import com.soklet.McpJsonBoolean;
 import com.soklet.McpJsonNull;
@@ -40,7 +38,6 @@ import com.soklet.McpRequestContext;
 import com.soklet.McpRequestId;
 import com.soklet.McpRequestOutcome;
 import com.soklet.McpAdmissionRejection;
-import com.soklet.McpRequestState;
 import com.soklet.McpRequestStateMode;
 import com.soklet.McpRequestStateProtectionException;
 import com.soklet.McpSimulation;
@@ -976,7 +973,8 @@ public final class McpServerRuntimeBridge {
 							(McpJsonObject) toPublic(input.clientCapabilities()),
 							(McpJsonObject) toPublic(input.requestMetadata()),
 							toPublicInputResponses(input.inputResponses()),
-							input.requestState(),
+							toPublicFrameworkRequestState(input.requestState()),
+							toPublicApplicationRequestState(input.requestState()),
 							input.acceptLanguageValues(),
 							toPublic(input.admissionIdentity()))),
 					"The MCP request-observation adapter returned null.");
@@ -2563,7 +2561,8 @@ public final class McpServerRuntimeBridge {
 			@NonNull McpJsonObject clientCapabilities,
 			@NonNull McpJsonObject requestMetadata,
 			@NonNull McpInputResponses inputResponses,
-			@NonNull Optional<@NonNull McpRequestState> requestState,
+			@NonNull Optional<@NonNull McpJsonValue> frameworkRequestState,
+			@NonNull Optional<@NonNull String> applicationRequestState,
 			@NonNull List<@NonNull String> acceptLanguageValues,
 			@NonNull McpAdmissionIdentity admissionIdentity) {
 		/** Creates an observation input without raw-header provenance. */
@@ -2578,11 +2577,13 @@ public final class McpServerRuntimeBridge {
 				@NonNull McpJsonObject clientCapabilities,
 				@NonNull McpJsonObject requestMetadata,
 				@NonNull McpInputResponses inputResponses,
-				@NonNull Optional<@NonNull McpRequestState> requestState,
+				@NonNull Optional<@NonNull McpJsonValue> frameworkRequestState,
+				@NonNull Optional<@NonNull String> applicationRequestState,
 				@NonNull McpAdmissionIdentity admissionIdentity) {
 			this(request, endpoint, endpointPathParameters, jsonRpcMethod, requestId,
 					protocolVersion, operationName, clientInformation,
-					clientCapabilities, requestMetadata, inputResponses, requestState,
+					clientCapabilities, requestMetadata, inputResponses,
+					frameworkRequestState, applicationRequestState,
 					acceptLanguageValues(request), admissionIdentity);
 		}
 
@@ -2602,7 +2603,8 @@ public final class McpServerRuntimeBridge {
 			this(request, endpoint, endpointPathParameters, jsonRpcMethod, requestId,
 					protocolVersion, operationName, clientInformation,
 					clientCapabilities, requestMetadata, inputResponses,
-					Optional.empty(), acceptLanguageValues(request), admissionIdentity);
+					Optional.empty(), Optional.empty(), acceptLanguageValues(request),
+					admissionIdentity);
 		}
 
 		/** Creates an observation input without multi-round-trip responses. */
@@ -2620,7 +2622,7 @@ public final class McpServerRuntimeBridge {
 			this(request, endpoint, endpointPathParameters, jsonRpcMethod, requestId,
 					protocolVersion, operationName, clientInformation,
 					clientCapabilities, requestMetadata,
-					McpInputResponses.emptyInstance(), Optional.empty(),
+					McpInputResponses.emptyInstance(), Optional.empty(), Optional.empty(),
 					acceptLanguageValues(request),
 					admissionIdentity);
 		}
@@ -2639,7 +2641,12 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(clientCapabilities);
 			requireNonNull(requestMetadata);
 			requireNonNull(inputResponses);
-			requireNonNull(requestState);
+			requireNonNull(frameworkRequestState);
+			requireNonNull(applicationRequestState);
+			if (frameworkRequestState.isPresent()
+					&& applicationRequestState.isPresent())
+				throw new IllegalArgumentException(
+						"At most one MCP request-state value may be present.");
 			acceptLanguageValues = List.copyOf(
 					requireNonNull(acceptLanguageValues));
 			requireNonNull(admissionIdentity);
@@ -3126,24 +3133,31 @@ public final class McpServerRuntimeBridge {
 							(com.soklet.internal.mcp.protocol.McpJsonObject)
 									toInternal(entry.getValue().getParams())));
 
+		Optional<McpJsonValue> frameworkRequestState =
+				publicResult.getFrameworkRequestState();
+		Optional<String> applicationRequestState =
+				publicResult.getApplicationRequestState();
 		Optional<String> protectedRequestState = Optional.empty();
-		if (publicResult.getRequestState().isPresent()) {
-			McpRequestState state = publicResult.getRequestState().orElseThrow();
-			if (requestStateMode == McpRequestStateMode.NONE)
+		if (frameworkRequestState.isPresent()
+				|| applicationRequestState.isPresent()) {
+			if (requestStateMode == McpRequestStateMode.NONE) {
 				throw new IllegalArgumentException(
 						"The operation does not declare request-state support.");
-			if (requestStateMode == McpRequestStateMode.APPLICATION_PROTECTED) {
-				if (!(state instanceof McpApplicationRequestState applicationState))
+			} else if (requestStateMode
+					== McpRequestStateMode.APPLICATION_PROTECTED) {
+				if (frameworkRequestState.isPresent())
 					throw new IllegalArgumentException(
 							"The operation requires application-protected request state.");
-				McpRequestStateCanonicalJson.strictUtf8(applicationState.getValue(),
-						65_536, "Application-protected MCP request state");
-				protectedRequestState = Optional.of(applicationState.getValue());
+				String state = applicationRequestState.orElseThrow();
+				McpRequestStateCanonicalJson.strictUtf8(state, 65_536,
+						"Application-protected MCP request state");
+				protectedRequestState = Optional.of(state);
 			} else if (requestStateMode
 					== McpRequestStateMode.FRAMEWORK_PROTECTED) {
-				if (!(state instanceof McpFrameworkRequestState frameworkState))
+				if (applicationRequestState.isPresent())
 					throw new IllegalArgumentException(
 							"The operation requires framework-protected request state.");
+				McpJsonValue state = frameworkRequestState.orElseThrow();
 				McpJsonRpcMessage.Request request = invocation.request();
 				protectedRequestState = Optional.of(requestStateRuntime.seal(
 						publicEndpoint.getPath(),
@@ -3152,7 +3166,7 @@ public final class McpServerRuntimeBridge {
 						invocation.admissionIdentity().authorizationPartition()
 								.applicationKey(),
 						request.params().toJsonObject(), request.id(),
-						toInternal(frameworkState.getValue()),
+						toInternal(state),
 						invocation.frameworkRequestStateContinuation(),
 						Optional.ofNullable(invocation.selectedLocale().get())));
 			} else {
@@ -3375,9 +3389,22 @@ public final class McpServerRuntimeBridge {
 	}
 
 	@NonNull
-	static McpJsonValue toPublicRequestStateValue(
-			com.soklet.internal.mcp.protocol.@NonNull McpJsonValue value) {
-		return toPublic(requireNonNull(value));
+	private static Optional<@NonNull McpJsonValue> toPublicFrameworkRequestState(
+			@NonNull Optional<@NonNull McpRuntimeRequestState> requestState) {
+		return requireNonNull(requestState)
+				.filter(McpRuntimeFrameworkRequestState.class::isInstance)
+				.map(McpRuntimeFrameworkRequestState.class::cast)
+				.map(McpRuntimeFrameworkRequestState::value)
+				.map(McpServerRuntimeBridge::toPublic);
+	}
+
+	@NonNull
+	private static Optional<@NonNull String> toPublicApplicationRequestState(
+			@NonNull Optional<@NonNull McpRuntimeRequestState> requestState) {
+		return requireNonNull(requestState)
+				.filter(McpRuntimeApplicationRequestState.class::isInstance)
+				.map(McpRuntimeApplicationRequestState.class::cast)
+				.map(McpRuntimeApplicationRequestState::value);
 	}
 
 	@NonNull

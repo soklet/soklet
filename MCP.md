@@ -42,8 +42,7 @@ callback; applications do not implement or subtype it.
 Public MCP value carriers follow the same Soklet construction style: they are
 final immutable classes with named factories or builders, private
 constructors, and conventional `get...` accessors. In particular,
-`McpJsonString`, `McpJsonBoolean`, `McpJsonNumber`,
-`McpApplicationRequestState`, and `McpFrameworkRequestState` use
+`McpJsonString`, `McpJsonBoolean`, and `McpJsonNumber` use
 `fromValue(...)`/`getValue()`; `McpInputRequest` uses
 `fromDeclaration(...)`; and prompt messages use
 `fromUserContent(...)` or `fromAssistantContent(...)` with `getRole()` and
@@ -307,7 +306,7 @@ McpToolRegistration<McpJsonObject> tool = McpToolRegistration
   .withName("catalog.continue")
   .jsonArguments()
   .handler((request, arguments, features) -> {
-    if (request.getRequestState().isEmpty()) {
+    if (request.getFrameworkRequestState().isEmpty()) {
       return McpInputRequiredResult.builder()
         .inputRequest("roots", McpInputRequest.fromDeclaration(
           roots, McpJsonObject.emptyInstance()))
@@ -317,8 +316,8 @@ McpToolRegistration<McpJsonObject> tool = McpToolRegistration
         .build();
     }
 
-    McpJsonObject state = (McpJsonObject) ((McpFrameworkRequestState)
-      request.getRequestState().orElseThrow()).getValue();
+    McpJsonObject state = (McpJsonObject)
+      request.getFrameworkRequestState().orElseThrow();
     request.getInputResponses().find("roots").orElseThrow();
     return McpCompleteResult.fromToolText(((McpJsonString)
       state.find("phase").orElseThrow()).getValue());
@@ -332,14 +331,22 @@ McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 different ownership:
 
 - `APPLICATION_PROTECTED` sends the exact nonempty string supplied through
-  `applicationRequestState(...)` and returns the exact echoed value as
-  `McpApplicationRequestState`. Soklet applies a fixed 65,536-byte UTF-8 bound
+  `applicationRequestState(...)` and returns the exact echoed value through
+  `McpRequestContext.getApplicationRequestState()`. Soklet applies a fixed
+  65,536-byte UTF-8 bound
   but does not parse, protect, expire, authorize, round-limit, or otherwise
   interpret it. No `McpProtectionConfig` is required.
 - `FRAMEWORK_PROTECTED` accepts application JSON through
   `frameworkRequestState(...)`, emits an opaque protected string, and returns
-  verified JSON as `McpFrameworkRequestState`. Any operation using this mode
-  makes a server-wide `McpProtectionConfig` mandatory.
+  verified JSON through `McpRequestContext.getFrameworkRequestState()`. Any
+  operation using this mode makes a server-wide `McpProtectionConfig`
+  mandatory.
+
+On an initial request both typed state accessors are empty. On a retry, only
+the accessor corresponding to the operation's declared mode can be present;
+applications read their value directly without constructing a carrier or
+performing a type cast. `McpInputRequiredResult` exposes the same two typed
+accessors for application tests and result inspection.
 
 Choose framework protection explicitly:
 
@@ -2002,7 +2009,7 @@ unfrozen.
 
 ## Current Phase 6 and release state
 
-The current API universe is 237 owners: 133 Phase 4, 39 Phase 5, and all 65
+The current API universe is 234 owners: 133 Phase 4, 36 Phase 5, and all 65
 Phase 6 owners are frozen; `api/mcp/provisional.includes` is empty. The
 bounded `MCP_TRACE_CORRELATION` log contract and its independent raw validated
 trace-ID opt-in are implemented and API-frozen. The current cancellation
@@ -2013,11 +2020,18 @@ cancellation metric is planned under this contract.
 
 The explicit-dispatch release-validation workflow, candidate script,
 downstream/toolchain manifest, release soak profile, and fail-closed evidence
-assembler are checked in. They do not constitute release evidence. Final local
-checks pass core clean verify at 1,671/0/0/4 over 464 main and 193 test
-sources, JDK 21 static-analysis `BUILD SUCCESS`, SpotBugs 0, Javadocs, API
-565/237 with 1,047/191/422 records, fuzz
-replay 139/139, smoke soak 6/6 plus verifier, candidate localization,
+assembler are checked in. They do not constitute release evidence. The last
+full pre-typed-state local checks passed core clean verify at 1,671/0/0/4 over
+464 main and 193 test sources, JDK 21 static-analysis `BUILD SUCCESS`,
+SpotBugs 0, Javadocs, fuzz replay 139/139, and smoke soak 6/6 plus verifier.
+After the no-alias greenfield typed-state amendment, fresh Corretto 26 clean
+verify passes 1,673/0/0/4 over 462 main and 193 test sources and builds the
+main, sources, and Javadoc artifacts. Focused request-state/runtime tests pass
+50/50; reflection/inventory contracts pass 24/24; and the aggregate API gate
+verifies 565 incompatibilities, 234 owners, and 1,048/179/422 records. The
+maintained 179-source API sketch passes Java 17 compilation,
+Javadoc doclint, and its localization smoke contract. Carried-forward local
+evidence remains green for candidate localization,
 artifact-backed simulator 39/39, pinned live official CLI 39/39, the website's
 offline clean-install, lint, and 33-route SSG build, and OpenTelemetry 36/36.
 TypeScript and Go are checksum-pinned, `READY`, and green against the local

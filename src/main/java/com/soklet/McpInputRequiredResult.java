@@ -43,7 +43,9 @@ public final class McpInputRequiredResult implements McpOperationResult {
 	@NonNull
 	private final Map<@NonNull String, @NonNull McpInputRequest> inputRequests;
 	@Nullable
-	private final McpRequestState requestState;
+	private final McpJsonValue frameworkRequestState;
+	@Nullable
+	private final String applicationRequestState;
 	@NonNull
 	private final McpJsonObject metadata;
 
@@ -58,12 +60,15 @@ public final class McpInputRequiredResult implements McpOperationResult {
 	}
 
 	private McpInputRequiredResult(@NonNull Builder builder) {
-		if (builder.inputRequests.isEmpty() && builder.requestState == null)
+		if (builder.inputRequests.isEmpty()
+				&& builder.frameworkRequestState == null
+				&& builder.applicationRequestState == null)
 			throw new IllegalStateException(
 					"An input-required result needs an input request, request state, or both.");
 		this.inputRequests = Collections.unmodifiableMap(
 				new LinkedHashMap<>(builder.inputRequests));
-		this.requestState = builder.requestState;
+		this.frameworkRequestState = builder.frameworkRequestState;
+		this.applicationRequestState = builder.applicationRequestState;
 		this.metadata = builder.metadata;
 	}
 
@@ -78,13 +83,23 @@ public final class McpInputRequiredResult implements McpOperationResult {
 	}
 
 	/**
-	 * Returns the state that the client must echo when retrying the operation.
+	 * Returns application-defined JSON for Soklet to protect as request state.
 	 *
-	 * @return request state, or empty when no state is needed
+	 * @return framework-protected request-state value, or empty when absent
 	 */
 	@NonNull
-	public Optional<@NonNull McpRequestState> getRequestState() {
-		return Optional.ofNullable(this.requestState);
+	public Optional<@NonNull McpJsonValue> getFrameworkRequestState() {
+		return Optional.ofNullable(this.frameworkRequestState);
+	}
+
+	/**
+	 * Returns opaque request state whose protection is application-owned.
+	 *
+	 * @return application-protected request-state value, or empty when absent
+	 */
+	@NonNull
+	public Optional<@NonNull String> getApplicationRequestState() {
+		return Optional.ofNullable(this.applicationRequestState);
 	}
 
 	/**
@@ -108,7 +123,9 @@ public final class McpInputRequiredResult implements McpOperationResult {
 		private final Map<@NonNull String, @NonNull McpInputRequest>
 				inputRequests = new LinkedHashMap<>();
 		@Nullable
-		private McpRequestState requestState;
+		private McpJsonValue frameworkRequestState;
+		@Nullable
+		private String applicationRequestState;
 		@NonNull
 		private McpJsonObject metadata = McpJsonObject.emptyInstance();
 
@@ -153,8 +170,9 @@ public final class McpInputRequiredResult implements McpOperationResult {
 		 */
 		@NonNull
 		public Builder frameworkRequestState(@NonNull McpJsonValue state) {
-			this.requestState = McpFrameworkRequestState.fromValue(
-					requireNonNull(state));
+			McpJsonValue validatedState = requireNonNull(state);
+			this.frameworkRequestState = validatedState;
+			this.applicationRequestState = null;
 			return this;
 		}
 
@@ -171,8 +189,12 @@ public final class McpInputRequiredResult implements McpOperationResult {
 		 */
 		@NonNull
 		public Builder applicationRequestState(@NonNull String state) {
-			this.requestState = McpApplicationRequestState.fromValue(
-					requireNonNull(state));
+			String validatedState = requireNonNull(state);
+			if (validatedState.isEmpty())
+				throw new IllegalArgumentException(
+						"Application request state must not be empty.");
+			this.applicationRequestState = validatedState;
+			this.frameworkRequestState = null;
 			return this;
 		}
 

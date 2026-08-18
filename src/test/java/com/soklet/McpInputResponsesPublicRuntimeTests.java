@@ -209,7 +209,10 @@ public class McpInputResponsesPublicRuntimeTests {
 				.jsonArguments()
 				.handler((request, arguments, features) -> {
 					toolInvocations.incrementAndGet();
-					Assertions.assertTrue(request.getRequestState().isEmpty());
+					Assertions.assertTrue(
+							request.getFrameworkRequestState().isEmpty());
+					Assertions.assertTrue(
+							request.getApplicationRequestState().isEmpty());
 					McpJsonObject response = Assertions.assertInstanceOf(
 							McpJsonObject.class,
 							request.getInputResponses().find("response")
@@ -224,7 +227,10 @@ public class McpInputResponsesPublicRuntimeTests {
 					resourceInvocations.incrementAndGet();
 					Assertions.assertSame(McpInputResponses.emptyInstance(),
 							request.getInputResponses());
-					Assertions.assertTrue(request.getRequestState().isEmpty());
+					Assertions.assertTrue(
+							request.getFrameworkRequestState().isEmpty());
+					Assertions.assertTrue(
+							request.getApplicationRequestState().isEmpty());
 					return McpCompleteResult.fromResourceOutput(
 							McpResourceOutput.builder()
 									.content(McpTextResourceContents.withUriAndText(
@@ -450,7 +456,8 @@ public class McpInputResponsesPublicRuntimeTests {
 				new ArrayList<>(responses.asMap().keySet()));
 		Assertions.assertThrows(UnsupportedOperationException.class,
 				() -> responses.asMap().clear());
-		Assertions.assertTrue(request.getRequestState().isEmpty());
+		Assertions.assertTrue(request.getFrameworkRequestState().isEmpty());
+		Assertions.assertTrue(request.getApplicationRequestState().isEmpty());
 
 		McpJsonObject approval = Assertions.assertInstanceOf(McpJsonObject.class,
 				responses.find("approval").orElseThrow());

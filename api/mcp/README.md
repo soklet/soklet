@@ -10,7 +10,8 @@ cohesion naming amendment, followed by the 2026-08-17 greenfield
 localization-result simplification amendment and the 2026-08-17 greenfield
 localization-context builder amendment, followed by the 2026-08-17 final
 greenfield API polish amendment and the 2026-08-18 greenfield public-record
-elimination amendment. The
+elimination amendment, followed by the 2026-08-18 greenfield typed-request-
+state amendment. The
 [Phase 5 freeze rationale](phase-5-freeze-rationale.md) and
 [Phase 6 freeze rationale](phase-6-freeze-rationale.md) record their exact
 compatibility snapshots and the limits of each freeze decision.
@@ -38,17 +39,17 @@ scope has exactly one owner:
 | Inventory | Entries | Meaning |
 | --- | ---: | --- |
 | `phase-4.includes` | 133 | frozen Phase 4 types and shared hosts |
-| `phase-5.includes` | 39 | frozen Phase 5 types |
+| `phase-5.includes` | 36 | frozen Phase 5 types |
 | `phase-6.includes` | 65 | frozen Phase 6 types |
 | `provisional.includes` | 0 | empty after the reviewed telemetry amendment |
 | `non-mcp-public-api.allowlist` | 0 | reviewed unrelated API deltas |
 
-The 237-entry union is sorted, nonoverlapping, and exact. Ownership records
+The 234-entry union is sorted, nonoverlapping, and exact. Ownership records
 when a type is intended to stabilize; it does not itself freeze the type.
 The current Phase 4, Phase 5, and Phase 6 include inventories have respective
 SHA-256 values
 `8c0c7f3a0b17cd824d292969b1dd4eb4b52bc64929f65b562a197e8dcf510b6b`,
-`696d63fb09f9f8ff9c3d1af2cf52ea49532cc9b3e15a81584abaa5dbda7031fe`,
+`2009a66e210e89c43e157df0498b357a5e29fc8bc7144ca373ad07c57d1fce2a`,
 and
 `474e1c3079501b286a9eb1b38dee06a532d263aef50b633b46d465813024dacc`.
 `McpPublicApiInventoryTests` is a fast, independent source/class-tree guard
@@ -131,8 +132,9 @@ The same amendment makes the already-final `McpCachePolicy` factory-owned by
 privatizing its remaining public value constructor. Across all three frozen
 phases, the sole public constructor is now the throwable
 `McpJsonRpcException(McpJsonRpcError)` constructor; non-throwable values are
-factory- or builder-owned. The exact owner partition remains 133/39/65/0 (237
-owners). The current Phase 4/5/6 snapshots contain 1,047/191/422 records with
+factory- or builder-owned. At that amendment checkpoint, the exact owner
+partition remained 133/39/65/0 (237 owners), and the Phase 4/5/6 snapshots
+contained 1,047/191/422 records with
 respective SHA-256 values
 `dc733de19433200065526bd02f985b56ca69f658aefd116e80446b5c885f035b`,
 `ea6d46dc055a57b2d31820cb937d89fe42bac5665c18c5fdb83eea75e79c82f5`,
@@ -149,14 +151,56 @@ Its sole net-new incompatibility is the `McpPromptMessage` superclass change
 from `java.lang.Record` to `java.lang.Object`; its former canonical record
 components are removals, not compatibility aliases.
 
-The exact post-amendment tree passes a clean Corretto 26 verify with 1,671
-tests, zero failures, zero errors, and four intentional skips over 464 main
+The exact public-record-amendment tree passed a clean Corretto 26 verify with
+1,671 tests, zero failures, zero errors, and four intentional skips over 464 main
 and 193 test sources, and builds the main, source, and Javadoc artifacts. The
 JDK 21 static-analysis build succeeds with the reviewed advisory warnings,
 SpotBugs reports zero findings, the aggregate freeze gate verifies all 565
 compatibility records and 1,047/191/422 signatures, and the maintained
 182-source Java 17 API sketch passes compilation, Javadoc doclint, and its
 localization smoke test.
+
+The subsequent 2026-08-18 greenfield typed-request-state amendment removes
+the public sealed `McpRequestState` carrier family, including
+`McpApplicationRequestState` and `McpFrameworkRequestState`, without aliases.
+Handlers and input-required results now expose application state directly as
+`Optional<String>` through `getApplicationRequestState()` and framework state
+directly as `Optional<McpJsonValue>` through
+`getFrameworkRequestState()`. Their builders retain the correspondingly typed
+setters; the two state forms remain mutually exclusive, and the last setter
+called wins.
+
+The Phase 4 request-context host replaces one default getter with two, adding
+one method without changing its 133 owners. Phase 5 removes the three carrier
+owners and their 13 records, while the input-required-result getter replacement
+adds one method, for a net change from 191 to 179 records. The exact current
+owner partition is 133/36/65/0 (234 total), and the signature partition is
+1,048/179/422. Phase 4 has 133 classes, one constructor, 79 fields, and 835
+methods, with signature SHA-256
+`0efe130ce6da63230f2bbf5f4c50889209a53bd49995f7da1a42ff713c7f60d4`
+and reflection/nullability digest
+`1d33a5deb35adb467feccac10ffce635eae903437a096ed63a8c17a1b57d2309`.
+Phase 5 has 36 classes, zero constructors, 15 fields, and 128 methods, with
+signature SHA-256
+`96f56fc34f81a9302d1387d437bee4caa36e465a07a40a8577eed4bd4313e5e4`,
+reflection/nullability digest
+`6569e3b106ae11e1d30da66c045d1a9bc23aa65016f36052df6b19fc320c06d9`,
+and include SHA-256
+`2009a66e210e89c43e157df0498b357a5e29fc8bc7144ca373ad07c57d1fce2a`.
+The Phase 6 snapshot, include inventory, and reflection digest are unchanged.
+The released-3.5.1 comparison likewise remains at 565 records with SHA-256
+`3269b4a73d42c035a90735336462aaeb98bf6809d003fa858dbfa4a839e4c2e2`
+because every removed carrier and changed host descriptor is part of the
+unreleased greenfield surface.
+
+A clean Corretto 26 verify passes 1,673 tests with zero failures, zero errors,
+and four intentional skips over 462 main and 193 test sources, and builds the
+main, sources, and Javadoc artifacts. The focused reflection and inventory
+contracts pass 24/24, the focused request-state/runtime set passes 50/50, the
+aggregate freeze gate
+verifies all 565 compatibility records and 1,048/179/422 signatures, and the
+maintained 179-source Java 17 API sketch passes compilation, Javadoc doclint,
+and its localization smoke test.
 
 The authoritative owner inventory comes from the full japicmp report
 `target/japicmp/mcp-api-freeze.xml`. It includes:
@@ -178,7 +222,7 @@ the ownership inventory.
 The local Phase 5 implementation now includes the public MRTR values and
 declared outbound `input_required` runtime for tools, prompts, and resource
 reads; method-specific embedded-parameter validation; inbound
-`inputResponses`; and application- and framework-protected request state.
+`inputResponses`; and directly typed application and framework request state.
 Framework protection includes authenticated state reopening, operation and
 authorization binding, expiry/round checks, and originating-request-ID
 evidence. Request-scoped progress and cooperative cancelation are also live on
@@ -217,20 +261,20 @@ separate evidence is recorded below.
 
 `frozen-phases` contains the contiguous, sorted prefix of frozen phases. It
 currently contains Phase 4, Phase 5, and Phase 6. `phase-4.signatures.jsonl` freezes
-1,047 canonical records across all 133 selected owners: 133 classes, one
-constructor, 79 fields, and 834 methods. Its SHA-256 is
-`dc733de19433200065526bd02f985b56ca69f658aefd116e80446b5c885f035b`.
-`phase-5.signatures.jsonl` freezes 191 canonical records across all 39
-selected owners: 39 classes, zero constructors, 15 fields, and 137 methods.
+1,048 canonical records across all 133 selected owners: 133 classes, one
+constructor, 79 fields, and 835 methods. Its SHA-256 is
+`0efe130ce6da63230f2bbf5f4c50889209a53bd49995f7da1a42ff713c7f60d4`.
+`phase-5.signatures.jsonl` freezes 179 canonical records across all 36
+selected owners: 36 classes, zero constructors, 15 fields, and 128 methods.
 Its SHA-256 is
-`ea6d46dc055a57b2d31820cb937d89fe42bac5665c18c5fdb83eea75e79c82f5`.
+`96f56fc34f81a9302d1387d437bee4caa36e465a07a40a8577eed4bd4313e5e4`.
 `phase-6.signatures.jsonl` freezes 422 canonical records across all 65
 selected owners: 65 classes, zero constructors, 40 fields, and 317 methods.
 Its SHA-256 is
 `f7355c91a0131c4bb9ef7f9b49f0d54e9bbafa0042a16c5932722e5765cee774`.
 Their current reflection/nullability digests are respectively
-`581038cefbc8e65845e38001632ed0678a83efe55446e4f25f233e874eef3f39`,
-`9c8c02a4eca29166a6a92956fa58033ea94939e6d7deef9e23a7ecd6d5babd3e`,
+`1d33a5deb35adb467feccac10ffce635eae903437a096ed63a8c17a1b57d2309`,
+`6569e3b106ae11e1d30da66c045d1a9bc23aa65016f36052df6b19fc320c06d9`,
 and
 `2f857d18ae3dfb641fadf00858fec19d594c0ac470c6ed6be70423596b340611`.
 The reviewed 2026-08-15 telemetry amendment moved all 32 former provisional
@@ -360,7 +404,8 @@ retained. The phase distribution is eight former records in Phase 4, six in
 Phase 5, and 31 in Phase 6. The owner partition remains 133/39/65/0. The same
 amendment makes the already-final `McpCachePolicy` constructor private and
 keeps its existing named factories as the public construction boundary.
-The current signature partition becomes 1,047/191/422. The only public
+At that amendment checkpoint, the signature partition became
+1,047/191/422. The only public
 constructor across the frozen surface is the throwable
 `McpJsonRpcException(McpJsonRpcError)` constructor; non-throwable values are
 factory- or builder-owned. The compatibility ledger contains 565 records with
@@ -370,6 +415,18 @@ the sole net-new released-3.5.1 incompatibility is the
 `McpPromptMessage` superclass change from `java.lang.Record` to
 `java.lang.Object`, while its former record components are recorded as
 removals.
+
+An eleventh reviewed amendment on 2026-08-18 removes the public sealed
+`McpRequestState` carrier family without aliases. Application state is exposed
+directly as `Optional<String>` and framework state as
+`Optional<McpJsonValue>` on `McpRequestContext` and
+`McpInputRequiredResult`; their builders retain the typed setters with the
+same mutual-exclusion and last-call-wins rule. Phase 4 replaces one getter with
+two, while Phase 5 removes the three carrier owners and replaces its one host
+getter with two. The current owner partition is therefore 133/36/65/0 and the
+signature partition is 1,048/179/422. Phase 6 is descriptor-identical to the
+prior amendment, and the released-3.5.1 ledger remains 565 records because the
+entire affected surface is greenfield.
 
 The snapshots protect the complete public/protected signatures of every owner
 in all three frozen phases, including shared hosts. A descriptor on a frozen
@@ -405,7 +462,7 @@ rendering begins in L2. The original 18-owner surface first grew
 `phase-6.includes` to 33; the later telemetry amendment grew it to 65, and the
 2026-08-17 result simplification removed one redundant nested owner, and the
 later context-builder amendment added the framework-owned builder. The current
-inventory is 65 Phase 6 owners in an exact 237-owner reviewed union.
+inventory is 65 Phase 6 owners in an exact 234-owner reviewed union.
 Phase 6 is frozen: see the
 [Phase 6 freeze rationale](phase-6-freeze-rationale.md).
 `McpServerDiagnostics` remains
@@ -1388,20 +1445,20 @@ evidence is written under `target/japicmp/` and
 
 CI runs the aggregate on JDK 17; the scripts themselves use the
 caller-selected JDK. On the exact current source, the aggregate gate covers
-565 reviewed incompatibility records and 237 reviewed current-side API owners.
+565 reviewed incompatibility records and 234 reviewed current-side API owners.
 The provisional inventory is empty; `EndpointMethodKey`, `RequestOutcomeKey`,
 `RequestStreamTerminationKey`, and `SubscriptionTerminationKey` are now frozen
-Phase 6 owners. The amended frozen inventories contain 1,047 Phase 4, 191
+Phase 6 owners. The amended frozen inventories contain 1,048 Phase 4, 179
 Phase 5, and 422 Phase 6 signatures. Phase 4 contains 133 classes, one
-constructor, 79 fields, and 834 methods, with SHA-256
-`dc733de19433200065526bd02f985b56ca69f658aefd116e80446b5c885f035b`
+constructor, 79 fields, and 835 methods, with SHA-256
+`0efe130ce6da63230f2bbf5f4c50889209a53bd49995f7da1a42ff713c7f60d4`
 and exact nullability digest
-`581038cefbc8e65845e38001632ed0678a83efe55446e4f25f233e874eef3f39`.
-Phase 5 contains 39 classes, zero constructors, 15 fields, and 137 methods,
+`1d33a5deb35adb467feccac10ffce635eae903437a096ed63a8c17a1b57d2309`.
+Phase 5 contains 36 classes, zero constructors, 15 fields, and 128 methods,
 with SHA-256
-`ea6d46dc055a57b2d31820cb937d89fe42bac5665c18c5fdb83eea75e79c82f5`
+`96f56fc34f81a9302d1387d437bee4caa36e465a07a40a8577eed4bd4313e5e4`
 and exact nullability digest
-`9c8c02a4eca29166a6a92956fa58033ea94939e6d7deef9e23a7ecd6d5babd3e`.
+`6569e3b106ae11e1d30da66c045d1a9bc23aa65016f36052df6b19fc320c06d9`.
 Phase 6 contains 65 classes, zero constructors, 40 fields, and 317 methods,
 with SHA-256
 `f7355c91a0131c4bb9ef7f9b49f0d54e9bbafa0042a16c5932722e5765cee774`

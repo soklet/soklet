@@ -168,16 +168,17 @@ class McpMultiRoundTripDescriptorTests {
 				.inputRequest("approval", request)
 				.build();
 		assertEquals(Map.of("approval", request), inputOnly.getInputRequests());
-		assertTrue(inputOnly.getRequestState().isEmpty());
+		assertTrue(inputOnly.getFrameworkRequestState().isEmpty());
+		assertTrue(inputOnly.getApplicationRequestState().isEmpty());
 		assertSame(McpJsonObject.emptyInstance(), inputOnly.getMetadata());
 
 		McpInputRequiredResult stateOnly = McpInputRequiredResult.builder()
 				.frameworkRequestState(McpJsonNull.INSTANCE)
 				.build();
 		assertTrue(stateOnly.getInputRequests().isEmpty());
-		McpFrameworkRequestState frameworkState =
-				(McpFrameworkRequestState) stateOnly.getRequestState().orElseThrow();
-		assertSame(McpJsonNull.INSTANCE, frameworkState.getValue());
+		assertSame(McpJsonNull.INSTANCE,
+				stateOnly.getFrameworkRequestState().orElseThrow());
+		assertTrue(stateOnly.getApplicationRequestState().isEmpty());
 
 		McpJsonObject metadata = McpJsonObject.builder()
 				.put("dev.example/result", "combined")
@@ -188,8 +189,9 @@ class McpMultiRoundTripDescriptorTests {
 				.metadata(metadata)
 				.build();
 		assertEquals(Map.of("approval", request), combined.getInputRequests());
-		assertEquals("opaque-state", ((McpApplicationRequestState) combined
-				.getRequestState().orElseThrow()).getValue());
+		assertEquals("opaque-state",
+				combined.getApplicationRequestState().orElseThrow());
+		assertTrue(combined.getFrameworkRequestState().isEmpty());
 		assertSame(metadata, combined.getMetadata());
 		assertTrue(combined instanceof McpOperationResult);
 	}
@@ -265,16 +267,19 @@ class McpMultiRoundTripDescriptorTests {
 		builder.applicationRequestState("opaque")
 				.metadata(secondMetadata);
 		McpInputRequiredResult applicationState = builder.build();
-		assertEquals("opaque", ((McpApplicationRequestState) applicationState
-				.getRequestState().orElseThrow()).getValue());
+		assertEquals("opaque",
+				applicationState.getApplicationRequestState().orElseThrow());
+		assertTrue(applicationState.getFrameworkRequestState().isEmpty());
 		assertSame(secondMetadata, applicationState.getMetadata());
 
 		builder.frameworkRequestState(secondState);
 		McpInputRequiredResult finalResult = builder.build();
-		assertSame(secondState, ((McpFrameworkRequestState) finalResult
-				.getRequestState().orElseThrow()).getValue());
-		assertSame(firstState, ((McpFrameworkRequestState) firstSnapshot
-				.getRequestState().orElseThrow()).getValue());
+		assertSame(secondState,
+				finalResult.getFrameworkRequestState().orElseThrow());
+		assertTrue(finalResult.getApplicationRequestState().isEmpty());
+		assertSame(firstState,
+				firstSnapshot.getFrameworkRequestState().orElseThrow());
+		assertTrue(firstSnapshot.getApplicationRequestState().isEmpty());
 		assertSame(firstMetadata, firstSnapshot.getMetadata());
 
 		assertThrows(NullPointerException.class,
@@ -286,8 +291,9 @@ class McpMultiRoundTripDescriptorTests {
 		assertThrows(NullPointerException.class,
 				() -> builder.metadata(null));
 		McpInputRequiredResult afterFailures = builder.build();
-		assertSame(secondState, ((McpFrameworkRequestState) afterFailures
-				.getRequestState().orElseThrow()).getValue());
+		assertSame(secondState,
+				afterFailures.getFrameworkRequestState().orElseThrow());
+		assertTrue(afterFailures.getApplicationRequestState().isEmpty());
 		assertSame(secondMetadata, afterFailures.getMetadata());
 	}
 
@@ -345,37 +351,31 @@ class McpMultiRoundTripDescriptorTests {
 	}
 
 	@Test
-	void requestStateValuesAreClosedAndRejectTheSecondAbsenceConvention() {
+	void requestStateAccessorsAreTypedAndRejectTheSecondAbsenceConvention() {
 		String frameworkSecret = "secret-framework-state";
 		String applicationSecret = "secret-application-state";
 		McpJsonValue value = McpJsonString.fromValue(frameworkSecret);
-		McpRequestState framework = McpFrameworkRequestState.fromValue(value);
-		McpRequestState application = McpApplicationRequestState.fromValue(
-				applicationSecret);
+		McpInputRequiredResult framework = McpInputRequiredResult.builder()
+				.frameworkRequestState(value)
+				.build();
+		McpInputRequiredResult application = McpInputRequiredResult.builder()
+				.applicationRequestState(applicationSecret)
+				.build();
 
-		assertSame(value, ((McpFrameworkRequestState) framework).getValue());
+		assertSame(value, framework.getFrameworkRequestState().orElseThrow());
+		assertTrue(framework.getApplicationRequestState().isEmpty());
 		assertEquals(applicationSecret,
-				((McpApplicationRequestState) application).getValue());
-		McpRequestState sameFramework = McpFrameworkRequestState.fromValue(
-				McpJsonString.fromValue(frameworkSecret));
-		McpRequestState sameApplication = McpApplicationRequestState.fromValue(
-				applicationSecret);
-		assertEquals(framework, sameFramework);
-		assertEquals(framework.hashCode(), sameFramework.hashCode());
-		assertEquals(application, sameApplication);
-		assertEquals(application.hashCode(), sameApplication.hashCode());
-		assertEquals("McpFrameworkRequestState{value=<redacted>}",
-				framework.toString());
-		assertEquals("McpApplicationRequestState{value=<redacted>}",
-				application.toString());
-		assertFalse(framework.toString().contains(frameworkSecret));
-		assertFalse(application.toString().contains(applicationSecret));
+				application.getApplicationRequestState().orElseThrow());
+		assertTrue(application.getFrameworkRequestState().isEmpty());
 		assertThrows(IllegalArgumentException.class,
-				() -> McpApplicationRequestState.fromValue(""));
+				() -> McpInputRequiredResult.builder()
+						.applicationRequestState(""));
 		assertThrows(NullPointerException.class,
-				() -> McpApplicationRequestState.fromValue(null));
+				() -> McpInputRequiredResult.builder()
+						.applicationRequestState(null));
 		assertThrows(NullPointerException.class,
-				() -> McpFrameworkRequestState.fromValue(null));
+				() -> McpInputRequiredResult.builder()
+						.frameworkRequestState(null));
 	}
 
 	@Test
@@ -524,7 +524,8 @@ class McpMultiRoundTripDescriptorTests {
 
 		assertSame(McpInputResponses.emptyInstance(),
 				context.getInputResponses());
-		assertTrue(context.getRequestState().isEmpty());
+		assertTrue(context.getFrameworkRequestState().isEmpty());
+		assertTrue(context.getApplicationRequestState().isEmpty());
 	}
 
 	private static McpInputRequest inputRequest(

@@ -393,7 +393,7 @@ public class McpCrossFeatureSoakTests {
 				.withName(PROTECTED_TOOL)
 				.jsonArguments()
 				.handler((request, arguments, features) -> {
-					if (request.getRequestState().isEmpty()) {
+					if (request.getFrameworkRequestState().isEmpty()) {
 						if (!request.getInputResponses().asMap().isEmpty())
 							throw new IllegalStateException(
 									"Initial protected request carried input responses.");
@@ -409,11 +409,8 @@ public class McpCrossFeatureSoakTests {
 								.build();
 					}
 
-					McpFrameworkRequestState requestState = requireType(
-							request.getRequestState().orElseThrow(),
-							McpFrameworkRequestState.class,
-							"framework request state");
-					McpJsonObject stateValue = requireType(requestState.getValue(),
+					McpJsonObject stateValue = requireType(
+							request.getFrameworkRequestState().orElseThrow(),
 							McpJsonObject.class, "framework request-state value");
 					requireJsonString(stateValue, "phase", "awaiting-approval");
 					requireJsonString(stateValue, "fixture",

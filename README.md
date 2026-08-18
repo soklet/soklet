@@ -725,7 +725,7 @@ the bounded pseudonymous token fields; the separate
 trace ID. Neither mode adds a trace value to metrics. The current snapshot has
 all 65 Phase 6 owners frozen and an empty provisional inventory, but it is not
 a release claim. Current local validation passes core clean verify at
-1,671/0/0/4 over 464 main and 193 test sources, both 39-row development
+1,673/0/0/4 over 462 main and 193 test sources, both 39-row development
 conformance paths, candidate localization, and the pinned TypeScript/Go
 snapshot harnesses. The checked-in fail-closed
 [release validator](release/README.md) still requires reviewed downstream pins
@@ -2289,14 +2289,21 @@ methods relative to V19, with no core inventory change.
 The twenty-first adds seven top-level public simulation types,
 `McpSimulationOptions.Builder`, and two abstract methods to `Simulator`, while
 leaving the metric/snapshot/canary inventories unchanged.
-Those Vxx counts remain historical. The current API inventory is 133/39/65
-Phase 4/5/6 owners (237 total), all three phases are frozen, and
+Those Vxx counts remain historical. The current API inventory is 133/36/65
+Phase 4/5/6 owners (234 total), all three phases are frozen, and
 `api/mcp/provisional.includes` is empty. The release-validation workflow and
 fail-closed evidence assembler are implemented, but no immutable candidate run
-is claimed. Final local evidence is green at core clean verify 1,671/0/0/4
-over 464 main and 193 test sources,
-JDK 21 static-analysis `BUILD SUCCESS`, SpotBugs 0, Javadocs, API 565/237 with
-1,047/191/422 records, fuzz replay 139/139, smoke soak 6/6 plus verifier,
+is claimed. The last full pre-typed-state local evidence was green at core
+clean verify 1,671/0/0/4 over 464 main and 193 test sources, JDK 21 static-
+analysis `BUILD SUCCESS`, SpotBugs 0, Javadocs, fuzz replay 139/139, and smoke
+soak 6/6 plus verifier. After the no-alias greenfield typed-state amendment,
+fresh Corretto 26 clean verify passes 1,673/0/0/4 over 462 main and 193 test
+sources and builds the main, sources, and Javadoc artifacts. Focused request-
+state/runtime tests pass 50/50, reflection/inventory contracts pass 24/24, and
+the aggregate API gate verifies 565 incompatibilities, 234 owners, and
+1,048/179/422 records. The maintained 179-source API sketch passes Java 17
+compilation, Javadoc doclint, and its localization smoke contract. Other
+carried-forward local evidence remains green for
 candidate localization, artifact-backed simulator 39/39, pinned live official
 CLI 39/39, the website's offline clean-install, lint, and 33-route SSG build,
 and OpenTelemetry 36/36. TypeScript and Go are checksum-pinned, `READY`, and

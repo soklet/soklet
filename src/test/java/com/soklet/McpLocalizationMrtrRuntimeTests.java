@@ -174,7 +174,7 @@ class McpLocalizationMrtrRuntimeTests {
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 
-					if (request.getRequestState().isEmpty())
+					if (request.getFrameworkRequestState().isEmpty())
 						return McpInputRequiredResult.builder()
 								.inputRequest("roots", McpInputRequest.fromDeclaration(
 										roots,

@@ -25,11 +25,8 @@ import com.soklet.CorsResponse;
 import com.soklet.HttpMethod;
 import com.soklet.MediaRange;
 import com.soklet.MetricsCollector.TransportFailureReason;
-import com.soklet.McpApplicationRequestState;
-import com.soklet.McpFrameworkRequestState;
 import com.soklet.McpRequestContext;
 import com.soklet.McpRequestOutcome;
-import com.soklet.McpRequestState;
 import com.soklet.McpRequestStateMode;
 import com.soklet.McpSimulation;
 import com.soklet.McpSimulationOptions;
@@ -2639,14 +2636,14 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		McpEffectiveAdmissionIdentity effectiveIdentity =
 				McpEffectiveAdmissionIdentity.resolve(endpoint, endpointPolicy.path(),
 						admittedIdentity);
-		Optional<McpRequestState> requestState = Optional.empty();
+		Optional<McpRuntimeRequestState> requestState = Optional.empty();
 		Optional<McpFrameworkRequestStateContinuation>
 				frameworkRequestStateContinuation = Optional.empty();
 		if (suppliedRequestState.isPresent()) {
 			String protectedState = suppliedRequestState.orElseThrow();
 			if (requestStateMode == McpRequestStateMode.APPLICATION_PROTECTED) {
 				requestState = Optional.of(
-						McpApplicationRequestState.fromValue(protectedState));
+						new McpRuntimeApplicationRequestState(protectedState));
 			} else if (requestStateMode
 					== McpRequestStateMode.FRAMEWORK_PROTECTED) {
 				McpFrameworkRequestStateRuntime.OpenedState openedState;
@@ -2663,9 +2660,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				} catch (Throwable throwable) {
 					return policyHookInternalError(mappedRequest.id(), corsHeaders);
 				}
-				requestState = Optional.of(McpFrameworkRequestState.fromValue(
-						McpServerRuntimeBridge.toPublicRequestStateValue(
-								openedState.state())));
+				requestState = Optional.of(
+						new McpRuntimeFrameworkRequestState(openedState.state()));
 				frameworkRequestStateContinuation = Optional.of(
 						openedState.continuation());
 			} else {

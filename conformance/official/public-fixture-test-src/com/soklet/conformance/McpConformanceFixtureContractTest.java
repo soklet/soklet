@@ -18,7 +18,6 @@ package com.soklet.conformance;
 
 import com.soklet.McpCompleteResult;
 import com.soklet.McpEndpoint;
-import com.soklet.McpFrameworkRequestState;
 import com.soklet.McpInputRequest;
 import com.soklet.McpInputRequiredResult;
 import com.soklet.McpInputResponses;
@@ -30,7 +29,6 @@ import com.soklet.McpOperationResult;
 import com.soklet.McpPromptGetContext;
 import com.soklet.McpPromptRegistration;
 import com.soklet.McpRequestContext;
-import com.soklet.McpRequestState;
 import com.soklet.McpRequestStateMode;
 import com.soklet.McpToolArguments;
 import com.soklet.McpToolRegistration;
@@ -284,13 +282,15 @@ public final class McpConformanceFixtureContractTest {
 	}
 
 	private static McpRequestContext context(McpInputResponses inputResponses,
-			McpRequestState requestState) {
+			McpJsonValue frameworkRequestState) {
 		return (McpRequestContext) Proxy.newProxyInstance(
 				McpRequestContext.class.getClassLoader(),
 				new Class<?>[] {McpRequestContext.class},
 				(proxy, method, arguments) -> switch (method.getName()) {
 					case "getInputResponses" -> inputResponses;
-					case "getRequestState" -> Optional.ofNullable(requestState);
+					case "getFrameworkRequestState" ->
+							Optional.ofNullable(frameworkRequestState);
+					case "getApplicationRequestState" -> Optional.empty();
 					case "toString" -> "McpConformanceFixtureContractContext";
 					default -> throw new AssertionError(
 							"Fixture handler unexpectedly called " + method.getName());
@@ -332,8 +332,8 @@ public final class McpConformanceFixtureContractTest {
 		return builder.build();
 	}
 
-	private static McpFrameworkRequestState state(String value) {
-		return McpFrameworkRequestState.fromValue(McpJsonString.fromValue(value));
+	private static McpJsonValue state(String value) {
+		return McpJsonString.fromValue(value);
 	}
 
 	private static McpInputRequiredResult assertInputRequired(
@@ -356,16 +356,15 @@ public final class McpConformanceFixtureContractTest {
 		assertEquals(expectedMethods, result.getInputRequests().values().stream()
 				.map(McpInputRequest::getMethod).toList(), "Wrong input-request methods");
 		if (expectedState == null) {
-			assertEquals(Optional.empty(), result.getRequestState(),
-					"Unexpected request state");
+			assertEquals(Optional.empty(), result.getFrameworkRequestState(),
+					"Unexpected framework request state");
+			assertEquals(Optional.empty(), result.getApplicationRequestState(),
+					"Unexpected application request state");
 			return;
 		}
-		McpFrameworkRequestState frameworkState = result.getRequestState()
-				.filter(McpFrameworkRequestState.class::isInstance)
-				.map(McpFrameworkRequestState.class::cast)
+		McpJsonValue value = result.getFrameworkRequestState()
 				.orElseThrow(() -> new AssertionError(
 						"Expected framework-protected request state"));
-		McpJsonValue value = frameworkState.getValue();
 		if (!(value instanceof McpJsonString stringValue))
 			throw new AssertionError("Expected a string application state");
 		assertEquals(expectedState, stringValue.getValue(), "Wrong application state");

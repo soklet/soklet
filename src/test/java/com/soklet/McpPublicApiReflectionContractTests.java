@@ -82,14 +82,14 @@ public class McpPublicApiReflectionContractTests {
 			Path.of("api/mcp/phase-6.includes"),
 			Path.of("api/mcp/provisional.includes"));
 	private static final int PHASE_FOUR_TYPE_COUNT = 133;
-	private static final int PHASE_FIVE_TYPE_COUNT = 39;
+	private static final int PHASE_FIVE_TYPE_COUNT = 36;
 	private static final int PHASE_SIX_TYPE_COUNT = 65;
 	private static final int PROVISIONAL_TYPE_COUNT = 0;
-	private static final int CURRENT_MCP_TYPE_COUNT = 237;
+	private static final int CURRENT_MCP_TYPE_COUNT = 234;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"581038cefbc8e65845e38001632ed0678a83efe55446e4f25f233e874eef3f39";
+			"1d33a5deb35adb467feccac10ffce635eae903437a096ed63a8c17a1b57d2309";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
-			"9c8c02a4eca29166a6a92956fa58033ea94939e6d7deef9e23a7ecd6d5babd3e";
+			"6569e3b106ae11e1d30da66c045d1a9bc23aa65016f36052df6b19fc320c06d9";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
 			"2f857d18ae3dfb641fadf00858fec19d594c0ac470c6ed6be70423596b340611";
 	private static final Map<String, Object> PHASE_FOUR_PRIMITIVE_CONSTANTS =
@@ -156,9 +156,6 @@ public class McpPublicApiReflectionContractTests {
 							List.of("IGNORE", "REJECT_REQUESTS")));
 	private static final Map<String, Set<String>> PHASE_FIVE_PERMITTED_TYPES =
 			Map.of(
-					"com.soklet.McpRequestState", Set.of(
-							"com.soklet.McpApplicationRequestState",
-							"com.soklet.McpFrameworkRequestState"),
 					"com.soklet.McpSubscriptionEvent", Set.of(
 							"com.soklet.McpSubscriptionEvent$ResourceUpdated",
 							"com.soklet.McpSubscriptionEvent$ResourcesListChanged"));
@@ -222,8 +219,6 @@ public class McpPublicApiReflectionContractTests {
 			McpPromptMessage.class,
 			McpRateLimitDecision.Allowed.class,
 			McpRateLimitDecision.Denied.class,
-			McpApplicationRequestState.class,
-			McpFrameworkRequestState.class,
 			McpInputRequest.class,
 			McpInputRequestDeclaration.class,
 			McpSubscriptionEvent.ResourceUpdated.class,
@@ -267,7 +262,7 @@ public class McpPublicApiReflectionContractTests {
 	}
 
 	@Test
-	public void phaseFiveInventoryRetainsExactlyThirtyNineOwners()
+	public void phaseFiveInventoryRetainsExactlyThirtySixOwners()
 			throws Exception {
 		Assertions.assertEquals(PHASE_FIVE_TYPE_COUNT, phaseFiveTypes().size(),
 				"The reviewed Phase 5 owner count changed");
@@ -625,8 +620,8 @@ public class McpPublicApiReflectionContractTests {
 	@Test
 	public void publicMcpValueCarriersRemainEncapsulatedFinalClasses()
 			throws Exception {
-		Assertions.assertEquals(45, FORMER_PUBLIC_RECORD_TYPES.size(),
-				"The reviewed former-record carrier inventory changed");
+		Assertions.assertEquals(43, FORMER_PUBLIC_RECORD_TYPES.size(),
+				"The reviewed surviving former-record carrier inventory changed");
 		Assertions.assertEquals(FORMER_PUBLIC_RECORD_TYPES.size(),
 				Set.copyOf(FORMER_PUBLIC_RECORD_TYPES).size(),
 				"The reviewed former-record carrier inventory contains duplicates");
@@ -701,14 +696,6 @@ public class McpPublicApiReflectionContractTests {
 	@Test
 	public void phaseFiveValueCarrierFactoriesAndGettersRemainExact()
 			throws Exception {
-		assertFactory(McpApplicationRequestState.class, "fromValue",
-				McpApplicationRequestState.class, List.of("value"), String.class);
-		assertFactory(McpFrameworkRequestState.class, "fromValue",
-				McpFrameworkRequestState.class, List.of("value"), McpJsonValue.class);
-		assertGetter(McpApplicationRequestState.class, "getValue", String.class);
-		assertGetter(McpFrameworkRequestState.class, "getValue",
-				McpJsonValue.class);
-
 		assertFactory(McpInputRequest.class, "fromDeclaration",
 				McpInputRequest.class, List.of("declaration", "params"),
 				McpInputRequestDeclaration.class, McpJsonObject.class);
@@ -833,11 +820,31 @@ public class McpPublicApiReflectionContractTests {
 		assertErasedGenericSignature(assertInstanceMethod(
 				McpRequestContext.class, "getInputResponses",
 				McpInputResponses.class, MethodShape.DEFAULT, false));
-		Method requestState = assertInstanceMethod(McpRequestContext.class,
-				"getRequestState", Optional.class, MethodShape.DEFAULT, false);
-		assertParameterizedType(requestState.getGenericReturnType(), null,
-				Optional.class, McpRequestState.class);
-		assertNoGenericParameters(requestState);
+		Method frameworkRequestState = assertInstanceMethod(
+				McpRequestContext.class, "getFrameworkRequestState",
+				Optional.class, MethodShape.DEFAULT, false);
+		assertParameterizedType(frameworkRequestState.getGenericReturnType(), null,
+				Optional.class, McpJsonValue.class);
+		assertNoGenericParameters(frameworkRequestState);
+		Method applicationRequestState = assertInstanceMethod(
+				McpRequestContext.class, "getApplicationRequestState",
+				Optional.class, MethodShape.DEFAULT, false);
+		assertParameterizedType(applicationRequestState.getGenericReturnType(), null,
+				Optional.class, String.class);
+		assertNoGenericParameters(applicationRequestState);
+
+		Method resultFrameworkRequestState = assertInstanceMethod(
+				McpInputRequiredResult.class, "getFrameworkRequestState",
+				Optional.class, MethodShape.CONCRETE, false);
+		assertParameterizedType(resultFrameworkRequestState.getGenericReturnType(),
+				null, Optional.class, McpJsonValue.class);
+		assertNoGenericParameters(resultFrameworkRequestState);
+		Method resultApplicationRequestState = assertInstanceMethod(
+				McpInputRequiredResult.class, "getApplicationRequestState",
+				Optional.class, MethodShape.CONCRETE, false);
+		assertParameterizedType(resultApplicationRequestState.getGenericReturnType(),
+				null, Optional.class, String.class);
+		assertNoGenericParameters(resultApplicationRequestState);
 
 		assertRegistrationDescriptors();
 		assertMrtrAnnotationDefaults(McpTool.class);

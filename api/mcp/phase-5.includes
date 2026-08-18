@@ -1,5 +1,3 @@
-com.soklet.McpApplicationRequestState
-com.soklet.McpFrameworkRequestState
 com.soklet.McpInputRequest
 com.soklet.McpInputRequestDeclaration
 com.soklet.McpInputRequiredResult
@@ -21,7 +19,6 @@ com.soklet.McpProtectionKeyRing$Builder
 com.soklet.McpProtectionKeyRingFingerprint
 com.soklet.McpProtectionKeyRingSnapshot
 com.soklet.McpProtectionMode
-com.soklet.McpRequestState
 com.soklet.McpRequestStateMode
 com.soklet.McpRequestStateProtectionContext
 com.soklet.McpRequestStateProtectionException

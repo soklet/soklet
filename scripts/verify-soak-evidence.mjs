@@ -357,9 +357,23 @@ function verifySurefireSuite(xmlPath, expected) {
   if (numericAttribute(attributes, 'tests', xmlPath) !== expected.tests)
     fail(`Unexpected test count in ${xmlPath}; expected ${expected.tests}`);
 
-  for (const attribute of ['errors', 'failures', 'skipped']) {
-    if (numericAttribute(attributes, attribute, xmlPath) !== 0)
-      fail(`Expected ${attribute}=0 in ${xmlPath}`);
+  const errors = numericAttribute(attributes, 'errors', xmlPath);
+  const failures = numericAttribute(attributes, 'failures', xmlPath);
+  const skipped = numericAttribute(attributes, 'skipped', xmlPath);
+
+  if (errors !== 0 || failures !== 0 || skipped !== 0) {
+    const nonpassing = [...xml.matchAll(
+      /<testcase\b([^>]*?)(?:\/>|>([\s\S]*?)<\/testcase>)/g,
+    )].flatMap((match) => {
+      const outcome = (match[2] ?? '').match(/<(error|failure|skipped)\b/);
+
+      if (outcome === null)
+        return [];
+
+      const testcase = parseAttributes(match[1], `testcase in ${xmlPath}`);
+      return [`${testcase.get('name') ?? '<unnamed>'} (${outcome[1]})`];
+    });
+    fail(`Surefire suite ${expected.name} did not pass; errors=${errors} failures=${failures} skipped=${skipped}; nonpassing=${nonpassing.join(', ') || '<unidentified>'}`);
   }
 
   if (/<(?:error|failure|skipped)\b/.test(xml))
@@ -388,11 +402,32 @@ function verifySurefireSuite(xmlPath, expected) {
     fail(`Unexpected testcase set in ${xmlPath}: ${[...uniqueTestCases].sort().join(', ')}`);
 }
 
+function verifySurefireEvidence(surefireDirectory) {
+  if (!existsSync(surefireDirectory))
+    fail(`Missing Surefire report directory: ${surefireDirectory}`);
+
+  const actualXmlReports = readdirSync(surefireDirectory)
+    .filter((name) => name.startsWith('TEST-') && name.endsWith('.xml'))
+    .sort();
+  const expectedXmlReports = [...EXPECTED_SUITES.keys()].sort();
+
+  if (actualXmlReports.length !== expectedXmlReports.length
+      || actualXmlReports.some((name, index) => name !== expectedXmlReports[index]))
+    fail(`Unexpected Surefire XML report set: ${actualXmlReports.join(', ') || '<empty>'}`);
+
+  for (const [filename, expected] of EXPECTED_SUITES)
+    verifySurefireSuite(resolve(surefireDirectory, filename), expected);
+}
+
 export function verifySoakEvidence(profileName, projectRoot = defaultProjectRoot) {
   const profile = verifySoakProfile(profileName, projectRoot);
   const { profileBytes, profileResource, profileSha256 } = profile;
   const reportPath = resolve(projectRoot, 'soak/target/soak-report.md');
   const surefireDirectory = resolve(projectRoot, 'soak/target/surefire-reports');
+  // A failed Maven test often leaves a partial Markdown report. Validate the
+  // authoritative Surefire outcome first so the follow-up `if: always()` CI
+  // step reports the failed suite and testcase instead of only a missing section.
+  verifySurefireEvidence(surefireDirectory);
   const report = readRequired(reportPath, 'soak Markdown report').toString('utf8');
 
   assertOnlyMetadataLine(report, '- Profile: ', `- Profile: ${profileName}`, 'profile identity');
@@ -418,17 +453,20 @@ export function verifySoakEvidence(profileName, projectRoot = defaultProjectRoot
     start: match.index,
   }));
 
-  if (headings.length !== EXPECTED_SCENARIOS.size + 1)
-    fail(`Expected one configuration section and exactly ${EXPECTED_SCENARIOS.size} scenario sections, found ${headings.length}`);
-
-  if (headings[0].name !== 'Canonical Configuration')
+  if (headings.length === 0 || headings[0].name !== 'Canonical Configuration')
     fail('Canonical Configuration must be the first level-two report section');
 
   const scenarioHeadings = headings.slice(1);
   const actualScenarios = new Set(scenarioHeadings.map(({ name }) => name));
 
-  if (actualScenarios.size !== scenarioHeadings.length || !equalSets(actualScenarios, EXPECTED_SCENARIOS))
-    fail(`Unexpected scenario set: ${[...actualScenarios].sort().join(', ')}`);
+  if (actualScenarios.size !== scenarioHeadings.length
+      || !equalSets(actualScenarios, EXPECTED_SCENARIOS)) {
+    const missing = [...EXPECTED_SCENARIOS]
+      .filter((name) => !actualScenarios.has(name)).sort();
+    const unexpected = [...actualScenarios]
+      .filter((name) => !EXPECTED_SCENARIOS.has(name)).sort();
+    fail(`Unexpected scenario sections; expected=${EXPECTED_SCENARIOS.size} found=${scenarioHeadings.length} missing=${missing.join(', ') || '<none>'} unexpected=${unexpected.join(', ') || '<none>'}`);
+  }
 
   for (let index = 0; index < scenarioHeadings.length; index++) {
     const heading = scenarioHeadings[index];
@@ -442,21 +480,6 @@ export function verifySoakEvidence(profileName, projectRoot = defaultProjectRoot
     if (heading.name === 'MCP localization render and invalidation churn')
       verifyLocalizationScenario(section);
   }
-
-  if (!existsSync(surefireDirectory))
-    fail(`Missing Surefire report directory: ${surefireDirectory}`);
-
-  const actualXmlReports = readdirSync(surefireDirectory)
-    .filter((name) => name.startsWith('TEST-') && name.endsWith('.xml'))
-    .sort();
-  const expectedXmlReports = [...EXPECTED_SUITES.keys()].sort();
-
-  if (actualXmlReports.length !== expectedXmlReports.length
-      || actualXmlReports.some((name, index) => name !== expectedXmlReports[index]))
-    fail(`Unexpected Surefire XML report set: ${actualXmlReports.join(', ') || '<empty>'}`);
-
-  for (const [filename, expected] of EXPECTED_SUITES)
-    verifySurefireSuite(resolve(surefireDirectory, filename), expected);
 
   return {
     profileName,

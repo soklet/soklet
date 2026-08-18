@@ -26,7 +26,6 @@ import com.soklet.McpCompleteResult;
 import com.soklet.McpContentBlock;
 import com.soklet.McpEmbeddedResource;
 import com.soklet.McpEndpoint;
-import com.soklet.McpFrameworkRequestState;
 import com.soklet.McpEndpointRegistry;
 import com.soklet.McpImageContent;
 import com.soklet.McpImplementation;
@@ -614,10 +613,9 @@ public final class McpConformanceFixture {
 
 	private static boolean hasFrameworkState(
 			com.soklet.McpRequestContext request, String expectedValue) {
-		if (request.getRequestState().isEmpty()
-				|| !(request.getRequestState().orElseThrow()
-				instanceof McpFrameworkRequestState frameworkState)
-				|| !(frameworkState.getValue() instanceof McpJsonString stateValue))
+		if (request.getFrameworkRequestState().isEmpty()
+				|| !(request.getFrameworkRequestState().orElseThrow()
+				instanceof McpJsonString stateValue))
 			return false;
 		return expectedValue.equals(stateValue.getValue());
 	}

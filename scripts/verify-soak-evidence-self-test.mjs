@@ -215,7 +215,16 @@ try {
     reportPath,
     (report) => report.replace('## MCP Phase 5 cross-feature churn', '## stale scenario'),
   );
-  assert.throws(() => verifySoakEvidence(profileName, fixtureRoot), /Unexpected scenario set/);
+  assert.throws(() => verifySoakEvidence(profileName, fixtureRoot),
+    /Unexpected scenario sections;.*missing=MCP Phase 5 cross-feature churn.*unexpected=stale scenario/);
+  restore();
+
+  restore = overwrite(
+    reportPath,
+    (report) => report.replace('## MCP Phase 5 cross-feature churn\n\n- Result: PASS\n', ''),
+  );
+  assert.throws(() => verifySoakEvidence(profileName, fixtureRoot),
+    /expected=6 found=5 missing=MCP Phase 5 cross-feature churn/);
   restore();
 
   restore = overwrite(reportPath, (report) => report.replace('- Result: PASS', '- Result: FAIL'));
@@ -243,12 +252,31 @@ try {
     'soak/target/surefire-reports/TEST-com.soklet.RealtimeTransportSoakTests.xml',
   );
   restore = overwrite(realtimePath, (xml) => xml.replace('skipped="0"', 'skipped="1"'));
-  assert.throws(() => verifySoakEvidence(profileName, fixtureRoot), /Expected skipped=0/);
+  assert.throws(() => verifySoakEvidence(profileName, fixtureRoot),
+    /Surefire suite com\.soklet\.RealtimeTransportSoakTests did not pass;.*skipped=1/);
   restore();
 
   const mcpPath = fixturePath(
     'soak/target/surefire-reports/TEST-com.soklet.McpCrossFeatureSoakTests.xml',
   );
+  restore = overwrite(
+    mcpPath,
+    (xml) => xml
+      .replace('errors="0"', 'errors="1"')
+      .replace(
+        '<testcase name="mcpSimulatorChurnReturnsResourcesToBaselineAfterCancellationAndScopeCleanup" classname="com.soklet.McpCrossFeatureSoakTests"/>',
+        '<testcase name="mcpSimulatorChurnReturnsResourcesToBaselineAfterCancellationAndScopeCleanup" classname="com.soklet.McpCrossFeatureSoakTests"><error message="timed out"/></testcase>',
+      ),
+  );
+  const restorePartialReport = overwrite(
+    reportPath,
+    (report) => report.replace('## MCP Phase 5 cross-feature churn\n\n- Result: PASS\n', ''),
+  );
+  assert.throws(() => verifySoakEvidence(profileName, fixtureRoot),
+    /Surefire suite com\.soklet\.McpCrossFeatureSoakTests did not pass; errors=1 failures=0 skipped=0; nonpassing=mcpSimulatorChurnReturnsResourcesToBaselineAfterCancellationAndScopeCleanup \(error\)/);
+  restorePartialReport();
+  restore();
+
   restore = overwrite(
     mcpPath,
     (xml) => xml.replace(

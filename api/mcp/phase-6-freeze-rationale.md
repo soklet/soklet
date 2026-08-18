@@ -18,6 +18,8 @@ Final greenfield API polish amendment reviewed: 2026-08-17
 
 Greenfield public-record elimination amendment reviewed: 2026-08-18
 
+Greenfield typed-request-state amendment reviewed: 2026-08-18
+
 This record approves the Phase 6 public/protected API snapshot for Soklet
 `3.6.0-SNAPSHOT`. The comparison baseline is released Soklet `3.5.1`, and the
 comparison tool is japicmp `0.26.1`. It records a compatibility decision; it
@@ -39,10 +41,10 @@ symbols and has SHA-256
 The matching full japicmp report establishes an exact owner universe of:
 
 - 133 Phase 4 owners;
-- 39 Phase 5 owners;
+- 36 Phase 5 owners;
 - 65 Phase 6 owners;
 - zero provisional owners; and
-- 237 owners in total.
+- 234 owners in total.
 
 The 65 Phase 6 owners are the exact sorted entries in `phase-6.includes`.
 The Phase 4 owner inventory remains 133, while its signature snapshot includes
@@ -65,7 +67,8 @@ subsequent context-builder amendment restores one Phase 6 nested owner while
 replacing the context interface with a framework-owned final class; the
 compatibility ledger again remains unchanged. The 2026-08-18 public-record
 elimination amendment converts values in all three phases without changing the
-owner partition.
+owner partition. The subsequent typed-request-state amendment removes three
+Phase 5 carrier owners and changes no Phase 6 descriptor.
 
 ## Frozen Phase 6 snapshot
 
@@ -357,9 +360,9 @@ SHA-256
 `f7355c91a0131c4bb9ef7f9b49f0d54e9bbafa0042a16c5932722e5765cee774`.
 The reflection/nullability digest is
 `2f857d18ae3dfb641fadf00858fec19d594c0ac470c6ed6be70423596b340611`.
-The current owner and signature partitions are 133/39/65/0 and
-1,047/191/422. The same amendment makes the already-final Phase 4-owned
-`McpCachePolicy` constructor private. The sole public constructor across all
+At that amendment checkpoint, the owner and signature partitions were
+133/39/65/0 and 1,047/191/422. The same amendment makes the already-final
+Phase 4-owned `McpCachePolicy` constructor private. The sole public constructor across all
 three frozen phases is the throwable
 `McpJsonRpcException(McpJsonRpcError)` constructor; non-throwable values are
 factory- or builder-owned.
@@ -372,12 +375,42 @@ is the Phase 4-owned `McpPromptMessage` superclass change from
 `java.lang.Record` to `java.lang.Object`; its former `role()` and `content()`
 record-component changes are now removals.
 
-The exact post-amendment tree passes a clean Corretto 26 verify with 1,671
-tests, zero failures, zero errors, and four intentional skips; JDK 21 static
+The exact public-record-amendment tree passed a clean Corretto 26 verify with
+1,671 tests, zero failures, zero errors, and four intentional skips; JDK 21 static
 analysis succeeds, SpotBugs reports zero findings, the aggregate freeze gate
 verifies all 565 compatibility records and 1,047/191/422 signatures, and the
 maintained 182-source Java 17 API sketch passes compilation and Javadoc
 doclint.
+
+## 2026-08-18 greenfield typed-request-state amendment
+
+The subsequent greenfield review removes the public sealed `McpRequestState`
+carrier family, including `McpApplicationRequestState` and
+`McpFrameworkRequestState`, without aliases. The Phase 4 request-context and
+Phase 5 input-required-result hosts now expose application state directly as
+`Optional<String>` and framework state directly as
+`Optional<McpJsonValue>`. Their builders retain the corresponding typed
+setters with mutual-exclusion and last-call-wins behavior.
+
+This amendment changes no Phase 6 owner or descriptor. The Phase 6 snapshot
+therefore remains exactly 422 records across 65 owners, with signature
+SHA-256
+`f7355c91a0131c4bb9ef7f9b49f0d54e9bbafa0042a16c5932722e5765cee774`,
+reflection/nullability digest
+`2f857d18ae3dfb641fadf00858fec19d594c0ac470c6ed6be70423596b340611`,
+and include SHA-256
+`474e1c3079501b286a9eb1b38dee06a532d263aef50b633b46d465813024dacc`.
+The complete owner and signature partitions become 133/36/65/0 (234 total)
+and 1,048/179/422. The compatibility ledger remains exactly 565 records with
+SHA-256
+`3269b4a73d42c035a90735336462aaeb98bf6809d003fa858dbfa4a839e4c2e2`
+because every affected descriptor is an unreleased greenfield addition
+relative to 3.5.1. The focused reflection/inventory contract passes 24/24 and
+the aggregate freeze gate verifies the exact updated partitions. Fresh
+Corretto 26 clean verify passes 1,673 tests with zero failures, zero errors,
+and four intentional skips over 462 main and 193 test sources, and builds the
+main, sources, and Javadoc artifacts; the maintained 179-source Java 17 API
+sketch passes compilation, Javadoc doclint, and its localization smoke test.
 
 ## Why no conformance-profile activation was required
 

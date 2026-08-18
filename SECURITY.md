@@ -1205,7 +1205,7 @@ fidelity, release-candidate, or Phase 6 freeze evidence.
 
 ## Current API and release-security state
 
-The current owner inventory is 133 Phase 4, 39 Phase 5, and 65 Phase 6 (237
+The current owner inventory is 133 Phase 4, 36 Phase 5, and 65 Phase 6 (234
 total), with all three phases frozen and no provisional owner. The implemented
 structured-log boundary completes the bounded `MCP_TRACE_CORRELATION` carrier
 and separate raw-ID opt-in, but operator access, storage, retention, and
@@ -1219,11 +1219,18 @@ checked-in workflow requires an immutable clean candidate commit, checksum-
 matched POM/main/sources/Javadocs artifacts, an isolated Maven installation,
 the release soak, official release-mode conformance, localization verification,
 and exact pinned downstream/interop evidence before it can assemble a PASS
-manifest. It has not produced release evidence. Final local checks pass core
-clean verify at 1,671/0/0/4 over 464 main and 193 test sources, JDK 21 static-
-analysis `BUILD SUCCESS`, SpotBugs 0, Javadocs, API 565/237 with
-1,047/191/422 records, fuzz replay 139/139, smoke
-soak 6/6 plus verifier, candidate localization, artifact-backed simulator
+manifest. It has not produced release evidence. The last full pre-typed-state
+local checks passed core clean verify at 1,671/0/0/4 over 464 main and 193 test
+sources, JDK 21 static-analysis `BUILD SUCCESS`, SpotBugs 0, Javadocs, fuzz
+replay 139/139, and smoke soak 6/6 plus verifier. After the no-alias greenfield
+typed-state amendment, fresh Corretto 26 clean verify passes 1,673/0/0/4 over
+462 main and 193 test sources and builds the main, sources, and Javadoc
+artifacts. Focused request-state/runtime tests pass 50/50;
+reflection/inventory contracts pass 24/24; and the aggregate API gate verifies
+565 incompatibilities, 234 owners, and 1,048/179/422 records. The maintained
+179-source API sketch passes Java 17 compilation, Javadoc doclint, and its
+localization smoke contract. Carried-forward local evidence remains green for
+candidate localization, artifact-backed simulator
 39/39, pinned live official CLI 39/39, the website's offline clean-install,
 lint, and 33-route SSG build, and OpenTelemetry 36/36. The checksum-pinned
 TypeScript and Go harnesses are `READY` and green against the local snapshot.

@@ -2627,7 +2627,9 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 	@NonNull
 	private final McpInputResponses inputResponses;
 	@NonNull
-	private final Optional<@NonNull McpRequestState> requestState;
+	private final Optional<@NonNull McpJsonValue> frameworkRequestState;
+	@NonNull
+	private final Optional<@NonNull String> applicationRequestState;
 	@NonNull
 	private final McpAdmissionIdentity admissionIdentity;
 	@NonNull
@@ -2652,7 +2654,8 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 				invocation.clientInformation(), invocation.clientCapabilitiesJson(),
 				invocation.requestMetadata(),
 				invocation.requestContext().getInputResponses(),
-				invocation.requestContext().getRequestState(),
+				invocation.requestContext().getFrameworkRequestState(),
+				invocation.requestContext().getApplicationRequestState(),
 				invocation.admissionIdentity(), Optional.empty());
 	}
 
@@ -2665,7 +2668,8 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 				invocation.clientInformation(), invocation.clientCapabilitiesJson(),
 				invocation.requestMetadata(),
 				invocation.requestContext().getInputResponses(),
-				invocation.requestContext().getRequestState(),
+				invocation.requestContext().getFrameworkRequestState(),
+				invocation.requestContext().getApplicationRequestState(),
 				invocation.admissionIdentity(), Optional.empty());
 	}
 
@@ -2678,7 +2682,8 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 				invocation.clientInformation(), invocation.clientCapabilitiesJson(),
 				invocation.requestMetadata(),
 				invocation.requestContext().getInputResponses(),
-				invocation.requestContext().getRequestState(),
+				invocation.requestContext().getFrameworkRequestState(),
+				invocation.requestContext().getApplicationRequestState(),
 				invocation.admissionIdentity(), Optional.empty());
 	}
 
@@ -2691,7 +2696,8 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 				invocation.clientInformation(), invocation.clientCapabilitiesJson(),
 				invocation.requestMetadata(),
 				invocation.requestContext().getInputResponses(),
-				invocation.requestContext().getRequestState(),
+				invocation.requestContext().getFrameworkRequestState(),
+				invocation.requestContext().getApplicationRequestState(),
 				invocation.admissionIdentity(), Optional.empty());
 	}
 
@@ -2715,7 +2721,7 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 				input.requestId(), input.protocolVersion(), input.operationName(),
 				input.clientInformation(), input.clientCapabilities(),
 				input.requestMetadata(), input.inputResponses(),
-				input.requestState(),
+				input.frameworkRequestState(), input.applicationRequestState(),
 				input.admissionIdentity(), input.acceptLanguageValues(),
 				requireNonNull(securityControls));
 	}
@@ -2732,13 +2738,15 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 			@NonNull McpJsonObject clientCapabilitiesJson,
 			@NonNull McpJsonObject requestMetadata,
 			@NonNull McpInputResponses inputResponses,
-			@NonNull Optional<@NonNull McpRequestState> requestState,
+			@NonNull Optional<@NonNull McpJsonValue> frameworkRequestState,
+			@NonNull Optional<@NonNull String> applicationRequestState,
 			@NonNull McpAdmissionIdentity admissionIdentity,
 			@NonNull Optional<@NonNull DefaultMcpSecurityControls>
 					securityControls) {
 		this(request, endpoint, endpointPathParameters, jsonRpcMethod, requestId,
 				protocolVersion, operationName, clientInformation,
-				clientCapabilitiesJson, requestMetadata, inputResponses, requestState,
+				clientCapabilitiesJson, requestMetadata, inputResponses,
+				frameworkRequestState, applicationRequestState,
 				admissionIdentity, acceptLanguageValues(request), securityControls);
 	}
 
@@ -2754,7 +2762,8 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 			@NonNull McpJsonObject clientCapabilitiesJson,
 			@NonNull McpJsonObject requestMetadata,
 			@NonNull McpInputResponses inputResponses,
-			@NonNull Optional<@NonNull McpRequestState> requestState,
+			@NonNull Optional<@NonNull McpJsonValue> frameworkRequestState,
+			@NonNull Optional<@NonNull String> applicationRequestState,
 			@NonNull McpAdmissionIdentity admissionIdentity,
 			@NonNull List<@NonNull String> acceptLanguageValues,
 			@NonNull Optional<@NonNull DefaultMcpSecurityControls>
@@ -2770,7 +2779,12 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 		this.clientInformation = requireNonNull(clientInformation);
 		this.requestMetadata = requireNonNull(requestMetadata);
 		this.inputResponses = requireNonNull(inputResponses);
-		this.requestState = requireNonNull(requestState);
+		this.frameworkRequestState = requireNonNull(frameworkRequestState);
+		this.applicationRequestState = requireNonNull(applicationRequestState);
+		if (frameworkRequestState.isPresent()
+				&& applicationRequestState.isPresent())
+			throw new IllegalArgumentException(
+					"At most one MCP request-state value may be present.");
 		this.admissionIdentity = requireNonNull(admissionIdentity);
 		this.acceptLanguageValues = List.copyOf(
 				requireNonNull(acceptLanguageValues));
@@ -2837,8 +2851,13 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 	@Override public @NonNull McpInputResponses getInputResponses() {
 		return this.inputResponses;
 	}
-	@Override public @NonNull Optional<@NonNull McpRequestState> getRequestState() {
-		return this.requestState;
+	@Override public @NonNull Optional<@NonNull McpJsonValue>
+	getFrameworkRequestState() {
+		return this.frameworkRequestState;
+	}
+	@Override public @NonNull Optional<@NonNull String>
+	getApplicationRequestState() {
+		return this.applicationRequestState;
 	}
 	@Override
 	@SuppressWarnings("deprecation")

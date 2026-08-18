@@ -60,7 +60,10 @@ public final class McpLocalSimulatorScenarioDriver {
 	private static final String MCP_PATH = "/mcp";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final String JSON_MEDIA_TYPE = "application/json";
-	private static final Duration WAIT = Duration.ofSeconds(5);
+	// GitHub-hosted runners can briefly deschedule the simulator's worker and
+	// metrics threads. Keep every wait bounded by the Node driver's 120-second
+	// process timeout while allowing enough headroom for that contention.
+	private static final Duration WAIT = Duration.ofSeconds(15);
 	private static final String EMPTY_CAPABILITIES = "{}";
 	private static final String FORM_CAPABILITY =
 			"{\"elicitation\":{\"form\":{}}}";
@@ -144,14 +147,17 @@ public final class McpLocalSimulatorScenarioDriver {
 		List<ScenarioRow> parsedRows = parseRows(rows);
 		assertEquals(EXPECTED_ROWS, parsedRows,
 				"Driver arguments differ from the pinned manifest ordinal projection");
-		StringBuilder output = new StringBuilder();
 		for (ScenarioRow row : parsedRows) {
-			runScenario(row);
-			appendPass(output, row);
+			try {
+				runScenario(row);
+			} catch (RuntimeException | Error failure) {
+				throw new AssertionError("Local simulator scenario failed: "
+						+ row.ordinal() + ":" + row.name(), failure);
+			}
+			byte[] bytes = passLine(row).getBytes(StandardCharsets.UTF_8);
+			System.out.write(bytes, 0, bytes.length);
+			System.out.flush();
 		}
-		byte[] bytes = output.toString().getBytes(StandardCharsets.UTF_8);
-		System.out.write(bytes, 0, bytes.length);
-		System.out.flush();
 	}
 
 	private static List<ScenarioRow> parseRows(String[] arguments) {
@@ -1020,9 +1026,8 @@ public final class McpLocalSimulatorScenarioDriver {
 					+ "> but was <" + actual + ">");
 	}
 
-	private static void appendPass(StringBuilder output, ScenarioRow row) {
-		output.append("PASS\t").append(row.ordinal()).append('\t')
-				.append(row.name()).append('\n');
+	private static String passLine(ScenarioRow row) {
+		return "PASS\t" + row.ordinal() + '\t' + row.name() + '\n';
 	}
 
 	private record ScenarioRow(int ordinal, String name) {
