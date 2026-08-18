@@ -671,7 +671,7 @@ public final class McpToolRegistration<A> {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder<A> rateLimiter(@NonNull String limiterName) {
+		public Builder<A> rateLimiterName(@NonNull String limiterName) {
 			this.state.rateLimiterName = requireNonBlank(limiterName,
 					"Rate-limiter name");
 			this.state.rateLimiter = null;
@@ -821,7 +821,7 @@ public final class McpToolRegistration<A> {
 		 * @return this builder
 		 */
 		@NonNull
-		public CompleteBuilder<A, R> rateLimiter(
+		public CompleteBuilder<A, R> rateLimiterName(
 				@NonNull String limiterName) {
 			this.state.rateLimiterName = requireNonBlank(limiterName,
 					"Rate-limiter name");
@@ -911,7 +911,7 @@ public final class McpToolRegistration<A> {
 
 		@Override
 		@NonNull
-		public A getArguments() {
+		public A getConvertedArguments() {
 			return this.arguments;
 		}
 

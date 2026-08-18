@@ -254,18 +254,10 @@ class McpLocalizationAdversarialTests {
 							contexts.incrementAndGet();
 							Locale locale = selector == null ? Locale.CANADA_FRENCH
 									: selector.select(request);
-							return new McpLocalizationContext() {
-								@Override
-								public Locale getLocale() {
-									return locale;
-								}
-
-								@Override
-								public McpLocalizationResult localize(
-										McpLocalizableText text) {
-									return McpLocalizationResult.useDefaultText();
-								}
-							};
+							return McpLocalizationContext.withLocale(locale)
+									.localizer(text ->
+											McpLocalizationResult.useDefaultText())
+									.build();
 						})
 						.build());
 	}
@@ -396,7 +388,7 @@ class McpLocalizationAdversarialTests {
 			return this.events.stream()
 					.filter(McpMetricsEvent.RequestFinished.class::isInstance)
 					.map(McpMetricsEvent.RequestFinished.class::cast)
-					.map(McpMetricsEvent.RequestFinished::jsonRpcMethod)
+					.map(McpMetricsEvent.RequestFinished::getJsonRpcMethod)
 					.collect(java.util.stream.Collectors.toUnmodifiableSet());
 		}
 	}

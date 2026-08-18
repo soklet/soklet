@@ -1469,8 +1469,9 @@ public class McpSubscriptionPublicRuntimeTests {
 							.filter(McpMetricsEvent.SubscriptionClosed.class::isInstance)
 							.map(McpMetricsEvent.SubscriptionClosed.class::cast)
 							.findFirst().orElseThrow();
-			Assertions.assertEquals(expectedReason, streamClosed.reason());
-			Assertions.assertEquals(expectedReason, subscriptionClosed.reason());
+			Assertions.assertEquals(expectedReason, streamClosed.getReason());
+			Assertions.assertEquals(expectedReason,
+					subscriptionClosed.getReason());
 			long keepAliveCount = events.stream()
 					.filter(McpMetricsEvent.KeepAliveEmitted.class::isInstance)
 					.count();

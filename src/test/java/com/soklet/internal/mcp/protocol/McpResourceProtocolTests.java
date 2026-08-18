@@ -318,13 +318,15 @@ public class McpResourceProtocolTests {
 						com.soklet.McpJsonObject.emptyInstance(), cache,
 						ignored -> McpServerRuntimeBridge.ResourceInvocationResult
 								.jsonRpcError(-32602, "Application rejected resource",
-										Optional.of(new com.soklet.McpJsonString("read-data"))));
+										Optional.of(com.soklet.McpJsonString.fromValue(
+												"read-data"))));
 		McpServerRuntimeBridge.ResourceListPlan listPlan =
 				new McpServerRuntimeBridge.ResourceListPlan(cache, cache, 4_096,
 						Optional.of(ignored -> McpServerRuntimeBridge
 								.ResourceListInvocationResult.jsonRpcError(
 										700, "Application rejected cursor",
-										Optional.of(new com.soklet.McpJsonString("list-data")))));
+										Optional.of(com.soklet.McpJsonString.fromValue(
+												"list-data")))));
 		McpServerRuntimeBridge bridge = new McpServerRuntimeBridge(
 				"127.0.0.1", 0, publicEndpoint, Set.of("127.0.0.1"), false,
 				CorsAuthorizer.rejectAllInstance(), true,

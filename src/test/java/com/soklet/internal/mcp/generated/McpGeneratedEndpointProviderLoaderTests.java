@@ -466,7 +466,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				Object convertedArguments = constructor.newInstance("value");
 				McpToolArguments<Object> arguments = new McpToolArguments<>() {
 					@Override
-					public Object getArguments() {
+					public Object getConvertedArguments() {
 						return convertedArguments;
 					}
 
@@ -621,7 +621,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				          McpToolRegistration.withName("tool-a")
 				              .types(EndpointA.Arguments.class, EndpointA.Result.class)
 				              .handler((request, arguments, features) -> instanceProvider
-				                  .provide(EndpointA.class).invoke(arguments.getArguments()))
+				                  .provide(EndpointA.class).invoke(arguments.getConvertedArguments()))
 				              .build();
 				      return McpEndpoint.withPath("/a")
 				          .serverInformation(McpImplementation
@@ -642,7 +642,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				          McpToolRegistration.withName("tool-b")
 				              .types(EndpointB.Arguments.class, EndpointB.Result.class)
 				              .handler((request, arguments, features) -> instanceProvider
-				                  .provide(EndpointB.class).invoke(arguments.getArguments()))
+				                  .provide(EndpointB.class).invoke(arguments.getConvertedArguments()))
 				              .build();
 				      return McpEndpoint.withPath("/b")
 				          .serverInformation(McpImplementation

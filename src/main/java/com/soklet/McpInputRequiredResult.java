@@ -153,7 +153,7 @@ public final class McpInputRequiredResult implements McpOperationResult {
 		 */
 		@NonNull
 		public Builder frameworkRequestState(@NonNull McpJsonValue state) {
-			this.requestState = new McpFrameworkRequestState(
+			this.requestState = McpFrameworkRequestState.fromValue(
 					requireNonNull(state));
 			return this;
 		}
@@ -171,7 +171,7 @@ public final class McpInputRequiredResult implements McpOperationResult {
 		 */
 		@NonNull
 		public Builder applicationRequestState(@NonNull String state) {
-			this.requestState = new McpApplicationRequestState(
+			this.requestState = McpApplicationRequestState.fromValue(
 					requireNonNull(state));
 			return this;
 		}

@@ -265,9 +265,8 @@ public class McpSubscriptionConfigurationTests {
 		McpSubscriptionEvent.ResourceUpdated event =
 				McpSubscriptionEvent.resourceUpdated(uri);
 
-		Assertions.assertEquals(uri, event.resourceUri());
-		Assertions.assertEquals(uri,
-				new McpSubscriptionEvent.ResourceUpdated(uri).resourceUri());
+		Assertions.assertEquals(uri, event.getResourceUri());
+		Assertions.assertEquals(McpSubscriptionEvent.resourceUpdated(uri), event);
 		URI sensitiveUri = URI.create(
 				"https://user:secret@example.com/resources/1?token=secret-token");
 		McpSubscriptionEvent.ResourceUpdated sensitiveEvent =
@@ -278,8 +277,6 @@ public class McpSubscriptionConfigurationTests {
 		Assertions.assertFalse(sensitiveEvent.toString().contains("secret"));
 		Assertions.assertThrows(NullPointerException.class,
 				() -> McpSubscriptionEvent.resourceUpdated(null));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> new McpSubscriptionEvent.ResourceUpdated(null));
 
 		for (URI invalid : List.of(
 				URI.create("resources/1"),
@@ -287,9 +284,6 @@ public class McpSubscriptionConfigurationTests {
 				URI.create("https://example.com/resources/café"))) {
 			Assertions.assertThrows(IllegalArgumentException.class,
 					() -> McpSubscriptionEvent.resourceUpdated(invalid),
-					invalid.toString());
-			Assertions.assertThrows(IllegalArgumentException.class,
-					() -> new McpSubscriptionEvent.ResourceUpdated(invalid),
 					invalid.toString());
 		}
 	}
@@ -360,14 +354,14 @@ public class McpSubscriptionConfigurationTests {
 				.build();
 		McpEndpoint namedLimiter = McpEndpoint.withPath("/named-limiter")
 				.serverInformation(serverInformation())
-				.toolRateLimiter("named-limiter")
+				.toolRateLimiterName("named-limiter")
 				.build();
 		McpEndpoint other = endpoint("/other");
 		Map<Class<?>, McpEndpoint> generatedEndpoints = new LinkedHashMap<>();
 		generatedEndpoints.put(GeneratedEndpoint.class, generated);
 		generatedEndpoints.put(NamedLimiterGeneratedEndpoint.class,
 				namedLimiter);
-		McpEndpointRegistry registry = new DefaultMcpEndpointRegistry(
+		McpEndpointRegistry registry = new McpEndpointRegistry(
 				generatedEndpoints).withEndpoint(other);
 		McpSubscriptionConfig subscriptions = configuration(
 				McpSubscriptionNotificationType.RESOURCE_UPDATED);
@@ -428,13 +422,13 @@ public class McpSubscriptionConfigurationTests {
 	}
 
 	@Test
-	public void resolverOverlayRequiresAnOwnedGeneratedEndpoint() {
+	public void registryOverlayRequiresAnOwnedGeneratedEndpoint() {
 		McpSubscriptionConfig subscriptions = configuration(
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED);
 		McpEndpointRegistry programmatic = McpEndpointRegistry.fromEndpoints(
 				List.of(endpoint("/generated")));
 		McpEndpoint generatedEndpoint = endpoint("/generated");
-		McpEndpointRegistry generated = new DefaultMcpEndpointRegistry(
+		McpEndpointRegistry generated = new McpEndpointRegistry(
 				Map.of(GeneratedEndpoint.class, generatedEndpoint));
 
 		Assertions.assertThrows(IllegalArgumentException.class,

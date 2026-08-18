@@ -29,7 +29,7 @@ public class McpRequestStateContextPlumbingTests {
 	@Test
 	public void observation_request_state_projects_into_the_public_context() {
 		McpApplicationRequestState requestState =
-				new McpApplicationRequestState("opaque-state");
+				McpApplicationRequestState.fromValue("opaque-state");
 		RequestObservationInput input = new RequestObservationInput(
 				request(), endpoint(), Map.of(), "tools/call",
 				Optional.of(McpRequestId.fromString("request")), "2026-07-28",

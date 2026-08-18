@@ -39,6 +39,12 @@ applications should authenticate and authorize there and return stable,
 bounded rate-limit and authorization partition keys in the accepted
 `McpAdmissionIdentity`. `McpAdmissionController.acceptAllInstance()` is an
 explicit anonymous policy, not a production authentication mechanism.
+Admission and rate-limit decisions are created only through the named sealed-
+root factories (`accepted(...)`, `rejected(...)`, `allowed()`, and
+`denied(...)`). Their nested final variants have private constructors and
+remain public only for typed pattern matching; inspect them through
+`Accepted.getIdentity()`, `Rejected.getRejection()`, and
+`Denied.getRetryAfter()` rather than record-style component accessors.
 Client information, client capabilities, request `_meta`, and advertised
 server information are self-reported or informational metadata. Never use
 them as authenticated identity or as an authorization or rate-limit partition
@@ -176,7 +182,7 @@ token and any opted-in raw ID are still sensitive, high-cardinality correlation
 data. Restrict log access and retention, and do not treat validation or
 pseudonymization as authentication or anonymization.
 
-All 64 Phase 6 owners are now frozen and the provisional inventory is empty.
+All 65 Phase 6 owners are now frozen and the provisional inventory is empty.
 Twenty-one bounded Phase 6 verticals are also implemented: shutdown
 observation, handler-capacity metrics, handler diagnostics, live
 stream/subscription diagnostics, protection/trace diagnostics, serialized
@@ -291,10 +297,13 @@ exact admitted-request lifecycle authority. Boxed, nonnegative
 `getActiveRequests()` plus immutable `getRequests()` and
 `getRequestDurations()` maps and matching builders expand the provisional
 snapshot to 13 getters and 14 public builder methods including `build()`: nine
-boxed `Long` values and four maps. Their public, thread-safe
-`RequestOutcomeKey(endpointPath, jsonRpcMethod, outcome)` rejects null/empty
-shape but does not validate application-created registry membership; the
-built-in producer supplies only a registered endpoint, recognized method or
+boxed `Long` values and four maps. Their public, thread-safe final key is
+created with
+`RequestOutcomeKey.fromDimensions(endpointPath, jsonRpcMethod, outcome)` and
+rejects null/empty shape but does not validate application-created registry
+membership; its dimensions are read with `getEndpointPath()`,
+`getJsonRpcMethod()`, and `getOutcome()`. The built-in producer supplies only a
+registered endpoint, recognized method or
 `<unrecognized>`, and fixed outcome. Count and histogram maps are independently
 sparse and do not imply a cross-map invariant.
 
@@ -1068,12 +1077,14 @@ A third unnumbered Phase 6 metric-dimensionality checkpoint was covered by
 `McpObservabilityPublicApiTests#metricSchemaHasExactFiniteNonTraceDimensions`
 and
 `McpRequestObservationPublicRuntimeTests#distinctTraceMetadataDoesNotCreateMetricDimensionsOrLeakIntoRendering`.
-It freezes the exact 23 event-record schemas, including 11 fieldless variants,
-and permits only endpoint path, bounded method, fixed outcome/reason/code, and
-nonnegative duration components. Production projects registered endpoints,
-recognized methods or `<unrecognized>`, ten fixed codes, and fixed enums;
-public event constructors do not enforce those runtime vocabularies for
-arbitrary application-created values. At that checkpoint, the MCP snapshot was
+It freezes the exact 23 public final event variants, including 11 fieldless
+variants, whose conventional getters expose only endpoint path, bounded
+method, fixed outcome/reason/code, and nonnegative duration. Production
+projects registered endpoints, recognized methods or `<unrecognized>`, ten
+fixed codes, and fixed enums; named `McpMetricsEvent` factories do not enforce
+those runtime vocabularies for arbitrary application-created values. Variant
+constructors are private, while the nested types remain public for typed
+pattern matching. At that checkpoint, the MCP snapshot was
 exactly three boxed `Long` values plus an immutable shutdown map. The default
 collector aggregated only the five handler variants and `ServerStopped`,
 ignoring and retaining none of the other 17 variants.
@@ -1194,7 +1205,7 @@ fidelity, release-candidate, or Phase 6 freeze evidence.
 
 ## Current API and release-security state
 
-The current owner inventory is 133 Phase 4, 39 Phase 5, and 64 Phase 6 (236
+The current owner inventory is 133 Phase 4, 39 Phase 5, and 65 Phase 6 (237
 total), with all three phases frozen and no provisional owner. The implemented
 structured-log boundary completes the bounded `MCP_TRACE_CORRELATION` carrier
 and separate raw-ID opt-in, but operator access, storage, retention, and
@@ -1209,20 +1220,28 @@ matched POM/main/sources/Javadocs artifacts, an isolated Maven installation,
 the release soak, official release-mode conformance, localization verification,
 and exact pinned downstream/interop evidence before it can assemble a PASS
 manifest. It has not produced release evidence. Final local checks pass core
-clean verify at 1,667/0/0/4 over 464 main and 193 test sources, JDK 21 static-
-analysis `BUILD SUCCESS`, SpotBugs 0, Javadocs, API 564/236 with
-1,053/195/420 records, fuzz replay 139/139, smoke
+clean verify at 1,671/0/0/4 over 464 main and 193 test sources, JDK 21 static-
+analysis `BUILD SUCCESS`, SpotBugs 0, Javadocs, API 565/237 with
+1,047/191/422 records, fuzz replay 139/139, smoke
 soak 6/6 plus verifier, candidate localization, artifact-backed simulator
-39/39, pinned live official CLI 39/39, site lint/build, and OpenTelemetry 36/36.
-The checksum-
-pinned TypeScript and Go harnesses are `READY` and green against the local
-snapshot. Both servlet candidate matrices pass 158/158 locally, but their
-version-property edits remain uncommitted. ToyStore's completed local migration
-passes 13/13, including five MCP tests, while its old manifest pin stays blocked
-until a reviewed commit and immutable-candidate/JDK-25 validation. Barebones
-compiles, but its live proof remains `UNVERIFIED` because an unrelated Docker
-process owns port 8080; the hook fails closed. The current `soklet-otel` and
-website migrations are not represented by clean committed pins.
+39/39, pinned live official CLI 39/39, the website's offline clean-install,
+lint, and 33-route SSG build, and OpenTelemetry 36/36. The checksum-pinned
+TypeScript and Go harnesses are `READY` and green against the local snapshot.
+The six reviewed downstream change sets remain uncommitted local work. They are
+therefore unpublished and unpinned, so the manifest continues to carry its old
+public commits. All four servlet legs pass 158/158 locally: the default 3.1.1 and
+3.6.0-SNAPSHOT legs for both javax and Jakarta. ToyStore's completed local
+migration passes 14/14, including six MCP tests. Its per-request credential
+proof accepts a valid request, then returns 401 for malformed, missing, expired, and wrong-audience
+credentials and 403 for an insufficient-scope credential; no prior request
+identity or authorization is inherited. Its old manifest pin stays blocked
+until its reviewed local changes are committed and published, the resulting
+commit is pinned, and the immutable-candidate/JDK-25 validation passes.
+Barebones compiles and its exact live
+probes pass locally on a reserved ephemeral IPv4 loopback port supplied through
+`SOKLET_BAREBONES_LOOPBACK_PORT` without disturbing the unrelated Docker
+listener on port 8080. Its source and validator changes remain uncommitted and
+unpinned, so its old public pin stays blocked.
 Scheduled/nightly and sustained fuzz-soak history, real multi-node localization
 orchestration, public Javadocs, release scans, and immutable candidate
 conformance/provenance also remain open. See

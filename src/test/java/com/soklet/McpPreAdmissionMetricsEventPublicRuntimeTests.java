@@ -76,9 +76,9 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 					+ "\"code\":-32700,\"message\":\"Parse error\"}}",
 					response.body());
 			Assertions.assertEquals(List.of(
-					new McpMetricsEvent.RequestAccepted(),
-					new McpMetricsEvent.ProtocolError(-32_700),
-					new McpMetricsEvent.RequestRejected()),
+					McpMetricsEvent.requestAccepted(),
+					McpMetricsEvent.protocolError(-32_700),
+					McpMetricsEvent.requestRejected()),
 					collector.quartetEvents());
 			Assertions.assertEquals(0, observer.starts());
 			Assertions.assertEquals(0, observer.finishes());
@@ -152,35 +152,36 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 			List<McpMetricsEvent> requestEvents = collector.requestEvents();
 			Assertions.assertEquals(9, requestEvents.size(),
 					requestEvents.toString());
-			Assertions.assertEquals(new McpMetricsEvent.RequestAccepted(),
+			Assertions.assertEquals(McpMetricsEvent.requestAccepted(),
 					requestEvents.get(0));
-			Assertions.assertEquals(new McpMetricsEvent.ProtocolError(-32_700),
+			Assertions.assertEquals(McpMetricsEvent.protocolError(-32_700),
 					requestEvents.get(1));
-			Assertions.assertEquals(new McpMetricsEvent.RequestRejected(),
+			Assertions.assertEquals(McpMetricsEvent.requestRejected(),
 					requestEvents.get(2));
-			Assertions.assertEquals(new McpMetricsEvent.RequestAccepted(),
+			Assertions.assertEquals(McpMetricsEvent.requestAccepted(),
 					requestEvents.get(3));
-			Assertions.assertEquals(new McpMetricsEvent.RequestRejected(),
+			Assertions.assertEquals(McpMetricsEvent.requestRejected(),
 					requestEvents.get(4));
-			Assertions.assertEquals(new McpMetricsEvent.RequestAccepted(),
+			Assertions.assertEquals(McpMetricsEvent.requestAccepted(),
 					requestEvents.get(5));
-			Assertions.assertEquals(new McpMetricsEvent.RequestStarted(
+			Assertions.assertEquals(McpMetricsEvent.requestStarted(
 					MCP_PATH, "server/discover"), requestEvents.get(6));
-			Assertions.assertEquals(new McpMetricsEvent.ProtocolError(-31_999),
+			Assertions.assertEquals(McpMetricsEvent.protocolError(-31_999),
 					requestEvents.get(7));
 			Assertions.assertInstanceOf(McpMetricsEvent.RequestFinished.class,
 					requestEvents.get(8));
 			McpMetricsEvent.RequestFinished finished =
 					(McpMetricsEvent.RequestFinished) requestEvents.get(8);
-			Assertions.assertEquals(MCP_PATH, finished.endpointPath());
-			Assertions.assertEquals("server/discover", finished.jsonRpcMethod());
+			Assertions.assertEquals(MCP_PATH, finished.getEndpointPath());
+			Assertions.assertEquals("server/discover",
+					finished.getJsonRpcMethod());
 			Assertions.assertEquals(McpRequestOutcome.REJECTED,
-					finished.outcome());
-			Assertions.assertFalse(finished.duration().isNegative());
+					finished.getOutcome());
+			Assertions.assertFalse(finished.getDuration().isNegative());
 			Assertions.assertEquals(List.of(-32_700, -31_999), requestEvents.stream()
 					.filter(McpMetricsEvent.ProtocolError.class::isInstance)
 					.map(McpMetricsEvent.ProtocolError.class::cast)
-					.map(McpMetricsEvent.ProtocolError::code)
+					.map(McpMetricsEvent.ProtocolError::getCode)
 					.toList(),
 					"Application-owned error code 1001 must not become a metric dimension.");
 
@@ -217,13 +218,13 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 		Assertions.assertEquals(404, ignored.response().statusCode(),
 				ignored.response().body());
 		Assertions.assertEquals(List.of(
-				new McpMetricsEvent.RequestAccepted(),
-				new McpMetricsEvent.UnknownMirroredHeader(MCP_PATH,
+				McpMetricsEvent.requestAccepted(),
+				McpMetricsEvent.unknownMirroredHeader(MCP_PATH,
 						McpMetricsEvent.UNRECOGNIZED_JSON_RPC_METHOD),
-				new McpMetricsEvent.UnknownMirroredHeader(MCP_PATH,
+				McpMetricsEvent.unknownMirroredHeader(MCP_PATH,
 						McpMetricsEvent.UNRECOGNIZED_JSON_RPC_METHOD),
-				new McpMetricsEvent.ProtocolError(-32_601),
-				new McpMetricsEvent.RequestRejected()),
+				McpMetricsEvent.protocolError(-32_601),
+				McpMetricsEvent.requestRejected()),
 				ignored.events());
 		Assertions.assertEquals(0, ignored.admissions());
 		assertAbsentFromObservability(ignored, rawMethod,
@@ -242,13 +243,13 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 		Assertions.assertEquals(400, strict.response().statusCode(),
 				strict.response().body());
 		Assertions.assertEquals(List.of(
-				new McpMetricsEvent.RequestAccepted(),
-				new McpMetricsEvent.UnknownMirroredHeader(MCP_PATH,
+				McpMetricsEvent.requestAccepted(),
+				McpMetricsEvent.unknownMirroredHeader(MCP_PATH,
 						"server/discover"),
-				new McpMetricsEvent.UnknownMirroredHeader(MCP_PATH,
+				McpMetricsEvent.unknownMirroredHeader(MCP_PATH,
 						"server/discover"),
-				new McpMetricsEvent.ProtocolError(-31_998),
-				new McpMetricsEvent.RequestRejected()),
+				McpMetricsEvent.protocolError(-31_998),
+				McpMetricsEvent.requestRejected()),
 				strict.events());
 		Assertions.assertEquals(0, strict.admissions());
 		assertAbsentFromObservability(strict, "Strict-Alpha-Canary",
@@ -293,7 +294,7 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 			Assertions.assertEquals(List.of(-32_700, -32_700), events.stream()
 					.filter(McpMetricsEvent.ProtocolError.class::isInstance)
 					.map(McpMetricsEvent.ProtocolError.class::cast)
-					.map(McpMetricsEvent.ProtocolError::code)
+					.map(McpMetricsEvent.ProtocolError::getCode)
 					.toList());
 			Assertions.assertEquals(1, collector.maximumConcurrentCallbacks(),
 					"A nested request must enqueue without recursively entering the collector.");
@@ -514,10 +515,10 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 				if (event instanceof McpMetricsEvent.RequestFinished)
 					this.requestFinishedMetric.countDown();
 				if (event instanceof McpMetricsEvent.ProtocolError protocolError
-						&& protocolError.code() == -32_700)
+						&& protocolError.getCode() == -32_700)
 					throw this.preAdmissionFailure;
 				if (event instanceof McpMetricsEvent.ProtocolError protocolError
-						&& protocolError.code() == -31_999)
+						&& protocolError.getCode() == -31_999)
 					throw this.admittedFailure;
 			} finally {
 				this.activeCallbacks.decrementAndGet();

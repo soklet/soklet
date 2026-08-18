@@ -238,7 +238,8 @@ public class McpServerPublicRuntimeTests {
 		McpProtectionKeyRingFingerprint protectionFingerprint =
 				new McpProtectionKeyRingFingerprint("A".repeat(43));
 		McpTraceCorrelationConfigurationFingerprint traceFingerprint =
-				new McpTraceCorrelationConfigurationFingerprint("E".repeat(43));
+				McpTraceCorrelationConfigurationFingerprint.fromValue(
+						"E".repeat(43));
 		McpServerDiagnostics started = diagnosticSnapshot(
 				McpServerStatus.STARTED, Optional.of(address), 2, 3, 1, 2, 4, 3,
 				McpProtectionMode.PRODUCTION_KEY_RING, false,

@@ -25,7 +25,6 @@ import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.lang.reflect.RecordComponent;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -66,11 +65,30 @@ public class McpLocalizationPublicApiTests {
 				Map.entry(McpLocalizationContext.class, Set.of(
 						"getLocale()",
 						"getRevision()",
-						"localize(com.soklet.McpLocalizableText)")),
+						"localize(com.soklet.McpLocalizableText)",
+						"toString()",
+						"withLocale(java.util.Locale)")),
+				Map.entry(McpLocalizationContext.Builder.class, Set.of(
+						"build()",
+						"localizer(java.util.function.Function)",
+						"revision(com.soklet.McpLocalizationRevision)")),
 				Map.entry(McpLocalizationResult.class, Set.of(
 						"useDefaultText()",
 						"failure()",
 						"localized(java.lang.String)")),
+				Map.entry(McpLocalizationResult.Localized.class, Set.of(
+						"equals(java.lang.Object)",
+						"getText()",
+						"hashCode()",
+						"toString()")),
+				Map.entry(McpLocalizationResult.UseDefaultText.class, Set.of(
+						"equals(java.lang.Object)",
+						"hashCode()",
+						"toString()")),
+				Map.entry(McpLocalizationResult.Failure.class, Set.of(
+						"equals(java.lang.Object)",
+						"hashCode()",
+						"toString()")),
 				Map.entry(McpLocalizationRevision.class, Set.of(
 						"equals(java.lang.Object)",
 						"fromValue(java.lang.String)",
@@ -109,9 +127,14 @@ public class McpLocalizationPublicApiTests {
 				McpLocalizationResult.UseDefaultText.class,
 				McpLocalizationResult.Failure.class),
 				Set.of(McpLocalizationResult.class.getPermittedSubclasses()));
-		assertRecordComponents(McpLocalizationResult.Localized.class, "text");
-		assertRecordComponents(McpLocalizationResult.UseDefaultText.class);
-		assertRecordComponents(McpLocalizationResult.Failure.class);
+		for (Class<?> resultType : McpLocalizationResult.class
+				.getPermittedSubclasses()) {
+			Assertions.assertTrue(Modifier.isFinal(resultType.getModifiers()));
+			Assertions.assertFalse(resultType.isRecord());
+			Assertions.assertTrue(Arrays.stream(resultType.getDeclaredConstructors())
+					.noneMatch(constructor -> Modifier.isPublic(
+							constructor.getModifiers())));
+		}
 		Assertions.assertArrayEquals(new McpLocalizationFailurePolicy[]{
 				McpLocalizationFailurePolicy.USE_DEFAULT_TEXT,
 				McpLocalizationFailurePolicy.FAIL_REQUEST
@@ -136,6 +159,7 @@ public class McpLocalizationPublicApiTests {
 				McpLocalizationContextProvider.class,
 				McpLocalizationRequest.class,
 				McpLocalizationContext.class,
+				McpLocalizationContext.Builder.class,
 				McpLocalizationResult.class,
 				McpLocalizationResult.Localized.class,
 				McpLocalizationResult.UseDefaultText.class,
@@ -173,6 +197,8 @@ public class McpLocalizationPublicApiTests {
 				"createContext", McpLocalizationRequest.class);
 		Method localize = McpLocalizationContext.class.getMethod("localize",
 				McpLocalizableText.class);
+		Method contextLocalizer = McpLocalizationContext.Builder.class.getMethod(
+				"localizer", java.util.function.Function.class);
 		Assertions.assertArrayEquals(new Class<?>[]{Exception.class},
 				createContext.getExceptionTypes());
 		Assertions.assertArrayEquals(new Class<?>[0],
@@ -190,8 +216,66 @@ public class McpLocalizationPublicApiTests {
 				"getResourceListCursor"), String.class);
 		assertParameterizedPayload(McpLocalizationContext.class.getMethod(
 				"getRevision"), McpLocalizationRevision.class);
+		AnnotatedParameterizedType localizerType = Assertions.assertInstanceOf(
+				AnnotatedParameterizedType.class,
+				contextLocalizer.getAnnotatedParameterTypes()[0]);
+		AnnotatedType[] localizerArguments =
+				localizerType.getAnnotatedActualTypeArguments();
+		Assertions.assertArrayEquals(new Object[]{McpLocalizableText.class,
+				McpLocalizationResult.class}, Arrays.stream(localizerArguments)
+				.map(AnnotatedType::getType).toArray());
+		for (AnnotatedType argument : localizerArguments)
+			Assertions.assertTrue(argument.isAnnotationPresent(NonNull.class),
+					contextLocalizer.toString());
 		assertParameterizedPayload(McpLocalizationCatalog.class.getMethod(
 				"getTexts"), McpLocalizableText.class);
+	}
+
+	@Test
+	public void contextsUseAnOwnedBuilderForImmutableRequestSnapshots() {
+		Assertions.assertFalse(McpLocalizationContext.class.isInterface());
+		Assertions.assertTrue(Modifier.isFinal(
+				McpLocalizationContext.class.getModifiers()));
+		McpLocalizationRevision revision =
+				McpLocalizationRevision.fromValue("catalog-secret-17");
+		McpLocalizableText text = new McpLocalizableText(
+				new McpTextCoordinate("/mcp", McpTextCoordinate.Kind.ENDPOINT,
+						"endpoint", "/instructions"),
+				"Canonical instructions");
+		McpLocalizationContext context = McpLocalizationContext
+				.withLocale(Locale.CANADA_FRENCH)
+				.revision(revision)
+				.localizer(localizableText -> McpLocalizationResult.localized(
+						"FR:" + localizableText.getDefaultText()))
+				.build();
+
+		Assertions.assertEquals(Locale.CANADA_FRENCH, context.getLocale());
+		Assertions.assertEquals(Optional.of(revision), context.getRevision());
+		Assertions.assertEquals("FR:Canonical instructions",
+				Assertions.assertInstanceOf(McpLocalizationResult.Localized.class,
+						context.localize(text)).getText());
+		Assertions.assertFalse(context.toString().contains("fr-CA"));
+		Assertions.assertFalse(context.toString().contains("catalog-secret-17"));
+		Assertions.assertFalse(context.toString().contains("Canonical instructions"));
+
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpLocalizationContext.withLocale(null));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpLocalizationContext.withLocale(Locale.ENGLISH)
+						.revision(null));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpLocalizationContext.withLocale(Locale.ENGLISH)
+						.localizer(null));
+		Assertions.assertThrows(IllegalStateException.class,
+				() -> McpLocalizationContext.withLocale(Locale.ENGLISH).build());
+		Assertions.assertThrows(NullPointerException.class,
+				() -> context.localize(null));
+		McpLocalizationContext nullReturning = McpLocalizationContext
+				.withLocale(Locale.ENGLISH)
+				.localizer(localizableText -> null)
+				.build();
+		Assertions.assertThrows(NullPointerException.class,
+				() -> nullReturning.localize(text));
 	}
 
 	@Test
@@ -252,6 +336,8 @@ public class McpLocalizationPublicApiTests {
 				Locale.forLanguageTag("und-Latn"))) {
 			Assertions.assertThrows(IllegalArgumentException.class,
 					() -> McpLocalizer.withFallbackLocale(invalid));
+			Assertions.assertThrows(IllegalArgumentException.class,
+					() -> McpLocalizationContext.withLocale(invalid));
 		}
 	}
 
@@ -264,12 +350,13 @@ public class McpLocalizationPublicApiTests {
 		McpLocalizationResult.Failure failure =
 				McpLocalizationResult.failure();
 
-		Assertions.assertEquals("translated secret", localized.text());
-		Assertions.assertEquals(new McpLocalizationResult.UseDefaultText(),
-				defaultText);
-		Assertions.assertEquals(new McpLocalizationResult.Failure(), failure);
+		Assertions.assertEquals("translated secret", localized.getText());
+		Assertions.assertEquals(McpLocalizationResult.localized(
+				"translated secret"), localized);
+		Assertions.assertSame(McpLocalizationResult.useDefaultText(), defaultText);
+		Assertions.assertSame(McpLocalizationResult.failure(), failure);
 		Assertions.assertFalse(localized.toString().contains("translated secret"));
-		Assertions.assertEquals(0, failure.getClass().getRecordComponents().length);
+		Assertions.assertFalse(failure.getClass().isRecord());
 
 		Assertions.assertThrows(NullPointerException.class,
 				() -> McpLocalizationResult.localized(null));
@@ -378,17 +465,9 @@ public class McpLocalizationPublicApiTests {
 	}
 
 	private static McpLocalizationContext context(Locale locale) {
-		return new McpLocalizationContext() {
-			@Override
-			public Locale getLocale() {
-				return locale;
-			}
-
-			@Override
-			public McpLocalizationResult localize(McpLocalizableText text) {
-				return McpLocalizationResult.useDefaultText();
-			}
-		};
+		return McpLocalizationContext.withLocale(locale)
+				.localizer(text -> McpLocalizationResult.useDefaultText())
+				.build();
 	}
 
 	private static McpEndpointRegistry endpointRegistry() {
@@ -416,14 +495,6 @@ public class McpLocalizationPublicApiTests {
 	private static String methodDescriptor(Method method) {
 		return method.getName() + "(" + Arrays.stream(method.getParameterTypes())
 				.map(Class::getName).collect(Collectors.joining(",")) + ")";
-	}
-
-	private static void assertRecordComponents(Class<?> type,
-			String... expectedNames) {
-		Assertions.assertTrue(type.isRecord());
-		RecordComponent[] components = type.getRecordComponents();
-		Assertions.assertArrayEquals(expectedNames, Arrays.stream(components)
-				.map(RecordComponent::getName).toArray(String[]::new));
 	}
 
 	private static void assertParameterizedPayload(Method method,

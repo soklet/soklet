@@ -81,7 +81,7 @@ class McpLocalizationSchemaWalkerTests {
 		McpJsonObject schema = McpJsonObject.builder()
 				.put("title", "  ")
 				.put("properties", McpJsonObject.builder()
-						.put("allowed", new McpJsonBoolean(true))
+						.put("allowed", McpJsonBoolean.fromValue(true))
 						.build())
 				.build();
 

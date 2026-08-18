@@ -18,6 +18,9 @@ import {
 
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+const SERVLET_DEFAULT_ARTIFACT_IDENTITY = 'com.soklet:soklet:3.1.1';
+const SERVLET_DEFAULT_ARTIFACT_SHA256 =
+  'a7acd26b5a8933726615719e8d9d766feba6d0ebdb32939fa8ef1eba8094e7a4';
 const EXPECTED_GATE_IDS = [
   'candidate-build',
   'isolated-install',
@@ -105,7 +108,7 @@ const EXPECTED_GATE_CONTRACTS = Object.freeze({
   }),
   'toystore-app': Object.freeze({
     access: 'PUBLIC_READ_ONLY',
-    artifactIdentity: 'com.soklet:toystore:1.0.0',
+    artifactIdentity: 'com.soklet.toystore:toystore:1.0.0',
     kind: 'DOWNSTREAM',
     repository: 'https://github.com/soklet/toystore-app.git',
     versionProperty: 'soklet.version',
@@ -144,6 +147,8 @@ const GATE_KEYS = [
   'artifactChecksum',
   'artifactIdentity',
   'commit',
+  'defaultArtifactIdentity',
+  'defaultArtifactSha256',
   'id',
   'kind',
   'reason',
@@ -383,6 +388,14 @@ function validateGate(gate, index) {
   requireString(gate.access, `gate ${gate.id} access`);
   requireNullableString(gate.artifactChecksum, `gate ${gate.id} artifact checksum`);
   requireString(gate.artifactIdentity, `gate ${gate.id} artifact identity`);
+  requireNullableString(
+    gate.defaultArtifactIdentity,
+    `gate ${gate.id} default artifact identity`,
+  );
+  requireNullableString(
+    gate.defaultArtifactSha256,
+    `gate ${gate.id} default artifact SHA-256`,
+  );
   requireNullableString(gate.repository, `gate ${gate.id} repository`);
   requireNullableString(gate.commit, `gate ${gate.id} commit`);
   requireNullableString(gate.versionProperty, `gate ${gate.id} version property`);
@@ -414,6 +427,25 @@ function validateGate(gate, index) {
 
   if (gate.commit !== null && !COMMIT_PATTERN.test(gate.commit))
     fail(`Gate ${gate.id} commit must be a full lowercase SHA`);
+
+  const isServletGate = gate.id === 'soklet-servlet-javax'
+    || gate.id === 'soklet-servlet-jakarta';
+  const expectedDefaultArtifactIdentity = isServletGate
+    ? SERVLET_DEFAULT_ARTIFACT_IDENTITY
+    : null;
+  const expectedDefaultArtifactSha256 = isServletGate
+    ? SERVLET_DEFAULT_ARTIFACT_SHA256
+    : null;
+  if (gate.defaultArtifactIdentity !== expectedDefaultArtifactIdentity
+      || gate.defaultArtifactSha256 !== expectedDefaultArtifactSha256) {
+    fail(
+      `Gate ${gate.id} default Soklet artifact pin differs from its canonical release contract`,
+    );
+  }
+  if (gate.defaultArtifactSha256 !== null
+      && !SHA256_PATTERN.test(gate.defaultArtifactSha256)) {
+    fail(`Gate ${gate.id} default artifact SHA-256 must be 64 lowercase hexadecimal characters`);
+  }
 
   if (gate.repository !== null && !/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\.git$/.test(gate.repository))
     fail(`Gate ${gate.id} must use an exact HTTPS GitHub repository URL`);
@@ -858,6 +890,8 @@ export function recordGateEvidence(
       artifactChecksum: gate.artifactChecksum,
       artifactIdentity: gate.artifactIdentity,
       commit: gate.commit,
+      defaultArtifactIdentity: gate.defaultArtifactIdentity,
+      defaultArtifactSha256: gate.defaultArtifactSha256,
       id: gate.id,
       repository: gate.repository,
     },
@@ -1084,7 +1118,15 @@ export function assembleReleaseEvidence(
     const expectedGate = config.gates.find((candidate) => candidate.id === id);
     requireExactKeys(
       gate.gate,
-      ['artifactChecksum', 'artifactIdentity', 'commit', 'id', 'repository'],
+      [
+        'artifactChecksum',
+        'artifactIdentity',
+        'commit',
+        'defaultArtifactIdentity',
+        'defaultArtifactSha256',
+        'id',
+        'repository',
+      ],
       `${id} gate pin`,
     );
 
@@ -1093,6 +1135,8 @@ export function assembleReleaseEvidence(
         || gate.gate.artifactChecksum !== expectedGate.artifactChecksum
         || gate.gate.artifactIdentity !== expectedGate.artifactIdentity
         || gate.gate.commit !== expectedGate.commit
+        || gate.gate.defaultArtifactIdentity !== expectedGate.defaultArtifactIdentity
+        || gate.gate.defaultArtifactSha256 !== expectedGate.defaultArtifactSha256
         || gate.gate.repository !== expectedGate.repository
         || !Array.isArray(gate.evidence) || gate.evidence.length === 0) {
       fail(`Invalid or incomplete PASS evidence for gate ${id}`);
@@ -1215,7 +1259,10 @@ function main(args) {
         gate.repository ?? '',
         gate.commit ?? '',
         gate.status,
+        gate.artifactIdentity,
         gate.versionProperty ?? '',
+        gate.defaultArtifactIdentity ?? '',
+        gate.defaultArtifactSha256 ?? '',
       ].join('\t'));
     }
     return;

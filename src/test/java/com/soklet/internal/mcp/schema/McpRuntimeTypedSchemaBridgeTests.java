@@ -52,20 +52,20 @@ class McpRuntimeTypedSchemaBridgeTests {
 		McpJsonArray required = assertInstanceOf(McpJsonArray.class,
 				schema.find("required").orElseThrow());
 
-		assertEquals(new McpJsonString("object"),
+		assertEquals(McpJsonString.fromValue("object"),
 				schema.find("type").orElseThrow());
 		assertEquals(Set.of("query", "limit", "pageSizes"),
 				properties.getMembers().keySet());
-		assertEquals(List.of(new McpJsonString("query"),
-				new McpJsonString("pageSizes")), required.getElements());
-		assertEquals(new McpJsonBoolean(false),
+		assertEquals(List.of(McpJsonString.fromValue("query"),
+				McpJsonString.fromValue("pageSizes")), required.getElements());
+		assertEquals(McpJsonBoolean.fromValue(false),
 				schema.find("additionalProperties").orElseThrow());
 
 		McpJsonObject input = McpJsonObject.builder()
 				.put("query", " exact ")
 				.put("pageSizes", McpJsonArray.fromElements(List.of(
-						new McpJsonNumber(BigDecimal.valueOf(2)),
-						new McpJsonNumber(BigDecimal.valueOf(5)))))
+						McpJsonNumber.fromValue(BigDecimal.valueOf(2)),
+						McpJsonNumber.fromValue(BigDecimal.valueOf(5)))))
 				.build();
 		Arguments expected = new Arguments(" exact ", Optional.empty(),
 				List.of(2, 5));
@@ -87,7 +87,7 @@ class McpRuntimeTypedSchemaBridgeTests {
 				bridge.encode(result));
 		assertTrue(bridge.isValid(encoded));
 		assertEquals(result, bridge.decode(encoded));
-		assertEquals(new McpJsonString("object"),
+		assertEquals(McpJsonString.fromValue("object"),
 				bridge.getSchemaDocument().find("type").orElseThrow());
 	}
 
@@ -130,16 +130,16 @@ class McpRuntimeTypedSchemaBridgeTests {
 		McpJsonObject publishedProperty = assertInstanceOf(McpJsonObject.class,
 				properties.find("publishedName").orElseThrow());
 
-		assertEquals(new McpJsonString("Published title"),
+		assertEquals(McpJsonString.fromValue("Published title"),
 				publishedProperty.find("title").orElseThrow());
-		assertEquals(new McpJsonString("Published description"),
+		assertEquals(McpJsonString.fromValue("Published description"),
 				publishedProperty.find("description").orElseThrow());
 		assertFalse(properties.find("javaName").isPresent());
 
 		AnnotatedResult value = new AnnotatedResult("value", Optional.empty());
 		McpJsonObject encoded = assertInstanceOf(McpJsonObject.class,
 				bridge.encode(value));
-		assertEquals(new McpJsonString("value"),
+		assertEquals(McpJsonString.fromValue("value"),
 				encoded.find("publishedName").orElseThrow());
 		assertEquals(value, bridge.decode(encoded));
 	}

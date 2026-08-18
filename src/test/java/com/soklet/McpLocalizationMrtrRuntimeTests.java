@@ -156,18 +156,10 @@ class McpLocalizationMrtrRuntimeTests {
 				.contextProvider(request -> {
 					observed.add(request.getContinuationLocale());
 					Locale locale = choice.select(request.getContinuationLocale());
-					return new McpLocalizationContext() {
-						@Override
-						public Locale getLocale() {
-							return locale;
-						}
-
-						@Override
-						public McpLocalizationResult localize(
-								McpLocalizableText text) {
-							return McpLocalizationResult.useDefaultText();
-						}
-					};
+					return McpLocalizationContext.withLocale(locale)
+							.localizer(text ->
+									McpLocalizationResult.useDefaultText())
+							.build();
 				})
 				.build();
 	}
@@ -184,8 +176,8 @@ class McpLocalizationMrtrRuntimeTests {
 
 					if (request.getRequestState().isEmpty())
 						return McpInputRequiredResult.builder()
-								.inputRequest("roots", McpInputRequest
-										.fromDeclaration(roots,
+								.inputRequest("roots", McpInputRequest.fromDeclaration(
+										roots,
 												McpJsonObject.emptyInstance()))
 								.frameworkRequestState(McpJsonObject.builder()
 										.put("phase", "waiting")

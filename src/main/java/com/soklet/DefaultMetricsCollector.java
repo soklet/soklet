@@ -789,14 +789,14 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			this.includeMcpRequestLifecycleMetrics.set(true);
 			this.mcpActiveRequests.decrementAndGet();
 			McpMetricsSnapshot.RequestOutcomeKey key =
-					new McpMetricsSnapshot.RequestOutcomeKey(
-							requestFinished.endpointPath(),
-							requestFinished.jsonRpcMethod(),
-							requestFinished.outcome());
+					McpMetricsSnapshot.RequestOutcomeKey.fromDimensions(
+							requestFinished.getEndpointPath(),
+							requestFinished.getJsonRpcMethod(),
+							requestFinished.getOutcome());
 			counterFor(this.mcpRequestsByOutcome, key).increment();
 			histogramFor(this.mcpRequestDurationsByOutcome, key,
 					HTTP_LATENCY_BUCKETS_NANOS)
-					.record(requestFinished.duration().toNanos());
+					.record(requestFinished.getDuration().toNanos());
 		} else if (event instanceof McpMetricsEvent.RequestStreamOpened) {
 			this.includeMcpRequestStreamLifecycleMetrics.set(true);
 			this.mcpActiveRequestStreams.incrementAndGet();
@@ -804,13 +804,13 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			this.includeMcpRequestStreamLifecycleMetrics.set(true);
 			this.mcpActiveRequestStreams.decrementAndGet();
 			McpMetricsSnapshot.RequestStreamTerminationKey key =
-					new McpMetricsSnapshot.RequestStreamTerminationKey(
-							requestStreamClosed.endpointPath(),
-							requestStreamClosed.jsonRpcMethod(),
-							requestStreamClosed.reason());
+					McpMetricsSnapshot.RequestStreamTerminationKey.fromDimensions(
+							requestStreamClosed.getEndpointPath(),
+							requestStreamClosed.getJsonRpcMethod(),
+							requestStreamClosed.getReason());
 			histogramFor(this.mcpRequestStreamDurationsByReason, key,
 					SSE_STREAM_DURATION_BUCKETS_NANOS)
-					.record(requestStreamClosed.duration().toNanos());
+					.record(requestStreamClosed.getDuration().toNanos());
 		} else if (event instanceof McpMetricsEvent.SubscriptionOpened) {
 			this.includeMcpSubscriptionLifecycleMetrics.set(true);
 			this.mcpActiveSubscriptions.incrementAndGet();
@@ -818,40 +818,40 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			this.includeMcpSubscriptionLifecycleMetrics.set(true);
 			this.mcpActiveSubscriptions.decrementAndGet();
 			McpMetricsSnapshot.SubscriptionTerminationKey key =
-					new McpMetricsSnapshot.SubscriptionTerminationKey(
-							subscriptionClosed.endpointPath(),
-							subscriptionClosed.reason());
+					McpMetricsSnapshot.SubscriptionTerminationKey.fromDimensions(
+							subscriptionClosed.getEndpointPath(),
+							subscriptionClosed.getReason());
 			histogramFor(this.mcpSubscriptionDurationsByReason, key,
 					SSE_STREAM_DURATION_BUCKETS_NANOS)
-					.record(subscriptionClosed.duration().toNanos());
+					.record(subscriptionClosed.getDuration().toNanos());
 		} else if (event instanceof McpMetricsEvent.CancelationSignaled
 				cancelationSignaled) {
 			McpMetricsSnapshot.EndpointMethodKey key =
-					new McpMetricsSnapshot.EndpointMethodKey(
-							cancelationSignaled.endpointPath(),
-							cancelationSignaled.jsonRpcMethod());
+					McpMetricsSnapshot.EndpointMethodKey.fromDimensions(
+							cancelationSignaled.getEndpointPath(),
+							cancelationSignaled.getJsonRpcMethod());
 			counterFor(this.mcpCancelationsSignaledByEndpointAndMethod, key)
 					.increment();
 		} else if (event instanceof McpMetricsEvent.ProgressEmitted
 				progressEmitted) {
 			McpMetricsSnapshot.EndpointMethodKey key =
-					new McpMetricsSnapshot.EndpointMethodKey(
-							progressEmitted.endpointPath(),
-							progressEmitted.jsonRpcMethod());
+					McpMetricsSnapshot.EndpointMethodKey.fromDimensions(
+							progressEmitted.getEndpointPath(),
+							progressEmitted.getJsonRpcMethod());
 			counterFor(this.mcpProgressEmittedByEndpointAndMethod, key)
 					.increment();
 		} else if (event instanceof McpMetricsEvent.KeepAliveEmitted) {
 			this.includeMcpKeepAliveMetrics.set(true);
 			this.mcpKeepAlivesEmitted.increment();
 		} else if (event instanceof McpMetricsEvent.ProtocolError protocolError) {
-			counterFor(this.mcpProtocolErrorsByCode, protocolError.code())
+			counterFor(this.mcpProtocolErrorsByCode, protocolError.getCode())
 					.increment();
 		} else if (event instanceof McpMetricsEvent.UnknownMirroredHeader
 				unknownMirroredHeader) {
 			McpMetricsSnapshot.EndpointMethodKey key =
-					new McpMetricsSnapshot.EndpointMethodKey(
-							unknownMirroredHeader.endpointPath(),
-							unknownMirroredHeader.jsonRpcMethod());
+					McpMetricsSnapshot.EndpointMethodKey.fromDimensions(
+							unknownMirroredHeader.getEndpointPath(),
+							unknownMirroredHeader.getJsonRpcMethod());
 			counterFor(this.mcpUnknownMirroredHeadersByEndpointAndMethod, key)
 					.increment();
 		} else if (event instanceof McpMetricsEvent.ConnectionAccepted) {
@@ -863,7 +863,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		} else if (event instanceof McpMetricsEvent.TransportFailure transportFailure) {
 			this.includeMcpTransportMetrics.set(true);
 			requireNonNull(this.mcpTransportFailuresByReason.get(
-					transportFailure.reason())).increment();
+					transportFailure.getReason())).increment();
 		} else if (event instanceof McpMetricsEvent.HandlerExecutionStarted) {
 			this.includeMcpHandlerMetrics.set(true);
 			this.mcpActiveHandlerExecutions.incrementAndGet();
@@ -881,7 +881,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			this.mcpHandlerCapacityRejections.increment();
 		} else if (event instanceof McpMetricsEvent.ServerStopped serverStopped) {
 			this.includeMcpServerMetrics.set(true);
-			requireNonNull(this.mcpShutdownsByOutcome.get(serverStopped.outcome()))
+			requireNonNull(this.mcpShutdownsByOutcome.get(serverStopped.getOutcome()))
 					.increment();
 		}
 	}
@@ -1844,9 +1844,9 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(3);
-		labels.put("endpoint", key.endpointPath());
-		labels.put("method", key.jsonRpcMethod());
-		labels.put("outcome", key.outcome().name().toLowerCase(Locale.ROOT));
+		labels.put("endpoint", key.getEndpointPath());
+		labels.put("method", key.getJsonRpcMethod());
+		labels.put("outcome", key.getOutcome().name().toLowerCase(Locale.ROOT));
 		return new LabelSet(labels);
 	}
 
@@ -1856,9 +1856,9 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(3);
-		labels.put("endpoint", key.endpointPath());
-		labels.put("method", key.jsonRpcMethod());
-		labels.put("reason", key.reason().name().toLowerCase(Locale.ROOT));
+		labels.put("endpoint", key.getEndpointPath());
+		labels.put("method", key.getJsonRpcMethod());
+		labels.put("reason", key.getReason().name().toLowerCase(Locale.ROOT));
 		return new LabelSet(labels);
 	}
 
@@ -1868,8 +1868,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(2);
-		labels.put("endpoint", key.endpointPath());
-		labels.put("reason", key.reason().name().toLowerCase(Locale.ROOT));
+		labels.put("endpoint", key.getEndpointPath());
+		labels.put("reason", key.getReason().name().toLowerCase(Locale.ROOT));
 		return new LabelSet(labels);
 	}
 
@@ -1879,8 +1879,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(key);
 
 		Map<String, String> labels = new LinkedHashMap<>(2);
-		labels.put("endpoint", key.endpointPath());
-		labels.put("method", key.jsonRpcMethod());
+		labels.put("endpoint", key.getEndpointPath());
+		labels.put("method", key.getJsonRpcMethod());
 		return new LabelSet(labels);
 	}
 

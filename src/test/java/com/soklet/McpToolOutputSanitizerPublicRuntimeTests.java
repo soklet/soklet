@@ -158,7 +158,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 			McpJsonObject invalidReplacement = McpJsonObject.builder()
 					.put("unexpected", "INVALID-SANITIZED-VALUE")
 					.build();
-			return switch (mode.value()) {
+			return switch (mode.getValue()) {
 				case "valid-replacement" -> McpToolOutput
 						.fromStructuredContent(validReplacement);
 				case "valid-with-content" -> McpToolOutput.builder()
@@ -167,7 +167,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 						.build();
 				case "valid-error" -> McpToolOutput.builder()
 						.structuredContent(validReplacement)
-						.isError(true)
+						.error(true)
 						.build();
 				case "omit-success" -> McpToolOutput
 						.fromText("SANITIZED-OMITTED-SUCCESS");
@@ -178,13 +178,13 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 						.build();
 				case "invalid-error" -> McpToolOutput.builder()
 						.structuredContent(invalidReplacement)
-						.isError(true)
+						.error(true)
 						.build();
 				default -> throw new IllegalArgumentException("Unknown test mode.");
 			};
 		};
 		McpServer server = server(List.of(tool, toolWithoutMirror),
-				McpHandlerInterceptor.defaultInstance(), sanitizer);
+				McpHandlerInterceptor.passThroughInstance(), sanitizer);
 
 		try {
 			server.start();
@@ -279,7 +279,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 						McpCompleteResult.fromToolText(handlerSecret))
 				.build();
 		McpServer server = server(List.of(tool),
-				McpHandlerInterceptor.defaultInstance(), sanitizer);
+				McpHandlerInterceptor.passThroughInstance(), sanitizer);
 
 		try {
 			server.start();

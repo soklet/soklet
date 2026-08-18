@@ -645,13 +645,13 @@ public class McpSimulatorEveryOperationTests {
 				Assertions.assertEquals(1L, allEvents.stream()
 						.filter(McpMetricsEvent.RequestStarted.class::isInstance)
 						.map(McpMetricsEvent.RequestStarted.class::cast)
-						.filter(event -> event.jsonRpcMethod().equals(entry.getKey()))
+						.filter(event -> event.getJsonRpcMethod().equals(entry.getKey()))
 						.count(), allEvents.toString());
 				Assertions.assertEquals(1L, allEvents.stream()
 						.filter(McpMetricsEvent.RequestFinished.class::isInstance)
 						.map(McpMetricsEvent.RequestFinished.class::cast)
-						.filter(event -> event.jsonRpcMethod().equals(entry.getKey())
-								&& event.outcome() == entry.getValue())
+						.filter(event -> event.getJsonRpcMethod().equals(entry.getKey())
+								&& event.getOutcome() == entry.getValue())
 						.count(), allEvents.toString());
 				Assertions.assertTrue(this.metrics.startedBeforeFinished(entry.getKey()),
 						allEvents.toString());
@@ -764,7 +764,7 @@ public class McpSimulatorEveryOperationTests {
 			this.events.add(event);
 			if (event instanceof McpMetricsEvent.RequestFinished finished) {
 				this.finished.countDown();
-				if (finished.jsonRpcMethod().equals("notifications/cancelled"))
+				if (finished.getJsonRpcMethod().equals("notifications/cancelled"))
 					this.notificationFinished.countDown();
 			}
 		}
@@ -785,10 +785,10 @@ public class McpSimulatorEveryOperationTests {
 			for (int i = 0; i < this.events.size(); i++) {
 				McpMetricsEvent event = this.events.get(i);
 				if (event instanceof McpMetricsEvent.RequestStarted requestStarted
-						&& requestStarted.jsonRpcMethod().equals(method))
+						&& requestStarted.getJsonRpcMethod().equals(method))
 					started = i;
 				if (event instanceof McpMetricsEvent.RequestFinished requestFinished
-						&& requestFinished.jsonRpcMethod().equals(method)) {
+						&& requestFinished.getJsonRpcMethod().equals(method)) {
 					finished = i;
 					break;
 				}

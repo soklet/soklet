@@ -58,8 +58,8 @@ public class McpRateLimiterTests {
 				limiter.acquire(request));
 		McpRateLimitDecision.Denied denied = Assertions.assertInstanceOf(
 				McpRateLimitDecision.Denied.class, limiter.acquire(request));
-		Assertions.assertFalse(denied.retryAfter().isZero());
-		Assertions.assertFalse(denied.retryAfter().isNegative());
+		Assertions.assertFalse(denied.getRetryAfter().isZero());
+		Assertions.assertFalse(denied.getRetryAfter().isNegative());
 
 		Assertions.assertInstanceOf(McpRateLimitDecision.Allowed.class,
 				limiter.acquire(context(
@@ -128,7 +128,7 @@ public class McpRateLimiterTests {
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				McpRateLimitDecision.denied(Duration.ofNanos(-1)));
 		Assertions.assertEquals(Duration.ZERO,
-				McpRateLimitDecision.denied(Duration.ZERO).retryAfter());
+				McpRateLimitDecision.denied(Duration.ZERO).getRetryAfter());
 	}
 
 	@Test
@@ -147,11 +147,11 @@ public class McpRateLimiterTests {
 				limiter.acquire(context));
 		Assertions.assertEquals(Duration.ofNanos(4),
 				Assertions.assertInstanceOf(McpRateLimitDecision.Denied.class,
-						limiter.acquire(context)).retryAfter());
+						limiter.acquire(context)).getRetryAfter());
 		clock.set(3);
 		Assertions.assertEquals(Duration.ofNanos(1),
 				Assertions.assertInstanceOf(McpRateLimitDecision.Denied.class,
-						limiter.acquire(context)).retryAfter());
+						limiter.acquire(context)).getRetryAfter());
 		clock.set(4);
 		Assertions.assertInstanceOf(McpRateLimitDecision.Allowed.class,
 				limiter.acquire(context));
@@ -196,7 +196,7 @@ public class McpRateLimiterTests {
 		McpRateLimitDecision.Denied saturated = Assertions.assertInstanceOf(
 				McpRateLimitDecision.Denied.class, limiter.acquire(context(
 						"/one", "three", McpRateLimitTarget.REQUEST)));
-		Assertions.assertEquals(Duration.ofNanos(10), saturated.retryAfter());
+		Assertions.assertEquals(Duration.ofNanos(10), saturated.getRetryAfter());
 		Assertions.assertEquals(2, limiter.retainedPartitionCount());
 
 		clock.set(10);

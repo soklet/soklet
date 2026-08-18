@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
@@ -24,6 +25,7 @@ import java.util.Collections;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeMap;
 
 import static java.util.Objects.requireNonNull;
@@ -521,110 +523,327 @@ public final class McpMetricsSnapshot {
 	/**
 	 * Key for endpoint-and-method counter aggregates.
 	 *
-	 * @param endpointPath registered endpoint-path declaration
-	 * @param jsonRpcMethod bounded JSON-RPC method dimension
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	public record EndpointMethodKey(@NonNull String endpointPath,
-			@NonNull String jsonRpcMethod) {
+	public static final class EndpointMethodKey {
+		@NonNull
+		private final String endpointPath;
+		@NonNull
+		private final String jsonRpcMethod;
+
 		/**
 		 * Creates an endpoint-and-method aggregate key.
 		 *
 		 * @param endpointPath registered endpoint-path declaration
 		 * @param jsonRpcMethod bounded JSON-RPC method dimension
+		 * @return endpoint-and-method aggregate key
 		 */
-		public EndpointMethodKey {
+		@NonNull
+		public static EndpointMethodKey fromDimensions(
+				@NonNull String endpointPath, @NonNull String jsonRpcMethod) {
+			return new EndpointMethodKey(endpointPath, jsonRpcMethod);
+		}
+
+		private EndpointMethodKey(@NonNull String endpointPath,
+				@NonNull String jsonRpcMethod) {
 			if (requireNonNull(endpointPath).isEmpty())
 				throw new IllegalArgumentException(
 						"Endpoint path must not be empty.");
 			if (requireNonNull(jsonRpcMethod).isEmpty())
 				throw new IllegalArgumentException(
 						"JSON-RPC method must not be empty.");
+			this.endpointPath = endpointPath;
+			this.jsonRpcMethod = jsonRpcMethod;
+		}
+
+		/** @return registered endpoint-path declaration */
+		@NonNull
+		public String getEndpointPath() {
+			return this.endpointPath;
+		}
+
+		/** @return bounded JSON-RPC method dimension */
+		@NonNull
+		public String getJsonRpcMethod() {
+			return this.jsonRpcMethod;
+		}
+
+		/** @return whether both aggregate dimensions are equal */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (!(other instanceof EndpointMethodKey key))
+				return false;
+			return this.endpointPath.equals(key.endpointPath)
+					&& this.jsonRpcMethod.equals(key.jsonRpcMethod);
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return Objects.hash(this.endpointPath, this.jsonRpcMethod);
+		}
+
+		/** @return dimension-redacted diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "EndpointMethodKey{endpointPath=<redacted>, "
+					+ "jsonRpcMethod=<redacted>}";
 		}
 	}
 
 	/**
 	 * Key for completed-request and request-duration aggregates.
 	 *
-	 * @param endpointPath registered endpoint-path declaration
-	 * @param jsonRpcMethod bounded JSON-RPC method dimension
-	 * @param outcome fixed terminal request outcome
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	public record RequestOutcomeKey(@NonNull String endpointPath,
-			@NonNull String jsonRpcMethod,
-			@NonNull McpRequestOutcome outcome) {
+	public static final class RequestOutcomeKey {
+		@NonNull
+		private final String endpointPath;
+		@NonNull
+		private final String jsonRpcMethod;
+		@NonNull
+		private final McpRequestOutcome outcome;
+
 		/**
 		 * Creates a request-outcome aggregate key.
 		 *
 		 * @param endpointPath registered endpoint-path declaration
 		 * @param jsonRpcMethod bounded JSON-RPC method dimension
 		 * @param outcome fixed terminal request outcome
+		 * @return request-outcome aggregate key
 		 */
-		public RequestOutcomeKey {
+		@NonNull
+		public static RequestOutcomeKey fromDimensions(
+				@NonNull String endpointPath, @NonNull String jsonRpcMethod,
+				@NonNull McpRequestOutcome outcome) {
+			return new RequestOutcomeKey(endpointPath, jsonRpcMethod, outcome);
+		}
+
+		private RequestOutcomeKey(@NonNull String endpointPath,
+				@NonNull String jsonRpcMethod,
+				@NonNull McpRequestOutcome outcome) {
 			if (requireNonNull(endpointPath).isEmpty())
 				throw new IllegalArgumentException(
 						"Endpoint path must not be empty.");
 			if (requireNonNull(jsonRpcMethod).isEmpty())
 				throw new IllegalArgumentException(
 						"JSON-RPC method must not be empty.");
-			requireNonNull(outcome);
+			this.endpointPath = endpointPath;
+			this.jsonRpcMethod = jsonRpcMethod;
+			this.outcome = requireNonNull(outcome);
+		}
+
+		/** @return registered endpoint-path declaration */
+		@NonNull
+		public String getEndpointPath() {
+			return this.endpointPath;
+		}
+
+		/** @return bounded JSON-RPC method dimension */
+		@NonNull
+		public String getJsonRpcMethod() {
+			return this.jsonRpcMethod;
+		}
+
+		/** @return fixed terminal request outcome */
+		@NonNull
+		public McpRequestOutcome getOutcome() {
+			return this.outcome;
+		}
+
+		/** @return whether all aggregate dimensions are equal */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (!(other instanceof RequestOutcomeKey key))
+				return false;
+			return this.endpointPath.equals(key.endpointPath)
+					&& this.jsonRpcMethod.equals(key.jsonRpcMethod)
+					&& this.outcome == key.outcome;
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return Objects.hash(this.endpointPath, this.jsonRpcMethod,
+					this.outcome);
+		}
+
+		/** @return diagnostic rendering with application dimensions redacted */
+		@Override
+		@NonNull
+		public String toString() {
+			return "RequestOutcomeKey{endpointPath=<redacted>, "
+					+ "jsonRpcMethod=<redacted>, outcome=" + this.outcome + "}";
 		}
 	}
 
 	/**
 	 * Key for request-stream duration aggregates.
 	 *
-	 * @param endpointPath registered endpoint-path declaration
-	 * @param jsonRpcMethod bounded JSON-RPC method dimension
-	 * @param reason fixed request-stream termination reason
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	public record RequestStreamTerminationKey(@NonNull String endpointPath,
-			@NonNull String jsonRpcMethod,
-			@NonNull McpStreamTerminationReason reason) {
+	public static final class RequestStreamTerminationKey {
+		@NonNull
+		private final String endpointPath;
+		@NonNull
+		private final String jsonRpcMethod;
+		@NonNull
+		private final McpStreamTerminationReason reason;
+
 		/**
 		 * Creates a request-stream termination aggregate key.
 		 *
 		 * @param endpointPath registered endpoint-path declaration
 		 * @param jsonRpcMethod bounded JSON-RPC method dimension
 		 * @param reason fixed request-stream termination reason
+		 * @return request-stream termination aggregate key
 		 */
-		public RequestStreamTerminationKey {
+		@NonNull
+		public static RequestStreamTerminationKey fromDimensions(
+				@NonNull String endpointPath, @NonNull String jsonRpcMethod,
+				@NonNull McpStreamTerminationReason reason) {
+			return new RequestStreamTerminationKey(endpointPath, jsonRpcMethod,
+					reason);
+		}
+
+		private RequestStreamTerminationKey(@NonNull String endpointPath,
+				@NonNull String jsonRpcMethod,
+				@NonNull McpStreamTerminationReason reason) {
 			if (requireNonNull(endpointPath).isEmpty())
 				throw new IllegalArgumentException(
 						"Endpoint path must not be empty.");
 			if (requireNonNull(jsonRpcMethod).isEmpty())
 				throw new IllegalArgumentException(
 						"JSON-RPC method must not be empty.");
-			requireNonNull(reason);
+			this.endpointPath = endpointPath;
+			this.jsonRpcMethod = jsonRpcMethod;
+			this.reason = requireNonNull(reason);
+		}
+
+		/** @return registered endpoint-path declaration */
+		@NonNull
+		public String getEndpointPath() {
+			return this.endpointPath;
+		}
+
+		/** @return bounded JSON-RPC method dimension */
+		@NonNull
+		public String getJsonRpcMethod() {
+			return this.jsonRpcMethod;
+		}
+
+		/** @return fixed request-stream termination reason */
+		@NonNull
+		public McpStreamTerminationReason getReason() {
+			return this.reason;
+		}
+
+		/** @return whether all aggregate dimensions are equal */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (!(other instanceof RequestStreamTerminationKey key))
+				return false;
+			return this.endpointPath.equals(key.endpointPath)
+					&& this.jsonRpcMethod.equals(key.jsonRpcMethod)
+					&& this.reason == key.reason;
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return Objects.hash(this.endpointPath, this.jsonRpcMethod,
+					this.reason);
+		}
+
+		/** @return diagnostic rendering with application dimensions redacted */
+		@Override
+		@NonNull
+		public String toString() {
+			return "RequestStreamTerminationKey{endpointPath=<redacted>, "
+					+ "jsonRpcMethod=<redacted>, reason=" + this.reason + "}";
 		}
 	}
 
 	/**
 	 * Key for subscription-duration aggregates.
 	 *
-	 * @param endpointPath registered endpoint-path declaration
-	 * @param reason fixed subscription termination reason
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	public record SubscriptionTerminationKey(@NonNull String endpointPath,
-			@NonNull McpStreamTerminationReason reason) {
+	public static final class SubscriptionTerminationKey {
+		@NonNull
+		private final String endpointPath;
+		@NonNull
+		private final McpStreamTerminationReason reason;
+
 		/**
 		 * Creates a subscription termination aggregate key.
 		 *
 		 * @param endpointPath registered endpoint-path declaration
 		 * @param reason fixed subscription termination reason
+		 * @return subscription termination aggregate key
 		 */
-		public SubscriptionTerminationKey {
+		@NonNull
+		public static SubscriptionTerminationKey fromDimensions(
+				@NonNull String endpointPath,
+				@NonNull McpStreamTerminationReason reason) {
+			return new SubscriptionTerminationKey(endpointPath, reason);
+		}
+
+		private SubscriptionTerminationKey(@NonNull String endpointPath,
+				@NonNull McpStreamTerminationReason reason) {
 			if (requireNonNull(endpointPath).isEmpty())
 				throw new IllegalArgumentException(
 						"Endpoint path must not be empty.");
-			requireNonNull(reason);
+			this.endpointPath = endpointPath;
+			this.reason = requireNonNull(reason);
+		}
+
+		/** @return registered endpoint-path declaration */
+		@NonNull
+		public String getEndpointPath() {
+			return this.endpointPath;
+		}
+
+		/** @return fixed subscription termination reason */
+		@NonNull
+		public McpStreamTerminationReason getReason() {
+			return this.reason;
+		}
+
+		/** @return whether both aggregate dimensions are equal */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (!(other instanceof SubscriptionTerminationKey key))
+				return false;
+			return this.endpointPath.equals(key.endpointPath)
+					&& this.reason == key.reason;
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return Objects.hash(this.endpointPath, this.reason);
+		}
+
+		/** @return diagnostic rendering with the application dimension redacted */
+		@Override
+		@NonNull
+		public String toString() {
+			return "SubscriptionTerminationKey{endpointPath=<redacted>, reason="
+					+ this.reason + "}";
 		}
 	}
 

@@ -115,7 +115,7 @@ class McpLocalizationCatalogExtractionTests {
 				endpoint.getTools().get(0).getInputSchema().getDocument());
 		assertEquals("Input title", schemaProperty(endpoint, "query/text")
 				.find("title").map(McpJsonString.class::cast)
-				.map(McpJsonString::value).orElseThrow());
+				.map(McpJsonString::getValue).orElseThrow());
 		assertThrows(UnsupportedOperationException.class,
 				() -> texts.clear());
 		assertThrows(UnsupportedOperationException.class,
@@ -367,18 +367,12 @@ class McpLocalizationCatalogExtractionTests {
 
 	private static McpLocalizationContext localizationContext(
 			AtomicInteger localizationInvocations) {
-		return new McpLocalizationContext() {
-			@Override
-			public Locale getLocale() {
-				return Locale.ENGLISH;
-			}
-
-			@Override
-			public McpLocalizationResult localize(McpLocalizableText text) {
+		return McpLocalizationContext.withLocale(Locale.ENGLISH)
+				.localizer(text -> {
 				localizationInvocations.incrementAndGet();
 				return McpLocalizationResult.useDefaultText();
-			}
-		};
+			})
+				.build();
 	}
 
 	private static McpEndpoint wireEndpoint() {

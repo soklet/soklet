@@ -19,6 +19,7 @@ package com.soklet;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Modifier;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
@@ -80,13 +81,46 @@ public class McpBootstrapValueTests {
 				List.copyOf(object.getMembers().keySet()));
 		Assertions.assertThrows(UnsupportedOperationException.class,
 				() -> object.getMembers().put("fourth",
-						new McpJsonNumber(java.math.BigDecimal.valueOf(4))));
+						McpJsonNumber.fromValue(java.math.BigDecimal.valueOf(4))));
+	}
+
+	@Test
+	public void jsonScalarValueObjectsHaveIntentionalValueSemanticsAndRedactedText() {
+		String secret = "secret-application-data";
+		McpJsonString string = McpJsonString.fromValue(secret);
+		McpJsonString sameString = McpJsonString.fromValue(secret);
+		McpJsonBoolean bool = McpJsonBoolean.fromValue(true);
+		McpJsonBoolean sameBool = McpJsonBoolean.fromValue(true);
+		McpJsonNumber number = McpJsonNumber.fromValue(
+				java.math.BigDecimal.valueOf(42));
+		McpJsonNumber sameNumber = McpJsonNumber.fromValue(
+				java.math.BigDecimal.valueOf(42));
+
+		Assertions.assertEquals(secret, string.getValue());
+		Assertions.assertEquals(string, sameString);
+		Assertions.assertEquals(string.hashCode(), sameString.hashCode());
+		Assertions.assertEquals(Boolean.TRUE, bool.getValue());
+		Assertions.assertEquals(bool, sameBool);
+		Assertions.assertEquals(bool.hashCode(), sameBool.hashCode());
+		Assertions.assertEquals(java.math.BigDecimal.valueOf(42), number.getValue());
+		Assertions.assertEquals(number, sameNumber);
+		Assertions.assertEquals(number.hashCode(), sameNumber.hashCode());
+		Assertions.assertNotEquals(number, McpJsonNumber.fromValue(
+				new java.math.BigDecimal("42.0")));
+		Assertions.assertEquals("McpJsonString{value=<redacted>}", string.toString());
+		Assertions.assertEquals("McpJsonBoolean{value=<redacted>}", bool.toString());
+		Assertions.assertEquals("McpJsonNumber{value=<redacted>}", number.toString());
+		Assertions.assertFalse(string.toString().contains(secret));
 	}
 
 	@Test
 	public void jsonAndEndpointScalarInputsRejectNullReferences() {
 		Assertions.assertThrows(NullPointerException.class,
-				() -> new McpJsonBoolean(null));
+				() -> McpJsonString.fromValue(null));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpJsonBoolean.fromValue(null));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> McpJsonNumber.fromValue(null));
 		Assertions.assertThrows(NullPointerException.class,
 				() -> McpJsonArray.builder().add((Boolean) null));
 		Assertions.assertThrows(NullPointerException.class,
@@ -161,7 +195,10 @@ public class McpBootstrapValueTests {
 	}
 
 	@Test
-	public void resolverDefensivelyCopiesAndWithEndpointDoesNotMutateTheOriginal() {
+	public void endpointRegistryIsAnOwnedImmutableValue() {
+		Assertions.assertFalse(McpEndpointRegistry.class.isInterface());
+		Assertions.assertTrue(Modifier.isFinal(
+				McpEndpointRegistry.class.getModifiers()));
 		McpEndpoint catalog = endpoint("/catalog");
 		McpEndpoint inventory = endpoint("/inventory");
 		List<McpEndpoint> mutableEndpoints = new ArrayList<>(List.of(catalog));
@@ -179,7 +216,7 @@ public class McpBootstrapValueTests {
 	}
 
 	@Test
-	public void resolverRequiresEndpointsWithDistinctNormalizedPaths() {
+	public void endpointRegistryRequiresEndpointsWithDistinctNormalizedPaths() {
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> McpEndpointRegistry.fromEndpoints(List.of()));
 		Assertions.assertThrows(IllegalArgumentException.class,

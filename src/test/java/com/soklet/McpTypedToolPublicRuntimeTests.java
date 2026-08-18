@@ -187,7 +187,7 @@ public class McpTypedToolPublicRuntimeTests {
 					stages.add("handler:" + TOOL_NAME);
 					handlerInvocations.incrementAndGet();
 					observedRequest.set(request);
-					observedArguments.set(arguments.getArguments());
+					observedArguments.set(arguments.getConvertedArguments());
 					observedRawArguments.set(arguments.getRawArguments());
 					return new SearchResult(List.of(new SearchItem("a", 7)));
 				})
@@ -298,7 +298,7 @@ public class McpTypedToolPublicRuntimeTests {
 			Assertions.assertEquals(1, handlerInvocations.get());
 			Assertions.assertEquals(new SearchArguments(" exact ", List.of(2, 5)),
 					observedArguments.get());
-			Assertions.assertEquals(new McpJsonString(" exact "),
+			Assertions.assertEquals(McpJsonString.fromValue(" exact "),
 					observedRawArguments.get().find("query").orElseThrow());
 			McpJsonArray rawPageSizes = Assertions.assertInstanceOf(
 					McpJsonArray.class,

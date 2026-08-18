@@ -274,7 +274,7 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 						.orElseThrow().getValue()));
 		Assertions.assertTrue(productionRendering.contains(
 				productionDiagnostics.getTraceCorrelationConfigurationFingerprint()
-						.orElseThrow().value()));
+						.orElseThrow().getValue()));
 
 		String protectorIdentityCanary = "CUSTOM-PROTECTOR-IDENTITY-CANARY";
 		McpServer custom = serverBuilder("provider-redaction")

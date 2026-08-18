@@ -232,17 +232,9 @@ class McpLocalizationHandlerRuntimeTests {
 	}
 
 	private static McpLocalizationContext context(Locale locale) {
-		return new McpLocalizationContext() {
-			@Override
-			public Locale getLocale() {
-				return locale;
-			}
-
-			@Override
-			public McpLocalizationResult localize(McpLocalizableText text) {
-				return McpLocalizationResult.useDefaultText();
-			}
-		};
+		return McpLocalizationContext.withLocale(locale)
+				.localizer(text -> McpLocalizationResult.useDefaultText())
+				.build();
 	}
 
 	@FunctionalInterface

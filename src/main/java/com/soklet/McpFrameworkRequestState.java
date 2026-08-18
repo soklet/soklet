@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -26,25 +27,54 @@ import static java.util.Objects.requireNonNull;
  * Immutable application-defined JSON state whose wire representation is
  * protected by Soklet.
  *
- * @param value decrypted application-defined JSON value
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public record McpFrameworkRequestState(
-		@NonNull McpJsonValue value) implements McpRequestState {
+public final class McpFrameworkRequestState implements McpRequestState {
+	@NonNull
+	private final McpJsonValue value;
+
 	/**
-	 * Creates framework-protected request state.
+	 * Creates framework-protected request state from its JSON value.
 	 *
 	 * @param value decrypted application-defined JSON value
+	 * @return immutable framework-protected request state
 	 */
-	public McpFrameworkRequestState {
-		requireNonNull(value);
+	@NonNull
+	public static McpFrameworkRequestState fromValue(@NonNull McpJsonValue value) {
+		return new McpFrameworkRequestState(value);
+	}
+
+	private McpFrameworkRequestState(@NonNull McpJsonValue value) {
+		this.value = requireNonNull(value);
+	}
+
+	/** @return decrypted application-defined JSON value */
+	@NonNull
+	public McpJsonValue getValue() {
+		return this.value;
+	}
+
+	/** @return whether this object contains the same JSON value */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpFrameworkRequestState state))
+			return false;
+		return this.value.equals(state.value);
+	}
+
+	/** @return value-based hash code */
+	@Override
+	public int hashCode() {
+		return this.value.hashCode();
 	}
 
 	/** @return rendering that does not expose decrypted request state */
 	@Override
 	@NonNull
-	public final String toString() {
+	public String toString() {
 		return "McpFrameworkRequestState{value=<redacted>}";
 	}
 }

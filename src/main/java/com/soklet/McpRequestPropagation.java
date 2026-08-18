@@ -73,7 +73,7 @@ record McpRequestPropagation(
 		return metadata.find(key)
 				.filter(McpJsonString.class::isInstance)
 				.map(McpJsonString.class::cast)
-				.map(McpJsonString::value);
+				.map(McpJsonString::getValue);
 	}
 
 	@NonNull

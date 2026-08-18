@@ -322,14 +322,14 @@ public class McpFinalTagGoldenWireProductionTests {
 				.jsonArguments()
 				.handler((request, arguments, features) ->
 						McpInputRequiredResult.builder()
-								.inputRequest("form", McpInputRequest
-										.fromDeclaration(form, formParams))
-								.inputRequest("url", McpInputRequest
-										.fromDeclaration(url, urlParams))
-								.inputRequest("sampling", McpInputRequest
-										.fromDeclaration(sampling, samplingParams))
-								.inputRequest("roots", McpInputRequest
-										.fromDeclaration(roots,
+								.inputRequest("form", McpInputRequest.fromDeclaration(
+										form, formParams))
+								.inputRequest("url", McpInputRequest.fromDeclaration(
+										url, urlParams))
+								.inputRequest("sampling", McpInputRequest.fromDeclaration(
+										sampling, samplingParams))
+								.inputRequest("roots", McpInputRequest.fromDeclaration(
+										roots,
 												McpJsonObject.emptyInstance()))
 								.metadata(McpJsonObject.builder()
 										.put("fixture", "phase-5-input-required")
@@ -346,14 +346,14 @@ public class McpFinalTagGoldenWireProductionTests {
 									.find("approval").orElseThrow());
 					Assertions.assertEquals("accept", Assertions.assertInstanceOf(
 							McpJsonString.class,
-							response.find("action").orElseThrow()).value());
+							response.find("action").orElseThrow()).getValue());
 					McpJsonObject extension = Assertions.assertInstanceOf(
 							McpJsonObject.class, response
 									.find("com.example/responseExtension")
 									.orElseThrow());
 					Assertions.assertTrue(Assertions.assertInstanceOf(
 							McpJsonBoolean.class,
-							extension.find("preserved").orElseThrow()).value());
+							extension.find("preserved").orElseThrow()).getValue());
 					return McpCompleteResult.fromToolText(
 							"input responses accepted");
 				})
@@ -586,8 +586,8 @@ public class McpFinalTagGoldenWireProductionTests {
 						Assertions.assertTrue(
 								request.getInputResponses().asMap().isEmpty());
 						return McpInputRequiredResult.builder()
-								.inputRequest("approval", McpInputRequest
-										.fromDeclaration(form,
+								.inputRequest("approval", McpInputRequest.fromDeclaration(
+										form,
 												McpJsonObject.builder()
 														.put("message",
 																"Approve the protected-state golden exchange")
@@ -605,25 +605,25 @@ public class McpFinalTagGoldenWireProductionTests {
 							McpFrameworkRequestState.class,
 							request.getRequestState().orElseThrow());
 					McpJsonObject stateValue = Assertions.assertInstanceOf(
-							McpJsonObject.class, state.value());
+							McpJsonObject.class, state.getValue());
 					Assertions.assertEquals("awaiting-approval",
 							Assertions.assertInstanceOf(McpJsonString.class,
-									stateValue.find("phase").orElseThrow()).value());
+									stateValue.find("phase").orElseThrow()).getValue());
 					Assertions.assertEquals("phase-5-protected-state",
 							Assertions.assertInstanceOf(McpJsonString.class,
-									stateValue.find("fixture").orElseThrow()).value());
+									stateValue.find("fixture").orElseThrow()).getValue());
 					McpJsonObject approval = Assertions.assertInstanceOf(
 							McpJsonObject.class, request.getInputResponses()
 									.find("approval").orElseThrow());
 					Assertions.assertEquals("accept", Assertions.assertInstanceOf(
 							McpJsonString.class,
-							approval.find("action").orElseThrow()).value());
+							approval.find("action").orElseThrow()).getValue());
 					McpJsonObject content = Assertions.assertInstanceOf(
 							McpJsonObject.class,
 							approval.find("content").orElseThrow());
 					Assertions.assertEquals("approved",
 							Assertions.assertInstanceOf(McpJsonString.class,
-									content.find("answer").orElseThrow()).value());
+									content.find("answer").orElseThrow()).getValue());
 					return McpCompleteResult.fromToolText(
 							"protected request state accepted");
 				})

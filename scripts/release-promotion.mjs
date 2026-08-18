@@ -49,6 +49,8 @@ const MANIFEST_GATE_KEYS = Object.freeze([
   'artifactChecksum',
   'artifactIdentity',
   'commit',
+  'defaultArtifactIdentity',
+  'defaultArtifactSha256',
   'id',
   'kind',
   'reason',
@@ -432,7 +434,15 @@ export function validateCompletedReleaseEvidence(value, candidateCommit) {
     );
     requireExactKeys(
       gate.gate,
-      ['artifactChecksum', 'artifactIdentity', 'commit', 'id', 'repository'],
+      [
+        'artifactChecksum',
+        'artifactIdentity',
+        'commit',
+        'defaultArtifactIdentity',
+        'defaultArtifactSha256',
+        'id',
+        'repository',
+      ],
       `${gateId} gate pin`,
     );
     if (gate.formatVersion !== 1 || gate.candidateCommit !== candidateCommit
@@ -520,6 +530,8 @@ function validateReviewedReleaseManifest(value, manifestSha256, evidence) {
     if (gate.artifactChecksum !== evidencePin.artifactChecksum
         || gate.artifactIdentity !== evidencePin.artifactIdentity
         || gate.commit !== evidencePin.commit
+        || gate.defaultArtifactIdentity !== evidencePin.defaultArtifactIdentity
+        || gate.defaultArtifactSha256 !== evidencePin.defaultArtifactSha256
         || gate.repository !== evidencePin.repository) {
       fail(`Reviewed release manifest gate ${gateId} does not match release-validation evidence`);
     }

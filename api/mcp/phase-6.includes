@@ -1,6 +1,7 @@
 com.soklet.McpLocalizableText
 com.soklet.McpLocalizationCatalog
 com.soklet.McpLocalizationContext
+com.soklet.McpLocalizationContext$Builder
 com.soklet.McpLocalizationContextProvider
 com.soklet.McpLocalizationControl
 com.soklet.McpLocalizationFailurePolicy

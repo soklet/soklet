@@ -694,6 +694,14 @@ deliberately before exposing it remotely.
 Framework-owned catalog text - server, tool, prompt, resource, and schema
 titles and descriptions - can be localized per request through a
 library-neutral seam that keeps Soklet free of any translation dependency.
+`McpLocalizationContext` is a Soklet-owned final value built with
+`withLocale(...)`; applications provide a localization callback instead of a
+custom context implementation.
+The other public MCP value carriers follow the same style: final immutable
+classes, named factories or builders, private constructors, and conventional
+`get...` accessors. Sealed decision, localization, subscription, and metric
+families keep public nested variants for typed pattern matching, but creation
+is owned by factories on the sealed root.
 Omitting a localizer leaves wire output byte-identical. See
 [MCP localization](https://www.soklet.com/docs/mcp-localization).
 
@@ -715,9 +723,9 @@ enables an exactly-once finish-time `MCP_TRACE_CORRELATION` log event carrying
 the bounded pseudonymous token fields; the separate
 `logRawValidatedTraceIds(true)` opt-in may add only the validated lowercase MCP
 trace ID. Neither mode adds a trace value to metrics. The current snapshot has
-all 64 Phase 6 owners frozen and an empty provisional inventory, but it is not
+all 65 Phase 6 owners frozen and an empty provisional inventory, but it is not
 a release claim. Current local validation passes core clean verify at
-1,667/0/0/4 over 464 main and 193 test sources, both 39-row development
+1,671/0/0/4 over 464 main and 193 test sources, both 39-row development
 conformance paths, candidate localization, and the pinned TypeScript/Go
 snapshot harnesses. The checked-in fail-closed
 [release validator](release/README.md) still requires reviewed downstream pins
@@ -1381,7 +1389,7 @@ The configured numeric values are positive and stable before start and across
 stop/restart. Lifecycle status, bound address, configured bounds, handler
 counts, and the paired stream/subscription counts form one runtime-owned atomic
 tuple. The four security fields form a separate atomic tuple owned by the
-security controls. The resulting public record is immutable, but the two
+security controls. The resulting public diagnostics view is immutable, but the two
 tuples do not claim a shared global linearization point. Handler counts are
 nonnegative and bounded by their corresponding configuration, queued work
 implies all handler slots are occupied, and
@@ -1544,10 +1552,12 @@ and
 The thirteenth bounded Phase 6 vertical implements admitted-request lifecycle
 aggregation. The provisional `McpMetricsSnapshot` adds boxed, nonnegative
 `getActiveRequests()`, immutable `getRequests()` and
-`getRequestDurations()` maps keyed by the new public, thread-safe
-`RequestOutcomeKey(endpointPath, jsonRpcMethod, outcome)`, and matching builder
-methods. The key rejects nulls and empty routed strings but public construction
-does not validate registry membership. The current surface is 13 getters and
+`getRequestDurations()` maps keyed by a public, thread-safe final value created
+with
+`RequestOutcomeKey.fromDimensions(endpointPath, jsonRpcMethod, outcome)`, and
+matching builder methods. The key rejects nulls and empty routed strings but
+its public factory does not validate registry membership. Its dimensions use
+`getEndpointPath()`, `getJsonRpcMethod()`, and `getOutcome()`. The current surface is 13 getters and
 14 public builder methods including `build()`: nine boxed `Long` values and
 four immutable maps; completed counts and histograms are independent sparse
 maps.
@@ -2165,12 +2175,14 @@ A third unnumbered Phase 6 checkpoint was covered by
 `McpObservabilityPublicApiTests#metricSchemaHasExactFiniteNonTraceDimensions`
 and
 `McpRequestObservationPublicRuntimeTests#distinctTraceMetadataDoesNotCreateMetricDimensionsOrLeakIntoRendering`.
-It freezes exactly 23 event records, including 11 fieldless variants. The
-remaining components are limited to endpoint path, bounded method, fixed
-outcome, reason or protocol code, and nonnegative duration. Production emits
-registered endpoints, recognized methods or `<unrecognized>`, the fixed ten
-codes, and fixed enums; public constructors still permit arbitrary
-application-created nonempty endpoints/methods and non-null codes. At that
+It freezes exactly 23 public final event variants, including 11 fieldless
+variants. Conventional getters expose only endpoint path, bounded method,
+fixed outcome, reason or protocol code, and nonnegative duration. Production
+emits registered endpoints, recognized methods or `<unrecognized>`, the fixed
+ten codes, and fixed enums; named outer factories still permit arbitrary
+application-created nonempty endpoints/methods and non-null codes. Variant
+constructors are private, while the nested types remain public for typed
+pattern matching. At that
 checkpoint, the MCP snapshot was three boxed `Long` values and one immutable
 shutdown map. `DefaultMetricsCollector` aggregated only five handler variants
 and `ServerStopped`, ignoring and retaining none of the other 17 variants.
@@ -2254,7 +2266,7 @@ The later `MCP_TRACE_CORRELATION` implementation completes the bounded
 pseudonymous-token and separately opted-in raw-ID structured-log contract;
 operator retention, custom collectors/application telemetry, broader privacy
 and redaction review, and sustained cardinality/drain evidence remain open.
-Phase 6 review and freeze are complete for all 64 owners, and the provisional
+Phase 6 review and freeze are complete for all 65 owners, and the provisional
 inventory is empty.
 Here, the remaining fuzz work means scheduled/manual coverage-guided and
 sustained execution, not the completed registration and deterministic corpus
@@ -2277,24 +2289,33 @@ methods relative to V19, with no core inventory change.
 The twenty-first adds seven top-level public simulation types,
 `McpSimulationOptions.Builder`, and two abstract methods to `Simulator`, while
 leaving the metric/snapshot/canary inventories unchanged.
-Those Vxx counts remain historical. The current API inventory is 133/39/64
-Phase 4/5/6 owners (236 total), all three phases are frozen, and
+Those Vxx counts remain historical. The current API inventory is 133/39/65
+Phase 4/5/6 owners (237 total), all three phases are frozen, and
 `api/mcp/provisional.includes` is empty. The release-validation workflow and
 fail-closed evidence assembler are implemented, but no immutable candidate run
-is claimed. Final local evidence is green at core clean verify 1,667/0/0/4
+is claimed. Final local evidence is green at core clean verify 1,671/0/0/4
 over 464 main and 193 test sources,
-JDK 21 static-analysis `BUILD SUCCESS`, SpotBugs 0, Javadocs, API 564/236 with
-1,053/195/420 records, fuzz replay 139/139, smoke soak 6/6 plus verifier,
+JDK 21 static-analysis `BUILD SUCCESS`, SpotBugs 0, Javadocs, API 565/237 with
+1,047/191/422 records, fuzz replay 139/139, smoke soak 6/6 plus verifier,
 candidate localization, artifact-backed simulator 39/39, pinned live official
-CLI 39/39, site lint/build, and OpenTelemetry 36/36. TypeScript and Go are
-checksum-pinned, `READY`, and green against the local snapshot. Both servlet
-candidate matrices pass 158/158 locally, but their required version-property
-edits remain uncommitted. ToyStore's local 3.6 MCP migration passes 13/13,
-including five MCP tests, but its old manifest pin remains blocked until a
-reviewed commit and immutable-candidate/JDK-25 validation. Barebones compiles;
-its live proof remains `UNVERIFIED` because an unrelated Docker process owns
-port 8080, and its hook fails closed. The current `soklet-otel` and website
-migrations likewise are not represented by clean committed pins. Scheduled/
+CLI 39/39, the website's offline clean-install, lint, and 33-route SSG build,
+and OpenTelemetry 36/36. TypeScript and Go are checksum-pinned, `READY`, and
+green against the local snapshot. The six reviewed downstream change sets
+remain uncommitted local work. They are therefore unpublished and unpinned, so
+the manifest continues to carry its old public commits. All four servlet legs
+pass 158/158 locally: the default 3.1.1 and 3.6.0-SNAPSHOT legs for both javax
+and Jakarta. ToyStore's local 3.6 MCP migration passes 14/14, including six MCP
+tests. Its per-request credential proof accepts a valid request, then returns 401 for malformed,
+missing, expired, and wrong-audience credentials and 403 for an
+insufficient-scope credential; no prior request identity or authorization is
+inherited. Its old manifest pin remains blocked until its reviewed local changes
+are committed and published, the resulting commit is pinned, and the
+immutable-candidate/JDK-25 validation passes.
+Barebones compiles and its exact live probes pass locally on a reserved
+ephemeral IPv4 loopback port without disturbing the unrelated Docker listener
+on port 8080. The port is supplied
+through `SOKLET_BAREBONES_LOOPBACK_PORT`. Its source and validator changes
+remain uncommitted and unpinned, so its old public pin remains blocked. Scheduled/
 nightly and sustained history, fleet orchestration, public publication, release scans, and
 immutable candidate provenance remain open.
 

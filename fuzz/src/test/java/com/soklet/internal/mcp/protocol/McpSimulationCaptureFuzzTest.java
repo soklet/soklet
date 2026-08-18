@@ -772,7 +772,7 @@ public class McpSimulationCaptureFuzzTest {
 			com.soklet.McpJsonValue method = message.getMembers().get("method");
 			Assertions.assertEquals("notifications/fuzz",
 					Assertions.assertInstanceOf(
-							com.soklet.McpJsonString.class, method).value());
+							com.soklet.McpJsonString.class, method).getValue());
 		}
 	}
 

@@ -23,14 +23,11 @@ import org.junit.jupiter.api.Timeout;
 
 import java.lang.reflect.AnnotatedParameterizedType;
 import java.lang.reflect.AnnotatedType;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.RecordComponent;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -74,27 +71,24 @@ public class McpProgressAndCancelationMetricsAggregationTests {
 
 		Class<McpMetricsSnapshot.EndpointMethodKey> keyType =
 				McpMetricsSnapshot.EndpointMethodKey.class;
-		Assertions.assertTrue(keyType.isRecord());
+		Assertions.assertFalse(keyType.isRecord());
 		Assertions.assertTrue(Modifier.isPublic(keyType.getModifiers()));
 		Assertions.assertTrue(Modifier.isStatic(keyType.getModifiers()));
 		Assertions.assertTrue(Modifier.isFinal(keyType.getModifiers()));
-		RecordComponent[] components = keyType.getRecordComponents();
-		Assertions.assertEquals(List.of("endpointPath", "jsonRpcMethod"),
-				Arrays.stream(components).map(RecordComponent::getName).toList());
-		Assertions.assertEquals(List.of(String.class, String.class),
-				Arrays.stream(components).map(RecordComponent::getType).toList());
-		for (RecordComponent component : components) {
-			Assertions.assertTrue(component.getAnnotatedType()
-					.isAnnotationPresent(NonNull.class), component.toString());
-			Assertions.assertTrue(component.getAccessor().getAnnotatedReturnType()
-					.isAnnotationPresent(NonNull.class), component.toString());
-		}
-		Constructor<McpMetricsSnapshot.EndpointMethodKey> constructor =
-				keyType.getConstructor(String.class, String.class);
-		Assertions.assertTrue(Modifier.isPublic(constructor.getModifiers()));
-		for (AnnotatedType parameter : constructor.getAnnotatedParameterTypes())
+		Assertions.assertEquals(0, keyType.getConstructors().length,
+				"Metrics keys must not expose public constructors.");
+		Method factory = keyType.getMethod("fromDimensions", String.class,
+				String.class);
+		Assertions.assertTrue(Modifier.isPublic(factory.getModifiers()));
+		Assertions.assertTrue(Modifier.isStatic(factory.getModifiers()));
+		Assertions.assertEquals(keyType, factory.getReturnType());
+		Assertions.assertTrue(factory.getAnnotatedReturnType()
+				.isAnnotationPresent(NonNull.class));
+		for (AnnotatedType parameter : factory.getAnnotatedParameterTypes())
 			Assertions.assertTrue(parameter.isAnnotationPresent(NonNull.class),
 					parameter.toString());
+		assertNonNullGetter(keyType, "getEndpointPath", String.class);
+		assertNonNullGetter(keyType, "getJsonRpcMethod", String.class);
 
 		McpMetricsSnapshot empty = McpMetricsSnapshot.emptyInstance();
 		Assertions.assertSame(empty, McpMetricsSnapshot.emptyInstance());
@@ -105,6 +99,18 @@ public class McpProgressAndCancelationMetricsAggregationTests {
 				JSON_RPC_METHOD);
 		McpMetricsSnapshot.EndpointMethodKey applicationKey = key(
 				"/application-defined", "vendor.example/arbitrary");
+		McpMetricsSnapshot.EndpointMethodKey equalApplicationKey = key(
+				"/application-defined", "vendor.example/arbitrary");
+		Assertions.assertEquals("/application-defined",
+				applicationKey.getEndpointPath());
+		Assertions.assertEquals("vendor.example/arbitrary",
+				applicationKey.getJsonRpcMethod());
+		Assertions.assertEquals(applicationKey, equalApplicationKey);
+		Assertions.assertEquals(applicationKey.hashCode(),
+				equalApplicationKey.hashCode());
+		Assertions.assertNotEquals(applicationKey, routedKey);
+		Assertions.assertEquals("EndpointMethodKey{endpointPath=<redacted>, "
+				+ "jsonRpcMethod=<redacted>}", applicationKey.toString());
 		Map<McpMetricsSnapshot.EndpointMethodKey, Long> cancelationSource =
 				new LinkedHashMap<>();
 		cancelationSource.put(routedKey, 2L);
@@ -128,20 +134,20 @@ public class McpProgressAndCancelationMetricsAggregationTests {
 		Assertions.assertThrows(UnsupportedOperationException.class,
 				() -> snapshot.getProgressEmitted().put(applicationKey, 1L));
 		Assertions.assertEquals("vendor.example/arbitrary",
-				applicationKey.jsonRpcMethod(),
+				applicationKey.getJsonRpcMethod(),
 				"Public keys validate shape, not the runtime-only method vocabulary.");
 
 		Assertions.assertThrows(NullPointerException.class,
-				() -> new McpMetricsSnapshot.EndpointMethodKey(null,
+				() -> McpMetricsSnapshot.EndpointMethodKey.fromDimensions(null,
 						JSON_RPC_METHOD));
 		Assertions.assertThrows(NullPointerException.class,
-				() -> new McpMetricsSnapshot.EndpointMethodKey(ENDPOINT_PATH,
+				() -> McpMetricsSnapshot.EndpointMethodKey.fromDimensions(ENDPOINT_PATH,
 						null));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new McpMetricsSnapshot.EndpointMethodKey("",
+				() -> McpMetricsSnapshot.EndpointMethodKey.fromDimensions("",
 						JSON_RPC_METHOD));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new McpMetricsSnapshot.EndpointMethodKey(ENDPOINT_PATH,
+				() -> McpMetricsSnapshot.EndpointMethodKey.fromDimensions(ENDPOINT_PATH,
 						""));
 		Assertions.assertThrows(NullPointerException.class,
 				() -> McpMetricsSnapshot.builder().cancelationsSignaled(null));
@@ -172,14 +178,14 @@ public class McpProgressAndCancelationMetricsAggregationTests {
 		DefaultMetricsCollector progressDriven =
 				DefaultMetricsCollector.defaultInstance();
 		progressDriven.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.ProgressEmitted(primary.endpointPath(),
-						primary.jsonRpcMethod()));
+				McpMetricsEvent.progressEmitted(primary.getEndpointPath(),
+						primary.getJsonRpcMethod()));
 		progressDriven.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.ProgressEmitted(primary.endpointPath(),
-						primary.jsonRpcMethod()));
+				McpMetricsEvent.progressEmitted(primary.getEndpointPath(),
+						primary.getJsonRpcMethod()));
 		progressDriven.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.ProgressEmitted(secondary.endpointPath(),
-						secondary.jsonRpcMethod()));
+				McpMetricsEvent.progressEmitted(secondary.getEndpointPath(),
+						secondary.getJsonRpcMethod()));
 		McpMetricsSnapshot progressSnapshot = progressDriven.snapshot()
 				.orElseThrow().getMcpMetrics();
 		Assertions.assertTrue(progressSnapshot.getCancelationsSignaled().isEmpty());
@@ -194,8 +200,8 @@ public class McpProgressAndCancelationMetricsAggregationTests {
 		DefaultMetricsCollector cancelationDriven =
 				DefaultMetricsCollector.defaultInstance();
 		cancelationDriven.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.CancelationSignaled(primary.endpointPath(),
-						primary.jsonRpcMethod()));
+				McpMetricsEvent.cancelationSignaled(primary.getEndpointPath(),
+						primary.getJsonRpcMethod()));
 		McpMetricsSnapshot cancelationSnapshot = cancelationDriven.snapshot()
 				.orElseThrow().getMcpMetrics();
 		Assertions.assertEquals(Map.of(primary, 1L),
@@ -208,11 +214,11 @@ public class McpProgressAndCancelationMetricsAggregationTests {
 		assertSparseFamilyAbsent(cancelationText, PROGRESS_METRIC_NAME);
 
 		cancelationDriven.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.ProgressEmitted(primary.endpointPath(),
-						primary.jsonRpcMethod()));
+				McpMetricsEvent.progressEmitted(primary.getEndpointPath(),
+						primary.getJsonRpcMethod()));
 		cancelationDriven.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.ProgressEmitted(primary.endpointPath(),
-						primary.jsonRpcMethod()));
+				McpMetricsEvent.progressEmitted(primary.getEndpointPath(),
+						primary.getJsonRpcMethod()));
 		Set<SampleProjection> observed = ConcurrentHashMap.newKeySet();
 		String selected = cancelationDriven.snapshotText(
 				MetricsCollector.SnapshotTextOptions.withMetricsFormat(
@@ -266,12 +272,12 @@ public class McpProgressAndCancelationMetricsAggregationTests {
 		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();
 		McpMetricsSnapshot.EndpointMethodKey key = key(ENDPOINT_PATH,
 				JSON_RPC_METHOD);
-		collector.didRecordMcpMetricsEvent(new McpMetricsEvent.ProgressEmitted(
-				key.endpointPath(), key.jsonRpcMethod()));
-		collector.didRecordMcpMetricsEvent(new McpMetricsEvent.ProgressEmitted(
-				key.endpointPath(), key.jsonRpcMethod()));
-		collector.didRecordMcpMetricsEvent(new McpMetricsEvent.CancelationSignaled(
-				key.endpointPath(), key.jsonRpcMethod()));
+		collector.didRecordMcpMetricsEvent(McpMetricsEvent.progressEmitted(
+				key.getEndpointPath(), key.getJsonRpcMethod()));
+		collector.didRecordMcpMetricsEvent(McpMetricsEvent.progressEmitted(
+				key.getEndpointPath(), key.getJsonRpcMethod()));
+		collector.didRecordMcpMetricsEvent(McpMetricsEvent.cancelationSignaled(
+				key.getEndpointPath(), key.getJsonRpcMethod()));
 		McpMetricsSnapshot retained = collector.snapshot().orElseThrow()
 				.getMcpMetrics();
 		Assertions.assertEquals(Map.of(key, 1L),
@@ -279,10 +285,10 @@ public class McpProgressAndCancelationMetricsAggregationTests {
 		Assertions.assertEquals(Map.of(key, 2L), retained.getProgressEmitted(),
 				"Progress and cancelation are independent counters, not complements.");
 
-		collector.didRecordMcpMetricsEvent(new McpMetricsEvent.ProgressEmitted(
-				key.endpointPath(), key.jsonRpcMethod()));
-		collector.didRecordMcpMetricsEvent(new McpMetricsEvent.CancelationSignaled(
-				key.endpointPath(), key.jsonRpcMethod()));
+		collector.didRecordMcpMetricsEvent(McpMetricsEvent.progressEmitted(
+				key.getEndpointPath(), key.getJsonRpcMethod()));
+		collector.didRecordMcpMetricsEvent(McpMetricsEvent.cancelationSignaled(
+				key.getEndpointPath(), key.getJsonRpcMethod()));
 		collector.reset();
 		Assertions.assertSame(McpMetricsSnapshot.emptyInstance(),
 				collector.snapshot().orElseThrow().getMcpMetrics());
@@ -313,14 +319,14 @@ public class McpProgressAndCancelationMetricsAggregationTests {
 					start.await();
 					for (int round = 0; round < rounds; ++round) {
 						collector.didRecordMcpMetricsEvent(
-								new McpMetricsEvent.ProgressEmitted(
-										key.endpointPath(), key.jsonRpcMethod()));
+								McpMetricsEvent.progressEmitted(
+										key.getEndpointPath(), key.getJsonRpcMethod()));
 						collector.didRecordMcpMetricsEvent(
-								new McpMetricsEvent.ProgressEmitted(
-										key.endpointPath(), key.jsonRpcMethod()));
+								McpMetricsEvent.progressEmitted(
+										key.getEndpointPath(), key.getJsonRpcMethod()));
 						collector.didRecordMcpMetricsEvent(
-								new McpMetricsEvent.CancelationSignaled(
-										key.endpointPath(), key.jsonRpcMethod()));
+								McpMetricsEvent.cancelationSignaled(
+										key.getEndpointPath(), key.getJsonRpcMethod()));
 					}
 					return null;
 				}));
@@ -348,10 +354,10 @@ public class McpProgressAndCancelationMetricsAggregationTests {
 		Assertions.assertEquals(expectedProgress, retained.getProgressEmitted());
 
 		McpMetricsSnapshot.EndpointMethodKey first = keys.get(0);
-		collector.didRecordMcpMetricsEvent(new McpMetricsEvent.ProgressEmitted(
-				first.endpointPath(), first.jsonRpcMethod()));
-		collector.didRecordMcpMetricsEvent(new McpMetricsEvent.CancelationSignaled(
-				first.endpointPath(), first.jsonRpcMethod()));
+		collector.didRecordMcpMetricsEvent(McpMetricsEvent.progressEmitted(
+				first.getEndpointPath(), first.getJsonRpcMethod()));
+		collector.didRecordMcpMetricsEvent(McpMetricsEvent.cancelationSignaled(
+				first.getEndpointPath(), first.getJsonRpcMethod()));
 		collector.reset();
 		Assertions.assertEquals(expectedCancelations,
 				retained.getCancelationsSignaled());
@@ -380,6 +386,18 @@ public class McpProgressAndCancelationMetricsAggregationTests {
 				.isAnnotationPresent(NonNull.class));
 		assertEndpointMethodCountMapType(builder.getGenericParameterTypes()[0],
 				builder.getAnnotatedParameterTypes()[0]);
+	}
+
+	private static void assertNonNullGetter(@NonNull Class<?> declaringType,
+			@NonNull String name, @NonNull Class<?> returnType)
+			throws Exception {
+		Method getter = requireNonNull(declaringType).getMethod(
+				requireNonNull(name));
+		Assertions.assertTrue(Modifier.isPublic(getter.getModifiers()));
+		Assertions.assertEquals(requireNonNull(returnType), getter.getReturnType());
+		Assertions.assertEquals(0, getter.getParameterCount());
+		Assertions.assertTrue(getter.getAnnotatedReturnType()
+				.isAnnotationPresent(NonNull.class));
 	}
 
 	private static void assertEndpointMethodCountMapType(
@@ -456,20 +474,20 @@ public class McpProgressAndCancelationMetricsAggregationTests {
 	@NonNull
 	private static Map<@NonNull String, @NonNull String> labels(
 			McpMetricsSnapshot.@NonNull EndpointMethodKey key) {
-		return Map.of("endpoint", requireNonNull(key).endpointPath(), "method",
-				key.jsonRpcMethod());
+		return Map.of("endpoint", requireNonNull(key).getEndpointPath(), "method",
+				key.getJsonRpcMethod());
 	}
 
 	@NonNull
 	private static String encodedLabels(
 			McpMetricsSnapshot.@NonNull EndpointMethodKey key) {
-		return "{endpoint=\"" + requireNonNull(key).endpointPath()
-				+ "\",method=\"" + key.jsonRpcMethod() + "\"}";
+		return "{endpoint=\"" + requireNonNull(key).getEndpointPath()
+				+ "\",method=\"" + key.getJsonRpcMethod() + "\"}";
 	}
 
 	private static McpMetricsSnapshot.@NonNull EndpointMethodKey key(
 			@NonNull String endpointPath, @NonNull String jsonRpcMethod) {
-		return new McpMetricsSnapshot.EndpointMethodKey(
+		return McpMetricsSnapshot.EndpointMethodKey.fromDimensions(
 				requireNonNull(endpointPath), requireNonNull(jsonRpcMethod));
 	}
 

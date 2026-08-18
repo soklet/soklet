@@ -171,7 +171,7 @@ final class McpLocalizationRenderer {
 			String replacementText;
 
 			if (result instanceof McpLocalizationResult.Localized localized) {
-				replacementText = localized.text();
+				replacementText = localized.getText();
 			} else if (result instanceof McpLocalizationResult.UseDefaultText) {
 				continue;
 			} else {

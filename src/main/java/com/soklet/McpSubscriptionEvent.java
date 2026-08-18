@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
@@ -41,7 +42,7 @@ public sealed interface McpSubscriptionEvent
 	 */
 	@NonNull
 	static ResourcesListChanged resourcesListChanged() {
-		return new ResourcesListChanged();
+		return ResourcesListChanged.INSTANCE;
 	}
 
 	/**
@@ -64,19 +65,46 @@ public sealed interface McpSubscriptionEvent
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record ResourcesListChanged() implements McpSubscriptionEvent {
+	public final class ResourcesListChanged implements McpSubscriptionEvent {
+		@NonNull
+		private static final ResourcesListChanged INSTANCE =
+				new ResourcesListChanged();
+
+		private ResourcesListChanged() {
+		}
+
+		/** @return whether the other value is also a list-changed event */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			return other instanceof ResourcesListChanged;
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return 0;
+		}
+
+		/** @return safe diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "ResourcesListChanged{}";
+		}
 	}
 
 	/**
-	 * Signals that the representation at one resource URI changed.
+	 * Signals that the representation at one absolute normalized resource URI
+	 * in ASCII wire form changed.
 	 *
-	 * @param resourceUri absolute normalized changed-resource URI in ASCII wire
-	 *                    form
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record ResourceUpdated(@NonNull URI resourceUri)
+	public final class ResourceUpdated
 			implements McpSubscriptionEvent {
+		@NonNull
+		private final URI resourceUri;
+
 		/**
 		 * Validates this resource-updated event.
 		 *
@@ -84,9 +112,31 @@ public sealed interface McpSubscriptionEvent
 		 * @throws IllegalArgumentException if the URI is relative, not normalized,
 		 *                                  or not in ASCII wire form
 		 */
-		public ResourceUpdated {
-			resourceUri = McpResourceValueSupport.requireAbsoluteNormalizedUri(
+		private ResourceUpdated(@NonNull URI resourceUri) {
+			this.resourceUri = McpResourceValueSupport.requireAbsoluteNormalizedUri(
 					resourceUri);
+		}
+
+		/** @return absolute normalized changed-resource URI in ASCII wire form */
+		@NonNull
+		public URI getResourceUri() {
+			return this.resourceUri;
+		}
+
+		/** @return whether this event identifies the same changed resource URI */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (!(other instanceof ResourceUpdated updated))
+				return false;
+			return this.resourceUri.equals(updated.resourceUri);
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return this.resourceUri.hashCode();
 		}
 
 		/** @return rendering that does not expose the resource URI */

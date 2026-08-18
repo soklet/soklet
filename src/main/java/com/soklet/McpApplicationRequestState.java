@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -26,29 +27,58 @@ import static java.util.Objects.requireNonNull;
  * Immutable opaque request state whose protection contract is entirely
  * application-owned.
  *
- * @param value nonempty opaque state value
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public record McpApplicationRequestState(
-		@NonNull String value) implements McpRequestState {
+public final class McpApplicationRequestState implements McpRequestState {
+	@NonNull
+	private final String value;
+
 	/**
-	 * Creates application-protected request state.
+	 * Creates application-protected request state from its opaque value.
 	 *
 	 * @param value nonempty opaque state value
+	 * @return immutable application-protected request state
 	 * @throws IllegalArgumentException if {@code value} is empty
 	 */
-	public McpApplicationRequestState {
-		requireNonNull(value);
+	@NonNull
+	public static McpApplicationRequestState fromValue(@NonNull String value) {
+		return new McpApplicationRequestState(value);
+	}
+
+	private McpApplicationRequestState(@NonNull String value) {
+		this.value = requireNonNull(value);
 		if (value.isEmpty())
 			throw new IllegalArgumentException(
 					"Application request state must not be empty.");
 	}
 
+	/** @return nonempty opaque state value */
+	@NonNull
+	public String getValue() {
+		return this.value;
+	}
+
+	/** @return whether this object contains the same opaque state value */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpApplicationRequestState state))
+			return false;
+		return this.value.equals(state.value);
+	}
+
+	/** @return value-based hash code */
+	@Override
+	public int hashCode() {
+		return this.value.hashCode();
+	}
+
 	/** @return rendering that does not expose opaque request state */
 	@Override
 	@NonNull
-	public final String toString() {
+	public String toString() {
 		return "McpApplicationRequestState{value=<redacted>}";
 	}
 }

@@ -299,8 +299,8 @@ public class McpInputResponsesPublicRuntimeTests {
 						Assertions.assertTrue(request.getInputResponses()
 								.find("wrong-key").isPresent());
 						return McpInputRequiredResult.builder()
-								.inputRequest("approval", McpInputRequest
-										.fromDeclaration(form, params))
+								.inputRequest("approval", McpInputRequest.fromDeclaration(
+										form, params))
 								.build();
 					}
 					Assertions.assertTrue(request.getInputResponses()
@@ -464,7 +464,7 @@ public class McpInputResponsesPublicRuntimeTests {
 				responses.find("sample").orElseThrow());
 		Assertions.assertEquals("assistant", string(sample, "role"));
 		Assertions.assertEquals("fixture-model", string(sample, "model"));
-		Assertions.assertEquals(new McpJsonBoolean(true),
+		Assertions.assertEquals(McpJsonBoolean.fromValue(true),
 				sample.find("com.example/sampleExtension").orElseThrow());
 		McpJsonObject sampleContent = object(sample, "content");
 		Assertions.assertEquals("text", string(sampleContent, "type"));
@@ -498,7 +498,7 @@ public class McpInputResponsesPublicRuntimeTests {
 	private static String string(@NonNull McpJsonObject parent,
 			@NonNull String name) {
 		return Assertions.assertInstanceOf(McpJsonString.class,
-				parent.find(name).orElseThrow()).value();
+				parent.find(name).orElseThrow()).getValue();
 	}
 
 	private static McpEndpoint.@NonNull Builder endpointBuilder() {

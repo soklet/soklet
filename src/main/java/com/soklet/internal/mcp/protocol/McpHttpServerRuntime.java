@@ -2646,7 +2646,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			String protectedState = suppliedRequestState.orElseThrow();
 			if (requestStateMode == McpRequestStateMode.APPLICATION_PROTECTED) {
 				requestState = Optional.of(
-						new McpApplicationRequestState(protectedState));
+						McpApplicationRequestState.fromValue(protectedState));
 			} else if (requestStateMode
 					== McpRequestStateMode.FRAMEWORK_PROTECTED) {
 				McpFrameworkRequestStateRuntime.OpenedState openedState;
@@ -2663,7 +2663,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				} catch (Throwable throwable) {
 					return policyHookInternalError(mappedRequest.id(), corsHeaders);
 				}
-				requestState = Optional.of(new McpFrameworkRequestState(
+				requestState = Optional.of(McpFrameworkRequestState.fromValue(
 						McpServerRuntimeBridge.toPublicRequestStateValue(
 								openedState.state())));
 				frameworkRequestStateContinuation = Optional.of(

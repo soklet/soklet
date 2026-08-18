@@ -87,7 +87,7 @@ public class McpRequestAdmissionMetricsAggregationTests {
 		Assertions.assertFalse(prometheus(acceptedDriven).contains(
 				"soklet_mcp_requests_"));
 		acceptedDriven.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.RequestAccepted());
+				McpMetricsEvent.requestAccepted());
 		assertAdmissionSnapshot(acceptedDriven, 1L, 0L);
 		assertAdmissionSamples(prometheus(acceptedDriven), 1L, 0L);
 		acceptedDriven.reset();
@@ -98,7 +98,7 @@ public class McpRequestAdmissionMetricsAggregationTests {
 		DefaultMetricsCollector rejectedDriven =
 				DefaultMetricsCollector.defaultInstance();
 		rejectedDriven.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.RequestRejected());
+				McpMetricsEvent.requestRejected());
 		assertAdmissionSnapshot(rejectedDriven, 0L, 1L);
 		assertAdmissionSamples(prometheus(rejectedDriven), 0L, 1L);
 
@@ -106,11 +106,11 @@ public class McpRequestAdmissionMetricsAggregationTests {
 		assertAdmissionSnapshot(collector, 0L, 0L);
 		assertAdmissionSamples(prometheus(collector), 0L, 0L);
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.RequestAccepted());
+				McpMetricsEvent.requestAccepted());
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.RequestAccepted());
+				McpMetricsEvent.requestAccepted());
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.RequestRejected());
+				McpMetricsEvent.requestRejected());
 
 		McpMetricsSnapshot retained = collector.snapshot().orElseThrow()
 				.getMcpMetrics();
@@ -178,9 +178,9 @@ public class McpRequestAdmissionMetricsAggregationTests {
 		Assertions.assertEquals(1, occurrences(openMetrics, "# EOF\n"));
 
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.RequestAccepted());
+				McpMetricsEvent.requestAccepted());
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.RequestRejected());
+				McpMetricsEvent.requestRejected());
 		Assertions.assertEquals(2L, retained.getRequestsAccepted());
 		Assertions.assertEquals(1L, retained.getRequestsRejected());
 		assertAdmissionSnapshot(collector, 3L, 2L);
@@ -209,11 +209,11 @@ public class McpRequestAdmissionMetricsAggregationTests {
 					start.await();
 					for (int round = 0; round < rounds; ++round) {
 						collector.didRecordMcpMetricsEvent(
-								new McpMetricsEvent.RequestAccepted());
+								McpMetricsEvent.requestAccepted());
 						collector.didRecordMcpMetricsEvent(
-								new McpMetricsEvent.RequestAccepted());
+								McpMetricsEvent.requestAccepted());
 						collector.didRecordMcpMetricsEvent(
-								new McpMetricsEvent.RequestRejected());
+								McpMetricsEvent.requestRejected());
 					}
 					return null;
 				}));
@@ -235,9 +235,9 @@ public class McpRequestAdmissionMetricsAggregationTests {
 		Assertions.assertEquals(expectedRejected,
 				retained.getRequestsRejected());
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.RequestAccepted());
+				McpMetricsEvent.requestAccepted());
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.RequestRejected());
+				McpMetricsEvent.requestRejected());
 		collector.reset();
 		Assertions.assertEquals(expectedAccepted,
 				retained.getRequestsAccepted());

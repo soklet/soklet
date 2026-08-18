@@ -253,17 +253,9 @@ class McpLocalizationSubscriptionRuntimeTests {
 	private static McpLocalizationContext context(
 			java.util.function.Function<McpLocalizableText,
 					McpLocalizationResult> provider) {
-		return new McpLocalizationContext() {
-			@Override
-			public Locale getLocale() {
-				return Locale.FRENCH;
-			}
-
-			@Override
-			public McpLocalizationResult localize(McpLocalizableText text) {
-				return provider.apply(text);
-			}
-		};
+		return McpLocalizationContext.withLocale(Locale.FRENCH)
+				.localizer(provider)
+				.build();
 	}
 
 	private static Request subscriptionRequest(String id) {

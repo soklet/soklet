@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
@@ -31,9 +32,9 @@ import static java.util.Objects.requireNonNull;
  * optional fields. Each event exposes only the dimensions meaningful for its
  * transition. Framework-produced endpoint paths are finite registered
  * declarations, and framework-produced method values are recognized names or
- * {@link #UNRECOGNIZED_JSON_RPC_METHOD}. Public event constructors enforce
- * only the documented value shape; applications that construct events
- * directly own the confidentiality and cardinality of those values. No raw
+ * {@link #UNRECOGNIZED_JSON_RPC_METHOD}. Public event factories enforce only
+ * the documented value shape; applications construct events through these
+ * factories and own the confidentiality and cardinality of supplied values. No raw
  * unrecognized method, operation name, resource URI, principal, header, trace
  * data, argument, or result is a framework-produced built-in metric dimension.
  *
@@ -71,13 +72,263 @@ public sealed interface McpMetricsEvent permits
 	@NonNull
 	String UNRECOGNIZED_JSON_RPC_METHOD = "<unrecognized>";
 
+	/** @return event indicating that a listener generation started */
+	@NonNull
+	static ServerStarted serverStarted() {
+		return ServerStarted.INSTANCE;
+	}
+
+	/** @return event indicating that a TCP connection was accepted */
+	@NonNull
+	static ConnectionAccepted connectionAccepted() {
+		return ConnectionAccepted.INSTANCE;
+	}
+
+	/** @return event indicating that a TCP connection was rejected */
+	@NonNull
+	static ConnectionRejected connectionRejected() {
+		return ConnectionRejected.INSTANCE;
+	}
+
+	/** @return event indicating that an HTTP request was accepted */
+	@NonNull
+	static RequestAccepted requestAccepted() {
+		return RequestAccepted.INSTANCE;
+	}
+
+	/** @return event indicating that a request was rejected */
+	@NonNull
+	static RequestRejected requestRejected() {
+		return RequestRejected.INSTANCE;
+	}
+
+	/**
+	 * Creates an event indicating that an admitted semantic request started.
+	 *
+	 * @param endpointPath finite registered endpoint-path declaration
+	 * @param jsonRpcMethod bounded JSON-RPC method dimension
+	 * @return request-started event
+	 */
+	@NonNull
+	static RequestStarted requestStarted(@NonNull String endpointPath,
+			@NonNull String jsonRpcMethod) {
+		return new RequestStarted(endpointPath, jsonRpcMethod);
+	}
+
+	/**
+	 * Creates an event indicating that an admitted semantic request finished.
+	 *
+	 * @param endpointPath finite registered endpoint-path declaration
+	 * @param jsonRpcMethod bounded JSON-RPC method dimension
+	 * @param outcome fixed terminal outcome
+	 * @param duration nonnegative request duration
+	 * @return request-finished event
+	 */
+	@NonNull
+	static RequestFinished requestFinished(@NonNull String endpointPath,
+			@NonNull String jsonRpcMethod, @NonNull McpRequestOutcome outcome,
+			@NonNull Duration duration) {
+		return new RequestFinished(endpointPath, jsonRpcMethod, outcome,
+				duration);
+	}
+
+	/**
+	 * Creates an event indicating that a request response stream opened.
+	 *
+	 * @param endpointPath finite registered endpoint-path declaration
+	 * @param jsonRpcMethod bounded JSON-RPC method dimension
+	 * @return request-stream-opened event
+	 */
+	@NonNull
+	static RequestStreamOpened requestStreamOpened(
+			@NonNull String endpointPath, @NonNull String jsonRpcMethod) {
+		return new RequestStreamOpened(endpointPath, jsonRpcMethod);
+	}
+
+	/**
+	 * Creates an event indicating that a request response stream closed.
+	 *
+	 * @param endpointPath finite registered endpoint-path declaration
+	 * @param jsonRpcMethod bounded JSON-RPC method dimension
+	 * @param reason fixed stream termination reason
+	 * @param duration nonnegative stream duration
+	 * @return request-stream-closed event
+	 */
+	@NonNull
+	static RequestStreamClosed requestStreamClosed(
+			@NonNull String endpointPath, @NonNull String jsonRpcMethod,
+			@NonNull McpStreamTerminationReason reason,
+			@NonNull Duration duration) {
+		return new RequestStreamClosed(endpointPath, jsonRpcMethod, reason,
+				duration);
+	}
+
+	/**
+	 * Creates an event indicating that a resource subscription became active.
+	 *
+	 * @param endpointPath finite registered endpoint-path declaration
+	 * @return subscription-opened event
+	 */
+	@NonNull
+	static SubscriptionOpened subscriptionOpened(@NonNull String endpointPath) {
+		return new SubscriptionOpened(endpointPath);
+	}
+
+	/**
+	 * Creates an event indicating that a resource subscription terminated.
+	 *
+	 * @param endpointPath finite registered endpoint-path declaration
+	 * @param reason fixed stream termination reason
+	 * @param duration nonnegative subscription duration
+	 * @return subscription-closed event
+	 */
+	@NonNull
+	static SubscriptionClosed subscriptionClosed(@NonNull String endpointPath,
+			@NonNull McpStreamTerminationReason reason,
+			@NonNull Duration duration) {
+		return new SubscriptionClosed(endpointPath, reason, duration);
+	}
+
+	/**
+	 * Creates an event indicating that cooperative cancelation was signaled.
+	 *
+	 * @param endpointPath finite registered endpoint-path declaration
+	 * @param jsonRpcMethod bounded JSON-RPC method dimension
+	 * @return cancelation-signaled event
+	 */
+	@NonNull
+	static CancelationSignaled cancelationSignaled(
+			@NonNull String endpointPath, @NonNull String jsonRpcMethod) {
+		return new CancelationSignaled(endpointPath, jsonRpcMethod);
+	}
+
+	/**
+	 * Creates an event indicating that a progress notification was emitted.
+	 *
+	 * @param endpointPath finite registered endpoint-path declaration
+	 * @param jsonRpcMethod bounded JSON-RPC method dimension
+	 * @return progress-emitted event
+	 */
+	@NonNull
+	static ProgressEmitted progressEmitted(@NonNull String endpointPath,
+			@NonNull String jsonRpcMethod) {
+		return new ProgressEmitted(endpointPath, jsonRpcMethod);
+	}
+
+	/** @return event indicating that a keep-alive was emitted */
+	@NonNull
+	static KeepAliveEmitted keepAliveEmitted() {
+		return KeepAliveEmitted.INSTANCE;
+	}
+
+	/**
+	 * Creates an event indicating that a fixed protocol error was produced.
+	 *
+	 * @param code fixed JSON-RPC error code
+	 * @return protocol-error event
+	 */
+	@NonNull
+	static ProtocolError protocolError(@NonNull Integer code) {
+		return new ProtocolError(code);
+	}
+
+	/**
+	 * Creates an event indicating that an unknown mirrored header was counted.
+	 *
+	 * @param endpointPath finite registered endpoint-path declaration
+	 * @param jsonRpcMethod bounded JSON-RPC method dimension
+	 * @return unknown-mirrored-header event
+	 */
+	@NonNull
+	static UnknownMirroredHeader unknownMirroredHeader(
+			@NonNull String endpointPath, @NonNull String jsonRpcMethod) {
+		return new UnknownMirroredHeader(endpointPath, jsonRpcMethod);
+	}
+
+	/** @return event indicating that handler execution started */
+	@NonNull
+	static HandlerExecutionStarted handlerExecutionStarted() {
+		return HandlerExecutionStarted.INSTANCE;
+	}
+
+	/** @return event indicating that handler execution finished */
+	@NonNull
+	static HandlerExecutionFinished handlerExecutionFinished() {
+		return HandlerExecutionFinished.INSTANCE;
+	}
+
+	/** @return event indicating that a handler request entered the queue */
+	@NonNull
+	static HandlerQueued handlerQueued() {
+		return HandlerQueued.INSTANCE;
+	}
+
+	/** @return event indicating that a handler request left the queue */
+	@NonNull
+	static HandlerDequeued handlerDequeued() {
+		return HandlerDequeued.INSTANCE;
+	}
+
+	/** @return event indicating that handler dispatch was rejected */
+	@NonNull
+	static HandlerCapacityRejected handlerCapacityRejected() {
+		return HandlerCapacityRejected.INSTANCE;
+	}
+
+	/**
+	 * Creates an event indicating that the transport recorded a failure.
+	 *
+	 * @param reason fixed low-level transport failure reason
+	 * @return transport-failure event
+	 */
+	@NonNull
+	static TransportFailure transportFailure(
+			MetricsCollector.@NonNull TransportFailureReason reason) {
+		return new TransportFailure(reason);
+	}
+
+	/**
+	 * Creates an event indicating that a real listener stop completed.
+	 *
+	 * @param outcome fixed listener shutdown outcome
+	 * @return server-stopped event
+	 */
+	@NonNull
+	static ServerStopped serverStopped(@NonNull McpShutdownOutcome outcome) {
+		return new ServerStopped(outcome);
+	}
+
 	/**
 	 * A listener generation started successfully.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record ServerStarted() implements McpMetricsEvent {
+	public final class ServerStarted implements McpMetricsEvent {
+		@NonNull
+		private static final ServerStarted INSTANCE = new ServerStarted();
+
+		private ServerStarted() {
+		}
+
+		/** @return whether this object is another server-started event */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			return other != null && getClass() == other.getClass();
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return 0;
+		}
+
+		/** @return diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "ServerStarted{}";
+		}
 	}
 
 	/**
@@ -86,7 +337,32 @@ public sealed interface McpMetricsEvent permits
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record ConnectionAccepted() implements McpMetricsEvent {
+	public final class ConnectionAccepted implements McpMetricsEvent {
+		@NonNull
+		private static final ConnectionAccepted INSTANCE =
+				new ConnectionAccepted();
+
+		private ConnectionAccepted() {
+		}
+
+		/** @return whether this object is another connection-accepted event */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			return other != null && getClass() == other.getClass();
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return 0;
+		}
+
+		/** @return diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "ConnectionAccepted{}";
+		}
 	}
 
 	/**
@@ -95,7 +371,32 @@ public sealed interface McpMetricsEvent permits
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record ConnectionRejected() implements McpMetricsEvent {
+	public final class ConnectionRejected implements McpMetricsEvent {
+		@NonNull
+		private static final ConnectionRejected INSTANCE =
+				new ConnectionRejected();
+
+		private ConnectionRejected() {
+		}
+
+		/** @return whether this object is another connection-rejected event */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			return other != null && getClass() == other.getClass();
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return 0;
+		}
+
+		/** @return diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "ConnectionRejected{}";
+		}
 	}
 
 	/**
@@ -104,7 +405,31 @@ public sealed interface McpMetricsEvent permits
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record RequestAccepted() implements McpMetricsEvent {
+	public final class RequestAccepted implements McpMetricsEvent {
+		@NonNull
+		private static final RequestAccepted INSTANCE = new RequestAccepted();
+
+		private RequestAccepted() {
+		}
+
+		/** @return whether this object is another request-accepted event */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			return other != null && getClass() == other.getClass();
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return 0;
+		}
+
+		/** @return diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "RequestAccepted{}";
+		}
 	}
 
 	/**
@@ -113,193 +438,554 @@ public sealed interface McpMetricsEvent permits
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record RequestRejected() implements McpMetricsEvent {
+	public final class RequestRejected implements McpMetricsEvent {
+		@NonNull
+		private static final RequestRejected INSTANCE = new RequestRejected();
+
+		private RequestRejected() {
+		}
+
+		/** @return whether this object is another request-rejected event */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			return other != null && getClass() == other.getClass();
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return 0;
+		}
+
+		/** @return diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "RequestRejected{}";
+		}
 	}
 
 	/**
 	 * An admitted semantic request started.
 	 *
-	 * @param endpointPath finite registered endpoint-path declaration
-	 * @param jsonRpcMethod bounded JSON-RPC method dimension
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record RequestStarted(@NonNull String endpointPath,
-			@NonNull String jsonRpcMethod) implements McpMetricsEvent {
-		/**
-		 * Creates a request-started event.
-		 *
-		 * @param endpointPath finite registered endpoint-path declaration
-		 * @param jsonRpcMethod bounded JSON-RPC method dimension
-		 */
-		public RequestStarted {
+	public final class RequestStarted implements McpMetricsEvent {
+		@NonNull
+		private final String endpointPath;
+		@NonNull
+		private final String jsonRpcMethod;
+
+		private RequestStarted(@NonNull String endpointPath,
+				@NonNull String jsonRpcMethod) {
 			requireRoutedDimensions(endpointPath, jsonRpcMethod);
+			this.endpointPath = endpointPath;
+			this.jsonRpcMethod = jsonRpcMethod;
+		}
+
+		/** @return finite registered endpoint-path declaration */
+		@NonNull
+		public String getEndpointPath() {
+			return this.endpointPath;
+		}
+
+		/** @return bounded JSON-RPC method dimension */
+		@NonNull
+		public String getJsonRpcMethod() {
+			return this.jsonRpcMethod;
+		}
+
+		/** @return whether this object contains the same dimensions */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (other == null || getClass() != other.getClass())
+				return false;
+			RequestStarted that = (RequestStarted) other;
+			return this.endpointPath.equals(that.endpointPath)
+					&& this.jsonRpcMethod.equals(that.jsonRpcMethod);
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return 31 * this.endpointPath.hashCode()
+					+ this.jsonRpcMethod.hashCode();
+		}
+
+		/** @return redacted diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "RequestStarted{endpointPath=<redacted>, "
+					+ "jsonRpcMethod=<redacted>}";
 		}
 	}
 
 	/**
 	 * An admitted semantic request reached its client-visible terminal outcome.
 	 *
-	 * @param endpointPath finite registered endpoint-path declaration
-	 * @param jsonRpcMethod bounded JSON-RPC method dimension
-	 * @param outcome fixed terminal outcome
-	 * @param duration nonnegative request duration
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record RequestFinished(@NonNull String endpointPath,
-			@NonNull String jsonRpcMethod,
-			@NonNull McpRequestOutcome outcome,
-			@NonNull Duration duration) implements McpMetricsEvent {
-		/**
-		 * Creates a request-finished event.
-		 *
-		 * @param endpointPath finite registered endpoint-path declaration
-		 * @param jsonRpcMethod bounded JSON-RPC method dimension
-		 * @param outcome fixed terminal outcome
-		 * @param duration nonnegative request duration
-		 */
-		public RequestFinished {
+	public final class RequestFinished implements McpMetricsEvent {
+		@NonNull
+		private final String endpointPath;
+		@NonNull
+		private final String jsonRpcMethod;
+		@NonNull
+		private final McpRequestOutcome outcome;
+		@NonNull
+		private final Duration duration;
+
+		private RequestFinished(@NonNull String endpointPath,
+				@NonNull String jsonRpcMethod,
+				@NonNull McpRequestOutcome outcome,
+				@NonNull Duration duration) {
 			requireRoutedDimensions(endpointPath, jsonRpcMethod);
-			requireNonNull(outcome);
+			this.endpointPath = endpointPath;
+			this.jsonRpcMethod = jsonRpcMethod;
+			this.outcome = requireNonNull(outcome);
 			requireNonNegative(duration);
+			this.duration = duration;
+		}
+
+		/** @return finite registered endpoint-path declaration */
+		@NonNull
+		public String getEndpointPath() {
+			return this.endpointPath;
+		}
+
+		/** @return bounded JSON-RPC method dimension */
+		@NonNull
+		public String getJsonRpcMethod() {
+			return this.jsonRpcMethod;
+		}
+
+		/** @return fixed terminal outcome */
+		@NonNull
+		public McpRequestOutcome getOutcome() {
+			return this.outcome;
+		}
+
+		/** @return nonnegative request duration */
+		@NonNull
+		public Duration getDuration() {
+			return this.duration;
+		}
+
+		/** @return whether this object contains the same event values */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (other == null || getClass() != other.getClass())
+				return false;
+			RequestFinished that = (RequestFinished) other;
+			return this.endpointPath.equals(that.endpointPath)
+					&& this.jsonRpcMethod.equals(that.jsonRpcMethod)
+					&& this.outcome.equals(that.outcome)
+					&& this.duration.equals(that.duration);
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			int result = this.endpointPath.hashCode();
+			result = 31 * result + this.jsonRpcMethod.hashCode();
+			result = 31 * result + this.outcome.hashCode();
+			return 31 * result + this.duration.hashCode();
+		}
+
+		/** @return redacted diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "RequestFinished{endpointPath=<redacted>, "
+					+ "jsonRpcMethod=<redacted>, outcome=" + this.outcome
+					+ ", duration=" + this.duration + "}";
 		}
 	}
 
 	/**
 	 * A request response stream opened.
 	 *
-	 * @param endpointPath finite registered endpoint-path declaration
-	 * @param jsonRpcMethod bounded JSON-RPC method dimension
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record RequestStreamOpened(@NonNull String endpointPath,
-			@NonNull String jsonRpcMethod) implements McpMetricsEvent {
-		/**
-		 * Creates a request-stream-opened event.
-		 *
-		 * @param endpointPath finite registered endpoint-path declaration
-		 * @param jsonRpcMethod bounded JSON-RPC method dimension
-		 */
-		public RequestStreamOpened {
+	public final class RequestStreamOpened implements McpMetricsEvent {
+		@NonNull
+		private final String endpointPath;
+		@NonNull
+		private final String jsonRpcMethod;
+
+		private RequestStreamOpened(@NonNull String endpointPath,
+				@NonNull String jsonRpcMethod) {
 			requireRoutedDimensions(endpointPath, jsonRpcMethod);
+			this.endpointPath = endpointPath;
+			this.jsonRpcMethod = jsonRpcMethod;
+		}
+
+		/** @return finite registered endpoint-path declaration */
+		@NonNull
+		public String getEndpointPath() {
+			return this.endpointPath;
+		}
+
+		/** @return bounded JSON-RPC method dimension */
+		@NonNull
+		public String getJsonRpcMethod() {
+			return this.jsonRpcMethod;
+		}
+
+		/** @return whether this object contains the same dimensions */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (other == null || getClass() != other.getClass())
+				return false;
+			RequestStreamOpened that = (RequestStreamOpened) other;
+			return this.endpointPath.equals(that.endpointPath)
+					&& this.jsonRpcMethod.equals(that.jsonRpcMethod);
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return 31 * this.endpointPath.hashCode()
+					+ this.jsonRpcMethod.hashCode();
+		}
+
+		/** @return redacted diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "RequestStreamOpened{endpointPath=<redacted>, "
+					+ "jsonRpcMethod=<redacted>}";
 		}
 	}
 
 	/**
 	 * A request response stream closed.
 	 *
-	 * @param endpointPath finite registered endpoint-path declaration
-	 * @param jsonRpcMethod bounded JSON-RPC method dimension
-	 * @param reason fixed stream termination reason
-	 * @param duration nonnegative stream duration
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record RequestStreamClosed(@NonNull String endpointPath,
-			@NonNull String jsonRpcMethod,
-			@NonNull McpStreamTerminationReason reason,
-			@NonNull Duration duration) implements McpMetricsEvent {
-		/**
-		 * Creates a request-stream-closed event.
-		 *
-		 * @param endpointPath finite registered endpoint-path declaration
-		 * @param jsonRpcMethod bounded JSON-RPC method dimension
-		 * @param reason fixed stream termination reason
-		 * @param duration nonnegative stream duration
-		 */
-		public RequestStreamClosed {
+	public final class RequestStreamClosed implements McpMetricsEvent {
+		@NonNull
+		private final String endpointPath;
+		@NonNull
+		private final String jsonRpcMethod;
+		@NonNull
+		private final McpStreamTerminationReason reason;
+		@NonNull
+		private final Duration duration;
+
+		private RequestStreamClosed(@NonNull String endpointPath,
+				@NonNull String jsonRpcMethod,
+				@NonNull McpStreamTerminationReason reason,
+				@NonNull Duration duration) {
 			requireRoutedDimensions(endpointPath, jsonRpcMethod);
-			requireNonNull(reason);
+			this.endpointPath = endpointPath;
+			this.jsonRpcMethod = jsonRpcMethod;
+			this.reason = requireNonNull(reason);
 			requireNonNegative(duration);
+			this.duration = duration;
+		}
+
+		/** @return finite registered endpoint-path declaration */
+		@NonNull
+		public String getEndpointPath() {
+			return this.endpointPath;
+		}
+
+		/** @return bounded JSON-RPC method dimension */
+		@NonNull
+		public String getJsonRpcMethod() {
+			return this.jsonRpcMethod;
+		}
+
+		/** @return fixed stream termination reason */
+		@NonNull
+		public McpStreamTerminationReason getReason() {
+			return this.reason;
+		}
+
+		/** @return nonnegative stream duration */
+		@NonNull
+		public Duration getDuration() {
+			return this.duration;
+		}
+
+		/** @return whether this object contains the same event values */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (other == null || getClass() != other.getClass())
+				return false;
+			RequestStreamClosed that = (RequestStreamClosed) other;
+			return this.endpointPath.equals(that.endpointPath)
+					&& this.jsonRpcMethod.equals(that.jsonRpcMethod)
+					&& this.reason.equals(that.reason)
+					&& this.duration.equals(that.duration);
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			int result = this.endpointPath.hashCode();
+			result = 31 * result + this.jsonRpcMethod.hashCode();
+			result = 31 * result + this.reason.hashCode();
+			return 31 * result + this.duration.hashCode();
+		}
+
+		/** @return redacted diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "RequestStreamClosed{endpointPath=<redacted>, "
+					+ "jsonRpcMethod=<redacted>, reason=" + this.reason
+					+ ", duration=" + this.duration + "}";
 		}
 	}
 
 	/**
 	 * A resource subscription became active.
 	 *
-	 * @param endpointPath finite registered endpoint-path declaration
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record SubscriptionOpened(@NonNull String endpointPath)
-			implements McpMetricsEvent {
-		/**
-		 * Creates a subscription-opened event.
-		 *
-		 * @param endpointPath finite registered endpoint-path declaration
-		 */
-		public SubscriptionOpened {
+	public final class SubscriptionOpened implements McpMetricsEvent {
+		@NonNull
+		private final String endpointPath;
+
+		private SubscriptionOpened(@NonNull String endpointPath) {
 			requireEndpointPath(endpointPath);
+			this.endpointPath = endpointPath;
+		}
+
+		/** @return finite registered endpoint-path declaration */
+		@NonNull
+		public String getEndpointPath() {
+			return this.endpointPath;
+		}
+
+		/** @return whether this object contains the same endpoint path */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (other == null || getClass() != other.getClass())
+				return false;
+			SubscriptionOpened that = (SubscriptionOpened) other;
+			return this.endpointPath.equals(that.endpointPath);
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return this.endpointPath.hashCode();
+		}
+
+		/** @return redacted diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "SubscriptionOpened{endpointPath=<redacted>}";
 		}
 	}
 
 	/**
 	 * A resource subscription terminated.
 	 *
-	 * @param endpointPath finite registered endpoint-path declaration
-	 * @param reason fixed stream termination reason
-	 * @param duration nonnegative subscription duration
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record SubscriptionClosed(@NonNull String endpointPath,
-			@NonNull McpStreamTerminationReason reason,
-			@NonNull Duration duration) implements McpMetricsEvent {
-		/**
-		 * Creates a subscription-closed event.
-		 *
-		 * @param endpointPath finite registered endpoint-path declaration
-		 * @param reason fixed stream termination reason
-		 * @param duration nonnegative subscription duration
-		 */
-		public SubscriptionClosed {
+	public final class SubscriptionClosed implements McpMetricsEvent {
+		@NonNull
+		private final String endpointPath;
+		@NonNull
+		private final McpStreamTerminationReason reason;
+		@NonNull
+		private final Duration duration;
+
+		private SubscriptionClosed(@NonNull String endpointPath,
+				@NonNull McpStreamTerminationReason reason,
+				@NonNull Duration duration) {
 			requireEndpointPath(endpointPath);
-			requireNonNull(reason);
+			this.endpointPath = endpointPath;
+			this.reason = requireNonNull(reason);
 			requireNonNegative(duration);
+			this.duration = duration;
+		}
+
+		/** @return finite registered endpoint-path declaration */
+		@NonNull
+		public String getEndpointPath() {
+			return this.endpointPath;
+		}
+
+		/** @return fixed stream termination reason */
+		@NonNull
+		public McpStreamTerminationReason getReason() {
+			return this.reason;
+		}
+
+		/** @return nonnegative subscription duration */
+		@NonNull
+		public Duration getDuration() {
+			return this.duration;
+		}
+
+		/** @return whether this object contains the same event values */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (other == null || getClass() != other.getClass())
+				return false;
+			SubscriptionClosed that = (SubscriptionClosed) other;
+			return this.endpointPath.equals(that.endpointPath)
+					&& this.reason.equals(that.reason)
+					&& this.duration.equals(that.duration);
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			int result = this.endpointPath.hashCode();
+			result = 31 * result + this.reason.hashCode();
+			return 31 * result + this.duration.hashCode();
+		}
+
+		/** @return redacted diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "SubscriptionClosed{endpointPath=<redacted>, reason="
+					+ this.reason + ", duration=" + this.duration + "}";
 		}
 	}
 
 	/**
 	 * Cooperative request cancelation was signaled.
 	 *
-	 * @param endpointPath finite registered endpoint-path declaration
-	 * @param jsonRpcMethod bounded JSON-RPC method dimension
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record CancelationSignaled(@NonNull String endpointPath,
-			@NonNull String jsonRpcMethod) implements McpMetricsEvent {
-		/**
-		 * Creates a cancelation-signaled event.
-		 *
-		 * @param endpointPath finite registered endpoint-path declaration
-		 * @param jsonRpcMethod bounded JSON-RPC method dimension
-		 */
-		public CancelationSignaled {
+	public final class CancelationSignaled implements McpMetricsEvent {
+		@NonNull
+		private final String endpointPath;
+		@NonNull
+		private final String jsonRpcMethod;
+
+		private CancelationSignaled(@NonNull String endpointPath,
+				@NonNull String jsonRpcMethod) {
 			requireRoutedDimensions(endpointPath, jsonRpcMethod);
+			this.endpointPath = endpointPath;
+			this.jsonRpcMethod = jsonRpcMethod;
+		}
+
+		/** @return finite registered endpoint-path declaration */
+		@NonNull
+		public String getEndpointPath() {
+			return this.endpointPath;
+		}
+
+		/** @return bounded JSON-RPC method dimension */
+		@NonNull
+		public String getJsonRpcMethod() {
+			return this.jsonRpcMethod;
+		}
+
+		/** @return whether this object contains the same dimensions */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (other == null || getClass() != other.getClass())
+				return false;
+			CancelationSignaled that = (CancelationSignaled) other;
+			return this.endpointPath.equals(that.endpointPath)
+					&& this.jsonRpcMethod.equals(that.jsonRpcMethod);
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return 31 * this.endpointPath.hashCode()
+					+ this.jsonRpcMethod.hashCode();
+		}
+
+		/** @return redacted diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "CancelationSignaled{endpointPath=<redacted>, "
+					+ "jsonRpcMethod=<redacted>}";
 		}
 	}
 
 	/**
 	 * A progress notification was accepted for delivery.
 	 *
-	 * @param endpointPath finite registered endpoint-path declaration
-	 * @param jsonRpcMethod bounded JSON-RPC method dimension
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record ProgressEmitted(@NonNull String endpointPath,
-			@NonNull String jsonRpcMethod) implements McpMetricsEvent {
-		/**
-		 * Creates a progress-emitted event.
-		 *
-		 * @param endpointPath finite registered endpoint-path declaration
-		 * @param jsonRpcMethod bounded JSON-RPC method dimension
-		 */
-		public ProgressEmitted {
+	public final class ProgressEmitted implements McpMetricsEvent {
+		@NonNull
+		private final String endpointPath;
+		@NonNull
+		private final String jsonRpcMethod;
+
+		private ProgressEmitted(@NonNull String endpointPath,
+				@NonNull String jsonRpcMethod) {
 			requireRoutedDimensions(endpointPath, jsonRpcMethod);
+			this.endpointPath = endpointPath;
+			this.jsonRpcMethod = jsonRpcMethod;
+		}
+
+		/** @return finite registered endpoint-path declaration */
+		@NonNull
+		public String getEndpointPath() {
+			return this.endpointPath;
+		}
+
+		/** @return bounded JSON-RPC method dimension */
+		@NonNull
+		public String getJsonRpcMethod() {
+			return this.jsonRpcMethod;
+		}
+
+		/** @return whether this object contains the same dimensions */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (other == null || getClass() != other.getClass())
+				return false;
+			ProgressEmitted that = (ProgressEmitted) other;
+			return this.endpointPath.equals(that.endpointPath)
+					&& this.jsonRpcMethod.equals(that.jsonRpcMethod);
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return 31 * this.endpointPath.hashCode()
+					+ this.jsonRpcMethod.hashCode();
+		}
+
+		/** @return redacted diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "ProgressEmitted{endpointPath=<redacted>, "
+					+ "jsonRpcMethod=<redacted>}";
 		}
 	}
 
@@ -309,41 +995,135 @@ public sealed interface McpMetricsEvent permits
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record KeepAliveEmitted() implements McpMetricsEvent {
+	public final class KeepAliveEmitted implements McpMetricsEvent {
+		@NonNull
+		private static final KeepAliveEmitted INSTANCE =
+				new KeepAliveEmitted();
+
+		private KeepAliveEmitted() {
+		}
+
+		/** @return whether this object is another keep-alive-emitted event */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			return other != null && getClass() == other.getClass();
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return 0;
+		}
+
+		/** @return diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "KeepAliveEmitted{}";
+		}
 	}
 
 	/**
 	 * A fixed JSON-RPC or MCP protocol error was produced.
 	 *
-	 * @param code fixed JSON-RPC error code
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record ProtocolError(@NonNull Integer code) implements McpMetricsEvent {
-		/** Creates a protocol-error event. */
-		public ProtocolError {
-			requireNonNull(code);
+	public final class ProtocolError implements McpMetricsEvent {
+		@NonNull
+		private final Integer code;
+
+		private ProtocolError(@NonNull Integer code) {
+			this.code = requireNonNull(code);
+		}
+
+		/** @return fixed JSON-RPC error code */
+		@NonNull
+		public Integer getCode() {
+			return this.code;
+		}
+
+		/** @return whether this object contains the same protocol error code */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (other == null || getClass() != other.getClass())
+				return false;
+			ProtocolError that = (ProtocolError) other;
+			return this.code.equals(that.code);
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return this.code.hashCode();
+		}
+
+		/** @return diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "ProtocolError{code=" + this.code + "}";
 		}
 	}
 
 	/**
 	 * An unknown mirrored-header occurrence was counted without its name.
 	 *
-	 * @param endpointPath finite registered endpoint-path declaration
-	 * @param jsonRpcMethod bounded JSON-RPC method dimension
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record UnknownMirroredHeader(@NonNull String endpointPath,
-			@NonNull String jsonRpcMethod) implements McpMetricsEvent {
-		/**
-		 * Creates an unknown-mirrored-header event.
-		 *
-		 * @param endpointPath finite registered endpoint-path declaration
-		 * @param jsonRpcMethod bounded JSON-RPC method dimension
-		 */
-		public UnknownMirroredHeader {
+	public final class UnknownMirroredHeader implements McpMetricsEvent {
+		@NonNull
+		private final String endpointPath;
+		@NonNull
+		private final String jsonRpcMethod;
+
+		private UnknownMirroredHeader(@NonNull String endpointPath,
+				@NonNull String jsonRpcMethod) {
 			requireRoutedDimensions(endpointPath, jsonRpcMethod);
+			this.endpointPath = endpointPath;
+			this.jsonRpcMethod = jsonRpcMethod;
+		}
+
+		/** @return finite registered endpoint-path declaration */
+		@NonNull
+		public String getEndpointPath() {
+			return this.endpointPath;
+		}
+
+		/** @return bounded JSON-RPC method dimension */
+		@NonNull
+		public String getJsonRpcMethod() {
+			return this.jsonRpcMethod;
+		}
+
+		/** @return whether this object contains the same dimensions */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (other == null || getClass() != other.getClass())
+				return false;
+			UnknownMirroredHeader that = (UnknownMirroredHeader) other;
+			return this.endpointPath.equals(that.endpointPath)
+					&& this.jsonRpcMethod.equals(that.jsonRpcMethod);
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return 31 * this.endpointPath.hashCode()
+					+ this.jsonRpcMethod.hashCode();
+		}
+
+		/** @return redacted diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "UnknownMirroredHeader{endpointPath=<redacted>, "
+					+ "jsonRpcMethod=<redacted>}";
 		}
 	}
 
@@ -353,7 +1133,32 @@ public sealed interface McpMetricsEvent permits
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record HandlerExecutionStarted() implements McpMetricsEvent {
+	public final class HandlerExecutionStarted implements McpMetricsEvent {
+		@NonNull
+		private static final HandlerExecutionStarted INSTANCE =
+				new HandlerExecutionStarted();
+
+		private HandlerExecutionStarted() {
+		}
+
+		/** @return whether this object is another handler-started event */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			return other != null && getClass() == other.getClass();
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return 0;
+		}
+
+		/** @return diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "HandlerExecutionStarted{}";
+		}
 	}
 
 	/**
@@ -363,7 +1168,32 @@ public sealed interface McpMetricsEvent permits
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record HandlerExecutionFinished() implements McpMetricsEvent {
+	public final class HandlerExecutionFinished implements McpMetricsEvent {
+		@NonNull
+		private static final HandlerExecutionFinished INSTANCE =
+				new HandlerExecutionFinished();
+
+		private HandlerExecutionFinished() {
+		}
+
+		/** @return whether this object is another handler-finished event */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			return other != null && getClass() == other.getClass();
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return 0;
+		}
+
+		/** @return diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "HandlerExecutionFinished{}";
+		}
 	}
 
 	/**
@@ -372,7 +1202,31 @@ public sealed interface McpMetricsEvent permits
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record HandlerQueued() implements McpMetricsEvent {
+	public final class HandlerQueued implements McpMetricsEvent {
+		@NonNull
+		private static final HandlerQueued INSTANCE = new HandlerQueued();
+
+		private HandlerQueued() {
+		}
+
+		/** @return whether this object is another handler-queued event */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			return other != null && getClass() == other.getClass();
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return 0;
+		}
+
+		/** @return diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "HandlerQueued{}";
+		}
 	}
 
 	/**
@@ -381,7 +1235,31 @@ public sealed interface McpMetricsEvent permits
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record HandlerDequeued() implements McpMetricsEvent {
+	public final class HandlerDequeued implements McpMetricsEvent {
+		@NonNull
+		private static final HandlerDequeued INSTANCE = new HandlerDequeued();
+
+		private HandlerDequeued() {
+		}
+
+		/** @return whether this object is another handler-dequeued event */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			return other != null && getClass() == other.getClass();
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return 0;
+		}
+
+		/** @return diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "HandlerDequeued{}";
+		}
 	}
 
 	/**
@@ -390,45 +1268,120 @@ public sealed interface McpMetricsEvent permits
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record HandlerCapacityRejected() implements McpMetricsEvent {
+	public final class HandlerCapacityRejected implements McpMetricsEvent {
+		@NonNull
+		private static final HandlerCapacityRejected INSTANCE =
+				new HandlerCapacityRejected();
+
+		private HandlerCapacityRejected() {
+		}
+
+		/** @return whether this object is another capacity-rejected event */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			return other != null && getClass() == other.getClass();
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return 0;
+		}
+
+		/** @return diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "HandlerCapacityRejected{}";
+		}
 	}
 
 	/**
 	 * The dedicated MCP transport recorded a bounded failure reason.
 	 *
-	 * @param reason fixed low-level transport failure reason
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record TransportFailure(
-			MetricsCollector.@NonNull TransportFailureReason reason)
-			implements McpMetricsEvent {
-		/**
-		 * Creates a transport-failure event.
-		 *
-		 * @param reason fixed low-level transport failure reason
-		 */
-		public TransportFailure {
-			requireNonNull(reason);
+	public final class TransportFailure implements McpMetricsEvent {
+		private final MetricsCollector.@NonNull TransportFailureReason reason;
+
+		private TransportFailure(
+				MetricsCollector.@NonNull TransportFailureReason reason) {
+			this.reason = requireNonNull(reason);
+		}
+
+		/** @return fixed low-level transport failure reason */
+		public MetricsCollector.@NonNull TransportFailureReason getReason() {
+			return this.reason;
+		}
+
+		/** @return whether this object contains the same failure reason */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (other == null || getClass() != other.getClass())
+				return false;
+			TransportFailure that = (TransportFailure) other;
+			return this.reason.equals(that.reason);
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return this.reason.hashCode();
+		}
+
+		/** @return diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "TransportFailure{reason=" + this.reason + "}";
 		}
 	}
 
 	/**
 	 * A real listener stop completed with one fixed outcome.
 	 *
-	 * @param outcome fixed listener shutdown outcome
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record ServerStopped(@NonNull McpShutdownOutcome outcome)
-			implements McpMetricsEvent {
-		/**
-		 * Creates a server-stopped event.
-		 *
-		 * @param outcome fixed listener shutdown outcome
-		 */
-		public ServerStopped {
-			requireNonNull(outcome);
+	public final class ServerStopped implements McpMetricsEvent {
+		@NonNull
+		private final McpShutdownOutcome outcome;
+
+		private ServerStopped(@NonNull McpShutdownOutcome outcome) {
+			this.outcome = requireNonNull(outcome);
+		}
+
+		/** @return fixed listener shutdown outcome */
+		@NonNull
+		public McpShutdownOutcome getOutcome() {
+			return this.outcome;
+		}
+
+		/** @return whether this object contains the same shutdown outcome */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (other == null || getClass() != other.getClass())
+				return false;
+			ServerStopped that = (ServerStopped) other;
+			return this.outcome.equals(that.outcome);
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return this.outcome.hashCode();
+		}
+
+		/** @return diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "ServerStopped{outcome=" + this.outcome + "}";
 		}
 	}
 

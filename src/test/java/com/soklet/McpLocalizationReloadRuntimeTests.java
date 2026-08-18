@@ -225,16 +225,10 @@ class McpLocalizationReloadRuntimeTests {
 					String captured = snapshot.get();
 					contextCaptured.countDown();
 					await(releaseContext);
-					return new McpLocalizationContext() {
-						@Override public Locale getLocale() {
-							return Locale.CANADA_FRENCH;
-						}
-						@Override public McpLocalizationResult localize(
-								McpLocalizableText text) {
-							return McpLocalizationResult.localized(
-									captured + text.getDefaultText());
-						}
-					};
+					return McpLocalizationContext.withLocale(Locale.CANADA_FRENCH)
+							.localizer(text -> McpLocalizationResult.localized(
+									captured + text.getDefaultText()))
+							.build();
 				})
 				.build();
 		McpServer server = server(true, localizer);
@@ -280,15 +274,10 @@ class McpLocalizationReloadRuntimeTests {
 				.contextProvider(request -> {
 					contextCaptured.countDown();
 					await(releaseContext);
-					return new McpLocalizationContext() {
-						@Override public Locale getLocale() {
-							return Locale.CANADA_FRENCH;
-						}
-						@Override public McpLocalizationResult localize(
-								McpLocalizableText text) {
-							return McpLocalizationResult.useDefaultText();
-						}
-					};
+					return McpLocalizationContext.withLocale(Locale.CANADA_FRENCH)
+							.localizer(text ->
+									McpLocalizationResult.useDefaultText())
+							.build();
 				})
 				.build();
 		McpServer server = server(true, localizer,
@@ -604,18 +593,10 @@ class McpLocalizationReloadRuntimeTests {
 			java.util.function.Function<McpLocalizableText,
 					McpLocalizationResult> provider) {
 		return McpLocalizer.withFallbackLocale(Locale.ENGLISH)
-				.contextProvider(request -> new McpLocalizationContext() {
-					@Override
-					public Locale getLocale() {
-						return Locale.CANADA_FRENCH;
-					}
-
-					@Override
-					public McpLocalizationResult localize(
-							McpLocalizableText text) {
-						return provider.apply(text);
-					}
-				})
+				.contextProvider(request -> McpLocalizationContext
+						.withLocale(Locale.CANADA_FRENCH)
+						.localizer(provider)
+						.build())
 				.build();
 	}
 

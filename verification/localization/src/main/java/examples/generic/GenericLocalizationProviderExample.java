@@ -95,20 +95,14 @@ public final class GenericLocalizationProviderExample
 				.orElseGet(() -> select(request.getLanguageRanges(), snapshot));
 		Map<String, String> catalog = snapshot.getOrDefault(selected, Map.of());
 
-		return new McpLocalizationContext() {
-			@Override
-			public Locale getLocale() {
-				return selected;
-			}
-
-			@Override
-			public McpLocalizationResult localize(McpLocalizableText text) {
-				String translated = catalog.get(key(text));
-				return translated == null
-						? McpLocalizationResult.useDefaultText()
-						: McpLocalizationResult.localized(translated);
-			}
-		};
+		return McpLocalizationContext.withLocale(selected)
+				.localizer(text -> {
+					String translated = catalog.get(key(text));
+					return translated == null
+							? McpLocalizationResult.useDefaultText()
+							: McpLocalizationResult.localized(translated);
+				})
+				.build();
 	}
 
 	private String key(McpLocalizableText text) {
@@ -213,7 +207,7 @@ public final class GenericLocalizationProviderExample
 	private static void assertLocalizedText(McpLocalizationResult result,
 			String expected) {
 		if (!(result instanceof McpLocalizationResult.Localized localized)
-				|| !expected.equals(localized.text()))
+				|| !expected.equals(localized.getText()))
 			throw new AssertionError("Caller mutation changed a published catalog.");
 	}
 }

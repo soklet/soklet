@@ -305,11 +305,11 @@ public class McpSimulatorPublicRuntimeTests {
 		Assertions.assertTrue(metrics.awaitRequestRejections());
 		Assertions.assertEquals(1, admissionCalls.get());
 		Assertions.assertEquals(List.of(
-				new McpMetricsEvent.RequestAccepted(),
-				new McpMetricsEvent.ProtocolError(-32_700),
-				new McpMetricsEvent.RequestRejected(),
-				new McpMetricsEvent.RequestAccepted(),
-				new McpMetricsEvent.RequestRejected()),
+				McpMetricsEvent.requestAccepted(),
+				McpMetricsEvent.protocolError(-32_700),
+				McpMetricsEvent.requestRejected(),
+				McpMetricsEvent.requestAccepted(),
+				McpMetricsEvent.requestRejected()),
 				metrics.events().stream()
 						.filter(event -> event instanceof McpMetricsEvent.RequestAccepted
 								|| event instanceof McpMetricsEvent.ProtocolError
@@ -345,7 +345,7 @@ public class McpSimulatorPublicRuntimeTests {
 							Assertions.assertInstanceOf(
 									McpApplicationRequestState.class,
 									request.getRequestState().orElseThrow());
-					Assertions.assertEquals(requestState, continuedState.value());
+					Assertions.assertEquals(requestState, continuedState.getValue());
 					return McpCompleteResult.fromToolText("continued complete");
 				})
 				.requestStateMode(McpRequestStateMode.APPLICATION_PROTECTED)
@@ -405,7 +405,7 @@ public class McpSimulatorPublicRuntimeTests {
 				metrics.events().stream()
 						.filter(McpMetricsEvent.RequestFinished.class::isInstance)
 						.map(McpMetricsEvent.RequestFinished.class::cast)
-						.map(McpMetricsEvent.RequestFinished::outcome)
+						.map(McpMetricsEvent.RequestFinished::getOutcome)
 						.toList());
 	}
 
@@ -583,7 +583,7 @@ public class McpSimulatorPublicRuntimeTests {
 			Assertions.assertEquals(1, metrics.events().stream()
 					.filter(McpMetricsEvent.RequestFinished.class::isInstance)
 					.map(McpMetricsEvent.RequestFinished.class::cast)
-					.filter(finished -> finished.outcome()
+					.filter(finished -> finished.getOutcome()
 							== McpRequestOutcome.CANCELED)
 					.count());
 			Assertions.assertTrue(metrics.events().stream().noneMatch(eventMetric ->
@@ -594,11 +594,11 @@ public class McpSimulatorPublicRuntimeTests {
 		Assertions.assertTrue(metrics.awaitRequestFinished());
 		Assertions.assertTrue(metrics.events().stream().anyMatch(event ->
 				event instanceof McpMetricsEvent.SubscriptionClosed closed
-						&& closed.reason()
+						&& closed.getReason()
 						== McpStreamTerminationReason.CLIENT_DISCONNECTED));
 		Assertions.assertTrue(metrics.events().stream().anyMatch(event ->
 				event instanceof McpMetricsEvent.SubscriptionClosed closed
-						&& closed.reason()
+						&& closed.getReason()
 						== McpStreamTerminationReason
 								.SIMULATOR_CAPTURE_BYTE_LIMIT_EXCEEDED));
 	}
@@ -680,7 +680,7 @@ public class McpSimulatorPublicRuntimeTests {
 				Assertions.assertEquals(2, metrics.events().stream()
 						.filter(McpMetricsEvent.RequestFinished.class::isInstance)
 						.map(McpMetricsEvent.RequestFinished.class::cast)
-						.filter(finished -> finished.outcome()
+						.filter(finished -> finished.getOutcome()
 								== McpRequestOutcome.CANCELED)
 						.count());
 				Assertions.assertTrue(metrics.events().stream().noneMatch(event ->
@@ -722,10 +722,10 @@ public class McpSimulatorPublicRuntimeTests {
 				StreamTerminationReason.SIMULATOR_LIMIT_EXCEEDED), tokenReasons);
 		Assertions.assertTrue(metrics.events().stream().anyMatch(event ->
 				event instanceof McpMetricsEvent.RequestFinished finished
-						&& finished.outcome() == McpRequestOutcome.CANCELED));
+						&& finished.getOutcome() == McpRequestOutcome.CANCELED));
 		Assertions.assertTrue(metrics.events().stream().anyMatch(event ->
 				event instanceof McpMetricsEvent.RequestStreamClosed closed
-						&& closed.reason()
+						&& closed.getReason()
 						== McpStreamTerminationReason.SIMULATOR_CAPTURE_ITEM_LIMIT_EXCEEDED));
 	}
 
@@ -1211,15 +1211,15 @@ public class McpSimulatorPublicRuntimeTests {
 			if (event instanceof McpMetricsEvent.RequestRejected)
 				this.requestRejections.countDown();
 			if (event instanceof McpMetricsEvent.RequestStreamClosed closed
-					&& closed.reason() == McpStreamTerminationReason
+					&& closed.getReason() == McpStreamTerminationReason
 							.SIMULATOR_CAPTURE_BYTE_LIMIT_EXCEEDED)
 				this.requestStreamByteLimit.countDown();
 			if (event instanceof McpMetricsEvent.SubscriptionClosed closed
-					&& closed.reason() == McpStreamTerminationReason
+					&& closed.getReason() == McpStreamTerminationReason
 							.SIMULATOR_CAPTURE_BYTE_LIMIT_EXCEEDED)
 				this.subscriptionByteLimit.countDown();
 			if (event instanceof McpMetricsEvent.RequestFinished finished
-					&& finished.outcome() == McpRequestOutcome.CANCELED)
+					&& finished.getOutcome() == McpRequestOutcome.CANCELED)
 				this.simulatorLimitRequestFinishes.countDown();
 		}
 

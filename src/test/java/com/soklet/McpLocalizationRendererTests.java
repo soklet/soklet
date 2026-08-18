@@ -227,46 +227,6 @@ class McpLocalizationRendererTests {
 	}
 
 	@Test
-	void aRootOrMalformedSelectedLocaleTakesTheWholeResponseFailurePath() {
-		for (Locale invalid : new Locale[]{Locale.ROOT, new Locale("")}) {
-			McpLocalizationRenderer.Outcome outcome = McpLocalizationRenderer.render(
-					catalog(), CODEC.toUtf8Bytes(catalog()).length, ENVELOPE_BYTES,
-					GENEROUS_CEILING, MAXIMUM_REPLACEMENT_CHARACTERS, slots(),
-					localeContext(invalid,
-							text -> McpLocalizationResult.localized("never")),
-					McpLocalizationFailurePolicy.USE_DEFAULT_TEXT, () -> false,
-					document -> CODEC.toUtf8Bytes(document).length);
-
-			assertEquals(McpLocalizationRenderer.Disposition.DEFAULT_TEXT,
-					outcome.disposition());
-		}
-	}
-
-	@Test
-	void aThrowingGetLocaleIsContainedIncludingErrors() {
-		McpLocalizationContext throwing = new McpLocalizationContext() {
-			@Override
-			public Locale getLocale() {
-				throw new AssertionError("secret-locale-detail");
-			}
-
-			@Override
-			public McpLocalizationResult localize(McpLocalizableText text) {
-				throw new AssertionError("unreachable");
-			}
-		};
-
-		McpLocalizationRenderer.Outcome outcome = McpLocalizationRenderer.render(
-				catalog(), CODEC.toUtf8Bytes(catalog()).length, ENVELOPE_BYTES,
-				GENEROUS_CEILING, MAXIMUM_REPLACEMENT_CHARACTERS, slots(), throwing,
-				McpLocalizationFailurePolicy.USE_DEFAULT_TEXT, () -> false,
-				document -> CODEC.toUtf8Bytes(document).length);
-
-		assertEquals(McpLocalizationRenderer.Disposition.DEFAULT_TEXT,
-				outcome.disposition());
-	}
-
-	@Test
 	void anErrorThrownByLocalizeIsContainedAndStopsLaterSlots() {
 		List<String> observed = new ArrayList<>();
 
@@ -323,17 +283,9 @@ class McpLocalizationRendererTests {
 
 	private static McpLocalizationContext localeContext(Locale locale,
 			Function<McpLocalizableText, McpLocalizationResult> provider) {
-		return new McpLocalizationContext() {
-			@Override
-			public Locale getLocale() {
-				return locale;
-			}
-
-			@Override
-			public McpLocalizationResult localize(McpLocalizableText text) {
-				return provider.apply(text);
-			}
-		};
+		return McpLocalizationContext.withLocale(locale)
+				.localizer(provider)
+				.build();
 	}
 
 	private static McpLocalizationRenderer.Outcome render(long ceiling,
@@ -375,17 +327,7 @@ class McpLocalizationRendererTests {
 
 	private static McpLocalizationContext context(
 			Function<McpLocalizableText, McpLocalizationResult> provider) {
-		return new McpLocalizationContext() {
-			@Override
-			public Locale getLocale() {
-				return Locale.FRENCH;
-			}
-
-			@Override
-			public McpLocalizationResult localize(McpLocalizableText text) {
-				return provider.apply(text);
-			}
-		};
+		return localeContext(Locale.FRENCH, provider);
 	}
 
 	private static McpJsonObject catalog() {

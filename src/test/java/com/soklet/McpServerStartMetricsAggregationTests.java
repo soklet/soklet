@@ -85,7 +85,7 @@ public class McpServerStartMetricsAggregationTests {
 	public void defaultCollectorAggregatesConfiguredAndDirectServerStartsAcrossRenderFilterAndReset() {
 		DefaultMetricsCollector stopDriven =
 				DefaultMetricsCollector.defaultInstance();
-		stopDriven.didRecordMcpMetricsEvent(new McpMetricsEvent.ServerStopped(
+		stopDriven.didRecordMcpMetricsEvent(McpMetricsEvent.serverStopped(
 				McpShutdownOutcome.CLEAN));
 		String stopDrivenText = prometheus(stopDriven);
 		assertMetricType(stopDrivenText);
@@ -105,7 +105,7 @@ public class McpServerStartMetricsAggregationTests {
 		Assertions.assertFalse(prometheus(eventDriven).contains(
 				SERVER_STARTS_METRIC_NAME));
 		eventDriven.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.ServerStarted());
+				McpMetricsEvent.serverStarted());
 		assertSample(prometheus(eventDriven), 1L);
 		eventDriven.reset();
 		assertSample(prometheus(eventDriven), 0L);
@@ -115,9 +115,9 @@ public class McpServerStartMetricsAggregationTests {
 				.getMcpMetrics().getServerStarts());
 		assertSample(prometheus(collector), 0L);
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.ServerStarted());
+				McpMetricsEvent.serverStarted());
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.ServerStarted());
+				McpMetricsEvent.serverStarted());
 
 		McpMetricsSnapshot retained = collector.snapshot().orElseThrow()
 				.getMcpMetrics();
@@ -168,7 +168,7 @@ public class McpServerStartMetricsAggregationTests {
 		Assertions.assertEquals(1, occurrences(openMetrics, "# EOF\n"));
 
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.ServerStarted());
+				McpMetricsEvent.serverStarted());
 		Assertions.assertEquals(2L, retained.getServerStarts());
 		Assertions.assertEquals(3L, collector.snapshot().orElseThrow()
 				.getMcpMetrics().getServerStarts());
@@ -196,7 +196,7 @@ public class McpServerStartMetricsAggregationTests {
 					start.await();
 					for (int round = 0; round < rounds; ++round)
 						collector.didRecordMcpMetricsEvent(
-								new McpMetricsEvent.ServerStarted());
+								McpMetricsEvent.serverStarted());
 					return null;
 				}));
 			start.countDown();
@@ -213,7 +213,7 @@ public class McpServerStartMetricsAggregationTests {
 				.getMcpMetrics();
 		Assertions.assertEquals(expected, retained.getServerStarts());
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.ServerStarted());
+				McpMetricsEvent.serverStarted());
 		collector.reset();
 		Assertions.assertEquals(expected, retained.getServerStarts());
 		Assertions.assertSame(McpMetricsSnapshot.emptyInstance(),

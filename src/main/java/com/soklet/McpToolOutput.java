@@ -79,7 +79,7 @@ public final class McpToolOutput implements McpCompletePayload {
 	@NonNull
 	public static McpToolOutput fromErrorText(@NonNull String text) {
 		return builder().content(McpTextContent.fromText(text))
-				.isError(true).build();
+				.error(true).build();
 	}
 
 	private McpToolOutput(@NonNull Builder builder) {
@@ -169,7 +169,7 @@ public final class McpToolOutput implements McpCompletePayload {
 		 * @throws NullPointerException if {@code error} is null
 		 */
 		@NonNull
-		public Builder isError(@NonNull Boolean error) {
+		public Builder error(@NonNull Boolean error) {
 			this.error = requireNonNull(error);
 			return this;
 		}

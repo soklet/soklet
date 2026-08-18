@@ -1083,7 +1083,7 @@ public final class McpServerRuntimeBridge {
 			return new McpSubscriptionEventSource.Event.ResourcesListChanged();
 		if (event instanceof McpSubscriptionEvent.ResourceUpdated updated) {
 			String wireResourceUri = McpLevelOneUriTemplate.requireValidAbsoluteUri(
-					updated.resourceUri().toASCIIString(), "Subscription resource URI");
+					updated.getResourceUri().toASCIIString(), "Subscription resource URI");
 			return new McpSubscriptionEventSource.Event.ResourceUpdated(
 					URI.create(wireResourceUri), wireResourceUri);
 		}
@@ -3093,7 +3093,7 @@ public final class McpServerRuntimeBridge {
 		for (Map.Entry<String, McpInputRequest> entry
 				: publicResult.getInputRequests().entrySet()) {
 			McpInputRequestDeclaration internalDeclaration =
-					toInternal(entry.getValue().declaration());
+					toInternal(entry.getValue().getDeclaration());
 			internalDeclarations.put(entry.getKey(), internalDeclaration);
 			for (McpClientCapabilityRequirement capability
 					: internalDeclaration.capabilities())
@@ -3124,7 +3124,7 @@ public final class McpServerRuntimeBridge {
 							requireNonNull(internalDeclarations.get(
 									entry.getKey())),
 							(com.soklet.internal.mcp.protocol.McpJsonObject)
-									toInternal(entry.getValue().params())));
+									toInternal(entry.getValue().getParams())));
 
 		Optional<String> protectedRequestState = Optional.empty();
 		if (publicResult.getRequestState().isPresent()) {
@@ -3136,9 +3136,9 @@ public final class McpServerRuntimeBridge {
 				if (!(state instanceof McpApplicationRequestState applicationState))
 					throw new IllegalArgumentException(
 							"The operation requires application-protected request state.");
-				McpRequestStateCanonicalJson.strictUtf8(applicationState.value(),
+				McpRequestStateCanonicalJson.strictUtf8(applicationState.getValue(),
 						65_536, "Application-protected MCP request state");
-				protectedRequestState = Optional.of(applicationState.value());
+				protectedRequestState = Optional.of(applicationState.getValue());
 			} else if (requestStateMode
 					== McpRequestStateMode.FRAMEWORK_PROTECTED) {
 				if (!(state instanceof McpFrameworkRequestState frameworkState))
@@ -3152,7 +3152,7 @@ public final class McpServerRuntimeBridge {
 						invocation.admissionIdentity().authorizationPartition()
 								.applicationKey(),
 						request.params().toJsonObject(), request.id(),
-						toInternal(frameworkState.value()),
+						toInternal(frameworkState.getValue()),
 						invocation.frameworkRequestStateContinuation(),
 						Optional.ofNullable(invocation.selectedLocale().get())));
 			} else {
@@ -3186,10 +3186,10 @@ public final class McpServerRuntimeBridge {
 			com.soklet.@NonNull McpInputRequestDeclaration declaration) {
 		Set<McpClientCapabilityRequirement> capabilities =
 				new LinkedHashSet<>();
-		for (McpClientCapability capability : declaration.capabilities())
+		for (McpClientCapability capability : declaration.getCapabilities())
 			capabilities.add(toInternal(capability));
-		return new McpInputRequestDeclaration(declaration.method(), capabilities,
-				toInternal(declaration.requirement()));
+		return new McpInputRequestDeclaration(declaration.getMethod(), capabilities,
+				toInternal(declaration.getRequirement()));
 	}
 
 	@NonNull
@@ -3333,10 +3333,10 @@ public final class McpServerRuntimeBridge {
 			@NonNull McpAdmissionDecision decision) {
 		if (decision instanceof McpAdmissionDecision.Accepted accepted)
 			return com.soklet.internal.mcp.protocol.McpAdmissionDecision.accepted(
-					toInternal(accepted.identity()));
+					toInternal(accepted.getIdentity()));
 		if (decision instanceof McpAdmissionDecision.Rejected rejected)
 			return com.soklet.internal.mcp.protocol.McpAdmissionDecision.rejected(
-					toInternal(rejected.rejection()));
+					toInternal(rejected.getRejection()));
 		throw new IllegalArgumentException("Unsupported MCP admission decision.");
 	}
 
@@ -3384,11 +3384,11 @@ public final class McpServerRuntimeBridge {
 	static McpJsonValue toPublic(
 			com.soklet.internal.mcp.protocol.@NonNull McpJsonValue value) {
 		if (value instanceof com.soklet.internal.mcp.protocol.McpJsonString string)
-			return new McpJsonString(string.value());
+			return McpJsonString.fromValue(string.value());
 		if (value instanceof com.soklet.internal.mcp.protocol.McpJsonNumber number)
-			return new McpJsonNumber(number.value());
+			return McpJsonNumber.fromValue(number.value());
 		if (value instanceof com.soklet.internal.mcp.protocol.McpJsonBoolean bool)
-			return new McpJsonBoolean(
+			return McpJsonBoolean.fromValue(
 					bool == com.soklet.internal.mcp.protocol.McpJsonBoolean.TRUE);
 		if (value instanceof com.soklet.internal.mcp.protocol.McpJsonNull)
 			return McpJsonNull.INSTANCE;
@@ -3408,12 +3408,12 @@ public final class McpServerRuntimeBridge {
 	private static com.soklet.internal.mcp.protocol.@NonNull McpJsonValue toInternal(
 			@NonNull McpJsonValue value) {
 		if (value instanceof McpJsonString string)
-			return new com.soklet.internal.mcp.protocol.McpJsonString(string.value());
+			return new com.soklet.internal.mcp.protocol.McpJsonString(string.getValue());
 		if (value instanceof McpJsonNumber number)
-			return new com.soklet.internal.mcp.protocol.McpJsonNumber(number.value());
+			return new com.soklet.internal.mcp.protocol.McpJsonNumber(number.getValue());
 		if (value instanceof McpJsonBoolean bool)
 			return com.soklet.internal.mcp.protocol.McpJsonBoolean
-					.fromBoolean(bool.value());
+					.fromBoolean(bool.getValue());
 		if (value instanceof McpJsonNull)
 			return com.soklet.internal.mcp.protocol.McpJsonNull.INSTANCE;
 		if (value instanceof McpJsonArray array) {

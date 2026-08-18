@@ -127,7 +127,7 @@ public class McpTransportMetricsAggregationTests {
 		DefaultMetricsCollector eventDriven =
 				DefaultMetricsCollector.defaultInstance();
 		eventDriven.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.ConnectionAccepted());
+				McpMetricsEvent.connectionAccepted());
 		String eventDrivenText = prometheus(eventDriven);
 		assertSample(eventDrivenText, CONNECTIONS_ACCEPTED_METRIC_NAME, 1L);
 		assertSample(eventDrivenText, CONNECTIONS_REJECTED_METRIC_NAME, 0L);
@@ -146,11 +146,11 @@ public class McpTransportMetricsAggregationTests {
 				configuredText);
 
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.ConnectionAccepted());
+				McpMetricsEvent.connectionAccepted());
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.ConnectionAccepted());
+				McpMetricsEvent.connectionAccepted());
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.ConnectionRejected());
+				McpMetricsEvent.connectionRejected());
 		EnumMap<MetricsCollector.TransportFailureReason, Long> expectedFailures =
 				new EnumMap<>(MetricsCollector.TransportFailureReason.class);
 		for (MetricsCollector.TransportFailureReason reason
@@ -159,7 +159,7 @@ public class McpTransportMetricsAggregationTests {
 			expectedFailures.put(reason, expectedCount);
 			for (long index = 0L; index < expectedCount; ++index)
 				collector.didRecordMcpMetricsEvent(
-						new McpMetricsEvent.TransportFailure(reason));
+						McpMetricsEvent.transportFailure(reason));
 		}
 
 		McpMetricsSnapshot retained = collector.snapshot().orElseThrow()
@@ -245,7 +245,7 @@ public class McpTransportMetricsAggregationTests {
 		Assertions.assertEquals(1, occurrences(openMetrics, "# EOF\n"));
 
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.ConnectionAccepted());
+				McpMetricsEvent.connectionAccepted());
 		Assertions.assertEquals(2L, retained.getConnectionsAccepted());
 		Assertions.assertEquals(expectedFailures,
 				retained.getTransportFailures());
@@ -268,7 +268,7 @@ public class McpTransportMetricsAggregationTests {
 				MetricsCollector.TransportFailureReason.WRITE_ERROR, null);
 		collector.didRecordTransportFailure(ServerType.SSE,
 				MetricsCollector.TransportFailureReason.CONNECTION_SETUP_ERROR, null);
-		collector.didRecordMcpMetricsEvent(new McpMetricsEvent.TransportFailure(
+		collector.didRecordMcpMetricsEvent(McpMetricsEvent.transportFailure(
 				MetricsCollector.TransportFailureReason.WRITE_TIMEOUT));
 
 		Set<Map<String, String>> labels =
@@ -350,13 +350,13 @@ public class McpTransportMetricsAggregationTests {
 					start.await();
 					for (int round = 0; round < rounds; ++round) {
 						collector.didRecordMcpMetricsEvent(
-								new McpMetricsEvent.ConnectionAccepted());
+								McpMetricsEvent.connectionAccepted());
 						collector.didRecordMcpMetricsEvent(
-								new McpMetricsEvent.ConnectionRejected());
+								McpMetricsEvent.connectionRejected());
 						for (MetricsCollector.TransportFailureReason reason
 								: MetricsCollector.TransportFailureReason.values())
 							collector.didRecordMcpMetricsEvent(
-									new McpMetricsEvent.TransportFailure(reason));
+									McpMetricsEvent.transportFailure(reason));
 					}
 					return null;
 				}));
@@ -380,8 +380,8 @@ public class McpTransportMetricsAggregationTests {
 		assertTransportSnapshot(retained, expected, expected, failures);
 
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.ConnectionAccepted());
-		collector.didRecordMcpMetricsEvent(new McpMetricsEvent.TransportFailure(
+				McpMetricsEvent.connectionAccepted());
+		collector.didRecordMcpMetricsEvent(McpMetricsEvent.transportFailure(
 				MetricsCollector.TransportFailureReason.UNKNOWN));
 		collector.reset();
 		assertTransportSnapshot(retained, expected, expected, failures);

@@ -17,10 +17,12 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.Objects;
 import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
@@ -33,15 +35,10 @@ import static java.util.Objects.requireNonNull;
  * core {@code elicitation/create}, {@code sampling/createMessage}, and
  * {@code roots/list} methods; this type is not an extension escape hatch.
  *
- * @param method client request method
- * @param capabilities immutable required client capabilities
- * @param requirement when the capabilities are required
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public record McpInputRequestDeclaration(@NonNull String method,
-		@NonNull Set<@NonNull McpClientCapability> capabilities,
-		@NonNull McpInputRequirement requirement) {
+public final class McpInputRequestDeclaration {
 	@NonNull
 	private static final Set<@NonNull String> CORE_METHODS =
 			Set.of("elicitation/create", "sampling/createMessage", "roots/list");
@@ -50,6 +47,12 @@ public record McpInputRequestDeclaration(@NonNull String method,
 			OPTIONAL_SAMPLING_CAPABILITIES = Set.of(
 					McpClientCapability.SAMPLING_CONTEXT,
 					McpClientCapability.SAMPLING_TOOLS);
+	@NonNull
+	private final String method;
+	@NonNull
+	private final Set<@NonNull McpClientCapability> capabilities;
+	@NonNull
+	private final McpInputRequirement requirement;
 
 	/**
 	 * Creates and validates an input-request declaration.
@@ -61,7 +64,9 @@ public record McpInputRequestDeclaration(@NonNull String method,
 	 * @throws IllegalArgumentException if the method or capability combination
 	 * is not one of Soklet 3.6's supported core declarations
 	 */
-	public McpInputRequestDeclaration {
+	private McpInputRequestDeclaration(@NonNull String method,
+			@NonNull Set<@NonNull McpClientCapability> capabilities,
+			@NonNull McpInputRequirement requirement) {
 		requireNonNull(method);
 		requireNonNull(capabilities);
 		requireNonNull(requirement);
@@ -80,11 +85,12 @@ public record McpInputRequestDeclaration(@NonNull String method,
 			throw new IllegalArgumentException(
 					"Soklet 3.6 supports only the three core input-request methods.");
 
-		capabilities = Collections.unmodifiableSet(copiedCapabilities);
+		Set<McpClientCapability> immutableCapabilities =
+				Collections.unmodifiableSet(copiedCapabilities);
 		if ("elicitation/create".equals(method)
-				&& !(capabilities.equals(Set.of(
+				&& !(immutableCapabilities.equals(Set.of(
 						McpClientCapability.ELICITATION_FORM))
-				|| capabilities.equals(Set.of(
+				|| immutableCapabilities.equals(Set.of(
 						McpClientCapability.ELICITATION_URL))))
 			throw new IllegalArgumentException(
 					"Elicitation declarations must select exactly form or URL capability.");
@@ -94,16 +100,20 @@ public record McpInputRequestDeclaration(@NonNull String method,
 					McpClientCapability.SAMPLING,
 					McpClientCapability.SAMPLING_CONTEXT,
 					McpClientCapability.SAMPLING_TOOLS);
-			if (!capabilities.contains(McpClientCapability.SAMPLING)
-					|| !allowed.containsAll(capabilities))
+			if (!immutableCapabilities.contains(McpClientCapability.SAMPLING)
+					|| !allowed.containsAll(immutableCapabilities))
 				throw new IllegalArgumentException(
 						"Sampling declarations require SAMPLING and only sampling capabilities.");
 		}
 
 		if ("roots/list".equals(method)
-				&& !capabilities.equals(Set.of(McpClientCapability.ROOTS)))
+				&& !immutableCapabilities.equals(Set.of(McpClientCapability.ROOTS)))
 			throw new IllegalArgumentException(
 					"Roots declarations require exactly the ROOTS capability.");
+
+		this.method = method;
+		this.capabilities = immutableCapabilities;
+		this.requirement = requirement;
 	}
 
 	/**
@@ -176,5 +186,49 @@ public record McpInputRequestDeclaration(@NonNull String method,
 			@NonNull McpInputRequirement requirement) {
 		return new McpInputRequestDeclaration("roots/list",
 				Set.of(McpClientCapability.ROOTS), requirement);
+	}
+
+	/** @return client request method */
+	@NonNull
+	public String getMethod() {
+		return this.method;
+	}
+
+	/** @return immutable required client capabilities */
+	@NonNull
+	public Set<@NonNull McpClientCapability> getCapabilities() {
+		return this.capabilities;
+	}
+
+	/** @return when the client capabilities are required */
+	@NonNull
+	public McpInputRequirement getRequirement() {
+		return this.requirement;
+	}
+
+	/** @return whether this value has the same method, capabilities, and requirement */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpInputRequestDeclaration declaration))
+			return false;
+		return this.method.equals(declaration.method)
+				&& this.capabilities.equals(declaration.capabilities)
+				&& this.requirement == declaration.requirement;
+	}
+
+	/** @return value-based hash code */
+	@Override
+	public int hashCode() {
+		return Objects.hash(this.method, this.capabilities, this.requirement);
+	}
+
+	/** @return value-based diagnostic rendering */
+	@Override
+	@NonNull
+	public String toString() {
+		return "McpInputRequestDeclaration{method='%s', capabilities=%s, requirement=%s}"
+				.formatted(this.method, this.capabilities, this.requirement);
 	}
 }

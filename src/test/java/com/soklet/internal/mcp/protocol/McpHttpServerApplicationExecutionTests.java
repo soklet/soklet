@@ -805,9 +805,9 @@ public class McpHttpServerApplicationExecutionTests {
 			observer.awaitRejectedEvent();
 			assertExactEmptyProtocolProcessorRejection(rejected);
 			Assertions.assertEquals(List.of(
-					new McpMetricsEvent.RequestAccepted(),
-					new McpMetricsEvent.RequestAccepted(),
-					new McpMetricsEvent.RequestRejected()),
+					McpMetricsEvent.requestAccepted(),
+					McpMetricsEvent.requestAccepted(),
+					McpMetricsEvent.requestRejected()),
 					observer.events());
 			Assertions.assertNull(observer.probeFailure(),
 					"Protocol submission metrics were delivered under a request-control lock.");
@@ -916,7 +916,7 @@ public class McpHttpServerApplicationExecutionTests {
 			observer.awaitAcceptedEvents();
 			Assertions.assertEquals(1, terminalReservationHooks.get());
 			Assertions.assertEquals(List.of(
-					new McpMetricsEvent.RequestAccepted()), observer.events(),
+					McpMetricsEvent.requestAccepted()), observer.events(),
 					"An ErrorResponse rejected by the stream must not emit ProtocolError.");
 		} finally {
 			McpRequestSseStream.setTestHooks(null);
@@ -1900,7 +1900,7 @@ public class McpHttpServerApplicationExecutionTests {
 
 		@Override
 		public PendingMetricRecord recordRequestAccepted() {
-			return record(new McpMetricsEvent.RequestAccepted());
+			return record(McpMetricsEvent.requestAccepted());
 		}
 
 		@Override
@@ -1924,19 +1924,19 @@ public class McpHttpServerApplicationExecutionTests {
 
 		@Override
 		public void recordRequestRejected() {
-			record(new McpMetricsEvent.RequestRejected());
+			record(McpMetricsEvent.requestRejected());
 		}
 
 		@Override
 		public PendingMetricRecord recordProtocolError(int code,
 				com.soklet.McpRequestContext requestContext) {
-			return record(new McpMetricsEvent.ProtocolError(code));
+			return record(McpMetricsEvent.protocolError(code));
 		}
 
 		@Override
 		public void recordUnknownMirroredHeader(String endpointPath,
 				String jsonRpcMethod) {
-			record(new McpMetricsEvent.UnknownMirroredHeader(
+			record(McpMetricsEvent.unknownMirroredHeader(
 					endpointPath, jsonRpcMethod));
 		}
 

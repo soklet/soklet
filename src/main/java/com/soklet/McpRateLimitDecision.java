@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
@@ -38,7 +39,7 @@ public sealed interface McpRateLimitDecision
 	 */
 	@NonNull
 	static Allowed allowed() {
-		return new Allowed();
+		return Allowed.INSTANCE;
 	}
 
 	/**
@@ -58,24 +59,80 @@ public sealed interface McpRateLimitDecision
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record Allowed() implements McpRateLimitDecision {
+	public final class Allowed implements McpRateLimitDecision {
+		@NonNull
+		private static final Allowed INSTANCE = new Allowed();
+
+		private Allowed() {
+		}
+
+		/** @return whether the other value is also an allowed decision */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			return other instanceof Allowed;
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return 0;
+		}
+
+		/** @return safe diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "Allowed{}";
+		}
 	}
 
 	/**
-	 * A denied acquisition.
+	 * A denied acquisition carrying a nonnegative minimum suggested retry
+	 * delay.
 	 *
-	 * @param retryAfter nonnegative minimum suggested retry delay
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record Denied(@NonNull Duration retryAfter) implements McpRateLimitDecision {
+	public final class Denied implements McpRateLimitDecision {
+		@NonNull
+		private final Duration retryAfter;
+
 		/**
 		 * Validates this denied decision.
 		 */
-		public Denied {
-			requireNonNull(retryAfter);
+		private Denied(@NonNull Duration retryAfter) {
+			this.retryAfter = requireNonNull(retryAfter);
 			if (retryAfter.isNegative())
 				throw new IllegalArgumentException("retryAfter must not be negative");
+		}
+
+		/** @return nonnegative minimum suggested retry delay */
+		@NonNull
+		public Duration getRetryAfter() {
+			return this.retryAfter;
+		}
+
+		/** @return whether this decision has the same suggested retry delay */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (!(other instanceof Denied denied))
+				return false;
+			return this.retryAfter.equals(denied.retryAfter);
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return this.retryAfter.hashCode();
+		}
+
+		/** @return safe diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "Denied{retryAfter=" + this.retryAfter + "}";
 		}
 	}
 }

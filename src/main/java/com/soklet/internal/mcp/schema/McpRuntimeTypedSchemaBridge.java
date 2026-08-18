@@ -257,11 +257,11 @@ public final class McpRuntimeTypedSchemaBridge<T> {
 	private static McpJsonValue toPublic(
 			com.soklet.internal.mcp.protocol.@NonNull McpJsonValue value) {
 		if (value instanceof com.soklet.internal.mcp.protocol.McpJsonString string)
-			return new McpJsonString(string.value());
+			return McpJsonString.fromValue(string.value());
 		if (value instanceof com.soklet.internal.mcp.protocol.McpJsonNumber number)
-			return new McpJsonNumber(number.value());
+			return McpJsonNumber.fromValue(number.value());
 		if (value instanceof com.soklet.internal.mcp.protocol.McpJsonBoolean bool)
-			return new McpJsonBoolean(
+			return McpJsonBoolean.fromValue(
 					bool == com.soklet.internal.mcp.protocol.McpJsonBoolean.TRUE);
 		if (value instanceof com.soklet.internal.mcp.protocol.McpJsonNull)
 			return McpJsonNull.INSTANCE;
@@ -283,12 +283,12 @@ public final class McpRuntimeTypedSchemaBridge<T> {
 	private static com.soklet.internal.mcp.protocol.@NonNull McpJsonValue toInternal(
 			@NonNull McpJsonValue value) {
 		if (value instanceof McpJsonString string)
-			return new com.soklet.internal.mcp.protocol.McpJsonString(string.value());
+			return new com.soklet.internal.mcp.protocol.McpJsonString(string.getValue());
 		if (value instanceof McpJsonNumber number)
-			return new com.soklet.internal.mcp.protocol.McpJsonNumber(number.value());
+			return new com.soklet.internal.mcp.protocol.McpJsonNumber(number.getValue());
 		if (value instanceof McpJsonBoolean bool)
 			return com.soklet.internal.mcp.protocol.McpJsonBoolean
-					.fromBoolean(bool.value());
+					.fromBoolean(bool.getValue());
 		if (value instanceof McpJsonNull)
 			return com.soklet.internal.mcp.protocol.McpJsonNull.INSTANCE;
 		if (value instanceof McpJsonArray array) {

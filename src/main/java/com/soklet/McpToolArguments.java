@@ -41,7 +41,7 @@ public interface McpToolArguments<A> {
 	 * @return converted arguments
 	 */
 	@NonNull
-	A getArguments();
+	A getConvertedArguments();
 
 	/**
 	 * Returns the validated immutable JSON object received on the wire.

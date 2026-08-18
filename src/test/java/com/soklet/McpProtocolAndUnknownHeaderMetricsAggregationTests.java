@@ -110,23 +110,23 @@ public class McpProtocolAndUnknownHeaderMetricsAggregationTests {
 				() -> snapshot.getUnknownMirroredHeaders().put(applicationKey,
 						1L));
 		Assertions.assertEquals(123_456,
-				new McpMetricsEvent.ProtocolError(123_456).code(),
+				McpMetricsEvent.protocolError(123_456).getCode(),
 				"Public/manual protocol values are not the framework-production allowlist.");
 		Assertions.assertEquals("vendor.example/arbitrary",
-				applicationKey.jsonRpcMethod(),
+				applicationKey.getJsonRpcMethod(),
 				"Public keys validate shape, not the runtime-only method vocabulary.");
 
 		Assertions.assertThrows(NullPointerException.class,
-				() -> new McpMetricsSnapshot.EndpointMethodKey(null,
+				() -> McpMetricsSnapshot.EndpointMethodKey.fromDimensions(null,
 						JSON_RPC_METHOD));
 		Assertions.assertThrows(NullPointerException.class,
-				() -> new McpMetricsSnapshot.EndpointMethodKey(ENDPOINT_PATH,
+				() -> McpMetricsSnapshot.EndpointMethodKey.fromDimensions(ENDPOINT_PATH,
 						null));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new McpMetricsSnapshot.EndpointMethodKey("",
+				() -> McpMetricsSnapshot.EndpointMethodKey.fromDimensions("",
 						JSON_RPC_METHOD));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new McpMetricsSnapshot.EndpointMethodKey(ENDPOINT_PATH,
+				() -> McpMetricsSnapshot.EndpointMethodKey.fromDimensions(ENDPOINT_PATH,
 						""));
 		Assertions.assertThrows(NullPointerException.class,
 				() -> McpMetricsSnapshot.builder().protocolErrors(null));
@@ -159,12 +159,12 @@ public class McpProtocolAndUnknownHeaderMetricsAggregationTests {
 		Map<Integer, Long> expectedProtocolErrors = new HashMap<>();
 		for (Integer code : FRAMEWORK_PROTOCOL_ERROR_CODES) {
 			protocolDriven.didRecordMcpMetricsEvent(
-					new McpMetricsEvent.ProtocolError(code));
+					McpMetricsEvent.protocolError(code));
 			expectedProtocolErrors.put(code, 1L);
 		}
 		Integer repeatedCode = FRAMEWORK_PROTOCOL_ERROR_CODES.get(0);
 		protocolDriven.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.ProtocolError(repeatedCode));
+				McpMetricsEvent.protocolError(repeatedCode));
 		expectedProtocolErrors.put(repeatedCode, 2L);
 		McpMetricsSnapshot protocolSnapshot = protocolDriven.snapshot()
 				.orElseThrow().getMcpMetrics();
@@ -186,14 +186,14 @@ public class McpProtocolAndUnknownHeaderMetricsAggregationTests {
 		DefaultMetricsCollector headerDriven =
 				DefaultMetricsCollector.defaultInstance();
 		headerDriven.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.UnknownMirroredHeader(
-						recognized.endpointPath(), recognized.jsonRpcMethod()));
+				McpMetricsEvent.unknownMirroredHeader(
+						recognized.getEndpointPath(), recognized.getJsonRpcMethod()));
 		headerDriven.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.UnknownMirroredHeader(
-						recognized.endpointPath(), recognized.jsonRpcMethod()));
+				McpMetricsEvent.unknownMirroredHeader(
+						recognized.getEndpointPath(), recognized.getJsonRpcMethod()));
 		headerDriven.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.UnknownMirroredHeader(
-						unrecognized.endpointPath(), unrecognized.jsonRpcMethod()));
+				McpMetricsEvent.unknownMirroredHeader(
+						unrecognized.getEndpointPath(), unrecognized.getJsonRpcMethod()));
 		McpMetricsSnapshot headerSnapshot = headerDriven.snapshot()
 				.orElseThrow().getMcpMetrics();
 		Assertions.assertTrue(headerSnapshot.getProtocolErrors().isEmpty());
@@ -207,7 +207,7 @@ public class McpProtocolAndUnknownHeaderMetricsAggregationTests {
 		assertSparseFamilyAbsent(headerText, PROTOCOL_ERRORS_METRIC_NAME);
 
 		headerDriven.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.ProtocolError(-32600));
+				McpMetricsEvent.protocolError(-32600));
 		Set<SampleProjection> observed = ConcurrentHashMap.newKeySet();
 		String selected = headerDriven.snapshotText(
 				MetricsCollector.SnapshotTextOptions.withMetricsFormat(
@@ -262,12 +262,12 @@ public class McpProtocolAndUnknownHeaderMetricsAggregationTests {
 		McpMetricsSnapshot.EndpointMethodKey key = key(ENDPOINT_PATH,
 				JSON_RPC_METHOD);
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.ProtocolError(-32600));
+				McpMetricsEvent.protocolError(-32600));
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.ProtocolError(-32600));
+				McpMetricsEvent.protocolError(-32600));
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.UnknownMirroredHeader(key.endpointPath(),
-						key.jsonRpcMethod()));
+				McpMetricsEvent.unknownMirroredHeader(key.getEndpointPath(),
+						key.getJsonRpcMethod()));
 		McpMetricsSnapshot retained = collector.snapshot().orElseThrow()
 				.getMcpMetrics();
 		Assertions.assertEquals(Map.of(-32600, 2L),
@@ -276,10 +276,10 @@ public class McpProtocolAndUnknownHeaderMetricsAggregationTests {
 				retained.getUnknownMirroredHeaders());
 
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.ProtocolError(-32601));
+				McpMetricsEvent.protocolError(-32601));
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.UnknownMirroredHeader(key.endpointPath(),
-						key.jsonRpcMethod()));
+				McpMetricsEvent.unknownMirroredHeader(key.getEndpointPath(),
+						key.getJsonRpcMethod()));
 		collector.reset();
 		Assertions.assertSame(McpMetricsSnapshot.emptyInstance(),
 				collector.snapshot().orElseThrow().getMcpMetrics());
@@ -304,8 +304,9 @@ public class McpProtocolAndUnknownHeaderMetricsAggregationTests {
 					"vendor.example/method-" + index);
 			publicUnknownHeaders.put(manualKey, 1L);
 			collector.didRecordMcpMetricsEvent(
-					new McpMetricsEvent.UnknownMirroredHeader(
-							manualKey.endpointPath(), manualKey.jsonRpcMethod()));
+					McpMetricsEvent.unknownMirroredHeader(
+							manualKey.getEndpointPath(),
+							manualKey.getJsonRpcMethod()));
 		}
 		McpMetricsSnapshot.EndpointMethodKey newestUnknown = key(
 				"/mcp/manual-" + MANUAL_DIMENSION_CAPACITY,
@@ -324,7 +325,7 @@ public class McpProtocolAndUnknownHeaderMetricsAggregationTests {
 			int code = protocolBase + index;
 			publicProtocolErrors.put(code, 1L);
 			collector.didRecordMcpMetricsEvent(
-					new McpMetricsEvent.ProtocolError(code));
+					McpMetricsEvent.protocolError(code));
 		}
 		int newestProtocol = protocolBase + MANUAL_DIMENSION_CAPACITY;
 		McpMetricsSnapshot bothFilled = collector.snapshot().orElseThrow()
@@ -371,13 +372,13 @@ public class McpProtocolAndUnknownHeaderMetricsAggregationTests {
 					start.await();
 					for (int round = 0; round < rounds; ++round) {
 						collector.didRecordMcpMetricsEvent(
-								new McpMetricsEvent.ProtocolError(code));
+								McpMetricsEvent.protocolError(code));
 						collector.didRecordMcpMetricsEvent(
-								new McpMetricsEvent.UnknownMirroredHeader(
-										key.endpointPath(), key.jsonRpcMethod()));
+								McpMetricsEvent.unknownMirroredHeader(
+										key.getEndpointPath(), key.getJsonRpcMethod()));
 						collector.didRecordMcpMetricsEvent(
-								new McpMetricsEvent.UnknownMirroredHeader(
-										key.endpointPath(), key.jsonRpcMethod()));
+								McpMetricsEvent.unknownMirroredHeader(
+										key.getEndpointPath(), key.getJsonRpcMethod()));
 					}
 					return null;
 				}));
@@ -406,12 +407,12 @@ public class McpProtocolAndUnknownHeaderMetricsAggregationTests {
 		Assertions.assertEquals(expectedUnknownHeaders,
 				retained.getUnknownMirroredHeaders());
 
-		collector.didRecordMcpMetricsEvent(new McpMetricsEvent.ProtocolError(
+		collector.didRecordMcpMetricsEvent(McpMetricsEvent.protocolError(
 				FRAMEWORK_PROTOCOL_ERROR_CODES.get(0)));
 		McpMetricsSnapshot.EndpointMethodKey first = keys.get(0);
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.UnknownMirroredHeader(first.endpointPath(),
-						first.jsonRpcMethod()));
+				McpMetricsEvent.unknownMirroredHeader(first.getEndpointPath(),
+						first.getJsonRpcMethod()));
 		collector.reset();
 		Assertions.assertEquals(expectedProtocolErrors,
 				retained.getProtocolErrors());
@@ -536,20 +537,20 @@ public class McpProtocolAndUnknownHeaderMetricsAggregationTests {
 	@NonNull
 	private static Map<@NonNull String, @NonNull String> labels(
 			McpMetricsSnapshot.@NonNull EndpointMethodKey key) {
-		return Map.of("endpoint", requireNonNull(key).endpointPath(), "method",
-				key.jsonRpcMethod());
+		return Map.of("endpoint", requireNonNull(key).getEndpointPath(), "method",
+				key.getJsonRpcMethod());
 	}
 
 	@NonNull
 	private static String encodedLabels(
 			McpMetricsSnapshot.@NonNull EndpointMethodKey key) {
-		return "{endpoint=\"" + requireNonNull(key).endpointPath()
-				+ "\",method=\"" + key.jsonRpcMethod() + "\"}";
+		return "{endpoint=\"" + requireNonNull(key).getEndpointPath()
+				+ "\",method=\"" + key.getJsonRpcMethod() + "\"}";
 	}
 
 	private static McpMetricsSnapshot.@NonNull EndpointMethodKey key(
 			@NonNull String endpointPath, @NonNull String jsonRpcMethod) {
-		return new McpMetricsSnapshot.EndpointMethodKey(
+		return McpMetricsSnapshot.EndpointMethodKey.fromDimensions(
 				requireNonNull(endpointPath), requireNonNull(jsonRpcMethod));
 	}
 

@@ -131,13 +131,13 @@ public class McpShutdownObservabilityTests {
 				() -> collector.didRecordMcpMetricsEvent(null));
 
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.ServerStopped(McpShutdownOutcome.CLEAN));
+				McpMetricsEvent.serverStopped(McpShutdownOutcome.CLEAN));
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.ServerStopped(McpShutdownOutcome.CLEAN));
-		collector.didRecordMcpMetricsEvent(new McpMetricsEvent.ServerStopped(
+				McpMetricsEvent.serverStopped(McpShutdownOutcome.CLEAN));
+		collector.didRecordMcpMetricsEvent(McpMetricsEvent.serverStopped(
 				McpShutdownOutcome.RESIDUAL_HANDLERS));
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.HandlerExecutionStarted());
+				McpMetricsEvent.handlerExecutionStarted());
 
 		McpMetricsSnapshot retained = collector.snapshot().orElseThrow()
 				.getMcpMetrics();
@@ -147,7 +147,7 @@ public class McpShutdownObservabilityTests {
 				retained.getShutdowns());
 
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.ServerStopped(McpShutdownOutcome.CLEAN));
+				McpMetricsEvent.serverStopped(McpShutdownOutcome.CLEAN));
 		Assertions.assertEquals(2L,
 				retained.getShutdowns().get(McpShutdownOutcome.CLEAN));
 		Assertions.assertEquals(3L, collector.snapshot().orElseThrow()
@@ -1010,7 +1010,7 @@ public class McpShutdownObservabilityTests {
 			return this.events.stream()
 					.filter(McpMetricsEvent.ServerStopped.class::isInstance)
 					.map(McpMetricsEvent.ServerStopped.class::cast)
-					.map(McpMetricsEvent.ServerStopped::outcome)
+					.map(McpMetricsEvent.ServerStopped::getOutcome)
 					.toList();
 		}
 	}

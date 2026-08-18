@@ -17,8 +17,10 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.Objects;
 
 import static java.util.Objects.requireNonNull;
 
@@ -32,25 +34,14 @@ import static java.util.Objects.requireNonNull;
  * configuration. Soklet validates that relationship when it emits the
  * containing result.
  *
- * @param declaration registered input-request declaration
- * @param params method-specific request parameters
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public record McpInputRequest(
-		@NonNull McpInputRequestDeclaration declaration,
-		@NonNull McpJsonObject params) {
-	/**
-	 * Creates and validates an input request.
-	 *
-	 * @param declaration registered input-request declaration
-	 * @param params method-specific request parameters
-	 * @throws NullPointerException if an argument is null
-	 */
-	public McpInputRequest {
-		requireNonNull(declaration);
-		requireNonNull(params);
-	}
+public final class McpInputRequest {
+	@NonNull
+	private final McpInputRequestDeclaration declaration;
+	@NonNull
+	private final McpJsonObject params;
 
 	/**
 	 * Creates an input request from its registered declaration.
@@ -67,14 +58,49 @@ public record McpInputRequest(
 		return new McpInputRequest(declaration, params);
 	}
 
+	private McpInputRequest(@NonNull McpInputRequestDeclaration declaration,
+			@NonNull McpJsonObject params) {
+		this.declaration = requireNonNull(declaration);
+		this.params = requireNonNull(params);
+	}
+
+	/** @return registered input-request declaration */
+	@NonNull
+	public McpInputRequestDeclaration getDeclaration() {
+		return this.declaration;
+	}
+
+	/** @return method-specific request parameters */
+	@NonNull
+	public McpJsonObject getParams() {
+		return this.params;
+	}
+
 	/**
 	 * Returns the declared client request method.
 	 *
 	 * @return client request method
 	 */
 	@NonNull
-	public String method() {
-		return this.declaration.method();
+	public String getMethod() {
+		return this.declaration.getMethod();
+	}
+
+	/** @return whether this value has the same declaration and parameters */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpInputRequest request))
+			return false;
+		return this.declaration.equals(request.declaration)
+				&& this.params.equals(request.params);
+	}
+
+	/** @return value-based hash code */
+	@Override
+	public int hashCode() {
+		return Objects.hash(this.declaration, this.params);
 	}
 
 	/** @return rendering that identifies the method but redacts request parameters */
@@ -82,6 +108,6 @@ public record McpInputRequest(
 	@NonNull
 	public final String toString() {
 		return "McpInputRequest{method='%s', params=<redacted>}"
-				.formatted(method());
+				.formatted(getMethod());
 	}
 }

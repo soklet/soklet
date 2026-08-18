@@ -51,9 +51,9 @@ class McpToolRegistrationTests {
 						.types(Arguments.class, Result.class)
 						.handler((request, arguments, features) -> {
 							rawArguments.set(arguments.getRawArguments());
-							assertEquals(" exact ", arguments.getArguments().query());
+							assertEquals(" exact ", arguments.getConvertedArguments().query());
 							assertEquals(List.of(2, 5),
-									arguments.getArguments().pageSizes());
+									arguments.getConvertedArguments().pageSizes());
 							return new Result(List.of(new Item("a", 7)));
 						})
 						.title("Catalog search")
@@ -65,8 +65,8 @@ class McpToolRegistrationTests {
 		McpJsonObject input = McpJsonObject.builder()
 				.put("query", " exact ")
 				.put("pageSizes", McpJsonArray.fromElements(List.of(
-						new McpJsonNumber(java.math.BigDecimal.valueOf(2)),
-						new McpJsonNumber(java.math.BigDecimal.valueOf(5)))))
+						McpJsonNumber.fromValue(java.math.BigDecimal.valueOf(2)),
+						McpJsonNumber.fromValue(java.math.BigDecimal.valueOf(5)))))
 				.build();
 
 		McpCompleteResult result = assertInstanceOf(McpCompleteResult.class,
@@ -83,19 +83,19 @@ class McpToolRegistrationTests {
 		assertEquals("Searches the catalog",
 				registration.getDescription().orElseThrow());
 		assertEquals("catalog", ((McpJsonString) registration.getMetadata()
-				.find("owner").orElseThrow()).value());
+				.find("owner").orElseThrow()).getValue());
 		assertEquals(Arguments.class, registration.getArgumentType());
 		assertEquals(Result.class, registration.getOutputType().orElseThrow());
-		assertEquals(new McpJsonString("object"), registration.getInputSchema()
+		assertEquals(McpJsonString.fromValue("object"), registration.getInputSchema()
 				.getDocument().find("type").orElseThrow());
-		assertEquals(new McpJsonString("object"), registration.getOutputSchema()
+		assertEquals(McpJsonString.fromValue("object"), registration.getOutputSchema()
 				.orElseThrow().getDocument().find("type").orElseThrow());
 		assertTrue(registration.isStructuredContentTextMirroringEnabled());
 		McpJsonArray items = assertInstanceOf(McpJsonArray.class,
 				structured.find("items").orElseThrow());
 		McpJsonObject item = assertInstanceOf(McpJsonObject.class,
 				items.getElements().get(0));
-		assertEquals(new McpJsonString("a"),
+		assertEquals(McpJsonString.fromValue("a"),
 				item.find("identifier").orElseThrow());
 	}
 
@@ -109,14 +109,14 @@ class McpToolRegistrationTests {
 						.build();
 		McpJsonObject inputSchema = registration.getInputSchema().getDocument();
 
-		assertEquals(new McpJsonString("Tenant"),
+		assertEquals(McpJsonString.fromValue("Tenant"),
 				property(inputSchema, "tenant").find("x-mcp-header")
 						.orElseThrow());
 		McpJsonObject routing = property(inputSchema, "routing");
-		assertEquals(new McpJsonString("Dry-Run"),
+		assertEquals(McpJsonString.fromValue("Dry-Run"),
 				property(routing, "dryRun").find("x-mcp-header")
 						.orElseThrow());
-		assertEquals(new McpJsonString("Shard"),
+		assertEquals(McpJsonString.fromValue("Shard"),
 				property(routing, "shard").find("x-mcp-header")
 						.orElseThrow());
 		assertTrue(property(inputSchema, "unmirrored")
@@ -171,7 +171,7 @@ class McpToolRegistrationTests {
 						.argumentType(Arguments.class)
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText(
-										arguments.getArguments().query()))
+										arguments.getConvertedArguments().query()))
 						.mirrorStructuredContentAsText(false)
 						.build();
 		McpToolRegistration<McpJsonObject> raw =
@@ -179,7 +179,7 @@ class McpToolRegistrationTests {
 						.jsonArguments()
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolStructuredContent(
-										arguments.getArguments()))
+										arguments.getConvertedArguments()))
 						.build();
 		McpJsonObject input = argumentsJson();
 		assertThrows(NullPointerException.class, () -> McpToolRegistration
@@ -209,7 +209,7 @@ class McpToolRegistrationTests {
 		assertFalse(advanced.isStructuredContentTextMirroringEnabled());
 		assertTrue(raw.isStructuredContentTextMirroringEnabled());
 		assertEquals(McpJsonObject.class, raw.getArgumentType());
-		assertEquals(new McpJsonString("object"),
+		assertEquals(McpJsonString.fromValue("object"),
 				raw.getInputSchema().getDocument().find("type").orElseThrow());
 		assertTrue(raw.getOutputType().isEmpty());
 		assertTrue(raw.getOutputSchema().isEmpty());
@@ -290,8 +290,8 @@ class McpToolRegistrationTests {
 						.put("email", emailSchema)
 						.build())
 				.put("required", McpJsonArray.fromElements(List.of(
-						new McpJsonString("tenant"),
-						new McpJsonString("email"))))
+						McpJsonString.fromValue("tenant"),
+						McpJsonString.fromValue("email"))))
 				.put("additionalProperties", false)
 				.build();
 		AtomicReference<McpJsonObject> decodedArguments = new AtomicReference<>();
@@ -299,7 +299,7 @@ class McpToolRegistrationTests {
 				McpToolRegistration.withName("conformance_schema")
 						.conformanceInputSchema(inputSchema)
 						.handler((request, arguments, features) -> {
-							decodedArguments.set(arguments.getArguments());
+							decodedArguments.set(arguments.getConvertedArguments());
 							return McpCompleteResult.fromToolText("done");
 						})
 						.build();
@@ -349,14 +349,14 @@ class McpToolRegistrationTests {
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("done"))
 						.rateLimiter(direct)
-						.rateLimiter("distributed")
+						.rateLimiterName("distributed")
 						.build();
 		McpToolRegistration<Arguments> directLast =
 				McpToolRegistration.withName("direct")
 						.argumentType(Arguments.class)
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("done"))
-						.rateLimiter("distributed")
+						.rateLimiterName("distributed")
 						.rateLimiter(direct)
 						.build();
 
@@ -370,7 +370,7 @@ class McpToolRegistrationTests {
 						.argumentType(Arguments.class)
 						.handler((request, arguments, features) ->
 								McpCompleteResult.fromToolText("done"))
-						.rateLimiter(" "));
+						.rateLimiterName(" "));
 	}
 
 	@Test

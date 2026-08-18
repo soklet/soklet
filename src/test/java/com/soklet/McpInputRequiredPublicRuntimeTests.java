@@ -76,10 +76,10 @@ public class McpInputRequiredPublicRuntimeTests {
 				.jsonArguments()
 				.handler((request, arguments, features) ->
 						McpInputRequiredResult.builder()
-								.inputRequest("approval", McpInputRequest
-										.fromDeclaration(form, toolFormParams))
-								.inputRequest("roots", McpInputRequest
-										.fromDeclaration(roots,
+								.inputRequest("approval", McpInputRequest.fromDeclaration(
+										form, toolFormParams))
+								.inputRequest("roots", McpInputRequest.fromDeclaration(
+										roots,
 												McpJsonObject.emptyInstance()))
 								.metadata(McpJsonObject.builder()
 										.put("testResult", "tool")
@@ -91,8 +91,8 @@ public class McpInputRequiredPublicRuntimeTests {
 				.withName("input-prompt")
 				.handler((request, promptGet, features) ->
 						McpInputRequiredResult.builder()
-								.inputRequest("promptRoots", McpInputRequest
-										.fromDeclaration(roots,
+								.inputRequest("promptRoots", McpInputRequest.fromDeclaration(
+										roots,
 												McpJsonObject.emptyInstance()))
 								.metadata(McpJsonObject.builder()
 										.put("testResult", "prompt")
@@ -104,8 +104,8 @@ public class McpInputRequiredPublicRuntimeTests {
 				.withUriTemplateAndName("test://items/{id}", "input-resource")
 				.handler((request, read, features) ->
 						McpInputRequiredResult.builder()
-								.inputRequest("resourceApproval", McpInputRequest
-										.fromDeclaration(form, resourceFormParams))
+								.inputRequest("resourceApproval", McpInputRequest.fromDeclaration(
+										form, resourceFormParams))
 								.metadata(McpJsonObject.builder()
 										.put("testResult", "resource")
 										.build())
@@ -407,11 +407,11 @@ public class McpInputRequiredPublicRuntimeTests {
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpInputRequiredResult.builder()
-							.inputRequest("valid-first", McpInputRequest
-									.fromDeclaration(roots,
+							.inputRequest("valid-first", McpInputRequest.fromDeclaration(
+									roots,
 											McpJsonObject.emptyInstance()))
-							.inputRequest("invalid-form", McpInputRequest
-									.fromDeclaration(form, invalidFormParams))
+							.inputRequest("invalid-form", McpInputRequest.fromDeclaration(
+									form, invalidFormParams))
 							.metadata(secretMetadata)
 							.build();
 				})
@@ -422,10 +422,10 @@ public class McpInputRequiredPublicRuntimeTests {
 				.handler((request, promptGet, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpInputRequiredResult.builder()
-							.inputRequest("valid-first", McpInputRequest
-									.fromDeclaration(form, validFormParams))
-							.inputRequest("invalid-sampling", McpInputRequest
-									.fromDeclaration(sampling,
+							.inputRequest("valid-first", McpInputRequest.fromDeclaration(
+									form, validFormParams))
+							.inputRequest("invalid-sampling", McpInputRequest.fromDeclaration(
+									sampling,
 											invalidSamplingParams))
 							.metadata(secretMetadata)
 							.build();
@@ -438,10 +438,10 @@ public class McpInputRequiredPublicRuntimeTests {
 				.handler((request, read, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpInputRequiredResult.builder()
-							.inputRequest("valid-first", McpInputRequest
-									.fromDeclaration(form, validFormParams))
-							.inputRequest("invalid-roots", McpInputRequest
-									.fromDeclaration(roots, invalidRootsParams))
+							.inputRequest("valid-first", McpInputRequest.fromDeclaration(
+									form, validFormParams))
+							.inputRequest("invalid-roots", McpInputRequest.fromDeclaration(
+									roots, invalidRootsParams))
 							.metadata(secretMetadata)
 							.build();
 				})
@@ -634,8 +634,8 @@ public class McpInputRequiredPublicRuntimeTests {
 							.inputRequest("undeclared-" + inputKeySecret,
 									McpInputRequest.fromDeclaration(undeclaredRoots,
 											McpJsonObject.emptyInstance()))
-							.inputRequest(inputKeySecret, McpInputRequest
-									.fromDeclaration(roots, invalidRootsParams))
+							.inputRequest(inputKeySecret, McpInputRequest.fromDeclaration(
+									roots, invalidRootsParams))
 							.metadata(secretMetadata)
 							.build();
 				})
@@ -703,8 +703,8 @@ public class McpInputRequiredPublicRuntimeTests {
 				.handler((request, arguments, features) -> {
 					handlerInvocations.incrementAndGet();
 					return McpInputRequiredResult.builder()
-							.inputRequest("secret-key", McpInputRequest
-									.fromDeclaration(emitted,
+							.inputRequest("secret-key", McpInputRequest.fromDeclaration(
+									emitted,
 											McpJsonObject.builder()
 													.put("secret", parameterSecret)
 													.build()))
@@ -781,8 +781,7 @@ public class McpInputRequiredPublicRuntimeTests {
 	private static McpInputRequiredResult inputRequired(String key,
 			McpInputRequestDeclaration declaration, McpJsonObject params) {
 		return McpInputRequiredResult.builder()
-				.inputRequest(key,
-						McpInputRequest.fromDeclaration(declaration, params))
+				.inputRequest(key, McpInputRequest.fromDeclaration(declaration, params))
 				.build();
 	}
 

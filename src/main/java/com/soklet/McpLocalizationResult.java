@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -50,7 +51,7 @@ public sealed interface McpLocalizationResult
 	/** @return result requesting the canonical default field */
 	@NonNull
 	static UseDefaultText useDefaultText() {
-		return new UseDefaultText();
+		return UseDefaultText.INSTANCE;
 	}
 
 	/**
@@ -62,30 +63,54 @@ public sealed interface McpLocalizationResult
 	 */
 	@NonNull
 	static Failure failure() {
-		return new Failure();
+		return Failure.INSTANCE;
 	}
 
 	/**
 	 * Text successfully resolved for the localization context. Resolution may
 	 * use the selected locale, a parent locale, or a localization-library
 	 * fallback; Soklet does not require or retain per-field resolution
-	 * provenance.
+	 * provenance. The result carries localized nonblank text.
 	 *
-	 * @param text localized nonblank text
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record Localized(@NonNull String text) implements McpLocalizationResult {
+	public final class Localized implements McpLocalizationResult {
+		@NonNull
+		private final String text;
+
 		/**
 		 * Validates the localized text.
 		 *
 		 * @param text localized nonblank text
 		 */
-		public Localized {
-			requireNonNull(text);
+		private Localized(@NonNull String text) {
+			this.text = requireNonNull(text);
 			if (text.isBlank())
 				throw new IllegalArgumentException(
 						"Localized MCP text must not be blank.");
+		}
+
+		/** @return localized nonblank text */
+		@NonNull
+		public String getText() {
+			return this.text;
+		}
+
+		/** @return whether this result contains the same localized text */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (!(other instanceof Localized localized))
+				return false;
+			return this.text.equals(localized.text);
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return this.text.hashCode();
 		}
 
 		/** @return redacted diagnostic rendering */
@@ -102,7 +127,31 @@ public sealed interface McpLocalizationResult
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record UseDefaultText() implements McpLocalizationResult {
+	public final class UseDefaultText implements McpLocalizationResult {
+		@NonNull
+		private static final UseDefaultText INSTANCE = new UseDefaultText();
+
+		private UseDefaultText() {
+		}
+
+		/** @return whether the other value also requests default text */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			return other instanceof UseDefaultText;
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return 0;
+		}
+
+		/** @return safe diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "UseDefaultText{}";
+		}
 	}
 
 	/**
@@ -112,6 +161,30 @@ public sealed interface McpLocalizationResult
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	@ThreadSafe
-	record Failure() implements McpLocalizationResult {
+	public final class Failure implements McpLocalizationResult {
+		@NonNull
+		private static final Failure INSTANCE = new Failure();
+
+		private Failure() {
+		}
+
+		/** @return whether the other value is also a localization failure */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			return other instanceof Failure;
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return 0;
+		}
+
+		/** @return safe diagnostic rendering */
+		@Override
+		@NonNull
+		public String toString() {
+			return "Failure{}";
+		}
 	}
 }

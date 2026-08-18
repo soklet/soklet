@@ -123,18 +123,10 @@ class McpLocalizationPreferenceTests {
 		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
 				.contextProvider(request -> {
 					observedRanges.set(List.copyOf(request.getLanguageRanges()));
-					return new McpLocalizationContext() {
-						@Override
-						public Locale getLocale() {
-							return Locale.ENGLISH;
-						}
-
-						@Override
-						public McpLocalizationResult localize(
-								McpLocalizableText text) {
-							return McpLocalizationResult.useDefaultText();
-						}
-					};
+					return McpLocalizationContext.withLocale(Locale.ENGLISH)
+							.localizer(text ->
+									McpLocalizationResult.useDefaultText())
+							.build();
 				})
 				.build();
 		String path = "/localization/physical-preference";

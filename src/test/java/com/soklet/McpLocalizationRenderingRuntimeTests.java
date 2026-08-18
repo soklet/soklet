@@ -162,17 +162,9 @@ class McpLocalizationRenderingRuntimeTests {
 	private static McpLocalizationContext context(Locale locale,
 			java.util.function.Function<McpLocalizableText,
 					McpLocalizationResult> provider) {
-		return new McpLocalizationContext() {
-			@Override
-			public Locale getLocale() {
-				return locale;
-			}
-
-			@Override
-			public McpLocalizationResult localize(McpLocalizableText text) {
-				return provider.apply(text);
-			}
-		};
+		return McpLocalizationContext.withLocale(locale)
+				.localizer(provider)
+				.build();
 	}
 
 	@Test

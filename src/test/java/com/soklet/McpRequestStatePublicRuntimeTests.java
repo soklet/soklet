@@ -91,7 +91,7 @@ public class McpRequestStatePublicRuntimeTests {
 									McpApplicationRequestState.class,
 									request.getRequestState().orElseThrow());
 					Assertions.assertEquals(APPLICATION_STATE,
-							requestState.value());
+							requestState.getValue());
 					return McpCompleteResult.fromToolText(
 							"application state accepted");
 				})
@@ -166,7 +166,7 @@ public class McpRequestStatePublicRuntimeTests {
 					Assertions.assertInstanceOf(
 							McpApplicationRequestState.class,
 							retryContext.getRequestState().orElseThrow());
-			Assertions.assertEquals(APPLICATION_STATE, retryState.value());
+			Assertions.assertEquals(APPLICATION_STATE, retryState.getValue());
 			Assertions.assertEquals(0, protector.seals.get());
 			Assertions.assertEquals(0, protector.opens.get());
 			Assertions.assertFalse(server.getDiagnostics().toString()
@@ -195,8 +195,8 @@ public class McpRequestStatePublicRuntimeTests {
 					handlerInvocations.incrementAndGet();
 					if (request.getRequestState().isEmpty())
 						return McpInputRequiredResult.builder()
-								.inputRequest("roots", McpInputRequest
-										.fromDeclaration(roots,
+								.inputRequest("roots", McpInputRequest.fromDeclaration(
+										roots,
 												McpJsonObject.emptyInstance()))
 								.frameworkRequestState(applicationState)
 								.build();
@@ -206,14 +206,14 @@ public class McpRequestStatePublicRuntimeTests {
 									McpFrameworkRequestState.class,
 									request.getRequestState().orElseThrow());
 					McpJsonObject stateValue = Assertions.assertInstanceOf(
-							McpJsonObject.class, state.value());
+							McpJsonObject.class, state.getValue());
 					Assertions.assertEquals("awaiting-roots",
 							Assertions.assertInstanceOf(McpJsonString.class,
-									stateValue.find("phase").orElseThrow()).value());
+									stateValue.find("phase").orElseThrow()).getValue());
 					Assertions.assertEquals(1,
 							Assertions.assertInstanceOf(McpJsonNumber.class,
 									stateValue.find("sequence").orElseThrow())
-									.value().intValueExact());
+									.getValue().intValueExact());
 					return McpCompleteResult.fromToolText(
 							"framework state accepted");
 				})
@@ -282,8 +282,8 @@ public class McpRequestStatePublicRuntimeTests {
 					handlerInvocations.incrementAndGet();
 					if (request.getRequestState().isEmpty())
 						return McpInputRequiredResult.builder()
-								.inputRequest("roots", McpInputRequest
-										.fromDeclaration(roots,
+								.inputRequest("roots", McpInputRequest.fromDeclaration(
+										roots,
 												McpJsonObject.emptyInstance()))
 								.frameworkRequestState(applicationState)
 								.build();
@@ -293,10 +293,10 @@ public class McpRequestStatePublicRuntimeTests {
 									McpFrameworkRequestState.class,
 									request.getRequestState().orElseThrow());
 					McpJsonObject stateValue = Assertions.assertInstanceOf(
-							McpJsonObject.class, state.value());
+							McpJsonObject.class, state.getValue());
 					Assertions.assertEquals("server-a",
 							Assertions.assertInstanceOf(McpJsonString.class,
-									stateValue.find("origin").orElseThrow()).value());
+									stateValue.find("origin").orElseThrow()).getValue());
 					return McpCompleteResult.fromToolText(
 							"cross-instance state accepted");
 				})
@@ -505,7 +505,7 @@ public class McpRequestStatePublicRuntimeTests {
 							Assertions.assertInstanceOf(
 									McpApplicationRequestState.class,
 									request.getRequestState().orElseThrow());
-					Assertions.assertEquals(APPLICATION_STATE, state.value());
+					Assertions.assertEquals(APPLICATION_STATE, state.getValue());
 					return McpCompleteResult.fromResourceOutput(
 							McpResourceOutput.builder()
 									.content(McpTextResourceContents

@@ -140,7 +140,7 @@ public final class McpJsonObject implements McpJsonValue {
 		 */
 		@NonNull
 		public Builder put(@NonNull String name, @NonNull String value) {
-			return put(name, new McpJsonString(value));
+			return put(name, McpJsonString.fromValue(value));
 		}
 
 		/**
@@ -152,7 +152,7 @@ public final class McpJsonObject implements McpJsonValue {
 		 */
 		@NonNull
 		public Builder put(@NonNull String name, @NonNull BigDecimal value) {
-			return put(name, new McpJsonNumber(value));
+			return put(name, McpJsonNumber.fromValue(value));
 		}
 
 		/**
@@ -208,7 +208,7 @@ public final class McpJsonObject implements McpJsonValue {
 		 */
 		@NonNull
 		public Builder put(@NonNull String name, @NonNull Boolean value) {
-			return put(name, new McpJsonBoolean(requireNonNull(value)));
+			return put(name, McpJsonBoolean.fromValue(requireNonNull(value)));
 		}
 
 		/**

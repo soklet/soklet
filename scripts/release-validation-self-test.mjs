@@ -3,12 +3,14 @@
 import assert from 'node:assert/strict';
 import {
   copyFileSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,12 +25,15 @@ import {
   validateReleaseConfiguration,
   verifyReleaseConformanceEvidence,
 } from './release-validation-evidence.mjs';
+import { verifyMavenDownstreamPom } from './verify-maven-downstream-pom.mjs';
+import { createLoopbackPortReservation } from './reserve-loopback-port.mjs';
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(scriptDirectory, '..');
 const trackedManifestPath = resolve(projectRoot, 'release/release-validation-manifest.json');
 const releaseWorkflowPath = resolve(projectRoot, '.github/workflows/release-validation.yml');
 const releaseValidatorPath = resolve(projectRoot, 'scripts/validate-release-candidate.sh');
+const loopbackPortReserverPath = resolve(projectRoot, 'scripts/reserve-loopback-port.mjs');
 const promotionHelperPath = resolve(projectRoot, 'scripts/release-promotion.mjs');
 const promotionWrapperPath = resolve(projectRoot, 'scripts/promote-release-candidate.sh');
 const pinnedJavaInstallerPath = resolve(
@@ -38,11 +43,38 @@ const pinnedJavaInstallerPath = resolve(
 const fixtureRoot = mkdtempSync(resolve(tmpdir(), 'soklet-release-validation-'));
 const candidateCommit = 'a'.repeat(40);
 
+function canBindLoopback(port) {
+  return new Promise((resolveBind) => {
+    const server = net.createServer();
+    server.once('error', () => resolveBind(false));
+    server.listen({ exclusive: true, host: '127.0.0.1', port }, () => {
+      server.close(() => resolveBind(true));
+    });
+  });
+}
+
+async function verifyLoopbackPortReservation(outputPath) {
+  const reservation = await createLoopbackPortReservation(outputPath);
+  try {
+    assert.equal(readFileSync(outputPath, 'utf8'), `${reservation.port}\n`);
+    const stats = lstatSync(outputPath);
+    assert.equal(stats.isFile(), true);
+    assert.equal(stats.isSymbolicLink(), false);
+    assert.equal(stats.mode & 0o077, 0);
+    assert.equal(await canBindLoopback(reservation.port), false);
+  } finally {
+    await reservation.close();
+  }
+  assert.equal(await canBindLoopback(reservation.port), true);
+}
+
 function fixturePath(...parts) {
   return resolve(fixtureRoot, ...parts);
 }
 
 try {
+  await verifyLoopbackPortReservation(fixturePath('reserved-loopback-port.txt'));
+
   const tracked = validateReleaseConfiguration(trackedManifestPath);
   assert.equal(tracked.candidate.version, '3.6.0');
   assert.equal(tracked.gates.length, 13);
@@ -50,9 +82,34 @@ try {
   assert.equal(tracked.toolchains.toystoreJava.vendorVersion, 'Corretto-25.0.4.7.1');
   assert.equal(tracked.promotion.helper.path, 'scripts/release-promotion.mjs');
   assert.equal(tracked.promotion.wrapper.path, 'scripts/promote-release-candidate.sh');
+  for (const gateId of [
+    'barebones-app',
+    'soklet-servlet-javax',
+    'soklet-servlet-jakarta',
+    'toystore-app',
+    'soklet-otel',
+    'soklet-website',
+  ]) {
+    const gate = tracked.gates.find(({ id }) => id === gateId);
+    assert.equal(gate.status, 'BLOCKED_UNCOMMITTED_LOCAL_MIGRATION');
+  }
   const trackedToyStoreGate = tracked.gates.find(({ id }) => id === 'toystore-app');
-  assert.equal(trackedToyStoreGate.status, 'BLOCKED_UNCOMMITTED_LOCAL_MIGRATION');
   assert.equal(trackedToyStoreGate.commit, '209781472b2d308cbc5538f2a7f956bc97b399b7');
+  assert.equal(
+    trackedToyStoreGate.artifactIdentity,
+    'com.soklet.toystore:toystore:1.0.0',
+  );
+  const trackedBarebonesGate = tracked.gates.find(({ id }) => id === 'barebones-app');
+  assert.match(trackedBarebonesGate.reason, /two local source-tree changes are uncommitted/);
+  for (const gateId of ['soklet-servlet-javax', 'soklet-servlet-jakarta']) {
+    const gate = tracked.gates.find(({ id }) => id === gateId);
+    assert.match(gate.reason, /uncommitted local POM/);
+    assert.equal(gate.defaultArtifactIdentity, 'com.soklet:soklet:3.1.1');
+    assert.equal(
+      gate.defaultArtifactSha256,
+      'a7acd26b5a8933726615719e8d9d766feba6d0ebdb32939fa8ef1eba8094e7a4',
+    );
+  }
   const trackedLocalizationGate = tracked.gates.find(
     ({ id }) => id === 'candidate-localization',
   );
@@ -65,7 +122,7 @@ try {
   assert.equal(trackedLocalizationGate.repository, null);
   assert.throws(
     () => validateReleaseConfiguration(trackedManifestPath, { requireReady: true }),
-    /Release manifest is not runnable/,
+    /barebones-app=BLOCKED_UNCOMMITTED_LOCAL_MIGRATION/,
   );
   for (const [gateId, directory] of [
     ['typescript-interop', 'typescript'],
@@ -111,6 +168,7 @@ try {
   assert.ok(candidateJavaInstall > toyStoreJavaInstall);
 
   const releaseValidator = readFileSync(releaseValidatorPath, 'utf8');
+  const loopbackPortReserver = readFileSync(loopbackPortReserverPath, 'utf8');
   assert.doesNotMatch(
     releaseValidator,
     /clone_pinned_gate candidate-localization/,
@@ -142,6 +200,52 @@ try {
     releaseValidator,
     /record_gate "\$gate_id" "\$log" "\$candidate_jar"/,
   );
+  assert.match(
+    releaseValidator,
+    /verify-maven-downstream-pom\.mjs/,
+  );
+  assert.match(
+    releaseValidator,
+    /"\$downstream_pom" "\$artifact_identity" "\$version_property"/,
+  );
+  assert.match(
+    releaseValidator,
+    /"\$surefire_verifier" "\$surefire_reports" "\$gate_id" candidate[\s\\\n\t]+"\$installed_jar" "\$candidate_jar_sha256"/,
+  );
+  assert.match(releaseValidator, /prepare_servlet_default_jar/);
+  assert.match(releaseValidator, /repo1\.maven\.org\/maven2\/com\/soklet\/soklet/);
+  assert.match(releaseValidator, /"\$default_jar" "\$default_artifact_sha256"/);
+  assert.match(releaseValidator, /"\$downstream_pom" "\$default_jar"/);
+  assert.ok(
+    (releaseValidator.match(/assert_installed_candidate_unchanged/g)?.length ?? 0) >= 10,
+  );
+  const barebonesFunction = releaseValidator.match(
+    /\nrun_barebones\(\) \{\n([\s\S]*?)\n\}\n\nrun_website\(\)/,
+  );
+  assert.notEqual(barebonesFunction, null);
+  assert.doesNotMatch(barebonesFunction[1], /8080/);
+  assert.match(barebonesFunction[1], /reserve_loopback_port "\$port_file" "\$reservation_log"/);
+  assert.match(
+    barebonesFunction[1],
+    /env RUNNING_IN_DOCKER=true SOKLET_BAREBONES_LOOPBACK_PORT="\$barebones_port"/,
+  );
+  assert.equal(barebonesFunction[1].match(/127\.0\.0\.1:\$barebones_port/g)?.length, 3);
+  assert.match(barebonesFunction[1], /grep --fixed-strings --line-regexp --quiet/);
+  assert.match(barebonesFunction[1], /! kill -0 "\$reservation_pid"/);
+  assert.match(barebonesFunction[1], /! kill -0 "\$app_pid"/);
+  assert.match(barebonesFunction[1], /assert_loopback_port_available "\$barebones_port"/);
+  assert.match(
+    barebonesFunction[1],
+    /record_gate barebones-app "\$port_file" "\$reservation_log" "\$log"/,
+  );
+  assert.ok(
+    barebonesFunction[1].indexOf('stop_active_process')
+      < barebonesFunction[1].indexOf('SOKLET_BAREBONES_LOOPBACK_PORT="$barebones_port"'),
+  );
+  assert.match(releaseValidator, /scripts\/reserve-loopback-port\.mjs/);
+  assert.match(loopbackPortReserver, /host: '127\.0\.0\.1', port: 0/);
+  assert.match(loopbackPortReserver, /flag: 'wx'/);
+  assert.doesNotMatch(releaseValidator, /assert_loopback_port_available 8080/);
   assert.doesNotMatch(releaseValidator, /trap cleanup EXIT HUP INT TERM/);
   for (const [signal, status] of [['HUP', 129], ['INT', 130], ['TERM', 143]]) {
     assert.match(releaseValidator, new RegExp(`trap 'exit ${status}' ${signal}`));
@@ -198,6 +302,97 @@ try {
   }
   writeFileSync(fixtureManifestPath, `${JSON.stringify(readyManifest, null, 2)}\n`);
 
+  const downstreamPomPath = fixturePath('downstream/pom.xml');
+  mkdirSync(dirname(downstreamPomPath), { recursive: true });
+  const downstreamPom = `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.soklet</groupId>
+  <artifactId>fixture</artifactId>
+  <version>1.0.0</version>
+  <properties><soklet.version>3.1.1</soklet.version></properties>
+  <dependencies>
+    <dependency>
+      <groupId>com.soklet</groupId>
+      <artifactId>soklet</artifactId>
+      <version>\${soklet.version}</version>
+    </dependency>
+  </dependencies>
+</project>
+`;
+  writeFileSync(downstreamPomPath, downstreamPom);
+  assert.deepEqual(
+    verifyMavenDownstreamPom(
+      downstreamPomPath,
+      'com.soklet:fixture:1.0.0',
+      'soklet.version',
+      'com.soklet:soklet:3.1.1',
+    ),
+    {
+      artifactId: 'fixture',
+      defaultArtifactIdentity: 'com.soklet:soklet:3.1.1',
+      defaultSokletVersion: '3.1.1',
+      groupId: 'com.soklet',
+      version: '1.0.0',
+    },
+  );
+  assert.throws(
+    () => verifyMavenDownstreamPom(
+      downstreamPomPath,
+      'com.soklet:not-fixture:1.0.0',
+      'soklet.version',
+      'com.soklet:soklet:3.1.1',
+    ),
+    /project identity is/,
+  );
+  writeFileSync(
+    downstreamPomPath,
+    downstreamPom.replace('<version>\${soklet.version}</version>', '<version>3.1.1</version>'),
+  );
+  assert.throws(
+    () => verifyMavenDownstreamPom(
+      downstreamPomPath,
+      'com.soklet:fixture:1.0.0',
+      'soklet.version',
+      'com.soklet:soklet:3.1.1',
+    ),
+    /dependency version is/,
+  );
+  writeFileSync(downstreamPomPath, downstreamPom);
+  writeFileSync(
+    downstreamPomPath,
+    downstreamPom.replace(
+      '<soklet.version>3.1.1</soklet.version>',
+      '<soklet.version>3.1.2</soklet.version>',
+    ),
+  );
+  assert.throws(
+    () => verifyMavenDownstreamPom(
+      downstreamPomPath,
+      'com.soklet:fixture:1.0.0',
+      'soklet.version',
+      'com.soklet:soklet:3.1.1',
+    ),
+    /expected exact stable version 3\.1\.1/,
+  );
+  for (const dynamicVersion of ['3.1.1-SNAPSHOT', 'LATEST', 'RELEASE', '[3.1,4.0)']) {
+    const dynamicPom = downstreamPom.replace(
+      '<soklet.version>3.1.1</soklet.version>',
+      `<soklet.version>${dynamicVersion}</soklet.version>`,
+    );
+    writeFileSync(downstreamPomPath, dynamicPom);
+    assert.throws(
+      () => verifyMavenDownstreamPom(
+        downstreamPomPath,
+        'com.soklet:fixture:1.0.0',
+        'soklet.version',
+        `com.soklet:soklet:${dynamicVersion}`,
+      ),
+      /(?:expected exact stable version|must be a concrete Maven version)/,
+    );
+  }
+  writeFileSync(downstreamPomPath, downstreamPom);
+
   const ready = validateReleaseConfiguration(fixtureManifestPath, { requireReady: true });
   assert.equal(ready.gates.length, 13);
 
@@ -224,6 +419,14 @@ try {
   });
   assertRejectsGateContractMutation((gates) => {
     gates.find(({ id }) => id === 'soklet-servlet-javax').versionProperty = null;
+  });
+  assertRejectsGateContractMutation((gates) => {
+    gates.find(({ id }) => id === 'soklet-servlet-javax').defaultArtifactIdentity =
+      'com.soklet:soklet:3.1.2';
+  });
+  assertRejectsGateContractMutation((gates) => {
+    gates.find(({ id }) => id === 'soklet-servlet-jakarta').defaultArtifactSha256 =
+      '0'.repeat(64);
   });
   assertRejectsGateContractMutation((gates) => {
     const candidateBuild = gates.find(({ id }) => id === 'candidate-build');

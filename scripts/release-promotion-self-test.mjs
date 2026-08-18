@@ -101,6 +101,8 @@ function syntheticGate(id, mainJar) {
       artifactChecksum,
       artifactIdentity,
       commit,
+      defaultArtifactIdentity: null,
+      defaultArtifactSha256: null,
       id,
       repository: null,
     },
@@ -182,6 +184,8 @@ function writeSyntheticInputs(root) {
       artifactChecksum: gate.artifactChecksum,
       artifactIdentity: gate.artifactIdentity,
       commit: gate.commit,
+      defaultArtifactIdentity: gate.defaultArtifactIdentity,
+      defaultArtifactSha256: gate.defaultArtifactSha256,
       id: gate.id,
       kind: gate.id === 'typescript-interop' || gate.id === 'go-interop'
         ? 'INTEROPERABILITY'
@@ -427,6 +431,28 @@ async function run() {
         signingFingerprint: SIGNING_FINGERPRINT,
       }),
       /not complete PASS evidence/,
+    );
+
+    const defaultPinDriftEvidence = structuredClone(inputs.evidence);
+    defaultPinDriftEvidence.gates[0].gate.defaultArtifactIdentity =
+      'com.soklet:soklet:3.1.1';
+    defaultPinDriftEvidence.gates[0].gate.defaultArtifactSha256 = '0'.repeat(64);
+    const defaultPinDriftPath = join(temporary, 'default-pin-drift-evidence.json');
+    const defaultPinDriftBytes = canonicalJsonBytes(defaultPinDriftEvidence);
+    writeNew(defaultPinDriftPath, defaultPinDriftBytes);
+    expectFailure(
+      () => preparePromotion({
+        artifactPaths: inputs.artifactPaths,
+        candidateCommit: CANDIDATE_COMMIT,
+        evidencePath: defaultPinDriftPath,
+        evidenceSha256: digest(defaultPinDriftBytes),
+        gpgPath: fakeGpg,
+        outputDirectory: join(temporary, 'default-pin-drift'),
+        releaseManifestPath: inputs.releaseManifestPath,
+        releaseManifestSha256: inputs.releaseManifestSha256,
+        signingFingerprint: SIGNING_FINGERPRINT,
+      }),
+      /does not match release-validation evidence/,
     );
 
     const receiptDriftEvidence = structuredClone(inputs.evidence);

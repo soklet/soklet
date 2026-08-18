@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.math.BigDecimal;
@@ -26,17 +27,54 @@ import static java.util.Objects.requireNonNull;
 /**
  * An immutable, exactly represented JSON number.
  *
- * @param value numeric value
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public record McpJsonNumber(@NonNull BigDecimal value) implements McpJsonValue {
+public final class McpJsonNumber implements McpJsonValue {
+	@NonNull
+	private final BigDecimal value;
+
 	/**
-	 * Creates an immutable, exactly represented JSON number.
+	 * Creates an immutable, exactly represented JSON number from its value.
 	 *
 	 * @param value the non-null numeric value
+	 * @return immutable JSON number
 	 */
-	public McpJsonNumber {
-		requireNonNull(value);
+	@NonNull
+	public static McpJsonNumber fromValue(@NonNull BigDecimal value) {
+		return new McpJsonNumber(value);
+	}
+
+	private McpJsonNumber(@NonNull BigDecimal value) {
+		this.value = requireNonNull(value);
+	}
+
+	/** @return exactly represented numeric value */
+	@NonNull
+	public BigDecimal getValue() {
+		return this.value;
+	}
+
+	/** @return whether this object contains the same exact numeric value */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpJsonNumber number))
+			return false;
+		return this.value.equals(number.value);
+	}
+
+	/** @return value-based hash code */
+	@Override
+	public int hashCode() {
+		return this.value.hashCode();
+	}
+
+	/** @return redacted diagnostic rendering */
+	@Override
+	@NonNull
+	public String toString() {
+		return "McpJsonNumber{value=<redacted>}";
 	}
 }

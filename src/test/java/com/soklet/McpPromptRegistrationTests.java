@@ -41,6 +41,29 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ThreadSafe
 class McpPromptRegistrationTests {
 	@Test
+	void promptMessagesExposeValueSemanticsWithoutRenderingContent() {
+		String secret = "prompt-content-secret";
+		McpTextContent content = McpTextContent.fromText(secret);
+		McpPromptMessage user = McpPromptMessage.fromUserContent(content);
+		McpPromptMessage equalUser = McpPromptMessage.fromUserContent(content);
+		McpPromptMessage assistant =
+				McpPromptMessage.fromAssistantContent(content);
+
+		assertEquals(McpRole.USER, user.getRole());
+		assertSame(content, user.getContent());
+		assertEquals(user, equalUser);
+		assertEquals(user.hashCode(), equalUser.hashCode());
+		assertFalse(user.equals(assistant));
+		assertEquals("McpPromptMessage{role=USER, content=<redacted>}",
+				user.toString());
+		assertFalse(user.toString().contains(secret));
+		assertThrows(NullPointerException.class,
+				() -> McpPromptMessage.fromUserContent(null));
+		assertThrows(NullPointerException.class,
+				() -> McpPromptMessage.fromAssistantContent(null));
+	}
+
+	@Test
 	void registrationPreservesDescriptorAndExactStringArguments()
 			throws Exception {
 		McpPromptArgumentDefinition required = McpPromptArgumentDefinition
@@ -92,7 +115,7 @@ class McpPromptRegistrationTests {
 		assertEquals(List.of(icon), registration.getIcons());
 		assertEquals(List.of(required, optional), registration.getArguments());
 		assertEquals("catalog", ((McpJsonString) registration.getMetadata()
-				.find("owner").orElseThrow()).value());
+				.find("owner").orElseThrow()).getValue());
 		assertEquals("Audience", required.getTitle().orElseThrow());
 		assertEquals("Intended audience",
 				required.getDescription().orElseThrow());
@@ -106,7 +129,7 @@ class McpPromptRegistrationTests {
 		assertThrows(UnsupportedOperationException.class,
 				() -> observed.get().getArguments().clear());
 		assertEquals("  Amélie  ", ((McpTextContent) output.getMessages()
-				.get(0).content()).getText());
+				.get(0).getContent()).getText());
 	}
 
 	@Test

@@ -51,7 +51,7 @@ class McpResultContentTests {
 				.content(mutable)
 				.content(second)
 				.structuredContent(structured)
-				.isError(true)
+				.error(true)
 				.build();
 		mutable.clear();
 
@@ -132,7 +132,7 @@ class McpResultContentTests {
 		assertThrows(NullPointerException.class,
 				() -> McpToolAnnotations.builder().openWorldHint(null));
 		assertThrows(NullPointerException.class,
-				() -> McpToolOutput.builder().isError(null));
+				() -> McpToolOutput.builder().error(null));
 	}
 
 	@Test

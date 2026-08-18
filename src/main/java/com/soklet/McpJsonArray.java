@@ -108,7 +108,7 @@ public final class McpJsonArray implements McpJsonValue {
 		 */
 		@NonNull
 		public Builder add(@NonNull String value) {
-			return add(new McpJsonString(value));
+			return add(McpJsonString.fromValue(value));
 		}
 
 		/**
@@ -119,7 +119,7 @@ public final class McpJsonArray implements McpJsonValue {
 		 */
 		@NonNull
 		public Builder add(@NonNull BigDecimal value) {
-			return add(new McpJsonNumber(value));
+			return add(McpJsonNumber.fromValue(value));
 		}
 
 		/**
@@ -131,7 +131,7 @@ public final class McpJsonArray implements McpJsonValue {
 		 */
 		@NonNull
 		public Builder add(@NonNull Boolean value) {
-			return add(new McpJsonBoolean(requireNonNull(value)));
+			return add(McpJsonBoolean.fromValue(requireNonNull(value)));
 		}
 
 		/**

@@ -23,11 +23,9 @@ import org.junit.jupiter.api.Timeout;
 
 import java.lang.reflect.AnnotatedParameterizedType;
 import java.lang.reflect.AnnotatedType;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.RecordComponent;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -81,30 +79,26 @@ public class McpRequestStreamLifecycleMetricsAggregationTests {
 
 		Class<McpMetricsSnapshot.RequestStreamTerminationKey> keyType =
 				McpMetricsSnapshot.RequestStreamTerminationKey.class;
-		Assertions.assertTrue(keyType.isRecord());
+		Assertions.assertFalse(keyType.isRecord());
 		Assertions.assertTrue(Modifier.isPublic(keyType.getModifiers()));
 		Assertions.assertTrue(Modifier.isStatic(keyType.getModifiers()));
 		Assertions.assertTrue(Modifier.isFinal(keyType.getModifiers()));
-		RecordComponent[] components = keyType.getRecordComponents();
-		Assertions.assertEquals(List.of("endpointPath", "jsonRpcMethod",
-				"reason"), Arrays.stream(components)
-				.map(RecordComponent::getName).toList());
-		Assertions.assertEquals(List.of(String.class, String.class,
-				McpStreamTerminationReason.class), Arrays.stream(components)
-				.map(RecordComponent::getType).toList());
-		for (RecordComponent component : components) {
-			Assertions.assertTrue(component.getAnnotatedType()
-					.isAnnotationPresent(NonNull.class), component.toString());
-			Assertions.assertTrue(component.getAccessor().getAnnotatedReturnType()
-					.isAnnotationPresent(NonNull.class), component.toString());
-		}
-		Constructor<McpMetricsSnapshot.RequestStreamTerminationKey> constructor =
-				keyType.getConstructor(String.class, String.class,
-						McpStreamTerminationReason.class);
-		Assertions.assertTrue(Modifier.isPublic(constructor.getModifiers()));
-		for (AnnotatedType parameter : constructor.getAnnotatedParameterTypes())
+		Assertions.assertEquals(0, keyType.getConstructors().length,
+				"Metrics keys must not expose public constructors.");
+		Method factory = keyType.getMethod("fromDimensions", String.class,
+				String.class, McpStreamTerminationReason.class);
+		Assertions.assertTrue(Modifier.isPublic(factory.getModifiers()));
+		Assertions.assertTrue(Modifier.isStatic(factory.getModifiers()));
+		Assertions.assertEquals(keyType, factory.getReturnType());
+		Assertions.assertTrue(factory.getAnnotatedReturnType()
+				.isAnnotationPresent(NonNull.class));
+		for (AnnotatedType parameter : factory.getAnnotatedParameterTypes())
 			Assertions.assertTrue(parameter.isAnnotationPresent(NonNull.class),
 					parameter.toString());
+		assertNonNullGetter(keyType, "getEndpointPath", String.class);
+		assertNonNullGetter(keyType, "getJsonRpcMethod", String.class);
+		assertNonNullGetter(keyType, "getReason",
+				McpStreamTerminationReason.class);
 
 		McpMetricsSnapshot empty = McpMetricsSnapshot.emptyInstance();
 		Assertions.assertSame(empty, McpMetricsSnapshot.emptyInstance());
@@ -114,9 +108,26 @@ public class McpRequestStreamLifecycleMetricsAggregationTests {
 		McpMetricsSnapshot.RequestStreamTerminationKey completedKey =
 				key(McpStreamTerminationReason.COMPLETED);
 		McpMetricsSnapshot.RequestStreamTerminationKey applicationKey =
-				new McpMetricsSnapshot.RequestStreamTerminationKey(
+				McpMetricsSnapshot.RequestStreamTerminationKey.fromDimensions(
 						"/application-defined", "vendor.example/arbitrary",
 						McpStreamTerminationReason.INTERNAL_ERROR);
+		McpMetricsSnapshot.RequestStreamTerminationKey equalApplicationKey =
+				McpMetricsSnapshot.RequestStreamTerminationKey.fromDimensions(
+						"/application-defined", "vendor.example/arbitrary",
+						McpStreamTerminationReason.INTERNAL_ERROR);
+		Assertions.assertEquals("/application-defined",
+				applicationKey.getEndpointPath());
+		Assertions.assertEquals("vendor.example/arbitrary",
+				applicationKey.getJsonRpcMethod());
+		Assertions.assertEquals(McpStreamTerminationReason.INTERNAL_ERROR,
+				applicationKey.getReason());
+		Assertions.assertEquals(applicationKey, equalApplicationKey);
+		Assertions.assertEquals(applicationKey.hashCode(),
+				equalApplicationKey.hashCode());
+		Assertions.assertNotEquals(applicationKey, completedKey);
+		Assertions.assertEquals("RequestStreamTerminationKey{"
+				+ "endpointPath=<redacted>, jsonRpcMethod=<redacted>, "
+				+ "reason=INTERNAL_ERROR}", applicationKey.toString());
 		MetricsCollector.HistogramSnapshot completedHistogram =
 				new MetricsCollector.HistogramSnapshot(
 						new long[]{1L, Long.MAX_VALUE}, new long[]{0L, 1L},
@@ -143,20 +154,20 @@ public class McpRequestStreamLifecycleMetricsAggregationTests {
 				() -> snapshot.getRequestStreamDurations().clear());
 
 		Assertions.assertThrows(NullPointerException.class,
-				() -> new McpMetricsSnapshot.RequestStreamTerminationKey(null,
+				() -> McpMetricsSnapshot.RequestStreamTerminationKey.fromDimensions(null,
 						JSON_RPC_METHOD, McpStreamTerminationReason.COMPLETED));
 		Assertions.assertThrows(NullPointerException.class,
-				() -> new McpMetricsSnapshot.RequestStreamTerminationKey(
+				() -> McpMetricsSnapshot.RequestStreamTerminationKey.fromDimensions(
 						ENDPOINT_PATH, null,
 						McpStreamTerminationReason.COMPLETED));
 		Assertions.assertThrows(NullPointerException.class,
-				() -> new McpMetricsSnapshot.RequestStreamTerminationKey(
+				() -> McpMetricsSnapshot.RequestStreamTerminationKey.fromDimensions(
 						ENDPOINT_PATH, JSON_RPC_METHOD, null));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new McpMetricsSnapshot.RequestStreamTerminationKey("",
+				() -> McpMetricsSnapshot.RequestStreamTerminationKey.fromDimensions("",
 						JSON_RPC_METHOD, McpStreamTerminationReason.COMPLETED));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new McpMetricsSnapshot.RequestStreamTerminationKey(
+				() -> McpMetricsSnapshot.RequestStreamTerminationKey.fromDimensions(
 						ENDPOINT_PATH, "",
 						McpStreamTerminationReason.COMPLETED));
 		Assertions.assertThrows(NullPointerException.class,
@@ -184,7 +195,7 @@ public class McpRequestStreamLifecycleMetricsAggregationTests {
 		Assertions.assertFalse(prometheus(eventDriven).contains(
 				ACTIVE_STREAMS_METRIC_NAME));
 		eventDriven.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.RequestStreamOpened(ENDPOINT_PATH,
+				McpMetricsEvent.requestStreamOpened(ENDPOINT_PATH,
 						JSON_RPC_METHOD));
 		McpMetricsSnapshot eventDrivenSnapshot = eventDriven.snapshot()
 				.orElseThrow().getMcpMetrics();
@@ -219,7 +230,7 @@ public class McpRequestStreamLifecycleMetricsAggregationTests {
 		Assertions.assertEquals(Set.copyOf(Arrays.asList(
 				McpStreamTerminationReason.values())),
 				retained.getRequestStreamDurations().keySet().stream()
-						.map(McpMetricsSnapshot.RequestStreamTerminationKey::reason)
+						.map(McpMetricsSnapshot.RequestStreamTerminationKey::getReason)
 						.collect(java.util.stream.Collectors.toUnmodifiableSet()));
 		MetricsCollector.HistogramSnapshot completedHistogram = retained
 				.getRequestStreamDurations().get(
@@ -325,7 +336,7 @@ public class McpRequestStreamLifecycleMetricsAggregationTests {
 		DefaultMetricsCollector collector =
 				DefaultMetricsCollector.defaultInstance();
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.RequestStreamOpened(ENDPOINT_PATH,
+				McpMetricsEvent.requestStreamOpened(ENDPOINT_PATH,
 						JSON_RPC_METHOD));
 		McpMetricsSnapshot retained = collector.snapshot().orElseThrow()
 				.getMcpMetrics();
@@ -343,7 +354,7 @@ public class McpRequestStreamLifecycleMetricsAggregationTests {
 
 		Duration fullDuration = Duration.ofSeconds(1_801L);
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.RequestStreamClosed(ENDPOINT_PATH,
+				McpMetricsEvent.requestStreamClosed(ENDPOINT_PATH,
 						JSON_RPC_METHOD, McpStreamTerminationReason.COMPLETED,
 						fullDuration));
 		McpMetricsSnapshot completed = collector.snapshot().orElseThrow()
@@ -459,6 +470,18 @@ public class McpRequestStreamLifecycleMetricsAggregationTests {
 				builder.getAnnotatedParameterTypes()[0]);
 	}
 
+	private static void assertNonNullGetter(@NonNull Class<?> declaringType,
+			@NonNull String name, @NonNull Class<?> returnType)
+			throws Exception {
+		Method getter = requireNonNull(declaringType).getMethod(
+				requireNonNull(name));
+		Assertions.assertTrue(Modifier.isPublic(getter.getModifiers()));
+		Assertions.assertEquals(requireNonNull(returnType), getter.getReturnType());
+		Assertions.assertEquals(0, getter.getParameterCount());
+		Assertions.assertTrue(getter.getAnnotatedReturnType()
+				.isAnnotationPresent(NonNull.class));
+	}
+
 	private static void assertStreamDurationMapType(
 			@NonNull Object genericType, @NonNull AnnotatedType annotatedType) {
 		ParameterizedType parameterized = Assertions.assertInstanceOf(
@@ -482,10 +505,10 @@ public class McpRequestStreamLifecycleMetricsAggregationTests {
 			@NonNull McpStreamTerminationReason reason,
 			@NonNull Duration duration) {
 		requireNonNull(collector).didRecordMcpMetricsEvent(
-				new McpMetricsEvent.RequestStreamOpened(ENDPOINT_PATH,
+				McpMetricsEvent.requestStreamOpened(ENDPOINT_PATH,
 						JSON_RPC_METHOD));
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.RequestStreamClosed(ENDPOINT_PATH,
+				McpMetricsEvent.requestStreamClosed(ENDPOINT_PATH,
 						JSON_RPC_METHOD, requireNonNull(reason),
 						requireNonNull(duration)));
 	}
@@ -547,7 +570,7 @@ public class McpRequestStreamLifecycleMetricsAggregationTests {
 
 	private static McpMetricsSnapshot.@NonNull RequestStreamTerminationKey key(
 			@NonNull McpStreamTerminationReason reason) {
-		return new McpMetricsSnapshot.RequestStreamTerminationKey(
+		return McpMetricsSnapshot.RequestStreamTerminationKey.fromDimensions(
 				ENDPOINT_PATH, JSON_RPC_METHOD, requireNonNull(reason));
 	}
 

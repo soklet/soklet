@@ -95,9 +95,9 @@ final class McpLocalizationSchemaWalker {
 			@NonNull String pointer, @NonNull String keyword,
 			@NonNull List<@NonNull SchemaText> texts) {
 		McpJsonValue value = schema.getMembers().get(keyword);
-		if (value instanceof McpJsonString string && !string.value().isBlank())
+		if (value instanceof McpJsonString string && !string.getValue().isBlank())
 			texts.add(new SchemaText(childPointer(pointer, keyword),
-					string.value()));
+					string.getValue()));
 	}
 
 	@NonNull

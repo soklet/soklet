@@ -271,23 +271,36 @@ public class McpObservabilityPublicApiTests {
 		for (Map.Entry<Class<?>, List<Map.Entry<String, Class<?>>>> entry
 				: expectedComponents.entrySet()) {
 			Class<?> eventType = entry.getKey();
-			Assertions.assertTrue(eventType.isRecord(), eventType.getName());
+			Assertions.assertFalse(eventType.isRecord(), eventType.getName());
 			List<Map.Entry<String, Class<?>>> actualComponents = Arrays.stream(
-					eventType.getRecordComponents())
-					.map(recordComponent -> component(recordComponent.getName(),
-							recordComponent.getType()))
+					eventType.getDeclaredMethods())
+					.filter(method -> Modifier.isPublic(method.getModifiers()))
+					.filter(method -> method.getParameterCount() == 0)
+					.filter(method -> method.getName().startsWith("get"))
+					.map(method -> component(
+							Character.toLowerCase(method.getName().charAt(3))
+									+ method.getName().substring(4),
+							method.getReturnType()))
+					.sorted(Map.Entry.comparingByKey())
 					.toList();
-			Assertions.assertEquals(entry.getValue(), actualComponents,
+			List<Map.Entry<String, Class<?>>> expected = entry.getValue().stream()
+					.sorted(Map.Entry.comparingByKey())
+					.toList();
+			Assertions.assertEquals(expected, actualComponents,
 					eventType.getName());
-			Arrays.stream(eventType.getRecordComponents()).forEach(
-					recordComponent -> {
-						Assertions.assertTrue(recordComponent.getAnnotatedType()
+			Arrays.stream(eventType.getDeclaredMethods())
+					.filter(method -> Modifier.isPublic(method.getModifiers()))
+					.filter(method -> method.getParameterCount() == 0)
+					.filter(method -> method.getName().startsWith("get"))
+					.forEach(method -> {
+						Assertions.assertTrue(method.getAnnotatedReturnType()
 								.isAnnotationPresent(NonNull.class),
-								recordComponent.toString());
+								method.toString());
 						Assertions.assertFalse(Map.class.isAssignableFrom(
-								recordComponent.getType()),
-								recordComponent.toString());
-						assertNonTraceDimensionName(recordComponent.getName());
+								method.getReturnType()), method.toString());
+						assertNonTraceDimensionName(
+								Character.toLowerCase(method.getName().charAt(3))
+										+ method.getName().substring(4));
 					});
 		}
 
@@ -436,51 +449,52 @@ public class McpObservabilityPublicApiTests {
 		Assertions.assertSame(McpMetricsSnapshot.emptyInstance(),
 				defaultCollector.snapshot().orElseThrow().getMcpMetrics());
 
-		// Public event constructors remain application-owned value carriers. This
+		// Public event factories remain application-owned value carriers. This
 		// gate freezes Soklet's built-in schema, not arbitrary nonempty values an
-		// application may deliberately place in a manually constructed event.
+		// application may deliberately place in a factory-created event.
 		McpMetricsEvent.RequestStarted applicationEvent =
-				new McpMetricsEvent.RequestStarted(
+				McpMetricsEvent.requestStarted(
 						"/application-defined", "vendor.example/arbitrary");
 		Assertions.assertEquals("vendor.example/arbitrary",
-				applicationEvent.jsonRpcMethod());
+				applicationEvent.getJsonRpcMethod());
 		Assertions.assertEquals(123_456,
-				new McpMetricsEvent.ProtocolError(123_456).code());
+				McpMetricsEvent.protocolError(123_456).getCode());
 	}
 
 	@Test
-	public void everyMetricsEventVariantIsConstructibleAndSemanticallyTyped() {
+	public void everyMetricsEventVariantIsConstructibleAndSemanticallyTyped()
+			throws NoSuchMethodException {
 		String endpointPath = "/mcp";
 		String method = "tools/call";
 		Duration duration = Duration.ofMillis(25);
 		List<McpMetricsEvent> events = List.of(
-				new McpMetricsEvent.ServerStarted(),
-				new McpMetricsEvent.ConnectionAccepted(),
-				new McpMetricsEvent.ConnectionRejected(),
-				new McpMetricsEvent.RequestAccepted(),
-				new McpMetricsEvent.RequestRejected(),
-				new McpMetricsEvent.RequestStarted(endpointPath, method),
-				new McpMetricsEvent.RequestFinished(endpointPath, method,
+				McpMetricsEvent.serverStarted(),
+				McpMetricsEvent.connectionAccepted(),
+				McpMetricsEvent.connectionRejected(),
+				McpMetricsEvent.requestAccepted(),
+				McpMetricsEvent.requestRejected(),
+				McpMetricsEvent.requestStarted(endpointPath, method),
+				McpMetricsEvent.requestFinished(endpointPath, method,
 						McpRequestOutcome.COMPLETE, duration),
-				new McpMetricsEvent.RequestStreamOpened(endpointPath, method),
-				new McpMetricsEvent.RequestStreamClosed(endpointPath, method,
+				McpMetricsEvent.requestStreamOpened(endpointPath, method),
+				McpMetricsEvent.requestStreamClosed(endpointPath, method,
 						McpStreamTerminationReason.COMPLETED, duration),
-				new McpMetricsEvent.SubscriptionOpened(endpointPath),
-				new McpMetricsEvent.SubscriptionClosed(endpointPath,
+				McpMetricsEvent.subscriptionOpened(endpointPath),
+				McpMetricsEvent.subscriptionClosed(endpointPath,
 						McpStreamTerminationReason.CLIENT_DISCONNECTED, duration),
-				new McpMetricsEvent.CancelationSignaled(endpointPath, method),
-				new McpMetricsEvent.ProgressEmitted(endpointPath, method),
-				new McpMetricsEvent.KeepAliveEmitted(),
-				new McpMetricsEvent.ProtocolError(-32600),
-				new McpMetricsEvent.UnknownMirroredHeader(endpointPath, method),
-				new McpMetricsEvent.HandlerExecutionStarted(),
-				new McpMetricsEvent.HandlerExecutionFinished(),
-				new McpMetricsEvent.HandlerQueued(),
-				new McpMetricsEvent.HandlerDequeued(),
-				new McpMetricsEvent.HandlerCapacityRejected(),
-				new McpMetricsEvent.TransportFailure(
+				McpMetricsEvent.cancelationSignaled(endpointPath, method),
+				McpMetricsEvent.progressEmitted(endpointPath, method),
+				McpMetricsEvent.keepAliveEmitted(),
+				McpMetricsEvent.protocolError(-32600),
+				McpMetricsEvent.unknownMirroredHeader(endpointPath, method),
+				McpMetricsEvent.handlerExecutionStarted(),
+				McpMetricsEvent.handlerExecutionFinished(),
+				McpMetricsEvent.handlerQueued(),
+				McpMetricsEvent.handlerDequeued(),
+				McpMetricsEvent.handlerCapacityRejected(),
+				McpMetricsEvent.transportFailure(
 						MetricsCollector.TransportFailureReason.WRITE_ERROR),
-				new McpMetricsEvent.ServerStopped(McpShutdownOutcome.CLEAN));
+				McpMetricsEvent.serverStopped(McpShutdownOutcome.CLEAN));
 
 		Set<Class<?>> constructedTypes = events.stream()
 				.map(Object::getClass)
@@ -488,35 +502,35 @@ public class McpObservabilityPublicApiTests {
 		Set<Class<?>> permittedTypes = Set.copyOf(Arrays.asList(
 				McpMetricsEvent.class.getPermittedSubclasses()));
 		Assertions.assertEquals(permittedTypes, constructedTypes);
-		Assertions.assertEquals(Integer.class,
-				McpMetricsEvent.ProtocolError.class.getRecordComponents()[0]
-						.getType());
+		Assertions.assertEquals(Integer.class, McpMetricsEvent.ProtocolError.class
+				.getMethod("getCode").getReturnType());
 		Assertions.assertThrows(NullPointerException.class,
-				() -> new McpMetricsEvent.ProtocolError(null));
+				() -> McpMetricsEvent.protocolError(null));
 
 		McpMetricsEvent.RequestFinished finished =
 				(McpMetricsEvent.RequestFinished) events.get(6);
-		Assertions.assertEquals(endpointPath, finished.endpointPath());
-		Assertions.assertEquals(method, finished.jsonRpcMethod());
-		Assertions.assertEquals(McpRequestOutcome.COMPLETE, finished.outcome());
-		Assertions.assertEquals(duration, finished.duration());
+		Assertions.assertEquals(endpointPath, finished.getEndpointPath());
+		Assertions.assertEquals(method, finished.getJsonRpcMethod());
+		Assertions.assertEquals(McpRequestOutcome.COMPLETE,
+				finished.getOutcome());
+		Assertions.assertEquals(duration, finished.getDuration());
 	}
 
 	@Test
 	public void metricsEventDimensionsFailClosedWhenInvalid() {
 		Assertions.assertThrows(NullPointerException.class,
-				() -> new McpMetricsEvent.RequestStarted(null, "tools/call"));
+				() -> McpMetricsEvent.requestStarted(null, "tools/call"));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new McpMetricsEvent.RequestStarted("", "tools/call"));
+				() -> McpMetricsEvent.requestStarted("", "tools/call"));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new McpMetricsEvent.RequestStarted("/mcp", ""));
+				() -> McpMetricsEvent.requestStarted("/mcp", ""));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new McpMetricsEvent.RequestFinished("/mcp", "tools/call",
+				() -> McpMetricsEvent.requestFinished("/mcp", "tools/call",
 						McpRequestOutcome.COMPLETE, Duration.ofNanos(-1L)));
 		Assertions.assertThrows(NullPointerException.class,
-				() -> new McpMetricsEvent.TransportFailure(null));
+				() -> McpMetricsEvent.transportFailure(null));
 		Assertions.assertThrows(NullPointerException.class,
-				() -> new McpMetricsEvent.ServerStopped(null));
+				() -> McpMetricsEvent.serverStopped(null));
 	}
 
 	private static Map.Entry<String, Class<?>> component(

@@ -72,25 +72,25 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 			server.start();
 			server.start();
 			Assertions.assertEquals(List.of(
-					new McpMetricsEvent.ServerStarted()),
+					McpMetricsEvent.serverStarted()),
 					collector.serverLifecycleEvents());
 
 			server.stop();
 			server.stop();
 			Assertions.assertEquals(List.of(
-					new McpMetricsEvent.ServerStarted(),
-					new McpMetricsEvent.ServerStopped(
+					McpMetricsEvent.serverStarted(),
+					McpMetricsEvent.serverStopped(
 							McpShutdownOutcome.CLEAN)),
 					collector.serverLifecycleEvents());
 
 			server.start();
 			server.stop();
 			Assertions.assertEquals(List.of(
-					new McpMetricsEvent.ServerStarted(),
-					new McpMetricsEvent.ServerStopped(
+					McpMetricsEvent.serverStarted(),
+					McpMetricsEvent.serverStopped(
 							McpShutdownOutcome.CLEAN),
-					new McpMetricsEvent.ServerStarted(),
-					new McpMetricsEvent.ServerStopped(
+					McpMetricsEvent.serverStarted(),
+					McpMetricsEvent.serverStopped(
 							McpShutdownOutcome.CLEAN)),
 					collector.serverLifecycleEvents());
 		} finally {
@@ -114,18 +114,18 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 			Assertions.assertEquals(McpShutdownOutcome.CLEAN,
 					stopResult.shutdownOutcome());
 			Assertions.assertEquals(List.of(
-					new McpMetricsEvent.ServerStarted(),
-					new McpMetricsEvent.ServerStopped(
+					McpMetricsEvent.serverStarted(),
+					McpMetricsEvent.serverStopped(
 							McpShutdownOutcome.CLEAN)),
 					collector.serverLifecycleEvents(),
 					"Consuming a generation must queue its stop before the lifecycle lock is released.");
 
 			server.start();
 			Assertions.assertEquals(List.of(
-					new McpMetricsEvent.ServerStarted(),
-					new McpMetricsEvent.ServerStopped(
+					McpMetricsEvent.serverStarted(),
+					McpMetricsEvent.serverStopped(
 							McpShutdownOutcome.CLEAN),
-					new McpMetricsEvent.ServerStarted()),
+					McpMetricsEvent.serverStarted()),
 					collector.serverLifecycleEvents(),
 					"A direct restart must never overtake the consumed generation's stop.");
 		} finally {
@@ -203,8 +203,8 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 			Assertions.assertFalse(server.isStarted());
 			Assertions.assertFalse(soklet.isStarted());
 			Assertions.assertEquals(List.of(
-					new McpMetricsEvent.ServerStarted(),
-					new McpMetricsEvent.ServerStopped(
+					McpMetricsEvent.serverStarted(),
+					McpMetricsEvent.serverStopped(
 							McpShutdownOutcome.CLEAN)),
 					collector.serverLifecycleEvents());
 			Assertions.assertNull(collector.probeFailure(),
@@ -238,26 +238,26 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 			server.start();
 			Assertions.assertTrue(server.isStarted());
 			Assertions.assertEquals(List.of(
-					new McpMetricsEvent.ServerStarted(),
-					new McpMetricsEvent.TransportFailure(
+					McpMetricsEvent.serverStarted(),
+					McpMetricsEvent.transportFailure(
 							MetricsCollector.TransportFailureReason
 									.EVENT_LOOP_TERMINATED),
-					new McpMetricsEvent.ServerStopped(
+					McpMetricsEvent.serverStopped(
 							McpShutdownOutcome.CLEAN),
-					new McpMetricsEvent.ServerStarted()),
+					McpMetricsEvent.serverStarted()),
 					collector.events(),
 					"Restart must return only after the fatal transport event, old stop, and new start are delivered in generation order.");
 
 			server.stop();
 			Assertions.assertEquals(List.of(
-					new McpMetricsEvent.ServerStarted(),
-					new McpMetricsEvent.TransportFailure(
+					McpMetricsEvent.serverStarted(),
+					McpMetricsEvent.transportFailure(
 							MetricsCollector.TransportFailureReason
 									.EVENT_LOOP_TERMINATED),
-					new McpMetricsEvent.ServerStopped(
+					McpMetricsEvent.serverStopped(
 							McpShutdownOutcome.CLEAN),
-					new McpMetricsEvent.ServerStarted(),
-					new McpMetricsEvent.ServerStopped(
+					McpMetricsEvent.serverStarted(),
+					McpMetricsEvent.serverStopped(
 							McpShutdownOutcome.CLEAN)),
 					collector.events());
 		} finally {

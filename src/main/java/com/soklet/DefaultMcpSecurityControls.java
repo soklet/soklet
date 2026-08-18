@@ -1068,7 +1068,7 @@ final class DefaultMcpSecurityControls
 		aggregate.writeBytes(TRACE_CONFIGURATION_DOMAIN);
 		writeUnsignedInt(aggregate, 1);
 		aggregate.writeBytes(record.encoded());
-		return new McpTraceCorrelationConfigurationFingerprint(
+		return McpTraceCorrelationConfigurationFingerprint.fromValue(
 				base64Url(sha256(aggregate.toByteArray())));
 	}
 

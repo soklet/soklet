@@ -173,13 +173,13 @@ public final class McpRuntimeToolInputSchemaBridge {
 
 		if (value instanceof McpJsonString string)
 			return new com.soklet.internal.mcp.protocol.McpJsonString(
-					string.value());
+					string.getValue());
 		if (value instanceof McpJsonNumber number)
 			return new com.soklet.internal.mcp.protocol.McpJsonNumber(
-					number.value());
+					number.getValue());
 		if (value instanceof McpJsonBoolean bool)
 			return com.soklet.internal.mcp.protocol.McpJsonBoolean
-					.fromBoolean(bool.value());
+					.fromBoolean(bool.getValue());
 		if (value instanceof McpJsonNull)
 			return com.soklet.internal.mcp.protocol.McpJsonNull.INSTANCE;
 		if (value instanceof McpJsonArray array) {

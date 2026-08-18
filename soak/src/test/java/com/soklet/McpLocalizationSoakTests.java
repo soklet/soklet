@@ -28,7 +28,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -474,30 +473,16 @@ class McpLocalizationSoakTests {
 						if (request.getLanguageRanges().stream()
 								.anyMatch(range -> "fr-ca".equals(range.getRange())))
 							this.boundedPreferenceMatches.incrementAndGet();
-						return new McpLocalizationContext() {
-							@Override
-							@NonNull
-							public Locale getLocale() {
-								return LOCALIZED_LOCALE;
-							}
-
-							@Override
-							@NonNull
-							public Optional<@NonNull McpLocalizationRevision>
-							getRevision() {
-								return Optional.of(captured);
-							}
-
-							@Override
-							@NonNull
-							public McpLocalizationResult localize(
-									@NonNull McpLocalizableText text) {
-								localizationLookups.incrementAndGet();
-								return McpLocalizationResult.localized(
-										"FR[" + captured.getValue() + "]:"
-												+ text.getDefaultText());
-							}
-						};
+						return McpLocalizationContext
+								.withLocale(LOCALIZED_LOCALE)
+								.revision(captured)
+								.localizer(text -> {
+									localizationLookups.incrementAndGet();
+									return McpLocalizationResult.localized(
+											"FR[" + captured.getValue() + "]:"
+													+ text.getDefaultText());
+								})
+								.build();
 					})
 					.build();
 		}

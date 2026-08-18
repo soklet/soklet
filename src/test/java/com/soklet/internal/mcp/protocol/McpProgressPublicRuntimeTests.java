@@ -247,8 +247,8 @@ public class McpProgressPublicRuntimeTests {
 							inputReporterSuppressed.set(features
 									.find(McpProgressReporter.class).isEmpty());
 							return McpInputRequiredResult.builder()
-									.inputRequest("roots", McpInputRequest
-											.fromDeclaration(roots,
+									.inputRequest("roots", McpInputRequest.fromDeclaration(
+											roots,
 													McpJsonObject.emptyInstance()))
 									.build();
 						})
@@ -425,11 +425,11 @@ public class McpProgressPublicRuntimeTests {
 							.map(McpMetricsEvent.CancelationSignaled.class::cast)
 							.toList();
 			Assertions.assertEquals(List.of(
-					new McpMetricsEvent.ProgressEmitted(MCP_PATH, "tools/call"),
-					new McpMetricsEvent.ProgressEmitted(MCP_PATH, "tools/call")),
+					McpMetricsEvent.progressEmitted(MCP_PATH, "tools/call"),
+					McpMetricsEvent.progressEmitted(MCP_PATH, "tools/call")),
 					progressEvents);
 			Assertions.assertEquals(List.of(
-					new McpMetricsEvent.CancelationSignaled(MCP_PATH, "tools/call")),
+					McpMetricsEvent.cancelationSignaled(MCP_PATH, "tools/call")),
 					cancelationEvents);
 			List<McpMetricsEvent> eventSnapshot = List.copyOf(metrics);
 			List<Class<?>> deterministicPrefixTypes = eventSnapshot.stream()
@@ -459,9 +459,9 @@ public class McpProgressPublicRuntimeTests {
 					.findFirst().orElseThrow();
 			Assertions.assertEquals(
 					com.soklet.McpStreamTerminationReason.CLIENT_DISCONNECTED,
-					streamClosed.reason());
+					streamClosed.getReason());
 			Assertions.assertEquals(com.soklet.McpRequestOutcome.CLIENT_DISCONNECTED,
-					requestFinished.outcome());
+					requestFinished.getOutcome());
 			int streamClosedIndex = eventSnapshot.indexOf(streamClosed);
 			int requestFinishedIndex = eventSnapshot.indexOf(requestFinished);
 			Assertions.assertTrue(streamClosedIndex < requestFinishedIndex,

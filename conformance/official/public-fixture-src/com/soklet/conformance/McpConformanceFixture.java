@@ -469,7 +469,7 @@ public final class McpConformanceFixture {
 					return McpInputRequiredResult.builder()
 							.inputRequest("confirm", formInput(
 									"Please confirm", "ok", "boolean"))
-							.frameworkRequestState(new McpJsonString("request-state"))
+							.frameworkRequestState(McpJsonString.fromValue("request-state"))
 							.build();
 				})
 				.mayRequestInput(FORM_INPUT)
@@ -496,7 +496,7 @@ public final class McpConformanceFixture {
 							.inputRequest("greeting", samplingInput(
 									"Generate a greeting", 50))
 							.inputRequest("client_roots", rootsInput())
-							.frameworkRequestState(new McpJsonString("multiple-inputs"))
+							.frameworkRequestState(McpJsonString.fromValue("multiple-inputs"))
 							.build();
 				})
 				.mayRequestInput(FORM_INPUT, SAMPLING_INPUT, ROOTS_INPUT)
@@ -520,12 +520,12 @@ public final class McpConformanceFixture {
 								.inputRequest("step2", formInput(
 										"Step 2: What is your favorite color?",
 										"color", "string"))
-								.frameworkRequestState(new McpJsonString("round-2"))
+								.frameworkRequestState(McpJsonString.fromValue("round-2"))
 								.build();
 					return McpInputRequiredResult.builder()
 							.inputRequest("step1", formInput(
 									"Step 1: What is your name?", "name", "string"))
-							.frameworkRequestState(new McpJsonString("round-1"))
+							.frameworkRequestState(McpJsonString.fromValue("round-1"))
 							.build();
 				})
 				.mayRequestInput(FORM_INPUT)
@@ -546,7 +546,7 @@ public final class McpConformanceFixture {
 					return McpInputRequiredResult.builder()
 							.inputRequest("confirm", formInput(
 									"Please confirm", "ok", "boolean"))
-							.frameworkRequestState(new McpJsonString("tamper-check"))
+							.frameworkRequestState(McpJsonString.fromValue("tamper-check"))
 							.build();
 				})
 				.mayRequestInput(FORM_INPUT)
@@ -617,9 +617,9 @@ public final class McpConformanceFixture {
 		if (request.getRequestState().isEmpty()
 				|| !(request.getRequestState().orElseThrow()
 				instanceof McpFrameworkRequestState frameworkState)
-				|| !(frameworkState.value() instanceof McpJsonString stateValue))
+				|| !(frameworkState.getValue() instanceof McpJsonString stateValue))
 			return false;
-		return expectedValue.equals(stateValue.value());
+		return expectedValue.equals(stateValue.getValue());
 	}
 
 	private static McpToolRegistration<McpJsonObject> rawTool(String name,

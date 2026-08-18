@@ -324,7 +324,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 				.argumentType(MirroredArguments.class)
 				.handler((request, arguments, features) -> {
 					handlers.incrementAndGet();
-					observed.set(arguments.getArguments());
+					observed.set(arguments.getConvertedArguments());
 					return McpCompleteResult.fromToolText("done");
 				})
 				.build();

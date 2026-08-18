@@ -2149,7 +2149,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				.append(").serverInformation(implementationBuilder.build());\n");
 		appendOptionalBuilderCall(source, "endpointBuilder", "instructions",
 				endpoint.instructions());
-		appendOptionalBuilderCall(source, "endpointBuilder", "toolRateLimiter",
+		appendOptionalBuilderCall(source, "endpointBuilder", "toolRateLimiterName",
 				endpoint.toolRateLimiter());
 		if (endpoint.resourceListCacheTtlMs() != 0
 				|| !"PRIVATE".equals(endpoint.resourceListCacheScope()))
@@ -2188,7 +2188,7 @@ public final class SokletProcessor extends AbstractProcessor {
 			appendOptionalBuilderCall(source, "toolBuilder" + index,
 					"description", tool.description());
 			appendOptionalBuilderCall(source, "toolBuilder" + index,
-					"rateLimiter", tool.rateLimiter());
+					"rateLimiterName", tool.rateLimiter());
 			source.append("\t\ttoolBuilder").append(index)
 					.append(".mirrorStructuredContentAsText(")
 					.append(tool.mirrorStructuredContentAsText()).append(");\n")
@@ -2364,7 +2364,7 @@ public final class SokletProcessor extends AbstractProcessor {
 						"features.require(com.soklet.CancelationToken.class)";
 				case PROGRESS_REPORTER ->
 						"features.find(com.soklet.McpProgressReporter.class)";
-				case TOOL_ARGUMENT -> "arguments.getArguments()."
+				case TOOL_ARGUMENT -> "arguments.getConvertedArguments()."
 						+ binding.carrierName() + "()";
 			});
 		}
@@ -2436,8 +2436,14 @@ public final class SokletProcessor extends AbstractProcessor {
 	@NonNull
 	private static String cachePolicyExpression(long timeToLiveMs,
 			@NonNull String scope) {
-		return "new com.soklet.McpCachePolicy(java.time.Duration.ofMillis("
-				+ timeToLiveMs + "L), com.soklet.McpCacheScope." + scope + ")";
+		String factory = switch (scope) {
+			case "PRIVATE" -> "fromPrivateTimeToLive";
+			case "PUBLIC" -> "fromPublicTimeToLive";
+			default -> throw new IllegalArgumentException(
+					"Unsupported MCP cache scope: " + scope);
+		};
+		return "com.soklet.McpCachePolicy." + factory
+				+ "(java.time.Duration.ofMillis(" + timeToLiveMs + "L))";
 	}
 
 	@NonNull

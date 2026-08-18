@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -29,26 +30,57 @@ import static java.util.Objects.requireNonNull;
  * This value is operational metadata only, not an authentication or token
  * derivation input.
  *
- * @param value unpadded Base64URL fingerprint value
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public record McpTraceCorrelationConfigurationFingerprint(
-		@NonNull String value) {
+public final class McpTraceCorrelationConfigurationFingerprint {
 	/** Fingerprint encoding version. */
 	@NonNull
 	public static final String VERSION = "v1";
+	@NonNull
+	private final String value;
 
-	/**
-	 * Validates the fingerprint value.
-	 *
-	 * @param value unpadded Base64URL fingerprint value
-	 */
-	public McpTraceCorrelationConfigurationFingerprint {
+	@NonNull
+	static McpTraceCorrelationConfigurationFingerprint fromValue(
+			@NonNull String value) {
+		return new McpTraceCorrelationConfigurationFingerprint(value);
+	}
+
+	private McpTraceCorrelationConfigurationFingerprint(@NonNull String value) {
 		requireNonNull(value);
 		if (!isCanonicalSha256Base64Url(value))
 			throw new IllegalArgumentException(
 					"Trace-correlation fingerprint must be a canonical unpadded Base64URL SHA-256 value.");
+		this.value = value;
+	}
+
+	/** @return unpadded Base64URL fingerprint value */
+	@NonNull
+	public String getValue() {
+		return this.value;
+	}
+
+	/** @return whether this value has the same encoded fingerprint */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpTraceCorrelationConfigurationFingerprint fingerprint))
+			return false;
+		return this.value.equals(fingerprint.value);
+	}
+
+	/** @return value-based hash code */
+	@Override
+	public int hashCode() {
+		return this.value.hashCode();
+	}
+
+	/** @return the unpadded Base64URL fingerprint value */
+	@Override
+	@NonNull
+	public String toString() {
+		return this.value;
 	}
 
 	private static boolean isCanonicalSha256Base64Url(@NonNull String value) {

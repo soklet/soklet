@@ -268,7 +268,7 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull
 			public PendingMetricRecord recordRequestAccepted() {
 				return mcpMetricEventDelivery.record(
-						new McpMetricsEvent.RequestAccepted());
+						McpMetricsEvent.requestAccepted());
 			}
 
 			@Override
@@ -284,19 +284,19 @@ final class DefaultMcpServer implements McpServer {
 			@Override
 			public void recordRequestRejected() {
 				mcpMetricEventDelivery.record(
-						new McpMetricsEvent.RequestRejected());
+						McpMetricsEvent.requestRejected());
 			}
 
 			@Override
 			public void recordConnectionAccepted() {
 				mcpMetricEventDelivery.record(
-						new McpMetricsEvent.ConnectionAccepted());
+						McpMetricsEvent.connectionAccepted());
 			}
 
 			@Override
 			public void recordConnectionRejected() {
 				mcpMetricEventDelivery.record(
-						new McpMetricsEvent.ConnectionRejected());
+						McpMetricsEvent.connectionRejected());
 			}
 
 			@Override
@@ -304,7 +304,7 @@ final class DefaultMcpServer implements McpServer {
 			public PendingMetricRecord recordTransportFailure(
 					MetricsCollector.@NonNull TransportFailureReason reason) {
 				return mcpMetricEventDelivery.record(
-						new McpMetricsEvent.TransportFailure(requireNonNull(reason)));
+						McpMetricsEvent.transportFailure(requireNonNull(reason)));
 			}
 
 			@Override
@@ -312,7 +312,7 @@ final class DefaultMcpServer implements McpServer {
 			public PendingMetricRecord recordProtocolError(int code,
 					@Nullable McpRequestContext requestContext) {
 				return mcpMetricEventDelivery.record(
-						new McpMetricsEvent.ProtocolError(code), requestContext);
+						McpMetricsEvent.protocolError(code), requestContext);
 			}
 
 			@Override
@@ -320,7 +320,7 @@ final class DefaultMcpServer implements McpServer {
 					@NonNull String endpointPath,
 					@NonNull String jsonRpcMethod) {
 				mcpMetricEventDelivery.record(
-						new McpMetricsEvent.UnknownMirroredHeader(
+						McpMetricsEvent.unknownMirroredHeader(
 								requireNonNull(endpointPath),
 								metricMethod(jsonRpcMethod)));
 			}
@@ -328,29 +328,29 @@ final class DefaultMcpServer implements McpServer {
 			@Override
 			public void recordHandlerExecutionStarted() {
 				mcpMetricEventDelivery.record(
-						new McpMetricsEvent.HandlerExecutionStarted());
+						McpMetricsEvent.handlerExecutionStarted());
 			}
 
 			@Override
 			public void recordHandlerExecutionFinished() {
 				mcpMetricEventDelivery.record(
-						new McpMetricsEvent.HandlerExecutionFinished());
+						McpMetricsEvent.handlerExecutionFinished());
 			}
 
 			@Override
 			public void recordHandlerQueued() {
-				mcpMetricEventDelivery.record(new McpMetricsEvent.HandlerQueued());
+				mcpMetricEventDelivery.record(McpMetricsEvent.handlerQueued());
 			}
 
 			@Override
 			public void recordHandlerDequeued() {
-				mcpMetricEventDelivery.record(new McpMetricsEvent.HandlerDequeued());
+				mcpMetricEventDelivery.record(McpMetricsEvent.handlerDequeued());
 			}
 
 			@Override
 			public void recordHandlerCapacityRejected() {
 				mcpMetricEventDelivery.record(
-						new McpMetricsEvent.HandlerCapacityRejected());
+						McpMetricsEvent.handlerCapacityRejected());
 			}
 
 			@Override
@@ -718,7 +718,7 @@ final class DefaultMcpServer implements McpServer {
 					this.listenerGenerationStopPending = false;
 					normalizedShutdownOutcome = this.lastShutdownOutcome;
 					this.mcpMetricEventDelivery.record(
-							new McpMetricsEvent.ServerStopped(
+							McpMetricsEvent.serverStopped(
 									normalizedShutdownOutcome));
 				}
 				if (this.securityControls.getProtectionMode()
@@ -726,7 +726,7 @@ final class DefaultMcpServer implements McpServer {
 					safelyLogStartupDiagnostic(
 							DEVELOPMENT_EPHEMERAL_PROTECTION_DIAGNOSTIC);
 				provisionalServerStarted = this.mcpMetricEventDelivery.record(
-						new McpMetricsEvent.ServerStarted());
+						McpMetricsEvent.serverStarted());
 				this.runtimeBridge.start();
 				this.lastShutdownOutcome = McpShutdownOutcome.CLEAN;
 				this.listenerGenerationStopPending = true;
@@ -802,7 +802,7 @@ final class DefaultMcpServer implements McpServer {
 				this.listenerGenerationStopPending = false;
 				listenerGenerationStopped = true;
 				this.mcpMetricEventDelivery.record(
-						new McpMetricsEvent.ServerStopped(shutdownOutcome));
+						McpMetricsEvent.serverStopped(shutdownOutcome));
 			}
 		}
 		return new McpServerStopResult(shutdownOutcome,
@@ -1092,7 +1092,7 @@ final class DefaultMcpServer implements McpServer {
 		if (decision instanceof McpRateLimitDecision.Allowed)
 			return RateLimitResult.allowed();
 		if (decision instanceof McpRateLimitDecision.Denied denied)
-			return RateLimitResult.denied(denied.retryAfter());
+			return RateLimitResult.denied(denied.getRetryAfter());
 		throw new IllegalArgumentException("Unsupported MCP rate-limit decision.");
 	}
 
@@ -1351,7 +1351,7 @@ final class DefaultMcpServer implements McpServer {
 		CancelationToken token = requireNonNull(cancelationToken);
 		Optional<ProgressEmitter> emitter = requireNonNull(progressEmitter);
 		token.onCancel(() -> this.mcpMetricEventDelivery.recordAndDrain(
-				new McpMetricsEvent.CancelationSignaled(endpointPath, boundedMethod),
+				McpMetricsEvent.cancelationSignaled(endpointPath, boundedMethod),
 				requestContext));
 
 		Map<Class<?>, Object> features = new LinkedHashMap<>();
@@ -1374,7 +1374,8 @@ final class DefaultMcpServer implements McpServer {
 	 * <p>
 	 * A creation failure - including a canceled boundary - always fails the
 	 * invocation before interceptor or handler entry: Soklet cannot fabricate
-	 * the application's context subtype, so neither failure policy applies.
+	 * the application's selected locale or translation snapshot, so neither
+	 * failure policy applies.
 	 *
 	 * @throws McpLocalizationContextUnavailableException on any creation failure;
 	 *         the provider throwable is discarded as untrusted localization data
@@ -1519,7 +1520,7 @@ final class DefaultMcpServer implements McpServer {
 
 					this.lastAcceptedProgress = progress;
 					mcpMetricEventDelivery.record(
-							new McpMetricsEvent.ProgressEmitted(
+							McpMetricsEvent.progressEmitted(
 									this.endpointPath, this.jsonRpcMethod),
 							this.requestContext);
 				}
@@ -1559,9 +1560,9 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpToolRegistration<?> tool) {
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
 		tool.getTitle().ifPresent(value ->
-				fields.put("title", new McpJsonString(value)));
+				fields.put("title", McpJsonString.fromValue(value)));
 		tool.getDescription().ifPresent(value ->
-				fields.put("description", new McpJsonString(value)));
+				fields.put("description", McpJsonString.fromValue(value)));
 		if (!tool.getIcons().isEmpty())
 			fields.put("icons", McpJsonArray.fromElements(tool.getIcons().stream()
 					.map(DefaultMcpServer::iconToJson)
@@ -1576,9 +1577,9 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpPromptRegistration prompt) {
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
 		prompt.getTitle().ifPresent(value ->
-				fields.put("title", new McpJsonString(value)));
+				fields.put("title", McpJsonString.fromValue(value)));
 		prompt.getDescription().ifPresent(value ->
-				fields.put("description", new McpJsonString(value)));
+				fields.put("description", McpJsonString.fromValue(value)));
 		if (!prompt.getIcons().isEmpty())
 			fields.put("icons", McpJsonArray.fromElements(prompt.getIcons().stream()
 					.map(DefaultMcpServer::iconToJson)
@@ -1591,11 +1592,11 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpResourceRegistration resource) {
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
 		resource.getTitle().ifPresent(value ->
-				fields.put("title", new McpJsonString(value)));
+				fields.put("title", McpJsonString.fromValue(value)));
 		resource.getDescription().ifPresent(value ->
-				fields.put("description", new McpJsonString(value)));
+				fields.put("description", McpJsonString.fromValue(value)));
 		resource.getMimeType().ifPresent(value ->
-				fields.put("mimeType", new McpJsonString(value)));
+				fields.put("mimeType", McpJsonString.fromValue(value)));
 		if (!resource.getIcons().isEmpty())
 			fields.put("icons", McpJsonArray.fromElements(resource.getIcons().stream()
 					.map(DefaultMcpServer::iconToJson)
@@ -1603,7 +1604,7 @@ final class DefaultMcpServer implements McpServer {
 		resource.getAnnotations().ifPresent(value ->
 				fields.put("annotations", contentAnnotationsToJson(value)));
 		resource.getSize().ifPresent(value ->
-				fields.put("size", new McpJsonNumber(
+				fields.put("size", McpJsonNumber.fromValue(
 						java.math.BigDecimal.valueOf(value))));
 		return McpJsonObject.fromMembers(fields);
 	}
@@ -1613,11 +1614,11 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpResourceDescriptor resource) {
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
 		resource.getTitle().ifPresent(value ->
-				fields.put("title", new McpJsonString(value)));
+				fields.put("title", McpJsonString.fromValue(value)));
 		resource.getDescription().ifPresent(value ->
-				fields.put("description", new McpJsonString(value)));
+				fields.put("description", McpJsonString.fromValue(value)));
 		resource.getMimeType().ifPresent(value ->
-				fields.put("mimeType", new McpJsonString(value)));
+				fields.put("mimeType", McpJsonString.fromValue(value)));
 		if (!resource.getIcons().isEmpty())
 			fields.put("icons", McpJsonArray.fromElements(resource.getIcons().stream()
 					.map(DefaultMcpServer::iconToJson)
@@ -1625,7 +1626,7 @@ final class DefaultMcpServer implements McpServer {
 		resource.getAnnotations().ifPresent(value ->
 				fields.put("annotations", contentAnnotationsToJson(value)));
 		resource.getSize().ifPresent(value ->
-				fields.put("size", new McpJsonNumber(
+				fields.put("size", McpJsonNumber.fromValue(
 						java.math.BigDecimal.valueOf(value))));
 		return McpJsonObject.fromMembers(fields);
 	}
@@ -1635,24 +1636,24 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpPromptArgumentDefinition argument) {
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
 		argument.getTitle().ifPresent(value ->
-				fields.put("title", new McpJsonString(value)));
+				fields.put("title", McpJsonString.fromValue(value)));
 		argument.getDescription().ifPresent(value ->
-				fields.put("description", new McpJsonString(value)));
+				fields.put("description", McpJsonString.fromValue(value)));
 		return McpJsonObject.fromMembers(fields);
 	}
 
 	@NonNull
 	private static McpJsonObject iconToJson(@NonNull McpIcon icon) {
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
-		fields.put("src", new McpJsonString(icon.getSource().toString()));
+		fields.put("src", McpJsonString.fromValue(icon.getSource().toString()));
 		icon.getMimeType().ifPresent(value ->
-				fields.put("mimeType", new McpJsonString(value)));
+				fields.put("mimeType", McpJsonString.fromValue(value)));
 		if (!icon.getSizes().isEmpty())
 			fields.put("sizes", McpJsonArray.fromElements(icon.getSizes().stream()
-					.map(McpJsonString::new)
+					.map(McpJsonString::fromValue)
 					.toList()));
 		icon.getTheme().ifPresent(value -> fields.put("theme",
-				new McpJsonString(value.name().toLowerCase(Locale.ROOT))));
+				McpJsonString.fromValue(value.name().toLowerCase(Locale.ROOT))));
 		return McpJsonObject.fromMembers(fields);
 	}
 
@@ -1661,15 +1662,15 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpToolAnnotations annotations) {
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
 		annotations.getTitle().ifPresent(value ->
-				fields.put("title", new McpJsonString(value)));
+				fields.put("title", McpJsonString.fromValue(value)));
 		annotations.getReadOnlyHint().ifPresent(value ->
-				fields.put("readOnlyHint", new McpJsonBoolean(value)));
+				fields.put("readOnlyHint", McpJsonBoolean.fromValue(value)));
 		annotations.getDestructiveHint().ifPresent(value ->
-				fields.put("destructiveHint", new McpJsonBoolean(value)));
+				fields.put("destructiveHint", McpJsonBoolean.fromValue(value)));
 		annotations.getIdempotentHint().ifPresent(value ->
-				fields.put("idempotentHint", new McpJsonBoolean(value)));
+				fields.put("idempotentHint", McpJsonBoolean.fromValue(value)));
 		annotations.getOpenWorldHint().ifPresent(value ->
-				fields.put("openWorldHint", new McpJsonBoolean(value)));
+				fields.put("openWorldHint", McpJsonBoolean.fromValue(value)));
 		return McpJsonObject.fromMembers(fields);
 	}
 
@@ -1683,7 +1684,7 @@ final class DefaultMcpServer implements McpServer {
 		output.getStructuredContent().ifPresent(value ->
 				fields.put("structuredContent", value));
 		if (output.isError())
-			fields.put("isError", new McpJsonBoolean(true));
+			fields.put("isError", McpJsonBoolean.fromValue(true));
 		return McpJsonObject.fromMembers(fields);
 	}
 
@@ -1693,7 +1694,7 @@ final class DefaultMcpServer implements McpServer {
 		requireAggregatePromptBinaryDataFitsOutput(output.getMessages());
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
 		output.getDescription().ifPresent(value ->
-				fields.put("description", new McpJsonString(value)));
+				fields.put("description", McpJsonString.fromValue(value)));
 		fields.put("messages", McpJsonArray.fromElements(
 				output.getMessages().stream()
 						.map(DefaultMcpServer::promptMessageToJson)
@@ -1710,7 +1711,7 @@ final class DefaultMcpServer implements McpServer {
 				.map(DefaultMcpServer::resourceContentsToJson)
 				.toList()));
 		output.getCacheTimeToLiveOverride().ifPresent(value ->
-				fields.put("ttlMs", new McpJsonNumber(
+				fields.put("ttlMs", McpJsonNumber.fromValue(
 						java.math.BigDecimal.valueOf(value.toMillis()))));
 		return McpJsonObject.fromMembers(fields);
 	}
@@ -1722,9 +1723,9 @@ final class DefaultMcpServer implements McpServer {
 				.map(DefaultMcpServer::resourceDescriptorToJson)
 				.toList()));
 		page.getNextCursor().ifPresent(value ->
-				fields.put("nextCursor", new McpJsonString(value)));
+				fields.put("nextCursor", McpJsonString.fromValue(value)));
 		page.getCacheTimeToLiveOverride().ifPresent(value ->
-				fields.put("ttlMs", new McpJsonNumber(
+				fields.put("ttlMs", McpJsonNumber.fromValue(
 						java.math.BigDecimal.valueOf(value.toMillis()))));
 		return McpJsonObject.fromMembers(fields);
 	}
@@ -1733,8 +1734,8 @@ final class DefaultMcpServer implements McpServer {
 	private static McpJsonObject resourceDescriptorToJson(
 			@NonNull McpResourceDescriptor resource) {
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
-		fields.put("uri", new McpJsonString(resource.getUri().toString()));
-		fields.put("name", new McpJsonString(resource.getName()));
+		fields.put("uri", McpJsonString.fromValue(resource.getUri().toString()));
+		fields.put("name", McpJsonString.fromValue(resource.getName()));
 		fields.putAll(resourceDescriptorFields(resource).getMembers());
 		if (!resource.getMetadata().getMembers().isEmpty())
 			fields.put("_meta", resource.getMetadata());
@@ -1760,9 +1761,9 @@ final class DefaultMcpServer implements McpServer {
 	private static McpJsonObject promptMessageToJson(
 			@NonNull McpPromptMessage message) {
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
-		fields.put("role", new McpJsonString(
-				message.role().name().toLowerCase(Locale.ROOT)));
-		fields.put("content", contentBlockToJson(message.content()));
+		fields.put("role", McpJsonString.fromValue(
+				message.getRole().name().toLowerCase(Locale.ROOT)));
+		fields.put("content", contentBlockToJson(message.getContent()));
 		return McpJsonObject.fromMembers(fields);
 	}
 
@@ -1771,45 +1772,45 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpContentBlock content) {
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
 		if (content instanceof McpTextContent text) {
-			fields.put("type", new McpJsonString("text"));
-			fields.put("text", new McpJsonString(text.getText()));
+			fields.put("type", McpJsonString.fromValue("text"));
+			fields.put("text", McpJsonString.fromValue(text.getText()));
 			addContentAnnotationsAndMetadata(fields, text.getAnnotations(),
 					text.getMetadata());
 		} else if (content instanceof McpImageContent image) {
-			fields.put("type", new McpJsonString("image"));
+			fields.put("type", McpJsonString.fromValue("image"));
 			requireBinaryDataFitsOutput(image.dataLength());
-			fields.put("data", new McpJsonString(encodeBinaryData(image.getData())));
-			fields.put("mimeType", new McpJsonString(image.getMimeType()));
+			fields.put("data", McpJsonString.fromValue(encodeBinaryData(image.getData())));
+			fields.put("mimeType", McpJsonString.fromValue(image.getMimeType()));
 			addContentAnnotationsAndMetadata(fields, image.getAnnotations(),
 					image.getMetadata());
 		} else if (content instanceof McpAudioContent audio) {
-			fields.put("type", new McpJsonString("audio"));
+			fields.put("type", McpJsonString.fromValue("audio"));
 			requireBinaryDataFitsOutput(audio.dataLength());
-			fields.put("data", new McpJsonString(encodeBinaryData(audio.getData())));
-			fields.put("mimeType", new McpJsonString(audio.getMimeType()));
+			fields.put("data", McpJsonString.fromValue(encodeBinaryData(audio.getData())));
+			fields.put("mimeType", McpJsonString.fromValue(audio.getMimeType()));
 			addContentAnnotationsAndMetadata(fields, audio.getAnnotations(),
 					audio.getMetadata());
 		} else if (content instanceof McpResourceLink link) {
-			fields.put("type", new McpJsonString("resource_link"));
-			fields.put("uri", new McpJsonString(link.getUri().toString()));
-			fields.put("name", new McpJsonString(link.getName()));
+			fields.put("type", McpJsonString.fromValue("resource_link"));
+			fields.put("uri", McpJsonString.fromValue(link.getUri().toString()));
+			fields.put("name", McpJsonString.fromValue(link.getName()));
 			link.getTitle().ifPresent(value ->
-					fields.put("title", new McpJsonString(value)));
+					fields.put("title", McpJsonString.fromValue(value)));
 			link.getDescription().ifPresent(value ->
-					fields.put("description", new McpJsonString(value)));
+					fields.put("description", McpJsonString.fromValue(value)));
 			link.getMimeType().ifPresent(value ->
-					fields.put("mimeType", new McpJsonString(value)));
+					fields.put("mimeType", McpJsonString.fromValue(value)));
 			if (!link.getIcons().isEmpty())
 				fields.put("icons", McpJsonArray.fromElements(link.getIcons().stream()
 						.map(DefaultMcpServer::iconToJson)
 						.toList()));
 			link.getSize().ifPresent(value ->
-					fields.put("size", new McpJsonNumber(
+					fields.put("size", McpJsonNumber.fromValue(
 							java.math.BigDecimal.valueOf(value))));
 			addContentAnnotationsAndMetadata(fields, link.getAnnotations(),
 					link.getMetadata());
 		} else if (content instanceof McpEmbeddedResource embedded) {
-			fields.put("type", new McpJsonString("resource"));
+			fields.put("type", McpJsonString.fromValue("resource"));
 			fields.put("resource", resourceContentsToJson(embedded.getResource()));
 			addContentAnnotationsAndMetadata(fields, embedded.getAnnotations(),
 					embedded.getMetadata());
@@ -1837,13 +1838,13 @@ final class DefaultMcpServer implements McpServer {
 		if (!annotations.getAudience().isEmpty())
 			fields.put("audience", McpJsonArray.fromElements(
 					annotations.getAudience().stream()
-							.map(role -> new McpJsonString(
+							.map(role -> McpJsonString.fromValue(
 									role.name().toLowerCase(Locale.ROOT)))
 							.toList()));
 		annotations.getPriority().ifPresent(value -> fields.put("priority",
-				new McpJsonNumber(java.math.BigDecimal.valueOf(value))));
+				McpJsonNumber.fromValue(java.math.BigDecimal.valueOf(value))));
 		annotations.getLastModified().ifPresent(value -> fields.put(
-				"lastModified", new McpJsonString(value.toString())));
+				"lastModified", McpJsonString.fromValue(value.toString())));
 		return McpJsonObject.fromMembers(fields);
 	}
 
@@ -1851,14 +1852,14 @@ final class DefaultMcpServer implements McpServer {
 	private static McpJsonObject resourceContentsToJson(
 			@NonNull McpResourceContents contents) {
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
-		fields.put("uri", new McpJsonString(contents.getUri().toString()));
+		fields.put("uri", McpJsonString.fromValue(contents.getUri().toString()));
 		contents.getMimeType().ifPresent(value ->
-				fields.put("mimeType", new McpJsonString(value)));
+				fields.put("mimeType", McpJsonString.fromValue(value)));
 		if (contents instanceof McpTextResourceContents text)
-			fields.put("text", new McpJsonString(text.getText()));
+			fields.put("text", McpJsonString.fromValue(text.getText()));
 		else if (contents instanceof McpBlobResourceContents blob) {
 			requireBinaryDataFitsOutput(blob.dataLength());
-			fields.put("blob", new McpJsonString(encodeBinaryData(blob.getData())));
+			fields.put("blob", McpJsonString.fromValue(encodeBinaryData(blob.getData())));
 		} else
 			throw new IllegalArgumentException(
 					"Unsupported MCP resource contents: "
@@ -1900,7 +1901,7 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull List<@NonNull McpPromptMessage> messages) {
 		long encodedCharacters = 0L;
 		for (McpPromptMessage message : messages) {
-			McpContentBlock content = message.content();
+			McpContentBlock content = message.getContent();
 			if (content instanceof McpImageContent image)
 				encodedCharacters += base64EncodedLength(image.dataLength());
 			else if (content instanceof McpAudioContent audio)
@@ -1965,7 +1966,7 @@ final class DefaultMcpServer implements McpServer {
 					.build(), startThrowables);
 		}
 		this.mcpMetricEventDelivery.recordAndDrain(
-				new McpMetricsEvent.RequestStarted(input.endpoint().getPath(),
+				McpMetricsEvent.requestStarted(input.endpoint().getPath(),
 						metricMethod(input.jsonRpcMethod())), context);
 
 		List<Throwable> immutableStartThrowables = List.copyOf(startThrowables);
@@ -1999,7 +2000,7 @@ final class DefaultMcpServer implements McpServer {
 								error.data().orElse(null));
 
 				mcpMetricEventDelivery.recordAndDrain(
-						new McpMetricsEvent.RequestFinished(
+						McpMetricsEvent.requestFinished(
 								input.endpoint().getPath(),
 								metricMethod(input.jsonRpcMethod()),
 								outcome, duration), context);
@@ -2023,7 +2024,7 @@ final class DefaultMcpServer implements McpServer {
 			@Override
 			public void didOpenRequestStream() {
 				mcpMetricEventDelivery.record(
-						new McpMetricsEvent.RequestStreamOpened(
+						McpMetricsEvent.requestStreamOpened(
 								input.endpoint().getPath(),
 								metricMethod(input.jsonRpcMethod())), context);
 			}
@@ -2033,7 +2034,7 @@ final class DefaultMcpServer implements McpServer {
 					@NonNull McpStreamTerminationReason reason,
 					@NonNull Duration duration) {
 				mcpMetricEventDelivery.record(
-						new McpMetricsEvent.RequestStreamClosed(
+						McpMetricsEvent.requestStreamClosed(
 								input.endpoint().getPath(),
 								metricMethod(input.jsonRpcMethod()), reason,
 								duration), context);
@@ -2042,7 +2043,7 @@ final class DefaultMcpServer implements McpServer {
 			@Override
 			public void didOpenSubscription() {
 				mcpMetricEventDelivery.record(
-						new McpMetricsEvent.SubscriptionOpened(
+						McpMetricsEvent.subscriptionOpened(
 								input.endpoint().getPath()), context);
 			}
 
@@ -2051,7 +2052,7 @@ final class DefaultMcpServer implements McpServer {
 					@NonNull McpStreamTerminationReason reason,
 					@NonNull Duration duration) {
 				mcpMetricEventDelivery.record(
-						new McpMetricsEvent.SubscriptionClosed(
+						McpMetricsEvent.subscriptionClosed(
 								input.endpoint().getPath(), reason, duration),
 						context);
 			}
@@ -2059,7 +2060,7 @@ final class DefaultMcpServer implements McpServer {
 			@Override
 			public void didEmitKeepAlive() {
 				mcpMetricEventDelivery.record(
-						new McpMetricsEvent.KeepAliveEmitted(), context);
+						McpMetricsEvent.keepAliveEmitted(), context);
 			}
 		};
 	}
@@ -2779,7 +2780,7 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 				.find(DEPRECATED_LOG_LEVEL_KEY)
 				.filter(McpJsonString.class::isInstance)
 				.map(McpJsonString.class::cast)
-				.map(McpJsonString::value)
+				.map(McpJsonString::getValue)
 				.map(value -> McpLogLevel.valueOf(
 						value.toUpperCase(Locale.ROOT)));
 		this.requestPropagation = McpRequestPropagation.fromMetadata(

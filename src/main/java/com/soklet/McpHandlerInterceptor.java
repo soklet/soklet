@@ -72,7 +72,7 @@ public interface McpHandlerInterceptor {
 	 * @return shared pass-through interceptor
 	 */
 	@NonNull
-	static McpHandlerInterceptor defaultInstance() {
+	static McpHandlerInterceptor passThroughInstance() {
 		return DefaultMcpHandlerInterceptor.INSTANCE;
 	}
 }

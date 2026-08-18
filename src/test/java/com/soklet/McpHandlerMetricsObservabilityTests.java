@@ -139,20 +139,20 @@ public class McpHandlerMetricsObservabilityTests {
 			assertSample(configuredZeroText, HANDLER_REJECTION_METRIC_NAME, 0L);
 
 			collector.didRecordMcpMetricsEvent(
-					new McpMetricsEvent.HandlerExecutionStarted());
+					McpMetricsEvent.handlerExecutionStarted());
 			collector.didRecordMcpMetricsEvent(
-					new McpMetricsEvent.HandlerExecutionStarted());
+					McpMetricsEvent.handlerExecutionStarted());
 			collector.didRecordMcpMetricsEvent(
-					new McpMetricsEvent.HandlerExecutionFinished());
+					McpMetricsEvent.handlerExecutionFinished());
 			collector.didRecordMcpMetricsEvent(
-					new McpMetricsEvent.HandlerQueued());
+					McpMetricsEvent.handlerQueued());
 			collector.didRecordMcpMetricsEvent(
-					new McpMetricsEvent.HandlerQueued());
+					McpMetricsEvent.handlerQueued());
 			collector.didRecordMcpMetricsEvent(
-					new McpMetricsEvent.HandlerDequeued());
+					McpMetricsEvent.handlerDequeued());
 			for (int index = 0; index < 3; index++)
 				collector.didRecordMcpMetricsEvent(
-						new McpMetricsEvent.HandlerCapacityRejected());
+						McpMetricsEvent.handlerCapacityRejected());
 
 			McpMetricsSnapshot retained = collector.snapshot().orElseThrow()
 					.getMcpMetrics();
@@ -218,9 +218,9 @@ public class McpHandlerMetricsObservabilityTests {
 			assertHandlerSnapshot(retained, 1L, 1L, 3L);
 
 			collector.didRecordMcpMetricsEvent(
-					new McpMetricsEvent.HandlerExecutionFinished());
+					McpMetricsEvent.handlerExecutionFinished());
 			collector.didRecordMcpMetricsEvent(
-					new McpMetricsEvent.HandlerDequeued());
+					McpMetricsEvent.handlerDequeued());
 			assertHandlerSnapshot(collector.snapshot().orElseThrow()
 					.getMcpMetrics(), 0L, 0L, 0L);
 
@@ -1284,7 +1284,7 @@ public class McpHandlerMetricsObservabilityTests {
 			return this.events.stream()
 					.filter(McpMetricsEvent.ServerStopped.class::isInstance)
 					.map(McpMetricsEvent.ServerStopped.class::cast)
-					.map(McpMetricsEvent.ServerStopped::outcome)
+					.map(McpMetricsEvent.ServerStopped::getOutcome)
 					.toList();
 		}
 	}
@@ -1370,13 +1370,18 @@ public class McpHandlerMetricsObservabilityTests {
 			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
 			while (System.nanoTime() - deadline < 0L) {
 				if (this.probeFailure.get() != null
-						|| this.observedStatuses.size() == expectedCount)
+						|| probeCountComplete(expectedCount))
 					return;
 				Thread.sleep(10L);
 			}
 			Assertions.assertTrue(this.probeFailure.get() != null
-					|| this.observedStatuses.size() == expectedCount,
+					|| probeCountComplete(expectedCount),
 					"Lifecycle lock probes did not complete in time.");
+		}
+
+		private boolean probeCountComplete(int expectedCount) {
+			return this.observedStatuses.size() == expectedCount
+					&& this.observedSokletStarted.size() == expectedCount;
 		}
 
 		@Nullable

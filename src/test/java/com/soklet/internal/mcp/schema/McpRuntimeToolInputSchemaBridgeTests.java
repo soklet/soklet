@@ -134,11 +134,11 @@ class McpRuntimeToolInputSchemaBridgeTests {
 	private static McpJsonValue toPublic(
 			com.soklet.internal.mcp.protocol.McpJsonValue value) {
 		if (value instanceof com.soklet.internal.mcp.protocol.McpJsonString string)
-			return new McpJsonString(string.value());
+			return McpJsonString.fromValue(string.value());
 		if (value instanceof com.soklet.internal.mcp.protocol.McpJsonNumber number)
-			return new McpJsonNumber(number.value());
+			return McpJsonNumber.fromValue(number.value());
 		if (value instanceof com.soklet.internal.mcp.protocol.McpJsonBoolean bool)
-			return new McpJsonBoolean(
+			return McpJsonBoolean.fromValue(
 					bool == com.soklet.internal.mcp.protocol.McpJsonBoolean.TRUE);
 		if (value instanceof com.soklet.internal.mcp.protocol.McpJsonNull)
 			return McpJsonNull.INSTANCE;

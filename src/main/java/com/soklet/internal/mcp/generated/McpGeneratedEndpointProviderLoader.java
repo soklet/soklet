@@ -420,13 +420,13 @@ public final class McpGeneratedEndpointProviderLoader {
 			com.soklet.@NonNull McpJsonValue value) {
 		if (value instanceof com.soklet.McpJsonString string)
 			return new com.soklet.internal.mcp.protocol.McpJsonString(
-					string.value());
+					string.getValue());
 		if (value instanceof com.soklet.McpJsonNumber number)
 			return new com.soklet.internal.mcp.protocol.McpJsonNumber(
-					number.value());
+					number.getValue());
 		if (value instanceof com.soklet.McpJsonBoolean bool)
 			return com.soklet.internal.mcp.protocol.McpJsonBoolean
-					.fromBoolean(bool.value());
+					.fromBoolean(bool.getValue());
 		if (value == com.soklet.McpJsonNull.INSTANCE)
 			return com.soklet.internal.mcp.protocol.McpJsonNull.INSTANCE;
 		if (value instanceof com.soklet.McpJsonArray array) {

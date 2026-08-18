@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -25,17 +26,54 @@ import static java.util.Objects.requireNonNull;
 /**
  * An immutable JSON string.
  *
- * @param value string value
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public record McpJsonString(@NonNull String value) implements McpJsonValue {
+public final class McpJsonString implements McpJsonValue {
+	@NonNull
+	private final String value;
+
 	/**
-	 * Creates an immutable JSON string.
+	 * Creates an immutable JSON string from its value.
 	 *
 	 * @param value the non-null string value
+	 * @return immutable JSON string
 	 */
-	public McpJsonString {
-		requireNonNull(value);
+	@NonNull
+	public static McpJsonString fromValue(@NonNull String value) {
+		return new McpJsonString(value);
+	}
+
+	private McpJsonString(@NonNull String value) {
+		this.value = requireNonNull(value);
+	}
+
+	/** @return string value */
+	@NonNull
+	public String getValue() {
+		return this.value;
+	}
+
+	/** @return whether this object contains the same string value */
+	@Override
+	public boolean equals(@Nullable Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof McpJsonString string))
+			return false;
+		return this.value.equals(string.value);
+	}
+
+	/** @return value-based hash code */
+	@Override
+	public int hashCode() {
+		return this.value.hashCode();
+	}
+
+	/** @return redacted diagnostic rendering */
+	@Override
+	@NonNull
+	public String toString() {
+		return "McpJsonString{value=<redacted>}";
 	}
 }

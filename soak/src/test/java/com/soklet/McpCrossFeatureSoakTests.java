@@ -399,8 +399,8 @@ public class McpCrossFeatureSoakTests {
 									"Initial protected request carried input responses.");
 						state.protectedInitialInvocations.incrementAndGet();
 						return McpInputRequiredResult.builder()
-								.inputRequest("approval", McpInputRequest
-										.fromDeclaration(form, McpJsonObject.builder()
+								.inputRequest("approval", McpInputRequest.fromDeclaration(
+										form, McpJsonObject.builder()
 												.put("message",
 														"Approve the soak protected-state exchange")
 												.put("requestedSchema", requestedSchema)
@@ -413,7 +413,7 @@ public class McpCrossFeatureSoakTests {
 							request.getRequestState().orElseThrow(),
 							McpFrameworkRequestState.class,
 							"framework request state");
-					McpJsonObject stateValue = requireType(requestState.value(),
+					McpJsonObject stateValue = requireType(requestState.getValue(),
 							McpJsonObject.class, "framework request-state value");
 					requireJsonString(stateValue, "phase", "awaiting-approval");
 					requireJsonString(stateValue, "fixture",
@@ -437,7 +437,8 @@ public class McpCrossFeatureSoakTests {
 				.withName(BLOCKING_TOOL)
 				.jsonArguments()
 				.handler((request, arguments, features) -> {
-					String invocation = requireJsonString(arguments.getArguments(),
+					String invocation = requireJsonString(
+							arguments.getConvertedArguments(),
 							"invocation");
 					CancelationToken token = features.require(CancelationToken.class);
 					BlockingObservation observation =
@@ -479,7 +480,8 @@ public class McpCrossFeatureSoakTests {
 				McpToolRegistration.withName(SIMULATOR_CAPTURE_TOOL)
 						.jsonArguments()
 						.handler((request, arguments, features) -> {
-							String mode = requireJsonString(arguments.getArguments(), "mode");
+							String mode = requireJsonString(
+									arguments.getConvertedArguments(), "mode");
 							McpProgressReporter reporter =
 									features.require(McpProgressReporter.class);
 							if ("item".equals(mode)) {
@@ -1540,7 +1542,7 @@ public class McpCrossFeatureSoakTests {
 	private static String requireJsonString(@NonNull McpJsonObject object,
 			@NonNull String member) {
 		return requireType(object.find(member).orElseThrow(), McpJsonString.class,
-				"JSON member " + member).value();
+				"JSON member " + member).getValue();
 	}
 
 	private static void requireJsonString(@NonNull McpJsonObject object,
@@ -1893,7 +1895,7 @@ public class McpCrossFeatureSoakTests {
 					this.subscriptionsOpened.incrementAndGet();
 				else if (event instanceof McpMetricsEvent.SubscriptionClosed closed) {
 					this.subscriptionsClosed.incrementAndGet();
-					this.subscriptionCloseReasons.add(closed.reason());
+					this.subscriptionCloseReasons.add(closed.getReason());
 				} else if (event instanceof McpMetricsEvent.CancelationSignaled)
 					this.cancelationSignals.incrementAndGet();
 				else if (event instanceof McpMetricsEvent.ProgressEmitted)

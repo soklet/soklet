@@ -742,16 +742,19 @@ public class McpSecurityControlsTests {
 				controls.getActiveKeyId());
 		Assertions.assertEquals("v1",
 				McpTraceCorrelationConfigurationFingerprint.VERSION);
-		Assertions.assertEquals(TRACE_GOLDEN_FINGERPRINT, fingerprint.value());
-		Assertions.assertEquals(fingerprint,
-				new McpTraceCorrelationConfigurationFingerprint(
-						TRACE_GOLDEN_FINGERPRINT));
+		Assertions.assertEquals(TRACE_GOLDEN_FINGERPRINT, fingerprint.getValue());
+		McpTraceCorrelationConfigurationFingerprint equalFingerprint =
+				McpTraceCorrelationConfigurationFingerprint.fromValue(
+						TRACE_GOLDEN_FINGERPRINT);
+		Assertions.assertEquals(fingerprint, equalFingerprint);
+		Assertions.assertEquals(fingerprint.hashCode(), equalFingerprint.hashCode());
+		Assertions.assertEquals(TRACE_GOLDEN_FINGERPRINT, fingerprint.toString());
 		Assertions.assertThrows(NullPointerException.class, () ->
-				new McpTraceCorrelationConfigurationFingerprint(null));
+				McpTraceCorrelationConfigurationFingerprint.fromValue(null));
 		for (String invalid : List.of("", "A".repeat(42), "A".repeat(44),
 				"!" + "A".repeat(42), "A".repeat(42) + "B"))
 			Assertions.assertThrows(IllegalArgumentException.class, () ->
-					new McpTraceCorrelationConfigurationFingerprint(invalid));
+					McpTraceCorrelationConfigurationFingerprint.fromValue(invalid));
 	}
 
 	@Test

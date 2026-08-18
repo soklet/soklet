@@ -139,15 +139,17 @@ public class McpInputSecurityApplicationPatternsTests {
 	void samplingPolicyClassifiesContentAndAppliesAFixedLoopBudget() {
 		Predicate<McpJsonValue> dataPolicy = value ->
 				!(value instanceof McpJsonString string)
-						|| !string.value().contains("SECRET-CANARY");
+						|| !string.getValue().contains("SECRET-CANARY");
 		SamplingPolicy policy = new SamplingPolicy(4, dataPolicy);
 
-		policy.validateRound(0, List.of(new McpJsonString("public context")));
-		policy.validateRound(3, List.of(new McpJsonString("final round")));
+		policy.validateRound(0,
+				List.of(McpJsonString.fromValue("public context")));
+		policy.validateRound(3,
+				List.of(McpJsonString.fromValue("final round")));
 		assertThrows(IllegalArgumentException.class, () -> policy.validateRound(
-				4, List.of(new McpJsonString("one round too many"))));
+				4, List.of(McpJsonString.fromValue("one round too many"))));
 		assertThrows(IllegalArgumentException.class, () -> policy.validateRound(
-				0, List.of(new McpJsonString("SECRET-CANARY"))));
+				0, List.of(McpJsonString.fromValue("SECRET-CANARY"))));
 	}
 
 	@Test
@@ -192,7 +194,7 @@ public class McpInputSecurityApplicationPatternsTests {
 		McpJsonValue rawAction = response.getMembers().get("action");
 		if (!(rawAction instanceof McpJsonString action))
 			throw invalid();
-		return switch (action.value()) {
+		return switch (action.getValue()) {
 			case "decline" -> new FormResult(FormAction.DECLINE, Optional.empty());
 			case "cancel" -> new FormResult(FormAction.CANCEL, Optional.empty());
 			case "accept" -> acceptForm(pending, response);
@@ -209,7 +211,7 @@ public class McpInputSecurityApplicationPatternsTests {
 		McpJsonValue rawDisplayName = content.getMembers().get("displayName");
 		if (!(rawDisplayName instanceof McpJsonString displayName))
 			throw invalid();
-		String value = displayName.value();
+		String value = displayName.getValue();
 		int length = value.codePointCount(0, value.length());
 		if (length < 1 || length > 80
 				|| value.codePoints().anyMatch(Character::isISOControl))

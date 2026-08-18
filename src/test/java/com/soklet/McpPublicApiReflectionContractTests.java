@@ -83,15 +83,15 @@ public class McpPublicApiReflectionContractTests {
 			Path.of("api/mcp/provisional.includes"));
 	private static final int PHASE_FOUR_TYPE_COUNT = 133;
 	private static final int PHASE_FIVE_TYPE_COUNT = 39;
-	private static final int PHASE_SIX_TYPE_COUNT = 64;
+	private static final int PHASE_SIX_TYPE_COUNT = 65;
 	private static final int PROVISIONAL_TYPE_COUNT = 0;
-	private static final int CURRENT_MCP_TYPE_COUNT = 236;
+	private static final int CURRENT_MCP_TYPE_COUNT = 237;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"d55b5e00570ca13de3168c2e77deb65003ae26d8e991a6eef96f21fa5f958d08";
+			"581038cefbc8e65845e38001632ed0678a83efe55446e4f25f233e874eef3f39";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
-			"a9c0a9311b6b0dff74b2813383b903a01dc185cbf7155c009edf1f6fb8e0d304";
+			"9c8c02a4eca29166a6a92956fa58033ea94939e6d7deef9e23a7ecd6d5babd3e";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
-			"6fa774d10bf9c8a6ab4274f7989ef55eb8032d37a7d58e8a6243c4123706edc9";
+			"2f857d18ae3dfb641fadf00858fec19d594c0ac470c6ed6be70423596b340611";
 	private static final Map<String, Object> PHASE_FOUR_PRIMITIVE_CONSTANTS =
 			Map.of(
 					"com.soklet.McpAdmissionIdentity#MAXIMUM_PARTITION_KEY_UTF_8_BYTES",
@@ -182,16 +182,83 @@ public class McpPublicApiReflectionContractTests {
 					"soklet-mcp-protection-v1",
 					"com.soklet.McpProtectionKeyRingFingerprint#VERSION",
 					"v1");
-	private static final Map<Class<?>, List<String>> PHASE_FIVE_RECORDS =
+	private static final Map<String, Set<String>> PHASE_SIX_PERMITTED_TYPES =
 			Map.of(
-					McpApplicationRequestState.class, List.of("value"),
-					McpFrameworkRequestState.class, List.of("value"),
-					McpInputRequest.class, List.of("declaration", "params"),
-					McpInputRequestDeclaration.class,
-					List.of("method", "capabilities", "requirement"),
-					McpSubscriptionEvent.ResourceUpdated.class,
-					List.of("resourceUri"),
-					McpSubscriptionEvent.ResourcesListChanged.class, List.of());
+					"com.soklet.McpLocalizationResult", Set.of(
+							"com.soklet.McpLocalizationResult$Failure",
+							"com.soklet.McpLocalizationResult$Localized",
+							"com.soklet.McpLocalizationResult$UseDefaultText"),
+					"com.soklet.McpMetricsEvent", Set.of(
+							"com.soklet.McpMetricsEvent$CancelationSignaled",
+							"com.soklet.McpMetricsEvent$ConnectionAccepted",
+							"com.soklet.McpMetricsEvent$ConnectionRejected",
+							"com.soklet.McpMetricsEvent$HandlerCapacityRejected",
+							"com.soklet.McpMetricsEvent$HandlerDequeued",
+							"com.soklet.McpMetricsEvent$HandlerExecutionFinished",
+							"com.soklet.McpMetricsEvent$HandlerExecutionStarted",
+							"com.soklet.McpMetricsEvent$HandlerQueued",
+							"com.soklet.McpMetricsEvent$KeepAliveEmitted",
+							"com.soklet.McpMetricsEvent$ProgressEmitted",
+							"com.soklet.McpMetricsEvent$ProtocolError",
+							"com.soklet.McpMetricsEvent$RequestAccepted",
+							"com.soklet.McpMetricsEvent$RequestFinished",
+							"com.soklet.McpMetricsEvent$RequestRejected",
+							"com.soklet.McpMetricsEvent$RequestStarted",
+							"com.soklet.McpMetricsEvent$RequestStreamClosed",
+							"com.soklet.McpMetricsEvent$RequestStreamOpened",
+							"com.soklet.McpMetricsEvent$ServerStarted",
+							"com.soklet.McpMetricsEvent$ServerStopped",
+							"com.soklet.McpMetricsEvent$SubscriptionClosed",
+							"com.soklet.McpMetricsEvent$SubscriptionOpened",
+							"com.soklet.McpMetricsEvent$TransportFailure",
+							"com.soklet.McpMetricsEvent$UnknownMirroredHeader"));
+	private static final Set<String> PHASE_SIX_NON_SEALED_TYPES = Set.of();
+	private static final List<Class<?>> FORMER_PUBLIC_RECORD_TYPES = List.of(
+			McpAdmissionDecision.Accepted.class,
+			McpAdmissionDecision.Rejected.class,
+			McpJsonBoolean.class,
+			McpJsonNumber.class,
+			McpJsonString.class,
+			McpPromptMessage.class,
+			McpRateLimitDecision.Allowed.class,
+			McpRateLimitDecision.Denied.class,
+			McpApplicationRequestState.class,
+			McpFrameworkRequestState.class,
+			McpInputRequest.class,
+			McpInputRequestDeclaration.class,
+			McpSubscriptionEvent.ResourceUpdated.class,
+			McpSubscriptionEvent.ResourcesListChanged.class,
+			McpLocalizationResult.Failure.class,
+			McpLocalizationResult.Localized.class,
+			McpLocalizationResult.UseDefaultText.class,
+			McpMetricsEvent.CancelationSignaled.class,
+			McpMetricsEvent.ConnectionAccepted.class,
+			McpMetricsEvent.ConnectionRejected.class,
+			McpMetricsEvent.HandlerCapacityRejected.class,
+			McpMetricsEvent.HandlerDequeued.class,
+			McpMetricsEvent.HandlerExecutionFinished.class,
+			McpMetricsEvent.HandlerExecutionStarted.class,
+			McpMetricsEvent.HandlerQueued.class,
+			McpMetricsEvent.KeepAliveEmitted.class,
+			McpMetricsEvent.ProgressEmitted.class,
+			McpMetricsEvent.ProtocolError.class,
+			McpMetricsEvent.RequestAccepted.class,
+			McpMetricsEvent.RequestFinished.class,
+			McpMetricsEvent.RequestRejected.class,
+			McpMetricsEvent.RequestStarted.class,
+			McpMetricsEvent.RequestStreamClosed.class,
+			McpMetricsEvent.RequestStreamOpened.class,
+			McpMetricsEvent.ServerStarted.class,
+			McpMetricsEvent.ServerStopped.class,
+			McpMetricsEvent.SubscriptionClosed.class,
+			McpMetricsEvent.SubscriptionOpened.class,
+			McpMetricsEvent.TransportFailure.class,
+			McpMetricsEvent.UnknownMirroredHeader.class,
+			McpMetricsSnapshot.EndpointMethodKey.class,
+			McpMetricsSnapshot.RequestOutcomeKey.class,
+			McpMetricsSnapshot.RequestStreamTerminationKey.class,
+			McpMetricsSnapshot.SubscriptionTerminationKey.class,
+			McpTraceCorrelationConfigurationFingerprint.class);
 
 	@Test
 	public void phaseFourSealedHierarchyRemainsExact() throws Exception {
@@ -213,6 +280,7 @@ public class McpPublicApiReflectionContractTests {
 				"com.soklet.McpLocalizableText",
 				"com.soklet.McpLocalizationCatalog",
 				"com.soklet.McpLocalizationContext",
+				"com.soklet.McpLocalizationContext$Builder",
 				"com.soklet.McpLocalizationContextProvider",
 				"com.soklet.McpLocalizationControl",
 				"com.soklet.McpLocalizationFailurePolicy",
@@ -318,6 +386,12 @@ public class McpPublicApiReflectionContractTests {
 	public void phaseFiveSealedHierarchyRemainsExact() throws Exception {
 		assertSealedHierarchy(phaseFiveTypes(), PHASE_FIVE_PERMITTED_TYPES,
 				PHASE_FIVE_NON_SEALED_TYPES, "Phase 5");
+	}
+
+	@Test
+	public void phaseSixSealedHierarchyRemainsExact() throws Exception {
+		assertSealedHierarchy(phaseSixTypes(), PHASE_SIX_PERMITTED_TYPES,
+				PHASE_SIX_NON_SEALED_TYPES, "Phase 6");
 	}
 
 	@Test
@@ -549,35 +623,144 @@ public class McpPublicApiReflectionContractTests {
 	}
 
 	@Test
-	public void publicRecordComponentsRetainTheirNamesAndDeclarationOrder()
+	public void publicMcpValueCarriersRemainEncapsulatedFinalClasses()
 			throws Exception {
-		assertRecordContract(McpAdmissionDecision.Accepted.class, "identity");
-		assertRecordContract(McpAdmissionDecision.Rejected.class, "rejection");
-		assertRecordContract(McpJsonBoolean.class, "value");
-		assertRecordContract(McpJsonNumber.class, "value");
-		assertRecordContract(McpJsonString.class, "value");
-		assertRecordContract(McpPromptMessage.class, "role", "content");
-		assertRecordContract(McpRateLimitDecision.Allowed.class);
-		assertRecordContract(McpRateLimitDecision.Denied.class, "retryAfter");
+		Assertions.assertEquals(45, FORMER_PUBLIC_RECORD_TYPES.size(),
+				"The reviewed former-record carrier inventory changed");
+		Assertions.assertEquals(FORMER_PUBLIC_RECORD_TYPES.size(),
+				Set.copyOf(FORMER_PUBLIC_RECORD_TYPES).size(),
+				"The reviewed former-record carrier inventory contains duplicates");
+
+		List<String> publicRecords = publicMcpTypes().stream()
+				.filter(Class::isRecord)
+				.map(Class::getName)
+				.sorted()
+				.toList();
+		Assertions.assertEquals(List.of(), publicRecords,
+				"The reviewed public MCP API must not expose record types");
+
+		List<String> publicConstructors = publicMcpTypes().stream()
+				.flatMap(type -> Arrays.stream(type.getConstructors()))
+				.map(constructor -> constructor.getDeclaringClass().getName()
+						+ "(" + Arrays.stream(constructor.getParameterTypes())
+						.map(Class::getName)
+						.collect(java.util.stream.Collectors.joining(",")) + ")")
+				.sorted()
+				.toList();
+		Assertions.assertEquals(List.of(
+				"com.soklet.McpJsonRpcException(com.soklet.McpJsonRpcError)"),
+				publicConstructors,
+				"Only the throwable MCP API may expose public construction");
+
+		for (Class<?> type : FORMER_PUBLIC_RECORD_TYPES)
+			assertEncapsulatedFinalValueType(type);
 	}
 
 	@Test
-	public void phaseFiveRecordsRetainTheirNamesAndDeclarationOrder()
+	public void phaseFourValueCarrierFactoriesAndGettersRemainExact()
 			throws Exception {
-		Map<Class<?>, List<String>> actualRecords = new TreeMap<>(
-				Comparator.comparing(Class::getName));
-		for (Class<?> type : phaseFiveTypes()) {
-			if (type.isRecord())
-				actualRecords.put(type, Arrays.stream(type.getRecordComponents())
-						.map(RecordComponent::getName).toList());
-		}
+		assertFactory(McpAdmissionDecision.class, "accepted",
+				McpAdmissionDecision.Accepted.class, List.of("identity"),
+				McpAdmissionIdentity.class);
+		assertFactory(McpAdmissionDecision.class, "accepted",
+				McpAdmissionDecision.Accepted.class, List.of());
+		assertFactory(McpAdmissionDecision.class, "rejected",
+				McpAdmissionDecision.Rejected.class, List.of("rejection"),
+				McpAdmissionRejection.class);
+		assertGetter(McpAdmissionDecision.Accepted.class, "getIdentity",
+				McpAdmissionIdentity.class);
+		assertGetter(McpAdmissionDecision.Rejected.class, "getRejection",
+				McpAdmissionRejection.class);
 
-		Assertions.assertEquals(PHASE_FIVE_RECORDS, actualRecords,
-				"Phase 5 record owners, component names, or declaration order changed");
-		for (Map.Entry<Class<?>, List<String>> entry
-				: PHASE_FIVE_RECORDS.entrySet())
-			assertRecordContract(entry.getKey(),
-					entry.getValue().toArray(String[]::new));
+		assertFactory(McpJsonBoolean.class, "fromValue", McpJsonBoolean.class,
+				List.of("value"), Boolean.class);
+		assertFactory(McpJsonNumber.class, "fromValue", McpJsonNumber.class,
+				List.of("value"), java.math.BigDecimal.class);
+		assertFactory(McpJsonString.class, "fromValue", McpJsonString.class,
+				List.of("value"), String.class);
+		assertGetter(McpJsonBoolean.class, "getValue", Boolean.class);
+		assertGetter(McpJsonNumber.class, "getValue", java.math.BigDecimal.class);
+		assertGetter(McpJsonString.class, "getValue", String.class);
+
+		assertFactory(McpPromptMessage.class, "fromUserContent",
+				McpPromptMessage.class, List.of("content"), McpContentBlock.class);
+		assertFactory(McpPromptMessage.class, "fromAssistantContent",
+				McpPromptMessage.class, List.of("content"), McpContentBlock.class);
+		assertGetter(McpPromptMessage.class, "getRole", McpRole.class);
+		assertGetter(McpPromptMessage.class, "getContent", McpContentBlock.class);
+
+		assertFactory(McpRateLimitDecision.class, "allowed",
+				McpRateLimitDecision.Allowed.class, List.of());
+		assertFactory(McpRateLimitDecision.class, "denied",
+				McpRateLimitDecision.Denied.class, List.of("retryAfter"),
+				Duration.class);
+		assertGetter(McpRateLimitDecision.Denied.class, "getRetryAfter",
+				Duration.class);
+	}
+
+	@Test
+	public void phaseFiveValueCarrierFactoriesAndGettersRemainExact()
+			throws Exception {
+		assertFactory(McpApplicationRequestState.class, "fromValue",
+				McpApplicationRequestState.class, List.of("value"), String.class);
+		assertFactory(McpFrameworkRequestState.class, "fromValue",
+				McpFrameworkRequestState.class, List.of("value"), McpJsonValue.class);
+		assertGetter(McpApplicationRequestState.class, "getValue", String.class);
+		assertGetter(McpFrameworkRequestState.class, "getValue",
+				McpJsonValue.class);
+
+		assertFactory(McpInputRequest.class, "fromDeclaration",
+				McpInputRequest.class, List.of("declaration", "params"),
+				McpInputRequestDeclaration.class, McpJsonObject.class);
+		assertGetter(McpInputRequest.class, "getDeclaration",
+				McpInputRequestDeclaration.class);
+		assertGetter(McpInputRequest.class, "getParams", McpJsonObject.class);
+		assertGetter(McpInputRequest.class, "getMethod", String.class);
+
+		assertFactory(McpInputRequestDeclaration.class, "fromElicitationForm",
+				McpInputRequestDeclaration.class, List.of("requirement"),
+				McpInputRequirement.class);
+		assertFactory(McpInputRequestDeclaration.class, "fromElicitationUrl",
+				McpInputRequestDeclaration.class, List.of("requirement"),
+				McpInputRequirement.class);
+		assertFactory(McpInputRequestDeclaration.class, "fromSampling",
+				McpInputRequestDeclaration.class,
+				List.of("optionalCapabilities", "requirement"), Set.class,
+				McpInputRequirement.class);
+		assertFactory(McpInputRequestDeclaration.class, "fromRoots",
+				McpInputRequestDeclaration.class, List.of("requirement"),
+				McpInputRequirement.class);
+		assertGetter(McpInputRequestDeclaration.class, "getMethod", String.class);
+		assertGetter(McpInputRequestDeclaration.class, "getCapabilities",
+				Set.class);
+		assertGetter(McpInputRequestDeclaration.class, "getRequirement",
+				McpInputRequirement.class);
+
+		assertFactory(McpSubscriptionEvent.class, "resourcesListChanged",
+				McpSubscriptionEvent.ResourcesListChanged.class, List.of());
+		assertFactory(McpSubscriptionEvent.class, "resourceUpdated",
+				McpSubscriptionEvent.ResourceUpdated.class, List.of("resourceUri"),
+				java.net.URI.class);
+		assertGetter(McpSubscriptionEvent.ResourceUpdated.class,
+				"getResourceUri", java.net.URI.class);
+	}
+
+	@Test
+	public void phaseSixValueCarrierFactoriesAndGettersRemainExact()
+			throws Exception {
+		assertFactory(McpLocalizationResult.class, "localized",
+				McpLocalizationResult.Localized.class, List.of("text"), String.class);
+		assertFactory(McpLocalizationResult.class, "useDefaultText",
+				McpLocalizationResult.UseDefaultText.class, List.of());
+		assertFactory(McpLocalizationResult.class, "failure",
+				McpLocalizationResult.Failure.class, List.of());
+		assertGetter(McpLocalizationResult.Localized.class, "getText",
+				String.class);
+
+		assertMetricsEventFactoriesAndGetters();
+		assertMetricsKeyFactoriesAndGetters();
+		assertGetter(McpTraceCorrelationConfigurationFingerprint.class,
+				"getValue", String.class);
 	}
 
 	@Test
@@ -637,7 +820,7 @@ public class McpPublicApiReflectionContractTests {
 
 		Method resolverSubscriptions = assertInstanceMethod(
 				McpEndpointRegistry.class, "withSubscriptions",
-				McpEndpointRegistry.class, MethodShape.ABSTRACT, false,
+				McpEndpointRegistry.class, MethodShape.CONCRETE, false,
 				Class.class, McpSubscriptionConfig.class);
 		Assertions.assertEquals(McpEndpointRegistry.class,
 				resolverSubscriptions.getGenericReturnType());
@@ -791,6 +974,216 @@ public class McpPublicApiReflectionContractTests {
 				requestStateMode.getDefaultValue(),
 				() -> annotationType.getName()
 						+ "#requestStateMode() default changed");
+	}
+
+	private static void assertMetricsEventFactoriesAndGetters()
+			throws Exception {
+		assertFactory(McpMetricsEvent.class, "serverStarted",
+				McpMetricsEvent.ServerStarted.class, List.of());
+		assertFactory(McpMetricsEvent.class, "connectionAccepted",
+				McpMetricsEvent.ConnectionAccepted.class, List.of());
+		assertFactory(McpMetricsEvent.class, "connectionRejected",
+				McpMetricsEvent.ConnectionRejected.class, List.of());
+		assertFactory(McpMetricsEvent.class, "requestAccepted",
+				McpMetricsEvent.RequestAccepted.class, List.of());
+		assertFactory(McpMetricsEvent.class, "requestRejected",
+				McpMetricsEvent.RequestRejected.class, List.of());
+		assertFactory(McpMetricsEvent.class, "requestStarted",
+				McpMetricsEvent.RequestStarted.class,
+				List.of("endpointPath", "jsonRpcMethod"), String.class,
+				String.class);
+		assertFactory(McpMetricsEvent.class, "requestFinished",
+				McpMetricsEvent.RequestFinished.class,
+				List.of("endpointPath", "jsonRpcMethod", "outcome", "duration"),
+				String.class, String.class, McpRequestOutcome.class, Duration.class);
+		assertFactory(McpMetricsEvent.class, "requestStreamOpened",
+				McpMetricsEvent.RequestStreamOpened.class,
+				List.of("endpointPath", "jsonRpcMethod"), String.class,
+				String.class);
+		assertFactory(McpMetricsEvent.class, "requestStreamClosed",
+				McpMetricsEvent.RequestStreamClosed.class,
+				List.of("endpointPath", "jsonRpcMethod", "reason", "duration"),
+				String.class, String.class, McpStreamTerminationReason.class,
+				Duration.class);
+		assertFactory(McpMetricsEvent.class, "subscriptionOpened",
+				McpMetricsEvent.SubscriptionOpened.class, List.of("endpointPath"),
+				String.class);
+		assertFactory(McpMetricsEvent.class, "subscriptionClosed",
+				McpMetricsEvent.SubscriptionClosed.class,
+				List.of("endpointPath", "reason", "duration"), String.class,
+				McpStreamTerminationReason.class, Duration.class);
+		assertFactory(McpMetricsEvent.class, "cancelationSignaled",
+				McpMetricsEvent.CancelationSignaled.class,
+				List.of("endpointPath", "jsonRpcMethod"), String.class,
+				String.class);
+		assertFactory(McpMetricsEvent.class, "progressEmitted",
+				McpMetricsEvent.ProgressEmitted.class,
+				List.of("endpointPath", "jsonRpcMethod"), String.class,
+				String.class);
+		assertFactory(McpMetricsEvent.class, "keepAliveEmitted",
+				McpMetricsEvent.KeepAliveEmitted.class, List.of());
+		assertFactory(McpMetricsEvent.class, "protocolError",
+				McpMetricsEvent.ProtocolError.class, List.of("code"), Integer.class);
+		assertFactory(McpMetricsEvent.class, "unknownMirroredHeader",
+				McpMetricsEvent.UnknownMirroredHeader.class,
+				List.of("endpointPath", "jsonRpcMethod"), String.class,
+				String.class);
+		assertFactory(McpMetricsEvent.class, "handlerExecutionStarted",
+				McpMetricsEvent.HandlerExecutionStarted.class, List.of());
+		assertFactory(McpMetricsEvent.class, "handlerExecutionFinished",
+				McpMetricsEvent.HandlerExecutionFinished.class, List.of());
+		assertFactory(McpMetricsEvent.class, "handlerQueued",
+				McpMetricsEvent.HandlerQueued.class, List.of());
+		assertFactory(McpMetricsEvent.class, "handlerDequeued",
+				McpMetricsEvent.HandlerDequeued.class, List.of());
+		assertFactory(McpMetricsEvent.class, "handlerCapacityRejected",
+				McpMetricsEvent.HandlerCapacityRejected.class, List.of());
+		assertFactory(McpMetricsEvent.class, "transportFailure",
+				McpMetricsEvent.TransportFailure.class, List.of("reason"),
+				MetricsCollector.TransportFailureReason.class);
+		assertFactory(McpMetricsEvent.class, "serverStopped",
+				McpMetricsEvent.ServerStopped.class, List.of("outcome"),
+				McpShutdownOutcome.class);
+
+		assertRoutedMetricsGetters(McpMetricsEvent.RequestStarted.class);
+		assertRoutedMetricsGetters(McpMetricsEvent.RequestFinished.class);
+		assertGetter(McpMetricsEvent.RequestFinished.class, "getOutcome",
+				McpRequestOutcome.class);
+		assertGetter(McpMetricsEvent.RequestFinished.class, "getDuration",
+				Duration.class);
+		assertRoutedMetricsGetters(McpMetricsEvent.RequestStreamOpened.class);
+		assertRoutedMetricsGetters(McpMetricsEvent.RequestStreamClosed.class);
+		assertGetter(McpMetricsEvent.RequestStreamClosed.class, "getReason",
+				McpStreamTerminationReason.class);
+		assertGetter(McpMetricsEvent.RequestStreamClosed.class, "getDuration",
+				Duration.class);
+		assertGetter(McpMetricsEvent.SubscriptionOpened.class, "getEndpointPath",
+				String.class);
+		assertGetter(McpMetricsEvent.SubscriptionClosed.class, "getEndpointPath",
+				String.class);
+		assertGetter(McpMetricsEvent.SubscriptionClosed.class, "getReason",
+				McpStreamTerminationReason.class);
+		assertGetter(McpMetricsEvent.SubscriptionClosed.class, "getDuration",
+				Duration.class);
+		assertRoutedMetricsGetters(McpMetricsEvent.CancelationSignaled.class);
+		assertRoutedMetricsGetters(McpMetricsEvent.ProgressEmitted.class);
+		assertGetter(McpMetricsEvent.ProtocolError.class, "getCode",
+				Integer.class);
+		assertRoutedMetricsGetters(McpMetricsEvent.UnknownMirroredHeader.class);
+		assertGetter(McpMetricsEvent.TransportFailure.class, "getReason",
+				MetricsCollector.TransportFailureReason.class);
+		assertGetter(McpMetricsEvent.ServerStopped.class, "getOutcome",
+				McpShutdownOutcome.class);
+	}
+
+	private static void assertMetricsKeyFactoriesAndGetters()
+			throws Exception {
+		assertFactory(McpMetricsSnapshot.EndpointMethodKey.class,
+				"fromDimensions", McpMetricsSnapshot.EndpointMethodKey.class,
+				List.of("endpointPath", "jsonRpcMethod"), String.class,
+				String.class);
+		assertFactory(McpMetricsSnapshot.RequestOutcomeKey.class,
+				"fromDimensions", McpMetricsSnapshot.RequestOutcomeKey.class,
+				List.of("endpointPath", "jsonRpcMethod", "outcome"), String.class,
+				String.class, McpRequestOutcome.class);
+		assertFactory(McpMetricsSnapshot.RequestStreamTerminationKey.class,
+				"fromDimensions",
+				McpMetricsSnapshot.RequestStreamTerminationKey.class,
+				List.of("endpointPath", "jsonRpcMethod", "reason"), String.class,
+				String.class, McpStreamTerminationReason.class);
+		assertFactory(McpMetricsSnapshot.SubscriptionTerminationKey.class,
+				"fromDimensions",
+				McpMetricsSnapshot.SubscriptionTerminationKey.class,
+				List.of("endpointPath", "reason"), String.class,
+				McpStreamTerminationReason.class);
+
+		assertRoutedMetricsGetters(McpMetricsSnapshot.EndpointMethodKey.class);
+		assertRoutedMetricsGetters(McpMetricsSnapshot.RequestOutcomeKey.class);
+		assertGetter(McpMetricsSnapshot.RequestOutcomeKey.class, "getOutcome",
+				McpRequestOutcome.class);
+		assertRoutedMetricsGetters(
+				McpMetricsSnapshot.RequestStreamTerminationKey.class);
+		assertGetter(McpMetricsSnapshot.RequestStreamTerminationKey.class,
+				"getReason", McpStreamTerminationReason.class);
+		assertGetter(McpMetricsSnapshot.SubscriptionTerminationKey.class,
+				"getEndpointPath", String.class);
+		assertGetter(McpMetricsSnapshot.SubscriptionTerminationKey.class,
+				"getReason", McpStreamTerminationReason.class);
+	}
+
+	private static void assertRoutedMetricsGetters(Class<?> owner)
+			throws Exception {
+		assertGetter(owner, "getEndpointPath", String.class);
+		assertGetter(owner, "getJsonRpcMethod", String.class);
+	}
+
+	private static void assertEncapsulatedFinalValueType(Class<?> type)
+			throws Exception {
+		Assertions.assertTrue(Modifier.isPublic(type.getModifiers()),
+				() -> type.getName() + " must remain public");
+		Assertions.assertTrue(Modifier.isFinal(type.getModifiers()),
+				() -> type.getName() + " must remain final");
+		Assertions.assertFalse(type.isInterface() || type.isAnnotation()
+				|| type.isEnum() || type.isRecord(),
+				() -> type.getName() + " must remain a non-record class");
+		if (type.isMemberClass())
+			Assertions.assertTrue(Modifier.isStatic(type.getModifiers()),
+					() -> type.getName() + " must remain a static nested class");
+		Assertions.assertArrayEquals(new Constructor<?>[0],
+				type.getConstructors(),
+				() -> type.getName() + " must not expose public constructors");
+
+		assertDeclaredObjectContractMethod(type, "equals", boolean.class,
+				Object.class);
+		assertDeclaredObjectContractMethod(type, "hashCode", int.class);
+		assertDeclaredObjectContractMethod(type, "toString", String.class);
+	}
+
+	private static void assertDeclaredObjectContractMethod(Class<?> owner,
+			String name, Class<?> returnType, Class<?>... parameterTypes)
+			throws Exception {
+		Method method = owner.getDeclaredMethod(name, parameterTypes);
+		Assertions.assertTrue(Modifier.isPublic(method.getModifiers()),
+				() -> owner.getName() + "#" + name + " must remain public");
+		Assertions.assertFalse(Modifier.isStatic(method.getModifiers()),
+				() -> owner.getName() + "#" + name
+						+ " must remain an instance method");
+		Assertions.assertEquals(returnType, method.getReturnType(),
+				() -> owner.getName() + "#" + name + " return type changed");
+	}
+
+	private static void assertFactory(Class<?> owner, String name,
+			Class<?> returnType, List<String> parameterNames,
+			Class<?>... parameterTypes) throws Exception {
+		Method method = owner.getMethod(name, parameterTypes);
+		String description = owner.getName() + "#" + name;
+
+		Assertions.assertSame(owner, method.getDeclaringClass(),
+				() -> description + " must remain declared on its reviewed host");
+		Assertions.assertTrue(Modifier.isPublic(method.getModifiers()),
+				() -> description + " must remain public");
+		Assertions.assertTrue(Modifier.isStatic(method.getModifiers()),
+				() -> description + " must remain static");
+		Assertions.assertFalse(Modifier.isAbstract(method.getModifiers()),
+				() -> description + " must remain concrete");
+		Assertions.assertEquals(returnType, method.getReturnType(),
+				() -> description + " erased return type changed");
+		Assertions.assertArrayEquals(parameterTypes, method.getParameterTypes(),
+				() -> description + " erased parameter types changed");
+		Assertions.assertFalse(method.isVarArgs(),
+				() -> description + " must not become varargs");
+		Assertions.assertFalse(method.isBridge(),
+				() -> description + " must not become a bridge method");
+		Assertions.assertFalse(method.isSynthetic(),
+				() -> description + " must not become synthetic");
+		assertParameterNames(method, parameterNames.toArray(String[]::new));
+	}
+
+	private static void assertGetter(Class<?> owner, String name,
+			Class<?> returnType) throws Exception {
+		Method method = assertInstanceMethod(owner, name, returnType,
+				MethodShape.CONCRETE, false);
+		assertNoGenericParameters(method);
 	}
 
 	private enum MethodShape {
@@ -1270,22 +1663,6 @@ public class McpPublicApiReflectionContractTests {
 		Assertions.assertEquals(1, arguments.length);
 		Assertions.assertEquals(expectedPayloadType, arguments[0].getType());
 		Assertions.assertTrue(arguments[0].isAnnotationPresent(NonNull.class));
-	}
-
-	private static void assertRecordContract(Class<?> recordType,
-			String... expectedNames) throws Exception {
-		Assertions.assertTrue(recordType.isRecord(),
-				() -> recordType.getName() + " must remain a record");
-		RecordComponent[] components = recordType.getRecordComponents();
-		Assertions.assertArrayEquals(expectedNames, Arrays.stream(components)
-				.map(RecordComponent::getName).toArray(String[]::new),
-				() -> recordType.getName()
-						+ " record components changed name or declaration order");
-
-		Class<?>[] componentTypes = Arrays.stream(components)
-				.map(RecordComponent::getType).toArray(Class<?>[]::new);
-		assertParameterNames(recordType.getDeclaredConstructor(componentTypes),
-				expectedNames);
 	}
 
 	private static void assertParameterNames(Executable executable,

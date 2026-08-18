@@ -23,11 +23,9 @@ import org.junit.jupiter.api.Timeout;
 
 import java.lang.reflect.AnnotatedParameterizedType;
 import java.lang.reflect.AnnotatedType;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.RecordComponent;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -93,29 +91,25 @@ public class McpSubscriptionLifecycleMetricsAggregationTests {
 
 		Class<McpMetricsSnapshot.SubscriptionTerminationKey> keyType =
 				McpMetricsSnapshot.SubscriptionTerminationKey.class;
-		Assertions.assertTrue(keyType.isRecord());
+		Assertions.assertFalse(keyType.isRecord());
 		Assertions.assertTrue(Modifier.isPublic(keyType.getModifiers()));
 		Assertions.assertTrue(Modifier.isStatic(keyType.getModifiers()));
 		Assertions.assertTrue(Modifier.isFinal(keyType.getModifiers()));
-		RecordComponent[] components = keyType.getRecordComponents();
-		Assertions.assertEquals(List.of("endpointPath", "reason"),
-				Arrays.stream(components).map(RecordComponent::getName).toList());
-		Assertions.assertEquals(List.of(String.class,
-				McpStreamTerminationReason.class), Arrays.stream(components)
-				.map(RecordComponent::getType).toList());
-		for (RecordComponent component : components) {
-			Assertions.assertTrue(component.getAnnotatedType()
-					.isAnnotationPresent(NonNull.class), component.toString());
-			Assertions.assertTrue(component.getAccessor().getAnnotatedReturnType()
-					.isAnnotationPresent(NonNull.class), component.toString());
-		}
-		Constructor<McpMetricsSnapshot.SubscriptionTerminationKey> constructor =
-				keyType.getConstructor(String.class,
-						McpStreamTerminationReason.class);
-		Assertions.assertTrue(Modifier.isPublic(constructor.getModifiers()));
-		for (AnnotatedType parameter : constructor.getAnnotatedParameterTypes())
+		Assertions.assertEquals(0, keyType.getConstructors().length,
+				"Metrics keys must not expose public constructors.");
+		Method factory = keyType.getMethod("fromDimensions", String.class,
+				McpStreamTerminationReason.class);
+		Assertions.assertTrue(Modifier.isPublic(factory.getModifiers()));
+		Assertions.assertTrue(Modifier.isStatic(factory.getModifiers()));
+		Assertions.assertEquals(keyType, factory.getReturnType());
+		Assertions.assertTrue(factory.getAnnotatedReturnType()
+				.isAnnotationPresent(NonNull.class));
+		for (AnnotatedType parameter : factory.getAnnotatedParameterTypes())
 			Assertions.assertTrue(parameter.isAnnotationPresent(NonNull.class),
 					parameter.toString());
+		assertNonNullGetter(keyType, "getEndpointPath", String.class);
+		assertNonNullGetter(keyType, "getReason",
+				McpStreamTerminationReason.class);
 		Assertions.assertEquals(TERMINATION_REASONS,
 				Arrays.asList(McpStreamTerminationReason.values()));
 
@@ -127,9 +121,24 @@ public class McpSubscriptionLifecycleMetricsAggregationTests {
 		McpMetricsSnapshot.SubscriptionTerminationKey completedKey =
 				key(McpStreamTerminationReason.COMPLETED);
 		McpMetricsSnapshot.SubscriptionTerminationKey applicationKey =
-				new McpMetricsSnapshot.SubscriptionTerminationKey(
+				McpMetricsSnapshot.SubscriptionTerminationKey.fromDimensions(
 						"/application-defined",
 						McpStreamTerminationReason.INTERNAL_ERROR);
+		McpMetricsSnapshot.SubscriptionTerminationKey equalApplicationKey =
+				McpMetricsSnapshot.SubscriptionTerminationKey.fromDimensions(
+						"/application-defined",
+						McpStreamTerminationReason.INTERNAL_ERROR);
+		Assertions.assertEquals("/application-defined",
+				applicationKey.getEndpointPath());
+		Assertions.assertEquals(McpStreamTerminationReason.INTERNAL_ERROR,
+				applicationKey.getReason());
+		Assertions.assertEquals(applicationKey, equalApplicationKey);
+		Assertions.assertEquals(applicationKey.hashCode(),
+				equalApplicationKey.hashCode());
+		Assertions.assertNotEquals(applicationKey, completedKey);
+		Assertions.assertEquals("SubscriptionTerminationKey{"
+				+ "endpointPath=<redacted>, reason=INTERNAL_ERROR}",
+				applicationKey.toString());
 		MetricsCollector.HistogramSnapshot completedHistogram =
 				new MetricsCollector.HistogramSnapshot(
 						new long[]{1L, Long.MAX_VALUE}, new long[]{0L, 1L},
@@ -156,13 +165,13 @@ public class McpSubscriptionLifecycleMetricsAggregationTests {
 				() -> snapshot.getSubscriptionDurations().clear());
 
 		Assertions.assertThrows(NullPointerException.class,
-				() -> new McpMetricsSnapshot.SubscriptionTerminationKey(null,
+				() -> McpMetricsSnapshot.SubscriptionTerminationKey.fromDimensions(null,
 						McpStreamTerminationReason.COMPLETED));
 		Assertions.assertThrows(NullPointerException.class,
-				() -> new McpMetricsSnapshot.SubscriptionTerminationKey(
+				() -> McpMetricsSnapshot.SubscriptionTerminationKey.fromDimensions(
 						ENDPOINT_PATH, null));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new McpMetricsSnapshot.SubscriptionTerminationKey("",
+				() -> McpMetricsSnapshot.SubscriptionTerminationKey.fromDimensions("",
 						McpStreamTerminationReason.COMPLETED));
 		Assertions.assertThrows(NullPointerException.class,
 				() -> McpMetricsSnapshot.builder().activeSubscriptions(null));
@@ -189,7 +198,7 @@ public class McpSubscriptionLifecycleMetricsAggregationTests {
 		Assertions.assertFalse(prometheus(eventDriven).contains(
 				ACTIVE_SUBSCRIPTIONS_METRIC_NAME));
 		eventDriven.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.SubscriptionOpened(ENDPOINT_PATH));
+				McpMetricsEvent.subscriptionOpened(ENDPOINT_PATH));
 		McpMetricsSnapshot eventDrivenSnapshot = eventDriven.snapshot()
 				.orElseThrow().getMcpMetrics();
 		Assertions.assertEquals(1L,
@@ -221,7 +230,7 @@ public class McpSubscriptionLifecycleMetricsAggregationTests {
 		Assertions.assertEquals(0L, retained.getActiveSubscriptions());
 		Assertions.assertEquals(Set.copyOf(TERMINATION_REASONS), retained
 				.getSubscriptionDurations().keySet().stream()
-				.map(McpMetricsSnapshot.SubscriptionTerminationKey::reason)
+				.map(McpMetricsSnapshot.SubscriptionTerminationKey::getReason)
 				.collect(java.util.stream.Collectors.toUnmodifiableSet()));
 		MetricsCollector.HistogramSnapshot completedHistogram = retained
 				.getSubscriptionDurations().get(
@@ -328,7 +337,7 @@ public class McpSubscriptionLifecycleMetricsAggregationTests {
 		DefaultMetricsCollector collector =
 				DefaultMetricsCollector.defaultInstance();
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.SubscriptionOpened(ENDPOINT_PATH));
+				McpMetricsEvent.subscriptionOpened(ENDPOINT_PATH));
 		McpMetricsSnapshot retained = collector.snapshot().orElseThrow()
 				.getMcpMetrics();
 		Assertions.assertEquals(1L, retained.getActiveSubscriptions());
@@ -345,7 +354,7 @@ public class McpSubscriptionLifecycleMetricsAggregationTests {
 
 		Duration fullDuration = Duration.ofSeconds(1_801L);
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.SubscriptionClosed(ENDPOINT_PATH,
+				McpMetricsEvent.subscriptionClosed(ENDPOINT_PATH,
 						McpStreamTerminationReason.COMPLETED, fullDuration));
 		McpMetricsSnapshot completed = collector.snapshot().orElseThrow()
 				.getMcpMetrics();
@@ -461,6 +470,18 @@ public class McpSubscriptionLifecycleMetricsAggregationTests {
 				builder.getAnnotatedParameterTypes()[0]);
 	}
 
+	private static void assertNonNullGetter(@NonNull Class<?> declaringType,
+			@NonNull String name, @NonNull Class<?> returnType)
+			throws Exception {
+		Method getter = requireNonNull(declaringType).getMethod(
+				requireNonNull(name));
+		Assertions.assertTrue(Modifier.isPublic(getter.getModifiers()));
+		Assertions.assertEquals(requireNonNull(returnType), getter.getReturnType());
+		Assertions.assertEquals(0, getter.getParameterCount());
+		Assertions.assertTrue(getter.getAnnotatedReturnType()
+				.isAnnotationPresent(NonNull.class));
+	}
+
 	private static void assertSubscriptionDurationMapType(
 			@NonNull Object genericType, @NonNull AnnotatedType annotatedType) {
 		ParameterizedType parameterized = Assertions.assertInstanceOf(
@@ -484,9 +505,9 @@ public class McpSubscriptionLifecycleMetricsAggregationTests {
 			@NonNull McpStreamTerminationReason reason,
 			@NonNull Duration duration) {
 		requireNonNull(collector).didRecordMcpMetricsEvent(
-				new McpMetricsEvent.SubscriptionOpened(ENDPOINT_PATH));
+				McpMetricsEvent.subscriptionOpened(ENDPOINT_PATH));
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.SubscriptionClosed(ENDPOINT_PATH,
+				McpMetricsEvent.subscriptionClosed(ENDPOINT_PATH,
 						requireNonNull(reason), requireNonNull(duration)));
 	}
 
@@ -546,7 +567,7 @@ public class McpSubscriptionLifecycleMetricsAggregationTests {
 
 	private static McpMetricsSnapshot.@NonNull SubscriptionTerminationKey key(
 			@NonNull McpStreamTerminationReason reason) {
-		return new McpMetricsSnapshot.SubscriptionTerminationKey(
+		return McpMetricsSnapshot.SubscriptionTerminationKey.fromDimensions(
 				ENDPOINT_PATH, requireNonNull(reason));
 	}
 

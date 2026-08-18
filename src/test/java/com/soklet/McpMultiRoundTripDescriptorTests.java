@@ -46,11 +46,10 @@ class McpMultiRoundTripDescriptorTests {
 	@Test
 	void declarationFactoriesProduceTheClosedValidatedCoreUnion() {
 		Set<McpClientCapability> mutableCapabilities = new LinkedHashSet<>(
-				Set.of(McpClientCapability.SAMPLING,
-						McpClientCapability.SAMPLING_CONTEXT));
+				Set.of(McpClientCapability.SAMPLING_CONTEXT));
 		McpInputRequestDeclaration copiedSampling =
-				new McpInputRequestDeclaration("sampling/createMessage",
-						mutableCapabilities, McpInputRequirement.CONDITIONAL);
+				McpInputRequestDeclaration.fromSampling(mutableCapabilities,
+						McpInputRequirement.CONDITIONAL);
 		mutableCapabilities.clear();
 		McpInputRequestDeclaration form =
 				McpInputRequestDeclaration.fromElicitationForm(
@@ -67,32 +66,27 @@ class McpMultiRoundTripDescriptorTests {
 				McpInputRequestDeclaration.fromRoots(
 						McpInputRequirement.REQUIRED);
 
-		assertEquals("elicitation/create", form.method());
+		assertEquals("elicitation/create", form.getMethod());
 		assertEquals(Set.of(McpClientCapability.ELICITATION_FORM),
-				form.capabilities());
-		assertEquals(McpInputRequirement.REQUIRED, form.requirement());
+				form.getCapabilities());
+		assertEquals(McpInputRequirement.REQUIRED, form.getRequirement());
 		assertEquals(Set.of(McpClientCapability.ELICITATION_URL),
-				url.capabilities());
+				url.getCapabilities());
 		assertEquals(Set.of(McpClientCapability.SAMPLING,
 				McpClientCapability.SAMPLING_CONTEXT,
-				McpClientCapability.SAMPLING_TOOLS), sampling.capabilities());
+				McpClientCapability.SAMPLING_TOOLS), sampling.getCapabilities());
 		assertEquals(Set.of(McpClientCapability.SAMPLING,
 				McpClientCapability.SAMPLING_CONTEXT),
-				copiedSampling.capabilities());
-		assertEquals("roots/list", roots.method());
+				copiedSampling.getCapabilities());
+		assertEquals("roots/list", roots.getMethod());
 		assertThrows(UnsupportedOperationException.class,
-				() -> form.capabilities().clear());
+				() -> form.getCapabilities().clear());
+		assertEquals(form, McpInputRequestDeclaration.fromElicitationForm(
+				McpInputRequirement.REQUIRED));
+		assertEquals(form.hashCode(), McpInputRequestDeclaration
+				.fromElicitationForm(McpInputRequirement.REQUIRED).hashCode());
 
 		assertThrows(IllegalArgumentException.class,
-				() -> new McpInputRequestDeclaration("extension/request",
-						Set.of(McpClientCapability.ROOTS),
-						McpInputRequirement.REQUIRED));
-		assertThrows(IllegalArgumentException.class,
-				() -> new McpInputRequestDeclaration("elicitation/create",
-						Set.of(McpClientCapability.ELICITATION_FORM,
-								McpClientCapability.ELICITATION_URL),
-						McpInputRequirement.REQUIRED));
-		assertThrows(IllegalArgumentException.class,
 				() -> McpInputRequestDeclaration.fromSampling(
 						Set.of(McpClientCapability.SAMPLING),
 						McpInputRequirement.CONDITIONAL));
@@ -100,18 +94,13 @@ class McpMultiRoundTripDescriptorTests {
 				() -> McpInputRequestDeclaration.fromSampling(
 						Set.of(McpClientCapability.ROOTS),
 						McpInputRequirement.CONDITIONAL));
-		assertThrows(IllegalArgumentException.class,
-				() -> new McpInputRequestDeclaration("roots/list",
-						Set.of(McpClientCapability.SAMPLING),
-						McpInputRequirement.REQUIRED));
-		IllegalArgumentException sanitized = assertThrows(
-				IllegalArgumentException.class,
-				() -> new McpInputRequestDeclaration(
-						"secret-extension-method",
-						Set.of(McpClientCapability.ROOTS),
-						McpInputRequirement.REQUIRED));
-		assertFalse(String.valueOf(sanitized.getMessage())
-				.contains("secret-extension-method"));
+		assertThrows(NullPointerException.class,
+				() -> McpInputRequestDeclaration.fromElicitationForm(null));
+		assertThrows(NullPointerException.class,
+				() -> McpInputRequestDeclaration.fromSampling(null,
+						McpInputRequirement.CONDITIONAL));
+		assertThrows(NullPointerException.class,
+				() -> McpInputRequestDeclaration.fromRoots(null));
 	}
 
 	@Test
@@ -134,22 +123,22 @@ class McpMultiRoundTripDescriptorTests {
 			McpInputRequest request =
 					McpInputRequest.fromDeclaration(declaration, params);
 
-			assertSame(declaration, request.declaration());
-			assertSame(params, request.params());
-			assertEquals(declaration.method(), request.method());
+			assertSame(declaration, request.getDeclaration());
+			assertSame(params, request.getParams());
+			assertEquals(declaration.getMethod(), request.getMethod());
+			assertEquals(request,
+					McpInputRequest.fromDeclaration(declaration, params));
+			assertEquals(request.hashCode(),
+					McpInputRequest.fromDeclaration(declaration, params).hashCode());
 			assertEquals("McpInputRequest{method='%s', params=<redacted>}"
-					.formatted(declaration.method()), request.toString());
+					.formatted(declaration.getMethod()), request.toString());
 			assertFalse(request.toString().contains(secretParams));
 		}
 
 		McpInputRequestDeclaration roots = declarations.get(3);
 		McpJsonObject emptyParams = McpJsonObject.emptyInstance();
 		assertSame(emptyParams,
-				McpInputRequest.fromDeclaration(roots, emptyParams).params());
-		assertThrows(NullPointerException.class,
-				() -> new McpInputRequest(null, emptyParams));
-		assertThrows(NullPointerException.class,
-				() -> new McpInputRequest(roots, null));
+				McpInputRequest.fromDeclaration(roots, emptyParams).getParams());
 		assertThrows(NullPointerException.class,
 				() -> McpInputRequest.fromDeclaration(null, emptyParams));
 		assertThrows(NullPointerException.class,
@@ -188,7 +177,7 @@ class McpMultiRoundTripDescriptorTests {
 		assertTrue(stateOnly.getInputRequests().isEmpty());
 		McpFrameworkRequestState frameworkState =
 				(McpFrameworkRequestState) stateOnly.getRequestState().orElseThrow();
-		assertSame(McpJsonNull.INSTANCE, frameworkState.value());
+		assertSame(McpJsonNull.INSTANCE, frameworkState.getValue());
 
 		McpJsonObject metadata = McpJsonObject.builder()
 				.put("dev.example/result", "combined")
@@ -200,7 +189,7 @@ class McpMultiRoundTripDescriptorTests {
 				.build();
 		assertEquals(Map.of("approval", request), combined.getInputRequests());
 		assertEquals("opaque-state", ((McpApplicationRequestState) combined
-				.getRequestState().orElseThrow()).value());
+				.getRequestState().orElseThrow()).getValue());
 		assertSame(metadata, combined.getMetadata());
 		assertTrue(combined instanceof McpOperationResult);
 	}
@@ -277,15 +266,15 @@ class McpMultiRoundTripDescriptorTests {
 				.metadata(secondMetadata);
 		McpInputRequiredResult applicationState = builder.build();
 		assertEquals("opaque", ((McpApplicationRequestState) applicationState
-				.getRequestState().orElseThrow()).value());
+				.getRequestState().orElseThrow()).getValue());
 		assertSame(secondMetadata, applicationState.getMetadata());
 
 		builder.frameworkRequestState(secondState);
 		McpInputRequiredResult finalResult = builder.build();
 		assertSame(secondState, ((McpFrameworkRequestState) finalResult
-				.getRequestState().orElseThrow()).value());
+				.getRequestState().orElseThrow()).getValue());
 		assertSame(firstState, ((McpFrameworkRequestState) firstSnapshot
-				.getRequestState().orElseThrow()).value());
+				.getRequestState().orElseThrow()).getValue());
 		assertSame(firstMetadata, firstSnapshot.getMetadata());
 
 		assertThrows(NullPointerException.class,
@@ -298,7 +287,7 @@ class McpMultiRoundTripDescriptorTests {
 				() -> builder.metadata(null));
 		McpInputRequiredResult afterFailures = builder.build();
 		assertSame(secondState, ((McpFrameworkRequestState) afterFailures
-				.getRequestState().orElseThrow()).value());
+				.getRequestState().orElseThrow()).getValue());
 		assertSame(secondMetadata, afterFailures.getMetadata());
 	}
 
@@ -359,14 +348,22 @@ class McpMultiRoundTripDescriptorTests {
 	void requestStateValuesAreClosedAndRejectTheSecondAbsenceConvention() {
 		String frameworkSecret = "secret-framework-state";
 		String applicationSecret = "secret-application-state";
-		McpJsonValue value = new McpJsonString(frameworkSecret);
-		McpRequestState framework = new McpFrameworkRequestState(value);
-		McpRequestState application = new McpApplicationRequestState(
+		McpJsonValue value = McpJsonString.fromValue(frameworkSecret);
+		McpRequestState framework = McpFrameworkRequestState.fromValue(value);
+		McpRequestState application = McpApplicationRequestState.fromValue(
 				applicationSecret);
 
-		assertSame(value, ((McpFrameworkRequestState) framework).value());
+		assertSame(value, ((McpFrameworkRequestState) framework).getValue());
 		assertEquals(applicationSecret,
-				((McpApplicationRequestState) application).value());
+				((McpApplicationRequestState) application).getValue());
+		McpRequestState sameFramework = McpFrameworkRequestState.fromValue(
+				McpJsonString.fromValue(frameworkSecret));
+		McpRequestState sameApplication = McpApplicationRequestState.fromValue(
+				applicationSecret);
+		assertEquals(framework, sameFramework);
+		assertEquals(framework.hashCode(), sameFramework.hashCode());
+		assertEquals(application, sameApplication);
+		assertEquals(application.hashCode(), sameApplication.hashCode());
 		assertEquals("McpFrameworkRequestState{value=<redacted>}",
 				framework.toString());
 		assertEquals("McpApplicationRequestState{value=<redacted>}",
@@ -374,11 +371,11 @@ class McpMultiRoundTripDescriptorTests {
 		assertFalse(framework.toString().contains(frameworkSecret));
 		assertFalse(application.toString().contains(applicationSecret));
 		assertThrows(IllegalArgumentException.class,
-				() -> new McpApplicationRequestState(""));
+				() -> McpApplicationRequestState.fromValue(""));
 		assertThrows(NullPointerException.class,
-				() -> new McpApplicationRequestState(null));
+				() -> McpApplicationRequestState.fromValue(null));
 		assertThrows(NullPointerException.class,
-				() -> new McpFrameworkRequestState(null));
+				() -> McpFrameworkRequestState.fromValue(null));
 	}
 
 	@Test
@@ -484,13 +481,13 @@ class McpMultiRoundTripDescriptorTests {
 				.withName("catalog.get")
 				.types(Arguments.class, CompleteOutput.class)
 				.handler((request, arguments, features) ->
-						new CompleteOutput(arguments.getArguments().identifier()))
+						new CompleteOutput(arguments.getConvertedArguments().identifier()))
 				.build();
 		Object completeBuilder = McpToolRegistration
 				.withName("catalog.other")
 				.types(Arguments.class, CompleteOutput.class)
 				.handler((request, arguments, features) ->
-						new CompleteOutput(arguments.getArguments().identifier()));
+						new CompleteOutput(arguments.getConvertedArguments().identifier()));
 		McpPromptRegistration prompt = McpPromptRegistration
 				.withName("plain")
 				.handler((request, get, features) ->

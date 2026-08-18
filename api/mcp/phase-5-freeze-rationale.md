@@ -6,6 +6,12 @@ Greenfield cohesion naming amendment reviewed: 2026-08-17
 
 Greenfield localization-result simplification amendment reviewed: 2026-08-17
 
+Greenfield localization-context builder amendment reviewed: 2026-08-17
+
+Final greenfield API polish amendment reviewed: 2026-08-17
+
+Greenfield public-record elimination amendment reviewed: 2026-08-18
+
 This record approves the Phase 5 public/protected API snapshot for Soklet
 `3.6.0-SNAPSHOT`. The comparison baseline is released Soklet `3.5.1`, and the
 comparison tool is japicmp `0.26.1`. It records a compatibility decision; it
@@ -33,7 +39,7 @@ The matching full japicmp report establishes an exact owner universe of:
 - 206 owners in total.
 
 That list is the original Phase 5 checkpoint. The current exact owner
-partition is 133 Phase 4, 39 Phase 5, 64 Phase 6, zero provisional, and 236
+partition is 133 Phase 4, 39 Phase 5, 65 Phase 6, zero provisional, and 237
 total.
 
 The 39 Phase 5 owners are the exact sorted entries in `phase-5.includes`.
@@ -45,29 +51,32 @@ inventory. The subsequent compatible trace-log amendment, rate-limit decision
 factory naming amendment, and greenfield admission-controller naming amendment
 changed only the Phase 4 snapshot, not this Phase 5 snapshot.
 The later 2026-08-17 greenfield cohesion amendment is count-neutral in every
-phase and advances the complete current compatibility set to 564 records with
-SHA-256
+phase and advanced the complete compatibility set at that checkpoint to 564
+records with SHA-256
 `6e14bcc0ad652b774a62613332cc7b71c93def649ecdd43e603f7d10e8974136`.
+The 2026-08-18 public-record elimination amendment retains the owner partition
+and advances the current compatibility set to 565 records with SHA-256
+`3269b4a73d42c035a90735336462aaeb98bf6809d003fa858dbfa4a839e4c2e2`.
 
 ## Frozen Phase 5 snapshot
 
-`phase-5.signatures.jsonl` contains exactly 195 canonical records:
+`phase-5.signatures.jsonl` contains exactly 191 canonical records:
 
 - 39 classes;
-- six constructors;
+- zero constructors;
 - 15 fields; and
-- 135 methods.
+- 137 methods.
 
 The reviewed file's SHA-256 is
-`4105df142e671c704b341eec54a65b5cbdc8da931888cab43d85835f577e2a32`.
+`ea6d46dc055a57b2d31820cb937d89fe42bac5665c18c5fdb83eea75e79c82f5`.
 The independent reflection contract freezes the Phase 5 JSpecify type-use
 layout with SHA-256
-`a9c0a9311b6b0dff74b2813383b903a01dc185cbf7155c009edf1f6fb8e0d304`.
+`9c8c02a4eca29166a6a92956fa58033ea94939e6d7deef9e23a7ecd6d5babd3e`.
 The 39-entry `phase-5.includes` inventory has SHA-256
 `696d63fb09f9f8ff9c3d1af2cf52ea49532cc9b3e15a81584abaa5dbda7031fe`.
 
 Immediately before the snapshot was checked in, a fresh extraction from the
-current full japicmp report produced the same 195 records and was byte-for-
+current full japicmp report produced the same 191 records and was byte-for-
 byte identical to the reviewed candidate. The aggregate freeze gate compares
 the Phase 4, Phase 5, and now Phase 6 snapshots bidirectionally on every run.
 
@@ -108,9 +117,10 @@ without aliases. No Phase 5 owner or descriptor changes: `phase-5.includes`
 remains at 39 entries, and `phase-5.signatures.jsonl` remains at 195 records
 with the same include, signature, and reflection hashes recorded above.
 
-Phase 6 now contains 64 owners and 420 records - 64 classes, 31 constructors,
-40 fields, and 285 methods - so the current exact owner partition is
-133/39/64/0 (236 total) and the phase-record partition is 1,053/195/420. Its
+At that simplification checkpoint, Phase 6 contained 64 owners and 420 records
+(64 classes, 31 constructors, 40 fields, and 285 methods), so the exact owner
+partition was
+133/39/64/0 (236 total) and the phase-record partition was 1,053/195/420. Its
 signature, include, and reflection SHA-256 values are respectively
 `2fa052e8f6370d9cff7497e70d23136b9b91ca3eda304f038325f7a8811fe435`,
 `2f6fa1c71302923ac9ffc0695005f509b46a6c722552c88cb03beaf3fc261979`,
@@ -118,6 +128,95 @@ and
 `6fa774d10bf9c8a6ab4274f7989ef55eb8032d37a7d58e8a6243c4123706edc9`.
 The generated compatibility ledger remains exactly 564 records with SHA-256
 `6e14bcc0ad652b774a62613332cc7b71c93def649ecdd43e603f7d10e8974136`.
+
+## 2026-08-17 greenfield localization-context builder amendment
+
+The subsequent same-day review converts the Phase 6-owned
+`McpLocalizationContext` interface into a Soklet-owned final immutable class
+and adds `McpLocalizationContext.Builder`. Applications now provide only the
+JDK `Function<McpLocalizableText, McpLocalizationResult>` callback and do not
+define context subtypes. No compatibility alias is retained. No Phase 5 owner
+or descriptor changes: its inventory, 195-record snapshot, and hashes remain
+exactly as recorded above.
+
+At that amendment checkpoint, Phase 6 contained 65 owners and 426 records - 65
+classes, 31 constructors, 40 fields, and 290 methods - so the exact owner
+partition was 133/39/65/0 (237 total) and the phase-record partition was
+1,053/195/426. Its signature, include, and reflection SHA-256 values were
+respectively
+`7f264422a9e0a81718ae46bc5333a26d56d4c772ded5620d91335b4253734878`,
+`474e1c3079501b286a9eb1b38dee06a532d263aef50b633b46d465813024dacc`,
+and
+`f6e0abeb94bf4e98822a57214c1fe459451fa207b377d99f10c3a562be2b9afa`.
+The generated compatibility ledger remains exactly 564 records with SHA-256
+`6e14bcc0ad652b774a62613332cc7b71c93def649ecdd43e603f7d10e8974136`.
+
+## 2026-08-17 final greenfield API polish amendment
+
+The final same-day review removes the redundant
+`McpInputRequest.fromDeclaration(...)` factory. At that checkpoint,
+`McpInputRequest` was a Soklet-owned record whose canonical constructor
+validated its declaration and parameters, so applications used that
+constructor directly. No factory alias was retained at that checkpoint.
+
+The Phase 5 owner count and class, constructor, and field counts remain
+unchanged. Removing the one method leaves 194 records - 39 classes, six
+constructors, 15 fields, and 134 methods - with signature SHA-256
+`19e0d0184d6c347e63689acfcef06222d6131d5d0a469740b627342b7ee24785`
+and reflection/nullability digest
+`d10c45dddd332f7308f6d731371b73412314a28560ba7f747a0e68071bfc59af`.
+The owner partition at that checkpoint remained 133/39/65/0, the signature
+partition was 1,053/194/426, and the generated compatibility ledger remained
+exactly 564 records with SHA-256
+`6e14bcc0ad652b774a62613332cc7b71c93def649ecdd43e603f7d10e8974136`.
+
+## 2026-08-18 greenfield public-record elimination amendment
+
+The subsequent review eliminates all 45 public MCP record shapes - nine
+top-level and 36 nested - in favor of final Soklet-owned classes. Constructors
+are private, applications construct values through named factories or
+builders, component accessors become conventional getters, and each former
+record has explicit equality, hash-code, and redacted or otherwise
+data-minimizing diagnostic semantics. Fieldless variants use shared instances.
+The unreleased greenfield API retains no canonical-constructor,
+component-accessor, record-shape, or deprecated compatibility alias.
+
+Phase 5 owns six of the converted shapes: `McpApplicationRequestState`,
+`McpFrameworkRequestState`, `McpInputRequest`, and
+`McpInputRequestDeclaration`, plus the nested
+`McpSubscriptionEvent.ResourcesListChanged` and `ResourceUpdated` variants.
+The request-state values use `fromValue(...)`; input declarations retain their
+domain-specific factories; `McpInputRequest.fromDeclaration(...)` is restored
+as the named construction boundary; and the subscription-event interface owns
+the list-changed and resource-updated factories. Application-controlled state,
+input parameters, and resource URIs remain redacted from diagnostics.
+
+The Phase 5 owner count remains 39. Its snapshot now contains exactly 191
+records - 39 classes, zero constructors, 15 fields, and 137 methods - with
+SHA-256
+`ea6d46dc055a57b2d31820cb937d89fe42bac5665c18c5fdb83eea75e79c82f5`.
+The reflection/nullability digest is
+`9c8c02a4eca29166a6a92956fa58033ea94939e6d7deef9e23a7ecd6d5babd3e`.
+The complete current owner and signature partitions are 133/39/65/0 and
+1,047/191/422. The same amendment makes the already-final Phase 4-owned
+`McpCachePolicy` constructor private. The sole public constructor across all
+three frozen phases is the throwable
+`McpJsonRpcException(McpJsonRpcError)` constructor; non-throwable values are
+factory- or builder-owned.
+
+The complete released-3.5.1 compatibility ledger contains 565 records with
+SHA-256
+`3269b4a73d42c035a90735336462aaeb98bf6809d003fa858dbfa4a839e4c2e2`.
+No converted Phase 5 value adds a net incompatibility; the sole net-new entry
+is the Phase 4-owned `McpPromptMessage` superclass change from
+`java.lang.Record` to `java.lang.Object`.
+
+The exact post-amendment tree passes a clean Corretto 26 verify with 1,671
+tests, zero failures, zero errors, and four intentional skips; JDK 21 static
+analysis succeeds, SpotBugs reports zero findings, the aggregate freeze gate
+verifies all 565 compatibility records and 1,047/191/422 signatures, and the
+maintained 182-source Java 17 API sketch passes compilation and Javadoc
+doclint.
 
 ## Reviewed contract
 
@@ -142,9 +241,10 @@ contracts:
   changing the Phase 4-frozen request-context surface.
 
 The exact reflection and source contracts cover non-signature details:
-39 owners, sealed permits, enum order, record shapes, SPI parameter names,
-public string constants, the `McpMayRequestInput` annotation, JSpecify
-nullability, standard author tags, and exact thread-safety markers.
+39 owners, sealed permits, enum order, value-class construction and getter
+names, SPI parameter names, public string constants, the `McpMayRequestInput`
+annotation, JSpecify nullability, standard author tags, and exact thread-safety
+markers.
 
 ## Review evidence and boundary
 

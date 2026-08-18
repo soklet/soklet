@@ -561,7 +561,7 @@ public final class McpEndpoint {
 		 * @return this builder
 		 */
 		@NonNull
-		public Builder toolRateLimiter(@NonNull String limiterName) {
+		public Builder toolRateLimiterName(@NonNull String limiterName) {
 			requireNonNull(limiterName);
 			if (limiterName.isBlank())
 				throw new IllegalArgumentException(

@@ -265,7 +265,7 @@ public final class McpConformanceFixtureContractTest {
 		assertEquals(expectedStateMode, registration.getRequestStateMode(),
 				"Wrong request-state mode for " + toolName);
 		assertEquals(expectedMethods, registration.getInputRequestDeclarations()
-				.stream().map(declaration -> declaration.method()).toList(),
+				.stream().map(declaration -> declaration.getMethod()).toList(),
 				"Wrong input declarations for " + toolName);
 	}
 
@@ -300,7 +300,7 @@ public final class McpConformanceFixtureContractTest {
 	private static McpToolArguments<McpJsonObject> toolArguments() {
 		return new McpToolArguments<>() {
 			@Override
-			public McpJsonObject getArguments() {
+			public McpJsonObject getConvertedArguments() {
 				return McpJsonObject.emptyInstance();
 			}
 
@@ -333,7 +333,7 @@ public final class McpConformanceFixtureContractTest {
 	}
 
 	private static McpFrameworkRequestState state(String value) {
-		return new McpFrameworkRequestState(new McpJsonString(value));
+		return McpFrameworkRequestState.fromValue(McpJsonString.fromValue(value));
 	}
 
 	private static McpInputRequiredResult assertInputRequired(
@@ -354,7 +354,7 @@ public final class McpConformanceFixtureContractTest {
 		assertEquals(expectedKeys, List.copyOf(result.getInputRequests().keySet()),
 				"Wrong input-request keys");
 		assertEquals(expectedMethods, result.getInputRequests().values().stream()
-				.map(McpInputRequest::method).toList(), "Wrong input-request methods");
+				.map(McpInputRequest::getMethod).toList(), "Wrong input-request methods");
 		if (expectedState == null) {
 			assertEquals(Optional.empty(), result.getRequestState(),
 					"Unexpected request state");
@@ -365,10 +365,10 @@ public final class McpConformanceFixtureContractTest {
 				.map(McpFrameworkRequestState.class::cast)
 				.orElseThrow(() -> new AssertionError(
 						"Expected framework-protected request state"));
-		McpJsonValue value = frameworkState.value();
+		McpJsonValue value = frameworkState.getValue();
 		if (!(value instanceof McpJsonString stringValue))
 			throw new AssertionError("Expected a string application state");
-		assertEquals(expectedState, stringValue.value(), "Wrong application state");
+		assertEquals(expectedState, stringValue.getValue(), "Wrong application state");
 	}
 
 	private static void assertEquals(Object expected, Object actual,

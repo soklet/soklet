@@ -100,7 +100,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 					"@com.soklet.annotation.McpHeader(\"Tenant\")"),
 					generatedSource);
 			Assertions.assertTrue(generatedSource.contains(
-					"search(request, features.require(com.soklet.CancelationToken.class), arguments.getArguments().argument0(), arguments.getArguments().argument1(), features.find(com.soklet.McpProgressReporter.class), features)"),
+					"search(request, features.require(com.soklet.CancelationToken.class), arguments.getConvertedArguments().argument0(), arguments.getConvertedArguments().argument1(), features.find(com.soklet.McpProgressReporter.class), features)"),
 					generatedSource);
 			Assertions.assertTrue(generatedSource.contains(
 					"compose(request, features.require(com.soklet.CancelationToken.class), prompt.findArgument(\"subject\").orElseThrow(), prompt.findArgument(\"tone\"), features.find(com.soklet.McpProgressReporter.class), features)"),
@@ -166,11 +166,11 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				McpJsonObject querySchema = Assertions.assertInstanceOf(
 						McpJsonObject.class,
 						properties.find("query-text").orElseThrow());
-				Assertions.assertEquals(new McpJsonString("Search query"),
+				Assertions.assertEquals(McpJsonString.fromValue("Search query"),
 						querySchema.find("title").orElseThrow());
-				Assertions.assertEquals(new McpJsonString("Text to search for"),
+				Assertions.assertEquals(McpJsonString.fromValue("Text to search for"),
 						querySchema.find("description").orElseThrow());
-				Assertions.assertEquals(new McpJsonString("Tenant"),
+				Assertions.assertEquals(McpJsonString.fromValue("Tenant"),
 						querySchema.find("x-mcp-header").orElseThrow());
 				Assertions.assertEquals(0, providedInstances.get());
 

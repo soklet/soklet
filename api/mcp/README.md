@@ -7,16 +7,19 @@ correction, 2026-08-12 localization host amendment, and 2026-08-15 structured
 trace-log and rate-limit decision factory naming amendments, followed by the
 2026-08-16 admission-controller naming amendment and the 2026-08-17 greenfield
 cohesion naming amendment, followed by the 2026-08-17 greenfield
-localization-result simplification amendment. The
+localization-result simplification amendment and the 2026-08-17 greenfield
+localization-context builder amendment, followed by the 2026-08-17 final
+greenfield API polish amendment and the 2026-08-18 greenfield public-record
+elimination amendment. The
 [Phase 5 freeze rationale](phase-5-freeze-rationale.md) and
 [Phase 6 freeze rationale](phase-6-freeze-rationale.md) record their exact
 compatibility snapshots and the limits of each freeze decision.
 
 `current-incompatibilities.jsonl` is the canonical set of incompatibilities
 between the released `com.soklet:soklet:3.5.1` artifact and the current
-3.6.0 source tree. It currently contains 564 records and has
+3.6.0 source tree. It currently contains 565 records and has
 SHA-256
-`6e14bcc0ad652b774a62613332cc7b71c93def649ecdd43e603f7d10e8974136`.
+`3269b4a73d42c035a90735336462aaeb98bf6809d003fa858dbfa4a839e4c2e2`.
 The API-diff gate regenerates the set and compares it in both directions, so
 an unexpected addition, removal, or changed record fails.
 
@@ -36,18 +39,18 @@ scope has exactly one owner:
 | --- | ---: | --- |
 | `phase-4.includes` | 133 | frozen Phase 4 types and shared hosts |
 | `phase-5.includes` | 39 | frozen Phase 5 types |
-| `phase-6.includes` | 64 | frozen Phase 6 types |
+| `phase-6.includes` | 65 | frozen Phase 6 types |
 | `provisional.includes` | 0 | empty after the reviewed telemetry amendment |
 | `non-mcp-public-api.allowlist` | 0 | reviewed unrelated API deltas |
 
-The 236-entry union is sorted, nonoverlapping, and exact. Ownership records
+The 237-entry union is sorted, nonoverlapping, and exact. Ownership records
 when a type is intended to stabilize; it does not itself freeze the type.
 The current Phase 4, Phase 5, and Phase 6 include inventories have respective
 SHA-256 values
 `8c0c7f3a0b17cd824d292969b1dd4eb4b52bc64929f65b562a197e8dcf510b6b`,
 `696d63fb09f9f8ff9c3d1af2cf52ea49532cc9b3e15a81584abaa5dbda7031fe`,
 and
-`2f6fa1c71302923ac9ffc0695005f509b46a6c722552c88cb03beaf3fc261979`.
+`474e1c3079501b286a9eb1b38dee06a532d263aef50b633b46d465813024dacc`.
 `McpPublicApiInventoryTests` is a fast, independent source/class-tree guard
 for exported MCP types, reviewed shared hosts, sorting, overlap, and existence.
 It complements the baseline comparison; it is not the authoritative
@@ -66,18 +69,94 @@ or sustained operational evidence.
 
 The 2026-08-17 greenfield cohesion naming amendment subsequently regenerated
 the count-neutral 1,053/195/428 phase snapshots and the same 133/39/65/0 owner
-partition. The current compatibility ledger contains 564 records. This API
-artifact refresh does not by itself repeat or replace the broader 2026-08-16
-runtime, static-analysis, simulator, or official-CLI evidence.
+partition. At that amendment checkpoint, the compatibility ledger contained
+564 records. This API artifact refresh does not by itself repeat or replace
+the broader 2026-08-16 runtime, static-analysis, simulator, or official-CLI
+evidence.
 
 The later 2026-08-17 greenfield localization-result simplification removes
 the unused `McpLocalizationResult.Fallback` owner and `fallback(...)` factory
-without an alias. The current partition is 133/39/64/0 (236 owners), and the
-current Phase 4/5/6 snapshots contain 1,053/195/420 records. The compatibility
+without an alias. At that simplification checkpoint, the partition was
+133/39/64/0 (236 owners), and the Phase 4/5/6 snapshots contained
+1,053/195/420 records. The compatibility
 ledger remains 564 records with the same SHA-256 because the removed surface
 was an unreleased compatible addition relative to 3.5.1. A fresh full core
 verify passes 1,667 tests with zero failures, zero errors, and four skips over
 464 main and 193 test sources.
+
+The subsequent 2026-08-17 greenfield localization-context builder amendment
+converts `McpLocalizationContext` from an application-implemented interface to
+a Soklet-owned final immutable class and adds its nested `Builder`. Applications
+now supply only the per-context `Function<McpLocalizableText,
+McpLocalizationResult>` callback; no custom context subtype or compatibility
+alias remains. At that amendment checkpoint the partition was 133/39/65/0
+(237 owners), and the Phase 4/5/6 snapshots contained 1,053/195/426 records.
+The compatibility
+ledger remains the same 564 records because both context shapes are unreleased
+additions relative to 3.5.1. A fresh full Corretto 26 verify passes 1,666 tests
+with zero failures, zero errors, and four skips over 464 main and 193 test
+sources; JDK 21 static analysis reports `BUILD SUCCESS`, and SpotBugs reports
+zero errors and zero warnings.
+
+The final 2026-08-17 greenfield API polish amendment makes
+`McpEndpointRegistry` a final immutable Soklet-owned class, clarifies converted
+tool arguments, named rate-limiter setters, the pass-through interceptor, and
+the tool-output error setter, and removes the redundant
+`McpInputRequest.fromDeclaration(...)` factory. No pre-amendment aliases are
+retained. At that checkpoint, the owner partition was 133/39/65/0 (237
+owners), and the Phase 4/5/6 snapshots contained 1,053/194/426 records with
+respective SHA-256 values
+`3fd2ead5b1e1dfa98686b722dc6ed274a073a9bccbe55d0ac2a215f5d17dfa9f`,
+`19e0d0184d6c347e63689acfcef06222d6131d5d0a469740b627342b7ee24785`,
+and
+`7f264422a9e0a81718ae46bc5333a26d56d4c772ded5620d91335b4253734878`.
+Their reflection/nullability digests are
+`fc06dda2a4b0d2300136b9173e05db0e4a573c1a9755855cf1c155cecf331be9`,
+`d10c45dddd332f7308f6d731371b73412314a28560ba7f747a0e68071bfc59af`,
+and
+`f6e0abeb94bf4e98822a57214c1fe459451fa207b377d99f10c3a562be2b9afa`.
+The 564-record compatibility ledger and its SHA-256 remain unchanged.
+The final Corretto 26 clean verify passes 1,666 tests with zero failures, zero
+errors, and four skips over 464 main and 193 test sources and builds Javadocs;
+the JDK 21 static-analysis build succeeds, SpotBugs reports zero findings, the
+aggregate API gate is green, and the reflection contract passes 19/19.
+
+The subsequent 2026-08-18 greenfield public-record elimination amendment
+replaces all 45 public MCP record shapes - nine top-level and 36 nested - with
+Soklet-owned final classes. Construction now uses private constructors behind
+named factories or builders, access uses conventional getters, and each
+former record has deliberate value semantics and a data-minimizing diagnostic
+rendering. No canonical-constructor or component-accessor alias is retained.
+The same amendment makes the already-final `McpCachePolicy` factory-owned by
+privatizing its remaining public value constructor. Across all three frozen
+phases, the sole public constructor is now the throwable
+`McpJsonRpcException(McpJsonRpcError)` constructor; non-throwable values are
+factory- or builder-owned. The exact owner partition remains 133/39/65/0 (237
+owners). The current Phase 4/5/6 snapshots contain 1,047/191/422 records with
+respective SHA-256 values
+`dc733de19433200065526bd02f985b56ca69f658aefd116e80446b5c885f035b`,
+`ea6d46dc055a57b2d31820cb937d89fe42bac5665c18c5fdb83eea75e79c82f5`,
+and
+`f7355c91a0131c4bb9ef7f9b49f0d54e9bbafa0042a16c5932722e5765cee774`.
+Their reflection/nullability digests are
+`581038cefbc8e65845e38001632ed0678a83efe55446e4f25f233e874eef3f39`,
+`9c8c02a4eca29166a6a92956fa58033ea94939e6d7deef9e23a7ecd6d5babd3e`,
+and
+`2f857d18ae3dfb641fadf00858fec19d594c0ac470c6ed6be70423596b340611`.
+The released-3.5.1 comparison now contains 565 records with SHA-256
+`3269b4a73d42c035a90735336462aaeb98bf6809d003fa858dbfa4a839e4c2e2`.
+Its sole net-new incompatibility is the `McpPromptMessage` superclass change
+from `java.lang.Record` to `java.lang.Object`; its former canonical record
+components are removals, not compatibility aliases.
+
+The exact post-amendment tree passes a clean Corretto 26 verify with 1,671
+tests, zero failures, zero errors, and four intentional skips over 464 main
+and 193 test sources, and builds the main, source, and Javadoc artifacts. The
+JDK 21 static-analysis build succeeds with the reviewed advisory warnings,
+SpotBugs reports zero findings, the aggregate freeze gate verifies all 565
+compatibility records and 1,047/191/422 signatures, and the maintained
+182-source Java 17 API sketch passes compilation, Javadoc doclint, and its
+localization smoke test.
 
 The authoritative owner inventory comes from the full japicmp report
 `target/japicmp/mcp-api-freeze.xml`. It includes:
@@ -138,17 +217,22 @@ separate evidence is recorded below.
 
 `frozen-phases` contains the contiguous, sorted prefix of frozen phases. It
 currently contains Phase 4, Phase 5, and Phase 6. `phase-4.signatures.jsonl` freezes
-1,053 canonical records across all 133 selected owners: 133 classes, 10
-constructors, 79 fields, and 831 methods. Its SHA-256 is
-`ea33203fe502b026d56d7711ffae816c3a68909efe2ae2bdd5a822093f881ef7`.
-`phase-5.signatures.jsonl` freezes 195 canonical records across all 39
-selected owners: 39 classes, six constructors, 15 fields, and 135 methods.
+1,047 canonical records across all 133 selected owners: 133 classes, one
+constructor, 79 fields, and 834 methods. Its SHA-256 is
+`dc733de19433200065526bd02f985b56ca69f658aefd116e80446b5c885f035b`.
+`phase-5.signatures.jsonl` freezes 191 canonical records across all 39
+selected owners: 39 classes, zero constructors, 15 fields, and 137 methods.
 Its SHA-256 is
-`4105df142e671c704b341eec54a65b5cbdc8da931888cab43d85835f577e2a32`.
-`phase-6.signatures.jsonl` freezes 420 canonical records across all 64
-selected owners: 64 classes, 31 constructors, 40 fields, and 285 methods.
+`ea6d46dc055a57b2d31820cb937d89fe42bac5665c18c5fdb83eea75e79c82f5`.
+`phase-6.signatures.jsonl` freezes 422 canonical records across all 65
+selected owners: 65 classes, zero constructors, 40 fields, and 317 methods.
 Its SHA-256 is
-`2fa052e8f6370d9cff7497e70d23136b9b91ca3eda304f038325f7a8811fe435`.
+`f7355c91a0131c4bb9ef7f9b49f0d54e9bbafa0042a16c5932722e5765cee774`.
+Their current reflection/nullability digests are respectively
+`581038cefbc8e65845e38001632ed0678a83efe55446e4f25f233e874eef3f39`,
+`9c8c02a4eca29166a6a92956fa58033ea94939e6d7deef9e23a7ecd6d5babd3e`,
+and
+`2f857d18ae3dfb641fadf00858fec19d594c0ac470c6ed6be70423596b340611`.
 The reviewed 2026-08-15 telemetry amendment moved all 32 former provisional
 owners into Phase 6 without changing their descriptors;
 `provisional.includes` is now empty.
@@ -236,14 +320,65 @@ and 285 methods. The complete incompatibility ledger remains exactly 564
 records with SHA-256
 `6e14bcc0ad652b774a62613332cc7b71c93def649ecdd43e603f7d10e8974136`.
 
+An eighth reviewed amendment on 2026-08-17 converts the still-unreleased
+`McpLocalizationContext` interface into a Soklet-owned final immutable class
+constructed through `withLocale(...)`, `localizer(...)`, and `build()`. The
+optional revision remains a context value, while applications
+provide only the JDK `Function` callback that performs localization against
+their captured immutable snapshot. No application context subtype, custom
+callback interface, or compatibility alias is retained. The nested `Builder`
+adds one Phase 6 owner and the revised class/builder surface adds six records,
+producing 65 owners and 426 records: 65 classes, 31 constructors, 40 fields,
+and 290 methods. The Phase 6 signature SHA-256 is
+`7f264422a9e0a81718ae46bc5333a26d56d4c772ded5620d91335b4253734878`,
+and its exact reflection/nullability digest is
+`f6e0abeb94bf4e98822a57214c1fe459451fa207b377d99f10c3a562be2b9afa`.
+The incompatibility ledger remains exactly 564 records with SHA-256
+`6e14bcc0ad652b774a62613332cc7b71c93def649ecdd43e603f7d10e8974136`.
+
+A ninth reviewed amendment on 2026-08-17 performs the final no-alias polish of
+the still-unreleased greenfield API. `McpEndpointRegistry` becomes a final
+immutable Soklet-owned class; `McpToolArguments.getConvertedArguments()`
+names the converted value explicitly; the String-valued Java builder methods
+become `toolRateLimiterName(...)` and `rateLimiterName(...)` while the direct
+limiter overloads and annotation elements remain unchanged;
+`McpHandlerInterceptor.passThroughInstance()` and
+`McpToolOutput.Builder.error(Boolean)` use value-oriented names; and the
+redundant `McpInputRequest.fromDeclaration(...)` factory is removed. Phase 4
+remains 1,053 records, Phase 5 becomes 194, and Phase 6 remains 426. The exact
+snapshot and reflection hashes are recorded in the three phase rationales.
+The owner partition and 564-record released-3.5.1 comparison do not change.
+
+A tenth reviewed amendment on 2026-08-18 eliminates every public MCP record
+shape from the still-unreleased greenfield API. The nine top-level records and
+36 nested records become final classes with private constructors, named
+factories or builders where applications construct values, conventional
+getters, explicit value semantics, and diagnostic renderings that redact
+application-controlled data. Data-free variants are shared singletons. No
+record constructor, component accessor, or deprecated compatibility alias is
+retained. The phase distribution is eight former records in Phase 4, six in
+Phase 5, and 31 in Phase 6. The owner partition remains 133/39/65/0. The same
+amendment makes the already-final `McpCachePolicy` constructor private and
+keeps its existing named factories as the public construction boundary.
+The current signature partition becomes 1,047/191/422. The only public
+constructor across the frozen surface is the throwable
+`McpJsonRpcException(McpJsonRpcError)` constructor; non-throwable values are
+factory- or builder-owned. The compatibility ledger contains 565 records with
+SHA-256
+`3269b4a73d42c035a90735336462aaeb98bf6809d003fa858dbfa4a839e4c2e2`;
+the sole net-new released-3.5.1 incompatibility is the
+`McpPromptMessage` superclass change from `java.lang.Record` to
+`java.lang.Object`, while its former record components are recorded as
+removals.
+
 The snapshots protect the complete public/protected signatures of every owner
 in all three frozen phases, including shared hosts. A descriptor on a frozen
 host is frozen even when it names a type owned by a later phase. Targeted
 reflection and source-contract tests cover important
 details that japicmp does not reliably model, including sealed hierarchies,
-public primitive constant values, MCP enum order, record and parameter names,
-annotation defaults, exact JSpecify type-use nullability, and thread-safety
-markers.
+public primitive constant values, MCP enum order, value-class construction and
+parameter names, annotation defaults, exact JSpecify type-use nullability, and
+thread-safety markers.
 
 ## Current bounded Phase 6 checkpoint
 
@@ -255,8 +390,9 @@ the shared `Simulator`, seven top-level simulation types, and
 `McpSimulationOptions.Builder` to Phase 6.
 
 The [Phase 6 freeze rationale](phase-6-freeze-rationale.md) records the
-localization API review and freeze. Eleven top-level localization types and six
-nested owners now provide immutable configuration, request-context SPI, closed
+localization API review and freeze. Eleven top-level localization types and
+seven nested owners now provide immutable configuration, a framework-owned
+request-context value and application callback, closed
 results, revisions, stable text coordinates, catalog extraction, and local
 control-plane shapes. Construction-time extraction operates on the final
 `McpEndpointRegistry`, produces deterministic opaque external keys and
@@ -267,8 +403,9 @@ carrier with its existing thread, one-shot, and call-lifetime rules. L1 does
 not invoke a localization provider or alter MCP wire output; request-time
 rendering begins in L2. The original 18-owner surface first grew
 `phase-6.includes` to 33; the later telemetry amendment grew it to 65, and the
-2026-08-17 result simplification removed one redundant nested owner. The
-current inventory is 64 Phase 6 owners in an exact 236-owner reviewed union.
+2026-08-17 result simplification removed one redundant nested owner, and the
+later context-builder amendment added the framework-owned builder. The current
+inventory is 65 Phase 6 owners in an exact 237-owner reviewed union.
 Phase 6 is frozen: see the
 [Phase 6 freeze rationale](phase-6-freeze-rationale.md).
 `McpServerDiagnostics` remains
@@ -483,8 +620,8 @@ The exact sealed inventory remains 23 event records, including 11 fieldless
 variants; all other components are endpoint path, bounded method, fixed
 outcome/reason/code, or nonnegative duration. Production supplies registered
 endpoints, recognized methods or `<unrecognized>`, ten fixed codes, and fixed
-enums. Public record constructors still accept arbitrary application-created
-nonempty routed strings and non-null codes. At that checkpoint, the snapshot
+enums. At that checkpoint, the public record constructors accepted arbitrary
+application-created nonempty routed strings and non-null codes. The snapshot
 was three boxed `Long` values plus immutable
 `Map<McpShutdownOutcome, Long>`; the default collector aggregated only five
 handler variants and `ServerStopped`, ignoring and retaining none of the other
@@ -1251,27 +1388,28 @@ evidence is written under `target/japicmp/` and
 
 CI runs the aggregate on JDK 17; the scripts themselves use the
 caller-selected JDK. On the exact current source, the aggregate gate covers
-564 reviewed incompatibility records and 236 reviewed current-side API owners.
+565 reviewed incompatibility records and 237 reviewed current-side API owners.
 The provisional inventory is empty; `EndpointMethodKey`, `RequestOutcomeKey`,
 `RequestStreamTerminationKey`, and `SubscriptionTerminationKey` are now frozen
-Phase 6 owners. The amended frozen inventories contain 1,053 Phase 4
-signatures and 195 Phase 5 signatures. The Phase 5
-snapshot contains 195 records (39 classes, six constructors, 15 fields, and
-135 methods), with
-SHA-256
-`4105df142e671c704b341eec54a65b5cbdc8da931888cab43d85835f577e2a32`;
-its exact nullability digest is
-`a9c0a9311b6b0dff74b2813383b903a01dc185cbf7155c009edf1f6fb8e0d304`.
-The Phase 5 counts are unchanged. Phase 6 owns 64 types and is frozen:
-`phase-6.signatures.jsonl` has exactly 420 records - 64 classes, 31
-constructors, 40 fields, and 285 methods - with SHA-256
-`2fa052e8f6370d9cff7497e70d23136b9b91ca3eda304f038325f7a8811fe435`
+Phase 6 owners. The amended frozen inventories contain 1,047 Phase 4, 191
+Phase 5, and 422 Phase 6 signatures. Phase 4 contains 133 classes, one
+constructor, 79 fields, and 834 methods, with SHA-256
+`dc733de19433200065526bd02f985b56ca69f658aefd116e80446b5c885f035b`
 and exact nullability digest
-`6fa774d10bf9c8a6ab4274f7989ef55eb8032d37a7d58e8a6243c4123706edc9`.
-The provisional inventory is empty. The amended Phase 4 snapshot has SHA-256
-`ea33203fe502b026d56d7711ffae816c3a68909efe2ae2bdd5a822093f881ef7`;
-its exact nullability digest is
-`d55b5e00570ca13de3168c2e77deb65003ae26d8e991a6eef96f21fa5f958d08`.
+`581038cefbc8e65845e38001632ed0678a83efe55446e4f25f233e874eef3f39`.
+Phase 5 contains 39 classes, zero constructors, 15 fields, and 137 methods,
+with SHA-256
+`ea6d46dc055a57b2d31820cb937d89fe42bac5665c18c5fdb83eea75e79c82f5`
+and exact nullability digest
+`9c8c02a4eca29166a6a92956fa58033ea94939e6d7deef9e23a7ecd6d5babd3e`.
+Phase 6 contains 65 classes, zero constructors, 40 fields, and 317 methods,
+with SHA-256
+`f7355c91a0131c4bb9ef7f9b49f0d54e9bbafa0042a16c5932722e5765cee774`
+and exact nullability digest
+`2f857d18ae3dfb641fadf00858fec19d594c0ac470c6ed6be70423596b340611`.
+The sole public constructor in the frozen surface is the throwable
+`McpJsonRpcException(McpJsonRpcError)` constructor; all non-throwable values
+are constructed through factories or builders.
 
 The L1-exit checkpoint tree passed a clean Corretto 26 verify at 1,557/0/0/4
 over 456 main and 179 test sources. The exact 2026-08-13 L2 framework-catalog
@@ -1310,9 +1448,13 @@ documentation examples rather than a Soklet verification surface. Actual
 scheduled/nightly and sustained fuzz/soak evidence, real
 multi-node fleet orchestration, public Javadoc publication, immutable
 release-candidate provenance and conformance, release scans, and final matrix
-closure remain open. ToyStore's local migration passes 13/13, including five
-MCP tests, but its reviewed committed pin and immutable-candidate/JDK-25 proof
-remain a required fail-closed 3.6.0 downstream release gate.
+closure remain open. ToyStore's local migration passes 14/14, including six
+MCP tests. Its per-request credential proof accepts a valid request, then
+returns 401 for malformed, missing, expired, and wrong-audience credentials and
+403 for an insufficient-scope credential, proving that prior identity and
+authorization are never inherited. Its reviewed committed pin and immutable-
+candidate/JDK-25 proof remain a required fail-closed 3.6.0 downstream release
+gate.
 
 At the V21 boundary, the focused simulator/API gate passed 46/0/0/0 and the
 broadened adjacent authority selector passed 215/0/0/0. Clean exact-source

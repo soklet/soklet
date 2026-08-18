@@ -32,7 +32,7 @@ public class McpInterceptionConfigurationTests {
 	@Test
 	public void defaultHooksAreSharedAndPassThrough() throws Exception {
 		McpHandlerInterceptor interceptor =
-				McpHandlerInterceptor.defaultInstance();
+				McpHandlerInterceptor.passThroughInstance();
 		McpToolOutputSanitizer sanitizer =
 				McpToolOutputSanitizer.passThroughInstance();
 		McpRequestContext request = requestContext();
@@ -56,7 +56,7 @@ public class McpInterceptionConfigurationTests {
 		Assertions.assertSame(expectedResult, actualResult);
 		Assertions.assertSame(expectedOutput, actualOutput);
 		Assertions.assertSame(interceptor,
-				McpHandlerInterceptor.defaultInstance());
+				McpHandlerInterceptor.passThroughInstance());
 		Assertions.assertSame(sanitizer,
 				McpToolOutputSanitizer.passThroughInstance());
 	}
@@ -74,7 +74,7 @@ public class McpInterceptionConfigurationTests {
 				.toolOutputSanitizer(sanitizer)
 				.build();
 
-		Assertions.assertSame(McpHandlerInterceptor.defaultInstance(),
+		Assertions.assertSame(McpHandlerInterceptor.passThroughInstance(),
 				defaultServer.getHandlerInterceptor());
 		Assertions.assertSame(McpToolOutputSanitizer.passThroughInstance(),
 				defaultServer.getToolOutputSanitizer());

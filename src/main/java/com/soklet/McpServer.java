@@ -77,7 +77,7 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 
 	/**
 	 * Returns the server-level application-handler interceptor. When omitted
-	 * during construction this is {@link McpHandlerInterceptor#defaultInstance()}.
+	 * during construction this is {@link McpHandlerInterceptor#passThroughInstance()}.
 	 *
 	 * @return handler interceptor
 	 */
@@ -306,7 +306,7 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 			this.unknownMirroredHeaderNameDiagnostics = false;
 			this.allowedHosts = Set.of();
 			this.rateLimiterRegistry = McpRateLimiterRegistry.emptyInstance();
-			this.handlerInterceptor = McpHandlerInterceptor.defaultInstance();
+			this.handlerInterceptor = McpHandlerInterceptor.passThroughInstance();
 			this.toolOutputSanitizer =
 					McpToolOutputSanitizer.passThroughInstance();
 		}

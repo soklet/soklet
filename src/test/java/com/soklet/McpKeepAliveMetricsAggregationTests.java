@@ -87,7 +87,7 @@ public class McpKeepAliveMetricsAggregationTests {
 		Assertions.assertFalse(prometheus(eventDriven).contains(
 				KEEP_ALIVES_METRIC_NAME));
 		eventDriven.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.KeepAliveEmitted());
+				McpMetricsEvent.keepAliveEmitted());
 		Assertions.assertEquals(1L, eventDriven.snapshot().orElseThrow()
 				.getMcpMetrics().getKeepAlivesEmitted());
 		assertMetricType(prometheus(eventDriven));
@@ -104,9 +104,9 @@ public class McpKeepAliveMetricsAggregationTests {
 		assertMetricType(prometheus(collector));
 		assertSample(prometheus(collector), 0L);
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.KeepAliveEmitted());
+				McpMetricsEvent.keepAliveEmitted());
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.KeepAliveEmitted());
+				McpMetricsEvent.keepAliveEmitted());
 
 		McpMetricsSnapshot retained = collector.snapshot().orElseThrow()
 				.getMcpMetrics();
@@ -157,7 +157,7 @@ public class McpKeepAliveMetricsAggregationTests {
 		Assertions.assertEquals(1, occurrences(openMetrics, "# EOF\n"));
 
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.KeepAliveEmitted());
+				McpMetricsEvent.keepAliveEmitted());
 		Assertions.assertEquals(2L, retained.getKeepAlivesEmitted());
 		Assertions.assertEquals(3L, collector.snapshot().orElseThrow()
 				.getMcpMetrics().getKeepAlivesEmitted());
@@ -186,7 +186,7 @@ public class McpKeepAliveMetricsAggregationTests {
 					start.await();
 					for (int round = 0; round < rounds; ++round)
 						collector.didRecordMcpMetricsEvent(
-								new McpMetricsEvent.KeepAliveEmitted());
+								McpMetricsEvent.keepAliveEmitted());
 					return null;
 				}));
 			start.countDown();
@@ -203,7 +203,7 @@ public class McpKeepAliveMetricsAggregationTests {
 				.getMcpMetrics();
 		Assertions.assertEquals(expected, retained.getKeepAlivesEmitted());
 		collector.didRecordMcpMetricsEvent(
-				new McpMetricsEvent.KeepAliveEmitted());
+				McpMetricsEvent.keepAliveEmitted());
 		collector.reset();
 		Assertions.assertEquals(expected, retained.getKeepAlivesEmitted());
 		Assertions.assertSame(McpMetricsSnapshot.emptyInstance(),

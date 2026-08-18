@@ -42,15 +42,7 @@ public final class McpCachePolicy {
 	@NonNull
 	private final McpCacheScope scope;
 
-	/**
-	 * Creates a cache policy.
-	 *
-	 * @param timeToLive nonnegative whole-millisecond default duration
-	 * @param scope fixed cache scope
-	 * @throws IllegalArgumentException if {@code timeToLive} is negative or
-	 * has sub-millisecond precision
-	 */
-	public McpCachePolicy(@NonNull Duration timeToLive,
+	private McpCachePolicy(@NonNull Duration timeToLive,
 			@NonNull McpCacheScope scope) {
 		this.timeToLive = requireTimeToLive(timeToLive);
 		this.scope = requireNonNull(scope);

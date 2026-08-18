@@ -649,7 +649,7 @@ public class McpRequestObservationPublicRuntimeTests {
 					mcpMetrics.getRequestsAccepted());
 			Assertions.assertEquals(0L, mcpMetrics.getRequestsRejected());
 			McpMetricsSnapshot.RequestOutcomeKey requestOutcomeKey =
-					new McpMetricsSnapshot.RequestOutcomeKey(MCP_PATH,
+					McpMetricsSnapshot.RequestOutcomeKey.fromDimensions(MCP_PATH,
 							"tools/call", McpRequestOutcome.COMPLETE);
 			Assertions.assertEquals(0L, mcpMetrics.getActiveRequests());
 			Assertions.assertEquals(Map.of(requestOutcomeKey,
@@ -1348,13 +1348,15 @@ public class McpRequestObservationPublicRuntimeTests {
 		List<McpMetricsEvent.RequestFinished> finished =
 				collector.requestFinishedEvents();
 		Assertions.assertEquals(1, started.size(), started.toString());
-		Assertions.assertEquals(MCP_PATH, started.get(0).endpointPath());
-		Assertions.assertEquals(expectedMethod, started.get(0).jsonRpcMethod());
+		Assertions.assertEquals(MCP_PATH, started.get(0).getEndpointPath());
+		Assertions.assertEquals(expectedMethod,
+				started.get(0).getJsonRpcMethod());
 		Assertions.assertEquals(1, finished.size(), finished.toString());
-		Assertions.assertEquals(MCP_PATH, finished.get(0).endpointPath());
-		Assertions.assertEquals(expectedMethod, finished.get(0).jsonRpcMethod());
-		Assertions.assertEquals(expectedOutcome, finished.get(0).outcome());
-		Assertions.assertFalse(finished.get(0).duration().isNegative());
+		Assertions.assertEquals(MCP_PATH, finished.get(0).getEndpointPath());
+		Assertions.assertEquals(expectedMethod,
+				finished.get(0).getJsonRpcMethod());
+		Assertions.assertEquals(expectedOutcome, finished.get(0).getOutcome());
+		Assertions.assertFalse(finished.get(0).getDuration().isNegative());
 	}
 
 	private static void assertLogCount(@NonNull List<@NonNull LogEvent> events,
@@ -1378,11 +1380,17 @@ public class McpRequestObservationPublicRuntimeTests {
 			@NonNull McpMetricsEvent event) throws ReflectiveOperationException {
 		Set<Integer> protocolErrorCodes = Set.of(-32700, -32600, -32601,
 				-32602, -32603, -32020, -32021, -32022, -31999, -31998);
-		for (java.lang.reflect.RecordComponent component
-				: event.getClass().getRecordComponents()) {
-			Object value = component.getAccessor().invoke(event);
-			Assertions.assertNotNull(value, component.toString());
-			switch (component.getName()) {
+		for (java.lang.reflect.Method getter
+				: event.getClass().getDeclaredMethods()) {
+			if (!java.lang.reflect.Modifier.isPublic(getter.getModifiers())
+					|| getter.getParameterCount() != 0
+					|| !getter.getName().startsWith("get"))
+				continue;
+			String dimensionName = Character.toLowerCase(
+					getter.getName().charAt(3)) + getter.getName().substring(4);
+			Object value = getter.invoke(event);
+			Assertions.assertNotNull(value, getter.toString());
+			switch (dimensionName) {
 				case "endpointPath" -> Assertions.assertEquals(MCP_PATH, value);
 				case "jsonRpcMethod" ->
 						Assertions.assertEquals("tools/call", value);
@@ -1402,7 +1410,7 @@ public class McpRequestObservationPublicRuntimeTests {
 						value.toString());
 				default -> Assertions.fail(
 						"Unexpected built-in metric dimension: "
-								+ component.getName());
+								+ dimensionName);
 			}
 		}
 	}

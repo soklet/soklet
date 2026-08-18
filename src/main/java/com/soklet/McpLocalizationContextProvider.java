@@ -32,8 +32,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * translation lookup.
  * <p>
  * Soklet exposes the exact returned context to application handlers and
- * interceptors, so an application may return a public application-owned
- * subtype. Soklet's no-leak guarantee applies when Soklet invokes this
+ * interceptors. Soklet's no-leak guarantee applies when Soklet invokes this
  * callback. Direct application invocation remains application-owned and has
  * normal application failure semantics.
  *

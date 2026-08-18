@@ -172,7 +172,7 @@ public final class McpPromptRegistration {
 			if (!definitions.containsKey(entry.getKey())
 					|| !(entry.getValue() instanceof McpJsonString string))
 				throw new McpInvalidPromptArgumentsException();
-			values.put(entry.getKey(), string.value());
+			values.put(entry.getKey(), string.getValue());
 		}
 		for (McpPromptArgumentDefinition argument : this.arguments) {
 			if (argument.isRequired() && !values.containsKey(argument.getName()))

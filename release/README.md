@@ -6,13 +6,25 @@ is a full candidate commit SHA, the workflow checks out that exact commit, and
 any repository change requires a new commit and a complete new run.
 
 The current manifest is intentionally **not runnable yet**. It records exact
-committed pins without treating uncommitted sibling work as evidence:
+public commit pins without treating uncommitted sibling work as evidence. Six
+downstream gates remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`:
 
-- ToyStore's local 3.6 MCP migration passes its focused tests but still needs a
-  reviewed commit to replace the manifest's pre-migration pin;
-- the current `soklet-otel` and `soklet.com` migrations are uncommitted and are
-  therefore not represented by their pinned commits;
-- Barebones and both servlet pins still require candidate validation.
+- ToyStore's local 3.6 MCP migration passes 14/14 tests, including six MCP
+  tests and exact per-request 401/403 coverage, but the migration is
+  uncommitted and is not represented by the manifest's pre-migration pin;
+- the current `soklet-otel` migration passes 36/36, but it remains uncommitted
+  and is not represented by its pinned commit;
+- the `soklet.com` migration passes its offline clean install, lint, and
+  33-route static-generation build, but it remains uncommitted and is not
+  represented by its pinned commit;
+- both servlet integrations pass 158/158 at their 3.1.1 default and at the
+  local 3.6.0 snapshot, but each required `soklet.version` POM edit is
+  uncommitted and absent from the pinned 1.2.0 release commit; and
+- Barebones compiles and passes its exact local live probes against the local
+  snapshot on an ephemeral loopback port without disturbing the unrelated
+  process on port 8080, but its two local source-tree changes, including the
+  required noninteractive port override, are uncommitted and absent from the
+  pinned public commit.
 
 The checksum-pinned TypeScript and Go interoperability harnesses are checked in,
 pass against the local snapshot candidate, and are `READY`; the release run must
@@ -64,10 +76,28 @@ candidate-version Maven invocation. ToyStore and `soklet-otel` intentionally
 have no default compatibility leg: both migrated sources target the new 3.6
 API and currently default to an unpublished snapshot, while the servlet
 integrations retain their released-default and candidate-version legs. Every
-Maven leg sets `failIfNoTests`, then independently verifies and retains
-nonempty Surefire XML with at least one executed test and zero failures or
-errors. Both Java archive identities and checksums are retained as gate
-evidence. No `current`, `latest`, branch, or feature-only Java resolver is used.
+Maven leg first proves that the downstream POM coordinates match the manifest,
+that `soklet.version` is a concrete property, and that the direct Soklet
+dependency uses it. The servlet default legs additionally pin the exact
+`com.soklet:soklet:3.1.1` identity and its reviewed Maven Central SHA-256. The
+validator checks both the default and candidate JARs as regular, nonsymlink
+archives with the expected checksum and Soklet core marker before and after
+each Maven leg, and rechecks the candidate during finalization. It then sets
+`failIfNoTests` and independently verifies and retains nonempty Surefire XML
+with at least one executed test, zero failures or errors, and exactly the
+expected Soklet core on every test classpath. Every classpath JAR is inspected
+by content regardless of its filename, and directories are rejected if they
+contain a shadowing `com/soklet/Soklet.class`. Both Java archive identities and
+checksums are retained as gate evidence. No `current`, `latest`, branch,
+dynamic, or feature-only Java resolver is used.
+
+The Barebones hook asks the operating system for an exclusive ephemeral IPv4
+loopback port and holds that reservation until immediately before process
+startup. It passes the selected port through the sample's scoped
+`SOKLET_BAREBONES_LOOPBACK_PORT` override, requires the matching startup marker,
+probes only that exact address, terminates only the recorded child PID, and
+proves that the same port can be rebound after shutdown. It does not inspect,
+signal, or depend on a process using the sample's normal port 8080.
 
 The workflow has no publish or signing authority. Promotion remains a separate
 maintainer-authorized operation and must consume the completed evidence
