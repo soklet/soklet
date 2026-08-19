@@ -2344,14 +2344,21 @@ Barebones compiles and its exact live probes pass locally on a reserved
 ephemeral IPv4 loopback port without disturbing the unrelated Docker listener
 on port 8080. The port is supplied
 through `SOKLET_BAREBONES_LOOPBACK_PORT`. Its source and validator changes
-remain uncommitted and unpinned, so its old public pin remains blocked. The
-format-v2 release contract now enumerates exactly 29 ordered gates. Fourteen
-are dispatch-configured, while nine remain `BLOCKED_HARNESS_MISSING` and the
+remain uncommitted and unpinned, so its old public pin remains blocked. A
+same-version macOS arm64 Corretto 21.0.12.9.1 run passes the full core
+`clean test` at 1,681/0/0/4; static analysis reports `BUILD SUCCESS` with
+the existing advisory inventory after the `SelfAssignment` fix, and SpotBugs
+reports zero bugs and errors. The checksum-pinned Corretto 21.0.12.9.1
+toolchain now drives the `core-jdk-21`, `static-analysis`, and `spotbugs`
+release gates. The format-v2 release contract now enumerates exactly 29
+ordered gates. Seventeen
+are dispatch-configured, while six remain `BLOCKED_HARNESS_MISSING` and the
 six downstreams remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`; `READY` means
-configured, never passed. Scheduled/nightly and sustained history, the exact
-JDK 21/static-analysis/SpotBugs toolchain, release scans, benchmarks, automated
-matrix closure, published downstream pins, and immutable-candidate provenance
-remain open. Candidate Javadoc generation/completeness is a configured gate;
+configured, never passed. Scheduled/nightly and sustained history, release
+scans, benchmarks, automated matrix closure, published downstream pins, and
+immutable-candidate provenance remain open. `release-scans` remains blocked
+on its exact scanner/toolchain, severity-policy, and retained-report contract.
+Candidate Javadoc generation/completeness is a configured gate;
 deployment of those Javadocs remains post-validation publication work. The
 bounded two-listener localization fixture is the Soklet-owned fleet gate;
 production multi-host coordination remains application/deployment-owned rather

@@ -43,6 +43,13 @@ jobs:
           toystoreJava "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
           "${RUNNER_TEMP}/release-validation-toystore-java-distribution.txt"
 
+      - name: Install checksum-pinned Corretto 21 for core analysis gates
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-corretto-linux-x64.sh
+          coreJdk21 "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/release-validation-core-jdk-21-distribution.txt"
+
       - name: Install checksum-pinned Corretto 17 for candidate validation
         shell: bash
         run: >-
@@ -73,6 +80,7 @@ jobs:
         shell: bash
         env:
           SOKLET_CANDIDATE_COMMIT: ${{ inputs.candidate_commit }}
+          SOKLET_RELEASE_CORE_JDK_21_DISTRIBUTION_EVIDENCE: ${{ runner.temp }}/release-validation-core-jdk-21-distribution.txt
           SOKLET_RELEASE_GO_DISTRIBUTION_EVIDENCE: ${{ runner.temp }}/release-validation-go-distribution.txt
           SOKLET_RELEASE_JAVA_DISTRIBUTION_EVIDENCE: ${{ runner.temp }}/release-validation-java-distribution.txt
           SOKLET_RELEASE_MAVEN_DISTRIBUTION_EVIDENCE: ${{ runner.temp }}/release-validation-maven-distribution.txt
@@ -94,6 +102,7 @@ jobs:
             ${{ runner.temp }}/release-validation-maven-distribution.txt
             ${{ runner.temp }}/release-validation-go-distribution.txt
             ${{ runner.temp }}/release-validation-java-distribution.txt
+            ${{ runner.temp }}/release-validation-core-jdk-21-distribution.txt
             ${{ runner.temp }}/release-validation-toystore-java-distribution.txt
             target/soklet-3.6.0.jar
             target/soklet-3.6.0-sources.jar

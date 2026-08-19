@@ -6,17 +6,15 @@ is a full candidate commit SHA, the workflow checks out that exact commit, and
 any repository change requires a new commit and a complete new run.
 
 The format-v2 manifest defines an exact ordered universe of 29 release gates.
-It is intentionally **not runnable yet**: 14 gates have complete checked-in
-dispatch configuration, while 15 remain fail-closed blockers. `READY` means
+It is intentionally **not runnable yet**: 17 gates have complete checked-in
+dispatch configuration, while 12 remain fail-closed blockers. `READY` means
 only that a gate has an executable, pinned validation path. It never means that
 the gate has passed for a candidate; only a typed PASS receipt inside the
 format-v2 evidence envelope from the exact candidate workflow can establish
 that.
 
-Nine gates remain `BLOCKED_HARNESS_MISSING`:
+Six gates remain `BLOCKED_HARNESS_MISSING`:
 
-- `core-jdk-21`, `static-analysis`, and `spotbugs` require an exact
-  checksum-pinned JDK 21 distribution and release-workflow installer;
 - `fuzz-nightly-history` and `soak-nightly-history` require a canonical
   importer for immutable scheduled-run history;
 - `operational-history` requires a bounded sustained cardinality, log-drain,
@@ -27,6 +25,15 @@ Nine gates remain `BLOCKED_HARNESS_MISSING`:
   and 3.6.0 schema-baseline harness; and
 - `matrix-closure` requires an executable unresolved-row policy and canonical
   report rather than a prose assertion.
+
+The exact checksum-pinned Corretto 21.0.12.9.1 toolchain now drives
+`core-jdk-21`, `static-analysis`, and `spotbugs`. A same-version macOS arm64
+local validation passes the full core `clean test` at 1,681/0/0/4, reports
+static-analysis `BUILD SUCCESS` with the existing advisory inventory after the
+`SelfAssignment` fix, and reports zero SpotBugs bugs and errors. These are
+local snapshot results, not candidate PASS receipts. `release-scans` remains
+blocked until its exact scanner/toolchain pin, severity policy, and retained
+report contract are implemented.
 
 Six downstream gates remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`. The manifest
 records their exact public commit pins without treating uncommitted sibling
@@ -54,8 +61,9 @@ pass against the local snapshot candidate, and are `READY`; the release run must
 still execute them against the exact immutable candidate before either can
 produce PASS evidence. The same distinction applies to every other `READY`
 row, including the candidate build, JDK 25, API freeze, candidate Javadocs,
-schema and deterministic fuzz replay, smoke and release soak, the bounded
-two-listener localization fleet fixture, conformance, and candidate
+the JDK 21 core/static-analysis/SpotBugs gates, schema and deterministic fuzz
+replay, smoke and release soak, the bounded two-listener localization fleet
+fixture, conformance, and candidate
 localization gates.
 
 `scripts/validate-release-candidate.sh` stops on these statuses before building.
@@ -76,9 +84,10 @@ Once every gate is ready, the validator:
    supported-JDK gates against the same candidate tree;
 4. installs the already-built POM and main JAR with the pinned `install-file`
    goal into a fresh isolated Maven repository and byte-compares the result;
-5. runs the API-freeze, candidate-Javadoc, schema-replay, deterministic-fuzz,
-   smoke-soak, release-soak, and bounded two-listener localization-fleet gates,
-   retaining each gate's exact machine-readable and human-readable reports;
+5. runs the API-freeze, candidate-Javadoc, JDK 21 clean-test, static-analysis,
+   SpotBugs, schema-replay, deterministic-fuzz, smoke-soak, release-soak, and
+   bounded two-listener localization-fleet gates, retaining each gate's exact
+   machine-readable and human-readable reports;
 6. imports the separately defined scheduled fuzz, nightly soak, operational,
    scan, benchmark, and matrix-closure evidence only through their canonical
    gate contracts; absent or malformed history cannot be replaced by a local
@@ -124,11 +133,13 @@ The soak module compiles source at the candidate commit, as documented in
 gates use the checksum-matched JAR or the isolated Maven repository.
 
 The candidate build uses the exact Corretto 17 toolchain. The workflow installs
-the exact Corretto 25 archive first and Corretto 17 last; the validator verifies
-the full vendor build, runtime version, compiler version, and Maven runtime
-before any build. Corretto 25 is selected only for `core-jdk-25`,
-`fuzz-replay`, `soak-smoke`, and ToyStore; the other currently configured Java
-gates use Corretto 17. ToyStore and `soklet-otel` intentionally
+the exact Corretto 25 archive first, Corretto 21.0.12.9.1 second, and Corretto
+17 last; the validator verifies each full vendor build, runtime version, and
+compiler version plus the default Maven runtime before any build. Corretto 21
+is selected only for `core-jdk-21`, `static-analysis`, and `spotbugs`.
+Corretto 25 is selected only for `core-jdk-25`, `fuzz-replay`, `soak-smoke`,
+and ToyStore; the other currently configured Java gates use Corretto 17.
+ToyStore and `soklet-otel` intentionally
 have no default compatibility leg: both migrated sources target the new 3.6
 API and currently default to an unpublished snapshot, while the servlet
 integrations retain their released-default and candidate-version legs. Every

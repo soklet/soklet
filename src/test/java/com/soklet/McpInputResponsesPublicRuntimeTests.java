@@ -70,7 +70,7 @@ public class McpInputResponsesPublicRuntimeTests {
 	public void validRetriesReachEveryHandlerThroughTheExactObservedContext()
 			throws Exception {
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver(3);
-		RecordingMetricsCollector collector = new RecordingMetricsCollector();
+		RecordingMetricsCollector collector = new RecordingMetricsCollector(3);
 		Map<String, McpRequestContext> handlerContexts =
 				new ConcurrentHashMap<>();
 		Map<String, McpRequestContext> interceptorContexts =
@@ -163,6 +163,7 @@ public class McpInputResponsesPublicRuntimeTests {
 							+ ",\"com.example/futureParameter\":{\"preserved\":true}",
 					ALL_INPUT_CAPABILITIES);
 			observer.awaitFinished();
+			collector.awaitFinished();
 
 			assertComplete(toolResponse, "tool-retry");
 			assertComplete(promptResponse, "prompt-retry");
@@ -657,14 +658,30 @@ public class McpInputResponsesPublicRuntimeTests {
 		private final AtomicInteger started = new AtomicInteger();
 		private final AtomicInteger finished = new AtomicInteger();
 		private final List<McpMetricsEvent> events = new CopyOnWriteArrayList<>();
+		private final CountDownLatch requestFinishes;
+
+		private RecordingMetricsCollector() {
+			this(0);
+		}
+
+		private RecordingMetricsCollector(int expectedRequestFinishes) {
+			this.requestFinishes = new CountDownLatch(expectedRequestFinishes);
+		}
 
 		@Override
 		public void didRecordMcpMetricsEvent(@NonNull McpMetricsEvent event) {
 			this.events.add(event);
 			if (event instanceof McpMetricsEvent.RequestStarted)
 				this.started.incrementAndGet();
-			if (event instanceof McpMetricsEvent.RequestFinished)
+			if (event instanceof McpMetricsEvent.RequestFinished) {
 				this.finished.incrementAndGet();
+				this.requestFinishes.countDown();
+			}
+		}
+
+		private void awaitFinished() throws InterruptedException {
+			Assertions.assertTrue(this.requestFinishes.await(5, TimeUnit.SECONDS),
+					"The MCP request-finished metrics did not arrive.");
 		}
 	}
 }

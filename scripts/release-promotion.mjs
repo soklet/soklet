@@ -95,14 +95,14 @@ const GATE_ARTIFACT_CONTRACTS = Object.freeze({
       evidenceRole('node-distribution', 'FILE', 'text/plain', 'release-validation-node-distribution.txt'),
       evidenceRole('maven-distribution', 'FILE', 'text/plain', 'release-validation-maven-distribution.txt'),
       evidenceRole('go-distribution', 'FILE', 'text/plain', 'release-validation-go-distribution.txt'),
-      evidenceRole('java-distribution', 'FILE', 'text/plain', 'release-validation-java-distribution.txt'),
+      evidenceRole('java-distribution', 'FILE', 'text/plain', 'release-validation-java-distribution.txt', 'gateToolchainDistribution'),
     ]),
   }),
   'core-jdk-21': Object.freeze({
     toolchain: 'coreJdk21',
     roles: Object.freeze([
       evidenceRole('build-log', 'FILE', 'text/plain', 'core-jdk-21.log'),
-      evidenceRole('java-distribution', 'FILE', 'text/plain', 'release-validation-core-jdk-21-distribution.txt'),
+      evidenceRole('java-distribution', 'FILE', 'text/plain', 'release-validation-core-jdk-21-distribution.txt', 'gateToolchainDistribution'),
       evidenceRole('surefire-reports', 'DIRECTORY', SUREFIRE_MEDIA_TYPE, 'surefire-reports'),
     ]),
   }),
@@ -110,7 +110,7 @@ const GATE_ARTIFACT_CONTRACTS = Object.freeze({
     toolchain: 'toystoreJava',
     roles: Object.freeze([
       evidenceRole('build-log', 'FILE', 'text/plain', 'core-jdk-25.log'),
-      evidenceRole('java-distribution', 'FILE', 'text/plain', 'release-validation-toystore-java-distribution.txt'),
+      evidenceRole('java-distribution', 'FILE', 'text/plain', 'release-validation-toystore-java-distribution.txt', 'gateToolchainDistribution'),
       evidenceRole('surefire-reports', 'DIRECTORY', SUREFIRE_MEDIA_TYPE, 'surefire-reports'),
     ]),
   }),
@@ -145,12 +145,14 @@ const GATE_ARTIFACT_CONTRACTS = Object.freeze({
     toolchain: 'coreJdk21',
     roles: Object.freeze([
       evidenceRole('analysis-log', 'FILE', 'text/plain', 'static-analysis.log'),
+      evidenceRole('java-distribution', 'FILE', 'text/plain', 'release-validation-core-jdk-21-distribution.txt', 'gateToolchainDistribution'),
     ]),
   }),
   spotbugs: Object.freeze({
     toolchain: 'coreJdk21',
     roles: Object.freeze([
       evidenceRole('spotbugs-log', 'FILE', 'text/plain', 'spotbugs.log'),
+      evidenceRole('java-distribution', 'FILE', 'text/plain', 'release-validation-core-jdk-21-distribution.txt', 'gateToolchainDistribution'),
       evidenceRole('spotbugs-report', 'FILE', 'application/xml', 'spotbugsXml.xml'),
     ]),
   }),
@@ -277,7 +279,7 @@ const GATE_ARTIFACT_CONTRACTS = Object.freeze({
       evidenceRole('project-pom', 'FILE', 'application/xml', 'pom.xml'),
       evidenceRole('candidate-log', 'FILE', 'text/plain', 'toystore-app-candidate.log'),
       evidenceRole('candidate-surefire-reports', 'DIRECTORY', SUREFIRE_MEDIA_TYPE, 'surefire-reports'),
-      evidenceRole('java-distribution', 'FILE', 'text/plain', 'release-validation-toystore-java-distribution.txt'),
+      evidenceRole('java-distribution', 'FILE', 'text/plain', 'release-validation-toystore-java-distribution.txt', 'gateToolchainDistribution'),
     ]),
   }),
   'soklet-otel': Object.freeze({
@@ -848,6 +850,70 @@ function requireGateDefaultArtifact(item, gate, expected, gateId) {
   }
 }
 
+function canonicalToolchainDistributionBytes(toolchain, description) {
+  requireExactKeys(
+    toolchain,
+    [
+      'archive',
+      'archiveSha256',
+      'distribution',
+      'distributionUrl',
+      'runtimeVersion',
+      'vendorVersion',
+      'version',
+    ],
+    description,
+  );
+  for (const [field, value] of Object.entries(toolchain))
+    requireTrimmedString(value, `${description} ${field}`);
+  if (!SHA256_PATTERN.test(toolchain.archiveSha256))
+    fail(`${description} archive SHA-256 is invalid`);
+  const version = /^([0-9]+)\.0\.([0-9]+)(?:\.([0-9]+))?$/.exec(toolchain.version);
+  const vendor = /^Corretto-([0-9]+)\.0\.([0-9]+)\.([0-9]+)\.([0-9]+)$/
+    .exec(toolchain.vendorVersion);
+  if (toolchain.distribution !== 'corretto'
+      || version === null
+      || vendor === null
+      || version[1] !== vendor[1]
+      || version[2] !== vendor[2]
+      || (version[3] !== undefined
+        && (version[1] !== '21' || version[3] !== vendor[4]))) {
+    fail(`${description} is not an exact supported Corretto identity`);
+  }
+  const distributionVersion = toolchain.vendorVersion.slice('Corretto-'.length);
+  const expectedRuntimeVersion = `${toolchain.version}+${vendor[3]}-LTS`;
+  const expectedArchive = `amazon-corretto-${distributionVersion}-linux-x64.tar.gz`;
+  const expectedUrl = `https://corretto.aws/downloads/resources/${distributionVersion}/${expectedArchive}`;
+  if (toolchain.runtimeVersion !== expectedRuntimeVersion
+      || toolchain.archive !== expectedArchive
+      || toolchain.distributionUrl !== expectedUrl) {
+    fail(`${description} fields do not match its exact Corretto distribution`);
+  }
+  return Buffer.from(
+    `distribution=${toolchain.distribution}\n`
+      + `version=${toolchain.version}\n`
+      + `runtimeVersion=${toolchain.runtimeVersion}\n`
+      + `vendorVersion=${toolchain.vendorVersion}\n`
+      + `url=${toolchain.distributionUrl}\n`
+      + `archive=${toolchain.archive}\n`
+      + `archiveSha256=${toolchain.archiveSha256}\n`,
+    'utf8',
+  );
+}
+
+function requireGateToolchainDistribution(item, gate, expected, toolchains, gateId) {
+  const expectedBytes = canonicalToolchainDistributionBytes(
+    toolchains[gate.toolchain],
+    `Reviewed release manifest ${gateId} toolchain`,
+  );
+  if (item.artifact.type !== 'FILE'
+      || item.artifact.fileName !== expected.fileName
+      || item.artifact.bytes !== expectedBytes.length
+      || item.artifact.sha256 !== sha256(expectedBytes)) {
+    fail(`Gate ${gateId} Java distribution evidence does not match its exact manifest toolchain`);
+  }
+}
+
 function requireGateEvidenceContract(gateEvidence, gateId, artifacts) {
   const contract = GATE_EVIDENCE_CONTRACTS[gateId];
   if (contract === undefined)
@@ -867,7 +933,9 @@ function requireGateEvidenceContract(gateEvidence, gateId, artifacts) {
         || item.artifact.fileName !== expected.fileName) {
       fail(`Gate ${gateId} evidence item ${index} does not match role ${expected.role}`);
     }
-    if (expected.binding !== null && expected.binding !== 'gateDefaultArtifact') {
+    if (expected.binding !== null
+        && expected.binding !== 'gateDefaultArtifact'
+        && expected.binding !== 'gateToolchainDistribution') {
       const artifact = artifacts[expected.binding];
       if (item.artifact.type !== 'FILE'
           || item.artifact.bytes !== artifact.bytes
@@ -1090,6 +1158,18 @@ function validateReviewedReleaseManifest(value, manifestSha256, evidence) {
     }
     if (gate.toolchain !== evidencePin.toolchain)
       fail(`Reviewed release manifest gate ${gateId} toolchain does not match release-validation evidence`);
+    const contract = GATE_EVIDENCE_CONTRACTS[gateId];
+    for (const [roleIndex, specification] of contract.roles.entries()) {
+      if (specification.binding === 'gateToolchainDistribution') {
+        requireGateToolchainDistribution(
+          evidence.gates[index].evidence[roleIndex],
+          gate,
+          specification,
+          value.toolchains,
+          gateId,
+        );
+      }
+    }
   }
 
   return value;

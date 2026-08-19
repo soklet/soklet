@@ -358,7 +358,12 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
       fileRole('node-distribution', 'text/plain', 'release-validation-node-distribution.txt'),
       fileRole('maven-distribution', 'text/plain', 'release-validation-maven-distribution.txt'),
       fileRole('go-distribution', 'text/plain', 'release-validation-go-distribution.txt'),
-      fileRole('java-distribution', 'text/plain', 'release-validation-java-distribution.txt'),
+      fileRole(
+        'java-distribution',
+        'text/plain',
+        'release-validation-java-distribution.txt',
+        'gateToolchainDistribution',
+      ),
     ],
   ),
   'core-jdk-21': gateEvidenceContract(
@@ -373,6 +378,7 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
         'java-distribution',
         'text/plain',
         'release-validation-core-jdk-21-distribution.txt',
+        'gateToolchainDistribution',
       ),
       surefireRole(),
     ],
@@ -389,6 +395,7 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
         'java-distribution',
         'text/plain',
         'release-validation-toystore-java-distribution.txt',
+        'gateToolchainDistribution',
       ),
       surefireRole(),
     ],
@@ -447,7 +454,15 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
     'mvn -B -ntp -Dgpg.skip=true -Pstatic-analysis clean compile',
     'static-analysis',
     'BUILD_SUCCESS',
-    [logRole('analysis-log', 'static-analysis.log')],
+    [
+      logRole('analysis-log', 'static-analysis.log'),
+      fileRole(
+        'java-distribution',
+        'text/plain',
+        'release-validation-core-jdk-21-distribution.txt',
+        'gateToolchainDistribution',
+      ),
+    ],
   ),
   spotbugs: gateEvidenceContract(
     'spotbugs',
@@ -457,6 +472,12 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
     'ZERO_SPOTBUGS_FINDINGS',
     [
       logRole('spotbugs-log', 'spotbugs.log'),
+      fileRole(
+        'java-distribution',
+        'text/plain',
+        'release-validation-core-jdk-21-distribution.txt',
+        'gateToolchainDistribution',
+      ),
       fileRole('spotbugs-report', 'application/xml', 'spotbugsXml.xml'),
     ],
   ),
@@ -651,6 +672,7 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
         'java-distribution',
         'text/plain',
         'release-validation-toystore-java-distribution.txt',
+        'gateToolchainDistribution',
       ),
     ],
   ),
@@ -826,14 +848,20 @@ function validateCorrettoToolchain(toolchain, major, description) {
     description,
   );
 
-  const versionMatch = new RegExp(`^${major}\\.0\\.([0-9]+)$`).exec(toolchain.version);
+  const versionMatch = new RegExp(
+    major === 21
+      ? `^${major}\\.0\\.([0-9]+)(?:\\.([0-9]+))?$`
+      : `^${major}\\.0\\.([0-9]+)$`,
+  ).exec(toolchain.version);
   const vendorVersionMatch = new RegExp(
     `^Corretto-${major}\\.0\\.([0-9]+)\\.([0-9]+)\\.([0-9]+)$`,
   ).exec(toolchain.vendorVersion);
 
   if (toolchain.distribution !== 'corretto'
       || versionMatch === null || vendorVersionMatch === null
-      || versionMatch[1] !== vendorVersionMatch[1]) {
+      || versionMatch[1] !== vendorVersionMatch[1]
+      || (versionMatch[2] !== undefined
+        && versionMatch[2] !== vendorVersionMatch[3])) {
     fail(`${description} must pin an exact Corretto ${major} build`);
   }
 
@@ -1479,6 +1507,53 @@ function validateGateDefaultArtifact(evidence, gate, specification, description)
   }
 }
 
+function canonicalToolchainDistributionBytes(toolchain, description) {
+  if (toolchain === null || typeof toolchain !== 'object' || Array.isArray(toolchain))
+    fail(`${description} requires an available manifest toolchain pin`);
+  for (const field of [
+    'archive',
+    'archiveSha256',
+    'distribution',
+    'distributionUrl',
+    'runtimeVersion',
+    'vendorVersion',
+    'version',
+  ]) {
+    requireString(toolchain[field], `${description} toolchain ${field}`);
+  }
+  if (!SHA256_PATTERN.test(toolchain.archiveSha256))
+    fail(`${description} toolchain archive SHA-256 is invalid`);
+  return Buffer.from(
+    `distribution=${toolchain.distribution}\n`
+      + `version=${toolchain.version}\n`
+      + `runtimeVersion=${toolchain.runtimeVersion}\n`
+      + `vendorVersion=${toolchain.vendorVersion}\n`
+      + `url=${toolchain.distributionUrl}\n`
+      + `archive=${toolchain.archive}\n`
+      + `archiveSha256=${toolchain.archiveSha256}\n`,
+    'utf8',
+  );
+}
+
+function validateGateToolchainDistribution(
+  evidence,
+  gate,
+  specification,
+  toolchains,
+  description,
+) {
+  const expectedBytes = canonicalToolchainDistributionBytes(
+    toolchains[gate.toolchain],
+    description,
+  );
+  if (evidence.type !== 'FILE'
+      || evidence.fileName !== specification.fileName
+      || evidence.bytes !== expectedBytes.length
+      || evidence.sha256 !== sha256(expectedBytes)) {
+    fail(`${description} does not match the gate's exact manifest toolchain distribution`);
+  }
+}
+
 function verifyCandidatePom(bytes) {
   const text = bytes.toString('utf8');
 
@@ -1650,6 +1725,14 @@ export function recordGateEvidence(
         artifact,
         gate,
         specification,
+        `${gateId} ${specification.role}`,
+      );
+    } else if (specification.candidateArtifact === 'gateToolchainDistribution') {
+      validateGateToolchainDistribution(
+        artifact,
+        gate,
+        specification,
+        config.toolchains,
         `${gateId} ${specification.role}`,
       );
     } else if (specification.candidateArtifact !== null) {
@@ -2019,6 +2102,14 @@ export function assembleReleaseEvidence(
           item.artifact,
           expectedGate,
           specification,
+          `${id} ${item.role}`,
+        );
+      } else if (specification.candidateArtifact === 'gateToolchainDistribution') {
+        validateGateToolchainDistribution(
+          item.artifact,
+          expectedGate,
+          specification,
+          config.toolchains,
           `${id} ${item.role}`,
         );
       } else if (specification.candidateArtifact !== null) {

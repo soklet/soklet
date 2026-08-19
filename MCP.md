@@ -2113,18 +2113,25 @@ ephemeral IPv4 loopback port supplied through
 `SOKLET_BAREBONES_LOOPBACK_PORT` without disturbing the unrelated Docker
 listener on port 8080. Its source and validator changes remain uncommitted and
 unpinned, so its old public pin stays blocked.
+A same-version macOS arm64 Corretto 21.0.12.9.1 run passes the full core
+`clean test` at 1,681/0/0/4. Static analysis reports `BUILD SUCCESS` with the
+existing advisory inventory after the `SelfAssignment` fix, and SpotBugs
+reports zero bugs and errors. The exact checksum-pinned Corretto 21.0.12.9.1
+toolchain now drives `core-jdk-21`, `static-analysis`, and `spotbugs`.
 The bounded two-listener localization fixture now covers failed reload,
 rolling revision drift without within-response mixing, node loss,
 subscription reconnect, node-local delivery, and final runtime cleanup.
-The format-v2 release contract now enumerates exactly 29 ordered gates. Fourteen
-are dispatch-configured, while nine remain `BLOCKED_HARNESS_MISSING` and the
+The format-v2 release contract now enumerates exactly 29 ordered gates.
+Seventeen are dispatch-configured, while six remain
+`BLOCKED_HARNESS_MISSING` and the
 six downstreams remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`; `READY` means
 configured, never passed. Scheduled/nightly and sustained fuzz/soak and
-operational history, the exact JDK 21/static-analysis/SpotBugs toolchain,
-release scans, benchmarks, automated matrix closure, published downstream
-pins, and an immutable checksum-matched candidate conformance/provenance run
-remain open. Candidate Javadoc generation/completeness is configured; public
-deployment is post-validation publication work. Production multi-host
+operational history, release scans, benchmarks, automated matrix closure,
+published downstream pins, and an immutable checksum-matched candidate
+conformance/provenance run remain open. `release-scans` remains blocked on
+its exact scanner/toolchain, severity-policy, and retained-report contract.
+Candidate Javadoc generation/completeness is configured; public deployment is
+post-validation publication work. Production multi-host
 localization coordination remains application/deployment-owned, while the
 bounded two-listener fixture is the configured Soklet fleet gate. See
 [release/README.md](release/README.md) for the exact fail-closed contract.

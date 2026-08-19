@@ -86,7 +86,16 @@ try {
   assert.equal(tracked.value.formatVersion, 2);
   assert.equal(tracked.gates.length, 29);
   assert.equal(tracked.toolchains.java.vendorVersion, 'Corretto-17.0.20.8.1');
-  assert.equal(tracked.toolchains.coreJdk21, null);
+  assert.deepEqual(tracked.toolchains.coreJdk21, {
+    archive: 'amazon-corretto-21.0.12.9.1-linux-x64.tar.gz',
+    archiveSha256: 'f79824540cef882da0cdf1369f9d1d69afc14b5a9bc3a771fd5bb795793ce2f2',
+    distribution: 'corretto',
+    distributionUrl:
+      'https://corretto.aws/downloads/resources/21.0.12.9.1/amazon-corretto-21.0.12.9.1-linux-x64.tar.gz',
+    runtimeVersion: '21.0.12.1+9-LTS',
+    vendorVersion: 'Corretto-21.0.12.9.1',
+    version: '21.0.12.1',
+  });
   assert.equal(tracked.toolchains.toystoreJava.vendorVersion, 'Corretto-25.0.4.7.1');
   assert.equal(tracked.promotion.helper.path, 'scripts/release-promotion.mjs');
   assert.equal(tracked.promotion.wrapper.path, 'scripts/promote-release-candidate.sh');
@@ -102,9 +111,6 @@ try {
     assert.equal(gate.status, 'BLOCKED_UNCOMMITTED_LOCAL_MIGRATION');
   }
   for (const gateId of [
-    'core-jdk-21',
-    'static-analysis',
-    'spotbugs',
     'fuzz-nightly-history',
     'soak-nightly-history',
     'operational-history',
@@ -114,6 +120,11 @@ try {
   ]) {
     const gate = tracked.gates.find(({ id }) => id === gateId);
     assert.equal(gate.status, 'BLOCKED_HARNESS_MISSING');
+  }
+  for (const gateId of ['core-jdk-21', 'static-analysis', 'spotbugs']) {
+    const gate = tracked.gates.find(({ id }) => id === gateId);
+    assert.equal(gate.status, 'READY');
+    assert.equal(gate.reason, '');
   }
   assert.deepEqual(
     tracked.gates.map(({ id }) => id),
@@ -195,8 +206,16 @@ try {
   const candidateJavaInstall = releaseWorkflow.indexOf(
     'install-pinned-corretto-linux-x64.sh\n          java',
   );
+  const coreJdk21Install = releaseWorkflow.indexOf(
+    'install-pinned-corretto-linux-x64.sh\n          coreJdk21',
+  );
   assert.ok(toyStoreJavaInstall >= 0);
-  assert.ok(candidateJavaInstall > toyStoreJavaInstall);
+  assert.ok(coreJdk21Install > toyStoreJavaInstall);
+  assert.ok(candidateJavaInstall > coreJdk21Install);
+  assert.match(
+    releaseWorkflow,
+    /SOKLET_RELEASE_CORE_JDK_21_DISTRIBUTION_EVIDENCE: \$\{\{ runner\.temp \}\}\/release-validation-core-jdk-21-distribution\.txt/,
+  );
 
   const releaseValidator = readFileSync(releaseValidatorPath, 'utf8');
   const loopbackPortReserver = readFileSync(loopbackPortReserverPath, 'utf8');
@@ -217,6 +236,22 @@ try {
   assert.match(
     releaseValidator,
     /record_gate core-jdk-25[\s\\\n]+"build-log=\$log"[\s\\\n]+"java-distribution=\$toystore_java_distribution_evidence"[\s\\\n]+"surefire-reports=\$reports"/,
+  );
+  assert.match(
+    releaseValidator,
+    /record_gate core-jdk-21[\s\\\n]+"build-log=\$log"[\s\\\n]+"java-distribution=\$core_jdk_21_distribution_evidence"[\s\\\n]+"surefire-reports=\$reports"/,
+  );
+  assert.match(
+    releaseValidator,
+    /run_static_analysis\(\)[\s\S]*?-Pstatic-analysis clean compile[\s\S]*?record_gate static-analysis[\s\\\n]+"analysis-log=\$log"[\s\\\n]+"java-distribution=\$core_jdk_21_distribution_evidence"/,
+  );
+  assert.match(
+    releaseValidator,
+    /run_spotbugs\(\)[\s\S]*?-Pspotbugs -DskipTests[\s\\\n]+clean compile spotbugs:check[\s\S]*?record_gate spotbugs[\s\\\n]+"spotbugs-log=\$log"[\s\\\n]+"java-distribution=\$core_jdk_21_distribution_evidence"[\s\\\n]+"spotbugs-report=\$report"/,
+  );
+  assert.match(
+    releaseValidator,
+    /export SOKLET_EVIDENCE_CORE_JDK_21_VERSION=\$actual_core_jdk_21_version/,
   );
   assert.match(
     releaseValidator,
@@ -324,17 +359,19 @@ try {
   assert.match(pinnedJavaInstaller, /sha256sum --check --strict/);
   assert.match(pinnedJavaInstaller, /java\.runtime\.version/);
   assert.match(pinnedJavaInstaller, /java\.vendor\.version/);
+  assert.match(pinnedJavaInstaller, /coreJdk21\)/);
+  assert.match(pinnedJavaInstaller, /\^21\\\.0\\\.\[0-9\]\+\(\\\.\[0-9\]\+\)\?\$/);
 
   const readyManifest = JSON.parse(readFileSync(trackedManifestPath, 'utf8'));
   readyManifest.toolchains.coreJdk21 = {
-    archive: 'amazon-corretto-21.0.9.10.1-linux-x64.tar.gz',
-    archiveSha256: '0'.repeat(64),
+    archive: 'amazon-corretto-21.0.12.9.1-linux-x64.tar.gz',
+    archiveSha256: 'f79824540cef882da0cdf1369f9d1d69afc14b5a9bc3a771fd5bb795793ce2f2',
     distribution: 'corretto',
     distributionUrl:
-      'https://corretto.aws/downloads/resources/21.0.9.10.1/amazon-corretto-21.0.9.10.1-linux-x64.tar.gz',
-    runtimeVersion: '21.0.9+10-LTS',
-    vendorVersion: 'Corretto-21.0.9.10.1',
-    version: '21.0.9',
+      'https://corretto.aws/downloads/resources/21.0.12.9.1/amazon-corretto-21.0.12.9.1-linux-x64.tar.gz',
+    runtimeVersion: '21.0.12.1+9-LTS',
+    vendorVersion: 'Corretto-21.0.12.9.1',
+    version: '21.0.12.1',
   };
   for (const gate of readyManifest.gates) {
     gate.status = 'READY';
@@ -563,6 +600,24 @@ try {
     },
     /core-jdk-21=BLOCKED_HARNESS_MISSING/,
   );
+  assertRejectsManifestMutation(
+    (manifest) => { manifest.toolchains.coreJdk21 = null; },
+    /READY gate core-jdk-21 cannot use unavailable toolchain coreJdk21/,
+  );
+  assertRejectsManifestMutation(
+    (manifest) => {
+      manifest.toolchains.coreJdk21.version = '21.0.12.2';
+      manifest.toolchains.coreJdk21.runtimeVersion = '21.0.12.2+9-LTS';
+    },
+    /Core JDK 21 toolchain must pin an exact Corretto 21 build/,
+  );
+  assertRejectsManifestMutation(
+    (manifest) => {
+      manifest.toolchains.java.version = '17.0.20.1';
+      manifest.toolchains.java.runtimeVersion = '17.0.20.1+8-LTS';
+    },
+    /Candidate Java toolchain must pin an exact Corretto 17 build/,
+  );
   writeFileSync(fixtureManifestPath, `${JSON.stringify(readyManifest, null, 2)}\n`);
 
   const savedToyStoreJavaUrl = readyManifest.toolchains.toystoreJava.distributionUrl;
@@ -657,7 +712,7 @@ try {
     GITHUB_RUN_ID: '1234',
     GITHUB_SERVER_URL: 'https://github.com',
     GITHUB_SHA: candidateCommit,
-    SOKLET_EVIDENCE_CORE_JDK_21_VERSION: '21.0.9',
+    SOKLET_EVIDENCE_CORE_JDK_21_VERSION: '21.0.12.1',
     SOKLET_EVIDENCE_GIT_VERSION: 'git version 2.50.1',
     SOKLET_EVIDENCE_GO_VERSION: 'go version go1.25.12 linux/amd64',
     SOKLET_EVIDENCE_JAVA_VERSION: '17.0.20',
@@ -888,7 +943,19 @@ try {
       specification.fileName,
     );
     mkdirSync(dirname(path), { recursive: true });
-    if (specification.type === 'DIRECTORY') {
+    if (specification.candidateArtifact === 'gateToolchainDistribution') {
+      const toolchain = ready.toolchains[gate.toolchain];
+      writeFileSync(
+        path,
+        `distribution=${toolchain.distribution}\n`
+          + `version=${toolchain.version}\n`
+          + `runtimeVersion=${toolchain.runtimeVersion}\n`
+          + `vendorVersion=${toolchain.vendorVersion}\n`
+          + `url=${toolchain.distributionUrl}\n`
+          + `archive=${toolchain.archive}\n`
+          + `archiveSha256=${toolchain.archiveSha256}\n`,
+      );
+    } else if (specification.type === 'DIRECTORY') {
       mkdirSync(path, { recursive: true });
       writeFileSync(resolve(path, 'evidence.txt'), 'fixture directory evidence\n');
     } else if (specification.candidateArtifact === 'pom') {
@@ -1042,6 +1109,36 @@ try {
     /basename must be exactly candidate-localization\.log/,
   );
 
+  const coreJdk21Gate = ready.gates.find(({ id }) => id === 'core-jdk-21');
+  const coreJdk21RolePaths = rolePathsForGate(coreJdk21Gate);
+  const coreJdk21DistributionPath = coreJdk21RolePaths
+    .find((rolePath) => rolePath.startsWith('java-distribution='))
+    .slice('java-distribution='.length);
+  const coreJdk21Distribution = readFileSync(coreJdk21DistributionPath, 'utf8');
+  for (const [label, pattern, replacement] of [
+    ['url', /^url=.*$/m, 'url=https://example.invalid/substituted.tar.gz'],
+    ['sha', /^archiveSha256=.*$/m, `archiveSha256=${'9'.repeat(64)}`],
+    ['runtime', /^runtimeVersion=.*$/m, 'runtimeVersion=21.0.12.1+8-LTS'],
+    ['vendor', /^vendorVersion=.*$/m, 'vendorVersion=Corretto-21.0.12.8.1'],
+  ]) {
+    writeFileSync(
+      coreJdk21DistributionPath,
+      coreJdk21Distribution.replace(pattern, replacement),
+    );
+    assert.throws(
+      () => recordGateEvidence(
+        fixtureManifestPath,
+        candidateCommit,
+        artifactDescriptorPath,
+        coreJdk21Gate.id,
+        fixturePath(`evidence/core-jdk-21-wrong-${label}.json`),
+        coreJdk21RolePaths,
+      ),
+      /does not match the gate's exact manifest toolchain distribution/,
+    );
+    writeFileSync(coreJdk21DistributionPath, coreJdk21Distribution);
+  }
+
   for (const gate of ready.gates) {
     const rolePaths = rolePathsForGate(gate);
     if (gate.id === 'soklet-servlet-javax'
@@ -1091,7 +1188,7 @@ try {
     .filter(({ gate }) => gate.id.endsWith('-interop'))
     .every(({ interoperability }) =>
       interoperability.candidateSha256 === descriptor.artifacts.mainJar.sha256));
-  assert.equal(evidence.toolchains.coreJdk21, '21.0.9');
+  assert.equal(evidence.toolchains.coreJdk21, '21.0.12.1');
   assert.equal(evidence.toolchains.java, '17.0.20');
   assert.equal(evidence.toolchains.toystoreJava, '25.0.4');
 
@@ -1158,8 +1255,12 @@ try {
   );
   for (const [gateId, label, role] of [
     ['candidate-build', 'missing-build-surefire', 'surefire-reports'],
+    ['core-jdk-21', 'missing-core-jdk-21-distribution', 'java-distribution'],
     ['core-jdk-25', 'missing-jdk-distribution', 'java-distribution'],
     ['candidate-javadocs', 'missing-javadoc-surefire', 'surefire-reports'],
+    ['static-analysis', 'missing-static-analysis-distribution', 'java-distribution'],
+    ['spotbugs', 'missing-spotbugs-distribution', 'java-distribution'],
+    ['spotbugs', 'missing-spotbugs-report', 'spotbugs-report'],
   ]) {
     assertRejectsGateEvidenceMutation(
       gateId,
@@ -1181,6 +1282,53 @@ try {
     'substituted-descriptor',
     (value) => { value.evidence[0].artifact.sha256 = '0'.repeat(64); },
     /artifact descriptor role does not match/,
+  );
+  assertRejectsGateEvidenceMutation(
+    'core-jdk-21',
+    'wrong-core-jdk-21-distribution',
+    (value) => {
+      value.evidence.find(({ role }) => role === 'java-distribution').artifact.sha256 =
+        '0'.repeat(64);
+    },
+    /does not match the gate's exact manifest toolchain distribution/,
+  );
+  assertRejectsGateEvidenceMutation(
+    'core-jdk-21',
+    'wrong-core-jdk-21-toolchain',
+    (value) => { value.receipt.toolchain = 'java'; },
+    /typed receipt does not match/,
+  );
+  assertRejectsGateEvidenceMutation(
+    'static-analysis',
+    'wrong-static-analysis-distribution',
+    (value) => {
+      value.evidence.find(({ role }) => role === 'java-distribution').artifact.sha256 =
+        '0'.repeat(64);
+    },
+    /does not match the gate's exact manifest toolchain distribution/,
+  );
+  assertRejectsGateEvidenceMutation(
+    'static-analysis',
+    'wrong-static-analysis-command',
+    (value) => { value.receipt.command = 'mvn compile'; },
+    /typed receipt does not match/,
+  );
+  assertRejectsGateEvidenceMutation(
+    'spotbugs',
+    'wrong-spotbugs-distribution',
+    (value) => {
+      value.evidence.find(({ role }) => role === 'java-distribution').artifact.sha256 =
+        '0'.repeat(64);
+    },
+    /does not match the gate's exact manifest toolchain distribution/,
+  );
+  assertRejectsGateEvidenceMutation(
+    'spotbugs',
+    'wrong-spotbugs-media',
+    (value) => {
+      value.evidence.find(({ role }) => role === 'spotbugs-report').mediaType = 'text/plain';
+    },
+    /does not match its exact role contract/,
   );
   assertRejectsGateEvidenceMutation(
     'soklet-servlet-javax',

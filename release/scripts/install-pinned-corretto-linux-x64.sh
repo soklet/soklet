@@ -3,7 +3,7 @@
 set -euo pipefail
 
 if [[ $# -ne 5 ]]; then
-	printf 'Usage: %s <java|toystoreJava> <runner-temp> <github-path> <github-env> <evidence-file>\n' "$0" >&2
+	printf 'Usage: %s <java|coreJdk21|toystoreJava> <runner-temp> <github-path> <github-env> <evidence-file>\n' "$0" >&2
 	exit 64
 fi
 
@@ -19,6 +19,10 @@ case "$toolchain_name" in
 	java)
 		expected_major=17
 		environment_name=JAVA_HOME
+		;;
+	coreJdk21)
+		expected_major=21
+		environment_name=SOKLET_RELEASE_CORE_JDK_21_HOME
 		;;
 	toystoreJava)
 		expected_major=25
@@ -45,15 +49,28 @@ distribution_version=${vendor_version#Corretto-}
 
 [[ "$distribution" == "corretto" ]] \
 	|| { printf 'Pinned Java distribution must be Corretto.\n' >&2; exit 1; }
-[[ "$java_version" =~ ^${expected_major}\.0\.[0-9]+$ ]] \
-	|| { printf 'Invalid pinned Java version: %s\n' "$java_version" >&2; exit 1; }
+if [[ "$expected_major" -eq 21 ]]; then
+	[[ "$java_version" =~ ^21\.0\.[0-9]+(\.[0-9]+)?$ ]] \
+		|| { printf 'Invalid pinned Java version: %s\n' "$java_version" >&2; exit 1; }
+else
+	[[ "$java_version" =~ ^${expected_major}\.0\.[0-9]+$ ]] \
+		|| { printf 'Invalid pinned Java version: %s\n' "$java_version" >&2; exit 1; }
+fi
 [[ "$vendor_version" =~ ^Corretto-${expected_major}\.0\.[0-9]+\.[0-9]+\.[0-9]+$ ]] \
 	|| { printf 'Invalid pinned Corretto build: %s\n' "$vendor_version" >&2; exit 1; }
 
 IFS=. read -r release_major release_minor release_security release_build release_package \
 	<<< "$distribution_version"
-[[ "$java_version" == "$release_major.$release_minor.$release_security" \
-		&& "$runtime_version" == "$java_version+$release_build-LTS" \
+release_version_prefix="$release_major.$release_minor.$release_security"
+if [[ "$expected_major" -eq 21 ]]; then
+	[[ "$java_version" == "$release_version_prefix" \
+			|| "$java_version" == "$release_version_prefix.$release_package" ]] \
+		|| { printf 'Pinned Corretto version fields are inconsistent.\n' >&2; exit 1; }
+else
+	[[ "$java_version" == "$release_version_prefix" ]] \
+		|| { printf 'Pinned Corretto version fields are inconsistent.\n' >&2; exit 1; }
+fi
+[[ "$runtime_version" == "$java_version+$release_build-LTS" \
 		&& "$release_package" =~ ^[0-9]+$ ]] \
 	|| { printf 'Pinned Corretto version fields are inconsistent.\n' >&2; exit 1; }
 

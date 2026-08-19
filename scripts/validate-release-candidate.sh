@@ -50,10 +50,12 @@ node_distribution_evidence=${SOKLET_RELEASE_NODE_DISTRIBUTION_EVIDENCE:-}
 maven_distribution_evidence=${SOKLET_RELEASE_MAVEN_DISTRIBUTION_EVIDENCE:-}
 go_distribution_evidence=${SOKLET_RELEASE_GO_DISTRIBUTION_EVIDENCE:-}
 java_distribution_evidence=${SOKLET_RELEASE_JAVA_DISTRIBUTION_EVIDENCE:-}
+core_jdk_21_distribution_evidence=${SOKLET_RELEASE_CORE_JDK_21_DISTRIBUTION_EVIDENCE:-}
 toystore_java_distribution_evidence=${SOKLET_RELEASE_TOYSTORE_JAVA_DISTRIBUTION_EVIDENCE:-}
 for distribution_evidence in \
 	"$node_distribution_evidence" "$maven_distribution_evidence" \
 	"$go_distribution_evidence" "$java_distribution_evidence" \
+	"$core_jdk_21_distribution_evidence" \
 	"$toystore_java_distribution_evidence"; do
 	[[ -n "$distribution_evidence" && -f "$distribution_evidence" \
 			&& ! -L "$distribution_evidence" ]] \
@@ -65,8 +67,9 @@ node "$evidence_helper" validate-config "$manifest_path"
 assert_ready_gate_has_dispatch() {
 	local gate_id=$1
 	case "$gate_id" in
-		candidate-build|core-jdk-25|isolated-install|api-freeze|candidate-javadocs|\
-		schema-replay|fuzz-replay|soak-smoke|release-soak|localization-fleet|\
+		candidate-build|core-jdk-21|core-jdk-25|isolated-install|api-freeze|\
+		candidate-javadocs|static-analysis|spotbugs|schema-replay|fuzz-replay|\
+		soak-smoke|release-soak|localization-fleet|\
 		candidate-conformance|candidate-localization|barebones-app|\
 		soklet-servlet-javax|soklet-servlet-jakarta|toystore-app|soklet-otel|\
 		soklet-website|typescript-interop|go-interop)
@@ -122,6 +125,9 @@ manifest_value() {
 expected_java_version=$(manifest_value toolchains.java.version)
 expected_java_runtime_version=$(manifest_value toolchains.java.runtimeVersion)
 expected_java_vendor_version=$(manifest_value toolchains.java.vendorVersion)
+expected_core_jdk_21_version=$(manifest_value toolchains.coreJdk21.version)
+expected_core_jdk_21_runtime_version=$(manifest_value toolchains.coreJdk21.runtimeVersion)
+expected_core_jdk_21_vendor_version=$(manifest_value toolchains.coreJdk21.vendorVersion)
 expected_toystore_java_version=$(manifest_value toolchains.toystoreJava.version)
 expected_toystore_java_runtime_version=$(manifest_value toolchains.toystoreJava.runtimeVersion)
 expected_toystore_java_vendor_version=$(manifest_value toolchains.toystoreJava.vendorVersion)
@@ -164,6 +170,27 @@ actual_javac_version=$("$core_java_home/bin/javac" -version 2>&1)
 	|| fail "Java vendor build is $actual_java_vendor_version; expected $expected_java_vendor_version."
 [[ "$actual_javac_version" == "javac $expected_java_version" ]] \
 	|| fail "javac is $actual_javac_version; expected javac $expected_java_version."
+
+core_jdk_21_home=${SOKLET_RELEASE_CORE_JDK_21_HOME:-}
+[[ -n "$core_jdk_21_home" && "$core_jdk_21_home" == /* \
+		&& -d "$core_jdk_21_home" && ! -L "$core_jdk_21_home" \
+		&& -x "$core_jdk_21_home/bin/java" \
+		&& -x "$core_jdk_21_home/bin/javac" ]] \
+	|| fail "SOKLET_RELEASE_CORE_JDK_21_HOME must name the installed nonsymlink core JDK 21."
+core_jdk_21_home=$(cd "$core_jdk_21_home" && pwd -P)
+actual_core_jdk_21_version=$(java_property "$core_jdk_21_home/bin/java" java.version)
+actual_core_jdk_21_runtime_version=$(java_property \
+	"$core_jdk_21_home/bin/java" java.runtime.version)
+actual_core_jdk_21_vendor=$(java_property "$core_jdk_21_home/bin/java" java.vendor)
+actual_core_jdk_21_vendor_version=$(java_property \
+	"$core_jdk_21_home/bin/java" java.vendor.version)
+actual_core_jdk_21_javac_version=$("$core_jdk_21_home/bin/javac" -version 2>&1)
+[[ "$actual_core_jdk_21_version" == "$expected_core_jdk_21_version" \
+		&& "$actual_core_jdk_21_runtime_version" == "$expected_core_jdk_21_runtime_version" \
+		&& "$actual_core_jdk_21_vendor" == "Amazon.com Inc." \
+		&& "$actual_core_jdk_21_vendor_version" == "$expected_core_jdk_21_vendor_version" \
+		&& "$actual_core_jdk_21_javac_version" == "javac $expected_core_jdk_21_version" ]] \
+	|| fail "Core JDK 21 Java/Javac identity does not match the exact manifest pin."
 
 toystore_java_home=${SOKLET_RELEASE_TOYSTORE_JAVA_HOME:-}
 [[ -n "$toystore_java_home" && "$toystore_java_home" == /* \
@@ -481,6 +508,27 @@ run_isolated_install() {
 		"install-log=$install_log"
 }
 
+run_core_jdk_21() {
+	local checkout
+	checkout=$(clone_candidate_gate core-jdk-21)
+	local log="$evidence_root/core-jdk-21.log"
+	(
+		cd "$checkout"
+		env JAVA_HOME="$core_jdk_21_home" \
+			PATH="$core_jdk_21_home/bin:$PATH" \
+			mvn -B -ntp -Dgpg.skip=true clean test
+	) 2>&1 | tee "$log"
+	node "$surefire_verifier" "$checkout/target/surefire-reports" \
+		core-jdk-21 candidate
+	local reports
+	reports=$(copy_surefire_evidence "$checkout/target/surefire-reports" core-jdk-21)
+	assert_candidate_checkout_unchanged core-jdk-21 "$checkout"
+	record_gate core-jdk-21 \
+		"build-log=$log" \
+		"java-distribution=$core_jdk_21_distribution_evidence" \
+		"surefire-reports=$reports"
+}
+
 run_core_jdk_25() {
 	local checkout
 	checkout=$(clone_candidate_gate core-jdk-25)
@@ -559,6 +607,47 @@ run_candidate_javadocs() {
 		"javadoc-jar=$candidate_javadoc_jar" \
 		"apidocs=$apidocs" \
 		"surefire-reports=$reports"
+}
+
+run_static_analysis() {
+	local checkout
+	checkout=$(clone_candidate_gate static-analysis)
+	local log="$evidence_root/static-analysis.log"
+	(
+		cd "$checkout"
+		env JAVA_HOME="$core_jdk_21_home" \
+			PATH="$core_jdk_21_home/bin:$PATH" \
+			mvn -B -ntp -Dgpg.skip=true -Pstatic-analysis clean compile
+	) 2>&1 | tee "$log"
+	assert_candidate_checkout_unchanged static-analysis "$checkout"
+	record_gate static-analysis \
+		"analysis-log=$log" \
+		"java-distribution=$core_jdk_21_distribution_evidence"
+}
+
+run_spotbugs() {
+	local checkout
+	checkout=$(clone_candidate_gate spotbugs)
+	local log="$evidence_root/spotbugs.log"
+	(
+		cd "$checkout"
+		env JAVA_HOME="$core_jdk_21_home" \
+			PATH="$core_jdk_21_home/bin:$PATH" \
+			mvn -B -ntp -Dgpg.skip=true -Pspotbugs -DskipTests \
+			clean compile spotbugs:check
+	) 2>&1 | tee "$log"
+	local source_report="$checkout/target/spotbugsXml.xml"
+	[[ -f "$source_report" && ! -L "$source_report" ]] \
+		|| fail "SpotBugs XML report is missing or is a symlink."
+	local raw_root="$evidence_root/raw/spotbugs"
+	local report="$raw_root/spotbugsXml.xml"
+	mkdir -p "$raw_root"
+	cp "$source_report" "$report"
+	assert_candidate_checkout_unchanged spotbugs "$checkout"
+	record_gate spotbugs \
+		"spotbugs-log=$log" \
+		"java-distribution=$core_jdk_21_distribution_evidence" \
+		"spotbugs-report=$report"
 }
 
 run_schema_replay() {
@@ -979,10 +1068,13 @@ run_interoperability() {
 		"interop-log=$log" "candidate-main-jar=$candidate_jar"
 }
 
+run_core_jdk_21
 run_core_jdk_25
 run_isolated_install
 run_api_freeze
 run_candidate_javadocs
+run_static_analysis
+run_spotbugs
 run_schema_replay
 run_fuzz_replay
 run_soak_profile soak-smoke smoke 600
@@ -1026,6 +1118,7 @@ verify_reviewed_soklet_jar "$final_default_jar" "$final_default_sha256" \
 
 export SOKLET_EVIDENCE_GIT_VERSION
 SOKLET_EVIDENCE_GIT_VERSION=$(git --version)
+export SOKLET_EVIDENCE_CORE_JDK_21_VERSION=$actual_core_jdk_21_version
 export SOKLET_EVIDENCE_GO_VERSION=$actual_go_version_output
 export SOKLET_EVIDENCE_JAVA_VERSION=$actual_java_version
 export SOKLET_EVIDENCE_MAVEN_VERSION=$actual_maven_version

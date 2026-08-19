@@ -1523,13 +1523,19 @@ documentation examples rather than a Soklet verification surface. The later
 revision drift without within-response mixing, node loss, fresh-context
 subscription reconnect, node-local delivery, and cleanup through two
 simultaneous real loopback listeners. The format-v2 release contract now
-enumerates exactly 29 ordered gates. Fourteen are dispatch-configured, while
-nine remain `BLOCKED_HARNESS_MISSING` and the six downstreams remain
+enumerates exactly 29 ordered gates. A same-version macOS arm64 Corretto
+21.0.12.9.1 run passes the full core `clean test` at 1,681/0/0/4; static
+analysis reports `BUILD SUCCESS` with the existing advisory inventory after
+the `SelfAssignment` fix, and SpotBugs reports zero bugs and errors. The exact
+checksum-pinned Corretto 21.0.12.9.1 toolchain now drives `core-jdk-21`,
+`static-analysis`, and `spotbugs`. Seventeen gates are dispatch-configured,
+while six remain `BLOCKED_HARNESS_MISSING` and the six downstreams remain
 `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`; `READY` means configured, never passed.
 Actual scheduled/nightly and sustained fuzz/soak and operational evidence, the
-exact JDK 21/static-analysis/SpotBugs toolchain, release scans, benchmarks,
-automated matrix closure, published downstream pins, and immutable release-
-candidate provenance and conformance remain open. Candidate Javadoc
+release scans, benchmarks, automated matrix closure, published downstream
+pins, and immutable release-candidate provenance and conformance remain open.
+`release-scans` remains blocked on its exact scanner/toolchain,
+severity-policy, and retained-report contract. Candidate Javadoc
 generation/completeness is configured; public deployment is post-validation
 publication work. The bounded two-listener fixture is the Soklet-owned fleet
 gate, while production multi-host coordination remains application/deployment-

@@ -9,7 +9,7 @@
   "promotion": {
     "helper": {
       "path": "scripts/release-promotion.mjs",
-      "sha256": "a2b1734b0979f441bca8b5b1a1f90de2d7fe869fcc5d77539b306862afd40458"
+      "sha256": "d6be7a5b8e0125a9ce3161f415529cf8d6a2e074728a8fca27267b78ff798f71"
     },
     "wrapper": {
       "path": "scripts/promote-release-candidate.sh",
@@ -17,7 +17,15 @@
     }
   },
   "toolchains": {
-    "coreJdk21": null,
+    "coreJdk21": {
+      "archive": "amazon-corretto-21.0.12.9.1-linux-x64.tar.gz",
+      "archiveSha256": "f79824540cef882da0cdf1369f9d1d69afc14b5a9bc3a771fd5bb795793ce2f2",
+      "distribution": "corretto",
+      "distributionUrl": "https://corretto.aws/downloads/resources/21.0.12.9.1/amazon-corretto-21.0.12.9.1-linux-x64.tar.gz",
+      "runtimeVersion": "21.0.12.1+9-LTS",
+      "vendorVersion": "Corretto-21.0.12.9.1",
+      "version": "21.0.12.1"
+    },
     "go": {
       "archive": "go1.25.12.linux-amd64.tar.gz",
       "archiveSha256": "234828b7a89e0e303d2556310ee549fbcf253d28de937bac3da13d6294262ac1",
@@ -82,9 +90,9 @@
       "evidenceContract": "soklet.release.core-jdk-21.v1",
       "id": "core-jdk-21",
       "kind": "SOURCE",
-      "reason": "No checksum-pinned JDK 21 distribution or release-workflow installer is defined.",
+      "reason": "",
       "repository": null,
-      "status": "BLOCKED_HARNESS_MISSING",
+      "status": "READY",
       "toolchain": "coreJdk21",
       "versionProperty": null
     },
@@ -162,9 +170,9 @@
       "evidenceContract": "soklet.release.static-analysis.v1",
       "id": "static-analysis",
       "kind": "SOURCE",
-      "reason": "The exact JDK 21 toolchain required by Error Prone and NullAway is not checksum-pinned or installed by the release workflow.",
+      "reason": "",
       "repository": null,
-      "status": "BLOCKED_HARNESS_MISSING",
+      "status": "READY",
       "toolchain": "coreJdk21",
       "versionProperty": null
     },
@@ -178,9 +186,9 @@
       "evidenceContract": "soklet.release.spotbugs.v1",
       "id": "spotbugs",
       "kind": "SOURCE",
-      "reason": "The exact JDK 21 toolchain required by the SpotBugs release run is not checksum-pinned or installed by the release workflow.",
+      "reason": "",
       "repository": null,
-      "status": "BLOCKED_HARNESS_MISSING",
+      "status": "READY",
       "toolchain": "coreJdk21",
       "versionProperty": null
     },
