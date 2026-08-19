@@ -1354,3 +1354,17 @@ containment waits now include the exact expected cleanup count before returning.
 Expected cleanup counts, timeout bounds, and assertions are unchanged;
 production behavior, public API, and frozen inventories are unchanged. These
 local snapshot checks are not immutable-candidate release evidence.
+
+A later subscription observer-scope revalidation on the same pinned Amazon
+Corretto 21.0.12.9.1 toolchain (`java 21.0.12.1`) passes the exact full
+`mvn -B -ntp clean test` at 1,682/0/0/4 over the unchanged 462 main and 196
+test sources. The affected method passes 1/1 focused and 20/20 repeated runs;
+`McpSubscriptionPublicRuntimeTests` plus
+`McpSubscriptionRuntimeBoundaryTests` pass 26/26. The test-only correction
+sets the per-principal subscription cap to one and holds the recovery
+subscription open while the original disconnect observer's exact-once count
+is asserted, preventing that recovery request's legitimate finish from
+entering the first request's observation phase. No production behavior,
+public API, Phase 4/5/6 freeze inventory, timeout, or asserted count changed.
+This is local snapshot evidence, not an immutable release-candidate PASS
+receipt.

@@ -648,9 +648,12 @@ public class McpSubscriptionPublicRuntimeTests {
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED);
 		SubscriptionObservations observations = new SubscriptionObservations();
 		McpServer server = serverBuilder(List.of(endpoint),
-				McpAdmissionController.acceptAllInstance()).build();
+				McpAdmissionController.acceptAllInstance())
+				.maximumSubscriptionsPerPrincipal(1)
+				.build();
 		Soklet soklet = managedSoklet(server, observations);
 		McpChunkedHttpClient client = null;
+		McpChunkedHttpClient recovered = null;
 
 		try {
 			soklet.start();
@@ -668,9 +671,12 @@ public class McpSubscriptionPublicRuntimeTests {
 					"disconnect");
 			observations.assertStreamMetrics(
 					McpStreamTerminationReason.CLIENT_DISCONNECTED, false);
-			awaitRecoveredSubscription(boundPort(server), "disconnect-recovered");
+			recovered = awaitOpenRecoveredSubscription(boundPort(server),
+					"disconnect-recovered");
 			Assertions.assertEquals(1, observations.finishCount());
 		} finally {
+			if (recovered != null)
+				recovered.closeWithReset();
 			if (client != null)
 				client.close();
 			soklet.stop();
@@ -957,21 +963,36 @@ public class McpSubscriptionPublicRuntimeTests {
 
 	private static void awaitRecoveredSubscription(int port, String id)
 			throws Exception {
+		McpChunkedHttpClient client = null;
+		try {
+			client = awaitOpenRecoveredSubscription(port, id);
+		} finally {
+			if (client != null)
+				client.closeWithReset();
+		}
+	}
+
+	@NonNull
+	private static McpChunkedHttpClient awaitOpenRecoveredSubscription(
+			int port, String id) throws Exception {
 		long deadline = System.nanoTime() + 5_000_000_000L;
 		while (true) {
 			McpChunkedHttpClient client = listen(port, "\"" + id + "\"",
 					"{\"resourcesListChanged\":true}");
 			McpChunkedHttpClient.HttpResponseHead head = client.readHead();
 			if (head.status() == 200) {
+				boolean returnClient = false;
 				try {
 					assertSseHead(head);
 					Assertions.assertEquals(acknowledgment("\"" + id + "\"",
 							"{\"resourcesListChanged\":true}"),
 							client.readChunkText());
+					returnClient = true;
+					return client;
 				} finally {
-					client.closeWithReset();
+					if (!returnClient)
+						client.closeWithReset();
 				}
-				return;
 			}
 
 			try (client) {
