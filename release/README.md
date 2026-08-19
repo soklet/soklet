@@ -27,11 +27,17 @@ Six gates remain `BLOCKED_HARNESS_MISSING`:
   report rather than a prose assertion.
 
 The exact checksum-pinned Corretto 21.0.12.9.1 toolchain now drives
-`core-jdk-21`, `static-analysis`, and `spotbugs`. A same-version macOS arm64
-local validation passes the full core `clean test` at 1,681/0/0/4, reports
+`core-jdk-21`, `static-analysis`, and `spotbugs`. At the initial JDK 21 gate
+checkpoint, a same-version macOS arm64 local validation passed the full core
+`clean test` at 1,681/0/0/4, reported
 static-analysis `BUILD SUCCESS` with the existing advisory inventory after the
-`SelfAssignment` fix, and reports zero SpotBugs bugs and errors. These are
-local snapshot results, not candidate PASS receipts. `release-scans` remains
+`SelfAssignment` fix, and reported zero SpotBugs bugs and errors. Current
+post-fix Corretto 21 validation passes core `clean test` at 1,682/0/0/4 over
+the unchanged 462 main and 196 test sources, with static-analysis clean compile
+successful, the focused terminal/subscription set at 32/32, clean smoke at 6/6
+plus its strict verifier and verifier self-test, and the cross-feature smoke
+method at 10/10 repeated stress runs. These are local snapshot results, not
+candidate PASS receipts. `release-scans` remains
 blocked until its exact scanner/toolchain pin, severity policy, and retained
 report contract are implemented.
 

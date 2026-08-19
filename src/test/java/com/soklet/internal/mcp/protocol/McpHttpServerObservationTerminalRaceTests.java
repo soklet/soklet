@@ -50,7 +50,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -65,6 +67,69 @@ class McpHttpServerObservationTerminalRaceTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final String APPLICATION_METHOD = "test/execute";
+
+	@Test
+	void protocol_completion_cannot_preempt_inline_stream_terminal_owner()
+			throws Exception {
+		InlineExecutorService executor = new InlineExecutorService();
+		RecordingObservation observation = new RecordingObservation();
+		AtomicReference<MicrohttpResponse> streamingResponse =
+				new AtomicReference<>();
+		WritableSource source = null;
+		RecordingSocketChannel socket = null;
+		McpHttpServerRuntime runtime = runtime(acceptingPolicy(), invocation -> {
+			Assertions.assertTrue(invocation.sendNotification(
+					progress("inline-terminal-owner")));
+			return completeResult("inline-terminal-owner");
+		}, observation, McpApplicationClock.SYSTEM,
+				McpJsonLimits.productionDefaults(), ignored -> executor);
+
+		try {
+			InetSocketAddress address = runtime.start();
+			submit(runtime, address, request(address, "inline-terminal-owner"),
+					response -> Assertions.assertTrue(
+							streamingResponse.compareAndSet(null, response),
+							"The inline SSE response callback must be offered once."));
+			MicrohttpResponse response = awaitValue(streamingResponse,
+					"The inline SSE response was not offered.");
+			Assertions.assertTrue(response.streaming());
+
+			// Do not give the transport a body source until the protocol task has
+			// returned. This deterministically exercises the handoff in which an
+			// inline handler already owns a reserved stream terminal.
+			ThreadPoolExecutor processor = processor(runtime);
+			awaitCondition(() -> processor.getActiveCount() == 0,
+					"The inline protocol task did not complete.");
+
+			source = newBodySource(response);
+			socket = new RecordingSocketChannel();
+			source.writeReadyCallback(() -> {
+				// The test drains every queued frame directly.
+			});
+			source.start();
+			for (int write = 0; write < 8 && source.isReadyToWrite(); write++)
+				source.writeTo(socket, Long.MAX_VALUE);
+			Assertions.assertFalse(source.hasRemaining(),
+					"The inline terminal response did not finish writing.");
+
+			String body = socket.writtenText();
+			Assertions.assertTrue(body.contains(
+					"\"value\":\"inline-terminal-owner\""), body);
+			Assertions.assertTrue(body.endsWith("0\r\n\r\n"), body);
+			observation.awaitFinished();
+			awaitClean(runtime);
+			Assertions.assertEquals(0,
+					runtime.diagnosticsSnapshot().activeRequestStreams());
+			observation.assertExactlyOne(McpRequestOutcome.COMPLETE);
+			observation.assertExactlyOneCompletedStream();
+		} finally {
+			if (source != null)
+				source.close(StreamTerminationReason.SERVER_STOPPING, null);
+			if (socket != null)
+				socket.close();
+			runtime.close();
+		}
+	}
 
 	@Test
 	void written_sse_terminal_beats_concurrent_client_cancel_exactly_once()
@@ -308,6 +373,14 @@ class McpHttpServerObservationTerminalRaceTests {
 	private static McpHttpServerRuntime runtime(McpHttpEndpointPolicy policy,
 			McpApplicationRequestHandler handler, RecordingObservation observation,
 			McpApplicationClock clock, McpJsonLimits jsonLimits) {
+		return runtime(policy, handler, observation, clock, jsonLimits,
+				McpApplicationHandlerExecutorFactory.production());
+	}
+
+	private static McpHttpServerRuntime runtime(McpHttpEndpointPolicy policy,
+			McpApplicationRequestHandler handler, RecordingObservation observation,
+			McpApplicationClock clock, McpJsonLimits jsonLimits,
+			McpApplicationHandlerExecutorFactory executorFactory) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
 						"observation-terminal-race-test", "3.6.0-SNAPSHOT"))
@@ -320,7 +393,7 @@ class McpHttpServerObservationTerminalRaceTests {
 				jsonLimits,
 				new McpApplicationExecutionConfiguration(
 						1, 1, Duration.ofSeconds(20), Duration.ofDays(1)),
-				clock, McpApplicationHandlerExecutorFactory.production(),
+				clock, executorFactory,
 				ignored -> {}, ignored -> {});
 	}
 
@@ -466,6 +539,9 @@ class McpHttpServerObservationTerminalRaceTests {
 			implements McpRuntimeObservationSink, McpRuntimeRequestObservation {
 		private final AtomicInteger starts;
 		private final AtomicInteger finishes;
+		private final AtomicInteger streamOpens;
+		private final AtomicInteger streamCloses;
+		private final AtomicReference<StreamTerminationReason> streamCloseReason;
 		private final AtomicReference<McpRequestOutcome> outcome;
 		private final AtomicReference<McpJsonRpcError> error;
 		private final AtomicReference<List<Throwable>> throwables;
@@ -474,6 +550,9 @@ class McpHttpServerObservationTerminalRaceTests {
 		private RecordingObservation() {
 			this.starts = new AtomicInteger();
 			this.finishes = new AtomicInteger();
+			this.streamOpens = new AtomicInteger();
+			this.streamCloses = new AtomicInteger();
+			this.streamCloseReason = new AtomicReference<>();
 			this.outcome = new AtomicReference<>();
 			this.error = new AtomicReference<>();
 			this.throwables = new AtomicReference<>(List.of());
@@ -490,6 +569,18 @@ class McpHttpServerObservationTerminalRaceTests {
 		@Override
 		public Optional<McpRequestContext> publicContext() {
 			return Optional.empty();
+		}
+
+		@Override
+		public void didOpenRequestStream() {
+			this.streamOpens.incrementAndGet();
+		}
+
+		@Override
+		public void didCloseRequestStream(StreamTerminationReason reason,
+				Duration duration) {
+			this.streamCloseReason.compareAndSet(null, reason);
+			this.streamCloses.incrementAndGet();
 		}
 
 		@Override
@@ -512,6 +603,51 @@ class McpHttpServerObservationTerminalRaceTests {
 			Assertions.assertEquals(1, starts.get());
 			Assertions.assertEquals(1, finishes.get());
 			Assertions.assertEquals(expectedOutcome, outcome.get());
+		}
+
+		private void assertExactlyOneCompletedStream() {
+			Assertions.assertEquals(1, this.streamOpens.get());
+			Assertions.assertEquals(1, this.streamCloses.get());
+			Assertions.assertEquals(StreamTerminationReason.COMPLETED,
+					this.streamCloseReason.get());
+		}
+	}
+
+	private static final class InlineExecutorService
+			extends AbstractExecutorService {
+		private final AtomicBoolean shutdown = new AtomicBoolean();
+
+		@Override
+		public void shutdown() {
+			this.shutdown.set(true);
+		}
+
+		@Override
+		public List<Runnable> shutdownNow() {
+			this.shutdown.set(true);
+			return List.of();
+		}
+
+		@Override
+		public boolean isShutdown() {
+			return this.shutdown.get();
+		}
+
+		@Override
+		public boolean isTerminated() {
+			return this.shutdown.get();
+		}
+
+		@Override
+		public boolean awaitTermination(long timeout, TimeUnit unit) {
+			return this.shutdown.get();
+		}
+
+		@Override
+		public void execute(Runnable command) {
+			if (this.shutdown.get())
+				throw new RejectedExecutionException("Executor is shut down.");
+			command.run();
 		}
 	}
 

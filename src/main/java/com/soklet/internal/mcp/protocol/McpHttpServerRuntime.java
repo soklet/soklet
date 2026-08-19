@@ -5890,7 +5890,11 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				synchronized (lock) {
 					if (applicationOwned || terminal)
 						return;
-					if (subscriptionRegistration != null) {
+					if (subscriptionRegistration != null
+							|| streamTerminalResponseOwned) {
+						// An inline application handler may reserve its stream terminal
+						// before the protocol handoff returns. Its transport callback still
+						// owns terminal cleanup and must not be preempted here.
 						protocolTask = null;
 						return;
 					}

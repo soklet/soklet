@@ -2084,9 +2084,9 @@ the typed-request-state amendment checkpoint. The 1,676/0/0/4 result over 462
 main and 194 test sources remains the rate-limit identity/trusted-proxy
 checkpoint. The independent-request direction-boundary result remains
 1,678/0/0/4 over 462 main and 195 test sources, with its focused protocol gate
-at 35/35. On the current localization-fleet fixture tree, Corretto 26 clean
-verify passes 1,681/0/0/4 over 462 main and 196 test sources and builds the
-main, sources, and Javadoc artifacts; the fixture passes 3/3 and its related
+at 35/35. At the localization-fleet checkpoint, Corretto 26 clean verify
+passed 1,681/0/0/4 over 462 main and 196 test sources and built the main,
+sources, and Javadoc artifacts; the fixture passes 3/3 and its related
 localization regression set passes 24/24. The preceding Corretto 17 clean-test
 run passed 1,659/0/0/72 before the rate-limit identity, independent-request,
 and localization-fleet runtime test sources were added, so it remains prior
@@ -2113,8 +2113,9 @@ ephemeral IPv4 loopback port supplied through
 `SOKLET_BAREBONES_LOOPBACK_PORT` without disturbing the unrelated Docker
 listener on port 8080. Its source and validator changes remain uncommitted and
 unpinned, so its old public pin stays blocked.
-A same-version macOS arm64 Corretto 21.0.12.9.1 run passes the full core
-`clean test` at 1,681/0/0/4. Static analysis reports `BUILD SUCCESS` with the
+A same-version macOS arm64 Corretto 21.0.12.9.1 run passed the full core
+`clean test` at 1,681/0/0/4 at the initial JDK 21 gate checkpoint. Static
+analysis reports `BUILD SUCCESS` with the
 existing advisory inventory after the `SelfAssignment` fix, and SpotBugs
 reports zero bugs and errors. The exact checksum-pinned Corretto 21.0.12.9.1
 toolchain now drives `core-jdk-21`, `static-analysis`, and `spotbugs`.
@@ -2135,5 +2136,19 @@ post-validation publication work. Production multi-host
 localization coordination remains application/deployment-owned, while the
 bounded two-listener fixture is the configured Soklet fleet gate. See
 [release/README.md](release/README.md) for the exact fail-closed contract.
+
+Those 1,681-test results remain the localization-fleet and initial JDK 21 gate
+checkpoints. Current post-fix Corretto 21 validation passes core `clean test`
+at 1,682/0/0/4 over the unchanged 462 main and 196 test sources. The focused
+terminal/subscription regression set passes 32/32, a clean smoke soak passes
+6/6 with its strict verifier and verifier self-test, and the cross-feature
+smoke method passes 10/10 repeated stress runs. The runtime now preserves
+transport-callback terminal ownership when a fast inline application stream
+reserves its terminal response before the protocol task returns, preventing
+premature terminal cleanup without relaxing a timeout or expected count. The
+subscription activation regression checks acknowledgment-then-notification
+wire order directly rather than using asynchronous metric delivery as a
+barrier. The internal order remains: acknowledgment queued, subscription
+activated, then response handed to the transport callback.
 
 Do not treat this snapshot guide as a release-conformance statement.

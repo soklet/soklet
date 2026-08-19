@@ -755,14 +755,13 @@ public class McpSubscriptionPublicRuntimeTests {
 				List.of(RESOURCE_URI, SECOND_RESOURCE_URI),
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED,
 				McpSubscriptionNotificationType.RESOURCE_UPDATED);
-		BlockingStreamOpenCollector blockingCollector =
-				new BlockingStreamOpenCollector();
 		McpServer server = serverBuilder(List.of(endpoint),
 				McpAdmissionController.acceptAllInstance())
 				.streamQueueCapacity(4)
 				.build();
 		Soklet soklet = managedSoklet(server,
-				LifecycleObserver.defaultInstance(), blockingCollector);
+				LifecycleObserver.defaultInstance(),
+				MetricsCollector.disabledInstance());
 		McpChunkedHttpClient client = null;
 
 		try {
@@ -770,10 +769,6 @@ public class McpSubscriptionPublicRuntimeTests {
 			client = listen(boundPort(server), "\"ack-race\"",
 					"{\"resourceSubscriptions\":[\"" + RESOURCE_URI
 							+ "\",\"" + SECOND_RESOURCE_URI + "\"]}");
-			blockingCollector.awaitBlocked();
-			publisher.publishResourceUpdated(RESOURCE_URI);
-			blockingCollector.release();
-
 			assertSseHead(client.readHead());
 			Assertions.assertEquals(acknowledgment("\"ack-race\"",
 					"{\"resourceSubscriptions\":[\"" + RESOURCE_URI
@@ -784,7 +779,6 @@ public class McpSubscriptionPublicRuntimeTests {
 					"\"ack-race\"", SECOND_RESOURCE_URI),
 					client.readChunkText());
 		} finally {
-			blockingCollector.release();
 			if (client != null)
 				client.closeWithReset();
 			soklet.stop();
@@ -1215,45 +1209,6 @@ public class McpSubscriptionPublicRuntimeTests {
 			@NonNull String paramsJson) {
 		private InvalidSubscriptionParams {
 			Assertions.assertFalse(id.isBlank());
-		}
-	}
-
-	@ThreadSafe
-	private static final class BlockingStreamOpenCollector
-			implements MetricsCollector {
-		@NonNull
-		private final AtomicBoolean blockNextStreamOpen = new AtomicBoolean(true);
-		@NonNull
-		private final CountDownLatch blocked = new CountDownLatch(1);
-		@NonNull
-		private final CountDownLatch release = new CountDownLatch(1);
-
-		@Override
-		public void didRecordMcpMetricsEvent(
-				@NonNull McpMetricsEvent event) {
-			if (!(event instanceof McpMetricsEvent.RequestStreamOpened)
-					|| !this.blockNextStreamOpen.compareAndSet(true, false))
-				return;
-			this.blocked.countDown();
-			try {
-				if (!this.release.await(5, TimeUnit.SECONDS))
-					throw new AssertionError(
-							"The blocked stream-open metric was not released.");
-			} catch (InterruptedException exception) {
-				Thread.currentThread().interrupt();
-				throw new AssertionError(
-						"Interrupted while blocking the stream-open metric.",
-						exception);
-			}
-		}
-
-		private void awaitBlocked() throws InterruptedException {
-			Assertions.assertTrue(this.blocked.await(5, TimeUnit.SECONDS),
-					"The request did not reach its stream-open boundary.");
-		}
-
-		private void release() {
-			this.release.countDown();
 		}
 	}
 

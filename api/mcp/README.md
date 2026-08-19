@@ -206,18 +206,33 @@ That 1,673 result remains the typed-request-state amendment checkpoint. The
 1,676/0/0/4 result over 462 main and 194 test sources remains the rate-limit
 identity/trusted-proxy checkpoint. The independent-request direction-boundary
 result remains 1,678/0/0/4 over 462 main and 195 test sources, with its focused
-protocol gate at 35/35. On the current localization-fleet fixture tree,
-Corretto 26 clean verify passes 1,681/0/0/4 over 462 main and 196 test sources
-and builds the main, sources, and Javadoc artifacts; the fixture passes 3/3 and
+protocol gate at 35/35. At the localization-fleet checkpoint, Corretto 26 clean
+verify passed 1,681/0/0/4 over 462 main and 196 test sources and built the main,
+sources, and Javadoc artifacts; the fixture passes 3/3 and
 its related localization regression set passes 24/24. The preceding Corretto
 17 clean-test run passed 1,659/0/0/72 before the rate-limit identity,
 independent-request, and localization-fleet runtime test sources were added, so
 it remains prior supported-JDK evidence rather than a current 196-source
 result. The exact six-scenario smoke soak
-passes 6/6 with its strict verifier. Resource subscriptions now become publisher-visible before the
-transport can expose their already-queued acknowledgment, closing the
-acknowledgment-to-activation notification-loss window; request-metrics tests
-also wait for the serialized finish event before inspecting collector state.
+passes 6/6 with its strict verifier. Resource subscriptions become
+publisher-visible before the transport can expose their already-queued
+acknowledgment, closing the acknowledgment-to-activation notification-loss
+window; request-metrics tests also wait for the serialized finish event before
+inspecting collector state.
+
+Those 1,681-test results remain the localization-fleet and initial JDK 21 gate
+checkpoints. Current post-fix Corretto 21 validation passes core `clean test`
+at 1,682/0/0/4 over the unchanged 462 main and 196 test sources. The focused
+terminal/subscription regression set passes 32/32, a clean smoke soak passes
+6/6 with its strict verifier and verifier self-test, and the cross-feature
+smoke method passes 10/10 repeated stress runs. Fast inline application streams
+retain transport-callback ownership after reserving a terminal response, so
+protocol-task return cannot preempt the terminal write or exact cleanup; no
+timeout or expected-count bound was relaxed. The subscription activation
+regression checks wire order directly instead of treating asynchronous metric
+delivery as an activation barrier. The internal order remains acknowledgment
+queued, subscription activated, and then response handed to the transport
+callback.
 
 The authoritative owner inventory comes from the full japicmp report
 `target/japicmp/mcp-api-freeze.xml`. It includes:
@@ -1523,10 +1538,11 @@ documentation examples rather than a Soklet verification surface. The later
 revision drift without within-response mixing, node loss, fresh-context
 subscription reconnect, node-local delivery, and cleanup through two
 simultaneous real loopback listeners. The format-v2 release contract now
-enumerates exactly 29 ordered gates. A same-version macOS arm64 Corretto
-21.0.12.9.1 run passes the full core `clean test` at 1,681/0/0/4; static
-analysis reports `BUILD SUCCESS` with the existing advisory inventory after
-the `SelfAssignment` fix, and SpotBugs reports zero bugs and errors. The exact
+enumerates exactly 29 ordered gates. At the initial JDK 21 gate checkpoint, a
+same-version macOS arm64 Corretto 21.0.12.9.1 run passed the full core
+`clean test` at 1,681/0/0/4; static analysis reports `BUILD SUCCESS` with the
+existing advisory inventory after the `SelfAssignment` fix, and SpotBugs
+reports zero bugs and errors. The exact
 checksum-pinned Corretto 21.0.12.9.1 toolchain now drives `core-jdk-21`,
 `static-analysis`, and `spotbugs`. Seventeen gates are dispatch-configured,
 while six remain `BLOCKED_HARNESS_MISSING` and the six downstreams remain
