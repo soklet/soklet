@@ -242,6 +242,17 @@ and observation containment waits for actual typed failure-log publication
 before exact inspection. The original exact counts and timeout assertions
 remain; production behavior, public API, and frozen inventories are unchanged.
 
+A subsequent containment revalidation on the pinned Amazon Corretto
+21.0.12.9.1 toolchain (`java 21.0.12.1`) passes the exact
+`mvn -B -ntp clean test` at 1,682/0/0/4 over 462 main and 196 test sources.
+The focused platform-plus-virtual-thread containment matrix passes 30/30, and
+20/20 complete repetitions cover 600 dynamic cases; the affected JDK 17
+platform-thread matrix also passes 15/15. This is test-only synchronization:
+containment waits now include the exact expected cleanup count before returning.
+Expected cleanup counts, timeout bounds, and assertions are unchanged;
+production behavior, public API, and frozen inventories are unchanged. These
+local snapshot checks are not immutable-candidate release evidence.
+
 The authoritative owner inventory comes from the full japicmp report
 `target/japicmp/mcp-api-freeze.xml`. It includes:
 

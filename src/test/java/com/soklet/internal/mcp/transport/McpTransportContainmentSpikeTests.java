@@ -238,7 +238,8 @@ public class McpTransportContainmentSpikeTests {
 					runtime,
 					value -> value.liveExchanges() == 0
 							&& value.dispatcher().activeSlots() == 0
-							&& value.dispatcher().queueDepth() == 0,
+							&& value.dispatcher().queueDepth() == 0
+							&& value.cleanupCount() == 4,
 					"handler capacity did not recover");
 			Assertions.assertEquals(3L, recovered.admittedRequests());
 			Assertions.assertEquals(1L, recovered.rejectedRequests());
@@ -494,7 +495,9 @@ public class McpTransportContainmentSpikeTests {
 
 			McpTransportRuntime.Snapshot cleaned = awaitSnapshot(
 					runtime,
-					value -> value.liveExchanges() == 0 && value.dispatcher().activeSlots() == 0,
+					value -> value.liveExchanges() == 0
+							&& value.dispatcher().activeSlots() == 0
+							&& value.cleanupCount() == 3,
 					"reset containment fixture did not clean up");
 			Assertions.assertEquals(3L, cleaned.cleanupCount());
 		} finally {
@@ -569,7 +572,8 @@ public class McpTransportContainmentSpikeTests {
 					runtime,
 					value -> value.liveExchanges() == 0
 							&& value.dispatcher().activeSlots() == 0
-							&& value.dispatcher().queueDepth() == 0,
+							&& value.dispatcher().queueDepth() == 0
+							&& value.cleanupCount() == 2,
 					"deadline outcomes did not clean up");
 			Assertions.assertEquals(1L, cleaned.terminalReservations());
 			Assertions.assertEquals(2L, cleaned.cleanupCount());
@@ -975,7 +979,8 @@ public class McpTransportContainmentSpikeTests {
 					value -> value.liveExchanges() == 0
 							&& value.dispatcher().activeSlots() == 0
 							&& value.dispatcher().queueDepth() == 0
-							&& value.subscriptions() == 0,
+							&& value.subscriptions() == 0
+							&& value.cleanupCount() == 3,
 					"shutdown did not clean up subscription, active, and queued framework state");
 			Assertions.assertFalse(cleaned.running());
 			Assertions.assertEquals(3L, cleaned.cleanupCount());

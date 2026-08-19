@@ -50,6 +50,18 @@ pinned JDK 17 `clean verify` gate. `release-scans` remains
 blocked until its exact scanner/toolchain pin, severity policy, and retained
 report contract are implemented.
 
+A subsequent containment revalidation on the pinned Amazon Corretto
+21.0.12.9.1 toolchain (`java 21.0.12.1`) passes the exact
+`mvn -B -ntp clean test` at 1,682/0/0/4 over 462 main and 196 test sources.
+The focused platform-plus-virtual-thread containment matrix passes 30/30, and
+20/20 complete repetitions cover 600 dynamic cases; the affected JDK 17
+platform-thread matrix also passes 15/15. This is test-only synchronization:
+containment waits now include the exact expected cleanup count before returning.
+Expected cleanup counts, timeout bounds, and assertions are unchanged;
+production behavior, public API, and frozen inventories are unchanged. These
+local snapshot checks are not immutable-candidate PASS receipts or release
+evidence.
+
 Six downstream gates remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`. The manifest
 records their exact public commit pins without treating uncommitted sibling
 work as evidence:

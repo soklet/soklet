@@ -741,6 +741,12 @@ localization, and the pinned TypeScript/Go snapshot harnesses are also green.
 Current post-fix Corretto 21 validation passes 1,682/0/0/4 over the unchanged
 462/196 source tree, with the focused terminal/subscription set at 32/32 and
 the cross-feature smoke method at 10/10 repeated stress runs.
+Subsequent pinned Corretto 21.0.12.9.1 containment revalidation also passes the
+exact full suite at 1,682/0/0/4; its focused platform-plus-virtual-thread matrix
+passes 30/30 and 20/20 repetitions cover 600 dynamic cases, while the affected
+JDK 17 platform-thread matrix passes 15/15. The test-only synchronization waits
+for exact cleanup counts without changing counts, timeouts, production, API, or
+freeze state; these local results are not immutable release evidence.
 Current supported-JDK revalidation on local Amazon Corretto
 17.0.20.1+10-LTS passes `mvn -B -ntp clean test` at 1,667/0/0/72 over the
 same 462 main and 196 test sources. The two corrected methods pass 2/2 once
@@ -2399,6 +2405,17 @@ synchronization: live transport smoke waits for the complete idle snapshot,
 and observation containment waits for actual typed failure-log publication
 before exact inspection. The original exact counts and timeout assertions
 remain; production behavior, public API, and frozen inventories are unchanged.
+
+A subsequent containment revalidation on the pinned Amazon Corretto
+21.0.12.9.1 toolchain (`java 21.0.12.1`) passes the exact
+`mvn -B -ntp clean test` at 1,682/0/0/4 over 462 main and 196 test sources.
+The focused platform-plus-virtual-thread containment matrix passes 30/30, and
+20/20 complete repetitions cover 600 dynamic cases; the affected JDK 17
+platform-thread matrix also passes 15/15. This is test-only synchronization:
+containment waits now include the exact expected cleanup count before returning.
+Expected cleanup counts, timeout bounds, and assertions are unchanged;
+production behavior, public API, and frozen inventories are unchanged. These
+local snapshot checks are not immutable-candidate release evidence.
 
 You can expose a `/metrics` endpoint by injecting [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html)
 into a [`ResourceMethod`](https://javadoc.soklet.com/com/soklet/ResourceMethod.html):
