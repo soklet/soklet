@@ -21,6 +21,9 @@ import com.soklet.McpRequestContext;
 import com.soklet.McpRequestOutcome;
 import com.soklet.StreamTerminationReason;
 import com.soklet.internal.mcp.transport.McpOutboundChannel;
+import com.soklet.internal.microhttp.Header;
+import com.soklet.internal.microhttp.MicrohttpRequest;
+import com.soklet.internal.microhttp.MicrohttpResponse;
 import com.soklet.internal.microhttp.WritableSource;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -33,8 +36,12 @@ import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.SocketOption;
@@ -50,11 +57,13 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 /**
  * Deterministic ownership, timing, and bounded-channel checks for resource
@@ -126,6 +135,74 @@ public class McpSubscriptionRuntimeBoundaryTests {
 			Assertions.assertEquals(1, observation.finishCount());
 			awaitClean(runtime);
 		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
+	public void eventPublishedDuringResponseHandoffFollowsAcknowledgment()
+			throws Exception {
+		TestEventSource source = new TestEventSource();
+		McpHttpServerRuntime runtime = runtime(MCP_PATH, source,
+				McpRuntimeObservationSink.disabledInstance(),
+				McpApplicationClock.SYSTEM,
+				subscriptionConfiguration(4, Duration.ofSeconds(1),
+						Duration.ofMinutes(1)));
+		AtomicReference<MicrohttpResponse> responseReference =
+				new AtomicReference<>();
+		AtomicReference<Throwable> callbackFailure = new AtomicReference<>();
+		CountDownLatch responseOffered = new CountDownLatch(1);
+		WritableSource bodySource = null;
+
+		try {
+			InetSocketAddress address = runtime.start();
+			submit(runtime, address,
+					subscriptionRequest(address, "handoff-boundary"), response -> {
+						try {
+							if (!responseReference.compareAndSet(null, response))
+								throw new AssertionError(
+										"The subscription response was offered more than once.");
+							// This callback is the transport handoff boundary. An event accepted
+							// here must follow the already-queued acknowledgment on the wire.
+							source.publishResourcesListChanged();
+						} catch (Throwable throwable) {
+							callbackFailure.set(throwable);
+						} finally {
+							responseOffered.countDown();
+						}
+					});
+
+			Assertions.assertTrue(responseOffered.await(5, TimeUnit.SECONDS),
+					"The subscription response was not offered.");
+			Assertions.assertNull(callbackFailure.get());
+			MicrohttpResponse response = responseReference.get();
+			Assertions.assertNotNull(response);
+			Assertions.assertTrue(response.streaming());
+			bodySource = newBodySource(response);
+			bodySource.writeReadyCallback(() -> {
+				// The test drains the queued frames directly.
+			});
+			bodySource.start();
+			PartialWriteSocketChannel socket =
+					new PartialWriteSocketChannel(Integer.MAX_VALUE);
+			for (int write = 0; write < 8 && bodySource.isReadyToWrite(); write++)
+				bodySource.writeTo(socket, Long.MAX_VALUE);
+
+			String wire = socket.writtenText();
+			int acknowledgment = wire.indexOf(
+					"\"method\":\"notifications/subscriptions/acknowledged\"");
+			int event = wire.indexOf(
+					"\"method\":\"notifications/resources/list_changed\"");
+			Assertions.assertTrue(acknowledgment >= 0, wire);
+			Assertions.assertTrue(event > acknowledgment,
+					"The response-handoff event was lost or preceded its acknowledgment: "
+							+ wire);
+			bodySource.close(StreamTerminationReason.CLIENT_DISCONNECTED, null);
+			bodySource = null;
+			awaitClean(runtime);
+		} finally {
+			if (bodySource != null)
+				bodySource.close(StreamTerminationReason.CLIENT_DISCONNECTED, null);
 			runtime.close();
 		}
 	}
@@ -711,6 +788,79 @@ public class McpSubscriptionRuntimeBoundaryTests {
 						"Mcp-Method", "subscriptions/listen")));
 	}
 
+	@NonNull
+	private static MicrohttpRequest subscriptionRequest(
+			@NonNull InetSocketAddress address, @NonNull String id) {
+		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"" + id
+				+ "\",\"method\":\"subscriptions/listen\",\"params\":{\"_meta\":{"
+				+ "\"io.modelcontextprotocol/protocolVersion\":\""
+				+ PROTOCOL_VERSION + "\","
+				+ "\"io.modelcontextprotocol/clientCapabilities\":{}},"
+				+ "\"notifications\":{\"resourcesListChanged\":true}}}";
+		return new MicrohttpRequest("POST", MCP_PATH, "HTTP/1.1", List.of(
+				new Header("Host", "127.0.0.1:" + address.getPort()),
+				new Header("Content-Type", "application/json; charset=UTF-8"),
+				new Header("Accept", "application/json, text/event-stream"),
+				new Header("MCP-Protocol-Version", PROTOCOL_VERSION),
+				new Header("Mcp-Method", "subscriptions/listen")),
+				body.getBytes(StandardCharsets.UTF_8), false,
+				new InetSocketAddress("127.0.0.1", 12_345));
+	}
+
+	private static void submit(@NonNull McpHttpServerRuntime runtime,
+			@NonNull InetSocketAddress address, @NonNull MicrohttpRequest request,
+			@NonNull Consumer<@NonNull MicrohttpResponse> callback)
+			throws Exception {
+		Method submitRequest = McpHttpServerRuntime.class.getDeclaredMethod(
+				"submitRequest", ThreadPoolExecutor.class,
+				McpApplicationExecution.class, InetSocketAddress.class,
+				MicrohttpRequest.class, Consumer.class);
+		submitRequest.setAccessible(true);
+		invoke(submitRequest, runtime, processor(runtime), application(runtime),
+				address, request, callback);
+	}
+
+	@NonNull
+	private static WritableSource newBodySource(
+			@NonNull MicrohttpResponse response) throws Exception {
+		Method newBodySource = MicrohttpResponse.class.getDeclaredMethod(
+				"newBodySource");
+		newBodySource.setAccessible(true);
+		return (WritableSource) invoke(newBodySource, response);
+	}
+
+	@NonNull
+	private static ThreadPoolExecutor processor(
+			@NonNull McpHttpServerRuntime runtime) throws Exception {
+		Field field = McpHttpServerRuntime.class.getDeclaredField(
+				"requestProcessor");
+		field.setAccessible(true);
+		return (ThreadPoolExecutor) field.get(runtime);
+	}
+
+	@NonNull
+	private static McpApplicationExecution application(
+			@NonNull McpHttpServerRuntime runtime) throws Exception {
+		Field field = McpHttpServerRuntime.class.getDeclaredField(
+				"applicationExecution");
+		field.setAccessible(true);
+		return (McpApplicationExecution) field.get(runtime);
+	}
+
+	private static Object invoke(@NonNull Method method, @NonNull Object target,
+			Object @NonNull ... arguments) throws Exception {
+		try {
+			return method.invoke(target, arguments);
+		} catch (InvocationTargetException exception) {
+			Throwable cause = exception.getCause();
+			if (cause instanceof Exception checked)
+				throw checked;
+			if (cause instanceof Error error)
+				throw error;
+			throw new AssertionError(cause);
+		}
+	}
+
 	private static void assertResidualRegistrationLifecycle(
 			@NonNull McpHttpServerRuntime runtime) {
 		McpHttpServerLifecycleSnapshot lifecycle = runtime.lifecycleSnapshot();
@@ -1208,6 +1358,11 @@ public class McpSubscriptionRuntimeBoundaryTests {
 		private PartialWriteSocketChannel(int maximumBytesPerWrite) {
 			super(SelectorProvider.provider());
 			this.maximumBytesPerWrite = maximumBytesPerWrite;
+		}
+
+		@NonNull
+		private String writtenText() {
+			return this.output.toString(StandardCharsets.UTF_8);
 		}
 
 		@Override

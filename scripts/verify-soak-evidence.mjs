@@ -70,6 +70,7 @@ const INTEGER_PROFILE_KEYS = new Set([
 ]);
 const MAXIMUM_JAVA_INTEGER = 2_147_483_647n;
 const MAXIMUM_JAVA_LONG = 9_223_372_036_854_775_807n;
+const MAXIMUM_SUREFIRE_DIAGNOSTIC_CHARACTERS = 2_048;
 const EXPECTED_SCENARIOS = new Set([
   'HTTP abort churn',
   'MCP Phase 5 cross-feature churn',
@@ -266,6 +267,71 @@ function numericAttribute(attributes, name, description) {
   return Number(value);
 }
 
+function decodeXmlAttribute(value, description) {
+  return value.replace(/&(#x[0-9A-Fa-f]+|#[0-9]+|amp|lt|gt|quot|apos);/g,
+    (reference, entity) => {
+      switch (entity) {
+        case 'amp': return '&';
+        case 'lt': return '<';
+        case 'gt': return '>';
+        case 'quot': return '"';
+        case 'apos': return "'";
+        default: {
+          const hexadecimal = entity.startsWith('#x');
+          const codePoint = Number.parseInt(entity.slice(hexadecimal ? 2 : 1),
+            hexadecimal ? 16 : 10);
+          if (!Number.isSafeInteger(codePoint) || codePoint > 0x10FFFF
+              || (codePoint >= 0xD800 && codePoint <= 0xDFFF))
+            fail(`Invalid XML character reference in ${description}: ${reference}`);
+          return String.fromCodePoint(codePoint);
+        }
+      }
+    });
+}
+
+function boundedSurefireDiagnostic(value, description, xmlEncoded) {
+  const decoded = xmlEncoded ? decodeXmlAttribute(value, description) : value;
+  const normalized = decoded.replace(/\s+/g, ' ').trim();
+
+  if (normalized === '')
+    return '';
+
+  if (normalized.length <= MAXIMUM_SUREFIRE_DIAGNOSTIC_CHARACTERS)
+    return normalized;
+
+  return `${normalized.slice(0,
+    MAXIMUM_SUREFIRE_DIAGNOSTIC_CHARACTERS - 1)}…`;
+}
+
+function surefireOutcome(testcaseBody, xmlPath) {
+  const outcome = testcaseBody.match(
+    /<(error|failure|skipped)\b([^>]*?)(?:\/>|>([\s\S]*?)<\/\1>)/,
+  );
+
+  if (outcome === null)
+    return null;
+
+  const outcomeType = outcome[1];
+  const description = `${outcomeType} in ${xmlPath}`;
+  const attributes = parseAttributes(outcome[2], description);
+  const attributeMessage = attributes.get('message');
+  let diagnostic = '';
+
+  if (attributeMessage !== undefined) {
+    diagnostic = boundedSurefireDiagnostic(attributeMessage, description, true);
+  } else {
+    const body = outcome[3] ?? '';
+    const cdata = body.match(/<!\[CDATA\[([\s\S]*?)\]\]>/);
+    const bodyText = cdata === null
+      ? body.replace(/<[^>]*>/g, ' ')
+      : cdata[1];
+    diagnostic = boundedSurefireDiagnostic(bodyText, description,
+      cdata === null);
+  }
+
+  return diagnostic === '' ? outcomeType : `${outcomeType}: ${diagnostic}`;
+}
+
 function observation(section, name) {
   const prefix = `- ${name}: `;
   const values = section.split('\n')
@@ -365,13 +431,13 @@ function verifySurefireSuite(xmlPath, expected) {
     const nonpassing = [...xml.matchAll(
       /<testcase\b([^>]*?)(?:\/>|>([\s\S]*?)<\/testcase>)/g,
     )].flatMap((match) => {
-      const outcome = (match[2] ?? '').match(/<(error|failure|skipped)\b/);
+      const outcome = surefireOutcome(match[2] ?? '', xmlPath);
 
       if (outcome === null)
         return [];
 
       const testcase = parseAttributes(match[1], `testcase in ${xmlPath}`);
-      return [`${testcase.get('name') ?? '<unnamed>'} (${outcome[1]})`];
+      return [`${testcase.get('name') ?? '<unnamed>'} (${outcome})`];
     });
     fail(`Surefire suite ${expected.name} did not pass; errors=${errors} failures=${failures} skipped=${skipped}; nonpassing=${nonpassing.join(', ') || '<unidentified>'}`);
   }

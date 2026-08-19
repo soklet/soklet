@@ -202,6 +202,15 @@ verifies all 565 compatibility records and 1,048/179/422 signatures, and the
 maintained 179-source Java 17 API sketch passes compilation, Javadoc doclint,
 and its localization smoke test.
 
+That 1,673 result remains the typed-request-state amendment checkpoint. On the
+current post-CI-hardening tree, Corretto 26 clean verify passes 1,674/0/0/4
+over the same 462 main and 193 test sources, Corretto 17 clean test passes
+1,659/0/0/72, and the exact six-scenario smoke soak passes 6/6 with its strict
+verifier. Resource subscriptions now become publisher-visible before the
+transport can expose their already-queued acknowledgment, closing the
+acknowledgment-to-activation notification-loss window; request-metrics tests
+also wait for the serialized finish event before inspecting collector state.
+
 The authoritative owner inventory comes from the full japicmp report
 `target/japicmp/mcp-api-freeze.xml`. It includes:
 

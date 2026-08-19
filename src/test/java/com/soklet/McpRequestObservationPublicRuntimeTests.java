@@ -1334,7 +1334,7 @@ public class McpRequestObservationPublicRuntimeTests {
 
 	private static void assertSingleCompleteMetrics(
 			@NonNull RecordingMetricsCollector collector,
-			@NonNull String expectedMethod) {
+			@NonNull String expectedMethod) throws InterruptedException {
 		assertSingleMetrics(collector, expectedMethod,
 				McpRequestOutcome.COMPLETE);
 	}
@@ -1342,7 +1342,9 @@ public class McpRequestObservationPublicRuntimeTests {
 	private static void assertSingleMetrics(
 			@NonNull RecordingMetricsCollector collector,
 			@NonNull String expectedMethod,
-			@NonNull McpRequestOutcome expectedOutcome) {
+			@NonNull McpRequestOutcome expectedOutcome)
+			throws InterruptedException {
+		collector.awaitRequestFinished();
 		List<McpMetricsEvent.RequestStarted> started =
 				collector.requestStartedEvents();
 		List<McpMetricsEvent.RequestFinished> finished =
@@ -1587,10 +1589,18 @@ public class McpRequestObservationPublicRuntimeTests {
 	private static final class RecordingMetricsCollector
 			implements MetricsCollector {
 		private final List<McpMetricsEvent> events = new CopyOnWriteArrayList<>();
+		private final CountDownLatch requestFinished = new CountDownLatch(1);
 
 		@Override
 		public void didRecordMcpMetricsEvent(@NonNull McpMetricsEvent event) {
 			this.events.add(event);
+			if (event instanceof McpMetricsEvent.RequestFinished)
+				this.requestFinished.countDown();
+		}
+
+		private void awaitRequestFinished() throws InterruptedException {
+			Assertions.assertTrue(this.requestFinished.await(5, TimeUnit.SECONDS),
+					"The MCP request-finished metric did not arrive.");
 		}
 
 		@NonNull

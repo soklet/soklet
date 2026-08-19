@@ -724,10 +724,11 @@ the bounded pseudonymous token fields; the separate
 `logRawValidatedTraceIds(true)` opt-in may add only the validated lowercase MCP
 trace ID. Neither mode adds a trace value to metrics. The current snapshot has
 all 65 Phase 6 owners frozen and an empty provisional inventory, but it is not
-a release claim. Current local validation passes core clean verify at
-1,673/0/0/4 over 462 main and 193 test sources, both 39-row development
-conformance paths, candidate localization, and the pinned TypeScript/Go
-snapshot harnesses. The checked-in fail-closed
+a release claim. Current local validation passes Corretto 26 core clean verify
+at 1,674/0/0/4 over 462 main and 193 test sources, Corretto 17 core clean test
+at 1,659/0/0/72, the exact six-scenario smoke soak at 6/6 plus its strict
+verifier, both 39-row development conformance paths, candidate localization,
+and the pinned TypeScript/Go snapshot harnesses. The checked-in fail-closed
 [release validator](release/README.md) still requires reviewed downstream pins
 and a checksum-matched immutable candidate; local snapshot results are not
 promotion evidence.

@@ -5127,16 +5127,14 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					reservation.responseCallback());
 			SubscriptionRegistration registration = requireNonNull(
 					reservation.registration());
-			try {
-				callback.accept(stream.response(withContentLanguage(
-						additionalHeaders, contentLanguage)));
-			} catch (Throwable throwable) {
-				stream.fail(StreamTerminationReason.WRITE_FAILED, throwable);
-			}
 			synchronized (lock) {
 				if (!terminal && !canceled && !streamAbortOwned
 						&& responseStream == stream
 						&& subscriptionRegistration == registration) {
+					// The acknowledgment was queued while the subscription was still
+					// pending. Activate before handing the response to the transport so a
+					// client that publishes immediately after reading that acknowledgment
+					// cannot race the pending-to-active transition and lose its event.
 					SubscriptionActivationResult activation = activateSubscription(
 							this, registration, localizationInvalidationToken);
 					if (activation != SubscriptionActivationResult.NOT_ACTIVATED)
@@ -5145,6 +5143,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 								.ACTIVATED_CURRENT_LOCALIZATION
 								? localizedTerminal : null;
 				}
+			}
+			try {
+				callback.accept(stream.response(withContentLanguage(
+						additionalHeaders, contentLanguage)));
+			} catch (Throwable throwable) {
+				stream.fail(StreamTerminationReason.WRITE_FAILED, throwable);
 			}
 			return SubscriptionOpenResult.OPENED;
 		}

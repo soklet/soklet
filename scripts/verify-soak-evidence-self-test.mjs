@@ -273,8 +273,42 @@ try {
     (report) => report.replace('## MCP Phase 5 cross-feature churn\n\n- Result: PASS\n', ''),
   );
   assert.throws(() => verifySoakEvidence(profileName, fixtureRoot),
-    /Surefire suite com\.soklet\.McpCrossFeatureSoakTests did not pass; errors=1 failures=0 skipped=0; nonpassing=mcpSimulatorChurnReturnsResourcesToBaselineAfterCancellationAndScopeCleanup \(error\)/);
+    /Surefire suite com\.soklet\.McpCrossFeatureSoakTests did not pass; errors=1 failures=0 skipped=0; nonpassing=mcpSimulatorChurnReturnsResourcesToBaselineAfterCancellationAndScopeCleanup \(error: timed out\)/);
   restorePartialReport();
+  restore();
+
+  const longDiagnostic = 'x'.repeat(3_000);
+  restore = overwrite(
+    mcpPath,
+    (xml) => xml
+      .replace('failures="0"', 'failures="1"')
+      .replace(
+        '<testcase name="mcpCrossFeatureChurnReturnsResourcesToBaselineAfterCancellationAndShutdown" classname="com.soklet.McpCrossFeatureSoakTests"/>',
+        '<testcase name="mcpCrossFeatureChurnReturnsResourcesToBaselineAfterCancellationAndShutdown" classname="com.soklet.McpCrossFeatureSoakTests"><failure message="Missing &quot;resource update&quot; &amp; details&#10;'
+          + longDiagnostic + '"/></testcase>',
+      ),
+  );
+  assert.throws(() => verifySoakEvidence(profileName, fixtureRoot), (error) => {
+    assert.match(error.message,
+      /mcpCrossFeatureChurnReturnsResourcesToBaselineAfterCancellationAndShutdown \(failure: Missing "resource update" & details x+/);
+    assert.match(error.message, /…\)$/);
+    assert.ok(error.message.length < 2_500,
+      `Surefire diagnostic was not bounded: ${error.message.length}`);
+    return true;
+  });
+  restore();
+
+  restore = overwrite(
+    mcpPath,
+    (xml) => xml
+      .replace('failures="0"', 'failures="1"')
+      .replace(
+        '<testcase name="mcpCrossFeatureChurnReturnsResourcesToBaselineAfterCancellationAndShutdown" classname="com.soklet.McpCrossFeatureSoakTests"/>',
+        '<testcase name="mcpCrossFeatureChurnReturnsResourcesToBaselineAfterCancellationAndShutdown" classname="com.soklet.McpCrossFeatureSoakTests"><failure><![CDATA[Missing message attribute\nwith <angle> & raw text]]></failure></testcase>',
+      ),
+  );
+  assert.throws(() => verifySoakEvidence(profileName, fixtureRoot),
+    /mcpCrossFeatureChurnReturnsResourcesToBaselineAfterCancellationAndShutdown \(failure: Missing message attribute with <angle> & raw text\)/);
   restore();
 
   restore = overwrite(

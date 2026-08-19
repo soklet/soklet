@@ -2030,8 +2030,12 @@ main, sources, and Javadoc artifacts. Focused request-state/runtime tests pass
 50/50; reflection/inventory contracts pass 24/24; and the aggregate API gate
 verifies 565 incompatibilities, 234 owners, and 1,048/179/422 records. The
 maintained 179-source API sketch passes Java 17 compilation,
-Javadoc doclint, and its localization smoke contract. Carried-forward local
-evidence remains green for candidate localization,
+Javadoc doclint, and its localization smoke contract. That 1,673 result remains
+the typed-request-state amendment checkpoint. On the current post-CI-hardening
+tree, Corretto 26 clean verify passes 1,674/0/0/4 over the same 462 main and
+193 test sources, Corretto 17 clean test passes 1,659/0/0/72, and the exact
+six-scenario smoke soak passes 6/6 with its strict verifier. Carried-forward
+local evidence remains green for candidate localization,
 artifact-backed simulator 39/39, pinned live official CLI 39/39, the website's
 offline clean-install, lint, and 33-route SSG build, and OpenTelemetry 36/36.
 TypeScript and Go are checksum-pinned, `READY`, and green against the local
