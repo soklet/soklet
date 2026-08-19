@@ -741,6 +741,14 @@ localization, and the pinned TypeScript/Go snapshot harnesses are also green.
 Current post-fix Corretto 21 validation passes 1,682/0/0/4 over the unchanged
 462/196 source tree, with the focused terminal/subscription set at 32/32 and
 the cross-feature smoke method at 10/10 repeated stress runs.
+Current supported-JDK revalidation on local Amazon Corretto
+17.0.20.1+10-LTS passes `mvn -B -ntp clean test` at 1,667/0/0/72 over the
+same 462 main and 196 test sources. The two corrected methods pass 2/2 once
+and 20/20 across ten combined repetitions. Both corrections are test-only
+synchronization: live transport smoke waits for the complete idle snapshot,
+and observation containment waits for actual typed failure-log publication
+before exact inspection. The original exact counts and timeout assertions
+remain; production behavior, public API, and frozen inventories are unchanged.
 The checked-in fail-closed
 [release validator](release/README.md) still requires reviewed downstream pins
 and a checksum-matched immutable candidate; local snapshot results are not
@@ -2383,6 +2391,14 @@ checks acknowledgment-then-notification wire order directly instead of
 treating asynchronous metric delivery as an activation barrier. Runtime
 ordering is unchanged: the acknowledgment is queued, the subscription is
 activated, and only then is the response handed to the transport callback.
+Current supported-JDK revalidation on local Amazon Corretto
+17.0.20.1+10-LTS passes `mvn -B -ntp clean test` at 1,667/0/0/72 over the
+same 462 main and 196 test sources. The two corrected methods pass 2/2 once
+and 20/20 across ten combined repetitions. Both corrections are test-only
+synchronization: live transport smoke waits for the complete idle snapshot,
+and observation containment waits for actual typed failure-log publication
+before exact inspection. The original exact counts and timeout assertions
+remain; production behavior, public API, and frozen inventories are unchanged.
 
 You can expose a `/metrics` endpoint by injecting [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html)
 into a [`ResourceMethod`](https://javadoc.soklet.com/com/soklet/ResourceMethod.html):

@@ -233,6 +233,14 @@ regression checks wire order directly instead of treating asynchronous metric
 delivery as an activation barrier. The internal order remains acknowledgment
 queued, subscription activated, and then response handed to the transport
 callback.
+Current supported-JDK revalidation on local Amazon Corretto
+17.0.20.1+10-LTS passes `mvn -B -ntp clean test` at 1,667/0/0/72 over the
+same 462 main and 196 test sources. The two corrected methods pass 2/2 once
+and 20/20 across ten combined repetitions. Both corrections are test-only
+synchronization: live transport smoke waits for the complete idle snapshot,
+and observation containment waits for actual typed failure-log publication
+before exact inspection. The original exact counts and timeout assertions
+remain; production behavior, public API, and frozen inventories are unchanged.
 
 The authoritative owner inventory comes from the full japicmp report
 `target/japicmp/mcp-api-freeze.xml`. It includes:

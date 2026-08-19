@@ -37,7 +37,16 @@ the unchanged 462 main and 196 test sources, with static-analysis clean compile
 successful, the focused terminal/subscription set at 32/32, clean smoke at 6/6
 plus its strict verifier and verifier self-test, and the cross-feature smoke
 method at 10/10 repeated stress runs. These are local snapshot results, not
-candidate PASS receipts. `release-scans` remains
+candidate PASS receipts. Current supported-JDK revalidation on local Amazon
+Corretto 17.0.20.1+10-LTS passes `mvn -B -ntp clean test` at 1,667/0/0/72
+over the same 462 main and 196 test sources. The two corrected methods pass
+2/2 once and 20/20 across ten combined repetitions. Both corrections are
+test-only synchronization: live transport smoke waits for the complete idle
+snapshot, and observation containment waits for actual typed failure-log
+publication before exact inspection. The original exact counts and timeout
+assertions remain; production behavior, public API, and frozen inventories
+are unchanged. This local clean-test result does not replace the candidate's
+pinned JDK 17 `clean verify` gate. `release-scans` remains
 blocked until its exact scanner/toolchain pin, severity policy, and retained
 report contract are implemented.
 

@@ -2150,5 +2150,13 @@ subscription activation regression checks acknowledgment-then-notification
 wire order directly rather than using asynchronous metric delivery as a
 barrier. The internal order remains: acknowledgment queued, subscription
 activated, then response handed to the transport callback.
+Current supported-JDK revalidation on local Amazon Corretto
+17.0.20.1+10-LTS passes `mvn -B -ntp clean test` at 1,667/0/0/72 over the
+same 462 main and 196 test sources. The two corrected methods pass 2/2 once
+and 20/20 across ten combined repetitions. Both corrections are test-only
+synchronization: live transport smoke waits for the complete idle snapshot,
+and observation containment waits for actual typed failure-log publication
+before exact inspection. The original exact counts and timeout assertions
+remain; production behavior, public API, and frozen inventories are unchanged.
 
 Do not treat this snapshot guide as a release-conformance statement.

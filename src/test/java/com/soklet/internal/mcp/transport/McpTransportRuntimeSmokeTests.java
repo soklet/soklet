@@ -68,7 +68,14 @@ public class McpTransportRuntimeSmokeTests {
 			Assertions.assertTrue(response.contains("event: progress\ndata: working:smoke\n\n"), response);
 			Assertions.assertTrue(response.contains("event: result\ndata: done:smoke\n\n"), response);
 			Assertions.assertTrue(response.endsWith("0\r\n\r\n"), response);
-			awaitCondition(() -> runtime.snapshot().liveExchanges() == 0);
+			awaitCondition(() -> {
+				McpTransportRuntime.Snapshot snapshot = runtime.snapshot();
+				return snapshot.liveExchanges() == 0
+						&& snapshot.activeStreams() == 0
+						&& snapshot.dispatcher().activeSlots() == 0
+						&& snapshot.dispatcher().queueDepth() == 0
+						&& snapshot.residualHandlerSlots() == 0;
+			});
 			Assertions.assertEquals(0, runtime.snapshot().dispatcher().activeSlots());
 			Assertions.assertEquals(1, runtime.snapshot().terminalReservations());
 		} finally {

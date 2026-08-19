@@ -1071,6 +1071,14 @@ public class McpRequestObservationPublicRuntimeTests {
 			HttpResponse<String> response = send(port, discoverRequest("contained"),
 					"server/discover", Optional.empty());
 			recordingObserver.awaitFinished();
+			awaitLogCount(recordingObserver.logEvents,
+					LogEventType.LIFECYCLE_OBSERVER_DID_START_MCP_REQUEST_HANDLING_FAILED,
+					1);
+			awaitLogCount(recordingObserver.logEvents,
+					LogEventType.LIFECYCLE_OBSERVER_DID_FINISH_MCP_REQUEST_HANDLING_FAILED,
+					1);
+			awaitLogCount(recordingObserver.logEvents,
+					LogEventType.METRICS_COLLECTOR_FAILED, 2);
 
 			assertSuccess(response, "contained");
 			Assertions.assertFalse(response.body().contains("secret"), response.body());
@@ -1371,6 +1379,24 @@ public class McpRequestObservationPublicRuntimeTests {
 		for (LogEvent event : matching)
 			Assertions.assertSame(expectedThrowable,
 					event.getThrowable().orElseThrow());
+	}
+
+	private static void awaitLogCount(
+			@NonNull List<@NonNull LogEvent> events,
+			@NonNull LogEventType eventType, int expectedCount)
+			throws InterruptedException {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+		while (System.nanoTime() - deadline < 0L) {
+			long count = events.stream()
+					.filter(event -> event.getLogEventType() == eventType)
+					.count();
+			if (count == expectedCount)
+				return;
+			Thread.sleep(10L);
+		}
+		Assertions.assertEquals(expectedCount, events.stream()
+				.filter(event -> event.getLogEventType() == eventType)
+				.count(), events.toString());
 	}
 
 	private static long countEvents(@NonNull List<@NonNull McpMetricsEvent> events,
