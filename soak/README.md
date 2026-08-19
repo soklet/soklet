@@ -58,6 +58,10 @@ stream, subscription, lifecycle, and process-resource accounting to return to
 its expected baseline. Its `mcp.*` profile keys freeze client/cycle counts,
 handler and stream bounds, subscription bounds, request/write/shutdown timing,
 shutdown cycles, and resource-delta tolerances for all three profiles.
+`mcp.settleTimeoutMillis` remains the runtime-resource cleanup deadline;
+`mcp.metricDeliveryTimeoutMillis` separately bounds serialized semantic-metric
+delivery only after runtime resources are idle, so observer lag does not widen
+the production cleanup tolerance.
 
 The mandatory `MCP localization render and invalidation churn` scenario uses
 the same bounded MCP settings to exercise localized response rendering,

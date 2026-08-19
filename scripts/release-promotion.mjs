@@ -28,11 +28,29 @@ const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const FINGERPRINT_PATTERN = /^(?:[0-9A-F]{40}|[0-9A-F]{64})$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const TOKEN_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+const DIRECTORY_EVIDENCE_ALGORITHM =
+  "SHA-256 of bytewise-path-sorted '<file-sha256>  <relative-path>\\n' rows";
 
 const EXPECTED_GATE_IDS = Object.freeze([
   'candidate-build',
+  'core-jdk-21',
+  'core-jdk-25',
   'isolated-install',
+  'api-freeze',
+  'candidate-javadocs',
+  'static-analysis',
+  'spotbugs',
+  'schema-replay',
+  'fuzz-replay',
+  'fuzz-nightly-history',
+  'soak-smoke',
+  'soak-nightly-history',
   'release-soak',
+  'localization-fleet',
+  'operational-history',
+  'release-scans',
+  'mcp-benchmarks',
+  'matrix-closure',
   'candidate-conformance',
   'candidate-localization',
   'barebones-app',
@@ -51,13 +69,410 @@ const MANIFEST_GATE_KEYS = Object.freeze([
   'commit',
   'defaultArtifactIdentity',
   'defaultArtifactSha256',
+  'evidenceContract',
   'id',
   'kind',
   'reason',
   'repository',
   'status',
+  'toolchain',
   'versionProperty',
 ]);
+
+const SUREFIRE_MEDIA_TYPE = 'application/vnd.soklet.surefire-reports';
+
+function evidenceRole(role, type, mediaType, fileName, binding = null) {
+  return Object.freeze({ binding, fileName, mediaType, role, type });
+}
+
+const GATE_ARTIFACT_CONTRACTS = Object.freeze({
+  'candidate-build': Object.freeze({
+    toolchain: 'java',
+    roles: Object.freeze([
+      evidenceRole('artifact-descriptor', 'FILE', 'application/json', 'candidate-artifacts.json', 'descriptor'),
+      evidenceRole('build-log', 'FILE', 'text/plain', 'candidate-build.log'),
+      evidenceRole('surefire-reports', 'DIRECTORY', SUREFIRE_MEDIA_TYPE, 'surefire-reports'),
+      evidenceRole('node-distribution', 'FILE', 'text/plain', 'release-validation-node-distribution.txt'),
+      evidenceRole('maven-distribution', 'FILE', 'text/plain', 'release-validation-maven-distribution.txt'),
+      evidenceRole('go-distribution', 'FILE', 'text/plain', 'release-validation-go-distribution.txt'),
+      evidenceRole('java-distribution', 'FILE', 'text/plain', 'release-validation-java-distribution.txt'),
+    ]),
+  }),
+  'core-jdk-21': Object.freeze({
+    toolchain: 'coreJdk21',
+    roles: Object.freeze([
+      evidenceRole('build-log', 'FILE', 'text/plain', 'core-jdk-21.log'),
+      evidenceRole('java-distribution', 'FILE', 'text/plain', 'release-validation-core-jdk-21-distribution.txt'),
+      evidenceRole('surefire-reports', 'DIRECTORY', SUREFIRE_MEDIA_TYPE, 'surefire-reports'),
+    ]),
+  }),
+  'core-jdk-25': Object.freeze({
+    toolchain: 'toystoreJava',
+    roles: Object.freeze([
+      evidenceRole('build-log', 'FILE', 'text/plain', 'core-jdk-25.log'),
+      evidenceRole('java-distribution', 'FILE', 'text/plain', 'release-validation-toystore-java-distribution.txt'),
+      evidenceRole('surefire-reports', 'DIRECTORY', SUREFIRE_MEDIA_TYPE, 'surefire-reports'),
+    ]),
+  }),
+  'isolated-install': Object.freeze({
+    toolchain: 'java',
+    roles: Object.freeze([
+      evidenceRole('installed-pom', 'FILE', 'application/xml', 'soklet-3.6.0.pom', 'pom'),
+      evidenceRole('installed-main-jar', 'FILE', 'application/java-archive', 'soklet-3.6.0.jar', 'mainJar'),
+      evidenceRole('install-log', 'FILE', 'text/plain', 'isolated-install.log'),
+    ]),
+  }),
+  'api-freeze': Object.freeze({
+    toolchain: 'java',
+    roles: Object.freeze([
+      evidenceRole('api-freeze-log', 'FILE', 'text/plain', 'api-freeze.log'),
+      evidenceRole('japicmp-diff', 'FILE', 'application/xml', 'mcp-api-diff.xml'),
+      evidenceRole('japicmp-incompatibilities', 'FILE', 'application/x-ndjson', 'mcp-api-diff.incompatibilities.jsonl'),
+      evidenceRole('api-freeze-report', 'FILE', 'application/xml', 'mcp-api-freeze.xml'),
+      evidenceRole('signatures', 'DIRECTORY', 'application/vnd.soklet.api-signatures', 'mcp-api-freezes'),
+    ]),
+  }),
+  'candidate-javadocs': Object.freeze({
+    toolchain: 'java',
+    roles: Object.freeze([
+      evidenceRole('javadoc-log', 'FILE', 'text/plain', 'candidate-javadocs.log'),
+      evidenceRole('javadoc-jar', 'FILE', 'application/java-archive', 'soklet-3.6.0-javadoc.jar', 'javadocJar'),
+      evidenceRole('apidocs', 'DIRECTORY', 'text/html', 'apidocs'),
+      evidenceRole('surefire-reports', 'DIRECTORY', SUREFIRE_MEDIA_TYPE, 'surefire-reports'),
+    ]),
+  }),
+  'static-analysis': Object.freeze({
+    toolchain: 'coreJdk21',
+    roles: Object.freeze([
+      evidenceRole('analysis-log', 'FILE', 'text/plain', 'static-analysis.log'),
+    ]),
+  }),
+  spotbugs: Object.freeze({
+    toolchain: 'coreJdk21',
+    roles: Object.freeze([
+      evidenceRole('spotbugs-log', 'FILE', 'text/plain', 'spotbugs.log'),
+      evidenceRole('spotbugs-report', 'FILE', 'application/xml', 'spotbugsXml.xml'),
+    ]),
+  }),
+  'schema-replay': Object.freeze({
+    toolchain: 'java',
+    roles: Object.freeze([
+      evidenceRole('replay-log', 'FILE', 'text/plain', 'schema-replay.log'),
+      evidenceRole('surefire-reports', 'DIRECTORY', SUREFIRE_MEDIA_TYPE, 'surefire-reports'),
+    ]),
+  }),
+  'fuzz-replay': Object.freeze({
+    toolchain: 'toystoreJava',
+    roles: Object.freeze([
+      evidenceRole('replay-log', 'FILE', 'text/plain', 'fuzz-replay.log'),
+      evidenceRole('surefire-reports', 'DIRECTORY', SUREFIRE_MEDIA_TYPE, 'surefire-reports'),
+    ]),
+  }),
+  'fuzz-nightly-history': Object.freeze({
+    toolchain: 'nodePin',
+    roles: Object.freeze([
+      evidenceRole('history', 'FILE', 'application/json', 'fuzz-nightly-history.json'),
+    ]),
+  }),
+  'soak-smoke': Object.freeze({
+    toolchain: 'toystoreJava',
+    roles: Object.freeze([
+      evidenceRole('soak-log', 'FILE', 'text/plain', 'soak-smoke.log'),
+      evidenceRole('soak-report', 'FILE', 'text/markdown', 'soak-report.md'),
+      evidenceRole('surefire-reports', 'DIRECTORY', SUREFIRE_MEDIA_TYPE, 'surefire-reports'),
+    ]),
+  }),
+  'soak-nightly-history': Object.freeze({
+    toolchain: 'nodePin',
+    roles: Object.freeze([
+      evidenceRole('history', 'FILE', 'application/json', 'soak-nightly-history.json'),
+    ]),
+  }),
+  'release-soak': Object.freeze({
+    toolchain: 'java',
+    roles: Object.freeze([
+      evidenceRole('soak-report', 'FILE', 'text/markdown', 'soak-report.md'),
+      evidenceRole('surefire-reports', 'DIRECTORY', SUREFIRE_MEDIA_TYPE, 'surefire-reports'),
+      evidenceRole('soak-log', 'FILE', 'text/plain', 'release-soak.log'),
+    ]),
+  }),
+  'localization-fleet': Object.freeze({
+    toolchain: 'java',
+    roles: Object.freeze([
+      evidenceRole('fleet-log', 'FILE', 'text/plain', 'localization-fleet.log'),
+      evidenceRole('surefire-reports', 'DIRECTORY', SUREFIRE_MEDIA_TYPE, 'surefire-reports'),
+    ]),
+  }),
+  'operational-history': Object.freeze({
+    toolchain: 'nodePin',
+    roles: Object.freeze([
+      evidenceRole('history', 'FILE', 'application/json', 'operational-history.json'),
+    ]),
+  }),
+  'release-scans': Object.freeze({
+    toolchain: 'coreJdk21',
+    roles: Object.freeze([
+      evidenceRole('scan-summary', 'FILE', 'application/json', 'release-scans.json'),
+      evidenceRole('scan-reports', 'DIRECTORY', 'application/vnd.soklet.scan-reports', 'release-scans'),
+    ]),
+  }),
+  'mcp-benchmarks': Object.freeze({
+    toolchain: 'java',
+    roles: Object.freeze([
+      evidenceRole('benchmark-results', 'FILE', 'application/json', 'mcp-benchmarks.json'),
+      evidenceRole('benchmark-log', 'FILE', 'text/plain', 'mcp-benchmarks.log'),
+    ]),
+  }),
+  'matrix-closure': Object.freeze({
+    toolchain: 'nodePin',
+    roles: Object.freeze([
+      evidenceRole('matrix-report', 'FILE', 'application/json', 'matrix-closure.json'),
+    ]),
+  }),
+  'candidate-conformance': Object.freeze({
+    toolchain: 'nodePin',
+    roles: Object.freeze([
+      evidenceRole('conformance-evidence', 'DIRECTORY', 'application/vnd.soklet.conformance-evidence', 'release'),
+    ]),
+  }),
+  'candidate-localization': Object.freeze({
+    toolchain: 'java',
+    roles: Object.freeze([
+      evidenceRole('localization-log', 'FILE', 'text/plain', 'candidate-localization.log'),
+    ]),
+  }),
+  'barebones-app': Object.freeze({
+    toolchain: 'java',
+    roles: Object.freeze([
+      evidenceRole('port-file', 'FILE', 'text/plain', 'barebones-loopback-port.txt'),
+      evidenceRole('reservation-log', 'FILE', 'text/plain', 'barebones-port-reservation.log'),
+      evidenceRole('runtime-log', 'FILE', 'text/plain', 'barebones-app.log'),
+    ]),
+  }),
+  'soklet-servlet-javax': Object.freeze({
+    toolchain: 'java',
+    roles: Object.freeze([
+      evidenceRole('project-pom', 'FILE', 'application/xml', 'pom.xml'),
+      evidenceRole('default-jar', 'FILE', 'application/java-archive', 'soklet-3.1.1.jar', 'gateDefaultArtifact'),
+      evidenceRole('default-log', 'FILE', 'text/plain', 'soklet-servlet-javax-default.log'),
+      evidenceRole('default-surefire-reports', 'DIRECTORY', SUREFIRE_MEDIA_TYPE, 'soklet-servlet-javax-default-surefire-reports'),
+      evidenceRole('candidate-log', 'FILE', 'text/plain', 'soklet-servlet-javax-candidate.log'),
+      evidenceRole('candidate-surefire-reports', 'DIRECTORY', SUREFIRE_MEDIA_TYPE, 'surefire-reports'),
+    ]),
+  }),
+  'soklet-servlet-jakarta': Object.freeze({
+    toolchain: 'java',
+    roles: Object.freeze([
+      evidenceRole('project-pom', 'FILE', 'application/xml', 'pom.xml'),
+      evidenceRole('default-jar', 'FILE', 'application/java-archive', 'soklet-3.1.1.jar', 'gateDefaultArtifact'),
+      evidenceRole('default-log', 'FILE', 'text/plain', 'soklet-servlet-jakarta-default.log'),
+      evidenceRole('default-surefire-reports', 'DIRECTORY', SUREFIRE_MEDIA_TYPE, 'soklet-servlet-jakarta-default-surefire-reports'),
+      evidenceRole('candidate-log', 'FILE', 'text/plain', 'soklet-servlet-jakarta-candidate.log'),
+      evidenceRole('candidate-surefire-reports', 'DIRECTORY', SUREFIRE_MEDIA_TYPE, 'surefire-reports'),
+    ]),
+  }),
+  'toystore-app': Object.freeze({
+    toolchain: 'toystoreJava',
+    roles: Object.freeze([
+      evidenceRole('project-pom', 'FILE', 'application/xml', 'pom.xml'),
+      evidenceRole('candidate-log', 'FILE', 'text/plain', 'toystore-app-candidate.log'),
+      evidenceRole('candidate-surefire-reports', 'DIRECTORY', SUREFIRE_MEDIA_TYPE, 'surefire-reports'),
+      evidenceRole('java-distribution', 'FILE', 'text/plain', 'release-validation-toystore-java-distribution.txt'),
+    ]),
+  }),
+  'soklet-otel': Object.freeze({
+    toolchain: 'java',
+    roles: Object.freeze([
+      evidenceRole('project-pom', 'FILE', 'application/xml', 'pom.xml'),
+      evidenceRole('candidate-log', 'FILE', 'text/plain', 'soklet-otel-candidate.log'),
+      evidenceRole('candidate-surefire-reports', 'DIRECTORY', SUREFIRE_MEDIA_TYPE, 'surefire-reports'),
+    ]),
+  }),
+  'soklet-website': Object.freeze({
+    toolchain: 'nodePin',
+    roles: Object.freeze([
+      evidenceRole('build-log', 'FILE', 'text/plain', 'soklet-website.log'),
+      evidenceRole('distribution', 'DIRECTORY', 'application/vnd.soklet.site-distribution', 'dist'),
+    ]),
+  }),
+  'typescript-interop': Object.freeze({
+    toolchain: 'nodePin',
+    roles: Object.freeze([
+      evidenceRole('interop-log', 'FILE', 'text/plain', 'typescript-interop.log'),
+      evidenceRole('candidate-main-jar', 'FILE', 'application/java-archive', 'soklet-3.6.0.jar', 'mainJar'),
+    ]),
+  }),
+  'go-interop': Object.freeze({
+    toolchain: 'go',
+    roles: Object.freeze([
+      evidenceRole('interop-log', 'FILE', 'text/plain', 'go-interop.log'),
+      evidenceRole('candidate-main-jar', 'FILE', 'application/java-archive', 'soklet-3.6.0.jar', 'mainJar'),
+    ]),
+  }),
+});
+
+function receiptIdentity(command, profile, expectation) {
+  return Object.freeze({ command, expectation, profile });
+}
+
+const GATE_RECEIPT_IDENTITIES = Object.freeze({
+  'candidate-build': receiptIdentity(
+    'mvn -B -ntp -Dgpg.skip=true clean verify',
+    'release-candidate',
+    'BUILD_SUCCESS_AND_CANDIDATE_ARTIFACTS_RECORDED',
+  ),
+  'core-jdk-21': receiptIdentity(
+    'mvn -B -ntp -Dgpg.skip=true clean test',
+    'jdk-21',
+    'TESTS_PASS_WITH_ZERO_ERRORS_AND_FAILURES',
+  ),
+  'core-jdk-25': receiptIdentity(
+    'mvn -B -ntp -Dgpg.skip=true clean test',
+    'jdk-25',
+    'TESTS_PASS_WITH_ZERO_ERRORS_AND_FAILURES',
+  ),
+  'isolated-install': receiptIdentity(
+    'org.apache.maven.plugins:maven-install-plugin:3.1.4:install-file',
+    'isolated-repository',
+    'INSTALLED_POM_AND_MAIN_JAR_MATCH_CANDIDATE_BYTES',
+  ),
+  'api-freeze': receiptIdentity(
+    'scripts/verify-mcp-api-freezes.sh',
+    'mcp-api-freeze',
+    'REVIEWED_BIDIRECTIONAL_API_SET_AND_SIGNATURES_MATCH',
+  ),
+  'candidate-javadocs': receiptIdentity(
+    'mvn -B -ntp -Dgpg.skip=true -Dtest=McpPublicJavadocTests clean package javadoc:javadoc',
+    'public-javadocs',
+    'PUBLIC_JAVADOC_INVENTORY_JAR_AND_STANDALONE_DOCLINT_PASS',
+  ),
+  'static-analysis': receiptIdentity(
+    'mvn -B -ntp -Dgpg.skip=true -Pstatic-analysis clean compile',
+    'static-analysis',
+    'BUILD_SUCCESS',
+  ),
+  spotbugs: receiptIdentity(
+    'mvn -B -ntp -Dgpg.skip=true -Pspotbugs -DskipTests clean compile spotbugs:check',
+    'spotbugs',
+    'ZERO_SPOTBUGS_FINDINGS',
+  ),
+  'schema-replay': receiptIdentity(
+    'mvn -B -ntp -Dgpg.skip=true -Dtest=JsonSchemaTestSuitePinTests,McpToolSchemaProfile* test',
+    'profile-1-replay',
+    'SELECTED_SCHEMA_CORPUS_AND_PROFILE_TESTS_PASS',
+  ),
+  'fuzz-replay': receiptIdentity(
+    'mvn -B -ntp -f fuzz/pom.xml clean test; node scripts/verify-json-corpus.mjs',
+    'checked-in-corpus',
+    'ALL_CHECKED_IN_FUZZ_CORPORA_PASS',
+  ),
+  'fuzz-nightly-history': receiptIdentity(
+    'node scripts/verify-release-history.mjs fuzz-nightly',
+    'nightly-history',
+    'REQUIRED_NIGHTLY_FUZZ_WINDOW_PASSES',
+  ),
+  'soak-smoke': receiptIdentity(
+    'SOKLET_SOAK_PROFILE=smoke mvn -B -ntp -f soak/pom.xml clean test',
+    'smoke',
+    'SOAK_REPORT_AND_SUREFIRE_PASS_WITHIN_PROFILE_LIMITS',
+  ),
+  'soak-nightly-history': receiptIdentity(
+    'node scripts/verify-release-history.mjs soak-nightly',
+    'nightly-history',
+    'REQUIRED_NIGHTLY_SOAK_WINDOW_PASSES',
+  ),
+  'release-soak': receiptIdentity(
+    'SOKLET_SOAK_PROFILE=release mvn -B -ntp -f soak/pom.xml clean test',
+    'release',
+    'SOAK_REPORT_AND_SUREFIRE_PASS_WITHIN_PROFILE_LIMITS',
+  ),
+  'localization-fleet': receiptIdentity(
+    'mvn -B -ntp -Dtest=McpLocalizationFleetPublicRuntimeTests test',
+    'two-listener-fleet',
+    'FAILED_RELOAD_ROLLING_DRIFT_NODE_LOSS_RECONNECT_AND_CLEANUP_PASS',
+  ),
+  'operational-history': receiptIdentity(
+    'node scripts/verify-release-history.mjs operational',
+    'scheduled-history',
+    'REQUIRED_OPERATIONAL_HISTORY_WINDOW_PASSES',
+  ),
+  'release-scans': receiptIdentity(
+    'node scripts/verify-release-scans.mjs',
+    'release',
+    'REQUIRED_RELEASE_SCANS_PASS_WITH_ZERO_UNACCEPTED_FINDINGS',
+  ),
+  'mcp-benchmarks': receiptIdentity(
+    'mvn -B -ntp -f benchmarks/pom.xml clean verify; node scripts/verify-release-benchmarks.mjs',
+    'release',
+    'JMH_JSON_351_COMPARISON_AND_SCHEMA_360_BASELINE_RECORDED_WITH_SIGNOFF',
+  ),
+  'matrix-closure': receiptIdentity(
+    'node scripts/verify-release-matrix-closure.mjs',
+    'release',
+    'ZERO_UNRESOLVED_IN_SCOPE_MATRIX_ROWS',
+  ),
+  'candidate-conformance': receiptIdentity(
+    'node conformance/official/run.mjs --phase 5 --mode release',
+    'release',
+    'ALL_39_CAPABILITY_SELECTED_SCENARIOS_PASS',
+  ),
+  'candidate-localization': receiptIdentity(
+    'verification/localization/verify.sh',
+    'generic-provider',
+    'CANDIDATE_ARTIFACT_LOCALIZATION_PROVIDER_PASSES',
+  ),
+  'barebones-app': receiptIdentity(
+    'javac --release 17; live loopback probes; clean shutdown',
+    'candidate',
+    'COMPILE_START_RESPOND_TERMINATE_AND_RELEASE_PORT',
+  ),
+  'soklet-servlet-javax': receiptIdentity(
+    'mvn -B -ntp clean verify; mvn -B -ntp -Dsoklet.version=3.6.0 clean verify',
+    'default-and-candidate',
+    'DEFAULT_AND_CANDIDATE_LEGS_PASS_WITH_EXACT_ARTIFACTS',
+  ),
+  'soklet-servlet-jakarta': receiptIdentity(
+    'mvn -B -ntp clean verify; mvn -B -ntp -Dsoklet.version=3.6.0 clean verify',
+    'default-and-candidate',
+    'DEFAULT_AND_CANDIDATE_LEGS_PASS_WITH_EXACT_ARTIFACTS',
+  ),
+  'toystore-app': receiptIdentity(
+    'mvn -B -ntp -Dsoklet.version=3.6.0 clean verify',
+    'candidate',
+    'CANDIDATE_LEG_PASSES_WITH_EXACT_ARTIFACT',
+  ),
+  'soklet-otel': receiptIdentity(
+    'mvn -B -ntp -Dsoklet.version=3.6.0 clean verify',
+    'candidate',
+    'CANDIDATE_LEG_PASSES_WITH_EXACT_ARTIFACT',
+  ),
+  'soklet-website': receiptIdentity(
+    'npm ci --ignore-scripts; npm run lint; npm run ssg-build',
+    'candidate-documentation',
+    'CLEAN_INSTALL_LINT_AND_STATIC_BUILD_PASS',
+  ),
+  'typescript-interop': receiptIdentity(
+    'verification/interoperability/typescript/verify.sh',
+    'tools-list',
+    'PINNED_SDK_TOOLS_LIST_FIXTURE_PASSES_AND_SHUTS_DOWN_CLEANLY',
+  ),
+  'go-interop': receiptIdentity(
+    'verification/interoperability/go/verify.sh',
+    'tools-list',
+    'PINNED_SDK_TOOLS_LIST_FIXTURE_PASSES_AND_SHUTS_DOWN_CLEANLY',
+  ),
+});
+
+export const GATE_EVIDENCE_CONTRACTS = Object.freeze(Object.fromEntries(
+  EXPECTED_GATE_IDS.map((gateId) => [
+    gateId,
+    Object.freeze({
+      ...GATE_ARTIFACT_CONTRACTS[gateId],
+      ...GATE_RECEIPT_IDENTITIES[gateId],
+      contractId: `soklet.release.${gateId}.v1`,
+    }),
+  ]),
+));
 
 const COORDINATES = Object.freeze({
   artifactId: 'soklet',
@@ -333,7 +748,7 @@ function requireEvidenceItem(item, expectedFileName, description) {
     fail(`${description} must have type FILE`);
 }
 
-function requireGateEvidenceItem(item, description) {
+function requireGateArtifact(item, description) {
   if (item?.type === 'FILE') {
     requireExactKeys(item, ['bytes', 'fileName', 'sha256', 'type'], description);
     requirePositiveSafeInteger(item.bytes, `${description} byte count`);
@@ -344,7 +759,8 @@ function requireGateEvidenceItem(item, description) {
       description,
     );
     requirePositiveSafeInteger(item.fileCount, `${description} file count`);
-    requireTrimmedString(item.algorithm, `${description} algorithm`);
+    if (item.algorithm !== DIRECTORY_EVIDENCE_ALGORITHM)
+      fail(`${description} algorithm is invalid`);
   } else {
     fail(`${description} must describe a FILE or DIRECTORY`);
   }
@@ -352,6 +768,118 @@ function requireGateEvidenceItem(item, description) {
   requireTrimmedString(item.fileName, `${description} file name`);
   if (basename(item.fileName) !== item.fileName || !SHA256_PATTERN.test(item.sha256))
     fail(`${description} identity is invalid`);
+}
+
+function requireGateEvidenceItem(item, description) {
+  requireExactKeys(item, ['artifact', 'mediaType', 'role'], description);
+  requireTrimmedString(item.role, `${description} role`);
+  if (!/^[a-z][a-z0-9-]*$/.test(item.role))
+    fail(`${description} role is invalid`);
+  requireTrimmedString(item.mediaType, `${description} media type`);
+  requireGateArtifact(item.artifact, `${description} artifact`);
+}
+
+function requireGateReceipt(receipt, gate, mainJar, gateId, candidateCommit, workflow, contract) {
+  requireExactKeys(
+    receipt,
+    [
+      'candidateCommit',
+      'candidateSha256',
+      'command',
+      'contractId',
+      'expectation',
+      'formatVersion',
+      'gateId',
+      'profile',
+      'result',
+      'toolchain',
+      'workflow',
+    ],
+    `${gateId} typed receipt`,
+  );
+  const expectedContractId = `soklet.release.${gateId}.v1`;
+  if (receipt.formatVersion !== 1
+      || receipt.candidateCommit !== candidateCommit
+      || receipt.candidateSha256 !== mainJar.sha256
+      || receipt.contractId !== expectedContractId
+      || receipt.contractId !== gate.evidenceContract
+      || receipt.gateId !== gateId
+      || receipt.result !== 'PASS'
+      || receipt.toolchain !== gate.toolchain
+      || receipt.toolchain !== contract.toolchain
+      || receipt.command !== contract.command
+      || receipt.expectation !== contract.expectation
+      || receipt.profile !== contract.profile
+      || JSON.stringify(canonicalize(receipt.workflow))
+        !== JSON.stringify(canonicalize(workflow))) {
+    fail(`${gateId} typed receipt does not match the candidate, gate contract, and toolchain`);
+  }
+}
+
+function requireWorkflowIdentity(workflow, candidateCommit, description) {
+  requireExactKeys(
+    workflow,
+    ['job', 'repository', 'runAttempt', 'runId', 'serverUrl', 'sha'],
+    description,
+  );
+  for (const [name, entry] of Object.entries(workflow))
+    requireTrimmedString(entry, `${description} ${name}`);
+  if (workflow.sha !== candidateCommit
+      || workflow.job !== 'validate'
+      || workflow.repository !== 'soklet/soklet'
+      || workflow.serverUrl !== 'https://github.com'
+      || !/^[1-9][0-9]*$/.test(workflow.runAttempt)
+      || !/^[1-9][0-9]*$/.test(workflow.runId)) {
+    fail(`${description} is not the reviewed Soklet release job for this candidate`);
+  }
+}
+
+function requireGateDefaultArtifact(item, gate, expected, gateId) {
+  const identity = /^com\.soklet:soklet:([0-9]+\.[0-9]+\.[0-9]+)$/.exec(
+    gate.defaultArtifactIdentity ?? '',
+  );
+  if (identity === null
+      || !SHA256_PATTERN.test(gate.defaultArtifactSha256 ?? '')
+      || expected.fileName !== `soklet-${identity[1]}.jar`
+      || item.artifact.type !== 'FILE'
+      || item.artifact.fileName !== expected.fileName
+      || item.artifact.sha256 !== gate.defaultArtifactSha256) {
+    fail(`Gate ${gateId} default JAR evidence does not match its exact identity and SHA-256`);
+  }
+}
+
+function requireGateEvidenceContract(gateEvidence, gateId, artifacts) {
+  const contract = GATE_EVIDENCE_CONTRACTS[gateId];
+  if (contract === undefined)
+    fail(`Promotion has no typed-evidence contract for gate ${gateId}`);
+  if (gateEvidence.gate.evidenceContract !== `soklet.release.${gateId}.v1`
+      || gateEvidence.gate.toolchain !== contract.toolchain) {
+    fail(`Gate ${gateId} does not identify its exact typed-evidence contract and toolchain`);
+  }
+  if (gateEvidence.evidence.length !== contract.roles.length)
+    fail(`Gate ${gateId} does not contain its exact ordered evidence roles`);
+
+  for (const [index, expected] of contract.roles.entries()) {
+    const item = gateEvidence.evidence[index];
+    if (item.role !== expected.role
+        || item.mediaType !== expected.mediaType
+        || item.artifact.type !== expected.type
+        || item.artifact.fileName !== expected.fileName) {
+      fail(`Gate ${gateId} evidence item ${index} does not match role ${expected.role}`);
+    }
+    if (expected.binding !== null && expected.binding !== 'gateDefaultArtifact') {
+      const artifact = artifacts[expected.binding];
+      if (item.artifact.type !== 'FILE'
+          || item.artifact.bytes !== artifact.bytes
+          || item.artifact.sha256 !== artifact.sha256) {
+        fail(`Gate ${gateId} evidence role ${expected.role} does not match candidate ${expected.binding}`);
+      }
+    } else if (expected.binding === 'gateDefaultArtifact') {
+      requireGateDefaultArtifact(item, gateEvidence.gate, expected, gateId);
+    }
+  }
+
+  return contract;
 }
 
 function requireInteroperabilityReceipt(receipt, gate, mainJar, gateId) {
@@ -405,7 +933,7 @@ export function validateCompletedReleaseEvidence(value, candidateCommit) {
     'release-validation evidence',
   );
 
-  if (value.formatVersion !== 1 || value.candidateCommit !== candidateCommit)
+  if (value.formatVersion !== 2 || value.candidateCommit !== candidateCommit)
     fail('Release-validation evidence does not identify the supplied candidate commit');
   if (!SHA256_PATTERN.test(value.releaseConfigurationSha256))
     fail('Release-validation evidence must identify its release configuration SHA-256');
@@ -419,6 +947,22 @@ export function validateCompletedReleaseEvidence(value, candidateCommit) {
   for (const [key, specification] of Object.entries(ARTIFACTS))
     requireEvidenceItem(value.artifacts[key], specification.evidenceName, `release-validation ${key}`);
 
+  requireWorkflowIdentity(value.workflow, candidateCommit, 'release-validation workflow');
+
+  const candidateDescriptorBytes = canonicalJsonBytes({
+    artifacts: value.artifacts,
+    candidateCommit,
+    coordinates: value.coordinates,
+    formatVersion: 1,
+  });
+  const candidateBindings = {
+    ...value.artifacts,
+    descriptor: {
+      bytes: candidateDescriptorBytes.length,
+      sha256: sha256(candidateDescriptorBytes),
+    },
+  };
+
   if (!Array.isArray(value.gates)
       || JSON.stringify(value.gates.map((gate) => gate?.gate?.id))
         !== JSON.stringify(EXPECTED_GATE_IDS)) {
@@ -429,7 +973,15 @@ export function validateCompletedReleaseEvidence(value, candidateCommit) {
     const gateId = EXPECTED_GATE_IDS[index];
     requireExactKeys(
       gate,
-      ['candidateCommit', 'evidence', 'formatVersion', 'gate', 'interoperability', 'status'],
+      [
+        'candidateCommit',
+        'evidence',
+        'formatVersion',
+        'gate',
+        'interoperability',
+        'receipt',
+        'status',
+      ],
       `${gateId} gate evidence`,
     );
     requireExactKeys(
@@ -440,19 +992,35 @@ export function validateCompletedReleaseEvidence(value, candidateCommit) {
         'commit',
         'defaultArtifactIdentity',
         'defaultArtifactSha256',
+        'evidenceContract',
         'id',
         'repository',
+        'toolchain',
       ],
       `${gateId} gate pin`,
     );
-    if (gate.formatVersion !== 1 || gate.candidateCommit !== candidateCommit
+    if (gate.formatVersion !== 2 || gate.candidateCommit !== candidateCommit
         || gate.status !== 'PASS' || gate.gate.id !== gateId
         || !Array.isArray(gate.evidence) || gate.evidence.length === 0) {
       fail(`Gate ${gateId} is not complete PASS evidence for this candidate`);
     }
+    const roles = new Set();
     gate.evidence.forEach((item, evidenceIndex) => {
       requireGateEvidenceItem(item, `${gateId} evidence item ${evidenceIndex}`);
+      if (roles.has(item.role))
+        fail(`Gate ${gateId} repeats evidence role ${item.role}`);
+      roles.add(item.role);
     });
+    const contract = requireGateEvidenceContract(gate, gateId, candidateBindings);
+    requireGateReceipt(
+      gate.receipt,
+      gate.gate,
+      value.artifacts.mainJar,
+      gateId,
+      candidateCommit,
+      value.workflow,
+      contract,
+    );
 
     const isInteroperability = gateId === 'typescript-interop' || gateId === 'go-interop';
     if ((gate.interoperability !== null) !== isInteroperability)
@@ -464,10 +1032,11 @@ export function validateCompletedReleaseEvidence(value, candidateCommit) {
         value.artifacts.mainJar,
         gateId,
       );
-      const candidateItems = gate.evidence.filter((item) => item.type === 'FILE'
-        && item.bytes === value.artifacts.mainJar.bytes
-        && item.fileName === value.artifacts.mainJar.fileName
-        && item.sha256 === value.artifacts.mainJar.sha256);
+      const candidateItems = gate.evidence.filter((item) => item.role === 'candidate-main-jar'
+        && item.artifact.type === 'FILE'
+        && item.artifact.bytes === value.artifacts.mainJar.bytes
+        && item.artifact.fileName === value.artifacts.mainJar.fileName
+        && item.artifact.sha256 === value.artifacts.mainJar.sha256);
       if (gate.evidence.length !== 2 || candidateItems.length !== 1)
         fail(`${gateId} evidence must contain its log and the exact candidate main JAR`);
     }
@@ -475,28 +1044,11 @@ export function validateCompletedReleaseEvidence(value, candidateCommit) {
 
   requireExactKeys(
     value.toolchains,
-    ['git', 'go', 'java', 'maven', 'node', 'npm', 'toystoreJava'],
+    ['coreJdk21', 'git', 'go', 'java', 'maven', 'node', 'npm', 'toystoreJava'],
     'release-validation toolchains',
   );
   for (const [name, version] of Object.entries(value.toolchains))
     requireTrimmedString(version, `release-validation ${name} toolchain`);
-
-  requireExactKeys(
-    value.workflow,
-    ['job', 'repository', 'runAttempt', 'runId', 'serverUrl', 'sha'],
-    'release-validation workflow',
-  );
-  for (const [name, entry] of Object.entries(value.workflow))
-    requireTrimmedString(entry, `release-validation workflow ${name}`);
-  if (value.workflow.sha !== candidateCommit)
-    fail('Release-validation workflow SHA does not match the supplied candidate commit');
-  if (value.workflow.job !== 'validate'
-      || value.workflow.repository !== 'soklet/soklet'
-      || value.workflow.serverUrl !== 'https://github.com'
-      || !/^[1-9][0-9]*$/.test(value.workflow.runAttempt)
-      || !/^[1-9][0-9]*$/.test(value.workflow.runId)) {
-    fail('Release-validation workflow identity is not the reviewed Soklet release job');
-  }
 
   return value;
 }
@@ -507,8 +1059,8 @@ function validateReviewedReleaseManifest(value, manifestSha256, evidence) {
     ['candidate', 'formatVersion', 'gates', 'promotion', 'toolchains'],
     'reviewed release manifest',
   );
-  if (value.formatVersion !== 1)
-    fail('Reviewed release manifest formatVersion must be 1');
+  if (value.formatVersion !== 2)
+    fail('Reviewed release manifest formatVersion must be 2');
   requireCoordinates(value.candidate, 'reviewed release manifest candidate');
   if (manifestSha256 !== evidence.releaseConfigurationSha256)
     fail('Reviewed release manifest SHA-256 does not match release-validation evidence');
@@ -532,9 +1084,12 @@ function validateReviewedReleaseManifest(value, manifestSha256, evidence) {
         || gate.commit !== evidencePin.commit
         || gate.defaultArtifactIdentity !== evidencePin.defaultArtifactIdentity
         || gate.defaultArtifactSha256 !== evidencePin.defaultArtifactSha256
+        || gate.evidenceContract !== evidencePin.evidenceContract
         || gate.repository !== evidencePin.repository) {
       fail(`Reviewed release manifest gate ${gateId} does not match release-validation evidence`);
     }
+    if (gate.toolchain !== evidencePin.toolchain)
+      fail(`Reviewed release manifest gate ${gateId} toolchain does not match release-validation evidence`);
   }
 
   return value;

@@ -235,7 +235,8 @@ final class McpRequestSseStream {
 	}
 
 	private @NonNull Frame frame(@NonNull McpJsonRpcMessage message) {
-		byte[] json = envelopeCodec.encode(message);
+		byte[] json = envelopeCodec.encode(
+				McpProtocolSupport.requireServerOutboundMessage(message));
 		byte[] frame = new byte[MESSAGE_PREFIX.length + json.length
 				+ MESSAGE_SUFFIX.length];
 		System.arraycopy(MESSAGE_PREFIX, 0, frame, 0, MESSAGE_PREFIX.length);

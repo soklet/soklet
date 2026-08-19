@@ -46,11 +46,8 @@ jobs:
       - name: Run tests
         run: mvn -B -ntp clean test
 
-      - name: Package main JAR
-        run: mvn -B -ntp -DskipTests package
-
-      - name: Build Javadoc
-        run: mvn -B -ntp clean javadoc:javadoc
+      - name: Package main, source, and Javadoc JARs
+        run: mvn -B -ntp -DskipTests clean package
 
       - name: Compile benchmarks
         run: mvn -B -ntp -f benchmarks/pom.xml -DskipTests clean compile

@@ -9,9 +9,13 @@ The four modes are intentionally distinct:
 
 1. `prepare` is offline. It verifies the independently supplied validation-
    evidence SHA-256, separately pinned reviewed release-manifest SHA-256,
-   candidate commit, fixed `com.soklet:soklet:3.6.0` coordinates, exact
-   13-gate PASS set and gate pins, reviewed workflow identity, and all four
-   artifact names, sizes, and SHA-256 values. It stages copies of those exact
+   candidate commit, fixed `com.soklet:soklet:3.6.0` coordinates, exact ordered
+   29-gate PASS set and gate pins, every typed gate receipt in the format-v2
+   evidence envelope, reviewed workflow identity, and all four artifact names,
+   sizes, and SHA-256 values.
+   Each receipt must match its gate's evidence contract, toolchain, canonical
+   command/profile/expectation, workflow run/job identity, candidate commit,
+   main-JAR SHA-256, and exact role/media/type/basename set. It stages copies of those exact
    bytes, creates and verifies
    four detached armored signatures with one explicit full GPG fingerprint,
    writes MD5, SHA-1, SHA-256, and SHA-512 files for the four base artifacts

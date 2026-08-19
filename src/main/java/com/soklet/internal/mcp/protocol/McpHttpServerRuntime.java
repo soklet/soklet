@@ -4662,7 +4662,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			Set<String> values = new LinkedHashSet<>(
 					headers.getOrDefault(matchingName, Set.of()));
 			values.add(header.value());
-			headers.put(matchingName, Set.copyOf(values));
+			headers.put(matchingName, Collections.unmodifiableSet(values));
 		}
 
 		return Request.withRawUrl(httpMethod, request.uri())

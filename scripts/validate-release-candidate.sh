@@ -62,6 +62,36 @@ done
 
 node "$evidence_helper" validate-config "$manifest_path"
 
+assert_ready_gate_has_dispatch() {
+	local gate_id=$1
+	case "$gate_id" in
+		candidate-build|core-jdk-25|isolated-install|api-freeze|candidate-javadocs|\
+		schema-replay|fuzz-replay|soak-smoke|release-soak|localization-fleet|\
+		candidate-conformance|candidate-localization|barebones-app|\
+		soklet-servlet-javax|soklet-servlet-jakarta|toystore-app|soklet-otel|\
+		soklet-website|typescript-interop|go-interop)
+			return 0
+			;;
+		*)
+			fail "gate $gate_id is READY but has no release-validator dispatch."
+			;;
+	esac
+}
+
+configured_gate_count=0
+while IFS=$'\t' read -r configured_gate_id configured_gate_status; do
+	configured_gate_count=$((configured_gate_count + 1))
+	[[ -n "$configured_gate_id" ]] \
+		|| fail "release manifest returned an empty gate ID."
+	[[ -n "$configured_gate_status" ]] \
+		|| fail "release manifest returned an empty status for gate $configured_gate_id."
+	if [[ "$configured_gate_status" == "READY" ]]; then
+		assert_ready_gate_has_dispatch "$configured_gate_id"
+	fi
+done < <(node "$evidence_helper" list-gate-ids "$manifest_path")
+[[ "$configured_gate_count" -eq 29 ]] \
+	|| fail "release manifest dispatch inventory must contain exactly 29 gates."
+
 head_commit=$(git rev-parse --verify HEAD)
 [[ "$head_commit" == "$candidate_commit" ]] \
 	|| fail "checkout HEAD is $head_commit; expected candidate $candidate_commit."
@@ -294,6 +324,15 @@ work_root="$validation_root/work"
 checkout_root="$work_root/checkouts"
 mkdir -p "$gate_evidence_root" "$checkout_root"
 cp "$build_log" "$evidence_root/candidate-build.log"
+node "$surefire_verifier" "$project_root/target/surefire-reports" \
+	candidate-build candidate
+candidate_build_raw_root="$evidence_root/raw/candidate-build"
+candidate_build_surefire_reports="$candidate_build_raw_root/surefire-reports"
+[[ ! -e "$candidate_build_surefire_reports" ]] \
+	|| fail "candidate-build Surefire evidence destination already exists."
+mkdir -p "$candidate_build_raw_root"
+cp -R "$project_root/target/surefire-reports" \
+	"$candidate_build_surefire_reports"
 
 candidate_pom="$project_root/pom.xml"
 candidate_jar="$project_root/target/soklet-$candidate_version.jar"
@@ -314,64 +353,33 @@ node "$evidence_helper" record-artifacts \
 	"$candidate_pom" "$candidate_jar" "$candidate_sources_jar" \
 	"$candidate_javadoc_jar"
 node "$evidence_helper" record-gate \
-	"$manifest_path" "$candidate_commit" candidate-build \
+	"$manifest_path" "$candidate_commit" "$artifact_descriptor" candidate-build \
 	"$gate_evidence_root/candidate-build.json" \
-	"$artifact_descriptor" "$evidence_root/candidate-build.log" \
-	"$node_distribution_evidence" "$maven_distribution_evidence" \
-	"$go_distribution_evidence" "$java_distribution_evidence"
+	"artifact-descriptor=$artifact_descriptor" \
+	"build-log=$evidence_root/candidate-build.log" \
+	"surefire-reports=$candidate_build_surefire_reports" \
+	"node-distribution=$node_distribution_evidence" \
+	"maven-distribution=$maven_distribution_evidence" \
+	"go-distribution=$go_distribution_evidence" \
+	"java-distribution=$java_distribution_evidence"
 
-isolated_maven_repository="$work_root/isolated-maven-repository"
-[[ ! -e "$isolated_maven_repository" ]] \
-	|| fail "isolated Maven repository already exists: $isolated_maven_repository"
-mkdir -p "$isolated_maven_repository"
-install_log="$evidence_root/isolated-install.log"
-mvn -B -ntp "$install_file_goal" \
-	-Dfile="$candidate_jar" \
-	-DpomFile="$candidate_pom" \
-	-DgeneratePom=false \
-	-DlocalRepositoryPath="$isolated_maven_repository" \
-	2>&1 | tee "$install_log"
-
-installed_root="$isolated_maven_repository/com/soklet/soklet/$candidate_version"
-installed_pom="$installed_root/soklet-$candidate_version.pom"
-installed_jar="$installed_root/soklet-$candidate_version.jar"
-cmp -s "$candidate_pom" "$installed_pom" \
-	|| fail "isolated Maven repository POM differs from the candidate POM."
-cmp -s "$candidate_jar" "$installed_jar" \
-	|| fail "isolated Maven repository JAR differs from the candidate JAR."
-assert_installed_candidate_unchanged
-node "$evidence_helper" record-gate \
-	"$manifest_path" "$candidate_commit" isolated-install \
-	"$gate_evidence_root/isolated-install.json" \
-	"$installed_pom" "$installed_jar" "$install_log"
-
-soak_log="$evidence_root/release-soak.log"
-assert_installed_candidate_unchanged
-timeout --signal=TERM --kill-after=30s "${soak_timeout_seconds}s" \
-	env SOKLET_SOAK_PROFILE=release \
-	mvn -B -ntp -f soak/pom.xml clean test 2>&1 | tee "$soak_log"
-assert_installed_candidate_unchanged
-node scripts/verify-soak-evidence.mjs release
-node "$evidence_helper" record-gate \
-	"$manifest_path" "$candidate_commit" release-soak \
-	"$gate_evidence_root/release-soak.json" \
-	"$project_root/soak/target/soak-report.md" \
-	"$project_root/soak/target/surefire-reports" "$soak_log"
-
-declare -A gate_repository gate_commit gate_status gate_version_property \
+declare -A gate_repository gate_commit gate_version_property \
 	gate_artifact_identity gate_default_artifact_identity \
 	gate_default_artifact_sha256
-while IFS=$'\t' read -r gate_id gate_kind repository commit status \
-		artifact_identity version_property default_artifact_identity \
-		default_artifact_sha256; do
-	gate_repository["$gate_id"]=$repository
-	gate_commit["$gate_id"]=$commit
-	gate_status["$gate_id"]=$status
-	gate_version_property["$gate_id"]=$version_property
-	gate_artifact_identity["$gate_id"]=$artifact_identity
-	gate_default_artifact_identity["$gate_id"]=$default_artifact_identity
-	gate_default_artifact_sha256["$gate_id"]=$default_artifact_sha256
-done < <(node "$evidence_helper" list-gates "$manifest_path")
+while IFS=$'\t' read -r gate_id _gate_status; do
+	gate_repository["$gate_id"]=$(node "$evidence_helper" gate-value \
+		"$manifest_path" "$gate_id" repository)
+	gate_commit["$gate_id"]=$(node "$evidence_helper" gate-value \
+		"$manifest_path" "$gate_id" commit)
+	gate_version_property["$gate_id"]=$(node "$evidence_helper" gate-value \
+		"$manifest_path" "$gate_id" versionProperty)
+	gate_artifact_identity["$gate_id"]=$(node "$evidence_helper" gate-value \
+		"$manifest_path" "$gate_id" artifactIdentity)
+	gate_default_artifact_identity["$gate_id"]=$(node "$evidence_helper" gate-value \
+		"$manifest_path" "$gate_id" defaultArtifactIdentity)
+	gate_default_artifact_sha256["$gate_id"]=$(node "$evidence_helper" gate-value \
+		"$manifest_path" "$gate_id" defaultArtifactSha256)
+done < <(node "$evidence_helper" list-gate-ids "$manifest_path")
 
 clone_pinned_gate() {
 	local gate_id=$1
@@ -402,12 +410,240 @@ assert_pinned_checkout_unchanged() {
 		|| fail "$gate_id tracked checkout changed during validation."
 }
 
+clone_candidate_gate() {
+	local gate_id=$1
+	local checkout="$checkout_root/candidate-$gate_id"
+	[[ ! -e "$checkout" ]] || fail "checkout path already exists: $checkout"
+	git clone --quiet --no-checkout --no-hardlinks "$project_root" "$checkout"
+	git -C "$checkout" checkout --quiet --detach "$candidate_commit"
+	[[ $(git -C "$checkout" rev-parse HEAD) == "$candidate_commit" ]] \
+		|| fail "$gate_id candidate checkout did not resolve the candidate commit."
+	[[ -z $(git -C "$checkout" status --porcelain --untracked-files=all) ]] \
+		|| fail "$gate_id candidate checkout is dirty immediately after checkout."
+	printf '%s\n' "$checkout"
+}
+
+assert_candidate_checkout_unchanged() {
+	local gate_id=$1
+	local checkout=$2
+	[[ $(git -C "$checkout" rev-parse HEAD) == "$candidate_commit" ]] \
+		|| fail "$gate_id candidate checkout HEAD changed during validation."
+	[[ -z $(git -C "$checkout" status --porcelain --untracked-files=no) ]] \
+		|| fail "$gate_id changed tracked candidate files during validation."
+}
+
+copy_surefire_evidence() {
+	local source=$1
+	local gate_id=$2
+	local raw_root="$evidence_root/raw/$gate_id"
+	local destination="$raw_root/surefire-reports"
+	[[ -d "$source" && ! -L "$source" ]] \
+		|| fail "$gate_id Surefire reports are missing or are a symlink."
+	[[ ! -e "$destination" ]] \
+		|| fail "$gate_id Surefire evidence destination already exists."
+	mkdir -p "$raw_root"
+	cp -R "$source" "$destination"
+	printf '%s\n' "$destination"
+}
+
 record_gate() {
 	local gate_id=$1
 	shift
 	node "$evidence_helper" record-gate \
-		"$manifest_path" "$candidate_commit" "$gate_id" \
+		"$manifest_path" "$candidate_commit" "$artifact_descriptor" "$gate_id" \
 		"$gate_evidence_root/$gate_id.json" "$@"
+}
+
+run_isolated_install() {
+	isolated_maven_repository="$work_root/isolated-maven-repository"
+	[[ ! -e "$isolated_maven_repository" ]] \
+		|| fail "isolated Maven repository already exists: $isolated_maven_repository"
+	mkdir -p "$isolated_maven_repository"
+	local install_log="$evidence_root/isolated-install.log"
+	mvn -B -ntp "$install_file_goal" \
+		-Dfile="$candidate_jar" \
+		-DpomFile="$candidate_pom" \
+		-DgeneratePom=false \
+		-DlocalRepositoryPath="$isolated_maven_repository" \
+		2>&1 | tee "$install_log"
+
+	local installed_root="$isolated_maven_repository/com/soklet/soklet/$candidate_version"
+	installed_pom="$installed_root/soklet-$candidate_version.pom"
+	installed_jar="$installed_root/soklet-$candidate_version.jar"
+	cmp -s "$candidate_pom" "$installed_pom" \
+		|| fail "isolated Maven repository POM differs from the candidate POM."
+	cmp -s "$candidate_jar" "$installed_jar" \
+		|| fail "isolated Maven repository JAR differs from the candidate JAR."
+	assert_installed_candidate_unchanged
+	record_gate isolated-install \
+		"installed-pom=$installed_pom" \
+		"installed-main-jar=$installed_jar" \
+		"install-log=$install_log"
+}
+
+run_core_jdk_25() {
+	local checkout
+	checkout=$(clone_candidate_gate core-jdk-25)
+	local log="$evidence_root/core-jdk-25.log"
+	(
+		cd "$checkout"
+		env JAVA_HOME="$toystore_java_home" \
+			PATH="$toystore_java_home/bin:$PATH" \
+			mvn -B -ntp -Dgpg.skip=true clean test
+	) 2>&1 | tee "$log"
+	node "$surefire_verifier" "$checkout/target/surefire-reports" \
+		core-jdk-25 candidate
+	local reports
+	reports=$(copy_surefire_evidence "$checkout/target/surefire-reports" core-jdk-25)
+	assert_candidate_checkout_unchanged core-jdk-25 "$checkout"
+	record_gate core-jdk-25 \
+		"build-log=$log" \
+		"java-distribution=$toystore_java_distribution_evidence" \
+		"surefire-reports=$reports"
+}
+
+run_api_freeze() {
+	local checkout
+	checkout=$(clone_candidate_gate api-freeze)
+	local log="$evidence_root/api-freeze.log"
+	(
+		cd "$checkout"
+		env JAVA_HOME="$core_java_home" PATH="$core_java_home/bin:$PATH" \
+			scripts/verify-mcp-api-freezes.sh
+	) 2>&1 | tee "$log"
+	local raw_root="$evidence_root/raw/api-freeze"
+	mkdir -p "$raw_root"
+	local diff="$raw_root/mcp-api-diff.xml"
+	local incompatibilities="$raw_root/mcp-api-diff.incompatibilities.jsonl"
+	local report="$raw_root/mcp-api-freeze.xml"
+	local signatures="$raw_root/mcp-api-freezes"
+	cp "$checkout/target/japicmp/mcp-api-diff.xml" "$diff"
+	cp "$checkout/target/japicmp/mcp-api-diff.incompatibilities.jsonl" \
+		"$incompatibilities"
+	cp "$checkout/target/japicmp/mcp-api-freeze.xml" "$report"
+	cp -R "$checkout/target/mcp-api-freezes" "$signatures"
+	assert_candidate_checkout_unchanged api-freeze "$checkout"
+	record_gate api-freeze \
+		"api-freeze-log=$log" \
+		"japicmp-diff=$diff" \
+		"japicmp-incompatibilities=$incompatibilities" \
+		"api-freeze-report=$report" \
+		"signatures=$signatures"
+}
+
+run_candidate_javadocs() {
+	local checkout
+	checkout=$(clone_candidate_gate candidate-javadocs)
+	local log="$evidence_root/candidate-javadocs.log"
+	(
+		cd "$checkout"
+		env JAVA_HOME="$core_java_home" PATH="$core_java_home/bin:$PATH" \
+			mvn -B -ntp -Dgpg.skip=true -Dtest=McpPublicJavadocTests \
+			clean package javadoc:javadoc
+	) 2>&1 | tee "$log"
+	node "$surefire_verifier" "$checkout/target/surefire-reports" \
+		candidate-javadocs candidate
+	local raw_root="$evidence_root/raw/candidate-javadocs"
+	local apidocs="$raw_root/apidocs"
+	[[ -d "$checkout/target/reports/apidocs" \
+			&& ! -L "$checkout/target/reports/apidocs" ]] \
+		|| fail "standalone public Javadocs were not generated."
+	mkdir -p "$raw_root"
+	cp -R "$checkout/target/reports/apidocs" "$apidocs"
+	local reports
+	reports=$(copy_surefire_evidence \
+		"$checkout/target/surefire-reports" candidate-javadocs)
+	assert_candidate_checkout_unchanged candidate-javadocs "$checkout"
+	record_gate candidate-javadocs \
+		"javadoc-log=$log" \
+		"javadoc-jar=$candidate_javadoc_jar" \
+		"apidocs=$apidocs" \
+		"surefire-reports=$reports"
+}
+
+run_schema_replay() {
+	local checkout
+	checkout=$(clone_candidate_gate schema-replay)
+	local log="$evidence_root/schema-replay.log"
+	(
+		cd "$checkout"
+		node scripts/json-schema-test-suite/verify.mjs
+		env JAVA_HOME="$core_java_home" PATH="$core_java_home/bin:$PATH" \
+			mvn -B -ntp -Dgpg.skip=true \
+			-Dtest='JsonSchemaTestSuitePinTests,McpToolSchemaProfile*' test
+	) 2>&1 | tee "$log"
+	node "$surefire_verifier" "$checkout/target/surefire-reports" \
+		schema-replay candidate
+	local reports
+	reports=$(copy_surefire_evidence "$checkout/target/surefire-reports" schema-replay)
+	assert_candidate_checkout_unchanged schema-replay "$checkout"
+	record_gate schema-replay "replay-log=$log" "surefire-reports=$reports"
+}
+
+run_fuzz_replay() {
+	local log="$evidence_root/fuzz-replay.log"
+	env JAVA_HOME="$toystore_java_home" PATH="$toystore_java_home/bin:$PATH" \
+		mvn -B -ntp -f fuzz/pom.xml clean test 2>&1 | tee "$log"
+	node scripts/verify-json-corpus.mjs 2>&1 | tee -a "$log"
+	node "$surefire_verifier" "$project_root/fuzz/target/surefire-reports" \
+		fuzz-replay candidate
+	local reports
+	reports=$(copy_surefire_evidence \
+		"$project_root/fuzz/target/surefire-reports" fuzz-replay)
+	record_gate fuzz-replay "replay-log=$log" "surefire-reports=$reports"
+}
+
+run_soak_profile() {
+	local gate_id=$1
+	local profile=$2
+	local timeout_seconds=$3
+	local log="$evidence_root/$gate_id.log"
+	local soak_java_home=$core_java_home
+	if [[ "$profile" == "smoke" ]]; then
+		soak_java_home=$toystore_java_home
+	fi
+	assert_installed_candidate_unchanged
+	timeout --signal=TERM --kill-after=30s "${timeout_seconds}s" \
+		env JAVA_HOME="$soak_java_home" PATH="$soak_java_home/bin:$PATH" \
+		SOKLET_SOAK_PROFILE="$profile" \
+		mvn -B -ntp -f soak/pom.xml clean test 2>&1 | tee "$log"
+	assert_installed_candidate_unchanged
+	node scripts/verify-soak-evidence.mjs "$profile"
+	node "$surefire_verifier" "$project_root/soak/target/surefire-reports" \
+		"$gate_id" candidate
+	local raw_root="$evidence_root/raw/$gate_id"
+	local report="$raw_root/soak-report.md"
+	mkdir -p "$raw_root"
+	cp "$project_root/soak/target/soak-report.md" "$report"
+	local reports
+	reports=$(copy_surefire_evidence \
+		"$project_root/soak/target/surefire-reports" "$gate_id")
+	if [[ "$gate_id" == "release-soak" ]]; then
+		record_gate "$gate_id" \
+			"soak-report=$report" "surefire-reports=$reports" "soak-log=$log"
+	else
+		record_gate "$gate_id" \
+			"soak-log=$log" "soak-report=$report" "surefire-reports=$reports"
+	fi
+}
+
+run_localization_fleet() {
+	local checkout
+	checkout=$(clone_candidate_gate localization-fleet)
+	local log="$evidence_root/localization-fleet.log"
+	(
+		cd "$checkout"
+		env JAVA_HOME="$core_java_home" PATH="$core_java_home/bin:$PATH" \
+			mvn -B -ntp -Dtest=McpLocalizationFleetPublicRuntimeTests test
+	) 2>&1 | tee "$log"
+	node "$surefire_verifier" "$checkout/target/surefire-reports" \
+		localization-fleet candidate
+	local reports
+	reports=$(copy_surefire_evidence \
+		"$checkout/target/surefire-reports" localization-fleet)
+	assert_candidate_checkout_unchanged localization-fleet "$checkout"
+	assert_installed_candidate_unchanged
+	record_gate localization-fleet "fleet-log=$log" "surefire-reports=$reports"
 }
 
 run_candidate_conformance() {
@@ -461,14 +697,14 @@ run_candidate_conformance() {
 		"$manifest_path" "$candidate_commit" "$artifact_descriptor" \
 		"$conformance_work/evidence.json"
 	assert_pinned_checkout_unchanged candidate-conformance "$checkout"
-	record_gate candidate-conformance "$conformance_work"
+	record_gate candidate-conformance "conformance-evidence=$conformance_work"
 }
 
 run_candidate_localization() {
 	local log="$evidence_root/candidate-localization.log"
 	verification/localization/verify.sh "$candidate_jar" \
 		2>&1 | tee "$log"
-	record_gate candidate-localization "$log"
+	record_gate candidate-localization "localization-log=$log"
 }
 
 prepare_servlet_default_jar() {
@@ -538,13 +774,24 @@ run_maven_downstream() {
 		node "$surefire_verifier" "$surefire_reports" "$gate_id" candidate \
 			"$installed_jar" "$candidate_jar_sha256"
 		assert_pinned_checkout_unchanged "$gate_id" "$checkout"
+		local raw_root="$evidence_root/raw/$gate_id"
+		mkdir -p "$raw_root"
+		local retained_pom="$raw_root/pom.xml"
+		cp "$downstream_pom" "$retained_pom"
+		local retained_surefire_reports
+		retained_surefire_reports=$(copy_surefire_evidence \
+			"$surefire_reports" "$gate_id")
 		if [[ "$gate_id" == "toystore-app" ]]; then
-			record_gate "$gate_id" "$downstream_pom" "$candidate_log" \
-				"$surefire_reports" \
-				"$toystore_java_distribution_evidence"
+			record_gate "$gate_id" \
+				"project-pom=$retained_pom" \
+				"candidate-log=$candidate_log" \
+				"candidate-surefire-reports=$retained_surefire_reports" \
+				"java-distribution=$toystore_java_distribution_evidence"
 		else
-			record_gate "$gate_id" "$downstream_pom" "$candidate_log" \
-				"$surefire_reports"
+			record_gate "$gate_id" \
+				"project-pom=$retained_pom" \
+				"candidate-log=$candidate_log" \
+				"candidate-surefire-reports=$retained_surefire_reports"
 		fi
 		return
 	fi
@@ -586,11 +833,23 @@ run_maven_downstream() {
 		|| fail "$gate_id default Soklet JAR changed during its candidate leg."
 	node "$surefire_verifier" "$checkout/target/surefire-reports" \
 		"$gate_id" candidate "$installed_jar" "$candidate_jar_sha256"
-	local evidence_paths=("$downstream_pom" "$default_jar" "$default_log" \
-		"$default_surefire_reports" "$candidate_log" \
-		"$checkout/target/surefire-reports")
+	local raw_root="$evidence_root/raw/$gate_id"
+	mkdir -p "$raw_root"
+	local retained_pom="$raw_root/pom.xml"
+	local retained_default_jar="$raw_root/soklet-$default_soklet_version.jar"
+	cp "$downstream_pom" "$retained_pom"
+	cp "$default_jar" "$retained_default_jar"
+	local candidate_surefire_reports
+	candidate_surefire_reports=$(copy_surefire_evidence \
+		"$checkout/target/surefire-reports" "$gate_id")
 	assert_pinned_checkout_unchanged "$gate_id" "$checkout"
-	record_gate "$gate_id" "${evidence_paths[@]}"
+	record_gate "$gate_id" \
+		"project-pom=$retained_pom" \
+		"default-jar=$retained_default_jar" \
+		"default-log=$default_log" \
+		"default-surefire-reports=$default_surefire_reports" \
+		"candidate-log=$candidate_log" \
+		"candidate-surefire-reports=$candidate_surefire_reports"
 }
 
 run_barebones() {
@@ -664,7 +923,14 @@ run_barebones() {
 		| grep -v -E '(^|/)soklet[^/]*\.jar$' || true)
 	[[ -z "$unexpected_barebones_changes" ]] \
 		|| fail "barebones-app changed tracked files other than its replaced Soklet JAR."
-	record_gate barebones-app "$port_file" "$reservation_log" "$log"
+	local raw_root="$evidence_root/raw/barebones-app"
+	local retained_port_file="$raw_root/barebones-loopback-port.txt"
+	mkdir -p "$raw_root"
+	cp "$port_file" "$retained_port_file"
+	record_gate barebones-app \
+		"port-file=$retained_port_file" \
+		"reservation-log=$reservation_log" \
+		"runtime-log=$log"
 }
 
 run_website() {
@@ -691,7 +957,11 @@ run_website() {
 		git diff --exit-code
 	) 2>&1 | tee "$log"
 	assert_pinned_checkout_unchanged soklet-website "$checkout"
-	record_gate soklet-website "$log" "$checkout/dist"
+	local raw_root="$evidence_root/raw/soklet-website"
+	local distribution="$raw_root/dist"
+	mkdir -p "$raw_root"
+	cp -R "$checkout/dist" "$distribution"
+	record_gate soklet-website "build-log=$log" "distribution=$distribution"
 }
 
 run_interoperability() {
@@ -705,9 +975,19 @@ run_interoperability() {
 	"$entrypoint" "$candidate_jar" "$checkout" \
 		2>&1 | tee "$log"
 	assert_pinned_checkout_unchanged "$gate_id" "$checkout"
-	record_gate "$gate_id" "$log" "$candidate_jar"
+	record_gate "$gate_id" \
+		"interop-log=$log" "candidate-main-jar=$candidate_jar"
 }
 
+run_core_jdk_25
+run_isolated_install
+run_api_freeze
+run_candidate_javadocs
+run_schema_replay
+run_fuzz_replay
+run_soak_profile soak-smoke smoke 600
+run_soak_profile release-soak release "$soak_timeout_seconds"
+run_localization_fleet
 run_candidate_conformance
 run_candidate_localization
 run_barebones

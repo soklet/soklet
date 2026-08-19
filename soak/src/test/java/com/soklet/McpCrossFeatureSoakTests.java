@@ -82,6 +82,9 @@ public class McpCrossFeatureSoakTests {
 	private static final int SIMULATOR_CASE_COUNT = 8;
 	private static final int SIMULATOR_STREAM_ITEM_CAPACITY = 4;
 	private static final int SIMULATOR_MAXIMUM_CAPTURED_BYTES = 4_096;
+	private static final int SIMULATOR_REQUESTS_PER_CASE_SET = 9;
+	private static final int SIMULATOR_STREAMS_PER_CASE_SET = 6;
+	private static final int SIMULATOR_SUBSCRIPTIONS_PER_CASE_SET = 1;
 	private static final int REQUESTS_PER_FEATURE_CYCLE = 5;
 	private static final int STREAMS_PER_FEATURE_CYCLE = 3;
 	private static final int SUBSCRIPTIONS_PER_FEATURE_CYCLE = 1;
@@ -121,8 +124,8 @@ public class McpCrossFeatureSoakTests {
 		RuntimeMetricTotals finalTotals = expectedRuntimeMetricTotals(
 				1 + workloadFeatureCycles, PROFILE.shutdownCycles());
 
-		Assertions.assertFalse(metricsCollector.hasExpectedTotalsAndBalance(
-				warmupTotals),
+		Assertions.assertFalse(metricsCollector.awaitExpectedTotalsAndBalance(
+				warmupTotals, ZERO_TIMEOUT),
 				"An empty metrics collector must not satisfy a positive phase fence.");
 
 		try (Soklet soklet = Soklet.fromConfig(config)) {
@@ -131,8 +134,9 @@ public class McpCrossFeatureSoakTests {
 			soklet.start();
 			performFeatureCycle(boundPort(mcpServer), "warmup", state,
 					publisher, true);
-			awaitRuntimeIdle("warmup", metricsCollector, warmupTotals, state,
-					PROFILE.settleTimeout());
+			awaitRuntimeIdle("warmup", mcpServer, metricsCollector,
+					warmupTotals, state, PROFILE.settleTimeout(),
+					PROFILE.metricDeliveryTimeout());
 			soklet.stop();
 			assertStopped(mcpServer);
 			Assertions.assertEquals(0, state.openClientSockets.get());
@@ -157,8 +161,10 @@ public class McpCrossFeatureSoakTests {
 									+ run.failures());
 					Assertions.assertEquals(workloadFeatureCycles,
 							run.completed());
-					awaitRuntimeIdle("mixed MCP feature churn", metricsCollector,
-							mixedTotals, state, PROFILE.settleTimeout());
+					awaitRuntimeIdle("mixed MCP feature churn", mcpServer,
+							metricsCollector, mixedTotals, state,
+							PROFILE.settleTimeout(),
+							PROFILE.metricDeliveryTimeout());
 				}
 
 				performShutdownBoundary(soklet, mcpServer, port,
@@ -169,8 +175,10 @@ public class McpCrossFeatureSoakTests {
 			}
 
 			Assertions.assertNotNull(mixedRun);
-			awaitRuntimeIdle("final stopped MCP state", metricsCollector,
-					finalTotals, state, PROFILE.settleTimeout());
+			awaitRuntimeIdle("final stopped MCP state", mcpServer,
+					metricsCollector, finalTotals, state,
+					PROFILE.settleTimeout(),
+					PROFILE.metricDeliveryTimeout());
 			assertExactCounters(state, publisher, metricsCollector, lifecycle,
 					workloadFeatureCycles);
 			finalSnapshot = SoakResourceSnapshot.assertReturnsNear(
@@ -225,7 +233,10 @@ public class McpCrossFeatureSoakTests {
 							Integer.toString(publisher.activeRegistrationCount()),
 							"Open client sockets",
 							Integer.toString(state.openClientSockets.get()),
-							"Settle timeout", PROFILE.settleTimeout().toString()));
+							"Runtime settle timeout",
+							PROFILE.settleTimeout().toString(),
+							"Metric delivery timeout",
+							PROFILE.metricDeliveryTimeout().toString()));
 		} finally {
 			state.releaseAllBlockingHandlers();
 			mcpServer.stop();
@@ -253,11 +264,21 @@ public class McpCrossFeatureSoakTests {
 		int workloadCycles = PROFILE.concurrentClients()
 				* PROFILE.cyclesPerClient();
 		int expectedPerCase = workloadCycles / SIMULATOR_CASE_COUNT;
+		RuntimeMetricTotals warmupTotals = expectedSimulatorMetricTotals(1, 0);
+		RuntimeMetricTotals measuredTotals = expectedSimulatorMetricTotals(
+				1 + expectedPerCase, 0);
+		RuntimeMetricTotals residualTotals = expectedSimulatorMetricTotals(
+				1 + expectedPerCase, 1);
+		RuntimeMetricTotals finalTotals = expectedSimulatorMetricTotals(
+				1 + expectedPerCase, 2);
 		SoakResourceSnapshot baseline;
 		SoakResourceSnapshot finalSnapshot;
 
 		Assertions.assertEquals(0, workloadCycles % SIMULATOR_CASE_COUNT,
 				"The checked-in soak profiles must exercise every simulator case equally.");
+		Assertions.assertFalse(metricsCollector.awaitExpectedTotalsAndBalance(
+				warmupTotals, ZERO_TIMEOUT),
+				"An empty collector must not satisfy the simulator warmup fence.");
 		try {
 			// Warm all deterministic paths and the executor before measuring the
 			// stopped, off-network resource baseline.
@@ -272,7 +293,8 @@ public class McpCrossFeatureSoakTests {
 				}
 			});
 			awaitSimulatorIdle("simulator warmup", metricsCollector, state,
-					PROFILE.settleTimeout());
+					warmupTotals, PROFILE.settleTimeout(),
+					PROFILE.metricDeliveryTimeout());
 			assertSimulatorStoppedAndDrained(mcpServer, state, publisher,
 					metricsCollector, lifecycle);
 			baseline = SoakResourceSnapshot.captureAfterGc();
@@ -306,11 +328,13 @@ public class McpCrossFeatureSoakTests {
 						"Unexpected execution count for simulator case " + caseIndex);
 
 			awaitSimulatorIdle("measured simulator churn", metricsCollector,
-					state, PROFILE.settleTimeout());
+					state, measuredTotals, PROFILE.settleTimeout(),
+					PROFILE.metricDeliveryTimeout());
 			performSimulatorResidualWave(config, mcpServer, state,
-					metricsCollector);
+					metricsCollector, residualTotals);
 			awaitSimulatorIdle("post-residual simulator recovery",
-					metricsCollector, state, PROFILE.settleTimeout());
+					metricsCollector, state, finalTotals, PROFILE.settleTimeout(),
+					PROFILE.metricDeliveryTimeout());
 			assertSimulatorStoppedAndDrained(mcpServer, state, publisher,
 					metricsCollector, lifecycle);
 			finalSnapshot = SoakResourceSnapshot.assertReturnsNear(
@@ -357,7 +381,10 @@ public class McpCrossFeatureSoakTests {
 							Integer.toString(publisher.activeRegistrationCount()),
 							"Open client sockets",
 							Integer.toString(state.openClientSockets.get()),
-							"Settle timeout", PROFILE.settleTimeout().toString()));
+							"Runtime settle timeout",
+							PROFILE.settleTimeout().toString(),
+							"Metric delivery timeout",
+							PROFILE.metricDeliveryTimeout().toString()));
 		} finally {
 			state.releaseAllBlockingHandlers();
 			state.releaseResidualHandler();
@@ -835,7 +862,8 @@ public class McpCrossFeatureSoakTests {
 
 	private static void performSimulatorResidualWave(@NonNull SokletConfig config,
 			@NonNull McpServer mcpServer, @NonNull SoakState state,
-			@NonNull CountingMcpMetricsCollector metricsCollector)
+			@NonNull CountingMcpMetricsCollector metricsCollector,
+			@NonNull RuntimeMetricTotals expectedTotals)
 			throws Exception {
 		AtomicReference<Simulator> escapedSimulator = new AtomicReference<>();
 		AtomicReference<McpSimulation> escapedSimulation = new AtomicReference<>();
@@ -879,7 +907,8 @@ public class McpCrossFeatureSoakTests {
 		Assertions.assertTrue(state.residualHandlerExited.await(
 				PROFILE.settleTimeout().toMillis(), TimeUnit.MILLISECONDS));
 		awaitSimulatorIdle("released residual simulator handler",
-				metricsCollector, state, PROFILE.settleTimeout());
+				metricsCollector, state, expectedTotals, PROFILE.settleTimeout(),
+				PROFILE.metricDeliveryTimeout());
 		Assertions.assertTrue(retainedSimulation.isComplete());
 		Assertions.assertEquals(McpStreamTerminationReason.CLIENT_DISCONNECTED,
 				awaitSimulatorCompletion(retainedSimulation).getReason());
@@ -988,13 +1017,32 @@ public class McpCrossFeatureSoakTests {
 
 	private static void awaitSimulatorIdle(@NonNull String scenario,
 			@NonNull CountingMcpMetricsCollector metrics,
-			@NonNull SoakState state, @NonNull Duration timeout)
+			@NonNull SoakState state,
+			@NonNull RuntimeMetricTotals expectedTotals,
+			@NonNull Duration runtimeIdleTimeout,
+			@NonNull Duration metricDeliveryTimeout)
 			throws InterruptedException {
-		Assertions.assertTrue(metrics.awaitBalanced(timeout),
-				() -> scenario + " did not balance MCP metric transitions: "
+		long runtimeDeadline = System.nanoTime()
+				+ requireNonNull(runtimeIdleTimeout).toNanos();
+		while ((state.activeBlockingHandlers.get() != 0
+				|| state.activeResidualHandlers.get() != 0)
+				&& System.nanoTime() < runtimeDeadline)
+			Thread.sleep(50L);
+		Assertions.assertEquals(0, state.activeBlockingHandlers.get(),
+				() -> scenario + " did not release blocking application handlers "
+						+ "within " + runtimeIdleTimeout + ": "
 						+ metrics.describe(state));
-		Assertions.assertEquals(0, state.activeBlockingHandlers.get());
-		Assertions.assertEquals(0, state.activeResidualHandlers.get());
+		Assertions.assertEquals(0, state.activeResidualHandlers.get(),
+				() -> scenario + " did not release residual application handlers "
+						+ "within " + runtimeIdleTimeout + ": "
+						+ metrics.describe(state));
+		Assertions.assertTrue(
+				metrics.awaitExpectedTotalsAndBalance(
+						requireNonNull(expectedTotals),
+						requireNonNull(metricDeliveryTimeout)),
+				() -> scenario + " did not deliver exact MCP metric totals within "
+						+ metricDeliveryTimeout + ": expected=" + expectedTotals
+						+ " actual=" + metrics.describe(state));
 	}
 
 	private static void assertSimulatorStoppedAndDrained(
@@ -1251,9 +1299,10 @@ public class McpCrossFeatureSoakTests {
 			subscription.close();
 			state.removeBlocking(blockingInvocation, observation);
 			observation = null;
-			awaitRuntimeIdle("MCP shutdown boundary " + cycleId,
+			awaitRuntimeIdle("MCP shutdown boundary " + cycleId, mcpServer,
 					metricsCollector, expectedTotals, state,
-					PROFILE.settleTimeout());
+					PROFILE.settleTimeout(),
+					PROFILE.metricDeliveryTimeout());
 			state.shutdownBoundariesCompleted.incrementAndGet();
 		} finally {
 			if (observation != null) {
@@ -1404,30 +1453,82 @@ public class McpCrossFeatureSoakTests {
 						* shutdownBoundaries);
 	}
 
+	@NonNull
+	private static RuntimeMetricTotals expectedSimulatorMetricTotals(
+			int completeCaseSets, int standaloneRequests) {
+		return new RuntimeMetricTotals(
+				SIMULATOR_REQUESTS_PER_CASE_SET * completeCaseSets
+						+ standaloneRequests,
+				SIMULATOR_STREAMS_PER_CASE_SET * completeCaseSets,
+				SIMULATOR_SUBSCRIPTIONS_PER_CASE_SET * completeCaseSets);
+	}
+
 	private static void awaitRuntimeIdle(@NonNull String scenario,
+			@NonNull McpServer mcpServer,
 			@NonNull CountingMcpMetricsCollector metrics,
 			@NonNull RuntimeMetricTotals expectedTotals,
-			@NonNull SoakState state, @NonNull Duration timeout)
+			@NonNull SoakState state, @NonNull Duration runtimeIdleTimeout,
+			@NonNull Duration metricDeliveryTimeout)
 			throws InterruptedException {
 		requireNonNull(scenario);
+		requireNonNull(mcpServer);
 		requireNonNull(metrics);
 		requireNonNull(expectedTotals);
 		requireNonNull(state);
-		requireNonNull(timeout);
-		long deadline = System.nanoTime() + timeout.toNanos();
+		requireNonNull(runtimeIdleTimeout);
+		requireNonNull(metricDeliveryTimeout);
+		// Resource cleanup retains the profile's original settle deadline. Only
+		// serialized semantic-metric delivery receives the separate observer budget.
+		long runtimeDeadline = System.nanoTime()
+				+ runtimeIdleTimeout.toNanos();
 
-		while (System.nanoTime() < deadline) {
-			if (metrics.hasExpectedTotalsAndBalance(expectedTotals)
-					&& state.activeBlockingHandlers.get() == 0
-					&& state.openClientSockets.get() == 0)
-				return;
+		while (!runtimeResourcesAreIdle(mcpServer, state)
+				&& System.nanoTime() < runtimeDeadline)
 			Thread.sleep(50L);
+
+		if (!runtimeResourcesAreIdle(mcpServer, state)) {
+			Assertions.fail(("%s did not return runtime resources to idle "
+					+ "within %s: actual=%s runtime=%s")
+					.formatted(scenario, runtimeIdleTimeout,
+							metrics.describe(state),
+							describeRuntimeDiagnostics(mcpServer)));
 		}
 
-		Assertions.fail(("%s did not return to runtime idle within %s: "
-				+ "expected=%s actual=%s")
-				.formatted(scenario, timeout, expectedTotals,
-						metrics.describe(state)));
+		if (!metrics.awaitExpectedTotalsAndBalance(expectedTotals,
+				metricDeliveryTimeout)) {
+			Assertions.fail(("%s returned runtime resources to idle, but exact "
+					+ "semantic metrics were not delivered within %s: "
+					+ "expected=%s actual=%s runtime=%s")
+					.formatted(scenario, metricDeliveryTimeout, expectedTotals,
+							metrics.describe(state),
+							describeRuntimeDiagnostics(mcpServer)));
+		}
+	}
+
+	private static boolean runtimeResourcesAreIdle(
+			@NonNull McpServer mcpServer, @NonNull SoakState state) {
+		McpServerDiagnostics diagnostics = requireNonNull(mcpServer)
+				.getDiagnostics();
+		return diagnostics.getActiveHandlerExecutions() == 0
+				&& diagnostics.getQueuedRequests() == 0
+				&& diagnostics.getActiveRequestStreams() == 0
+				&& diagnostics.getActiveSubscriptions() == 0
+				&& requireNonNull(state).activeBlockingHandlers.get() == 0
+				&& state.activeResidualHandlers.get() == 0
+				&& state.openClientSockets.get() == 0;
+	}
+
+	@NonNull
+	private static String describeRuntimeDiagnostics(
+			@NonNull McpServer mcpServer) {
+		McpServerDiagnostics diagnostics = requireNonNull(mcpServer)
+				.getDiagnostics();
+		return "status=%s handlers=%d queued=%d streams=%d subscriptions=%d"
+				.formatted(diagnostics.getStatus(),
+						diagnostics.getActiveHandlerExecutions(),
+						diagnostics.getQueuedRequests(),
+						diagnostics.getActiveRequestStreams(),
+						diagnostics.getActiveSubscriptions());
 	}
 
 	private static void assertStopped(@NonNull McpServer mcpServer) {
@@ -1893,9 +1994,15 @@ public class McpCrossFeatureSoakTests {
 		@NonNull
 		private final AtomicInteger requestsFinished = new AtomicInteger();
 		@NonNull
+		private final Map<McpRequestOutcome, AtomicInteger>
+				requestsFinishedByOutcome = new ConcurrentHashMap<>();
+		@NonNull
 		private final AtomicInteger streamsOpened = new AtomicInteger();
 		@NonNull
 		private final AtomicInteger streamsClosed = new AtomicInteger();
+		@NonNull
+		private final Map<McpStreamTerminationReason, AtomicInteger>
+				streamsClosedByReason = new ConcurrentHashMap<>();
 		@NonNull
 		private final AtomicInteger subscriptionsOpened = new AtomicInteger();
 		@NonNull
@@ -1919,12 +2026,20 @@ public class McpCrossFeatureSoakTests {
 			try {
 				if (event instanceof McpMetricsEvent.RequestStarted)
 					this.requestsStarted.incrementAndGet();
-				else if (event instanceof McpMetricsEvent.RequestFinished)
+				else if (event instanceof McpMetricsEvent.RequestFinished finished) {
 					this.requestsFinished.incrementAndGet();
+					this.requestsFinishedByOutcome.computeIfAbsent(
+							finished.getOutcome(), ignored -> new AtomicInteger())
+							.incrementAndGet();
+				}
 				else if (event instanceof McpMetricsEvent.RequestStreamOpened)
 					this.streamsOpened.incrementAndGet();
-				else if (event instanceof McpMetricsEvent.RequestStreamClosed)
+				else if (event instanceof McpMetricsEvent.RequestStreamClosed closed) {
 					this.streamsClosed.incrementAndGet();
+					this.streamsClosedByReason.computeIfAbsent(
+							closed.getReason(), ignored -> new AtomicInteger())
+							.incrementAndGet();
+				}
 				else if (event instanceof McpMetricsEvent.SubscriptionOpened)
 					this.subscriptionsOpened.incrementAndGet();
 				else if (event instanceof McpMetricsEvent.SubscriptionClosed closed) {
@@ -2008,8 +2123,10 @@ public class McpCrossFeatureSoakTests {
 					== handlerExecutionsFinished();
 		}
 
-		private boolean awaitBalanced(@NonNull Duration timeout)
-				throws InterruptedException {
+		private boolean awaitExpectedTotalsAndBalance(
+				@NonNull RuntimeMetricTotals expectedTotals,
+				@NonNull Duration timeout) throws InterruptedException {
+			RuntimeMetricTotals expected = requireNonNull(expectedTotals);
 			long timeoutNanos;
 			try {
 				timeoutNanos = requireNonNull(timeout).toNanos();
@@ -2019,13 +2136,14 @@ public class McpCrossFeatureSoakTests {
 			long startedAt = System.nanoTime();
 			synchronized (this.balanceLock) {
 				long remaining = timeoutNanos;
-				while (!isBalanced() && remaining > 0L) {
+				while (!hasExpectedTotalsAndBalance(expected)
+						&& remaining > 0L) {
 					TimeUnit.NANOSECONDS.timedWait(this.balanceLock, remaining);
 					long elapsed = System.nanoTime() - startedAt;
 					remaining = elapsed >= timeoutNanos ? 0L
 							: timeoutNanos - elapsed;
 				}
-				return isBalanced();
+				return hasExpectedTotalsAndBalance(expected);
 			}
 		}
 
@@ -2043,16 +2161,35 @@ public class McpCrossFeatureSoakTests {
 
 		@NonNull
 		private String describe(@NonNull SoakState state) {
-			return ("requests=%d/%d streams=%d/%d subscriptions=%d/%d "
+			return ("requests=%d/%d requestOutcomes=%s streams=%d/%d "
+					+ "streamCloseReasons=%s subscriptions=%d/%d "
 					+ "handlers=%d/%d activeBlocking=%d activeResidual=%d "
 					+ "openClientSockets=%d")
 					.formatted(requestsStarted(), requestsFinished(),
-							streamsOpened(), streamsClosed(), subscriptionsOpened(),
+							describeEnumCounts(McpRequestOutcome.class,
+									this.requestsFinishedByOutcome),
+							streamsOpened(), streamsClosed(),
+							describeEnumCounts(McpStreamTerminationReason.class,
+									this.streamsClosedByReason),
+							subscriptionsOpened(),
 							subscriptionsClosed(),
 							handlerExecutionsStarted(), handlerExecutionsFinished(),
 							state.activeBlockingHandlers.get(),
 							state.activeResidualHandlers.get(),
 							state.openClientSockets.get());
+		}
+
+		@NonNull
+		private static <E extends Enum<E>> Map<E, Integer> describeEnumCounts(
+				@NonNull Class<E> enumType,
+				@NonNull Map<E, AtomicInteger> counts) {
+			Map<E, Integer> snapshot = new LinkedHashMap<>();
+			for (E value : requireNonNull(enumType).getEnumConstants()) {
+				AtomicInteger count = requireNonNull(counts).get(value);
+				if (count != null && count.get() > 0)
+					snapshot.put(value, count.get());
+			}
+			return Map.copyOf(snapshot);
 		}
 	}
 
@@ -2400,6 +2537,7 @@ public class McpCrossFeatureSoakTests {
 			SoakResourceSnapshot.@NonNull ResourceTolerance resourceTolerance,
 			@NonNull Duration runTimeout,
 			@NonNull Duration settleTimeout,
+			@NonNull Duration metricDeliveryTimeout,
 			int shutdownCycles,
 			@NonNull Duration shutdownTimeout,
 			int streamQueueCapacity,
@@ -2427,6 +2565,8 @@ public class McpCrossFeatureSoakTests {
 									"mcp.resourceTolerance.maxLiveThreadGrowth")),
 					profile.durationMillis("mcp.runTimeoutMillis"),
 					profile.durationMillis("mcp.settleTimeoutMillis"),
+					profile.durationMillis(
+							"mcp.metricDeliveryTimeoutMillis"),
 					profile.integer("mcp.shutdownCycles"),
 					profile.durationMillis("mcp.shutdownTimeoutMillis"),
 					profile.integer("mcp.streamQueueCapacity"),

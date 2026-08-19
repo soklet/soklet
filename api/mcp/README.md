@@ -202,11 +202,19 @@ verifies all 565 compatibility records and 1,048/179/422 signatures, and the
 maintained 179-source Java 17 API sketch passes compilation, Javadoc doclint,
 and its localization smoke test.
 
-That 1,673 result remains the typed-request-state amendment checkpoint. On the
-current post-CI-hardening tree, Corretto 26 clean verify passes 1,674/0/0/4
-over the same 462 main and 193 test sources, Corretto 17 clean test passes
-1,659/0/0/72, and the exact six-scenario smoke soak passes 6/6 with its strict
-verifier. Resource subscriptions now become publisher-visible before the
+That 1,673 result remains the typed-request-state amendment checkpoint. The
+1,676/0/0/4 result over 462 main and 194 test sources remains the rate-limit
+identity/trusted-proxy checkpoint. The independent-request direction-boundary
+result remains 1,678/0/0/4 over 462 main and 195 test sources, with its focused
+protocol gate at 35/35. On the current localization-fleet fixture tree,
+Corretto 26 clean verify passes 1,681/0/0/4 over 462 main and 196 test sources
+and builds the main, sources, and Javadoc artifacts; the fixture passes 3/3 and
+its related localization regression set passes 24/24. The preceding Corretto
+17 clean-test run passed 1,659/0/0/72 before the rate-limit identity,
+independent-request, and localization-fleet runtime test sources were added, so
+it remains prior supported-JDK evidence rather than a current 196-source
+result. The exact six-scenario smoke soak
+passes 6/6 with its strict verifier. Resource subscriptions now become publisher-visible before the
 transport can expose their already-queued acknowledgment, closing the
 acknowledgment-to-activation notification-loss window; request-metrics tests
 also wait for the serialized finish event before inspecting collector state.
@@ -1510,11 +1518,23 @@ since frozen, the localization soak and nightly fuzz selectors are wired, and
 `verification/localization/verify.sh` now compiles and runs a library-neutral
 generic provider against the packaged jar alone and enforces zero Soklet
 runtime dependencies. Translation-library adapters remain application-owned
-documentation examples rather than a Soklet verification surface. Actual
-scheduled/nightly and sustained fuzz/soak evidence, real
-multi-node fleet orchestration, public Javadoc publication, immutable
-release-candidate provenance and conformance, release scans, and final matrix
-closure remain open. ToyStore's local migration passes 14/14, including six
+documentation examples rather than a Soklet verification surface. The later
+`McpLocalizationFleetPublicRuntimeTests` fixture covers failed reload, rolling
+revision drift without within-response mixing, node loss, fresh-context
+subscription reconnect, node-local delivery, and cleanup through two
+simultaneous real loopback listeners. The format-v2 release contract now
+enumerates exactly 29 ordered gates. Fourteen are dispatch-configured, while
+nine remain `BLOCKED_HARNESS_MISSING` and the six downstreams remain
+`BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`; `READY` means configured, never passed.
+Actual scheduled/nightly and sustained fuzz/soak and operational evidence, the
+exact JDK 21/static-analysis/SpotBugs toolchain, release scans, benchmarks,
+automated matrix closure, published downstream pins, and immutable release-
+candidate provenance and conformance remain open. Candidate Javadoc
+generation/completeness is configured; public deployment is post-validation
+publication work. The bounded two-listener fixture is the Soklet-owned fleet
+gate, while production multi-host coordination remains application/deployment-
+owned. ToyStore's local migration passes
+14/14, including six
 MCP tests. Its per-request credential proof accepts a valid request, then
 returns 401 for malformed, missing, expired, and wrong-audience credentials and
 403 for an insufficient-scope credential, proving that prior identity and

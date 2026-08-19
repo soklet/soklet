@@ -74,6 +74,18 @@ final class McpProtocolSupport {
 	}
 
 	@NonNull
+	static McpJsonRpcMessage requireServerOutboundMessage(
+			@NonNull McpJsonRpcMessage message) {
+		requireNonNull(message);
+
+		if (message instanceof McpJsonRpcMessage.Request)
+			throw new IllegalArgumentException(
+					"MCP servers must not write independent JSON-RPC requests.");
+
+		return message;
+	}
+
+	@NonNull
 	static McpJsonObject requireInboundMetadataFields(
 			@NonNull McpJsonObject fields,
 			@NonNull Set<@NonNull String> reservedNames) {

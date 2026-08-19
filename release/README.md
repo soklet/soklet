@@ -5,9 +5,32 @@ Soklet 3.6.0 candidate. It is deliberately separate from ordinary CI: its input
 is a full candidate commit SHA, the workflow checks out that exact commit, and
 any repository change requires a new commit and a complete new run.
 
-The current manifest is intentionally **not runnable yet**. It records exact
-public commit pins without treating uncommitted sibling work as evidence. Six
-downstream gates remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`:
+The format-v2 manifest defines an exact ordered universe of 29 release gates.
+It is intentionally **not runnable yet**: 14 gates have complete checked-in
+dispatch configuration, while 15 remain fail-closed blockers. `READY` means
+only that a gate has an executable, pinned validation path. It never means that
+the gate has passed for a candidate; only a typed PASS receipt inside the
+format-v2 evidence envelope from the exact candidate workflow can establish
+that.
+
+Nine gates remain `BLOCKED_HARNESS_MISSING`:
+
+- `core-jdk-21`, `static-analysis`, and `spotbugs` require an exact
+  checksum-pinned JDK 21 distribution and release-workflow installer;
+- `fuzz-nightly-history` and `soak-nightly-history` require a canonical
+  importer for immutable scheduled-run history;
+- `operational-history` requires a bounded sustained cardinality, log-drain,
+  and resource-history receipt contract;
+- `release-scans` requires an exact scanner/toolchain pin, severity policy,
+  and retained report contract;
+- `mcp-benchmarks` requires the isolated 3.5.1-versus-3.6.0 JSON comparison
+  and 3.6.0 schema-baseline harness; and
+- `matrix-closure` requires an executable unresolved-row policy and canonical
+  report rather than a prose assertion.
+
+Six downstream gates remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`. The manifest
+records their exact public commit pins without treating uncommitted sibling
+work as evidence:
 
 - ToyStore's local 3.6 MCP migration passes 14/14 tests, including six MCP
   tests and exact per-request 401/403 coverage, but the migration is
@@ -29,7 +52,11 @@ downstream gates remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`:
 The checksum-pinned TypeScript and Go interoperability harnesses are checked in,
 pass against the local snapshot candidate, and are `READY`; the release run must
 still execute them against the exact immutable candidate before either can
-produce PASS evidence.
+produce PASS evidence. The same distinction applies to every other `READY`
+row, including the candidate build, JDK 25, API freeze, candidate Javadocs,
+schema and deterministic fuzz replay, smoke and release soak, the bounded
+two-listener localization fleet fixture, conformance, and candidate
+localization gates.
 
 `scripts/validate-release-candidate.sh` stops on these statuses before building.
 Change a gate to `READY` only in the same reviewed commit that supplies its
@@ -42,37 +69,66 @@ Once every gate is ready, the validator:
 
 1. requires a clean checkout whose `HEAD` is the supplied 40-character SHA;
 2. verifies the checked-in manifest and exact Corretto, Maven, Node, npm, and
-   Go toolchains, installing both Corretto JDKs, Maven, Node/npm, and Go from
-   versioned, checksum-pinned upstream distributions;
+   Go toolchains, rejecting any `READY` gate whose named toolchain is absent or
+   unpinned;
 3. performs one unsigned JDK 17 `clean verify` build and hashes the POM plus the
-   main, sources, and Javadocs JARs;
+   main, sources, and Javadocs JARs, then runs the separately configured
+   supported-JDK gates against the same candidate tree;
 4. installs the already-built POM and main JAR with the pinned `install-file`
    goal into a fresh isolated Maven repository and byte-compares the result;
-5. runs the checked-in `release` soak profile behind a 3,600-second outer
-   timeout and requires its Markdown and Surefire verifier;
-6. runs official conformance in release mode against the exact candidate bytes,
+5. runs the API-freeze, candidate-Javadoc, schema-replay, deterministic-fuzz,
+   smoke-soak, release-soak, and bounded two-listener localization-fleet gates,
+   retaining each gate's exact machine-readable and human-readable reports;
+6. imports the separately defined scheduled fuzz, nightly soak, operational,
+   scan, benchmark, and matrix-closure evidence only through their canonical
+   gate contracts; absent or malformed history cannot be replaced by a local
+   path or prose note;
+7. runs official conformance in release mode against the exact candidate bytes,
    requires `IMMUTABLE_RELEASE_CANDIDATE`, `releaseCandidateEvidence: true`, and
    terminal `PASSED` evidence, then compiles and runs a library-neutral
    localization provider against the candidate JAR alone;
-7. checks out every downstream at its exact manifest commit and invokes its
+8. checks out every downstream at its exact manifest commit and invokes its
    candidate hook, including default/candidate servlet matrices, candidate-only
    ToyStore and OpenTelemetry 3.6 migrations, Barebones startup/probe/termination,
    website generated-artifact cleanliness, and the interoperability entry
    points; ToyStore alone runs under the separately pinned Corretto 25
    compiler/runtime because its POM requires release 25; and
-8. rehashes the candidate and assembles a canonical evidence manifest only
-   after the exact complete gate set has PASS evidence.
+9. rehashes the candidate and assembles a canonical evidence manifest only
+   after the exact ordered 29-gate set has typed PASS evidence.
+
+Each gate has one immutable evidence-contract ID and one manifest-selected
+toolchain. `record-gate` requires the artifact descriptor plus an exact ordered
+set of `role=path` inputs. Its receipt binds the gate ID, contract, canonical
+command/profile/expectation, workflow run and job, candidate commit, and main
+candidate-JAR SHA-256. Every role also fixes its media type, artifact type, and
+basename. Duplicate, missing, extra, substituted, or misnamed artifacts fail
+closed. Promotion independently revalidates that complete receipt structure;
+it does not trust a generic list of nonempty paths.
+
+The JDK 17 candidate build and every supported-JDK gate retain verified
+Surefire reports; the JDK-specific gates also bind their checksum-verified
+distribution receipts. The candidate-Javadoc gate runs the exact
+`McpPublicJavadocTests` inventory contract and retains its Surefire reports,
+Javadoc JAR, and standalone doclint output. Servlet baseline JAR roles bind
+directly to each gate's reviewed default identity and SHA-256 during both
+validation and promotion rather than relying on a role name or filename.
+
+The `localization-fleet` gate is the real two-listener node-loss, revision-
+drift, failed-reload, rolling-activation, reconnect, and cleanup fixture.
+Production multi-host coordination remains an application/deployment
+responsibility and is not represented as a fictitious Soklet-owned release
+harness.
 
 The soak module compiles source at the candidate commit, as documented in
 `soak/README.md`; it does not claim to consume the candidate JAR. Artifact-based
 gates use the checksum-matched JAR or the isolated Maven repository.
 
-The candidate build and every gate other than ToyStore retain the exact
-Corretto 17 default. The workflow installs ToyStore's exact Corretto 25 archive
-first and the candidate Corretto 17 archive last; the validator verifies the
-full Corretto vendor build, runtime version, compiler version, and Maven runtime
-before any build, then supplies the Corretto 25 home only to ToyStore's single
-candidate-version Maven invocation. ToyStore and `soklet-otel` intentionally
+The candidate build uses the exact Corretto 17 toolchain. The workflow installs
+the exact Corretto 25 archive first and Corretto 17 last; the validator verifies
+the full vendor build, runtime version, compiler version, and Maven runtime
+before any build. Corretto 25 is selected only for `core-jdk-25`,
+`fuzz-replay`, `soak-smoke`, and ToyStore; the other currently configured Java
+gates use Corretto 17. ToyStore and `soklet-otel` intentionally
 have no default compatibility leg: both migrated sources target the new 3.6
 API and currently default to an unpublished snapshot, while the servlet
 integrations retain their released-default and candidate-version legs. Every
@@ -121,13 +177,14 @@ bash -n scripts/validate-release-candidate.sh
 bash -n release/scripts/install-pinned-corretto-linux-x64.sh
 ```
 
-The first command validates the currently recorded pins and statuses. Adding
-`--require-ready` is expected to fail until every blocker above is resolved.
+The first command validates the currently recorded pins, exact gate order,
+evidence contracts, toolchain references, and statuses. Adding
+`--require-ready` is expected to fail until all 15 blockers above are resolved.
 
 After the final candidate commit exists, dispatch
 `.github/workflows/release-validation.yml` from that commit and supply the same
 full SHA as its input. A successful run
-uploads the four unsigned candidate inputs, release-soak evidence, official
-conformance evidence, and `target/release-validation/evidence/`. Missing files,
-extra or missing gate rows, failed/skipped suites, checksum drift, a changed
-`HEAD`, or a workflow SHA mismatch prevents final evidence assembly.
+uploads the four unsigned candidate inputs and the complete typed gate-evidence
+tree. Missing files, substituted artifact roles, extra, missing, or reordered
+gate rows, failed/skipped suites, checksum drift, a changed `HEAD`, or a
+workflow SHA mismatch prevents final evidence assembly.

@@ -20,6 +20,7 @@ import {
   CENTRAL_REPOSITORY_BASE_URL,
   CENTRAL_STATUS_BASE_URL,
   CENTRAL_UPLOAD_URL,
+  GATE_EVIDENCE_CONTRACTS,
   canonicalJsonBytes,
   centralTransport,
   preparePromotion,
@@ -30,6 +31,7 @@ import {
   validatePreparationRecord,
   verifyPublished,
 } from './release-promotion.mjs';
+import { EXPECTED_GATE_EVIDENCE_CONTRACTS } from './release-validation-evidence.mjs';
 
 const CANDIDATE_COMMIT = '0123456789abcdef0123456789abcdef01234567';
 const SIGNING_FINGERPRINT = 'ABCDEF0123456789ABCDEF0123456789ABCDEF01';
@@ -38,8 +40,24 @@ const DEPLOYMENT_ID = '12345678-1234-4234-8234-123456789abc';
 const SECRET_AUTHORIZATION = 'Bearer dXNlcjpzdXBlci1zZWNyZXQ=';
 const GATE_IDS = [
   'candidate-build',
+  'core-jdk-21',
+  'core-jdk-25',
   'isolated-install',
+  'api-freeze',
+  'candidate-javadocs',
+  'static-analysis',
+  'spotbugs',
+  'schema-replay',
+  'fuzz-replay',
+  'fuzz-nightly-history',
+  'soak-smoke',
+  'soak-nightly-history',
   'release-soak',
+  'localization-fleet',
+  'operational-history',
+  'release-scans',
+  'mcp-benchmarks',
+  'matrix-closure',
   'candidate-conformance',
   'candidate-localization',
   'barebones-app',
@@ -54,6 +72,44 @@ const GATE_IDS = [
 
 function digest(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
+}
+
+function verifyGateContractParity() {
+  assert.deepEqual(Object.keys(GATE_EVIDENCE_CONTRACTS), GATE_IDS);
+  assert.deepEqual(Object.keys(EXPECTED_GATE_EVIDENCE_CONTRACTS), GATE_IDS);
+  for (const gateId of GATE_IDS) {
+    const promotion = GATE_EVIDENCE_CONTRACTS[gateId];
+    const evidence = EXPECTED_GATE_EVIDENCE_CONTRACTS[gateId];
+    assert.equal(promotion.command, evidence.command, `${gateId} command drift`);
+    assert.equal(promotion.contractId, evidence.contractId, `${gateId} contract drift`);
+    assert.equal(promotion.expectation, evidence.expectation, `${gateId} expectation drift`);
+    assert.equal(promotion.profile, evidence.profile, `${gateId} profile drift`);
+    assert.equal(promotion.toolchain, evidence.toolchain, `${gateId} toolchain drift`);
+    assert.equal(promotion.roles.length, evidence.roles.length, `${gateId} role-count drift`);
+    for (const [index, expected] of evidence.roles.entries()) {
+      const actual = promotion.roles[index];
+      assert.deepEqual(
+        {
+          fileName: actual.fileName,
+          mediaType: actual.mediaType,
+          role: actual.role,
+          type: actual.type,
+        },
+        {
+          fileName: expected.fileName,
+          mediaType: expected.mediaType,
+          role: expected.role,
+          type: expected.type,
+        },
+        `${gateId} role ${index} drift`,
+      );
+      assert.equal(
+        actual.binding,
+        expected.candidateArtifact,
+        `${gateId} role ${index} candidate binding drift`,
+      );
+    }
+  }
 }
 
 function writeNew(path, bytes, mode) {
@@ -71,14 +127,59 @@ function evidenceItem(path) {
   };
 }
 
-function syntheticGate(id, mainJar) {
+function syntheticEvidenceItem(specification, artifacts, gate) {
+  let artifact;
+  if (specification.binding !== null && specification.binding !== 'gateDefaultArtifact') {
+    artifact = {
+      ...artifacts[specification.binding],
+      fileName: specification.fileName,
+    };
+  } else if (specification.type === 'DIRECTORY') {
+    artifact = {
+      algorithm: "SHA-256 of bytewise-path-sorted '<file-sha256>  <relative-path>\\n' rows",
+      fileCount: 1,
+      fileName: specification.fileName,
+      sha256: digest(Buffer.from(specification.role, 'utf8')),
+      type: 'DIRECTORY',
+    };
+  } else {
+    artifact = {
+      bytes: 1,
+      fileName: specification.fileName,
+      sha256: specification.binding === 'gateDefaultArtifact'
+        ? gate.defaultArtifactSha256
+        : digest(Buffer.from(specification.role, 'utf8')),
+      type: 'FILE',
+    };
+  }
+  return {
+    artifact,
+    mediaType: specification.mediaType,
+    role: specification.role,
+  };
+}
+
+function syntheticGate(id, artifacts, workflow) {
   const isInteroperability = id === 'typescript-interop' || id === 'go-interop';
+  const isServlet = id === 'soklet-servlet-javax' || id === 'soklet-servlet-jakarta';
   const artifactChecksum = isInteroperability ? `${id}-checksum` : null;
   const artifactIdentity = `${id}-identity`;
   const commit = isInteroperability ? '3'.repeat(40) : null;
+  const contract = GATE_EVIDENCE_CONTRACTS[id];
+  const gate = {
+    artifactChecksum,
+    artifactIdentity,
+    commit,
+    defaultArtifactIdentity: isServlet ? 'com.soklet:soklet:3.1.1' : null,
+    defaultArtifactSha256: isServlet ? '4'.repeat(64) : null,
+    evidenceContract: `soklet.release.${id}.v1`,
+    id,
+    repository: null,
+    toolchain: contract.toolchain,
+  };
   const interoperability = isInteroperability
     ? {
-        candidateSha256: mainJar.sha256,
+        candidateSha256: artifacts.mainJar.sha256,
         client: id === 'typescript-interop' ? 'typescript' : 'go',
         fixtureScenario: 'tools-list',
         fixtureShutdown: 'CLEAN',
@@ -92,21 +193,24 @@ function syntheticGate(id, mainJar) {
     : null;
   return {
     candidateCommit: CANDIDATE_COMMIT,
-    evidence: [
-      { bytes: 1, fileName: `${id}.log`, sha256: '1'.repeat(64), type: 'FILE' },
-      ...(isInteroperability ? [mainJar] : []),
-    ],
-    formatVersion: 1,
-    gate: {
-      artifactChecksum,
-      artifactIdentity,
-      commit,
-      defaultArtifactIdentity: null,
-      defaultArtifactSha256: null,
-      id,
-      repository: null,
-    },
+    evidence: contract.roles.map((specification) =>
+      syntheticEvidenceItem(specification, artifacts, gate)),
+    formatVersion: 2,
+    gate,
     interoperability,
+    receipt: {
+      candidateCommit: CANDIDATE_COMMIT,
+      candidateSha256: artifacts.mainJar.sha256,
+      command: contract.command,
+      contractId: gate.evidenceContract,
+      expectation: contract.expectation,
+      formatVersion: 1,
+      gateId: id,
+      profile: contract.profile,
+      result: 'PASS',
+      toolchain: contract.toolchain,
+      workflow,
+    },
     status: 'PASS',
   };
 }
@@ -140,19 +244,43 @@ function writeSyntheticInputs(root) {
     pom: evidenceItem(paths.pom),
     sourcesJar: evidenceItem(paths.sourcesJar),
   };
+  const coordinates = {
+    artifactId: 'soklet',
+    groupId: 'com.soklet',
+    packaging: 'jar',
+    version: '3.6.0',
+  };
+  const candidateDescriptorBytes = canonicalJsonBytes({
+    artifacts,
+    candidateCommit: CANDIDATE_COMMIT,
+    coordinates,
+    formatVersion: 1,
+  });
+  const candidateBindings = {
+    ...artifacts,
+    descriptor: {
+      bytes: candidateDescriptorBytes.length,
+      sha256: digest(candidateDescriptorBytes),
+      type: 'FILE',
+    },
+  };
+  const workflow = {
+    job: 'validate',
+    repository: 'soklet/soklet',
+    runAttempt: '1',
+    runId: '1234',
+    serverUrl: 'https://github.com',
+    sha: CANDIDATE_COMMIT,
+  };
   const evidence = {
     artifacts,
     candidateCommit: CANDIDATE_COMMIT,
-    coordinates: {
-      artifactId: 'soklet',
-      groupId: 'com.soklet',
-      packaging: 'jar',
-      version: '3.6.0',
-    },
-    formatVersion: 1,
-    gates: GATE_IDS.map((id) => syntheticGate(id, artifacts.mainJar)),
+    coordinates,
+    formatVersion: 2,
+    gates: GATE_IDS.map((id) => syntheticGate(id, candidateBindings, workflow)),
     releaseConfigurationSha256: '2'.repeat(64),
     toolchains: {
+      coreJdk21: 'core JDK 21 version synthetic',
       git: 'git version synthetic',
       go: 'go version synthetic',
       java: 'java version synthetic',
@@ -161,14 +289,7 @@ function writeSyntheticInputs(root) {
       npm: 'npm version synthetic',
       toystoreJava: 'toystore java version synthetic',
     },
-    workflow: {
-      job: 'validate',
-      repository: 'soklet/soklet',
-      runAttempt: '1',
-      runId: '1234',
-      serverUrl: 'https://github.com',
-      sha: CANDIDATE_COMMIT,
-    },
+    workflow,
   };
   const promotionHelperBytes = readFileSync(
     fileURLToPath(new URL('./release-promotion.mjs', import.meta.url)),
@@ -178,7 +299,7 @@ function writeSyntheticInputs(root) {
   );
   const releaseManifest = {
     candidate: evidence.coordinates,
-    formatVersion: 1,
+    formatVersion: 2,
     gates: evidence.gates.map(({ gate }) => ({
       access: 'SYNTHETIC',
       artifactChecksum: gate.artifactChecksum,
@@ -186,6 +307,7 @@ function writeSyntheticInputs(root) {
       commit: gate.commit,
       defaultArtifactIdentity: gate.defaultArtifactIdentity,
       defaultArtifactSha256: gate.defaultArtifactSha256,
+      evidenceContract: gate.evidenceContract,
       id: gate.id,
       kind: gate.id === 'typescript-interop' || gate.id === 'go-interop'
         ? 'INTEROPERABILITY'
@@ -193,6 +315,7 @@ function writeSyntheticInputs(root) {
       reason: '',
       repository: gate.repository,
       status: 'READY',
+      toolchain: gate.toolchain,
       versionProperty: null,
     })),
     promotion: {
@@ -220,6 +343,7 @@ function writeSyntheticInputs(root) {
     evidence,
     evidencePath,
     evidenceSha256: digest(evidenceBytes),
+    releaseManifest,
     releaseManifestPath,
     releaseManifestSha256,
   };
@@ -269,6 +393,51 @@ function prepare(root, inputs, fakeGpg, outputName) {
   });
 }
 
+function expectEvidenceFailure(root, inputs, fakeGpg, name, evidence, pattern) {
+  const evidencePath = join(root, `${name}.json`);
+  const evidenceBytes = canonicalJsonBytes(evidence);
+  writeNew(evidencePath, evidenceBytes);
+  expectFailure(
+    () => preparePromotion({
+      artifactPaths: inputs.artifactPaths,
+      candidateCommit: CANDIDATE_COMMIT,
+      evidencePath,
+      evidenceSha256: digest(evidenceBytes),
+      gpgPath: fakeGpg,
+      outputDirectory: join(root, name),
+      releaseManifestPath: inputs.releaseManifestPath,
+      releaseManifestSha256: inputs.releaseManifestSha256,
+      signingFingerprint: SIGNING_FINGERPRINT,
+    }),
+    pattern,
+  );
+}
+
+function expectManifestFailure(root, inputs, fakeGpg, name, manifest, pattern) {
+  const manifestPath = join(root, `${name}-manifest.json`);
+  const manifestBytes = canonicalJsonBytes(manifest);
+  writeNew(manifestPath, manifestBytes);
+  const evidence = structuredClone(inputs.evidence);
+  evidence.releaseConfigurationSha256 = digest(manifestBytes);
+  const evidencePath = join(root, `${name}-evidence.json`);
+  const evidenceBytes = canonicalJsonBytes(evidence);
+  writeNew(evidencePath, evidenceBytes);
+  expectFailure(
+    () => preparePromotion({
+      artifactPaths: inputs.artifactPaths,
+      candidateCommit: CANDIDATE_COMMIT,
+      evidencePath,
+      evidenceSha256: digest(evidenceBytes),
+      gpgPath: fakeGpg,
+      outputDirectory: join(root, name),
+      releaseManifestPath: manifestPath,
+      releaseManifestSha256: digest(manifestBytes),
+      signingFingerprint: SIGNING_FINGERPRINT,
+    }),
+    pattern,
+  );
+}
+
 function expectFailure(action, pattern) {
   assert.throws(action, pattern);
 }
@@ -305,6 +474,7 @@ function clock() {
 }
 
 async function run() {
+  verifyGateContractParity();
   const temporary = mkdtempSync(join(tmpdir(), 'soklet-promotion-self-test-'));
   try {
     const inputs = writeSyntheticInputs(temporary);
@@ -411,6 +581,266 @@ async function run() {
         signingFingerprint: SIGNING_FINGERPRINT,
       }),
       /canonical JSON encoding/,
+    );
+
+    const legacyFormatEvidence = structuredClone(inputs.evidence);
+    legacyFormatEvidence.formatVersion = 1;
+    expectEvidenceFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'legacy-v1-evidence',
+      legacyFormatEvidence,
+      /does not identify the supplied candidate commit/,
+    );
+
+    const legacyGateIds = new Set([
+      'candidate-build',
+      'isolated-install',
+      'release-soak',
+      'candidate-conformance',
+      'candidate-localization',
+      'barebones-app',
+      'soklet-servlet-javax',
+      'soklet-servlet-jakarta',
+      'toystore-app',
+      'soklet-otel',
+      'soklet-website',
+      'typescript-interop',
+      'go-interop',
+    ]);
+    const legacyGateSetEvidence = structuredClone(inputs.evidence);
+    legacyGateSetEvidence.gates = legacyGateSetEvidence.gates.filter(({ gate }) =>
+      legacyGateIds.has(gate.id));
+    expectEvidenceFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'legacy-13-gate-evidence',
+      legacyGateSetEvidence,
+      /exact ordered set/,
+    );
+
+    const missingGateEvidence = structuredClone(inputs.evidence);
+    missingGateEvidence.gates.splice(5, 1);
+    expectEvidenceFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'missing-gate-evidence',
+      missingGateEvidence,
+      /exact ordered set/,
+    );
+
+    const extraGateEvidence = structuredClone(inputs.evidence);
+    extraGateEvidence.gates.push(structuredClone(extraGateEvidence.gates.at(-1)));
+    expectEvidenceFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'extra-gate-evidence',
+      extraGateEvidence,
+      /exact ordered set/,
+    );
+
+    const reorderedGateEvidence = structuredClone(inputs.evidence);
+    [reorderedGateEvidence.gates[1], reorderedGateEvidence.gates[2]] =
+      [reorderedGateEvidence.gates[2], reorderedGateEvidence.gates[1]];
+    expectEvidenceFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'reordered-gate-evidence',
+      reorderedGateEvidence,
+      /exact ordered set/,
+    );
+
+    const legacyManifest = structuredClone(inputs.releaseManifest);
+    legacyManifest.formatVersion = 1;
+    expectManifestFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'legacy-v1-manifest',
+      legacyManifest,
+      /formatVersion must be 2/,
+    );
+
+    const legacyGateSetManifest = structuredClone(inputs.releaseManifest);
+    legacyGateSetManifest.gates = legacyGateSetManifest.gates.filter(({ id }) =>
+      legacyGateIds.has(id));
+    expectManifestFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'legacy-13-gate-manifest',
+      legacyGateSetManifest,
+      /gates must be exactly/,
+    );
+
+    const missingGateManifest = structuredClone(inputs.releaseManifest);
+    missingGateManifest.gates.splice(5, 1);
+    expectManifestFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'missing-gate-manifest',
+      missingGateManifest,
+      /gates must be exactly/,
+    );
+
+    const extraGateManifest = structuredClone(inputs.releaseManifest);
+    extraGateManifest.gates.push(structuredClone(extraGateManifest.gates.at(-1)));
+    expectManifestFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'extra-gate-manifest',
+      extraGateManifest,
+      /gates must be exactly/,
+    );
+
+    const reorderedGateManifest = structuredClone(inputs.releaseManifest);
+    [reorderedGateManifest.gates[1], reorderedGateManifest.gates[2]] =
+      [reorderedGateManifest.gates[2], reorderedGateManifest.gates[1]];
+    expectManifestFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'reordered-gate-manifest',
+      reorderedGateManifest,
+      /gates must be exactly/,
+    );
+
+    const legacyGateEnvelopeEvidence = structuredClone(inputs.evidence);
+    legacyGateEnvelopeEvidence.gates[0].formatVersion = 1;
+    expectEvidenceFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'legacy-gate-envelope',
+      legacyGateEnvelopeEvidence,
+      /not complete PASS evidence/,
+    );
+
+    const missingReceiptEvidence = structuredClone(inputs.evidence);
+    delete missingReceiptEvidence.gates[0].receipt;
+    expectEvidenceFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'missing-typed-receipt',
+      missingReceiptEvidence,
+      /gate evidence keys must be exactly/,
+    );
+
+    const wrongContractReceiptEvidence = structuredClone(inputs.evidence);
+    wrongContractReceiptEvidence.gates[0].receipt.contractId =
+      'soklet.release.candidate-build.v0';
+    expectEvidenceFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'wrong-receipt-contract',
+      wrongContractReceiptEvidence,
+      /typed receipt does not match/,
+    );
+
+    const wrongCommitReceiptEvidence = structuredClone(inputs.evidence);
+    wrongCommitReceiptEvidence.gates[2].receipt.candidateCommit = 'f'.repeat(40);
+    expectEvidenceFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'wrong-receipt-candidate-commit',
+      wrongCommitReceiptEvidence,
+      /typed receipt does not match/,
+    );
+
+    const wrongWorkflowReceiptEvidence = structuredClone(inputs.evidence);
+    wrongWorkflowReceiptEvidence.gates[2].receipt.workflow = {
+      ...wrongWorkflowReceiptEvidence.gates[2].receipt.workflow,
+      runId: '9999',
+    };
+    expectEvidenceFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'wrong-receipt-workflow',
+      wrongWorkflowReceiptEvidence,
+      /typed receipt does not match/,
+    );
+
+    const wrongToolchainReceiptEvidence = structuredClone(inputs.evidence);
+    wrongToolchainReceiptEvidence.gates[1].receipt.toolchain = 'java';
+    expectEvidenceFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'wrong-receipt-toolchain',
+      wrongToolchainReceiptEvidence,
+      /typed receipt does not match/,
+    );
+
+    const wrongCandidateReceiptEvidence = structuredClone(inputs.evidence);
+    wrongCandidateReceiptEvidence.gates[2].receipt.candidateSha256 = '9'.repeat(64);
+    expectEvidenceFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'wrong-receipt-candidate',
+      wrongCandidateReceiptEvidence,
+      /typed receipt does not match/,
+    );
+
+    const wrongCommandReceiptEvidence = structuredClone(inputs.evidence);
+    wrongCommandReceiptEvidence.gates[3].receipt.command = 'mvn test';
+    expectEvidenceFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'wrong-receipt-command',
+      wrongCommandReceiptEvidence,
+      /typed receipt does not match/,
+    );
+
+    const reorderedRolesEvidence = structuredClone(inputs.evidence);
+    [reorderedRolesEvidence.gates[0].evidence[0], reorderedRolesEvidence.gates[0].evidence[1]] =
+      [reorderedRolesEvidence.gates[0].evidence[1], reorderedRolesEvidence.gates[0].evidence[0]];
+    expectEvidenceFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'reordered-evidence-roles',
+      reorderedRolesEvidence,
+      /does not match role/,
+    );
+
+    const servletGateIndex = GATE_IDS.indexOf('soklet-servlet-javax');
+    const servletDefaultRoleIndex = inputs.evidence.gates[servletGateIndex].evidence
+      .findIndex(({ role }) => role === 'default-jar');
+    const wrongDefaultShaEvidence = structuredClone(inputs.evidence);
+    wrongDefaultShaEvidence.gates[servletGateIndex]
+      .evidence[servletDefaultRoleIndex].artifact.sha256 = '8'.repeat(64);
+    expectEvidenceFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'wrong-default-artifact-sha',
+      wrongDefaultShaEvidence,
+      /default JAR evidence does not match its exact identity and SHA-256/,
+    );
+
+    const wrongDefaultIdentityEvidence = structuredClone(inputs.evidence);
+    wrongDefaultIdentityEvidence.gates[servletGateIndex].gate.defaultArtifactIdentity =
+      'com.soklet:soklet:3.1.2';
+    expectEvidenceFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'wrong-default-artifact-identity',
+      wrongDefaultIdentityEvidence,
+      /default JAR evidence does not match its exact identity and SHA-256/,
     );
 
     const incompleteEvidence = structuredClone(inputs.evidence);
@@ -767,8 +1197,23 @@ async function run() {
     );
     assert.equal(rejectedMode.status, 64);
     assert.match(rejectedMode.stderr, /Unsupported promotion mode/);
-    for (const forbiddenCommand of ['mvn ', 'javac ', 'javadoc ', 'maven '])
-      assert.ok(!helperSource.includes(forbiddenCommand), `helper must not invoke ${forbiddenCommand.trim()}`);
+    assert.equal(
+      (helperSource.match(/\bspawnSync\(/g) ?? []).length,
+      1,
+      'helper may spawn only the reviewed signer operation',
+    );
+    assert.match(
+      helperSource,
+      /function runSigner\(executable, args, operation\).*?spawnSync\(executable, args,/s,
+      'the sole child process must be the supplied signer executable',
+    );
+    for (const forbiddenExecutable of ['mvn', 'maven', 'javac', 'javadoc']) {
+      assert.doesNotMatch(
+        helperSource,
+        new RegExp(`(?:spawnSync|execFileSync|execSync|spawn)\\(\\s*['\"]${forbiddenExecutable}['\"]`),
+        `helper must not invoke ${forbiddenExecutable}`,
+      );
+    }
 
     await expectAsyncFailure(
       () => centralTransport({

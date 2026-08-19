@@ -724,11 +724,21 @@ the bounded pseudonymous token fields; the separate
 `logRawValidatedTraceIds(true)` opt-in may add only the validated lowercase MCP
 trace ID. Neither mode adds a trace value to metrics. The current snapshot has
 all 65 Phase 6 owners frozen and an empty provisional inventory, but it is not
-a release claim. Current local validation passes Corretto 26 core clean verify
-at 1,674/0/0/4 over 462 main and 193 test sources, Corretto 17 core clean test
-at 1,659/0/0/72, the exact six-scenario smoke soak at 6/6 plus its strict
-verifier, both 39-row development conformance paths, candidate localization,
-and the pinned TypeScript/Go snapshot harnesses. The checked-in fail-closed
+a release claim. The 1,676/0/0/4 result over 462 main and 194 test sources
+remains the rate-limit identity/trusted-proxy checkpoint. Current local
+independent-request direction-boundary validation remains green at
+1,678/0/0/4 over 462 main and 195 test sources, with its focused protocol gate
+at 35/35. On the current localization-fleet fixture tree, Corretto 26 core
+clean verify passes 1,681/0/0/4 over 462 main and 196 test sources and builds
+the main, sources, and Javadoc artifacts; the new fixture passes 3/3 and its
+related localization regression set passes 24/24. The preceding Corretto 17
+core clean-test run passed 1,659/0/0/72 before the rate-limit identity,
+independent-request, and localization-fleet runtime test sources were added, so
+it remains prior supported-JDK evidence rather than a current 196-source
+result. The exact six-scenario smoke soak
+passes 6/6 plus its strict verifier; both 39-row development conformance paths, candidate
+localization, and the pinned TypeScript/Go snapshot harnesses are also green.
+The checked-in fail-closed
 [release validator](release/README.md) still requires reviewed downstream pins
 and a checksum-matched immutable candidate; local snapshot results are not
 promotion evidence.
@@ -2303,8 +2313,19 @@ sources and builds the main, sources, and Javadoc artifacts. Focused request-
 state/runtime tests pass 50/50, reflection/inventory contracts pass 24/24, and
 the aggregate API gate verifies 565 incompatibilities, 234 owners, and
 1,048/179/422 records. The maintained 179-source API sketch passes Java 17
-compilation, Javadoc doclint, and its localization smoke contract. Other
-carried-forward local evidence remains green for
+compilation, Javadoc doclint, and its localization smoke contract. That 1,673
+result remains the typed-request-state amendment checkpoint. The 1,676/0/0/4
+result over 462 main and 194 test sources remains the rate-limit identity/
+trusted-proxy checkpoint. The independent-request direction-boundary result
+remains 1,678/0/0/4 over 462 main and 195 test sources, with its focused
+protocol gate at 35/35. Current Corretto 26 clean verify passes 1,681/0/0/4
+over 462 main and 196 test sources and builds the main, sources, and Javadoc
+artifacts; the new localization fleet fixture passes 3/3 and its related
+localization regression set passes 24/24. The preceding Corretto 17 clean-test
+run passed 1,659/0/0/72 before the rate-limit identity, independent-request,
+and localization-fleet runtime test sources were added, so it remains prior
+supported-JDK evidence rather than a current 196-source result. Other carried-
+forward local evidence remains green for
 candidate localization, artifact-backed simulator 39/39, pinned live official
 CLI 39/39, the website's offline clean-install, lint, and 33-route SSG build,
 and OpenTelemetry 36/36. TypeScript and Go are checksum-pinned, `READY`, and
@@ -2323,9 +2344,18 @@ Barebones compiles and its exact live probes pass locally on a reserved
 ephemeral IPv4 loopback port without disturbing the unrelated Docker listener
 on port 8080. The port is supplied
 through `SOKLET_BAREBONES_LOOPBACK_PORT`. Its source and validator changes
-remain uncommitted and unpinned, so its old public pin remains blocked. Scheduled/
-nightly and sustained history, fleet orchestration, public publication, release scans, and
-immutable candidate provenance remain open.
+remain uncommitted and unpinned, so its old public pin remains blocked. The
+format-v2 release contract now enumerates exactly 29 ordered gates. Fourteen
+are dispatch-configured, while nine remain `BLOCKED_HARNESS_MISSING` and the
+six downstreams remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`; `READY` means
+configured, never passed. Scheduled/nightly and sustained history, the exact
+JDK 21/static-analysis/SpotBugs toolchain, release scans, benchmarks, automated
+matrix closure, published downstream pins, and immutable-candidate provenance
+remain open. Candidate Javadoc generation/completeness is a configured gate;
+deployment of those Javadocs remains post-validation publication work. The
+bounded two-listener localization fixture is the Soklet-owned fleet gate;
+production multi-host coordination remains application/deployment-owned rather
+than an unimplemented core release gate.
 
 You can expose a `/metrics` endpoint by injecting [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html)
 into a [`ResourceMethod`](https://javadoc.soklet.com/com/soklet/ResourceMethod.html):

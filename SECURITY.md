@@ -50,12 +50,48 @@ server information are self-reported or informational metadata. Never use
 them as authenticated identity or as an authorization or rate-limit partition
 key.
 
+`Forwarded` and `X-Forwarded-For` are also ordinary untrusted request headers;
+they never alter `McpAdmissionIdentity` by themselves. If an application
+deliberately derives an anonymous rate-limit partition from client IP, do so in
+the admission controller with `EffectiveClientIpResolver` and an explicit
+`EffectiveOriginResolver.TrustPolicy`. Use `TRUST_NONE` for direct traffic, or
+`TRUST_PROXY_ALLOWLIST` with an exact allowlist covering every possible
+physical socket peer and every trusted proxy-hop address expected in the
+forwarding chain, never end-client addresses. When the physical peer is not
+trusted, the resolver ignores the forwarding headers and uses the raw socket
+peer when available. The trusted proxy or network edge must strip or overwrite
+both `Forwarded` and `X-Forwarded-For`; usable `Forwarded: for=` values take
+precedence. Do not use `TRUST_ALL` on a listener reachable by untrusted clients,
+do not treat the allowlist as a replacement for network controls that prevent
+proxy bypass, and never derive a partition from the request-controlled MCP
+`clientInfo` returned by `McpAdmissionContext.getClientInfo()`.
+
 Request-wide rate limiting is optional. A tool-bearing server must configure a
 fallback tool limiter; named endpoint and tool overrides replace that fallback.
 The built-in token bucket is bounded but local to one JVM. Multi-instance
 deployments that require fleet-wide enforcement should supply their own
 thread-safe `McpRateLimiter`, backed by a distributed service, and should fail
 closed when that service is unavailable.
+
+The built-in limiter partitions only on the admitted identity. A custom limiter
+also receives the raw request through `McpRateLimitContext.getRequest()` and
+must not treat its forwarding headers or self-reported MCP metadata as trusted
+partition input unless application policy deliberately resolves them under the
+same proxy boundary.
+
+Localization contexts and catalog snapshots are node-local; they are not
+authentication state or a distributed session. Every request reconstructs its
+context from the request's bounded preferences and authenticated application
+policy. For a rolling reload, build and validate the complete candidate off the
+request path, atomically install it on one node, and only then call that node's
+`catalogsChanged()` control; repeat explicitly for every applicable node and
+expect temporary cross-node revision drift. If the deployment requires a
+fleet-atomic cutover, stage and validate the candidate everywhere before any
+node mutates, then use an application-owned coordinator, proxy, or traffic
+switch to activate it. A failed candidate must produce neither a swap nor an
+invalidation. After node loss, a client reconnects and repeats its credentials,
+preferences, and any portable protected state; Soklet recovers no localization
+session from the lost process.
 
 `@McpHeader` deliberately requires a registered `Mcp-Param-*` request-header
 value to agree with the corresponding property already parsed from the JSON
@@ -1230,11 +1266,19 @@ reflection/inventory contracts pass 24/24; and the aggregate API gate verifies
 565 incompatibilities, 234 owners, and 1,048/179/422 records. The maintained
 179-source API sketch passes Java 17 compilation, Javadoc doclint, and its
 localization smoke contract. That 1,673 result remains the typed-request-state
-amendment checkpoint. On the current post-CI-hardening tree, Corretto 26 clean
-verify passes 1,674/0/0/4 over the same 462 main and 193 test sources,
-Corretto 17 clean test passes 1,659/0/0/72, and the exact six-scenario smoke
-soak passes 6/6 with its strict verifier. Carried-forward local evidence
-remains green for candidate localization, artifact-backed simulator
+amendment checkpoint. The 1,676/0/0/4 result over 462 main and 194 test sources
+remains the rate-limit identity/trusted-proxy checkpoint. The independent-
+request direction-boundary result remains 1,678/0/0/4 over 462 main and 195
+test sources, with its focused protocol gate at 35/35. On the current
+localization-fleet fixture tree, Corretto 26 clean verify passes 1,681/0/0/4
+over 462 main and 196 test sources and builds the main, sources, and Javadoc
+artifacts; the fixture passes 3/3 and its related localization regression set
+passes 24/24. The preceding Corretto 17 clean-test run passed 1,659/0/0/72
+before the rate-limit identity, independent-request, and localization-fleet
+runtime test sources were added, so it remains prior supported-JDK evidence
+rather than a current 196-source result. The exact six-
+scenario smoke soak passes 6/6 with its strict verifier. Carried-forward local
+evidence remains green for candidate localization, artifact-backed simulator
 39/39, pinned live official CLI 39/39, the website's offline clean-install,
 lint, and 33-route SSG build, and OpenTelemetry 36/36. The checksum-pinned
 TypeScript and Go harnesses are `READY` and green against the local snapshot.
@@ -1253,8 +1297,19 @@ probes pass locally on a reserved ephemeral IPv4 loopback port supplied through
 `SOKLET_BAREBONES_LOOPBACK_PORT` without disturbing the unrelated Docker
 listener on port 8080. Its source and validator changes remain uncommitted and
 unpinned, so its old public pin stays blocked.
-Scheduled/nightly and sustained fuzz-soak history, real multi-node localization
-orchestration, public Javadocs, release scans, and immutable candidate
-conformance/provenance also remain open. See
+The bounded two-listener localization fixture now covers failed reload,
+rolling revision drift without within-response mixing, node loss,
+subscription reconnect, node-local delivery, and final runtime cleanup.
+The format-v2 release contract now enumerates exactly 29 ordered gates. Fourteen
+are dispatch-configured, while nine remain `BLOCKED_HARNESS_MISSING` and the
+six downstreams remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`; `READY` means
+configured, never passed. Scheduled/nightly and sustained fuzz-soak and
+operational history, the exact JDK 21/static-analysis/SpotBugs toolchain,
+release scans, benchmarks, automated matrix closure, published downstream
+pins, and immutable candidate conformance/provenance remain open. Candidate
+Javadoc generation/completeness is configured; public deployment remains
+post-validation publication work. The bounded two-listener localization
+fixture is the Soklet-owned fleet gate; production multi-host coordination is
+an application/deployment security responsibility. See
 [release/README.md](release/README.md) for the exact validator contract and
 current fail-closed statuses.

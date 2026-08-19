@@ -132,7 +132,7 @@ try {
   for (const checkedInProfileName of ['smoke', 'nightly', 'release']) {
     const checkedInProfile = verifySoakProfile(checkedInProfileName, projectRoot);
     assert.equal(checkedInProfile.profileName, checkedInProfileName);
-    assert.equal(checkedInProfile.values.size, 39);
+    assert.equal(checkedInProfile.values.size, 40);
     assert.match(checkedInProfile.profileSha256, /^[0-9a-f]{64}$/);
   }
 

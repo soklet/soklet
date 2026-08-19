@@ -996,7 +996,8 @@ record McpApplicationResponse(int status, @NonNull String reason,
 		if (status < 100 || status > 599)
 			throw new IllegalArgumentException("HTTP status must be between 100 and 599.");
 		requireNonNull(reason);
-		requireNonNull(message);
+		message = requireNonNull(message);
+		message.ifPresent(McpProtocolSupport::requireServerOutboundMessage);
 		requireNonNull(outcome);
 		throwables = List.copyOf(requireNonNull(throwables));
 	}

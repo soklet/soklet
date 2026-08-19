@@ -19,7 +19,7 @@ jobs:
   validate:
     name: Validate immutable candidate
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 240
     steps:
       - name: Check out exact candidate
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -36,7 +36,7 @@ jobs:
           "${RUNNER_TEMP}" "${GITHUB_PATH}"
           "${RUNNER_TEMP}/release-validation-node-distribution.txt"
 
-      - name: Install checksum-pinned Corretto 25 for ToyStore
+      - name: Install checksum-pinned Corretto 25 for core and ToyStore gates
         shell: bash
         run: >-
           bash release/scripts/install-pinned-corretto-linux-x64.sh
@@ -89,6 +89,7 @@ jobs:
           retention-days: 90
           path: |
             target/release-validation/evidence
+            release/release-validation-manifest.json
             ${{ runner.temp }}/release-validation-node-distribution.txt
             ${{ runner.temp }}/release-validation-maven-distribution.txt
             ${{ runner.temp }}/release-validation-go-distribution.txt

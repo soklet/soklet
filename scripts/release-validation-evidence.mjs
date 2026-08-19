@@ -23,8 +23,24 @@ const SERVLET_DEFAULT_ARTIFACT_SHA256 =
   'a7acd26b5a8933726615719e8d9d766feba6d0ebdb32939fa8ef1eba8094e7a4';
 const EXPECTED_GATE_IDS = [
   'candidate-build',
+  'core-jdk-21',
+  'core-jdk-25',
   'isolated-install',
+  'api-freeze',
+  'candidate-javadocs',
+  'static-analysis',
+  'spotbugs',
+  'schema-replay',
+  'fuzz-replay',
+  'fuzz-nightly-history',
+  'soak-smoke',
+  'soak-nightly-history',
   'release-soak',
+  'localization-fleet',
+  'operational-history',
+  'release-scans',
+  'mcp-benchmarks',
+  'matrix-closure',
   'candidate-conformance',
   'candidate-localization',
   'barebones-app',
@@ -55,6 +71,23 @@ const EXPECTED_GATE_CONTRACTS = Object.freeze({
     artifactIdentity: 'com.soklet:soklet:3.6.0',
     kind: 'SOURCE',
     repository: null,
+    toolchain: 'java',
+    versionProperty: null,
+  }),
+  'core-jdk-21': Object.freeze({
+    access: 'LOCAL_CHECKOUT',
+    artifactIdentity: 'maven:clean-test@jdk-21',
+    kind: 'SOURCE',
+    repository: null,
+    toolchain: 'coreJdk21',
+    versionProperty: null,
+  }),
+  'core-jdk-25': Object.freeze({
+    access: 'LOCAL_CHECKOUT',
+    artifactIdentity: 'maven:clean-test@jdk-25',
+    kind: 'SOURCE',
+    repository: null,
+    toolchain: 'toystoreJava',
     versionProperty: null,
   }),
   'isolated-install': Object.freeze({
@@ -62,6 +95,79 @@ const EXPECTED_GATE_CONTRACTS = Object.freeze({
     artifactIdentity: 'org.apache.maven.plugins:maven-install-plugin:3.1.4',
     kind: 'CANDIDATE_ARTIFACT',
     repository: null,
+    toolchain: 'java',
+    versionProperty: null,
+  }),
+  'api-freeze': Object.freeze({
+    access: 'LOCAL_CHECKOUT',
+    artifactIdentity: 'scripts/verify-mcp-api-freezes.sh',
+    kind: 'SOURCE',
+    repository: null,
+    toolchain: 'java',
+    versionProperty: null,
+  }),
+  'candidate-javadocs': Object.freeze({
+    access: 'LOCAL_CHECKOUT',
+    artifactIdentity: 'com.soklet:soklet:3.6.0:javadoc',
+    kind: 'CANDIDATE_ARTIFACT',
+    repository: null,
+    toolchain: 'java',
+    versionProperty: null,
+  }),
+  'static-analysis': Object.freeze({
+    access: 'LOCAL_CHECKOUT',
+    artifactIdentity: 'maven-profile:static-analysis',
+    kind: 'SOURCE',
+    repository: null,
+    toolchain: 'coreJdk21',
+    versionProperty: null,
+  }),
+  spotbugs: Object.freeze({
+    access: 'LOCAL_CHECKOUT',
+    artifactIdentity: 'maven-profile:spotbugs',
+    kind: 'SOURCE',
+    repository: null,
+    toolchain: 'coreJdk21',
+    versionProperty: null,
+  }),
+  'schema-replay': Object.freeze({
+    access: 'LOCAL_CHECKOUT',
+    artifactIdentity: 'json-schema-test-suite:reviewed-pin',
+    kind: 'SOURCE',
+    repository: null,
+    toolchain: 'java',
+    versionProperty: null,
+  }),
+  'fuzz-replay': Object.freeze({
+    access: 'LOCAL_CHECKOUT',
+    artifactIdentity: 'fuzz:checked-in-corpus',
+    kind: 'SOURCE',
+    repository: null,
+    toolchain: 'toystoreJava',
+    versionProperty: null,
+  }),
+  'fuzz-nightly-history': Object.freeze({
+    access: 'LOCAL_CHECKOUT',
+    artifactIdentity: 'ci:fuzz-nightly-history',
+    kind: 'SOURCE',
+    repository: null,
+    toolchain: 'nodePin',
+    versionProperty: null,
+  }),
+  'soak-smoke': Object.freeze({
+    access: 'LOCAL_CHECKOUT',
+    artifactIdentity: 'SOKLET_SOAK_PROFILE=smoke',
+    kind: 'SOURCE',
+    repository: null,
+    toolchain: 'toystoreJava',
+    versionProperty: null,
+  }),
+  'soak-nightly-history': Object.freeze({
+    access: 'LOCAL_CHECKOUT',
+    artifactIdentity: 'SOKLET_SOAK_PROFILE=nightly-history',
+    kind: 'SOURCE',
+    repository: null,
+    toolchain: 'nodePin',
     versionProperty: null,
   }),
   'release-soak': Object.freeze({
@@ -69,6 +175,47 @@ const EXPECTED_GATE_CONTRACTS = Object.freeze({
     artifactIdentity: 'SOKLET_SOAK_PROFILE=release',
     kind: 'SOURCE',
     repository: null,
+    toolchain: 'java',
+    versionProperty: null,
+  }),
+  'localization-fleet': Object.freeze({
+    access: 'LOCAL_CHECKOUT',
+    artifactIdentity: 'McpLocalizationFleetPublicRuntimeTests',
+    kind: 'SOURCE',
+    repository: null,
+    toolchain: 'java',
+    versionProperty: null,
+  }),
+  'operational-history': Object.freeze({
+    access: 'LOCAL_CHECKOUT',
+    artifactIdentity: 'ci:operational-history',
+    kind: 'SOURCE',
+    repository: null,
+    toolchain: 'nodePin',
+    versionProperty: null,
+  }),
+  'release-scans': Object.freeze({
+    access: 'LOCAL_CHECKOUT',
+    artifactIdentity: 'ci:release-scans',
+    kind: 'SOURCE',
+    repository: null,
+    toolchain: 'coreJdk21',
+    versionProperty: null,
+  }),
+  'mcp-benchmarks': Object.freeze({
+    access: 'LOCAL_CHECKOUT',
+    artifactIdentity: 'benchmarks:mcp-json-schema',
+    kind: 'SOURCE',
+    repository: null,
+    toolchain: 'java',
+    versionProperty: null,
+  }),
+  'matrix-closure': Object.freeze({
+    access: 'LOCAL_CHECKOUT',
+    artifactIdentity: 'mcp:conformance-matrix-closure',
+    kind: 'SOURCE',
+    repository: null,
+    toolchain: 'nodePin',
     versionProperty: null,
   }),
   'candidate-conformance': Object.freeze({
@@ -76,6 +223,7 @@ const EXPECTED_GATE_CONTRACTS = Object.freeze({
     artifactIdentity: '@modelcontextprotocol/conformance:0.2.0-alpha.10-descriptive',
     kind: 'CANDIDATE_ARTIFACT',
     repository: 'https://github.com/modelcontextprotocol/conformance.git',
+    toolchain: 'nodePin',
     versionProperty: null,
   }),
   'candidate-localization': Object.freeze({
@@ -83,6 +231,7 @@ const EXPECTED_GATE_CONTRACTS = Object.freeze({
     artifactIdentity: 'verification/localization/generic-provider',
     kind: 'CANDIDATE_ARTIFACT',
     repository: null,
+    toolchain: 'java',
     versionProperty: null,
   }),
   'barebones-app': Object.freeze({
@@ -90,6 +239,7 @@ const EXPECTED_GATE_CONTRACTS = Object.freeze({
     artifactIdentity: 'soklet/barebones-app-source',
     kind: 'DOWNSTREAM',
     repository: 'https://github.com/soklet/barebones-app.git',
+    toolchain: 'java',
     versionProperty: null,
   }),
   'soklet-servlet-javax': Object.freeze({
@@ -97,6 +247,7 @@ const EXPECTED_GATE_CONTRACTS = Object.freeze({
     artifactIdentity: 'com.soklet:soklet-servlet-javax:1.2.0',
     kind: 'DOWNSTREAM',
     repository: 'https://github.com/soklet/soklet-servlet-javax.git',
+    toolchain: 'java',
     versionProperty: 'soklet.version',
   }),
   'soklet-servlet-jakarta': Object.freeze({
@@ -104,6 +255,7 @@ const EXPECTED_GATE_CONTRACTS = Object.freeze({
     artifactIdentity: 'com.soklet:soklet-servlet-jakarta:1.2.0',
     kind: 'DOWNSTREAM',
     repository: 'https://github.com/soklet/soklet-servlet-jakarta.git',
+    toolchain: 'java',
     versionProperty: 'soklet.version',
   }),
   'toystore-app': Object.freeze({
@@ -111,6 +263,7 @@ const EXPECTED_GATE_CONTRACTS = Object.freeze({
     artifactIdentity: 'com.soklet.toystore:toystore:1.0.0',
     kind: 'DOWNSTREAM',
     repository: 'https://github.com/soklet/toystore-app.git',
+    toolchain: 'toystoreJava',
     versionProperty: 'soklet.version',
   }),
   'soklet-otel': Object.freeze({
@@ -118,6 +271,7 @@ const EXPECTED_GATE_CONTRACTS = Object.freeze({
     artifactIdentity: 'com.soklet:soklet-otel:1.4.0-SNAPSHOT',
     kind: 'DOWNSTREAM',
     repository: 'https://github.com/soklet/soklet-otel.git',
+    toolchain: 'java',
     versionProperty: 'soklet.version',
   }),
   'soklet-website': Object.freeze({
@@ -125,6 +279,7 @@ const EXPECTED_GATE_CONTRACTS = Object.freeze({
     artifactIdentity: 'revetware/soklet.com-source',
     kind: 'DOWNSTREAM',
     repository: 'https://github.com/revetware/soklet.com.git',
+    toolchain: 'nodePin',
     versionProperty: null,
   }),
   'typescript-interop': Object.freeze({
@@ -132,6 +287,7 @@ const EXPECTED_GATE_CONTRACTS = Object.freeze({
     artifactIdentity: 'npm:@modelcontextprotocol/client@2.0.0',
     kind: 'INTEROPERABILITY',
     repository: 'https://github.com/modelcontextprotocol/typescript-sdk.git',
+    toolchain: 'nodePin',
     versionProperty: null,
   }),
   'go-interop': Object.freeze({
@@ -139,6 +295,7 @@ const EXPECTED_GATE_CONTRACTS = Object.freeze({
     artifactIdentity: 'github.com/modelcontextprotocol/go-sdk@v1.7.0',
     kind: 'INTEROPERABILITY',
     repository: 'https://github.com/modelcontextprotocol/go-sdk.git',
+    toolchain: 'go',
     versionProperty: null,
   }),
 });
@@ -149,13 +306,410 @@ const GATE_KEYS = [
   'commit',
   'defaultArtifactIdentity',
   'defaultArtifactSha256',
+  'evidenceContract',
   'id',
   'kind',
   'reason',
   'repository',
   'status',
+  'toolchain',
   'versionProperty',
 ];
+
+function evidenceRole(role, type, mediaType, fileName, candidateArtifact = null) {
+  return Object.freeze({ candidateArtifact, fileName, mediaType, role, type });
+}
+
+const fileRole = (role, mediaType, fileName, candidateArtifact = null) =>
+  evidenceRole(role, 'FILE', mediaType, fileName, candidateArtifact);
+const directoryRole = (role, mediaType, fileName) =>
+  evidenceRole(role, 'DIRECTORY', mediaType, fileName);
+const logRole = (role, fileName) => fileRole(role, 'text/plain', fileName);
+const surefireRole = (role = 'surefire-reports', fileName = 'surefire-reports') =>
+  directoryRole(role, 'application/vnd.soklet.surefire-reports', fileName);
+
+function gateEvidenceContract(gateId, toolchain, command, profile, expectation, roles) {
+  return Object.freeze({
+    command,
+    contractId: `soklet.release.${gateId}.v1`,
+    expectation,
+    profile,
+    roles: Object.freeze(roles),
+    toolchain,
+  });
+}
+
+/**
+ * Validator-owned release-gate evidence contracts. This table is intentionally
+ * executable policy rather than manifest-provided data: changing a manifest
+ * cannot weaken the retained evidence required for a gate.
+ */
+export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
+  'candidate-build': gateEvidenceContract(
+    'candidate-build',
+    'java',
+    'mvn -B -ntp -Dgpg.skip=true clean verify',
+    'release-candidate',
+    'BUILD_SUCCESS_AND_CANDIDATE_ARTIFACTS_RECORDED',
+    [
+      fileRole('artifact-descriptor', 'application/json', 'candidate-artifacts.json', 'descriptor'),
+      logRole('build-log', 'candidate-build.log'),
+      surefireRole(),
+      fileRole('node-distribution', 'text/plain', 'release-validation-node-distribution.txt'),
+      fileRole('maven-distribution', 'text/plain', 'release-validation-maven-distribution.txt'),
+      fileRole('go-distribution', 'text/plain', 'release-validation-go-distribution.txt'),
+      fileRole('java-distribution', 'text/plain', 'release-validation-java-distribution.txt'),
+    ],
+  ),
+  'core-jdk-21': gateEvidenceContract(
+    'core-jdk-21',
+    'coreJdk21',
+    'mvn -B -ntp -Dgpg.skip=true clean test',
+    'jdk-21',
+    'TESTS_PASS_WITH_ZERO_ERRORS_AND_FAILURES',
+    [
+      logRole('build-log', 'core-jdk-21.log'),
+      fileRole(
+        'java-distribution',
+        'text/plain',
+        'release-validation-core-jdk-21-distribution.txt',
+      ),
+      surefireRole(),
+    ],
+  ),
+  'core-jdk-25': gateEvidenceContract(
+    'core-jdk-25',
+    'toystoreJava',
+    'mvn -B -ntp -Dgpg.skip=true clean test',
+    'jdk-25',
+    'TESTS_PASS_WITH_ZERO_ERRORS_AND_FAILURES',
+    [
+      logRole('build-log', 'core-jdk-25.log'),
+      fileRole(
+        'java-distribution',
+        'text/plain',
+        'release-validation-toystore-java-distribution.txt',
+      ),
+      surefireRole(),
+    ],
+  ),
+  'isolated-install': gateEvidenceContract(
+    'isolated-install',
+    'java',
+    'org.apache.maven.plugins:maven-install-plugin:3.1.4:install-file',
+    'isolated-repository',
+    'INSTALLED_POM_AND_MAIN_JAR_MATCH_CANDIDATE_BYTES',
+    [
+      fileRole('installed-pom', 'application/xml', 'soklet-3.6.0.pom', 'pom'),
+      fileRole('installed-main-jar', 'application/java-archive', 'soklet-3.6.0.jar', 'mainJar'),
+      logRole('install-log', 'isolated-install.log'),
+    ],
+  ),
+  'api-freeze': gateEvidenceContract(
+    'api-freeze',
+    'java',
+    'scripts/verify-mcp-api-freezes.sh',
+    'mcp-api-freeze',
+    'REVIEWED_BIDIRECTIONAL_API_SET_AND_SIGNATURES_MATCH',
+    [
+      logRole('api-freeze-log', 'api-freeze.log'),
+      fileRole('japicmp-diff', 'application/xml', 'mcp-api-diff.xml'),
+      fileRole(
+        'japicmp-incompatibilities',
+        'application/x-ndjson',
+        'mcp-api-diff.incompatibilities.jsonl',
+      ),
+      fileRole('api-freeze-report', 'application/xml', 'mcp-api-freeze.xml'),
+      directoryRole('signatures', 'application/vnd.soklet.api-signatures', 'mcp-api-freezes'),
+    ],
+  ),
+  'candidate-javadocs': gateEvidenceContract(
+    'candidate-javadocs',
+    'java',
+    'mvn -B -ntp -Dgpg.skip=true -Dtest=McpPublicJavadocTests clean package javadoc:javadoc',
+    'public-javadocs',
+    'PUBLIC_JAVADOC_INVENTORY_JAR_AND_STANDALONE_DOCLINT_PASS',
+    [
+      logRole('javadoc-log', 'candidate-javadocs.log'),
+      fileRole(
+        'javadoc-jar',
+        'application/java-archive',
+        'soklet-3.6.0-javadoc.jar',
+        'javadocJar',
+      ),
+      directoryRole('apidocs', 'text/html', 'apidocs'),
+      surefireRole(),
+    ],
+  ),
+  'static-analysis': gateEvidenceContract(
+    'static-analysis',
+    'coreJdk21',
+    'mvn -B -ntp -Dgpg.skip=true -Pstatic-analysis clean compile',
+    'static-analysis',
+    'BUILD_SUCCESS',
+    [logRole('analysis-log', 'static-analysis.log')],
+  ),
+  spotbugs: gateEvidenceContract(
+    'spotbugs',
+    'coreJdk21',
+    'mvn -B -ntp -Dgpg.skip=true -Pspotbugs -DskipTests clean compile spotbugs:check',
+    'spotbugs',
+    'ZERO_SPOTBUGS_FINDINGS',
+    [
+      logRole('spotbugs-log', 'spotbugs.log'),
+      fileRole('spotbugs-report', 'application/xml', 'spotbugsXml.xml'),
+    ],
+  ),
+  'schema-replay': gateEvidenceContract(
+    'schema-replay',
+    'java',
+    'mvn -B -ntp -Dgpg.skip=true -Dtest=JsonSchemaTestSuitePinTests,McpToolSchemaProfile* test',
+    'profile-1-replay',
+    'SELECTED_SCHEMA_CORPUS_AND_PROFILE_TESTS_PASS',
+    [logRole('replay-log', 'schema-replay.log'), surefireRole()],
+  ),
+  'fuzz-replay': gateEvidenceContract(
+    'fuzz-replay',
+    'toystoreJava',
+    'mvn -B -ntp -f fuzz/pom.xml clean test; node scripts/verify-json-corpus.mjs',
+    'checked-in-corpus',
+    'ALL_CHECKED_IN_FUZZ_CORPORA_PASS',
+    [logRole('replay-log', 'fuzz-replay.log'), surefireRole()],
+  ),
+  'fuzz-nightly-history': gateEvidenceContract(
+    'fuzz-nightly-history',
+    'nodePin',
+    'node scripts/verify-release-history.mjs fuzz-nightly',
+    'nightly-history',
+    'REQUIRED_NIGHTLY_FUZZ_WINDOW_PASSES',
+    [fileRole('history', 'application/json', 'fuzz-nightly-history.json')],
+  ),
+  'soak-smoke': gateEvidenceContract(
+    'soak-smoke',
+    'toystoreJava',
+    'SOKLET_SOAK_PROFILE=smoke mvn -B -ntp -f soak/pom.xml clean test',
+    'smoke',
+    'SOAK_REPORT_AND_SUREFIRE_PASS_WITHIN_PROFILE_LIMITS',
+    [
+      logRole('soak-log', 'soak-smoke.log'),
+      fileRole('soak-report', 'text/markdown', 'soak-report.md'),
+      surefireRole(),
+    ],
+  ),
+  'soak-nightly-history': gateEvidenceContract(
+    'soak-nightly-history',
+    'nodePin',
+    'node scripts/verify-release-history.mjs soak-nightly',
+    'nightly-history',
+    'REQUIRED_NIGHTLY_SOAK_WINDOW_PASSES',
+    [fileRole('history', 'application/json', 'soak-nightly-history.json')],
+  ),
+  'release-soak': gateEvidenceContract(
+    'release-soak',
+    'java',
+    'SOKLET_SOAK_PROFILE=release mvn -B -ntp -f soak/pom.xml clean test',
+    'release',
+    'SOAK_REPORT_AND_SUREFIRE_PASS_WITHIN_PROFILE_LIMITS',
+    [
+      fileRole('soak-report', 'text/markdown', 'soak-report.md'),
+      surefireRole(),
+      logRole('soak-log', 'release-soak.log'),
+    ],
+  ),
+  'localization-fleet': gateEvidenceContract(
+    'localization-fleet',
+    'java',
+    'mvn -B -ntp -Dtest=McpLocalizationFleetPublicRuntimeTests test',
+    'two-listener-fleet',
+    'FAILED_RELOAD_ROLLING_DRIFT_NODE_LOSS_RECONNECT_AND_CLEANUP_PASS',
+    [logRole('fleet-log', 'localization-fleet.log'), surefireRole()],
+  ),
+  'operational-history': gateEvidenceContract(
+    'operational-history',
+    'nodePin',
+    'node scripts/verify-release-history.mjs operational',
+    'scheduled-history',
+    'REQUIRED_OPERATIONAL_HISTORY_WINDOW_PASSES',
+    [fileRole('history', 'application/json', 'operational-history.json')],
+  ),
+  'release-scans': gateEvidenceContract(
+    'release-scans',
+    'coreJdk21',
+    'node scripts/verify-release-scans.mjs',
+    'release',
+    'REQUIRED_RELEASE_SCANS_PASS_WITH_ZERO_UNACCEPTED_FINDINGS',
+    [
+      fileRole('scan-summary', 'application/json', 'release-scans.json'),
+      directoryRole('scan-reports', 'application/vnd.soklet.scan-reports', 'release-scans'),
+    ],
+  ),
+  'mcp-benchmarks': gateEvidenceContract(
+    'mcp-benchmarks',
+    'java',
+    'mvn -B -ntp -f benchmarks/pom.xml clean verify; node scripts/verify-release-benchmarks.mjs',
+    'release',
+    'JMH_JSON_351_COMPARISON_AND_SCHEMA_360_BASELINE_RECORDED_WITH_SIGNOFF',
+    [
+      fileRole('benchmark-results', 'application/json', 'mcp-benchmarks.json'),
+      logRole('benchmark-log', 'mcp-benchmarks.log'),
+    ],
+  ),
+  'matrix-closure': gateEvidenceContract(
+    'matrix-closure',
+    'nodePin',
+    'node scripts/verify-release-matrix-closure.mjs',
+    'release',
+    'ZERO_UNRESOLVED_IN_SCOPE_MATRIX_ROWS',
+    [fileRole('matrix-report', 'application/json', 'matrix-closure.json')],
+  ),
+  'candidate-conformance': gateEvidenceContract(
+    'candidate-conformance',
+    'nodePin',
+    'node conformance/official/run.mjs --phase 5 --mode release',
+    'release',
+    'ALL_39_CAPABILITY_SELECTED_SCENARIOS_PASS',
+    [directoryRole(
+      'conformance-evidence',
+      'application/vnd.soklet.conformance-evidence',
+      'release',
+    )],
+  ),
+  'candidate-localization': gateEvidenceContract(
+    'candidate-localization',
+    'java',
+    'verification/localization/verify.sh',
+    'generic-provider',
+    'CANDIDATE_ARTIFACT_LOCALIZATION_PROVIDER_PASSES',
+    [logRole('localization-log', 'candidate-localization.log')],
+  ),
+  'barebones-app': gateEvidenceContract(
+    'barebones-app',
+    'java',
+    'javac --release 17; live loopback probes; clean shutdown',
+    'candidate',
+    'COMPILE_START_RESPOND_TERMINATE_AND_RELEASE_PORT',
+    [
+      fileRole('port-file', 'text/plain', 'barebones-loopback-port.txt'),
+      logRole('reservation-log', 'barebones-port-reservation.log'),
+      logRole('runtime-log', 'barebones-app.log'),
+    ],
+  ),
+  'soklet-servlet-javax': gateEvidenceContract(
+    'soklet-servlet-javax',
+    'java',
+    'mvn -B -ntp clean verify; mvn -B -ntp -Dsoklet.version=3.6.0 clean verify',
+    'default-and-candidate',
+    'DEFAULT_AND_CANDIDATE_LEGS_PASS_WITH_EXACT_ARTIFACTS',
+    [
+      fileRole('project-pom', 'application/xml', 'pom.xml'),
+      fileRole(
+        'default-jar',
+        'application/java-archive',
+        'soklet-3.1.1.jar',
+        'gateDefaultArtifact',
+      ),
+      logRole('default-log', 'soklet-servlet-javax-default.log'),
+      surefireRole('default-surefire-reports', 'soklet-servlet-javax-default-surefire-reports'),
+      logRole('candidate-log', 'soklet-servlet-javax-candidate.log'),
+      surefireRole('candidate-surefire-reports'),
+    ],
+  ),
+  'soklet-servlet-jakarta': gateEvidenceContract(
+    'soklet-servlet-jakarta',
+    'java',
+    'mvn -B -ntp clean verify; mvn -B -ntp -Dsoklet.version=3.6.0 clean verify',
+    'default-and-candidate',
+    'DEFAULT_AND_CANDIDATE_LEGS_PASS_WITH_EXACT_ARTIFACTS',
+    [
+      fileRole('project-pom', 'application/xml', 'pom.xml'),
+      fileRole(
+        'default-jar',
+        'application/java-archive',
+        'soklet-3.1.1.jar',
+        'gateDefaultArtifact',
+      ),
+      logRole('default-log', 'soklet-servlet-jakarta-default.log'),
+      surefireRole(
+        'default-surefire-reports',
+        'soklet-servlet-jakarta-default-surefire-reports',
+      ),
+      logRole('candidate-log', 'soklet-servlet-jakarta-candidate.log'),
+      surefireRole('candidate-surefire-reports'),
+    ],
+  ),
+  'toystore-app': gateEvidenceContract(
+    'toystore-app',
+    'toystoreJava',
+    'mvn -B -ntp -Dsoklet.version=3.6.0 clean verify',
+    'candidate',
+    'CANDIDATE_LEG_PASSES_WITH_EXACT_ARTIFACT',
+    [
+      fileRole('project-pom', 'application/xml', 'pom.xml'),
+      logRole('candidate-log', 'toystore-app-candidate.log'),
+      surefireRole('candidate-surefire-reports'),
+      fileRole(
+        'java-distribution',
+        'text/plain',
+        'release-validation-toystore-java-distribution.txt',
+      ),
+    ],
+  ),
+  'soklet-otel': gateEvidenceContract(
+    'soklet-otel',
+    'java',
+    'mvn -B -ntp -Dsoklet.version=3.6.0 clean verify',
+    'candidate',
+    'CANDIDATE_LEG_PASSES_WITH_EXACT_ARTIFACT',
+    [
+      fileRole('project-pom', 'application/xml', 'pom.xml'),
+      logRole('candidate-log', 'soklet-otel-candidate.log'),
+      surefireRole('candidate-surefire-reports'),
+    ],
+  ),
+  'soklet-website': gateEvidenceContract(
+    'soklet-website',
+    'nodePin',
+    'npm ci --ignore-scripts; npm run lint; npm run ssg-build',
+    'candidate-documentation',
+    'CLEAN_INSTALL_LINT_AND_STATIC_BUILD_PASS',
+    [
+      logRole('build-log', 'soklet-website.log'),
+      directoryRole('distribution', 'application/vnd.soklet.site-distribution', 'dist'),
+    ],
+  ),
+  'typescript-interop': gateEvidenceContract(
+    'typescript-interop',
+    'nodePin',
+    'verification/interoperability/typescript/verify.sh',
+    'tools-list',
+    'PINNED_SDK_TOOLS_LIST_FIXTURE_PASSES_AND_SHUTS_DOWN_CLEANLY',
+    [
+      logRole('interop-log', 'typescript-interop.log'),
+      fileRole(
+        'candidate-main-jar',
+        'application/java-archive',
+        'soklet-3.6.0.jar',
+        'mainJar',
+      ),
+    ],
+  ),
+  'go-interop': gateEvidenceContract(
+    'go-interop',
+    'go',
+    'verification/interoperability/go/verify.sh',
+    'tools-list',
+    'PINNED_SDK_TOOLS_LIST_FIXTURE_PASSES_AND_SHUTS_DOWN_CLEANLY',
+    [
+      logRole('interop-log', 'go-interop.log'),
+      fileRole(
+        'candidate-main-jar',
+        'application/java-archive',
+        'soklet-3.6.0.jar',
+        'mainJar',
+      ),
+    ],
+  ),
+});
 
 function fail(message) {
   throw new Error(message);
@@ -304,7 +858,15 @@ function validateCorrettoToolchain(toolchain, major, description) {
 function validateToolchains(toolchains, projectRoot) {
   requireExactKeys(
     toolchains,
-    ['go', 'java', 'maven', 'nodePin', 'releaseSoakTimeoutSeconds', 'toystoreJava'],
+    [
+      'coreJdk21',
+      'go',
+      'java',
+      'maven',
+      'nodePin',
+      'releaseSoakTimeoutSeconds',
+      'toystoreJava',
+    ],
     'toolchains',
   );
   requireExactKeys(
@@ -326,6 +888,8 @@ function validateToolchains(toolchains, projectRoot) {
   requireExactKeys(toolchains.nodePin, ['path', 'sha256'], 'Node toolchain pin');
 
   validateCorrettoToolchain(toolchains.java, 17, 'Candidate Java toolchain');
+  if (toolchains.coreJdk21 !== null)
+    validateCorrettoToolchain(toolchains.coreJdk21, 21, 'Core JDK 21 toolchain');
   validateCorrettoToolchain(toolchains.toystoreJava, 25, 'ToyStore Java toolchain');
 
   if (!/^1\.25\.[0-9]+$/.test(toolchains.go.version))
@@ -380,12 +944,14 @@ function validateToolchains(toolchains, projectRoot) {
   }
 }
 
-function validateGate(gate, index) {
+function validateGate(gate, index, toolchains) {
   requireExactKeys(gate, GATE_KEYS, `gate ${index}`);
   requireString(gate.id, `gate ${index} id`);
   requireString(gate.kind, `gate ${gate.id} kind`);
   requireString(gate.status, `gate ${gate.id} status`);
   requireString(gate.access, `gate ${gate.id} access`);
+  requireString(gate.evidenceContract, `gate ${gate.id} evidence contract`);
+  requireString(gate.toolchain, `gate ${gate.id} toolchain`);
   requireNullableString(gate.artifactChecksum, `gate ${gate.id} artifact checksum`);
   requireString(gate.artifactIdentity, `gate ${gate.id} artifact identity`);
   requireNullableString(
@@ -459,6 +1025,7 @@ function validateGate(gate, index) {
     'artifactIdentity',
     'kind',
     'repository',
+    'toolchain',
     'versionProperty',
   ]) {
     if (gate[field] !== expectedContract[field]) {
@@ -468,6 +1035,23 @@ function validateGate(gate, index) {
       );
     }
   }
+
+  const expectedEvidenceContract = EXPECTED_GATE_EVIDENCE_CONTRACTS[gate.id];
+  if (expectedEvidenceContract === undefined)
+    fail(`Gate ${gate.id} has no canonical evidence contract`);
+  if (gate.evidenceContract !== expectedEvidenceContract.contractId) {
+    fail(
+      `Gate ${gate.id} evidenceContract differs from its canonical release contract: `
+        + `expected ${JSON.stringify(expectedEvidenceContract.contractId)}, `
+        + `found ${JSON.stringify(gate.evidenceContract)}`,
+    );
+  }
+  if (gate.toolchain !== expectedEvidenceContract.toolchain)
+    fail(`Gate ${gate.id} toolchain differs from its canonical evidence contract`);
+  if (!(gate.toolchain in toolchains))
+    fail(`Gate ${gate.id} refers to unknown toolchain ${gate.toolchain}`);
+  if (gate.status === 'READY' && toolchains[gate.toolchain] === null)
+    fail(`READY gate ${gate.id} cannot use unavailable toolchain ${gate.toolchain}`);
 
   if (gate.id === 'typescript-interop'
       && (gate.artifactIdentity !== 'npm:@modelcontextprotocol/client@2.0.0'
@@ -601,8 +1185,8 @@ export function validateReleaseConfiguration(path, { requireReady = false } = {}
     'manifest',
   );
 
-  if (config.value.formatVersion !== 1)
-    fail('Release-validation manifest formatVersion must be 1');
+  if (config.value.formatVersion !== 2)
+    fail('Release-validation manifest formatVersion must be 2');
 
   validateCandidate(config.value.candidate);
   validateToolchains(config.value.toolchains, projectRoot);
@@ -610,7 +1194,7 @@ export function validateReleaseConfiguration(path, { requireReady = false } = {}
   if (!Array.isArray(config.value.gates))
     fail('Manifest gates must be an array');
 
-  config.value.gates.forEach(validateGate);
+  config.value.gates.forEach((gate, index) => validateGate(gate, index, config.value.toolchains));
   const actualIds = config.value.gates.map(({ id }) => id);
 
   if (new Set(actualIds).size !== actualIds.length
@@ -728,6 +1312,171 @@ function validateEvidenceItem(item, description) {
     fail(`${description} file name must not contain a path`);
   if (!SHA256_PATTERN.test(item.sha256))
     fail(`${description} SHA-256 must contain 64 lowercase hexadecimal characters`);
+}
+
+function validateCandidateArtifactDescriptor(config, candidateCommit, path) {
+  const descriptor = readJson(path, 'candidate artifact descriptor').value;
+  requireExactKeys(
+    descriptor,
+    ['artifacts', 'candidateCommit', 'coordinates', 'formatVersion'],
+    'candidate artifact descriptor',
+  );
+  requireExactKeys(
+    descriptor.artifacts,
+    ['javadocJar', 'mainJar', 'pom', 'sourcesJar'],
+    'candidate artifact descriptor artifacts',
+  );
+  if (descriptor.formatVersion !== 1
+      || descriptor.candidateCommit !== candidateCommit
+      || JSON.stringify(descriptor.coordinates) !== JSON.stringify(config.candidate)) {
+    fail('Candidate artifact descriptor identity does not match this validation run');
+  }
+  for (const [name, artifact] of Object.entries(descriptor.artifacts)) {
+    validateEvidenceItem(artifact, `candidate artifact ${name}`);
+    if (artifact.type !== 'FILE')
+      fail(`Candidate artifact ${name} must be a file`);
+  }
+  return descriptor;
+}
+
+function validateEvidenceContent(path, specification, description) {
+  const absolutePath = resolve(path);
+  if (!existsSync(absolutePath))
+    fail(`Missing ${description}: ${absolutePath}`);
+  const stats = lstatSync(absolutePath);
+  if (stats.isSymbolicLink())
+    fail(`${description} cannot be a symbolic link: ${absolutePath}`);
+  if ((specification.type === 'FILE' && !stats.isFile())
+      || (specification.type === 'DIRECTORY' && !stats.isDirectory())) {
+    fail(`${description} must be a ${specification.type}`);
+  }
+  if (basename(absolutePath) !== specification.fileName) {
+    fail(
+      `${description} basename must be exactly ${specification.fileName}, `
+        + `found ${basename(absolutePath)}`,
+    );
+  }
+  if (specification.type === 'DIRECTORY')
+    return;
+
+  const file = readRealFile(absolutePath, description);
+  if (specification.mediaType === 'application/java-archive') {
+    if (file.bytes.length < 4 || file.bytes[0] !== 0x50 || file.bytes[1] !== 0x4b)
+      fail(`${description} is not a JAR/ZIP file`);
+    return;
+  }
+  if (specification.mediaType === 'application/json') {
+    readJson(absolutePath, description);
+    return;
+  }
+
+  const text = requireUtf8Text(file, description);
+  if (text.length === 0)
+    fail(`${description} cannot be empty`);
+  if (specification.mediaType === 'application/xml' && !text.trimStart().startsWith('<'))
+    fail(`${description} is not recognizable XML`);
+  if (specification.mediaType === 'application/x-ndjson') {
+    const lines = text.split('\n').filter((line) => line !== '');
+    if (lines.length === 0)
+      fail(`${description} must contain at least one JSON line`);
+    for (const [index, line] of lines.entries()) {
+      try {
+        JSON.parse(line);
+      } catch (error) {
+        fail(`${description} line ${index + 1} is not valid JSON`);
+      }
+    }
+  }
+}
+
+function parseRolePaths(gateId, contract, rolePaths) {
+  if (!Array.isArray(rolePaths))
+    fail(`Gate ${gateId} evidence role paths must be an array`);
+  const parsed = rolePaths.map((rolePath, index) => {
+    requireString(rolePath, `gate ${gateId} role path ${index}`);
+    const separator = rolePath.indexOf('=');
+    if (separator <= 0 || separator === rolePath.length - 1)
+      fail(`Gate ${gateId} evidence must use role=path arguments`);
+    return Object.freeze({ role: rolePath.slice(0, separator), path: rolePath.slice(separator + 1) });
+  });
+  const actualRoles = parsed.map(({ role }) => role);
+  const expectedRoles = contract.roles.map(({ role }) => role);
+  if (new Set(actualRoles).size !== actualRoles.length
+      || JSON.stringify(actualRoles) !== JSON.stringify(expectedRoles)) {
+    fail(`Gate ${gateId} evidence roles and order must be exactly: ${expectedRoles.join(', ')}`);
+  }
+  return parsed;
+}
+
+const WORKFLOW_KEYS = ['job', 'repository', 'runAttempt', 'runId', 'serverUrl', 'sha'];
+
+function workflowIdentity() {
+  return Object.freeze({
+    job: requireEnvironment('GITHUB_JOB'),
+    repository: requireEnvironment('GITHUB_REPOSITORY'),
+    runAttempt: requireEnvironment('GITHUB_RUN_ATTEMPT'),
+    runId: requireEnvironment('GITHUB_RUN_ID'),
+    serverUrl: requireEnvironment('GITHUB_SERVER_URL'),
+    sha: requireEnvironment('GITHUB_SHA'),
+  });
+}
+
+const GATE_RECEIPT_KEYS = [
+  'candidateCommit',
+  'candidateSha256',
+  'command',
+  'contractId',
+  'expectation',
+  'formatVersion',
+  'gateId',
+  'profile',
+  'result',
+  'toolchain',
+  'workflow',
+];
+
+function validateGateReceipt(receipt, gate, contract, candidateCommit, candidateSha256) {
+  requireExactKeys(receipt, GATE_RECEIPT_KEYS, `${gate.id} typed receipt`);
+  requireExactKeys(receipt.workflow, WORKFLOW_KEYS, `${gate.id} receipt workflow`);
+  for (const [key, value] of Object.entries(receipt.workflow))
+    requireString(value, `${gate.id} receipt workflow ${key}`);
+  if (receipt.formatVersion !== 1
+      || receipt.candidateCommit !== candidateCommit
+      || receipt.candidateSha256 !== candidateSha256
+      || !SHA256_PATTERN.test(receipt.candidateSha256)
+      || receipt.command !== contract.command
+      || receipt.contractId !== contract.contractId
+      || receipt.expectation !== contract.expectation
+      || receipt.gateId !== gate.id
+      || receipt.profile !== contract.profile
+      || receipt.result !== 'PASS'
+      || receipt.toolchain !== gate.toolchain
+      || receipt.workflow.sha !== candidateCommit) {
+    fail(`${gate.id} typed receipt does not match its exact candidate and gate contract`);
+  }
+  return Object.freeze({ ...receipt });
+}
+
+function evidenceMatchesCandidateArtifact(evidence, candidateArtifact, description) {
+  if (evidence.type !== 'FILE'
+      || evidence.bytes !== candidateArtifact.bytes
+      || evidence.sha256 !== candidateArtifact.sha256) {
+    fail(`${description} bytes do not match the candidate artifact descriptor`);
+  }
+}
+
+function validateGateDefaultArtifact(evidence, gate, specification, description) {
+  const identity = /^com\.soklet:soklet:([0-9]+\.[0-9]+\.[0-9]+)$/.exec(
+    gate.defaultArtifactIdentity ?? '',
+  );
+  if (identity === null
+      || !SHA256_PATTERN.test(gate.defaultArtifactSha256 ?? '')
+      || specification.fileName !== `soklet-${identity[1]}.jar`
+      || evidence.type !== 'FILE'
+      || evidence.fileName !== specification.fileName
+      || evidence.sha256 !== gate.defaultArtifactSha256) {
+    fail(`${description} does not match the gate's exact default artifact identity and SHA-256`);
+  }
 }
 
 function verifyCandidatePom(bytes) {
@@ -861,12 +1610,18 @@ function interoperabilityReceiptForEvidence(gate, evidencePaths) {
 export function recordGateEvidence(
   configPath,
   candidateCommit,
+  artifactDescriptorPath,
   gateId,
   outputPath,
-  evidencePaths,
+  rolePaths,
 ) {
   const config = validateReleaseConfiguration(configPath);
   requireCommit(candidateCommit);
+  const descriptor = validateCandidateArtifactDescriptor(
+    config,
+    candidateCommit,
+    artifactDescriptorPath,
+  );
   const gate = config.gates.find(({ id }) => id === gateId);
 
   if (gate === undefined)
@@ -875,27 +1630,86 @@ export function recordGateEvidence(
   if (gate.status !== 'READY')
     fail(`Cannot record PASS for non-ready gate ${gateId}: ${gate.status}`);
 
-  if (!Array.isArray(evidencePaths) || evidencePaths.length === 0)
-    fail(`Gate ${gateId} must retain at least one evidence path`);
+  const contract = EXPECTED_GATE_EVIDENCE_CONTRACTS[gateId];
+  if (contract === undefined)
+    fail(`Gate ${gateId} has no validator-owned evidence contract`);
+  const parsedRolePaths = parseRolePaths(gateId, contract, rolePaths);
+  const evidence = contract.roles.map((specification, index) => {
+    const path = parsedRolePaths[index].path;
+    validateEvidenceContent(path, specification, `${gateId} ${specification.role} evidence`);
+    const artifact = evidenceForPath(path);
+    if (specification.candidateArtifact === 'descriptor') {
+      const expectedDescriptor = evidenceForPath(artifactDescriptorPath);
+      if (artifact.type !== 'FILE'
+          || artifact.bytes !== expectedDescriptor.bytes
+          || artifact.sha256 !== expectedDescriptor.sha256) {
+        fail(`${gateId} artifact descriptor role does not match the validated descriptor`);
+      }
+    } else if (specification.candidateArtifact === 'gateDefaultArtifact') {
+      validateGateDefaultArtifact(
+        artifact,
+        gate,
+        specification,
+        `${gateId} ${specification.role}`,
+      );
+    } else if (specification.candidateArtifact !== null) {
+      evidenceMatchesCandidateArtifact(
+        artifact,
+        descriptor.artifacts[specification.candidateArtifact],
+        `${gateId} ${specification.role}`,
+      );
+    }
+    return Object.freeze({
+      artifact,
+      mediaType: specification.mediaType,
+      role: specification.role,
+    });
+  });
+  const workflow = workflowIdentity();
+  if (workflow.sha !== candidateCommit)
+    fail(`Workflow SHA ${workflow.sha} does not match candidate ${candidateCommit}`);
 
   const interoperability = gate.kind === 'INTEROPERABILITY'
-    ? interoperabilityReceiptForEvidence(gate, evidencePaths)
+    ? interoperabilityReceiptForEvidence(gate, parsedRolePaths.map(({ path }) => path))
     : null;
+
+  const receipt = validateGateReceipt(
+    {
+      candidateCommit,
+      candidateSha256: descriptor.artifacts.mainJar.sha256,
+      command: contract.command,
+      contractId: contract.contractId,
+      expectation: contract.expectation,
+      formatVersion: 1,
+      gateId,
+      profile: contract.profile,
+      result: 'PASS',
+      toolchain: gate.toolchain,
+      workflow,
+    },
+    gate,
+    contract,
+    candidateCommit,
+    descriptor.artifacts.mainJar.sha256,
+  );
 
   const value = {
     candidateCommit,
-    evidence: evidencePaths.map(evidenceForPath),
-    formatVersion: 1,
+    evidence,
+    formatVersion: 2,
     gate: {
       artifactChecksum: gate.artifactChecksum,
       artifactIdentity: gate.artifactIdentity,
       commit: gate.commit,
       defaultArtifactIdentity: gate.defaultArtifactIdentity,
       defaultArtifactSha256: gate.defaultArtifactSha256,
+      evidenceContract: gate.evidenceContract,
       id: gate.id,
       repository: gate.repository,
+      toolchain: gate.toolchain,
     },
     interoperability,
+    receipt,
     status: 'PASS',
   };
   writeCanonicalJson(outputPath, value);
@@ -1063,6 +1877,43 @@ function requireEnvironment(name) {
   return value;
 }
 
+function runtimeToolchainEvidence(config) {
+  const nodePin = readJson(
+    resolve(config.projectRoot, config.toolchains.nodePin.path),
+    'Node toolchain pin',
+  ).value;
+  const expected = {
+    coreJdk21: config.toolchains.coreJdk21.version,
+    go: `go version go${config.toolchains.go.version} linux/amd64`,
+    java: config.toolchains.java.version,
+    maven: config.toolchains.maven.version,
+    node: nodePin?.toolchain?.node,
+    npm: nodePin?.toolchain?.npm,
+    toystoreJava: config.toolchains.toystoreJava.version,
+  };
+  const actual = {
+    coreJdk21: requireEnvironment('SOKLET_EVIDENCE_CORE_JDK_21_VERSION'),
+    git: requireEnvironment('SOKLET_EVIDENCE_GIT_VERSION'),
+    go: requireEnvironment('SOKLET_EVIDENCE_GO_VERSION'),
+    java: requireEnvironment('SOKLET_EVIDENCE_JAVA_VERSION'),
+    maven: requireEnvironment('SOKLET_EVIDENCE_MAVEN_VERSION'),
+    node: requireEnvironment('SOKLET_EVIDENCE_NODE_VERSION'),
+    npm: requireEnvironment('SOKLET_EVIDENCE_NPM_VERSION'),
+    toystoreJava: requireEnvironment('SOKLET_EVIDENCE_TOYSTORE_JAVA_VERSION'),
+  };
+  for (const [name, expectedVersion] of Object.entries(expected)) {
+    if (actual[name] !== expectedVersion) {
+      fail(
+        `Observed ${name} toolchain must be exactly ${expectedVersion}, `
+          + `found ${actual[name]}`,
+      );
+    }
+  }
+  if (!/^git version [0-9]+\.[0-9]+(?:\.[0-9]+)?(?:[ .+-].*)?$/.test(actual.git))
+    fail(`Observed git toolchain is not an exact git version: ${actual.git}`);
+  return Object.freeze(actual);
+}
+
 export function assembleReleaseEvidence(
   configPath,
   candidateCommit,
@@ -1072,29 +1923,14 @@ export function assembleReleaseEvidence(
 ) {
   const config = validateReleaseConfiguration(configPath, { requireReady: true });
   requireCommit(candidateCommit);
-  const descriptor = readJson(artifactDescriptorPath, 'candidate artifact descriptor').value;
-  requireExactKeys(
-    descriptor,
-    ['artifacts', 'candidateCommit', 'coordinates', 'formatVersion'],
-    'candidate artifact descriptor',
+  const descriptor = validateCandidateArtifactDescriptor(
+    config,
+    candidateCommit,
+    artifactDescriptorPath,
   );
-
-  if (descriptor.formatVersion !== 1 || descriptor.candidateCommit !== candidateCommit)
-    fail('Candidate artifact descriptor identity does not match this validation run');
-
-  if (JSON.stringify(descriptor.coordinates) !== JSON.stringify(config.candidate))
-    fail('Candidate artifact descriptor coordinates do not match the release manifest');
-
-  requireExactKeys(
-    descriptor.artifacts,
-    ['javadocJar', 'mainJar', 'pom', 'sourcesJar'],
-    'candidate artifact descriptor artifacts',
-  );
-  for (const [name, artifact] of Object.entries(descriptor.artifacts)) {
-    validateEvidenceItem(artifact, `candidate artifact ${name}`);
-    if (artifact.type !== 'FILE')
-      fail(`Candidate artifact ${name} must be a file`);
-  }
+  const workflow = workflowIdentity();
+  if (workflow.sha !== candidateCommit)
+    fail(`Workflow SHA ${workflow.sha} does not match candidate ${candidateCommit}`);
 
   const absoluteGateDirectory = resolve(gateDirectory);
 
@@ -1111,7 +1947,15 @@ export function assembleReleaseEvidence(
     const gate = readJson(resolve(absoluteGateDirectory, `${id}.json`), `${id} gate evidence`).value;
     requireExactKeys(
       gate,
-      ['candidateCommit', 'evidence', 'formatVersion', 'gate', 'interoperability', 'status'],
+      [
+        'candidateCommit',
+        'evidence',
+        'formatVersion',
+        'gate',
+        'interoperability',
+        'receipt',
+        'status',
+      ],
       `${id} gate evidence`,
     );
 
@@ -1124,27 +1968,77 @@ export function assembleReleaseEvidence(
         'commit',
         'defaultArtifactIdentity',
         'defaultArtifactSha256',
+        'evidenceContract',
         'id',
         'repository',
+        'toolchain',
       ],
       `${id} gate pin`,
     );
 
-    if (gate.formatVersion !== 1 || gate.candidateCommit !== candidateCommit
+    if (gate.formatVersion !== 2 || gate.candidateCommit !== candidateCommit
         || gate.status !== 'PASS' || gate.gate.id !== id
         || gate.gate.artifactChecksum !== expectedGate.artifactChecksum
         || gate.gate.artifactIdentity !== expectedGate.artifactIdentity
         || gate.gate.commit !== expectedGate.commit
         || gate.gate.defaultArtifactIdentity !== expectedGate.defaultArtifactIdentity
         || gate.gate.defaultArtifactSha256 !== expectedGate.defaultArtifactSha256
+        || gate.gate.evidenceContract !== expectedGate.evidenceContract
         || gate.gate.repository !== expectedGate.repository
-        || !Array.isArray(gate.evidence) || gate.evidence.length === 0) {
+        || gate.gate.toolchain !== expectedGate.toolchain
+        || !Array.isArray(gate.evidence)) {
       fail(`Invalid or incomplete PASS evidence for gate ${id}`);
     }
 
+    const contract = EXPECTED_GATE_EVIDENCE_CONTRACTS[id];
+    const actualRoles = gate.evidence.map((item) => item?.role);
+    const expectedRoles = contract.roles.map(({ role }) => role);
+    if (new Set(actualRoles).size !== actualRoles.length
+        || JSON.stringify(actualRoles) !== JSON.stringify(expectedRoles)) {
+      fail(`${id} evidence roles and order must be exactly: ${expectedRoles.join(', ')}`);
+    }
     gate.evidence.forEach((item, index) => {
-      validateEvidenceItem(item, `${id} evidence item ${index}`);
+      requireExactKeys(item, ['artifact', 'mediaType', 'role'], `${id} evidence item ${index}`);
+      const specification = contract.roles[index];
+      if (item.role !== specification.role
+          || item.mediaType !== specification.mediaType
+          || item.artifact?.type !== specification.type
+          || item.artifact?.fileName !== specification.fileName) {
+        fail(`${id} evidence item ${index} does not match its exact role contract`);
+      }
+      validateEvidenceItem(item.artifact, `${id} ${item.role} artifact`);
+      if (specification.candidateArtifact === 'descriptor') {
+        const expectedDescriptor = evidenceForPath(artifactDescriptorPath);
+        if (item.artifact.type !== 'FILE'
+            || item.artifact.bytes !== expectedDescriptor.bytes
+            || item.artifact.sha256 !== expectedDescriptor.sha256) {
+          fail(`${id} artifact descriptor role does not match the validated descriptor`);
+        }
+      } else if (specification.candidateArtifact === 'gateDefaultArtifact') {
+        validateGateDefaultArtifact(
+          item.artifact,
+          expectedGate,
+          specification,
+          `${id} ${item.role}`,
+        );
+      } else if (specification.candidateArtifact !== null) {
+        evidenceMatchesCandidateArtifact(
+          item.artifact,
+          descriptor.artifacts[specification.candidateArtifact],
+          `${id} ${item.role}`,
+        );
+      }
     });
+
+    validateGateReceipt(
+      gate.receipt,
+      expectedGate,
+      contract,
+      candidateCommit,
+      descriptor.artifacts.mainJar.sha256,
+    );
+    if (JSON.stringify(gate.receipt.workflow) !== JSON.stringify(workflow))
+      fail(`${id} receipt workflow does not match the assembled workflow identity`);
 
     if (expectedGate.kind === 'INTEROPERABILITY') {
       validateInteroperabilityReceipt(
@@ -1152,10 +2046,10 @@ export function assembleReleaseEvidence(
         expectedGate,
         descriptor.artifacts.mainJar.sha256,
       );
-      const candidateItems = gate.evidence.filter((item) => item.type === 'FILE'
-        && item.bytes === descriptor.artifacts.mainJar.bytes
-        && item.fileName === descriptor.artifacts.mainJar.fileName
-        && item.sha256 === descriptor.artifacts.mainJar.sha256);
+      const candidateItems = gate.evidence.filter((item) => item.artifact.type === 'FILE'
+        && item.artifact.bytes === descriptor.artifacts.mainJar.bytes
+        && item.artifact.fileName === descriptor.artifacts.mainJar.fileName
+        && item.artifact.sha256 === descriptor.artifacts.mainJar.sha256);
       if (gate.evidence.length !== 2 || candidateItems.length !== 1) {
         fail(`${id} evidence must include the exact candidate main JAR alongside its receipt log`);
       }
@@ -1170,30 +2064,12 @@ export function assembleReleaseEvidence(
     artifacts: descriptor.artifacts,
     candidateCommit,
     coordinates: config.candidate,
-    formatVersion: 1,
+    formatVersion: 2,
     gates,
     releaseConfigurationSha256: config.sha256,
-    toolchains: {
-      git: requireEnvironment('SOKLET_EVIDENCE_GIT_VERSION'),
-      go: requireEnvironment('SOKLET_EVIDENCE_GO_VERSION'),
-      java: requireEnvironment('SOKLET_EVIDENCE_JAVA_VERSION'),
-      maven: requireEnvironment('SOKLET_EVIDENCE_MAVEN_VERSION'),
-      node: requireEnvironment('SOKLET_EVIDENCE_NODE_VERSION'),
-      npm: requireEnvironment('SOKLET_EVIDENCE_NPM_VERSION'),
-      toystoreJava: requireEnvironment('SOKLET_EVIDENCE_TOYSTORE_JAVA_VERSION'),
-    },
-    workflow: {
-      job: requireEnvironment('GITHUB_JOB'),
-      repository: requireEnvironment('GITHUB_REPOSITORY'),
-      runAttempt: requireEnvironment('GITHUB_RUN_ATTEMPT'),
-      runId: requireEnvironment('GITHUB_RUN_ID'),
-      serverUrl: requireEnvironment('GITHUB_SERVER_URL'),
-      sha: requireEnvironment('GITHUB_SHA'),
-    },
+    toolchains: runtimeToolchainEvidence(config),
+    workflow,
   };
-
-  if (value.workflow.sha !== candidateCommit)
-    fail(`Workflow SHA ${value.workflow.sha} does not match candidate ${candidateCommit}`);
 
   const absoluteOutput = writeCanonicalJson(outputPath, value);
   return Object.freeze({ path: absoluteOutput, sha256: sha256(readFileSync(absoluteOutput)) });
@@ -1216,17 +2092,34 @@ function configurationValue(config, path) {
   return String(value);
 }
 
+function gateValue(config, gateId, field) {
+  const gate = config.gates.find(({ id }) => id === gateId);
+  if (gate === undefined)
+    fail(`Unknown release gate: ${gateId}`);
+  if (!(field in gate))
+    fail(`Unknown release gate field: ${field}`);
+  const value = gate[field];
+  if (value === null)
+    return '';
+  if (typeof value !== 'string' && typeof value !== 'number')
+    fail(`Release gate field is not scalar: ${field}`);
+  return String(value);
+}
+
 function usage() {
   console.error(
     'Usage: node scripts/release-validation-evidence.mjs '
       + 'validate-config <manifest> [--require-ready]\n'
       + '   or: node scripts/release-validation-evidence.mjs value <manifest> <path>\n'
       + '   or: node scripts/release-validation-evidence.mjs list-gates <manifest>\n'
+      + '   or: node scripts/release-validation-evidence.mjs list-gate-ids <manifest>\n'
+      + '   or: node scripts/release-validation-evidence.mjs gate-value '
+      + '<manifest> <gate-id> <field>\n'
       + '   or: node scripts/release-validation-evidence.mjs sha256 <file>\n'
       + '   or: node scripts/release-validation-evidence.mjs record-artifacts '
       + '<manifest> <commit> <output> <pom> <main-jar> <sources-jar> <javadoc-jar>\n'
       + '   or: node scripts/release-validation-evidence.mjs record-gate '
-      + '<manifest> <commit> <gate-id> <output> <evidence-path>...\n'
+      + '<manifest> <commit> <artifact-descriptor> <gate-id> <output> <role=path>...\n'
       + '   or: node scripts/release-validation-evidence.mjs verify-conformance '
       + '<manifest> <commit> <artifact-descriptor> <conformance-evidence>\n'
       + '   or: node scripts/release-validation-evidence.mjs assemble '
@@ -1263,8 +2156,22 @@ function main(args) {
         gate.versionProperty ?? '',
         gate.defaultArtifactIdentity ?? '',
         gate.defaultArtifactSha256 ?? '',
+        gate.evidenceContract,
+        gate.toolchain,
       ].join('\t'));
     }
+    return;
+  }
+
+  if (command === 'list-gate-ids' && args.length === 1) {
+    const config = validateReleaseConfiguration(args[0]);
+    for (const gate of config.gates)
+      console.log(`${gate.id}\t${gate.status}`);
+    return;
+  }
+
+  if (command === 'gate-value' && args.length === 3) {
+    console.log(gateValue(validateReleaseConfiguration(args[0]), args[1], args[2]));
     return;
   }
 
@@ -1283,8 +2190,8 @@ function main(args) {
     return;
   }
 
-  if (command === 'record-gate' && args.length >= 5) {
-    recordGateEvidence(args[0], args[1], args[2], args[3], args.slice(4));
+  if (command === 'record-gate' && args.length >= 6) {
+    recordGateEvidence(args[0], args[1], args[2], args[3], args[4], args.slice(5));
     return;
   }
 

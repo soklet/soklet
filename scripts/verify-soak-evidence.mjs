@@ -24,6 +24,7 @@ const EXPECTED_PROFILE_KEYS = new Set([
   'mcp.keepAliveIntervalMillis',
   'mcp.maximumSubscriptionDurationMillis',
   'mcp.maximumSubscriptionsPerPrincipal',
+  'mcp.metricDeliveryTimeoutMillis',
   'mcp.requestHandlerConcurrency',
   'mcp.requestHandlerQueueCapacity',
   'mcp.requestTimeoutMillis',

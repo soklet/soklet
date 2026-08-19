@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import {
   copyFileSync,
   lstatSync,
@@ -12,13 +13,14 @@ import {
 } from 'node:fs';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
-import { dirname, resolve } from 'node:path';
+import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   activeScenarios,
   verifyManifestSet,
 } from '../conformance/official/verify.mjs';
 import {
+  EXPECTED_GATE_EVIDENCE_CONTRACTS,
   assembleReleaseEvidence,
   recordCandidateArtifacts,
   recordGateEvidence,
@@ -72,13 +74,19 @@ function fixturePath(...parts) {
   return resolve(fixtureRoot, ...parts);
 }
 
+function sha256(bytes) {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
 try {
   await verifyLoopbackPortReservation(fixturePath('reserved-loopback-port.txt'));
 
   const tracked = validateReleaseConfiguration(trackedManifestPath);
   assert.equal(tracked.candidate.version, '3.6.0');
-  assert.equal(tracked.gates.length, 13);
+  assert.equal(tracked.value.formatVersion, 2);
+  assert.equal(tracked.gates.length, 29);
   assert.equal(tracked.toolchains.java.vendorVersion, 'Corretto-17.0.20.8.1');
+  assert.equal(tracked.toolchains.coreJdk21, null);
   assert.equal(tracked.toolchains.toystoreJava.vendorVersion, 'Corretto-25.0.4.7.1');
   assert.equal(tracked.promotion.helper.path, 'scripts/release-promotion.mjs');
   assert.equal(tracked.promotion.wrapper.path, 'scripts/promote-release-candidate.sh');
@@ -92,6 +100,29 @@ try {
   ]) {
     const gate = tracked.gates.find(({ id }) => id === gateId);
     assert.equal(gate.status, 'BLOCKED_UNCOMMITTED_LOCAL_MIGRATION');
+  }
+  for (const gateId of [
+    'core-jdk-21',
+    'static-analysis',
+    'spotbugs',
+    'fuzz-nightly-history',
+    'soak-nightly-history',
+    'operational-history',
+    'release-scans',
+    'mcp-benchmarks',
+    'matrix-closure',
+  ]) {
+    const gate = tracked.gates.find(({ id }) => id === gateId);
+    assert.equal(gate.status, 'BLOCKED_HARNESS_MISSING');
+  }
+  assert.deepEqual(
+    tracked.gates.map(({ id }) => id),
+    Object.keys(EXPECTED_GATE_EVIDENCE_CONTRACTS),
+  );
+  for (const gate of tracked.gates) {
+    const contract = EXPECTED_GATE_EVIDENCE_CONTRACTS[gate.id];
+    assert.equal(gate.evidenceContract, contract.contractId);
+    assert.equal(gate.toolchain, contract.toolchain);
   }
   const trackedToyStoreGate = tracked.gates.find(({ id }) => id === 'toystore-app');
   assert.equal(trackedToyStoreGate.commit, '209781472b2d308cbc5538f2a7f956bc97b399b7');
@@ -169,6 +200,36 @@ try {
 
   const releaseValidator = readFileSync(releaseValidatorPath, 'utf8');
   const loopbackPortReserver = readFileSync(loopbackPortReserverPath, 'utf8');
+  assert.match(releaseValidator, /assert_ready_gate_has_dispatch\(\)/);
+  assert.match(
+    releaseValidator,
+    /gate \$gate_id is READY but has no release-validator dispatch/,
+  );
+  assert.match(releaseValidator, /configured_gate_count" -eq 29/);
+  assert.match(
+    releaseValidator,
+    /"\$surefire_verifier" "\$project_root\/target\/surefire-reports"[\s\\\n]+candidate-build candidate/,
+  );
+  assert.match(
+    releaseValidator,
+    /"build-log=\$evidence_root\/candidate-build\.log"[\s\\\n]+"surefire-reports=\$candidate_build_surefire_reports"/,
+  );
+  assert.match(
+    releaseValidator,
+    /record_gate core-jdk-25[\s\\\n]+"build-log=\$log"[\s\\\n]+"java-distribution=\$toystore_java_distribution_evidence"[\s\\\n]+"surefire-reports=\$reports"/,
+  );
+  assert.match(
+    releaseValidator,
+    /-Dtest=McpPublicJavadocTests[\s\\\n]+clean package javadoc:javadoc/,
+  );
+  assert.match(
+    releaseValidator,
+    /"\$surefire_verifier" "\$checkout\/target\/surefire-reports"[\s\\\n]+candidate-javadocs candidate/,
+  );
+  assert.match(
+    releaseValidator,
+    /"apidocs=\$apidocs"[\s\\\n]+"surefire-reports=\$reports"/,
+  );
   assert.doesNotMatch(
     releaseValidator,
     /clone_pinned_gate candidate-localization/,
@@ -188,7 +249,10 @@ try {
   assert.match(candidateOnlyBranch[1], /-DfailIfNoTests=true/);
   assert.match(candidateOnlyBranch[1], /-D"\$version_property"="\$candidate_version"/);
   assert.match(candidateOnlyBranch[1], /"\$surefire_verifier" "\$surefire_reports"/);
-  assert.match(candidateOnlyBranch[1], /"\$toystore_java_distribution_evidence"/);
+  assert.match(
+    candidateOnlyBranch[1],
+    /"java-distribution=\$toystore_java_distribution_evidence"/,
+  );
   assert.match(candidateOnlyBranch[1], /\n\t\treturn$/);
   for (const gateId of ['toystore-app', 'soklet-otel']) {
     assert.equal(
@@ -198,7 +262,7 @@ try {
   }
   assert.match(
     releaseValidator,
-    /record_gate "\$gate_id" "\$log" "\$candidate_jar"/,
+    /record_gate "\$gate_id"[\s\\\n]+"interop-log=\$log" "candidate-main-jar=\$candidate_jar"/,
   );
   assert.match(
     releaseValidator,
@@ -215,7 +279,10 @@ try {
   assert.match(releaseValidator, /prepare_servlet_default_jar/);
   assert.match(releaseValidator, /repo1\.maven\.org\/maven2\/com\/soklet\/soklet/);
   assert.match(releaseValidator, /"\$default_jar" "\$default_artifact_sha256"/);
-  assert.match(releaseValidator, /"\$downstream_pom" "\$default_jar"/);
+  assert.match(
+    releaseValidator,
+    /"project-pom=\$retained_pom"[\s\\\n]+"default-jar=\$retained_default_jar"/,
+  );
   assert.ok(
     (releaseValidator.match(/assert_installed_candidate_unchanged/g)?.length ?? 0) >= 10,
   );
@@ -236,7 +303,7 @@ try {
   assert.match(barebonesFunction[1], /assert_loopback_port_available "\$barebones_port"/);
   assert.match(
     barebonesFunction[1],
-    /record_gate barebones-app "\$port_file" "\$reservation_log" "\$log"/,
+    /record_gate barebones-app[\s\\\n]+"port-file=\$retained_port_file"[\s\\\n]+"reservation-log=\$reservation_log"[\s\\\n]+"runtime-log=\$log"/,
   );
   assert.ok(
     barebonesFunction[1].indexOf('stop_active_process')
@@ -259,6 +326,16 @@ try {
   assert.match(pinnedJavaInstaller, /java\.vendor\.version/);
 
   const readyManifest = JSON.parse(readFileSync(trackedManifestPath, 'utf8'));
+  readyManifest.toolchains.coreJdk21 = {
+    archive: 'amazon-corretto-21.0.9.10.1-linux-x64.tar.gz',
+    archiveSha256: '0'.repeat(64),
+    distribution: 'corretto',
+    distributionUrl:
+      'https://corretto.aws/downloads/resources/21.0.9.10.1/amazon-corretto-21.0.9.10.1-linux-x64.tar.gz',
+    runtimeVersion: '21.0.9+10-LTS',
+    vendorVersion: 'Corretto-21.0.9.10.1',
+    version: '21.0.9',
+  };
   for (const gate of readyManifest.gates) {
     gate.status = 'READY';
     gate.reason = '';
@@ -394,7 +471,7 @@ try {
   writeFileSync(downstreamPomPath, downstreamPom);
 
   const ready = validateReleaseConfiguration(fixtureManifestPath, { requireReady: true });
-  assert.equal(ready.gates.length, 13);
+  assert.equal(ready.gates.length, 29);
 
   function assertRejectsGateContractMutation(mutate) {
     const substituted = JSON.parse(JSON.stringify(readyManifest));
@@ -443,6 +520,49 @@ try {
       'https://github.com/example/localization-adapter.git';
     candidateLocalization.commit = 'b'.repeat(40);
   });
+  assertRejectsGateContractMutation((gates) => {
+    gates.find(({ id }) => id === 'candidate-build').evidenceContract =
+      'soklet.release.substituted.v1';
+  });
+  assertRejectsGateContractMutation((gates) => {
+    gates.find(({ id }) => id === 'candidate-build').toolchain = 'nodePin';
+  });
+  writeFileSync(fixtureManifestPath, `${JSON.stringify(readyManifest, null, 2)}\n`);
+
+  function assertRejectsManifestMutation(mutate, pattern) {
+    const substituted = JSON.parse(JSON.stringify(readyManifest));
+    mutate(substituted);
+    writeFileSync(fixtureManifestPath, `${JSON.stringify(substituted, null, 2)}\n`);
+    assert.throws(
+      () => validateReleaseConfiguration(fixtureManifestPath, { requireReady: true }),
+      pattern,
+    );
+  }
+
+  assertRejectsManifestMutation(
+    (manifest) => { manifest.formatVersion = 1; },
+    /formatVersion must be 2/,
+  );
+  assertRejectsManifestMutation(
+    (manifest) => { manifest.gates.splice(3, 1); },
+    /gate IDs and order must be exactly/,
+  );
+  assertRejectsManifestMutation(
+    (manifest) => { manifest.gates.push({ ...manifest.gates[0], id: 'extra' }); },
+    /no canonical release contract/,
+  );
+  assertRejectsManifestMutation(
+    (manifest) => { [manifest.gates[0], manifest.gates[1]] = [manifest.gates[1], manifest.gates[0]]; },
+    /gate IDs and order must be exactly/,
+  );
+  assertRejectsManifestMutation(
+    (manifest) => {
+      const gate = manifest.gates.find(({ id }) => id === 'core-jdk-21');
+      gate.status = 'BLOCKED_HARNESS_MISSING';
+      gate.reason = 'Fixture blocked gate.';
+    },
+    /core-jdk-21=BLOCKED_HARNESS_MISSING/,
+  );
   writeFileSync(fixtureManifestPath, `${JSON.stringify(readyManifest, null, 2)}\n`);
 
   const savedToyStoreJavaUrl = readyManifest.toolchains.toystoreJava.distributionUrl;
@@ -520,7 +640,6 @@ try {
   const sourcesJarPath = fixturePath('soklet-3.6.0-sources.jar');
   const javadocJarPath = fixturePath('soklet-3.6.0-javadoc.jar');
   const artifactDescriptorPath = fixturePath('evidence/candidate-artifacts.json');
-  const evidencePayloadPath = fixturePath('evidence/payload.txt');
   const gateDirectory = fixturePath('evidence/gates');
   const finalEvidencePath = fixturePath('evidence/release-validation-evidence.json');
   mkdirSync(dirname(artifactDescriptorPath), { recursive: true });
@@ -530,7 +649,23 @@ try {
 `);
   for (const path of [mainJarPath, sourcesJarPath, javadocJarPath])
     writeFileSync(path, Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x01]));
-  writeFileSync(evidencePayloadPath, 'fixture evidence\n');
+
+  Object.assign(process.env, {
+    GITHUB_JOB: 'validate',
+    GITHUB_REPOSITORY: 'soklet/soklet',
+    GITHUB_RUN_ATTEMPT: '1',
+    GITHUB_RUN_ID: '1234',
+    GITHUB_SERVER_URL: 'https://github.com',
+    GITHUB_SHA: candidateCommit,
+    SOKLET_EVIDENCE_CORE_JDK_21_VERSION: '21.0.9',
+    SOKLET_EVIDENCE_GIT_VERSION: 'git version 2.50.1',
+    SOKLET_EVIDENCE_GO_VERSION: 'go version go1.25.12 linux/amd64',
+    SOKLET_EVIDENCE_JAVA_VERSION: '17.0.20',
+    SOKLET_EVIDENCE_MAVEN_VERSION: '3.9.16',
+    SOKLET_EVIDENCE_NODE_VERSION: '26.5.0',
+    SOKLET_EVIDENCE_NPM_VERSION: '11.17.0',
+    SOKLET_EVIDENCE_TOYSTORE_JAVA_VERSION: '25.0.4',
+  });
 
   recordCandidateArtifacts(
     fixtureManifestPath,
@@ -666,6 +801,7 @@ try {
       tool: 'test_simple_text',
       ...overrides,
     };
+    mkdirSync(dirname(path), { recursive: true });
     writeFileSync(
       path,
       `dependency setup output\nSOKLET_INTEROP_PASS 2026-07-28 ${client}\nSOKLET_INTEROP_EVIDENCE ${JSON.stringify(receipt)}\n`,
@@ -673,7 +809,9 @@ try {
   }
 
   const typeScriptReadyGate = ready.gates.find(({ id }) => id === 'typescript-interop');
-  const wrongCandidateLogPath = fixturePath('evidence/typescript-wrong-candidate.log');
+  const wrongCandidateLogPath = fixturePath(
+    'evidence/wrong-candidate/typescript-interop.log',
+  );
   writeInteropLog(typeScriptReadyGate, wrongCandidateLogPath, {
     candidateSha256: 'd'.repeat(64),
   });
@@ -681,13 +819,17 @@ try {
     () => recordGateEvidence(
       fixtureManifestPath,
       candidateCommit,
+      artifactDescriptorPath,
       typeScriptReadyGate.id,
       fixturePath('evidence/typescript-wrong-candidate.json'),
-      [wrongCandidateLogPath, mainJarPath],
+      [
+        `interop-log=${wrongCandidateLogPath}`,
+        `candidate-main-jar=${mainJarPath}`,
+      ],
     ),
     /does not match the exact candidate, SDK pin, and fixture contract/,
   );
-  const wrongSdkLogPath = fixturePath('evidence/typescript-wrong-sdk.log');
+  const wrongSdkLogPath = fixturePath('evidence/wrong-sdk/typescript-interop.log');
   writeInteropLog(typeScriptReadyGate, wrongSdkLogPath, {
     sdkArtifactChecksum: typeScriptReadyGate.artifactChecksum.replace(
       'sha512-8',
@@ -698,13 +840,17 @@ try {
     () => recordGateEvidence(
       fixtureManifestPath,
       candidateCommit,
+      artifactDescriptorPath,
       typeScriptReadyGate.id,
       fixturePath('evidence/typescript-wrong-sdk.json'),
-      [wrongSdkLogPath, mainJarPath],
+      [
+        `interop-log=${wrongSdkLogPath}`,
+        `candidate-main-jar=${mainJarPath}`,
+      ],
     ),
     /does not match the exact candidate, SDK pin, and fixture contract/,
   );
-  const noncanonicalLogPath = fixturePath('evidence/typescript-noncanonical.log');
+  const noncanonicalLogPath = fixturePath('evidence/noncanonical/typescript-interop.log');
   writeInteropLog(typeScriptReadyGate, noncanonicalLogPath);
   writeFileSync(
     noncanonicalLogPath,
@@ -717,44 +863,216 @@ try {
     () => recordGateEvidence(
       fixtureManifestPath,
       candidateCommit,
+      artifactDescriptorPath,
       typeScriptReadyGate.id,
       fixturePath('evidence/typescript-noncanonical.json'),
-      [noncanonicalLogPath, mainJarPath],
+      [
+        `interop-log=${noncanonicalLogPath}`,
+        `candidate-main-jar=${mainJarPath}`,
+      ],
     ),
     /receipt must use the exact canonical encoding/,
   );
 
+  function evidencePathForRole(gate, specification) {
+    if (specification.candidateArtifact === 'descriptor')
+      return artifactDescriptorPath;
+    if (specification.candidateArtifact === 'mainJar')
+      return mainJarPath;
+    if (specification.candidateArtifact === 'javadocJar')
+      return javadocJarPath;
+
+    const path = fixturePath(
+      'evidence/role-fixtures',
+      gate.id,
+      specification.fileName,
+    );
+    mkdirSync(dirname(path), { recursive: true });
+    if (specification.type === 'DIRECTORY') {
+      mkdirSync(path, { recursive: true });
+      writeFileSync(resolve(path, 'evidence.txt'), 'fixture directory evidence\n');
+    } else if (specification.candidateArtifact === 'pom') {
+      copyFileSync(pomPath, path);
+    } else if (specification.mediaType === 'application/java-archive') {
+      writeFileSync(path, Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x01]));
+    } else if (specification.mediaType === 'application/json') {
+      writeFileSync(
+        path,
+        `${JSON.stringify({ gateId: gate.id, result: 'PASS', role: specification.role })}\n`,
+      );
+    } else if (specification.mediaType === 'application/xml') {
+      writeFileSync(path, '<evidence result="PASS"/>\n');
+    } else if (specification.mediaType === 'application/x-ndjson') {
+      writeFileSync(path, '{"result":"PASS"}\n');
+    } else {
+      writeFileSync(path, 'fixture evidence\n');
+    }
+    return path;
+  }
+
+  function rolePathsForGate(gate) {
+    const contract = EXPECTED_GATE_EVIDENCE_CONTRACTS[gate.id];
+    return contract.roles.map((specification) => {
+      let path = evidencePathForRole(gate, specification);
+      if (gate.kind === 'INTEROPERABILITY' && specification.role === 'interop-log') {
+        writeInteropLog(gate, path);
+      }
+      return `${specification.role}=${path}`;
+    });
+  }
+
+  function syntheticEvidenceDescriptor(path, specification) {
+    if (specification.type === 'DIRECTORY') {
+      const bytes = readFileSync(resolve(path, 'evidence.txt'));
+      const rows = `${sha256(bytes)}  evidence.txt\n`;
+      return {
+        algorithm:
+          "SHA-256 of bytewise-path-sorted '<file-sha256>  <relative-path>\\n' rows",
+        fileCount: 1,
+        fileName: basename(path),
+        sha256: sha256(Buffer.from(rows, 'utf8')),
+        type: 'DIRECTORY',
+      };
+    }
+    const bytes = readFileSync(path);
+    return {
+      bytes: bytes.length,
+      fileName: basename(path),
+      sha256: sha256(bytes),
+      type: 'FILE',
+    };
+  }
+
+  function writeSyntheticServletEvidence(gate, outputPath, rolePaths) {
+    const contract = EXPECTED_GATE_EVIDENCE_CONTRACTS[gate.id];
+    const paths = new Map(rolePaths.map((rolePath) => {
+      const separator = rolePath.indexOf('=');
+      return [rolePath.slice(0, separator), rolePath.slice(separator + 1)];
+    }));
+    const workflow = {
+      job: process.env.GITHUB_JOB,
+      repository: process.env.GITHUB_REPOSITORY,
+      runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+      runId: process.env.GITHUB_RUN_ID,
+      serverUrl: process.env.GITHUB_SERVER_URL,
+      sha: process.env.GITHUB_SHA,
+    };
+    const evidence = contract.roles.map((specification) => ({
+      artifact: specification.candidateArtifact === 'gateDefaultArtifact'
+        ? {
+          bytes: 1037363,
+          fileName: specification.fileName,
+          sha256: gate.defaultArtifactSha256,
+          type: 'FILE',
+        }
+        : syntheticEvidenceDescriptor(paths.get(specification.role), specification),
+      mediaType: specification.mediaType,
+      role: specification.role,
+    }));
+    writeFileSync(outputPath, `${JSON.stringify({
+      candidateCommit,
+      evidence,
+      formatVersion: 2,
+      gate: {
+        artifactChecksum: gate.artifactChecksum,
+        artifactIdentity: gate.artifactIdentity,
+        commit: gate.commit,
+        defaultArtifactIdentity: gate.defaultArtifactIdentity,
+        defaultArtifactSha256: gate.defaultArtifactSha256,
+        evidenceContract: gate.evidenceContract,
+        id: gate.id,
+        repository: gate.repository,
+        toolchain: gate.toolchain,
+      },
+      interoperability: null,
+      receipt: {
+        candidateCommit,
+        candidateSha256: descriptor.artifacts.mainJar.sha256,
+        command: contract.command,
+        contractId: contract.contractId,
+        expectation: contract.expectation,
+        formatVersion: 1,
+        gateId: gate.id,
+        profile: contract.profile,
+        result: 'PASS',
+        toolchain: gate.toolchain,
+        workflow,
+      },
+      status: 'PASS',
+    }, null, 2)}\n`);
+  }
+
+  const candidateLocalizationGate = ready.gates.find(
+    ({ id }) => id === 'candidate-localization',
+  );
+  const localizationPaths = rolePathsForGate(candidateLocalizationGate);
+  assert.throws(
+    () => recordGateEvidence(
+      fixtureManifestPath,
+      candidateCommit,
+      artifactDescriptorPath,
+      candidateLocalizationGate.id,
+      fixturePath('evidence/missing-role.json'),
+      [],
+    ),
+    /evidence roles and order must be exactly/,
+  );
+  assert.throws(
+    () => recordGateEvidence(
+      fixtureManifestPath,
+      candidateCommit,
+      artifactDescriptorPath,
+      candidateLocalizationGate.id,
+      fixturePath('evidence/substituted-role.json'),
+      [`substituted=${localizationPaths[0].split('=').slice(1).join('=')}`],
+    ),
+    /evidence roles and order must be exactly/,
+  );
+  const wrongBasenamePath = fixturePath('evidence/wrong-localization-name.log');
+  writeFileSync(wrongBasenamePath, 'fixture evidence\n');
+  assert.throws(
+    () => recordGateEvidence(
+      fixtureManifestPath,
+      candidateCommit,
+      artifactDescriptorPath,
+      candidateLocalizationGate.id,
+      fixturePath('evidence/substituted-path.json'),
+      [`localization-log=${wrongBasenamePath}`],
+    ),
+    /basename must be exactly candidate-localization\.log/,
+  );
+
   for (const gate of ready.gates) {
-    let evidencePaths = [evidencePayloadPath];
-    if (gate.kind === 'INTEROPERABILITY') {
-      const logPath = fixturePath('evidence', `${gate.id}.log`);
-      writeInteropLog(gate, logPath);
-      evidencePaths = [logPath, mainJarPath];
+    const rolePaths = rolePathsForGate(gate);
+    if (gate.id === 'soklet-servlet-javax'
+        || gate.id === 'soklet-servlet-jakarta') {
+      assert.throws(
+        () => recordGateEvidence(
+          fixtureManifestPath,
+          candidateCommit,
+          artifactDescriptorPath,
+          gate.id,
+          fixturePath(`evidence/${gate.id}-wrong-default-jar.json`),
+          rolePaths,
+        ),
+        /does not match the gate's exact default artifact identity and SHA-256/,
+      );
+      writeSyntheticServletEvidence(
+        gate,
+        resolve(gateDirectory, `${gate.id}.json`),
+        rolePaths,
+      );
+      continue;
     }
     recordGateEvidence(
       fixtureManifestPath,
       candidateCommit,
+      artifactDescriptorPath,
       gate.id,
       resolve(gateDirectory, `${gate.id}.json`),
-      evidencePaths,
+      rolePaths,
     );
   }
-
-  Object.assign(process.env, {
-    GITHUB_JOB: 'validate',
-    GITHUB_REPOSITORY: 'soklet/soklet',
-    GITHUB_RUN_ATTEMPT: '1',
-    GITHUB_RUN_ID: '1234',
-    GITHUB_SERVER_URL: 'https://github.com',
-    GITHUB_SHA: candidateCommit,
-    SOKLET_EVIDENCE_GIT_VERSION: 'git version fixture',
-    SOKLET_EVIDENCE_GO_VERSION: 'go version go1.25.12 linux/amd64',
-    SOKLET_EVIDENCE_JAVA_VERSION: '17.0.20',
-    SOKLET_EVIDENCE_MAVEN_VERSION: '3.9.16',
-    SOKLET_EVIDENCE_NODE_VERSION: '26.5.0',
-    SOKLET_EVIDENCE_NPM_VERSION: '11.17.0',
-    SOKLET_EVIDENCE_TOYSTORE_JAVA_VERSION: '25.0.4',
-  });
 
   const assembled = assembleReleaseEvidence(
     fixtureManifestPath,
@@ -766,14 +1084,119 @@ try {
   assert.match(assembled.sha256, /^[0-9a-f]{64}$/);
   const evidence = JSON.parse(readFileSync(finalEvidencePath, 'utf8'));
   assert.equal(evidence.candidateCommit, candidateCommit);
-  assert.equal(evidence.gates.length, 13);
+  assert.equal(evidence.formatVersion, 2);
+  assert.equal(evidence.gates.length, 29);
   assert.ok(evidence.gates.every(({ status }) => status === 'PASS'));
   assert.ok(evidence.gates
     .filter(({ gate }) => gate.id.endsWith('-interop'))
     .every(({ interoperability }) =>
       interoperability.candidateSha256 === descriptor.artifacts.mainJar.sha256));
+  assert.equal(evidence.toolchains.coreJdk21, '21.0.9');
   assert.equal(evidence.toolchains.java, '17.0.20');
   assert.equal(evidence.toolchains.toystoreJava, '25.0.4');
+
+  function assertRejectsGateEvidenceMutation(gateId, label, mutate, pattern) {
+    const path = resolve(gateDirectory, `${gateId}.json`);
+    const saved = readFileSync(path, 'utf8');
+    const substituted = JSON.parse(saved);
+    mutate(substituted);
+    writeFileSync(path, `${JSON.stringify(substituted, null, 2)}\n`);
+    assert.throws(
+      () => assembleReleaseEvidence(
+        fixtureManifestPath,
+        candidateCommit,
+        artifactDescriptorPath,
+        gateDirectory,
+        fixturePath(`evidence/rejected-${label}.json`),
+      ),
+      pattern,
+    );
+    writeFileSync(path, saved);
+  }
+
+  assertRejectsGateEvidenceMutation(
+    'candidate-localization',
+    'wrong-contract',
+    (value) => { value.receipt.contractId = 'soklet.release.substituted.v1'; },
+    /typed receipt does not match/,
+  );
+  assertRejectsGateEvidenceMutation(
+    'candidate-localization',
+    'wrong-toolchain',
+    (value) => { value.receipt.toolchain = 'nodePin'; },
+    /typed receipt does not match/,
+  );
+  assertRejectsGateEvidenceMutation(
+    'candidate-localization',
+    'wrong-candidate-sha',
+    (value) => { value.receipt.candidateSha256 = '0'.repeat(64); },
+    /typed receipt does not match/,
+  );
+  assertRejectsGateEvidenceMutation(
+    'candidate-localization',
+    'v1-envelope',
+    (value) => { value.formatVersion = 1; },
+    /Invalid or incomplete PASS evidence/,
+  );
+  assertRejectsGateEvidenceMutation(
+    'candidate-localization',
+    'missing-receipt',
+    (value) => { delete value.receipt; },
+    /gate evidence keys must be exactly/,
+  );
+  assertRejectsGateEvidenceMutation(
+    'candidate-localization',
+    'wrong-media',
+    (value) => { value.evidence[0].mediaType = 'application/json'; },
+    /does not match its exact role contract/,
+  );
+  assertRejectsGateEvidenceMutation(
+    'candidate-localization',
+    'missing-evidence-role',
+    (value) => { value.evidence = []; },
+    /evidence roles and order must be exactly/,
+  );
+  for (const [gateId, label, role] of [
+    ['candidate-build', 'missing-build-surefire', 'surefire-reports'],
+    ['core-jdk-25', 'missing-jdk-distribution', 'java-distribution'],
+    ['candidate-javadocs', 'missing-javadoc-surefire', 'surefire-reports'],
+  ]) {
+    assertRejectsGateEvidenceMutation(
+      gateId,
+      label,
+      (value) => {
+        value.evidence = value.evidence.filter((item) => item.role !== role);
+      },
+      /evidence roles and order must be exactly/,
+    );
+  }
+  assertRejectsGateEvidenceMutation(
+    'candidate-build',
+    'reordered-evidence-roles',
+    (value) => { [value.evidence[0], value.evidence[1]] = [value.evidence[1], value.evidence[0]]; },
+    /evidence roles and order must be exactly/,
+  );
+  assertRejectsGateEvidenceMutation(
+    'candidate-build',
+    'substituted-descriptor',
+    (value) => { value.evidence[0].artifact.sha256 = '0'.repeat(64); },
+    /artifact descriptor role does not match/,
+  );
+  assertRejectsGateEvidenceMutation(
+    'soklet-servlet-javax',
+    'wrong-default-jar-bytes',
+    (value) => {
+      value.evidence.find(({ role }) => role === 'default-jar').artifact.sha256 =
+        '0'.repeat(64);
+    },
+    /does not match the gate's exact default artifact identity and SHA-256/,
+  );
+  assertRejectsGateEvidenceMutation(
+    'candidate-localization',
+    'wrong-workflow',
+    (value) => { value.receipt.workflow.runId = '9876'; },
+    /receipt workflow does not match/,
+  );
 
   const typeScriptEvidencePath = resolve(gateDirectory, 'typescript-interop.json');
   const savedTypeScriptEvidence = readFileSync(typeScriptEvidencePath, 'utf8');

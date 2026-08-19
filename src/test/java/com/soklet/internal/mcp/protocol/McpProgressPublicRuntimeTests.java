@@ -449,14 +449,24 @@ public class McpProgressPublicRuntimeTests {
 					McpMetricsEvent.ProgressEmitted.class),
 					deterministicPrefixTypes,
 					"Startup, stream-open, and accepted progress events must retain their deterministic record order.");
-			McpMetricsEvent.RequestStreamClosed streamClosed = eventSnapshot.stream()
+			List<McpMetricsEvent.RequestStreamClosed> streamClosedEvents =
+					eventSnapshot.stream()
 					.filter(McpMetricsEvent.RequestStreamClosed.class::isInstance)
 					.map(McpMetricsEvent.RequestStreamClosed.class::cast)
-					.findFirst().orElseThrow();
-			McpMetricsEvent.RequestFinished requestFinished = eventSnapshot.stream()
+					.toList();
+			List<McpMetricsEvent.RequestFinished> requestFinishedEvents =
+					eventSnapshot.stream()
 					.filter(McpMetricsEvent.RequestFinished.class::isInstance)
 					.map(McpMetricsEvent.RequestFinished.class::cast)
-					.findFirst().orElseThrow();
+					.toList();
+			Assertions.assertEquals(1, streamClosedEvents.size(),
+					"Disconnect must close the request stream exactly once.");
+			Assertions.assertEquals(1, requestFinishedEvents.size(),
+					"Disconnect must finish request observation exactly once.");
+			McpMetricsEvent.RequestStreamClosed streamClosed =
+					streamClosedEvents.get(0);
+			McpMetricsEvent.RequestFinished requestFinished =
+					requestFinishedEvents.get(0);
 			Assertions.assertEquals(
 					com.soklet.McpStreamTerminationReason.CLIENT_DISCONNECTED,
 					streamClosed.getReason());
@@ -466,6 +476,12 @@ public class McpProgressPublicRuntimeTests {
 			int requestFinishedIndex = eventSnapshot.indexOf(requestFinished);
 			Assertions.assertTrue(streamClosedIndex < requestFinishedIndex,
 					"Request-stream closure must precede terminal request observation.");
+			var diagnostics = server.getDiagnostics();
+			Assertions.assertEquals(0,
+					diagnostics.getActiveHandlerExecutions());
+			Assertions.assertEquals(0, diagnostics.getQueuedRequests());
+			Assertions.assertEquals(0, diagnostics.getActiveRequestStreams());
+			Assertions.assertEquals(0, diagnostics.getActiveSubscriptions());
 			Assertions.assertEquals(1,
 					maximumConcurrentMetricCallbacks.get(),
 					"A reentrant progress report must queue instead of recursively invoking the collector.");

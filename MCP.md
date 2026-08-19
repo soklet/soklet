@@ -39,6 +39,18 @@ this source repository in the project-root `mcp/examples/phase-4` workspace.
 `withLocale(...)`, with an optional revision and an application localization
 callback; applications do not implement or subtype it.
 
+Localization is node-local by design. Ordinary requests may be routed round-
+robin because each node creates a fresh context from the request's portable
+inputs and one response retains one immutable catalog snapshot. A live SSE
+subscription remains on the listener that accepted it; after node loss, the
+client reconnects to a survivor and that node creates a fresh context rather
+than recovering a distributed localization session. `catalogsChanged()` is
+also server-local: after an atomic catalog swap, the application calls it on
+every applicable instance. A rolling activation may temporarily serve
+different revisions on different nodes, while a fleet-atomic cutover requires
+an application-owned coordinator or traffic switch. A failed candidate is not
+installed and produces no invalidation.
+
 Public MCP value carriers follow the same Soklet construction style: they are
 final immutable classes with named factories or builders, private
 constructors, and conventional `get...` accessors. In particular,
@@ -272,6 +284,16 @@ Soklet supports the core `elicitation/create`, `sampling/createMessage`, and
 `roots/list` declarations, validates their method-specific parameters, and
 rejects an emitted declaration that was not registered for that operation.
 
+Those client operations are embedded values, not standalone JSON-RPC
+requests. Soklet writes each `method`/`params` pair only inside the
+`inputRequests` member of the correlated `input_required` result. It never
+writes a server-originated top-level JSON-RPC request to an HTTP response or
+request-scoped SSE stream. At the top level, a method-bearing server message
+is a notification without an `id`, while a correlated response has an `id`
+and no `method`. After performing an embedded operation, the client sends a
+fresh POST to retry the original tool, prompt, or resource request; there is
+no bidirectional session carrying an independent server request.
+
 `McpInputRequirement.REQUIRED` makes the declaration's capabilities mandatory
 before admission on every call. `CONDITIONAL` defers that check until the
 handler actually emits the request. All missing capabilities from one result
@@ -424,6 +446,23 @@ self-reported client values. Client information, client capabilities, request
 `_meta`, and server information are informational rather than authenticated
 identity.
 
+HTTP `Forwarded` and `X-Forwarded-For` headers are equally inert at this
+boundary: Soklet never turns them into an admission identity or silently
+replaces the application's partition key. If an application deliberately uses
+a client IP for an anonymous quota, its admission controller must resolve that
+IP from `McpAdmissionContext.getRequest()` through
+`EffectiveClientIpResolver` with an explicit
+`EffectiveOriginResolver.TrustPolicy`. Use `TRUST_NONE` for a directly reached
+listener. Behind known proxies, prefer `TRUST_PROXY_ALLOWLIST` with an
+allowlist that covers every possible physical socket peer and every trusted
+proxy-hop address expected in the forwarded chain, never end-client addresses.
+An untrusted physical peer then causes forwarded values to be ignored in favor
+of the raw socket peer. The trusted proxy or network edge must strip or
+overwrite both header families; usable `Forwarded: for=` values take precedence
+over `X-Forwarded-For`. Never use
+`McpAdmissionContext.getClientInfo()` as a partition key, and never use
+`TRUST_ALL` where an untrusted client can reach Soklet directly.
+
 Each request is independent. Applications must not rely on authentication,
 capabilities, or other metadata from an earlier request on the same TCP
 connection. Cross-request application state needs its own explicit identifier
@@ -448,6 +487,16 @@ has the HTTP status but no JSON-RPC body. The first denial wins and successful
 charges are never refunded after a later denial, failure, timeout,
 cancellation, or write failure. Refill accounting uses a private monotonic
 clock; there is no public clock or reset/test-mode seam.
+
+The built-in limiter partitions only on the key in the accepted
+`McpAdmissionIdentity`; it has no hidden client-IP or forwarded-header mode.
+A custom limiter can inspect the raw `Request` through
+`McpRateLimitContext.getRequest()` and must likewise treat forwarding headers
+and self-reported MCP metadata as untrusted unless the application deliberately
+resolves them under this policy. Applications using a proxy-derived IP must
+keep direct reachability and proxy header normalization within their deployment
+threat model. A trusted-proxy allowlist is not a substitute for preventing an
+unintended path around the trusted proxy.
 
 ## Handler execution, interception, and output
 
@@ -2031,10 +2080,19 @@ main, sources, and Javadoc artifacts. Focused request-state/runtime tests pass
 verifies 565 incompatibilities, 234 owners, and 1,048/179/422 records. The
 maintained 179-source API sketch passes Java 17 compilation,
 Javadoc doclint, and its localization smoke contract. That 1,673 result remains
-the typed-request-state amendment checkpoint. On the current post-CI-hardening
-tree, Corretto 26 clean verify passes 1,674/0/0/4 over the same 462 main and
-193 test sources, Corretto 17 clean test passes 1,659/0/0/72, and the exact
-six-scenario smoke soak passes 6/6 with its strict verifier. Carried-forward
+the typed-request-state amendment checkpoint. The 1,676/0/0/4 result over 462
+main and 194 test sources remains the rate-limit identity/trusted-proxy
+checkpoint. The independent-request direction-boundary result remains
+1,678/0/0/4 over 462 main and 195 test sources, with its focused protocol gate
+at 35/35. On the current localization-fleet fixture tree, Corretto 26 clean
+verify passes 1,681/0/0/4 over 462 main and 196 test sources and builds the
+main, sources, and Javadoc artifacts; the fixture passes 3/3 and its related
+localization regression set passes 24/24. The preceding Corretto 17 clean-test
+run passed 1,659/0/0/72 before the rate-limit identity, independent-request,
+and localization-fleet runtime test sources were added, so it remains prior
+supported-JDK evidence rather than a current 196-source result. The exact six-
+scenario smoke soak passes 6/6 with its strict
+verifier. Carried-forward
 local evidence remains green for candidate localization,
 artifact-backed simulator 39/39, pinned live official CLI 39/39, the website's
 offline clean-install, lint, and 33-route SSG build, and OpenTelemetry 36/36.
@@ -2055,9 +2113,20 @@ ephemeral IPv4 loopback port supplied through
 `SOKLET_BAREBONES_LOOPBACK_PORT` without disturbing the unrelated Docker
 listener on port 8080. Its source and validator changes remain uncommitted and
 unpinned, so its old public pin stays blocked.
-Scheduled/nightly and sustained fuzz/soak history, real multi-node localization
-orchestration, public Javadocs, release scans, and an immutable checksum-
-matched candidate conformance/provenance run also remain open. See
+The bounded two-listener localization fixture now covers failed reload,
+rolling revision drift without within-response mixing, node loss,
+subscription reconnect, node-local delivery, and final runtime cleanup.
+The format-v2 release contract now enumerates exactly 29 ordered gates. Fourteen
+are dispatch-configured, while nine remain `BLOCKED_HARNESS_MISSING` and the
+six downstreams remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`; `READY` means
+configured, never passed. Scheduled/nightly and sustained fuzz/soak and
+operational history, the exact JDK 21/static-analysis/SpotBugs toolchain,
+release scans, benchmarks, automated matrix closure, published downstream
+pins, and an immutable checksum-matched candidate conformance/provenance run
+remain open. Candidate Javadoc generation/completeness is configured; public
+deployment is post-validation publication work. Production multi-host
+localization coordination remains application/deployment-owned, while the
+bounded two-listener fixture is the configured Soklet fleet gate. See
 [release/README.md](release/README.md) for the exact fail-closed contract.
 
 Do not treat this snapshot guide as a release-conformance statement.

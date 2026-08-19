@@ -60,6 +60,7 @@ final class SoakProfiles {
 			"mcp.keepAliveIntervalMillis",
 			"mcp.maximumSubscriptionDurationMillis",
 			"mcp.maximumSubscriptionsPerPrincipal",
+			"mcp.metricDeliveryTimeoutMillis",
 			"mcp.requestHandlerConcurrency",
 			"mcp.requestHandlerQueueCapacity",
 			"mcp.requestTimeoutMillis",
