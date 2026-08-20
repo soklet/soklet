@@ -2011,10 +2011,12 @@ authorization-server and resource-server obligation.
 
 The official MCP conformance suite is pinned and automated as release
 evidence. The earlier frozen Phase 4 candidate passed its then-active reviewed
-profile. The checked-in final-schema corpus now contains 43 production-derived
-messages: the prior five-message progress and subscription exchanges plus
-Phase 3 unknown-method and Phase 5 missing-capability request/error pairs. That
-manifested corpus is bound to the live listener by the nine-test focused
+profile. The checked-in final-schema corpus now contains 48 production-derived
+messages: the prior five-message progress and subscription exchanges, Phase 3
+unknown-method and Phase 5 missing-capability request/error pairs, a Phase 3
+rate-limited tool request/error pair and rate-limited notification, and a Phase
+4 strict-unknown-header request/error pair. That manifested corpus is bound to
+the live listener by the 11-test focused
 golden suite. Final-tag Ajv validation of the expanded corpus was not rerun
 locally because the pinned official-suite checkout was unavailable; it remains
 with candidate conformance. This local wire evidence is separate from the
@@ -2038,11 +2040,11 @@ the harness to phase 5. A fresh 39-scenario development-candidate verify passes
 all profiles, validates all 39 then-current goldens, and records no bad outcome,
 standard-error output, or non-clean fixture exit.
 
-The later 2026-08-20 protocol/capability golden reconciliation passes the
+The preceding 2026-08-20 protocol/capability golden reconciliation passed the
 focused live golden suite 9/9 on local Corretto 17 and the pinned Corretto 21,
 the broader protocol/capability gate 86/86 on Corretto 17, and the runner and
-local-simulator self-tests. Full Corretto 17 clean verify passes 1,671/0/0/72
-over 462 main and 196 test sources and builds the main, sources, and Javadoc
+local-simulator self-tests. Full Corretto 17 clean verify passed 1,671/0/0/72
+over 462 main and 196 test sources and built the main, sources, and Javadoc
 JARs. These are local snapshot checks, not immutable-candidate evidence.
 
 At the V21 boundary, the focused five-class simulator/API gate passed
@@ -2144,7 +2146,7 @@ Eighteen are dispatch-configured, while five remain
 `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving 11 fail-closed blockers;
 `READY` means configured, never passed. The matrix-closure hook is `READY`, but
 the canonical report generated from its checked-in registry remains
-deliberately `FAILED` while 33 rows are `UNRESOLVED`, so no PASS receipt can be
+deliberately `FAILED` while 29 rows are `UNRESOLVED`, so no PASS receipt can be
 recorded. A `RELEASE_GATED` row has
 candidate-contained implementation or evidence anchors and names the exact
 immutable, scheduled, sustained, or downstream gate that still owes proof; it
@@ -2219,5 +2221,19 @@ dequeued snapshot. Existing timeout bounds and expected counts are unchanged;
 production behavior, public API, and the Phase 4/5/6 freeze inventories are
 unchanged. This is local snapshot evidence, not immutable release-candidate
 evidence.
+
+The subsequent policy/error reconciliation is test- and golden-only. Its exact
+slice passes 27/27 on the pinned local Corretto 17 and Corretto 21 toolchains,
+and the adjacent policy regression set passes 59/59 on each.
+`McpFinalTagGoldenWireProductionTests` passes 11/11 on each JDK, and the
+manifest now binds 48 production-derived messages. An unsigned Corretto 17
+`clean verify` passes 1,677/0/0/72 over 462 main and 197 test sources and
+builds the main, sources, and Javadoc JARs. No production behavior, public API,
+or Phase 4/5/6 freeze inventory changed. The canonical matrix remains
+deliberately `FAILED`: 95 rows are `CORE_COMPLETE`, 116 are `RELEASE_GATED`,
+four are `APPLICATION_OWNED`, 18 are `NOT_APPLICABLE`, and 29 remain
+`UNRESOLVED`. Final-tag Ajv validation of the expanded 48-message corpus was
+not rerun locally and remains owned by candidate conformance. These are local
+snapshot checks, not immutable-candidate evidence.
 
 Do not treat this snapshot guide as a release-conformance statement.

@@ -150,6 +150,22 @@ public class McpBootstrapValueTests {
 	}
 
 	@Test
+	public void applicationErrorFactoriesRejectBothSokletOwnedCodesWithAndWithoutData() {
+		McpJsonObject data = McpJsonObject.builder()
+				.put("fixture", "reserved-code")
+				.build();
+		for (Integer code : List.of(
+				McpJsonRpcError.SOKLET_RATE_LIMIT_ERROR_CODE,
+				McpJsonRpcError.SOKLET_STRICT_UNKNOWN_MIRRORED_HEADER_ERROR_CODE)) {
+			Assertions.assertThrows(IllegalArgumentException.class,
+					() -> McpJsonRpcError.fromApplication(code, "reserved"));
+			Assertions.assertThrows(IllegalArgumentException.class,
+					() -> McpJsonRpcError.fromApplication(
+							code, "reserved", data));
+		}
+	}
+
+	@Test
 	public void operationFreeEndpointIsValidAndNormalizesItsPath() {
 		McpImplementation serverInformation = McpImplementation
 				.withNameAndVersion("catalog", "3.6.0")

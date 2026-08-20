@@ -34,6 +34,36 @@
       "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_3_messages_match_the_production_listener"
     },
     {
+      "name": "phase-3-rate-limited-notification",
+      "phase": 3,
+      "source": "production",
+      "path": "phase-3/rate-limited-notification.json",
+      "sha256": "47b30fdbb646c120451296a81e14fa3dc22baa142cf1dea64e01a68caa1d9fdb",
+      "schemaRef": "#/$defs/CancelledNotification",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_3_rate_limit_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-3-rate-limited-tool-error",
+      "phase": 3,
+      "source": "production",
+      "path": "phase-3/rate-limited-tool-error.json",
+      "sha256": "a66a043e3e0406656f55d72696e82f1180d7943f45b8a70ef5034d3cd859d506",
+      "schemaRef": "#/$defs/JSONRPCErrorResponse",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_3_rate_limit_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-3-rate-limited-tool-request",
+      "phase": 3,
+      "source": "production",
+      "path": "phase-3/rate-limited-tool-request.json",
+      "sha256": "54083b8da9a40af6681894aac368b264f47c96422c262ef04492a323b46a7d11",
+      "schemaRef": "#/$defs/CallToolRequest",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_3_rate_limit_messages_match_the_production_listener"
+    },
+    {
       "name": "phase-3-unknown-method-error",
       "phase": 3,
       "source": "production",
@@ -232,6 +262,26 @@
       "schemaRef": "#/$defs/ListResourceTemplatesResultResponse",
       "transportForm": "http-json-body",
       "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_resource_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-4-strict-unknown-header-error",
+      "phase": 4,
+      "source": "production",
+      "path": "phase-4/strict-unknown-header-error.json",
+      "sha256": "b380ba37ff3a72db69833e5ffacb5610fc332116562b151b7b85d985297262b2",
+      "schemaRef": "#/$defs/JSONRPCErrorResponse",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_strict_unknown_header_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-4-strict-unknown-header-request",
+      "phase": 4,
+      "source": "production",
+      "path": "phase-4/strict-unknown-header-request.json",
+      "sha256": "946c53892641abbc514f2f6b5c6de59933e346168c6cdf70227d86fba36b6fe8",
+      "schemaRef": "#/$defs/CallToolRequest",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_4_strict_unknown_header_messages_match_the_production_listener"
     },
     {
       "name": "phase-5-input-required-tool-request",

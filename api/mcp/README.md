@@ -1594,7 +1594,7 @@ checksum-pinned Corretto 21.0.12.9.1 toolchain now drives `core-jdk-21`,
 while five remain `BLOCKED_HARNESS_MISSING` and the six downstreams remain
 `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving 11 fail-closed blockers;
 `READY` means configured, never passed. The matrix-closure hook is `READY`, but
-its checked-in registry deliberately reports `FAILED` while 33 rows remain
+its checked-in registry deliberately reports `FAILED` while 29 rows remain
 `UNRESOLVED`. Actual scheduled/nightly and sustained fuzz/soak and operational
 evidence, release scans, benchmarks, published downstream pins, and immutable
 release-candidate provenance and conformance remain open. `release-scans`
@@ -1630,10 +1630,12 @@ on both JDKs; neither was rerun. Prior benchmark-module evidence was also not
 rerun for V21.
 
 The conformance runner/infrastructure self-tests and scenario/supplement-
-manifest gates are green. The manifest now binds 43 production-derived golden
-messages; the four-message addition contains Phase 3 unknown-method and Phase
-5 missing-capability request/error pairs. The focused live golden-wire suite
-passes nine tests with no failure, error, or skip. Final-tag Ajv validation of
+manifest gates are green. The manifest now binds 48 production-derived golden
+messages; after the four-message Phase 3 unknown-method and Phase 5 missing-
+capability addition, the current five-message addition supplies a Phase 3
+rate-limited tool request/error pair and rate-limited notification plus a Phase
+4 strict-unknown-header request/error pair. The focused live golden-wire suite
+passes 11 tests with no failure, error, or skip. Final-tag Ajv validation of
 the expanded corpus remains with the pinned candidate-conformance path because
 its official-suite checkout was not available for this local slice.
 The separate clean observation supplied the 16 Phase 5 profile candidates. The
@@ -1646,12 +1648,26 @@ It is `CANDIDATE_ARTIFACT_DEVELOPMENT_ONLY` evidence with
 `releaseCandidateEvidence: false`, not release sign-off. Final JDK 17 and JDK
 25 CI results for this exact tree remain open.
 
-The later 2026-08-20 protocol/capability golden reconciliation passes the
+The preceding 2026-08-20 protocol/capability golden reconciliation passed the
 focused live golden suite 9/9 on local Corretto 17 and the pinned Corretto 21,
 the broader protocol/capability gate 86/86 on Corretto 17, and the runner and
-local-simulator self-tests. Full Corretto 17 clean verify passes 1,671/0/0/72
-over 462 main and 196 test sources and builds the main, sources, and Javadoc
+local-simulator self-tests. Full Corretto 17 clean verify passed 1,671/0/0/72
+over 462 main and 196 test sources and built the main, sources, and Javadoc
 JARs. These are local snapshot checks, not immutable-candidate evidence.
+
+The subsequent policy/error reconciliation is test- and golden-only. Its exact
+slice passes 27/27 on the pinned local Corretto 17 and Corretto 21 toolchains,
+and the adjacent policy regression set passes 59/59 on each.
+`McpFinalTagGoldenWireProductionTests` passes 11/11 on each JDK, and the
+manifest now binds 48 production-derived messages. An unsigned Corretto 17
+`clean verify` passes 1,677/0/0/72 over 462 main and 197 test sources and
+builds the main, sources, and Javadoc JARs. No production behavior, public API,
+or Phase 4/5/6 freeze inventory changed. The canonical matrix remains
+deliberately `FAILED`: 95 rows are `CORE_COMPLETE`, 116 are `RELEASE_GATED`,
+four are `APPLICATION_OWNED`, 18 are `NOT_APPLICABLE`, and 29 remain
+`UNRESOLVED`. Final-tag Ajv validation of the expanded 48-message corpus was
+not rerun locally and remains owned by candidate conformance. These are local
+snapshot checks, not immutable-candidate evidence.
 
 A compatible addition to a frozen owner requires deliberate review, a
 snapshot update, and an update to the freeze rationale. An incompatible change

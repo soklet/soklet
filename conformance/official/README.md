@@ -97,8 +97,11 @@ notifications, and terminal response to one production SSE stream. A second
 five-message production exchange binds a `subscriptions/listen` request,
 acknowledgment, resource-list change, resource update, and graceful tagged
 terminal result. Phase 3 unknown-method and Phase 5 missing-capability request/
-error pairs bring the current corpus to 43 messages, all production-derived;
-the earlier subscription terminal schema canary has been replaced. The
+error pairs brought the preceding corpus to 43 messages. The current corpus
+adds a Phase 3 rate-limited tool request/error pair, a rate-limited
+notification, and a Phase 4 strict-unknown-header request/error pair, bringing
+the total to 48 production-derived messages; the earlier subscription terminal
+schema canary has been replaced. The
 validator uses Ajv and `ajv-formats` from the official suite's
 verified lockfile, so no Soklet runtime dependency or second package
 installation is added. These corpus additions are local production-listener/
@@ -107,14 +110,28 @@ diagnostic history. The later complete controlled observation is profile-
 acquisition evidence, not the later activated Phase 5 verify gate. The fresh
 verification and frozen profiles are recorded below.
 
-The 2026-08-20 protocol/capability reconciliation passes the focused live
-golden suite 9/9 on local Corretto 17 and the pinned Corretto 21, the broader
-protocol/capability gate 86/86 on Corretto 17, and the runner and local-
-simulator self-tests. Full Corretto 17 clean verify passes 1,671/0/0/72 over
-462 main and 196 test sources and builds the main, sources, and Javadoc JARs.
-The pinned official-suite checkout was not locally available, so final-tag Ajv
-validation of the expanded 43-message corpus remains with candidate
-conformance. These are local snapshot checks, not immutable-candidate evidence.
+The preceding 2026-08-20 protocol/capability reconciliation passed the focused
+live golden suite 9/9 on local Corretto 17 and the pinned Corretto 21, the
+broader protocol/capability gate 86/86 on Corretto 17, and the runner and
+local-simulator self-tests. Full Corretto 17 clean verify passed 1,671/0/0/72 over
+462 main and 196 test sources and built the main, sources, and Javadoc JARs.
+The pinned official-suite checkout was not locally available, so at that
+checkpoint final-tag Ajv validation of the expanded 43-message corpus remained
+with candidate conformance. These are local snapshot checks, not immutable-
+candidate evidence.
+
+The subsequent policy/error reconciliation is test- and golden-only. Its exact
+slice passes 27/27 on the pinned local Corretto 17 and Corretto 21 toolchains,
+and the adjacent policy regression set passes 59/59 on each.
+`McpFinalTagGoldenWireProductionTests` passes 11/11 on each JDK. An unsigned
+Corretto 17 `clean verify` passes 1,677/0/0/72 over 462 main and 197 test
+sources and builds the main, sources, and Javadoc JARs. No production behavior,
+public API, or Phase 4/5/6 freeze inventory changed. The canonical matrix
+remains deliberately `FAILED`: 95 rows are `CORE_COMPLETE`, 116 are
+`RELEASE_GATED`, four are `APPLICATION_OWNED`, 18 are `NOT_APPLICABLE`, and 29
+remain `UNRESOLVED`. Final-tag Ajv validation of the current 48-message corpus
+was not rerun locally and remains owned by candidate conformance. These are
+local snapshot checks, not immutable-candidate evidence.
 
 The schema layer checks JSON message shapes only. HTTP status and headers,
 CORS, SSE framing, cross-message order, ID correlation, filter containment,

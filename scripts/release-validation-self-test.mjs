@@ -956,7 +956,7 @@ try {
     evidenceClass: 'IMMUTABLE_RELEASE_CANDIDATE',
     failure: null,
     formatVersion: 1,
-    goldenMessagesValidated: 43,
+    goldenMessagesValidated: 48,
     mode: 'release',
     phase: 5,
     protocolVersion: conformanceManifests.pins.protocolVersion,
@@ -1011,7 +1011,7 @@ try {
     /not a complete passing immutable release-candidate run/,
   );
   assertRejectsConformanceMutation(
-    (value) => { value.goldenMessagesValidated = 42; },
+    (value) => { value.goldenMessagesValidated = 47; },
     /not a complete passing immutable release-candidate run/,
   );
   assertRejectsConformanceMutation(

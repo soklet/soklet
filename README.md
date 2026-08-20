@@ -2399,7 +2399,7 @@ ordered gates. Eighteen are dispatch-configured, while five remain
 `BLOCKED_HARNESS_MISSING` and the six downstreams remain
 `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving 11 fail-closed blockers;
 `READY` means configured, never passed. The matrix-closure hook is `READY`, but
-its checked-in registry deliberately reports `FAILED` while 33 rows remain
+its checked-in registry deliberately reports `FAILED` while 29 rows remain
 `UNRESOLVED`. Scheduled/nightly and sustained history, release scans,
 benchmarks, published downstream pins, and immutable-candidate provenance
 remain open. `release-scans` remains blocked on its exact scanner/toolchain,
@@ -2410,12 +2410,12 @@ bounded two-listener localization fixture is the Soklet-owned fleet gate;
 production multi-host coordination remains application/deployment-owned rather
 than an unimplemented core release gate.
 
-The current 2026-08-20 protocol/capability golden checkpoint passes 9/9 on
+The preceding 2026-08-20 protocol/capability golden checkpoint passed 9/9 on
 local Corretto 17 and the pinned Corretto 21, 86/86 across the broader
 Corretto 17 protocol/capability gate, and both runner and local-simulator self-
-tests. Full Corretto 17 clean verify passes 1,671/0/0/72 over 462 main and 196
-test sources and builds all three JARs. The manifest binds 43 production-
-derived messages; expanded-corpus final-tag Ajv validation remains with
+tests. Full Corretto 17 clean verify passed 1,671/0/0/72 over 462 main and 196
+test sources and built all three JARs. The manifest bound 43 production-
+derived messages; expanded-corpus final-tag Ajv validation remained with
 candidate conformance because the pinned official-suite checkout was not
 locally available. This is local snapshot evidence, not immutable-candidate
 evidence.
@@ -2480,6 +2480,20 @@ dequeued snapshot. Existing timeout bounds and expected counts are unchanged;
 production behavior, public API, and the Phase 4/5/6 freeze inventories are
 unchanged. This is local snapshot evidence, not immutable release-candidate
 evidence.
+
+The subsequent policy/error reconciliation is test- and golden-only. Its exact
+slice passes 27/27 on the pinned local Corretto 17 and Corretto 21 toolchains,
+and the adjacent policy regression set passes 59/59 on each.
+`McpFinalTagGoldenWireProductionTests` passes 11/11 on each JDK, and the
+manifest now binds 48 production-derived messages. An unsigned Corretto 17
+`clean verify` passes 1,677/0/0/72 over 462 main and 197 test sources and
+builds the main, sources, and Javadoc JARs. No production behavior, public API,
+or Phase 4/5/6 freeze inventory changed. The canonical matrix remains
+deliberately `FAILED`: 95 rows are `CORE_COMPLETE`, 116 are `RELEASE_GATED`,
+four are `APPLICATION_OWNED`, 18 are `NOT_APPLICABLE`, and 29 remain
+`UNRESOLVED`. Final-tag Ajv validation of the expanded 48-message corpus was
+not rerun locally and remains owned by candidate conformance. These are local
+snapshot checks, not immutable-candidate evidence.
 
 You can expose a `/metrics` endpoint by injecting [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html)
 into a [`ResourceMethod`](https://javadoc.soklet.com/com/soklet/ResourceMethod.html):

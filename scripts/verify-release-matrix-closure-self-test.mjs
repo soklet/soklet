@@ -37,7 +37,6 @@ const expectedUnresolvedIds = Object.freeze([
   'MCP-VER-004',
   'MCP-HTTP-018',
   'MCP-HTTP-020',
-  'MCP-HTTP-021',
   'MCP-HTTP-024',
   'MCP-HTTP-025',
   'MCP-MRTR-011',
@@ -51,10 +50,7 @@ const expectedUnresolvedIds = Object.freeze([
   'SOK-EXEC-005',
   'SOK-VALID-001',
   'SOK-VALID-002',
-  'SOK-ERROR-001',
   'SOK-ERROR-002',
-  'SOK-RATE-006',
-  'SOK-RATE-007',
   'SOK-CORS-005',
   'SOK-STATE-002',
   'SOK-STATE-007',
@@ -146,10 +142,10 @@ try {
   );
   assert.deepEqual(current.report.dispositionCounts, {
     APPLICATION_OWNED: 4,
-    CORE_COMPLETE: 91,
+    CORE_COMPLETE: 95,
     NOT_APPLICABLE: 18,
     RELEASE_GATED: 116,
-    UNRESOLVED: 33,
+    UNRESOLVED: 29,
   });
   assert.deepEqual(
     current.report.unresolvedRows.map(({ id }) => id),
@@ -183,6 +179,33 @@ try {
       'src/test/java/com/soklet/internal/mcp/protocol/McpFinalTagGoldenWireProductionTests.java',
     ));
   }
+  for (const id of [
+    'MCP-HTTP-021',
+    'SOK-ERROR-001',
+    'SOK-RATE-006',
+    'SOK-RATE-007',
+  ]) {
+    assert.equal(row(registry, id).disposition, 'CORE_COMPLETE');
+    assert.deepEqual(row(registry, id).releaseGates, []);
+    assert.equal(row(registry, id).reason, '');
+  }
+  for (const id of [
+    'MCP-HTTP-021',
+    'SOK-ERROR-001',
+    'SOK-RATE-007',
+  ]) {
+    assert.ok(row(registry, id).evidence.includes(
+      'src/test/java/com/soklet/internal/mcp/protocol/McpFinalTagGoldenWireProductionTests.java',
+    ));
+  }
+  assert.ok(row(registry, 'SOK-ERROR-001').evidence.includes(
+    'src/test/java/com/soklet/McpBootstrapValueTests.java',
+  ));
+  for (const id of ['SOK-RATE-006', 'SOK-RATE-007']) {
+    assert.ok(row(registry, id).evidence.includes(
+      'src/test/java/com/soklet/McpRateLimitPipelinePublicRuntimeTests.java',
+    ));
+  }
   assert.deepEqual(row(registry, 'SOK-METRIC-001').releaseGates, [
     'release-soak',
     'operational-history',
@@ -199,7 +222,7 @@ try {
   assert.equal(checkedInCli.stdout, current.reportText);
   assert.equal(
     checkedInCli.stderr,
-    'Matrix closure failed: 33 unresolved row(s).\n',
+    'Matrix closure failed: 29 unresolved row(s).\n',
   );
 
   const usage = spawnSync(process.execPath, [verifierPath, 'unexpected'], {

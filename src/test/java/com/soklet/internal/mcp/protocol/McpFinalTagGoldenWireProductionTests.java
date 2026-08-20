@@ -61,6 +61,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
+import java.time.Duration;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -128,6 +129,105 @@ public class McpFinalTagGoldenWireProductionTests {
 					404, McpJsonRpcError.METHOD_NOT_FOUND,
 					"phase-3-unknown-method",
 					fixture("phase-3/unknown-method-error.json"));
+		}
+	}
+
+	@Test
+	public void checked_in_phase_3_rate_limit_messages_match_the_production_listener()
+			throws Exception {
+		String rateLimitPartitionSecret = "golden-rate-partition-secret";
+		AtomicInteger admissionInvocations = new AtomicInteger();
+		AtomicInteger requestLimiterInvocations = new AtomicInteger();
+		AtomicInteger toolLimiterInvocations = new AtomicInteger();
+		AtomicInteger interceptorInvocations = new AtomicInteger();
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName("golden.rate-limited")
+				.jsonArguments()
+				.handler((request, arguments, features) -> {
+					handlerInvocations.incrementAndGet();
+					return McpCompleteResult.fromToolText(
+							"unexpected rate-limited handler execution");
+				})
+				.build();
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
+				.serverInformation(McpImplementation.withNameAndVersion(
+						"soklet-final-schema-golden", "3.6.0-SNAPSHOT").build())
+				.tool(tool)
+				.build();
+		McpServer server = McpServer.withPort(0)
+				.host("127.0.0.1")
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(context -> {
+					admissionInvocations.incrementAndGet();
+					return com.soklet.McpAdmissionDecision.accepted(
+							com.soklet.McpAdmissionIdentity
+									.withRateLimitPartitionKey(rateLimitPartitionSecret)
+									.build());
+				})
+				.requestRateLimiter(context -> {
+					int invocation = requestLimiterInvocations.incrementAndGet();
+					Assertions.assertEquals(com.soklet.McpRateLimitTarget.REQUEST,
+							context.getTarget());
+					Assertions.assertEquals(rateLimitPartitionSecret,
+							context.getAdmissionIdentity().getRateLimitPartitionKey());
+					if (invocation == 1) {
+						Assertions.assertEquals("tools/call", context.getJsonRpcMethod());
+						Assertions.assertEquals("golden.rate-limited",
+								context.getOperationName().orElseThrow());
+					} else {
+						Assertions.assertEquals(2, invocation);
+						Assertions.assertEquals("notifications/cancelled",
+								context.getJsonRpcMethod());
+						Assertions.assertTrue(context.getOperationName().isEmpty());
+					}
+					return McpRateLimitDecision.denied(Duration.ofMillis(1_001L));
+				})
+				.toolRateLimiter(context -> {
+					toolLimiterInvocations.incrementAndGet();
+					return McpRateLimitDecision.allowed();
+				})
+				.handlerInterceptor((context, continuation) -> {
+					interceptorInvocations.incrementAndGet();
+					return continuation.proceed();
+				})
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.allowedHosts(Set.of("127.0.0.1"))
+				.build();
+
+		try {
+			server.start();
+			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+			String response = assertRateLimitedErrorExchange(port,
+					fixture("phase-3/rate-limited-tool-request.json"), List.of(
+							new McpChunkedHttpClient.RequestHeader(
+									"MCP-Protocol-Version", PROTOCOL_VERSION),
+							new McpChunkedHttpClient.RequestHeader(
+									"Mcp-Method", "tools/call"),
+							new McpChunkedHttpClient.RequestHeader(
+									"Mcp-Name", "golden.rate-limited")),
+					"phase-3-rate-limited",
+					fixture("phase-3/rate-limited-tool-error.json"), "2",
+					rateLimitPartitionSecret);
+			Assertions.assertFalse(response.contains(rateLimitPartitionSecret), response);
+			Assertions.assertEquals(1, admissionInvocations.get());
+			Assertions.assertEquals(1, requestLimiterInvocations.get());
+			Assertions.assertEquals(0, toolLimiterInvocations.get());
+			Assertions.assertEquals(0, interceptorInvocations.get());
+			Assertions.assertEquals(0, handlerInvocations.get());
+
+			assertRateLimitedNotificationExchange(port,
+					fixture("phase-3/rate-limited-notification.json"),
+					List.of(new McpChunkedHttpClient.RequestHeader(
+							"MCP-Protocol-Version", PROTOCOL_VERSION)), "2",
+					rateLimitPartitionSecret);
+			Assertions.assertEquals(2, admissionInvocations.get());
+			Assertions.assertEquals(2, requestLimiterInvocations.get());
+			Assertions.assertEquals(0, toolLimiterInvocations.get());
+			Assertions.assertEquals(0, interceptorInvocations.get());
+			Assertions.assertEquals(0, handlerInvocations.get());
+		} finally {
+			server.stop();
 		}
 	}
 
@@ -282,6 +382,86 @@ public class McpFinalTagGoldenWireProductionTests {
 			assertResourceRead(port, "template", "golden://records/record-42", 200);
 			assertResourceRead(port, "text", textResourceUri.toString(), 200);
 			assertResourceRead(port, "unknown", "golden://missing/resource", 400);
+		} finally {
+			server.stop();
+		}
+	}
+
+	@Test
+	public void checked_in_phase_4_strict_unknown_header_messages_match_the_production_listener()
+			throws Exception {
+		String unknownHeaderName = "Mcp-Param-Super-Secret-Name";
+		String unknownHeaderValue = "super-secret-value";
+		AtomicInteger admissionInvocations = new AtomicInteger();
+		AtomicInteger requestLimiterInvocations = new AtomicInteger();
+		AtomicInteger toolLimiterInvocations = new AtomicInteger();
+		AtomicInteger interceptorInvocations = new AtomicInteger();
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName("golden.strict-unknown")
+				.jsonArguments()
+				.handler((request, arguments, features) -> {
+					handlerInvocations.incrementAndGet();
+					return McpCompleteResult.fromToolText(
+							"unexpected strict-unknown handler execution");
+				})
+				.build();
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
+				.serverInformation(McpImplementation.withNameAndVersion(
+						"soklet-final-schema-golden", "3.6.0-SNAPSHOT").build())
+				.tool(tool)
+				.build();
+		McpServer server = McpServer.withPort(0)
+				.host("127.0.0.1")
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(context -> {
+					admissionInvocations.incrementAndGet();
+					return com.soklet.McpAdmissionDecision.accepted();
+				})
+				.requestRateLimiter(context -> {
+					requestLimiterInvocations.incrementAndGet();
+					return McpRateLimitDecision.allowed();
+				})
+				.toolRateLimiter(context -> {
+					toolLimiterInvocations.incrementAndGet();
+					return McpRateLimitDecision.allowed();
+				})
+				.handlerInterceptor((context, continuation) -> {
+					interceptorInvocations.incrementAndGet();
+					return continuation.proceed();
+				})
+				.unknownMirroredHeaderPolicy(
+						com.soklet.McpUnknownMirroredHeaderPolicy.REJECT_REQUESTS)
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.allowedHosts(Set.of("127.0.0.1"))
+				.build();
+
+		try {
+			server.start();
+			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+			String response = assertErrorExchange(port,
+					fixture("phase-4/strict-unknown-header-request.json"), List.of(
+							new McpChunkedHttpClient.RequestHeader(
+									"MCP-Protocol-Version", PROTOCOL_VERSION),
+							new McpChunkedHttpClient.RequestHeader(
+									"Mcp-Method", "tools/call"),
+							new McpChunkedHttpClient.RequestHeader(
+									"Mcp-Name", "golden.strict-unknown"),
+							new McpChunkedHttpClient.RequestHeader(
+									unknownHeaderName, unknownHeaderValue)),
+					400, com.soklet.McpJsonRpcError
+							.SOKLET_STRICT_UNKNOWN_MIRRORED_HEADER_ERROR_CODE,
+					"phase-4-strict-unknown",
+					fixture("phase-4/strict-unknown-header-error.json"),
+					unknownHeaderName, "Super-Secret-Name", unknownHeaderValue);
+			Assertions.assertFalse(response.contains(unknownHeaderName), response);
+			Assertions.assertFalse(response.contains("Super-Secret-Name"), response);
+			Assertions.assertFalse(response.contains(unknownHeaderValue), response);
+			Assertions.assertEquals(0, admissionInvocations.get());
+			Assertions.assertEquals(0, requestLimiterInvocations.get());
+			Assertions.assertEquals(0, toolLimiterInvocations.get());
+			Assertions.assertEquals(0, interceptorInvocations.get());
+			Assertions.assertEquals(0, handlerInvocations.get());
 		} finally {
 			server.stop();
 		}
@@ -795,9 +975,10 @@ public class McpFinalTagGoldenWireProductionTests {
 		}
 	}
 
-	private static void assertErrorExchange(int port, String request,
+	private static String assertErrorExchange(int port, String request,
 			List<McpChunkedHttpClient.RequestHeader> headers, int expectedStatus,
-			int expectedCode, String expectedRequestId, String expectedResponse)
+			int expectedCode, String expectedRequestId, String expectedResponse,
+			String... prohibitedText)
 			throws Exception {
 		try (McpChunkedHttpClient client =
 					McpChunkedHttpClient.postMcpMessage(port, request, headers)) {
@@ -806,22 +987,79 @@ public class McpFinalTagGoldenWireProductionTests {
 			Assertions.assertEquals("application/json",
 					head.singleHeader("Content-Type"));
 			Assertions.assertEquals("no-store", head.singleHeader("Cache-Control"));
+			Assertions.assertFalse(head.hasHeader("Retry-After"));
+			assertProhibitedTextAbsent(head.raw(), prohibitedText);
 			String response = client.readFixedBody(head);
 			Assertions.assertEquals(expectedResponse, response);
+			assertProhibitedTextAbsent(response, prohibitedText);
+			assertErrorBody(response, expectedCode, expectedRequestId);
+			return response;
+		}
+	}
 
-			McpJsonRpcEnvelope.ErrorResponse errorResponse = Assertions.assertInstanceOf(
+	private static String assertRateLimitedErrorExchange(int port, String request,
+			List<McpChunkedHttpClient.RequestHeader> headers, String expectedRequestId,
+			String expectedResponse, String expectedRetryAfter,
+			String... prohibitedText) throws Exception {
+		try (McpChunkedHttpClient client =
+					McpChunkedHttpClient.postMcpMessage(port, request, headers)) {
+			McpChunkedHttpClient.HttpResponseHead head = client.readHead();
+			Assertions.assertEquals(429, head.status(), head.raw());
+			Assertions.assertEquals("application/json",
+					head.singleHeader("Content-Type"));
+			Assertions.assertEquals("no-store", head.singleHeader("Cache-Control"));
+			Assertions.assertEquals(expectedRetryAfter,
+					head.singleHeader("Retry-After"));
+			assertProhibitedTextAbsent(head.raw(), prohibitedText);
+			String response = client.readFixedBody(head);
+			Assertions.assertEquals(expectedResponse, response);
+			assertProhibitedTextAbsent(response, prohibitedText);
+			assertErrorBody(response,
+					com.soklet.McpJsonRpcError.SOKLET_RATE_LIMIT_ERROR_CODE,
+					expectedRequestId);
+			return response;
+		}
+	}
+
+	private static void assertRateLimitedNotificationExchange(int port, String request,
+			List<McpChunkedHttpClient.RequestHeader> headers, String expectedRetryAfter,
+			String... prohibitedText)
+			throws Exception {
+		try (McpChunkedHttpClient client =
+					McpChunkedHttpClient.postMcpMessage(port, request, headers)) {
+			McpChunkedHttpClient.HttpResponseHead head = client.readHead();
+			Assertions.assertEquals(429, head.status(), head.raw());
+			Assertions.assertEquals("no-store", head.singleHeader("Cache-Control"));
+			Assertions.assertEquals(expectedRetryAfter,
+					head.singleHeader("Retry-After"));
+			Assertions.assertFalse(head.hasHeader("Content-Type"));
+			assertProhibitedTextAbsent(head.raw(), prohibitedText);
+			String response = client.readFixedBody(head);
+			Assertions.assertEquals("", response);
+			assertProhibitedTextAbsent(response, prohibitedText);
+		}
+	}
+
+	private static void assertProhibitedTextAbsent(String text,
+			String... prohibitedText) {
+		for (String prohibited : prohibitedText)
+			Assertions.assertFalse(text.contains(prohibited), text);
+	}
+
+	private static void assertErrorBody(String response, int expectedCode,
+			String expectedRequestId) {
+		McpJsonRpcEnvelope.ErrorResponse errorResponse = Assertions.assertInstanceOf(
 					McpJsonRpcEnvelope.ErrorResponse.class,
 					new McpJsonRpcEnvelopeCodec(new McpJsonCodec(
 							McpJsonLimits.productionDefaults())).decode(response));
-			Assertions.assertEquals(new McpJsonRpcId.StringId(expectedRequestId),
-					errorResponse.id().orElseThrow());
-			com.soklet.internal.mcp.protocol.McpJsonObject error =
-					Assertions.assertInstanceOf(
-							com.soklet.internal.mcp.protocol.McpJsonObject.class,
-							errorResponse.error());
-			Assertions.assertEquals(new McpJsonNumber(expectedCode),
-					error.members().get("code"));
-		}
+		Assertions.assertEquals(new McpJsonRpcId.StringId(expectedRequestId),
+				errorResponse.id().orElseThrow());
+		com.soklet.internal.mcp.protocol.McpJsonObject error =
+				Assertions.assertInstanceOf(
+						com.soklet.internal.mcp.protocol.McpJsonObject.class,
+						errorResponse.error());
+		Assertions.assertEquals(new McpJsonNumber(expectedCode),
+				error.members().get("code"));
 	}
 
 	private static String fixture(String filename) throws Exception {

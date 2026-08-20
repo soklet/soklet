@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":"phase-3-rate-limited","reason":"golden notification rate limit"}}

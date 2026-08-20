@@ -1964,7 +1964,7 @@ export function verifyReleaseConformanceEvidence(
       || evidence.mode !== 'release'
       || evidence.protocolVersion !== pins.protocolVersion
       || evidence.suiteCommit !== pins.officialConformanceSuite.commit
-      || evidence.goldenMessagesValidated !== 43
+      || evidence.goldenMessagesValidated !== 48
       || evidence.failure !== null
       || !Array.isArray(evidence.scenarios)
       || evidence.scenarios.length !== selectedScenarios.length) {
