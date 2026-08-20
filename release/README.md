@@ -76,6 +76,19 @@ public API, Phase 4/5/6 freeze inventory, timeout, or asserted count changed.
 This is local snapshot evidence, not an immutable release-candidate PASS
 receipt.
 
+Current JDK 17 application-execution revalidation on local Amazon Corretto
+17.0.20.1+10-LTS passes the exact `mvn -B -ntp clean test` at 1,667/0/0/72
+over the unchanged 462 main and 196 test sources. The affected method passes
+1/1 focused and 20/20 repeated runs, and the full
+`McpApplicationExecutionTests` class passes 10/10. The same affected method
+also passes 1/1 on the pinned Corretto 21.0.12.9.1 toolchain. The test-only
+correction uses an exact post-observer stable fence requiring both
+`retainedExchanges == 1` and `queuedCleanups == 1` before inspecting the
+dequeued snapshot. Existing timeout bounds and expected counts are unchanged;
+production behavior, public API, and the Phase 4/5/6 freeze inventories are
+unchanged. This is local snapshot evidence, not immutable release-candidate
+evidence.
+
 Six downstream gates remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`. The manifest
 records their exact public commit pins without treating uncommitted sibling
 work as evidence:
@@ -231,7 +244,7 @@ bash -n release/scripts/install-pinned-corretto-linux-x64.sh
 
 The first command validates the currently recorded pins, exact gate order,
 evidence contracts, toolchain references, and statuses. Adding
-`--require-ready` is expected to fail until all 15 blockers above are resolved.
+`--require-ready` is expected to fail until all 12 blockers above are resolved.
 
 After the final candidate commit exists, dispatch
 `.github/workflows/release-validation.yml` from that commit and supply the same

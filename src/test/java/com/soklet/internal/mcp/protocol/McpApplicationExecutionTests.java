@@ -587,6 +587,8 @@ public class McpApplicationExecutionTests {
 					deadline
 							? "Dequeued delivery retained the execution-boundary monitor."
 							: "Dequeued delivery retained the exchange terminal monitor.");
+			awaitCondition(() -> execution.snapshot().retainedExchanges() == 1
+					&& queuedCleanups.get() == 1);
 			McpApplicationExecutionSnapshot dequeued = execution.snapshot();
 			Assertions.assertEquals(1, dequeued.activeHandlerSlots());
 			Assertions.assertEquals(0, dequeued.queuedRequests());
