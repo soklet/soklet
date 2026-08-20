@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   copyFileSync,
@@ -29,12 +30,25 @@ import {
 } from './release-validation-evidence.mjs';
 import { verifyMavenDownstreamPom } from './verify-maven-downstream-pom.mjs';
 import { createLoopbackPortReservation } from './reserve-loopback-port.mjs';
+import { verifyMatrixClosure } from './verify-release-matrix-closure.mjs';
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(scriptDirectory, '..');
 const trackedManifestPath = resolve(projectRoot, 'release/release-validation-manifest.json');
 const releaseWorkflowPath = resolve(projectRoot, '.github/workflows/release-validation.yml');
 const releaseValidatorPath = resolve(projectRoot, 'scripts/validate-release-candidate.sh');
+const matrixClosureRegistryPath = resolve(
+  projectRoot,
+  'release/mcp-conformance-matrix-closure.json',
+);
+const matrixClosureVerifierPath = resolve(
+  projectRoot,
+  'scripts/verify-release-matrix-closure.mjs',
+);
+const matrixClosureSelfTestPath = resolve(
+  projectRoot,
+  'scripts/verify-release-matrix-closure-self-test.mjs',
+);
 const loopbackPortReserverPath = resolve(projectRoot, 'scripts/reserve-loopback-port.mjs');
 const promotionHelperPath = resolve(projectRoot, 'scripts/release-promotion.mjs');
 const promotionWrapperPath = resolve(projectRoot, 'scripts/promote-release-candidate.sh');
@@ -79,6 +93,27 @@ function sha256(bytes) {
 }
 
 try {
+  for (const [label, path] of [
+    ['matrix-closure registry', matrixClosureRegistryPath],
+    ['matrix-closure verifier', matrixClosureVerifierPath],
+    ['matrix-closure verifier self-test', matrixClosureSelfTestPath],
+  ]) {
+    const stats = lstatSync(path);
+    assert.equal(stats.isFile(), true, `${label} must be a regular file`);
+    assert.equal(stats.isSymbolicLink(), false, `${label} must not be a symlink`);
+  }
+  const matrixClosureSelfTest = spawnSync(
+    process.execPath,
+    [matrixClosureSelfTestPath],
+    { cwd: projectRoot, encoding: 'utf8' },
+  );
+  assert.equal(
+    matrixClosureSelfTest.status,
+    0,
+    `Matrix-closure verifier self-test failed: ${matrixClosureSelfTest.error?.message
+      ?? matrixClosureSelfTest.stderr ?? matrixClosureSelfTest.stdout}`,
+  );
+
   await verifyLoopbackPortReservation(fixturePath('reserved-loopback-port.txt'));
 
   const tracked = validateReleaseConfiguration(trackedManifestPath);
@@ -99,6 +134,17 @@ try {
   assert.equal(tracked.toolchains.toystoreJava.vendorVersion, 'Corretto-25.0.4.7.1');
   assert.equal(tracked.promotion.helper.path, 'scripts/release-promotion.mjs');
   assert.equal(tracked.promotion.wrapper.path, 'scripts/promote-release-candidate.sh');
+  assert.equal(tracked.gates.filter(({ status }) => status === 'READY').length, 18);
+  assert.equal(
+    tracked.gates.filter(({ status }) => status === 'BLOCKED_HARNESS_MISSING').length,
+    5,
+  );
+  assert.equal(
+    tracked.gates.filter(
+      ({ status }) => status === 'BLOCKED_UNCOMMITTED_LOCAL_MIGRATION',
+    ).length,
+    6,
+  );
   for (const gateId of [
     'barebones-app',
     'soklet-servlet-javax',
@@ -116,12 +162,16 @@ try {
     'operational-history',
     'release-scans',
     'mcp-benchmarks',
-    'matrix-closure',
   ]) {
     const gate = tracked.gates.find(({ id }) => id === gateId);
     assert.equal(gate.status, 'BLOCKED_HARNESS_MISSING');
   }
-  for (const gateId of ['core-jdk-21', 'static-analysis', 'spotbugs']) {
+  for (const gateId of [
+    'core-jdk-21',
+    'static-analysis',
+    'spotbugs',
+    'matrix-closure',
+  ]) {
     const gate = tracked.gates.find(({ id }) => id === gateId);
     assert.equal(gate.status, 'READY');
     assert.equal(gate.reason, '');
@@ -135,6 +185,26 @@ try {
     assert.equal(gate.evidenceContract, contract.contractId);
     assert.equal(gate.toolchain, contract.toolchain);
   }
+  const trackedMatrixClosureGate = tracked.gates.find(
+    ({ id }) => id === 'matrix-closure',
+  );
+  assert.equal(trackedMatrixClosureGate.artifactIdentity, 'mcp:conformance-matrix-closure');
+  assert.equal(trackedMatrixClosureGate.status, 'READY');
+  assert.equal(trackedMatrixClosureGate.reason, '');
+  assert.deepEqual(EXPECTED_GATE_EVIDENCE_CONTRACTS['matrix-closure'], {
+    command: 'node scripts/verify-release-matrix-closure.mjs',
+    contractId: 'soklet.release.matrix-closure.v1',
+    expectation: 'ZERO_UNRESOLVED_IN_SCOPE_MATRIX_ROWS',
+    profile: 'release',
+    roles: [{
+      candidateArtifact: null,
+      fileName: 'matrix-closure.json',
+      mediaType: 'application/json',
+      role: 'matrix-report',
+      type: 'FILE',
+    }],
+    toolchain: 'nodePin',
+  });
   const trackedToyStoreGate = tracked.gates.find(({ id }) => id === 'toystore-app');
   assert.equal(trackedToyStoreGate.commit, '209781472b2d308cbc5538f2a7f956bc97b399b7');
   assert.equal(
@@ -225,6 +295,67 @@ try {
     /gate \$gate_id is READY but has no release-validator dispatch/,
   );
   assert.match(releaseValidator, /configured_gate_count" -eq 29/);
+  assert.match(
+    releaseValidator,
+    /soak-smoke\|release-soak\|localization-fleet\|matrix-closure\|/,
+  );
+  const matrixClosureFunction = releaseValidator.match(
+    /\nrun_matrix_closure\(\) \{\n([\s\S]*?)\n\}\n\nrun_candidate_conformance\(\)/,
+  );
+  assert.notEqual(matrixClosureFunction, null);
+  assert.match(
+    matrixClosureFunction[1],
+    /release\/mcp-conformance-matrix-closure\.json/,
+  );
+  assert.match(
+    matrixClosureFunction[1],
+    /scripts\/verify-release-matrix-closure\.mjs/,
+  );
+  assert.match(
+    matrixClosureFunction[1],
+    /scripts\/verify-release-matrix-closure-self-test\.mjs/,
+  );
+  assert.match(
+    matrixClosureFunction[1],
+    /for source in "\$registry" "\$verifier" "\$verifier_self_test"/,
+  );
+  assert.match(
+    matrixClosureFunction[1],
+    /\[\[ -f "\$source" && ! -L "\$source" \]\]/,
+  );
+  assert.match(
+    matrixClosureFunction[1],
+    /git ls-files --error-unmatch "\$relative"/,
+  );
+  assert.match(
+    matrixClosureFunction[1],
+    /local report="\$raw_root\/matrix-closure\.json"/,
+  );
+  assert.match(
+    matrixClosureFunction[1],
+    /node scripts\/verify-release-matrix-closure\.mjs > "\$report"/,
+  );
+  assert.match(
+    matrixClosureFunction[1],
+    /record_gate matrix-closure "matrix-report=\$report"/,
+  );
+  assert.ok(
+    matrixClosureFunction[1].indexOf(
+      'node scripts/verify-release-matrix-closure.mjs > "$report"',
+    )
+      < matrixClosureFunction[1].indexOf(
+        'record_gate matrix-closure "matrix-report=$report"',
+      ),
+  );
+  assert.equal(releaseValidator.match(/^run_matrix_closure$/gm)?.length, 1);
+  const localizationFleetInvocation = releaseValidator.indexOf('\nrun_localization_fleet\n');
+  const matrixClosureInvocation = releaseValidator.indexOf('\nrun_matrix_closure\n');
+  const candidateConformanceInvocation = releaseValidator.indexOf(
+    '\nrun_candidate_conformance\n',
+  );
+  assert.ok(localizationFleetInvocation >= 0);
+  assert.ok(matrixClosureInvocation > localizationFleetInvocation);
+  assert.ok(candidateConformanceInvocation > matrixClosureInvocation);
   assert.match(
     releaseValidator,
     /"\$surefire_verifier" "\$project_root\/target\/surefire-reports"[\s\\\n]+candidate-build candidate/,
@@ -690,6 +821,52 @@ try {
   );
   writeFileSync(fixtureGoModPath, savedGoMod);
 
+  const resolvedMatrixClosureRegistry = JSON.parse(
+    readFileSync(matrixClosureRegistryPath, 'utf8'),
+  );
+  for (const row of resolvedMatrixClosureRegistry.rows) {
+    if (row.disposition === 'UNRESOLVED') {
+      row.disposition = 'CORE_COMPLETE';
+      row.reason = '';
+      if (row.evidence.every((reference) => reference.endsWith('.md'))) {
+        row.evidence.push('scripts/verify-release-matrix-closure-self-test.mjs');
+        row.evidence.sort();
+      }
+    }
+  }
+  for (const reference of new Set(
+    resolvedMatrixClosureRegistry.rows.flatMap(({ evidence }) => evidence),
+  )) {
+    if (reference === 'release/release-validation-manifest.json')
+      continue;
+    const destination = fixturePath(reference);
+    mkdirSync(dirname(destination), { recursive: true });
+    copyFileSync(resolve(projectRoot, reference), destination);
+  }
+  const fixtureMatrixClosureRegistryPath = fixturePath(
+    'release/mcp-conformance-matrix-closure.json',
+  );
+  const fixtureMatrixClosureVerifierPath = fixturePath(
+    'scripts/verify-release-matrix-closure.mjs',
+  );
+  copyFileSync(matrixClosureVerifierPath, fixtureMatrixClosureVerifierPath);
+  writeFileSync(
+    fixtureMatrixClosureRegistryPath,
+    `${JSON.stringify(resolvedMatrixClosureRegistry, null, 2)}\n`,
+  );
+  for (const args of [
+    ['init', '--quiet'],
+    ['add', '--', '.'],
+  ]) {
+    const result = spawnSync('git', ['-C', fixtureRoot, ...args], { encoding: 'utf8' });
+    assert.equal(
+      result.status,
+      0,
+      `Unable to prepare tracked matrix-closure fixture: ${result.error?.message
+        ?? result.stderr}`,
+    );
+  }
+
   const pomPath = fixturePath('pom.xml');
   const mainJarPath = fixturePath('soklet-3.6.0.jar');
   const sourcesJarPath = fixturePath('soklet-3.6.0-sources.jar');
@@ -697,6 +874,20 @@ try {
   const artifactDescriptorPath = fixturePath('evidence/candidate-artifacts.json');
   const gateDirectory = fixturePath('evidence/gates');
   const finalEvidencePath = fixturePath('evidence/release-validation-evidence.json');
+  const matrixReportPath = fixturePath(
+    'evidence/raw/matrix-closure/matrix-closure.json',
+  );
+  const resolvedMatrixClosure = verifyMatrixClosure({
+    manifestPath: fixtureManifestPath,
+    projectRoot: fixtureRoot,
+    registryPath: fixtureMatrixClosureRegistryPath,
+  });
+  assert.equal(resolvedMatrixClosure.exitCode, 0);
+  assert.equal(resolvedMatrixClosure.report.status, 'PASSED');
+  assert.equal(resolvedMatrixClosure.report.rowCount, 262);
+  assert.deepEqual(resolvedMatrixClosure.report.unresolvedRows, []);
+  mkdirSync(dirname(matrixReportPath), { recursive: true });
+  writeFileSync(matrixReportPath, resolvedMatrixClosure.reportText);
   mkdirSync(dirname(artifactDescriptorPath), { recursive: true });
   mkdirSync(gateDirectory, { recursive: true });
   writeFileSync(pomPath, `<?xml version="1.0" encoding="UTF-8"?>
@@ -765,7 +956,7 @@ try {
     evidenceClass: 'IMMUTABLE_RELEASE_CANDIDATE',
     failure: null,
     formatVersion: 1,
-    goldenMessagesValidated: 39,
+    goldenMessagesValidated: 43,
     mode: 'release',
     phase: 5,
     protocolVersion: conformanceManifests.pins.protocolVersion,
@@ -820,7 +1011,7 @@ try {
     /not a complete passing immutable release-candidate run/,
   );
   assertRejectsConformanceMutation(
-    (value) => { value.goldenMessagesValidated = 38; },
+    (value) => { value.goldenMessagesValidated = 42; },
     /not a complete passing immutable release-candidate run/,
   );
   assertRejectsConformanceMutation(
@@ -936,6 +1127,8 @@ try {
       return mainJarPath;
     if (specification.candidateArtifact === 'javadocJar')
       return javadocJarPath;
+    if (gate.id === 'matrix-closure' && specification.role === 'matrix-report')
+      return matrixReportPath;
 
     const path = fixturePath(
       'evidence/role-fixtures',
@@ -1139,6 +1332,51 @@ try {
     writeFileSync(coreJdk21DistributionPath, coreJdk21Distribution);
   }
 
+  const matrixClosureGate = ready.gates.find(({ id }) => id === 'matrix-closure');
+  function assertRejectsMatrixReport(label, text, pattern) {
+    const path = fixturePath(
+      'evidence/rejected-matrix-reports',
+      label,
+      'matrix-closure.json',
+    );
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, text);
+    assert.throws(
+      () => recordGateEvidence(
+        fixtureManifestPath,
+        candidateCommit,
+        artifactDescriptorPath,
+        matrixClosureGate.id,
+        fixturePath(`evidence/rejected-matrix-${label}.json`),
+        [`matrix-report=${path}`],
+      ),
+      pattern,
+    );
+  }
+  assertRejectsMatrixReport(
+    'generic-json',
+    '{"result":"PASS"}\n',
+    /must exactly match the canonical PASSED report/,
+  );
+  const failedMatrixReport = structuredClone(resolvedMatrixClosure.report);
+  failedMatrixReport.status = 'FAILED';
+  failedMatrixReport.dispositionCounts.CORE_COMPLETE -= 1;
+  failedMatrixReport.dispositionCounts.UNRESOLVED = 1;
+  failedMatrixReport.unresolvedRows = [{
+    id: 'MCP-BASE-005',
+    reason: 'Synthetic unresolved row.',
+  }];
+  assertRejectsMatrixReport(
+    'failed',
+    `${JSON.stringify(failedMatrixReport, null, 2)}\n`,
+    /must exactly match the canonical PASSED report/,
+  );
+  assertRejectsMatrixReport(
+    'noncanonical',
+    `${JSON.stringify(resolvedMatrixClosure.report)}\n`,
+    /must exactly match the canonical PASSED report/,
+  );
+
   for (const gate of ready.gates) {
     const rolePaths = rolePathsForGate(gate);
     if (gate.id === 'soklet-servlet-javax'
@@ -1192,6 +1430,61 @@ try {
   assert.equal(evidence.toolchains.java, '17.0.20');
   assert.equal(evidence.toolchains.toystoreJava, '25.0.4');
 
+  const savedMatrixReport = readFileSync(matrixReportPath);
+  writeFileSync(matrixReportPath, Buffer.concat([savedMatrixReport, Buffer.from('\n')]));
+  assert.throws(
+    () => assembleReleaseEvidence(
+      fixtureManifestPath,
+      candidateCommit,
+      artifactDescriptorPath,
+      gateDirectory,
+      fixturePath('evidence/rejected-tampered-matrix-raw.json'),
+    ),
+    /must exactly match the canonical PASSED report/,
+  );
+  writeFileSync(matrixReportPath, savedMatrixReport);
+
+  rmSync(matrixReportPath);
+  assert.throws(
+    () => assembleReleaseEvidence(
+      fixtureManifestPath,
+      candidateCommit,
+      artifactDescriptorPath,
+      gateDirectory,
+      fixturePath('evidence/rejected-deleted-matrix-raw.json'),
+    ),
+    /Missing retained matrix-closure report/,
+  );
+  writeFileSync(matrixReportPath, savedMatrixReport);
+
+  const matrixGateEvidencePath = resolve(gateDirectory, 'matrix-closure.json');
+  const savedMatrixGateEvidence = readFileSync(matrixGateEvidencePath);
+  const forgedMatrixReport = `${JSON.stringify(failedMatrixReport, null, 2)}\n`;
+  const forgedMatrixGateEvidence = JSON.parse(savedMatrixGateEvidence);
+  forgedMatrixGateEvidence.evidence[0].artifact.bytes = Buffer.byteLength(
+    forgedMatrixReport,
+  );
+  forgedMatrixGateEvidence.evidence[0].artifact.sha256 = sha256(
+    Buffer.from(forgedMatrixReport),
+  );
+  writeFileSync(matrixReportPath, forgedMatrixReport);
+  writeFileSync(
+    matrixGateEvidencePath,
+    `${JSON.stringify(forgedMatrixGateEvidence, null, 2)}\n`,
+  );
+  assert.throws(
+    () => assembleReleaseEvidence(
+      fixtureManifestPath,
+      candidateCommit,
+      artifactDescriptorPath,
+      gateDirectory,
+      fixturePath('evidence/rejected-forged-matrix-raw-and-metadata.json'),
+    ),
+    /must exactly match the canonical PASSED report/,
+  );
+  writeFileSync(matrixReportPath, savedMatrixReport);
+  writeFileSync(matrixGateEvidencePath, savedMatrixGateEvidence);
+
   function assertRejectsGateEvidenceMutation(gateId, label, mutate, pattern) {
     const path = resolve(gateDirectory, `${gateId}.json`);
     const saved = readFileSync(path, 'utf8');
@@ -1216,6 +1509,12 @@ try {
     'wrong-contract',
     (value) => { value.receipt.contractId = 'soklet.release.substituted.v1'; },
     /typed receipt does not match/,
+  );
+  assertRejectsGateEvidenceMutation(
+    'matrix-closure',
+    'forged-matrix-artifact-metadata',
+    (value) => { value.evidence[0].artifact.sha256 = '0'.repeat(64); },
+    /artifact metadata does not match the retained raw report/,
   );
   assertRejectsGateEvidenceMutation(
     'candidate-localization',

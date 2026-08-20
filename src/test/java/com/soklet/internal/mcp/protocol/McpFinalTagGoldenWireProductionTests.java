@@ -61,8 +61,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class McpFinalTagGoldenWireProductionTests {
@@ -101,6 +103,31 @@ public class McpFinalTagGoldenWireProductionTests {
 							"MCP-Protocol-Version", "2025-11-25"),
 					new McpChunkedHttpClient.RequestHeader("Mcp-Method", "server/discover")),
 					400, fixture("phase-3/unsupported-version-error.json"));
+		}
+	}
+
+	@Test
+	public void checked_in_phase_3_unknown_method_messages_match_the_production_listener()
+			throws Exception {
+		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
+				McpImplementationMetadata.withNameAndVersion(
+						"soklet-final-schema-golden", "3.6.0-SNAPSHOT"))
+				.build();
+		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
+				CorsAuthorizer.rejectAllInstance(),
+				ignored -> McpAdmissionDecision.acceptedAnonymous());
+
+		try (McpHttpServerRuntime runtime = new McpHttpServerRuntime(
+				McpHttpTransportConfiguration.productionDefaults(0), policy, endpoint)) {
+			int port = runtime.start().getPort();
+			assertErrorExchange(port, fixture("phase-3/unknown-method-request.json"),
+					List.of(new McpChunkedHttpClient.RequestHeader(
+							"MCP-Protocol-Version", PROTOCOL_VERSION),
+						new McpChunkedHttpClient.RequestHeader(
+								"Mcp-Method", "example/unknown")),
+					404, McpJsonRpcError.METHOD_NOT_FOUND,
+					"phase-3-unknown-method",
+					fixture("phase-3/unknown-method-error.json"));
 		}
 	}
 
@@ -400,6 +427,80 @@ public class McpFinalTagGoldenWireProductionTests {
 	}
 
 	@Test
+	public void checked_in_phase_5_missing_capability_messages_match_the_production_listener()
+			throws Exception {
+		AtomicInteger admissionInvocations = new AtomicInteger();
+		AtomicInteger requestLimiterInvocations = new AtomicInteger();
+		AtomicInteger toolLimiterInvocations = new AtomicInteger();
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		McpInputRequestDeclaration form = McpInputRequestDeclaration
+				.fromElicitationForm(McpInputRequirement.REQUIRED);
+		McpInputRequestDeclaration url = McpInputRequestDeclaration
+				.fromElicitationUrl(McpInputRequirement.REQUIRED);
+		McpInputRequestDeclaration sampling = McpInputRequestDeclaration
+				.fromSampling(new LinkedHashSet<>(List.of(
+						McpClientCapability.SAMPLING_CONTEXT,
+						McpClientCapability.SAMPLING_TOOLS)),
+						McpInputRequirement.REQUIRED);
+		McpInputRequestDeclaration roots = McpInputRequestDeclaration
+				.fromRoots(McpInputRequirement.REQUIRED);
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName("golden.missing-capability")
+				.jsonArguments()
+				.handler((request, arguments, features) -> {
+					handlerInvocations.incrementAndGet();
+					return McpCompleteResult.fromToolText("unexpected handler execution");
+				})
+				.mayRequestInput(form, url, sampling, roots)
+				.build();
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
+				.serverInformation(McpImplementation.withNameAndVersion(
+						"soklet-final-schema-golden", "3.6.0-SNAPSHOT").build())
+				.tool(tool)
+				.build();
+		McpServer server = McpServer.withPort(0)
+				.host("127.0.0.1")
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(context -> {
+					admissionInvocations.incrementAndGet();
+					return com.soklet.McpAdmissionDecision.accepted();
+				})
+				.requestRateLimiter(context -> {
+					requestLimiterInvocations.incrementAndGet();
+					return McpRateLimitDecision.allowed();
+				})
+				.toolRateLimiter(context -> {
+					toolLimiterInvocations.incrementAndGet();
+					return McpRateLimitDecision.allowed();
+				})
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.allowedHosts(Set.of("127.0.0.1"))
+				.build();
+
+		try {
+			server.start();
+			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+			assertErrorExchange(port,
+					fixture("phase-5/missing-capability-tool-request.json"), List.of(
+							new McpChunkedHttpClient.RequestHeader(
+									"MCP-Protocol-Version", PROTOCOL_VERSION),
+							new McpChunkedHttpClient.RequestHeader(
+									"Mcp-Method", "tools/call"),
+							new McpChunkedHttpClient.RequestHeader(
+									"Mcp-Name", "golden.missing-capability")),
+					400, McpJsonRpcError.MISSING_REQUIRED_CLIENT_CAPABILITY,
+					"phase-5-missing-capability",
+					fixture("phase-5/missing-capability-error.json"));
+			Assertions.assertEquals(0, admissionInvocations.get());
+			Assertions.assertEquals(0, requestLimiterInvocations.get());
+			Assertions.assertEquals(0, toolLimiterInvocations.get());
+			Assertions.assertEquals(0, handlerInvocations.get());
+		} finally {
+			server.stop();
+		}
+	}
+
+	@Test
 	public void checked_in_phase_5_progress_messages_match_the_production_listener()
 			throws Exception {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
@@ -691,6 +792,35 @@ public class McpFinalTagGoldenWireProductionTests {
 			Assertions.assertEquals("application/json", head.singleHeader("Content-Type"));
 			Assertions.assertEquals("no-store", head.singleHeader("Cache-Control"));
 			Assertions.assertEquals(expectedResponse, client.readFixedBody(head));
+		}
+	}
+
+	private static void assertErrorExchange(int port, String request,
+			List<McpChunkedHttpClient.RequestHeader> headers, int expectedStatus,
+			int expectedCode, String expectedRequestId, String expectedResponse)
+			throws Exception {
+		try (McpChunkedHttpClient client =
+					McpChunkedHttpClient.postMcpMessage(port, request, headers)) {
+			McpChunkedHttpClient.HttpResponseHead head = client.readHead();
+			Assertions.assertEquals(expectedStatus, head.status(), head.raw());
+			Assertions.assertEquals("application/json",
+					head.singleHeader("Content-Type"));
+			Assertions.assertEquals("no-store", head.singleHeader("Cache-Control"));
+			String response = client.readFixedBody(head);
+			Assertions.assertEquals(expectedResponse, response);
+
+			McpJsonRpcEnvelope.ErrorResponse errorResponse = Assertions.assertInstanceOf(
+					McpJsonRpcEnvelope.ErrorResponse.class,
+					new McpJsonRpcEnvelopeCodec(new McpJsonCodec(
+							McpJsonLimits.productionDefaults())).decode(response));
+			Assertions.assertEquals(new McpJsonRpcId.StringId(expectedRequestId),
+					errorResponse.id().orElseThrow());
+			com.soklet.internal.mcp.protocol.McpJsonObject error =
+					Assertions.assertInstanceOf(
+							com.soklet.internal.mcp.protocol.McpJsonObject.class,
+							errorResponse.error());
+			Assertions.assertEquals(new McpJsonNumber(expectedCode),
+					error.members().get("code"));
 		}
 	}
 

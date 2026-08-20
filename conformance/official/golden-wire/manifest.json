@@ -34,6 +34,26 @@
       "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_3_messages_match_the_production_listener"
     },
     {
+      "name": "phase-3-unknown-method-error",
+      "phase": 3,
+      "source": "production",
+      "path": "phase-3/unknown-method-error.json",
+      "sha256": "a678611cec7d13fa9724fb89473eb56ce98aeed0a9aaccaa69d2d0c320281c7e",
+      "schemaRef": "#/$defs/JSONRPCErrorResponse",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_3_unknown_method_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-3-unknown-method-request",
+      "phase": 3,
+      "source": "production",
+      "path": "phase-3/unknown-method-request.json",
+      "sha256": "b9e86b3fc33c281ee467f960d622b1005f246ac04de42712c282272547d69d62",
+      "schemaRef": "#/$defs/JSONRPCRequest",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_3_unknown_method_messages_match_the_production_listener"
+    },
+    {
       "name": "phase-3-unsupported-version-error",
       "phase": 3,
       "source": "production",
@@ -252,6 +272,26 @@
       "schemaRef": "#/$defs/CallToolResultResponse",
       "transportForm": "http-json-body",
       "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_input_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-5-missing-capability-error",
+      "phase": 5,
+      "source": "production",
+      "path": "phase-5/missing-capability-error.json",
+      "sha256": "8cec2e410f51a0f86609b50ab0a0726236a1903965818fd9acdc55140e115207",
+      "schemaRef": "#/$defs/MissingRequiredClientCapabilityError",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_missing_capability_messages_match_the_production_listener"
+    },
+    {
+      "name": "phase-5-missing-capability-tool-request",
+      "phase": 5,
+      "source": "production",
+      "path": "phase-5/missing-capability-tool-request.json",
+      "sha256": "0ffea73f5cd9358528dec38a12adcaba8910fd61728433c6c06a6bf6f2e56a7b",
+      "schemaRef": "#/$defs/CallToolRequest",
+      "transportForm": "http-json-body",
+      "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_missing_capability_messages_match_the_production_listener"
     },
     {
       "name": "phase-5-progress-notification-0",

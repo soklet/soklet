@@ -1,0 +1,3283 @@
+{
+  "formatVersion": 1,
+  "protocolVersion": "2026-07-28",
+  "releaseVersion": "3.6.0",
+  "sourceMatrixPath": "mcp/MCP_CONFORMANCE_MATRIX.md",
+  "sourceMatrixLastUpdated": "2026-08-20",
+  "sourceMatrixSha256": "6cc7de8364c05dbd1ffb7abfec04b8e1f35c6d286472f15a00642fdd05689d77",
+  "releaseGateUniverse": [
+    "candidate-build",
+    "core-jdk-21",
+    "core-jdk-25",
+    "isolated-install",
+    "api-freeze",
+    "candidate-javadocs",
+    "static-analysis",
+    "spotbugs",
+    "schema-replay",
+    "fuzz-replay",
+    "fuzz-nightly-history",
+    "soak-smoke",
+    "soak-nightly-history",
+    "release-soak",
+    "localization-fleet",
+    "operational-history",
+    "release-scans",
+    "mcp-benchmarks",
+    "matrix-closure",
+    "candidate-conformance",
+    "candidate-localization",
+    "barebones-app",
+    "soklet-servlet-javax",
+    "soklet-servlet-jakarta",
+    "toystore-app",
+    "soklet-otel",
+    "soklet-website",
+    "typescript-interop",
+    "go-interop"
+  ],
+  "rows": [
+    {
+      "id": "MCP-BASE-001",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/main/java/com/soklet/internal/mcp/protocol/McpJsonRpcEnvelope.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-BASE-002",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecFuzzTest.java",
+        "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpJsonRpcEnvelopeCodecFuzzTest.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonRpcEnvelopeCodecTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-BASE-003",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonRpcEnvelopeCodecTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-BASE-004",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-BASE-005",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpInputResponsesPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpRequestStatePublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFinalTagGoldenWireProductionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonRpcEnvelopeCodecTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpWireDtoSketchTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "The exhaustive result-envelope evidence gate is still open."
+    },
+    {
+      "id": "MCP-BASE-006",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpHandlerInterceptionPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpServerCapabilityRegistryTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpWireDtoSketchTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-BASE-007",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonRpcEnvelopeCodecTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonRpcErrorTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-BASE-008",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonRpcErrorTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-BASE-009",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFinalTagGoldenWireProductionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonRpcErrorTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-BASE-010",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonRpcErrorTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-BASE-011",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonRpcEnvelopeCodecTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "Public extension-notification API and official-suite evidence remain pending."
+    },
+    {
+      "id": "MCP-BASE-012",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFinalTagGoldenWireProductionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpStreamTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-BASE-013",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpRequestStatePublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerConnectionContractTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-BASE-014",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-BASE-015",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/McpRequestStatePublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFrameworkRequestStateRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "The explicit durable-handle documentation example remains open."
+    },
+    {
+      "id": "MCP-BASE-016",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/schema/McpRuntimeToolInputSchemaBridgeTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileManifestTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-BASE-017",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileManifestTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileOfficialSuiteTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-BASE-018",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-BASE-019",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "fuzz/src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileFuzzTest.java",
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileLimitTests.java"
+      ],
+      "releaseGates": [
+        "candidate-build",
+        "core-jdk-21",
+        "core-jdk-25"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25."
+    },
+    {
+      "id": "MCP-BASE-020",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpRequestWireMapperTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpWireDtoSketchTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-BASE-021",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidatorTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpRequestWireMapperTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-BASE-022",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFinalTagGoldenWireProductionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerConnectionContractTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerModernHeaderTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpRequestWireMapperTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-BASE-023",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFinalTagGoldenWireProductionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpInputRequestContractTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpProgressPublicRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-BASE-024",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/McpBootstrapValueTests.java",
+        "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "The self-report-versus-identity negative inventory remains pending."
+    },
+    {
+      "id": "MCP-BASE-025",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFinalTagGoldenWireProductionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-BASE-026",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpRequestPropagationTests.java",
+        "src/test/java/com/soklet/TraceContextTests.java"
+      ],
+      "releaseGates": [
+        "soklet-otel"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: soklet-otel."
+    },
+    {
+      "id": "MCP-BASE-027",
+      "disposition": "NOT_APPLICABLE",
+      "evidence": [
+        "MCP.md"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-VER-001",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFinalTagGoldenWireProductionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-VER-002",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpServerPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-VER-003",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpRequestWireMapperTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "The unsupported-extension fallback recorded for Phase 3 is not closed."
+    },
+    {
+      "id": "MCP-VER-004",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "The exhaustive legacy-path and earlier metadata-error evidence remain pending."
+    },
+    {
+      "id": "MCP-VER-005",
+      "disposition": "NOT_APPLICABLE",
+      "evidence": [
+        "MCP.md"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-CAP-001",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpResourcePublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpServerCapabilityRegistryTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-CAP-002",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpLocalizationReloadRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpServerCapabilityRegistryTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-CAP-003",
+      "disposition": "NOT_APPLICABLE",
+      "evidence": [
+        "MCP.md"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-CAP-004",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpRequestObservationPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpRequestWireMapperTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpServerCapabilityRegistryTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-HTTP-001",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonRpcEnvelopeCodecTests.java"
+      ],
+      "releaseGates": [
+        "candidate-javadocs",
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-javadocs, candidate-conformance."
+    },
+    {
+      "id": "MCP-HTTP-002",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-HTTP-003",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpServerPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-HTTP-004",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpServerPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerConnectionContractTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerPolicyPipelineTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-HTTP-005",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-HTTP-006",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-HTTP-007",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFinalTagGoldenWireProductionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpProgressPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-HTTP-008",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-HTTP-009",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-HTTP-010",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerModernHeaderTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-HTTP-011",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFinalTagGoldenWireProductionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-HTTP-012",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerModernHeaderTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-HTTP-013",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpAnnotatedToolProcessorRuntimeTests.java",
+        "src/test/java/com/soklet/McpAnnotationProcessorValidationTests.java",
+        "src/test/java/com/soklet/McpMirroredHeaderPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpToolRegistrationTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerCustomHeaderTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpSchemaUseValidatorTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpTypeMirrorTypedSchemaBridgeTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpTypedSchemaCompilerTests.java"
+      ],
+      "releaseGates": [
+        "candidate-javadocs",
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-javadocs, candidate-conformance."
+    },
+    {
+      "id": "MCP-HTTP-014",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpMirroredHeaderCodecFuzzTest.java",
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerCustomHeaderTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerModernHeaderTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpMirroredHeaderCodecTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-HTTP-015",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpAnnotatedToolProcessorRuntimeTests.java",
+        "src/test/java/com/soklet/McpMirroredHeaderPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerCustomHeaderTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerModernHeaderTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-HTTP-016",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpMirroredHeaderPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerCustomHeaderTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerModernHeaderTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-HTTP-017",
+      "disposition": "NOT_APPLICABLE",
+      "evidence": [
+        "MCP.md"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-HTTP-018",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerConnectionContractTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "The migration negative inventory remains pending."
+    },
+    {
+      "id": "MCP-HTTP-019",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-HTTP-020",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/McpMirroredHeaderPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpPreAdmissionMetricsEventPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpProtocolAndUnknownHeaderMetricsAggregationTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerCustomHeaderTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpUnknownMirroredHeaderNameDiagnosticsTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "Broader core log/privacy and official-scenario evidence remain open."
+    },
+    {
+      "id": "MCP-HTTP-021",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/McpMirroredHeaderPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerCustomHeaderTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "The independent origin-policy golden remains pending."
+    },
+    {
+      "id": "MCP-HTTP-022",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-HTTP-023",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-HTTP-024",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "Independent byte-golden, public-documentation, and official-suite evidence remain pending."
+    },
+    {
+      "id": "MCP-HTTP-025",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/McpInputResponsesPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpRequestStatePublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "The exhaustive HTTP no-store golden remains pending."
+    },
+    {
+      "id": "MCP-PROG-001",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFinalTagGoldenWireProductionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpProgressPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpRequestWireMapperTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-PROG-002",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpProgressUpdateTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpProgressPublicRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-PROG-003",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "soak/src/test/java/com/soklet/McpCrossFeatureSoakTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpProgressPublicRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "release-soak",
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: release-soak, candidate-conformance."
+    },
+    {
+      "id": "MCP-PROG-004",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "soak/src/test/java/com/soklet/McpCrossFeatureSoakTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpProgressPublicRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "soak-nightly-history",
+        "release-soak"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: soak-nightly-history, release-soak."
+    },
+    {
+      "id": "MCP-PROG-005",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpApplicationExecutionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-CANCEL-001",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpProgressPublicRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-CANCEL-002",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-CANCEL-003",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpServerPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpApplicationExecutionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-CANCEL-004",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "soak/src/test/java/com/soklet/McpCrossFeatureSoakTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpMultiRoundTripTerminationRaceTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpProgressAndCancelationRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpProgressPublicRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "soak-nightly-history",
+        "release-soak"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: soak-nightly-history, release-soak."
+    },
+    {
+      "id": "MCP-CANCEL-005",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonRpcEnvelopeCodecTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-CANCEL-006",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpProgressAndCancelationRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpProgressPublicRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-SUB-001",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-SUB-002",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFinalTagGoldenWireProductionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-SUB-003",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-SUB-004",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-SUB-005",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-SUB-006",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-SUB-007",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "soak/src/test/java/com/soklet/McpCrossFeatureSoakTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeBoundaryTests.java"
+      ],
+      "releaseGates": [
+        "soak-nightly-history",
+        "release-soak",
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: soak-nightly-history, release-soak, candidate-conformance."
+    },
+    {
+      "id": "MCP-SUB-008",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpSubscriptionConfigurationTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeBoundaryTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-SUB-009",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "soak/src/test/java/com/soklet/McpCrossFeatureSoakTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeBoundaryTests.java"
+      ],
+      "releaseGates": [
+        "release-soak"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: release-soak."
+    },
+    {
+      "id": "MCP-SUB-010",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpLocalizationReloadRuntimeTests.java",
+        "src/test/java/com/soklet/McpSubscriptionConfigurationTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpServerCapabilityRegistryTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-MRTR-001",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpInputResponsesPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpRequestStatePublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidatorTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFrameworkRequestStateRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpStreamTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-MRTR-002",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpWireDtoSketchTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-MRTR-003",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpMultiRoundTripDescriptorTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidatorTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpWireDtoSketchTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-MRTR-004",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpMultiRoundTripDescriptorTests.java",
+        "src/test/java/com/soklet/McpRequestStatePublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpWireDtoSketchTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-MRTR-005",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidatorTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpInputRequestContractTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-MRTR-006",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpRequestStatePublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpSecurityControlsTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFrameworkRequestStateRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-MRTR-007",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFrameworkRequestStateRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpRequestStateBindingTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpRequestStatePlaintextCodecTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-MRTR-008",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFrameworkRequestStateRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpMultiRoundTripTerminationRaceTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpRequestStatePlaintextCodecTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-MRTR-009",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpInputResponsesPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpRequestStatePublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpInputResponseValidatorTests.java",
+        "src/test/java/examples/mcp/McpInputSecurityApplicationPatternsTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-MRTR-010",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpInputResponsesPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpRequestStatePublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpInputRequestContractTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpMultiRoundTripTerminationRaceTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpRequestStatePlaintextCodecTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-MRTR-011",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpMultiRoundTripTerminationRaceTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpProgressPublicRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "The external-proxy capability fixture remains open."
+    },
+    {
+      "id": "MCP-MRTR-012",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpInputRequestContractTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-MRTR-013",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpRequestStatePlaintextCodecFuzzTest.java",
+        "src/test/java/com/soklet/McpSecurityControlsTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFrameworkRequestStateRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpRequestStatePlaintextCodecTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-MRTR-014",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpRequestStatePublicRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-MRTR-015",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpSecurityControlsTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-ELICIT-001",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidatorTests.java",
+        "src/test/java/examples/mcp/McpInputSecurityApplicationPatternsTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-ELICIT-002",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidatorTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpWireDtoSketchTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-ELICIT-003",
+      "disposition": "APPLICATION_OWNED",
+      "evidence": [
+        "src/test/java/examples/mcp/McpInputSecurityApplicationPatternsTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "Durable elicitation state persistence and user binding are explicitly application-owned."
+    },
+    {
+      "id": "MCP-ELICIT-004",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidatorTests.java",
+        "src/test/java/examples/mcp/McpInputSecurityApplicationPatternsTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-ELICIT-005",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/examples/mcp/McpInputSecurityApplicationPatternsTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-SAMPLING-001",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidatorTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-SAMPLING-002",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidatorTests.java",
+        "src/test/java/examples/mcp/McpInputSecurityApplicationPatternsTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-SAMPLING-003",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidatorTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-ROOTS-001",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpInputResponsesPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidatorTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpInputResponseValidatorTests.java",
+        "src/test/java/examples/mcp/McpInputSecurityApplicationPatternsTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-DISC-001",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpMultiEndpointPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpServerCapabilityRegistryTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-DISC-002",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpBootstrapValueTests.java",
+        "src/test/java/com/soklet/McpServerPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpServerCapabilityRegistryTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-TOOL-001",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpServerCapabilityRegistryTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-TOOL-002",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpToolRegistrationTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-TOOL-003",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/schema/McpRuntimeToolInputSchemaBridgeTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpRuntimeTypedSchemaTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpSchemaUseValidatorTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpTypedSchemaCompilerTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-TOOL-004",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpToolRegistrationTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-TOOL-005",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpAnnotatedToolProcessorRuntimeTests.java",
+        "src/test/java/com/soklet/McpToolRegistrationTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpSchemaUseValidatorTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpTypedSchemaCompilerTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-TOOL-006",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpAnnotatedToolProcessorRuntimeTests.java",
+        "src/test/java/com/soklet/McpToolOutputSanitizerPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpToolRegistrationTests.java",
+        "src/test/java/com/soklet/McpTypedToolPublicRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-TOOL-007",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpToolContentPublicRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-TOOL-008",
+      "disposition": "NOT_APPLICABLE",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpServerCapabilityRegistryTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-TOOL-009",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "conformance/official/scenarios.json",
+        "release/release-validation-manifest.json"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-TOOL-010",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpToolOutputSanitizerPublicRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-PROMPT-001",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpPromptPublicRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-PROMPT-002",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpPromptRegistrationTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-PROMPT-003",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpPromptRegistrationTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-PROMPT-004",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpInputResponsesPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpPromptPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpRequestStatePublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFinalTagGoldenWireProductionTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-PROMPT-005",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpPromptRegistrationTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-PROMPT-006",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/McpPromptPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpPromptRegistrationTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "The secured prompt example evidence remains pending."
+    },
+    {
+      "id": "MCP-RESOURCE-001",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpResourcePublicRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-RESOURCE-002",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpResourceRegistrationTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-RESOURCE-003",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpResourcePublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFinalTagGoldenWireProductionTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-RESOURCE-004",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFinalTagGoldenWireProductionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-RESOURCE-005",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpResourcePublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-RESOURCE-006",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "MCP.md"
+      ],
+      "releaseGates": [],
+      "reason": "The secured filesystem-resource application example remains pending."
+    },
+    {
+      "id": "MCP-RESOURCE-007",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/McpResourceRegistrationTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "Deployment guidance for supported resource URI schemes remains pending."
+    },
+    {
+      "id": "MCP-RESOURCE-008",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpServerCapabilityRegistryTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-CACHE-001",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpResourcePublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-CACHE-002",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpInputResponsesPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpRequestStatePublicRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-CACHE-003",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpResourceRegistrationTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-CACHE-004",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpResourceRegistrationTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-CACHE-005",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpResourcePublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpResourceRegistrationTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-CACHE-006",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpServerCapabilityRegistryTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-PAGE-001",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpResourcePublicRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-PAGE-002",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpResourcePublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-PAGE-003",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpResourceRegistrationTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-PAGE-004",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/McpResourcePublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "Final application guidance for invalid cursors remains pending."
+    },
+    {
+      "id": "MCP-PAGE-005",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpResourcePublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpStaticResponsePreflightTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "MCP-PAGE-006",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/McpResourcePublicRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "The distributed portable-cursor fixture remains pending."
+    },
+    {
+      "id": "MCP-PAGE-007",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "MCP.md"
+      ],
+      "releaseGates": [],
+      "reason": "The stable-cursor example and invalidation/expiry review remain pending."
+    },
+    {
+      "id": "MCP-AUTH-001",
+      "disposition": "NOT_APPLICABLE",
+      "evidence": [
+        "MCP.md"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-AUTH-002",
+      "disposition": "APPLICATION_OWNED",
+      "evidence": [
+        "MCP.md",
+        "SECURITY.md"
+      ],
+      "releaseGates": [],
+      "reason": "The deployment owns RFC 9728 protected-resource metadata publication and its authorization-server listing."
+    },
+    {
+      "id": "MCP-AUTH-003",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerPolicyPipelineTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "Absolute resource_metadata and scope-challenge integration remain pending."
+    },
+    {
+      "id": "MCP-AUTH-004",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "scripts/validate-release-candidate.sh"
+      ],
+      "releaseGates": [
+        "toystore-app"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: toystore-app."
+    },
+    {
+      "id": "MCP-AUTH-005",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "scripts/validate-release-candidate.sh"
+      ],
+      "releaseGates": [
+        "toystore-app"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: toystore-app."
+    },
+    {
+      "id": "MCP-AUTH-006",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerConnectionContractTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerPolicyPipelineTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance",
+        "toystore-app"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance, toystore-app."
+    },
+    {
+      "id": "MCP-AUTH-007",
+      "disposition": "APPLICATION_OWNED",
+      "evidence": [
+        "MCP.md",
+        "SECURITY.md"
+      ],
+      "releaseGates": [],
+      "reason": "The protected-resource deployment owns challenge scopes and must not require offline_access."
+    },
+    {
+      "id": "MCP-AUTH-008",
+      "disposition": "NOT_APPLICABLE",
+      "evidence": [
+        "MCP.md"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-AUTH-009",
+      "disposition": "NOT_APPLICABLE",
+      "evidence": [
+        "MCP.md"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-API-001",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "scripts/verify-mcp-api-freezes.sh",
+        "src/test/java/com/soklet/McpPublicApiInventoryTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-API-002",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "scripts/api-diff/verify.sh",
+        "scripts/verify-mcp-api-freezes.sh",
+        "src/test/java/com/soklet/McpPublicApiInventoryTests.java",
+        "src/test/java/com/soklet/McpPublicJavadocTests.java",
+        "verification/interoperability/go/verify.sh",
+        "verification/interoperability/typescript/verify.sh",
+        "verification/localization/verify.sh"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-API-003",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpToolRegistrationTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-API-004",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpAnnotatedToolProcessorRuntimeTests.java",
+        "src/test/java/com/soklet/McpMirroredHeaderPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpTypeMirrorTypedSchemaBridgeTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpTypedSchemaFrontendParityTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-API-005",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java",
+        "src/test/java/com/soklet/McpToolRegistrationTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-API-006",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpAnnotatedResourceProcessorRuntimeTests.java",
+        "src/test/java/com/soklet/McpAnnotatedToolProcessorRuntimeTests.java",
+        "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java",
+        "src/test/java/com/soklet/McpPublicJavadocTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpProgressPublicRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-API-007",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpHandlerInterceptionPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpRequestObservationPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpRequestPropagationTests.java",
+        "src/test/java/com/soklet/McpTypedToolPublicRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-API-008",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpMultiEndpointPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "SOK-API-009",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpHandlerInterceptionPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpInterceptionConfigurationTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-EXEC-001",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpServerPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpTypedToolPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/transport/McpTransportContainmentSpikeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-build",
+        "core-jdk-21",
+        "core-jdk-25"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25."
+    },
+    {
+      "id": "SOK-EXEC-002",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpServerPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpTypedToolPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpApplicationExecutionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java"
+      ],
+      "releaseGates": [
+        "candidate-build",
+        "core-jdk-21",
+        "core-jdk-25"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25."
+    },
+    {
+      "id": "SOK-EXEC-003",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpHandlerInterceptionPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpApplicationInterceptionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerPolicyPipelineTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-EXEC-004",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpTypedToolPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerPolicyPipelineTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-EXEC-005",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "Exhaustive simultaneous queue/deadline/disconnect races remain open."
+    },
+    {
+      "id": "SOK-EXEC-006",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "soak/src/test/java/com/soklet/McpCrossFeatureSoakTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpMultiRoundTripTerminationRaceTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpProgressPublicRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-build",
+        "core-jdk-21",
+        "core-jdk-25",
+        "release-soak"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25, release-soak."
+    },
+    {
+      "id": "SOK-EXEC-007",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "soak/src/test/java/com/soklet/McpCrossFeatureSoakTests.java",
+        "src/test/java/com/soklet/SokletMcpLifecycleTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpMultiRoundTripTerminationRaceTests.java"
+      ],
+      "releaseGates": [
+        "candidate-build",
+        "core-jdk-21",
+        "core-jdk-25",
+        "soak-nightly-history",
+        "release-soak"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25, soak-nightly-history, release-soak."
+    },
+    {
+      "id": "SOK-EXEC-008",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "SOK-EXEC-009",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpMultiEndpointCapacityPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-build",
+        "core-jdk-21",
+        "core-jdk-25"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25."
+    },
+    {
+      "id": "SOK-VALID-001",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/McpMirroredHeaderPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerCustomHeaderTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerModernHeaderTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerPolicyPipelineTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "Independent byte-golden ordering evidence remains pending."
+    },
+    {
+      "id": "SOK-VALID-002",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpCursorValidatorFuzzTest.java",
+        "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpJsonRpcEnvelopeCodecFuzzTest.java",
+        "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpMirroredHeaderCodecFuzzTest.java",
+        "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpRequestStatePlaintextCodecFuzzTest.java",
+        "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpSimulationCaptureFuzzTest.java",
+        "fuzz/src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileFuzzTest.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileLimitTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpTypedJsonBinderTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpTypedSchemaCompilerTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "Scheduled coverage, corpus saturation, and complete transport/result coverage remain open."
+    },
+    {
+      "id": "SOK-VALID-003",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpAnnotatedToolProcessorRuntimeTests.java",
+        "src/test/java/com/soklet/McpToolRegistrationTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpRuntimeTypedSchemaTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpTypeMirrorTypedSchemaBridgeTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpTypeMirrorTypedTypeModelTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpTypedSchemaCompilerTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpTypedSchemaFrontendParityTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-VALID-004",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/schema/McpRuntimeTypedSchemaCompilerTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpTypedJsonBinderTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-VALID-005",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecFuzzTest.java",
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java"
+      ],
+      "releaseGates": [
+        "candidate-build",
+        "core-jdk-21",
+        "core-jdk-25"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25."
+    },
+    {
+      "id": "SOK-VALID-006",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileManifestTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileOfficialSuiteTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "SOK-VALID-007",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpAnnotationProcessorValidationTests.java",
+        "src/test/java/com/soklet/McpResourcePublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpResourceRegistrationTests.java",
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-VALID-008",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpHandlerInterceptionPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpToolOutputSanitizerPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpProgressPublicRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-ERROR-001",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/main/java/com/soklet/McpJsonRpcError.java",
+        "src/main/java/com/soklet/internal/mcp/protocol/McpJsonRpcError.java",
+        "src/test/java/com/soklet/McpMirroredHeaderPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerCustomHeaderTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerPolicyPipelineTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "The independent exhaustive golden-error matrix remains pending."
+    },
+    {
+      "id": "SOK-ERROR-002",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpInputResponsesPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpMirroredHeaderPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpRequestStatePublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFinalTagGoldenWireProductionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerPolicyPipelineTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "Progress/commit races, a production capability golden, and the exhaustive byte matrix remain open."
+    },
+    {
+      "id": "SOK-RATE-001",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpRateLimiterTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-RATE-002",
+      "disposition": "NOT_APPLICABLE",
+      "evidence": [
+        "MCP.md"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-RATE-003",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpAnnotatedToolProcessorRuntimeTests.java",
+        "src/test/java/com/soklet/McpTypedToolPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerPolicyPipelineTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-RATE-004",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpAnnotatedToolProcessorRuntimeTests.java",
+        "src/test/java/com/soklet/McpMultiEndpointPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpToolRegistrationTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-RATE-005",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpRequestPolicyTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-RATE-006",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/McpTypedToolPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerPolicyPipelineTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "The compound limiter no-refund matrix remains open."
+    },
+    {
+      "id": "SOK-RATE-007",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerPolicyPipelineTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "The independent rate-limit golden remains pending."
+    },
+    {
+      "id": "SOK-RATE-008",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpRateLimitIdentityPublicRuntimeTests.java",
+        "src/test/java/com/soklet/UtilitiesTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-RATE-009",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpRateLimiterTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-CORS-001",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-CORS-002",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpServerPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-CORS-003",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/CorsAuthorizerTransportNeutralPreflightTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-CORS-004",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpServerPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-CORS-005",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/McpMirroredHeaderPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerConnectionContractTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerCustomHeaderTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "The independent CORS golden remains pending."
+    },
+    {
+      "id": "SOK-CORS-006",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-CORS-007",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-LIST-001",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "SOK-LIST-002",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpResourcePublicRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-LIST-003",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpAnnotationProcessorValidationTests.java",
+        "src/test/java/com/soklet/McpResourceRegistrationTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-LIST-004",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpCursorValidatorFuzzTest.java",
+        "src/test/java/com/soklet/McpResourcePublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-LIST-005",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpResourcePublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpResourceRegistrationTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-LIST-006",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpCursorValidatorFuzzTest.java",
+        "src/test/java/com/soklet/McpResourcePublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpStaticResponsePreflightTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-RESOURCE-001",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpAnnotationProcessorValidationTests.java",
+        "src/test/java/com/soklet/McpResourcePublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-RESOURCE-002",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpAnnotationProcessorValidationTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "SOK-STATE-001",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpSecurityControlsTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-STATE-002",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/McpSecurityControlsTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "Release-document review of the protected-state cryptographic profile remains open."
+    },
+    {
+      "id": "SOK-STATE-003",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpSecurityControlsTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-STATE-004",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpSecurityControlsTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-STATE-005",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpSecurityControlsTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-STATE-006",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpSecurityControlsTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-STATE-007",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/McpSecurityControlsTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "The final protected-state operational runbook review remains open."
+    },
+    {
+      "id": "SOK-STATE-008",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpProtectionTraceDiagnosticsPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpSecurityControlsTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-STATE-009",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpRequestStatePlaintextCodecFuzzTest.java",
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpRequestStatePublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFrameworkRequestStateRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpRequestStateBindingTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpRequestStatePlaintextCodecTests.java"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "SOK-STATE-010",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpRequestStatePublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpSecurityControlsTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFrameworkRequestStateRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-PRIV-001",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpMirroredHeaderCodecFuzzTest.java",
+        "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpRequestStatePlaintextCodecFuzzTest.java",
+        "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpSimulationCaptureFuzzTest.java",
+        "src/test/java/com/soklet/McpHandlerMetricsObservabilityTests.java",
+        "src/test/java/com/soklet/McpKeepAliveMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpObservabilityPublicApiTests.java",
+        "src/test/java/com/soklet/McpPreAdmissionMetricsEventPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpProgressAndCancelationMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpProtectionTraceDiagnosticsPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpProtocolAndUnknownHeaderMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpRequestAdmissionMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpRequestLifecycleMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpRequestObservationPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpRequestStreamLifecycleMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpSecurityControlsTests.java",
+        "src/test/java/com/soklet/McpServerStartMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpShutdownObservabilityTests.java",
+        "src/test/java/com/soklet/McpSubscriptionLifecycleMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpTraceLogRecordTests.java",
+        "src/test/java/com/soklet/McpTransportMetricsAggregationTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpTransportMetricsEventRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "Broader core privacy coverage is still open beyond application and operational ownership."
+    },
+    {
+      "id": "SOK-TRACE-001",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpRequestObservationPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpSecurityControlsTests.java"
+      ],
+      "releaseGates": [
+        "release-soak"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: release-soak."
+    },
+    {
+      "id": "SOK-TRACE-002",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpRequestObservationPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpSecurityControlsTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-TRACE-003",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpProtectionTraceDiagnosticsPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpSecurityControlsTests.java"
+      ],
+      "releaseGates": [
+        "release-soak"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: release-soak."
+    },
+    {
+      "id": "SOK-TRACE-004",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpObservabilityPublicApiTests.java",
+        "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java",
+        "src/test/java/com/soklet/McpRequestObservationPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpTraceLogRecordTests.java"
+      ],
+      "releaseGates": [
+        "release-soak",
+        "operational-history"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: release-soak, operational-history."
+    },
+    {
+      "id": "SOK-TRACE-005",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpKeepAliveMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpObservabilityPublicApiTests.java",
+        "src/test/java/com/soklet/McpProgressAndCancelationMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpProtocolAndUnknownHeaderMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpRequestAdmissionMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpRequestLifecycleMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpRequestObservationPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpRequestStreamLifecycleMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpServerStartMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpSubscriptionLifecycleMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpTraceLogRecordTests.java",
+        "src/test/java/com/soklet/McpTransportMetricsAggregationTests.java"
+      ],
+      "releaseGates": [
+        "release-soak",
+        "operational-history"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: release-soak, operational-history."
+    },
+    {
+      "id": "SOK-METRIC-001",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpHandlerMetricsObservabilityTests.java",
+        "src/test/java/com/soklet/McpKeepAliveMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpMetricsEventDeliveryPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpPreAdmissionMetricsEventPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpProgressAndCancelationMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpProtocolAndUnknownHeaderMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpRequestAdmissionMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpRequestLifecycleMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpRequestStreamLifecycleMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpServerStartMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpSubscriptionLifecycleMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpTransportMetricsAggregationTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpProgressPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpTransportMetricDrainSchedulerTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpTransportMetricsEventRuntimeTests.java",
+        "src/test/java/com/soklet/internal/microhttp/EventLoopUnexpectedTerminationTests.java"
+      ],
+      "releaseGates": [
+        "release-soak",
+        "operational-history",
+        "soklet-otel"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: release-soak, operational-history, soklet-otel."
+    },
+    {
+      "id": "SOK-METRIC-002",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpHandlerMetricsObservabilityTests.java",
+        "src/test/java/com/soklet/McpShutdownObservabilityTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-METRIC-003",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpHandlerMetricsObservabilityTests.java",
+        "src/test/java/com/soklet/McpHandlerQueueDiagnosticsPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpProtectionTraceDiagnosticsPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpServerPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpStreamSubscriptionDiagnosticsPublicRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-METRIC-004",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpHandlerMetricsObservabilityTests.java",
+        "src/test/java/com/soklet/McpKeepAliveMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpMetricsEventDeliveryPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpObservabilityPublicApiTests.java",
+        "src/test/java/com/soklet/McpPreAdmissionMetricsEventPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpProgressAndCancelationMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpProtocolAndUnknownHeaderMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpPublicApiInventoryTests.java",
+        "src/test/java/com/soklet/McpRequestAdmissionMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpRequestLifecycleMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpRequestObservationPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpRequestStreamLifecycleMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpServerStartMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpShutdownObservabilityTests.java",
+        "src/test/java/com/soklet/McpSubscriptionLifecycleMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpTransportMetricsAggregationTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpTransportMetricDrainSchedulerTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpTransportMetricsEventRuntimeTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-SIM-001",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "conformance/official/local-simulator-self-test.mjs",
+        "conformance/official/public-fixture-src/com/soklet/conformance/McpConformanceFixture.java",
+        "conformance/official/public-fixture-test-src/com/soklet/conformance/McpLocalSimulatorScenarioDriver.java",
+        "conformance/official/run-local-simulator.mjs",
+        "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpSimulationCaptureFuzzTest.java",
+        "soak/src/test/java/com/soklet/McpCrossFeatureSoakTests.java",
+        "src/test/java/com/soklet/McpSimulatorEveryOperationTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "Adversarial slow-reader and write-idle simulator equivalence remains open."
+    },
+    {
+      "id": "SOK-SHUT-001",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "soak/src/test/java/com/soklet/McpCrossFeatureSoakTests.java",
+        "src/test/java/com/soklet/SokletMcpLifecycleTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpMultiRoundTripTerminationRaceTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeBoundaryTests.java"
+      ],
+      "releaseGates": [
+        "soak-nightly-history",
+        "release-soak"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: soak-nightly-history, release-soak."
+    },
+    {
+      "id": "SOK-SHUT-002",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpMetricsEventDeliveryPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpServerStartMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpShutdownObservabilityTests.java",
+        "src/test/java/com/soklet/SokletMcpLifecycleTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java",
+        "src/test/java/com/soklet/internal/microhttp/EventLoopUnexpectedTerminationTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-SHUT-003",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpHandlerMetricsObservabilityTests.java",
+        "src/test/java/com/soklet/McpShutdownObservabilityTests.java",
+        "src/test/java/com/soklet/SokletMcpLifecycleTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpMultiRoundTripTerminationRaceTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-SHUT-004",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/SokletMcpLifecycleTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpMultiRoundTripTerminationRaceTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-SHUT-005",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/SokletMcpLifecycleTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpMultiRoundTripTerminationRaceTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-L10N-001",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpLocalizationAdversarialTests.java",
+        "src/test/java/com/soklet/McpLocalizationCatalogExtractionTests.java",
+        "src/test/java/com/soklet/McpLocalizationHandlerRuntimeTests.java",
+        "src/test/java/com/soklet/McpLocalizationPreferenceTests.java",
+        "src/test/java/com/soklet/McpLocalizationPublicApiTests.java",
+        "src/test/java/com/soklet/McpLocalizationRenderingRuntimeTests.java",
+        "src/test/java/com/soklet/McpLocalizationSubscriptionRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-build",
+        "core-jdk-21",
+        "core-jdk-25",
+        "candidate-localization"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25, candidate-localization."
+    },
+    {
+      "id": "SOK-L10N-002",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpLocalizationByteAccountingTests.java",
+        "src/test/java/com/soklet/McpLocalizationCatalogExtractionTests.java",
+        "src/test/java/com/soklet/McpLocalizationOverlayTests.java",
+        "src/test/java/com/soklet/McpLocalizationPublicApiTests.java",
+        "src/test/java/com/soklet/McpLocalizationRendererTests.java",
+        "src/test/java/com/soklet/McpLocalizationRenderingRuntimeTests.java",
+        "src/test/java/com/soklet/McpLocalizationSchemaWalkerTests.java"
+      ],
+      "releaseGates": [
+        "candidate-localization"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-localization."
+    },
+    {
+      "id": "SOK-L10N-003",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "fuzz/src/test/java/com/soklet/McpLocalizationFuzzTest.java",
+        "release/release-validation-manifest.json",
+        "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java",
+        "src/test/java/com/soklet/McpLocalizationAdversarialTests.java",
+        "src/test/java/com/soklet/McpLocalizationPreferenceTests.java",
+        "src/test/java/com/soklet/McpLocalizationPublicApiTests.java",
+        "src/test/java/com/soklet/McpLocalizationRenderingRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "fuzz-nightly-history",
+        "soak-nightly-history",
+        "release-soak",
+        "candidate-localization"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: fuzz-nightly-history, soak-nightly-history, release-soak, candidate-localization."
+    },
+    {
+      "id": "SOK-L10N-004",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpLocalizationCatalogExtractionTests.java",
+        "src/test/java/com/soklet/McpLocalizationHttpBoundaryTests.java",
+        "src/test/java/com/soklet/McpLocalizationRenderingRuntimeTests.java",
+        "src/test/java/com/soklet/McpLocalizationSubscriptionRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-build",
+        "core-jdk-21",
+        "core-jdk-25",
+        "candidate-localization"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25, candidate-localization."
+    },
+    {
+      "id": "SOK-L10N-005",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpLocalizationFleetPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpLocalizationMrtrRuntimeTests.java",
+        "src/test/java/com/soklet/McpLocalizationReloadRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "localization-fleet"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: localization-fleet."
+    },
+    {
+      "id": "SOK-L10N-006",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "fuzz/src/test/resources/com/soklet/internal/mcp/protocol/McpRequestStatePlaintextCodecFuzzTestInputs/decodeOnlyRejectsWithUniformRedactedIllegalArgumentException/canonical-v2.state",
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpLocalizationMrtrRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFrameworkRequestStateRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpRequestStateSelectedLocaleCodecTests.java"
+      ],
+      "releaseGates": [
+        "candidate-build",
+        "core-jdk-21",
+        "core-jdk-25",
+        "fuzz-nightly-history",
+        "candidate-localization"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25, fuzz-nightly-history, candidate-localization."
+    },
+    {
+      "id": "SOK-L10N-007",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "src/test/java/com/soklet/McpLocalizationHandlerRuntimeTests.java",
+        "src/test/java/com/soklet/McpLocalizationPublicApiTests.java"
+      ],
+      "releaseGates": [],
+      "reason": "The application-owned cursor/localization boundary still lacks its downstream fixture evidence."
+    },
+    {
+      "id": "SOK-L10N-008",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpLocalizationFleetPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpLocalizationPublicApiTests.java",
+        "src/test/java/com/soklet/McpLocalizationReloadRuntimeTests.java",
+        "src/test/java/com/soklet/McpLocalizationSubscriptionRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeBoundaryTests.java"
+      ],
+      "releaseGates": [
+        "soak-nightly-history",
+        "release-soak",
+        "localization-fleet"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: soak-nightly-history, release-soak, localization-fleet."
+    },
+    {
+      "id": "SOK-L10N-009",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "scripts/api-diff/verify.sh",
+        "verification/interoperability/go/verify.sh",
+        "verification/interoperability/typescript/verify.sh",
+        "verification/localization/verify.sh"
+      ],
+      "releaseGates": [
+        "candidate-javadocs",
+        "release-scans",
+        "candidate-localization",
+        "toystore-app"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-javadocs, release-scans, candidate-localization, toystore-app."
+    },
+    {
+      "id": "SOK-L10N-010",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpLocalizationCatalogExtractionTests.java",
+        "src/test/java/com/soklet/McpLocalizationRenderingRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "release-scans",
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: release-scans, candidate-conformance."
+    },
+    {
+      "id": "SOK-L10N-011",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpLocalizationFleetPublicRuntimeTests.java"
+      ],
+      "releaseGates": [
+        "candidate-build",
+        "core-jdk-21",
+        "core-jdk-25",
+        "candidate-javadocs",
+        "fuzz-nightly-history",
+        "soak-nightly-history",
+        "release-soak",
+        "localization-fleet",
+        "operational-history",
+        "release-scans",
+        "mcp-benchmarks",
+        "candidate-conformance",
+        "candidate-localization",
+        "toystore-app"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25, candidate-javadocs, fuzz-nightly-history, soak-nightly-history, release-soak, localization-fleet, operational-history, release-scans, mcp-benchmarks, candidate-conformance, candidate-localization, toystore-app."
+    },
+    {
+      "id": "SOK-CONF-001",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "conformance/official/runner-self-test.mjs",
+        "conformance/official/scenarios.json",
+        "conformance/official/self-test.mjs",
+        "conformance/official/verify.mjs",
+        "release/release-validation-manifest.json",
+        "scripts/api-diff/self-test.mjs",
+        "scripts/json-schema-test-suite/verify.mjs"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "SOK-CONF-002",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "conformance/official/adjudicate.mjs",
+        "conformance/official/expected-checks.json",
+        "release/release-validation-manifest.json"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "SOK-CONF-003",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "conformance/official/golden-wire/manifest.json",
+        "conformance/official/validate-final-tag-wire.mjs",
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFinalTagGoldenWireProductionTests.java",
+        "src/test/resources/com/soklet/internal/mcp/schema/profile-1/manifest.json"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "SOK-CONF-004",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "conformance/official/build-public-fixture.sh",
+        "conformance/official/run.mjs",
+        "release/release-validation-manifest.json"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "SOK-CONF-005",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "conformance/official/verify.mjs",
+        "release/release-validation-manifest.json"
+      ],
+      "releaseGates": [
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-conformance."
+    },
+    {
+      "id": "SOK-CONF-006",
+      "disposition": "RELEASE_GATED",
+      "evidence": [
+        "api/mcp/phase-5-freeze-rationale.md",
+        "api/mcp/phase-6-freeze-rationale.md",
+        "release/release-validation-manifest.json",
+        "scripts/verify-mcp-api-freezes.sh",
+        "scripts/verify-soak-evidence.mjs",
+        "src/test/java/com/soklet/McpConformanceSupplementManifestTests.java"
+      ],
+      "releaseGates": [
+        "candidate-build",
+        "core-jdk-21",
+        "core-jdk-25",
+        "fuzz-nightly-history",
+        "soak-nightly-history",
+        "release-soak"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25, fuzz-nightly-history, soak-nightly-history, release-soak."
+    },
+    {
+      "id": "SOK-NA-001",
+      "disposition": "NOT_APPLICABLE",
+      "evidence": [
+        "MCP.md"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-NA-002",
+      "disposition": "NOT_APPLICABLE",
+      "evidence": [
+        "MCP.md"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-NA-003",
+      "disposition": "NOT_APPLICABLE",
+      "evidence": [
+        "MCP.md"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-NA-004",
+      "disposition": "NOT_APPLICABLE",
+      "evidence": [
+        "MCP.md"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-NA-005",
+      "disposition": "NOT_APPLICABLE",
+      "evidence": [
+        "MCP.md"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-NA-006",
+      "disposition": "NOT_APPLICABLE",
+      "evidence": [
+        "MCP.md"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-NA-007",
+      "disposition": "NOT_APPLICABLE",
+      "evidence": [
+        "MCP.md"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-NA-008",
+      "disposition": "NOT_APPLICABLE",
+      "evidence": [
+        "MCP.md"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "SOK-NA-009",
+      "disposition": "NOT_APPLICABLE",
+      "evidence": [
+        "MCP.md"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "AMB-001",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/main/java/com/soklet/internal/mcp/transport/McpExecutionDefaults.java",
+        "src/test/java/com/soklet/internal/mcp/transport/McpExecutionDefaultsTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "AMB-002",
+      "disposition": "UNRESOLVED",
+      "evidence": [
+        "MCP.md"
+      ],
+      "releaseGates": [],
+      "reason": "URI-template and cursor-adjacent numeric/accounting decisions remain only partially resolved."
+    },
+    {
+      "id": "AMB-003",
+      "disposition": "CORE_COMPLETE",
+      "evidence": [
+        "src/test/java/com/soklet/McpKeepAliveMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpProgressAndCancelationMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpProtocolAndUnknownHeaderMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpRequestAdmissionMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpRequestLifecycleMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpRequestStreamLifecycleMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpServerStartMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpSubscriptionLifecycleMetricsAggregationTests.java",
+        "src/test/java/com/soklet/McpTransportMetricsAggregationTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "AMB-004",
+      "disposition": "APPLICATION_OWNED",
+      "evidence": [
+        "MCP.md",
+        "SECURITY.md"
+      ],
+      "releaseGates": [],
+      "reason": "Only a complete application deployment, not Soklet core, may claim Authorization conformance."
+    }
+  ]
+}

@@ -1998,18 +1998,27 @@ mode.
 
 Soklet 3.6.0 does not provide stdio transport, public arbitrary JSON Schema
 registration, MCP Completion, MCP logging capability, mutable tool/prompt list
-publishers, or an application result-extension registry. OAuth resource-server
-metadata and identity-provider behavior remain deployment responsibilities;
-applications may implement authentication and standards-compliant challenges
-at the admission boundary. Doing so does not by itself make core Soklet or the
-deployment fully conformant with MCP Authorization; the deployment must meet
-every applicable authorization-server and resource-server obligation.
+publishers, or an application result-extension registry. OAuth protected-
+resource metadata and identity-provider behavior remain deployment
+responsibilities. A deployment claiming MCP Authorization must publish RFC
+9728 protected-resource metadata with at least one authorization server through
+the applicable challenge URL or well-known URI, and it must not require
+`offline_access` as a protected-resource scope. Applications may implement
+authentication and standards-compliant challenges at the admission boundary.
+Doing so does not by itself make core Soklet or the deployment fully conformant
+with MCP Authorization; the deployment must meet every applicable
+authorization-server and resource-server obligation.
 
 The official MCP conformance suite is pinned and automated as release
 evidence. The earlier frozen Phase 4 candidate passed its then-active reviewed
-profile. The checked-in final-schema corpus now contains 39 production-derived
-messages, including five-message progress and subscription exchanges; that
-local wire evidence is separate from the official suite. A controlled
+profile. The checked-in final-schema corpus now contains 43 production-derived
+messages: the prior five-message progress and subscription exchanges plus
+Phase 3 unknown-method and Phase 5 missing-capability request/error pairs. That
+manifested corpus is bound to the live listener by the nine-test focused
+golden suite. Final-tag Ajv validation of the expanded corpus was not rerun
+locally because the pinned official-suite checkout was unavailable; it remains
+with candidate conformance. This local wire evidence is separate from the
+official suite. A controlled
 observation-only run of the current packaged fixture exercised all 39
 applicable pinned scenarios and recorded 147 `SUCCESS`, two exact reviewed
 `server-stateless` `SKIPPED`, and one reviewed
@@ -2026,8 +2035,15 @@ registration or client socket remains. Sustained/fleet/release-candidate
 calibration remains later work. The later atomic closeout activates all 39 exact
 profiles, preserves the 23 historical IDs, freezes the Phase 5 API, and advances
 the harness to phase 5. A fresh 39-scenario development-candidate verify passes
-all profiles, validates all 39 goldens, and records no bad outcome, standard-
-error output, or non-clean fixture exit.
+all profiles, validates all 39 then-current goldens, and records no bad outcome,
+standard-error output, or non-clean fixture exit.
+
+The later 2026-08-20 protocol/capability golden reconciliation passes the
+focused live golden suite 9/9 on local Corretto 17 and the pinned Corretto 21,
+the broader protocol/capability gate 86/86 on Corretto 17, and the runner and
+local-simulator self-tests. Full Corretto 17 clean verify passes 1,671/0/0/72
+over 462 main and 196 test sources and builds the main, sources, and Javadoc
+JARs. These are local snapshot checks, not immutable-candidate evidence.
 
 At the V21 boundary, the focused five-class simulator/API gate passed
 46/0/0/0, and the broadened adjacent authority selector passed 215/0/0/0.
@@ -2123,14 +2139,21 @@ The bounded two-listener localization fixture now covers failed reload,
 rolling revision drift without within-response mixing, node loss,
 subscription reconnect, node-local delivery, and final runtime cleanup.
 The format-v2 release contract now enumerates exactly 29 ordered gates.
-Seventeen are dispatch-configured, while six remain
-`BLOCKED_HARNESS_MISSING` and the
-six downstreams remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`; `READY` means
-configured, never passed. Scheduled/nightly and sustained fuzz/soak and
-operational history, release scans, benchmarks, automated matrix closure,
-published downstream pins, and an immutable checksum-matched candidate
-conformance/provenance run remain open. `release-scans` remains blocked on
-its exact scanner/toolchain, severity-policy, and retained-report contract.
+Eighteen are dispatch-configured, while five remain
+`BLOCKED_HARNESS_MISSING` and the six downstreams remain
+`BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving 11 fail-closed blockers;
+`READY` means configured, never passed. The matrix-closure hook is `READY`, but
+the canonical report generated from its checked-in registry remains
+deliberately `FAILED` while 33 rows are `UNRESOLVED`, so no PASS receipt can be
+recorded. A `RELEASE_GATED` row has
+candidate-contained implementation or evidence anchors and names the exact
+immutable, scheduled, sustained, or downstream gate that still owes proof; it
+does not excuse a local implementation, test, documentation, golden, or
+fixture gap. Scheduled/nightly and sustained fuzz/soak and operational
+history, release scans, benchmarks, published downstream pins, and an
+immutable checksum-matched candidate conformance/provenance run remain open.
+`release-scans` remains blocked on its exact scanner/toolchain,
+severity-policy, and retained-report contract.
 Candidate Javadoc generation/completeness is configured; public deployment is
 post-validation publication work. Production multi-host
 localization coordination remains application/deployment-owned, while the

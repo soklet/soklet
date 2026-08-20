@@ -50,6 +50,15 @@ server information are self-reported or informational metadata. Never use
 them as authenticated identity or as an authorization or rate-limit partition
 key.
 
+Soklet transports application-owned authentication decisions and safe
+challenges but does not publish OAuth protected-resource metadata or choose an
+authorization server. A deployment claiming MCP Authorization owns RFC 9728
+protected-resource metadata with at least one authorization server, including
+the applicable challenge URL or well-known URI, and must not require
+`offline_access` as a protected-resource scope. Transporting a challenge does
+not by itself make core Soklet or the deployment conformant with MCP
+Authorization.
+
 `Forwarded` and `X-Forwarded-For` are also ordinary untrusted request headers;
 they never alter `McpAdmissionIdentity` by themselves. If an application
 deliberately derives an anonymous rate-limit partition from client IP, do so in
@@ -1307,20 +1316,32 @@ The bounded two-listener localization fixture now covers failed reload,
 rolling revision drift without within-response mixing, node loss,
 subscription reconnect, node-local delivery, and final runtime cleanup.
 The format-v2 release contract now enumerates exactly 29 ordered gates.
-Seventeen are dispatch-configured, while six remain
-`BLOCKED_HARNESS_MISSING` and the
-six downstreams remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`; `READY` means
-configured, never passed. Scheduled/nightly and sustained fuzz-soak and
-operational history, release scans, benchmarks, automated matrix closure,
-published downstream pins, and immutable candidate conformance/provenance
-remain open. `release-scans` remains blocked on its exact scanner/toolchain,
-severity-policy, and retained-report contract. Candidate Javadoc
+Eighteen are dispatch-configured, while five remain
+`BLOCKED_HARNESS_MISSING` and the six downstreams remain
+`BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving 11 fail-closed blockers;
+`READY` means configured, never passed. The matrix-closure hook is `READY`, but
+its checked-in registry deliberately reports `FAILED` while 33 rows remain
+`UNRESOLVED`. Scheduled/nightly and sustained fuzz-soak and operational
+history, release scans, benchmarks, published downstream pins, and immutable
+candidate conformance/provenance remain open. `release-scans` remains blocked
+on its exact scanner/toolchain, severity-policy, and retained-report contract.
+Candidate Javadoc
 generation/completeness is configured; public deployment remains
 post-validation publication work. The bounded two-listener localization
 fixture is the Soklet-owned fleet gate; production multi-host coordination is
 an application/deployment security responsibility. See
 [release/README.md](release/README.md) for the exact validator contract and
 current fail-closed statuses.
+
+The current 2026-08-20 protocol/capability golden checkpoint passes 9/9 on
+local Corretto 17 and the pinned Corretto 21, 86/86 across the broader
+Corretto 17 protocol/capability gate, and both runner and local-simulator self-
+tests. Full Corretto 17 clean verify passes 1,671/0/0/72 over 462 main and 196
+test sources and builds all three JARs. The manifest binds 43 production-
+derived messages; expanded-corpus final-tag Ajv validation remains with
+candidate conformance because the pinned official-suite checkout was not
+locally available. This is local snapshot evidence, not immutable-candidate
+evidence.
 
 Those 1,681-test results remain the localization-fleet and initial JDK 21 gate
 checkpoints. Current post-fix Corretto 21 validation passes core `clean test`

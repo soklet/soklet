@@ -362,9 +362,9 @@
       "evidenceContract": "soklet.release.matrix-closure.v1",
       "id": "matrix-closure",
       "kind": "SOURCE",
-      "reason": "No checked-in machine verifier and typed receipt proves closure of every V10-required conformance-matrix row.",
+      "reason": "",
       "repository": null,
-      "status": "BLOCKED_HARNESS_MISSING",
+      "status": "READY",
       "toolchain": "nodePin",
       "versionProperty": null
     },

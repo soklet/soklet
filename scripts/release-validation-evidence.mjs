@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import {
   existsSync,
   lstatSync,
@@ -15,9 +16,13 @@ import {
   activeScenarios,
   verifyManifestSet,
 } from '../conformance/official/verify.mjs';
+import { verifyMatrixClosure } from './verify-release-matrix-closure.mjs';
 
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+const MATRIX_CLOSURE_GATE_ID = 'matrix-closure';
+const MATRIX_CLOSURE_REGISTRY_PATH = 'release/mcp-conformance-matrix-closure.json';
+const MATRIX_CLOSURE_VERIFIER_PATH = 'scripts/verify-release-matrix-closure.mjs';
 const SERVLET_DEFAULT_ARTIFACT_IDENTITY = 'com.soklet:soklet:3.1.1';
 const SERVLET_DEFAULT_ARTIFACT_SHA256 =
   'a7acd26b5a8933726615719e8d9d766feba6d0ebdb32939fa8ef1eba8094e7a4';
@@ -1312,6 +1317,91 @@ function evidenceForPath(path) {
   });
 }
 
+function requireTrackedCandidateFile(projectRoot, relativePath, description) {
+  const file = readRealFile(resolve(projectRoot, relativePath), description);
+  const tracked = spawnSync(
+    'git',
+    [
+      '-c',
+      `safe.directory=${projectRoot}`,
+      '-C',
+      projectRoot,
+      'ls-files',
+      '--error-unmatch',
+      '--',
+      relativePath,
+    ],
+    { encoding: 'utf8' },
+  );
+  if (tracked.error !== undefined) {
+    fail(`Unable to inspect ${description} tracking: ${tracked.error.message}`);
+  }
+  if (tracked.status !== 0)
+    fail(`${description} must be tracked by the candidate commit`);
+  return file;
+}
+
+function expectedMatrixClosureReport(config) {
+  const registry = requireTrackedCandidateFile(
+    config.projectRoot,
+    MATRIX_CLOSURE_REGISTRY_PATH,
+    'matrix-closure registry',
+  );
+  const verifier = requireTrackedCandidateFile(
+    config.projectRoot,
+    MATRIX_CLOSURE_VERIFIER_PATH,
+    'matrix-closure verifier',
+  );
+  const executingVerifier = readRealFile(
+    resolve(dirname(fileURLToPath(import.meta.url)), 'verify-release-matrix-closure.mjs'),
+    'executing matrix-closure verifier',
+  );
+  if (verifier.bytes.compare(executingVerifier.bytes) !== 0) {
+    fail('Tracked matrix-closure verifier does not match the executing verifier');
+  }
+
+  let result;
+  try {
+    result = verifyMatrixClosure({
+      manifestPath: config.absolutePath,
+      projectRoot: config.projectRoot,
+      registryPath: registry.absolutePath,
+    });
+  } catch (error) {
+    fail(
+      `Matrix-closure registry verification failed: ${error instanceof Error
+        ? error.message : error}`,
+    );
+  }
+  if (result.exitCode !== 0) {
+    fail(
+      `Matrix-closure registry is not closed: `
+        + `${result.report.unresolvedRows.length} unresolved row(s)`,
+    );
+  }
+  if (result.report.registrySha256 !== sha256(registry.bytes)) {
+    fail('Matrix-closure registry changed while its canonical report was derived');
+  }
+  return Buffer.from(result.reportText, 'utf8');
+}
+
+function validateMatrixClosureReport(config, path, description) {
+  const report = readRealFile(path, description);
+  const expected = expectedMatrixClosureReport(config);
+  if (report.bytes.compare(expected) !== 0) {
+    fail(
+      `${description} must exactly match the canonical PASSED report derived `
+        + 'from the tracked matrix-closure registry and verifier',
+    );
+  }
+  return Object.freeze({
+    bytes: report.bytes.length,
+    fileName: basename(report.absolutePath),
+    sha256: sha256(report.bytes),
+    type: 'FILE',
+  });
+}
+
 function requireCommit(commit, description = 'candidate commit') {
   if (!COMMIT_PATTERN.test(commit))
     fail(`${description} must be a full lowercase commit SHA`);
@@ -1712,7 +1802,14 @@ export function recordGateEvidence(
   const evidence = contract.roles.map((specification, index) => {
     const path = parsedRolePaths[index].path;
     validateEvidenceContent(path, specification, `${gateId} ${specification.role} evidence`);
-    const artifact = evidenceForPath(path);
+    const artifact = gateId === MATRIX_CLOSURE_GATE_ID
+        && specification.role === 'matrix-report'
+      ? validateMatrixClosureReport(
+        config,
+        path,
+        `${gateId} ${specification.role} evidence`,
+      )
+      : evidenceForPath(path);
     if (specification.candidateArtifact === 'descriptor') {
       const expectedDescriptor = evidenceForPath(artifactDescriptorPath);
       if (artifact.type !== 'FILE'
@@ -1867,7 +1964,7 @@ export function verifyReleaseConformanceEvidence(
       || evidence.mode !== 'release'
       || evidence.protocolVersion !== pins.protocolVersion
       || evidence.suiteCommit !== pins.officialConformanceSuite.commit
-      || evidence.goldenMessagesValidated !== 39
+      || evidence.goldenMessagesValidated !== 43
       || evidence.failure !== null
       || !Array.isArray(evidence.scenarios)
       || evidence.scenarios.length !== selectedScenarios.length) {
@@ -2020,6 +2117,19 @@ export function assembleReleaseEvidence(
   if (!existsSync(absoluteGateDirectory) || !lstatSync(absoluteGateDirectory).isDirectory())
     fail(`Missing gate-evidence directory: ${absoluteGateDirectory}`);
 
+  const retainedMatrixReport = resolve(
+    absoluteGateDirectory,
+    '..',
+    'raw',
+    MATRIX_CLOSURE_GATE_ID,
+    'matrix-closure.json',
+  );
+  const retainedMatrixArtifact = validateMatrixClosureReport(
+    config,
+    retainedMatrixReport,
+    'retained matrix-closure report',
+  );
+
   const actualFiles = readdirSync(absoluteGateDirectory).filter((name) => name.endsWith('.json')).sort();
   const expectedFiles = EXPECTED_GATE_IDS.map((id) => `${id}.json`).sort();
 
@@ -2090,6 +2200,11 @@ export function assembleReleaseEvidence(
         fail(`${id} evidence item ${index} does not match its exact role contract`);
       }
       validateEvidenceItem(item.artifact, `${id} ${item.role} artifact`);
+      if (id === MATRIX_CLOSURE_GATE_ID
+          && specification.role === 'matrix-report'
+          && JSON.stringify(item.artifact) !== JSON.stringify(retainedMatrixArtifact)) {
+        fail('matrix-closure artifact metadata does not match the retained raw report');
+      }
       if (specification.candidateArtifact === 'descriptor') {
         const expectedDescriptor = evidenceForPath(artifactDescriptorPath);
         if (item.artifact.type !== 'FILE'

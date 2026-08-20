@@ -6,14 +6,16 @@ is a full candidate commit SHA, the workflow checks out that exact commit, and
 any repository change requires a new commit and a complete new run.
 
 The format-v2 manifest defines an exact ordered universe of 29 release gates.
-It is intentionally **not runnable yet**: 17 gates have complete checked-in
-dispatch configuration, while 12 remain fail-closed blockers. `READY` means
-only that a gate has an executable, pinned validation path. It never means that
-the gate has passed for a candidate; only a typed PASS receipt inside the
-format-v2 evidence envelope from the exact candidate workflow can establish
-that.
+It is intentionally **not release-runnable end to end yet**: 18 gates have
+complete checked-in dispatch configuration, five remain
+`BLOCKED_HARNESS_MISSING`, and six downstream gates remain
+`BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, for 11 fail-closed blockers total.
+`READY` means only that a gate has an executable, pinned validation path. It
+never means that the gate has passed for a candidate; only a typed PASS receipt
+inside the format-v2 evidence envelope from the exact candidate workflow can
+establish that.
 
-Six gates remain `BLOCKED_HARNESS_MISSING`:
+Five gates remain `BLOCKED_HARNESS_MISSING`:
 
 - `fuzz-nightly-history` and `soak-nightly-history` require a canonical
   importer for immutable scheduled-run history;
@@ -22,9 +24,26 @@ Six gates remain `BLOCKED_HARNESS_MISSING`:
 - `release-scans` requires an exact scanner/toolchain pin, severity policy,
   and retained report contract;
 - `mcp-benchmarks` requires the isolated 3.5.1-versus-3.6.0 JSON comparison
-  and 3.6.0 schema-baseline harness; and
-- `matrix-closure` requires an executable unresolved-row policy and canonical
-  report rather than a prose assertion.
+  and 3.6.0 schema-baseline harness.
+
+The checked-in registry, verifier, and verifier self-test make
+`matrix-closure` `READY`. The registry deliberately produces a canonical
+`FAILED` report while 33 rows remain `UNRESOLVED`, so the validator cannot
+record a typed PASS receipt yet. `RELEASE_GATED` means that a row has
+candidate-contained implementation or evidence anchors and that its remaining
+immutable-candidate, scheduled-history, sustained-run, or pinned-downstream
+proof is owned by the exact named release gate or gates. It must not be used to
+hide a local implementation, test, documentation, golden, or fixture gap.
+
+The current 2026-08-20 protocol/capability golden checkpoint passes 9/9 on
+local Corretto 17 and the pinned Corretto 21, 86/86 across the broader
+Corretto 17 protocol/capability gate, and both runner and local-simulator self-
+tests. Full Corretto 17 clean verify passes 1,671/0/0/72 over 462 main and 196
+test sources and builds all three JARs. The manifest binds 43 production-
+derived messages; expanded-corpus final-tag Ajv validation remains with
+candidate conformance because the pinned official-suite checkout was not
+locally available. This is local snapshot evidence, not a candidate PASS
+receipt.
 
 The exact checksum-pinned Corretto 21.0.12.9.1 toolchain now drives
 `core-jdk-21`, `static-analysis`, and `spotbugs`. At the initial JDK 21 gate
@@ -139,13 +158,15 @@ Once every gate is ready, the validator:
 4. installs the already-built POM and main JAR with the pinned `install-file`
    goal into a fresh isolated Maven repository and byte-compares the result;
 5. runs the API-freeze, candidate-Javadoc, JDK 21 clean-test, static-analysis,
-   SpotBugs, schema-replay, deterministic-fuzz, smoke-soak, release-soak, and
-   bounded two-listener localization-fleet gates, retaining each gate's exact
-   machine-readable and human-readable reports;
+   SpotBugs, schema-replay, deterministic-fuzz, smoke-soak, release-soak,
+   bounded two-listener localization-fleet, and matrix-closure gates, retaining
+   each gate's exact machine-readable and human-readable reports; matrix
+   closure records a PASS only when its canonical report has zero unresolved
+   rows;
 6. imports the separately defined scheduled fuzz, nightly soak, operational,
-   scan, benchmark, and matrix-closure evidence only through their canonical
-   gate contracts; absent or malformed history cannot be replaced by a local
-   path or prose note;
+   scan, and benchmark evidence only through their canonical gate contracts;
+   absent or malformed history cannot be replaced by a local path or prose
+   note;
 7. runs official conformance in release mode against the exact candidate bytes,
    requires `IMMUTABLE_RELEASE_CANDIDATE`, `releaseCandidateEvidence: true`, and
    terminal `PASSED` evidence, then compiles and runs a library-neutral
@@ -244,7 +265,7 @@ bash -n release/scripts/install-pinned-corretto-linux-x64.sh
 
 The first command validates the currently recorded pins, exact gate order,
 evidence contracts, toolchain references, and statuses. Adding
-`--require-ready` is expected to fail until all 12 blockers above are resolved.
+`--require-ready` is expected to fail until all 11 blockers above are resolved.
 
 After the final candidate commit exists, dispatch
 `.github/workflows/release-validation.yml` from that commit and supply the same

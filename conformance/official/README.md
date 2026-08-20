@@ -96,15 +96,25 @@ Phase 5 progress exchange binds its initiating request, exact 0/50/100
 notifications, and terminal response to one production SSE stream. A second
 five-message production exchange binds a `subscriptions/listen` request,
 acknowledgment, resource-list change, resource update, and graceful tagged
-terminal result. The current corpus therefore contains 39 messages, all
-production-derived; the earlier subscription terminal schema canary has been
-replaced. The validator uses Ajv and `ajv-formats` from the official suite's
+terminal result. Phase 3 unknown-method and Phase 5 missing-capability request/
+error pairs bring the current corpus to 43 messages, all production-derived;
+the earlier subscription terminal schema canary has been replaced. The
+validator uses Ajv and `ajv-formats` from the official suite's
 verified lockfile, so no Soklet runtime dependency or second package
 installation is added. These corpus additions are local production-listener/
 final-schema evidence. The standalone progress observation is useful
 diagnostic history. The later complete controlled observation is profile-
 acquisition evidence, not the later activated Phase 5 verify gate. The fresh
 verification and frozen profiles are recorded below.
+
+The 2026-08-20 protocol/capability reconciliation passes the focused live
+golden suite 9/9 on local Corretto 17 and the pinned Corretto 21, the broader
+protocol/capability gate 86/86 on Corretto 17, and the runner and local-
+simulator self-tests. Full Corretto 17 clean verify passes 1,671/0/0/72 over
+462 main and 196 test sources and builds the main, sources, and Javadoc JARs.
+The pinned official-suite checkout was not locally available, so final-tag Ajv
+validation of the expanded 43-message corpus remains with candidate
+conformance. These are local snapshot checks, not immutable-candidate evidence.
 
 The schema layer checks JSON message shapes only. HTTP status and headers,
 CORS, SSE framing, cross-message order, ID correlation, filter containment,
@@ -330,8 +340,9 @@ scenarios and all exact frozen profiles. Its evidence is classified
 `releaseCandidateEvidence: false`, and contains exactly 150 outcomes: 147
 `SUCCESS`, the two reviewed `server-stateless` capability `SKIPPED` outcomes
 listed above, and the one reviewed `server-sse-streams-functional` `INFO`.
-Thirty-six wire-schema successes cover 103 messages; all 39 checked-in goldens
-validated. No warning, failure, or wire-schema-harness error occurred, every
+Thirty-six wire-schema successes cover 103 messages; all 39 goldens then
+checked in validated, and the focused golden-wire suite passed 7/7 at that
+checkpoint. No warning, failure, or wire-schema-harness error occurred, every
 standard-error stream was empty, and all 39 fixture processes exited cleanly.
 
 The evidence SHA-256 is

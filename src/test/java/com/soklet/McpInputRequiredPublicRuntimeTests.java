@@ -749,6 +749,251 @@ public class McpInputRequiredPublicRuntimeTests {
 		}
 	}
 
+	@Test
+	public void interceptorShortCircuitsRejectUndeclaredInputRequestsAcrossOperationKinds()
+			throws Exception {
+		String inputKeySecret = "INTERCEPTOR-UNDECLARED-INPUT-KEY-SECRET";
+		String parameterSecret = "INTERCEPTOR-UNDECLARED-PARAMETER-SECRET";
+		String metadataSecret = "INTERCEPTOR-UNDECLARED-METADATA-SECRET";
+		AtomicInteger interceptorInvocations = new AtomicInteger();
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		AtomicInteger sanitizerInvocations = new AtomicInteger();
+		McpInputRequestDeclaration declared = McpInputRequestDeclaration
+				.fromElicitationForm(McpInputRequirement.CONDITIONAL);
+		McpInputRequestDeclaration emitted = McpInputRequestDeclaration
+				.fromRoots(McpInputRequirement.CONDITIONAL);
+		McpInputRequiredResult undeclaredResult = McpInputRequiredResult.builder()
+				.inputRequest(inputKeySecret, McpInputRequest.fromDeclaration(
+						emitted, McpJsonObject.builder()
+								.put("x-secret", parameterSecret)
+								.build()))
+				.metadata(McpJsonObject.builder()
+						.put("secret", metadataSecret)
+						.build())
+				.build();
+		URI resourceUri = URI.create("test://interceptor-undeclared-input");
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName("interceptor-undeclared-tool")
+				.jsonArguments()
+				.handler((request, arguments, features) -> {
+					handlerInvocations.incrementAndGet();
+					return McpCompleteResult.fromToolText("must-not-run");
+				})
+				.mayRequestInput(declared)
+				.build();
+		McpPromptRegistration prompt = McpPromptRegistration
+				.withName("interceptor-undeclared-prompt")
+				.handler((request, promptGet, features) -> {
+					handlerInvocations.incrementAndGet();
+					return McpCompleteResult.fromPromptOutput(
+							McpPromptOutput.fromMessages(
+									McpPromptMessage.fromUserContent(
+											McpTextContent.fromText("must-not-run"))));
+				})
+				.mayRequestInput(declared)
+				.build();
+		McpResourceRegistration resource = McpResourceRegistration
+				.withUriAndName(resourceUri, "interceptor-undeclared-resource")
+				.handler((request, read, features) -> {
+					handlerInvocations.incrementAndGet();
+					return McpCompleteResult.fromResourceOutput(
+							McpResourceOutput.builder()
+									.content(McpTextResourceContents.withUriAndText(
+											read.getUri(), "must-not-run")
+											.build())
+									.build());
+				})
+				.mayRequestInput(declared)
+				.cachePolicy(McpCachePolicy.fromPublicTimeToLive(
+						Duration.ofHours(1)))
+				.build();
+		McpEndpoint endpoint = endpointBuilder()
+				.tool(tool)
+				.prompt(prompt)
+				.resource(resource)
+				.build();
+		McpServer server = server(endpoint,
+				McpAdmissionController.acceptAllInstance(),
+				context -> McpRateLimitDecision.allowed(),
+				context -> McpRateLimitDecision.allowed(),
+				(context, continuation) -> {
+					interceptorInvocations.incrementAndGet();
+					return undeclaredResult;
+				},
+				(request, toolName, rawArguments, output) -> {
+					sanitizerInvocations.incrementAndGet();
+					return output;
+				});
+
+		try {
+			server.start();
+			int port = boundPort(server);
+			HttpResponse<String> toolResponse = callTool(port,
+					"interceptor-undeclared-tool-response",
+					"interceptor-undeclared-tool",
+					FORM_AND_ROOTS_CAPABILITIES);
+			assertInternalErrorWithoutOutput(toolResponse,
+					"interceptor-undeclared-tool-response",
+					parameterSecret, metadataSecret);
+			Assertions.assertFalse(toolResponse.body().contains(inputKeySecret),
+					toolResponse.body());
+
+			HttpResponse<String> promptResponse = send(port,
+					"interceptor-undeclared-prompt-response", "prompts/get",
+					"interceptor-undeclared-prompt",
+					",\"name\":\"interceptor-undeclared-prompt\",\"arguments\":{}",
+					FORM_AND_ROOTS_CAPABILITIES);
+			assertInternalErrorWithoutOutput(promptResponse,
+					"interceptor-undeclared-prompt-response",
+					parameterSecret, metadataSecret);
+			Assertions.assertFalse(promptResponse.body().contains(inputKeySecret),
+					promptResponse.body());
+
+			HttpResponse<String> resourceResponse = send(port,
+					"interceptor-undeclared-resource-response", "resources/read",
+					resourceUri.toString(), ",\"uri\":\"" + resourceUri + "\"",
+					FORM_AND_ROOTS_CAPABILITIES);
+			assertInternalErrorWithoutOutput(resourceResponse,
+					"interceptor-undeclared-resource-response",
+					parameterSecret, metadataSecret);
+			Assertions.assertFalse(resourceResponse.body().contains(inputKeySecret),
+					resourceResponse.body());
+			Assertions.assertFalse(resourceResponse.body().contains("\"ttlMs\""),
+					resourceResponse.body());
+			Assertions.assertFalse(
+					resourceResponse.body().contains("\"cacheScope\""),
+					resourceResponse.body());
+			Assertions.assertEquals(3, interceptorInvocations.get());
+			Assertions.assertEquals(0, handlerInvocations.get());
+			Assertions.assertEquals(0, sanitizerInvocations.get());
+		} finally {
+			server.stop();
+		}
+	}
+
+	@Test
+	public void toolInterceptorInputRequiredResultsHonorValidationAndCapabilityPrecedence()
+			throws Exception {
+		String inputKeySecret = "TOOL-INTERCEPTOR-INPUT-KEY-SECRET";
+		String parameterSecret = "TOOL-INTERCEPTOR-PARAMETER-SECRET";
+		String metadataSecret = "TOOL-INTERCEPTOR-METADATA-SECRET";
+		AtomicInteger interceptorInvocations = new AtomicInteger();
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		AtomicInteger sanitizerInvocations = new AtomicInteger();
+		McpInputRequestDeclaration form = McpInputRequestDeclaration
+				.fromElicitationForm(McpInputRequirement.CONDITIONAL);
+		McpInputRequestDeclaration roots = McpInputRequestDeclaration
+				.fromRoots(McpInputRequirement.CONDITIONAL);
+		McpJsonObject invalidRootsParams = McpJsonObject.builder()
+				.put("_meta", parameterSecret)
+				.put("secret", parameterSecret)
+				.build();
+		McpJsonObject secretMetadata = McpJsonObject.builder()
+				.put("secret", metadataSecret)
+				.build();
+		McpEndpoint.Builder endpointBuilder = endpointBuilder();
+		for (String toolName : List.of("interceptor-valid-input",
+				"interceptor-undeclared-input", "interceptor-invalid-input",
+				"interceptor-missing-capability")) {
+			McpToolRegistration.Builder<McpJsonObject> toolBuilder =
+					McpToolRegistration.withName(toolName)
+							.jsonArguments()
+							.handler((request, arguments, features) -> {
+								handlerInvocations.incrementAndGet();
+								return McpCompleteResult.fromToolText("must-not-run");
+							});
+			if (toolName.equals("interceptor-undeclared-input")
+					|| toolName.equals("interceptor-missing-capability"))
+				toolBuilder.mayRequestInput(form);
+			else
+				toolBuilder.mayRequestInput(roots);
+			endpointBuilder.tool(toolBuilder.build());
+		}
+		McpServer server = server(endpointBuilder.build(),
+				McpAdmissionController.acceptAllInstance(),
+				context -> McpRateLimitDecision.allowed(),
+				context -> McpRateLimitDecision.allowed(),
+				(context, continuation) -> {
+					interceptorInvocations.incrementAndGet();
+					return switch (context.getOperationName().orElseThrow()) {
+						case "interceptor-valid-input" -> inputRequired(
+								"valid", roots, McpJsonObject.emptyInstance());
+						case "interceptor-undeclared-input" ->
+								McpInputRequiredResult.builder()
+										.inputRequest(inputKeySecret,
+												McpInputRequest.fromDeclaration(roots,
+														McpJsonObject.emptyInstance()))
+										.metadata(secretMetadata)
+										.build();
+						case "interceptor-invalid-input",
+								"interceptor-missing-capability" ->
+								McpInputRequiredResult.builder()
+										.inputRequest(inputKeySecret,
+												McpInputRequest.fromDeclaration(roots,
+														invalidRootsParams))
+										.metadata(secretMetadata)
+										.build();
+						default -> continuation.proceed();
+					};
+				},
+				(request, toolName, rawArguments, output) -> {
+					sanitizerInvocations.incrementAndGet();
+					return output;
+				});
+
+		try {
+			server.start();
+			int port = boundPort(server);
+			HttpResponse<String> valid = callTool(port, "interceptor-valid",
+					"interceptor-valid-input", ROOTS_CAPABILITY);
+			assertInputRequired(valid, "interceptor-valid");
+			Assertions.assertEquals(
+					"{\"jsonrpc\":\"2.0\",\"id\":\"interceptor-valid\",\"result\":{"
+							+ "\"inputRequests\":{\"valid\":{"
+							+ "\"method\":\"roots/list\",\"params\":{}}},"
+							+ "\"resultType\":\"input_required\"}}",
+					valid.body());
+			Assertions.assertEquals(0, sanitizerInvocations.get());
+
+			HttpResponse<String> undeclared = callTool(port,
+					"interceptor-undeclared", "interceptor-undeclared-input",
+					FORM_AND_ROOTS_CAPABILITIES);
+			assertInternalErrorWithoutOutput(undeclared,
+					"interceptor-undeclared", inputKeySecret, metadataSecret);
+
+			HttpResponse<String> invalid = callTool(port, "interceptor-invalid",
+					"interceptor-invalid-input", ROOTS_CAPABILITY);
+			assertInternalErrorWithoutOutput(invalid, "interceptor-invalid",
+					parameterSecret, metadataSecret);
+			Assertions.assertFalse(invalid.body().contains(inputKeySecret),
+					invalid.body());
+
+			HttpResponse<String> missingCapability = callTool(port,
+					"interceptor-missing", "interceptor-missing-capability", "{}");
+			assertMissingCapability(missingCapability, "interceptor-missing",
+					ROOTS_CAPABILITY);
+			Assertions.assertFalse(
+					missingCapability.body().contains(inputKeySecret),
+					missingCapability.body());
+			Assertions.assertFalse(
+					missingCapability.body().contains(parameterSecret),
+					missingCapability.body());
+			Assertions.assertFalse(
+					missingCapability.body().contains(metadataSecret),
+					missingCapability.body());
+			Assertions.assertFalse(
+					missingCapability.body().contains("inputRequests"),
+					missingCapability.body());
+			Assertions.assertFalse(missingCapability.body().contains("\"result\""),
+					missingCapability.body());
+			Assertions.assertEquals(4, interceptorInvocations.get());
+			Assertions.assertEquals(0, handlerInvocations.get());
+			Assertions.assertEquals(0, sanitizerInvocations.get());
+		} finally {
+			server.stop();
+		}
+	}
+
 	private static McpEndpoint.Builder endpointBuilder() {
 		return McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
@@ -761,6 +1006,17 @@ public class McpInputRequiredPublicRuntimeTests {
 			McpRateLimiter requestRateLimiter,
 			McpRateLimiter toolRateLimiter,
 			McpToolOutputSanitizer sanitizer) {
+		return server(endpoint, admissionController, requestRateLimiter,
+				toolRateLimiter, McpHandlerInterceptor.passThroughInstance(),
+				sanitizer);
+	}
+
+	private static McpServer server(McpEndpoint endpoint,
+			McpAdmissionController admissionController,
+			McpRateLimiter requestRateLimiter,
+			McpRateLimiter toolRateLimiter,
+			McpHandlerInterceptor handlerInterceptor,
+			McpToolOutputSanitizer sanitizer) {
 		return McpServer.withPort(0)
 				.host(LOOPBACK)
 				.endpointRegistry(
@@ -768,6 +1024,7 @@ public class McpInputRequiredPublicRuntimeTests {
 				.admissionController(admissionController)
 				.requestRateLimiter(requestRateLimiter)
 				.toolRateLimiter(toolRateLimiter)
+				.handlerInterceptor(handlerInterceptor)
 				.toolOutputSanitizer(sanitizer)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))

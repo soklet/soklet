@@ -1590,14 +1590,16 @@ same-version macOS arm64 Corretto 21.0.12.9.1 run passed the full core
 existing advisory inventory after the `SelfAssignment` fix, and SpotBugs
 reports zero bugs and errors. The exact
 checksum-pinned Corretto 21.0.12.9.1 toolchain now drives `core-jdk-21`,
-`static-analysis`, and `spotbugs`. Seventeen gates are dispatch-configured,
-while six remain `BLOCKED_HARNESS_MISSING` and the six downstreams remain
-`BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`; `READY` means configured, never passed.
-Actual scheduled/nightly and sustained fuzz/soak and operational evidence, the
-release scans, benchmarks, automated matrix closure, published downstream
-pins, and immutable release-candidate provenance and conformance remain open.
-`release-scans` remains blocked on its exact scanner/toolchain,
-severity-policy, and retained-report contract. Candidate Javadoc
+`static-analysis`, and `spotbugs`. Eighteen gates are dispatch-configured,
+while five remain `BLOCKED_HARNESS_MISSING` and the six downstreams remain
+`BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving 11 fail-closed blockers;
+`READY` means configured, never passed. The matrix-closure hook is `READY`, but
+its checked-in registry deliberately reports `FAILED` while 33 rows remain
+`UNRESOLVED`. Actual scheduled/nightly and sustained fuzz/soak and operational
+evidence, release scans, benchmarks, published downstream pins, and immutable
+release-candidate provenance and conformance remain open. `release-scans`
+remains blocked on its exact scanner/toolchain, severity-policy, and
+retained-report contract. Candidate Javadoc
 generation/completeness is configured; public deployment is post-validation
 publication work. The bounded two-listener fixture is the Soklet-owned fleet
 gate, while production multi-host coordination remains application/deployment-
@@ -1628,18 +1630,28 @@ on both JDKs; neither was rerun. Prior benchmark-module evidence was also not
 rerun for V21.
 
 The conformance runner/infrastructure self-tests and scenario/supplement-
-manifest gates are green. The final-tag validator checks all 39 production-
-derived golden messages against the pinned final schema with Ajv 8.20.0; the
-focused golden-wire suite passes seven tests with no failure, error, or skip.
+manifest gates are green. The manifest now binds 43 production-derived golden
+messages; the four-message addition contains Phase 3 unknown-method and Phase
+5 missing-capability request/error pairs. The focused live golden-wire suite
+passes nine tests with no failure, error, or skip. Final-tag Ajv validation of
+the expanded corpus remains with the pinned candidate-conformance path because
+its official-suite checkout was not available for this local slice.
 The separate clean observation supplied the 16 Phase 5 profile candidates. The
 later atomic activation retained all 23 historical IDs, activated all 39 exact
 profiles at implementation phase 5, and passed the fresh 39-scenario verify
-with 150 exact outcomes, 36 wire successes over 103 messages, all 39 goldens,
-empty standard error, and 39 clean exits. Evidence SHA-256 is
+with 150 exact outcomes, 36 wire successes over 103 messages, all 39 then-
+current goldens, empty standard error, and 39 clean exits. Evidence SHA-256 is
 `082d841697f472da97a822c4dba35e922378f170a7050eca400b32a3eeaf6fc1`.
 It is `CANDIDATE_ARTIFACT_DEVELOPMENT_ONLY` evidence with
 `releaseCandidateEvidence: false`, not release sign-off. Final JDK 17 and JDK
 25 CI results for this exact tree remain open.
+
+The later 2026-08-20 protocol/capability golden reconciliation passes the
+focused live golden suite 9/9 on local Corretto 17 and the pinned Corretto 21,
+the broader protocol/capability gate 86/86 on Corretto 17, and the runner and
+local-simulator self-tests. Full Corretto 17 clean verify passes 1,671/0/0/72
+over 462 main and 196 test sources and builds the main, sources, and Javadoc
+JARs. These are local snapshot checks, not immutable-candidate evidence.
 
 A compatible addition to a frozen owner requires deliberate review, a
 snapshot update, and an update to the freeze rationale. An incompatible change

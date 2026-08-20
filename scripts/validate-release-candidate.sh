@@ -69,7 +69,7 @@ assert_ready_gate_has_dispatch() {
 	case "$gate_id" in
 		candidate-build|core-jdk-21|core-jdk-25|isolated-install|api-freeze|\
 		candidate-javadocs|static-analysis|spotbugs|schema-replay|fuzz-replay|\
-		soak-smoke|release-soak|localization-fleet|\
+		soak-smoke|release-soak|localization-fleet|matrix-closure|\
 		candidate-conformance|candidate-localization|barebones-app|\
 		soklet-servlet-javax|soklet-servlet-jakarta|toystore-app|soklet-otel|\
 		soklet-website|typescript-interop|go-interop)
@@ -735,6 +735,35 @@ run_localization_fleet() {
 	record_gate localization-fleet "fleet-log=$log" "surefire-reports=$reports"
 }
 
+run_matrix_closure() {
+	local registry="$project_root/release/mcp-conformance-matrix-closure.json"
+	local verifier="$project_root/scripts/verify-release-matrix-closure.mjs"
+	local verifier_self_test="$project_root/scripts/verify-release-matrix-closure-self-test.mjs"
+	local source relative
+	for source in "$registry" "$verifier" "$verifier_self_test"; do
+		[[ -f "$source" && ! -L "$source" ]] \
+			|| fail "matrix-closure source is missing or is a symlink: $source"
+		relative=${source#"$project_root"/}
+		[[ "$relative" != "$source" ]] \
+			|| fail "matrix-closure source is outside the candidate checkout: $source"
+		git ls-files --error-unmatch "$relative" >/dev/null 2>&1 \
+			|| fail "matrix-closure source is not tracked by the candidate commit: $relative"
+	done
+
+	local raw_root="$evidence_root/raw/matrix-closure"
+	local report="$raw_root/matrix-closure.json"
+	[[ ! -e "$report" ]] \
+		|| fail "matrix-closure report destination already exists."
+	mkdir -p "$raw_root"
+	assert_installed_candidate_unchanged
+	node scripts/verify-release-matrix-closure.mjs > "$report"
+	[[ -s "$report" && -f "$report" && ! -L "$report" ]] \
+		|| fail "matrix-closure report is missing, empty, or is a symlink."
+	assert_candidate_checkout_unchanged matrix-closure "$project_root"
+	assert_installed_candidate_unchanged
+	record_gate matrix-closure "matrix-report=$report"
+}
+
 run_candidate_conformance() {
 	local checkout
 	checkout=$(clone_pinned_gate candidate-conformance)
@@ -1080,6 +1109,7 @@ run_fuzz_replay
 run_soak_profile soak-smoke smoke 600
 run_soak_profile release-soak release "$soak_timeout_seconds"
 run_localization_fleet
+run_matrix_closure
 run_candidate_conformance
 run_candidate_localization
 run_barebones

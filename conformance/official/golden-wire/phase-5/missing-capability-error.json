@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":"phase-5-missing-capability","error":{"code":-32021,"message":"Missing required client capability","data":{"requiredCapabilities":{"elicitation":{"form":{},"url":{}},"roots":{},"sampling":{"context":{},"tools":{}}}}}}
