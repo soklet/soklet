@@ -30,7 +30,14 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Typed MCP admission rejection. Soklet owns envelope serialization and
- * suppresses the body for notifications.
+ * suppresses the body for notifications. Application response headers are
+ * transported only after Soklet's response-header safety validation. An
+ * application may supply {@code WWW-Authenticate} with a standards-compliant
+ * Bearer challenge, including an absolute {@code resource_metadata} URI and
+ * operation scopes, but Soklet treats that challenge syntax as opaque: the
+ * application owns authentication semantics and RFC compliance. Unsafe,
+ * framework-owned, hop-by-hop, CORS, and obsolete transport-state headers
+ * fail closed.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -80,7 +87,12 @@ public final class McpAdmissionRejection {
 		return this.jsonRpcError;
 	}
 
-	/** @return immutable application response headers */
+	/**
+	 * Returns immutable application response headers. Values remain subject to
+	 * Soklet's fail-closed response-header safety validation when transported.
+	 *
+	 * @return immutable application response headers
+	 */
 	@NonNull
 	public Map<@NonNull String, @NonNull Set<@NonNull String>> getHeaders() {
 		return this.headers;
@@ -121,7 +133,13 @@ public final class McpAdmissionRejection {
 			return this;
 		}
 
-		/** @param headers application response headers @return this builder */
+		/**
+		 * Replaces the application response headers. Headers remain subject to
+		 * Soklet's fail-closed response-header safety validation when transported.
+		 *
+		 * @param headers application response headers
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder headers(
 				@NonNull Map<@NonNull String, ? extends @NonNull Set<@NonNull String>> headers) {
@@ -132,7 +150,14 @@ public final class McpAdmissionRejection {
 			return this;
 		}
 
-		/** @param name header name @param value header value @return this builder */
+		/**
+		 * Adds an application response header. The header remains subject to
+		 * Soklet's fail-closed response-header safety validation when transported.
+		 *
+		 * @param name header name
+		 * @param value header value
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder header(@NonNull String name, @NonNull String value) {
 			this.headers.computeIfAbsent(requireNonNull(name), ignored -> new LinkedHashSet<>())

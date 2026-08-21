@@ -4,7 +4,7 @@
   "releaseVersion": "3.6.0",
   "sourceMatrixPath": "mcp/MCP_CONFORMANCE_MATRIX.md",
   "sourceMatrixLastUpdated": "2026-08-20",
-  "sourceMatrixSha256": "37f7f9da54900992d42a984bc5cb334ac6ac2f0192b62ccd8070ebb6037f8e9b",
+  "sourceMatrixSha256": "82ab9e60d6e5ca19af5e29b900ce797ff9316968a34bbdd0d71e700a85239e96",
   "releaseGateUniverse": [
     "candidate-build",
     "core-jdk-21",
@@ -310,13 +310,14 @@
     },
     {
       "id": "MCP-BASE-024",
-      "disposition": "UNRESOLVED",
+      "disposition": "CORE_COMPLETE",
       "evidence": [
         "src/test/java/com/soklet/McpBootstrapValueTests.java",
+        "src/test/java/com/soklet/McpSelfReportedIdentityPublicRuntimeTests.java",
         "src/test/java/com/soklet/McpServerPublicRuntimeTests.java"
       ],
       "releaseGates": [],
-      "reason": "The self-report-versus-identity negative inventory remains pending."
+      "reason": ""
     },
     {
       "id": "MCP-BASE-025",
@@ -381,12 +382,13 @@
     },
     {
       "id": "MCP-VER-003",
-      "disposition": "UNRESOLVED",
+      "disposition": "CORE_COMPLETE",
       "evidence": [
+        "src/test/java/com/soklet/McpExtensionCompatibilityPublicRuntimeTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpRequestWireMapperTests.java"
       ],
       "releaseGates": [],
-      "reason": "The unsupported-extension fallback recorded for Phase 3 is not closed."
+      "reason": ""
     },
     {
       "id": "MCP-VER-004",
@@ -673,13 +675,17 @@
     },
     {
       "id": "MCP-HTTP-018",
-      "disposition": "UNRESOLVED",
+      "disposition": "CORE_COMPLETE",
       "evidence": [
+        "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+        "src/test/java/com/soklet/McpLegacySessionNegativeInventoryTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerConnectionContractTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerPolicyPipelineTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
       ],
       "releaseGates": [],
-      "reason": "The migration negative inventory remains pending."
+      "reason": ""
     },
     {
       "id": "MCP-HTTP-019",
@@ -1806,13 +1812,16 @@
     },
     {
       "id": "MCP-AUTH-003",
-      "disposition": "UNRESOLVED",
+      "disposition": "CORE_COMPLETE",
       "evidence": [
+        "conformance/golden-http-head/authorization-cors/authorized-bearer-challenge.head",
+        "conformance/golden-http-head/authorization-cors/manifest.sha256",
+        "src/test/java/com/soklet/McpAuthorizationIntegrationTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerPolicyPipelineTests.java"
       ],
       "releaseGates": [],
-      "reason": "Absolute resource_metadata and scope-challenge integration remain pending."
+      "reason": ""
     },
     {
       "id": "MCP-AUTH-004",
@@ -2387,8 +2396,13 @@
     },
     {
       "id": "SOK-CORS-005",
-      "disposition": "UNRESOLVED",
+      "disposition": "CORE_COMPLETE",
       "evidence": [
+        "conformance/golden-http-head/authorization-cors/authorized-bearer-challenge.head",
+        "conformance/golden-http-head/authorization-cors/authorized-preflight.head",
+        "conformance/golden-http-head/authorization-cors/empty-cors-rejection.head",
+        "conformance/golden-http-head/authorization-cors/manifest.sha256",
+        "src/test/java/com/soklet/McpAuthorizationIntegrationTests.java",
         "src/test/java/com/soklet/McpMirroredHeaderPublicRuntimeTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerConnectionContractTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerCustomHeaderTests.java",
@@ -2396,7 +2410,7 @@
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
       ],
       "releaseGates": [],
-      "reason": "The independent CORS golden remains pending."
+      "reason": ""
     },
     {
       "id": "SOK-CORS-006",

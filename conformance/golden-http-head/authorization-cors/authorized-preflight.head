@@ -1,0 +1,8 @@
+HTTP/1.1 204 No Content
+Connection: close
+Cache-Control: no-store
+Access-Control-Allow-Origin: https://allowed.example
+Access-Control-Allow-Methods: POST, OPTIONS
+Access-Control-Allow-Headers: Accept, Authorization, Content-Type, Mcp-Method, Mcp-Name, Mcp-Param-Tenant, MCP-Protocol-Version
+Access-Control-Max-Age: 600
+Vary: Origin, Access-Control-Request-Method, Access-Control-Request-Headers

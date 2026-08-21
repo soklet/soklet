@@ -28,7 +28,7 @@ Five gates remain `BLOCKED_HARNESS_MISSING`:
 
 The checked-in registry, verifier, and verifier self-test make
 `matrix-closure` `READY`. The registry deliberately produces a canonical
-`FAILED` report while 29 rows remain `UNRESOLVED`, so the validator cannot
+`FAILED` report while 24 rows remain `UNRESOLVED`, so the validator cannot
 record a typed PASS receipt yet. `RELEASE_GATED` means that a row has
 candidate-contained implementation or evidence anchors and that its remaining
 immutable-candidate, scheduled-history, sustained-run, or pinned-downstream
@@ -108,19 +108,52 @@ production behavior, public API, and the Phase 4/5/6 freeze inventories are
 unchanged. This is local snapshot evidence, not immutable release-candidate
 evidence.
 
-The subsequent policy/error reconciliation is test- and golden-only. Its exact
-slice passes 27/27 on the pinned local Corretto 17 and Corretto 21 toolchains,
-and the adjacent policy regression set passes 59/59 on each.
+The previous policy/error reconciliation checkpoint was test- and golden-only.
+Its exact slice passes 27/27 on the pinned local Corretto 17 and Corretto 21
+toolchains, and the adjacent policy regression set passes 59/59 on each.
 `McpFinalTagGoldenWireProductionTests` passes 11/11 on each JDK, and the
 manifest now binds 48 production-derived messages. An unsigned Corretto 17
 `clean verify` passes 1,677/0/0/72 over 462 main and 197 test sources and
 builds the main, sources, and Javadoc JARs. No production behavior, public API,
-or Phase 4/5/6 freeze inventory changed. The canonical matrix remains
-deliberately `FAILED`: 95 rows are `CORE_COMPLETE`, 116 are `RELEASE_GATED`,
-four are `APPLICATION_OWNED`, 18 are `NOT_APPLICABLE`, and 29 remain
-`UNRESOLVED`. Final-tag Ajv validation of the expanded 48-message corpus was
-not rerun locally and remains owned by candidate conformance. These local
-checks are not candidate PASS receipts.
+or Phase 4/5/6 freeze inventory changed. At that checkpoint, the canonical
+matrix was deliberately `FAILED`: 95 rows were `CORE_COMPLETE`, 116 were
+`RELEASE_GATED`, four were `APPLICATION_OWNED`, 18 were `NOT_APPLICABLE`, and
+29 remained `UNRESOLVED`. Final-tag Ajv validation of the expanded 48-message
+corpus had not been rerun locally and remained owned by candidate conformance.
+These local checks are not candidate PASS receipts.
+
+The current five-row compatibility reconciliation closes the core rows for
+admitted identity versus client self-report, unknown client-extension
+fallback, Bearer challenge transport, authorization/CORS response-head
+behavior, and legacy session/replay-header containment. A real listener keeps
+credential-selected identity authoritative despite forged client metadata.
+Valid unknown extension settings remain opaque admission input without
+inventing or advertising core support; malformed settings fail before
+admission. A safe Bearer challenge can carry an absolute `resource_metadata`
+URI and operation scopes, but the application owns their meaning and standards
+compliance. The independent CORS goldens cover `Authorization`, modern and
+registered MCP headers, `WWW-Authenticate` exposure, exact order and
+multiplicity, and fail-closed legacy-header rejection.
+
+The focused compatibility slice passes 33/33 on the pinned local Corretto 17
+and Corretto 21 toolchains. The separate authorization/CORS HTTP-head manifest
+at `conformance/golden-http-head/authorization-cors/manifest.sha256` binds
+three raw production response-head fixtures.
+`McpAuthorizationIntegrationTests` contains two test methods: one reads and
+verifies those goldens, while the other asserts request and notification
+challenge semantics. This separate corpus does not alter the final-schema
+corpus, which remains 48 JSON messages with 11 focused
+golden tests. An unsigned Corretto 17 `clean verify` passes 1,685/0/0/72 over
+462 main and 201 test sources and builds the main, sources, and Javadoc JARs.
+The only production change is an internal policy-response denylist for legacy
+MCP session/replay headers; a negative
+production-source inventory confines those names to that denylist. Public API,
+signatures, and the Phase 4/5/6 freeze inventories are unchanged. The current
+canonical matrix remains deliberately `FAILED`: 100 rows are `CORE_COMPLETE`,
+116 are `RELEASE_GATED`, four are `APPLICATION_OWNED`, 18 are
+`NOT_APPLICABLE`, and 24 remain `UNRESOLVED`. Final-tag Ajv validation of the
+expanded 48-message corpus was not rerun locally and remains owned by candidate
+conformance. These local checks are not candidate PASS receipts.
 
 Six downstream gates remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`. The manifest
 records their exact public commit pins without treating uncommitted sibling

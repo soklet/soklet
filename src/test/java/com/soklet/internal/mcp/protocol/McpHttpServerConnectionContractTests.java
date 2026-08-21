@@ -178,22 +178,38 @@ public class McpHttpServerConnectionContractTests {
 				assertResponse(client, 400, "\"id\":\"wrong-custom\"",
 						"\"code\":-32020");
 
+				client.writeRequest("GET", "/mcp", "localhost:" + port, "",
+						List.of(
+								new McpChunkedHttpClient.RequestHeader(
+										"MCP-Session-Id", "legacy-get-session"),
+								new McpChunkedHttpClient.RequestHeader(
+										"Last-Event-ID", "legacy-get-event")));
+				assertResponse(client, 405);
+
 				client.writeMcpMessage(toolRequest("final", "delta"),
 						toolHeaders("delta"));
 				assertResponse(client, 200, "\"id\":\"final\"");
 
 				client.writeRequest("DELETE", "/mcp", "localhost:" + port, "",
-						List.of());
+						List.of(
+								new McpChunkedHttpClient.RequestHeader(
+										"MCP-Session-Id", "legacy-delete-session"),
+								new McpChunkedHttpClient.RequestHeader(
+										"Last-Event-ID", "legacy-delete-event")));
 				assertResponse(client, 405);
+
+				client.writeMcpMessage(toolRequest("after-delete", "epsilon"),
+						toolHeaders("epsilon"));
+				assertResponse(client, 200, "\"id\":\"after-delete\"");
 			}
 
-			Assertions.assertEquals(3, handlers.get());
+			Assertions.assertEquals(4, handlers.get());
 			Assertions.assertEquals(List.of(
 					Optional.of("Bearer first"), Optional.of("Bearer second"),
-					Optional.empty()), authorizations);
+					Optional.empty(), Optional.empty()), authorizations);
 			Assertions.assertEquals(List.of(
 					"127.0.0.1:" + port, "localhost:" + port,
-					"127.0.0.1:" + port), hosts);
+					"127.0.0.1:" + port, "127.0.0.1:" + port), hosts);
 			Assertions.assertEquals(0,
 					runtime.requestExecutionSnapshot()
 							.activeIdentifiedRequestExchanges());

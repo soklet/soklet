@@ -446,6 +446,14 @@ self-reported client values. Client information, client capabilities, request
 `_meta`, and server information are informational rather than authenticated
 identity.
 
+An admission rejection may carry an application-authored
+`WWW-Authenticate` Bearer challenge, including an absolute
+`resource_metadata` URI and operation scopes. Soklet safely transports that
+header but treats its syntax as opaque: the application owns authentication,
+authorization-server selection, scope semantics, and RFC compliance. Unsafe
+or reserved response headers fail closed, and notifications retain the HTTP
+status and safe headers without acquiring a JSON-RPC body.
+
 HTTP `Forwarded` and `X-Forwarded-For` headers are equally inert at this
 boundary: Soklet never turns them into an admission identity or silently
 replaces the application's partition key. If an application deliberately uses
@@ -676,8 +684,10 @@ to the protocol's negotiation rules.
 Every JSON-RPC request carries `Mcp-Method`. Tool calls, prompt gets, and
 resource reads also carry `Mcp-Name`; each header must agree with the JSON-RPC
 method or selected operation. Notifications are exempt from these header
-requirements. Legacy `MCP-Session-Id` and `Last-Event-ID` headers are ignored,
-never stored, and never echoed.
+requirements. Legacy `MCP-Session-Id` and `Last-Event-ID` headers are ignored
+and never stored. They are also forbidden in application-authored MCP response
+headers, so neither automatic transport behavior nor policy output can echo
+them.
 
 An identifiable HTTP `notifications/cancelled` message still traverses version
 validation, admission, and request limiting, then returns an empty HTTP 202.
@@ -1996,6 +2006,15 @@ Soklet's pre-3.6.0 MCP implementation. Applications that require MCP
 `2025-11-25` must remain on Soklet 3.5.x; there is no adapter or dual-protocol
 mode.
 
+Client extension settings are open but do not implicitly enable server
+behavior. Keys in `clientCapabilities.extensions` must use a valid namespaced
+extension identifier. A valid unsupported setting remains inspectable through
+the request's client capabilities, while Soklet continues core processing
+without inventing a core capability, advertising matching server support, or
+reflecting the setting into the response. Malformed extension containers,
+identifiers, or settings fail before admission, and unsupported extension
+methods retain the normal explicit unknown-method behavior.
+
 Soklet 3.6.0 does not provide stdio transport, public arbitrary JSON Schema
 registration, MCP Completion, MCP logging capability, mutable tool/prompt list
 publishers, or an application result-extension registry. OAuth protected-
@@ -2146,7 +2165,7 @@ Eighteen are dispatch-configured, while five remain
 `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving 11 fail-closed blockers;
 `READY` means configured, never passed. The matrix-closure hook is `READY`, but
 the canonical report generated from its checked-in registry remains
-deliberately `FAILED` while 29 rows are `UNRESOLVED`, so no PASS receipt can be
+deliberately `FAILED` while 24 rows are `UNRESOLVED`, so no PASS receipt can be
 recorded. A `RELEASE_GATED` row has
 candidate-contained implementation or evidence anchors and names the exact
 immutable, scheduled, sustained, or downstream gate that still owes proof; it
@@ -2222,18 +2241,51 @@ production behavior, public API, and the Phase 4/5/6 freeze inventories are
 unchanged. This is local snapshot evidence, not immutable release-candidate
 evidence.
 
-The subsequent policy/error reconciliation is test- and golden-only. Its exact
-slice passes 27/27 on the pinned local Corretto 17 and Corretto 21 toolchains,
-and the adjacent policy regression set passes 59/59 on each.
+The previous policy/error reconciliation checkpoint was test- and golden-only.
+Its exact slice passes 27/27 on the pinned local Corretto 17 and Corretto 21
+toolchains, and the adjacent policy regression set passes 59/59 on each.
 `McpFinalTagGoldenWireProductionTests` passes 11/11 on each JDK, and the
 manifest now binds 48 production-derived messages. An unsigned Corretto 17
 `clean verify` passes 1,677/0/0/72 over 462 main and 197 test sources and
 builds the main, sources, and Javadoc JARs. No production behavior, public API,
-or Phase 4/5/6 freeze inventory changed. The canonical matrix remains
-deliberately `FAILED`: 95 rows are `CORE_COMPLETE`, 116 are `RELEASE_GATED`,
-four are `APPLICATION_OWNED`, 18 are `NOT_APPLICABLE`, and 29 remain
-`UNRESOLVED`. Final-tag Ajv validation of the expanded 48-message corpus was
-not rerun locally and remains owned by candidate conformance. These are local
-snapshot checks, not immutable-candidate evidence.
+or Phase 4/5/6 freeze inventory changed. At that checkpoint, the canonical
+matrix was deliberately `FAILED`: 95 rows were `CORE_COMPLETE`, 116 were
+`RELEASE_GATED`, four were `APPLICATION_OWNED`, 18 were `NOT_APPLICABLE`, and
+29 remained `UNRESOLVED`. Final-tag Ajv validation of the expanded 48-message
+corpus had not been rerun locally and remained owned by candidate conformance.
+These are local snapshot checks, not immutable-candidate evidence.
+
+The current five-row compatibility reconciliation closes the core rows for
+admitted identity versus client self-report, unknown client-extension
+fallback, Bearer challenge transport, authorization/CORS response-head
+behavior, and legacy session/replay-header containment. A real listener keeps
+credential-selected identity authoritative despite forged client metadata.
+Valid unknown extension settings remain opaque admission input without
+inventing or advertising core support; malformed settings fail before
+admission. A safe Bearer challenge can carry an absolute `resource_metadata`
+URI and operation scopes, but the application owns their meaning and standards
+compliance. The independent CORS goldens cover `Authorization`, modern and
+registered MCP headers, `WWW-Authenticate` exposure, exact order and
+multiplicity, and fail-closed legacy-header rejection.
+
+The focused compatibility slice passes 33/33 on the pinned local Corretto 17
+and Corretto 21 toolchains. The separate authorization/CORS HTTP-head manifest
+at `conformance/golden-http-head/authorization-cors/manifest.sha256` binds
+three raw production response-head fixtures.
+`McpAuthorizationIntegrationTests` contains two test methods: one reads and
+verifies those goldens, while the other asserts request and notification
+challenge semantics. This separate corpus does not alter the final-schema
+corpus, which remains 48 JSON messages with 11 focused
+golden tests. An unsigned Corretto 17 `clean verify` passes 1,685/0/0/72 over
+462 main and 201 test sources and builds the main, sources, and Javadoc JARs.
+The only production change is an internal policy-response denylist for legacy
+MCP session/replay headers; a negative
+production-source inventory confines those names to that denylist. Public API,
+signatures, and the Phase 4/5/6 freeze inventories are unchanged. The current
+canonical matrix remains deliberately `FAILED`: 100 rows are `CORE_COMPLETE`,
+116 are `RELEASE_GATED`, four are `APPLICATION_OWNED`, 18 are
+`NOT_APPLICABLE`, and 24 remain `UNRESOLVED`. Final-tag Ajv validation of the
+expanded 48-message corpus was not rerun locally and remains owned by candidate
+conformance. These are local snapshot checks, not immutable-candidate evidence.
 
 Do not treat this snapshot guide as a release-conformance statement.

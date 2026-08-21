@@ -264,6 +264,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			"proxy-authorization", "proxy-connection", "te", "trailer",
 			"transfer-encoding", "upgrade", "retry-after");
 	@NonNull
+	private static final Set<@NonNull String> FORBIDDEN_LEGACY_MCP_POLICY_HEADERS = Set.of(
+			"mcp-session-id", "last-event-id");
+	@NonNull
 	private static final Set<@NonNull HttpMethod> MCP_HTTP_METHODS =
 			Set.of(HttpMethod.POST, HttpMethod.OPTIONS);
 	@NonNull
@@ -3809,6 +3812,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			if (!validHeaderName(name)
 					|| !normalizedNames.add(lowerName)
 					|| FRAMEWORK_OWNED_POLICY_HEADERS.contains(lowerName)
+					|| FORBIDDEN_LEGACY_MCP_POLICY_HEADERS.contains(lowerName)
 					|| lowerName.startsWith("access-control-"))
 				throw new IllegalArgumentException(
 						"Admission rejection contains an unsafe response header.");

@@ -10,6 +10,10 @@
   incompatible in this minor release. Applications that require the legacy MCP
   implementation must remain on Soklet 3.5.x; 3.6.0 provides no compatibility
   adapter.
+- MCP HTTP is stateless: `GET` and `DELETE` return `405`, while
+  `MCP-Session-Id` and `Last-Event-ID` are ignored, never stored, and never
+  emitted. This includes application-authored policy output; attempts to add
+  either legacy header fail closed instead of being echoed.
 
 ### Features
 

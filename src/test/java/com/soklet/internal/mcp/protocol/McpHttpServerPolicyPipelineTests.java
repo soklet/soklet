@@ -244,6 +244,12 @@ public class McpHttpServerPolicyPipelineTests {
 														List.of("safe\r\nInjected: true")))))),
 				new PolicyFailureCase("content-encoding",
 						rejectionPolicy(Map.of("Content-Encoding", List.of("gzip")))),
+				new PolicyFailureCase("legacy-session-header",
+						rejectionPolicy(Map.of(
+								"mCp-SeSsIoN-Id", List.of("legacy-session-secret")))),
+				new PolicyFailureCase("legacy-replay-header",
+						rejectionPolicy(Map.of(
+								"lAsT-EvEnT-iD", List.of("legacy-replay-secret")))),
 				new PolicyFailureCase("duplicate-header-name",
 						rejectionPolicy(Map.of(
 								"X-Duplicate", List.of("first"),
@@ -276,7 +282,13 @@ public class McpHttpServerPolicyPipelineTests {
 				Assertions.assertFalse(response.head().hasHeader("X-Unsafe"));
 				Assertions.assertFalse(response.head().hasHeader("X-Policy"));
 				Assertions.assertFalse(response.head().hasHeader("Content-Encoding"));
+				Assertions.assertFalse(response.head().hasHeader("MCP-Session-Id"));
+				Assertions.assertFalse(response.head().hasHeader("Last-Event-ID"));
 				Assertions.assertFalse(response.head().hasHeader("X-Duplicate"));
+				Assertions.assertFalse(response.head().raw().contains("legacy-session-secret"));
+				Assertions.assertFalse(response.head().raw().contains("legacy-replay-secret"));
+				Assertions.assertFalse(response.body().contains("legacy-session-secret"));
+				Assertions.assertFalse(response.body().contains("legacy-replay-secret"));
 				Assertions.assertEquals(0, interceptorInvocations.get());
 				Assertions.assertEquals(0, handlerInvocations.get());
 				awaitClean(runtime);

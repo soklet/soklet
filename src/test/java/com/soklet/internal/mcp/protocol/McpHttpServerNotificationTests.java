@@ -591,13 +591,31 @@ public class McpHttpServerNotificationTests {
 								"Must not escape", Optional.empty()), Map.of()),
 				new NotificationAdmissionHardeningCase("framework-owned response header",
 						new McpJsonRpcError(1_001, "Rejected", Optional.empty()),
-						Map.of("Content-Type", List.of("text/plain; secret=true"))));
+						Map.of("Content-Type", List.of("text/plain; secret=true"))),
+				new NotificationAdmissionHardeningCase("legacy session response header",
+						new McpJsonRpcError(1_001, "Rejected", Optional.empty()),
+						Map.of("mCp-SeSsIoN-Id",
+								List.of("legacy-session-secret"))),
+				new NotificationAdmissionHardeningCase("legacy replay response header",
+						new McpJsonRpcError(1_001, "Rejected", Optional.empty()),
+						Map.of("lAsT-EvEnT-iD",
+								List.of("legacy-replay-secret"))));
 
 		for (NotificationAdmissionHardeningCase testCase : cases) {
+			AtomicInteger limiterInvocations = new AtomicInteger();
+			AtomicInteger interceptorInvocations = new AtomicInteger();
 			McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
 					CorsAuthorizer.rejectAllInstance(),
 					ignored -> McpAdmissionDecision.rejected(new McpAdmissionRejection(
-							401, testCase.error(), testCase.headers())));
+							401, testCase.error(), testCase.headers())))
+					.withRequestRateLimiter(ignored -> {
+						limiterInvocations.incrementAndGet();
+						return McpRateLimitDecision.allowed();
+					})
+					.withRequestInterceptor((invocation, continuation) -> {
+						interceptorInvocations.incrementAndGet();
+						return continuation.invoke();
+					});
 			McpHttpServerRuntime runtime = runtime(policy);
 			try {
 				int port = runtime.start().getPort();
@@ -611,6 +629,20 @@ public class McpHttpServerNotificationTests {
 				Assertions.assertEquals("", response.body(), testCase.description());
 				Assertions.assertFalse(response.head().hasHeader("Content-Type"),
 						testCase.description());
+				Assertions.assertFalse(response.head().hasHeader("MCP-Session-Id"),
+						testCase.description());
+				Assertions.assertFalse(response.head().hasHeader("Last-Event-ID"),
+						testCase.description());
+				Assertions.assertFalse(response.head().raw().contains("secret"),
+						testCase.description());
+				Assertions.assertFalse(response.body().contains("secret"),
+						testCase.description());
+				Assertions.assertEquals(0, limiterInvocations.get(),
+						"Admission rejection must precede the notification limiter: "
+								+ testCase.description());
+				Assertions.assertEquals(0, interceptorInvocations.get(),
+						"Admission rejection must precede notification interception: "
+								+ testCase.description());
 			} finally {
 				runtime.close();
 			}

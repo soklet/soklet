@@ -120,18 +120,48 @@ checkpoint final-tag Ajv validation of the expanded 43-message corpus remained
 with candidate conformance. These are local snapshot checks, not immutable-
 candidate evidence.
 
-The subsequent policy/error reconciliation is test- and golden-only. Its exact
-slice passes 27/27 on the pinned local Corretto 17 and Corretto 21 toolchains,
-and the adjacent policy regression set passes 59/59 on each.
+The previous policy/error reconciliation checkpoint was test- and golden-only.
+Its exact slice passes 27/27 on the pinned local Corretto 17 and Corretto 21
+toolchains, and the adjacent policy regression set passes 59/59 on each.
 `McpFinalTagGoldenWireProductionTests` passes 11/11 on each JDK. An unsigned
 Corretto 17 `clean verify` passes 1,677/0/0/72 over 462 main and 197 test
 sources and builds the main, sources, and Javadoc JARs. No production behavior,
-public API, or Phase 4/5/6 freeze inventory changed. The canonical matrix
-remains deliberately `FAILED`: 95 rows are `CORE_COMPLETE`, 116 are
-`RELEASE_GATED`, four are `APPLICATION_OWNED`, 18 are `NOT_APPLICABLE`, and 29
-remain `UNRESOLVED`. Final-tag Ajv validation of the current 48-message corpus
-was not rerun locally and remains owned by candidate conformance. These are
-local snapshot checks, not immutable-candidate evidence.
+public API, or Phase 4/5/6 freeze inventory changed. At that checkpoint, the
+canonical matrix was deliberately `FAILED`: 95 rows were `CORE_COMPLETE`, 116
+were `RELEASE_GATED`, four were `APPLICATION_OWNED`, 18 were `NOT_APPLICABLE`,
+and 29 remained `UNRESOLVED`. Final-tag Ajv validation of the current
+48-message corpus had not been rerun locally and remained owned by candidate
+conformance. These are local snapshot checks, not immutable-candidate evidence.
+
+The current five-row compatibility reconciliation also proves that forged
+client self-report cannot replace credential-selected identity and that valid
+unknown extension settings remain opaque without inventing server support,
+while malformed settings fail before admission. It adds an independent HTTP
+response-head evidence surface without changing the official final-schema JSON
+corpus. Its focused slice passes 33/33 on the pinned local Corretto 17 and
+Corretto 21 toolchains. The separate authorization/CORS HTTP-head manifest at
+`../golden-http-head/authorization-cors/manifest.sha256` binds three raw
+production response-head fixtures: an exact Bearer challenge, an authorized
+CORS preflight, and an empty CORS rejection.
+`McpAuthorizationIntegrationTests` contains two test methods: one reads and
+verifies those goldens, while the other asserts request and notification
+challenge semantics. These fixtures cover an absolute `resource_metadata` URI
+and operation scopes, modern and endpoint-registered request headers,
+`Authorization`, `WWW-Authenticate` exposure, exact response-head order and
+multiplicity, and fail-closed legacy session/replay-header rejection. They are
+not Ajv inputs and do not alter the 48 final-schema JSON messages or 11 focused
+golden tests.
+
+An unsigned Corretto 17 `clean verify` passes 1,685/0/0/72 over 462 main and
+201 test sources and builds the main, sources, and Javadoc JARs. The only
+production change is an internal policy-response denylist backed by a negative
+production-source inventory; public API, signatures, and the Phase 4/5/6
+freeze inventories are unchanged. The current canonical matrix remains
+deliberately `FAILED`: 100 rows are `CORE_COMPLETE`, 116 are `RELEASE_GATED`,
+four are `APPLICATION_OWNED`, 18 are `NOT_APPLICABLE`, and 24 remain
+`UNRESOLVED`. Final-tag Ajv validation of the expanded 48-message corpus was
+not rerun locally and remains owned by candidate conformance. These are local
+snapshot checks, not immutable-candidate evidence.
 
 The schema layer checks JSON message shapes only. HTTP status and headers,
 CORS, SSE framing, cross-message order, ID correlation, filter containment,
