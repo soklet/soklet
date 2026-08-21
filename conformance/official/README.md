@@ -133,12 +133,12 @@ and 29 remained `UNRESOLVED`. Final-tag Ajv validation of the current
 48-message corpus had not been rerun locally and remained owned by candidate
 conformance. These are local snapshot checks, not immutable-candidate evidence.
 
-The current five-row compatibility reconciliation also proves that forged
+The preceding five-row compatibility reconciliation also proved that forged
 client self-report cannot replace credential-selected identity and that valid
 unknown extension settings remain opaque without inventing server support,
 while malformed settings fail before admission. It adds an independent HTTP
 response-head evidence surface without changing the official final-schema JSON
-corpus. Its focused slice passes 33/33 on the pinned local Corretto 17 and
+corpus. Its focused slice passed 33/33 on the pinned local Corretto 17 and
 Corretto 21 toolchains. The separate authorization/CORS HTTP-head manifest at
 `../golden-http-head/authorization-cors/manifest.sha256` binds three raw
 production response-head fixtures: an exact Bearer challenge, an authorized
@@ -152,16 +152,39 @@ multiplicity, and fail-closed legacy session/replay-header rejection. They are
 not Ajv inputs and do not alter the 48 final-schema JSON messages or 11 focused
 golden tests.
 
-An unsigned Corretto 17 `clean verify` passes 1,685/0/0/72 over 462 main and
-201 test sources and builds the main, sources, and Javadoc JARs. The only
-production change is an internal policy-response denylist backed by a negative
+An unsigned Corretto 17 `clean verify` passed 1,685/0/0/72 over 462 main and
+201 test sources and built the main, sources, and Javadoc JARs. The only
+production change was an internal policy-response denylist backed by a negative
 production-source inventory; public API, signatures, and the Phase 4/5/6
-freeze inventories are unchanged. The current canonical matrix remains
-deliberately `FAILED`: 100 rows are `CORE_COMPLETE`, 116 are `RELEASE_GATED`,
-four are `APPLICATION_OWNED`, 18 are `NOT_APPLICABLE`, and 24 remain
-`UNRESOLVED`. Final-tag Ajv validation of the expanded 48-message corpus was
+freeze inventories were unchanged. At that checkpoint, the canonical matrix
+remained deliberately `FAILED`: 100 rows were `CORE_COMPLETE`, 116 were
+`RELEASE_GATED`, four were `APPLICATION_OWNED`, 18 were `NOT_APPLICABLE`, and
+24 were `UNRESOLVED`. Final-tag Ajv validation of the expanded 48-message corpus was
 not rerun locally and remains owned by candidate conformance. These are local
 snapshot checks, not immutable-candidate evidence.
+
+The current four-row HTTP-contract reconciliation adds a third, independent
+evidence surface without changing the official corpus: 21 canonical complete
+HTTP response fixtures bound by
+`../golden-http-contract/precedence-no-store/manifest.sha256` at SHA-256
+`ec1bd3f13c70bec100b18e774bfbdf2d9e574c1d8df99f2acc4b36e85f51702c`.
+Four contract tests—three real-listener goldens and one exhaustive response-
+authority inventory—and four initialize-diagnostic tests pass 8/8 on local
+Corretto 17.0.20.1 and local Corretto 21.0.11; the adjacent group passes
+108/108 on both. Full clean test passes 1,693/0/0/72 and 1,708/0/0/4,
+respectively, over 462 main and 203 test sources. A subsequent local Corretto
+17 package validation built all three JARs after allowing configured external
+Javadoc links. These are local snapshot results, not immutable-candidate
+evidence or pinned-Corretto-21 results.
+
+The official final-schema corpus remains exactly 48 JSON messages with 11
+focused tests, and the authorization/CORS corpus remains three heads with two
+integration tests. The narrow internal diagnostic change implements no
+initialization or session and leaves public API and freeze inventories
+unchanged. The current matrix remains `FAILED`: 104 rows are `CORE_COMPLETE`,
+116 are `RELEASE_GATED`, four are `APPLICATION_OWNED`, 18 are
+`NOT_APPLICABLE`, and 20 remain `UNRESOLVED`. Final-tag Ajv validation remains
+owned by candidate conformance.
 
 The schema layer checks JSON message shapes only. HTTP status and headers,
 CORS, SSE framing, cross-message order, ID correlation, filter containment,

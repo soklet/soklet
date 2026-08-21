@@ -32,10 +32,7 @@ const expectedUnresolvedIds = Object.freeze([
   'MCP-BASE-005',
   'MCP-BASE-011',
   'MCP-BASE-015',
-  'MCP-VER-004',
   'MCP-HTTP-020',
-  'MCP-HTTP-024',
-  'MCP-HTTP-025',
   'MCP-MRTR-011',
   'MCP-PROMPT-006',
   'MCP-RESOURCE-006',
@@ -44,7 +41,6 @@ const expectedUnresolvedIds = Object.freeze([
   'MCP-PAGE-006',
   'MCP-PAGE-007',
   'SOK-EXEC-005',
-  'SOK-VALID-001',
   'SOK-VALID-002',
   'SOK-ERROR-002',
   'SOK-STATE-002',
@@ -137,10 +133,10 @@ try {
   );
   assert.deepEqual(current.report.dispositionCounts, {
     APPLICATION_OWNED: 4,
-    CORE_COMPLETE: 100,
+    CORE_COMPLETE: 104,
     NOT_APPLICABLE: 18,
     RELEASE_GATED: 116,
-    UNRESOLVED: 24,
+    UNRESOLVED: 20,
   });
   assert.deepEqual(
     current.report.unresolvedRows.map(({ id }) => id),
@@ -177,13 +173,17 @@ try {
   for (const id of [
     'MCP-BASE-024',
     'MCP-VER-003',
+    'MCP-VER-004',
     'MCP-HTTP-018',
+    'MCP-HTTP-024',
+    'MCP-HTTP-025',
     'MCP-AUTH-003',
     'MCP-HTTP-021',
     'SOK-ERROR-001',
     'SOK-RATE-006',
     'SOK-RATE-007',
     'SOK-CORS-005',
+    'SOK-VALID-001',
   ]) {
     assert.equal(row(registry, id).disposition, 'CORE_COMPLETE');
     assert.deepEqual(row(registry, id).releaseGates, []);
@@ -212,6 +212,9 @@ try {
   assert.ok(row(registry, 'MCP-VER-003').evidence.includes(
     'src/test/java/com/soklet/McpExtensionCompatibilityPublicRuntimeTests.java',
   ));
+  assert.ok(row(registry, 'MCP-VER-004').evidence.includes(
+    'src/test/java/com/soklet/internal/mcp/protocol/McpInitializeRejectionDiagnosticsTests.java',
+  ));
   for (const evidence of [
     'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java',
     'src/test/java/com/soklet/McpLegacySessionNegativeInventoryTests.java',
@@ -233,6 +236,25 @@ try {
   ]) {
     assert.ok(row(registry, 'SOK-CORS-005').evidence.includes(evidence));
   }
+  for (const id of ['MCP-HTTP-024', 'MCP-HTTP-025', 'SOK-VALID-001']) {
+    assert.ok(row(registry, id).evidence.includes(
+      'conformance/golden-http-contract/precedence-no-store/manifest.sha256',
+    ));
+    assert.ok(row(registry, id).evidence.includes(
+      'src/test/java/com/soklet/McpHttpContractGoldenProductionTests.java',
+    ));
+  }
+  for (const id of ['MCP-HTTP-021', 'SOK-ERROR-001', 'SOK-ERROR-002']) {
+    assert.ok(row(registry, id).evidence.includes(
+      'src/test/java/com/soklet/internal/mcp/protocol/McpInitializeRejectionDiagnosticsTests.java',
+    ));
+  }
+  for (const evidence of [
+    'src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java',
+    'src/test/java/com/soklet/McpRateLimitPipelinePublicRuntimeTests.java',
+  ]) {
+    assert.ok(row(registry, 'SOK-VALID-001').evidence.includes(evidence));
+  }
   assert.deepEqual(row(registry, 'SOK-METRIC-001').releaseGates, [
     'release-soak',
     'operational-history',
@@ -249,7 +271,7 @@ try {
   assert.equal(checkedInCli.stdout, current.reportText);
   assert.equal(
     checkedInCli.stderr,
-    'Matrix closure failed: 24 unresolved row(s).\n',
+    'Matrix closure failed: 20 unresolved row(s).\n',
   );
 
   const usage = spawnSync(process.execPath, [verifierPath, 'unexpected'], {

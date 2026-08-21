@@ -2269,7 +2269,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		try {
 			envelope = envelopeCodec.decode(request.body());
 		} catch (McpWireDecodingException exception) {
-			return wireDecodingFailure(exception, null, corsHeaders);
+			return wireDecodingFailure(exception,
+					exception.readableMethod().orElse(null), corsHeaders);
 		}
 
 		if (envelope instanceof McpJsonRpcEnvelope.Notification notification)
@@ -2298,10 +2299,11 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					unknownHeaderName);
 		if (customHeaderValidation.outcome()
 				== McpCustomMirroredHeaderOutcome.HEADER_MISMATCH)
-			return headerMismatch(wireRequest.id(), corsHeaders);
+			return headerMismatch(wireRequest.id(), wireRequest.method(), corsHeaders);
 		if (customHeaderValidation.outcome()
 				== McpCustomMirroredHeaderOutcome.STRICT_UNKNOWN)
-			return strictUnknownMirroredHeader(wireRequest.id(), corsHeaders);
+			return strictUnknownMirroredHeader(wireRequest.id(), wireRequest.method(),
+					corsHeaders);
 
 		McpJsonRpcMessage.Request mappedRequest;
 		try {
@@ -2313,7 +2315,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		String headerProtocolVersion = singleHeader(request, MCP_PROTOCOL_VERSION)
 				.orElseThrow();
 		if (!headerProtocolVersion.equals(mappedRequest.params().metadata().protocolVersion()))
-			return headerMismatch(mappedRequest.id(), corsHeaders);
+			return headerMismatch(mappedRequest.id(), mappedRequest.method(), corsHeaders);
 
 		String requestedProtocolVersion = mappedRequest.params().metadata().protocolVersion();
 		if (!McpProtocolVersion.SUPPORTED.contains(requestedProtocolVersion))
@@ -4221,31 +4223,31 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		List<String> names = headerValues(request, MCP_NAME);
 
 		if (protocolVersions.size() != 1 || methods.size() != 1)
-			return headerMismatch(wireRequest.id(), corsHeaders);
+			return headerMismatch(wireRequest.id(), wireRequest.method(), corsHeaders);
 		try {
 			mirroredHeaderCodec.requirePlainString(protocolVersions.get(0));
 			mirroredHeaderCodec.requirePlainString(methods.get(0));
 		} catch (IllegalArgumentException exception) {
-			return headerMismatch(wireRequest.id(), corsHeaders);
+			return headerMismatch(wireRequest.id(), wireRequest.method(), corsHeaders);
 		}
 		if (!methods.get(0).equals(wireRequest.method()))
-			return headerMismatch(wireRequest.id(), corsHeaders);
+			return headerMismatch(wireRequest.id(), wireRequest.method(), corsHeaders);
 
 		Optional<String> expectedName = standardMirroredName(wireRequest);
 		if (requiresMcpName(wireRequest.method())) {
 			if (names.size() != 1 || expectedName.isEmpty())
-				return headerMismatch(wireRequest.id(), corsHeaders);
+				return headerMismatch(wireRequest.id(), wireRequest.method(), corsHeaders);
 
 			String decodedName;
 			try {
 				decodedName = mirroredHeaderCodec.decodeString(names.get(0));
 			} catch (IllegalArgumentException exception) {
-				return headerMismatch(wireRequest.id(), corsHeaders);
+				return headerMismatch(wireRequest.id(), wireRequest.method(), corsHeaders);
 			}
 			if (!decodedName.equals(expectedName.orElseThrow()))
-				return headerMismatch(wireRequest.id(), corsHeaders);
+				return headerMismatch(wireRequest.id(), wireRequest.method(), corsHeaders);
 		} else if (!names.isEmpty()) {
-			return headerMismatch(wireRequest.id(), corsHeaders);
+			return headerMismatch(wireRequest.id(), wireRequest.method(), corsHeaders);
 		}
 
 		return null;
@@ -4274,27 +4276,29 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 	@NonNull
 	private MicrohttpResponse headerMismatch(@NonNull McpJsonRpcId id,
+			@NonNull String readableMethod,
 			@NonNull List<@NonNull Header> corsHeaders) {
 		return jsonRpcError(400, "Bad Request", Optional.of(id),
 				new McpJsonRpcError(McpJsonRpcError.HEADER_MISMATCH,
-						"Header mismatch", Optional.empty()), corsHeaders);
+						"Header mismatch", supportedVersionDiagnostic(readableMethod)),
+				corsHeaders);
 	}
 
 	@NonNull
 	private MicrohttpResponse strictUnknownMirroredHeader(@NonNull McpJsonRpcId id,
+			@NonNull String readableMethod,
 			@NonNull List<@NonNull Header> corsHeaders) {
 		return jsonRpcError(400, "Bad Request", Optional.of(id),
 				new McpJsonRpcError(SOKLET_STRICT_UNKNOWN_MIRRORED_HEADER,
-						"Unknown mirrored header", Optional.empty()), corsHeaders);
+						"Unknown mirrored header",
+						supportedVersionDiagnostic(readableMethod)), corsHeaders);
 	}
 
 	@NonNull
 	private MicrohttpResponse methodNotFound(
 			McpJsonRpcMessage.@NonNull Request request,
 			@NonNull List<@NonNull Header> corsHeaders) {
-		Optional<McpJsonValue> data = "initialize".equals(request.method())
-				? Optional.of(supportedVersionDiagnostic())
-				: Optional.empty();
+		Optional<McpJsonValue> data = supportedVersionDiagnostic(request.method());
 		return jsonRpcError(404, "Not Found", Optional.of(request.id()),
 				new McpJsonRpcError(McpJsonRpcError.METHOD_NOT_FOUND,
 						"Method not found", data), corsHeaders);
@@ -4335,9 +4339,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			case INVALID_REQUEST -> "Invalid Request";
 			case INVALID_PARAMS -> "Invalid params";
 		};
-		Optional<McpJsonValue> data = "initialize".equals(readableMethod)
-				? Optional.of(supportedVersionDiagnostic())
-				: Optional.empty();
+		Optional<McpJsonValue> data = supportedVersionDiagnostic(readableMethod);
 		return jsonRpcError(400, "Bad Request", exception.readableRequestId(),
 				new McpJsonRpcError(code, message, data), corsHeaders);
 	}
@@ -4349,6 +4351,14 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				.map(McpJsonValue.class::cast)
 				.toList();
 		return new McpJsonObject(Map.of("supportedVersions", new McpJsonArray(versions)));
+	}
+
+	@NonNull
+	private Optional<@NonNull McpJsonValue> supportedVersionDiagnostic(
+			@Nullable String readableMethod) {
+		return "initialize".equals(readableMethod)
+				? Optional.of(supportedVersionDiagnostic())
+				: Optional.empty();
 	}
 
 	@NonNull

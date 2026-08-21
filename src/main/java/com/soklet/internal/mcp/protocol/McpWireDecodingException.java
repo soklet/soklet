@@ -40,41 +40,49 @@ final class McpWireDecodingException extends IllegalArgumentException {
 	private final Kind kind;
 	@NonNull
 	private final Optional<@NonNull McpJsonRpcId> readableRequestId;
+	@NonNull
+	private final Optional<@NonNull String> readableMethod;
 
 	private McpWireDecodingException(@NonNull Kind kind, @NonNull String message,
-			@NonNull Optional<@NonNull McpJsonRpcId> readableRequestId) {
+			@NonNull Optional<@NonNull McpJsonRpcId> readableRequestId,
+			@NonNull Optional<@NonNull String> readableMethod) {
 		super(requireNonNull(message));
 		this.kind = requireNonNull(kind);
 		this.readableRequestId = requireNonNull(readableRequestId);
+		this.readableMethod = requireNonNull(readableMethod);
 	}
 
 	private McpWireDecodingException(@NonNull Kind kind, @NonNull String message,
 			@NonNull Optional<@NonNull McpJsonRpcId> readableRequestId,
+			@NonNull Optional<@NonNull String> readableMethod,
 			@NonNull Throwable cause) {
 		super(requireNonNull(message), requireNonNull(cause));
 		this.kind = requireNonNull(kind);
 		this.readableRequestId = requireNonNull(readableRequestId);
+		this.readableMethod = requireNonNull(readableMethod);
 	}
 
 	@NonNull
 	static McpWireDecodingException parseError(@NonNull Throwable cause) {
 		return new McpWireDecodingException(Kind.PARSE_ERROR,
 				"The request body is not valid JSON.", Optional.empty(),
+				Optional.empty(),
 				requireNonNull(cause));
 	}
 
 	@NonNull
 	static McpWireDecodingException invalidRequest(@NonNull String message,
-			@NonNull Optional<@NonNull McpJsonRpcId> readableRequestId) {
+			@NonNull Optional<@NonNull McpJsonRpcId> readableRequestId,
+			@NonNull Optional<@NonNull String> readableMethod) {
 		return new McpWireDecodingException(Kind.INVALID_REQUEST, message,
-				readableRequestId);
+				readableRequestId, readableMethod);
 	}
 
 	@NonNull
 	static McpWireDecodingException invalidParams(@NonNull String message,
 			@NonNull McpJsonRpcId readableRequestId) {
 		return new McpWireDecodingException(Kind.INVALID_PARAMS, message,
-				Optional.of(requireNonNull(readableRequestId)));
+				Optional.of(requireNonNull(readableRequestId)), Optional.empty());
 	}
 
 	@NonNull
@@ -85,5 +93,10 @@ final class McpWireDecodingException extends IllegalArgumentException {
 	@NonNull
 	Optional<@NonNull McpJsonRpcId> readableRequestId() {
 		return readableRequestId;
+	}
+
+	@NonNull
+	Optional<@NonNull String> readableMethod() {
+		return readableMethod;
 	}
 }

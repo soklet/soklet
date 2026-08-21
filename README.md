@@ -2399,7 +2399,7 @@ ordered gates. Eighteen are dispatch-configured, while five remain
 `BLOCKED_HARNESS_MISSING` and the six downstreams remain
 `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving 11 fail-closed blockers;
 `READY` means configured, never passed. The matrix-closure hook is `READY`, but
-its checked-in registry deliberately reports `FAILED` while 24 rows remain
+its checked-in registry deliberately reports `FAILED` while 20 rows remain
 `UNRESOLVED`. Scheduled/nightly and sustained history, release scans,
 benchmarks, published downstream pins, and immutable-candidate provenance
 remain open. `release-scans` remains blocked on its exact scanner/toolchain,
@@ -2495,7 +2495,7 @@ matrix was deliberately `FAILED`: 95 rows were `CORE_COMPLETE`, 116 were
 corpus had not been rerun locally and remained owned by candidate conformance.
 These are local snapshot checks, not immutable-candidate evidence.
 
-The current five-row compatibility reconciliation closes the core rows for
+The preceding five-row compatibility reconciliation closed the core rows for
 admitted identity versus client self-report, unknown client-extension
 fallback, Bearer challenge transport, authorization/CORS response-head
 behavior, and legacy session/replay-header containment. A real listener keeps
@@ -2508,7 +2508,7 @@ compliance. The independent CORS goldens cover `Authorization`, modern and
 registered MCP headers, `WWW-Authenticate` exposure, exact order and
 multiplicity, and fail-closed legacy-header rejection.
 
-The focused compatibility slice passes 33/33 on the pinned local Corretto 17
+The focused compatibility slice passed 33/33 on the pinned local Corretto 17
 and Corretto 21 toolchains. The separate authorization/CORS HTTP-head manifest
 at `conformance/golden-http-head/authorization-cors/manifest.sha256` binds
 three raw production response-head fixtures.
@@ -2516,17 +2516,54 @@ three raw production response-head fixtures.
 verifies those goldens, while the other asserts request and notification
 challenge semantics. This separate corpus does not alter the final-schema
 corpus, which remains 48 JSON messages with 11 focused
-golden tests. An unsigned Corretto 17 `clean verify` passes 1,685/0/0/72 over
-462 main and 201 test sources and builds the main, sources, and Javadoc JARs.
-The only production change is an internal policy-response denylist for legacy
+golden tests. An unsigned Corretto 17 `clean verify` passed 1,685/0/0/72 over
+462 main and 201 test sources and built the main, sources, and Javadoc JARs.
+The only production change was an internal policy-response denylist for legacy
 MCP session/replay headers; a negative
 production-source inventory confines those names to that denylist. Public API,
-signatures, and the Phase 4/5/6 freeze inventories are unchanged. The current
-canonical matrix remains deliberately `FAILED`: 100 rows are `CORE_COMPLETE`,
-116 are `RELEASE_GATED`, four are `APPLICATION_OWNED`, 18 are
-`NOT_APPLICABLE`, and 24 remain `UNRESOLVED`. Final-tag Ajv validation of the
+signatures, and the Phase 4/5/6 freeze inventories were unchanged. At that
+checkpoint, the canonical matrix remained deliberately `FAILED`: 100 rows
+were `CORE_COMPLETE`, 116 were `RELEASE_GATED`, four were
+`APPLICATION_OWNED`, 18 were `NOT_APPLICABLE`, and 24 were `UNRESOLVED`.
+Final-tag Ajv validation of the
 expanded 48-message corpus was not rerun locally and remains owned by candidate
 conformance. These are local snapshot checks, not immutable-candidate evidence.
+
+The current four-row HTTP-contract reconciliation closes modern-only
+`initialize` rejection diagnostics, unsupported classified-notification
+handling, universal MCP HTTP `no-store`, and exact request/notification
+validation precedence. The separate
+`conformance/golden-http-contract/precedence-no-store/manifest.sha256` binds 21
+path-sorted canonical complete-response hex fixtures and has SHA-256
+`ec1bd3f13c70bec100b18e774bfbdf2d9e574c1d8df99f2acc4b36e85f51702c`.
+Four contract tests—three production-listener golden tests and one exhaustive
+response-authority inventory—cover compound request first-failure winners,
+the separate notification/preflight order, overload/SSE, and every production
+response authority. Four initialize-diagnostic tests
+cover decoder method preservation, a positive all-stage control, 23 readable-
+initialize rejection cases, and the negative diagnostic boundary. Every
+golden response carries exactly one `Cache-Control: no-store`, and an
+application attempt to author a cacheable replacement fails closed.
+
+The new suites pass 8/8, and the adjacent contract group passes 108/108, on
+local Amazon Corretto 17.0.20.1 and local Amazon Corretto 21.0.11. Full clean
+test passes 1,693/0/0/72 on Corretto 17 and 1,708/0/0/4 on Corretto 21 over
+462 main and 203 test sources; the JDK 21 total includes 15 additional virtual-
+thread containment cases. These are local snapshot results, not immutable-
+candidate evidence or results from the release-pinned Corretto 21.0.12.9.1
+toolchain. A subsequent local Corretto 17 package validation built the main,
+sources, and Javadoc JARs after allowing the configured external Javadoc links.
+The new corpus is separate from both the unchanged official 48-
+message/11-test final-schema JSON corpus and the unchanged three-head/two-test
+authorization/CORS corpus. The narrow internal production change preserves a
+readable `initialize` method through valid-JSON envelope/ID failures and
+attaches only the modern diagnostic; it does not implement initialization or a
+handshake. Public API, signatures, and the Phase 4/5/6 freeze inventories are
+unchanged. The current canonical matrix remains deliberately `FAILED`: 104
+rows are `CORE_COMPLETE`, 116 are `RELEASE_GATED`, four are
+`APPLICATION_OWNED`, 18 are `NOT_APPLICABLE`, and 20 remain `UNRESOLVED`.
+Final-tag Ajv validation of the 48-message corpus was not rerun locally and
+remains owned by candidate conformance.
 
 You can expose a `/metrics` endpoint by injecting [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html)
 into a [`ResourceMethod`](https://javadoc.soklet.com/com/soklet/ResourceMethod.html):

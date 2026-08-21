@@ -28,7 +28,7 @@ Five gates remain `BLOCKED_HARNESS_MISSING`:
 
 The checked-in registry, verifier, and verifier self-test make
 `matrix-closure` `READY`. The registry deliberately produces a canonical
-`FAILED` report while 24 rows remain `UNRESOLVED`, so the validator cannot
+`FAILED` report while 20 rows remain `UNRESOLVED`, so the validator cannot
 record a typed PASS receipt yet. `RELEASE_GATED` means that a row has
 candidate-contained implementation or evidence anchors and that its remaining
 immutable-candidate, scheduled-history, sustained-run, or pinned-downstream
@@ -122,7 +122,7 @@ matrix was deliberately `FAILED`: 95 rows were `CORE_COMPLETE`, 116 were
 corpus had not been rerun locally and remained owned by candidate conformance.
 These local checks are not candidate PASS receipts.
 
-The current five-row compatibility reconciliation closes the core rows for
+The preceding five-row compatibility reconciliation closed the core rows for
 admitted identity versus client self-report, unknown client-extension
 fallback, Bearer challenge transport, authorization/CORS response-head
 behavior, and legacy session/replay-header containment. A real listener keeps
@@ -135,7 +135,7 @@ compliance. The independent CORS goldens cover `Authorization`, modern and
 registered MCP headers, `WWW-Authenticate` exposure, exact order and
 multiplicity, and fail-closed legacy-header rejection.
 
-The focused compatibility slice passes 33/33 on the pinned local Corretto 17
+The focused compatibility slice passed 33/33 on the pinned local Corretto 17
 and Corretto 21 toolchains. The separate authorization/CORS HTTP-head manifest
 at `conformance/golden-http-head/authorization-cors/manifest.sha256` binds
 three raw production response-head fixtures.
@@ -143,17 +143,41 @@ three raw production response-head fixtures.
 verifies those goldens, while the other asserts request and notification
 challenge semantics. This separate corpus does not alter the final-schema
 corpus, which remains 48 JSON messages with 11 focused
-golden tests. An unsigned Corretto 17 `clean verify` passes 1,685/0/0/72 over
-462 main and 201 test sources and builds the main, sources, and Javadoc JARs.
-The only production change is an internal policy-response denylist for legacy
+golden tests. An unsigned Corretto 17 `clean verify` passed 1,685/0/0/72 over
+462 main and 201 test sources and built the main, sources, and Javadoc JARs.
+The only production change was an internal policy-response denylist for legacy
 MCP session/replay headers; a negative
 production-source inventory confines those names to that denylist. Public API,
-signatures, and the Phase 4/5/6 freeze inventories are unchanged. The current
-canonical matrix remains deliberately `FAILED`: 100 rows are `CORE_COMPLETE`,
-116 are `RELEASE_GATED`, four are `APPLICATION_OWNED`, 18 are
-`NOT_APPLICABLE`, and 24 remain `UNRESOLVED`. Final-tag Ajv validation of the
+signatures, and the Phase 4/5/6 freeze inventories were unchanged. At that
+checkpoint, the canonical matrix remained deliberately `FAILED`: 100 rows
+were `CORE_COMPLETE`, 116 were `RELEASE_GATED`, four were
+`APPLICATION_OWNED`, 18 were `NOT_APPLICABLE`, and 24 were `UNRESOLVED`.
+Final-tag Ajv validation of the
 expanded 48-message corpus was not rerun locally and remains owned by candidate
 conformance. These local checks are not candidate PASS receipts.
+
+The current four-row HTTP-contract reconciliation closes modern-only readable-
+`initialize` rejection diagnostics, unsupported classified-notification
+handling, universal MCP HTTP `no-store`, and exact validation precedence. The
+separate `conformance/golden-http-contract/precedence-no-store/manifest.sha256`
+binds 21 canonical complete responses at SHA-256
+`ec1bd3f13c70bec100b18e774bfbdf2d9e574c1d8df99f2acc4b36e85f51702c`.
+Four contract tests comprise three real-listener goldens and one exhaustive
+response-authority inventory; four diagnostic tests cover the positive post-
+JSON and negative pre-JSON/unreadable-method boundary. They pass 8/8, and the
+adjacent group passes
+108/108, on local Corretto 17.0.20.1 and local Corretto 21.0.11.
+
+Full clean test passes 1,693/0/0/72 and 1,708/0/0/4, respectively, over 462
+main and 203 test sources; the JDK 21 total includes 15 extra virtual-thread
+containment cases. A subsequent local Corretto 17 package validation built all
+three JARs after allowing configured external Javadoc links. This corpus is
+separate from the official 48-message/11-test and auth/CORS three-head/two-test
+corpora. Public API and freeze inventories are unchanged. The current matrix
+remains deliberately `FAILED`: 104 rows are `CORE_COMPLETE`, 116 are
+`RELEASE_GATED`, four are `APPLICATION_OWNED`, 18 are `NOT_APPLICABLE`, and 20
+remain `UNRESOLVED`. These local snapshot checks are neither candidate PASS
+receipts nor results from the release-pinned Corretto 21.0.12.9.1 toolchain.
 
 Six downstream gates remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`. The manifest
 records their exact public commit pins without treating uncommitted sibling

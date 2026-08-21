@@ -14,6 +14,16 @@
   `MCP-Session-Id` and `Last-Event-ID` are ignored, never stored, and never
   emitted. This includes application-authored policy output; attempts to add
   either legacy header fail closed instead of being echoed.
+- The 3.6 modern-only migration diagnostic is intentionally narrower than the
+  3.5.x initialization protocol. Once strict JSON exposes the exact readable
+  method `initialize`, subsequent envelope/ID, mirrored-header, metadata,
+  version, and removed-method rejections carry a supported-version diagnostic
+  whose supported-version list names only `2026-07-28`;
+  `UnsupportedProtocolVersionError` retains its defined `requested` field.
+  Pre-JSON transport failures, unparseable JSON, unreadable methods, and other
+  method names do not acquire that diagnostic. This is a fall-forward aid, not
+  an initialization handshake or session. Applications that require those
+  3.5.x semantics must remain on Soklet 3.5.x.
 
 ### Features
 
@@ -21,6 +31,13 @@
   owns an independent listener and port, integrates with `SokletConfig`, and
   supports discovery as the first request without a session or initialization
   handshake.
+- Added a separate complete-HTTP contract corpus: 21 checksum-bound response
+  fixtures plus three production-listener golden tests and one exhaustive
+  response-authority inventory freeze request/notification first-failure
+  order, unsupported-notification handling, and universal HTTP `no-store`.
+  Four additional tests freeze the readable-`initialize` diagnostic boundary.
+  This evidence surface does not alter the official 48-message final-schema
+  corpus or the three-head authorization/CORS corpus.
 - Added annotation-first and programmatic tools, prompts, exact resources,
   resource templates, resource reads, and custom resource listing. Tool
   registration uses staged typed, argument-only, or raw-JSON argument paths;

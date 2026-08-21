@@ -3,8 +3,8 @@
   "protocolVersion": "2026-07-28",
   "releaseVersion": "3.6.0",
   "sourceMatrixPath": "mcp/MCP_CONFORMANCE_MATRIX.md",
-  "sourceMatrixLastUpdated": "2026-08-20",
-  "sourceMatrixSha256": "82ab9e60d6e5ca19af5e29b900ce797ff9316968a34bbdd0d71e700a85239e96",
+  "sourceMatrixLastUpdated": "2026-08-21",
+  "sourceMatrixSha256": "b0415d770f2e2452a1a512848275cec9543cbf1ee61cbe3a78d811ee134b29ff",
   "releaseGateUniverse": [
     "candidate-build",
     "core-jdk-21",
@@ -392,12 +392,13 @@
     },
     {
       "id": "MCP-VER-004",
-      "disposition": "UNRESOLVED",
+      "disposition": "CORE_COMPLETE",
       "evidence": [
-        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpInitializeRejectionDiagnosticsTests.java"
       ],
       "releaseGates": [],
-      "reason": "The exhaustive legacy-path and earlier metadata-error evidence remain pending."
+      "reason": ""
     },
     {
       "id": "MCP-VER-005",
@@ -716,7 +717,8 @@
         "src/test/java/com/soklet/McpMirroredHeaderPublicRuntimeTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpFinalTagGoldenWireProductionTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerCustomHeaderTests.java",
-        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java"
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpInitializeRejectionDiagnosticsTests.java"
       ],
       "releaseGates": [],
       "reason": ""
@@ -744,17 +746,21 @@
     },
     {
       "id": "MCP-HTTP-024",
-      "disposition": "UNRESOLVED",
+      "disposition": "CORE_COMPLETE",
       "evidence": [
+        "conformance/golden-http-contract/precedence-no-store/manifest.sha256",
+        "src/test/java/com/soklet/McpHttpContractGoldenProductionTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java"
       ],
       "releaseGates": [],
-      "reason": "Independent byte-golden, public-documentation, and official-suite evidence remain pending."
+      "reason": ""
     },
     {
       "id": "MCP-HTTP-025",
-      "disposition": "UNRESOLVED",
+      "disposition": "CORE_COMPLETE",
       "evidence": [
+        "conformance/golden-http-contract/precedence-no-store/manifest.sha256",
+        "src/test/java/com/soklet/McpHttpContractGoldenProductionTests.java",
         "src/test/java/com/soklet/McpInputResponsesPublicRuntimeTests.java",
         "src/test/java/com/soklet/McpRequestStatePublicRuntimeTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java",
@@ -762,7 +768,7 @@
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
       ],
       "releaseGates": [],
-      "reason": "The exhaustive HTTP no-store golden remains pending."
+      "reason": ""
     },
     {
       "id": "MCP-PROG-001",
@@ -2122,16 +2128,20 @@
     },
     {
       "id": "SOK-VALID-001",
-      "disposition": "UNRESOLVED",
+      "disposition": "CORE_COMPLETE",
       "evidence": [
+        "conformance/golden-http-contract/precedence-no-store/manifest.sha256",
+        "src/test/java/com/soklet/McpHttpContractGoldenProductionTests.java",
+        "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
         "src/test/java/com/soklet/McpMirroredHeaderPublicRuntimeTests.java",
+        "src/test/java/com/soklet/McpRateLimitPipelinePublicRuntimeTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerCustomHeaderTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerModernHeaderTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerPolicyPipelineTests.java"
       ],
       "releaseGates": [],
-      "reason": "Independent byte-golden ordering evidence remains pending."
+      "reason": ""
     },
     {
       "id": "SOK-VALID-002",
@@ -2240,7 +2250,8 @@
         "src/test/java/com/soklet/internal/mcp/protocol/McpFinalTagGoldenWireProductionTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerCustomHeaderTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java",
-        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerPolicyPipelineTests.java"
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerPolicyPipelineTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpInitializeRejectionDiagnosticsTests.java"
       ],
       "releaseGates": [],
       "reason": ""
@@ -2256,7 +2267,8 @@
         "src/test/java/com/soklet/internal/mcp/protocol/McpFinalTagGoldenWireProductionTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerPolicyPipelineTests.java",
-        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpInitializeRejectionDiagnosticsTests.java"
       ],
       "releaseGates": [],
       "reason": "Progress/commit races, a production capability golden, and the exhaustive byte matrix remain open."
