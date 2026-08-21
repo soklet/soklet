@@ -4,7 +4,7 @@
   "releaseVersion": "3.6.0",
   "sourceMatrixPath": "mcp/MCP_CONFORMANCE_MATRIX.md",
   "sourceMatrixLastUpdated": "2026-08-21",
-  "sourceMatrixSha256": "b0415d770f2e2452a1a512848275cec9543cbf1ee61cbe3a78d811ee134b29ff",
+  "sourceMatrixSha256": "1b4b2d3f75b34648349ccd4535e68fe95637031b97508c472447d6db39939557",
   "releaseGateUniverse": [
     "candidate-build",
     "core-jdk-21",
@@ -80,17 +80,19 @@
     },
     {
       "id": "MCP-BASE-005",
-      "disposition": "UNRESOLVED",
+      "disposition": "CORE_COMPLETE",
       "evidence": [
+        "conformance/golden-result-envelope/live/manifest.sha256",
         "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
         "src/test/java/com/soklet/McpInputResponsesPublicRuntimeTests.java",
         "src/test/java/com/soklet/McpRequestStatePublicRuntimeTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpFinalTagGoldenWireProductionTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpJsonRpcEnvelopeCodecTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpResultEnvelopeGoldenProductionTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpWireDtoSketchTests.java"
       ],
       "releaseGates": [],
-      "reason": "The exhaustive result-envelope evidence gate is still open."
+      "reason": ""
     },
     {
       "id": "MCP-BASE-006",
@@ -196,13 +198,14 @@
     },
     {
       "id": "MCP-BASE-015",
-      "disposition": "UNRESOLVED",
+      "disposition": "APPLICATION_OWNED",
       "evidence": [
         "src/test/java/com/soklet/McpRequestStatePublicRuntimeTests.java",
-        "src/test/java/com/soklet/internal/mcp/protocol/McpFrameworkRequestStateRuntimeTests.java"
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFrameworkRequestStateRuntimeTests.java",
+        "src/test/java/examples/mcp/McpDurableHandlePromptApplicationPatternsTests.java"
       ],
       "releaseGates": [],
-      "reason": "The explicit durable-handle documentation example remains open."
+      "reason": "Applications own durable-handle issuance, persistence, rotation, expiry, and admitted-context binding; the executable public-API example proves that boundary."
     },
     {
       "id": "MCP-BASE-016",
@@ -1181,14 +1184,15 @@
     },
     {
       "id": "MCP-MRTR-011",
-      "disposition": "UNRESOLVED",
+      "disposition": "CORE_COMPLETE",
       "evidence": [
         "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpConditionalCapabilityProxyRuntimeTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpMultiRoundTripTerminationRaceTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpProgressPublicRuntimeTests.java"
       ],
       "releaseGates": [],
-      "reason": "The external-proxy capability fixture remains open."
+      "reason": ""
     },
     {
       "id": "MCP-MRTR-012",
@@ -1544,13 +1548,14 @@
     },
     {
       "id": "MCP-PROMPT-006",
-      "disposition": "UNRESOLVED",
+      "disposition": "APPLICATION_OWNED",
       "evidence": [
         "src/test/java/com/soklet/McpPromptPublicRuntimeTests.java",
-        "src/test/java/com/soklet/McpPromptRegistrationTests.java"
+        "src/test/java/com/soklet/McpPromptRegistrationTests.java",
+        "src/test/java/examples/mcp/McpDurableHandlePromptApplicationPatternsTests.java"
       ],
       "releaseGates": [],
-      "reason": "The secured prompt example evidence remains pending."
+      "reason": "Applications own prompt-semantic allowlists, authorization, resource selection, and injection policy; the executable public-API example proves that boundary."
     },
     {
       "id": "MCP-RESOURCE-001",
@@ -1618,21 +1623,23 @@
     },
     {
       "id": "MCP-RESOURCE-006",
-      "disposition": "UNRESOLVED",
+      "disposition": "APPLICATION_OWNED",
       "evidence": [
-        "MCP.md"
+        "MCP.md",
+        "src/test/java/examples/mcp/McpResourceCursorApplicationPatternsTests.java"
       ],
       "releaseGates": [],
-      "reason": "The secured filesystem-resource application example remains pending."
+      "reason": "Applications exposing files own canonical containment, symlink and race policy, authorization, and safe failure mapping; the executable public-API example proves the bounded pattern."
     },
     {
       "id": "MCP-RESOURCE-007",
-      "disposition": "UNRESOLVED",
+      "disposition": "APPLICATION_OWNED",
       "evidence": [
-        "src/test/java/com/soklet/McpResourceRegistrationTests.java"
+        "src/test/java/com/soklet/McpResourceRegistrationTests.java",
+        "src/test/java/examples/mcp/McpResourceCursorApplicationPatternsTests.java"
       ],
       "releaseGates": [],
-      "reason": "Deployment guidance for supported resource URI schemes remains pending."
+      "reason": "Applications own the URI schemes their clients can load or their handlers resolve; the executable public-API example distinguishes direct HTTPS from handler-only custom URIs."
     },
     {
       "id": "MCP-RESOURCE-008",
@@ -1757,13 +1764,14 @@
     },
     {
       "id": "MCP-PAGE-004",
-      "disposition": "UNRESOLVED",
+      "disposition": "APPLICATION_OWNED",
       "evidence": [
         "src/test/java/com/soklet/McpResourcePublicRuntimeTests.java",
-        "src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java"
+        "src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java",
+        "src/test/java/examples/mcp/McpResourceCursorApplicationPatternsTests.java"
       ],
       "releaseGates": [],
-      "reason": "Final application guidance for invalid cursors remains pending."
+      "reason": "Applications own cursor parsing, integrity, expiry, authorization, snapshot lookup, and neutral invalid-parameter mapping; the executable public-API example proves one safe pattern."
     },
     {
       "id": "MCP-PAGE-005",
@@ -1790,12 +1798,13 @@
     },
     {
       "id": "MCP-PAGE-007",
-      "disposition": "UNRESOLVED",
+      "disposition": "APPLICATION_OWNED",
       "evidence": [
-        "MCP.md"
+        "MCP.md",
+        "src/test/java/examples/mcp/McpResourceCursorApplicationPatternsTests.java"
       ],
       "releaseGates": [],
-      "reason": "The stable-cursor example and invalidation/expiry review remain pending."
+      "reason": "Applications own cursor stability, retained snapshots, revisions, expiry windows, and integrity; the executable example proves a single-process retained-snapshot pattern."
     },
     {
       "id": "MCP-AUTH-001",
@@ -2056,12 +2065,13 @@
     },
     {
       "id": "SOK-EXEC-005",
-      "disposition": "UNRESOLVED",
+      "disposition": "CORE_COMPLETE",
       "evidence": [
-        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java"
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpQueuedExecutionWinnerElectionTests.java"
       ],
       "releaseGates": [],
-      "reason": "Exhaustive simultaneous queue/deadline/disconnect races remain open."
+      "reason": ""
     },
     {
       "id": "SOK-EXEC-006",
@@ -2258,20 +2268,24 @@
     },
     {
       "id": "SOK-ERROR-002",
-      "disposition": "UNRESOLVED",
+      "disposition": "CORE_COMPLETE",
       "evidence": [
+        "conformance/golden-error-mapping/live/manifest.sha256",
         "src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java",
         "src/test/java/com/soklet/McpInputResponsesPublicRuntimeTests.java",
         "src/test/java/com/soklet/McpMirroredHeaderPublicRuntimeTests.java",
         "src/test/java/com/soklet/McpRequestStatePublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpErrorMappingGoldenProductionTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpFinalTagGoldenWireProductionTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerObservationTerminalRaceTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerPolicyPipelineTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java",
-        "src/test/java/com/soklet/internal/mcp/protocol/McpInitializeRejectionDiagnosticsTests.java"
+        "src/test/java/com/soklet/internal/mcp/protocol/McpInitializeRejectionDiagnosticsTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpProgressPublicRuntimeTests.java"
       ],
       "releaseGates": [],
-      "reason": "Progress/commit races, a production capability golden, and the exhaustive byte matrix remain open."
+      "reason": ""
     },
     {
       "id": "SOK-RATE-001",

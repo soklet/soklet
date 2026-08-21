@@ -245,6 +245,270 @@ class McpHttpServerObservationTerminalRaceTests {
 	}
 
 	@Test
+	void precommit_mapped_error_beats_late_client_cancel_exactly_once()
+			throws Exception {
+		RecordingObservation observation = new RecordingObservation();
+		IllegalStateException handlerFailure = new IllegalStateException(
+				"handler-secret-must-not-reach-the-wire");
+		IOException cancellationCause = new IOException(
+				"cancel-secret-must-not-reach-the-wire");
+		AtomicReference<MicrohttpResponse> renderedResponse = new AtomicReference<>();
+		AtomicReference<Throwable> cancellationFailure = new AtomicReference<>();
+		McpHttpServerRuntime runtime = errorRaceRuntime(invocation -> {
+			throw handlerFailure;
+		}, observation, McpApplicationClock.SYSTEM);
+
+		try {
+			InetSocketAddress address = runtime.start();
+			MicrohttpRequest request = request(address, "precommit-error-owner");
+			submit(runtime, address, request, response -> {
+				Assertions.assertTrue(renderedResponse.compareAndSet(null, response),
+						"The mapped response callback must be offered once.");
+				try {
+					cancel(runtime, request,
+							StreamTerminationReason.CLIENT_DISCONNECTED,
+							cancellationCause);
+				} catch (Throwable throwable) {
+					cancellationFailure.set(throwable);
+				}
+			});
+
+			MicrohttpResponse response = awaitValue(renderedResponse,
+					"The mapped error response was not offered.");
+			Assertions.assertNull(cancellationFailure.get());
+			Assertions.assertEquals(500, response.status());
+			String body = new String(response.body(), StandardCharsets.UTF_8);
+			Assertions.assertEquals(
+					"{\"jsonrpc\":\"2.0\",\"id\":\"precommit-error-owner\","
+							+ "\"error\":{\"code\":-32603,"
+							+ "\"message\":\"Internal error\"}}",
+					body);
+			assertRedacted(body, handlerFailure, cancellationCause);
+
+			completeBody(response);
+			observation.awaitFinished();
+			awaitClean(runtime);
+			observation.assertExactlyOneInternalError(handlerFailure);
+			observation.assertProtocolErrors(
+					List.of(McpJsonRpcError.INTERNAL_ERROR));
+			observation.assertNoStream();
+			Assertions.assertEquals(0,
+					runtime.diagnosticsSnapshot().activeRequestStreams());
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
+	void written_streamed_error_terminal_beats_concurrent_client_cancel_exactly_once()
+			throws Exception {
+		TerminalWriteBlockingClock clock = new TerminalWriteBlockingClock();
+		RecordingObservation observation = new RecordingObservation();
+		CountDownLatch releaseHandler = new CountDownLatch(1);
+		CountDownLatch handlerSentProgress = new CountDownLatch(1);
+		IllegalStateException handlerFailure = new IllegalStateException(
+				"stream-handler-secret-must-not-reach-the-wire");
+		IOException cancellationCause = new IOException(
+				"stream-cancel-secret-must-not-reach-the-wire");
+		AtomicReference<MicrohttpResponse> streamingResponse = new AtomicReference<>();
+		AtomicReference<Throwable> writerFailure = new AtomicReference<>();
+		AtomicReference<Throwable> cancellationFailure = new AtomicReference<>();
+		AtomicReference<WritableSource> sourceReference = new AtomicReference<>();
+		AtomicReference<RecordingSocketChannel> socketReference = new AtomicReference<>();
+		Thread writer = null;
+		Thread canceler = null;
+		McpHttpServerRuntime runtime = errorRaceRuntime(invocation -> {
+			Assertions.assertTrue(invocation.sendNotification(
+					progress("streamed-error-owner")));
+			handlerSentProgress.countDown();
+			releaseHandler.await();
+			throw handlerFailure;
+		}, observation, clock);
+
+		try {
+			InetSocketAddress address = runtime.start();
+			MicrohttpRequest request = request(address, "streamed-error-owner");
+			submit(runtime, address, request, response ->
+					Assertions.assertTrue(
+							streamingResponse.compareAndSet(null, response),
+							"The SSE response callback must be offered once."));
+
+			Assertions.assertTrue(handlerSentProgress.await(5, TimeUnit.SECONDS));
+			MicrohttpResponse response = awaitValue(streamingResponse,
+					"The first SSE response was not offered.");
+			Assertions.assertTrue(response.streaming());
+			WritableSource source = newBodySource(response);
+			sourceReference.set(source);
+			RecordingSocketChannel socket = new RecordingSocketChannel();
+			socketReference.set(socket);
+			source.writeReadyCallback(() -> {
+				// The test drives every write directly.
+			});
+			source.start();
+			Assertions.assertTrue(source.writeTo(socket, Long.MAX_VALUE) > 0L,
+					"The progress event was not written.");
+			Assertions.assertFalse(source.isReadyToWrite(),
+					"Only progress should be ready before handler failure.");
+
+			releaseHandler.countDown();
+			awaitCondition(source::isReadyToWrite,
+					"The mapped terminal error was not reserved.");
+
+			writer = new Thread(() -> {
+				try {
+					clock.blockNextCallOnCurrentThread();
+					source.writeTo(socket, Long.MAX_VALUE);
+				} catch (Throwable throwable) {
+					writerFailure.set(throwable);
+				}
+			}, "mcp-error-terminal-byte-writer");
+			writer.start();
+			Assertions.assertTrue(clock.writeTimestampEntered.await(5, TimeUnit.SECONDS),
+					"The terminal error write did not reach its timestamp boundary.");
+
+			CountDownLatch cancelInvoked = new CountDownLatch(1);
+			canceler = new Thread(() -> {
+				cancelInvoked.countDown();
+				try {
+					cancel(runtime, request,
+							StreamTerminationReason.CLIENT_DISCONNECTED,
+							cancellationCause);
+				} catch (Throwable throwable) {
+					cancellationFailure.set(throwable);
+				}
+			}, "mcp-error-terminal-byte-canceler");
+			canceler.start();
+			Assertions.assertTrue(cancelInvoked.await(5, TimeUnit.SECONDS));
+			Thread cancelThread = canceler;
+			awaitCondition(() -> cancelThread.getState() == Thread.State.BLOCKED,
+					"Cancel did not contend after the terminal error byte was written.");
+
+			clock.releaseWriteTimestamp.countDown();
+			writer.join(TimeUnit.SECONDS.toMillis(5));
+			canceler.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertFalse(writer.isAlive());
+			Assertions.assertFalse(canceler.isAlive());
+			Assertions.assertNull(writerFailure.get());
+			Assertions.assertNull(cancellationFailure.get());
+			observation.awaitFinished();
+			awaitClean(runtime);
+
+			String body = socket.writtenText();
+			String terminal = "data: {\"jsonrpc\":\"2.0\","
+					+ "\"id\":\"streamed-error-owner\","
+					+ "\"error\":{\"code\":-32603,"
+					+ "\"message\":\"Internal error\"}}\n\n";
+			Assertions.assertEquals(1, occurrences(body, terminal), body);
+			Assertions.assertTrue(body.contains(
+					"\"progressToken\":\"streamed-error-owner\""), body);
+			Assertions.assertTrue(body.endsWith("0\r\n\r\n"), body);
+			assertRedacted(body, handlerFailure, cancellationCause);
+			observation.assertExactlyOneInternalError(handlerFailure);
+			observation.assertProtocolErrors(
+					List.of(McpJsonRpcError.INTERNAL_ERROR));
+			observation.assertExactlyOneCompletedStream();
+			Assertions.assertEquals(0,
+					runtime.diagnosticsSnapshot().activeRequestStreams());
+		} finally {
+			releaseHandler.countDown();
+			clock.releaseWriteTimestamp.countDown();
+			WritableSource source = sourceReference.get();
+			if (source != null)
+				source.close(StreamTerminationReason.SERVER_STOPPING, null);
+			if (writer != null)
+				writer.join(TimeUnit.SECONDS.toMillis(5));
+			if (canceler != null)
+				canceler.join(TimeUnit.SECONDS.toMillis(5));
+			RecordingSocketChannel socket = socketReference.get();
+			if (socket != null)
+				socket.close();
+			runtime.close();
+		}
+	}
+
+	@Test
+	void client_cancel_beats_unreserved_streamed_error_and_discards_its_metric()
+			throws Exception {
+		RecordingObservation observation = new RecordingObservation();
+		CountDownLatch releaseHandler = new CountDownLatch(1);
+		CountDownLatch handlerSentProgress = new CountDownLatch(1);
+		CountDownLatch terminalAttemptEntered = new CountDownLatch(1);
+		CountDownLatch releaseTerminalAttempt = new CountDownLatch(1);
+		IllegalStateException handlerFailure = new IllegalStateException(
+				"losing-handler-secret-must-not-reach-the-wire");
+		IOException cancellationCause = new IOException(
+				"winning-cancel-secret-must-not-reach-the-wire");
+		AtomicReference<MicrohttpResponse> streamingResponse = new AtomicReference<>();
+		AtomicReference<WritableSource> sourceReference = new AtomicReference<>();
+		AtomicReference<RecordingSocketChannel> socketReference = new AtomicReference<>();
+		McpHttpServerRuntime runtime = errorRaceRuntime(invocation -> {
+			Assertions.assertTrue(invocation.sendNotification(
+					progress("cancel-wins")));
+			handlerSentProgress.countDown();
+			releaseHandler.await();
+			throw handlerFailure;
+		}, observation, McpApplicationClock.SYSTEM);
+
+		try {
+			McpRequestSseStream.setTestHooks(() -> {
+				terminalAttemptEntered.countDown();
+				awaitLatchUninterruptibly(releaseTerminalAttempt);
+			});
+			InetSocketAddress address = runtime.start();
+			MicrohttpRequest request = request(address, "cancel-wins");
+			submit(runtime, address, request, response ->
+					Assertions.assertTrue(
+							streamingResponse.compareAndSet(null, response),
+							"The SSE response callback must be offered once."));
+
+			Assertions.assertTrue(handlerSentProgress.await(5, TimeUnit.SECONDS));
+			MicrohttpResponse response = awaitValue(streamingResponse,
+					"The first SSE response was not offered.");
+			WritableSource source = newBodySource(response);
+			sourceReference.set(source);
+			RecordingSocketChannel socket = new RecordingSocketChannel();
+			socketReference.set(socket);
+			source.writeReadyCallback(() -> {
+				// The test drives the accepted progress write directly.
+			});
+			source.start();
+			Assertions.assertTrue(source.writeTo(socket, Long.MAX_VALUE) > 0L,
+					"The accepted progress event was not written.");
+
+			releaseHandler.countDown();
+			Assertions.assertTrue(terminalAttemptEntered.await(5, TimeUnit.SECONDS),
+					"The mapped error did not reach terminal reservation.");
+			cancel(runtime, request, StreamTerminationReason.CLIENT_DISCONNECTED,
+					cancellationCause);
+			releaseTerminalAttempt.countDown();
+
+			observation.awaitFinished();
+			awaitClean(runtime);
+			String body = socket.writtenText();
+			Assertions.assertTrue(body.contains(
+					"\"progressToken\":\"cancel-wins\""), body);
+			Assertions.assertFalse(body.contains("\"code\":-32603"), body);
+			assertRedacted(body, handlerFailure, cancellationCause);
+			observation.assertExactlyOneClientDisconnect(cancellationCause);
+			observation.assertProtocolErrors(List.of());
+			observation.assertExactlyOneClientDisconnectedStream();
+			Assertions.assertEquals(0,
+					runtime.diagnosticsSnapshot().activeRequestStreams());
+		} finally {
+			releaseHandler.countDown();
+			releaseTerminalAttempt.countDown();
+			McpRequestSseStream.setTestHooks(null);
+			WritableSource source = sourceReference.get();
+			if (source != null)
+				source.close(StreamTerminationReason.SERVER_STOPPING, null);
+			RecordingSocketChannel socket = socketReference.get();
+			if (socket != null)
+				socket.close();
+			runtime.close();
+		}
+	}
+
+	@Test
 	void application_stop_after_admission_cannot_strand_observation()
 			throws Exception {
 		RecordingObservation observation = new RecordingObservation();
@@ -361,6 +625,27 @@ class McpHttpServerObservationTerminalRaceTests {
 	private static McpHttpEndpointPolicy acceptingPolicy() {
 		return McpHttpEndpointPolicy.forDiscovery(CorsAuthorizer.rejectAllInstance(),
 				ignored -> McpRequestAdmissionDecision.ACCEPT);
+	}
+
+	private static McpHttpServerRuntime errorRaceRuntime(
+			McpApplicationRequestHandler handler,
+			RecordingObservation observation, McpApplicationClock clock) {
+		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
+				McpImplementationMetadata.withNameAndVersion(
+						"error-terminal-race-test", "3.6.0-SNAPSHOT"))
+				.build();
+		McpHttpEndpointBinding binding = new McpHttpEndpointBinding(
+				acceptingPolicy(), endpoint, McpApplicationRequestRouter.fromHandlers(
+						Map.of(APPLICATION_METHOD, handler)), observation);
+		return new McpHttpServerRuntime(
+				McpHttpTransportConfiguration.productionDefaults(0), List.of(binding),
+				McpJsonLimits.productionDefaults(),
+				new McpApplicationExecutionConfiguration(
+						1, 1, Duration.ofSeconds(20), Duration.ofDays(1)),
+				clock, McpApplicationHandlerExecutorFactory.production(),
+				ignored -> {}, ignored -> {}, Optional.empty(),
+				McpFrameworkRequestStateRuntime.disabledInstance(),
+				McpSubscriptionRuntimeConfiguration.productionDefaults(), observation);
 	}
 
 	private static McpHttpServerRuntime runtime(McpHttpEndpointPolicy policy,
@@ -535,8 +820,45 @@ class McpHttpServerObservationTerminalRaceTests {
 		Assertions.assertTrue(condition.getAsBoolean(), failure);
 	}
 
+	private static void assertRedacted(String wire, Throwable... secrets) {
+		for (Throwable secret : secrets)
+			Assertions.assertFalse(wire.contains(secret.getMessage()), wire);
+	}
+
+	private static int occurrences(String value, String target) {
+		int count = 0;
+		int offset = 0;
+		while ((offset = value.indexOf(target, offset)) >= 0) {
+			count++;
+			offset += target.length();
+		}
+		return count;
+	}
+
+	private static void awaitLatchUninterruptibly(CountDownLatch latch) {
+		boolean interrupted = false;
+		while (true) {
+			try {
+				latch.await();
+				break;
+			} catch (InterruptedException exception) {
+				interrupted = true;
+			}
+		}
+		if (interrupted)
+			Thread.currentThread().interrupt();
+	}
+
+	private record PendingProtocolError(int code)
+			implements McpApplicationExecutionObserver.PendingMetricRecord {
+	}
+
 	private static final class RecordingObservation
-			implements McpRuntimeObservationSink, McpRuntimeRequestObservation {
+			implements McpRuntimeObservationSink, McpRuntimeRequestObservation,
+			McpApplicationExecutionObserver {
+		private final Object metricLock;
+		private final List<PendingProtocolError> pendingProtocolErrors;
+		private final List<Integer> deliveredProtocolErrors;
 		private final AtomicInteger starts;
 		private final AtomicInteger finishes;
 		private final AtomicInteger streamOpens;
@@ -546,8 +868,12 @@ class McpHttpServerObservationTerminalRaceTests {
 		private final AtomicReference<McpJsonRpcError> error;
 		private final AtomicReference<List<Throwable>> throwables;
 		private final CountDownLatch finished;
+		private int metricDeferralDepth;
 
 		private RecordingObservation() {
+			this.metricLock = new Object();
+			this.pendingProtocolErrors = new java.util.ArrayList<>();
+			this.deliveredProtocolErrors = new java.util.ArrayList<>();
 			this.starts = new AtomicInteger();
 			this.finishes = new AtomicInteger();
 			this.streamOpens = new AtomicInteger();
@@ -594,6 +920,79 @@ class McpHttpServerObservationTerminalRaceTests {
 			finished.countDown();
 		}
 
+		@Override
+		public void beginDeferral() {
+			synchronized (metricLock) {
+				metricDeferralDepth++;
+			}
+		}
+
+		@Override
+		public PendingMetricRecord recordProtocolError(int code,
+				@Nullable McpRequestContext requestContext) {
+			PendingProtocolError pending = new PendingProtocolError(code);
+			synchronized (metricLock) {
+				pendingProtocolErrors.add(pending);
+			}
+			return pending;
+		}
+
+		@Override
+		public void discardPendingMetric(PendingMetricRecord pendingMetricRecord) {
+			if (!(pendingMetricRecord instanceof PendingProtocolError pending))
+				return;
+			synchronized (metricLock) {
+				if (!pendingProtocolErrors.remove(pending))
+					throw new IllegalStateException(
+							"The provisional protocol error is no longer pending.");
+			}
+		}
+
+		@Override
+		public void recordHandlerExecutionStarted() {
+		}
+
+		@Override
+		public void recordHandlerExecutionFinished() {
+		}
+
+		@Override
+		public void recordHandlerQueued() {
+		}
+
+		@Override
+		public void recordHandlerDequeued() {
+		}
+
+		@Override
+		public void recordHandlerCapacityRejected() {
+		}
+
+		@Override
+		public void drain() {
+			synchronized (metricLock) {
+				if (metricDeferralDepth != 0 || pendingProtocolErrors.isEmpty())
+					return;
+				for (PendingProtocolError pending : pendingProtocolErrors)
+					deliveredProtocolErrors.add(pending.code());
+				pendingProtocolErrors.clear();
+			}
+		}
+
+		@Override
+		public void endDeferral() {
+			boolean shouldDrain;
+			synchronized (metricLock) {
+				if (metricDeferralDepth == 0)
+					throw new IllegalStateException(
+							"Metric deferral is not active.");
+				metricDeferralDepth--;
+				shouldDrain = metricDeferralDepth == 0;
+			}
+			if (shouldDrain)
+				drain();
+		}
+
 		private void awaitFinished() throws InterruptedException {
 			Assertions.assertTrue(finished.await(5, TimeUnit.SECONDS),
 					"The admitted request observation was stranded.");
@@ -605,11 +1004,47 @@ class McpHttpServerObservationTerminalRaceTests {
 			Assertions.assertEquals(expectedOutcome, outcome.get());
 		}
 
+		private void assertExactlyOneInternalError(Throwable expectedFailure) {
+			assertExactlyOne(McpRequestOutcome.INTERNAL_ERROR);
+			McpJsonRpcError observedError = error.get();
+			Assertions.assertNotNull(observedError);
+			Assertions.assertEquals(McpJsonRpcError.INTERNAL_ERROR,
+					observedError.code());
+			Assertions.assertEquals("Internal error", observedError.message());
+			Assertions.assertEquals(List.of(expectedFailure), throwables.get());
+		}
+
+		private void assertExactlyOneClientDisconnect(Throwable expectedCause) {
+			assertExactlyOne(McpRequestOutcome.CLIENT_DISCONNECTED);
+			Assertions.assertNull(error.get());
+			Assertions.assertEquals(List.of(expectedCause), throwables.get());
+		}
+
+		private void assertProtocolErrors(List<Integer> expectedCodes) {
+			synchronized (metricLock) {
+				Assertions.assertEquals(expectedCodes, deliveredProtocolErrors);
+				Assertions.assertEquals(List.of(), pendingProtocolErrors);
+			}
+		}
+
+		private void assertNoStream() {
+			Assertions.assertEquals(0, streamOpens.get());
+			Assertions.assertEquals(0, streamCloses.get());
+			Assertions.assertNull(streamCloseReason.get());
+		}
+
 		private void assertExactlyOneCompletedStream() {
 			Assertions.assertEquals(1, this.streamOpens.get());
 			Assertions.assertEquals(1, this.streamCloses.get());
 			Assertions.assertEquals(StreamTerminationReason.COMPLETED,
 					this.streamCloseReason.get());
+		}
+
+		private void assertExactlyOneClientDisconnectedStream() {
+			Assertions.assertEquals(1, streamOpens.get());
+			Assertions.assertEquals(1, streamCloses.get());
+			Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED,
+					streamCloseReason.get());
 		}
 	}
 

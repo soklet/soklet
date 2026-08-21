@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":"typed-sanitized","result":{"content":[{"type":"text","text":"{\"value\":\"sanitized-visible\"}"}],"structuredContent":{"value":"sanitized-visible"},"resultType":"complete"}}

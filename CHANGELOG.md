@@ -38,6 +38,78 @@
   Four additional tests freeze the readable-`initialize` diagnostic boundary.
   This evidence surface does not alter the official 48-message final-schema
   corpus or the three-head authorization/CORS corpus.
+- Added two independent production-golden corpora for the remaining core result
+  and ordinary error contracts. Twenty-five checksum-bound JSON/SSE fixtures
+  exhaust Soklet 3.6's core `complete` and `input_required` result-envelope
+  authorities; extension result types remain a separate capability boundary.
+  Nine canonical complete-HTTP fixtures cover the eight frozen ordinary error
+  mapping families, including distinct required and conditional `-32021`
+  paths, while readable-`initialize` and other path-specific errors remain
+  explicit supplements. Five deterministic tests freeze both progress/error
+  enqueue orders and mapped-error/cancellation terminal ownership, without
+  changing public API or ordinary runtime behavior.
+- Added public-API-only
+  [durable-handle and secured-prompt patterns](src/test/java/examples/mcp/McpDurableHandlePromptApplicationPatternsTests.java)
+  plus [resource, URI, filesystem, and cursor patterns](src/test/java/examples/mcp/McpResourceCursorApplicationPatternsTests.java).
+  Their eight executable tests document application-owned durable storage and
+  context binding, semantic prompt authorization, canonical filesystem
+  containment, delivery-intent URI policy, and cursor integrity, snapshot,
+  revision, and expiry. Soklet does not implement those deployment facilities.
+  No production behavior or public signature/freeze inventory changed; public
+  Javadocs now document the existing application-owned boundaries. Focused
+  owner evidence on Amazon Corretto 17.0.20.1+10-LTS is two separate 4/4 class
+  runs (eight tests total); the direct combined suite is 8/8 on local Amazon
+  Corretto 21.0.11.10.1 (OpenJDK 21.0.11+10-LTS). The adjacent 12-class suite
+  passes 66/66 on each JDK. Full `mvn -B -ntp clean test` passes 1,712 tests
+  with zero failures, zero errors, and 72 skips on Corretto 17, and 1,727 tests
+  with zero failures, zero errors, and four skips on local Corretto 21; both
+  compile 462 main and 207 test sources. Following the historical
+  106/116/4/18/18 checkpoint, that application-pattern checkpoint was 106
+  `CORE_COMPLETE`, 116 `RELEASE_GATED`, 10 `APPLICATION_OWNED`, 18
+  `NOT_APPLICABLE`, and 12 `UNRESOLVED`.
+- Added a real two-leg loopback proxy fixture for an unmet conditional input
+  capability. A manual monotonic idle cycle proves zero backend and forwarded
+  response bytes through exact expiry, one client-disconnect outcome and
+  cooperative cancelation, suppression of the retained handler's late result,
+  and exact framework cleanup. A capability-present control forwards the SSE
+  head, progress, and terminal result byte-for-byte through the same proxy.
+  The focused/adjacent gate passes 33/33 on local Amazon Corretto
+  17.0.20.1+10-LTS and local Amazon Corretto 21.0.11.10.1. Full
+  `mvn -B -ntp clean test` passes 1,713/0/0/72 on Corretto 17 and 1,728/0/0/4
+  on local Corretto 21, respectively, over 462 main and 208 test sources. A
+  narrow internal production fix
+  preserves an outer cancel transition's exact observation reason and cause
+  instead of publishing a generic cancelation fallback. Public API,
+  signatures, freeze inventories, and the version are unchanged. This proves
+  one configured loopback intermediary, not a universal wall-clock proxy
+  timeout or prompt non-cooperative application-code exit. At that checkpoint,
+  `MCP-MRTR-011` became `CORE_COMPLETE`; the matrix was 107 `CORE_COMPLETE`, 116
+  `RELEASE_GATED`, 10 `APPLICATION_OWNED`, 18 `NOT_APPLICABLE`, and 11
+  `UNRESOLVED`. These are local snapshot results, not immutable-candidate
+  evidence; the Corretto 21 run is not release-pinned.
+- Added deterministic queued-execution winner-election evidence. A monotonic
+  manual clock, staged contenders, and FIFO manual executor enumerate all six
+  total orders of promotion, exact-boundary deadline, and client disconnect.
+  Deadline before promotion while still queued and writable returns the exact
+  HTTP 503/JSON-RPC `-32603` response; disconnect writes nothing; promotion
+  first leaves the queued state and follows the separately provisional active-
+  deadline path. A second cross-layer case reserves the queued deadline, then
+  makes the outer request control unwritable before response handoff. It
+  observes zero callback bytes, exactly one `CLIENT_DISCONNECTED` finish and
+  one dequeue/gauge removal; one deadline-expiration occurrence and one
+  abandoned response diagnose the reserved-but-unwritable attempt without
+  creating a second terminal outcome. No queued interceptor or handler runs,
+  cleanup is once-only, and all framework state returns to baseline. The
+  focused class passes 2/2 on pinned Amazon Corretto 17.0.20.1+10-LTS and local
+  Amazon Corretto 21.0.11.10.1; the adjacent Corretto 17 execution bundle
+  passes 53/53. Full `mvn -B -ntp clean test` passes 1,715/0/0/72 and
+  1,730/0/0/4, respectively, over 462 main and 209 test sources. This test-only
+  slice changes no production behavior, public API, signature/freeze inventory,
+  or version. `SOK-EXEC-005` is now `CORE_COMPLETE`; the active matrix is 108
+  `CORE_COMPLETE`, 116 `RELEASE_GATED`, 10 `APPLICATION_OWNED`, 18
+  `NOT_APPLICABLE`, and 10 `UNRESOLVED`. These are bounded local ordering
+  results, not every possible scheduler/network interleaving or immutable-
+  candidate evidence; the Corretto 21 run is not release-pinned.
 - Added annotation-first and programmatic tools, prompts, exact resources,
   resource templates, resource reads, and custom resource listing. Tool
   registration uses staged typed, argument-only, or raw-JSON argument paths;

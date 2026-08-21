@@ -26,6 +26,11 @@ import java.util.Optional;
  * Immutable request-specific context for a dynamic {@code resources/list}
  * operation.
  *
+ * <p>Soklet preserves a cursor as an opaque, bounded string. The application
+ * decides whether it is authentic, unexpired, authorized for the current
+ * principal, bound to a retained snapshot and catalog revision, and portable
+ * to the instance handling this request.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -35,7 +40,10 @@ public interface McpResourceListContext {
 	 *
 	 * <p>The application owns the cursor's format, integrity, lifetime,
 	 * authorization binding, and cross-instance portability. A present empty
-	 * string is preserved as a present protocol value.
+	 * string is preserved as a present protocol value. Invalid, expired,
+	 * tampered, cross-principal, missing-snapshot, and wrong-revision values
+	 * should produce the same neutral application error; Soklet does not
+	 * classify those failures.
 	 *
 	 * @return client cursor, or empty when the request omitted {@code cursor}
 	 */

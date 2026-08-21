@@ -6487,7 +6487,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				applicationOwned = false;
 				protocolTask = null;
 				remove = responseStream == null || canceled || terminal;
+				// An outer cancel transition owns its exact reason and cause.
 				finishCanceled = remove
+						&& cancellationReason == null
 						&& plannedRequestObservationResult == null
 						&& requestObservationTerminal == null;
 				if (remove) {

@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":103,"result":{"messages":[{"role":"user","content":{"type":"text","text":"handler prompt complete"}}],"resultType":"complete","_meta":{"resultEnvelopeAuthority":"handler-prompt"}}}

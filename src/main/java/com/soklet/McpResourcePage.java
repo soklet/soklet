@@ -77,6 +77,11 @@ public final class McpResourcePage implements McpOperationResult {
 	/**
 	 * Returns the opaque cursor clients should supply for the next page.
 	 *
+	 * <p>The application is responsible for binding a cursor to the intended
+	 * page position, retained snapshot and catalog revision, authorization
+	 * context, and expiry as required by its deployment. Soklet does not sign,
+	 * encrypt, store, or verify the cursor.
+	 *
 	 * @return next cursor, or empty when this is the final page
 	 */
 	@NonNull
@@ -147,8 +152,11 @@ public final class McpResourcePage implements McpOperationResult {
 		/**
 		 * Supplies the opaque cursor clients should use for the next page.
 		 *
-		 * <p>The application owns the cursor's format and lifecycle. An empty
-		 * string remains a present protocol value.
+		 * <p>The application owns the cursor's integrity, confidentiality,
+		 * authorization binding, expiry, page position, retained snapshot,
+		 * catalog revision, and cross-instance portability. An empty string
+		 * remains a present protocol value. Soklet enforces its configured
+		 * outgoing UTF-8 bound but does not mint or protect the value.
 		 *
 		 * @param nextCursor next cursor
 		 * @return this builder

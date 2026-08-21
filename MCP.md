@@ -226,9 +226,15 @@ values. `McpPromptRegistration` declares required/optional
 equivalent. Missing, duplicate, unknown, or non-string arguments fail before
 the application handler runs.
 
-Soklet validates prompt structure, but prompt injection, authorization, and
-the safety of any application resource access remain handler responsibilities.
-Treat prompt text and arguments as untrusted input.
+Soklet validates prompt structure, but prompt injection, business allowlists,
+authorization, output classification, and the safety of any referenced
+application resource remain handler responsibilities. Treat prompt text and
+arguments as untrusted input. Authorize the admitted principal before reading
+a referenced resource, and collapse unknown, unauthorized, unsafe, and missing
+inputs to a neutral failure that reveals no protected value. The
+[durable-handle and prompt-security example](src/test/java/examples/mcp/McpDurableHandlePromptApplicationPatternsTests.java)
+compile-checks one deployment-specific allowlist and canary policy; it is not a
+universal injection detector.
 
 The immutable prompt catalog follows registration order and is returned as one
 page. A present cursor is invalid because Soklet 3.6.0 does not expose dynamic
@@ -259,12 +265,23 @@ between absent and present-empty cursor values and enforces a positive UTF-8
 size limit (4,096 bytes by default) on incoming and outgoing cursors. The
 application owns cursor encoding, validation, expiry, integrity,
 authorization binding, backing-snapshot behavior, and cross-instance
-portability. An invalid application cursor should produce a safe application
-error; Soklet has no cursor store, signing key, or pagination magic.
+portability. Bind each cursor to its page position, retained snapshot, catalog
+revision, expiry, and current authorization context as the deployment
+requires. Tampered, expired, cross-principal, missing-snapshot, wrong-revision,
+and malformed values should produce the same neutral application error;
+Soklet has no cursor store, signing key, or pagination magic.
 
 Soklet ships no `file://` mapper. A handler that maps resource URIs to a
 filesystem owns root containment, traversal rejection, canonicalization,
-symlink policy, and authorization.
+symlink policy, authorization, and races between validation and opening.
+Canonicalize both the configured root and requested target, contain the target
+after symlink resolution, then authorize the canonical target before opening
+it. Separately allowlist schemes, authorities, credentials, queries, and
+fragments according to delivery intent: a URI intended for direct client
+loading has a different trust boundary from a handler-only custom URI. The
+[resource and cursor-security example](src/test/java/examples/mcp/McpResourceCursorApplicationPatternsTests.java)
+exercises these application-owned policies without claiming Soklet implements
+them or that its in-process snapshot test double is fleet-portable.
 
 Resources and catalogs carry an `McpCachePolicy` with private/public scope and
 a nonnegative time to live. A dynamic resource page may override only its time
@@ -357,7 +374,14 @@ different ownership:
   `McpRequestContext.getApplicationRequestState()`. Soklet applies a fixed
   65,536-byte UTF-8 bound
   but does not parse, protect, expire, authorize, round-limit, or otherwise
-  interpret it. No `McpProtectionConfig` is required.
+  interpret it. For durable continuation, persist application state in a
+  durable repository, return only an opaque unguessable handle, bind the
+  record to the admitted principal and authorization context, and consume or
+  rotate it atomically according to the replay policy. The client must carry
+  the current handle on every retry or new connection. No
+  `McpProtectionConfig` or Soklet repository is involved. The
+  [durable-handle example](src/test/java/examples/mcp/McpDurableHandlePromptApplicationPatternsTests.java)
+  compile-checks this application boundary.
 - `FRAMEWORK_PROTECTED` accepts application JSON through
   `frameworkRequestState(...)`, emits an opaque protected string, and returns
   verified JSON through `McpRequestContext.getFrameworkRequestState()`. Any
@@ -474,7 +498,10 @@ over `X-Forwarded-For`. Never use
 Each request is independent. Applications must not rely on authentication,
 capabilities, or other metadata from an earlier request on the same TCP
 connection. Cross-request application state needs its own explicit identifier
-on every request.
+on every request. A durable continuation should carry an opaque handle on each
+retry and resolve it from an application-owned repository bound to the current
+admitted security context; connection or handler-object identity is not a
+continuation authority.
 
 ## Rate limiting
 
@@ -512,8 +539,14 @@ Handlers are synchronous. Defaults are 32 active application handlers, 128
 queued requests, and a 60-second absolute request timeout. Queue capacity and
 handler concurrency are independent positive finite bounds. A supplied
 executor changes where work runs but cannot bypass them. Capacity rejection is
-HTTP 503 with JSON-RPC `-32603`; a queued request whose absolute deadline
-expires never enters application code.
+HTTP 503 with JSON-RPC `-32603`. A queued request keeps its original absolute
+deadline. If that deadline owns while the request is still queued and writable,
+Soklet removes it without application dispatch and returns the same fixed
+503/`-32603` response; a client disconnect owns without writing a response.
+Promotion first ends the queued state and follows the separately documented
+active-request deadline behavior. These transitions produce one queue-depth
+removal and one observable request outcome even when a reserved deadline
+response becomes unwritable before transport handoff.
 
 A timeout, disconnect, server shutdown, or response-stream backpressure
 failure cancels the invocation's `CancelationToken`. Soklet also interrupts
@@ -2215,7 +2248,7 @@ Eighteen are dispatch-configured, while five remain
 `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving 11 fail-closed blockers;
 `READY` means configured, never passed. The matrix-closure hook is `READY`, but
 the canonical report generated from its checked-in registry remains
-deliberately `FAILED` while 20 rows are `UNRESOLVED`, so no PASS receipt can be
+deliberately `FAILED` while 10 rows are `UNRESOLVED`, so no PASS receipt can be
 recorded. A `RELEASE_GATED` row has
 candidate-contained implementation or evidence anchors and names the exact
 immutable, scheduled, sustained, or downstream gate that still owes proof; it
@@ -2339,7 +2372,7 @@ Final-tag Ajv validation of the
 expanded 48-message corpus was not rerun locally and remains owned by candidate
 conformance. These are local snapshot checks, not immutable-candidate evidence.
 
-The current four-row HTTP-contract reconciliation closes modern-only readable-
+The preceding four-row HTTP-contract reconciliation closed modern-only readable-
 `initialize` rejection diagnostics, unsupported classified-notification
 handling, universal MCP HTTP `no-store`, and the exact request/notification
 validation order. The separate
@@ -2361,10 +2394,123 @@ external Javadoc links. The new HTTP corpus is separate from the unchanged
 CORS corpus. The narrow internal change preserves a readable `initialize`
 method through valid-JSON envelope/ID failures solely to attach the modern
 diagnostic; it adds no initialization or session. Public API, signatures, and
-freeze inventories are unchanged. The current matrix is deliberately
-`FAILED`: 104 rows are `CORE_COMPLETE`, 116 are `RELEASE_GATED`, four are
-`APPLICATION_OWNED`, 18 are `NOT_APPLICABLE`, and 20 remain `UNRESOLVED`.
+freeze inventories are unchanged. At that checkpoint, the matrix was
+deliberately `FAILED`: 104 rows were `CORE_COMPLETE`, 116 were `RELEASE_GATED`,
+four were `APPLICATION_OWNED`, 18 were `NOT_APPLICABLE`, and 20 remained
+`UNRESOLVED`.
 These are local snapshot results, not immutable-candidate evidence or results
 from the release-pinned Corretto 21.0.12.9.1 toolchain.
+
+The subsequent 2026-08-21 core-result/error closure adds two independent
+corpora. The checksum-bound
+`conformance/golden-result-envelope/live/manifest.sha256` binds 25 production
+JSON/SSE fixtures at SHA-256
+`d2eaa03c24927d45ef350b187624f50448d78a6531a26dedbbe07ee327b91b14`.
+Four live tests plus the source/authority inventory exhaust Soklet 3.6's core
+`complete` and `input_required` result-envelope authorities; extension result
+types remain separately bounded by `MCP-BASE-006`. The separate
+`conformance/golden-error-mapping/live/manifest.sha256` binds nine canonical
+complete HTTP responses across the eight frozen ordinary error families at
+SHA-256
+`90fae4482e7d8560f421aa4edbc8a6459d72f42880b5351298d5b74ff3f8b780`.
+Two live-listener tests cover every fixture. Existing readable-`initialize`
+and path-specific `-32602`, input-response, and request-state evidence remain
+explicit supplements; the ordinary corpus does not claim every data-bearing
+error pathway. Five deterministic tests freeze both progress/error enqueue
+orders and the error/cancellation ownership boundaries: a nonstream mapped
+response owns its terminal before a late pre-body cancellation, written
+streamed-error bytes beat a concurrent cancellation, and cancellation before
+streamed-error reservation discards both the error terminal and its
+provisional metric.
+
+The combined focused suite passes 21/21 and the adjacent group passes 195/195
+on pinned Corretto 17.0.20.1 and local Corretto 21.0.11. Full clean test passes
+1,704/0/0/72 and 1,719/0/0/4, respectively, over 462 main and 205 test sources;
+Corretto 17 package validation builds the main, sources, and Javadoc JARs. API
+diff/parser/freezes remain green at 565 reviewed incompatibilities and
+unchanged Phase 4/5/6 signature counts 1,048/179/422. No production behavior,
+public API, freeze, or version changes; the sole production-source diff is a
+package-private no-op test hook at the existing-stream enqueue boundary. At
+that checkpoint, the matrix remained deliberately `FAILED`: 106 rows were
+`CORE_COMPLETE`, 116 were `RELEASE_GATED`, four were `APPLICATION_OWNED`, 18
+were `NOT_APPLICABLE`, and 18 remained `UNRESOLVED`. These are local snapshot
+results, not immutable-candidate evidence or results from the release-pinned
+Corretto 21.0.12.9.1 toolchain.
+
+The subsequent application-semantic closure adds the public-API-only
+[durable-handle and secured-prompt patterns](src/test/java/examples/mcp/McpDurableHandlePromptApplicationPatternsTests.java)
+and [resource, URI, filesystem, and cursor patterns](src/test/java/examples/mcp/McpResourceCursorApplicationPatternsTests.java).
+The eight executable tests distinguish application ownership from framework
+validation: Soklet provides none of the example's durable repository, prompt
+business policy, canonical filesystem mapper, delivery-intent URI policy,
+cursor signing key, or retained snapshot storage. The evidence moves
+`MCP-BASE-015`, `MCP-PROMPT-006`, `MCP-RESOURCE-006/007`, and
+`MCP-PAGE-004/007` to `APPLICATION_OWNED`; distributed portable-cursor evidence
+remains open. No production behavior or public signature/freeze inventory
+changed; public Javadocs now document the existing application-owned
+boundaries. Focused owner evidence on Amazon Corretto 17.0.20.1+10-LTS is two
+separate 4/4 class runs (eight tests total); the direct combined suite is 8/8
+on local Amazon Corretto 21.0.11.10.1 (OpenJDK 21.0.11+10-LTS). The adjacent
+12-class suite passes 66/66 on each JDK. Full `mvn -B -ntp clean test` passes
+1,712 tests with zero failures, zero errors, and 72 skips on Corretto 17, and
+1,727 tests with zero failures, zero errors, and four skips on local Corretto
+21; both compile 462 main and 207 test sources. At that application-pattern
+checkpoint, the matrix remained deliberately `FAILED`: 106 rows were
+`CORE_COMPLETE`, 116 were `RELEASE_GATED`, 10 were `APPLICATION_OWNED`, 18
+were `NOT_APPLICABLE`, and 12 remained `UNRESOLVED`.
+
+The subsequent conditional-capability proxy closure adds the
+[real loopback intermediary fixture](src/test/java/com/soklet/internal/mcp/protocol/McpConditionalCapabilityProxyRuntimeTests.java).
+Its single test drives a two-leg socket proxy with a manual monotonic idle
+clock. With conditional support absent, the proxy observes zero backend and
+client-visible response bytes before expiring at its exact configured boundary;
+the reset produces one exact client-disconnect outcome and one cooperative
+cancelation. The handler remains accounted until explicitly released, and its
+late result emits no bytes. With support present, the same proxy forwards the
+SSE head, progress notification, and terminal result byte-for-byte. The
+focused/adjacent gate passes 33/33 on local Amazon Corretto
+17.0.20.1+10-LTS and local Amazon Corretto 21.0.11.10.1 (OpenJDK
+21.0.11+10-LTS). Full `mvn -B -ntp clean test` passes 1,713 tests with zero
+failures, zero errors, and 72 skips on Corretto 17, and 1,728 tests with zero
+failures, zero errors, and four skips on local Corretto 21; both compile 462
+main and 208 test sources. A narrow internal production
+fix preserves an outer cancel transition's exact observation reason and cause
+instead of publishing a generic cancelation fallback. Public API, signatures,
+freeze inventories, and the version are unchanged. This evidence models one
+configured loopback intermediary; it does not establish a wall-clock
+production timeout, universal proxy behavior, or prompt non-cooperative
+application-code exit. At that checkpoint, `MCP-MRTR-011` became
+`CORE_COMPLETE`; the matrix remained deliberately `FAILED` at 107
+`CORE_COMPLETE`, 116
+`RELEASE_GATED`, 10 `APPLICATION_OWNED`, 18 `NOT_APPLICABLE`, and 11
+`UNRESOLVED`. These are local snapshot results, not immutable-candidate
+evidence; the Corretto 21 run is not release-pinned.
+
+The subsequent queued-execution winner-election closure adds
+[deterministic queue ownership evidence](src/test/java/com/soklet/internal/mcp/protocol/McpQueuedExecutionWinnerElectionTests.java).
+One method stages promotion, exact-boundary deadline, and client disconnect,
+then enumerates all six total orders with a monotonic manual clock and FIFO
+manual executor. Deadline before promotion while the request remains writable
+returns the exact queued HTTP 503/JSON-RPC `-32603` response; disconnect writes
+nothing; promotion first ends the queued state and follows the separately
+provisional active-deadline path. A second cross-layer case holds the exact
+observer-deferral gap after the application layer reserves a queued deadline,
+then makes the outer request control unwritable by disconnect before response
+handoff. It observes zero callback bytes, exactly one `CLIENT_DISCONNECTED`
+finish and one dequeue/gauge removal. One deadline-expiration occurrence and
+one abandoned response account for the reserved-but-unwritable attempt, not a
+second terminal outcome. No queued interceptor or handler runs, cleanup occurs
+once per request, and all framework state returns to baseline. The focused
+class passes 2/2 on pinned Amazon Corretto 17.0.20.1+10-LTS and local Amazon
+Corretto 21.0.11.10.1; the adjacent Corretto 17 execution bundle passes 53/53.
+Full `mvn -B -ntp clean test` passes 1,715/0/0/72 on Corretto 17 and
+1,730/0/0/4 on local Corretto 21 over 462 main and 209 test sources. This
+slice changes no production behavior, public API, signature/freeze inventory,
+or version. It closes `SOK-EXEC-005`; the current matrix remains deliberately
+`FAILED` at 108 `CORE_COMPLETE`, 116 `RELEASE_GATED`, 10
+`APPLICATION_OWNED`, 18 `NOT_APPLICABLE`, and 10 `UNRESOLVED`. These are
+bounded local ordering results, not proof of every scheduler/network
+interleaving or immutable-candidate evidence; the Corretto 21 run is not
+release-pinned.
 
 Do not treat this snapshot guide as a release-conformance statement.

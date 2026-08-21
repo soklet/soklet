@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":"tool-handler-complete","result":{"content":[{"type":"text","text":"handler tool complete"}],"resultType":"complete","_meta":{"resultEnvelopeAuthority":"handler-tool"}}}

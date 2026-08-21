@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":"tool-input-initial","result":{"inputRequests":{"roots":{"method":"roots/list","params":{}}},"resultType":"input_required","_meta":{"resultEnvelopeAuthority":"inputRequests-only"}}}

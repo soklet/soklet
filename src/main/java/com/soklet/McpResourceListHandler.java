@@ -28,13 +28,21 @@ import javax.annotation.concurrent.ThreadSafe;
  * registrations into the page. Implementations must be safe for concurrent
  * invocation.
  *
+ * <p>The application owns cursor syntax and cryptographic integrity,
+ * authorization binding, expiry, page position, catalog revision, retained
+ * snapshot semantics, and cross-instance storage. Invalid, expired, tampered,
+ * cross-principal, missing-snapshot, and wrong-revision cursors should collapse
+ * to the same neutral application error without disclosing which check failed.
+ * Soklet only transports the bounded opaque value; it does not mint, verify,
+ * persist, or synchronize application cursors or snapshots.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 @FunctionalInterface
 public interface McpResourceListHandler {
 	/**
-	 * Produces one complete resource-list page.
+	 * Produces one complete, application-authorized resource-list page.
 	 *
 	 * @param request request metadata
 	 * @param list pagination input and registered-descriptor convenience data

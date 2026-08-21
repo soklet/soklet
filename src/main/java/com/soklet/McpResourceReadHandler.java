@@ -23,10 +23,23 @@ import javax.annotation.concurrent.ThreadSafe;
 /**
  * Programmatic MCP resource-read handler.
  *
- * <p>The open {@link McpOperationResult} return preserves the result spine for
- * later multi-round-trip support. In the Phase 4 resource surface, handlers
- * complete with {@link McpCompleteResult#fromResourceOutput(McpResourceOutput)}.
- * Implementations must be safe for concurrent invocation.
+ * <p>Routing proves neither authorization nor safe dereference. An application
+ * that maps a resource URI to a filesystem must canonicalize its configured
+ * root and requested target, reject targets outside that root after symlink
+ * resolution, authorize the canonical target under the current admitted
+ * identity, and address deployment-specific races between validation and
+ * opening. Soklet provides no filesystem mapper or containment guarantee.
+ *
+ * <p>The application must also define URI policy by delivery intent. A URI
+ * permitted for direct client loading may need a different scheme, authority,
+ * credential, query, and fragment policy from an application-handler-only
+ * URI. Soklet's URI syntax validation and routing do not establish that a URI
+ * is safe or consumable for either purpose.
+ *
+ * <p>Handlers may complete with
+ * {@link McpCompleteResult#fromResourceOutput(McpResourceOutput)} or return a
+ * declared multi-round-trip result. Implementations must be safe for
+ * concurrent invocation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -34,7 +47,7 @@ import javax.annotation.concurrent.ThreadSafe;
 @FunctionalInterface
 public interface McpResourceReadHandler {
 	/**
-	 * Reads one resource.
+	 * Reads one routed resource under application authorization and policy.
 	 *
 	 * @param request request metadata
 	 * @param resource resolved resource URI and template variables

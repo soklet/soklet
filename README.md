@@ -716,7 +716,12 @@ applications still own response-key correlation, action handling, accepted
 content policy, user binding, sampling limits, and filesystem containment. See
 the compile-checked
 [application input-security patterns](src/test/java/examples/mcp/McpInputSecurityApplicationPatternsTests.java)
-and [deployment guidance](SECURITY.md#mcp-deployment-security).
+[durable-handle and prompt-security patterns](src/test/java/examples/mcp/McpDurableHandlePromptApplicationPatternsTests.java),
+and [resource and cursor-security patterns](src/test/java/examples/mcp/McpResourceCursorApplicationPatternsTests.java).
+These examples demonstrate application-owned repositories, semantic
+authorization, canonical containment, delivery-intent URI policy, and stable
+cursor snapshots; Soklet does not supply those deployment policies. See also
+[deployment guidance](SECURITY.md#mcp-deployment-security).
 
 Trace correlation remains default-off. Configuring a trace-correlation key
 enables an exactly-once finish-time `MCP_TRACE_CORRELATION` log event carrying
@@ -1503,7 +1508,11 @@ disconnect, cancelation, and shutdown removal of queued work decrement queue
 depth without counting a rejection. Reset preserves the two live gauges while
 clearing cumulative rejections. A non-cooperative residual handler remains
 active after bounded shutdown until it actually exits, at which point the
-active gauge returns to zero; retained snapshots do not change.
+active gauge returns to zero; retained snapshots do not change. Promotion,
+queued deadline, and disconnect elect one queue-depth removal; a still-queued
+writable deadline uses the fixed overload response, while disconnect writes
+nothing even if it makes a reserved deadline response unwritable before
+handoff.
 
 The tenth bounded Phase 6 vertical resolved the full `AMB-003` aggregate
 contract and implemented the coherent transport-boundary slice. At that
@@ -2399,7 +2408,7 @@ ordered gates. Eighteen are dispatch-configured, while five remain
 `BLOCKED_HARNESS_MISSING` and the six downstreams remain
 `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving 11 fail-closed blockers;
 `READY` means configured, never passed. The matrix-closure hook is `READY`, but
-its checked-in registry deliberately reports `FAILED` while 20 rows remain
+its checked-in registry deliberately reports `FAILED` while 10 rows remain
 `UNRESOLVED`. Scheduled/nightly and sustained history, release scans,
 benchmarks, published downstream pins, and immutable-candidate provenance
 remain open. `release-scans` remains blocked on its exact scanner/toolchain,
@@ -2529,7 +2538,7 @@ Final-tag Ajv validation of the
 expanded 48-message corpus was not rerun locally and remains owned by candidate
 conformance. These are local snapshot checks, not immutable-candidate evidence.
 
-The current four-row HTTP-contract reconciliation closes modern-only
+The preceding four-row HTTP-contract reconciliation closed modern-only
 `initialize` rejection diagnostics, unsupported classified-notification
 handling, universal MCP HTTP `no-store`, and exact request/notification
 validation precedence. The separate
@@ -2559,11 +2568,119 @@ authorization/CORS corpus. The narrow internal production change preserves a
 readable `initialize` method through valid-JSON envelope/ID failures and
 attaches only the modern diagnostic; it does not implement initialization or a
 handshake. Public API, signatures, and the Phase 4/5/6 freeze inventories are
-unchanged. The current canonical matrix remains deliberately `FAILED`: 104
-rows are `CORE_COMPLETE`, 116 are `RELEASE_GATED`, four are
-`APPLICATION_OWNED`, 18 are `NOT_APPLICABLE`, and 20 remain `UNRESOLVED`.
+unchanged. At that checkpoint, the canonical matrix remained deliberately
+`FAILED`: 104 rows were `CORE_COMPLETE`, 116 were `RELEASE_GATED`, four were
+`APPLICATION_OWNED`, 18 were `NOT_APPLICABLE`, and 20 remained `UNRESOLVED`.
 Final-tag Ajv validation of the 48-message corpus was not rerun locally and
 remains owned by candidate conformance.
+
+The subsequent 2026-08-21 core-result/error closure adds two independent
+corpora without changing the official 48-message/11-test or authorization/
+CORS three-head/two-test corpora. The checksum-bound
+`conformance/golden-result-envelope/live/manifest.sha256` binds 25 production
+JSON/SSE fixtures at SHA-256
+`d2eaa03c24927d45ef350b187624f50448d78a6531a26dedbbe07ee327b91b14`.
+Four live tests plus the source/authority inventory exhaust Soklet 3.6's core
+`complete` and `input_required` result-envelope authorities; extension result
+types remain separately bounded by `MCP-BASE-006`. The separate
+`conformance/golden-error-mapping/live/manifest.sha256` binds nine canonical
+complete HTTP responses across the eight frozen ordinary error families at
+SHA-256
+`90fae4482e7d8560f421aa4edbc8a6459d72f42880b5351298d5b74ff3f8b780`.
+Two live-listener tests cover every fixture, while existing readable-
+`initialize` and path-specific error evidence remain explicit supplements.
+Five deterministic tests freeze both progress/error enqueue orders and the
+mapped-error/cancellation ownership boundaries, including late pre-body
+cancellation only after a nonstream mapped response already owns its terminal.
+
+The combined focused suite passes 21/21 and the adjacent group passes 195/195
+on pinned Corretto 17.0.20.1 and local Corretto 21.0.11. Full clean test passes
+1,704/0/0/72 and 1,719/0/0/4, respectively, over 462 main and 205 test sources;
+Corretto 17 package validation builds the main, sources, and Javadoc JARs. API
+diff/parser/freezes remain green at 565 reviewed incompatibilities and
+unchanged Phase 4/5/6 signature counts 1,048/179/422. No production behavior,
+public API, freeze, or version changes; the sole production-source diff is a
+package-private no-op test hook at the existing-stream enqueue boundary. At
+that checkpoint, the canonical matrix remained deliberately `FAILED`: 106 rows
+were `CORE_COMPLETE`, 116 were `RELEASE_GATED`, four were
+`APPLICATION_OWNED`, 18 were `NOT_APPLICABLE`, and 18 remained `UNRESOLVED`.
+These are local snapshot results, not immutable-candidate evidence or results
+from the release-pinned Corretto 21.0.12.9.1 toolchain.
+
+The subsequent application-semantic closure adds two public-API-only,
+compile-checked examples: the
+[durable-handle and secured-prompt patterns](src/test/java/examples/mcp/McpDurableHandlePromptApplicationPatternsTests.java)
+and [resource, URI, filesystem, and cursor patterns](src/test/java/examples/mcp/McpResourceCursorApplicationPatternsTests.java).
+They move `MCP-BASE-015`, `MCP-PROMPT-006`, `MCP-RESOURCE-006/007`, and
+`MCP-PAGE-004/007` to `APPLICATION_OWNED`; they do not claim that Soklet owns a
+durable repository, semantic prompt policy, filesystem mapper, delivery-intent
+URI policy, cursor key, or distributed snapshot store. No production behavior
+or public signature/freeze inventory changed; public Javadocs now document the
+existing application-owned boundaries. Focused owner evidence on Amazon
+Corretto 17.0.20.1+10-LTS is two separate 4/4 class runs (eight tests total);
+the direct combined suite is 8/8 on local Amazon Corretto 21.0.11.10.1
+(OpenJDK 21.0.11+10-LTS). The adjacent 12-class suite passes 66/66 on each JDK.
+Full `mvn -B -ntp clean test` passes 1,712 tests with zero failures, zero errors,
+and 72 skips on Corretto 17, and 1,727 tests with zero failures, zero errors,
+and four skips on local Corretto 21; both compile 462 main and 207 test sources.
+At that application-pattern checkpoint, the canonical matrix remained
+deliberately `FAILED`: 106 rows were `CORE_COMPLETE`, 116 were `RELEASE_GATED`,
+10 were `APPLICATION_OWNED`, 18 were `NOT_APPLICABLE`, and 12 remained
+`UNRESOLVED`.
+
+The subsequent conditional-capability proxy closure adds the
+[real loopback intermediary fixture](src/test/java/com/soklet/internal/mcp/protocol/McpConditionalCapabilityProxyRuntimeTests.java).
+Its single test drives a two-leg socket proxy with a manual monotonic idle
+clock. With conditional support absent, the proxy observes zero backend and
+client-visible response bytes before expiring at its exact configured boundary;
+the reset produces one exact client-disconnect outcome and one cooperative
+cancelation. The handler remains accounted until explicitly released, and its
+late result emits no bytes. With support present, the same proxy forwards the
+SSE head, progress notification, and terminal result byte-for-byte. The
+focused/adjacent gate passes 33/33 on local Amazon Corretto
+17.0.20.1+10-LTS and local Amazon Corretto 21.0.11.10.1 (OpenJDK
+21.0.11+10-LTS). Full `mvn -B -ntp clean test` passes 1,713 tests with zero
+failures, zero errors, and 72 skips on Corretto 17, and 1,728 tests with zero
+failures, zero errors, and four skips on local Corretto 21; both compile 462
+main and 208 test sources. A narrow internal production
+fix preserves an outer cancel transition's exact observation reason and cause
+instead of publishing a generic cancelation fallback. Public API, signatures,
+freeze inventories, and the version are unchanged. This evidence models one
+configured loopback intermediary; it does not establish a wall-clock
+production timeout, universal proxy behavior, or prompt non-cooperative
+application-code exit. At that checkpoint, `MCP-MRTR-011` became
+`CORE_COMPLETE`; the matrix remained deliberately `FAILED` at 107
+`CORE_COMPLETE`, 116
+`RELEASE_GATED`, 10 `APPLICATION_OWNED`, 18 `NOT_APPLICABLE`, and 11
+`UNRESOLVED`. These are local snapshot results, not immutable-candidate
+evidence; the Corretto 21 run is not release-pinned.
+
+The subsequent queued-execution winner-election closure adds
+[deterministic queue ownership evidence](src/test/java/com/soklet/internal/mcp/protocol/McpQueuedExecutionWinnerElectionTests.java).
+One method stages promotion, exact-boundary deadline, and client disconnect,
+then enumerates all six total orders with a monotonic manual clock and FIFO
+manual executor. Deadline before promotion while the request remains writable
+returns the exact queued HTTP 503/JSON-RPC `-32603` response; disconnect writes
+nothing; promotion first ends the queued state and follows the separately
+provisional active-deadline path. A second cross-layer case holds the exact
+observer-deferral gap after the application layer reserves a queued deadline,
+then makes the outer request control unwritable by disconnect before response
+handoff. It observes zero callback bytes, exactly one `CLIENT_DISCONNECTED`
+finish and one dequeue/gauge removal. One deadline-expiration occurrence and
+one abandoned response account for the reserved-but-unwritable attempt, not a
+second terminal outcome. No queued interceptor or handler runs, cleanup occurs
+once per request, and all framework state returns to baseline. The focused
+class passes 2/2 on pinned Amazon Corretto 17.0.20.1+10-LTS and local Amazon
+Corretto 21.0.11.10.1; the adjacent Corretto 17 execution bundle passes 53/53.
+Full `mvn -B -ntp clean test` passes 1,715/0/0/72 on Corretto 17 and
+1,730/0/0/4 on local Corretto 21 over 462 main and 209 test sources. This
+slice changes no production behavior, public API, signature/freeze inventory,
+or version. It closes `SOK-EXEC-005`; the current matrix remains deliberately
+`FAILED` at 108 `CORE_COMPLETE`, 116 `RELEASE_GATED`, 10
+`APPLICATION_OWNED`, 18 `NOT_APPLICABLE`, and 10 `UNRESOLVED`. These are
+bounded local ordering results, not proof of every scheduler/network
+interleaving or immutable-candidate evidence; the Corretto 21 run is not
+release-pinned.
 
 You can expose a `/metrics` endpoint by injecting [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html)
 into a [`ResourceMethod`](https://javadoc.soklet.com/com/soklet/ResourceMethod.html):

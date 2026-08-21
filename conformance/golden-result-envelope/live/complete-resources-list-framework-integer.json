@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":102,"result":{"resources":[{"uri":"result://envelope/resource","name":"Result envelope resource"}],"ttlMs":0,"cacheScope":"private","resultType":"complete"}}

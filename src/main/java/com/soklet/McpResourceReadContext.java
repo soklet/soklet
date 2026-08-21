@@ -23,13 +23,23 @@ import java.net.URI;
 import java.util.Map;
 
 /**
- * Immutable resolved input for one MCP resource-read invocation.
+ * Immutable routed input for one MCP resource-read invocation.
+ *
+ * <p>The URI and template variables remain application input. Routing does not
+ * authorize the current principal, establish filesystem containment, or say
+ * that the URI is safe for direct client loading. A handler must apply its own
+ * delivery-intent URI allowlist and, for filesystem-backed resources,
+ * canonicalize and contain the target before authorization and opening.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 public interface McpResourceReadContext {
-	/** @return exact resource URI supplied by the client */
+	/**
+	 * Returns the exact routed resource URI supplied by the client.
+	 *
+	 * @return exact resource URI; not an authorization or dereference decision
+	 */
 	@NonNull
 	URI getUri();
 

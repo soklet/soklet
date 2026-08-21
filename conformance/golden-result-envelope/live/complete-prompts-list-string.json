@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":"prompts-list-complete","result":{"prompts":[{"name":"result.prompt"}],"ttlMs":0,"cacheScope":"private","resultType":"complete"}}

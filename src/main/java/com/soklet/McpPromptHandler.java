@@ -23,10 +23,19 @@ import javax.annotation.concurrent.ThreadSafe;
 /**
  * Programmatic MCP prompt handler.
  *
- * <p>The open {@link McpOperationResult} return preserves the result spine for
- * later multi-round-trip support. In the Phase 4 prompt surface, handlers
- * complete with {@link McpCompleteResult#fromPromptOutput(McpPromptOutput)}.
- * Implementations must be safe for concurrent invocation.
+ * <p>Structural validation does not make prompt arguments semantically safe.
+ * The handler owns deployment-specific business allowlists, input and output
+ * classification, prompt-injection defenses, and authorization under the
+ * current admitted identity. It must authorize before reading a referenced
+ * resource and should collapse rejected input, authorization failure, and
+ * unavailable resources to a neutral client-visible failure that does not
+ * disclose protected values. Soklet supplies no universal injection detector
+ * or application resource authorizer.
+ *
+ * <p>Handlers may complete with
+ * {@link McpCompleteResult#fromPromptOutput(McpPromptOutput)} or return a
+ * declared multi-round-trip result. Implementations must be safe for
+ * concurrent invocation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -34,7 +43,7 @@ import javax.annotation.concurrent.ThreadSafe;
 @FunctionalInterface
 public interface McpPromptHandler {
 	/**
-	 * Handles one validated prompt invocation.
+	 * Handles one structurally validated prompt invocation.
 	 *
 	 * @param request request metadata
 	 * @param prompt supplied prompt arguments

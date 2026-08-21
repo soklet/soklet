@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":500,"result":{"tools":[{"name":"result.typed","inputSchema":{"type":"object","properties":{"mode":{"type":"string"}},"required":["mode"],"additionalProperties":false},"outputSchema":{"type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}}],"ttlMs":0,"cacheScope":"private","resultType":"complete"}}

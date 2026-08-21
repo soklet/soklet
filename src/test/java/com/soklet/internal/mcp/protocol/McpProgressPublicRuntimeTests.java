@@ -511,6 +511,190 @@ public class McpProgressPublicRuntimeTests {
 		}
 	}
 
+	@Test
+	public void progressEnqueueWinsBeforeMappedErrorTerminal() throws Exception {
+		assertProgressErrorWinner(true);
+	}
+
+	@Test
+	public void mappedErrorTerminalWinsAfterProgressEligibility() throws Exception {
+		assertProgressErrorWinner(false);
+	}
+
+	private static void assertProgressErrorWinner(boolean progressWins)
+			throws Exception {
+		String id = progressWins ? "progress-wins" : "error-wins";
+		String secret = "application-secret-" + id;
+		List<McpMetricsEvent> metrics = new CopyOnWriteArrayList<>();
+		CountDownLatch requestFinished = new CountDownLatch(1);
+		CountDownLatch lateEnqueueEntered = new CountDownLatch(1);
+		CountDownLatch releaseLateEnqueue = new CountDownLatch(1);
+		CountDownLatch lateReportFinished = new CountDownLatch(1);
+		AtomicInteger enqueueAttempts = new AtomicInteger();
+		AtomicBoolean lateReporterInterrupted = new AtomicBoolean();
+		AtomicReference<Throwable> lateReportFailure = new AtomicReference<>();
+		AtomicReference<Future<?>> lateReport = new AtomicReference<>();
+		ExecutorService lateReporter = Executors.newSingleThreadExecutor();
+		MetricsCollector metricsCollector = new MetricsCollector() {
+			@Override
+			public void didRecordMcpMetricsEvent(@NonNull McpMetricsEvent event) {
+				metrics.add(event);
+				if (event instanceof McpMetricsEvent.RequestFinished)
+					requestFinished.countDown();
+			}
+		};
+		McpRequestSseStream.TestHooks hooks = new McpRequestSseStream.TestHooks() {
+			@Override
+			public void beforeTerminalReservation() {
+			}
+
+			@Override
+			public void beforeMessageEnqueue() {
+				if (enqueueAttempts.incrementAndGet() != 1)
+					return;
+				lateEnqueueEntered.countDown();
+				awaitUninterruptibly(releaseLateEnqueue);
+			}
+		};
+		McpToolRegistration<McpJsonObject> tool = tool("progress." + id,
+				(request, arguments, features) -> {
+					McpProgressReporter reporter =
+							features.require(McpProgressReporter.class);
+					reporter.report(McpProgressUpdate.withProgress(1.0d).build());
+					lateReport.set(lateReporter.submit(() -> {
+						try {
+							reporter.report(McpProgressUpdate.withProgress(2.0d)
+									.build());
+						} catch (Throwable throwable) {
+							lateReportFailure.set(throwable);
+						} finally {
+							lateReporterInterrupted.set(
+									Thread.currentThread().isInterrupted());
+							lateReportFinished.countDown();
+						}
+					}));
+					if (!lateEnqueueEntered.await(5, TimeUnit.SECONDS))
+						throw new AssertionError(
+								"Late progress did not reach the enqueue boundary.");
+					if (progressWins) {
+						releaseLateEnqueue.countDown();
+						if (!lateReportFinished.await(5, TimeUnit.SECONDS))
+							throw new AssertionError(
+									"Progress did not win the enqueue boundary.");
+					}
+					throw new IllegalStateException(secret);
+				});
+		McpServer server = server(List.of(tool));
+		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.metricsCollector(metricsCollector)
+				.build());
+		McpChunkedHttpClient client = null;
+
+		try {
+			McpRequestSseStream.setTestHooks(hooks);
+			soklet.start();
+			String idJson = "\"" + id + "\"";
+			String tokenJson = "\"" + id + "-token\"";
+			client = callTool(boundPort(server), idJson,
+					"progress." + id, "{}", tokenJson);
+			assertSseHead(client.readHead());
+			Assertions.assertEquals(progressEvent(tokenJson, "1"),
+					client.readChunkText());
+			if (progressWins) {
+				Assertions.assertEquals(progressEvent(tokenJson, "2"),
+						client.readChunkText());
+			}
+			String terminal = sse("{\"jsonrpc\":\"2.0\",\"id\":\"" + id
+					+ "\",\"error\":{\"code\":-32603,"
+					+ "\"message\":\"Internal error\"}}");
+			String terminalFrame = client.readChunkText();
+			Assertions.assertEquals(terminal, terminalFrame);
+			Assertions.assertFalse(terminalFrame.contains(secret), terminalFrame);
+			if (!progressWins)
+				releaseLateEnqueue.countDown();
+			Assertions.assertTrue(lateReportFinished.await(5, TimeUnit.SECONDS),
+					"The late progress report remained blocked.");
+			Future<?> report = lateReport.get();
+			Assertions.assertNotNull(report);
+			report.get(5, TimeUnit.SECONDS);
+			Assertions.assertNull(lateReportFailure.get());
+			Assertions.assertEquals(1, enqueueAttempts.get(),
+					"Only the late report traverses the existing-stream enqueue path.");
+			Assertions.assertEquals(!progressWins,
+					lateReporterInterrupted.get(),
+					"Only a terminal-owned late enqueue restores interruption.");
+			Assertions.assertNull(client.readChunk(),
+					"No progress frame may follow the mapped terminal error.");
+
+			Assertions.assertTrue(requestFinished.await(5, TimeUnit.SECONDS),
+					"The mapped-error request did not finish observation.");
+			awaitPublicCleanup(server);
+			Assertions.assertEquals(progressWins ? 2L : 1L, metrics.stream()
+					.filter(McpMetricsEvent.ProgressEmitted.class::isInstance)
+					.count());
+			List<McpMetricsEvent.ProtocolError> protocolErrors = metrics.stream()
+					.filter(McpMetricsEvent.ProtocolError.class::isInstance)
+					.map(McpMetricsEvent.ProtocolError.class::cast)
+					.toList();
+			Assertions.assertEquals(1, protocolErrors.size());
+			Assertions.assertEquals(McpJsonRpcError.INTERNAL_ERROR,
+					protocolErrors.get(0).getCode());
+			List<McpMetricsEvent.RequestFinished> finishes = metrics.stream()
+					.filter(McpMetricsEvent.RequestFinished.class::isInstance)
+					.map(McpMetricsEvent.RequestFinished.class::cast)
+					.toList();
+			Assertions.assertEquals(1, finishes.size());
+			Assertions.assertEquals(com.soklet.McpRequestOutcome.INTERNAL_ERROR,
+					finishes.get(0).getOutcome());
+			List<McpMetricsEvent.RequestStreamClosed> streamCloses = metrics.stream()
+					.filter(McpMetricsEvent.RequestStreamClosed.class::isInstance)
+					.map(McpMetricsEvent.RequestStreamClosed.class::cast)
+					.toList();
+			Assertions.assertEquals(1, streamCloses.size());
+			Assertions.assertEquals(
+					com.soklet.McpStreamTerminationReason.COMPLETED,
+					streamCloses.get(0).getReason());
+			Assertions.assertTrue(metrics.indexOf(streamCloses.get(0))
+					< metrics.indexOf(finishes.get(0)));
+			Assertions.assertTrue(metrics.indexOf(protocolErrors.get(0))
+					< metrics.indexOf(finishes.get(0)));
+			List<Class<?>> requestTerminalOrder = metrics.stream()
+					.filter(event -> event instanceof McpMetricsEvent.ProgressEmitted
+							|| event instanceof McpMetricsEvent.ProtocolError
+							|| event instanceof McpMetricsEvent.RequestStreamClosed
+							|| event instanceof McpMetricsEvent.RequestFinished)
+					.map(Object::getClass)
+					.toList();
+			List<Class<?>> expectedOrder = progressWins ? List.of(
+					McpMetricsEvent.ProgressEmitted.class,
+					McpMetricsEvent.ProgressEmitted.class,
+					McpMetricsEvent.ProtocolError.class,
+					McpMetricsEvent.RequestStreamClosed.class,
+					McpMetricsEvent.RequestFinished.class) : List.of(
+					McpMetricsEvent.ProgressEmitted.class,
+					McpMetricsEvent.ProtocolError.class,
+					McpMetricsEvent.RequestStreamClosed.class,
+					McpMetricsEvent.RequestFinished.class);
+			Assertions.assertEquals(expectedOrder, requestTerminalOrder,
+					"Accepted progress and terminal events must retain request FIFO.");
+			Assertions.assertEquals(0,
+					server.getDiagnostics().getActiveHandlerExecutions());
+			Assertions.assertEquals(0, server.getDiagnostics().getQueuedRequests());
+			Assertions.assertEquals(0,
+					server.getDiagnostics().getActiveRequestStreams());
+		} finally {
+			releaseLateEnqueue.countDown();
+			McpRequestSseStream.setTestHooks(null);
+			if (client != null)
+				client.close();
+			soklet.stop();
+			lateReporter.shutdownNow();
+			Assertions.assertTrue(lateReporter.awaitTermination(
+					5, TimeUnit.SECONDS));
+		}
+	}
+
 	private static void assertExactProgressExchange(int port, String idJson,
 			String tokenJson, String expectedTokenJson) throws Exception {
 		try (McpChunkedHttpClient client = callTool(port, idJson,
@@ -534,6 +718,30 @@ public class McpProgressPublicRuntimeTests {
 				+ "\"method\":\"notifications/progress\","
 				+ "\"params\":{\"progressToken\":" + tokenJson + ","
 				+ "\"progress\":" + progressFields + "}}");
+	}
+
+	private static void awaitPublicCleanup(McpServer server)
+			throws InterruptedException {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+		while ((server.getDiagnostics().getActiveHandlerExecutions() != 0
+				|| server.getDiagnostics().getQueuedRequests() != 0
+				|| server.getDiagnostics().getActiveRequestStreams() != 0)
+				&& System.nanoTime() - deadline < 0L)
+			Thread.sleep(5L);
+	}
+
+	private static void awaitUninterruptibly(CountDownLatch latch) {
+		boolean interrupted = false;
+		while (true) {
+			try {
+				latch.await();
+				break;
+			} catch (InterruptedException exception) {
+				interrupted = true;
+			}
+		}
+		if (interrupted)
+			Thread.currentThread().interrupt();
 	}
 
 	private static String sse(String json) {

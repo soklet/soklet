@@ -17,7 +17,10 @@
 package com.soklet;
 
 /**
- * Declares the request-state contract for one MCP operation.
+ * Declares who protects request state for one MCP operation.
+ *
+ * <p>This selection does not create a cross-request application session.
+ * Every retry remains an independent request and must carry its state again.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -26,6 +29,15 @@ public enum McpRequestStateMode {
 	NONE,
 	/** Soklet protects application-defined JSON state on the wire. */
 	FRAMEWORK_PROTECTED,
-	/** The application owns protection of an opaque state string. */
+	/**
+	 * The application owns protection of an opaque state string.
+	 *
+	 * <p>A durable application commonly uses the string as an unguessable
+	 * handle into an application-owned repository. The application owns record
+	 * durability, principal and authorization-context binding, integrity,
+	 * confidentiality, expiry, duplicate-use handling, and atomic handle rotation.
+	 * Soklet only transports the string and does not provide that repository or
+	 * those protections.
+	 */
 	APPLICATION_PROTECTED
 }

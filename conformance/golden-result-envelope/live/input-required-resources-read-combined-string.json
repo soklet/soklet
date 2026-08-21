@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":"resource-combined-initial","result":{"inputRequests":{"roots":{"method":"roots/list","params":{}}},"requestState":"result-envelope-framework-state-v1","resultType":"input_required","_meta":{"resultEnvelopeAuthority":"combined"}}}

@@ -36,6 +36,13 @@ import static java.util.Objects.requireNonNull;
  * requests retain their insertion order and their keys are unique within the
  * result. Input-required results intentionally expose no cache controls.
  *
+ * <p>For a durable {@link McpRequestStateMode#APPLICATION_PROTECTED}
+ * continuation, an application can persist the continuation in its own
+ * repository and return only an opaque handle as application request state.
+ * The client must carry the current handle on every retry, including retries
+ * over a new connection. Soklet transports that string; it does not store,
+ * rotate, protect, authorize, or recover the referenced application record.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -94,6 +101,11 @@ public final class McpInputRequiredResult implements McpOperationResult {
 
 	/**
 	 * Returns opaque request state whose protection is application-owned.
+	 *
+	 * <p>The value may be a handle into an application-owned durable
+	 * repository. Its presence does not imply that Soklet has validated the
+	 * handle's integrity, expiry, duplicate-use status, or binding to the admitted
+	 * principal or authorization context.
 	 *
 	 * @return application-protected request-state value, or empty when absent
 	 */
@@ -181,6 +193,13 @@ public final class McpInputRequiredResult implements McpOperationResult {
 		 *
 		 * <p>This replaces any request state supplied by an earlier builder
 		 * call.
+		 *
+		 * <p>For durable continuation, persist the state before returning the
+		 * result, use an unguessable handle, bind the repository record to the
+		 * admitted security context, and consume or rotate it atomically when
+		 * the application's duplicate-use policy requires that behavior. The client
+		 * must return the handle on each retry; Soklet provides no repository
+		 * for it.
 		 *
 		 * @param state nonempty opaque application-protected state
 		 * @return this builder

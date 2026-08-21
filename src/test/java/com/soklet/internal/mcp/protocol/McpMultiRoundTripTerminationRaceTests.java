@@ -17,6 +17,7 @@
 package com.soklet.internal.mcp.protocol;
 
 import com.soklet.CorsAuthorizer;
+import com.soklet.McpRequestOutcome;
 import com.soklet.McpRequestStateMode;
 import com.soklet.StreamTerminationReason;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestStateProtectionAdapter;
@@ -460,8 +461,10 @@ public class McpMultiRoundTripTerminationRaceTests {
 		AtomicInteger cancelations = new AtomicInteger();
 		AtomicReference<StreamTerminationReason> reason = new AtomicReference<>();
 		AtomicReference<Boolean> progressSuppressed = new AtomicReference<>();
+		McpRuntimeObservationRecorder observations =
+				new McpRuntimeObservationRecorder();
 		McpHttpServerRuntime runtime = runtime(plan, stateRuntime(protector),
-				clock, 1, new McpRuntimeObservationRecorder(), new AtomicInteger(),
+				clock, 1, observations, new AtomicInteger(),
 				invocation -> {
 					invocation.requireHandlerEntry();
 					progressSuppressed.set(McpServerRuntimeBridge
@@ -499,6 +502,11 @@ public class McpMultiRoundTripTerminationRaceTests {
 
 			awaitCondition(() -> cancelations.get() == 1);
 			Assertions.assertEquals(termination.reason(), reason.get());
+			McpRuntimeObservationRecorder.Observation observation =
+					observations.observation("conditional-hold");
+			Assertions.assertEquals(termination.outcome(),
+					observation.awaitFinish().outcome());
+			Assertions.assertEquals(1, observation.finishCount());
 			awaitApplication(runtime, snapshot ->
 					snapshot.activeHandlerSlots() == 1
 							&& snapshot.activeIdentifiedRequestExchanges() == 0
@@ -509,6 +517,7 @@ public class McpMultiRoundTripTerminationRaceTests {
 							&& snapshot.activeIdentifiedRequestExchanges() == 0
 							&& snapshot.retainedExchanges() == 0);
 			Assertions.assertEquals(1, cancelations.get());
+			Assertions.assertEquals(1, observation.finishCount());
 			Assertions.assertEquals(1, released.responseCleanups());
 			Assertions.assertEquals(0, runtime.requestExecutionSnapshot()
 					.activeResponseStreams());
@@ -773,17 +782,26 @@ public class McpMultiRoundTripTerminationRaceTests {
 	}
 
 	private enum HoldTermination {
-		DISCONNECT(StreamTerminationReason.CLIENT_DISCONNECTED),
-		DEADLINE(StreamTerminationReason.RESPONSE_TIMEOUT);
+		DISCONNECT(StreamTerminationReason.CLIENT_DISCONNECTED,
+				McpRequestOutcome.CLIENT_DISCONNECTED),
+		DEADLINE(StreamTerminationReason.RESPONSE_TIMEOUT,
+				McpRequestOutcome.DEADLINE_EXCEEDED);
 
 		private final StreamTerminationReason reason;
+		private final McpRequestOutcome outcome;
 
-		HoldTermination(StreamTerminationReason reason) {
+		HoldTermination(StreamTerminationReason reason,
+				McpRequestOutcome outcome) {
 			this.reason = reason;
+			this.outcome = outcome;
 		}
 
 		private StreamTerminationReason reason() {
 			return reason;
+		}
+
+		private McpRequestOutcome outcome() {
+			return outcome;
 		}
 	}
 

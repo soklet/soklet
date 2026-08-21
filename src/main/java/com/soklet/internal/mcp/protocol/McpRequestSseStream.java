@@ -109,6 +109,10 @@ final class McpRequestSseStream {
 	interface TestHooks {
 		void beforeTerminalReservation();
 
+		default void beforeMessageEnqueue() {
+			// No-op outside deterministic race tests.
+		}
+
 		default void beforeWriteIdleFailureAttempt(
 				@NonNull Runnable competingTermination) {
 			requireNonNull(competingTermination);
@@ -164,6 +168,7 @@ final class McpRequestSseStream {
 	}
 
 	void enqueueMessage(@NonNull McpJsonRpcMessage message) throws InterruptedException {
+		testHooks.beforeMessageEnqueue();
 		channel.enqueue(frame(requireNonNull(message)));
 	}
 

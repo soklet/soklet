@@ -180,7 +180,7 @@ public class McpSimulatorEveryOperationTests {
 
 		fixture.assertFinished(Map.of(
 				"notifications/cancelled", McpRequestOutcome.COMPLETE,
-				"tools/call", McpRequestOutcome.CANCELED));
+				"tools/call", McpRequestOutcome.CLIENT_DISCONNECTED));
 		fixture.assertOffNetwork();
 	}
 

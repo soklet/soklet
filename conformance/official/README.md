@@ -163,7 +163,7 @@ remained deliberately `FAILED`: 100 rows were `CORE_COMPLETE`, 116 were
 not rerun locally and remains owned by candidate conformance. These are local
 snapshot checks, not immutable-candidate evidence.
 
-The current four-row HTTP-contract reconciliation adds a third, independent
+The preceding four-row HTTP-contract reconciliation added a third, independent
 evidence surface without changing the official corpus: 21 canonical complete
 HTTP response fixtures bound by
 `../golden-http-contract/precedence-no-store/manifest.sha256` at SHA-256
@@ -181,10 +181,106 @@ The official final-schema corpus remains exactly 48 JSON messages with 11
 focused tests, and the authorization/CORS corpus remains three heads with two
 integration tests. The narrow internal diagnostic change implements no
 initialization or session and leaves public API and freeze inventories
-unchanged. The current matrix remains `FAILED`: 104 rows are `CORE_COMPLETE`,
-116 are `RELEASE_GATED`, four are `APPLICATION_OWNED`, 18 are
-`NOT_APPLICABLE`, and 20 remain `UNRESOLVED`. Final-tag Ajv validation remains
+unchanged. At that checkpoint, the matrix remained `FAILED`: 104 rows were
+`CORE_COMPLETE`, 116 were `RELEASE_GATED`, four were `APPLICATION_OWNED`, 18
+were `NOT_APPLICABLE`, and 20 remained `UNRESOLVED`. Final-tag Ajv validation remains
 owned by candidate conformance.
+
+The subsequent 2026-08-21 core-result/error closure does not alter either
+official-suite corpus. A separate checksum-bound core result-envelope corpus
+contains 25 JSON/SSE fixtures and four production tests; its manifest SHA-256
+is `d2eaa03c24927d45ef350b187624f50448d78a6531a26dedbbe07ee327b91b14`.
+A second separate corpus contains nine canonical complete HTTP fixtures across
+the eight frozen ordinary error families and two production-listener tests;
+its manifest SHA-256 is
+`90fae4482e7d8560f421aa4edbc8a6459d72f42880b5351298d5b74ff3f8b780`.
+Readable-`initialize` and path-specific errors remain separate supplemental
+evidence. Five deterministic tests additionally freeze progress/error enqueue
+and mapped-error/cancellation ownership in both winning directions.
+
+The combined focused suite passes 21/21 and the adjacent group passes 195/195
+on pinned Corretto 17.0.20.1 and local Corretto 21.0.11. Full clean test passes
+1,704/0/0/72 and 1,719/0/0/4 over 462 main and 205 test sources; Corretto 17
+package validation builds all three JARs. API diff/parser/freezes remain green
+with 565 reviewed incompatibilities and unchanged 1,048/179/422 signatures.
+No production behavior, public API, freeze, or version changes; the sole
+production-source diff is a package-private no-op test hook at the existing-
+stream enqueue boundary. At that checkpoint, the matrix remained `FAILED`:
+106 rows were `CORE_COMPLETE`, 116 were `RELEASE_GATED`, four were
+`APPLICATION_OWNED`, 18 were `NOT_APPLICABLE`, and 18 remained `UNRESOLVED`.
+These are local snapshot results, not immutable-candidate evidence or release-
+pinned Corretto 21 results.
+
+The subsequent application-semantic closure does not alter either official-
+suite corpus. The public-API-only
+[durable-handle and secured-prompt patterns](../../src/test/java/examples/mcp/McpDurableHandlePromptApplicationPatternsTests.java)
+and [resource, URI, filesystem, and cursor patterns](../../src/test/java/examples/mcp/McpResourceCursorApplicationPatternsTests.java)
+contain eight executable tests for responsibilities that remain outside the
+official schema layer and Soklet core. They move `MCP-BASE-015`,
+`MCP-PROMPT-006`, `MCP-RESOURCE-006/007`, and `MCP-PAGE-004/007` to
+`APPLICATION_OWNED`; distributed portable-cursor evidence remains unresolved.
+No production behavior or public signature/freeze inventory changed; public
+Javadocs now document the existing application-owned boundaries. Focused owner
+evidence on Amazon Corretto 17.0.20.1+10-LTS is two separate 4/4 class runs
+(eight tests total); the direct combined suite is 8/8 on local Amazon Corretto
+21.0.11.10.1 (OpenJDK 21.0.11+10-LTS). The adjacent 12-class suite passes 66/66
+on each JDK. Full `mvn -B -ntp clean test` passes 1,712 tests with zero
+failures, zero errors, and 72 skips on Corretto 17, and 1,727 tests with zero
+failures, zero errors, and four skips on local Corretto 21; both compile 462
+main and 207 test sources. At that application-pattern checkpoint, the matrix
+remained `FAILED`: 106 rows were `CORE_COMPLETE`, 116 were `RELEASE_GATED`, 10
+were `APPLICATION_OWNED`, 18 were `NOT_APPLICABLE`, and 12 remained
+`UNRESOLVED`.
+
+The subsequent conditional-capability proxy closure is independent local
+transport evidence for the already-green official missing-capability profile.
+`McpConditionalCapabilityProxyRuntimeTests#proxyIdleExpiryCancelsSilentHoldAndSupportedControlForwardsSse`
+drives a real two-leg loopback socket proxy with a manual monotonic idle clock.
+The unsupported control observes zero backend and client-visible response
+bytes through exact proxy expiry, one client-disconnect outcome, one
+cooperative cancelation, no late result after retained-handler exit, and exact
+framework cleanup. The capability-present control forwards the SSE head,
+progress notification, and terminal result byte-for-byte through that same
+proxy. The focused/adjacent gate passes 33/33 on local Amazon Corretto
+17.0.20.1+10-LTS and local Amazon Corretto 21.0.11.10.1 (OpenJDK
+21.0.11+10-LTS). Full `mvn -B -ntp clean test` passes 1,713/0/0/72 on
+Corretto 17 and 1,728/0/0/4 on local Corretto 21, respectively, over 462 main
+and 208 test sources. A narrow internal production observation-race fix preserves
+an outer cancel transition's exact reason and cause; public API, signatures,
+freeze inventories, and the version are unchanged. This proves one configured
+loopback intermediary, not a universal proxy timeout or prompt
+non-cooperative application-code exit, and it is not a new official-suite
+result. At that checkpoint, `MCP-MRTR-011` became `CORE_COMPLETE`; the matrix
+remained `FAILED` at 107 `CORE_COMPLETE`, 116 `RELEASE_GATED`, 10
+`APPLICATION_OWNED`, 18 `NOT_APPLICABLE`, and 11 `UNRESOLVED`. These are local
+snapshot results, not immutable-candidate evidence; the Corretto 21 run is not
+release-pinned.
+
+The subsequent queued-execution winner-election closure is independent local
+runtime evidence and does not change an official-suite profile.
+`McpQueuedExecutionWinnerElectionTests` uses a monotonic manual clock, staged
+contenders, and a FIFO manual executor to enumerate all six total orders of
+promotion, exact-boundary deadline, and client disconnect. Deadline before
+promotion while still writable returns the exact queued 503/`-32603`; a
+disconnect writes nothing; promotion first leaves the queued state and follows
+the separately provisional active-deadline path. Its second cross-layer case
+holds the observer-deferral gap after queued-deadline reservation, then makes
+the outer request control unwritable before response handoff. It records zero
+callback bytes, exactly one `CLIENT_DISCONNECTED` finish and one dequeue/gauge
+removal. The one deadline-expiration occurrence and one abandoned response are
+diagnostics for the reserved-but-unwritable attempt, not a second outcome. No
+queued interceptor or handler runs and framework state returns to baseline.
+The focused class passes 2/2 on pinned Amazon Corretto 17.0.20.1+10-LTS and
+local Amazon Corretto 21.0.11.10.1; the adjacent Corretto 17 execution bundle
+passes 53/53. Full `mvn -B -ntp clean test` passes 1,715/0/0/72 on Corretto 17
+and 1,730/0/0/4 on local Corretto 21 over 462 main and 209 test sources. This
+test-only slice changes no production behavior, public API, freeze inventory,
+version, or official result. It closes `SOK-EXEC-005`; the current matrix
+remains `FAILED` at 108 `CORE_COMPLETE`, 116 `RELEASE_GATED`, 10
+`APPLICATION_OWNED`, 18 `NOT_APPLICABLE`, and 10 `UNRESOLVED`. These are
+bounded local ordering results, not every possible scheduler/network
+interleaving or immutable-candidate evidence; the Corretto 21 run is not
+release-pinned.
 
 The schema layer checks JSON message shapes only. HTTP status and headers,
 CORS, SSE framing, cross-message order, ID correlation, filter containment,

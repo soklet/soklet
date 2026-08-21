@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":"resources-list-handler-complete","result":{"resources":[{"uri":"result://envelope/resource","name":"Custom-listed result resource"}],"cacheScope":"private","ttlMs":0,"resultType":"complete","_meta":{"resultEnvelopeAuthority":"custom-resource-list"}}}

@@ -31,6 +31,12 @@ import java.util.Optional;
  * includes framework-owned operations such as discovery and static catalogs,
  * even though those operations do not invoke an application handler.
  *
+ * <p>Each request is independently admitted. Connection reuse does not carry
+ * application identity or continuation state into a later request; a durable
+ * application continuation needs an explicit handle on every retry and an
+ * application-owned repository that binds the handle to the current admitted
+ * security context.
+ *
  * <p>Invocation-specific optional behavior is exposed through
  * {@link McpInvocationFeatures}, not by adding optional members to this
  * context.
@@ -123,6 +129,12 @@ public interface McpRequestContext {
 	/**
 	 * Returns application-protected opaque state supplied with a
 	 * multi-round-trip retry.
+	 *
+	 * <p>Soklet preserves the exact validated string but does not resolve it.
+	 * The application owns any durable repository, confidentiality, integrity,
+	 * expiry, duplicate-use policy, atomic rotation, and binding to the current
+	 * admission identity and authorization context. The same requirements
+	 * apply when the retry arrives over a new connection or server instance.
 	 *
 	 * <p>The default preserves compatibility for request-context
 	 * implementations that do not yet supply multi-round-trip data.

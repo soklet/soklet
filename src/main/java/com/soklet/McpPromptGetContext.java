@@ -28,6 +28,10 @@ import java.util.Optional;
  * <p>The argument map contains only arguments declared by the prompt.
  * Required arguments are guaranteed to be present before the handler runs.
  * Omission and an explicitly supplied empty string remain distinct.
+ * Structural validation does not establish a business allowlist, resistance
+ * to prompt injection, authorization to access referenced data, or safe model
+ * output. Those semantic policies remain application responsibilities and
+ * should be evaluated before any referenced resource is accessed.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

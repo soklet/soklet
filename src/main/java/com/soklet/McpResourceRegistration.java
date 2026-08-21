@@ -38,6 +38,14 @@ import static java.util.Objects.requireNonNull;
  * default time to live for reads; the default is
  * {@link McpCachePolicy#privateNoCacheInstance()}.
  *
+ * <p>Registration validates address structure and routing, not deployment
+ * safety. The application owns an allowlist based on how each URI is delivered
+ * or dereferenced. Direct-client addresses and handler-only custom addresses
+ * commonly require different scheme, authority, credential, query, and
+ * fragment rules. A filesystem-backed handler additionally owns canonical
+ * root containment, symlink policy, authorization, and safe opening; Soklet
+ * does not map registered URIs to files.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -76,6 +84,10 @@ public final class McpResourceRegistration {
 	/**
 	 * Begins a staged exact-resource registration.
 	 *
+	 * <p>Acceptance here does not mean that the URI is safe for direct client
+	 * loading or for application-side dereference. Apply a deployment policy
+	 * for the address's intended delivery path.
+	 *
 	 * @param uri absolute normalized resource URI in ASCII wire form
 	 * @param name nonblank resource name
 	 * @return required-handler stage
@@ -94,6 +106,9 @@ public final class McpResourceRegistration {
 	 * <p>This method performs inexpensive local validation. Endpoint/server
 	 * construction performs complete RFC 6570 Level 1 parsing and route
 	 * validation.
+	 *
+	 * <p>Neither validation step authorizes expanded URIs or establishes that
+	 * their scheme is safe for the application's delivery intent.
 	 *
 	 * @param uriTemplate nonblank URI template containing simple
 	 * {@code {variable}} expressions

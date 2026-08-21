@@ -29,20 +29,10 @@ const symlinkEvidenceName = '.matrix-closure-symlink-self-test';
 const symlinkEvidencePath = join(projectRoot, symlinkEvidenceName);
 
 const expectedUnresolvedIds = Object.freeze([
-  'MCP-BASE-005',
   'MCP-BASE-011',
-  'MCP-BASE-015',
   'MCP-HTTP-020',
-  'MCP-MRTR-011',
-  'MCP-PROMPT-006',
-  'MCP-RESOURCE-006',
-  'MCP-RESOURCE-007',
-  'MCP-PAGE-004',
   'MCP-PAGE-006',
-  'MCP-PAGE-007',
-  'SOK-EXEC-005',
   'SOK-VALID-002',
-  'SOK-ERROR-002',
   'SOK-STATE-002',
   'SOK-STATE-007',
   'SOK-PRIV-001',
@@ -132,11 +122,11 @@ try {
     createHash('sha256').update(registryBytes).digest('hex'),
   );
   assert.deepEqual(current.report.dispositionCounts, {
-    APPLICATION_OWNED: 4,
-    CORE_COMPLETE: 104,
+    APPLICATION_OWNED: 10,
+    CORE_COMPLETE: 108,
     NOT_APPLICABLE: 18,
     RELEASE_GATED: 116,
-    UNRESOLVED: 20,
+    UNRESOLVED: 10,
   });
   assert.deepEqual(
     current.report.unresolvedRows.map(({ id }) => id),
@@ -171,6 +161,7 @@ try {
     ));
   }
   for (const id of [
+    'MCP-BASE-005',
     'MCP-BASE-024',
     'MCP-VER-003',
     'MCP-VER-004',
@@ -180,14 +171,86 @@ try {
     'MCP-AUTH-003',
     'MCP-HTTP-021',
     'SOK-ERROR-001',
+    'SOK-ERROR-002',
     'SOK-RATE-006',
     'SOK-RATE-007',
     'SOK-CORS-005',
     'SOK-VALID-001',
+    'MCP-MRTR-011',
+    'SOK-EXEC-005',
   ]) {
     assert.equal(row(registry, id).disposition, 'CORE_COMPLETE');
     assert.deepEqual(row(registry, id).releaseGates, []);
     assert.equal(row(registry, id).reason, '');
+  }
+  const conditionalProxyRow = row(registry, 'MCP-MRTR-011');
+  assert.deepEqual(conditionalProxyRow.releaseGates, []);
+  assert.equal(conditionalProxyRow.reason, '');
+  assert.ok(conditionalProxyRow.evidence.includes(
+    'src/test/java/com/soklet/internal/mcp/protocol/McpConditionalCapabilityProxyRuntimeTests.java',
+  ));
+  const queuedWinnerRow = row(registry, 'SOK-EXEC-005');
+  assert.ok(queuedWinnerRow.evidence.includes(
+    'src/test/java/com/soklet/internal/mcp/protocol/McpQueuedExecutionWinnerElectionTests.java',
+  ));
+  for (const [id, evidence, reason] of [
+    [
+      'MCP-BASE-015',
+      [
+        'src/test/java/com/soklet/McpRequestStatePublicRuntimeTests.java',
+        'src/test/java/com/soklet/internal/mcp/protocol/McpFrameworkRequestStateRuntimeTests.java',
+        'src/test/java/examples/mcp/McpDurableHandlePromptApplicationPatternsTests.java',
+      ],
+      'Applications own durable-handle issuance, persistence, rotation, expiry, and admitted-context binding; the executable public-API example proves that boundary.',
+    ],
+    [
+      'MCP-PROMPT-006',
+      [
+        'src/test/java/com/soklet/McpPromptPublicRuntimeTests.java',
+        'src/test/java/com/soklet/McpPromptRegistrationTests.java',
+        'src/test/java/examples/mcp/McpDurableHandlePromptApplicationPatternsTests.java',
+      ],
+      'Applications own prompt-semantic allowlists, authorization, resource selection, and injection policy; the executable public-API example proves that boundary.',
+    ],
+    [
+      'MCP-RESOURCE-006',
+      [
+        'MCP.md',
+        'src/test/java/examples/mcp/McpResourceCursorApplicationPatternsTests.java',
+      ],
+      'Applications exposing files own canonical containment, symlink and race policy, authorization, and safe failure mapping; the executable public-API example proves the bounded pattern.',
+    ],
+    [
+      'MCP-RESOURCE-007',
+      [
+        'src/test/java/com/soklet/McpResourceRegistrationTests.java',
+        'src/test/java/examples/mcp/McpResourceCursorApplicationPatternsTests.java',
+      ],
+      'Applications own the URI schemes their clients can load or their handlers resolve; the executable public-API example distinguishes direct HTTPS from handler-only custom URIs.',
+    ],
+    [
+      'MCP-PAGE-004',
+      [
+        'src/test/java/com/soklet/McpResourcePublicRuntimeTests.java',
+        'src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java',
+        'src/test/java/examples/mcp/McpResourceCursorApplicationPatternsTests.java',
+      ],
+      'Applications own cursor parsing, integrity, expiry, authorization, snapshot lookup, and neutral invalid-parameter mapping; the executable public-API example proves one safe pattern.',
+    ],
+    [
+      'MCP-PAGE-007',
+      [
+        'MCP.md',
+        'src/test/java/examples/mcp/McpResourceCursorApplicationPatternsTests.java',
+      ],
+      'Applications own cursor stability, retained snapshots, revisions, expiry windows, and integrity; the executable example proves a single-process retained-snapshot pattern.',
+    ],
+  ]) {
+    const applicationRow = row(registry, id);
+    assert.equal(applicationRow.disposition, 'APPLICATION_OWNED');
+    assert.deepEqual(applicationRow.evidence, evidence);
+    assert.deepEqual(applicationRow.releaseGates, []);
+    assert.equal(applicationRow.reason, reason);
   }
   for (const id of [
     'MCP-HTTP-021',
@@ -201,6 +264,20 @@ try {
   assert.ok(row(registry, 'SOK-ERROR-001').evidence.includes(
     'src/test/java/com/soklet/McpBootstrapValueTests.java',
   ));
+  for (const evidence of [
+    'conformance/golden-result-envelope/live/manifest.sha256',
+    'src/test/java/com/soklet/internal/mcp/protocol/McpResultEnvelopeGoldenProductionTests.java',
+  ]) {
+    assert.ok(row(registry, 'MCP-BASE-005').evidence.includes(evidence));
+  }
+  for (const evidence of [
+    'conformance/golden-error-mapping/live/manifest.sha256',
+    'src/test/java/com/soklet/internal/mcp/protocol/McpErrorMappingGoldenProductionTests.java',
+    'src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerObservationTerminalRaceTests.java',
+    'src/test/java/com/soklet/internal/mcp/protocol/McpProgressPublicRuntimeTests.java',
+  ]) {
+    assert.ok(row(registry, 'SOK-ERROR-002').evidence.includes(evidence));
+  }
   for (const id of ['SOK-RATE-006', 'SOK-RATE-007']) {
     assert.ok(row(registry, id).evidence.includes(
       'src/test/java/com/soklet/McpRateLimitPipelinePublicRuntimeTests.java',
@@ -271,7 +348,7 @@ try {
   assert.equal(checkedInCli.stdout, current.reportText);
   assert.equal(
     checkedInCli.stderr,
-    'Matrix closure failed: 20 unresolved row(s).\n',
+    'Matrix closure failed: 10 unresolved row(s).\n',
   );
 
   const usage = spawnSync(process.execPath, [verifierPath, 'unexpected'], {
@@ -301,12 +378,16 @@ try {
   assert.equal(resolved.exitCode, 0);
   assert.equal(resolved.report.status, 'PASSED');
   assert.deepEqual(resolved.report.dispositionCounts, {
-    APPLICATION_OWNED: 4,
-    CORE_COMPLETE: 124,
+    APPLICATION_OWNED: 10,
+    CORE_COMPLETE: 118,
     NOT_APPLICABLE: 18,
     RELEASE_GATED: 116,
     UNRESOLVED: 0,
   });
+  assert.equal(
+    resolved.report.dispositionCounts.CORE_COMPLETE,
+    current.report.dispositionCounts.CORE_COMPLETE + expectedUnresolvedIds.length,
+  );
   assert.deepEqual(resolved.report.unresolvedRows, []);
   assert.deepEqual(resolved.report.rows, resolvedRegistry.rows);
   assert.equal(resolved.reportText, canonicalJson(resolved.report));
