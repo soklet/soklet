@@ -4,7 +4,7 @@
   "releaseVersion": "3.6.0",
   "sourceMatrixPath": "mcp/MCP_CONFORMANCE_MATRIX.md",
   "sourceMatrixLastUpdated": "2026-08-21",
-  "sourceMatrixSha256": "1b4b2d3f75b34648349ccd4535e68fe95637031b97508c472447d6db39939557",
+  "sourceMatrixSha256": "880a3a8dfd6740d708a428ffda7c47abbe1c0841c7b66b732ce6d28763e7a15d",
   "releaseGateUniverse": [
     "candidate-build",
     "core-jdk-21",
@@ -146,13 +146,14 @@
     },
     {
       "id": "MCP-BASE-011",
-      "disposition": "UNRESOLVED",
+      "disposition": "CORE_COMPLETE",
       "evidence": [
+        "src/test/java/com/soklet/McpNotificationPublicRuntimeTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpJsonRpcEnvelopeCodecTests.java"
       ],
       "releaseGates": [],
-      "reason": "Public extension-notification API and official-suite evidence remain pending."
+      "reason": ""
     },
     {
       "id": "MCP-BASE-012",
@@ -1789,12 +1790,15 @@
     },
     {
       "id": "MCP-PAGE-006",
-      "disposition": "UNRESOLVED",
+      "disposition": "APPLICATION_OWNED",
       "evidence": [
-        "src/test/java/com/soklet/McpResourcePublicRuntimeTests.java"
+        "MCP.md",
+        "SECURITY.md",
+        "src/test/java/com/soklet/McpResourcePublicRuntimeTests.java",
+        "src/test/java/examples/mcp/McpLocalizedCursorFleetApplicationPatternsTests.java"
       ],
       "releaseGates": [],
-      "reason": "The distributed portable-cursor fixture remains pending."
+      "reason": "Applications own page size, cross-page uniqueness and snapshot consistency, cursor integrity, authorization, and cross-instance storage/key portability; the executable two-node public-API example proves one shared-snapshot pattern."
     },
     {
       "id": "MCP-PAGE-007",
@@ -2832,18 +2836,30 @@
     },
     {
       "id": "SOK-SIM-001",
-      "disposition": "UNRESOLVED",
+      "disposition": "RELEASE_GATED",
       "evidence": [
         "conformance/official/local-simulator-self-test.mjs",
         "conformance/official/public-fixture-src/com/soklet/conformance/McpConformanceFixture.java",
         "conformance/official/public-fixture-test-src/com/soklet/conformance/McpLocalSimulatorScenarioDriver.java",
         "conformance/official/run-local-simulator.mjs",
         "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpSimulationCaptureFuzzTest.java",
+        "release/release-validation-manifest.json",
         "soak/src/test/java/com/soklet/McpCrossFeatureSoakTests.java",
-        "src/test/java/com/soklet/McpSimulatorEveryOperationTests.java"
+        "src/test/java/com/soklet/McpSimulatorEveryOperationTests.java",
+        "src/test/java/com/soklet/McpSimulatorPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSimulationCaptureRuntimeTests.java"
       ],
-      "releaseGates": [],
-      "reason": "Adversarial slow-reader and write-idle simulator equivalence remains open."
+      "releaseGates": [
+        "candidate-build",
+        "core-jdk-21",
+        "core-jdk-25",
+        "fuzz-nightly-history",
+        "soak-nightly-history",
+        "release-soak",
+        "candidate-conformance"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25, fuzz-nightly-history, soak-nightly-history, release-soak, candidate-conformance."
     },
     {
       "id": "SOK-SHUT-001",
@@ -3024,13 +3040,16 @@
     },
     {
       "id": "SOK-L10N-007",
-      "disposition": "UNRESOLVED",
+      "disposition": "APPLICATION_OWNED",
       "evidence": [
+        "MCP.md",
+        "SECURITY.md",
         "src/test/java/com/soklet/McpLocalizationHandlerRuntimeTests.java",
-        "src/test/java/com/soklet/McpLocalizationPublicApiTests.java"
+        "src/test/java/com/soklet/McpLocalizationPublicApiTests.java",
+        "src/test/java/examples/mcp/McpLocalizedCursorFleetApplicationPatternsTests.java"
       ],
       "releaseGates": [],
-      "reason": "The application-owned cursor/localization boundary still lacks its downstream fixture evidence."
+      "reason": "Applications own locale/revision binding in opaque cursors and handler mismatch mapping; the executable two-node public-API example proves provider preselection plus full handler authentication while Soklet preserves every cursor byte."
     },
     {
       "id": "SOK-L10N-008",

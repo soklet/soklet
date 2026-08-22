@@ -1594,7 +1594,7 @@ checksum-pinned Corretto 21.0.12.9.1 toolchain now drives `core-jdk-21`,
 while five remain `BLOCKED_HARNESS_MISSING` and the six downstreams remain
 `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving 11 fail-closed blockers;
 `READY` means configured, never passed. The matrix-closure hook is `READY`, but
-its checked-in registry deliberately reports `FAILED` while 10 rows remain
+its checked-in registry deliberately reports `FAILED` while six rows remain
 `UNRESOLVED`. Actual scheduled/nightly and sustained fuzz/soak and operational
 evidence, release scans, benchmarks, published downstream pins, and immutable
 release-candidate provenance and conformance remain open. `release-scans`
@@ -1835,6 +1835,71 @@ or version. It closes `SOK-EXEC-005`; the current matrix remains deliberately
 bounded local ordering results, not proof of every scheduler/network
 interleaving or immutable-candidate evidence; the Corretto 21 run is not
 release-pinned.
+
+The subsequent off-network simulation boundary closure adds deterministic
+internal and public evidence with source SHA-256 values
+`7ab30148451fbef7e8a8131486cb67989ac133271797502920ef4aa2f1db6bd5` and
+`b666ad1bcb6a3bca6e3af46505fe46b7365042b06189cc8daf41d5fb51e05350`.
+Off-network capture never arms live write idle; non-drained item/byte limits
+preserve retained frames, omit the offender, and remain immutable once-only
+simulator outcomes. An unrelated simulation completes while the limited
+handler still owns its slot, with balanced accounting and no transport event.
+Separate real-listener tests remain the authorities for bounded slow-reader
+TCP backpressure and actual response-write-idle closure/interruption. The two
+selectors pass 2/0/0/0, both affected classes pass 25/0/0/0, and the adjacent
+loopback/simulator bundle passes 26/0/0/0 on pinned Corretto 17 and local
+Corretto 21. Full clean test passes 1,717/0/0/72 and 1,732/0/0/4 over 462 main
+and 209 test sources. No production behavior, API, freeze inventory, manifest,
+or version changes. `SOK-SIM-001` is now `RELEASE_GATED` by the exact seven
+named gates; the current matrix is 108 `CORE_COMPLETE`, 117 `RELEASE_GATED`,
+10 `APPLICATION_OWNED`, 18 `NOT_APPLICABLE`, and 9 `UNRESOLVED`, with a
+117/117/10/18/0 synthetic all-resolved report. This is deliberate simulator/
+live separation, not kernel, TCP, or live write-idle equivalence.
+
+The subsequent localized-cursor fleet application-pattern closure adds
+`McpLocalizedCursorFleetApplicationPatternsTests` at final source SHA-256
+`10d872127f2a25632137899986ea75cfdfe838eb2d6fbfa395283285b678d567`.
+Its two public-API-only methods transfer only the exact opaque cursor between
+independently configured simulator nodes; preserve bounded, stable, unique
+traversal of a retained snapshot after another node activates a replacement
+catalog; bind snapshot/catalog and locale/localization revisions plus expiry,
+offset, and authorization; and preserve the same bytes from provider
+preselection through full handler authentication. Every exercised invalid
+classification produces one fixed no-data application `-32602`/400 error with
+zero lifecycle throwables. The selector passes 2/0/0/0, the adjacent six-class
+set passes 30/0/0/0, and full clean test passes 1,719/0/0/72 and
+1,734/0/0/4 on pinned Corretto 17 and local Corretto 21 over 462 main and 210
+test sources. No production behavior, API, freeze inventory, manifest, or
+version changes. `MCP-PAGE-006` and `SOK-L10N-007` are now
+`APPLICATION_OWNED`; the matrix is 108/117/12/18/7 and the synthetic report
+is 115/117/12/18/0. The two-node fixture models application replication; it is
+not Soklet-provided storage, key management, replication, affinity, or a
+positive cache-TTL claim.
+
+The subsequent `MCP-BASE-011` notification-identifier boundary closure adds
+`src/test/java/com/soklet/McpNotificationPublicRuntimeTests.java` at final
+source SHA-256
+`ce10724e565470bdcd6f005ad3d332ea473698f7c7754c765c3bfc73a8c3a3f5`.
+Its two public-API-only methods prove that classified inbound notifications
+always have an empty HTTP transport body and bypass application request-
+handler and handler-interceptor stages. Malformed JSON that fails before
+notification classification is outside this claim. Outbound progress,
+subscription-acknowledgment, and list-changed notification frames carry a
+method and omit top-level `id`; nested `progressToken`,
+`io.modelcontextprotocol/subscriptionId`, and cancellation `requestId`
+parameter members remain legitimate. Only the method-free terminal result
+retains the initiating request's top-level `id`. Soklet 3.6 registers no
+extension-notification handler and exposes no arbitrary extension-notification
+handler API. The exact selector passes 2/0/0/0, the adjacent set passes
+83/0/0/0 on both JDKs, and full clean test passes 1,721/0/0/72 and
+1,736/0/0/4 on pinned Corretto 17 and local Corretto 21 over 462 main and 211
+test sources. No production behavior, API, freeze inventory, manifest,
+version, or official 48-message/11-test corpus changes. `MCP-BASE-011` is now
+`CORE_COMPLETE`; the current report remains `FAILED` at 109 `CORE_COMPLETE`,
+117 `RELEASE_GATED`, 12 `APPLICATION_OWNED`, 18 `NOT_APPLICABLE`, and 6
+`UNRESOLVED`, while the synthetic all-resolved report is 115/117/12/18/0.
+The remaining IDs are `MCP-HTTP-020`, `SOK-VALID-002`, `SOK-STATE-002`,
+`SOK-STATE-007`, `SOK-PRIV-001`, and `AMB-002`.
 
 A compatible addition to a frozen owner requires deliberate review, a
 snapshot update, and an update to the freeze rationale. An incompatible change

@@ -733,6 +733,200 @@ public class McpSimulatorPublicRuntimeTests {
 	}
 
 	@Test
+	public void nonDrainingCaptureLimitDoesNotBlockUnrelatedSimulationOrCreateTransportFailure() {
+		CountDownLatch firstSlowProgress = new CountDownLatch(1);
+		CountDownLatch allowSlowOverflow = new CountDownLatch(1);
+		CountDownLatch slowHeldAfterLimit = new CountDownLatch(1);
+		CountDownLatch releaseSlowHandler = new CountDownLatch(1);
+		CountDownLatch slowHandlerExited = new CountDownLatch(1);
+		CountDownLatch slowCanceled = new CountDownLatch(1);
+		CountDownLatch fastHandlerEntered = new CountDownLatch(1);
+		AtomicReference<CancelationToken> slowToken = new AtomicReference<>();
+		List<StreamTerminationReason> slowTokenReasons =
+				new CopyOnWriteArrayList<>();
+		AtomicInteger slowCancelCallbacks = new AtomicInteger();
+		RecordingMetrics metrics = new RecordingMetrics(0, 1, 2, 2);
+		McpToolRegistration<McpJsonObject> slow = tool("capture-slow",
+				(request, arguments, features) -> {
+					CancelationToken token = features.require(CancelationToken.class);
+					slowToken.set(token);
+					token.onCancel(() -> {
+						slowCancelCallbacks.incrementAndGet();
+						slowTokenReasons.add(token.getCancelationReason().orElseThrow());
+						slowCanceled.countDown();
+					});
+					McpProgressReporter reporter =
+							features.require(McpProgressReporter.class);
+					try {
+						reporter.report(McpProgressUpdate.withProgress(1.0d).build());
+						firstSlowProgress.countDown();
+						awaitLatch(allowSlowOverflow);
+						reporter.report(McpProgressUpdate.withProgress(2.0d).build());
+						slowHeldAfterLimit.countDown();
+						awaitLatchIgnoringInterrupt(releaseSlowHandler);
+						return McpCompleteResult.fromToolText("late slow result");
+					} finally {
+						slowHandlerExited.countDown();
+					}
+				});
+		McpToolRegistration<McpJsonObject> fast = tool("capture-fast",
+				(request, arguments, features) -> {
+					fastHandlerEntered.countDown();
+					return McpCompleteResult.fromToolText("unrelated complete");
+				});
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
+				.serverInformation(McpImplementation.withNameAndVersion(
+						"simulator-capture-isolation-test",
+						"3.6.0-SNAPSHOT").build())
+				.tools(List.of(slow, fast))
+				.build();
+		McpServer server = baseServerBuilder(List.of(endpoint),
+				McpAdmissionController.acceptAllInstance(), Duration.ofMillis(250))
+				.requestHandlerConcurrency(2)
+				.requestHandlerQueueCapacity(1)
+				.keepAliveInterval(Duration.ofHours(1))
+				.writeTimeout(Duration.ofHours(2))
+				.requestTimeout(Duration.ofHours(3))
+				.build();
+		SokletConfig config = config(server, metrics,
+				LifecycleObserver.defaultInstance());
+		try {
+			Soklet.runSimulator(config, simulator -> {
+				assertStoppedDiagnostics(server);
+				McpSimulation slowSimulation = simulator.startMcpRequest(request(
+						"capture-slow", "capture-slow", "\"slow-token\"",
+						LOOPBACK + ":0", Optional.empty()),
+						McpSimulationOptions.builder()
+								.streamItemQueueCapacity(1).build());
+				try {
+					Assertions.assertTrue(awaitLatch(firstSlowProgress));
+					Assertions.assertEquals(McpSimulationBodyMode.SERVER_SENT_EVENTS,
+							awaitResponse(slowSimulation).getBodyMode());
+					Assertions.assertTrue(pollCompletion(slowSimulation,
+							Duration.ZERO).isEmpty());
+					allowSlowOverflow.countDown();
+					Assertions.assertTrue(awaitLatch(slowCanceled));
+					Assertions.assertTrue(awaitLatch(slowHeldAfterLimit));
+
+					McpSimulationCompletion slowCompletion =
+							awaitCompletion(slowSimulation);
+					Assertions.assertEquals(McpStreamTerminationReason
+							.SIMULATOR_CAPTURE_ITEM_LIMIT_EXCEEDED,
+							slowCompletion.getReason());
+					Assertions.assertTrue(slowCompletion.getTerminalMessage().isEmpty());
+					Assertions.assertTrue(slowCompletion.getThrowables().isEmpty());
+					Assertions.assertTrue(slowSimulation.isComplete());
+					Assertions.assertTrue(slowToken.get().isCanceled());
+					Assertions.assertEquals(List.of(
+							StreamTerminationReason.SIMULATOR_LIMIT_EXCEEDED),
+							slowTokenReasons);
+					Assertions.assertEquals(1, slowCancelCallbacks.get());
+					slowSimulation.cancel();
+					slowSimulation.close();
+					Assertions.assertSame(slowCompletion,
+							awaitCompletion(slowSimulation));
+					Assertions.assertEquals(1, slowCancelCallbacks.get());
+					assertStoppedDiagnostics(server);
+
+					McpSimulation fastSimulation = simulator.startMcpRequest(request(
+							"capture-fast", "capture-fast", null,
+							LOOPBACK + ":0", Optional.empty()));
+					Assertions.assertTrue(awaitLatch(fastHandlerEntered));
+					McpSimulationResponse fastResponse = awaitResponse(fastSimulation);
+					Assertions.assertEquals(McpSimulationBodyMode.JSON,
+							fastResponse.getBodyMode());
+					Assertions.assertTrue(new String(
+							fastResponse.getBody().orElseThrow(),
+							StandardCharsets.UTF_8).contains("unrelated complete"));
+					Assertions.assertEquals(McpStreamTerminationReason.COMPLETED,
+							awaitCompletion(fastSimulation).getReason());
+					Assertions.assertTrue(fastSimulation.isComplete());
+					Assertions.assertEquals(1L, slowHandlerExited.getCount(),
+							"The unrelated simulation must finish while the slow handler still owns its slot.");
+					Assertions.assertSame(slowCompletion,
+							awaitCompletion(slowSimulation));
+
+					McpSimulationStreamItem retained = nextItem(slowSimulation);
+					String retainedFrame = new String(retained.getEncodedBytes(),
+							StandardCharsets.UTF_8);
+					Assertions.assertTrue(retainedFrame.contains("\"progress\":1"));
+					Assertions.assertFalse(retainedFrame.contains("\"progress\":2"));
+					Assertions.assertTrue(pollNextItem(slowSimulation,
+							Duration.ZERO).isEmpty(),
+							"The frame that exceeded the non-drained item limit must be omitted.");
+
+					releaseSlowHandler.countDown();
+					Assertions.assertTrue(awaitLatch(slowHandlerExited));
+					assertStoppedDiagnostics(server);
+				} finally {
+					allowSlowOverflow.countDown();
+					releaseSlowHandler.countDown();
+				}
+			});
+		} finally {
+			allowSlowOverflow.countDown();
+			releaseSlowHandler.countDown();
+		}
+
+		Assertions.assertTrue(metrics.awaitRequestFinished());
+		Assertions.assertTrue(metrics.awaitSimulatorLimitRequestFinishes());
+		Assertions.assertTrue(metrics.awaitHandlerExecutionsFinished());
+		Assertions.assertTrue(awaitLatch(slowHandlerExited));
+		Assertions.assertEquals(1, slowCancelCallbacks.get());
+		Assertions.assertEquals(List.of(
+				StreamTerminationReason.SIMULATOR_LIMIT_EXCEEDED),
+				slowTokenReasons);
+		List<McpMetricsEvent> events = metrics.events();
+		Assertions.assertEquals(2, countEvents(events,
+				McpMetricsEvent.RequestAccepted.class), events.toString());
+		Assertions.assertEquals(2, countEvents(events,
+				McpMetricsEvent.RequestStarted.class), events.toString());
+		Assertions.assertEquals(2, countEvents(events,
+				McpMetricsEvent.HandlerExecutionStarted.class), events.toString());
+		Assertions.assertEquals(2, countEvents(events,
+				McpMetricsEvent.HandlerExecutionFinished.class), events.toString());
+		Assertions.assertEquals(1, countEvents(events,
+				McpMetricsEvent.RequestStreamOpened.class), events.toString());
+		Assertions.assertEquals(2, countEvents(events,
+				McpMetricsEvent.ProgressEmitted.class), events.toString());
+		Assertions.assertEquals(1, countEvents(events,
+				McpMetricsEvent.CancelationSignaled.class), events.toString());
+		Assertions.assertEquals(1, events.stream()
+				.filter(McpMetricsEvent.RequestStreamClosed.class::isInstance)
+				.map(McpMetricsEvent.RequestStreamClosed.class::cast)
+				.filter(closed -> closed.getReason() == McpStreamTerminationReason
+						.SIMULATOR_CAPTURE_ITEM_LIMIT_EXCEEDED)
+				.count(), events.toString());
+		Assertions.assertEquals(2, countEvents(events,
+				McpMetricsEvent.RequestFinished.class), events.toString());
+		Assertions.assertEquals(1, events.stream()
+				.filter(McpMetricsEvent.RequestFinished.class::isInstance)
+				.map(McpMetricsEvent.RequestFinished.class::cast)
+				.filter(finished -> finished.getOutcome()
+						== McpRequestOutcome.CANCELED)
+				.count(), events.toString());
+		Assertions.assertEquals(1, events.stream()
+				.filter(McpMetricsEvent.RequestFinished.class::isInstance)
+				.map(McpMetricsEvent.RequestFinished.class::cast)
+				.filter(finished -> finished.getOutcome()
+						== McpRequestOutcome.COMPLETE)
+				.count(), events.toString());
+		Assertions.assertEquals(15, events.size(), events.toString());
+		Assertions.assertTrue(events.stream().noneMatch(event ->
+				event instanceof McpMetricsEvent.RequestRejected
+						|| event instanceof McpMetricsEvent.HandlerQueued
+						|| event instanceof McpMetricsEvent.HandlerDequeued
+						|| event instanceof McpMetricsEvent.HandlerCapacityRejected
+						|| event instanceof McpMetricsEvent.KeepAliveEmitted
+						|| event instanceof McpMetricsEvent.ProtocolError
+						|| event instanceof McpMetricsEvent.TransportFailure
+						|| event instanceof McpMetricsEvent.ConnectionAccepted
+						|| event instanceof McpMetricsEvent.ConnectionRejected),
+				events.toString());
+		assertStoppedDiagnostics(server);
+	}
+
+	@Test
 	public void simulatorScopeExitCancelsOutstandingRequestsAndRestoresOffNetworkState() {
 		CountDownLatch handlerEntered = new CountDownLatch(1);
 		CountDownLatch canceled = new CountDownLatch(1);
@@ -1163,6 +1357,26 @@ public class McpSimulatorPublicRuntimeTests {
 		}
 	}
 
+	private static void awaitLatchIgnoringInterrupt(
+			@NonNull CountDownLatch latch) {
+		boolean interrupted = false;
+		while (latch.getCount() != 0L) {
+			try {
+				latch.await();
+			} catch (InterruptedException ignored) {
+				interrupted = true;
+			}
+		}
+		if (interrupted)
+			Thread.currentThread().interrupt();
+	}
+
+	private static long countEvents(
+			@NonNull List<@NonNull McpMetricsEvent> events,
+			@NonNull Class<?> eventType) {
+		return events.stream().filter(eventType::isInstance).count();
+	}
+
 	private static void assertSameJsonRpcId(@NonNull McpJsonValue first,
 			@NonNull McpJsonValue second) {
 		McpJsonObject firstObject = Assertions.assertInstanceOf(
@@ -1182,6 +1396,7 @@ public class McpSimulatorPublicRuntimeTests {
 		private final CountDownLatch subscriptionByteLimit =
 				new CountDownLatch(1);
 		private final CountDownLatch simulatorLimitRequestFinishes;
+		private final CountDownLatch handlerExecutionsFinished;
 
 		private RecordingMetrics() {
 			this(0, 0, 1);
@@ -1200,10 +1415,21 @@ public class McpSimulatorPublicRuntimeTests {
 		private RecordingMetrics(int expectedRequestRejections,
 				int expectedSimulatorLimitRequestFinishes,
 				int expectedRequestFinishes) {
+			this(expectedRequestRejections,
+					expectedSimulatorLimitRequestFinishes,
+					expectedRequestFinishes, 0);
+		}
+
+		private RecordingMetrics(int expectedRequestRejections,
+				int expectedSimulatorLimitRequestFinishes,
+				int expectedRequestFinishes,
+				int expectedHandlerExecutionFinishes) {
 			this.requestFinished = new CountDownLatch(expectedRequestFinishes);
 			this.requestRejections = new CountDownLatch(expectedRequestRejections);
 			this.simulatorLimitRequestFinishes =
 					new CountDownLatch(expectedSimulatorLimitRequestFinishes);
+			this.handlerExecutionsFinished =
+					new CountDownLatch(expectedHandlerExecutionFinishes);
 		}
 
 		@Override
@@ -1224,6 +1450,8 @@ public class McpSimulatorPublicRuntimeTests {
 			if (event instanceof McpMetricsEvent.RequestFinished finished
 					&& finished.getOutcome() == McpRequestOutcome.CANCELED)
 				this.simulatorLimitRequestFinishes.countDown();
+			if (event instanceof McpMetricsEvent.HandlerExecutionFinished)
+				this.handlerExecutionsFinished.countDown();
 		}
 
 		private boolean awaitRequestFinished() {
@@ -1244,6 +1472,10 @@ public class McpSimulatorPublicRuntimeTests {
 
 		private boolean awaitSimulatorLimitRequestFinishes() {
 			return awaitLatch(this.simulatorLimitRequestFinishes);
+		}
+
+		private boolean awaitHandlerExecutionsFinished() {
+			return awaitLatch(this.handlerExecutionsFinished);
 		}
 
 		private List<McpMetricsEvent> events() {

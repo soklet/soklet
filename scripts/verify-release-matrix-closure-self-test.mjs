@@ -29,15 +29,11 @@ const symlinkEvidenceName = '.matrix-closure-symlink-self-test';
 const symlinkEvidencePath = join(projectRoot, symlinkEvidenceName);
 
 const expectedUnresolvedIds = Object.freeze([
-  'MCP-BASE-011',
   'MCP-HTTP-020',
-  'MCP-PAGE-006',
   'SOK-VALID-002',
   'SOK-STATE-002',
   'SOK-STATE-007',
   'SOK-PRIV-001',
-  'SOK-SIM-001',
-  'SOK-L10N-007',
   'AMB-002',
 ]);
 const expectedReportKeys = Object.freeze([
@@ -122,11 +118,11 @@ try {
     createHash('sha256').update(registryBytes).digest('hex'),
   );
   assert.deepEqual(current.report.dispositionCounts, {
-    APPLICATION_OWNED: 10,
-    CORE_COMPLETE: 108,
+    APPLICATION_OWNED: 12,
+    CORE_COMPLETE: 109,
     NOT_APPLICABLE: 18,
-    RELEASE_GATED: 116,
-    UNRESOLVED: 10,
+    RELEASE_GATED: 117,
+    UNRESOLVED: 6,
   });
   assert.deepEqual(
     current.report.unresolvedRows.map(({ id }) => id),
@@ -162,6 +158,7 @@ try {
   }
   for (const id of [
     'MCP-BASE-005',
+    'MCP-BASE-011',
     'MCP-BASE-024',
     'MCP-VER-003',
     'MCP-VER-004',
@@ -183,6 +180,14 @@ try {
     assert.deepEqual(row(registry, id).releaseGates, []);
     assert.equal(row(registry, id).reason, '');
   }
+  const notificationBoundaryRow = row(registry, 'MCP-BASE-011');
+  assert.deepEqual(notificationBoundaryRow.evidence, [
+    'src/test/java/com/soklet/McpNotificationPublicRuntimeTests.java',
+    'src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java',
+    'src/test/java/com/soklet/internal/mcp/protocol/McpJsonRpcEnvelopeCodecTests.java',
+  ]);
+  assert.deepEqual(notificationBoundaryRow.releaseGates, []);
+  assert.equal(notificationBoundaryRow.reason, '');
   const conditionalProxyRow = row(registry, 'MCP-MRTR-011');
   assert.deepEqual(conditionalProxyRow.releaseGates, []);
   assert.equal(conditionalProxyRow.reason, '');
@@ -193,6 +198,29 @@ try {
   assert.ok(queuedWinnerRow.evidence.includes(
     'src/test/java/com/soklet/internal/mcp/protocol/McpQueuedExecutionWinnerElectionTests.java',
   ));
+  const simulationBoundaryRow = row(registry, 'SOK-SIM-001');
+  assert.equal(simulationBoundaryRow.disposition, 'RELEASE_GATED');
+  assert.deepEqual(simulationBoundaryRow.releaseGates, [
+    'candidate-build',
+    'core-jdk-21',
+    'core-jdk-25',
+    'fuzz-nightly-history',
+    'soak-nightly-history',
+    'release-soak',
+    'candidate-conformance',
+  ]);
+  assert.equal(
+    simulationBoundaryRow.reason,
+    'Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25, fuzz-nightly-history, soak-nightly-history, release-soak, candidate-conformance.',
+  );
+  for (const evidence of [
+    'release/release-validation-manifest.json',
+    'src/test/java/com/soklet/McpSimulatorPublicRuntimeTests.java',
+    'src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java',
+    'src/test/java/com/soklet/internal/mcp/protocol/McpSimulationCaptureRuntimeTests.java',
+  ]) {
+    assert.ok(simulationBoundaryRow.evidence.includes(evidence));
+  }
   for (const [id, evidence, reason] of [
     [
       'MCP-BASE-015',
@@ -238,12 +266,33 @@ try {
       'Applications own cursor parsing, integrity, expiry, authorization, snapshot lookup, and neutral invalid-parameter mapping; the executable public-API example proves one safe pattern.',
     ],
     [
+      'MCP-PAGE-006',
+      [
+        'MCP.md',
+        'SECURITY.md',
+        'src/test/java/com/soklet/McpResourcePublicRuntimeTests.java',
+        'src/test/java/examples/mcp/McpLocalizedCursorFleetApplicationPatternsTests.java',
+      ],
+      'Applications own page size, cross-page uniqueness and snapshot consistency, cursor integrity, authorization, and cross-instance storage/key portability; the executable two-node public-API example proves one shared-snapshot pattern.',
+    ],
+    [
       'MCP-PAGE-007',
       [
         'MCP.md',
         'src/test/java/examples/mcp/McpResourceCursorApplicationPatternsTests.java',
       ],
       'Applications own cursor stability, retained snapshots, revisions, expiry windows, and integrity; the executable example proves a single-process retained-snapshot pattern.',
+    ],
+    [
+      'SOK-L10N-007',
+      [
+        'MCP.md',
+        'SECURITY.md',
+        'src/test/java/com/soklet/McpLocalizationHandlerRuntimeTests.java',
+        'src/test/java/com/soklet/McpLocalizationPublicApiTests.java',
+        'src/test/java/examples/mcp/McpLocalizedCursorFleetApplicationPatternsTests.java',
+      ],
+      'Applications own locale/revision binding in opaque cursors and handler mismatch mapping; the executable two-node public-API example proves provider preselection plus full handler authentication while Soklet preserves every cursor byte.',
     ],
   ]) {
     const applicationRow = row(registry, id);
@@ -348,7 +397,7 @@ try {
   assert.equal(checkedInCli.stdout, current.reportText);
   assert.equal(
     checkedInCli.stderr,
-    'Matrix closure failed: 10 unresolved row(s).\n',
+    'Matrix closure failed: 6 unresolved row(s).\n',
   );
 
   const usage = spawnSync(process.execPath, [verifierPath, 'unexpected'], {
@@ -378,10 +427,10 @@ try {
   assert.equal(resolved.exitCode, 0);
   assert.equal(resolved.report.status, 'PASSED');
   assert.deepEqual(resolved.report.dispositionCounts, {
-    APPLICATION_OWNED: 10,
-    CORE_COMPLETE: 118,
+    APPLICATION_OWNED: 12,
+    CORE_COMPLETE: 115,
     NOT_APPLICABLE: 18,
-    RELEASE_GATED: 116,
+    RELEASE_GATED: 117,
     UNRESOLVED: 0,
   });
   assert.equal(

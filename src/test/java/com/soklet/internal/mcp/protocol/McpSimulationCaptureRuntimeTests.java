@@ -482,6 +482,126 @@ public class McpSimulationCaptureRuntimeTests {
 		Assertions.assertEquals(1, capture.listener().terminationCount());
 	}
 
+	@Test
+	public void offNetworkCaptureNeverArmsWriteIdleAndCaptureLimitsRemainFirstWinner()
+			throws Exception {
+		AtomicInteger writeIdleReservations = new AtomicInteger();
+		McpRequestSseStream.setTestHooks(new McpRequestSseStream.TestHooks() {
+			@Override
+			public void beforeTerminalReservation() {
+				// This proof exercises capture overflow, not normal completion.
+			}
+
+			@Override
+			public void beforeWriteIdleFailureAttempt(
+					@NonNull Runnable competingTermination) {
+				writeIdleReservations.incrementAndGet();
+			}
+		});
+
+		try {
+			List<McpRequestSseStream.Frame> itemRetained = List.of(
+					frame("item-retained-first"),
+					frame("item-retained-second"));
+			assertNonDrainingCaptureLimitFirstWinner(
+					options(itemRetained.size(), Integer.MAX_VALUE),
+					itemRetained, frame("item-offender"),
+					McpStreamTerminationReason
+							.SIMULATOR_CAPTURE_ITEM_LIMIT_EXCEEDED,
+					writeIdleReservations);
+
+			List<McpRequestSseStream.Frame> byteRetained = List.of(
+					frame("byte-retained-first"),
+					frame("byte-retained-boundary"));
+			int exactByteLimit = byteRetained.stream()
+					.mapToInt(frame -> frame.encodedBytes().length).sum();
+			assertNonDrainingCaptureLimitFirstWinner(
+					options(byteRetained.size() + 1, exactByteLimit),
+					byteRetained, frame("byte-offender"),
+					McpStreamTerminationReason
+							.SIMULATOR_CAPTURE_BYTE_LIMIT_EXCEEDED,
+					writeIdleReservations);
+			Assertions.assertEquals(0, writeIdleReservations.get(),
+					"Off-network capture must never attempt the live write-idle terminal reservation.");
+		} finally {
+			McpRequestSseStream.setTestHooks(null);
+		}
+	}
+
+	private static void assertNonDrainingCaptureLimitFirstWinner(
+			@NonNull McpSimulationOptions options,
+			@NonNull List<McpRequestSseStream.@NonNull Frame> retainedFrames,
+			McpRequestSseStream.@NonNull Frame offender,
+			@NonNull McpStreamTerminationReason expectedReason,
+			@NonNull AtomicInteger writeIdleReservations) throws Exception {
+		SseCapture capture = newSseCapture(options);
+		McpRequestSseStream stream = new McpRequestSseStream(
+				ENVELOPE_CODEC, capture.runtime());
+		capture.runtime().acceptResponse(stream.response(List.of()));
+		long writeIdleTimeoutNanos = 1_000L;
+
+		Assertions.assertEquals(Long.MAX_VALUE,
+				capture.runtime().responseWriteIdleDeadlineNanos(
+						writeIdleTimeoutNanos));
+		Assertions.assertTrue(stream.snapshot().isEmpty(),
+				"Simulation capture must not expose a live outbound-channel reservation.");
+		Assertions.assertFalse(stream.failIfWriteIdleExpired(
+				writeIdleTimeoutNanos, writeIdleTimeoutNanos,
+				StreamTerminationReason.RESPONSE_IDLE_TIMEOUT, null),
+				"The off-network channel must not expire write idle at equality.");
+		Assertions.assertFalse(stream.failIfWriteIdleExpired(
+				writeIdleTimeoutNanos + 1L, writeIdleTimeoutNanos,
+				StreamTerminationReason.RESPONSE_IDLE_TIMEOUT, null),
+				"The off-network channel must not expire write idle after equality.");
+		Assertions.assertEquals(0, writeIdleReservations.get());
+		Assertions.assertEquals(0, capture.listener().terminationCount());
+		Assertions.assertEquals(0, capture.completionCallbacks().get());
+		Assertions.assertTrue(capture.runtime().awaitCompletion(
+				Duration.ZERO).isEmpty());
+
+		for (McpRequestSseStream.Frame retainedFrame : retainedFrames)
+			Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED,
+					capture.runtime().offer(retainedFrame));
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.CLOSED,
+				capture.runtime().offer(offender));
+		capture.listener().assertTermination(
+				StreamTerminationReason.SIMULATOR_LIMIT_EXCEEDED,
+				expectedReason);
+
+		Assertions.assertFalse(stream.failIfWriteIdleExpired(
+				writeIdleTimeoutNanos + 2L, writeIdleTimeoutNanos,
+				StreamTerminationReason.RESPONSE_IDLE_TIMEOUT, null));
+		Assertions.assertFalse(stream.failIfDeadlineExpired(2_000L, 2_000L,
+				StreamTerminationReason.RESPONSE_TIMEOUT, null));
+		Assertions.assertFalse(stream.fail(
+				StreamTerminationReason.CLIENT_DISCONNECTED, null));
+		capture.runtime().cancel();
+		capture.runtime().didFinishRequest(McpRequestOutcome.CANCELED, List.of());
+
+		McpSimulationCompletion completion = completion(capture);
+		Assertions.assertEquals(expectedReason, completion.getReason());
+		Assertions.assertTrue(completion.getTerminalMessage().isEmpty());
+		Assertions.assertTrue(completion.getThrowables().isEmpty());
+		Assertions.assertEquals(1, capture.listener().terminationCount());
+		Assertions.assertEquals(1, capture.completionCallbacks().get());
+		Assertions.assertEquals(0, writeIdleReservations.get());
+
+		capture.runtime().cancel();
+		capture.runtime().didFinishRequest(McpRequestOutcome.DEADLINE_EXCEEDED,
+				List.of(new AssertionError("late terminal must be ignored")));
+		Assertions.assertSame(completion, completion(capture));
+		Assertions.assertEquals(1, capture.listener().terminationCount());
+		Assertions.assertEquals(1, capture.completionCallbacks().get());
+		Assertions.assertEquals(0, writeIdleReservations.get());
+
+		for (McpRequestSseStream.Frame retainedFrame : retainedFrames)
+			assertEncodedBytes(retainedFrame, capture.runtime().nextStreamItem(
+					Duration.ZERO).orElseThrow());
+		Assertions.assertTrue(capture.runtime().nextStreamItem(
+				Duration.ZERO).isEmpty(),
+				"The first frame beyond the exact capture limit must be omitted.");
+	}
+
 	@NonNull
 	private static McpSimulationOptions options(int itemCapacity,
 			int byteCapacity) {

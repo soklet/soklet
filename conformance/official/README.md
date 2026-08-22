@@ -282,6 +282,73 @@ bounded local ordering results, not every possible scheduler/network
 interleaving or immutable-candidate evidence; the Corretto 21 run is not
 release-pinned.
 
+The subsequent off-network simulation boundary closure adds deterministic
+internal and public evidence. Off-network capture never arms live write idle;
+non-drained item/byte limits preserve retained frames, omit the offender, and
+remain immutable once-only simulator outcomes. An unrelated simulation
+completes while the limited handler still owns its slot, with balanced
+accounting and no transport event. Separate real-listener tests remain the
+authorities for bounded slow-reader TCP backpressure and actual response-
+write-idle closure/interruption. The internal/public source SHA-256 values are
+`7ab30148451fbef7e8a8131486cb67989ac133271797502920ef4aa2f1db6bd5` and
+`b666ad1bcb6a3bca6e3af46505fe46b7365042b06189cc8daf41d5fb51e05350`.
+The two selectors pass 2/0/0/0, both affected classes pass 25/0/0/0, and the
+adjacent loopback/simulator bundle passes 26/0/0/0 on pinned Corretto 17 and
+local Corretto 21. Full clean test passes 1,717/0/0/72 and 1,732/0/0/4 over
+462 main and 209 test sources. No production behavior, public API, freeze
+inventory, manifest, version, or official result changes. `SOK-SIM-001` is now
+`RELEASE_GATED` by the exact seven named gates. The current report remains
+`FAILED` at 108 `CORE_COMPLETE`, 117 `RELEASE_GATED`, 10 `APPLICATION_OWNED`,
+18 `NOT_APPLICABLE`, and 9 `UNRESOLVED`; the synthetic all-resolved report is
+117/117/10/18/0. This is deliberate simulator/live separation, not kernel,
+TCP, or live write-idle equivalence.
+
+The subsequent localized-cursor fleet application-pattern closure adds the
+public-API-only `McpLocalizedCursorFleetApplicationPatternsTests` at final
+source SHA-256
+`10d872127f2a25632137899986ea75cfdfe838eb2d6fbfa395283285b678d567`.
+It transfers only an exact opaque cursor across independently configured
+simulator nodes, proves stable bounded retained-snapshot traversal and
+locale/catalog/localization-revision binding, preserves identical bytes from
+provider preselection through handler authentication, and maps every
+exercised invalid classification to one fixed no-data application
+`-32602`/400 error with zero lifecycle throwables. The exact selector passes
+2/0/0/0, the adjacent six-class set passes 30/0/0/0, and full clean test
+passes 1,719/0/0/72 and 1,734/0/0/4 on pinned Corretto 17 and local Corretto
+21 over 462 main and 210 test sources. No production behavior, API, freeze
+inventory, manifest, version, or official-result change. `MCP-PAGE-006` and
+`SOK-L10N-007` are now `APPLICATION_OWNED`; the report is
+108/117/12/18/7 and the synthetic report is 115/117/12/18/0. This proves one
+in-process two-node application pattern, not Soklet storage, key management,
+replication, affinity, or a positive cache-TTL policy.
+
+The subsequent `MCP-BASE-011` notification-identifier boundary closure adds
+the public-API-only
+`src/test/java/com/soklet/McpNotificationPublicRuntimeTests.java` at final
+source SHA-256
+`ce10724e565470bdcd6f005ad3d332ea473698f7c7754c765c3bfc73a8c3a3f5`.
+Its two methods prove that classified inbound notifications always have an
+empty HTTP transport body and bypass application request-handler and handler-
+interceptor stages. Malformed JSON that fails before notification
+classification is outside this claim. Outbound progress, subscription-
+acknowledgment, and list-changed notification frames carry a method and omit
+top-level `id`; nested `progressToken`,
+`io.modelcontextprotocol/subscriptionId`, and cancellation `requestId`
+parameter members remain legitimate. Only the method-free terminal result
+retains the initiating request's top-level `id`. Soklet 3.6 registers no
+extension-notification handler and exposes no arbitrary extension-notification
+handler API. The exact selector passes 2/0/0/0, the adjacent set passes
+83/0/0/0 on both JDKs, and full clean test passes 1,721/0/0/72 and
+1,736/0/0/4 on pinned Corretto 17 and local Corretto 21 over 462 main and 211
+test sources. No production behavior, API, freeze inventory, manifest,
+version, official result, or official 48-message/11-test corpus changes.
+`MCP-BASE-011` is now `CORE_COMPLETE`; the current report remains `FAILED` at
+109 `CORE_COMPLETE`, 117 `RELEASE_GATED`, 12 `APPLICATION_OWNED`, 18
+`NOT_APPLICABLE`, and 6 `UNRESOLVED`, while the synthetic all-resolved report
+is 115/117/12/18/0. The remaining IDs are `MCP-HTTP-020`, `SOK-VALID-002`,
+`SOK-STATE-002`, `SOK-STATE-007`, `SOK-PRIV-001`, and `AMB-002`. This local
+checkpoint adds no new official-suite claim.
+
 The schema layer checks JSON message shapes only. HTTP status and headers,
 CORS, SSE framing, cross-message order, ID correlation, filter containment,
 and progress monotonicity remain production/local/official scenario duties.
@@ -428,6 +495,12 @@ does not invoke the official CLI, replay the official expected-check multiset,
 exercise kernel transport/backpressure/write-idle behavior, or establish
 release-candidate provenance. Those remain responsibilities of the pinned live
 verification and later release gates.
+The deterministic capture/runtime boundary additionally proves that this
+off-network path does not arm live write idle, retains its own exact bounded
+capture-limit outcomes, and does not create transport failure when an
+unrelated simulation completes. It intentionally does not reinterpret those
+facts as kernel/TCP equivalence; live-listener tests remain the transport
+authority.
 `run.mjs` independently requires the exact fixture-classes/candidate-JAR pair
 in that order: the fixed snapshot path in development mode or the validated
 main-JAR path in release mode. It refuses missing, substituted, symlinked, or

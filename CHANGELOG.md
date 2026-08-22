@@ -110,6 +110,71 @@
   `NOT_APPLICABLE`, and 10 `UNRESOLVED`. These are bounded local ordering
   results, not every possible scheduler/network interleaving or immutable-
   candidate evidence; the Corretto 21 run is not release-pinned.
+- Added explicit off-network/live simulation-boundary evidence. The internal
+  capture test proves that simulation never arms the live write-idle deadline,
+  while non-drained item and exact-byte capture limits preserve retained
+  frames, omit the offender, and remain the immutable once-only simulator-
+  specific winner. A public two-request test holds the limited handler after
+  capture completion while an unrelated simulation completes, then proves
+  balanced handler/request accounting, one simulator-limit cancellation, and
+  no connection or transport-failure event. Separate real-listener tests prove
+  bounded slow-reader TCP backpressure and actual response-write-idle closure/
+  interruption; this slice proves deliberate separation, not kernel, TCP, or
+  live write-idle equivalence. The public and internal test source SHA-256
+  values are `b666ad1bcb6a3bca6e3af46505fe46b7365042b06189cc8daf41d5fb51e05350`
+  and `7ab30148451fbef7e8a8131486cb67989ac133271797502920ef4aa2f1db6bd5`.
+  The two selectors pass 2/0/0/0, both affected classes pass 25/0/0/0, and the
+  adjacent loopback/simulator bundle passes 26/0/0/0 on both Corretto 17 and
+  21. Full `mvn -B -ntp clean test` passes 1,717/0/0/72 on pinned Corretto 17
+  and 1,732/0/0/4 on local Corretto 21 over 462 main and 209 test sources. No
+  production behavior, public API, signature/freeze inventory, manifest, or
+  version changes. `SOK-SIM-001` is now `RELEASE_GATED` by the exact seven
+  named gates; the active matrix is 108 `CORE_COMPLETE`, 117 `RELEASE_GATED`,
+  10 `APPLICATION_OWNED`, 18 `NOT_APPLICABLE`, and 9 `UNRESOLVED`. The
+  synthetic all-resolved report is 117/117/10/18/0.
+- Added the public-API-only
+  [`McpLocalizedCursorFleetApplicationPatternsTests`](src/test/java/examples/mcp/McpLocalizedCursorFleetApplicationPatternsTests.java)
+  at final source SHA-256
+  `10d872127f2a25632137899986ea75cfdfe838eb2d6fbfa395283285b678d567`.
+  Its two methods transfer only an exact opaque cursor between independently
+  configured simulator nodes; prove exact page bounds, stable unique traversal
+  of one retained snapshot after a live-catalog change, catalog/localization
+  revision and locale/expiry/offset/authorization binding, provider
+  preselection, and full handler authentication; and map every exercised
+  invalid classification to one fixed no-data application `-32602`/400 error
+  with zero lifecycle throwables. The exact selector passes 2/0/0/0, the
+  adjacent six-class set passes 30/0/0/0, and full clean test passes
+  1,719/0/0/72 and 1,734/0/0/4 on pinned Corretto 17 and local Corretto 21
+  over 462 main and 210 test sources. No production behavior, public API,
+  freeze inventory, manifest, or version changes. `MCP-PAGE-006` and
+  `SOK-L10N-007` are now `APPLICATION_OWNED`; the active matrix is
+  108/117/12/18/7 and the synthetic all-resolved report is 115/117/12/18/0.
+  The fixture models one in-process two-node application pattern, not
+  Soklet-provided storage, key management, replication, affinity, or a
+  positive cache-TTL policy.
+- Added the public-API-only
+  [`McpNotificationPublicRuntimeTests`](src/test/java/com/soklet/McpNotificationPublicRuntimeTests.java)
+  at final source SHA-256
+  `ce10724e565470bdcd6f005ad3d332ea473698f7c7754c765c3bfc73a8c3a3f5`.
+  Its two methods close the `MCP-BASE-011` identifier boundary: classified
+  inbound notifications always have an empty HTTP transport body and bypass
+  application request-handler and handler-interceptor stages, while outbound
+  progress, subscription-acknowledgment, and list-changed notification frames
+  carry a method and omit top-level `id`. Nested `progressToken`,
+  `io.modelcontextprotocol/subscriptionId`, and cancellation `requestId`
+  parameter members remain legitimate; only the method-free terminal result
+  retains the initiating request's top-level `id`. Malformed JSON that fails
+  before notification classification is outside this claim. Soklet 3.6
+  registers no extension-notification handler and exposes no arbitrary
+  extension-notification handler API. The exact selector passes 2/0/0/0, the
+  adjacent set passes 83/0/0/0 on both JDKs, and full clean test passes
+  1,721/0/0/72 and 1,736/0/0/4 on pinned Corretto 17 and local Corretto 21
+  over 462 main and 211 test sources. No production behavior, public API,
+  freeze inventory, manifest, version, or official 48-message/11-test corpus
+  changes. `MCP-BASE-011` is now `CORE_COMPLETE`; the active matrix is
+  109/117/12/18/6 and the synthetic all-resolved report is 115/117/12/18/0.
+  The six remaining unresolved IDs are `MCP-HTTP-020`, `SOK-VALID-002`,
+  `SOK-STATE-002`, `SOK-STATE-007`, `SOK-PRIV-001`, and `AMB-002`.
 - Added annotation-first and programmatic tools, prompts, exact resources,
   resource templates, resource reads, and custom resource listing. Tool
   registration uses staged typed, argument-only, or raw-JSON argument paths;
