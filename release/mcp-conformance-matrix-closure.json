@@ -3,8 +3,8 @@
   "protocolVersion": "2026-07-28",
   "releaseVersion": "3.6.0",
   "sourceMatrixPath": "mcp/MCP_CONFORMANCE_MATRIX.md",
-  "sourceMatrixLastUpdated": "2026-08-21",
-  "sourceMatrixSha256": "880a3a8dfd6740d708a428ffda7c47abbe1c0841c7b66b732ce6d28763e7a15d",
+  "sourceMatrixLastUpdated": "2026-08-22",
+  "sourceMatrixSha256": "ecd69178a61b1eb118334dc9ee147e7f490a99f37adcd68f7a50b9e0e04631f8",
   "releaseGateUniverse": [
     "candidate-build",
     "core-jdk-21",
@@ -703,7 +703,7 @@
     },
     {
       "id": "MCP-HTTP-020",
-      "disposition": "UNRESOLVED",
+      "disposition": "CORE_COMPLETE",
       "evidence": [
         "src/test/java/com/soklet/McpMirroredHeaderPublicRuntimeTests.java",
         "src/test/java/com/soklet/McpPreAdmissionMetricsEventPublicRuntimeTests.java",
@@ -712,7 +712,7 @@
         "src/test/java/com/soklet/internal/mcp/protocol/McpUnknownMirroredHeaderNameDiagnosticsTests.java"
       ],
       "releaseGates": [],
-      "reason": "Broader core log/privacy and official-scenario evidence remain open."
+      "reason": ""
     },
     {
       "id": "MCP-HTTP-021",

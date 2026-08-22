@@ -1378,7 +1378,7 @@ Eighteen are dispatch-configured, while five remain
 `BLOCKED_HARNESS_MISSING` and the six downstreams remain
 `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving 11 fail-closed blockers;
 `READY` means configured, never passed. The matrix-closure hook is `READY`, but
-its checked-in registry deliberately reports `FAILED` while six rows remain
+its checked-in registry deliberately reports `FAILED` while five rows remain
 `UNRESOLVED`. Scheduled/nightly and sustained fuzz-soak and operational
 history, release scans, benchmarks, published downstream pins, and immutable
 candidate conformance/provenance remain open. `release-scans` remains blocked
@@ -1712,3 +1712,28 @@ manifest, version, or official 48-message/11-test corpus changes.
 `NOT_APPLICABLE`, and 6 `UNRESOLVED`, while the synthetic all-resolved report
 is 115/117/12/18/0. The remaining IDs are `MCP-HTTP-020`, `SOK-VALID-002`,
 `SOK-STATE-002`, `SOK-STATE-007`, `SOK-PRIV-001`, and `AMB-002`.
+
+The subsequent 2026-08-22 `MCP-HTTP-020` closure strengthens
+`McpMirroredHeaderPublicRuntimeTests` at final source SHA-256
+`2c3b912484bd96d0f2f73fc4c3b85fdf9760e22d895acf4145b962bd8fc0b303`.
+An unannotated `privilege` body property carries `reader` while unknown
+`Mcp-Param-Privilege` carries `administrator-canary`; converted and raw
+arguments remain body-authoritative and the response excludes the canary.
+Existing exact fixtures prove name diagnostics are off by default; opt-in
+emits sanitized names only, permits at most ten attempted events per server in
+any monotonic 60-second window, truncates at 128 ASCII bytes, and attaches
+neither values nor requests. Each occurrence independently aggregates only by
+registered endpoint and bounded method, never header identity, with an
+8,192-dimension default-map cap and the same downstream OpenTelemetry shape.
+
+The focused class passes 6/0/0/0, the adjacent five-class set passes 29/0/0/0,
+and full clean test passes 1,721/0/0/72 and 1,736/0/0/4 on pinned Corretto 17
+and local Corretto 21 over 462 main and 211 test sources. The pinned
+40-scenario official inventory has no exact scenario for this policy; this
+test-only slice changes no production behavior, public API, freeze inventory,
+manifest, version, official result, or official corpus. `MCP-HTTP-020` is now
+`CORE_COMPLETE`; the report is 110/117/12/18/5 and the remaining IDs are
+`SOK-VALID-002`, `SOK-STATE-002`, `SOK-STATE-007`, `SOK-PRIV-001`, and
+`AMB-002`. This boundary does not close generic `Request`, `Throwable`,
+custom-collector, or application-telemetry privacy; those remain owned by
+`SOK-PRIV-001`.

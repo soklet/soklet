@@ -29,7 +29,6 @@ const symlinkEvidenceName = '.matrix-closure-symlink-self-test';
 const symlinkEvidencePath = join(projectRoot, symlinkEvidenceName);
 
 const expectedUnresolvedIds = Object.freeze([
-  'MCP-HTTP-020',
   'SOK-VALID-002',
   'SOK-STATE-002',
   'SOK-STATE-007',
@@ -119,10 +118,10 @@ try {
   );
   assert.deepEqual(current.report.dispositionCounts, {
     APPLICATION_OWNED: 12,
-    CORE_COMPLETE: 109,
+    CORE_COMPLETE: 110,
     NOT_APPLICABLE: 18,
     RELEASE_GATED: 117,
-    UNRESOLVED: 6,
+    UNRESOLVED: 5,
   });
   assert.deepEqual(
     current.report.unresolvedRows.map(({ id }) => id),
@@ -163,6 +162,7 @@ try {
     'MCP-VER-003',
     'MCP-VER-004',
     'MCP-HTTP-018',
+    'MCP-HTTP-020',
     'MCP-HTTP-024',
     'MCP-HTTP-025',
     'MCP-AUTH-003',
@@ -188,6 +188,16 @@ try {
   ]);
   assert.deepEqual(notificationBoundaryRow.releaseGates, []);
   assert.equal(notificationBoundaryRow.reason, '');
+  const unknownHeaderPolicyRow = row(registry, 'MCP-HTTP-020');
+  assert.deepEqual(unknownHeaderPolicyRow.evidence, [
+    'src/test/java/com/soklet/McpMirroredHeaderPublicRuntimeTests.java',
+    'src/test/java/com/soklet/McpPreAdmissionMetricsEventPublicRuntimeTests.java',
+    'src/test/java/com/soklet/McpProtocolAndUnknownHeaderMetricsAggregationTests.java',
+    'src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerCustomHeaderTests.java',
+    'src/test/java/com/soklet/internal/mcp/protocol/McpUnknownMirroredHeaderNameDiagnosticsTests.java',
+  ]);
+  assert.deepEqual(unknownHeaderPolicyRow.releaseGates, []);
+  assert.equal(unknownHeaderPolicyRow.reason, '');
   const conditionalProxyRow = row(registry, 'MCP-MRTR-011');
   assert.deepEqual(conditionalProxyRow.releaseGates, []);
   assert.equal(conditionalProxyRow.reason, '');
@@ -397,7 +407,7 @@ try {
   assert.equal(checkedInCli.stdout, current.reportText);
   assert.equal(
     checkedInCli.stderr,
-    'Matrix closure failed: 6 unresolved row(s).\n',
+    'Matrix closure failed: 5 unresolved row(s).\n',
   );
 
   const usage = spawnSync(process.execPath, [verifierPath, 'unexpected'], {

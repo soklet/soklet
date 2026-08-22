@@ -28,7 +28,7 @@ Five gates remain `BLOCKED_HARNESS_MISSING`:
 
 The checked-in registry, verifier, and verifier self-test make
 `matrix-closure` `READY`. The registry deliberately produces a canonical
-`FAILED` report while six rows remain `UNRESOLVED`, so the validator cannot
+`FAILED` report while five rows remain `UNRESOLVED`, so the validator cannot
 record a typed PASS receipt yet. `RELEASE_GATED` means that a row has
 candidate-contained implementation or evidence anchors and that its remaining
 immutable-candidate, scheduled-history, sustained-run, or pinned-downstream
@@ -348,6 +348,29 @@ version, gate-status, or official 48-message/11-test corpus changes.
 is 115/117/12/18/0. The remaining IDs are `MCP-HTTP-020`, `SOK-VALID-002`,
 `SOK-STATE-002`, `SOK-STATE-007`, `SOK-PRIV-001`, and `AMB-002`. This local
 checkpoint adds no new official-suite or release-gate claim.
+
+The subsequent 2026-08-22 `MCP-HTTP-020` local-policy closure strengthens
+`McpMirroredHeaderPublicRuntimeTests` at final source SHA-256
+`2c3b912484bd96d0f2f73fc4c3b85fdf9760e22d895acf4145b962bd8fc0b303`.
+Its real-listener path proves that an unknown header named for an unannotated
+body property cannot replace converted or raw arguments. Existing exact
+fixtures prove the separate name-only diagnostic is off by default and
+bounded to ten attempted events per server per monotonic 60-second window and
+128 ASCII bytes, without values or request attachment; the independent
+default aggregate retains only registered endpoint and bounded method under
+an 8,192-entry cap and the same downstream OpenTelemetry shape.
+
+The focused class passes 6/0/0/0, the adjacent five-class set passes 29/0/0/0,
+and full clean test passes 1,721/0/0/72 and 1,736/0/0/4 on pinned Corretto 17
+and local Corretto 21 over 462 main and 211 test sources. No production
+behavior, public API, freeze inventory, manifest, version, gate status,
+official result, or official 48-message/11-test corpus changed. The pinned
+40-scenario inventory has no exact scenario for this Soklet policy, so this
+adds no official claim or release gate. `MCP-HTTP-020` is now
+`CORE_COMPLETE`; the report is 110/117/12/18/5 and the remaining IDs are
+`SOK-VALID-002`, `SOK-STATE-002`, `SOK-STATE-007`, `SOK-PRIV-001`, and
+`AMB-002`. Generic `Request`, `Throwable`, custom-collector, and
+application-telemetry privacy remain owned by `SOK-PRIV-001`.
 
 Six downstream gates remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`. The manifest
 records their exact public commit pins without treating uncommitted sibling

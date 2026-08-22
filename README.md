@@ -2413,7 +2413,7 @@ ordered gates. Eighteen are dispatch-configured, while five remain
 `BLOCKED_HARNESS_MISSING` and the six downstreams remain
 `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving 11 fail-closed blockers;
 `READY` means configured, never passed. The matrix-closure hook is `READY`, but
-its checked-in registry deliberately reports `FAILED` while six rows remain
+its checked-in registry deliberately reports `FAILED` while five rows remain
 `UNRESOLVED`. Scheduled/nightly and sustained history, release scans,
 benchmarks, published downstream pins, and immutable-candidate provenance
 remain open. `release-scans` remains blocked on its exact scanner/toolchain,
@@ -2757,6 +2757,35 @@ version, or official 48-message/11-test corpus changes. `MCP-BASE-011` is now
 `UNRESOLVED`, while the synthetic all-resolved report is 115/117/12/18/0.
 The remaining IDs are `MCP-HTTP-020`, `SOK-VALID-002`, `SOK-STATE-002`,
 `SOK-STATE-007`, `SOK-PRIV-001`, and `AMB-002`.
+
+The subsequent 2026-08-22 `MCP-HTTP-020` closure strengthens
+`src/test/java/com/soklet/McpMirroredHeaderPublicRuntimeTests.java` at final
+source SHA-256
+`2c3b912484bd96d0f2f73fc4c3b85fdf9760e22d895acf4145b962bd8fc0b303`.
+An unannotated `privilege` body property carries `reader` while unknown
+`Mcp-Param-Privilege` carries `administrator-canary`; converted and raw
+arguments remain exactly body-authoritative, and the successful response
+excludes the canary. Existing exact fixtures prove name diagnostics are off by
+default; opt-in emits sanitized names only, permits at most ten attempted
+events per server in any monotonic 60-second window, truncates at 128 ASCII
+bytes, and attaches neither values nor requests. Each occurrence independently
+aggregates only by registered endpoint and bounded method, never header
+identity, with an 8,192-dimension default-map cap and the same downstream
+OpenTelemetry shape. Public/manual metric inputs remain application-controlled.
+
+The focused class passes 6/0/0/0 and the adjacent five-class set passes
+29/0/0/0 on both JDKs. Full clean test passes 1,721/0/0/72 and 1,736/0/0/4 on
+pinned Corretto 17 and local Corretto 21 over 462 main and 211 test sources.
+No production behavior, public API, freeze inventory, manifest, version,
+official result, or official 48-message/11-test corpus changed. The pinned
+40-scenario official inventory has no exact unknown-header diagnostic,
+redaction, quota, or cardinality scenario, so this adds no official-suite
+claim. `MCP-HTTP-020` is now `CORE_COMPLETE`; the current report remains
+`FAILED` at 110/117/12/18/5, while the synthetic report remains
+115/117/12/18/0. The remaining IDs are `SOK-VALID-002`, `SOK-STATE-002`,
+`SOK-STATE-007`, `SOK-PRIV-001`, and `AMB-002`. Generic `Request`,
+`Throwable`, custom-collector, and application-telemetry privacy remain owned
+by `SOK-PRIV-001`.
 
 You can expose a `/metrics` endpoint by injecting [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html)
 into a [`ResourceMethod`](https://javadoc.soklet.com/com/soklet/ResourceMethod.html):

@@ -1594,7 +1594,7 @@ checksum-pinned Corretto 21.0.12.9.1 toolchain now drives `core-jdk-21`,
 while five remain `BLOCKED_HARNESS_MISSING` and the six downstreams remain
 `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving 11 fail-closed blockers;
 `READY` means configured, never passed. The matrix-closure hook is `READY`, but
-its checked-in registry deliberately reports `FAILED` while six rows remain
+its checked-in registry deliberately reports `FAILED` while five rows remain
 `UNRESOLVED`. Actual scheduled/nightly and sustained fuzz/soak and operational
 evidence, release scans, benchmarks, published downstream pins, and immutable
 release-candidate provenance and conformance remain open. `release-scans`
@@ -1900,6 +1900,32 @@ version, or official 48-message/11-test corpus changes. `MCP-BASE-011` is now
 `UNRESOLVED`, while the synthetic all-resolved report is 115/117/12/18/0.
 The remaining IDs are `MCP-HTTP-020`, `SOK-VALID-002`, `SOK-STATE-002`,
 `SOK-STATE-007`, `SOK-PRIV-001`, and `AMB-002`.
+
+The subsequent 2026-08-22 `MCP-HTTP-020` closure strengthens the existing
+public listener fixture at final source SHA-256
+`2c3b912484bd96d0f2f73fc4c3b85fdf9760e22d895acf4145b962bd8fc0b303`.
+An unannotated `privilege` body property carries `reader` while unknown
+`Mcp-Param-Privilege` carries `administrator-canary`; converted and raw
+arguments remain exactly body-authoritative, and the response excludes the
+canary. Exact fixtures prove name diagnostics are off by default; opt-in
+permits ten attempted sanitized-name-only events per server per monotonic
+60-second window, truncates at 128 ASCII bytes, and attaches neither values
+nor requests. Per-occurrence default aggregation uses registered endpoint and
+bounded method only, never header identity, under an independent 8,192-
+dimension cap and the same downstream OpenTelemetry shape. Public/manual
+metric inputs remain application-controlled.
+
+The focused class passes 6/0/0/0, the adjacent five-class set passes 29/0/0/0,
+and full clean test passes 1,721/0/0/72 and 1,736/0/0/4 on pinned Corretto 17
+and local Corretto 21 over 462 main and 211 test sources. No production
+behavior, public API, freeze inventory, manifest, version, official result, or
+official corpus changed. The pinned 40-scenario inventory has no exact
+scenario for this policy, so this adds no official-suite claim.
+`MCP-HTTP-020` is now `CORE_COMPLETE`; the report is 110/117/12/18/5 and
+the remaining IDs are `SOK-VALID-002`, `SOK-STATE-002`, `SOK-STATE-007`,
+`SOK-PRIV-001`, and `AMB-002`. Generic `Request`, `Throwable`,
+custom-collector, and application-telemetry privacy remain owned by
+`SOK-PRIV-001`.
 
 A compatible addition to a frozen owner requires deliberate review, a
 snapshot update, and an update to the freeze rationale. An incompatible change

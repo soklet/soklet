@@ -57,8 +57,9 @@ public class McpMirroredHeaderPublicRuntimeTests {
 		AtomicInteger admissions = new AtomicInteger();
 		AtomicInteger handlers = new AtomicInteger();
 		AtomicReference<MirroredArguments> observed = new AtomicReference<>();
+		AtomicReference<McpJsonObject> observedRaw = new AtomicReference<>();
 		McpToolRegistration<MirroredArguments> tool = mirroredTool(TOOL_NAME,
-				handlers, observed);
+				handlers, observed, observedRaw);
 		McpServer server = serverBuilder(List.of(endpoint(MCP_PATH, tool)),
 				admissions, CorsAuthorizer.rejectAllInstance()).build();
 
@@ -70,8 +71,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 			assertSuccess(valid, "valid");
 			Assertions.assertEquals(1, admissions.get());
 			Assertions.assertEquals(1, handlers.get());
-			Assertions.assertEquals(new MirroredArguments("acme",
-					new Routing(true, 42)), observed.get());
+			assertBodyAuthoritativeArguments(observed, observedRaw);
 
 			Map<String, String> mismatchHeaders = validHeaders();
 			mismatchHeaders.put("Mcp-Param-Tenant", "other");
@@ -84,12 +84,15 @@ public class McpMirroredHeaderPublicRuntimeTests {
 					"A recognized mismatch must fail before the tool handler.");
 
 			Map<String, String> unknownHeaders = validHeaders();
-			unknownHeaders.put("Mcp-Param-Unregistered", "untrusted");
+			unknownHeaders.put("Mcp-Param-Privilege", "administrator-canary");
 			HttpResponse<String> ignored = call(port, MCP_PATH, "ignored",
 					TOOL_NAME, mirroredArgumentsJson(), unknownHeaders);
 			assertSuccess(ignored, "ignored");
 			Assertions.assertEquals(2, admissions.get());
 			Assertions.assertEquals(2, handlers.get());
+			assertBodyAuthoritativeArguments(observed, observedRaw);
+			Assertions.assertFalse(ignored.body().contains("administrator-canary"),
+					ignored.body());
 		} finally {
 			server.stop();
 		}
@@ -320,14 +323,35 @@ public class McpMirroredHeaderPublicRuntimeTests {
 	private static McpToolRegistration<MirroredArguments> mirroredTool(
 			String name, AtomicInteger handlers,
 			AtomicReference<MirroredArguments> observed) {
+		return mirroredTool(name, handlers, observed, new AtomicReference<>());
+	}
+
+	private static McpToolRegistration<MirroredArguments> mirroredTool(
+			String name, AtomicInteger handlers,
+			AtomicReference<MirroredArguments> observed,
+			AtomicReference<McpJsonObject> observedRaw) {
 		return McpToolRegistration.withName(name)
 				.argumentType(MirroredArguments.class)
 				.handler((request, arguments, features) -> {
 					handlers.incrementAndGet();
 					observed.set(arguments.getConvertedArguments());
+					observedRaw.set(arguments.getRawArguments());
 					return McpCompleteResult.fromToolText("done");
 				})
 				.build();
+	}
+
+	private static void assertBodyAuthoritativeArguments(
+			AtomicReference<MirroredArguments> observed,
+			AtomicReference<McpJsonObject> observedRaw) {
+		Assertions.assertEquals(new MirroredArguments("acme",
+				new Routing(true, 42), "reader"), observed.get());
+		McpJsonObject raw = observedRaw.get();
+		Assertions.assertNotNull(raw);
+		Assertions.assertEquals(Set.of("tenant", "routing", "privilege"),
+				raw.getMembers().keySet());
+		Assertions.assertEquals(McpJsonString.fromValue("reader"),
+				raw.find("privilege").orElseThrow());
 	}
 
 	private static McpEndpoint endpoint(String path,
@@ -448,7 +472,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 
 	private static String mirroredArgumentsJson() {
 		return "{\"tenant\":\"acme\",\"routing\":{"
-				+ "\"dryRun\":true,\"shard\":42}}";
+				+ "\"dryRun\":true,\"shard\":42},\"privilege\":\"reader\"}";
 	}
 
 	private static String callBody(String id, String toolName,
@@ -486,7 +510,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 	}
 
 	private record MirroredArguments(@McpHeader("Tenant") String tenant,
-			Routing routing) {
+			Routing routing, String privilege) {
 	}
 
 	private record Routing(@McpHeader("Dry-Run") boolean dryRun,

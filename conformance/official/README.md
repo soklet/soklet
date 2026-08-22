@@ -349,6 +349,33 @@ is 115/117/12/18/0. The remaining IDs are `MCP-HTTP-020`, `SOK-VALID-002`,
 `SOK-STATE-002`, `SOK-STATE-007`, `SOK-PRIV-001`, and `AMB-002`. This local
 checkpoint adds no new official-suite claim.
 
+The subsequent 2026-08-22 `MCP-HTTP-020` local-policy closure strengthens
+`McpMirroredHeaderPublicRuntimeTests` at final source SHA-256
+`2c3b912484bd96d0f2f73fc4c3b85fdf9760e22d895acf4145b962bd8fc0b303`.
+Its existing real-listener path now proves that an unknown header named for an
+unannotated body property cannot replace either converted or raw arguments:
+`privilege=reader` remains body-authoritative while
+`Mcp-Param-Privilege=administrator-canary` is absent from the successful
+response. Existing exact fixtures bound the separate name-only diagnostic to
+ten attempted events per server per monotonic 60-second window and 128 ASCII
+bytes, attach neither values nor requests, and keep the independent default
+aggregate to registered endpoint and bounded method dimensions under an
+8,192-entry cap and the same downstream OpenTelemetry shape.
+
+The focused class passes 6/0/0/0, the adjacent five-class set passes 29/0/0/0,
+and full clean test passes 1,721/0/0/72 and 1,736/0/0/4 on pinned Corretto 17
+and local Corretto 21 over 462 main and 211 test sources. No production
+behavior, public API, freeze inventory, manifest, version, official result, or
+official 48-message/11-test corpus changed. The pinned 40-scenario inventory
+has no exact unknown-header diagnostic, redaction, quota, or cardinality
+scenario; the adjacent standard- and registered-custom-header profiles are
+not evidence for this Soklet policy. `MCP-HTTP-020` is now
+`CORE_COMPLETE`; the report is 110/117/12/18/5 and the remaining IDs are
+`SOK-VALID-002`, `SOK-STATE-002`, `SOK-STATE-007`, `SOK-PRIV-001`, and
+`AMB-002`. Generic `Request`, `Throwable`, custom-collector, and
+application-telemetry privacy remain under `SOK-PRIV-001`. This checkpoint
+adds no official-suite claim.
+
 The schema layer checks JSON message shapes only. HTTP status and headers,
 CORS, SSE framing, cross-message order, ID correlation, filter containment,
 and progress monotonicity remain production/local/official scenario duties.
