@@ -17,15 +17,21 @@
 package com.soklet;
 
 import com.soklet.annotation.GET;
+import com.soklet.annotation.SseEventSource;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledForJreRange;
+import org.junit.jupiter.api.condition.JRE;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import static com.soklet.TestSupport.connectWithRetry;
 import static com.soklet.TestSupport.findFreePort;
@@ -76,6 +82,77 @@ public class ResourceLeakTests {
 				"Timeout scheduler should be cleared after stop");
 	}
 
+	@Test
+	@EnabledForJreRange(min = JRE.JAVA_21)
+	public void sseConnectionReturnsResourcesNearBaselineAfterShutdown() throws Exception {
+		ResourceSnapshot stoppedBaseline = ResourceSnapshot.captureAfterGc();
+		int port = findFreePort();
+		SseServer sseServer = SseServer.withPort(port)
+				.verifyConnectionOnceEstablished(false)
+				.shutdownTimeout(Duration.ofSeconds(2))
+				.build();
+		DefaultSseServer defaultSseServer = (DefaultSseServer) sseServer;
+		SokletConfig config = SokletConfig.withSseServer(sseServer)
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
+						Set.of(SseResource.class)))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+
+		try (Soklet soklet = Soklet.fromConfig(config)) {
+			soklet.start();
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2_000)) {
+				socket.setSoTimeout(2_000);
+				socket.getOutputStream().write(("""
+						GET /events HTTP/1.1\r
+						Host: 127.0.0.1:%s\r
+						Accept: text/event-stream\r
+						\r
+						""").formatted(port).getBytes(StandardCharsets.ISO_8859_1));
+				socket.getOutputStream().flush();
+
+				BufferedReader reader = new BufferedReader(new InputStreamReader(
+						socket.getInputStream(), StandardCharsets.ISO_8859_1));
+				String status = reader.readLine();
+				Assertions.assertNotNull(status);
+				Assertions.assertTrue(status.startsWith("HTTP/1.1 200"),
+						"Unexpected response: " + status);
+				String header;
+				do {
+					header = reader.readLine();
+					Assertions.assertNotNull(header,
+							"SSE response ended before its headers were complete");
+				} while (!header.isEmpty());
+
+				long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+				while (defaultSseServer.getActiveConnectionCount() == 0
+						&& System.nanoTime() < deadline)
+					Thread.onSpinWait();
+				Assertions.assertTrue(defaultSseServer.getActiveConnectionCount() > 0,
+						"SSE connection did not register");
+			}
+		}
+
+		Assertions.assertTrue(defaultSseServer.getGlobalConnections().isEmpty(),
+				"Global SSE connections should be cleared after stop");
+		Assertions.assertTrue(defaultSseServer.getBroadcastersByResourcePath().isEmpty(),
+				"SSE broadcaster cache should be cleared after stop");
+		Assertions.assertTrue(defaultSseServer.getIdleBroadcastersByResourcePath().isEmpty(),
+				"Idle SSE broadcaster cache should be cleared after stop");
+		Assertions.assertTrue(defaultSseServer.getResourcePathDeclarationsByResourcePathCache()
+				.isEmpty(), "SSE resource path cache should be cleared after stop");
+		Assertions.assertTrue(defaultSseServer.getRequestHandlerExecutorService().isEmpty(),
+				"SSE request handler executor should be cleared after stop");
+		Assertions.assertTrue(defaultSseServer.getRequestHandlerTimeoutScheduler().isEmpty(),
+				"SSE timeout scheduler should be cleared after stop");
+		Assertions.assertTrue(defaultSseServer.getRequestReaderExecutorService().isEmpty(),
+				"SSE request reader executor should be cleared after stop");
+		Assertions.assertTrue(defaultSseServer.getEventLoopThread().isEmpty(),
+				"SSE event loop thread should be cleared after stop");
+		ResourceSnapshot.assertReturnsNear("SSE connection after shutdown", stoppedBaseline,
+				Duration.ofSeconds(5),
+				new ResourceSnapshot.ResourceTolerance(4L, 24L * 1024L * 1024L, 12));
+	}
+
 	private static void assertOkResponse(int port) throws Exception {
 		try (Socket socket = connectWithRetry("127.0.0.1", port, 2_000)) {
 			socket.setSoTimeout(2_000);
@@ -104,6 +181,15 @@ public class ResourceLeakTests {
 		@GET("/health")
 		public String health() {
 			return "ok";
+		}
+	}
+
+	@ThreadSafe
+	public static class SseResource {
+		@SseEventSource("/events")
+		@NonNull
+		public SseHandshakeResult events() {
+			return SseHandshakeResult.accept();
 		}
 	}
 

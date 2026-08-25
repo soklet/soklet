@@ -23,6 +23,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Optional;
 
+import static com.soklet.internal.mcp.protocol.McpApplicationMetadata.requireApplicationMetadata;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -64,7 +65,7 @@ public final class McpTextContent implements McpContentBlock {
 	private McpTextContent(@NonNull Builder builder) {
 		this.text = builder.text;
 		this.annotations = builder.annotations;
-		this.metadata = builder.metadata;
+		this.metadata = requireApplicationMetadata(builder.metadata);
 	}
 
 	/** @return text value */

@@ -104,9 +104,9 @@ jobs:
             ${{ runner.temp }}/release-validation-java-distribution.txt
             ${{ runner.temp }}/release-validation-core-jdk-21-distribution.txt
             ${{ runner.temp }}/release-validation-toystore-java-distribution.txt
-            target/soklet-3.6.0.jar
-            target/soklet-3.6.0-sources.jar
-            target/soklet-3.6.0-javadoc.jar
+            target/soklet-4.0.0.jar
+            target/soklet-4.0.0-sources.jar
+            target/soklet-4.0.0-javadoc.jar
             pom.xml
             soak/target/soak-report.md
             soak/target/surefire-reports

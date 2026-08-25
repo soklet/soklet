@@ -4,12 +4,12 @@
     "artifactId": "soklet",
     "groupId": "com.soklet",
     "packaging": "jar",
-    "version": "3.6.0"
+    "version": "4.0.0"
   },
   "promotion": {
     "helper": {
       "path": "scripts/release-promotion.mjs",
-      "sha256": "d6be7a5b8e0125a9ce3161f415529cf8d6a2e074728a8fca27267b78ff798f71"
+      "sha256": "5b85bdd0101ad8f51e24efb05a7d7795e6df6ccce92ba64f7da0474fab7a394a"
     },
     "wrapper": {
       "path": "scripts/promote-release-candidate.sh",
@@ -67,7 +67,7 @@
     {
       "access": "LOCAL_CHECKOUT",
       "artifactChecksum": null,
-      "artifactIdentity": "com.soklet:soklet:3.6.0",
+      "artifactIdentity": "com.soklet:soklet:4.0.0",
       "commit": null,
       "defaultArtifactIdentity": null,
       "defaultArtifactSha256": null,
@@ -147,7 +147,7 @@
     {
       "access": "LOCAL_CHECKOUT",
       "artifactChecksum": null,
-      "artifactIdentity": "com.soklet:soklet:3.6.0:javadoc",
+      "artifactIdentity": "com.soklet:soklet:4.0.0:javadoc",
       "commit": null,
       "defaultArtifactIdentity": null,
       "defaultArtifactSha256": null,
@@ -346,7 +346,7 @@
       "evidenceContract": "soklet.release.mcp-benchmarks.v1",
       "id": "mcp-benchmarks",
       "kind": "SOURCE",
-      "reason": "The benchmark module compiles, but no reproducible 3.5.1-versus-3.6.0 execution and sign-off harness exists.",
+      "reason": "The benchmark module compiles, but no reproducible 3.5.1-versus-4.0.0 execution and sign-off harness exists.",
       "repository": null,
       "status": "BLOCKED_HARNESS_MISSING",
       "toolchain": "java",
@@ -458,7 +458,7 @@
       "evidenceContract": "soklet.release.toystore-app.v1",
       "id": "toystore-app",
       "kind": "DOWNSTREAM",
-      "reason": "The completed local 3.6 MCP migration is uncommitted and is intentionally not represented by this pre-migration pin.",
+      "reason": "The completed local 4.0 MCP migration is uncommitted and is intentionally not represented by this pre-migration pin.",
       "repository": "https://github.com/soklet/toystore-app.git",
       "status": "BLOCKED_UNCOMMITTED_LOCAL_MIGRATION",
       "toolchain": "toystoreJava",

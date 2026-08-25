@@ -62,13 +62,33 @@ class EventLoopUnexpectedTerminationTests {
 		Handler handler = (request, callback) -> callback.accept(
 				StreamingMicrohttpResponses.withWritableSourceBody(
 						200, "OK", List.of(), () -> source));
+		ConnectionListener coordinatorListener = new ConnectionListener() {
+			@Override
+			public void willAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
+			}
+
+			@Override
+			public void didAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
+			}
+
+			@Override
+			public void didFailToAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
+			}
+
+			@Override
+			public void didTerminateEventLoop(@NonNull EventLoop eventLoop,
+					@NonNull Throwable throwable) {
+				order.add("coordinator-notified");
+				eventLoop.stop();
+			}
+		};
 		EventLoop eventLoop = new EventLoop(Options.builder()
 				.withHost("127.0.0.1")
 				.withPort(0)
 				.withResolution(Duration.ofMillis(10))
 				.withConcurrency(2)
 				.build(), NoopLogger.instance(), handler,
-				NoopConnectionListener.instance(), failureObserver);
+				coordinatorListener, failureObserver);
 		Socket client = null;
 
 		try {
@@ -87,7 +107,8 @@ class EventLoopUnexpectedTerminationTests {
 					"Fatal cleanup never reached the sibling connection.");
 			Assertions.assertEquals(1L, observationClosed.getCount(),
 					"The parent failure scope closed before sibling cleanup completed.");
-			Assertions.assertEquals(List.of("failure-began", "sibling-close-entered"),
+			Assertions.assertEquals(List.of("failure-began", "coordinator-notified",
+					"sibling-close-entered"),
 					order);
 
 			source.releaseClose.countDown();
@@ -97,8 +118,8 @@ class EventLoopUnexpectedTerminationTests {
 			Assertions.assertEquals(List.of(
 					MetricsCollector.TransportFailureReason.EVENT_LOOP_TERMINATED),
 					reasons);
-			Assertions.assertEquals(List.of("failure-began", "sibling-close-entered",
-					"sibling-close-returned", "failure-closed"), order);
+			Assertions.assertEquals(List.of("failure-began", "coordinator-notified",
+					"sibling-close-entered", "sibling-close-returned", "failure-closed"), order);
 		} finally {
 			source.releaseClose.countDown();
 			if (client != null)
@@ -131,6 +152,7 @@ class EventLoopUnexpectedTerminationTests {
 					@NonNull Throwable throwable) {
 				notifications.incrementAndGet();
 				terminated.countDown();
+				eventLoop.stop();
 			}
 		};
 		EventLoop eventLoop = new EventLoop(Options.builder()

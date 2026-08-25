@@ -434,7 +434,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 				@McpServerEndpoint(
 				    path = "/catalog/mcp",
 				    name = "catalog",
-				    version = "3.6.0-SNAPSHOT",
+				    version = "4.0.0-SNAPSHOT",
 				    title = "Catalog server",
 				    description = "Generated endpoint",
 				    websiteUrl = "https://example.com/catalog",

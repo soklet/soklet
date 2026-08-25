@@ -32,6 +32,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Timeout(30)
 public class McpHttpServerCustomHeaderTests {
 	private static final String PROTOCOL_VERSION = "2026-07-28";
+	private static final String UNSUPPORTED_VERSION = "2099-01-01";
 	private static final String METHOD = "tools/call";
 	private static final String TOOL = "execute_sql";
 	private static final McpMirroredHeaderPlan MIRRORED_HEADERS =
@@ -216,6 +217,49 @@ public class McpHttpServerCustomHeaderTests {
 	}
 
 	@Test
+	public void unsupportedSelectorAddsOnlyBoundedDataToCustomHeaderWinners()
+			throws Exception {
+		AtomicInteger admissions = new AtomicInteger();
+		AtomicInteger handlers = new AtomicInteger();
+		McpHttpEndpointPolicy strictPolicy = acceptingPolicy(admissions)
+				.withUnknownMirroredHeaderPolicy(
+						McpUnknownMirroredHeaderPolicy.REJECT_REQUESTS);
+		McpHttpServerRuntime runtime = runtime(strictPolicy, handlers);
+
+		try {
+			int port = runtime.start().getPort();
+			FixedResponse recognizedMismatch = send(port, "32", requiredArguments(),
+					withProtocolVersion(customHeaders(
+							boolHeader("true"), shardHeader("42")),
+							UNSUPPORTED_VERSION));
+			assertError(recognizedMismatch, "32", -32_020);
+			assertSupportedVersionsDiagnostic(recognizedMismatch);
+			Assertions.assertTrue(recognizedMismatch.body().contains(
+					"\"message\":\"Header mismatch\""), recognizedMismatch.body());
+			Assertions.assertFalse(recognizedMismatch.body().contains(
+					UNSUPPORTED_VERSION));
+
+			List<McpChunkedHttpClient.RequestHeader> strictHeaders = new ArrayList<>(
+					withProtocolVersion(validRequiredHeaders("tenant", "true", "42"),
+							UNSUPPORTED_VERSION));
+			strictHeaders.add(new McpChunkedHttpClient.RequestHeader(
+					"Mcp-Param-Super-Secret-Name", "super-secret-value"));
+			FixedResponse strict = send(port, "33", requiredArguments(), strictHeaders);
+			assertError(strict, "33", -31_998);
+			assertSupportedVersionsDiagnostic(strict);
+			Assertions.assertTrue(strict.body().contains(
+					"\"message\":\"Unknown mirrored header\""), strict.body());
+			Assertions.assertFalse(strict.body().contains("Super-Secret"));
+			Assertions.assertFalse(strict.body().contains("super-secret-value"));
+			Assertions.assertFalse(strict.body().contains(UNSUPPORTED_VERSION));
+			Assertions.assertEquals(0, admissions.get());
+			Assertions.assertEquals(0, handlers.get());
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
 	public void custom_header_errors_preserve_authorized_cors_response_headers()
 			throws Exception {
 		String origin = "https://allowed.example";
@@ -258,7 +302,7 @@ public class McpHttpServerCustomHeaderTests {
 		String otherTool = "other";
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"custom-header-scope-test", "3.6.0-SNAPSHOT"))
+						"custom-header-scope-test", "4.0.0-SNAPSHOT"))
 				.tool(new McpNormalizedOperation(TOOL,
 						McpInputRequestPlan.empty(), MIRRORED_HEADERS))
 				.tool(new McpNormalizedOperation(otherTool,
@@ -324,7 +368,7 @@ public class McpHttpServerCustomHeaderTests {
 				McpInputRequestPlan.empty(), MIRRORED_HEADERS);
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"custom-header-test", "3.6.0-SNAPSHOT"))
+						"custom-header-test", "4.0.0-SNAPSHOT"))
 				.tool(tool)
 				.build();
 		return runtime(policy, handlers, endpoint);
@@ -380,6 +424,14 @@ public class McpHttpServerCustomHeaderTests {
 		return customHeaders(tenantHeader(tenant), boolHeader(dryRun), shardHeader(shard));
 	}
 
+	private static List<McpChunkedHttpClient.RequestHeader> withProtocolVersion(
+			List<McpChunkedHttpClient.RequestHeader> headers, String version) {
+		List<McpChunkedHttpClient.RequestHeader> copied = new ArrayList<>(headers);
+		copied.set(0, new McpChunkedHttpClient.RequestHeader(
+				"MCP-Protocol-Version", version));
+		return List.copyOf(copied);
+	}
+
 	private static McpChunkedHttpClient.RequestHeader tenantHeader(String value) {
 		return new McpChunkedHttpClient.RequestHeader("Mcp-Param-Tenant", value);
 	}
@@ -414,6 +466,12 @@ public class McpHttpServerCustomHeaderTests {
 				response.body());
 		Assertions.assertEquals("no-store",
 				response.head().singleHeader("Cache-Control"));
+	}
+
+	private static void assertSupportedVersionsDiagnostic(FixedResponse response) {
+		Assertions.assertTrue(response.body().contains(
+				"\"data\":{\"supportedVersions\":[\"" + PROTOCOL_VERSION
+						+ "\"]}"), response.body());
 	}
 
 	private static void assertCors(FixedResponse response, String origin) {

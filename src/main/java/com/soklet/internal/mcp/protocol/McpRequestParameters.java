@@ -61,8 +61,10 @@ record McpRequestMetadata(@NonNull String protocolVersion,
 
 	@NonNull
 	static McpRequestMetadata fromClientCapabilities(
+			@NonNull McpProtocolProfile profile,
 			@NonNull McpClientCapabilities clientCapabilities) {
-		return new McpRequestMetadata(McpProtocolVersion.CURRENT, clientCapabilities,
+		return new McpRequestMetadata(requireNonNull(profile).revision(),
+				clientCapabilities,
 				Optional.empty(), Optional.empty(), Optional.empty(), McpJsonObject.empty());
 	}
 
@@ -145,8 +147,6 @@ enum McpRequestLogLevel {
 final class McpProtocolVersion {
 	@NonNull
 	static final String CURRENT = "2026-07-28";
-	@NonNull
-	static final List<@NonNull String> SUPPORTED = List.of(CURRENT);
 
 	private McpProtocolVersion() {
 	}

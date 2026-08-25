@@ -998,7 +998,7 @@ public class McpInputRequiredPublicRuntimeTests {
 		return McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
 						"input-required-public-runtime-test",
-						"3.6.0-SNAPSHOT").build());
+						"4.0.0-SNAPSHOT").build());
 	}
 
 	private static McpServer server(McpEndpoint endpoint,

@@ -632,7 +632,7 @@ class McpHttpServerObservationTerminalRaceTests {
 			RecordingObservation observation, McpApplicationClock clock) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"error-terminal-race-test", "3.6.0-SNAPSHOT"))
+						"error-terminal-race-test", "4.0.0-SNAPSHOT"))
 				.build();
 		McpHttpEndpointBinding binding = new McpHttpEndpointBinding(
 				acceptingPolicy(), endpoint, McpApplicationRequestRouter.fromHandlers(
@@ -668,7 +668,7 @@ class McpHttpServerObservationTerminalRaceTests {
 			McpApplicationHandlerExecutorFactory executorFactory) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"observation-terminal-race-test", "3.6.0-SNAPSHOT"))
+						"observation-terminal-race-test", "4.0.0-SNAPSHOT"))
 				.build();
 		McpHttpEndpointBinding binding = new McpHttpEndpointBinding(policy, endpoint,
 				McpApplicationRequestRouter.fromHandlers(

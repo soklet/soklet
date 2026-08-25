@@ -48,6 +48,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -56,6 +57,7 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
@@ -207,6 +209,10 @@ final class DefaultHttpServer implements HttpServer {
 	private final Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
 	@NonNull
 	private final Supplier<ExecutorService> streamingExecutorServiceSupplier;
+	@NonNull
+	private final BuiltInTransportLifecycleAdapter lifecycleAdapter;
+	@NonNull
+	private volatile Runnable startSetupHook = () -> {};
 	@NonNull
 	private final Integer streamingQueueCapacityInBytes;
 	@NonNull
@@ -395,6 +401,9 @@ final class DefaultHttpServer implements HttpServer {
 
 		if (this.concurrentConnectionLimit < 0)
 			throw new IllegalArgumentException("Concurrent connection limit must be >= 0");
+
+		this.lifecycleAdapter = new BuiltInTransportLifecycleAdapter(
+				InternalParticipantKind.HTTP, new HttpLifecycleOperations(), this::getShutdownTimeout);
 	}
 
 	@Override
@@ -402,11 +411,19 @@ final class DefaultHttpServer implements HttpServer {
 		getLock().lock();
 
 		try {
+			if (getLifecycleAdapter().shutdownInProgress())
+				throw new IllegalStateException(
+						"Cannot start HTTP server while shutdown is in progress");
 			if (isStarted())
 				return;
 
 			if (getRequestHandler().isEmpty())
 				throw new IllegalStateException(format("No %s was registered for %s", RequestHandler.class, getClass()));
+
+			BuiltInTransportLifecycleAdapter.Generation lifecycleGeneration =
+					getLifecycleAdapter().beginStart();
+			try {
+				this.startSetupHook.run();
 
 			Options options = OptionsBuilder.newBuilder()
 					.withHost(getHost())
@@ -451,14 +468,16 @@ final class DefaultHttpServer implements HttpServer {
 
 				@Override
 				public void didTerminateEventLoop(@NonNull EventLoop eventLoop,
-																					@NonNull Throwable throwable) {
-					Thread cleanupThread = new Thread(() ->
-							cleanupAfterUnexpectedEventLoopTermination(eventLoop, throwable), "http-event-loop-cleanup");
-					cleanupThread.start();
+																			@NonNull Throwable throwable) {
+					// The failure signal is the first framework-visible consequence.  The
+					// adapter's coordinator exclusively owns transport-wide quiesce/force.
+					getLifecycleAdapter().signalUnexpectedFailure(lifecycleGeneration, throwable);
+					notifyDidFailToAcceptConnection(null,
+							ConnectionRejectionReason.INTERNAL_ERROR, throwable);
 				}
 			};
 
-			Handler handler = ((microhttpRequest, microHttpCallback) -> {
+			Handler handlerDelegate = ((microhttpRequest, microHttpCallback) -> {
 				ExecutorService requestHandlerExecutorServiceReference = this.requestHandlerExecutorService;
 				TimeoutScheduler requestHandlerTimeoutSchedulerReference = this.requestHandlerTimeoutScheduler;
 				InetSocketAddress remoteAddress = microhttpRequest.remoteAddress();
@@ -694,26 +713,85 @@ final class DefaultHttpServer implements HttpServer {
 					}
 				}
 			});
+			Map<MicrohttpRequest, AdmissionFence.Admission> lifecycleAdmissions =
+					new ConcurrentHashMap<>();
+			Handler handler = new Handler() {
+				@Override
+				public void handle(@NonNull MicrohttpRequest request,
+						@NonNull Consumer<MicrohttpResponse> responseConsumer) {
+					AdmissionFence.Admission admission = getLifecycleAdapter()
+							.tryAdmit(lifecycleGeneration).orElse(null);
+					if (admission == null) {
+						RejectedExecutionException exception = new RejectedExecutionException(
+								"HTTP request rejected because the server is shutting down");
+						responseConsumer.accept(withConnectionClose(
+								provideMicrohttpFailsafeResponse(503, request, exception)));
+						return;
+					}
 
-			this.requestHandlerExecutorService = getRequestHandlerExecutorServiceSupplier().get();
-			this.streamingExecutorService = getStreamingExecutorServiceSupplier().get();
-			this.streamingTimeoutExecutorService = new ScheduledThreadPoolExecutor(1, new NonvirtualThreadFactory("streaming-timeout"));
-			this.requestHandlerTimeoutScheduler = new TimeoutScheduler(new NonvirtualThreadFactory("request-handler-timeout"));
-			EventLoop eventLoop = null;
+					AdmissionFence.Admission existing = lifecycleAdmissions.putIfAbsent(
+							request, admission);
+					if (existing != null) {
+						admission.close();
+						throw new IllegalStateException(
+								"HTTP request was dispatched more than once concurrently");
+					}
+					if (!getLifecycleAdapter().admissionOpen(lifecycleGeneration)) {
+						releaseLifecycleAdmission(lifecycleAdmissions, request);
+						RejectedExecutionException exception = new RejectedExecutionException(
+								"HTTP request rejected because shutdown won admission");
+						responseConsumer.accept(withConnectionClose(
+								provideMicrohttpFailsafeResponse(503, request, exception)));
+						return;
+					}
 
-			try {
-				eventLoop = new EventLoop(options, logger, handler, connectionListener);
+					try {
+						handlerDelegate.handle(request, response -> {
+							try {
+								responseConsumer.accept(response);
+							} finally {
+								releaseLifecycleAdmission(lifecycleAdmissions, request);
+							}
+						});
+					} catch (RuntimeException | Error throwable) {
+						releaseLifecycleAdmission(lifecycleAdmissions, request);
+						throw throwable;
+					}
+				}
+
+				@Override
+				public void cancel(@NonNull MicrohttpRequest request,
+						@NonNull StreamTerminationReason reason, @Nullable Throwable cause) {
+					releaseLifecycleAdmission(lifecycleAdmissions, request);
+				}
+			};
+
+				this.requestHandlerExecutorService = getRequestHandlerExecutorServiceSupplier().get();
+				this.streamingExecutorService = getStreamingExecutorServiceSupplier().get();
+				this.streamingTimeoutExecutorService = new ScheduledThreadPoolExecutor(1, new NonvirtualThreadFactory("streaming-timeout"));
+				this.requestHandlerTimeoutScheduler = new TimeoutScheduler(new NonvirtualThreadFactory("request-handler-timeout"));
+				EventLoop eventLoop = new EventLoop(options, logger, handler, connectionListener);
+				eventLoop.useCoordinatorOwnedUnexpectedTermination();
 				this.eventLoop = eventLoop;
 				eventLoop.start();
+				getLifecycleAdapter().markReady(lifecycleGeneration);
 			} catch (BindException e) {
-				cleanupFailedStart(eventLoop);
-				throw new UncheckedIOException(format("Soklet was unable to start the HTTP server - port %d is already in use.", options.port()), e);
+				getLifecycleAdapter().failedStart(lifecycleGeneration, e, false);
+				throw new UncheckedIOException(format("Soklet was unable to start the HTTP server - port %d is already in use.", getPort()), e);
 			} catch (IOException e) {
-				cleanupFailedStart(eventLoop);
+				getLifecycleAdapter().failedStart(lifecycleGeneration, e, false);
 				throw new UncheckedIOException(e);
 			} catch (RuntimeException e) {
-				cleanupFailedStart(eventLoop);
+				getLifecycleAdapter().failedStart(lifecycleGeneration, e, false);
 				throw e;
+			} catch (Error error) {
+				try {
+					getLifecycleAdapter().failedStart(lifecycleGeneration, error, false);
+				} catch (Throwable cleanupFailure) {
+					if (cleanupFailure != error)
+						error.addSuppressed(cleanupFailure);
+				}
+				throw error;
 			}
 		} finally {
 			getLock().unlock();
@@ -722,113 +800,15 @@ final class DefaultHttpServer implements HttpServer {
 
 	@Override
 	public void stop() {
-		getLock().lock();
-
+		BuiltInTransportLifecycleAdapter.Generation generation;
+		ReentrantLock lock = getLock();
+		lock.lock();
 		try {
-			EventLoop eventLoop = getEventLoop().orElse(null);
-
-			if (eventLoop == null)
-				return;
-
-			boolean interrupted = false;
-
-			try {
-				eventLoop.stopAccepting();
-				eventLoop.beginDrain();
-				eventLoop.joinAcceptLoop();
-			} catch (InterruptedException e) {
-				interrupted = true;
-			} catch (Exception e) {
-				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to stop HTTP server accept loop")
-						.throwable(e)
-						.build());
-			}
-
-			final long deadlineNanos = System.nanoTime() + getShutdownTimeout().toNanos();
-
-			try {
-				ExecutorService requestHandlerExecutorService = getRequestHandlerExecutorService().orElse(null);
-
-				if (requestHandlerExecutorService != null) {
-					// Start graceful shutdown (no new tasks)
-					requestHandlerExecutorService.shutdown();
-
-					// First: wait gracefully up to the remaining budget
-					long remMillis = remainingMillis(deadlineNanos);
-					boolean done = remMillis == 0L || requestHandlerExecutorService.awaitTermination(remMillis, TimeUnit.MILLISECONDS);
-
-					if (!done) {
-						// Escalate: interrupt running tasks
-						requestHandlerExecutorService.shutdownNow();
-
-						// Small best-effort wait with whatever time remains
-						remMillis = Math.max(1L, remainingMillis(deadlineNanos));
-						requestHandlerExecutorService.awaitTermination(remMillis, TimeUnit.MILLISECONDS);
-					}
-				}
-
-				try {
-					eventLoop.awaitConnectionsDrained(Duration.ofMillis(remainingMillis(deadlineNanos)));
-				} catch (InterruptedException e) {
-					interrupted = true;
-				} finally {
-					eventLoop.stopConnections();
-					eventLoop.joinConnectionLoops();
-				}
-
-				ExecutorService streamingExecutorService = getStreamingExecutorService().orElse(null);
-
-				if (streamingExecutorService != null) {
-					streamingExecutorService.shutdown();
-
-					long remMillis = remainingMillis(deadlineNanos);
-					boolean done = remMillis == 0L || streamingExecutorService.awaitTermination(remMillis, TimeUnit.MILLISECONDS);
-
-					if (!done) {
-						streamingExecutorService.shutdownNow();
-						remMillis = Math.max(1L, remainingMillis(deadlineNanos));
-						streamingExecutorService.awaitTermination(remMillis, TimeUnit.MILLISECONDS);
-					}
-				}
-
-				ScheduledExecutorService streamingTimeoutExecutorService = getStreamingTimeoutExecutorService().orElse(null);
-
-				if (streamingTimeoutExecutorService != null) {
-					streamingTimeoutExecutorService.shutdownNow();
-				}
-
-				TimeoutScheduler requestHandlerTimeoutScheduler = getRequestHandlerTimeoutScheduler().orElse(null);
-
-				if (requestHandlerTimeoutScheduler != null) {
-					requestHandlerTimeoutScheduler.shutdown();
-					long remMillis = remainingMillis(deadlineNanos);
-					requestHandlerTimeoutScheduler.awaitTermination(remMillis, TimeUnit.MILLISECONDS);
-					requestHandlerTimeoutScheduler.shutdownNow();
-				}
-			} catch (InterruptedException e) {
-				interrupted = true;
-			} catch (Exception e) {
-				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR,
-								"Unable to shut down HTTP server resources")
-						.throwable(e)
-						.build());
-			} finally {
-				if (interrupted)
-					Thread.currentThread().interrupt();
-			}
+			generation = getLifecycleAdapter().requestStop();
 		} finally {
-			this.eventLoop = null;
-			this.requestHandlerExecutorService = null;
-			this.streamingExecutorService = null;
-			this.streamingTimeoutExecutorService = null;
-			this.requestHandlerTimeoutScheduler = null;
-
-			getLock().unlock();
+			lock.unlock();
 		}
-	}
-
-	private long remainingMillis(long deadlineNanos) {
-		return Math.max(0L, TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime()));
+		getLifecycleAdapter().awaitStop(generation);
 	}
 
 	@NonNull
@@ -852,6 +832,14 @@ final class DefaultHttpServer implements HttpServer {
 	private void cancelTimeout(TimeoutScheduler.@Nullable ScheduledTask timeoutTask) {
 		if (timeoutTask != null)
 			timeoutTask.cancel();
+	}
+
+	private static void releaseLifecycleAdmission(
+			@NonNull Map<MicrohttpRequest, AdmissionFence.Admission> admissions,
+			@NonNull MicrohttpRequest request) {
+		AdmissionFence.Admission admission = admissions.remove(requireNonNull(request));
+		if (admission != null)
+			admission.close();
 	}
 
 	@NonNull
@@ -2130,108 +2118,164 @@ final class DefaultHttpServer implements HttpServer {
 		return Optional.ofNullable(this.requestHandler);
 	}
 
-	private void cleanupFailedStart(@Nullable EventLoop eventLoop) {
-		if (eventLoop != null) {
-			try {
-				eventLoop.stop();
-			} catch (Exception e) {
-				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to shut down server event loop after failed start")
-						.throwable(e)
-						.build());
-			}
-		}
-
-		ExecutorService requestHandlerExecutorService = this.requestHandlerExecutorService;
-
-		if (requestHandlerExecutorService != null) {
-			requestHandlerExecutorService.shutdownNow();
-		}
-
-		ExecutorService streamingExecutorService = this.streamingExecutorService;
-
-		if (streamingExecutorService != null) {
-			streamingExecutorService.shutdownNow();
-		}
-
-		ScheduledExecutorService streamingTimeoutExecutorService = this.streamingTimeoutExecutorService;
-
-		if (streamingTimeoutExecutorService != null) {
-			streamingTimeoutExecutorService.shutdownNow();
-		}
-
-		TimeoutScheduler requestHandlerTimeoutScheduler = this.requestHandlerTimeoutScheduler;
-
-		if (requestHandlerTimeoutScheduler != null) {
-			requestHandlerTimeoutScheduler.shutdownNow();
-		}
-
-		this.eventLoop = null;
-		this.requestHandlerExecutorService = null;
-		this.streamingExecutorService = null;
-		this.streamingTimeoutExecutorService = null;
-		this.requestHandlerTimeoutScheduler = null;
+	@NonNull
+	BuiltInTransportLifecycleAdapter getLifecycleAdapter() {
+		return this.lifecycleAdapter;
 	}
 
-	private void cleanupAfterUnexpectedEventLoopTermination(@NonNull EventLoop terminatedEventLoop,
-																													@NonNull Throwable throwable) {
-		requireNonNull(terminatedEventLoop);
-		requireNonNull(throwable);
-
-		ExecutorService requestHandlerExecutorService;
-		ExecutorService streamingExecutorService;
-		ScheduledExecutorService streamingTimeoutExecutorService;
-		TimeoutScheduler requestHandlerTimeoutScheduler;
-		boolean cleanupRequired = false;
-		ReentrantLock lock = getLock();
-
-		lock.lock();
-
-		try {
-			if (this.eventLoop == terminatedEventLoop) {
-				cleanupRequired = true;
-				this.eventLoop = null;
-				requestHandlerExecutorService = this.requestHandlerExecutorService;
-				streamingExecutorService = this.streamingExecutorService;
-				streamingTimeoutExecutorService = this.streamingTimeoutExecutorService;
-				requestHandlerTimeoutScheduler = this.requestHandlerTimeoutScheduler;
-				this.requestHandlerExecutorService = null;
-				this.streamingExecutorService = null;
-				this.streamingTimeoutExecutorService = null;
-				this.requestHandlerTimeoutScheduler = null;
-			} else {
-				requestHandlerExecutorService = null;
-				streamingExecutorService = null;
-				streamingTimeoutExecutorService = null;
-				requestHandlerTimeoutScheduler = null;
-			}
-		} finally {
-			lock.unlock();
-		}
-
-		if (!cleanupRequired)
-			return;
-
-		notifyDidFailToAcceptConnection(null, ConnectionRejectionReason.INTERNAL_ERROR, throwable);
-
-		try {
-			terminatedEventLoop.stopConnections();
-		} catch (Exception e) {
-			safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to shut down HTTP server event loop after unexpected termination")
-					.throwable(e)
-					.build());
-		}
-
-		shutdownNowIfNeeded(requestHandlerExecutorService);
-		shutdownNowIfNeeded(streamingExecutorService);
-		shutdownNowIfNeeded(streamingTimeoutExecutorService);
-
-		if (requestHandlerTimeoutScheduler != null)
-			requestHandlerTimeoutScheduler.shutdownNow();
+	void setStartSetupHookForTests(@NonNull Runnable startSetupHook) {
+		this.startSetupHook = requireNonNull(startSetupHook);
 	}
 
-	private void shutdownNowIfNeeded(@Nullable ExecutorService executorService) {
-		if (executorService != null && !executorService.isTerminated())
-			executorService.shutdownNow();
+	@NonNull
+	private HttpRuntimeSnapshot runtimeSnapshot() {
+		return new HttpRuntimeSnapshot(this.eventLoop,
+				this.requestHandlerExecutorService, this.streamingExecutorService,
+				this.streamingTimeoutExecutorService, this.requestHandlerTimeoutScheduler);
+	}
+
+	private void releaseRuntimeSnapshot(@NonNull HttpRuntimeSnapshot snapshot) {
+		requireNonNull(snapshot);
+		if (this.eventLoop == snapshot.eventLoop())
+			this.eventLoop = null;
+		if (this.requestHandlerExecutorService == snapshot.requestHandlerExecutor())
+			this.requestHandlerExecutorService = null;
+		if (this.streamingExecutorService == snapshot.streamingExecutor())
+			this.streamingExecutorService = null;
+		if (this.streamingTimeoutExecutorService == snapshot.streamingTimeoutExecutor())
+			this.streamingTimeoutExecutorService = null;
+		if (this.requestHandlerTimeoutScheduler == snapshot.requestTimeoutScheduler())
+			this.requestHandlerTimeoutScheduler = null;
+	}
+
+	private static boolean awaitExecutor(@Nullable ExecutorService executor,
+			long absoluteDeadlineNanos) throws InterruptedException {
+		if (executor == null || executor.isTerminated())
+			return true;
+		long remainingNanos = LifecycleDeadlines.remainingNanos(
+				absoluteDeadlineNanos, System.nanoTime());
+		return remainingNanos > 0L
+				&& executor.awaitTermination(remainingNanos, TimeUnit.NANOSECONDS);
+	}
+
+	private static boolean awaitScheduler(@Nullable TimeoutScheduler scheduler,
+			long absoluteDeadlineNanos) throws InterruptedException {
+		if (scheduler == null)
+			return true;
+		return scheduler.awaitTerminationUntil(absoluteDeadlineNanos);
+	}
+
+	private record HttpRuntimeSnapshot(
+			@Nullable EventLoop eventLoop,
+			@Nullable ExecutorService requestHandlerExecutor,
+			@Nullable ExecutorService streamingExecutor,
+			@Nullable ScheduledExecutorService streamingTimeoutExecutor,
+			@Nullable TimeoutScheduler requestTimeoutScheduler) {
+	}
+
+	private final class HttpLifecycleOperations
+			implements BuiltInTransportLifecycleAdapter.Operations {
+		@NonNull
+		private final AtomicReference<HttpRuntimeSnapshot> retainedSnapshot =
+				new AtomicReference<>();
+
+		@Override
+		public void quiesce() {
+			HttpRuntimeSnapshot snapshot = runtimeSnapshot();
+			this.retainedSnapshot.compareAndSet(null, snapshot);
+			EventLoop eventLoop = snapshot.eventLoop();
+			if (eventLoop != null) {
+				eventLoop.stopAccepting();
+				eventLoop.beginDrain();
+			}
+			if (snapshot.requestHandlerExecutor() != null)
+				snapshot.requestHandlerExecutor().shutdown();
+			if (snapshot.streamingExecutor() != null)
+				snapshot.streamingExecutor().shutdown();
+			if (snapshot.streamingTimeoutExecutor() != null)
+				snapshot.streamingTimeoutExecutor().shutdown();
+			if (snapshot.requestTimeoutScheduler() != null)
+				snapshot.requestTimeoutScheduler().shutdown();
+		}
+
+		@Override
+		public void force() {
+			quiesce();
+			HttpRuntimeSnapshot snapshot = retained();
+			if (snapshot.eventLoop() != null)
+				snapshot.eventLoop().stopConnections();
+			if (snapshot.requestHandlerExecutor() != null)
+				snapshot.requestHandlerExecutor().shutdownNow();
+			if (snapshot.streamingExecutor() != null)
+				snapshot.streamingExecutor().shutdownNow();
+			if (snapshot.streamingTimeoutExecutor() != null)
+				snapshot.streamingTimeoutExecutor().shutdownNow();
+			if (snapshot.requestTimeoutScheduler() != null)
+				snapshot.requestTimeoutScheduler().shutdownNow();
+		}
+
+		@Override
+		public boolean awaitTermination(long absoluteDeadlineNanos)
+				throws InterruptedException {
+			HttpRuntimeSnapshot snapshot = retained();
+			boolean eventLoopTerminated = snapshot.eventLoop() == null
+					|| snapshot.eventLoop().joinUntil(absoluteDeadlineNanos);
+			boolean requestHandlersTerminated = awaitExecutor(
+					snapshot.requestHandlerExecutor(), absoluteDeadlineNanos);
+			boolean streamingTerminated = awaitExecutor(
+					snapshot.streamingExecutor(), absoluteDeadlineNanos);
+			boolean streamingTimeoutsTerminated = awaitExecutor(
+					snapshot.streamingTimeoutExecutor(), absoluteDeadlineNanos);
+			boolean requestTimeoutsTerminated = awaitScheduler(
+					snapshot.requestTimeoutScheduler(), absoluteDeadlineNanos);
+			return eventLoopTerminated && requestHandlersTerminated
+					&& streamingTerminated && streamingTimeoutsTerminated
+					&& requestTimeoutsTerminated;
+		}
+
+		@Override
+		@NonNull
+		public Set<InternalResidualActivityKind> residualActivity() {
+			HttpRuntimeSnapshot snapshot = retained();
+			Set<InternalResidualActivityKind> kinds =
+					EnumSet.noneOf(InternalResidualActivityKind.class);
+			if (snapshot.eventLoop() != null && !snapshot.eventLoop().isTerminated())
+				kinds.add(InternalResidualActivityKind.EVENT_LOOP);
+			if (snapshot.eventLoop() != null
+					&& snapshot.eventLoop().numAdmittedConnections() > 0)
+				kinds.add(InternalResidualActivityKind.CONNECTION);
+			if (!terminated(snapshot.requestHandlerExecutor())
+					|| !terminated(snapshot.streamingExecutor())
+					|| !terminated(snapshot.streamingTimeoutExecutor())
+					|| !terminated(snapshot.requestTimeoutScheduler()))
+				kinds.add(InternalResidualActivityKind.EXECUTOR_TASK);
+			return Collections.unmodifiableSet(kinds);
+		}
+
+		@Override
+		public void releaseTerminatedEvidence() {
+			HttpRuntimeSnapshot snapshot = retained();
+			releaseRuntimeSnapshot(snapshot);
+			this.retainedSnapshot.compareAndSet(snapshot, null);
+		}
+
+		@NonNull
+		private HttpRuntimeSnapshot retained() {
+			HttpRuntimeSnapshot snapshot = this.retainedSnapshot.get();
+			if (snapshot != null)
+				return snapshot;
+			snapshot = runtimeSnapshot();
+			this.retainedSnapshot.compareAndSet(null, snapshot);
+			return requireNonNull(this.retainedSnapshot.get());
+		}
+
+		private boolean terminated(@Nullable ExecutorService executor) {
+			return executor == null || executor.isTerminated();
+		}
+
+		private boolean terminated(@Nullable TimeoutScheduler scheduler) {
+			return scheduler == null || scheduler.isTerminated();
+		}
 	}
 
 	@ThreadSafe

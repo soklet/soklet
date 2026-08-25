@@ -10,7 +10,6 @@ import org.junit.jupiter.api.Test;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.nio.channels.Selector;
 import java.time.Duration;
@@ -23,9 +22,11 @@ import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import java.util.zip.GZIPInputStream;
 
@@ -214,7 +215,210 @@ public class DefaultHttpServerTests {
 	}
 
 	@Test
-	public void staleHttpEventLoopCleanupDoesNotClobberRestartedServer() throws Exception {
+	public void stopCannotPublishAnEmptyGenerationWhileStartInstallsHttpResources()
+			throws Exception {
+		CountDownLatch supplierEntered = new CountDownLatch(1);
+		CountDownLatch releaseSupplier = new CountDownLatch(1);
+		CountDownLatch stopReturned = new CountDownLatch(1);
+		RecordingExecutorService requestExecutor = new RecordingExecutorService();
+		RecordingExecutorService streamingExecutor = new RecordingExecutorService();
+		DefaultHttpServer server = (DefaultHttpServer) HttpServer.withPort(0)
+				.host("127.0.0.1")
+				.requestHandlerExecutorServiceSupplier(() -> {
+					supplierEntered.countDown();
+					awaitUninterruptibly(releaseSupplier);
+					return requestExecutor;
+				})
+				.streamingExecutorServiceSupplier(() -> streamingExecutor)
+				.build();
+		server.initialize(SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new LifecycleObserver() {})
+				.build(), (request, responseConsumer) -> {});
+		AtomicReference<Throwable> startFailure = new AtomicReference<>();
+		AtomicReference<Throwable> stopFailure = new AtomicReference<>();
+		Thread startThread = new Thread(() -> {
+			try {
+				server.start();
+			} catch (Throwable throwable) {
+				startFailure.set(throwable);
+			}
+		}, "http-start-publication-race");
+		Thread stopThread = new Thread(() -> {
+			try {
+				server.stop();
+			} catch (Throwable throwable) {
+				stopFailure.set(throwable);
+			} finally {
+				stopReturned.countDown();
+			}
+		}, "http-stop-publication-race");
+
+		try {
+			startThread.start();
+			Assertions.assertTrue(supplierEntered.await(1, TimeUnit.SECONDS));
+			stopThread.start();
+			Assertions.assertFalse(stopReturned.await(100, TimeUnit.MILLISECONDS),
+					"Stop must serialize behind generation resource publication");
+			Assertions.assertTrue(server.getLifecycleAdapter().result().isEmpty(),
+					"Stop must not prove the partially published generation empty");
+		} finally {
+			releaseSupplier.countDown();
+		}
+		startThread.join(3_000L);
+		stopThread.join(3_000L);
+
+		Assertions.assertFalse(startThread.isAlive());
+		Assertions.assertFalse(stopThread.isAlive());
+		Assertions.assertNull(startFailure.get());
+		Assertions.assertNull(stopFailure.get());
+		Assertions.assertFalse(server.isStarted());
+		Assertions.assertTrue(server.getEventLoop().isEmpty());
+		Assertions.assertTrue(server.getRequestHandlerExecutorService().isEmpty());
+		Assertions.assertTrue(server.getStreamingExecutorService().isEmpty());
+		Assertions.assertTrue(requestExecutor.isShutdown());
+		Assertions.assertTrue(streamingExecutor.isShutdown());
+	}
+
+	@Test
+	public void startRejectsRunningHttpGenerationWhileItsStopIsInProgress()
+			throws Exception {
+		CountDownLatch taskStarted = new CountDownLatch(1);
+		CountDownLatch releaseTask = new CountDownLatch(1);
+		ExecutorService requestExecutor = Executors.newSingleThreadExecutor();
+		requestExecutor.submit(() -> {
+			taskStarted.countDown();
+			awaitUninterruptibly(releaseTask);
+		});
+		RecordingExecutorService streamingExecutor = new RecordingExecutorService();
+		DefaultHttpServer server = (DefaultHttpServer) HttpServer.withPort(0)
+				.host("127.0.0.1")
+				.shutdownTimeout(Duration.ofSeconds(5))
+				.requestHandlerExecutorServiceSupplier(() -> requestExecutor)
+				.streamingExecutorServiceSupplier(() -> streamingExecutor)
+				.build();
+		server.initialize(SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new LifecycleObserver() {})
+				.build(), (request, responseConsumer) -> {});
+		Thread stopThread = new Thread(server::stop, "http-running-start-stop-race");
+
+		try {
+			Assertions.assertTrue(taskStarted.await(1, TimeUnit.SECONDS));
+			server.start();
+			stopThread.start();
+			waitUntil(server.getLifecycleAdapter()::shutdownInProgress, 2_000L);
+
+			IllegalStateException failure = Assertions.assertThrows(
+					IllegalStateException.class, server::start);
+			Assertions.assertEquals(
+					"Cannot start HTTP server while shutdown is in progress",
+					failure.getMessage());
+			Assertions.assertTrue(stopThread.isAlive());
+		} finally {
+			releaseTask.countDown();
+			stopThread.join(3_000L);
+			server.stop();
+			requestExecutor.shutdownNow();
+		}
+
+		Assertions.assertFalse(stopThread.isAlive());
+		Assertions.assertFalse(server.isStarted());
+	}
+
+	@Test
+	public void startupErrorRetainsItsIdentityAndRollsBackPartialHttpResources() {
+		AssertionError startupError = new AssertionError("streaming executor creation failed");
+		RecordingExecutorService requestExecutor = new RecordingExecutorService();
+		DefaultHttpServer server = (DefaultHttpServer) HttpServer.withPort(0)
+				.host("127.0.0.1")
+				.requestHandlerExecutorServiceSupplier(() -> requestExecutor)
+				.streamingExecutorServiceSupplier(() -> {
+					throw startupError;
+				})
+				.build();
+		server.initialize(SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new LifecycleObserver() {})
+				.build(), (request, responseConsumer) -> {});
+
+		AssertionError thrown = Assertions.assertThrows(AssertionError.class, server::start);
+
+		Assertions.assertSame(startupError, thrown);
+		Assertions.assertTrue(requestExecutor.isShutdown());
+		Assertions.assertTrue(server.getRequestHandlerExecutorService().isEmpty());
+		Assertions.assertTrue(server.getStreamingExecutorService().isEmpty());
+		InternalShutdownResult result = server.getLifecycleAdapter().result().orElseThrow();
+		Assertions.assertEquals(InternalStartupDisposition.FAILED,
+				result.startupDisposition());
+		Assertions.assertTrue(result.isComplete());
+		Assertions.assertEquals(List.of(startupError), result
+				.participantResult(InternalParticipantKind.HTTP).orElseThrow().failures());
+	}
+
+	@Test
+	public void earlySetupErrorRetainsIdentityCleansGenerationAndAllowsHttpRestart() {
+		AssertionError startupError = new AssertionError("early HTTP setup failed");
+		AtomicInteger setupAttempts = new AtomicInteger();
+		DefaultHttpServer server = (DefaultHttpServer) HttpServer.withPort(0)
+				.host("127.0.0.1")
+				.build();
+		server.setStartSetupHookForTests(() -> {
+			if (setupAttempts.getAndIncrement() == 0)
+				throw startupError;
+		});
+		server.initialize(SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new LifecycleObserver() {})
+				.build(), (request, responseConsumer) -> {});
+
+		AssertionError thrown = Assertions.assertThrows(AssertionError.class, server::start);
+
+		Assertions.assertSame(startupError, thrown);
+		InternalShutdownResult failedResult = server.getLifecycleAdapter().result()
+				.orElseThrow();
+		Assertions.assertEquals(InternalStartupDisposition.FAILED,
+				failedResult.startupDisposition());
+		Assertions.assertTrue(failedResult.isComplete());
+		Assertions.assertEquals(List.of(startupError), failedResult
+				.participantResult(InternalParticipantKind.HTTP).orElseThrow().failures());
+		Assertions.assertTrue(server.getEventLoop().isEmpty());
+		Assertions.assertTrue(server.getRequestHandlerExecutorService().isEmpty());
+		Assertions.assertTrue(server.getRequestHandlerTimeoutScheduler().isEmpty());
+
+		try {
+			server.start();
+			Assertions.assertTrue(server.isStarted());
+			Assertions.assertEquals(2, setupAttempts.get());
+		} finally {
+			server.stop();
+		}
+		Assertions.assertFalse(server.isStarted());
+	}
+
+	@Test
+	public void liveHttpTimeoutSchedulerIsPositiveResidualEvidence() throws Exception {
+		DefaultHttpServer server = (DefaultHttpServer) HttpServer.withPort(0).build();
+		TimeoutScheduler scheduler = new TimeoutScheduler(
+				runnable -> new Thread(runnable, "http-residual-timeout-scheduler"));
+		Field schedulerField = DefaultHttpServer.class.getDeclaredField(
+				"requestHandlerTimeoutScheduler");
+		schedulerField.setAccessible(true);
+		schedulerField.set(server, scheduler);
+
+		try {
+			Assertions.assertFalse(scheduler.isTerminated());
+			Assertions.assertTrue(lifecycleOperations(server.getLifecycleAdapter())
+					.residualActivity().contains(
+							InternalResidualActivityKind.EXECUTOR_TASK));
+		} finally {
+			scheduler.shutdownNow();
+			Assertions.assertTrue(scheduler.awaitTermination(1, TimeUnit.SECONDS));
+		}
+	}
+
+	@Test
+	public void staleHttpEventLoopFailureDoesNotClobberRestartedServer() throws Exception {
 		RecordingExecutorService firstRequestHandlerExecutorService = new RecordingExecutorService();
 		RecordingExecutorService secondRequestHandlerExecutorService = new RecordingExecutorService();
 		RecordingExecutorService firstStreamingExecutorService = new RecordingExecutorService();
@@ -240,20 +444,19 @@ public class DefaultHttpServerTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(new LifecycleObserver() {})
 				.build();
-		Method cleanupMethod = DefaultHttpServer.class.getDeclaredMethod(
-				"cleanupAfterUnexpectedEventLoopTermination", EventLoop.class, Throwable.class);
-		cleanupMethod.setAccessible(true);
 		server.initialize(sokletConfig, (request, requestResultConsumer) -> {});
 
 		try {
 			server.start();
-			EventLoop staleEventLoop = server.getEventLoop().orElseThrow();
+			BuiltInTransportLifecycleAdapter.Generation staleGeneration = server
+					.getLifecycleAdapter().generation().orElseThrow();
 			server.stop();
 
 			server.start();
 			EventLoop restartedEventLoop = server.getEventLoop().orElseThrow();
 
-			cleanupMethod.invoke(server, staleEventLoop, new AssertionError("stale event loop"));
+			server.getLifecycleAdapter().signalUnexpectedFailure(staleGeneration,
+					new AssertionError("stale event loop"));
 
 			Assertions.assertTrue(server.isStarted());
 			Assertions.assertSame(restartedEventLoop, server.getEventLoop().orElseThrow());
@@ -289,6 +492,28 @@ public class DefaultHttpServerTests {
 		}
 
 		Assertions.fail("Timed out waiting for condition");
+	}
+
+	private static void awaitUninterruptibly(CountDownLatch latch) {
+		boolean interrupted = false;
+		for (;;) {
+			try {
+				latch.await();
+				break;
+			} catch (InterruptedException exception) {
+				interrupted = true;
+			}
+		}
+		if (interrupted)
+			Thread.currentThread().interrupt();
+	}
+
+	private static BuiltInTransportLifecycleAdapter.Operations lifecycleOperations(
+			BuiltInTransportLifecycleAdapter adapter) throws Exception {
+		Field operationsField = BuiltInTransportLifecycleAdapter.class
+				.getDeclaredField("operations");
+		operationsField.setAccessible(true);
+		return (BuiltInTransportLifecycleAdapter.Operations) operationsField.get(adapter);
 	}
 
 	private static final class RecordingExecutorService extends AbstractExecutorService {

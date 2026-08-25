@@ -1638,9 +1638,12 @@ class ConnectionEventLoop {
 
     boolean joinUntil(long deadlineNanos) throws InterruptedException {
         while (thread.isAlive()) {
-            long remainingNanos = deadlineNanos - System.nanoTime();
-            if (remainingNanos <= 0L)
+            long nowNanos = System.nanoTime();
+            if (nowNanos >= deadlineNanos)
                 return false;
+            long remainingNanos = deadlineNanos - nowNanos;
+            if (remainingNanos < 0L)
+                remainingNanos = Long.MAX_VALUE;
             long millis = remainingNanos / 1_000_000L;
             int nanos = (int) (remainingNanos % 1_000_000L);
             thread.join(millis, nanos);

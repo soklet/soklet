@@ -31,7 +31,7 @@ import static java.util.Objects.requireNonNull;
  * Immutable declaration of an MCP client request that an operation may emit.
  *
  * <p>The declaration binds a core client request method to the complete set
- * of client capabilities required to emit it. Soklet 3.6 accepts only the
+ * of client capabilities required to emit it. Soklet 4.0 accepts only the
  * core {@code elicitation/create}, {@code sampling/createMessage}, and
  * {@code roots/list} methods; this type is not an extension escape hatch.
  *
@@ -62,7 +62,7 @@ public final class McpInputRequestDeclaration {
 	 * @param requirement when the capabilities are required
 	 * @throws NullPointerException if an argument or capability is null
 	 * @throws IllegalArgumentException if the method or capability combination
-	 * is not one of Soklet 3.6's supported core declarations
+	 * is not one of Soklet 4.0's supported core declarations
 	 */
 	private McpInputRequestDeclaration(@NonNull String method,
 			@NonNull Set<@NonNull McpClientCapability> capabilities,
@@ -83,7 +83,7 @@ public final class McpInputRequestDeclaration {
 					"At least one input-request capability is required.");
 		if (!CORE_METHODS.contains(method))
 			throw new IllegalArgumentException(
-					"Soklet 3.6 supports only the three core input-request methods.");
+					"Soklet 4.0 supports only the three core input-request methods.");
 
 		Set<McpClientCapability> immutableCapabilities =
 				Collections.unmodifiableSet(copiedCapabilities);

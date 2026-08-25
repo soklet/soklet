@@ -402,11 +402,11 @@ public class McpRequestWireMapperTests {
 	@Test
 	public void outboundConvenienceFactoryStillRejectsBlankServerInformation() {
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> McpImplementationMetadata.withNameAndVersion("", "3.6.0"));
+				() -> McpImplementationMetadata.withNameAndVersion("", "4.0.0"));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> McpImplementationMetadata.withNameAndVersion("server", " "));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> new McpImplementationMetadata("server", "3.6.0",
+				() -> new McpImplementationMetadata("server", "4.0.0",
 						Optional.empty(), Optional.empty(),
 						Optional.of(URI.create("server.html")), List.of(),
 						McpJsonObject.empty()));

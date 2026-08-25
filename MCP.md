@@ -1,13 +1,13 @@
 # Model Context Protocol (MCP)
 
-Soklet 3.6.0 targets the MCP `2026-07-28` server protocol. MCP support is part
+Soklet 4.0.0 targets the MCP `2026-07-28` server protocol. MCP support is part
 of core Soklet and uses a dedicated `McpServer` listener; it is not mounted in
 the ordinary `HttpServer` or `SseServer`. The API and implementation ship in
 the zero-runtime-dependency `com.soklet:soklet` artifact; there is no separate
 `soklet-mcp` component.
 
 This guide describes the implemented and frozen Phase 4, Phase 5, and Phase 6
-surfaces in the current `3.6.0-SNAPSHOT`: multi-round-trip request state,
+surfaces in the current `4.0.0-SNAPSHOT`: multi-round-trip request state,
 progress/cancelation, subscriptions, localization, lifecycle and aggregate
 metrics, bounded off-network simulation, downstream OpenTelemetry integration,
 and bounded structured trace-correlation logging. All 65 Phase 6 owners are
@@ -237,7 +237,7 @@ compile-checks one deployment-specific allowlist and canary policy; it is not a
 universal injection detector.
 
 The immutable prompt catalog follows registration order and is returned as one
-page. A present cursor is invalid because Soklet 3.6.0 does not expose dynamic
+page. A present cursor is invalid because Soklet 4.0.0 does not expose dynamic
 prompt-list pagination or a prompt list-change publisher.
 
 ## Resources and pagination
@@ -692,8 +692,16 @@ blocks restart; calling `stop()` again retries or joins that cleanup without
 overlapping close invocations. Waiting remains bounded by the server's original
 global shutdown timeout. Application code publishes coarse change events with
 `publishResourcesListChanged()` or `publishResourceUpdated(URI)`; Soklet owns
-authorization, requested-filter matching, per-stream coalescing, bounded
-queues, backpressure, and wire serialization.
+requested-filter matching, per-stream coalescing, bounded queues, backpressure,
+and wire serialization. Publisher events contain no endpoint, principal,
+authorization partition, or connected-client target. Two subscriptions to the same URI in different admitted partitions therefore receive the same coarse event.
+The stored partition scopes registration, quota accounting, and stream isolation; it is not a per-event authorization check and does not establish semantic authority to read a URI.
+
+Admission may inspect the original bounded request body when authorizing a listen request.
+Soklet exposes no parsed subscription-filter accessor on the admission context.
+Applications must authorize confidential or capability-bearing subscription URIs during admission and must not infer secrecy merely because a URI is difficult to guess.
+A rejected or failed admission never activates a subscription, even though the server generation's single shared publisher listener may already be registered.
+With `McpAdmissionController.acceptAllInstance()`, all anonymous callers on one endpoint share its empty authorization/quota partition; one caller can exhaust the configured per-partition subscription bucket for the rest.
 
 The listener parses all protocol filter fields but acknowledges and emits only
 the configured resource-list and requested-resource update families. Tool and
@@ -706,8 +714,8 @@ separate streams and may coexist, including across authorization partitions.
 
 A valid listen request traverses admission and the optional request limiter;
 it does not invoke an application handler, `McpHandlerInterceptor`, a tool
-limiter, or consume an application handler slot. Stream count per admitted
-principal, duration, pending queue size, and write-idle time are bounded.
+limiter, or consume an application handler slot. Stream count per endpoint and admitted authorization/quota partition, duration, pending queue size, and write-idle time are bounded.
+Distinct admitted principals that provide no authorization partition key share the endpoint's empty partition and therefore share one subscription bucket.
 Keep-alive comments prevent an otherwise idle writable stream from reaching
 its write-idle timeout; `keepAliveInterval` must therefore be strictly shorter
 than `writeTimeout`, and `McpServer.Builder.build()` rejects an invalid pair.
@@ -748,9 +756,9 @@ The JSON-RPC request path has 17 ordered groups. The first failure wins:
 4. POST-only HTTP method and `Content-Type`/`Accept` negotiation;
 5. strict JSON parsing;
 6. JSON-RPC envelope validation;
-7. standard and custom mirrored-header decoding and body agreement;
-8. required `_meta`, metadata-key, and extension-identifier/settings validation;
-9. header/body version agreement and supported-version validation;
+7. required and custom mirrored-header cardinality/form, strict-unknown policy, and method/name agreement, but no body-revision agreement;
+8. the non-failing readable nested body-revision probe, followed by exact selector membership/profile selection and unsupported dispatch;
+9. selected-profile required `_meta`, metadata-key, extension/settings, and universal-spine validation, followed by post-map header/body revision agreement;
 10. cheap method/structural parameter validation, followed by required client-
     capability preflight;
 11. admission, the optional request limiter, and the resolved tool limiter;
@@ -764,24 +772,16 @@ The JSON-RPC request path has 17 ordered groups. The first failure wins:
 17. envelope generation and response write.
 
 Notifications have a separate, shorter path. The shared transport prefix is
-limits, routing, Host, Origin/CORS, POST/media/Accept, strict JSON, and envelope
-classification. An unsupported classified notification then validates any
-present `_meta`, the protocol-version header, admission, and the optional
-request limiter before empty HTTP 400 handling. An identifiable
-`notifications/cancelled` skips parameter and present-`_meta` validation, but
-traverses the other stages before its empty HTTP 202 result. Notifications do
-not acquire request-only mirrored-header, required-`_meta`/capability, tool-
-limiter, queue/slot, interceptor, handler, sanitizer, or response-envelope
-semantics.
+limits, routing, Host, Origin/CORS, POST/media/Accept, strict JSON, and envelope classification.
+A classified notification then validates protocol-selector cardinality/form and exact registry membership
+before any profile-specific present `_meta`, admission, and the optional request limiter.
+Unsupported selectors return an empty HTTP 400 without profile mapping. An identifiable `notifications/cancelled` skips parameter and present-`_meta` validation, but traverses the other stages before its empty HTTP 202 result.
+Notifications do not acquire request-only mirrored-header, required-`_meta`/capability, tool-limiter, queue/slot, interceptor, handler, sanitizer, or response-envelope semantics.
 
-Soklet does not implement `initialize`, an initialization handshake, or a
-session. It recognizes the exact readable method name only for migration
-diagnostics: once strict JSON parsing exposes `method: "initialize"`, every
-subsequent rejection carries a supported-version diagnostic whose supported-
-version list names only `2026-07-28`. Ordinary failures use
-`data.supportedVersions`; an actual unsupported version retains its defined
-requested/supported data shape. Pre-JSON transport failures, unparseable JSON,
-an unreadable method, and other method names do not acquire this diagnostic.
+Soklet does not implement `initialize`, an initialization handshake, or a session. One immutable internal exact-revision registry is the authority for profile selection, discovery advertisement, and every supported-version diagnostic; its sole production entry is `2026-07-28`.
+A bounded diagnostic is attached after either of two triggers: strict JSON exposes the exact readable method `initialize`, or selector cardinality/plain-string validation succeeds and the selector is absent from that registry.
+Ordinary eligible failures use `data.supportedVersions`; an actual unsupported version retains its defined registry-ordered `supported` then exact header-derived `requested` shape.
+Pre-JSON transport failures, unparseable JSON, unreadable methods, and row-1 envelope failures for other methods cannot acquire selector-derived data because selector validation has not run.
 
 The universal HTTP `no-store` policy includes early parser/transport errors,
 fixed JSON and empty responses, CORS preflight, notification responses, and
@@ -2093,8 +2093,8 @@ terminated; process termination is the only hard stop for such code.
 
 ## Compatibility and unsupported features
 
-The 3.6.0 MCP API and wire behavior are intentionally incompatible with
-Soklet's pre-3.6.0 MCP implementation. Applications that require MCP
+The 4.0.0 MCP API and wire behavior are intentionally incompatible with
+Soklet's pre-4.0.0 MCP implementation. Applications that require MCP
 `2025-11-25` must remain on Soklet 3.5.x; there is no adapter or dual-protocol
 mode.
 
@@ -2107,7 +2107,7 @@ reflecting the setting into the response. Malformed extension containers,
 identifiers, or settings fail before admission, and unsupported extension
 methods retain the normal explicit unknown-method behavior.
 
-Soklet 3.6.0 does not provide stdio transport, public arbitrary JSON Schema
+Soklet 4.0.0 does not provide stdio transport, public arbitrary JSON Schema
 registration, MCP Completion, MCP logging capability, mutable tool/prompt list
 publishers, or an application result-extension registry. OAuth protected-
 resource metadata and identity-provider behavior remain deployment
@@ -2229,7 +2229,7 @@ TypeScript and Go are checksum-pinned, `READY`, and green against the local
 snapshot. The six reviewed downstream change sets remain uncommitted local
 work. They are therefore unpublished and unpinned, so the manifest continues
 to carry its old public commits. All four servlet legs pass 158/158 locally:
-the default 3.1.1 and 3.6.0-SNAPSHOT legs for both javax and Jakarta. ToyStore's completed local
+the default 3.1.1 and 4.0.0-SNAPSHOT legs for both javax and Jakarta. ToyStore's completed local
 migration passes 14/14, including six MCP tests. Its per-request credential
 proof accepts a valid request, then returns 401 for malformed, missing, expired, and
 wrong-audience credentials and 403 for an insufficient-scope credential; no
@@ -2257,7 +2257,7 @@ Eighteen are dispatch-configured, while five remain
 `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving 11 fail-closed blockers;
 `READY` means configured, never passed. The matrix-closure hook is `READY`, but
 the canonical report generated from its checked-in registry remains
-deliberately `FAILED` while six rows are `UNRESOLVED`, so no PASS receipt can be
+deliberately `FAILED` while five rows are `UNRESOLVED`, so no PASS receipt can be
 recorded. A `RELEASE_GATED` row has
 candidate-contained implementation or evidence anchors and names the exact
 immutable, scheduled, sustained, or downstream gate that still owes proof; it
@@ -2312,7 +2312,7 @@ Corretto 21.0.12.9.1 toolchain (`java 21.0.12.1`) passes the exact full
 test sources. The affected method passes 1/1 focused and 20/20 repeated runs;
 `McpSubscriptionPublicRuntimeTests` plus
 `McpSubscriptionRuntimeBoundaryTests` pass 26/26. The test-only correction
-sets the per-principal subscription cap to one and holds the recovery
+sets the per-authorization-partition subscription cap to one and holds the recovery
 subscription open while the original disconnect observer's exact-once count
 is asserted, preventing that recovery request's legitimate finish from
 entering the first request's observation phase. No production behavior,
@@ -2381,18 +2381,17 @@ Final-tag Ajv validation of the
 expanded 48-message corpus was not rerun locally and remains owned by candidate
 conformance. These are local snapshot checks, not immutable-candidate evidence.
 
-The preceding four-row HTTP-contract reconciliation closed modern-only readable-
-`initialize` rejection diagnostics, unsupported classified-notification
-handling, universal MCP HTTP `no-store`, and the exact request/notification
-validation order. The separate
-`conformance/golden-http-contract/precedence-no-store/manifest.sha256` binds 21
+The preceding four-row HTTP-contract reconciliation closed readable
+`initialize` and validated-unsupported-selector rejection diagnostics,
+unsupported classified-notification handling, universal MCP HTTP `no-store`,
+and the exact request/notification validation order. The separate
+`conformance/golden-http-contract/precedence-no-store/manifest.sha256` binds 22
 canonical complete-response fixtures and has SHA-256
-`ec1bd3f13c70bec100b18e774bfbdf2d9e574c1d8df99f2acc4b36e85f51702c`.
-Four contract tests comprise three production-listener golden tests and one
-exhaustive response-authority inventory; four diagnostic tests include 23
+`273e83945e5bae949c4a2eee85993883abb1350ef7234b98548d1134d0f7af02`.
+Five contract tests comprise three production-listener golden tests, one exhaustive response-authority inventory, and one six-document manifest-digest
+parity gate; four diagnostic tests include 23
 readable-`initialize` rejection cases and the negative pre-JSON/method
-boundary. The new suites pass 8/8 and the adjacent contract group passes
-108/108 on local Corretto 17.0.20.1 and local Corretto 21.0.11.
+boundary. Those two classes pass 9/9 in the current focused execution.
 
 Full clean test passes 1,693/0/0/72 on Corretto 17 and 1,708/0/0/4 on Corretto
 21 over 462 main and 203 test sources; the latter includes 15 additional
@@ -2401,9 +2400,10 @@ validation built the main, sources, and Javadoc JARs after allowing configured
 external Javadoc links. The new HTTP corpus is separate from the unchanged
 48-message/11-test official final-schema corpus and three-head/two-test auth/
 CORS corpus. The narrow internal change preserves a readable `initialize`
-method through valid-JSON envelope/ID failures solely to attach the modern
-diagnostic; it adds no initialization or session. Public API, signatures, and
-freeze inventories are unchanged. At that checkpoint, the matrix was
+method through valid-JSON envelope/ID failures and adds a bounded diagnostic
+after validated unsupported-selector membership; it adds no initialization or
+session. Public API, signatures, and freeze inventories are unchanged. At that
+checkpoint, the matrix was
 deliberately `FAILED`: 104 rows were `CORE_COMPLETE`, 116 were `RELEASE_GATED`,
 four were `APPLICATION_OWNED`, 18 were `NOT_APPLICABLE`, and 20 remained
 `UNRESOLVED`.
@@ -2418,10 +2418,10 @@ JSON/SSE fixtures at SHA-256
 Four live tests plus the source/authority inventory exhaust Soklet 3.6's core
 `complete` and `input_required` result-envelope authorities; extension result
 types remain separately bounded by `MCP-BASE-006`. The separate
-`conformance/golden-error-mapping/live/manifest.sha256` binds nine canonical
+`conformance/golden-error-mapping/live/manifest.sha256` binds twelve canonical
 complete HTTP responses across the eight frozen ordinary error families at
 SHA-256
-`90fae4482e7d8560f421aa4edbc8a6459d72f42880b5351298d5b74ff3f8b780`.
+`bfaecadaba283df430026504b94f71640c0c56a830159100f9be9179a7ce4e2d`.
 Two live-listener tests cover every fixture. Existing readable-`initialize`
 and path-specific `-32602`, input-response, and request-state evidence remain
 explicit supplements; the ordinary corpus does not claim every data-bearing

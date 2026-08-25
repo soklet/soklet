@@ -249,7 +249,7 @@ public class McpRequestPolicyTests {
 
 	private static McpNormalizedEndpoint endpoint(String name) {
 		return McpNormalizedEndpoint.withServerInformation(
-				McpImplementationMetadata.withNameAndVersion(name, "3.6.0-SNAPSHOT"))
+				McpImplementationMetadata.withNameAndVersion(name, "4.0.0-SNAPSHOT"))
 				.build();
 	}
 }

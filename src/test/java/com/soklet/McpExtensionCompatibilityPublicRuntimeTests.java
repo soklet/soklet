@@ -141,7 +141,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 	private static McpServer server(McpAdmissionController admissionController) {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"extension-compatibility-test", "3.6.0-SNAPSHOT").build())
+						"extension-compatibility-test", "4.0.0-SNAPSHOT").build())
 				.build();
 		return McpServer.withPort(0)
 				.host(LOOPBACK)

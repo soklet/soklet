@@ -73,7 +73,9 @@ public class McpWireDtoSketchTests {
 	@Test
 	public void responses_serialize_the_exact_correlated_string_and_integer_request_ids() {
 		McpRequestMetadata metadata =
-				McpRequestMetadata.fromClientCapabilities(McpClientCapabilities.empty());
+				McpRequestMetadata.fromClientCapabilities(
+						Mcp20260728ProtocolProfile.INSTANCE,
+						McpClientCapabilities.empty());
 		McpRequestParameters params =
 				new McpRequestParameters(metadata, McpJsonObject.empty());
 		List<McpJsonRpcId> requestIds = List.of(
@@ -101,7 +103,9 @@ public class McpWireDtoSketchTests {
 	@Test
 	public void json_rpc_variants_serialize_to_exact_exclusive_shapes() {
 		McpRequestMetadata metadata =
-				McpRequestMetadata.fromClientCapabilities(McpClientCapabilities.empty());
+				McpRequestMetadata.fromClientCapabilities(
+						Mcp20260728ProtocolProfile.INSTANCE,
+						McpClientCapabilities.empty());
 		McpRequestParameters params = new McpRequestParameters(metadata,
 				new McpJsonObject(Map.of("value", new McpJsonString("request"))));
 		McpJsonObject extensions =
@@ -285,6 +289,7 @@ public class McpWireDtoSketchTests {
 				"building must defensively copy the mutable builder state");
 
 		McpJsonObject minimal = McpRequestMetadata.fromClientCapabilities(
+				Mcp20260728ProtocolProfile.INSTANCE,
 				McpClientCapabilities.empty()).toJsonObject();
 		Assertions.assertEquals(Set.of(
 				McpRequestMetadata.PROTOCOL_VERSION_KEY,
@@ -458,7 +463,7 @@ public class McpWireDtoSketchTests {
 						"com.example/icon-purpose", new McpJsonString("maskable"))));
 		McpImplementationMetadata implementation = new McpImplementationMetadata(
 				"catalog",
-				"3.6.0",
+				"4.0.0",
 				Optional.of("Catalog"),
 				Optional.of("Catalog MCP server"),
 				Optional.of(URI.create("https://example.com")),
@@ -482,7 +487,8 @@ public class McpWireDtoSketchTests {
 	@Test
 	public void protocol_error_factories_use_exact_structured_data() {
 		McpJsonRpcError unsupported =
-				McpJsonRpcError.unsupportedProtocolVersion("2025-11-25");
+				McpJsonRpcError.unsupportedProtocolVersion("2025-11-25",
+						McpProductionProtocolProfiles.REGISTRY.revisions());
 		Assertions.assertEquals(McpJsonRpcError.UNSUPPORTED_PROTOCOL_VERSION,
 				unsupported.code());
 		McpJsonObject unsupportedData =

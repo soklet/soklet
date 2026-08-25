@@ -580,7 +580,7 @@ public class McpProtocolAndUnknownHeaderMetricsAggregationTests {
 				DefaultMetricsCollector.defaultInstance();
 		McpEndpoint endpoint = McpEndpoint.withPath(ENDPOINT_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"protocol-header-metrics-test", "3.6.0-SNAPSHOT")
+						"protocol-header-metrics-test", "4.0.0-SNAPSHOT")
 						.build())
 				.build();
 		McpServer server = McpServer.withPort(0)

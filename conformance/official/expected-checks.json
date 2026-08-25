@@ -3,7 +3,7 @@
   "protocolVersion": "2026-07-28",
   "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64",
   "profilePolicy": "A profile is the reviewed complete multiset of check ID, status, and occurrence count, plus its exact automatic wire-check count. Missing or extra checks, changed statuses or counts, FAILURE, WARNING, an unreviewed INFO or SKIPPED result, or any wire-schema-harness-error fails adjudication.",
-  "deferredProfilePolicy": "No Soklet 3.6.0 RUN row remains deferred after atomic Phase 5 activation. Null is retained only for the NOT_APPLICABLE completion-complete row and never means accept anything.",
+  "deferredProfilePolicy": "No Soklet 4.0.0 RUN row remains deferred after atomic Phase 5 activation. Null is retained only for the NOT_APPLICABLE completion-complete row and never means accept anything.",
   "profiles": [
     {
       "id": "tools-list.phase4.v1",

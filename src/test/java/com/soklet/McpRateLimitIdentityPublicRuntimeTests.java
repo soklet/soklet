@@ -256,7 +256,7 @@ public class McpRateLimitIdentityPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
 						"rate-limit-identity-public-runtime-test",
-						"3.6.0-SNAPSHOT").build())
+						"4.0.0-SNAPSHOT").build())
 				.tool(tool)
 				.build();
 		return McpServer.withPort(0)

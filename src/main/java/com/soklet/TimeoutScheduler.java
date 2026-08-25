@@ -100,6 +100,10 @@ final class TimeoutScheduler {
 		return this.shutdown.get();
 	}
 
+	boolean isTerminated() {
+		return !this.workerThread.isAlive();
+	}
+
 	void shutdown() {
 		if (this.shutdown.compareAndSet(false, true))
 			LockSupport.unpark(this.workerThread);
@@ -116,22 +120,31 @@ final class TimeoutScheduler {
 	}
 
 	boolean awaitTermination(long timeout,
-													 @NonNull TimeUnit unit) throws InterruptedException {
+										 @NonNull TimeUnit unit) throws InterruptedException {
 		requireNonNull(unit);
 
 		long timeoutNanos = unit.toNanos(timeout);
+		long deadlineNanos = LifecycleDeadlines.after(System.nanoTime(),
+				Duration.ofNanos(Math.max(0L, timeoutNanos)));
+		return awaitTerminationUntil(deadlineNanos);
+	}
+
+	boolean awaitTerminationUntil(long absoluteDeadlineNanos)
+			throws InterruptedException {
+		long timeoutNanos = LifecycleDeadlines.remainingNanos(
+				absoluteDeadlineNanos, System.nanoTime());
 
 		if (timeoutNanos <= 0L)
 			return !this.workerThread.isAlive();
 
-		long deadlineNanos = System.nanoTime() + timeoutNanos;
 		long remainingNanos = timeoutNanos;
 
 		while (this.workerThread.isAlive() && remainingNanos > 0L) {
 			long millis = TimeUnit.NANOSECONDS.toMillis(remainingNanos);
 			int nanos = (int) (remainingNanos - TimeUnit.MILLISECONDS.toNanos(millis));
 			this.workerThread.join(millis, nanos);
-			remainingNanos = deadlineNanos - System.nanoTime();
+			remainingNanos = LifecycleDeadlines.remainingNanos(
+					absoluteDeadlineNanos, System.nanoTime());
 		}
 
 		return !this.workerThread.isAlive();

@@ -18,14 +18,15 @@ compatibility snapshots and the limits of each freeze decision.
 
 `current-incompatibilities.jsonl` is the canonical set of incompatibilities
 between the released `com.soklet:soklet:3.5.1` artifact and the current
-3.6.0 source tree. It currently contains 565 records and has
+4.0.0 source tree. It currently contains 565 records and has
 SHA-256
 `3269b4a73d42c035a90735336462aaeb98bf6809d003fa858dbfa4a839e4c2e2`.
-The API-diff gate regenerates the set and compares it in both directions, so
-an unexpected addition, removal, or changed record fails.
+The API-diff gate regenerates the set and compares it in both directions, so an unexpected addition, removal, or changed record fails.
 
-`phase-0-incompatibilities.jsonl` is the immutable 566-record historical
-removal surface from deleting the legacy MCP implementation. It initially
+The aggregate API-freeze wrapper also runs the MCP metadata-builder inventory and the independent protocol-profile evidence verifier/self-test. The latter binds the sole package-private production `2026-07-28` profile authority to its specification, schema, official-conformance, scenario, golden, and interoperability pins.
+It changes no public descriptor or freeze owner: a test-only registry seam is package-private and unreachable from public configuration or production defaults.
+
+`phase-0-incompatibilities.jsonl` is the immutable 566-record historical removal surface from deleting the legacy MCP implementation. It initially
 matched the then-current set, but it intentionally does not evolve as the
 greenfield implementation reuses legacy names or adds new API.
 `phase-0-shared-host-rationales.jsonl` explains every removed MCP-owned member
@@ -259,7 +260,7 @@ Corretto 21.0.12.9.1 toolchain (`java 21.0.12.1`) passes the exact full
 test sources. The affected method passes 1/1 focused and 20/20 repeated runs;
 `McpSubscriptionPublicRuntimeTests` plus
 `McpSubscriptionRuntimeBoundaryTests` pass 26/26. The test-only correction
-sets the per-principal subscription cap to one and holds the recovery
+sets the per-authorization-partition subscription cap to one and holds the recovery
 subscription open while the original disconnect observer's exact-once count
 is asserted, preventing that recovery request's legitimate finish from
 entering the first request's observation phase. No production behavior,
@@ -306,12 +307,11 @@ authorization binding, expiry/round checks, and originating-request-ID
 evidence. Request-scoped progress and cooperative cancelation are also live on
 application handler paths.
 
-Configured endpoints can additionally host framework-owned
-`subscriptions/listen` POST/SSE streams for resource-list changes and updates
-to requested resource URIs. Application-owned publishers may be in-process or
-distributed; Soklet owns admission, filtering, coalescing, stream bounds, and
-wire serialization. The checked-in final-tag corpus contains 39
-production-derived messages, including progress and subscription exchanges.
+Configured endpoints can additionally host framework-owned `subscriptions/listen` POST/SSE streams for resource-list changes
+and updates to requested resource URIs. Application-owned publishers emit coarse identity-free broadcasts: Soklet matches the accepted URI
+filter, while the admitted authorization partition scopes registration, quota accounting, and stream isolation rather than event targeting or semantic URI authorization.
+Applications authorize confidential or capability-bearing URIs during admission from the original bounded request body; Soklet exposes no parsed filter accessor.
+Soklet owns filtering, coalescing, stream bounds, and wire serialization. The checked-in final-tag corpus contains 39 production-derived messages, including progress and subscription exchanges.
 
 Deterministic MRTR termination coverage now includes blocked custom protector
 open/seal paths, conditional-capability holds, and independent fresh-ID
@@ -1609,7 +1609,7 @@ MCP tests. Its per-request credential proof accepts a valid request, then
 returns 401 for malformed, missing, expired, and wrong-audience credentials and
 403 for an insufficient-scope credential, proving that prior identity and
 authorization are never inherited. Its reviewed committed pin and immutable-
-candidate/JDK-25 proof remain a required fail-closed 3.6.0 downstream release
+candidate/JDK-25 proof remain a required fail-closed 4.0.0 downstream release
 gate.
 
 At the V21 boundary, the focused simulator/API gate passed 46/0/0/0 and the
@@ -1703,18 +1703,18 @@ Final-tag Ajv validation of the
 expanded 48-message corpus was not rerun locally and remains owned by candidate
 conformance. These are local snapshot checks, not immutable-candidate evidence.
 
-The preceding four-row HTTP-contract reconciliation closed modern-only readable-
-`initialize` rejection diagnostics, unsupported classified-notification
-handling, universal MCP HTTP `no-store`, and exact request/notification
-validation precedence. Its separate 21-response complete-HTTP corpus is bound
+The preceding four-row HTTP-contract reconciliation closed readable
+`initialize` and validated-unsupported-selector rejection diagnostics,
+unsupported classified-notification handling, universal MCP HTTP `no-store`,
+and exact request/notification validation precedence. Its separate 22-response
+complete-HTTP corpus is bound
 by `conformance/golden-http-contract/precedence-no-store/manifest.sha256` at
 SHA-256
-`ec1bd3f13c70bec100b18e774bfbdf2d9e574c1d8df99f2acc4b36e85f51702c`.
-Four contract tests comprise three real-listener goldens and one exhaustive
-response-authority inventory; four diagnostic tests cover the positive post-
-JSON and negative pre-JSON/unreadable-method boundary. They pass 8/8, and the
-adjacent contract group
-passes 108/108, on local Corretto 17.0.20.1 and local Corretto 21.0.11.
+`273e83945e5bae949c4a2eee85993883abb1350ef7234b98548d1134d0f7af02`.
+Five contract tests comprise three real-listener goldens, one exhaustive response-authority inventory, and one six-document manifest-digest parity gate;
+four diagnostic tests cover the positive post-JSON and negative pre-JSON/
+unreadable-method boundary. Those two classes pass 9/9 in the current focused
+execution.
 
 Full clean test passes 1,693/0/0/72 and 1,708/0/0/4, respectively, over 462
 main and 203 test sources; the JDK 21 total includes 15 extra virtual-thread
@@ -1722,9 +1722,9 @@ containment cases. A subsequent local Corretto 17 package validation built the
 main, sources, and Javadoc JARs after allowing configured external Javadoc
 links. This corpus is separate from the unchanged official 48-message/11-test
 and auth/CORS three-head/two-test corpora. The narrow internal change preserves
-readable `initialize` only after strict JSON and implements no handshake or
-session. Public API and freeze inventories remain unchanged. At that
-checkpoint, the matrix remained deliberately `FAILED`: 104 rows were
+readable `initialize` after strict JSON and adds a bounded diagnostic only after unsupported-selector form and membership validation; it implements no
+handshake or session. Public API and freeze inventories remain unchanged. At
+that checkpoint, the matrix remained deliberately `FAILED`: 104 rows were
 `CORE_COMPLETE`, 116 were `RELEASE_GATED`, four were `APPLICATION_OWNED`, 18
 were `NOT_APPLICABLE`, and 20 remained `UNRESOLVED`. These are local snapshot results, not immutable-candidate
 evidence or results from the release-pinned Corretto 21.0.12.9.1 toolchain.
@@ -1735,10 +1735,10 @@ production corpora. The 25-fixture core result-envelope manifest at
 `d2eaa03c24927d45ef350b187624f50448d78a6531a26dedbbe07ee327b91b14`.
 Four live tests and a checksum/source-authority inventory exhaust Soklet 3.6's
 core `complete` and `input_required` JSON/SSE envelope authorities; extension
-result types remain separately bounded by `MCP-BASE-006`. The nine-fixture
+result types remain separately bounded by `MCP-BASE-006`. The twelve-fixture
 canonical complete-HTTP error manifest at
 `conformance/golden-error-mapping/live/manifest.sha256` has SHA-256
-`90fae4482e7d8560f421aa4edbc8a6459d72f42880b5351298d5b74ff3f8b780`.
+`bfaecadaba283df430026504b94f71640c0c56a830159100f9be9179a7ce4e2d`.
 Two live-listener tests cover the eight frozen ordinary mapping families,
 including both required and conditional `-32021`; readable-`initialize` and
 path-specific error evidence remain explicit supplements. Five deterministic

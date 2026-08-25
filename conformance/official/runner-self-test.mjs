@@ -152,21 +152,21 @@ function publicFixtureClasspathRequiresExactCandidateBoundary() {
   const fixtureMainClass = resolve(
     fixtureClasses, 'com/soklet/conformance/McpConformanceFixture.class',
   );
-  const candidateJar = resolve(scratch, 'target/soklet-3.6.0-SNAPSHOT.jar');
+  const candidateJar = resolve(scratch, 'target/soklet-4.0.0-SNAPSHOT.jar');
   try {
     mkdirSync(resolve(fixtureMainClass, '..'), { recursive: true });
     writeFileSync(fixtureMainClass, 'fixture');
     writeFileSync(candidateJar, 'candidate');
     const classpath = [
       'target/conformance/public-fixture/classes',
-      'target/soklet-3.6.0-SNAPSHOT.jar',
+      'target/soklet-4.0.0-SNAPSHOT.jar',
     ].join(delimiter);
 
     assert.deepEqual(verifyPublicFixtureClasspath(classpath, scratch), {
       fixtureClasses,
       candidateJar,
     });
-		const releaseCandidateJar = resolve(scratch, 'release/soklet-3.6.0.jar');
+		const releaseCandidateJar = resolve(scratch, 'release/soklet-4.0.0.jar');
 		mkdirSync(resolve(releaseCandidateJar, '..'), { recursive: true });
 		writeFileSync(releaseCandidateJar, 'release-candidate');
 		const releaseClasspath = [fixtureClasses, releaseCandidateJar].join(delimiter);
@@ -179,7 +179,7 @@ function publicFixtureClasspathRequiresExactCandidateBoundary() {
 			/validated release-candidate JAR/,
 		);
     assert.throws(() => verifyPublicFixtureClasspath(
-      ['target/soklet-3.6.0-SNAPSHOT.jar',
+      ['target/soklet-4.0.0-SNAPSHOT.jar',
         'target/conformance/public-fixture/classes'].join(delimiter),
       scratch,
     ), /classpath must be exactly/);
@@ -207,10 +207,10 @@ function releaseCandidateProvenanceIsFailClosed() {
 		protocolVersion: '2026-07-28',
 		officialConformanceSuite: { commit: suiteCommit },
 	};
-	const pom = resolve(scratch, 'soklet-3.6.0.pom');
-	const mainJar = resolve(scratch, 'soklet-3.6.0.jar');
-	const sourcesJar = resolve(scratch, 'soklet-3.6.0-sources.jar');
-	const javadocJar = resolve(scratch, 'soklet-3.6.0-javadoc.jar');
+	const pom = resolve(scratch, 'soklet-4.0.0.pom');
+	const mainJar = resolve(scratch, 'soklet-4.0.0.jar');
+	const sourcesJar = resolve(scratch, 'soklet-4.0.0-sources.jar');
+	const javadocJar = resolve(scratch, 'soklet-4.0.0-javadoc.jar');
 	const manifestPath = resolve(scratch, 'release-candidate.json');
 	const pomBytes = Buffer.from([
 		'<?xml version="1.0" encoding="UTF-8"?>',
@@ -218,7 +218,7 @@ function releaseCandidateProvenanceIsFailClosed() {
 		'  <modelVersion>4.0.0</modelVersion>',
 		'  <groupId>com.soklet</groupId>',
 		'  <artifactId>soklet</artifactId>',
-		'  <version>3.6.0</version>',
+		'  <version>4.0.0</version>',
 		'  <packaging>jar</packaging>',
 		'</project>',
 		'',
@@ -237,7 +237,7 @@ function releaseCandidateProvenanceIsFailClosed() {
 			coordinates: {
 				groupId: 'com.soklet',
 				artifactId: 'soklet',
-				version: '3.6.0',
+				version: '4.0.0',
 			},
 			artifacts: {
 				pom: { path: pom, sha256: sha256(pomBytes) },

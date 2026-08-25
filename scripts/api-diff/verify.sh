@@ -44,4 +44,4 @@ GENERATED_SET="$PROJECT_ROOT/target/japicmp/mcp-api-diff.incompatibilities.jsonl
 "$NODE_EXECUTABLE" "$SCRIPT_DIR/japicmp-symbols.mjs" --verify \
   "$RAW_REPORT" "$REVIEWED_SET"
 
-echo "Verified Soklet 3.6 public API against the reviewed 3.5.1 incompatibility set"
+echo "Verified Soklet 4.0 public API against the reviewed 3.5.1 incompatibility set"

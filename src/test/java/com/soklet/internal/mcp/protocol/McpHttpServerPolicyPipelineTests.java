@@ -464,7 +464,7 @@ public class McpHttpServerPolicyPipelineTests {
 			McpApplicationExecutionConfiguration executionConfiguration) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"policy-pipeline-test", "3.6.0-SNAPSHOT"))
+						"policy-pipeline-test", "4.0.0-SNAPSHOT"))
 				.build();
 		McpApplicationRequestRouter router = McpApplicationRequestRouter.fromHandlers(
 				Map.of(APPLICATION_METHOD, handler));

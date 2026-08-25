@@ -87,7 +87,7 @@ public class McpTypedToolPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"bounded-public-runtime-test", "3.6.0-SNAPSHOT").build())
+						"bounded-public-runtime-test", "4.0.0-SNAPSHOT").build())
 				.tool(tool)
 				.build();
 		McpServer server = McpServer.withPort(0)
@@ -196,7 +196,7 @@ public class McpTypedToolPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"typed-tool-public-runtime-test", "3.6.0-SNAPSHOT").build())
+						"typed-tool-public-runtime-test", "4.0.0-SNAPSHOT").build())
 				.tool(tool)
 				.build();
 		McpRateLimiter requestRateLimiter = context -> {
@@ -358,7 +358,7 @@ public class McpTypedToolPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"propagation-public-runtime-test", "3.6.0-SNAPSHOT").build())
+						"propagation-public-runtime-test", "4.0.0-SNAPSHOT").build())
 				.tool(tool)
 				.build();
 		McpServer server = McpServer.withPort(0)

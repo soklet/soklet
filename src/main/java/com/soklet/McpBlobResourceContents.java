@@ -25,6 +25,7 @@ import java.net.URI;
 import java.util.Arrays;
 import java.util.Optional;
 
+import static com.soklet.internal.mcp.protocol.McpApplicationMetadata.requireApplicationMetadata;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -61,7 +62,7 @@ public final class McpBlobResourceContents implements McpResourceContents {
 		this.uri = builder.uri;
 		this.data = Arrays.copyOf(builder.data, builder.data.length);
 		this.mimeType = builder.mimeType;
-		this.metadata = builder.metadata;
+		this.metadata = requireApplicationMetadata(builder.metadata);
 	}
 
 	/**

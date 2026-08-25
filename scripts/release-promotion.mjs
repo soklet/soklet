@@ -22,6 +22,10 @@ import {
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
+import {
+  verifyReleaseHarnessConfiguration,
+  verifyReleaseHarnessManifestParity,
+} from './import-release-harness-evidence.mjs';
 
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
@@ -30,6 +34,10 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const TOKEN_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 const DIRECTORY_EVIDENCE_ALGORITHM =
   "SHA-256 of bytewise-path-sorted '<file-sha256>  <relative-path>\\n' rows";
+export const VERSION_TRANSITION_FINAL_PASS_LINE =
+  'version-transition inventory PASS stage=final occurrences=365 files=132 '
+  + 'FIXTURE_PRESERVE=6 HISTORICAL_PRESERVE=32 REMOVE_BY_MCP_R4=3 '
+  + 'RETARGET_NOW=308 UNRELATED_VERSION_PRESERVE=16';
 
 const EXPECTED_GATE_IDS = Object.freeze([
   'candidate-build',
@@ -117,8 +125,8 @@ const GATE_ARTIFACT_CONTRACTS = Object.freeze({
   'isolated-install': Object.freeze({
     toolchain: 'java',
     roles: Object.freeze([
-      evidenceRole('installed-pom', 'FILE', 'application/xml', 'soklet-3.6.0.pom', 'pom'),
-      evidenceRole('installed-main-jar', 'FILE', 'application/java-archive', 'soklet-3.6.0.jar', 'mainJar'),
+      evidenceRole('installed-pom', 'FILE', 'application/xml', 'soklet-4.0.0.pom', 'pom'),
+      evidenceRole('installed-main-jar', 'FILE', 'application/java-archive', 'soklet-4.0.0.jar', 'mainJar'),
       evidenceRole('install-log', 'FILE', 'text/plain', 'isolated-install.log'),
     ]),
   }),
@@ -136,7 +144,7 @@ const GATE_ARTIFACT_CONTRACTS = Object.freeze({
     toolchain: 'java',
     roles: Object.freeze([
       evidenceRole('javadoc-log', 'FILE', 'text/plain', 'candidate-javadocs.log'),
-      evidenceRole('javadoc-jar', 'FILE', 'application/java-archive', 'soklet-3.6.0-javadoc.jar', 'javadocJar'),
+      evidenceRole('javadoc-jar', 'FILE', 'application/java-archive', 'soklet-4.0.0-javadoc.jar', 'javadocJar'),
       evidenceRole('apidocs', 'DIRECTORY', 'text/html', 'apidocs'),
       evidenceRole('surefire-reports', 'DIRECTORY', SUREFIRE_MEDIA_TYPE, 'surefire-reports'),
     ]),
@@ -215,7 +223,7 @@ const GATE_ARTIFACT_CONTRACTS = Object.freeze({
     toolchain: 'coreJdk21',
     roles: Object.freeze([
       evidenceRole('scan-summary', 'FILE', 'application/json', 'release-scans.json'),
-      evidenceRole('scan-reports', 'DIRECTORY', 'application/vnd.soklet.scan-reports', 'release-scans'),
+      evidenceRole('scan-reports', 'DIRECTORY', 'application/vnd.soklet.release-scans.v1', 'release-scans'),
     ]),
   }),
   'mcp-benchmarks': Object.freeze({
@@ -301,14 +309,14 @@ const GATE_ARTIFACT_CONTRACTS = Object.freeze({
     toolchain: 'nodePin',
     roles: Object.freeze([
       evidenceRole('interop-log', 'FILE', 'text/plain', 'typescript-interop.log'),
-      evidenceRole('candidate-main-jar', 'FILE', 'application/java-archive', 'soklet-3.6.0.jar', 'mainJar'),
+      evidenceRole('candidate-main-jar', 'FILE', 'application/java-archive', 'soklet-4.0.0.jar', 'mainJar'),
     ]),
   }),
   'go-interop': Object.freeze({
     toolchain: 'go',
     roles: Object.freeze([
       evidenceRole('interop-log', 'FILE', 'text/plain', 'go-interop.log'),
-      evidenceRole('candidate-main-jar', 'FILE', 'application/java-archive', 'soklet-3.6.0.jar', 'mainJar'),
+      evidenceRole('candidate-main-jar', 'FILE', 'application/java-archive', 'soklet-4.0.0.jar', 'mainJar'),
     ]),
   }),
 });
@@ -406,7 +414,7 @@ const GATE_RECEIPT_IDENTITIES = Object.freeze({
   'mcp-benchmarks': receiptIdentity(
     'mvn -B -ntp -f benchmarks/pom.xml clean verify; node scripts/verify-release-benchmarks.mjs',
     'release',
-    'JMH_JSON_351_COMPARISON_AND_SCHEMA_360_BASELINE_RECORDED_WITH_SIGNOFF',
+    'JMH_JSON_351_COMPARISON_AND_SCHEMA_400_BASELINE_RECORDED_WITH_SIGNOFF',
   ),
   'matrix-closure': receiptIdentity(
     'node scripts/verify-release-matrix-closure.mjs',
@@ -429,22 +437,22 @@ const GATE_RECEIPT_IDENTITIES = Object.freeze({
     'COMPILE_START_RESPOND_TERMINATE_AND_RELEASE_PORT',
   ),
   'soklet-servlet-javax': receiptIdentity(
-    'mvn -B -ntp clean verify; mvn -B -ntp -Dsoklet.version=3.6.0 clean verify',
+    'mvn -B -ntp clean verify; mvn -B -ntp -Dsoklet.version=4.0.0 clean verify',
     'default-and-candidate',
     'DEFAULT_AND_CANDIDATE_LEGS_PASS_WITH_EXACT_ARTIFACTS',
   ),
   'soklet-servlet-jakarta': receiptIdentity(
-    'mvn -B -ntp clean verify; mvn -B -ntp -Dsoklet.version=3.6.0 clean verify',
+    'mvn -B -ntp clean verify; mvn -B -ntp -Dsoklet.version=4.0.0 clean verify',
     'default-and-candidate',
     'DEFAULT_AND_CANDIDATE_LEGS_PASS_WITH_EXACT_ARTIFACTS',
   ),
   'toystore-app': receiptIdentity(
-    'mvn -B -ntp -Dsoklet.version=3.6.0 clean verify',
+    'mvn -B -ntp -Dsoklet.version=4.0.0 clean verify',
     'candidate',
     'CANDIDATE_LEG_PASSES_WITH_EXACT_ARTIFACT',
   ),
   'soklet-otel': receiptIdentity(
-    'mvn -B -ntp -Dsoklet.version=3.6.0 clean verify',
+    'mvn -B -ntp -Dsoklet.version=4.0.0 clean verify',
     'candidate',
     'CANDIDATE_LEG_PASSES_WITH_EXACT_ARTIFACT',
   ),
@@ -476,15 +484,48 @@ export const GATE_EVIDENCE_CONTRACTS = Object.freeze(Object.fromEntries(
   ]),
 ));
 
+const RELEASE_HARNESS_GATE_IDS = Object.freeze([
+  'fuzz-nightly-history',
+  'mcp-benchmarks',
+  'operational-history',
+  'release-scans',
+  'soak-nightly-history',
+]);
+
+export function verifyPromotionHarnessRegistryParity(manifestPath) {
+  const configuration = verifyReleaseHarnessConfiguration();
+  if (manifestPath !== undefined)
+    verifyReleaseHarnessManifestParity(configuration, realpathSync(manifestPath));
+  for (const gateId of RELEASE_HARNESS_GATE_IDS) {
+    const registered = configuration.contracts.get(gateId);
+    const promotion = GATE_EVIDENCE_CONTRACTS[gateId];
+    if (promotion.contractId !== registered.evidenceContract
+        || promotion.command !== registered.importerMode.verifierCommand
+        || promotion.roles.length !== registered.roles.length) {
+      fail(`Promotion contract for ${gateId} drifted from the release-harness registry`);
+    }
+    for (const [index, role] of registered.roles.entries()) {
+      const consumed = promotion.roles[index];
+      if (consumed.role !== role.name
+          || consumed.type !== role.kind.toUpperCase()
+          || consumed.mediaType !== role.mediaType
+          || consumed.fileName !== role.path) {
+        fail(`Promotion role ${gateId}[${index}] drifted from the release-harness registry`);
+      }
+    }
+  }
+  return configuration.registrySha256;
+}
+
 const COORDINATES = Object.freeze({
   artifactId: 'soklet',
   groupId: 'com.soklet',
   packaging: 'jar',
-  version: '3.6.0',
+  version: '4.0.0',
 });
 
-const MAVEN_DIRECTORY = 'com/soklet/soklet/3.6.0';
-const BUNDLE_NAME = 'soklet-3.6.0-central-bundle.zip';
+const MAVEN_DIRECTORY = 'com/soklet/soklet/4.0.0';
+const BUNDLE_NAME = 'soklet-4.0.0-central-bundle.zip';
 const PREPARATION_NAME = 'promotion-preparation.json';
 const PUBLISHED_EVIDENCE_NAME = 'central-published-evidence.json';
 const PROMOTION_HELPER_PATH = fileURLToPath(import.meta.url);
@@ -495,31 +536,31 @@ export const CENTRAL_UPLOAD_URL =
 export const CENTRAL_STATUS_BASE_URL =
   'https://central.sonatype.com/api/v1/publisher/status?id=';
 export const CENTRAL_REPOSITORY_BASE_URL =
-  'https://repo1.maven.org/maven2/com/soklet/soklet/3.6.0/';
+  'https://repo1.maven.org/maven2/com/soklet/soklet/4.0.0/';
 
 const ARTIFACTS = Object.freeze({
   pom: Object.freeze({
     option: 'pom',
     evidenceName: 'pom.xml',
-    bundleName: 'soklet-3.6.0.pom',
+    bundleName: 'soklet-4.0.0.pom',
     kind: 'pom',
   }),
   mainJar: Object.freeze({
     option: 'main-jar',
-    evidenceName: 'soklet-3.6.0.jar',
-    bundleName: 'soklet-3.6.0.jar',
+    evidenceName: 'soklet-4.0.0.jar',
+    bundleName: 'soklet-4.0.0.jar',
     kind: 'jar',
   }),
   sourcesJar: Object.freeze({
     option: 'sources-jar',
-    evidenceName: 'soklet-3.6.0-sources.jar',
-    bundleName: 'soklet-3.6.0-sources.jar',
+    evidenceName: 'soklet-4.0.0-sources.jar',
+    bundleName: 'soklet-4.0.0-sources.jar',
     kind: 'jar',
   }),
   javadocJar: Object.freeze({
     option: 'javadoc-jar',
-    evidenceName: 'soklet-3.6.0-javadoc.jar',
-    bundleName: 'soklet-3.6.0-javadoc.jar',
+    evidenceName: 'soklet-4.0.0-javadoc.jar',
+    bundleName: 'soklet-4.0.0-javadoc.jar',
     kind: 'jar',
   }),
 });
@@ -736,7 +777,7 @@ function compareAscii(left, right) {
 function requireCoordinates(value, description) {
   requireExactKeys(value, ['artifactId', 'groupId', 'packaging', 'version'], description);
   if (JSON.stringify(value) !== JSON.stringify(COORDINATES))
-    fail(`${description} must be exactly com.soklet:soklet:3.6.0 with JAR packaging`);
+    fail(`${description} must be exactly com.soklet:soklet:4.0.0 with JAR packaging`);
 }
 
 function requireEvidenceItem(item, expectedFileName, description) {
@@ -1121,6 +1162,36 @@ export function validateCompletedReleaseEvidence(value, candidateCommit) {
   return value;
 }
 
+function verifyRetainedVersionTransitionFinalLog(evidenceFile, evidence) {
+  const candidateBuild = evidence.gates.find(({ gate }) => gate.id === 'candidate-build');
+  const buildLog = candidateBuild?.evidence.find(({ role }) => role === 'build-log');
+  if (buildLog?.artifact.type !== 'FILE'
+      || buildLog.artifact.fileName !== 'candidate-build.log') {
+    fail('Candidate-build evidence does not identify its retained build log');
+  }
+
+  const retainedLog = readRegularFile(
+    join(dirname(evidenceFile.absolutePath), buildLog.artifact.fileName),
+    'retained candidate-build log',
+  );
+  if (retainedLog.bytes.length !== buildLog.artifact.bytes
+      || sha256(retainedLog.bytes) !== buildLog.artifact.sha256) {
+    fail('Retained candidate-build log does not match release-validation evidence');
+  }
+
+  const text = retainedLog.bytes.toString('utf8');
+  if (Buffer.from(text, 'utf8').compare(retainedLog.bytes) !== 0)
+    fail('Retained candidate-build log must be UTF-8');
+  const passLines = text.split(/\r\n|\n|\r/)
+    .filter((line) => line.startsWith('version-transition inventory PASS'));
+  if (passLines.length !== 1 || passLines[0] !== VERSION_TRANSITION_FINAL_PASS_LINE) {
+    fail(
+      'Retained candidate-build log must contain exactly one canonical '
+        + 'version-transition final-stage PASS line',
+    );
+  }
+}
+
 function validateReviewedReleaseManifest(value, manifestSha256, evidence) {
   requireExactKeys(
     value,
@@ -1180,9 +1251,9 @@ function verifyCandidatePom(bytes) {
   if (Buffer.from(text, 'utf8').compare(bytes) !== 0)
     fail('Candidate POM must be UTF-8');
 
-  const coordinates = /<project\b[^>]*>\s*<modelVersion>\s*4\.0\.0\s*<\/modelVersion>\s*<groupId>\s*com\.soklet\s*<\/groupId>\s*<artifactId>\s*soklet\s*<\/artifactId>\s*<version>\s*3\.6\.0\s*<\/version>\s*<packaging>\s*jar\s*<\/packaging>/s;
+  const coordinates = /<project\b[^>]*>\s*<modelVersion>\s*4\.0\.0\s*<\/modelVersion>\s*<groupId>\s*com\.soklet\s*<\/groupId>\s*<artifactId>\s*soklet\s*<\/artifactId>\s*<version>\s*4\.0\.0\s*<\/version>\s*<packaging>\s*jar\s*<\/packaging>/s;
   if (!coordinates.test(text))
-    fail('Candidate POM must declare direct com.soklet:soklet:3.6.0 JAR coordinates');
+    fail('Candidate POM must declare direct com.soklet:soklet:4.0.0 JAR coordinates');
 }
 
 function verifyJar(bytes, description) {
@@ -1579,6 +1650,7 @@ export function preparePromotion({
   gpgPath,
   outputDirectory,
 }) {
+  verifyPromotionHarnessRegistryParity();
   const fingerprint = signingFingerprint.toUpperCase();
   if (!FINGERPRINT_PATTERN.test(fingerprint))
     fail('Signing fingerprint must be a full 40- or 64-character hexadecimal fingerprint');
@@ -1590,6 +1662,7 @@ export function preparePromotion({
     'canonical release-validation evidence',
   );
   const evidence = validateCompletedReleaseEvidence(evidenceFile.value, candidateCommit);
+  verifyRetainedVersionTransitionFinalLog(evidenceFile, evidence);
   const manifestFile = parseCanonicalJson(
     releaseManifestPath,
     releaseManifestSha256,

@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import static com.soklet.internal.mcp.protocol.McpApplicationMetadata.requireApplicationMetadata;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -78,7 +79,7 @@ public final class McpResourceLink implements McpContentBlock {
 		this.icons = List.copyOf(builder.icons);
 		this.annotations = builder.annotations;
 		this.size = builder.size;
-		this.metadata = builder.metadata;
+		this.metadata = requireApplicationMetadata(builder.metadata);
 	}
 
 	/** @return absolute normalized linked-resource URI in ASCII wire form */

@@ -29,10 +29,7 @@
 	     methods SpotBugs does not model precisely. Keep the category live everywhere else. -->
 	<Match>
 		<Class name="com.soklet.DefaultHttpServer"/>
-		<Or>
-			<Method name="start"/>
-			<Method name="stop"/>
-		</Or>
+		<Method name="start"/>
 		<Bug pattern="UL_UNRELEASED_LOCK_EXCEPTION_PATH"/>
 	</Match>
 	<Match>
@@ -41,7 +38,6 @@
 			<Method name="isStarted"/>
 			<Method name="isStopping"/>
 			<Method name="start"/>
-			<Method name="stop"/>
 		</Or>
 		<Bug pattern="UL_UNRELEASED_LOCK_EXCEPTION_PATH"/>
 	</Match>

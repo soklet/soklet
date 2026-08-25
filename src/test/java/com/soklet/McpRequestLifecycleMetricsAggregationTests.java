@@ -639,7 +639,7 @@ public class McpRequestLifecycleMetricsAggregationTests {
 				DefaultMetricsCollector.defaultInstance();
 		McpEndpoint endpoint = McpEndpoint.withPath(ENDPOINT_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"request-lifecycle-metrics-test", "3.6.0-SNAPSHOT")
+						"request-lifecycle-metrics-test", "4.0.0-SNAPSHOT")
 						.build())
 				.build();
 		McpServer server = McpServer.withPort(0)

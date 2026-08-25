@@ -353,6 +353,6 @@ public class McpServerCapabilityRegistryTests {
 
 	private static McpNormalizedEndpoint.Builder endpointBuilder() {
 		return McpNormalizedEndpoint.withServerInformation(
-				McpImplementationMetadata.withNameAndVersion("test-server", "3.6.0"));
+				McpImplementationMetadata.withNameAndVersion("test-server", "4.0.0"));
 	}
 }

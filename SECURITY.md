@@ -34,32 +34,23 @@ authorizes it; omitting an authorizer is reject-all for present origins. Do not
 treat browser CORS response headers as a substitute for authentication or
 network isolation.
 
-Validation precedence is a security boundary. Transport limits and endpoint
-routing run first, followed by Host, Origin/CORS, POST/media negotiation,
-strict JSON, and JSON-RPC envelope classification. Requests then traverse
-mirrored headers, required metadata/extensions, version, cheap structure and
-required capabilities before admission, request/tool limiting, bounded
-dispatch, interception, full input validation, handler execution, output
-processing in the exact order of preliminary result-shape recognition,
-applicable sanitization, and remaining result/output-schema validation, and
-then writing. Notifications instead validate present
-metadata, version, admission, and the optional request limiter after the common
-transport prefix, then terminate with an empty response; identifiable
+Validation precedence is a security boundary. Transport limits and endpoint routing run first, followed by Host, Origin/CORS, POST/media negotiation,
+strict JSON, and JSON-RPC envelope classification.
+Requests then traverse mirrored-header form and method/name agreement; a read-only nested body-version probe and exact registry profile selection; then selected-profile required
+metadata/extensions, universal-spine validation, and post-map header/body version agreement. Cheap structure and required capabilities precede admission, request/tool limiting,
+bounded dispatch, interception, full input validation, handler execution, output processing in the exact order of preliminary result-shape recognition, applicable sanitization,
+and remaining result/output-schema validation, and then writing. Notifications instead validate selector cardinality/form and registry membership before any selected-profile
+present metadata, admission, and the optional request limiter after the common transport prefix, then terminate with an empty response; identifiable
 `notifications/cancelled` skips parameter/present-metadata validation only.
-Compound failures never move application callbacks ahead of their documented
-stage.
+Compound failures never move application callbacks ahead of their documented stage.
 
-A readable post-JSON `initialize` method receives a modern-only rejection
-diagnostic whose supported-version list names only `2026-07-28`; this does not
-implement initialization or a session. Pre-JSON failures, unparseable JSON,
-unreadable methods, and other method names receive no such diagnostic, and
-rejected header/metadata values
-or secret canaries are not reflected beyond the defined request-ID and
-unsupported-version `requested` fields. Every MCP HTTP response family—
-including early parser errors, fixed empty/JSON/preflight responses, and SSE—
-carries exactly one
-`Cache-Control: no-store`. An application-authored attempt to replace that
-header fails closed.
+A readable post-JSON `initialize` method receives a modern-only rejection diagnostic whose supported-version list names only `2026-07-28`; a selector
+that has passed cardinality/plain-string validation and is absent from the immutable production registry is the only additive trigger for other methods.
+This does not implement initialization or a session. Pre-JSON failures, unparseable JSON, unreadable methods,
+and row-1 failures for other methods receive no selector-derived diagnostic.
+Rejected header/metadata values or secret canaries are not reflected beyond the defined request-ID and unsupported-version `requested` fields.
+Every MCP HTTP response family—including early parser errors, fixed empty/JSON/preflight responses, and SSE—carries exactly one `Cache-Control: no-store`.
+An application-authored attempt to replace that header fails closed.
 
 Every MCP server requires an explicit `McpAdmissionController`. Production
 applications should authenticate and authorize there and return stable,
@@ -76,6 +67,15 @@ Client information, client capabilities, request `_meta`, and advertised
 server information are self-reported or informational metadata. Never use
 them as authenticated identity or as an authorization or rate-limit partition
 key.
+
+Resource-subscription publishers emit coarse identity-free broadcasts.
+Soklet matches those events against each accepted URI filter, but the stored
+authorization partition only scopes registration, quota accounting, and stream isolation; it is not an event target or semantic URI-authorization check.
+Admission may inspect the original bounded request body, while Soklet exposes no parsed subscription-filter accessor.
+Authorize confidential or capability-bearing subscription URIs during admission, and do not treat an unguessable URI as a secrecy boundary.
+A rejected admission activates no subscription even though the generation's shared publisher listener may already exist.
+Accept-all anonymous callers on one endpoint share one empty authorization/quota partition,
+so one caller can exhaust their common bucket.
 
 Soklet validates response-header safety and transports application-owned
 authentication decisions and challenges, including Bearer challenges with an
@@ -1352,7 +1352,7 @@ TypeScript and Go harnesses are `READY` and green against the local snapshot.
 The six reviewed downstream change sets remain uncommitted local work. They are
 therefore unpublished and unpinned, so the manifest continues to carry its old
 public commits. All four servlet legs pass 158/158 locally: the default 3.1.1 and
-3.6.0-SNAPSHOT legs for both javax and Jakarta. ToyStore's completed local
+4.0.0-SNAPSHOT legs for both javax and Jakarta. ToyStore's completed local
 migration passes 14/14, including six MCP tests. Its per-request credential
 proof accepts a valid request, then returns 401 for malformed, missing, expired, and wrong-audience
 credentials and 403 for an insufficient-scope credential; no prior request
@@ -1440,7 +1440,7 @@ Corretto 21.0.12.9.1 toolchain (`java 21.0.12.1`) passes the exact full
 test sources. The affected method passes 1/1 focused and 20/20 repeated runs;
 `McpSubscriptionPublicRuntimeTests` plus
 `McpSubscriptionRuntimeBoundaryTests` pass 26/26. The test-only correction
-sets the per-principal subscription cap to one and holds the recovery
+sets the per-authorization-partition subscription cap to one and holds the recovery
 subscription open while the original disconnect observer's exact-once count
 is asserted, preventing that recovery request's legitimate finish from
 entering the first request's observation phase. No production behavior,
@@ -1512,22 +1512,22 @@ conformance. These are local snapshot checks, not immutable-candidate evidence.
 The preceding four-row HTTP-contract reconciliation closed the exact validation-
 precedence, diagnostic-boundary, unsupported-notification, and universal
 `no-store` security contracts. The separate
-`conformance/golden-http-contract/precedence-no-store/manifest.sha256` binds 21
+`conformance/golden-http-contract/precedence-no-store/manifest.sha256` binds 22
 canonical complete responses at SHA-256
-`ec1bd3f13c70bec100b18e774bfbdf2d9e574c1d8df99f2acc4b36e85f51702c`.
-Four contract tests comprise three real-listener golden tests and one exhaustive
-response-authority inventory; four initialize-diagnostic tests include 23
-readable-`initialize` rejection cases and the negative boundary. The new suites
-pass 8/8 and the adjacent contract group passes 108/108 on local Corretto
-17.0.20.1 and local Corretto 21.0.11.
+`273e83945e5bae949c4a2eee85993883abb1350ef7234b98548d1134d0f7af02`.
+Five contract tests comprise three real-listener golden tests, one exhaustive response-authority inventory, and one six-document manifest-digest parity gate;
+four initialize-diagnostic tests include 23 readable-`initialize` rejection
+cases and the negative boundary. Those two classes pass 9/9 in the current
+focused execution.
 
 Full clean test passes 1,693/0/0/72 on Corretto 17 and 1,708/0/0/4 on Corretto
 21 over 462 main and 203 test sources. A subsequent local Corretto 17 package
 validation built all three JARs after allowing configured external Javadoc
 links. This corpus is separate from the unchanged official 48-message/11-test
 JSON corpus and three-head/two-test authorization/CORS corpus. The narrow
-internal change preserves readable `initialize` only after strict JSON to
-attach the modern diagnostic; it implements no initialization or session.
+internal change preserves readable `initialize` after strict JSON and adds a
+bounded diagnostic only after unsupported-selector form and membership
+validation; it implements no initialization or session.
 Public API and freeze inventories are unchanged. At that checkpoint, the
 matrix remained `FAILED`: 104 rows were `CORE_COMPLETE`, 116 were
 `RELEASE_GATED`, four were `APPLICATION_OWNED`, 18 were `NOT_APPLICABLE`, and
@@ -1541,9 +1541,9 @@ SHA-256
 `d2eaa03c24927d45ef350b187624f50448d78a6531a26dedbbe07ee327b91b14`;
 its four live tests and source/authority inventory exhaust Soklet 3.6's core
 `complete` and `input_required` envelope authorities without claiming
-extension result types. The nine-fixture canonical complete-HTTP error
+extension result types. The twelve-fixture canonical complete-HTTP error
 manifest is SHA-256
-`90fae4482e7d8560f421aa4edbc8a6459d72f42880b5351298d5b74ff3f8b780`;
+`bfaecadaba283df430026504b94f71640c0c56a830159100f9be9179a7ce4e2d`;
 it covers the eight frozen ordinary mapping families, including separate
 required-preflight and conditional-result `-32021` paths, exact `no-store`,
 Retry-After exclusivity, original string/integer IDs across the corpus, and

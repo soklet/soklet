@@ -122,7 +122,7 @@ try {
 
   const candidateJar = resolve(
     root,
-    'repository/com/soklet/soklet/3.6.0/soklet-3.6.0.jar',
+    'repository/com/soklet/soklet/4.0.0/soklet-4.0.0.jar',
   );
   const oldJar = resolve(
     root,

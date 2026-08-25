@@ -116,7 +116,7 @@ public class McpQueuedExecutionWinnerElectionTests {
 			clock.awaitBackgroundCycle();
 			McpApplicationExecution application = application(runtime);
 			application.dispatch(transportRequest(), request("active-owner"),
-					admissionIdentity(), invocation -> {
+					Mcp20260728ProtocolProfile.INSTANCE, admissionIdentity(), invocation -> {
 						activeInvocations.incrementAndGet();
 						return McpWireResult.complete(McpJsonObject.empty());
 					}, ACTIVE_DEADLINE_NANOS, response -> {
@@ -248,7 +248,7 @@ public class McpQueuedExecutionWinnerElectionTests {
 			McpApplicationRequestHandler handler) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"queued-winner-election-test", "3.6.0-SNAPSHOT"))
+						"queued-winner-election-test", "4.0.0-SNAPSHOT"))
 				.build();
 		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
 				CorsAuthorizer.rejectAllInstance(),
@@ -312,7 +312,7 @@ public class McpQueuedExecutionWinnerElectionTests {
 	private static McpEffectiveAdmissionIdentity admissionIdentity() {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"queued-winner-election-test", "3.6.0-SNAPSHOT"))
+						"queued-winner-election-test", "4.0.0-SNAPSHOT"))
 				.build();
 		return McpEffectiveAdmissionIdentity.resolve(endpoint, "/mcp",
 				McpAdmissionIdentity.anonymousInstance());
@@ -416,7 +416,7 @@ public class McpQueuedExecutionWinnerElectionTests {
 			this.execution.start();
 			this.clock.awaitBackgroundCycle();
 			this.execution.dispatch(transportRequest(), request("active-race"),
-					admissionIdentity(), invocation -> {
+					Mcp20260728ProtocolProfile.INSTANCE, admissionIdentity(), invocation -> {
 						this.activeInvocations.incrementAndGet();
 						return McpWireResult.complete(McpJsonObject.empty());
 					}, ACTIVE_DEADLINE_NANOS, response -> {
@@ -425,7 +425,8 @@ public class McpQueuedExecutionWinnerElectionTests {
 						return true;
 					}, this.activeCleanups::incrementAndGet);
 			this.execution.dispatch(this.queuedTransportRequest,
-					this.queuedRequest, admissionIdentity(), invocation -> {
+					this.queuedRequest, Mcp20260728ProtocolProfile.INSTANCE,
+					admissionIdentity(), invocation -> {
 						this.queuedInvocations.incrementAndGet();
 						return McpWireResult.complete(McpJsonObject.empty());
 					}, QUEUED_DEADLINE_NANOS, response -> {

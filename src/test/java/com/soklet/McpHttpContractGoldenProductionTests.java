@@ -71,6 +71,17 @@ public class McpHttpContractGoldenProductionTests {
 			"conformance", "golden-http-contract", "precedence-no-store");
 	private static final Path PROTOCOL_SOURCE_ROOT = Path.of(
 			"src", "main", "java", "com", "soklet", "internal", "mcp", "protocol");
+	private static final String SUPERSEDED_ERROR_MAPPING_MANIFEST_DIGEST =
+			"90fae4482e7d8560f421aa4edbc8a6459d72f42880b5351298d5b74ff3f8b780";
+	private static final String SUPERSEDED_HTTP_CONTRACT_MANIFEST_DIGEST =
+			"ec1bd3f13c70bec100b18e774bfbdf2d9e574c1d8df99f2acc4b36e85f51702c";
+	private static final List<Path> CANDIDATE_DOCUMENTATION = List.of(
+			Path.of("MCP.md"),
+			Path.of("README.md"),
+			Path.of("SECURITY.md"),
+			Path.of("api", "mcp", "README.md"),
+			Path.of("conformance", "official", "README.md"),
+			Path.of("release", "README.md"));
 
 	@Test
 	public void requestPipelineFirstFailureWinnersMatchCompleteWireGoldens()
@@ -120,6 +131,13 @@ public class McpHttpContractGoldenProductionTests {
 									"{\"jsonrpc\":\"2.0\",\"id\":\"contract\","
 											+ "\"result\":{}}", baseMediaHeaders()),
 							"invalid-envelope-400.http.hex", List.of()),
+					new RequestCase("unsupported-selector-row1-non-initialize",
+							post("unsupported-selector-row1-non-initialize", MCP_PATH,
+									"{\"jsonrpc\":\"2.0\",\"id\":\"contract\","
+											+ "\"method\":\"tools/call\",\"result\":{}}",
+									toolHeaders(TOOL_NAME, "2099-01-01")),
+							"unsupported-selector-invalid-envelope-non-initialize-400.http.hex",
+							List.of()),
 					new RequestCase("mirrored-header",
 							post("mirrored-header", MCP_PATH,
 									toolRequestWithoutMetadata(TOOL_NAME, "success"),
@@ -128,8 +146,13 @@ public class McpHttpContractGoldenProductionTests {
 					new RequestCase("metadata",
 							post("metadata", MCP_PATH,
 									toolRequestWithoutMetadata(TOOL_NAME, "success"),
-									toolHeaders(TOOL_NAME, "2099-01-01")),
+									toolHeaders(TOOL_NAME, PROTOCOL_VERSION)),
 							"invalid-params-400.http.hex", List.of()),
+					new RequestCase("unsupported-missing-metadata",
+							post("unsupported-missing-metadata", MCP_PATH,
+									toolRequestWithoutMetadata(TOOL_NAME, "success"),
+									toolHeaders(TOOL_NAME, "2099-01-01")),
+							"unsupported-version-400.http.hex", List.of()),
 					new RequestCase("version",
 							post("version", MCP_PATH,
 									toolRequest(TOOL_NAME, "schema-failure",
@@ -415,7 +438,7 @@ public class McpHttpContractGoldenProductionTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"http-contract-golden", "3.6.0-SNAPSHOT").build())
+						"http-contract-golden", "4.0.0-SNAPSHOT").build())
 				.tool(tool)
 				.tool(typedTool)
 				.build();
@@ -623,7 +646,7 @@ public class McpHttpContractGoldenProductionTests {
 		Path manifest = GOLDEN_ROOT.resolve("manifest.sha256");
 		Assertions.assertTrue(Files.isRegularFile(manifest, LinkOption.NOFOLLOW_LINKS));
 		List<String> rows = Files.readAllLines(manifest, StandardCharsets.US_ASCII);
-		Assertions.assertEquals(21, rows.size());
+		Assertions.assertEquals(22, rows.size());
 		List<String> manifested = new ArrayList<>();
 		for (String row : rows) {
 			String[] fields = row.split("  ", -1);
@@ -653,6 +676,29 @@ public class McpHttpContractGoldenProductionTests {
 			expected.sort(String::compareTo);
 			Assertions.assertEquals(expected, actual);
 		}
+	}
+
+	@Test
+	public void candidateDocumentationPinsCurrentGoldenManifestDigests()
+			throws Exception {
+		String errorMappingDigest = sha256(Files.readAllBytes(Path.of(
+				"conformance", "golden-error-mapping", "live", "manifest.sha256")));
+		String httpContractDigest = sha256(Files.readAllBytes(
+				GOLDEN_ROOT.resolve("manifest.sha256")));
+		StringBuilder completeDocumentation = new StringBuilder();
+		for (Path documentation : CANDIDATE_DOCUMENTATION) {
+			String source = Files.readString(documentation, StandardCharsets.UTF_8);
+			completeDocumentation.append(source);
+			Assertions.assertEquals(1, occurrences(source, errorMappingDigest),
+					documentation + " must pin the current error-mapping manifest once.");
+			Assertions.assertEquals(1, occurrences(source, httpContractDigest),
+					documentation + " must pin the current HTTP-contract manifest once.");
+		}
+		String allSource = completeDocumentation.toString();
+		Assertions.assertEquals(0, occurrences(allSource,
+				SUPERSEDED_ERROR_MAPPING_MANIFEST_DIGEST));
+		Assertions.assertEquals(0, occurrences(allSource,
+				SUPERSEDED_HTTP_CONTRACT_MANIFEST_DIGEST));
 	}
 
 	private static String sha256(byte[] bytes) throws Exception {

@@ -79,4 +79,11 @@ while IFS= read -r phase || [ -n "$phase" ]; do
     "$reviewed_signatures"
 done < "$FROZEN_PHASES"
 
+"$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-mcp-metadata-builders-self-test.mjs"
+"$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-mcp-metadata-builders.mjs"
+"$NODE_EXECUTABLE" \
+  "$PROJECT_ROOT/conformance/official/verify-profile-evidence-self-test.mjs"
+"$NODE_EXECUTABLE" \
+  "$PROJECT_ROOT/conformance/official/verify-profile-evidence.mjs"
+
 echo "Verified frozen MCP API phases against reviewed signature snapshots"

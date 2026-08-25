@@ -224,7 +224,7 @@ class McpPromptRegistrationTests {
 	private static McpEndpoint.Builder endpointBuilder() {
 		return McpEndpoint.withPath("/mcp")
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"prompt-tests", "3.6.0-SNAPSHOT").build());
+						"prompt-tests", "4.0.0-SNAPSHOT").build());
 	}
 
 	private static void assertInvalid(McpPromptRegistration registration,

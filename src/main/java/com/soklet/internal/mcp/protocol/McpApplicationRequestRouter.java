@@ -826,6 +826,8 @@ final class McpApplicationInvocation {
 	private final @Nullable McpRequestContext publicRequestContext;
 	private final McpJsonRpcMessage.@NonNull Request request;
 	@NonNull
+	private final McpProtocolProfile protocolProfile;
+	@NonNull
 	private final McpEffectiveAdmissionIdentity admissionIdentity;
 	@NonNull
 	private final Optional<@NonNull McpFrameworkRequestStateContinuation>
@@ -845,11 +847,13 @@ final class McpApplicationInvocation {
 	McpApplicationInvocation(@Nullable Request sokletRequest,
 			@Nullable McpRequestContext publicRequestContext,
 			McpJsonRpcMessage.@NonNull Request request,
+			@NonNull McpProtocolProfile protocolProfile,
 			@NonNull McpEffectiveAdmissionIdentity admissionIdentity,
 			@NonNull McpApplicationCancellation cancellation,
 			@NonNull McpApplicationNotificationWriter notificationWriter,
 			@NonNull McpApplicationHandlerEntryGuard handlerEntryGuard) {
-		this(sokletRequest, publicRequestContext, request, admissionIdentity,
+		this(sokletRequest, publicRequestContext, request, protocolProfile,
+				admissionIdentity,
 				Optional.empty(), cancellation, notificationWriter,
 				handlerEntryGuard, () -> false);
 	}
@@ -857,6 +861,7 @@ final class McpApplicationInvocation {
 	McpApplicationInvocation(@Nullable Request sokletRequest,
 			@Nullable McpRequestContext publicRequestContext,
 			McpJsonRpcMessage.@NonNull Request request,
+			@NonNull McpProtocolProfile protocolProfile,
 			@NonNull McpEffectiveAdmissionIdentity admissionIdentity,
 			@NonNull Optional<@NonNull McpFrameworkRequestStateContinuation>
 					frameworkRequestStateContinuation,
@@ -867,6 +872,7 @@ final class McpApplicationInvocation {
 		this.sokletRequest = sokletRequest;
 		this.publicRequestContext = publicRequestContext;
 		this.request = requireNonNull(request);
+		this.protocolProfile = requireNonNull(protocolProfile);
 		this.admissionIdentity = requireNonNull(admissionIdentity);
 		this.frameworkRequestStateContinuation = requireNonNull(
 				frameworkRequestStateContinuation);
@@ -894,6 +900,12 @@ final class McpApplicationInvocation {
 
 	McpJsonRpcMessage.@NonNull Request request() {
 		return request;
+	}
+
+	/** @return exact profile selected once by common bootstrap */
+	@NonNull
+	McpProtocolProfile protocolProfile() {
+		return protocolProfile;
 	}
 
 	@NonNull
@@ -1180,6 +1192,8 @@ final class McpApplicationExecution {
 	@NonNull
 	private final AtomicBoolean stopped;
 	@NonNull
+	private final AtomicBoolean quiescing;
+	@NonNull
 	private final AtomicReference<@Nullable StreamTerminationReason> stoppingReason;
 	@NonNull
 	private final Thread timerThread;
@@ -1258,6 +1272,7 @@ final class McpApplicationExecution {
 		this.responseCleanups = new AtomicLong();
 		this.started = new AtomicBoolean();
 		this.stopped = new AtomicBoolean();
+		this.quiescing = new AtomicBoolean();
 		this.stoppingReason = new AtomicReference<>();
 		this.timerThread = new Thread(this::runTimerLoop, "soklet-mcp-deadline");
 		this.timerThread.setDaemon(false);
@@ -1271,11 +1286,13 @@ final class McpApplicationExecution {
 
 	void dispatch(@NonNull MicrohttpRequest transportRequest,
 			McpJsonRpcMessage.@NonNull Request request,
+			@NonNull McpProtocolProfile protocolProfile,
 			@NonNull McpEffectiveAdmissionIdentity admissionIdentity,
 			@NonNull McpApplicationRequestHandler handler,
 			long deadlineNanos, @NonNull McpApplicationResponseWriter responseWriter,
 			@NonNull Runnable terminalCleanup) {
-		dispatchInternal(transportRequest, null, request, admissionIdentity,
+		dispatchInternal(transportRequest, null, request, protocolProfile,
+				admissionIdentity,
 				Optional.empty(), handler, null,
 				this.defaultRequestInterceptor, McpApplicationEntryGate.alwaysInstance(),
 				deadlineNanos, responseWriter,
@@ -1285,11 +1302,13 @@ final class McpApplicationExecution {
 	void dispatchWithSokletRequest(@NonNull MicrohttpRequest transportRequest,
 			@NonNull Request sokletRequest,
 			McpJsonRpcMessage.@NonNull Request request,
+			@NonNull McpProtocolProfile protocolProfile,
 			@NonNull McpEffectiveAdmissionIdentity admissionIdentity,
 			@NonNull McpApplicationRequestHandler handler,
 			long deadlineNanos, @NonNull McpApplicationResponseWriter responseWriter,
 			@NonNull Runnable terminalCleanup) {
 		dispatchInternal(transportRequest, requireNonNull(sokletRequest), request,
+				protocolProfile,
 				admissionIdentity, Optional.empty(), handler, null,
 				this.defaultRequestInterceptor,
 				McpApplicationEntryGate.alwaysInstance(), deadlineNanos,
@@ -1299,12 +1318,14 @@ final class McpApplicationExecution {
 	void dispatchWithSokletRequest(@NonNull MicrohttpRequest transportRequest,
 			@NonNull Request sokletRequest,
 			McpJsonRpcMessage.@NonNull Request request,
+			@NonNull McpProtocolProfile protocolProfile,
 			@NonNull McpEffectiveAdmissionIdentity admissionIdentity,
 			@NonNull McpApplicationRequestHandler handler,
 			@NonNull McpApplicationRequestInterceptor requestInterceptor,
 			long deadlineNanos, @NonNull McpApplicationResponseWriter responseWriter,
 			@NonNull Runnable terminalCleanup) {
 		dispatchInternal(transportRequest, requireNonNull(sokletRequest), request,
+				protocolProfile,
 				admissionIdentity, Optional.empty(), handler, null, requestInterceptor,
 				McpApplicationEntryGate.alwaysInstance(), deadlineNanos,
 				responseWriter, terminalCleanup);
@@ -1313,6 +1334,7 @@ final class McpApplicationExecution {
 	void dispatchWithSokletRequest(@NonNull MicrohttpRequest transportRequest,
 			@NonNull Request sokletRequest,
 			McpJsonRpcMessage.@NonNull Request request,
+			@NonNull McpProtocolProfile protocolProfile,
 			@NonNull McpEffectiveAdmissionIdentity admissionIdentity,
 			@NonNull McpApplicationRequestHandler handler,
 			@NonNull McpApplicationRequestInterceptor requestInterceptor,
@@ -1320,6 +1342,7 @@ final class McpApplicationExecution {
 			long deadlineNanos, @NonNull McpApplicationResponseWriter responseWriter,
 			@NonNull Runnable terminalCleanup) {
 		dispatchInternal(transportRequest, requireNonNull(sokletRequest), request,
+				protocolProfile,
 				admissionIdentity, Optional.empty(), handler, null, requestInterceptor,
 				requireNonNull(applicationEntryGate), deadlineNanos,
 				responseWriter, terminalCleanup);
@@ -1328,6 +1351,7 @@ final class McpApplicationExecution {
 	void dispatchWithSokletRequest(@NonNull MicrohttpRequest transportRequest,
 			@NonNull Request sokletRequest,
 			McpJsonRpcMessage.@NonNull Request request,
+			@NonNull McpProtocolProfile protocolProfile,
 			@NonNull McpEffectiveAdmissionIdentity admissionIdentity,
 			@NonNull Optional<@NonNull McpFrameworkRequestStateContinuation>
 					frameworkRequestStateContinuation,
@@ -1337,6 +1361,7 @@ final class McpApplicationExecution {
 			long deadlineNanos, @NonNull McpApplicationResponseWriter responseWriter,
 			@NonNull Runnable terminalCleanup) {
 		dispatchInternal(transportRequest, requireNonNull(sokletRequest), request,
+				protocolProfile,
 				admissionIdentity, frameworkRequestStateContinuation, handler, null,
 				requestInterceptor, requireNonNull(applicationEntryGate),
 				deadlineNanos, responseWriter, terminalCleanup);
@@ -1346,12 +1371,14 @@ final class McpApplicationExecution {
 			@NonNull Request sokletRequest,
 			@NonNull McpRequestContext publicRequestContext,
 			McpJsonRpcMessage.@NonNull Request request,
+			@NonNull McpProtocolProfile protocolProfile,
 			@NonNull McpEffectiveAdmissionIdentity admissionIdentity,
 			@NonNull McpApplicationRequestHandler handler,
 			@NonNull McpApplicationRequestInterceptor requestInterceptor,
 			long deadlineNanos, @NonNull McpApplicationResponseWriter responseWriter,
 			@NonNull Runnable terminalCleanup) {
 		dispatchInternal(transportRequest, requireNonNull(sokletRequest), request,
+				protocolProfile,
 				admissionIdentity, Optional.empty(), handler,
 				requireNonNull(publicRequestContext),
 				requestInterceptor, McpApplicationEntryGate.alwaysInstance(),
@@ -1362,6 +1389,7 @@ final class McpApplicationExecution {
 			@NonNull Request sokletRequest,
 			@NonNull McpRequestContext publicRequestContext,
 			McpJsonRpcMessage.@NonNull Request request,
+			@NonNull McpProtocolProfile protocolProfile,
 			@NonNull McpEffectiveAdmissionIdentity admissionIdentity,
 			@NonNull McpApplicationRequestHandler handler,
 			@NonNull McpApplicationRequestInterceptor requestInterceptor,
@@ -1369,6 +1397,7 @@ final class McpApplicationExecution {
 			long deadlineNanos, @NonNull McpApplicationResponseWriter responseWriter,
 			@NonNull Runnable terminalCleanup) {
 		dispatchInternal(transportRequest, requireNonNull(sokletRequest), request,
+				protocolProfile,
 				admissionIdentity, Optional.empty(), handler,
 				requireNonNull(publicRequestContext),
 				requestInterceptor, requireNonNull(applicationEntryGate),
@@ -1379,6 +1408,7 @@ final class McpApplicationExecution {
 			@NonNull Request sokletRequest,
 			@NonNull McpRequestContext publicRequestContext,
 			McpJsonRpcMessage.@NonNull Request request,
+			@NonNull McpProtocolProfile protocolProfile,
 			@NonNull McpEffectiveAdmissionIdentity admissionIdentity,
 			@NonNull Optional<@NonNull McpFrameworkRequestStateContinuation>
 					frameworkRequestStateContinuation,
@@ -1388,6 +1418,7 @@ final class McpApplicationExecution {
 			long deadlineNanos, @NonNull McpApplicationResponseWriter responseWriter,
 			@NonNull Runnable terminalCleanup) {
 		dispatchInternal(transportRequest, requireNonNull(sokletRequest), request,
+				protocolProfile,
 				admissionIdentity, frameworkRequestStateContinuation, handler,
 				requireNonNull(publicRequestContext), requestInterceptor,
 				requireNonNull(applicationEntryGate), deadlineNanos,
@@ -1397,6 +1428,7 @@ final class McpApplicationExecution {
 	private void dispatchInternal(@NonNull MicrohttpRequest transportRequest,
 			@Nullable Request sokletRequest,
 			McpJsonRpcMessage.@NonNull Request request,
+			@NonNull McpProtocolProfile protocolProfile,
 			@NonNull McpEffectiveAdmissionIdentity admissionIdentity,
 			@NonNull Optional<@NonNull McpFrameworkRequestStateContinuation>
 					frameworkRequestStateContinuation,
@@ -1408,6 +1440,7 @@ final class McpApplicationExecution {
 			@NonNull Runnable terminalCleanup) {
 		requireNonNull(transportRequest);
 		requireNonNull(request);
+		requireNonNull(protocolProfile);
 		requireNonNull(admissionIdentity);
 		requireNonNull(frameworkRequestStateContinuation);
 		requireNonNull(handler);
@@ -1416,13 +1449,14 @@ final class McpApplicationExecution {
 		requireNonNull(responseWriter);
 		requireNonNull(terminalCleanup);
 
-		if (stopped.get()) {
+		if (stopped.get() || quiescing.get()) {
 			terminalCleanup.run();
 			return;
 		}
 
 		long exchangeId = exchangeSequence.incrementAndGet();
-		Exchange exchange = new Exchange(exchangeId, transportRequest, sokletRequest, request,
+		Exchange exchange = new Exchange(exchangeId, transportRequest, sokletRequest,
+				request, protocolProfile,
 				publicRequestContext, admissionIdentity,
 				frameworkRequestStateContinuation, handler, requestInterceptor,
 				applicationEntryGate, deadlineNanos, responseWriter,
@@ -1446,7 +1480,9 @@ final class McpApplicationExecution {
 			}
 			case REJECTED -> {
 				capacityRejections.incrementAndGet();
-				exchange.respond(McpApplicationResponse.capacityRejected(request.id()));
+				exchange.respond(exchange.profiledFrameworkError(
+						McpProfileErrorKind.CONTROL,
+						McpApplicationResponse.capacityRejected(request.id())));
 			}
 			case CLOSED -> exchange.releaseAfterClosure();
 			case CANCELED -> exchange.cleanupRetainedExchange();
@@ -1472,7 +1508,7 @@ final class McpApplicationExecution {
 			@NonNull Supplier<@NonNull T> reservation) {
 		requireNonNull(reservation);
 		synchronized (executionBoundaryLock) {
-			if (stopped.get())
+			if (stopped.get() || quiescing.get())
 				return Optional.empty();
 			return Optional.of(requireNonNull(reservation.get()));
 		}
@@ -1534,6 +1570,18 @@ final class McpApplicationExecution {
 		stop(StreamTerminationReason.SERVER_STOPPING);
 	}
 
+	void beginGracefulDrain() {
+		synchronized (executionBoundaryLock) {
+			if (stopped.get() || quiescing.get())
+				return;
+			stoppingReason.set(StreamTerminationReason.SERVER_STOPPING);
+			quiescing.set(true);
+		}
+		dispatcher.beginGracefulDrain();
+		finishGracefulDrainIfComplete();
+		signalDeadlineTimer();
+	}
+
 	void stop(@NonNull StreamTerminationReason reason) {
 		requireNonNull(reason);
 		synchronized (executionBoundaryLock) {
@@ -1555,6 +1603,26 @@ final class McpApplicationExecution {
 		// shutdown is essential here: shutdownNow may discard a dispatcher-owned
 		// runnable promoted while its current worker is still returning, leaving
 		// the logical handler slot charged forever.
+		handlerExecutor.shutdown();
+		LockSupport.unpark(timerThread);
+	}
+
+	private void finishGracefulDrainIfComplete() {
+		if (!quiescing.get() || stopped.get())
+			return;
+		McpApplicationHandlerDispatcher.Snapshot snapshot = dispatcher.snapshot();
+		if (snapshot.activeSlots() != 0 || snapshot.queueDepth() != 0
+				|| !retainedExchanges.isEmpty() || !requestsByIdentity.isEmpty())
+			return;
+		synchronized (executionBoundaryLock) {
+			if (!quiescing.get() || stopped.get())
+				return;
+			McpApplicationHandlerDispatcher.Snapshot confirmed = dispatcher.snapshot();
+			if (confirmed.activeSlots() != 0 || confirmed.queueDepth() != 0
+					|| !retainedExchanges.isEmpty() || !requestsByIdentity.isEmpty())
+				return;
+			stopped.set(true);
+		}
 		handlerExecutor.shutdown();
 		LockSupport.unpark(timerThread);
 	}
@@ -1599,6 +1667,7 @@ final class McpApplicationExecution {
 			} catch (Throwable ignored) {
 				// One cycle failure must not permanently disable request deadlines.
 			}
+			finishGracefulDrainIfComplete();
 
 			if (!stopped.get())
 				LockSupport.parkNanos(configuration.timerResolution().toNanos());
@@ -1621,6 +1690,8 @@ final class McpApplicationExecution {
 		private final @Nullable Request sokletRequest;
 		private final @Nullable McpRequestContext publicRequestContext;
 		private final McpJsonRpcMessage.@NonNull Request request;
+		@NonNull
+		private final McpProtocolProfile protocolProfile;
 		@NonNull
 		private final McpEffectiveAdmissionIdentity admissionIdentity;
 		@NonNull
@@ -1652,6 +1723,7 @@ final class McpApplicationExecution {
 		private Exchange(long exchangeId, @NonNull MicrohttpRequest transportRequest,
 				@Nullable Request sokletRequest,
 				McpJsonRpcMessage.@NonNull Request request,
+				@NonNull McpProtocolProfile protocolProfile,
 				@Nullable McpRequestContext publicRequestContext,
 				@NonNull McpEffectiveAdmissionIdentity admissionIdentity,
 				@NonNull Optional<@NonNull McpFrameworkRequestStateContinuation>
@@ -1665,7 +1737,8 @@ final class McpApplicationExecution {
 			this.exchangeId = exchangeId;
 			this.sokletRequest = sokletRequest;
 			this.publicRequestContext = publicRequestContext;
-			this.request = request;
+			this.request = requireNonNull(request);
+			this.protocolProfile = requireNonNull(protocolProfile);
 			this.admissionIdentity = admissionIdentity;
 			this.frameworkRequestStateContinuation = requireNonNull(
 					frameworkRequestStateContinuation);
@@ -1702,7 +1775,7 @@ final class McpApplicationExecution {
 					return;
 
 				McpApplicationInvocation invocation = new McpApplicationInvocation(
-						sokletRequest, publicRequestContext, request,
+						sokletRequest, publicRequestContext, request, protocolProfile,
 						admissionIdentity, frameworkRequestStateContinuation,
 						cancellation,
 						this::writeNotification, this::requirePublicHandlerEntry,
@@ -1733,43 +1806,69 @@ final class McpApplicationExecution {
 				if (result == null)
 					throw new IllegalStateException(
 							"An MCP application interceptor or handler returned null.");
-				respond(McpApplicationResponse.success(request.id(), result));
+				respond(McpApplicationResponse.success(request.id(),
+						renderApplicationResult(result)));
 			} catch (McpInvalidApplicationInputException exception) {
 				if (!cancellation.isCancellationRequested())
-					respond(McpApplicationResponse.invalidParams(request.id()));
+					respond(profiledFrameworkError(McpProfileErrorKind.OPERATION,
+							McpApplicationResponse.invalidParams(request.id())));
 			} catch (McpProtocolJsonRpcException exception) {
 				if (!cancellation.isCancellationRequested())
-					respond(McpApplicationResponse.protocolJsonRpcError(
-							request.id(), exception.error()));
+					respond(profiledFrameworkError(McpProfileErrorKind.OPERATION,
+							McpApplicationResponse.protocolJsonRpcError(
+									request.id(), exception.error())));
 			} catch (McpApplicationJsonRpcException exception) {
 				if (!cancellation.isCancellationRequested())
 					respond(McpApplicationResponse.applicationJsonRpcError(
 							request.id(), exception.error()));
 			} catch (McpRequestStateUnavailableException exception) {
 				if (!cancellation.isCancellationRequested())
-					respond(McpApplicationResponse.internalError(
-							request.id(), 503, "Service Unavailable"));
+					respond(profiledFrameworkError(McpProfileErrorKind.CONTROL,
+							McpApplicationResponse.internalError(
+									request.id(), 503, "Service Unavailable")));
 			} catch (McpLocalizationContextUnavailableException exception) {
 				// Context-creation failure uses the fixed internal error with an
 				// EMPTY throwable list: the underlying provider throwable is
 				// untrusted localization data and was already discarded.
 				if (!cancellation.isCancellationRequested())
-					respond(McpApplicationResponse.internalError(
-							request.id(), 500, "Internal Server Error"));
+					respond(profiledFrameworkError(McpProfileErrorKind.CONTROL,
+							McpApplicationResponse.internalError(
+									request.id(), 500, "Internal Server Error")));
 			} catch (InterruptedException exception) {
 				Thread.currentThread().interrupt();
 				if (!cancellation.isCancellationRequested())
-					respond(McpApplicationResponse.internalError(
-							request.id(), 500, "Internal Server Error", exception));
+					respond(profiledFrameworkError(McpProfileErrorKind.CONTROL,
+							McpApplicationResponse.internalError(request.id(), 500,
+									"Internal Server Error", exception)));
 			} catch (Throwable throwable) {
 				if (!cancellation.isCancellationRequested())
-					respond(McpApplicationResponse.internalError(
-							request.id(), 500, "Internal Server Error", throwable));
+					respond(profiledFrameworkError(McpProfileErrorKind.CONTROL,
+							McpApplicationResponse.internalError(request.id(), 500,
+									"Internal Server Error", throwable)));
 			} finally {
 				handlerRunning.set(false);
 				handlerFinished.set(true);
 				cleanupRetainedExchange();
 			}
+		}
+
+		@NonNull
+		private McpWireResult renderApplicationResult(
+				@NonNull McpWireResult canonicalResult) {
+			Optional<McpProfileApplicationResultKind> kind = switch (request.method()) {
+				case "tools/call" -> Optional.of(McpProfileApplicationResultKind.TOOL);
+				case "prompts/get" -> Optional.of(McpProfileApplicationResultKind.PROMPT);
+				case "resources/read" -> Optional.of(
+						McpProfileApplicationResultKind.RESOURCE_READ);
+				case "resources/list" -> Optional.of(
+						McpProfileApplicationResultKind.RESOURCE_LIST);
+				default -> Optional.empty();
+			};
+			if (kind.isEmpty())
+				return requireNonNull(canonicalResult);
+			return requireNonNull(protocolProfile.renderApplicationResult(
+					kind.orElseThrow(),
+					requireNonNull(canonicalResult)));
 		}
 
 		private boolean beginApplicationInvocation() {
@@ -1857,13 +1956,32 @@ final class McpApplicationExecution {
 		private void submissionFailed(@NonNull Throwable throwable) {
 			try {
 				if (!cancellation.isCancellationRequested())
-					respond(McpApplicationResponse.internalError(
-							request.id(), 500, "Internal Server Error", throwable));
+					respond(profiledFrameworkError(McpProfileErrorKind.CONTROL,
+							McpApplicationResponse.internalError(request.id(), 500,
+									"Internal Server Error", throwable)));
 			} finally {
 				// The dispatcher has already changed the ticket to REJECTED and
 				// released its slot. Cancellation may also have detached the lease.
 				cleanupRetainedExchange();
 			}
+		}
+
+		@NonNull
+		private McpApplicationResponse profiledFrameworkError(
+				@NonNull McpProfileErrorKind kind,
+				@NonNull McpApplicationResponse canonicalResponse) {
+			McpJsonRpcMessage.ErrorResponse canonicalErrorResponse =
+					(McpJsonRpcMessage.ErrorResponse) requireNonNull(canonicalResponse)
+							.message().orElseThrow();
+			McpJsonRpcError renderedError = requireNonNull(this.protocolProfile
+					.renderFrameworkError(requireNonNull(kind),
+							canonicalErrorResponse.error()));
+			return new McpApplicationResponse(canonicalResponse.status(),
+					canonicalResponse.reason(), Optional.of(
+							new McpJsonRpcMessage.ErrorResponse(
+									canonicalErrorResponse.id(), renderedError,
+									canonicalErrorResponse.extensionFields())),
+					canonicalResponse.outcome(), canonicalResponse.throwables());
 		}
 
 		private boolean respond(@NonNull McpApplicationResponse response) {
@@ -2014,7 +2132,10 @@ final class McpApplicationExecution {
 									"An open exchange must retain its transport lease.");
 							terminalState = TerminalState.RESPONSE_OFFERED;
 							response = canceledBeforeDispatch
-									? McpApplicationResponse.queuedDeadline(request.id())
+									? profiledFrameworkError(
+											McpProfileErrorKind.CONTROL,
+											McpApplicationResponse.queuedDeadline(
+													request.id()))
 									: McpApplicationResponse.activeDeadline();
 						}
 					} else {
@@ -2093,8 +2214,11 @@ final class McpApplicationExecution {
 			boolean handlerCannotRun = ticketState ==
 					McpApplicationHandlerDispatcher.TicketState.CANCELED
 					|| ticketState == McpApplicationHandlerDispatcher.TicketState.REJECTED;
-			if (transportLease.get() == null && (handlerFinished.get() || handlerCannotRun))
+			if (transportLease.get() == null && (handlerFinished.get() || handlerCannotRun)) {
 				retainedExchanges.remove(exchangeId, this);
+				if (quiescing.get())
+					signalDeadlineTimer();
+			}
 		}
 
 		private boolean hasTransportLease() {

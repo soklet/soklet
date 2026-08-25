@@ -21,8 +21,8 @@ Greenfield localization-context builder amendment reviewed: 2026-08-17
 Final greenfield API polish amendment reviewed: 2026-08-17
 
 Greenfield public-record elimination amendment reviewed: 2026-08-18
-
 Greenfield typed-request-state amendment reviewed: 2026-08-18
+Reserved application-metadata behavioral amendment reviewed: 2026-08-24
 
 This record approves the Phase 4 public/protected API snapshot for Soklet
 `3.6.0-SNAPSHOT`. The comparison baseline is released Soklet `3.5.1`, and the
@@ -439,6 +439,38 @@ and four intentional skips over 462 main and 193 test sources, and builds the
 main, sources, and Javadoc artifacts; the maintained 179-source Java 17 API
 sketch passes compilation, Javadoc doclint, and its localization smoke test.
 
+### 2026-08-24 reserved application-metadata behavioral amendment
+
+The 4.0 review deliberately tightens construction behavior without changing
+the frozen public/protected descriptor set. Every public builder in the
+mechanically derived `mcp-metadata-builder-inventory.json` now rejects an
+application-authored `_meta` key whose DNS-style prefix has `mcp` or
+`modelcontextprotocol` as its second label. The exact seven reviewed owners
+are `McpTextContent`, `McpImageContent`, `McpAudioContent`, `McpResourceLink`,
+`McpEmbeddedResource`, `McpTextResourceContents`, and
+`McpBlobResourceContents`.
+
+One internal prefix validator supplies both these public-package construction
+checks and the pre-existing protocol-side application-metadata validators.
+Inbound protocol-owned metadata remains accepted and preserved. Legal
+application namespaces, including `com.example.mcp/...`, and empty metadata
+remain accepted and are preserved by identity. Validation occurs while the
+immutable value is built, before a tool, prompt, or resource response can be
+constructed or serialized; nested text and blob resource contents inside an
+`McpEmbeddedResource` follow the same rule.
+
+The Node verifier derives eligible owner/method identities exclusively from
+the current-side generated Phase 4/5/6 signature files, treats those files as
+read-only, and requires exact equality with the checked-in inventory. The
+named Java behavior test loads the same inventory, requires exact adapter-key
+parity, exercises every reserved-prefix family and every inventoried builder,
+and proves handler failures yield only the generic protocol error without a
+partial result, exception detail, or handler-output leak. Existing valid wire
+goldens are unchanged. Because this is a behavioral tightening with no public
+member, modifier, annotation, hierarchy, or JSpecify change, the reviewed
+1,048/179/422 signature partitions, reflection/nullability digests, and
+565-record released-3.5.1 compatibility ledger remain unchanged.
+
 The snapshot includes every final descriptor that a later phase needs on a
 Phase 4-owned host:
 
@@ -457,7 +489,8 @@ Phase 4-owned host:
   interceptor continuation's invocation-feature accessor;
 - the dedicated structured trace-correlation log-event type;
 - stream-queue, write-timeout, keep-alive, shutdown-timeout,
-  per-principal-subscription, and subscription-duration controls; and
+  per-authorization-partition-subscription and subscription-duration controls;
+  and
 - the existing lifecycle/metrics shared-host attachment descriptors.
 
 The six operational defaults are positive and finite:
@@ -466,7 +499,8 @@ The six operational defaults are positive and finite:
 - write timeout: 30 seconds;
 - keep-alive interval: 15 seconds;
 - shutdown timeout: 30 seconds;
-- maximum subscriptions per principal: 32; and
+- maximum subscriptions per endpoint and authorization/quota partition: 32;
+  and
 - maximum subscription duration: 24 hours.
 
 At the Phase 4 freeze, the referenced Phase 5/6 types' own members remained

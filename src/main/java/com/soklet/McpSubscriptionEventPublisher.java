@@ -36,9 +36,11 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * This SPI distributes application change events only. Soklet owns all MCP
  * stream-delivery mechanics: per-stream queues, duplicate-event coalescing,
- * backpressure, subscription filtering and authorization, and MCP wire
- * serialization. Publisher implementations must not attempt to perform those
- * functions.
+ * backpressure, matching against each accepted URI filter, and MCP wire
+ * serialization. Publisher events carry no endpoint, client, principal, or
+ * authorization-partition target. Applications must authorize confidential or
+ * capability-bearing subscription URIs when admitting the original request;
+ * publisher implementations must not attempt to perform these functions.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

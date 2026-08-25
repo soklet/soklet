@@ -107,6 +107,7 @@ public class McpErrorMappingGoldenProductionTests {
 	@BeforeAll
 	public static void corpusIsCompleteChecksumBoundAndExhaustsEightFamilies()
 			throws Exception {
+		Assertions.assertEquals(12, FIXTURES.size());
 		Assertions.assertTrue(Files.isDirectory(
 				GOLDEN_ROOT, LinkOption.NOFOLLOW_LINKS), GOLDEN_ROOT.toString());
 		Assertions.assertFalse(Files.isSymbolicLink(GOLDEN_ROOT),
@@ -207,6 +208,29 @@ public class McpErrorMappingGoldenProductionTests {
 									",\"name\":\"" + REGULAR_TOOL
 											+ "\",\"arguments\":{}"),
 									toolHeaders(HEADER_SECRET, PROTOCOL_VERSION))),
+					new LiveCase(
+							"unsupported-selector-name-mismatch-integer-400.http.hex",
+							post("unsupported-selector-name-mismatch",
+									requestBody("32020", "tools/call", "2099-01-01",
+											"{}", ",\"name\":\"" + REGULAR_TOOL
+													+ "\",\"arguments\":{}"),
+									toolHeaders(HEADER_SECRET, "2099-01-01"))),
+					new LiveCase(
+							"unsupported-selector-strict-unknown-integer-400.http.hex",
+							post("unsupported-selector-strict-unknown",
+									requestBody("31998", "tools/call", "2099-01-01",
+											"{}", ",\"name\":\"" + REGULAR_TOOL
+													+ "\",\"arguments\":{}"),
+									withHeader(toolHeaders(REGULAR_TOOL, "2099-01-01"),
+											STRICT_NAME_SECRET, STRICT_VALUE_SECRET))),
+					new LiveCase(
+							"unsupported-selector-body-version-mismatch-string-400.http.hex",
+							post("unsupported-selector-body-version-mismatch",
+									requestBody("\"unsupported-body-version\"",
+											"tools/call", PROTOCOL_VERSION, "{}",
+											",\"name\":\"" + REGULAR_TOOL
+													+ "\",\"arguments\":{}"),
+									toolHeaders(REGULAR_TOOL, "2099-01-01"))),
 					new LiveCase("missing-capability-required-string-400.http.hex",
 							post("missing-required", requestBody(
 									"\"missing-required\"", "tools/call",
@@ -354,7 +378,7 @@ public class McpErrorMappingGoldenProductionTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"error-mapping-golden", "3.6.0-SNAPSHOT").build())
+						"error-mapping-golden", "4.0.0-SNAPSHOT").build())
 				.tools(List.of(regular, required, conditional, hold))
 				.build();
 		return McpServer.withPort(0)
@@ -531,6 +555,15 @@ public class McpErrorMappingGoldenProductionTests {
 				new FixtureContract(MappingFamily.RATE_LIMIT, 429, -31999,
 						true, true));
 		fixtures.put("strict-unknown-integer-400.http.hex",
+				new FixtureContract(MappingFamily.STRICT_UNKNOWN, 400, -31998,
+						false, false));
+		fixtures.put("unsupported-selector-body-version-mismatch-string-400.http.hex",
+				new FixtureContract(MappingFamily.HEADER_MISMATCH, 400, -32020,
+						true, false));
+		fixtures.put("unsupported-selector-name-mismatch-integer-400.http.hex",
+				new FixtureContract(MappingFamily.HEADER_MISMATCH, 400, -32020,
+						false, false));
+		fixtures.put("unsupported-selector-strict-unknown-integer-400.http.hex",
 				new FixtureContract(MappingFamily.STRICT_UNKNOWN, 400, -31998,
 						false, false));
 		fixtures.put("unsupported-version-string-400.http.hex",

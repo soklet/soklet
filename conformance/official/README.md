@@ -26,8 +26,20 @@ distribution as CI evidence.
 
 `upstream-pins.json` records the immutable suite and final-specification
 identities, hashes, toolchain versions, and scenario-inventory digests.
+`protocol-profile-evidence.json` is the separate production revision index: it
+maps every immutable internal registry entry to the exact specification,
+vendored schema, official-suite, scenario, checksum-bound golden, and Go/
+TypeScript interoperability pins that define its evidence. The index
+must contain exactly the sole `2026-07-28` production profile and the exact
+`global-2026-deferred-r2c` method/parameter-ownership sentinel. The paired
+`verify-profile-evidence.mjs` verifier rejects missing or extra revisions,
+unknown or widened ownership, pin drift, untracked/non-regular/symlinked
+evidence, and nondeterministic output; its self-test covers those fail-closed
+paths. The candidate-conformance runner verifies this index before consuming
+its profile evidence.
+
 `scenarios.json` preserves all 40 names in the pinned CLI's exact order. Its 39
-`RUN` rows are the active Soklet 3.6.0 run set; `completion-complete` is the
+`RUN` rows are the active Soklet 4.0.0 run set; `completion-complete` is the
 only `NOT_APPLICABLE` row because Soklet does not advertise Completion.
 
 `earliestPhase` means the first phase in which a scenario is mandatory as part
@@ -41,7 +53,7 @@ Each scenario receives a fresh deterministic JVM; the fixture never changes
 its advertised capabilities to suit the selected scenario.
 
 The fixture is a candidate-artifact-only black box. Development verification
-compiles and runs against packaged `target/soklet-3.6.0-SNAPSHOT.jar`; release
+compiles and runs against packaged `target/soklet-4.0.0-SNAPSHOT.jar`; release
 verification instead uses the explicit checksum-locked main JAR. Its runtime
 classpath contains only fixture classes plus the selected JAR, never
 `target/classes` or `target/test-classes`. Normal configuration and handlers
@@ -64,9 +76,9 @@ Expected profiles are evidence, not guesses. `expected-checks.json` retains the
 23 historical Phase 3/4 profile IDs and freezes the 16 exact reviewed Phase 5
 profiles. All 39 `RUN` rows now have one non-null profile, the manifest records
 `currentImplementationPhase: 5`, and the complete profile file has SHA-256
-`59a4b982e04c7649b3318b6227a6bd73b000c690b7e5c9edab4a164069a76730`.
+`7852c6bfc8c686f1d9b8b6e2ac27ebe1b69e5b5ee62cc1c09fd874f427d1bc09`.
 The activated scenario manifest has SHA-256
-`8d97a1560a70373d4832c96bb627eb8e4009de77c86bf3a2d9772403621fe5df`.
+`e8f0d1a8c9ac673c80e3a6434f5763bb608f49d1fad62e48c179d26b6bee18e3`.
 Null never means “accept anything”; for a future phase it means “not executable
 in this phase.”
 
@@ -164,14 +176,14 @@ not rerun locally and remains owned by candidate conformance. These are local
 snapshot checks, not immutable-candidate evidence.
 
 The preceding four-row HTTP-contract reconciliation added a third, independent
-evidence surface without changing the official corpus: 21 canonical complete
+evidence surface without changing the official corpus: 22 canonical complete
 HTTP response fixtures bound by
 `../golden-http-contract/precedence-no-store/manifest.sha256` at SHA-256
-`ec1bd3f13c70bec100b18e774bfbdf2d9e574c1d8df99f2acc4b36e85f51702c`.
-Four contract tests—three real-listener goldens and one exhaustive response-
-authority inventory—and four initialize-diagnostic tests pass 8/8 on local
-Corretto 17.0.20.1 and local Corretto 21.0.11; the adjacent group passes
-108/108 on both. Full clean test passes 1,693/0/0/72 and 1,708/0/0/4,
+`273e83945e5bae949c4a2eee85993883abb1350ef7234b98548d1134d0f7af02`.
+Five contract tests—three real-listener goldens, one exhaustive response-
+authority inventory, and one six-document manifest-digest parity gate—and four
+initialize-diagnostic tests pass 9/9 in the current focused execution. Full
+clean test previously passed 1,693/0/0/72 and 1,708/0/0/4,
 respectively, over 462 main and 203 test sources. A subsequent local Corretto
 17 package validation built all three JARs after allowing configured external
 Javadoc links. These are local snapshot results, not immutable-candidate
@@ -189,11 +201,11 @@ owned by candidate conformance.
 The subsequent 2026-08-21 core-result/error closure does not alter either
 official-suite corpus. A separate checksum-bound core result-envelope corpus
 contains 25 JSON/SSE fixtures and four production tests; its manifest SHA-256
-is `d2eaa03c24927d45ef350b187624f50448d78a6531a26dedbbe07ee327b91b14`.
-A second separate corpus contains nine canonical complete HTTP fixtures across
+is `8ad233e91c4898fecaead0f779b13aebbaf3e2211fe3356f376c507736638d9c`.
+A second separate corpus contains twelve canonical complete HTTP fixtures across
 the eight frozen ordinary error families and two production-listener tests;
 its manifest SHA-256 is
-`90fae4482e7d8560f421aa4edbc8a6459d72f42880b5351298d5b74ff3f8b780`.
+`bfaecadaba283df430026504b94f71640c0c56a830159100f9be9179a7ce4e2d`.
 Readable-`initialize` and path-specific errors remain separate supplemental
 evidence. Five deterministic tests additionally freeze progress/error enqueue
 and mapped-error/cancellation ownership in both winning directions.
@@ -335,7 +347,7 @@ acknowledgment, and list-changed notification frames carry a method and omit
 top-level `id`; nested `progressToken`,
 `io.modelcontextprotocol/subscriptionId`, and cancellation `requestId`
 parameter members remain legitimate. Only the method-free terminal result
-retains the initiating request's top-level `id`. Soklet 3.6 registers no
+retains the initiating request's top-level `id`. Soklet 4.0 registers no
 extension-notification handler and exposes no arbitrary extension-notification
 handler API. The exact selector passes 2/0/0/0, the adjacent set passes
 83/0/0/0 on both JDKs, and full clean test passes 1,721/0/0/72 and
@@ -393,7 +405,7 @@ compile and execute the local checkpoint as follows:
 mvn -B -ntp -Dtest=McpFinalTagGoldenWireProductionTests clean package
 mkdir -p target/conformance/official
 sh conformance/official/build-public-fixture.sh \
-  /absolute/project/target/soklet-3.6.0-SNAPSHOT.jar \
+  /absolute/project/target/soklet-4.0.0-SNAPSHOT.jar \
   /absolute/project/target/conformance/public-fixture \
   > target/conformance/official/public-fixture-classpath.txt
 node conformance/official/local-simulator-self-test.mjs
@@ -416,7 +428,7 @@ node conformance/official/run.mjs \
 
 `--mode release` executes the same current Phase 5 selection and exact frozen
 profiles as `--mode verify`, but it fails before starting the fixture unless it
-can bind the run to the final `com.soklet:soklet:3.6.0` POM, main JAR, sources
+can bind the run to the final `com.soklet:soklet:4.0.0` POM, main JAR, sources
 JAR, Javadocs JAR, candidate commit, protocol pin, and official-suite pin.
 Release mode never accepts a snapshot coordinate. It does not rebuild any
 candidate artifact.
@@ -435,23 +447,23 @@ Every artifact path is absolute and every hash is lowercase SHA-256:
   "coordinates": {
     "groupId": "com.soklet",
     "artifactId": "soklet",
-    "version": "3.6.0"
+    "version": "4.0.0"
   },
   "artifacts": {
     "pom": {
-      "path": "/absolute/candidate/soklet-3.6.0.pom",
+      "path": "/absolute/candidate/soklet-4.0.0.pom",
       "sha256": "<64-lowercase-hex>"
     },
     "mainJar": {
-      "path": "/absolute/candidate/soklet-3.6.0.jar",
+      "path": "/absolute/candidate/soklet-4.0.0.jar",
       "sha256": "<64-lowercase-hex>"
     },
     "sourcesJar": {
-      "path": "/absolute/candidate/soklet-3.6.0-sources.jar",
+      "path": "/absolute/candidate/soklet-4.0.0-sources.jar",
       "sha256": "<64-lowercase-hex>"
     },
     "javadocJar": {
-      "path": "/absolute/candidate/soklet-3.6.0-javadoc.jar",
+      "path": "/absolute/candidate/soklet-4.0.0-javadoc.jar",
       "sha256": "<64-lowercase-hex>"
     }
   }
@@ -466,7 +478,7 @@ candidate POM must be byte-identical to that checkout's `pom.xml`:
 
 ```sh
 sh conformance/official/build-public-fixture.sh \
-  /absolute/candidate/soklet-3.6.0.jar \
+  /absolute/candidate/soklet-4.0.0.jar \
   /absolute/project/target/conformance/public-fixture \
   > /absolute/project/target/conformance/official/release-fixture-classpath.txt
 node conformance/official/run.mjs \

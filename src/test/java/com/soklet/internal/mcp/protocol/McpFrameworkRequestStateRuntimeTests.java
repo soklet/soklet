@@ -93,6 +93,30 @@ public class McpFrameworkRequestStateRuntimeTests {
 	}
 
 	@Test
+	public void requestStateSealedUnderOneProtocolRevisionIsRejectedUnderAnother()
+			throws Exception {
+		String differentRevision = "2099-01-01";
+		MutableClock clock = new MutableClock(INITIAL_TIME);
+		RecordingAdapter adapter = new RecordingAdapter();
+		McpFrameworkRequestStateRuntime runtime = runtime(clock, adapter);
+		String protectedState = seal(runtime, stringId("request-1"),
+				new McpJsonString("state"), Optional.empty());
+		RequestStateProtectionInput sealInput =
+				requireNonNull(adapter.lastSealInput);
+
+		Assertions.assertThrows(McpInvalidRequestStateException.class,
+				() -> runtime.open(ENDPOINT_PATH, differentRevision, METHOD,
+						AUTHORIZATION_PARTITION, parameters(),
+						stringId("request-2"), protectedState));
+		RequestStateProtectionInput openInput =
+				requireNonNull(adapter.lastOpenInput);
+		Assertions.assertEquals(PROTOCOL_VERSION, sealInput.protocolVersion());
+		Assertions.assertEquals(differentRevision, openInput.protocolVersion());
+		Assertions.assertFalse(Arrays.equals(sealInput.associatedData(),
+				openInput.associatedData()));
+	}
+
+	@Test
 	public void reemissionPreservesTimesAndAdvancesRoundAndOriginatingId()
 			throws Exception {
 		MutableClock clock = new MutableClock(INITIAL_TIME);

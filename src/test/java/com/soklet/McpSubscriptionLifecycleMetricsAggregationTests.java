@@ -598,7 +598,7 @@ public class McpSubscriptionLifecycleMetricsAggregationTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(ENDPOINT_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
 						"subscription-lifecycle-metrics-test",
-						"3.6.0-SNAPSHOT").build())
+						"4.0.0-SNAPSHOT").build())
 				.build();
 		McpServer server = McpServer.withPort(0)
 				.host("127.0.0.1")

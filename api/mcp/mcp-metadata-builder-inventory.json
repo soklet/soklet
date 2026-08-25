@@ -1,0 +1,63 @@
+{
+  "builders": [
+    {
+      "builder": "com.soklet.McpAudioContent$Builder",
+      "family": "com.soklet.McpContentBlock",
+      "metadataMethod": "M:com/soklet/McpAudioContent$Builder#metadata(Lcom/soklet/McpJsonObject;)Lcom/soklet/McpAudioContent$Builder;",
+      "owner": "com.soklet.McpAudioContent",
+      "phase": 4
+    },
+    {
+      "builder": "com.soklet.McpBlobResourceContents$Builder",
+      "family": "com.soklet.McpResourceContents",
+      "metadataMethod": "M:com/soklet/McpBlobResourceContents$Builder#metadata(Lcom/soklet/McpJsonObject;)Lcom/soklet/McpBlobResourceContents$Builder;",
+      "owner": "com.soklet.McpBlobResourceContents",
+      "phase": 4
+    },
+    {
+      "builder": "com.soklet.McpEmbeddedResource$Builder",
+      "family": "com.soklet.McpContentBlock",
+      "metadataMethod": "M:com/soklet/McpEmbeddedResource$Builder#metadata(Lcom/soklet/McpJsonObject;)Lcom/soklet/McpEmbeddedResource$Builder;",
+      "owner": "com.soklet.McpEmbeddedResource",
+      "phase": 4
+    },
+    {
+      "builder": "com.soklet.McpImageContent$Builder",
+      "family": "com.soklet.McpContentBlock",
+      "metadataMethod": "M:com/soklet/McpImageContent$Builder#metadata(Lcom/soklet/McpJsonObject;)Lcom/soklet/McpImageContent$Builder;",
+      "owner": "com.soklet.McpImageContent",
+      "phase": 4
+    },
+    {
+      "builder": "com.soklet.McpResourceLink$Builder",
+      "family": "com.soklet.McpContentBlock",
+      "metadataMethod": "M:com/soklet/McpResourceLink$Builder#metadata(Lcom/soklet/McpJsonObject;)Lcom/soklet/McpResourceLink$Builder;",
+      "owner": "com.soklet.McpResourceLink",
+      "phase": 4
+    },
+    {
+      "builder": "com.soklet.McpTextContent$Builder",
+      "family": "com.soklet.McpContentBlock",
+      "metadataMethod": "M:com/soklet/McpTextContent$Builder#metadata(Lcom/soklet/McpJsonObject;)Lcom/soklet/McpTextContent$Builder;",
+      "owner": "com.soklet.McpTextContent",
+      "phase": 4
+    },
+    {
+      "builder": "com.soklet.McpTextResourceContents$Builder",
+      "family": "com.soklet.McpResourceContents",
+      "metadataMethod": "M:com/soklet/McpTextResourceContents$Builder#metadata(Lcom/soklet/McpJsonObject;)Lcom/soklet/McpTextResourceContents$Builder;",
+      "owner": "com.soklet.McpTextResourceContents",
+      "phase": 4
+    }
+  ],
+  "derivation": {
+    "eligibleInterfaces": [
+      "com.soklet.McpContentBlock",
+      "com.soklet.McpResourceContents"
+    ],
+    "metadataParameter": "com.soklet.McpJsonObject",
+    "signatureDirectory": "target/mcp-api-freezes",
+    "signaturePhaseInventory": "api/mcp/frozen-phases"
+  },
+  "formatVersion": 1
+}

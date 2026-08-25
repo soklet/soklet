@@ -121,6 +121,8 @@ public final class McpServerRuntimeBridge {
 	@NonNull
 	private final List<@NonNull LocalizedEndpointInvalidation>
 			localizedEndpointInvalidations;
+	@NonNull
+	private final List<@NonNull EndpointPlan> executableEndpointPlans;
 
 	/**
 	 * Creates a discovery-only listener projection.
@@ -496,6 +498,53 @@ public final class McpServerRuntimeBridge {
 				corsAuthorizer, corsAuthorizerExplicitlyConfigured,
 				admissionAdapter, requestRateLimitAdapter,
 				unknownMirroredHeaderPolicy,
+				unknownMirroredHeaderNameDiagnostics,
+				unknownMirroredHeaderNameDiagnosticConsumer,
+				requestHandlerConcurrency, requestHandlerQueueCapacity,
+				requestTimeout, requestHandlerExecutorServiceSupplier,
+				startupDiagnosticConsumer, unexpectedTerminationConsumer,
+				requestObservationAdapter, requestStateProtectionPlan,
+				streamQueueCapacity, writeTimeout, keepAliveInterval,
+				shutdownTimeout, maximumSubscriptionsPerPrincipal,
+				maximumSubscriptionDuration, applicationExecutionObserver,
+				LifecycleAdapter.disabledInstance());
+	}
+
+	/**
+	 * Creates one production listener projection with common lifecycle
+	 * admission and termination signaling.
+	 */
+	public McpServerRuntimeBridge(@NonNull String host, int port,
+			@NonNull List<@NonNull EndpointPlan> endpointPlans,
+			@NonNull Set<@NonNull String> allowedHosts, boolean requireOrigin,
+			@NonNull CorsAuthorizer corsAuthorizer,
+			boolean corsAuthorizerExplicitlyConfigured,
+			@NonNull AdmissionAdapter admissionAdapter,
+			@NonNull Optional<@NonNull RateLimitAdapter> requestRateLimitAdapter,
+			com.soklet.@NonNull McpUnknownMirroredHeaderPolicy
+					unknownMirroredHeaderPolicy,
+			boolean unknownMirroredHeaderNameDiagnostics,
+			@NonNull BiConsumer<@NonNull String, @NonNull String>
+					unknownMirroredHeaderNameDiagnosticConsumer,
+			int requestHandlerConcurrency, int requestHandlerQueueCapacity,
+			@NonNull Duration requestTimeout,
+			@NonNull Optional<@NonNull Supplier<@NonNull ExecutorService>>
+					requestHandlerExecutorServiceSupplier,
+			@NonNull Consumer<@NonNull String> startupDiagnosticConsumer,
+			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer,
+			@NonNull RequestObservationAdapter requestObservationAdapter,
+			@NonNull Optional<@NonNull RequestStateProtectionPlan>
+					requestStateProtectionPlan,
+			int streamQueueCapacity, @NonNull Duration writeTimeout,
+			@NonNull Duration keepAliveInterval, @NonNull Duration shutdownTimeout,
+			int maximumSubscriptionsPerPrincipal,
+			@NonNull Duration maximumSubscriptionDuration,
+			@NonNull McpApplicationExecutionObserver applicationExecutionObserver,
+			@NonNull LifecycleAdapter lifecycleAdapter) {
+		this(host, port, endpointPlans, allowedHosts, requireOrigin,
+				corsAuthorizer, corsAuthorizerExplicitlyConfigured,
+				admissionAdapter, requestRateLimitAdapter,
+				unknownMirroredHeaderPolicy,
 				nameDiagnosticConsumer(unknownMirroredHeaderNameDiagnostics,
 						unknownMirroredHeaderNameDiagnosticConsumer),
 				requestHandlerConcurrency, requestHandlerQueueCapacity,
@@ -507,7 +556,8 @@ public final class McpServerRuntimeBridge {
 						writeTimeout, keepAliveInterval, shutdownTimeout,
 						maximumSubscriptionsPerPrincipal,
 						maximumSubscriptionDuration),
-				requireNonNull(applicationExecutionObserver));
+				requireNonNull(applicationExecutionObserver),
+				requireNonNull(lifecycleAdapter));
 	}
 
 	/** One localization-enabled endpoint's invalidation publication handle. */
@@ -643,9 +693,48 @@ public final class McpServerRuntimeBridge {
 			@NonNull McpSubscriptionRuntimeConfiguration
 					subscriptionRuntimeConfiguration,
 			@NonNull McpApplicationExecutionObserver applicationExecutionObserver) {
+		this(host, port, endpointPlans, allowedHosts, requireOrigin,
+				corsAuthorizer, corsAuthorizerExplicitlyConfigured,
+				admissionAdapter, requestRateLimitAdapter,
+				unknownMirroredHeaderPolicy,
+				unknownMirroredHeaderNameDiagnosticConsumer,
+				requestHandlerConcurrency, requestHandlerQueueCapacity,
+				requestTimeout, requestHandlerExecutorServiceSupplier,
+				startupDiagnosticConsumer, unexpectedTerminationConsumer,
+				requestObservationAdapter, requestStateProtectionPlan,
+				subscriptionRuntimeConfiguration, applicationExecutionObserver,
+				LifecycleAdapter.disabledInstance());
+	}
+
+	private McpServerRuntimeBridge(@NonNull String host, int port,
+			@NonNull List<@NonNull EndpointPlan> endpointPlans,
+			@NonNull Set<@NonNull String> allowedHosts, boolean requireOrigin,
+			@NonNull CorsAuthorizer corsAuthorizer,
+			boolean corsAuthorizerExplicitlyConfigured,
+			@NonNull AdmissionAdapter admissionAdapter,
+			@NonNull Optional<@NonNull RateLimitAdapter> requestRateLimitAdapter,
+			com.soklet.@NonNull McpUnknownMirroredHeaderPolicy
+					unknownMirroredHeaderPolicy,
+			@NonNull Optional<@NonNull BiConsumer<@NonNull String, @NonNull String>>
+					unknownMirroredHeaderNameDiagnosticConsumer,
+			int requestHandlerConcurrency, int requestHandlerQueueCapacity,
+			@NonNull Duration requestTimeout,
+			@NonNull Optional<@NonNull Supplier<@NonNull ExecutorService>>
+					requestHandlerExecutorServiceSupplier,
+			@NonNull Consumer<@NonNull String> startupDiagnosticConsumer,
+			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer,
+			@NonNull Optional<@NonNull RequestObservationAdapter>
+					requestObservationAdapter,
+			@NonNull Optional<@NonNull RequestStateProtectionPlan>
+					requestStateProtectionPlan,
+			@NonNull McpSubscriptionRuntimeConfiguration
+					subscriptionRuntimeConfiguration,
+			@NonNull McpApplicationExecutionObserver applicationExecutionObserver,
+			@NonNull LifecycleAdapter lifecycleAdapter) {
 		requireNonNull(host);
 		List<EndpointPlan> immutableEndpointPlans =
 				List.copyOf(requireNonNull(endpointPlans));
+		this.executableEndpointPlans = immutableEndpointPlans;
 		requireNonNull(allowedHosts);
 		requireNonNull(corsAuthorizer);
 		requireNonNull(admissionAdapter);
@@ -710,7 +799,8 @@ public final class McpServerRuntimeBridge {
 				startupDiagnosticConsumer, unexpectedTerminationConsumer,
 				unknownMirroredHeaderNameDiagnosticConsumer,
 				requestStateRuntime, subscriptionRuntimeConfiguration,
-				applicationExecutionObserver);
+				applicationExecutionObserver,
+				requireNonNull(lifecycleAdapter));
 	}
 
 	@NonNull
@@ -1114,6 +1204,37 @@ public final class McpServerRuntimeBridge {
 		this.runtime.stop();
 	}
 
+	public void quiesceLifecycle() {
+		this.runtime.quiesceLifecycle();
+	}
+
+	public void forceLifecycle() {
+		this.runtime.forceLifecycle();
+	}
+
+	public boolean awaitLifecycleTermination(long absoluteDeadlineNanos)
+			throws InterruptedException {
+		return this.runtime.awaitLifecycleTermination(absoluteDeadlineNanos);
+	}
+
+	@NonNull
+	public LifecycleEvidence getLifecycleEvidence() {
+		McpLifecycleEvidence evidence = this.runtime.lifecycleEvidence();
+		return new LifecycleEvidence(evidence.eventLoop(), evidence.connection(),
+				evidence.executorTask(), evidence.stream(), evidence.callback(),
+				evidence.subscriptionRegistration());
+	}
+
+	public void releaseLifecycleEvidence() {
+		this.runtime.releaseLifecycleEvidence();
+	}
+
+	/** Immutable executable source shared by live and fresh simulated graphs. */
+	@NonNull
+	List<@NonNull EndpointPlan> executableEndpointPlans() {
+		return this.executableEndpointPlans;
+	}
+
 	public boolean stopAndReportResidualHandlers() {
 		return this.runtime.stopAndReportResidualApplicationExecutions();
 	}
@@ -1129,6 +1250,12 @@ public final class McpServerRuntimeBridge {
 
 	public boolean hasResidualHandlers() {
 		return getRuntimeState().residualHandlers();
+	}
+
+	@ThreadSafe
+	public record LifecycleEvidence(boolean eventLoop, boolean connection,
+			boolean executorTask, boolean stream, boolean callback,
+			boolean subscriptionRegistration) {
 	}
 
 	/** Internal bridge for one off-network simulator scope. */
@@ -1177,9 +1304,9 @@ public final class McpServerRuntimeBridge {
 			boolean residualHandlers) {
 		public RuntimeState {
 			requireNonNull(boundAddress);
-			if (started != boundAddress.isPresent())
+			if (started && boundAddress.isEmpty())
 				throw new IllegalArgumentException(
-						"A started MCP listener must have exactly one bound address.");
+						"A started MCP listener must have a retained bound address.");
 			if (started && !stopRequired)
 				throw new IllegalArgumentException(
 						"A started MCP listener must require a stop transition.");
@@ -1217,9 +1344,9 @@ public final class McpServerRuntimeBridge {
 			int queuedRequests, int activeRequestStreams, int activeSubscriptions) {
 		public DiagnosticsState {
 			requireNonNull(boundAddress);
-			if (started != boundAddress.isPresent())
+			if (started && boundAddress.isEmpty())
 				throw new IllegalArgumentException(
-						"A started MCP listener must have exactly one bound address.");
+						"A started MCP listener must have a retained bound address.");
 			if (started && !stopRequired)
 				throw new IllegalArgumentException(
 						"A started MCP listener must require a stop transition.");
@@ -2388,6 +2515,53 @@ public final class McpServerRuntimeBridge {
 	}
 
 	/**
+	 * Descriptor-neutral bridge into the framework-owned lifecycle generation.
+	 * One lease spans the complete protocol/application/stream exchange.
+	 */
+	@ThreadSafe
+	public interface LifecycleAdapter {
+		@NonNull
+		Generation currentGeneration();
+
+		interface Generation {
+			@NonNull
+			Optional<@NonNull Runnable> tryAdmit();
+
+			void signalTerminationFailure(@NonNull Throwable cause);
+		}
+
+		@NonNull
+		static LifecycleAdapter disabledInstance() {
+			return DisabledLifecycleAdapter.INSTANCE;
+		}
+	}
+
+	private enum DisabledLifecycleAdapter implements LifecycleAdapter {
+		INSTANCE;
+
+		@Override
+		@NonNull
+		public Generation currentGeneration() {
+			return DisabledLifecycleGeneration.INSTANCE;
+		}
+	}
+
+	private enum DisabledLifecycleGeneration implements LifecycleAdapter.Generation {
+		INSTANCE;
+
+		@Override
+		@NonNull
+		public Optional<@NonNull Runnable> tryAdmit() {
+			return Optional.of(() -> {});
+		}
+
+		@Override
+		public void signalTerminationFailure(@NonNull Throwable cause) {
+			requireNonNull(cause);
+		}
+	}
+
+	/**
 	 * Internal bridge callback for server-owned framework-state protection.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -2698,6 +2872,19 @@ public final class McpServerRuntimeBridge {
 	}
 
 	@NonNull
+	static String selectedProtocolRevision(
+			@NonNull McpApplicationInvocation invocation) {
+		McpApplicationInvocation requiredInvocation = requireNonNull(invocation);
+		String selectedRevision = requiredInvocation.protocolProfile().revision();
+		String mappedRevision = requiredInvocation.request().params().metadata()
+				.protocolVersion();
+		if (!selectedRevision.equals(mappedRevision))
+			throw new IllegalStateException(
+					"The selected MCP profile and mapped request revision disagree.");
+		return selectedRevision;
+	}
+
+	@NonNull
 	static Optional<@NonNull ProgressEmitter> progressEmitterFor(
 			@NonNull McpApplicationInvocation invocation,
 			@NonNull McpInputRequestPlan inputRequestPlan) {
@@ -2722,8 +2909,12 @@ public final class McpServerRuntimeBridge {
 					@NonNull Optional<@NonNull Double> total,
 					@NonNull Optional<@NonNull String> message)
 					throws InterruptedException {
-				return invocation.sendNotification(progressNotification(
-						token, progress, total, message));
+				McpJsonRpcMessage.Notification canonical = progressNotification(
+						token, progress, total, message);
+				return invocation.sendNotification(invocation.protocolProfile()
+						.renderFrameworkNotification(
+								McpProfileFrameworkNotificationKind.PROGRESS,
+								canonical));
 			}
 		});
 	}
@@ -2792,7 +2983,7 @@ public final class McpServerRuntimeBridge {
 								"A production MCP tool invocation requires its Soklet request.")),
 				requirePublicRequestContext(invocation),
 				publicEndpoint, Map.of(), request.method(), toPublic(request.id()),
-				requestMetadata.protocolVersion(), toolPlan.name(),
+				selectedProtocolRevision(invocation), toolPlan.name(),
 				requestMetadata.clientInformation().map(McpServerRuntimeBridge::toPublic),
 				(McpJsonObject) toPublic(
 						requestMetadata.clientCapabilities().toJsonObject()),
@@ -2913,7 +3104,7 @@ public final class McpServerRuntimeBridge {
 								"A production MCP prompt invocation requires its Soklet request.")),
 				requirePublicRequestContext(invocation),
 				publicEndpoint, Map.of(), request.method(), toPublic(request.id()),
-				requestMetadata.protocolVersion(), promptPlan.name(),
+				selectedProtocolRevision(invocation), promptPlan.name(),
 				requestMetadata.clientInformation().map(McpServerRuntimeBridge::toPublic),
 				(McpJsonObject) toPublic(
 						requestMetadata.clientCapabilities().toJsonObject()),
@@ -2972,7 +3163,7 @@ public final class McpServerRuntimeBridge {
 								"A production MCP resource invocation requires its Soklet request.")),
 				requirePublicRequestContext(invocation),
 				publicEndpoint, Map.of(), request.method(), toPublic(request.id()),
-				requestMetadata.protocolVersion(), internalInvocation.uri(),
+				selectedProtocolRevision(invocation), internalInvocation.uri(),
 				requestMetadata.clientInformation().map(McpServerRuntimeBridge::toPublic),
 				(McpJsonObject) toPublic(
 						requestMetadata.clientCapabilities().toJsonObject()),
@@ -3028,7 +3219,7 @@ public final class McpServerRuntimeBridge {
 								"A production MCP resource-list invocation requires its Soklet request.")),
 				requirePublicRequestContext(invocation),
 				publicEndpoint, Map.of(), request.method(), toPublic(request.id()),
-				requestMetadata.protocolVersion(),
+				selectedProtocolRevision(invocation),
 				requestMetadata.clientInformation().map(McpServerRuntimeBridge::toPublic),
 				(McpJsonObject) toPublic(
 						requestMetadata.clientCapabilities().toJsonObject()),
@@ -3161,7 +3352,7 @@ public final class McpServerRuntimeBridge {
 				McpJsonRpcMessage.Request request = invocation.request();
 				protectedRequestState = Optional.of(requestStateRuntime.seal(
 						publicEndpoint.getPath(),
-						request.params().metadata().protocolVersion(),
+						selectedProtocolRevision(invocation),
 						request.method(),
 						invocation.admissionIdentity().authorizationPartition()
 								.applicationKey(),

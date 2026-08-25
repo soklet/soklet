@@ -2518,11 +2518,17 @@ public class SseTests {
 
 		SetupFailingSocketChannel channel = new SetupFailingSocketChannel();
 		ExecutorService executorService = Executors.newSingleThreadExecutor();
+		BuiltInTransportLifecycleAdapter.Generation generation =
+				server.getLifecycleAdapter().beginStart();
+		server.getLifecycleAdapter().markReady(generation);
 		try {
-			Method method = DefaultSseServer.class.getDeclaredMethod("handleAcceptedSocketChannel", SocketChannel.class, ExecutorService.class);
+			Method method = DefaultSseServer.class.getDeclaredMethod(
+					"handleAcceptedSocketChannel", SocketChannel.class,
+					ExecutorService.class, BuiltInTransportLifecycleAdapter.Generation.class);
 			method.setAccessible(true);
-			method.invoke(server, channel, executorService);
+			method.invoke(server, channel, executorService, generation);
 		} finally {
+			server.stop();
 			executorService.shutdownNow();
 		}
 
@@ -2614,6 +2620,9 @@ public class SseTests {
 		requestHandlerExecutorServiceField.setAccessible(true);
 
 		try {
+			BuiltInTransportLifecycleAdapter.Generation generation =
+					server.getLifecycleAdapter().beginStart();
+			server.getLifecycleAdapter().markReady(generation);
 			startedField.set(server, true);
 			serverSocketChannelField.set(server, serverSocketChannel);
 			requestHandlerExecutorServiceField.set(server, executorService);
@@ -2633,7 +2642,7 @@ public class SseTests {
 	}
 
 	@Test
-	public void sseAcceptLoopCleansUpAfterUnexpectedTermination() throws Exception {
+	public void sseAcceptLoopSignalsBeforeCoordinatorCleanup() throws Exception {
 		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
 		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
 		List<String> lifecycleEvents = new CopyOnWriteArrayList<>();
@@ -2671,6 +2680,9 @@ public class SseTests {
 		connectionExecutorServiceField.setAccessible(true);
 
 		try {
+			BuiltInTransportLifecycleAdapter.Generation generation =
+					server.getLifecycleAdapter().beginStart();
+			server.getLifecycleAdapter().markReady(generation);
 			startedField.set(server, true);
 			serverSocketChannelField.set(server, serverSocketChannel);
 			requestHandlerExecutorServiceField.set(server, requestHandlerExecutorService);
@@ -2679,6 +2691,7 @@ public class SseTests {
 			connectionExecutorServiceField.set(server, connectionExecutorService);
 
 			server.startInternal();
+			server.stop();
 
 			Assertions.assertFalse(server.isStarted());
 			Assertions.assertTrue(serverSocketChannel.isClosed());
@@ -2690,6 +2703,10 @@ public class SseTests {
 					lifecycleEvents.toString());
 			Assertions.assertEquals(1L, transportFailureCount(metricsCollector, ServerType.SSE,
 					MetricsCollector.TransportFailureReason.EVENT_LOOP_TERMINATED));
+			Assertions.assertEquals(InternalParticipantShutdownDisposition.UNEXPECTED_TERMINATION,
+					server.getLifecycleAdapter().result().orElseThrow()
+							.participantResult(InternalParticipantKind.SSE).orElseThrow()
+							.disposition());
 		} finally {
 			server.stop();
 			requestHandlerTimeoutScheduler.shutdownNow();
@@ -2700,7 +2717,7 @@ public class SseTests {
 	}
 
 	@Test
-	public void staleSseAcceptLoopCleanupDoesNotClobberRestartedServer() throws Exception {
+	public void staleSseAcceptLoopFailureDoesNotClobberRestartedServer() throws Exception {
 		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
 		RecordingExecutorService requestHandlerExecutorService = new RecordingExecutorService();
 		RecordingExecutorService requestReaderExecutorService = new RecordingExecutorService();
@@ -2713,25 +2730,31 @@ public class SseTests {
 		Field requestHandlerTimeoutSchedulerField = DefaultSseServer.class.getDeclaredField("requestHandlerTimeoutScheduler");
 		Field requestReaderExecutorServiceField = DefaultSseServer.class.getDeclaredField("requestReaderExecutorService");
 		Field connectionExecutorServiceField = DefaultSseServer.class.getDeclaredField("connectionExecutorService");
-		Method cleanupMethod = DefaultSseServer.class.getDeclaredMethod(
-				"cleanupAfterUnexpectedEventLoopTermination", Throwable.class, long.class);
 		startedField.setAccessible(true);
 		lifecycleGenerationField.setAccessible(true);
 		requestHandlerExecutorServiceField.setAccessible(true);
 		requestHandlerTimeoutSchedulerField.setAccessible(true);
 		requestReaderExecutorServiceField.setAccessible(true);
 		connectionExecutorServiceField.setAccessible(true);
-		cleanupMethod.setAccessible(true);
 
 		try {
+			BuiltInTransportLifecycleAdapter.Generation staleGeneration =
+					server.getLifecycleAdapter().beginStart();
+			server.getLifecycleAdapter().failedStart(staleGeneration,
+					new AssertionError("prior generation"), true);
+			BuiltInTransportLifecycleAdapter.Generation currentGeneration =
+					server.getLifecycleAdapter().beginStart();
+			server.getLifecycleAdapter().markReady(currentGeneration);
 			startedField.set(server, true);
-			lifecycleGenerationField.set(server, 2L);
+			((java.util.concurrent.atomic.AtomicLong) lifecycleGenerationField.get(server))
+					.set(2L);
 			requestHandlerExecutorServiceField.set(server, requestHandlerExecutorService);
 			requestHandlerTimeoutSchedulerField.set(server, requestHandlerTimeoutScheduler);
 			requestReaderExecutorServiceField.set(server, requestReaderExecutorService);
 			connectionExecutorServiceField.set(server, connectionExecutorService);
 
-			cleanupMethod.invoke(server, new AssertionError("stale accept loop"), 1L);
+			server.getLifecycleAdapter().signalUnexpectedFailure(staleGeneration,
+					new AssertionError("stale accept loop"));
 
 			Assertions.assertTrue(server.isStarted());
 			Assertions.assertFalse(requestHandlerExecutorService.isShutdown());
@@ -2744,6 +2767,173 @@ public class SseTests {
 			requestHandlerExecutorService.shutdownNow();
 			requestReaderExecutorService.shutdownNow();
 			connectionExecutorService.shutdownNow();
+		}
+	}
+
+	@Test
+	public void stopCannotPublishAnEmptyGenerationWhileStartInstallsSseResources()
+			throws Exception {
+		CountDownLatch supplierEntered = new CountDownLatch(1);
+		CountDownLatch releaseSupplier = new CountDownLatch(1);
+		CountDownLatch stopReturned = new CountDownLatch(1);
+		RecordingExecutorService requestHandlerExecutor = new RecordingExecutorService();
+		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0)
+				.host("127.0.0.1")
+				.requestHandlerExecutorServiceSupplier(() -> {
+					supplierEntered.countDown();
+					awaitUninterruptibly(releaseSupplier);
+					return requestHandlerExecutor;
+				})
+				.build();
+		server.initialize(SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new QuietLifecycle())
+				.build(), (request, responseConsumer) -> {});
+		AtomicReference<Throwable> startFailure = new AtomicReference<>();
+		AtomicReference<Throwable> stopFailure = new AtomicReference<>();
+		Thread startThread = new Thread(() -> {
+			try {
+				server.start();
+			} catch (Throwable throwable) {
+				startFailure.set(throwable);
+			}
+		}, "sse-start-publication-race");
+		Thread stopThread = new Thread(() -> {
+			try {
+				server.stop();
+			} catch (Throwable throwable) {
+				stopFailure.set(throwable);
+			} finally {
+				stopReturned.countDown();
+			}
+		}, "sse-stop-publication-race");
+
+		try {
+			startThread.start();
+			Assertions.assertTrue(supplierEntered.await(1, TimeUnit.SECONDS));
+			stopThread.start();
+			Assertions.assertFalse(stopReturned.await(100, TimeUnit.MILLISECONDS),
+					"Stop must serialize behind generation resource publication");
+			Assertions.assertTrue(server.getLifecycleAdapter().result().isEmpty(),
+					"Stop must not prove the partially published generation empty");
+		} finally {
+			releaseSupplier.countDown();
+		}
+		startThread.join(3_000L);
+		stopThread.join(3_000L);
+
+		Assertions.assertFalse(startThread.isAlive());
+		Assertions.assertFalse(stopThread.isAlive());
+		Assertions.assertNull(startFailure.get());
+		Assertions.assertNull(stopFailure.get());
+		Assertions.assertFalse(server.isStarted());
+		Assertions.assertTrue(server.getEventLoopThread().isEmpty());
+		Assertions.assertTrue(server.getRequestHandlerExecutorService().isEmpty());
+		Assertions.assertTrue(server.getRequestHandlerTimeoutScheduler().isEmpty());
+		Assertions.assertTrue(server.getRequestReaderExecutorService().isEmpty());
+		Assertions.assertTrue(server.getConnectionExecutorService().isEmpty());
+		Assertions.assertTrue(requestHandlerExecutor.isShutdown());
+	}
+
+	@Test
+	public void startRejectsRunningSseGenerationWhileItsStopIsInProgress()
+			throws Exception {
+		CountDownLatch taskStarted = new CountDownLatch(1);
+		CountDownLatch releaseTask = new CountDownLatch(1);
+		ExecutorService requestExecutor = Executors.newSingleThreadExecutor();
+		requestExecutor.submit(() -> {
+			taskStarted.countDown();
+			awaitUninterruptibly(releaseTask);
+		});
+		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0)
+				.host("127.0.0.1")
+				.shutdownTimeout(Duration.ofSeconds(5))
+				.requestHandlerExecutorServiceSupplier(() -> requestExecutor)
+				.build();
+		server.initialize(SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new QuietLifecycle())
+				.build(), (request, responseConsumer) -> {});
+		Thread stopThread = new Thread(server::stop, "sse-running-start-stop-race");
+
+		try {
+			Assertions.assertTrue(taskStarted.await(1, TimeUnit.SECONDS));
+			server.start();
+			stopThread.start();
+			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+			while (!server.getLifecycleAdapter().shutdownInProgress()
+					&& System.nanoTime() < deadline)
+				Thread.onSpinWait();
+			Assertions.assertTrue(server.getLifecycleAdapter().shutdownInProgress());
+
+			IllegalStateException failure = Assertions.assertThrows(
+					IllegalStateException.class, server::start);
+			Assertions.assertEquals(
+					"Cannot start SSE server while shutdown is in progress",
+					failure.getMessage());
+			Assertions.assertTrue(stopThread.isAlive());
+		} finally {
+			releaseTask.countDown();
+			stopThread.join(3_000L);
+			server.stop();
+			requestExecutor.shutdownNow();
+		}
+
+		Assertions.assertFalse(stopThread.isAlive());
+		Assertions.assertFalse(server.isStarted());
+	}
+
+	@Test
+	public void startupErrorRetainsItsIdentityAndRollsBackPartialSseResources()
+			throws Exception {
+		AssertionError startupError = new AssertionError(
+				"SSE request executor creation failed");
+		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0)
+				.host("127.0.0.1")
+				.requestHandlerExecutorServiceSupplier(() -> {
+					throw startupError;
+				})
+				.build();
+		server.initialize(SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new QuietLifecycle())
+				.build(), (request, responseConsumer) -> {});
+
+		AssertionError thrown = Assertions.assertThrows(AssertionError.class, server::start);
+
+		Assertions.assertSame(startupError, thrown);
+		Field listenerField = DefaultSseServer.class.getDeclaredField("serverSocketChannel");
+		listenerField.setAccessible(true);
+		Assertions.assertNull(listenerField.get(server));
+		Assertions.assertFalse(server.isStarted());
+		Assertions.assertTrue(server.getRequestHandlerExecutorService().isEmpty());
+		Assertions.assertTrue(server.getRequestHandlerTimeoutScheduler().isEmpty());
+		InternalShutdownResult result = server.getLifecycleAdapter().result().orElseThrow();
+		Assertions.assertEquals(InternalStartupDisposition.FAILED,
+				result.startupDisposition());
+		Assertions.assertTrue(result.isComplete());
+		Assertions.assertEquals(List.of(startupError), result
+				.participantResult(InternalParticipantKind.SSE).orElseThrow().failures());
+	}
+
+	@Test
+	public void liveSseTimeoutSchedulerIsPositiveResidualEvidence() throws Exception {
+		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
+		TimeoutScheduler scheduler = new TimeoutScheduler(
+				runnable -> new Thread(runnable, "sse-residual-timeout-scheduler"));
+		Field schedulerField = DefaultSseServer.class.getDeclaredField(
+				"requestHandlerTimeoutScheduler");
+		schedulerField.setAccessible(true);
+		schedulerField.set(server, scheduler);
+
+		try {
+			Assertions.assertFalse(scheduler.isTerminated());
+			Assertions.assertTrue(lifecycleOperations(server.getLifecycleAdapter())
+					.residualActivity().contains(
+							InternalResidualActivityKind.EXECUTOR_TASK));
+		} finally {
+			scheduler.shutdownNow();
+			Assertions.assertTrue(scheduler.awaitTermination(1, TimeUnit.SECONDS));
 		}
 	}
 
@@ -3382,6 +3572,28 @@ public class SseTests {
 
 			command.run();
 		}
+	}
+
+	private static void awaitUninterruptibly(@NonNull CountDownLatch latch) {
+		boolean interrupted = false;
+		for (;;) {
+			try {
+				latch.await();
+				break;
+			} catch (InterruptedException exception) {
+				interrupted = true;
+			}
+		}
+		if (interrupted)
+			Thread.currentThread().interrupt();
+	}
+
+	private static BuiltInTransportLifecycleAdapter.Operations lifecycleOperations(
+			@NonNull BuiltInTransportLifecycleAdapter adapter) throws Exception {
+		Field operationsField = BuiltInTransportLifecycleAdapter.class
+				.getDeclaredField("operations");
+		operationsField.setAccessible(true);
+		return (BuiltInTransportLifecycleAdapter.Operations) operationsField.get(adapter);
 	}
 
 	private static byte[] readN(InputStream in, int n, int timeoutMs) throws IOException {

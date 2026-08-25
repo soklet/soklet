@@ -24,6 +24,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.util.Arrays;
 import java.util.Optional;
 
+import static com.soklet.internal.mcp.protocol.McpApplicationMetadata.requireApplicationMetadata;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -58,7 +59,7 @@ public final class McpAudioContent implements McpContentBlock {
 		this.data = Arrays.copyOf(builder.data, builder.data.length);
 		this.mimeType = builder.mimeType;
 		this.annotations = builder.annotations;
-		this.metadata = builder.metadata;
+		this.metadata = requireApplicationMetadata(builder.metadata);
 	}
 
 	/** @return a defensive copy of the audio bytes */

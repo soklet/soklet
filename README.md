@@ -646,10 +646,10 @@ public void sseTest() {
 
 #### Model Context Protocol (MCP)
 
-> **Unreleased API:** This section describes `3.6.0-SNAPSHOT`. The `3.5.1`
+> **Unreleased API:** This section describes `4.0.0-SNAPSHOT`. The `3.5.1`
 > artifact shown above contains the older, incompatible MCP API.
 
-Soklet 3.6.0 targets the MCP `2026-07-28` server protocol with a dedicated,
+Soklet 4.0.0 targets the MCP `2026-07-28` server protocol with a dedicated,
 stateless `McpServer`. MCP owns a listener and port separate from Soklet's
 ordinary HTTP and SSE servers, can host multiple exact endpoint paths, and
 derives each endpoint's advertised capabilities from its registered
@@ -771,7 +771,7 @@ Corretto 21.0.12.9.1 toolchain (`java 21.0.12.1`) passes the exact full
 test sources. The affected method passes 1/1 focused and 20/20 repeated runs;
 `McpSubscriptionPublicRuntimeTests` plus
 `McpSubscriptionRuntimeBoundaryTests` pass 26/26. The test-only correction
-sets the per-principal subscription cap to one and holds the recovery
+sets the per-authorization-partition subscription cap to one and holds the recovery
 subscription open while the original disconnect observer's exact-once count
 is asserted, preventing that recovery request's legitimate finish from
 entering the first request's observation phase. No production behavior,
@@ -2389,8 +2389,8 @@ and OpenTelemetry 36/36. TypeScript and Go are checksum-pinned, `READY`, and
 green against the local snapshot. The six reviewed downstream change sets
 remain uncommitted local work. They are therefore unpublished and unpinned, so
 the manifest continues to carry its old public commits. All four servlet legs
-pass 158/158 locally: the default 3.1.1 and 3.6.0-SNAPSHOT legs for both javax
-and Jakarta. ToyStore's local 3.6 MCP migration passes 14/14, including six MCP
+pass 158/158 locally: the default 3.1.1 and 4.0.0-SNAPSHOT legs for both javax
+and Jakarta. ToyStore's local 4.0 MCP migration passes 14/14, including six MCP
 tests. Its per-request credential proof accepts a valid request, then returns 401 for malformed,
 missing, expired, and wrong-audience credentials and 403 for an
 insufficient-scope credential; no prior request identity or authorization is
@@ -2474,7 +2474,7 @@ Corretto 21.0.12.9.1 toolchain (`java 21.0.12.1`) passes the exact full
 test sources. The affected method passes 1/1 focused and 20/20 repeated runs;
 `McpSubscriptionPublicRuntimeTests` plus
 `McpSubscriptionRuntimeBoundaryTests` pass 26/26. The test-only correction
-sets the per-principal subscription cap to one and holds the recovery
+sets the per-authorization-partition subscription cap to one and holds the recovery
 subscription open while the original disconnect observer's exact-once count
 is asserted, preventing that recovery request's legitimate finish from
 entering the first request's observation phase. No production behavior,
@@ -2543,15 +2543,15 @@ Final-tag Ajv validation of the
 expanded 48-message corpus was not rerun locally and remains owned by candidate
 conformance. These are local snapshot checks, not immutable-candidate evidence.
 
-The preceding four-row HTTP-contract reconciliation closed modern-only
-`initialize` rejection diagnostics, unsupported classified-notification
-handling, universal MCP HTTP `no-store`, and exact request/notification
-validation precedence. The separate
-`conformance/golden-http-contract/precedence-no-store/manifest.sha256` binds 21
+The preceding four-row HTTP-contract reconciliation closed readable
+`initialize` and validated-unsupported-selector rejection diagnostics,
+unsupported classified-notification handling, universal MCP HTTP `no-store`,
+and exact request/notification validation precedence. The separate
+`conformance/golden-http-contract/precedence-no-store/manifest.sha256` binds 22
 path-sorted canonical complete-response hex fixtures and has SHA-256
-`ec1bd3f13c70bec100b18e774bfbdf2d9e574c1d8df99f2acc4b36e85f51702c`.
-Four contract tests—three production-listener golden tests and one exhaustive
-response-authority inventory—cover compound request first-failure winners,
+`273e83945e5bae949c4a2eee85993883abb1350ef7234b98548d1134d0f7af02`.
+Five contract tests—three production-listener golden tests, one exhaustive response-authority inventory, and one six-document manifest-digest parity
+gate—cover compound request first-failure winners,
 the separate notification/preflight order, overload/SSE, and every production
 response authority. Four initialize-diagnostic tests
 cover decoder method preservation, a positive all-stage control, 23 readable-
@@ -2559,8 +2559,8 @@ initialize rejection cases, and the negative diagnostic boundary. Every
 golden response carries exactly one `Cache-Control: no-store`, and an
 application attempt to author a cacheable replacement fails closed.
 
-The new suites pass 8/8, and the adjacent contract group passes 108/108, on
-local Amazon Corretto 17.0.20.1 and local Amazon Corretto 21.0.11. Full clean
+The five contract tests plus four initialize diagnostics pass 9/9 in the
+current focused execution. Full clean
 test passes 1,693/0/0/72 on Corretto 17 and 1,708/0/0/4 on Corretto 21 over
 462 main and 203 test sources; the JDK 21 total includes 15 additional virtual-
 thread containment cases. These are local snapshot results, not immutable-
@@ -2570,10 +2570,10 @@ sources, and Javadoc JARs after allowing the configured external Javadoc links.
 The new corpus is separate from both the unchanged official 48-
 message/11-test final-schema JSON corpus and the unchanged three-head/two-test
 authorization/CORS corpus. The narrow internal production change preserves a
-readable `initialize` method through valid-JSON envelope/ID failures and
-attaches only the modern diagnostic; it does not implement initialization or a
-handshake. Public API, signatures, and the Phase 4/5/6 freeze inventories are
-unchanged. At that checkpoint, the canonical matrix remained deliberately
+readable `initialize` method through valid-JSON envelope/ID failures and adds a bounded diagnostic after validated unsupported-selector membership; it does
+not implement initialization or a handshake. Public API, signatures, and the
+Phase 4/5/6 freeze inventories are unchanged. At that checkpoint, the
+canonical matrix remained deliberately
 `FAILED`: 104 rows were `CORE_COMPLETE`, 116 were `RELEASE_GATED`, four were
 `APPLICATION_OWNED`, 18 were `NOT_APPLICABLE`, and 20 remained `UNRESOLVED`.
 Final-tag Ajv validation of the 48-message corpus was not rerun locally and
@@ -2588,10 +2588,10 @@ JSON/SSE fixtures at SHA-256
 Four live tests plus the source/authority inventory exhaust Soklet 3.6's core
 `complete` and `input_required` result-envelope authorities; extension result
 types remain separately bounded by `MCP-BASE-006`. The separate
-`conformance/golden-error-mapping/live/manifest.sha256` binds nine canonical
+`conformance/golden-error-mapping/live/manifest.sha256` binds twelve canonical
 complete HTTP responses across the eight frozen ordinary error families at
 SHA-256
-`90fae4482e7d8560f421aa4edbc8a6459d72f42880b5351298d5b74ff3f8b780`.
+`bfaecadaba283df430026504b94f71640c0c56a830159100f9be9179a7ce4e2d`.
 Two live-listener tests cover every fixture, while existing readable-
 `initialize` and path-specific error evidence remain explicit supplements.
 Five deterministic tests freeze both progress/error enqueue orders and the

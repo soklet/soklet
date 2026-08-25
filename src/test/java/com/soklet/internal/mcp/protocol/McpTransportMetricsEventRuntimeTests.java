@@ -285,7 +285,7 @@ public class McpTransportMetricsEventRuntimeTests {
 			McpApplicationExecutionObserver observer) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint
 				.withServerInformation(McpImplementationMetadata.withNameAndVersion(
-						"transport-metrics-test", "3.6.0-SNAPSHOT"))
+						"transport-metrics-test", "4.0.0-SNAPSHOT"))
 				.build();
 		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
 				CorsAuthorizer.rejectAllInstance(),

@@ -21,6 +21,7 @@ import {
   CENTRAL_STATUS_BASE_URL,
   CENTRAL_UPLOAD_URL,
   GATE_EVIDENCE_CONTRACTS,
+  VERSION_TRANSITION_FINAL_PASS_LINE,
   canonicalJsonBytes,
   centralTransport,
   preparePromotion,
@@ -29,6 +30,7 @@ import {
   recordUserManagedUpload,
   uploadUserManaged,
   validatePreparationRecord,
+  verifyPromotionHarnessRegistryParity,
   verifyPublished,
 } from './release-promotion.mjs';
 import { EXPECTED_GATE_EVIDENCE_CONTRACTS } from './release-validation-evidence.mjs';
@@ -75,6 +77,7 @@ function digest(bytes) {
 }
 
 function verifyGateContractParity() {
+  assert.match(verifyPromotionHarnessRegistryParity(), /^[0-9a-f]{64}$/);
   assert.deepEqual(Object.keys(GATE_EVIDENCE_CONTRACTS), GATE_IDS);
   assert.deepEqual(Object.keys(EXPECTED_GATE_EVIDENCE_CONTRACTS), GATE_IDS);
   for (const gateId of GATE_IDS) {
@@ -241,10 +244,10 @@ function writeSyntheticInputs(root) {
   const artifactsDirectory = join(root, 'artifacts');
   mkdirSync(artifactsDirectory, { recursive: true });
   const paths = {
-    javadocJar: join(artifactsDirectory, 'soklet-3.6.0-javadoc.jar'),
-    mainJar: join(artifactsDirectory, 'soklet-3.6.0.jar'),
+    javadocJar: join(artifactsDirectory, 'soklet-4.0.0-javadoc.jar'),
+    mainJar: join(artifactsDirectory, 'soklet-4.0.0.jar'),
     pom: join(artifactsDirectory, 'pom.xml'),
-    sourcesJar: join(artifactsDirectory, 'soklet-3.6.0-sources.jar'),
+    sourcesJar: join(artifactsDirectory, 'soklet-4.0.0-sources.jar'),
   };
   writeNew(
     paths.pom,
@@ -252,7 +255,7 @@ function writeSyntheticInputs(root) {
       '<?xml version="1.0" encoding="UTF-8"?>\n'
         + '<project><modelVersion>4.0.0</modelVersion>'
         + '<groupId>com.soklet</groupId><artifactId>soklet</artifactId>'
-        + '<version>3.6.0</version><packaging>jar</packaging></project>\n',
+        + '<version>4.0.0</version><packaging>jar</packaging></project>\n',
       'utf8',
     ),
   );
@@ -270,7 +273,7 @@ function writeSyntheticInputs(root) {
     artifactId: 'soklet',
     groupId: 'com.soklet',
     packaging: 'jar',
-    version: '3.6.0',
+    version: '4.0.0',
   };
   const candidateDescriptorBytes = canonicalJsonBytes({
     artifacts,
@@ -345,6 +348,16 @@ function writeSyntheticInputs(root) {
     },
     workflow,
   };
+  const candidateBuildLogPath = join(root, 'candidate-build.log');
+  const candidateBuildLogBytes = Buffer.from(
+    `${VERSION_TRANSITION_FINAL_PASS_LINE}\n[INFO] synthetic candidate build passed\n`,
+    'utf8',
+  );
+  writeNew(candidateBuildLogPath, candidateBuildLogBytes);
+  const candidateBuildLog = evidence.gates
+    .find(({ gate }) => gate.id === 'candidate-build')
+    .evidence.find(({ role }) => role === 'build-log');
+  candidateBuildLog.artifact = evidenceItem(candidateBuildLogPath);
   const promotionHelperBytes = readFileSync(
     fileURLToPath(new URL('./release-promotion.mjs', import.meta.url)),
   );
@@ -394,6 +407,8 @@ function writeSyntheticInputs(root) {
   writeNew(evidencePath, evidenceBytes);
   return {
     artifactPaths: paths,
+    candidateBuildLogBytes,
+    candidateBuildLogPath,
     evidence,
     evidencePath,
     evidenceSha256: digest(evidenceBytes),
@@ -486,6 +501,61 @@ function expectManifestFailure(root, inputs, fakeGpg, name, manifest, pattern) {
       outputDirectory: join(root, name),
       releaseManifestPath: manifestPath,
       releaseManifestSha256: digest(manifestBytes),
+      signingFingerprint: SIGNING_FINGERPRINT,
+    }),
+    pattern,
+  );
+}
+
+function expectRetainedBuildLogFailure(
+  root,
+  inputs,
+  fakeGpg,
+  name,
+  pattern,
+  {
+    logBytes = inputs.candidateBuildLogBytes,
+    metadataBytes = logBytes,
+    mode = 'file',
+  } = {},
+) {
+  const inputDirectory = join(root, `${name}-input`);
+  mkdirSync(inputDirectory);
+  const evidence = structuredClone(inputs.evidence);
+  const buildLog = evidence.gates
+    .find(({ gate }) => gate.id === 'candidate-build')
+    .evidence.find(({ role }) => role === 'build-log');
+  buildLog.artifact = {
+    bytes: metadataBytes.length,
+    fileName: 'candidate-build.log',
+    sha256: digest(metadataBytes),
+    type: 'FILE',
+  };
+  const evidencePath = join(inputDirectory, 'release-validation-evidence.json');
+  const evidenceBytes = canonicalJsonBytes(evidence);
+  writeNew(evidencePath, evidenceBytes);
+
+  const retainedLogPath = join(inputDirectory, 'candidate-build.log');
+  if (mode === 'file') {
+    writeNew(retainedLogPath, logBytes);
+  } else if (mode === 'symlink') {
+    const target = join(inputDirectory, 'real-candidate-build.log');
+    writeNew(target, logBytes);
+    symlinkSync(target, retainedLogPath);
+  } else {
+    assert.equal(mode, 'missing');
+  }
+
+  expectFailure(
+    () => preparePromotion({
+      artifactPaths: inputs.artifactPaths,
+      candidateCommit: CANDIDATE_COMMIT,
+      evidencePath,
+      evidenceSha256: digest(evidenceBytes),
+      gpgPath: fakeGpg,
+      outputDirectory: join(root, `${name}-output`),
+      releaseManifestPath: inputs.releaseManifestPath,
+      releaseManifestSha256: inputs.releaseManifestSha256,
       signingFingerprint: SIGNING_FINGERPRINT,
     }),
     pattern,
@@ -591,11 +661,81 @@ async function run() {
       [...entries.map((entry) => entry.path)].sort(),
       'bundle entries must be ASCII-sorted',
     );
-    assert.ok(entries.every((entry) => entry.path.startsWith('com/soklet/soklet/3.6.0/')));
+    assert.ok(entries.every((entry) => entry.path.startsWith('com/soklet/soklet/4.0.0/')));
     assert.equal(entries.filter((entry) => entry.path.endsWith('.asc')).length, 4);
     assert.equal(entries.filter((entry) => /\.asc\.(?:md5|sha1|sha256|sha512)$/.test(entry.path)).length, 0);
     assert.equal(entries.filter((entry) => /\.(?:md5|sha1|sha256|sha512)$/.test(entry.path)).length, 16);
     validatePreparationRecord(first.preparation, firstBundle);
+
+    expectRetainedBuildLogFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'missing-retained-build-log',
+      /readable, regular, nonsymlink/,
+      { mode: 'missing' },
+    );
+    expectRetainedBuildLogFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'symlink-retained-build-log',
+      /readable, regular, nonsymlink/,
+      { mode: 'symlink' },
+    );
+    expectRetainedBuildLogFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'mismatched-retained-build-log',
+      /does not match release-validation evidence/,
+      {
+        logBytes: Buffer.concat([
+          inputs.candidateBuildLogBytes,
+          Buffer.from('[INFO] unrecorded bytes\n', 'utf8'),
+        ]),
+        metadataBytes: inputs.candidateBuildLogBytes,
+      },
+    );
+    expectRetainedBuildLogFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'wrong-stage-retained-build-log',
+      /exactly one canonical version-transition final-stage PASS line/,
+      {
+        logBytes: Buffer.from(
+          `${VERSION_TRANSITION_FINAL_PASS_LINE.replace('stage=final', 'stage=post-retarget')}\n`,
+          'utf8',
+        ),
+      },
+    );
+    expectRetainedBuildLogFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'wrong-count-retained-build-log',
+      /exactly one canonical version-transition final-stage PASS line/,
+      {
+        logBytes: Buffer.from(
+          `${VERSION_TRANSITION_FINAL_PASS_LINE.replace('occurrences=365', 'occurrences=364')}\n`,
+          'utf8',
+        ),
+      },
+    );
+    expectRetainedBuildLogFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'duplicate-pass-retained-build-log',
+      /exactly one canonical version-transition final-stage PASS line/,
+      {
+        logBytes: Buffer.from(
+          `${VERSION_TRANSITION_FINAL_PASS_LINE}\n${VERSION_TRANSITION_FINAL_PASS_LINE}\n`,
+          'utf8',
+        ),
+      },
+    );
 
     const corruptedBundle = Buffer.from(firstBundle);
     corruptedBundle[40] ^= 0x01;
@@ -1140,7 +1280,7 @@ async function run() {
     assert.equal(uploadRequests[0].url, CENTRAL_UPLOAD_URL);
     assert.equal(uploadRequests[0].method, 'POST');
     assert.match(uploadRequests[0].headers['Content-Type'], /^multipart\/form-data; boundary=/);
-    assert.match(uploadRequests[0].body.toString('latin1'), /name="bundle"; filename="soklet-3\.6\.0-central-bundle\.zip"/);
+    assert.match(uploadRequests[0].body.toString('latin1'), /name="bundle"; filename="soklet-4\.0\.0-central-bundle\.zip"/);
     assert.ok(uploadRequests.slice(1).every((request) =>
       request.url === `${CENTRAL_STATUS_BASE_URL}${DEPLOYMENT_ID}` && request.method === 'POST'));
     assert.ok(!JSON.stringify(upload).includes(SECRET_AUTHORIZATION));
@@ -1278,7 +1418,7 @@ async function run() {
         return { body: Buffer.from('not propagated'), status: 404 };
       }
       const fileName = request.url.slice(CENTRAL_REPOSITORY_BASE_URL.length);
-      const bytes = entryMap.get(`com/soklet/soklet/3.6.0/${fileName}`);
+      const bytes = entryMap.get(`com/soklet/soklet/4.0.0/${fileName}`);
       assert.ok(bytes !== undefined, `unexpected published artifact ${fileName}`);
       return { body: bytes, status: 200 };
     };
@@ -1316,7 +1456,7 @@ async function run() {
           if (request.url.startsWith(CENTRAL_STATUS_BASE_URL))
             return jsonResponse('PUBLISHED');
           const fileName = request.url.slice(CENTRAL_REPOSITORY_BASE_URL.length);
-          const bytes = entryMap.get(`com/soklet/soklet/3.6.0/${fileName}`);
+          const bytes = entryMap.get(`com/soklet/soklet/4.0.0/${fileName}`);
           if (!corruptedDownload) {
             corruptedDownload = true;
             return { body: Buffer.concat([bytes, Buffer.from([0])]), status: 200 };

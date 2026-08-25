@@ -1,0 +1,67 @@
+{
+  "formatVersion": 1,
+  "methodParameterOwnership": "global-2026-deferred-r2c",
+  "profiles": [
+    {
+      "revision": "2026-07-28",
+      "specification": {
+        "repository": "https://github.com/modelcontextprotocol/modelcontextprotocol.git",
+        "tag": "2026-07-28",
+        "commit": "5f5440bb26a62e2cf3440b92da5a667efa03b267"
+      },
+      "schema": {
+        "path": "conformance/official/final-schema/schema.json",
+        "sha256": "ef70b61f99b6d2e5e3b46863822eab08dff6a45bedc7a08914e0e5b133f40203"
+      },
+      "officialConformance": {
+        "pinsPath": "conformance/official/upstream-pins.json",
+        "pinsSha256": "fb39d00d27982b1d52aac593e9a809006e02c56ed4bf125d0da83523576553a2",
+        "suiteCommit": "49103de6ed70804e940637bf3e9e29e4a3f54e64"
+      },
+      "scenarios": {
+        "path": "conformance/official/scenarios.json",
+        "sha256": "e8f0d1a8c9ac673c80e3a6434f5763bb608f49d1fad62e48c179d26b6bee18e3"
+      },
+      "goldens": [
+        {
+          "path": "conformance/golden-error-mapping/live/manifest.sha256",
+          "sha256": "bfaecadaba283df430026504b94f71640c0c56a830159100f9be9179a7ce4e2d"
+        },
+        {
+          "path": "conformance/golden-http-contract/precedence-no-store/manifest.sha256",
+          "sha256": "273e83945e5bae949c4a2eee85993883abb1350ef7234b98548d1134d0f7af02"
+        },
+        {
+          "path": "conformance/golden-http-head/authorization-cors/manifest.sha256",
+          "sha256": "a059a3fa81e447f17aa4a9038726cfaf2f7d6a04f77b086d41fc4fc9b6dad760"
+        },
+        {
+          "path": "conformance/golden-result-envelope/live/manifest.sha256",
+          "sha256": "8ad233e91c4898fecaead0f779b13aebbaf3e2211fe3356f376c507736638d9c"
+        },
+        {
+          "path": "conformance/official/golden-wire/manifest.json",
+          "sha256": "33d945e88ae66fce2440ec7b872d004da2c5702c5b55be4d120e16d53be12e82"
+        }
+      ],
+      "interoperability": [
+        {
+          "implementation": "go",
+          "artifactIdentity": "github.com/modelcontextprotocol/go-sdk@v1.7.0",
+          "artifactChecksum": "h1:yqjY2dsbKAC0LSuWZVBMrHgiG8ukXv6NRo0JiALay44=",
+          "commit": "bc72835f62eb94d0fb484439f886b6885b075f36",
+          "lockPath": "verification/interoperability/go/go.sum",
+          "lockSha256": "3217ba72b22c5fffe92b8c0d35c6925a2564d8100a9b4b9fa5080a4fae91a4e4"
+        },
+        {
+          "implementation": "typescript",
+          "artifactIdentity": "npm:@modelcontextprotocol/client@2.0.0",
+          "artifactChecksum": "sha512-8f1OghQ2rjzIOfqgUCP+8GiUWqRs89njoWLNqAe8kWmDePv3s1fZXseej+QXemssEuuOvLLmLO/kqM3IQHtISw==",
+          "commit": "cc4b41617ce3601b1290d67216ea0b194a3cd9ac",
+          "lockPath": "verification/interoperability/typescript/package-lock.json",
+          "lockSha256": "2121079f0a787375456a7a8b6bc2b03d014ef782ee6e061e7873cea866e6ddf2"
+        }
+      ]
+    }
+  ]
+}

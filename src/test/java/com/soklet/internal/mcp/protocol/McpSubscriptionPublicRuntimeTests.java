@@ -20,6 +20,7 @@ import com.soklet.CorsAuthorizer;
 import com.soklet.LifecycleObserver;
 import com.soklet.McpAdmissionDecision;
 import com.soklet.McpAdmissionIdentity;
+import com.soklet.McpAdmissionRejection;
 import com.soklet.McpCompleteResult;
 import com.soklet.McpEndpoint;
 import com.soklet.McpEndpointRegistry;
@@ -303,6 +304,136 @@ public class McpSubscriptionPublicRuntimeTests {
 		}
 		Assertions.assertEquals(1, deniedAdmissionCalls.get());
 		Assertions.assertEquals(1, deniedLimiterCalls.get());
+	}
+
+	@Test
+	public void rejectedAdmissionNeverActivatesARegisteredSubscription()
+			throws Exception {
+		RecordingPublisher publisher = new RecordingPublisher();
+		McpEndpoint endpoint = endpoint(MCP_PATH, publisher,
+				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED,
+				McpSubscriptionNotificationType.RESOURCE_UPDATED);
+		String notifications = "{\"resourcesListChanged\":true,"
+				+ "\"resourceSubscriptions\":[\"" + RESOURCE_URI + "\"]}";
+		AtomicBoolean admit = new AtomicBoolean();
+		McpServer server = serverBuilder(List.of(endpoint), context -> {
+			if (admit.get())
+				return McpAdmissionController.acceptAllInstance().admit(context);
+			return McpAdmissionDecision.rejected(McpAdmissionRejection
+					.withStatusCodeAndError(403, McpJsonRpcError.fromApplication(
+							1_001, "Subscription forbidden"))
+					.build());
+		})
+				.maximumSubscriptionsPerPrincipal(1)
+				.build();
+		McpChunkedHttpClient admitted = null;
+
+		try {
+			server.start();
+			int port = boundPort(server);
+			try (McpChunkedHttpClient rejected = listen(port,
+					"\"rejected\"", notifications)) {
+				McpChunkedHttpClient.HttpResponseHead head = rejected.readHead();
+				Assertions.assertEquals(403, head.status(), head.raw());
+				Assertions.assertEquals("{\"jsonrpc\":\"2.0\","
+						+ "\"id\":\"rejected\",\"error\":{\"code\":1001,"
+						+ "\"message\":\"Subscription forbidden\"}}",
+						rejected.readFixedBody(head));
+			}
+
+			Assertions.assertEquals(1, publisher.subscriptionCount(),
+					"The generation-wide publisher listener may already exist.");
+			publisher.publishResourceUpdated(RESOURCE_URI);
+			Assertions.assertEquals(0,
+					server.getDiagnostics().getActiveRequestStreams());
+			Assertions.assertEquals(0,
+					server.getDiagnostics().getActiveSubscriptions());
+
+			admit.set(true);
+			admitted = listen(port, "\"admitted\"", notifications);
+			assertSseHead(admitted.readHead());
+			Assertions.assertEquals(acknowledgment("\"admitted\"",
+					notifications), admitted.readChunkText(),
+					"A pre-admission broadcast must not be accepted or replayed.");
+			assertCapacityRejected(port, "shared-anonymous-cap");
+			publisher.publishResourcesListChanged();
+			Assertions.assertEquals(resourceListChanged("\"admitted\""),
+					admitted.readChunkText());
+		} finally {
+			if (admitted != null)
+				admitted.closeWithReset();
+			server.stop();
+		}
+	}
+
+	@Test
+	public void nullAndThrowingAdmissionNeverActivateOrConsumeSubscriptionQuota()
+			throws Exception {
+		for (AdmissionFailure failure : List.of(
+				new AdmissionFailure("null", false),
+				new AdmissionFailure("throw", true))) {
+			RecordingPublisher publisher = new RecordingPublisher();
+			McpEndpoint endpoint = endpoint(MCP_PATH, publisher,
+					McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED,
+					McpSubscriptionNotificationType.RESOURCE_UPDATED);
+			String notifications = "{\"resourcesListChanged\":true,"
+					+ "\"resourceSubscriptions\":[\"" + RESOURCE_URI + "\"]}";
+			AtomicBoolean admit = new AtomicBoolean();
+			McpServer server = serverBuilder(List.of(endpoint), context -> {
+				if (admit.get())
+					return McpAdmissionController.acceptAllInstance().admit(context);
+				if (failure.throwing())
+					throw new IllegalStateException("secret subscription admission failure");
+				return null;
+			})
+					.maximumSubscriptionsPerPrincipal(1)
+					.build();
+			McpChunkedHttpClient admitted = null;
+
+			try {
+				server.start();
+				int port = boundPort(server);
+				String failedId = failure.name() + "-admission";
+				try (McpChunkedHttpClient failed = listen(port,
+						"\"" + failedId + "\"",
+						notifications)) {
+					McpChunkedHttpClient.HttpResponseHead head = failed.readHead();
+					Assertions.assertEquals(500, head.status(),
+							failure.name() + ": " + head.raw());
+					Assertions.assertEquals("application/json",
+							head.singleHeader("Content-Type"));
+					Assertions.assertEquals("{\"jsonrpc\":\"2.0\",\"id\":\""
+							+ failedId + "\",\"error\":{\"code\":-32603,"
+							+ "\"message\":\"Internal error\"}}",
+							failed.readFixedBody(head));
+				}
+
+				Assertions.assertEquals(1, publisher.subscriptionCount(),
+						"Each generation must retain exactly one shared publisher listener.");
+				publisher.publishResourceUpdated(RESOURCE_URI);
+				Assertions.assertEquals(0,
+						server.getDiagnostics().getActiveRequestStreams());
+				Assertions.assertEquals(0,
+						server.getDiagnostics().getActiveSubscriptions());
+
+				admit.set(true);
+				String admittedId = failure.name() + "-admitted";
+				admitted = listen(port, "\"" + admittedId + "\"",
+						notifications);
+				assertSseHead(admitted.readHead());
+				Assertions.assertEquals(acknowledgment("\"" + admittedId + "\"",
+						notifications), admitted.readChunkText(),
+						"A failed-admission broadcast must not be registered or replayed.");
+				assertCapacityRejected(port, failure.name() + "-quota");
+				publisher.publishResourcesListChanged();
+				Assertions.assertEquals(resourceListChanged("\"" + admittedId + "\""),
+						admitted.readChunkText());
+			} finally {
+				if (admitted != null)
+					admitted.closeWithReset();
+				server.stop();
+			}
+		}
 	}
 
 	@Test
@@ -1065,7 +1196,7 @@ public class McpSubscriptionPublicRuntimeTests {
 				+ subscriptionIdJson + ","
 				+ "\"io.modelcontextprotocol/serverInfo\":{"
 				+ "\"name\":\"subscription-public-runtime-test\","
-				+ "\"version\":\"3.6.0-SNAPSHOT\"}}}}");
+				+ "\"version\":\"4.0.0-SNAPSHOT\"}}}}");
 	}
 
 	private static String sse(String json) {
@@ -1131,7 +1262,7 @@ public class McpSubscriptionPublicRuntimeTests {
 		McpEndpoint.Builder builder = McpEndpoint.withPath(path)
 				.serverInformation(McpImplementation.withNameAndVersion(
 						"subscription-public-runtime-test",
-						"3.6.0-SNAPSHOT").build())
+						"4.0.0-SNAPSHOT").build())
 				.subscriptions(subscriptions);
 		for (URI resourceUri : resourceUris) {
 			builder.resource(McpResourceRegistration
@@ -1231,6 +1362,9 @@ public class McpSubscriptionPublicRuntimeTests {
 		private InvalidSubscriptionParams {
 			Assertions.assertFalse(id.isBlank());
 		}
+	}
+
+	private record AdmissionFailure(@NonNull String name, boolean throwing) {
 	}
 
 	@ThreadSafe

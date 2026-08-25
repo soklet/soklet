@@ -40,7 +40,7 @@
       "expectedCheckProfile": null,
       "requiredFixtureRegistrations": [],
       "localSupplements": [],
-      "rationale": "Soklet 3.6.0 does not implement or advertise Completion."
+      "rationale": "Soklet 4.0.0 does not implement or advertise Completion."
     },
     {
       "ordinal": 3,

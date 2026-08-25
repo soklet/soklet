@@ -1,22 +1,26 @@
 # No-rebuild release promotion
 
 Soklet's promotion tooling is deliberately separate from candidate validation
-and ordinary CI. It consumes the completed canonical release-validation
-evidence and the four already-built unsigned artifacts. It cannot compile,
+and ordinary CI. It consumes the completed release-validation evidence
+directory and the four already-built unsigned artifacts. It cannot compile,
 package, generate Javadocs, or invoke a build lifecycle.
 
 The four modes are intentionally distinct:
 
 1. `prepare` is offline. It verifies the independently supplied validation-
    evidence SHA-256, separately pinned reviewed release-manifest SHA-256,
-   candidate commit, fixed `com.soklet:soklet:3.6.0` coordinates, exact ordered
+   candidate commit, fixed `com.soklet:soklet:4.0.0` coordinates, exact ordered
    29-gate PASS set and gate pins, every typed gate receipt in the format-v2
    evidence envelope, reviewed workflow identity, and all four artifact names,
    sizes, and SHA-256 values.
    Each receipt must match its gate's evidence contract, toolchain, canonical
    command/profile/expectation, workflow run/job identity, candidate commit,
-   main-JAR SHA-256, and exact role/media/type/basename set. It stages copies of those exact
-   bytes, creates and verifies
+   main-JAR SHA-256, and exact role/media/type/basename set. Before signing, it
+   also reopens the retained `candidate-build.log` beside the canonical
+   evidence, matches its bytes and SHA-256 to the existing `build-log` role,
+   and requires exactly one canonical version-transition final-stage PASS
+   line. This adds no gate, evidence role, or receipt. It stages copies of the
+   exact candidate artifact bytes, creates and verifies
    four detached armored signatures with one explicit full GPG fingerprint,
    writes MD5, SHA-1, SHA-256, and SHA-512 files for the four base artifacts
    only, and creates a deterministic Maven-layout ZIP plus canonical evidence.
@@ -42,10 +46,13 @@ maintainer action in the Portal UI and is outside this tooling.
 
 ## Offline preparation
 
-Obtain the canonical `release-validation-evidence.json`, its SHA-256 through a
-separate trusted channel (for example the immutable workflow artifact digest),
-and the four artifact files from the same completed validation run. Do not use
-a hash copied out of an untrusted evidence download as the independent value.
+Obtain the complete `target/release-validation/evidence` directory, the
+canonical `release-validation-evidence.json` SHA-256 through a separate trusted
+channel (for example the immutable workflow artifact digest), and the four
+artifact files from the same completed validation run. Preserve
+`candidate-build.log` beside `release-validation-evidence.json`; a missing,
+symlinked, substituted, or non-final log fails preparation. Do not use a hash
+copied out of an untrusted evidence download as the independent value.
 
 The signer path must be absolute and must identify a regular nonsymlink
 executable. The fingerprint must be the full 40- or 64-hexadecimal fingerprint
@@ -63,17 +70,17 @@ scripts/promote-release-candidate.sh prepare \
   --release-manifest-sha256 <independently-reviewed-manifest-sha256> \
   --candidate-commit <40-lowercase-hex> \
   --pom /secure/input/pom.xml \
-  --main-jar /secure/input/soklet-3.6.0.jar \
-  --sources-jar /secure/input/soklet-3.6.0-sources.jar \
-  --javadoc-jar /secure/input/soklet-3.6.0-javadoc.jar \
+  --main-jar /secure/input/soklet-4.0.0.jar \
+  --sources-jar /secure/input/soklet-4.0.0-sources.jar \
+  --javadoc-jar /secure/input/soklet-4.0.0-javadoc.jar \
   --signing-fingerprint <full-fingerprint> \
   --gpg /absolute/path/to/gpg \
-  --output-directory /secure/output/soklet-3.6.0-promotion
+  --output-directory /secure/output/soklet-4.0.0-promotion
 ```
 
 The output directory must not already exist. A successful run creates only:
 
-- `soklet-3.6.0-central-bundle.zip`, containing the four Maven-layout base
+- `soklet-4.0.0-central-bundle.zip`, containing the four Maven-layout base
   artifacts, four `.asc` files, and four checksum files per base artifact; and
 - `promotion-preparation.json`, canonically recording the validation evidence,
   commit, coordinates, signing fingerprint, every artifact/signature/checksum
@@ -98,9 +105,9 @@ evidence.
 chmod 600 /secure/credentials/central-token
 SOKLET_CENTRAL_TOKEN_FILE=/secure/credentials/central-token \
   scripts/promote-release-candidate.sh upload \
-  --preparation /secure/output/soklet-3.6.0-promotion/promotion-preparation.json \
+  --preparation /secure/output/soklet-4.0.0-promotion/promotion-preparation.json \
   --preparation-sha256 <reviewed-preparation-sha256> \
-  --bundle /secure/output/soklet-3.6.0-promotion/soklet-3.6.0-central-bundle.zip \
+  --bundle /secure/output/soklet-4.0.0-promotion/soklet-4.0.0-central-bundle.zip \
   --accepted-output /secure/output/central-upload-accepted.json \
   --output /secure/output/central-upload-evidence.json \
   --timeout-seconds 900 \
@@ -122,9 +129,9 @@ rerun `upload`. Resume the same deployment ID instead:
 ```sh
 SOKLET_CENTRAL_TOKEN_FILE=/secure/credentials/central-token \
   scripts/promote-release-candidate.sh status \
-  --preparation /secure/output/soklet-3.6.0-promotion/promotion-preparation.json \
+  --preparation /secure/output/soklet-4.0.0-promotion/promotion-preparation.json \
   --preparation-sha256 <reviewed-preparation-sha256> \
-  --bundle /secure/output/soklet-3.6.0-promotion/soklet-3.6.0-central-bundle.zip \
+  --bundle /secure/output/soklet-4.0.0-promotion/soklet-4.0.0-central-bundle.zip \
   --accepted-evidence /secure/output/central-upload-accepted.json \
   --accepted-evidence-sha256 <reviewed-accepted-evidence-sha256> \
   --output /secure/output/central-upload-evidence.json \
@@ -147,9 +154,9 @@ records and the same private status credential:
 ```sh
 SOKLET_CENTRAL_TOKEN_FILE=/secure/credentials/central-token \
   scripts/promote-release-candidate.sh verify-published \
-  --preparation /secure/output/soklet-3.6.0-promotion/promotion-preparation.json \
+  --preparation /secure/output/soklet-4.0.0-promotion/promotion-preparation.json \
   --preparation-sha256 <reviewed-preparation-sha256> \
-  --bundle /secure/output/soklet-3.6.0-promotion/soklet-3.6.0-central-bundle.zip \
+  --bundle /secure/output/soklet-4.0.0-promotion/soklet-4.0.0-central-bundle.zip \
   --upload-evidence /secure/output/central-upload-evidence.json \
   --upload-evidence-sha256 <reviewed-upload-evidence-sha256> \
   --output /secure/output/central-published-evidence.json \
@@ -159,8 +166,8 @@ SOKLET_CENTRAL_TOKEN_FILE=/secure/credentials/central-token \
 
 Archive all four canonical JSON records (preparation, accepted deployment,
 terminal validation, and published verification), their independently recorded
-hashes, the bundle, the reviewed release manifest, the original workflow
-evidence, and the four validation artifacts.
+hashes, the bundle, the reviewed release manifest, the complete original
+workflow evidence directory, and the four validation artifacts.
 A mismatch, unexpected Central state, redirect, timeout, extra ZIP entry,
 credential-permission issue, or existing output target fails closed.
 

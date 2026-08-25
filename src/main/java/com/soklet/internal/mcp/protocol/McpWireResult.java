@@ -32,7 +32,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * Provisional open wire result. Core factories enforce the invariants of the
  * result type they emit; the extension factory keeps the representation open
- * without advertising or enabling an extension in Soklet 3.6.
+ * without advertising or enabling an extension in Soklet 4.0.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

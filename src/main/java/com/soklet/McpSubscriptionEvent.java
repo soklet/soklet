@@ -26,8 +26,10 @@ import java.net.URI;
  * Immutable application event that identifies a coarse MCP resource change.
  * <p>
  * Events do not identify an endpoint, authorization partition, or connected
- * client. Soklet retains responsibility for applying endpoint configuration,
- * client-requested filters, and authorization isolation before wire emission.
+ * client. Soklet applies endpoint configuration and each accepted URI filter
+ * before wire emission. The authorization partition stored when a subscription
+ * is admitted scopes registration and quota accounting; it is not an event
+ * target and does not authorize a URI semantically.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

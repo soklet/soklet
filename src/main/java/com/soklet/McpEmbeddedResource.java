@@ -23,6 +23,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Optional;
 
+import static com.soklet.internal.mcp.protocol.McpApplicationMetadata.requireApplicationMetadata;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -53,7 +54,7 @@ public final class McpEmbeddedResource implements McpContentBlock {
 	private McpEmbeddedResource(@NonNull Builder builder) {
 		this.resource = builder.resource;
 		this.annotations = builder.annotations;
-		this.metadata = builder.metadata;
+		this.metadata = requireApplicationMetadata(builder.metadata);
 	}
 
 	/** @return embedded resource contents */

@@ -306,7 +306,7 @@ public class McpResourceProtocolTests {
 			throws Exception {
 		com.soklet.McpEndpoint publicEndpoint = com.soklet.McpEndpoint.withPath("/mcp")
 				.serverInformation(com.soklet.McpImplementation.withNameAndVersion(
-						"resource-bridge-test", "3.6.0-SNAPSHOT").build())
+						"resource-bridge-test", "4.0.0-SNAPSHOT").build())
 				.build();
 		McpServerRuntimeBridge.CachePlan cache =
 				McpServerRuntimeBridge.CachePlan.privateNoCache();
@@ -567,7 +567,7 @@ public class McpResourceProtocolTests {
 	private static McpNormalizedEndpoint.Builder endpointBuilder() {
 		return McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"resource-protocol-test", "3.6.0-SNAPSHOT"));
+						"resource-protocol-test", "4.0.0-SNAPSHOT"));
 	}
 
 	private static McpHttpServerRuntime runtime(McpNormalizedEndpoint endpoint,

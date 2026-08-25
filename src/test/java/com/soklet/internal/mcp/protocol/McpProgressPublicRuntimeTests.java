@@ -760,7 +760,7 @@ public class McpProgressPublicRuntimeTests {
 			List<McpToolRegistration<?>> tools) {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"progress-public-runtime-test", "3.6.0-SNAPSHOT").build())
+						"progress-public-runtime-test", "4.0.0-SNAPSHOT").build())
 				.tools(tools)
 				.build();
 		return McpServer.withPort(0)

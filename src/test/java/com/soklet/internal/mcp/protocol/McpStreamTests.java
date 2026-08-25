@@ -117,7 +117,7 @@ public class McpStreamTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"stream-test", "3.6.0-SNAPSHOT").build())
+						"stream-test", "4.0.0-SNAPSHOT").build())
 				.tool(tool)
 				.resource(resource)
 				.subscriptions(subscriptions)
@@ -208,6 +208,7 @@ public class McpStreamTests {
 		McpJsonRpcMessage.Request request = new McpJsonRpcMessage.Request(
 				new McpJsonRpcId.StringId("server-request"), "roots/list",
 				new McpRequestParameters(McpRequestMetadata.fromClientCapabilities(
+						Mcp20260728ProtocolProfile.INSTANCE,
 						McpClientCapabilities.empty()), McpJsonObject.empty()),
 				McpJsonObject.empty());
 

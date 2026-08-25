@@ -71,6 +71,11 @@ jobs:
       - name: Verify reviewed API incompatibilities and MCP freezes
         run: scripts/verify-mcp-api-freezes.sh
 
+      - name: Verify version-transition inventory
+        run: |
+          node scripts/verify-version-transition-inventory-self-test.mjs
+          node scripts/verify-version-transition-inventory.mjs --stage post-retarget
+
       - name: Upload API-diff evidence
         if: always()
         uses: actions/upload-artifact@v6
@@ -180,8 +185,14 @@ jobs:
           java-version: '21'
           cache: maven
 
+      - name: Test SpotBugs exclusion-target verifier
+        run: node scripts/verify-spotbugs-exclusions-self-test.mjs
+
       - name: Run SpotBugs
         run: mvn -B -ntp -Pspotbugs -DskipTests clean compile spotbugs:check
+
+      - name: Verify SpotBugs exclusion targets
+        run: node scripts/verify-spotbugs-exclusions.mjs
 
   mcp-conformance-phase-5:
     name: MCP Conformance Candidate Artifact Phase 5 (JDK 17)
@@ -228,7 +239,7 @@ jobs:
           set -euo pipefail
           mvn -B -ntp -DskipTests package
           sh conformance/official/build-public-fixture.sh \
-            "${GITHUB_WORKSPACE}/target/soklet-3.6.0-SNAPSHOT.jar" \
+            "${GITHUB_WORKSPACE}/target/soklet-4.0.0-SNAPSHOT.jar" \
             "${GITHUB_WORKSPACE}/target/conformance/public-fixture" \
             > target/conformance/official/public-fixture-classpath.txt
 
@@ -236,7 +247,7 @@ jobs:
         shell: bash
         run: >-
           verification/localization/verify.sh
-          "${GITHUB_WORKSPACE}/target/soklet-3.6.0-SNAPSHOT.jar"
+          "${GITHUB_WORKSPACE}/target/soklet-4.0.0-SNAPSHOT.jar"
 
       - name: Run strict local off-network MCP simulator scenarios
         shell: bash

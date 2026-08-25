@@ -513,7 +513,7 @@ public class McpInputResponsesPublicRuntimeTests {
 		return McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
 						"input-responses-public-runtime-test",
-						"3.6.0-SNAPSHOT").build());
+						"4.0.0-SNAPSHOT").build());
 	}
 
 	private static McpServer.@NonNull Builder serverBuilder(

@@ -310,6 +310,6 @@ class McpResourceRegistrationTests {
 	private static McpEndpoint.Builder endpointBuilder() {
 		return McpEndpoint.withPath("/mcp")
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"resource-tests", "3.6.0-SNAPSHOT").build());
+						"resource-tests", "4.0.0-SNAPSHOT").build());
 	}
 }

@@ -60,7 +60,8 @@ public class McpApplicationInterceptionTests {
 
 		try {
 			execution.start();
-			execution.dispatch(transportRequest(1), request("transform"), identity,
+			execution.dispatch(transportRequest(1), request("transform"),
+					Mcp20260728ProtocolProfile.INSTANCE, identity,
 					invocation -> {
 						stages.add("handler");
 						return result("handler");
@@ -97,6 +98,7 @@ public class McpApplicationInterceptionTests {
 		try {
 			execution.start();
 			execution.dispatch(transportRequest(2), request("short-circuit"),
+					Mcp20260728ProtocolProfile.INSTANCE,
 					admissionIdentity("short-circuit"), invocation -> {
 						handlerInvocations.incrementAndGet();
 						return result("handler");
@@ -135,6 +137,7 @@ public class McpApplicationInterceptionTests {
 		try {
 			execution.start();
 			execution.dispatch(transportRequest(3), request("one-shot"),
+					Mcp20260728ProtocolProfile.INSTANCE,
 					admissionIdentity("one-shot"), invocation -> {
 						handlerInvocations.incrementAndGet();
 						return result("once");
@@ -180,6 +183,7 @@ public class McpApplicationInterceptionTests {
 		try {
 			execution.start();
 			execution.dispatch(transportRequest(31), request("bounded-continuation"),
+					Mcp20260728ProtocolProfile.INSTANCE,
 					admissionIdentity("bounded-continuation"), invocation -> {
 						handlerInvocations.incrementAndGet();
 						return result("escaped");
@@ -294,6 +298,7 @@ public class McpApplicationInterceptionTests {
 		try {
 			execution.start();
 			execution.dispatch(transportRequest, request("canceled"),
+					Mcp20260728ProtocolProfile.INSTANCE,
 					admissionIdentity("canceled"), invocation -> {
 						handlerInvocations.incrementAndGet();
 						return result("too-late");
@@ -328,6 +333,7 @@ public class McpApplicationInterceptionTests {
 		try {
 			execution.start();
 			execution.dispatch(transportRequest(8), request("failure"),
+					Mcp20260728ProtocolProfile.INSTANCE,
 					admissionIdentity("failure"), invocation -> {
 						handlerInvocations.incrementAndGet();
 						return result("handler");
@@ -363,7 +369,8 @@ public class McpApplicationInterceptionTests {
 	private static void dispatch(McpApplicationExecution execution, int port,
 			String id, McpApplicationRequestHandler handler,
 			AtomicReference<McpApplicationResponse> response, AtomicInteger cleanups) {
-		execution.dispatch(transportRequest(port), request(id), admissionIdentity(id),
+		execution.dispatch(transportRequest(port), request(id),
+				Mcp20260728ProtocolProfile.INSTANCE, admissionIdentity(id),
 				handler, deadline(), value -> {
 					response.set(value);
 					return true;
@@ -411,7 +418,7 @@ public class McpApplicationInterceptionTests {
 	private static McpEffectiveAdmissionIdentity admissionIdentity(String suffix) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"interception-" + suffix, "3.6.0-SNAPSHOT"))
+						"interception-" + suffix, "4.0.0-SNAPSHOT"))
 				.build();
 		return McpEffectiveAdmissionIdentity.resolve(endpoint, "/mcp",
 				McpAdmissionIdentity.anonymousInstance());

@@ -552,7 +552,7 @@ public class McpRequestStatePublicRuntimeTests {
 	private static McpEndpoint.Builder endpointBuilder(String implementationName) {
 		return McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						implementationName, "3.6.0-SNAPSHOT").build());
+						implementationName, "4.0.0-SNAPSHOT").build());
 	}
 
 	private static McpServer.Builder serverBuilder(McpEndpoint endpoint) {

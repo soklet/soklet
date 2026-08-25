@@ -982,7 +982,7 @@ public class McpHttpServerRuntimeTests {
 						McpMirroredHeaderValueType.STRING)));
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"cors-header-test", "3.6.0-SNAPSHOT"))
+						"cors-header-test", "4.0.0-SNAPSHOT"))
 				.tool(new McpNormalizedOperation("lookup", McpInputRequestPlan.empty(),
 						mirroredHeaders))
 				.build();
@@ -1207,7 +1207,7 @@ public class McpHttpServerRuntimeTests {
 	private static McpHttpServerRuntime runtime(McpHttpTransportConfiguration configuration,
 			McpHttpEndpointPolicy policy, String serverName) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
-				McpImplementationMetadata.withNameAndVersion(serverName, "3.6.0-SNAPSHOT"))
+				McpImplementationMetadata.withNameAndVersion(serverName, "4.0.0-SNAPSHOT"))
 				.build();
 		return new McpHttpServerRuntime(configuration, policy, endpoint);
 	}
@@ -1216,7 +1216,7 @@ public class McpHttpServerRuntimeTests {
 			McpHttpEndpointPolicy policy, Consumer<String> startupDiagnosticConsumer) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"test-server", "3.6.0-SNAPSHOT"))
+						"test-server", "4.0.0-SNAPSHOT"))
 				.build();
 		return new McpHttpServerRuntime(
 				configuration, policy, endpoint, startupDiagnosticConsumer);
@@ -1233,7 +1233,7 @@ public class McpHttpServerRuntimeTests {
 			McpApplicationRequestHandler handler) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						serverName, "3.6.0-SNAPSHOT"))
+						serverName, "4.0.0-SNAPSHOT"))
 				.build();
 		McpHttpEndpointPolicy policy = new McpHttpEndpointPolicy(
 				path, Set.of(), McpAbsentOriginPolicy.ALLOW,

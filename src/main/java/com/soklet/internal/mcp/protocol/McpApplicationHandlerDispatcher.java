@@ -129,6 +129,7 @@ final class McpApplicationHandlerDispatcher {
 	private int maximumObservedActiveSlots;
 	private int maximumObservedQueueDepth;
 	private boolean accepting;
+	private boolean draining;
 
 	McpApplicationHandlerDispatcher(int concurrency, int queueCapacity,
 			@NonNull ExecutorService executorService) {
@@ -152,6 +153,7 @@ final class McpApplicationHandlerDispatcher {
 		this.observer = requireNonNull(observer);
 		this.queue = new ArrayDeque<>(queueCapacity);
 		this.accepting = true;
+		this.draining = false;
 	}
 
 	@NonNull
@@ -245,11 +247,13 @@ final class McpApplicationHandlerDispatcher {
 	List<@NonNull Ticket> stopAccepting() {
 		List<Ticket> canceledTickets;
 
-		synchronized (lock) {
+			synchronized (lock) {
 			if (!accepting)
-				return List.of();
+				if (!draining)
+					return List.of();
 
 			accepting = false;
+			draining = false;
 			canceledTickets = new ArrayList<>(queue);
 			queue.clear();
 
@@ -262,6 +266,19 @@ final class McpApplicationHandlerDispatcher {
 		if (!canceledTickets.isEmpty())
 			drainObserver();
 		return List.copyOf(canceledTickets);
+	}
+
+	/**
+	 * Closes admission while preserving every ticket that was already accepted.
+	 * Queued work continues to promote as active slots return during grace.
+	 */
+	void beginGracefulDrain() {
+		synchronized (lock) {
+			if (!accepting)
+				return;
+			accepting = false;
+			draining = true;
+		}
 	}
 
 	@NonNull
@@ -361,7 +378,7 @@ final class McpApplicationHandlerDispatcher {
 	}
 
 	private @Nullable Ticket promoteNextLocked() {
-		if (!accepting || queue.isEmpty())
+		if ((!accepting && !draining) || queue.isEmpty())
 			return null;
 
 		Ticket next = queue.remove();

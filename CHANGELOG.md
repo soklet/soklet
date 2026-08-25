@@ -1,6 +1,6 @@
 # Changelog
 
-## 3.6.0 (Unreleased)
+## 4.0.0 (Unreleased)
 
 ### Breaking Changes
 
@@ -8,13 +8,13 @@
   MCP 2026-07-28 design. The new transport has no session or initialization
   lifecycle, and the new Java API is intentionally source- and binary-
   incompatible in this minor release. Applications that require the legacy MCP
-  implementation must remain on Soklet 3.5.x; 3.6.0 provides no compatibility
+  implementation must remain on Soklet 3.5.x; 4.0.0 provides no compatibility
   adapter.
 - MCP HTTP is stateless: `GET` and `DELETE` return `405`, while
   `MCP-Session-Id` and `Last-Event-ID` are ignored, never stored, and never
   emitted. This includes application-authored policy output; attempts to add
   either legacy header fail closed instead of being echoed.
-- The 3.6 modern-only migration diagnostic is intentionally narrower than the
+- The 4.0 modern-only migration diagnostic is intentionally narrower than the
   3.5.x initialization protocol. Once strict JSON exposes the exact readable
   method `initialize`, subsequent envelope/ID, mirrored-header, metadata,
   version, and removed-method rejections carry a supported-version diagnostic
@@ -40,7 +40,7 @@
   corpus or the three-head authorization/CORS corpus.
 - Added two independent production-golden corpora for the remaining core result
   and ordinary error contracts. Twenty-five checksum-bound JSON/SSE fixtures
-  exhaust Soklet 3.6's core `complete` and `input_required` result-envelope
+  exhaust Soklet 4.0's core `complete` and `input_required` result-envelope
   authorities; extension result types remain a separate capability boundary.
   Nine canonical complete-HTTP fixtures cover the eight frozen ordinary error
   mapping families, including distinct required and conditional `-32021`
@@ -164,7 +164,7 @@
   `io.modelcontextprotocol/subscriptionId`, and cancellation `requestId`
   parameter members remain legitimate; only the method-free terminal result
   retains the initiating request's top-level `id`. Malformed JSON that fails
-  before notification classification is outside this claim. Soklet 3.6
+  before notification classification is outside this claim. Soklet 4.0
   registers no extension-notification handler and exposes no arbitrary
   extension-notification handler API. The exact selector passes 2/0/0/0, the
   adjacent set passes 83/0/0/0 on both JDKs, and full clean test passes
@@ -792,7 +792,7 @@
   `SOK-SHUT-002` remain COMPLETE.
 - Added the nineteenth bounded Phase 6 production vertical in the sibling
   `soklet-otel` artifact. Unreleased `1.4.0-SNAPSHOT`, built against Soklet
-  `3.6.0-SNAPSHOT`, maps all 23 `McpMetricsEvent` variants to exactly 22
+  `4.0.0-SNAPSHOT`, maps all 23 `McpMetricsEvent` variants to exactly 22
   OpenTelemetry instruments: 21 MCP-specific instruments plus the shared
   transport-failure counter. The core event, snapshot, text, sketch, canary,
   and owner inventories are unchanged.
@@ -802,7 +802,7 @@
   `soklet.server.type="mcp"` and `soklet.failure.reason`, never `error.type`.
   Terminal values use overflow-safe duration conversion, with no
   cross-instrument atomicity or conservation promise.
-- Removed the obsolete pre-3.6 MCP request/session/SSE tracing callbacks,
+- Removed the obsolete pre-4.0 MCP request/session/SSE tracing callbacks,
   session instruments, span-policy knobs, and MCP span-naming methods. The
   reviewed V19 `1.3.1` to `1.4.0-SNAPSHOT` public diff was exactly 15 removed
   legacy methods and one added `didRecordMcpMetricsEvent(McpMetricsEvent)`

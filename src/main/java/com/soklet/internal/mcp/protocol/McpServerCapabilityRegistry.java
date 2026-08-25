@@ -81,7 +81,8 @@ final class McpServerCapabilityRegistry {
 	@NonNull
 	static McpServerCapabilityRegistry fromEndpoint(
 			@NonNull McpNormalizedEndpoint endpoint) {
-		return new McpServerCapabilityRegistry(endpoint, Set.of());
+		return new McpServerCapabilityRegistry(endpoint, Set.of(),
+				McpProductionProtocolProfiles.REGISTRY);
 	}
 
 	/**
@@ -94,14 +95,27 @@ final class McpServerCapabilityRegistry {
 			@NonNull McpNormalizedEndpoint endpoint,
 			@NonNull Set<McpRuntimeCatalogLocalizer.@NonNull ResponseKind>
 					localizedResponseKinds) {
-		return new McpServerCapabilityRegistry(endpoint, localizedResponseKinds);
+		return new McpServerCapabilityRegistry(endpoint, localizedResponseKinds,
+				McpProductionProtocolProfiles.REGISTRY);
+	}
+
+	@NonNull
+	static McpServerCapabilityRegistry fromEndpoint(
+			@NonNull McpNormalizedEndpoint endpoint,
+			@NonNull Set<McpRuntimeCatalogLocalizer.@NonNull ResponseKind>
+					localizedResponseKinds,
+			@NonNull McpProtocolProfileRegistry protocolProfiles) {
+		return new McpServerCapabilityRegistry(endpoint, localizedResponseKinds,
+				protocolProfiles);
 	}
 
 	private McpServerCapabilityRegistry(@NonNull McpNormalizedEndpoint endpoint,
 			@NonNull Set<McpRuntimeCatalogLocalizer.@NonNull ResponseKind>
-					localizedResponseKinds) {
+					localizedResponseKinds,
+			@NonNull McpProtocolProfileRegistry protocolProfiles) {
 		requireNonNull(localizedResponseKinds);
 		requireNonNull(endpoint);
+		requireNonNull(protocolProfiles);
 		this.tools = namesOf(endpoint.tools());
 		this.prompts = namesOf(endpoint.prompts());
 		this.promptDescriptors = promptDescriptors(endpoint.prompts());
@@ -176,7 +190,7 @@ final class McpServerCapabilityRegistry {
 				new McpResultMetadata(serverInformation, endpoint.discoveryMetadata());
 		Optional<McpResultMetadata> optionalResultMetadata =
 				resultMetadata.isEmpty() ? Optional.empty() : Optional.of(resultMetadata);
-		this.discoverResult = new McpDiscoverResult(McpProtocolVersion.SUPPORTED,
+		this.discoverResult = new McpDiscoverResult(protocolProfiles.revisions(),
 				capabilities, endpoint.instructions(),
 				endpoint.discoveryCachePolicy().timeToLiveMilliseconds(),
 				endpoint.discoveryCachePolicy().scope(), optionalResultMetadata);

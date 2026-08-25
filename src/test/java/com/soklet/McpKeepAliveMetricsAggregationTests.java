@@ -250,7 +250,7 @@ public class McpKeepAliveMetricsAggregationTests {
 				DefaultMetricsCollector.defaultInstance();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp/keep-alive-metrics")
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"keep-alive-metrics-test", "3.6.0-SNAPSHOT")
+						"keep-alive-metrics-test", "4.0.0-SNAPSHOT")
 						.build())
 				.build();
 		McpServer server = McpServer.withPort(0)

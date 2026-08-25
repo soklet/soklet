@@ -84,7 +84,7 @@ record McpInputRequestDeclaration(@NonNull String method,
 
 		if (!CORE_METHODS.contains(method))
 			throw new IllegalArgumentException(
-					"Soklet 3.6 supports only the three core input-request methods.");
+					"Soklet 4.0 supports only the three core input-request methods.");
 
 		if ("elicitation/create".equals(method)
 				&& !(capabilities.equals(Set.of(McpCoreClientCapability.ELICITATION_FORM))

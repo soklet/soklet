@@ -118,9 +118,9 @@ class McpLocalizationSubscriptionRuntimeTests {
 		List<String> bodies = new ArrayList<>();
 
 		Soklet.runSimulator(config, simulator -> {
-			// With a per-principal cap of 2, any reservation leak would turn the
-			// third and later attempts into capacity rejections instead of the
-			// sanitized localization failure.
+			// With a per-authorization-partition cap of 2, any reservation leak
+			// would turn the third and later attempts into capacity rejections
+			// instead of the sanitized localization failure.
 			for (int attempt = 0; attempt < 5; ++attempt) {
 				McpSimulation simulation = simulator.startMcpRequest(
 						subscriptionRequest("rollback-" + attempt));

@@ -33,14 +33,14 @@ public class McpBootstrapValueTests {
 	@Test
 	public void implementationMetadataIsImmutableAndValidatesRequiredValues() {
 		McpImplementation implementation = McpImplementation
-				.withNameAndVersion("catalog", "3.6.0")
+				.withNameAndVersion("catalog", "4.0.0")
 				.title("Catalog MCP")
 				.description("Catalog tools and resources")
 				.websiteUrl(URI.create("https://catalog.example/mcp"))
 				.build();
 
 		Assertions.assertEquals("catalog", implementation.getName());
-		Assertions.assertEquals("3.6.0", implementation.getVersion());
+		Assertions.assertEquals("4.0.0", implementation.getVersion());
 		Assertions.assertEquals("Catalog MCP", implementation.getTitle().orElseThrow());
 		Assertions.assertEquals("Catalog tools and resources",
 				implementation.getDescription().orElseThrow());
@@ -48,18 +48,18 @@ public class McpBootstrapValueTests {
 				implementation.getWebsiteUrl().orElseThrow());
 
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> McpImplementation.withNameAndVersion(" ", "3.6.0"));
+				() -> McpImplementation.withNameAndVersion(" ", "4.0.0"));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> McpImplementation.withNameAndVersion("catalog", ""));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> McpImplementation.withNameAndVersion("catalog", "3.6.0")
+				() -> McpImplementation.withNameAndVersion("catalog", "4.0.0")
 						.websiteUrl(URI.create("relative")));
 	}
 
 	@Test
 	public void blankOptionalImplementationTextIsAbsent() {
 		McpImplementation implementation = McpImplementation
-				.withNameAndVersion("catalog", "3.6.0")
+				.withNameAndVersion("catalog", "4.0.0")
 				.title(" ")
 				.description("\t")
 				.build();
@@ -136,7 +136,7 @@ public class McpBootstrapValueTests {
 		Assertions.assertThrows(NullPointerException.class, () -> McpEndpoint
 				.withPath("/mcp")
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"server", "3.6.0").build())
+						"server", "4.0.0").build())
 				.includeServerInformation(null));
 		Assertions.assertThrows(NullPointerException.class,
 				() -> McpJsonRpcError.fromApplication(null, "failure"));
@@ -168,7 +168,7 @@ public class McpBootstrapValueTests {
 	@Test
 	public void operationFreeEndpointIsValidAndNormalizesItsPath() {
 		McpImplementation serverInformation = McpImplementation
-				.withNameAndVersion("catalog", "3.6.0")
+				.withNameAndVersion("catalog", "4.0.0")
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(" /mcp// ")
 				.serverInformation(serverInformation)
@@ -284,7 +284,7 @@ public class McpBootstrapValueTests {
 	private static McpEndpoint endpoint(String path) {
 		return McpEndpoint.withPath(path)
 				.serverInformation(McpImplementation
-						.withNameAndVersion("server", "3.6.0")
+						.withNameAndVersion("server", "4.0.0")
 						.build())
 				.build();
 	}

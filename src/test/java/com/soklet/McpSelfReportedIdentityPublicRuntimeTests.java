@@ -72,7 +72,7 @@ public class McpSelfReportedIdentityPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"self-report-identity-test", "3.6.0-SNAPSHOT").build())
+						"self-report-identity-test", "4.0.0-SNAPSHOT").build())
 				.tool(tool)
 				.build();
 		McpServer server = McpServer.withPort(0)

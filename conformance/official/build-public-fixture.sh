@@ -4,7 +4,7 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 PROJECT_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd -P)
-CANDIDATE_JAR=${1:-"$PROJECT_ROOT/target/soklet-3.6.0-SNAPSHOT.jar"}
+CANDIDATE_JAR=${1:-"$PROJECT_ROOT/target/soklet-4.0.0-SNAPSHOT.jar"}
 OUTPUT_ROOT=${2:-"$PROJECT_ROOT/target/conformance/public-fixture"}
 SOURCE_ROOT="$SCRIPT_DIR/public-fixture-src"
 TEST_SOURCE_ROOT="$SCRIPT_DIR/public-fixture-test-src"

@@ -517,7 +517,7 @@ public class McpProgressAndCancelationMetricsAggregationTests {
 				DefaultMetricsCollector.defaultInstance();
 		McpEndpoint endpoint = McpEndpoint.withPath(ENDPOINT_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"progress-cancelation-metrics-test", "3.6.0-SNAPSHOT")
+						"progress-cancelation-metrics-test", "4.0.0-SNAPSHOT")
 						.build())
 				.build();
 		McpServer server = McpServer.withPort(0)

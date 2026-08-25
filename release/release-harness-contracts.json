@@ -1,0 +1,564 @@
+{
+  "contracts": [
+    {
+      "candidateBindings": [
+        "candidateCommit",
+        "candidateMainJarSha256",
+        "candidatePomSha256",
+        "candidateRegistrySha256",
+        "candidateTree",
+        "immutableBundleSha256",
+        "producerWorkflowSha256"
+      ],
+      "contractVersion": 1,
+      "evidenceContract": "soklet.release.fuzz-nightly-history.v1",
+      "id": "fuzz-nightly-history",
+      "importerMode": {
+        "import": "import-release-harness-evidence.mjs --import --gate <id> --candidate-root <absolute-path> --bundle <absolute-path> --output <absolute-path>",
+        "verifierCommand": "node scripts/verify-release-history.mjs fuzz-nightly",
+        "verifyConfig": "import-release-harness-evidence.mjs --verify-config"
+      },
+      "policy": {
+        "cadenceHours": 24,
+        "cadenceToleranceHours": 4,
+        "consecutiveUtcDates": 7,
+        "corpusHashes": "ORDERED_AND_UNIQUE_PER_TARGET_RUN",
+        "newestMaximumAgeHours": 36,
+        "oldestAgeHours": {
+          "maximum": 192,
+          "minimum": 144
+        },
+        "outcomesAllowed": [
+          "PASS"
+        ],
+        "perTargetDurationSeconds": 300,
+        "targets": [
+          {
+            "id": "request-parser",
+            "ordinal": 0
+          },
+          {
+            "id": "multipart-parser",
+            "ordinal": 1
+          },
+          {
+            "id": "http-date",
+            "ordinal": 2
+          },
+          {
+            "id": "parameterized-header-value",
+            "ordinal": 3
+          },
+          {
+            "id": "media-range",
+            "ordinal": 4
+          },
+          {
+            "id": "query-format",
+            "ordinal": 5
+          },
+          {
+            "id": "response-cookie",
+            "ordinal": 6
+          },
+          {
+            "id": "trace-context",
+            "ordinal": 7
+          },
+          {
+            "id": "mcp-json-parse",
+            "ordinal": 8
+          },
+          {
+            "id": "mcp-json-round-trip",
+            "ordinal": 9
+          },
+          {
+            "id": "mcp-json-rpc-envelope",
+            "ordinal": 10
+          },
+          {
+            "id": "mcp-mirrored-header",
+            "ordinal": 11
+          },
+          {
+            "id": "mcp-profile-1-schema",
+            "ordinal": 12
+          },
+          {
+            "id": "mcp-cursor-validator",
+            "ordinal": 13
+          },
+          {
+            "id": "mcp-request-state-plaintext",
+            "ordinal": 14
+          },
+          {
+            "id": "mcp-simulation-capture",
+            "ordinal": 15
+          },
+          {
+            "id": "mcp-localization-byte-accounting",
+            "ordinal": 16
+          },
+          {
+            "id": "mcp-localization-preferences",
+            "ordinal": 17
+          },
+          {
+            "id": "mcp-localization-overlay",
+            "ordinal": 18
+          }
+        ],
+        "zeroToleranceOutcomes": [
+          "crash",
+          "duplicate-run",
+          "missing-target",
+          "sanitizer",
+          "timeout",
+          "unexpected-result",
+          "unexpected-throwable"
+        ]
+      },
+      "producer": ".github/workflows/ci.yml#fuzz-nightly",
+      "retention": {
+        "acceptedBundleAndReceiptDaysAfterG5OrInvalidation": 400,
+        "rawProducerArtifactDays": 90
+      },
+      "roles": [
+        {
+          "kind": "file",
+          "mediaType": "application/json",
+          "name": "history",
+          "ordinal": 0,
+          "path": "fuzz-nightly-history.json",
+          "required": true
+        }
+      ],
+      "toolchains": [
+        {
+          "artifact": "corretto-25.0.4.7.1-linux-x64.tar.gz",
+          "digest": "sha256:1d03a3bd5091728492d92f0ef341aca7d8885ece9a150119558f3e3d62b58745",
+          "version": "25.0.4.7.1"
+        },
+        {
+          "artifact": "jazzer-junit.jar",
+          "digest": "sha256:1b1ae8658216031c50e989e6008193c04c2ad63c4c9b9876d4c66e23ecb75312",
+          "version": "0.30.0"
+        }
+      ]
+    },
+    {
+      "candidateBindings": [
+        "candidateCommit",
+        "candidateMainJarSha256",
+        "candidatePomSha256",
+        "candidateRegistrySha256",
+        "candidateTree",
+        "immutableBundleSha256",
+        "producerWorkflowSha256"
+      ],
+      "contractVersion": 1,
+      "evidenceContract": "soklet.release.mcp-benchmarks.v1",
+      "id": "mcp-benchmarks",
+      "importerMode": {
+        "import": "import-release-harness-evidence.mjs --import --gate <id> --candidate-root <absolute-path> --bundle <absolute-path> --output <absolute-path>",
+        "verifierCommand": "mvn -B -ntp -f benchmarks/pom.xml clean verify; node scripts/verify-release-benchmarks.mjs",
+        "verifyConfig": "import-release-harness-evidence.mjs --verify-config"
+      },
+      "policy": {
+        "candidateJvm": [
+          "-Xms1g",
+          "-Xmx1g",
+          "-XX:+AlwaysPreTouch"
+        ],
+        "comparison": {
+          "artifact": "com.soklet:soklet:3.5.1",
+          "jarSha256": "464c24c42f8a69705871202bb1b1f6dbfee52a9776c16d381fcc8af2afa4a589",
+          "minimumJsonParseWriteScoreRatio": 0.9,
+          "pomSha256": "89eb36427f626ee9591954bf25e8fc1b817d54c7ee3888d05615657aefbfe2d6"
+        },
+        "forks": 5,
+        "measurement": {
+          "iterations": 10,
+          "secondsPerIteration": 1
+        },
+        "ordering": "ALTERNATE_3.5.1_AND_4.0.0_PER_COMPLETE_REPETITION",
+        "profile1Baseline": {
+          "operations": [
+            "schema-compile",
+            "schema-evaluate"
+          ],
+          "requirement": "ZERO_ERRORS_AND_COMPLETE_RAW_RESULT"
+        },
+        "regressionPolicy": "A score ratio below 0.90 requires a hashed release-note entry and separate project-owner regression approval; never accept silently.",
+        "runnerPolicy": "Use the same physical ubuntu-24.04 x86_64 runner and boot for both artifacts; bind exact image version, kernel, CPU model, microcode, governor, and turbo state in evidence.",
+        "threads": 1,
+        "warmup": {
+          "iterations": 10,
+          "secondsPerIteration": 1
+        }
+      },
+      "producer": ".github/workflows/release-validation.yml#mcp-benchmarks",
+      "retention": {
+        "acceptedBundleAndReceiptDaysAfterG5OrInvalidation": 400,
+        "rawProducerArtifactDays": 90
+      },
+      "roles": [
+        {
+          "kind": "file",
+          "mediaType": "application/json",
+          "name": "benchmark-results",
+          "ordinal": 0,
+          "path": "mcp-benchmarks.json",
+          "required": true
+        },
+        {
+          "kind": "file",
+          "mediaType": "text/plain",
+          "name": "benchmark-log",
+          "ordinal": 1,
+          "path": "mcp-benchmarks.log",
+          "required": true
+        }
+      ],
+      "toolchains": [
+        {
+          "artifact": "corretto-17.0.20.8.1-linux-x64.tar.gz",
+          "digest": "sha256:89b50d4ef5d27ce1f8e5cad616525e14f7665b7b4a1ffca85381b0e21401034f",
+          "version": "17.0.20.8.1"
+        },
+        {
+          "artifact": "jmh-core.jar",
+          "digest": "sha256:dc0eaf2bbf0036a70b60798c785d6e03a9daf06b68b8edb0f1ba9eb3421baeb3",
+          "version": "1.37"
+        },
+        {
+          "artifact": "jmh-generator-annprocess.jar",
+          "digest": "sha256:6a5604b5b804e0daca1145df1077609321687734a8b49387e49f10557c186c77",
+          "version": "1.37"
+        }
+      ]
+    },
+    {
+      "candidateBindings": [
+        "candidateCommit",
+        "candidateMainJarSha256",
+        "candidatePomSha256",
+        "candidateRegistrySha256",
+        "candidateTree",
+        "immutableBundleSha256",
+        "producerWorkflowSha256"
+      ],
+      "contractVersion": 1,
+      "evidenceContract": "soklet.release.operational-history.v1",
+      "id": "operational-history",
+      "importerMode": {
+        "import": "import-release-harness-evidence.mjs --import --gate <id> --candidate-root <absolute-path> --bundle <absolute-path> --output <absolute-path>",
+        "verifierCommand": "node scripts/verify-release-history.mjs operational",
+        "verifyConfig": "import-release-harness-evidence.mjs --verify-config"
+      },
+      "policy": {
+        "cadenceSeconds": 5,
+        "drainMaximumSeconds": 30,
+        "durationSeconds": 21600,
+        "finalResourceDeltas": {
+          "http": {
+            "fileDescriptors": 12,
+            "heapBytes": 100663296,
+            "liveThreads": 48
+          },
+          "mcpAndRealtime": {
+            "fileDescriptors": 16,
+            "heapBytes": 134217728,
+            "liveThreads": 96
+          }
+        },
+        "loadShape": {
+          "clientsPerScenario": 16,
+          "deterministicSeed": 400,
+          "operationsPerClientPerSecond": 1,
+          "scenarioOrder": [
+            "http",
+            "mcp",
+            "realtime"
+          ],
+          "secondsPerScenario": 7200,
+          "uniqueAdversarialDimensionValuesPerScenario": 10000
+        },
+        "maximumSampleGapSeconds": 15,
+        "metricDimensions": "REGISTERED_ONLY",
+        "postIntervalReserveSeconds": 600,
+        "sensitiveCanariesAllowed": 0,
+        "terminalFrameworkCardinality": 0,
+        "zeroToleranceOutcomes": [
+          "dropped-log-record",
+          "rejected-metric-delivery",
+          "unregistered-metric-dimension"
+        ]
+      },
+      "producer": ".github/workflows/ci.yml#operational-history",
+      "retention": {
+        "acceptedBundleAndReceiptDaysAfterG5OrInvalidation": 400,
+        "rawProducerArtifactDays": 90
+      },
+      "roles": [
+        {
+          "kind": "file",
+          "mediaType": "application/json",
+          "name": "history",
+          "ordinal": 0,
+          "path": "operational-history.json",
+          "required": true
+        }
+      ],
+      "toolchains": [
+        {
+          "artifact": "corretto-17.0.20.8.1-linux-x64.tar.gz",
+          "digest": "sha256:89b50d4ef5d27ce1f8e5cad616525e14f7665b7b4a1ffca85381b0e21401034f",
+          "version": "17.0.20.8.1"
+        }
+      ]
+    },
+    {
+      "candidateBindings": [
+        "candidateCommit",
+        "candidateMainJarSha256",
+        "candidatePomSha256",
+        "candidateRegistrySha256",
+        "candidateTree",
+        "immutableBundleSha256",
+        "producerWorkflowSha256"
+      ],
+      "contractVersion": 1,
+      "evidenceContract": "soklet.release.release-scans.v1",
+      "id": "release-scans",
+      "importerMode": {
+        "import": "import-release-harness-evidence.mjs --import --gate <id> --candidate-root <absolute-path> --bundle <absolute-path> --output <absolute-path>",
+        "verifierCommand": "node scripts/verify-release-scans.mjs",
+        "verifyConfig": "import-release-harness-evidence.mjs --verify-config"
+      },
+      "policy": {
+        "allowlist": {
+          "fields": [
+            "approvedAt",
+            "approvalReference",
+            "commit",
+            "expiresAt",
+            "fingerprint",
+            "owner",
+            "path",
+            "rationale",
+            "ruleId",
+            "scanner"
+          ],
+          "maximumLifetimeDays": 30,
+          "wildcardSuppression": "PROHIBITED"
+        },
+        "codeql": {
+          "actionCommit": "5595ccaf912efad79be6eef63a5619ff05969be3",
+          "bundle": {
+            "commit": "18420e3271f74589575af831a523c833acda327f",
+            "linuxTarGzSha256": "cb361567fa1bdb9d322da4240f621b36f245e4d7bb97db3c3a2ad7f743c8e8e7",
+            "version": "2.26.2"
+          },
+          "javaQueries": {
+            "qlpackSha256": "eda3c4b42579797a140a92848e18b9f98dc4e4d92b9cf63886d5f17ba5747bc9",
+            "securityExtendedSuiteSelectorSha256": "b7aa198be7e5e8ab999591c2c9848e96d0ba8e5b9b5db702790f039ff6bcdb56",
+            "securityExtendedSuiteSha256": "37219d0083acd6da13923eb01986f4c83efaf041077393b424fed6e387168978",
+            "version": "1.11.7"
+          },
+          "querySuite": "security-extended",
+          "rejection": "EVERY_SECURITY_TAGGED_RESULT_UNLESS_EXACTLY_ALLOWLISTED; HIGH_OR_CRITICAL_RESULTS_CANNOT_BE_ALLOWLISTED"
+        },
+        "gitleaks": {
+          "candidateScope": "FULL_EXACT_CANDIDATE_ANCESTRY",
+          "commit": "83d9cd684c87d95d656c1458ef04895a7f1cbd8e",
+          "configSha256": "e163e53b9e7e8a8511e77271e2b323ed057759542a6d988258afe3a1fa329caf",
+          "linuxX64ArchiveSha256": "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb",
+          "rejection": "EVERY_FINDING_UNLESS_EXACT_FINGERPRINT_EXCEPTION_IS_UNEXPIRED",
+          "version": "8.30.1"
+        },
+        "reports": [
+          {
+            "name": "00-codeql-java.sarif",
+            "ordinal": 0
+          },
+          {
+            "name": "01-spotbugs.xml",
+            "ordinal": 1
+          },
+          {
+            "name": "02-gitleaks.sarif",
+            "ordinal": 2
+          },
+          {
+            "name": "03-gitleaks.json",
+            "ordinal": 3
+          },
+          {
+            "name": "04-runtime-dependency-surface.json",
+            "ordinal": 4
+          },
+          {
+            "name": "05-toolchain-provenance.json",
+            "ordinal": 5
+          }
+        ],
+        "runtimeDependencySurface": {
+          "expectedExternalRuntimeDependencyCount": 0,
+          "nonzeroResult": "HARD_FAILURE_AND_G0_AMENDMENT_REQUIRED",
+          "vulnerabilityDatabase": null
+        },
+        "spotbugs": {
+          "effort": "Max",
+          "engineJarSha256": "4469bc080afe7cd2290a20bf63e28392b80abcc7c7ace33c8f55da52a17c7ca5",
+          "engineVersion": "4.9.8",
+          "exclusionFileSha256": "2c7559cc6d288da637316de4957ffd8cc86aa22014dede34f3a581716f82f63c",
+          "failOnError": true,
+          "mavenPluginJarSha256": "bceba1f3c178e36d9a5ca1f76b86cd15bed73150ce7a820df470c6c3f5fa8757",
+          "mavenPluginVersion": "4.9.8.3",
+          "rejection": "EVERY_UNFILTERED_MEDIUM_OR_HIGH_FINDING",
+          "threshold": "Medium"
+        },
+        "unapprovedBaselineFindings": {
+          "gitleaksGenericApiKeyCount": 26,
+          "status": "FAIL_CLOSED_PENDING_INDIVIDUAL_SECURITY_REVIEW"
+        }
+      },
+      "producer": ".github/workflows/codeql.yml plus release-validation scan aggregation",
+      "retention": {
+        "acceptedBundleAndReceiptDaysAfterG5OrInvalidation": 400,
+        "rawProducerArtifactDays": 90
+      },
+      "roles": [
+        {
+          "kind": "file",
+          "mediaType": "application/json",
+          "name": "scan-summary",
+          "ordinal": 0,
+          "path": "release-scans.json",
+          "required": true
+        },
+        {
+          "kind": "directory",
+          "mediaType": "application/vnd.soklet.release-scans.v1",
+          "name": "scan-reports",
+          "ordinal": 1,
+          "path": "release-scans",
+          "required": true
+        }
+      ],
+      "toolchains": [
+        {
+          "artifact": "codeql-bundle-linux64.tar.gz",
+          "digest": "sha256:cb361567fa1bdb9d322da4240f621b36f245e4d7bb97db3c3a2ad7f743c8e8e7",
+          "version": "2.26.2"
+        },
+        {
+          "artifact": "gitleaks_8.30.1_linux_x64.tar.gz",
+          "digest": "sha256:551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb",
+          "version": "8.30.1"
+        },
+        {
+          "artifact": "spotbugs-maven-plugin.jar",
+          "digest": "sha256:bceba1f3c178e36d9a5ca1f76b86cd15bed73150ce7a820df470c6c3f5fa8757",
+          "version": "4.9.8.3"
+        }
+      ]
+    },
+    {
+      "candidateBindings": [
+        "candidateCommit",
+        "candidateMainJarSha256",
+        "candidatePomSha256",
+        "candidateRegistrySha256",
+        "candidateTree",
+        "immutableBundleSha256",
+        "producerWorkflowSha256"
+      ],
+      "contractVersion": 1,
+      "evidenceContract": "soklet.release.soak-nightly-history.v1",
+      "id": "soak-nightly-history",
+      "importerMode": {
+        "import": "import-release-harness-evidence.mjs --import --gate <id> --candidate-root <absolute-path> --bundle <absolute-path> --output <absolute-path>",
+        "verifierCommand": "node scripts/verify-release-history.mjs soak-nightly",
+        "verifyConfig": "import-release-harness-evidence.mjs --verify-config"
+      },
+      "policy": {
+        "cadenceHours": 24,
+        "cadenceToleranceHours": 4,
+        "consecutiveUtcDates": 7,
+        "newestMaximumAgeHours": 36,
+        "oldestAgeHours": {
+          "maximum": 192,
+          "minimum": 144
+        },
+        "profile": "nightly",
+        "profileSha256": "cfd2b6efbac2257eff4615b22462939779bf06de7f23ed719d0faac03e6a022c",
+        "scenarios": [
+          {
+            "id": "HTTP abort churn",
+            "ordinal": 0
+          },
+          {
+            "id": "MCP Phase 5 cross-feature churn",
+            "ordinal": 1
+          },
+          {
+            "id": "MCP localization render and invalidation churn",
+            "ordinal": 2
+          },
+          {
+            "id": "MCP off-network simulator churn",
+            "ordinal": 3
+          },
+          {
+            "id": "concurrent HTTP churn",
+            "ordinal": 4
+          },
+          {
+            "id": "concurrent SSE churn",
+            "ordinal": 5
+          }
+        ],
+        "surefire": {
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0,
+          "tests": 6
+        },
+        "thresholds": "EVERY_CHECKED_IN_NIGHTLY_PROFILE_RESOURCE_THRESHOLD",
+        "zeroToleranceOutcomes": [
+          "duplicate-run",
+          "failed-scenario",
+          "missing-report",
+          "missing-scenario"
+        ]
+      },
+      "producer": ".github/workflows/ci.yml#soak-nightly",
+      "retention": {
+        "acceptedBundleAndReceiptDaysAfterG5OrInvalidation": 400,
+        "rawProducerArtifactDays": 90
+      },
+      "roles": [
+        {
+          "kind": "file",
+          "mediaType": "application/json",
+          "name": "history",
+          "ordinal": 0,
+          "path": "soak-nightly-history.json",
+          "required": true
+        }
+      ],
+      "toolchains": [
+        {
+          "artifact": "corretto-25.0.4.7.1-linux-x64.tar.gz",
+          "digest": "sha256:1d03a3bd5091728492d92f0ef341aca7d8885ece9a150119558f3e3d62b58745",
+          "version": "25.0.4.7.1"
+        }
+      ]
+    }
+  ],
+  "formatVersion": 1
+}

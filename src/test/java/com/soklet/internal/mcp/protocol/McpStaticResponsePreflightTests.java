@@ -105,7 +105,7 @@ public class McpStaticResponsePreflightTests {
 	private static McpNormalizedEndpoint.Builder endpointBuilder() {
 		return McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"static-preflight-test", "3.6.0-SNAPSHOT"));
+						"static-preflight-test", "4.0.0-SNAPSHOT"));
 	}
 
 	private static McpHttpServerRuntime runtime(McpNormalizedEndpoint endpoint) {

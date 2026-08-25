@@ -14,6 +14,7 @@ import { basename, delimiter, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { adjudicateChecks } from './adjudicate.mjs';
 import { validateFinalTagWire } from './validate-final-tag-wire.mjs';
+import { verifyProfileEvidence } from './verify-profile-evidence.mjs';
 import {
   activeScenarios,
   officialScenarioArguments,
@@ -84,6 +85,7 @@ export async function runOfficialConformance(options, { processObject = process 
 		} else {
 			verifyPublicFixtureClasspath(options.classpath, options.projectRoot);
 		}
+		verifyProfileEvidence({ projectRoot: options.projectRoot });
     evidence.suiteCommit = pins.officialConformanceSuite.commit;
     evidence.protocolVersion = pins.protocolVersion;
     persistEvidence(evidencePath, evidence);
@@ -469,7 +471,7 @@ export function verifyPublicFixtureClasspath(classpath, projectRoot, expectedCan
   const root = resolve(projectRoot);
   const fixtureClasses = resolve(root, 'target/conformance/public-fixture/classes');
   const candidateJar = expectedCandidateJar === undefined
-    ? resolve(root, 'target/soklet-3.6.0-SNAPSHOT.jar')
+    ? resolve(root, 'target/soklet-4.0.0-SNAPSHOT.jar')
     : resolve(expectedCandidateJar);
   const fixtureMainClass = resolve(
     fixtureClasses, 'com/soklet/conformance/McpConformanceFixture.class',
@@ -491,7 +493,7 @@ export function verifyPublicFixtureClasspath(classpath, projectRoot, expectedCan
       expectedCandidateJar === undefined
         ? 'Public MCP fixture classpath must be exactly '
           + 'target/conformance/public-fixture/classes followed by '
-          + 'target/soklet-3.6.0-SNAPSHOT.jar'
+          + 'target/soklet-4.0.0-SNAPSHOT.jar'
         : 'Public MCP fixture classpath must be exactly '
           + 'target/conformance/public-fixture/classes followed by the validated '
           + `release-candidate JAR ${candidateJar}`,
@@ -599,7 +601,7 @@ function verifyReleaseCandidateOptions(options, pins) {
     coordinates: {
       groupId: 'com.soklet',
       artifactId: 'soklet',
-      version: '3.6.0',
+      version: '4.0.0',
     },
     artifacts: {
       pom: { path: options.candidatePom, sha256: options.candidatePomSha256 },
@@ -646,8 +648,8 @@ function verifyReleaseCandidateDescriptor(descriptor, pins, { source, manifestSh
   const coordinates = descriptor.coordinates;
   if (coordinates.groupId !== 'com.soklet'
       || coordinates.artifactId !== 'soklet'
-      || coordinates.version !== '3.6.0') {
-    throw new Error('Release candidate coordinates must be com.soklet:soklet:3.6.0');
+      || coordinates.version !== '4.0.0') {
+    throw new Error('Release candidate coordinates must be com.soklet:soklet:4.0.0');
   }
   requireExactKeys(
     descriptor.artifacts, ['pom', 'mainJar', 'sourcesJar', 'javadocJar'],

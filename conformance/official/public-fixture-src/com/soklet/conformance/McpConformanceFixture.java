@@ -256,7 +256,7 @@ public final class McpConformanceFixture {
 	static McpEndpoint endpointForScenario(String scenario) {
 		McpEndpoint.Builder builder = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"soklet-public-conformance", "3.6.0-SNAPSHOT")
+						"soklet-public-conformance", "4.0.0-SNAPSHOT")
 						.description("Soklet MCP conformance fixture")
 						.build())
 				.includeServerInformation(true)

@@ -363,10 +363,14 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 
 		/**
 		 * Sets the positive, finite number of concurrently live subscriptions for
-		 * one admitted principal. The default is {@code 32}. This setting has
+		 * one admitted authorization/quota partition. The default is {@code 32}.
+		 * All callers accepted without an explicit partition key at one endpoint
+		 * share that endpoint's empty anonymous partition, so one anonymous client
+		 * can exhaust the bucket for every other anonymous caller. This setting has
 		 * neutral behavior until subscriptions are active.
 		 *
-		 * @param maximumSubscriptionsPerPrincipal subscription limit per principal
+		 * @param maximumSubscriptionsPerPrincipal subscription limit per endpoint
+		 *                                          and authorization/quota partition
 		 * @return this builder
 		 * @throws NullPointerException if {@code maximumSubscriptionsPerPrincipal}
 		 *                              is null

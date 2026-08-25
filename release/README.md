@@ -1,7 +1,7 @@
 # Release-candidate validation
 
 The release validator is an explicit-dispatch, fail-closed skeleton for the
-Soklet 3.6.0 candidate. It is deliberately separate from ordinary CI: its input
+Soklet 4.0.0 candidate. It is deliberately separate from ordinary CI: its input
 is a full candidate commit SHA, the workflow checks out that exact commit, and
 any repository change requires a new commit and a complete new run.
 
@@ -23,8 +23,8 @@ Five gates remain `BLOCKED_HARNESS_MISSING`:
   and resource-history receipt contract;
 - `release-scans` requires an exact scanner/toolchain pin, severity policy,
   and retained report contract;
-- `mcp-benchmarks` requires the isolated 3.5.1-versus-3.6.0 JSON comparison
-  and 3.6.0 schema-baseline harness.
+- `mcp-benchmarks` requires the isolated 3.5.1-versus-4.0.0 JSON comparison
+  and 4.0.0 schema-baseline harness.
 
 The checked-in registry, verifier, and verifier self-test make
 `matrix-closure` `READY`. The registry deliberately produces a canonical
@@ -34,6 +34,15 @@ candidate-contained implementation or evidence anchors and that its remaining
 immutable-candidate, scheduled-history, sustained-run, or pinned-downstream
 proof is owned by the exact named release gate or gates. It must not be used to
 hide a local implementation, test, documentation, golden, or fixture gap.
+
+Candidate conformance also verifies
+`conformance/official/protocol-profile-evidence.json` before setup. That index
+binds the sole immutable production revision to its specification, schema,
+official-suite, scenario, golden, and interoperability evidence; its strict
+verifier/self-test run directly and through the API-freeze wrapper. A missing
+or extra profile, ownership-sentinel change, pin drift, untracked or symlinked
+evidence, or nondeterministic report fails closed. Test-only injected profiles
+are intentionally absent from discovery and candidate evidence.
 
 The preceding 2026-08-20 protocol/capability golden checkpoint passed 9/9 on
 local Corretto 17 and the pinned Corretto 21, 86/86 across the broader
@@ -87,7 +96,7 @@ Corretto 21.0.12.9.1 toolchain (`java 21.0.12.1`) passes the exact full
 test sources. The affected method passes 1/1 focused and 20/20 repeated runs;
 `McpSubscriptionPublicRuntimeTests` plus
 `McpSubscriptionRuntimeBoundaryTests` pass 26/26. The test-only correction
-sets the per-principal subscription cap to one and holds the recovery
+sets the per-authorization-partition subscription cap to one and holds the recovery
 subscription open while the original disconnect observer's exact-once count
 is asserted, preventing that recovery request's legitimate finish from
 entering the first request's observation phase. No production behavior,
@@ -156,17 +165,18 @@ Final-tag Ajv validation of the
 expanded 48-message corpus was not rerun locally and remains owned by candidate
 conformance. These local checks are not candidate PASS receipts.
 
-The preceding four-row HTTP-contract reconciliation closed modern-only readable-
-`initialize` rejection diagnostics, unsupported classified-notification
-handling, universal MCP HTTP `no-store`, and exact validation precedence. The
+The preceding four-row HTTP-contract reconciliation closed readable
+`initialize` and validated-unsupported-selector rejection diagnostics,
+unsupported classified-notification handling, universal MCP HTTP `no-store`,
+and exact validation precedence. The
 separate `conformance/golden-http-contract/precedence-no-store/manifest.sha256`
-binds 21 canonical complete responses at SHA-256
-`ec1bd3f13c70bec100b18e774bfbdf2d9e574c1d8df99f2acc4b36e85f51702c`.
-Four contract tests comprise three real-listener goldens and one exhaustive
-response-authority inventory; four diagnostic tests cover the positive post-
-JSON and negative pre-JSON/unreadable-method boundary. They pass 8/8, and the
-adjacent group passes
-108/108, on local Corretto 17.0.20.1 and local Corretto 21.0.11.
+binds 22 canonical complete responses at SHA-256
+`273e83945e5bae949c4a2eee85993883abb1350ef7234b98548d1134d0f7af02`.
+Five contract tests comprise three real-listener goldens, one exhaustive
+response-authority inventory, and one six-document manifest-digest parity gate;
+four diagnostic tests cover the positive post-JSON and negative pre-JSON/
+unreadable-method boundary. Those two classes pass 9/9 in the current focused
+execution.
 
 Full clean test passes 1,693/0/0/72 and 1,708/0/0/4, respectively, over 462
 main and 203 test sources; the JDK 21 total includes 15 extra virtual-thread
@@ -183,13 +193,13 @@ The subsequent 2026-08-21 core-result/error closure binds two more independent
 corpora without changing the official 48-message/11-test or authorization/
 CORS three-head/two-test corpora. The 25-fixture core result-envelope manifest
 at `conformance/golden-result-envelope/live/manifest.sha256` has SHA-256
-`d2eaa03c24927d45ef350b187624f50448d78a6531a26dedbbe07ee327b91b14`.
+`8ad233e91c4898fecaead0f779b13aebbaf3e2211fe3356f376c507736638d9c`.
 Four production-listener tests and the checksum/source-authority inventory
-exhaust Soklet 3.6's core `complete` and `input_required` envelope authorities;
-extension result types remain separately bounded by `MCP-BASE-006`. The nine-
+exhaust Soklet 4.0's core `complete` and `input_required` envelope authorities;
+extension result types remain separately bounded by `MCP-BASE-006`. The twelve-
 fixture canonical complete-HTTP error manifest at
 `conformance/golden-error-mapping/live/manifest.sha256` has SHA-256
-`90fae4482e7d8560f421aa4edbc8a6459d72f42880b5351298d5b74ff3f8b780`.
+`bfaecadaba283df430026504b94f71640c0c56a830159100f9be9179a7ce4e2d`.
 Two production-listener tests cover all eight frozen ordinary mapping families
 and both `-32021` paths; readable-`initialize` and path-specific error evidence
 remain explicit supplements. Five deterministic tests freeze the two progress/
@@ -335,7 +345,7 @@ acknowledgment, and list-changed notification frames carry a method and omit
 top-level `id`; nested `progressToken`,
 `io.modelcontextprotocol/subscriptionId`, and cancellation `requestId`
 parameter members remain legitimate. Only the method-free terminal result
-retains the initiating request's top-level `id`. Soklet 3.6 registers no
+retains the initiating request's top-level `id`. Soklet 4.0 registers no
 extension-notification handler and exposes no arbitrary extension-notification
 handler API. The exact selector passes 2/0/0/0, the adjacent set passes
 83/0/0/0 on both JDKs, and full clean test passes 1,721/0/0/72 and
@@ -376,7 +386,7 @@ Six downstream gates remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`. The manifest
 records their exact public commit pins without treating uncommitted sibling
 work as evidence:
 
-- ToyStore's local 3.6 MCP migration passes 14/14 tests, including six MCP
+- ToyStore's local 4.0 MCP migration passes 14/14 tests, including six MCP
   tests and exact per-request 401/403 coverage, but the migration is
   uncommitted and is not represented by the manifest's pre-migration pin;
 - the current `soklet-otel` migration passes 36/36, but it remains uncommitted
@@ -385,7 +395,7 @@ work as evidence:
   33-route static-generation build, but it remains uncommitted and is not
   represented by its pinned commit;
 - both servlet integrations pass 158/158 at their 3.1.1 default and at the
-  local 3.6.0 snapshot, but each required `soklet.version` POM edit is
+  local 4.0.0 snapshot, but each required `soklet.version` POM edit is
   uncommitted and absent from the pinned 1.2.0 release commit; and
 - Barebones compiles and passes its exact local live probes against the local
   snapshot on an ephemeral loopback port without disturbing the unrelated
@@ -437,7 +447,7 @@ Once every gate is ready, the validator:
    localization provider against the candidate JAR alone;
 8. checks out every downstream at its exact manifest commit and invokes its
    candidate hook, including default/candidate servlet matrices, candidate-only
-   ToyStore and OpenTelemetry 3.6 migrations, Barebones startup/probe/termination,
+   ToyStore and OpenTelemetry 4.0 migrations, Barebones startup/probe/termination,
    website generated-artifact cleanliness, and the interoperability entry
    points; ToyStore alone runs under the separately pinned Corretto 25
    compiler/runtime because its POM requires release 25; and
@@ -479,7 +489,7 @@ is selected only for `core-jdk-21`, `static-analysis`, and `spotbugs`.
 Corretto 25 is selected only for `core-jdk-25`, `fuzz-replay`, `soak-smoke`,
 and ToyStore; the other currently configured Java gates use Corretto 17.
 ToyStore and `soklet-otel` intentionally
-have no default compatibility leg: both migrated sources target the new 3.6
+have no default compatibility leg: both migrated sources target the new 4.0
 API and currently default to an unpublished snapshot, while the servlet
 integrations retain their released-default and candidate-version legs. Every
 Maven leg first proves that the downstream POM coordinates match the manifest,

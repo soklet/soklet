@@ -258,12 +258,13 @@ public class McpProgressAndCancelationRuntimeTests {
 				McpJsonObject.empty());
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint
 				.withServerInformation(McpImplementationMetadata.withNameAndVersion(
-						"progress-test", "3.6.0-SNAPSHOT"))
+						"progress-test", "4.0.0-SNAPSHOT"))
 				.build();
 		McpEffectiveAdmissionIdentity identity =
 				McpEffectiveAdmissionIdentity.resolve(endpoint, "/mcp",
 						McpAdmissionIdentity.anonymousInstance());
-		return new McpApplicationInvocation(null, null, request, identity,
+		return new McpApplicationInvocation(null, null, request,
+				Mcp20260728ProtocolProfile.INSTANCE, identity,
 				new McpApplicationCancellationState(), notificationWriter, () -> {});
 	}
 }

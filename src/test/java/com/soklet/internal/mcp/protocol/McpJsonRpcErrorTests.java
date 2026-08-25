@@ -63,7 +63,8 @@ public class McpJsonRpcErrorTests {
 		Assertions.assertEquals(Set.of("requiredCapabilities"),
 				((McpJsonObject) missing.data().orElseThrow()).members().keySet());
 
-		McpJsonRpcError unsupported = McpJsonRpcError.unsupportedProtocolVersion("draft");
+		McpJsonRpcError unsupported = McpJsonRpcError.unsupportedProtocolVersion(
+				"draft", McpProductionProtocolProfiles.REGISTRY.revisions());
 		Assertions.assertEquals(McpJsonRpcError.UNSUPPORTED_PROTOCOL_VERSION,
 				unsupported.code());
 		Assertions.assertEquals("Unsupported protocol version", unsupported.message());

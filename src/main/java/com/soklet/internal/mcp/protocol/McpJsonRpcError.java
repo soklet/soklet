@@ -70,12 +70,15 @@ record McpJsonRpcError(int code, @NonNull String message,
 	}
 
 	@NonNull
-	static McpJsonRpcError unsupportedProtocolVersion(@NonNull String requestedVersion) {
+	static McpJsonRpcError unsupportedProtocolVersion(
+			@NonNull String requestedVersion,
+			@NonNull List<@NonNull String> supportedProtocolVersions) {
+		requireNonNull(supportedProtocolVersions);
 		Map<@NonNull String, @NonNull McpJsonValue> values = new LinkedHashMap<>();
 		List<@NonNull McpJsonValue> supportedVersions =
-				new ArrayList<>(McpProtocolVersion.SUPPORTED.size());
+				new ArrayList<>(supportedProtocolVersions.size());
 
-		for (String supportedVersion : McpProtocolVersion.SUPPORTED)
+		for (String supportedVersion : supportedProtocolVersions)
 			supportedVersions.add(new McpJsonString(supportedVersion));
 
 		values.put("supported", new McpJsonArray(supportedVersions));

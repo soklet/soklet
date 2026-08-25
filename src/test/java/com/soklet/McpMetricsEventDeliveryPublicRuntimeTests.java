@@ -423,7 +423,7 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 		List<McpEndpoint> endpoints = java.util.Arrays.stream(paths)
 				.map(path -> McpEndpoint.withPath(path)
 						.serverInformation(McpImplementation.withNameAndVersion(
-								"metric-delivery-test", "3.6.0-SNAPSHOT")
+								"metric-delivery-test", "4.0.0-SNAPSHOT")
 								.build())
 						.build())
 				.toList();

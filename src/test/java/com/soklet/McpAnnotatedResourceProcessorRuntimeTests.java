@@ -364,7 +364,7 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				@McpServerEndpoint(
 				    path = "/resources/mcp",
 				    name = "resource-catalog",
-				    version = "3.6.0-SNAPSHOT",
+				    version = "4.0.0-SNAPSHOT",
 				    resourceListCacheTtlMs = 300,
 				    resourceListCacheScope = McpCacheScope.PUBLIC,
 				    resourceTemplateListCacheTtlMs = 450)

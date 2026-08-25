@@ -45,6 +45,24 @@ downstream_pom_verifier="$project_root/scripts/verify-maven-downstream-pom.mjs"
 loopback_port_reserver="$project_root/scripts/reserve-loopback-port.mjs"
 [[ -f "$loopback_port_reserver" && ! -L "$loopback_port_reserver" ]] \
 	|| fail "loopback port reservation helper is missing or is a symlink."
+version_transition_inventory="$project_root/release/version-transition-inventory.json"
+version_transition_verifier="$project_root/scripts/verify-version-transition-inventory.mjs"
+version_transition_self_test="$project_root/scripts/verify-version-transition-inventory-self-test.mjs"
+for version_transition_source in \
+	"$version_transition_inventory" "$version_transition_verifier" \
+	"$version_transition_self_test"; do
+	[[ -f "$version_transition_source" && ! -L "$version_transition_source" ]] \
+		|| fail "version-transition inventory source is missing or is a symlink."
+done
+release_harness_registry="$project_root/release/release-harness-contracts.json"
+release_harness_importer="$project_root/scripts/import-release-harness-evidence.mjs"
+release_harness_importer_self_test="$project_root/scripts/import-release-harness-evidence-self-test.mjs"
+for release_harness_source in \
+	"$release_harness_registry" "$release_harness_importer" \
+	"$release_harness_importer_self_test"; do
+	[[ -f "$release_harness_source" && ! -L "$release_harness_source" ]] \
+		|| fail "release-harness contract source is missing or is a symlink."
+done
 
 node_distribution_evidence=${SOKLET_RELEASE_NODE_DISTRIBUTION_EVIDENCE:-}
 maven_distribution_evidence=${SOKLET_RELEASE_MAVEN_DISTRIBUTION_EVIDENCE:-}
@@ -62,6 +80,10 @@ for distribution_evidence in \
 		|| fail "checksum-pinned toolchain distribution evidence is missing."
 done
 
+# This candidate host proves the importer and its negative cases before any
+# gate evidence can be recorded or imported.
+node "$release_harness_importer" --verify-config
+node "$release_harness_importer_self_test"
 node "$evidence_helper" validate-config "$manifest_path"
 
 assert_ready_gate_has_dispatch() {
@@ -342,7 +364,11 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 build_log="$temporary_directory/candidate-build.log"
-mvn -B -ntp -Dgpg.skip=true clean verify 2>&1 | tee "$build_log"
+{
+	node "$version_transition_self_test"
+	node "$version_transition_verifier" --stage final
+	mvn -B -ntp -Dgpg.skip=true clean verify
+} 2>&1 | tee "$build_log"
 
 validation_root="$project_root/target/release-validation"
 evidence_root="$validation_root/evidence"
@@ -487,12 +513,14 @@ run_isolated_install() {
 		|| fail "isolated Maven repository already exists: $isolated_maven_repository"
 	mkdir -p "$isolated_maven_repository"
 	local install_log="$evidence_root/isolated-install.log"
-	mvn -B -ntp "$install_file_goal" \
-		-Dfile="$candidate_jar" \
-		-DpomFile="$candidate_pom" \
-		-DgeneratePom=false \
-		-DlocalRepositoryPath="$isolated_maven_repository" \
-		2>&1 | tee "$install_log"
+	{
+		node "$version_transition_verifier" --stage final
+		mvn -B -ntp "$install_file_goal" \
+			-Dfile="$candidate_jar" \
+			-DpomFile="$candidate_pom" \
+			-DgeneratePom=false \
+			-DlocalRepositoryPath="$isolated_maven_repository"
+	} 2>&1 | tee "$install_log"
 
 	local installed_root="$isolated_maven_repository/com/soklet/soklet/$candidate_version"
 	installed_pom="$installed_root/soklet-$candidate_version.pom"

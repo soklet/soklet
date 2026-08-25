@@ -179,7 +179,8 @@ public class McpApplicationExecutionTests {
 
 		try {
 			execution.start();
-			execution.dispatch(transportRequest, request, admissionIdentity(), invocation -> {
+			execution.dispatch(transportRequest, request,
+					Mcp20260728ProtocolProfile.INSTANCE, admissionIdentity(), invocation -> {
 				handlerInvocations.incrementAndGet();
 				return McpWireResult.complete(McpJsonObject.empty());
 			}, System.nanoTime() + TimeUnit.SECONDS.toNanos(30), response -> {
@@ -234,7 +235,7 @@ public class McpApplicationExecutionTests {
 
 		execution.start();
 		execution.dispatch(transportRequest(), request("start-after-stop"),
-				admissionIdentity(), invocation -> {
+				Mcp20260728ProtocolProfile.INSTANCE, admissionIdentity(), invocation -> {
 			handlerInvocations.incrementAndGet();
 			return McpWireResult.complete(McpJsonObject.empty());
 		}, System.nanoTime() + TimeUnit.SECONDS.toNanos(30), response -> {
@@ -276,7 +277,7 @@ public class McpApplicationExecutionTests {
 		try {
 			execution.start();
 			execution.dispatch(transportRequest(), request("already-expired"),
-					admissionIdentity(), invocation -> {
+					Mcp20260728ProtocolProfile.INSTANCE, admissionIdentity(), invocation -> {
 				handlerInvocations.incrementAndGet();
 				return McpWireResult.complete(McpJsonObject.empty());
 			}, 99L, value -> {
@@ -342,7 +343,7 @@ public class McpApplicationExecutionTests {
 		try {
 			execution.start();
 			execution.dispatch(transportRequest(), progressRequest("deadline-progress"),
-					admissionIdentity(), invocation -> {
+					Mcp20260728ProtocolProfile.INSTANCE, admissionIdentity(), invocation -> {
 						token.set(invocation.cancelationToken());
 						invocation.cancelationToken().onCancel(() -> {
 							cancelationReason.set(invocation.cancellationReason()
@@ -426,7 +427,7 @@ public class McpApplicationExecutionTests {
 		try {
 			execution.start();
 			execution.dispatch(transportRequest, request("cancel-during-rejection"),
-					admissionIdentity(),
+					Mcp20260728ProtocolProfile.INSTANCE, admissionIdentity(),
 					invocation -> {
 						handlerInvocations.incrementAndGet();
 						return McpWireResult.complete(McpJsonObject.empty());
@@ -477,7 +478,7 @@ public class McpApplicationExecutionTests {
 			Thread dispatch = new Thread(() -> {
 				dispatchThread.set(Thread.currentThread());
 				execution.dispatch(transportRequest(), request("pre-admission-deadline"),
-						admissionIdentity(),
+						Mcp20260728ProtocolProfile.INSTANCE, admissionIdentity(),
 						invocation -> {
 							handlerInvocations.incrementAndGet();
 							return McpWireResult.complete(McpJsonObject.empty());
@@ -552,7 +553,7 @@ public class McpApplicationExecutionTests {
 			execution.start();
 			execution.dispatch(activeRequest,
 					request(deadline ? "deadline-active" : "cancel-active"),
-					admissionIdentity(), invocation -> {
+					Mcp20260728ProtocolProfile.INSTANCE, admissionIdentity(), invocation -> {
 						activeEntered.countDown();
 						releaseActive.await();
 						return McpWireResult.complete(McpJsonObject.empty());
@@ -562,7 +563,7 @@ public class McpApplicationExecutionTests {
 
 			execution.dispatch(queuedRequest,
 					request(deadline ? "deadline-queued" : "cancel-queued"),
-					admissionIdentity(), invocation -> {
+					Mcp20260728ProtocolProfile.INSTANCE, admissionIdentity(), invocation -> {
 						queuedInvocations.incrementAndGet();
 						return McpWireResult.complete(McpJsonObject.empty());
 					}, deadline ? 10L : 1_000L, response -> {
@@ -618,7 +619,7 @@ public class McpApplicationExecutionTests {
 	private static McpEffectiveAdmissionIdentity admissionIdentity() {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"application-execution-test", "3.6.0-SNAPSHOT"))
+						"application-execution-test", "4.0.0-SNAPSHOT"))
 				.build();
 		return McpEffectiveAdmissionIdentity.resolve(endpoint, "/mcp",
 				McpAdmissionIdentity.anonymousInstance());

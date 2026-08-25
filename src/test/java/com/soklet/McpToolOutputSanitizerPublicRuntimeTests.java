@@ -303,7 +303,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
 						"sanitizer-public-runtime-test",
-						"3.6.0-SNAPSHOT").build())
+						"4.0.0-SNAPSHOT").build())
 				.tools(tools)
 				.build();
 		return McpServer.withPort(0)

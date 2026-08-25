@@ -31,6 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Timeout(30)
 public class McpHttpServerModernHeaderTests {
 	private static final String PROTOCOL_VERSION = "2026-07-28";
+	private static final String UNSUPPORTED_VERSION = "2099-01-01";
 
 	@Test
 	public void standard_name_mirrors_decode_and_match_for_all_required_methods()
@@ -190,6 +191,109 @@ public class McpHttpServerModernHeaderTests {
 	}
 
 	@Test
+	public void unsupportedSelectorCollisionMatrixPreservesBootstrapWinners()
+			throws Exception {
+		AtomicInteger admissions = new AtomicInteger();
+		AtomicInteger handlers = new AtomicInteger();
+		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
+				CorsAuthorizer.rejectAllInstance(), ignored -> {
+					admissions.incrementAndGet();
+					return McpAdmissionDecision.acceptedAnonymous();
+				});
+		McpHttpServerRuntime runtime = runtime(policy, handlers);
+
+		try {
+			int port = runtime.start().getPort();
+			FixedResponse standardMismatch = send(port,
+					request("50", "tools/call", "name", "get_weather", true),
+					headersWithVersion("tools/call", UNSUPPORTED_VERSION,
+							new McpChunkedHttpClient.RequestHeader(
+									"Mcp-Name", "different-tool")));
+			assertHeaderMismatch(standardMismatch, "50");
+			assertSupportedVersionsDiagnostic(standardMismatch);
+			Assertions.assertFalse(standardMismatch.body().contains("different-tool"));
+			Assertions.assertFalse(standardMismatch.body().contains(
+					UNSUPPORTED_VERSION));
+
+			List<UnsupportedBodyCase> unsupportedCases = List.of(
+					new UnsupportedBodyCase("51",
+							requestWithProtocolVersion("51", "server/discover",
+									UNSUPPORTED_VERSION)),
+					new UnsupportedBodyCase("52", requestWithRawParams(
+							"52", "server/discover", "{}", "")),
+					new UnsupportedBodyCase("53", requestWithRawParams(
+							"53", "server/discover",
+							"{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":42}}",
+							"")),
+					new UnsupportedBodyCase("54", requestWithRawParams(
+							"54", "server/discover", "{\"_meta\":\"unreadable\"}",
+							"")),
+					new UnsupportedBodyCase("55", requestWithRawParams(
+							"55", "server/discover", "[]", "")),
+					new UnsupportedBodyCase("56", requestWithRawParams(
+							"56", "server/discover", "{}",
+							",\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\""
+									+ PROTOCOL_VERSION + "\"}")));
+			for (UnsupportedBodyCase testCase : unsupportedCases) {
+				FixedResponse response = send(port, testCase.body(),
+						headersWithVersion("server/discover", UNSUPPORTED_VERSION));
+				assertUnsupportedVersion(response, testCase.id());
+			}
+
+			FixedResponse unsupportedDifferingBody = send(port,
+					requestWithProtocolVersion("57", "server/discover",
+							PROTOCOL_VERSION),
+					headersWithVersion("server/discover", UNSUPPORTED_VERSION));
+			assertHeaderMismatch(unsupportedDifferingBody, "57");
+			assertSupportedVersionsDiagnostic(unsupportedDifferingBody);
+
+			FixedResponse supportedDifferingBody = send(port,
+					requestWithProtocolVersion("58", "server/discover",
+							UNSUPPORTED_VERSION),
+					headersWithVersion("server/discover", PROTOCOL_VERSION));
+			assertHeaderMismatch(supportedDifferingBody, "58");
+			Assertions.assertFalse(supportedDifferingBody.body().contains(
+					"supportedVersions"));
+
+			FixedResponse supportedMalformedMetadata = send(port,
+					requestWithRawParams("59", "server/discover",
+							"{\"_meta\":\"malformed\"}", ""),
+					headersWithVersion("server/discover", PROTOCOL_VERSION));
+			Assertions.assertEquals(400, supportedMalformedMetadata.head().status(),
+					supportedMalformedMetadata.head().raw());
+			Assertions.assertTrue(supportedMalformedMetadata.body().contains(
+					"\"id\":59"), supportedMalformedMetadata.body());
+			Assertions.assertTrue(supportedMalformedMetadata.body().contains(
+					"\"code\":-32602"), supportedMalformedMetadata.body());
+
+			FixedResponse differingRevisionAndMalformedMetadata = send(port,
+					requestWithRawParams("60", "server/discover",
+							"{\"_meta\":{"
+									+ "\"io.modelcontextprotocol/protocolVersion\":\""
+									+ UNSUPPORTED_VERSION + "\","
+									+ "\"io.modelcontextprotocol/clientCapabilities\":[]}}",
+							""),
+					headersWithVersion("server/discover", PROTOCOL_VERSION));
+			Assertions.assertEquals(400,
+					differingRevisionAndMalformedMetadata.head().status(),
+					differingRevisionAndMalformedMetadata.head().raw());
+			Assertions.assertTrue(differingRevisionAndMalformedMetadata.body()
+					.contains("\"id\":60"),
+					differingRevisionAndMalformedMetadata.body());
+			Assertions.assertTrue(differingRevisionAndMalformedMetadata.body()
+					.contains("\"code\":-32602"),
+					differingRevisionAndMalformedMetadata.body());
+			Assertions.assertFalse(differingRevisionAndMalformedMetadata.body()
+					.contains("supportedVersions"),
+					differingRevisionAndMalformedMetadata.body());
+			Assertions.assertEquals(0, admissions.get());
+			Assertions.assertEquals(0, handlers.get());
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
 	public void plain_method_and_protocol_mirrors_reject_obs_text_before_policy()
 			throws Exception {
 		AtomicInteger admissions = new AtomicInteger();
@@ -230,7 +334,7 @@ public class McpHttpServerModernHeaderTests {
 			AtomicInteger handlerInvocations) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"modern-header-test", "3.6.0-SNAPSHOT"))
+						"modern-header-test", "4.0.0-SNAPSHOT"))
 				.build();
 		McpApplicationRequestHandler handler = ignored -> {
 			handlerInvocations.incrementAndGet();
@@ -258,9 +362,15 @@ public class McpHttpServerModernHeaderTests {
 
 	private static List<McpChunkedHttpClient.RequestHeader> headers(String method,
 			McpChunkedHttpClient.RequestHeader... additional) {
+		return headersWithVersion(method, PROTOCOL_VERSION, additional);
+	}
+
+	private static List<McpChunkedHttpClient.RequestHeader> headersWithVersion(
+			String method, String protocolVersion,
+			McpChunkedHttpClient.RequestHeader... additional) {
 		List<McpChunkedHttpClient.RequestHeader> headers = new ArrayList<>();
 		headers.add(new McpChunkedHttpClient.RequestHeader(
-				"MCP-Protocol-Version", PROTOCOL_VERSION));
+				"MCP-Protocol-Version", protocolVersion));
 		headers.add(new McpChunkedHttpClient.RequestHeader("Mcp-Method", method));
 		headers.addAll(List.of(additional));
 		return List.copyOf(headers);
@@ -303,6 +413,13 @@ public class McpHttpServerModernHeaderTests {
 				+ "\"io.modelcontextprotocol/clientCapabilities\":{}}}}";
 	}
 
+	private static String requestWithRawParams(String id, String method,
+			String params, String topLevelFields) {
+		return "{\"jsonrpc\":\"2.0\",\"id\":" + id
+				+ ",\"method\":\"" + method + "\",\"params\":" + params
+				+ topLevelFields + "}";
+	}
+
 	private static String jsonEscape(String value) {
 		return value.replace("\\", "\\\\")
 				.replace("\"", "\\\"")
@@ -321,12 +438,35 @@ public class McpHttpServerModernHeaderTests {
 				response.head().singleHeader("Cache-Control"));
 	}
 
+	private static void assertSupportedVersionsDiagnostic(FixedResponse response) {
+		Assertions.assertTrue(response.body().contains(
+				"\"data\":{\"supportedVersions\":[\"" + PROTOCOL_VERSION
+						+ "\"]}"), response.body());
+	}
+
+	private static void assertUnsupportedVersion(FixedResponse response, String id) {
+		Assertions.assertEquals(400, response.head().status(), response.head().raw());
+		Assertions.assertTrue(response.body().contains("\"id\":" + id),
+				response.body());
+		Assertions.assertTrue(response.body().contains("\"code\":-32022"),
+				response.body());
+		Assertions.assertTrue(response.body().contains(
+				"\"data\":{\"supported\":[\"" + PROTOCOL_VERSION
+						+ "\"],\"requested\":\"" + UNSUPPORTED_VERSION + "\"}"),
+				response.body());
+		Assertions.assertFalse(response.body().contains("supportedVersions"),
+				response.body());
+	}
+
 	private record SuccessfulCase(String method, String bodyField,
 			String bodyValue, String headerValue) {
 	}
 
 	private record RequestCase(String id, String body,
 			List<McpChunkedHttpClient.RequestHeader> headers) {
+	}
+
+	private record UnsupportedBodyCase(String id, String body) {
 	}
 
 	private record FixedResponse(McpChunkedHttpClient.HttpResponseHead head,

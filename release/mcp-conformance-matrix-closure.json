@@ -1,10 +1,10 @@
 {
   "formatVersion": 1,
   "protocolVersion": "2026-07-28",
-  "releaseVersion": "3.6.0",
+  "releaseVersion": "4.0.0",
   "sourceMatrixPath": "mcp/MCP_CONFORMANCE_MATRIX.md",
-  "sourceMatrixLastUpdated": "2026-08-22",
-  "sourceMatrixSha256": "ecd69178a61b1eb118334dc9ee147e7f490a99f37adcd68f7a50b9e0e04631f8",
+  "sourceMatrixLastUpdated": "2026-08-24",
+  "sourceMatrixSha256": "284c843b6b6f13a0930395137c36e15d5fa437515611dbed759f6c613d78248f",
   "releaseGateUniverse": [
     "candidate-build",
     "core-jdk-21",
@@ -364,6 +364,7 @@
       "evidence": [
         "release/release-validation-manifest.json",
         "src/test/java/com/soklet/internal/mcp/protocol/McpFinalTagGoldenWireProductionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerModernHeaderTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java"
       ],
       "releaseGates": [
@@ -398,7 +399,9 @@
       "id": "MCP-VER-004",
       "disposition": "CORE_COMPLETE",
       "evidence": [
-        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java",
+        "src/test/java/com/soklet/McpHttpContractGoldenProductionTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerCustomHeaderTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerModernHeaderTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpInitializeRejectionDiagnosticsTests.java"
       ],
       "releaseGates": [],
@@ -718,7 +721,9 @@
       "id": "MCP-HTTP-021",
       "disposition": "CORE_COMPLETE",
       "evidence": [
+        "conformance/golden-error-mapping/live/manifest.sha256",
         "src/test/java/com/soklet/McpMirroredHeaderPublicRuntimeTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpErrorMappingGoldenProductionTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpFinalTagGoldenWireProductionTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerCustomHeaderTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerNotificationTests.java",

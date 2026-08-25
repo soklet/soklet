@@ -24,6 +24,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
 import java.util.Optional;
 
+import static com.soklet.internal.mcp.protocol.McpApplicationMetadata.requireApplicationMetadata;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -61,7 +62,7 @@ public final class McpTextResourceContents implements McpResourceContents {
 		this.uri = builder.uri;
 		this.text = builder.text;
 		this.mimeType = builder.mimeType;
-		this.metadata = builder.metadata;
+		this.metadata = requireApplicationMetadata(builder.metadata);
 	}
 
 	/**

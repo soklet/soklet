@@ -43,6 +43,7 @@ public class EventLoop {
     private final Thread thread;
     private final Object lifecycleLock;
     private final Object unexpectedTerminationLock;
+    private volatile boolean coordinatorOwnsUnexpectedTermination;
     private TransportFailureObserver.@Nullable Observation
             unexpectedTerminationObservation;
     private int terminatedConnectionEventLoops;
@@ -67,15 +68,19 @@ public class EventLoop {
     static final class ConnectionAdmission {
         private final AtomicInteger admittedConnections;
         private final AtomicBoolean released;
+		private final Runnable didRelease;
 
-        private ConnectionAdmission(AtomicInteger admittedConnections) {
+        private ConnectionAdmission(AtomicInteger admittedConnections,
+															Runnable didRelease) {
             this.admittedConnections = admittedConnections;
             this.released = new AtomicBoolean();
+			this.didRelease = didRelease;
         }
 
         void release() {
             if (released.compareAndSet(false, true)) {
                 admittedConnections.decrementAndGet();
+				didRelease.run();
             }
         }
     }
@@ -244,7 +249,6 @@ public class EventLoop {
     private void handleUnexpectedTermination(Throwable throwable) {
         synchronized (unexpectedTerminationLock) {
             if (!unexpectedTerminationNotified.compareAndSet(false, true)) {
-                publishUnexpectedTermination();
                 awaitUnexpectedTerminationRuntimeCleanup();
                 return;
             }
@@ -254,7 +258,6 @@ public class EventLoop {
                             TransportFailureReason.EVENT_LOOP_TERMINATED);
         }
 
-        publishUnexpectedTermination();
         try {
             try {
                 connectionListener.didTerminateEventLoop(this, throwable);
@@ -262,6 +265,15 @@ public class EventLoop {
                 // No safe fallback sink is available from an event-loop thread.
             }
         } finally {
+            // HTTP's temporary lifecycle adapter opts into coordinator ownership.
+            // Other current consumers retain the pre-B1 cleanup contract until
+            // their independently reviewed conversion slice.
+            if (!coordinatorOwnsUnexpectedTermination) {
+                stopAccepting.set(true);
+                stopConnections.set(true);
+                selector.wakeup();
+                connectionEventLoops.forEach(ConnectionEventLoop::wakeup);
+            }
             TransportFailureObserver.@Nullable Observation completedObservation;
             synchronized (unexpectedTerminationLock) {
                 unexpectedTerminationRuntimeCleanupComplete = true;
@@ -272,13 +284,6 @@ public class EventLoop {
             if (completedObservation != null)
                 completedObservation.close();
         }
-    }
-
-    private void publishUnexpectedTermination() {
-        stopAccepting.set(true);
-        stopConnections.set(true);
-        selector.wakeup();
-        connectionEventLoops.forEach(ConnectionEventLoop::wakeup);
     }
 
     private void didTerminateConnectionEventLoop() {
@@ -424,7 +429,8 @@ public class EventLoop {
 
     private @Nullable ConnectionAdmission tryReserveConnection() {
         int maximumConnections = options.maxConnections();
-        ConnectionAdmission admission = new ConnectionAdmission(admittedConnections);
+        ConnectionAdmission admission = new ConnectionAdmission(admittedConnections,
+				this::completeDrainIfReady);
 
         while (true) {
             int currentConnections = admittedConnections.get();
@@ -453,7 +459,28 @@ public class EventLoop {
     public void beginDrain() {
         draining.set(true);
         connectionEventLoops.forEach(ConnectionEventLoop::beginDrain);
+		completeDrainIfReady();
     }
+
+    /**
+     * Transfers transport-wide unexpected-termination cleanup to the listener.
+     * This is an internal migration seam and must be called before start().
+     */
+    public void useCoordinatorOwnedUnexpectedTermination() {
+        synchronized (lifecycleLock) {
+            if (started)
+                throw new IllegalStateException(
+                        "Unexpected-termination ownership must be selected before start().");
+            coordinatorOwnsUnexpectedTermination = true;
+        }
+    }
+
+	private void completeDrainIfReady() {
+		if (!draining.get() || admittedConnections.get() != 0)
+			return;
+		stopConnections.set(true);
+		connectionEventLoops.forEach(ConnectionEventLoop::wakeup);
+	}
 
     public void stopConnections() {
         stopConnections.set(true);
@@ -481,11 +508,19 @@ public class EventLoop {
     public boolean join(Duration timeout) throws InterruptedException {
         long timeoutNanos = Math.max(0L, timeout.toNanos());
         long deadlineNanos = System.nanoTime() + timeoutNanos;
-        if (!joinThread(thread, deadlineNanos)) {
+        return joinUntil(deadlineNanos);
+    }
+
+    /**
+     * Observes accept/connection-loop termination against one caller-owned
+     * absolute monotonic deadline.  The deadline is never reset per loop.
+     */
+    public boolean joinUntil(long absoluteDeadlineNanos) throws InterruptedException {
+        if (!joinThread(thread, absoluteDeadlineNanos)) {
             return false;
         }
         for (ConnectionEventLoop connectionEventLoop : connectionEventLoops) {
-            if (!connectionEventLoop.joinUntil(deadlineNanos)) {
+            if (!connectionEventLoop.joinUntil(absoluteDeadlineNanos)) {
                 return false;
             }
         }
@@ -510,10 +545,13 @@ public class EventLoop {
     private boolean joinThread(Thread threadToJoin, long deadlineNanos)
             throws InterruptedException {
         while (threadToJoin.isAlive()) {
-            long remainingNanos = deadlineNanos - System.nanoTime();
-            if (remainingNanos <= 0L) {
+            long nowNanos = System.nanoTime();
+            if (nowNanos >= deadlineNanos) {
                 return false;
             }
+            long remainingNanos = deadlineNanos - nowNanos;
+            if (remainingNanos < 0L)
+                remainingNanos = Long.MAX_VALUE;
             long millis = remainingNanos / 1_000_000L;
             int nanos = (int) (remainingNanos % 1_000_000L);
             threadToJoin.join(millis, nanos);
@@ -536,7 +574,7 @@ public class EventLoop {
         return true;
     }
 
-    int numAdmittedConnections() {
+    public int numAdmittedConnections() {
         return admittedConnections.get();
     }
 

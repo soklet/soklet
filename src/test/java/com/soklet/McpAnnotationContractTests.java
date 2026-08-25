@@ -105,7 +105,7 @@ public class McpAnnotationContractTests {
 				.getAnnotation(McpServerEndpoint.class);
 		Assertions.assertEquals("/mcp", endpoint.path());
 		Assertions.assertEquals("catalog", endpoint.name());
-		Assertions.assertEquals("3.6.0", endpoint.version());
+		Assertions.assertEquals("4.0.0", endpoint.version());
 		Assertions.assertEquals("", endpoint.title());
 		Assertions.assertEquals("", endpoint.description());
 		Assertions.assertEquals("", endpoint.websiteUrl());
@@ -248,7 +248,7 @@ public class McpAnnotationContractTests {
 				.isAnnotationPresent(NonNull.class));
 	}
 
-	@McpServerEndpoint(path = "/mcp", name = "catalog", version = "3.6.0")
+	@McpServerEndpoint(path = "/mcp", name = "catalog", version = "4.0.0")
 	public static final class MinimalEndpoint {
 		@McpTool(name = "search")
 		public SearchResult search(

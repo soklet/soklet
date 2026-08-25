@@ -457,7 +457,7 @@ public class McpSubscriptionConfigurationTests {
 	}
 
 	private static McpImplementation serverInformation() {
-		return McpImplementation.withNameAndVersion("test-server", "3.6.0")
+		return McpImplementation.withNameAndVersion("test-server", "4.0.0")
 				.build();
 	}
 

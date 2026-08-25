@@ -111,7 +111,7 @@ public class McpHttpServerNotificationTests {
 		AtomicReference<McpApplicationInvocation> invocation = new AtomicReference<>();
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"notification-cancellation-test", "3.6.0-SNAPSHOT"))
+						"notification-cancellation-test", "4.0.0-SNAPSHOT"))
 				.tool(new McpNormalizedOperation("slow-tool",
 						McpInputRequestPlan.empty(), McpMirroredHeaderPlan.empty()))
 				.build();
@@ -209,7 +209,7 @@ public class McpHttpServerNotificationTests {
 							"strict JSON failure remains pre-classification",
 							"{", List.of(), false, 400, 0, 0, true),
 					new NotificationPrecedenceCase(
-							"unsupported metadata precedes missing protocol and policy",
+							"missing selector precedes malformed metadata and policy",
 							notification("future/event",
 									"{\"_meta\":\"malformed\"}"),
 							List.of(), false, 400, 0, 0, false),
@@ -265,7 +265,7 @@ public class McpHttpServerNotificationTests {
 	}
 
 	@Test
-	public void unsupported_notification_validates_present_metadata_before_policy()
+	public void unsupported_selector_precedes_present_metadata_and_policy()
 			throws Exception {
 		AtomicInteger admissions = new AtomicInteger();
 		McpHttpServerRuntime runtime = runtime(McpHttpEndpointPolicy.forDiscovery(
@@ -280,7 +280,8 @@ public class McpHttpServerNotificationTests {
 					"{\"_meta\":\"not-an-object\"}",
 					"{\"_meta\":{\"bad/key/with-two-slashes\":true}}")) {
 				FixedResponse response = send(port, notification("future/event", params),
-						List.of(versionHeader()));
+						List.of(new McpChunkedHttpClient.RequestHeader(
+								"MCP-Protocol-Version", "2099-01-01")));
 				Assertions.assertEquals(400, response.head().status(), response.head().raw());
 				Assertions.assertEquals("", response.body());
 				Assertions.assertFalse(response.head().hasHeader("Content-Type"));
@@ -652,7 +653,7 @@ public class McpHttpServerNotificationTests {
 	private static McpHttpServerRuntime runtime(McpHttpEndpointPolicy policy) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"notification-test", "3.6.0-SNAPSHOT"))
+						"notification-test", "4.0.0-SNAPSHOT"))
 				.build();
 		return new McpHttpServerRuntime(
 				McpHttpTransportConfiguration.productionDefaults(0), policy, endpoint);

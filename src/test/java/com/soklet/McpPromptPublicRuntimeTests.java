@@ -100,7 +100,7 @@ public class McpPromptPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"prompt-public-runtime-test", "3.6.0-SNAPSHOT").build())
+						"prompt-public-runtime-test", "4.0.0-SNAPSHOT").build())
 				.prompt(prompt)
 				.build();
 		McpServer server = McpServer.withPort(0)

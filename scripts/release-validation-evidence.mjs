@@ -73,7 +73,7 @@ const ALLOWED_GATE_STATUSES = new Set([
 const EXPECTED_GATE_CONTRACTS = Object.freeze({
   'candidate-build': Object.freeze({
     access: 'LOCAL_CHECKOUT',
-    artifactIdentity: 'com.soklet:soklet:3.6.0',
+    artifactIdentity: 'com.soklet:soklet:4.0.0',
     kind: 'SOURCE',
     repository: null,
     toolchain: 'java',
@@ -113,7 +113,7 @@ const EXPECTED_GATE_CONTRACTS = Object.freeze({
   }),
   'candidate-javadocs': Object.freeze({
     access: 'LOCAL_CHECKOUT',
-    artifactIdentity: 'com.soklet:soklet:3.6.0:javadoc',
+    artifactIdentity: 'com.soklet:soklet:4.0.0:javadoc',
     kind: 'CANDIDATE_ARTIFACT',
     repository: null,
     toolchain: 'java',
@@ -412,8 +412,8 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
     'isolated-repository',
     'INSTALLED_POM_AND_MAIN_JAR_MATCH_CANDIDATE_BYTES',
     [
-      fileRole('installed-pom', 'application/xml', 'soklet-3.6.0.pom', 'pom'),
-      fileRole('installed-main-jar', 'application/java-archive', 'soklet-3.6.0.jar', 'mainJar'),
+      fileRole('installed-pom', 'application/xml', 'soklet-4.0.0.pom', 'pom'),
+      fileRole('installed-main-jar', 'application/java-archive', 'soklet-4.0.0.jar', 'mainJar'),
       logRole('install-log', 'isolated-install.log'),
     ],
   ),
@@ -446,7 +446,7 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
       fileRole(
         'javadoc-jar',
         'application/java-archive',
-        'soklet-3.6.0-javadoc.jar',
+        'soklet-4.0.0-javadoc.jar',
         'javadocJar',
       ),
       directoryRole('apidocs', 'text/html', 'apidocs'),
@@ -566,7 +566,7 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
     'REQUIRED_RELEASE_SCANS_PASS_WITH_ZERO_UNACCEPTED_FINDINGS',
     [
       fileRole('scan-summary', 'application/json', 'release-scans.json'),
-      directoryRole('scan-reports', 'application/vnd.soklet.scan-reports', 'release-scans'),
+      directoryRole('scan-reports', 'application/vnd.soklet.release-scans.v1', 'release-scans'),
     ],
   ),
   'mcp-benchmarks': gateEvidenceContract(
@@ -574,7 +574,7 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
     'java',
     'mvn -B -ntp -f benchmarks/pom.xml clean verify; node scripts/verify-release-benchmarks.mjs',
     'release',
-    'JMH_JSON_351_COMPARISON_AND_SCHEMA_360_BASELINE_RECORDED_WITH_SIGNOFF',
+    'JMH_JSON_351_COMPARISON_AND_SCHEMA_400_BASELINE_RECORDED_WITH_SIGNOFF',
     [
       fileRole('benchmark-results', 'application/json', 'mcp-benchmarks.json'),
       logRole('benchmark-log', 'mcp-benchmarks.log'),
@@ -623,7 +623,7 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
   'soklet-servlet-javax': gateEvidenceContract(
     'soklet-servlet-javax',
     'java',
-    'mvn -B -ntp clean verify; mvn -B -ntp -Dsoklet.version=3.6.0 clean verify',
+    'mvn -B -ntp clean verify; mvn -B -ntp -Dsoklet.version=4.0.0 clean verify',
     'default-and-candidate',
     'DEFAULT_AND_CANDIDATE_LEGS_PASS_WITH_EXACT_ARTIFACTS',
     [
@@ -643,7 +643,7 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
   'soklet-servlet-jakarta': gateEvidenceContract(
     'soklet-servlet-jakarta',
     'java',
-    'mvn -B -ntp clean verify; mvn -B -ntp -Dsoklet.version=3.6.0 clean verify',
+    'mvn -B -ntp clean verify; mvn -B -ntp -Dsoklet.version=4.0.0 clean verify',
     'default-and-candidate',
     'DEFAULT_AND_CANDIDATE_LEGS_PASS_WITH_EXACT_ARTIFACTS',
     [
@@ -666,7 +666,7 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
   'toystore-app': gateEvidenceContract(
     'toystore-app',
     'toystoreJava',
-    'mvn -B -ntp -Dsoklet.version=3.6.0 clean verify',
+    'mvn -B -ntp -Dsoklet.version=4.0.0 clean verify',
     'candidate',
     'CANDIDATE_LEG_PASSES_WITH_EXACT_ARTIFACT',
     [
@@ -684,7 +684,7 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
   'soklet-otel': gateEvidenceContract(
     'soklet-otel',
     'java',
-    'mvn -B -ntp -Dsoklet.version=3.6.0 clean verify',
+    'mvn -B -ntp -Dsoklet.version=4.0.0 clean verify',
     'candidate',
     'CANDIDATE_LEG_PASSES_WITH_EXACT_ARTIFACT',
     [
@@ -715,7 +715,7 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
       fileRole(
         'candidate-main-jar',
         'application/java-archive',
-        'soklet-3.6.0.jar',
+        'soklet-4.0.0.jar',
         'mainJar',
       ),
     ],
@@ -731,7 +731,7 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
       fileRole(
         'candidate-main-jar',
         'application/java-archive',
-        'soklet-3.6.0.jar',
+        'soklet-4.0.0.jar',
         'mainJar',
       ),
     ],
@@ -832,9 +832,9 @@ function validateCandidate(candidate) {
 
   if (candidate.groupId !== 'com.soklet'
       || candidate.artifactId !== 'soklet'
-      || candidate.version !== '3.6.0'
+      || candidate.version !== '4.0.0'
       || candidate.packaging !== 'jar') {
-    fail('Candidate coordinates must be exactly com.soklet:soklet:3.6.0 with JAR packaging');
+    fail('Candidate coordinates must be exactly com.soklet:soklet:4.0.0 with JAR packaging');
   }
 }
 
@@ -1650,10 +1650,10 @@ function verifyCandidatePom(bytes) {
   if (Buffer.from(text, 'utf8').compare(bytes) !== 0)
     fail('Candidate POM must be UTF-8');
 
-  const coordinates = /<project\b[^>]*>\s*<modelVersion>\s*4\.0\.0\s*<\/modelVersion>\s*<groupId>\s*com\.soklet\s*<\/groupId>\s*<artifactId>\s*soklet\s*<\/artifactId>\s*<version>\s*3\.6\.0\s*<\/version>\s*<packaging>\s*jar\s*<\/packaging>/s;
+  const coordinates = /<project\b[^>]*>\s*<modelVersion>\s*4\.0\.0\s*<\/modelVersion>\s*<groupId>\s*com\.soklet\s*<\/groupId>\s*<artifactId>\s*soklet\s*<\/artifactId>\s*<version>\s*4\.0\.0\s*<\/version>\s*<packaging>\s*jar\s*<\/packaging>/s;
 
   if (!coordinates.test(text))
-    fail('Candidate POM must declare direct com.soklet:soklet:3.6.0 JAR coordinates');
+    fail('Candidate POM must declare direct com.soklet:soklet:4.0.0 JAR coordinates');
 }
 
 export function recordCandidateArtifacts(

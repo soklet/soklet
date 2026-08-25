@@ -723,7 +723,7 @@ public class McpSubscriptionRuntimeBoundaryTests {
 			@NonNull McpRuntimeObservationSink observations) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint
 				.withServerInformation(McpImplementationMetadata.withNameAndVersion(
-						"subscription-boundary-test", "3.6.0-SNAPSHOT"))
+						"subscription-boundary-test", "4.0.0-SNAPSHOT"))
 				.exactResource(RESOURCE_URI.toString())
 				.subscriptions(McpNormalizedSubscriptionConfiguration.supporting(
 						McpResourceNotificationType.RESOURCES_LIST_CHANGED,
@@ -945,7 +945,7 @@ public class McpSubscriptionRuntimeBoundaryTests {
 				+ "\"io.modelcontextprotocol/subscriptionId\":\"" + id
 				+ "\",\"io.modelcontextprotocol/serverInfo\":{"
 				+ "\"name\":\"subscription-boundary-test\","
-				+ "\"version\":\"3.6.0-SNAPSHOT\"}}}}");
+				+ "\"version\":\"4.0.0-SNAPSHOT\"}}}}");
 	}
 
 	@NonNull

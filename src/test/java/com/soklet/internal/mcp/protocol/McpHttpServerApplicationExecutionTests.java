@@ -276,7 +276,7 @@ public class McpHttpServerApplicationExecutionTests {
 		};
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"restart-after-factory-failure", "3.6.0-SNAPSHOT"))
+						"restart-after-factory-failure", "4.0.0-SNAPSHOT"))
 				.build();
 		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
 				McpHttpTransportConfiguration.productionDefaults(0),
@@ -543,7 +543,7 @@ public class McpHttpServerApplicationExecutionTests {
 		ControllableClock clock = new ControllableClock();
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"acceptance-deadline-test", "3.6.0-SNAPSHOT"))
+						"acceptance-deadline-test", "4.0.0-SNAPSHOT"))
 				.build();
 		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
 				McpHttpTransportConfiguration.productionDefaults(0),
@@ -618,7 +618,7 @@ public class McpHttpServerApplicationExecutionTests {
 		ControllableClock clock = new ControllableClock(initialTime);
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"deadline-wraparound-test", "3.6.0-SNAPSHOT"))
+						"deadline-wraparound-test", "4.0.0-SNAPSHOT"))
 				.build();
 		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
 				McpHttpTransportConfiguration.productionDefaults(0),
@@ -687,7 +687,7 @@ public class McpHttpServerApplicationExecutionTests {
 		});
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"cors-deadline-test", "3.6.0-SNAPSHOT"))
+						"cors-deadline-test", "4.0.0-SNAPSHOT"))
 				.build();
 		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
 				McpHttpTransportConfiguration.productionDefaults(0),
@@ -755,7 +755,7 @@ public class McpHttpServerApplicationExecutionTests {
 						runtimeReference);
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"protocol-submission-metrics-test", "3.6.0-SNAPSHOT"))
+						"protocol-submission-metrics-test", "4.0.0-SNAPSHOT"))
 				.build();
 		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
 				CorsAuthorizer.rejectAllInstance(), request -> {
@@ -879,7 +879,7 @@ public class McpHttpServerApplicationExecutionTests {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
 						"streamed-protocol-error-metrics-test",
-						"3.6.0-SNAPSHOT"))
+						"4.0.0-SNAPSHOT"))
 				.build();
 		McpApplicationRequestRouter applicationRouter = router(invocation -> {
 			Assertions.assertTrue(invocation.sendNotification(
@@ -936,7 +936,7 @@ public class McpHttpServerApplicationExecutionTests {
 		ControllableClock clock = new ControllableClock();
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"protocol-backlog-test", "3.6.0-SNAPSHOT"))
+						"protocol-backlog-test", "4.0.0-SNAPSHOT"))
 				.build();
 		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
 				transportConfiguration(Duration.ofSeconds(5), 1, 1),
@@ -1024,7 +1024,7 @@ public class McpHttpServerApplicationExecutionTests {
 		ControllableClock clock = new ControllableClock();
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"discovery-deadline-test", "3.6.0-SNAPSHOT"))
+						"discovery-deadline-test", "4.0.0-SNAPSHOT"))
 				.build();
 		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
 				McpHttpTransportConfiguration.productionDefaults(0),
@@ -1105,7 +1105,7 @@ public class McpHttpServerApplicationExecutionTests {
 				&& Thread.currentThread() == protocolWorker.get() ? expiredTime : 0L;
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"completion-deadline-test", "3.6.0-SNAPSHOT"))
+						"completion-deadline-test", "4.0.0-SNAPSHOT"))
 				.build();
 		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
 				McpHttpTransportConfiguration.productionDefaults(0),
@@ -1462,7 +1462,7 @@ public class McpHttpServerApplicationExecutionTests {
 			McpRuntimeObservationSink observationSink) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"application-test-server", "3.6.0-SNAPSHOT"))
+						"application-test-server", "4.0.0-SNAPSHOT"))
 				.build();
 		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
 				CorsAuthorizer.rejectAllInstance(),
@@ -1483,7 +1483,7 @@ public class McpHttpServerApplicationExecutionTests {
 			McpApplicationExecutionObserver executionObserver) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"application-test-server", "3.6.0-SNAPSHOT"))
+						"application-test-server", "4.0.0-SNAPSHOT"))
 				.build();
 		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
 				CorsAuthorizer.rejectAllInstance(),
@@ -1508,7 +1508,7 @@ public class McpHttpServerApplicationExecutionTests {
 			McpApplicationClock clock) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"application-test-server", "3.6.0-SNAPSHOT"))
+						"application-test-server", "4.0.0-SNAPSHOT"))
 				.build();
 		return new McpHttpServerRuntime(
 				transportConfiguration,

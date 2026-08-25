@@ -504,7 +504,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 	private static McpEndpoint emptyEndpoint(@NonNull String path) {
 		return McpEndpoint.withPath(requireNonNull(path))
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"handler-diagnostics-test", "3.6.0-SNAPSHOT").build())
+						"handler-diagnostics-test", "4.0.0-SNAPSHOT").build())
 				.build();
 	}
 
@@ -519,7 +519,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 				.build();
 		return McpEndpoint.withPath(requireNonNull(path))
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"handler-diagnostics-test", "3.6.0-SNAPSHOT").build())
+						"handler-diagnostics-test", "4.0.0-SNAPSHOT").build())
 				.tool(tool)
 				.build();
 	}

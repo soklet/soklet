@@ -31,6 +31,10 @@ import {
 import { verifyMavenDownstreamPom } from './verify-maven-downstream-pom.mjs';
 import { createLoopbackPortReservation } from './reserve-loopback-port.mjs';
 import { verifyMatrixClosure } from './verify-release-matrix-closure.mjs';
+import {
+  verifyReleaseHarnessConfiguration,
+  verifyReleaseHarnessManifestParity,
+} from './import-release-harness-evidence.mjs';
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(scriptDirectory, '..');
@@ -48,6 +52,30 @@ const matrixClosureVerifierPath = resolve(
 const matrixClosureSelfTestPath = resolve(
   projectRoot,
   'scripts/verify-release-matrix-closure-self-test.mjs',
+);
+const versionTransitionInventoryPath = resolve(
+  projectRoot,
+  'release/version-transition-inventory.json',
+);
+const versionTransitionVerifierPath = resolve(
+  projectRoot,
+  'scripts/verify-version-transition-inventory.mjs',
+);
+const versionTransitionSelfTestPath = resolve(
+  projectRoot,
+  'scripts/verify-version-transition-inventory-self-test.mjs',
+);
+const releaseHarnessRegistryPath = resolve(
+  projectRoot,
+  'release/release-harness-contracts.json',
+);
+const releaseHarnessImporterPath = resolve(
+  projectRoot,
+  'scripts/import-release-harness-evidence.mjs',
+);
+const releaseHarnessImporterSelfTestPath = resolve(
+  projectRoot,
+  'scripts/import-release-harness-evidence-self-test.mjs',
 );
 const loopbackPortReserverPath = resolve(projectRoot, 'scripts/reserve-loopback-port.mjs');
 const promotionHelperPath = resolve(projectRoot, 'scripts/release-promotion.mjs');
@@ -97,6 +125,12 @@ try {
     ['matrix-closure registry', matrixClosureRegistryPath],
     ['matrix-closure verifier', matrixClosureVerifierPath],
     ['matrix-closure verifier self-test', matrixClosureSelfTestPath],
+    ['version-transition inventory', versionTransitionInventoryPath],
+    ['version-transition verifier', versionTransitionVerifierPath],
+    ['version-transition verifier self-test', versionTransitionSelfTestPath],
+    ['release-harness registry', releaseHarnessRegistryPath],
+    ['release-harness importer', releaseHarnessImporterPath],
+    ['release-harness importer self-test', releaseHarnessImporterSelfTestPath],
   ]) {
     const stats = lstatSync(path);
     assert.equal(stats.isFile(), true, `${label} must be a regular file`);
@@ -113,11 +147,45 @@ try {
     `Matrix-closure verifier self-test failed: ${matrixClosureSelfTest.error?.message
       ?? matrixClosureSelfTest.stderr ?? matrixClosureSelfTest.stdout}`,
   );
+  const versionTransitionSelfTest = spawnSync(
+    process.execPath,
+    [versionTransitionSelfTestPath],
+    { cwd: projectRoot, encoding: 'utf8' },
+  );
+  assert.equal(
+    versionTransitionSelfTest.status,
+    0,
+    `Version-transition verifier self-test failed: ${versionTransitionSelfTest.error?.message
+      ?? versionTransitionSelfTest.stderr ?? versionTransitionSelfTest.stdout}`,
+  );
+  const releaseHarnessImporterSelfTest = spawnSync(
+    process.execPath,
+    [releaseHarnessImporterSelfTestPath],
+    { cwd: projectRoot, encoding: 'utf8' },
+  );
+  assert.equal(
+    releaseHarnessImporterSelfTest.status,
+    0,
+    `Release-harness importer self-test failed: ${releaseHarnessImporterSelfTest.error?.message
+      ?? releaseHarnessImporterSelfTest.stderr ?? releaseHarnessImporterSelfTest.stdout}`,
+  );
 
   await verifyLoopbackPortReservation(fixturePath('reserved-loopback-port.txt'));
 
   const tracked = validateReleaseConfiguration(trackedManifestPath);
-  assert.equal(tracked.candidate.version, '3.6.0');
+  const releaseHarnessConfiguration = verifyReleaseHarnessConfiguration();
+  assert.equal(
+    verifyReleaseHarnessManifestParity(releaseHarnessConfiguration, trackedManifestPath),
+    true,
+  );
+  assert.deepEqual([...releaseHarnessConfiguration.contracts.keys()], [
+    'fuzz-nightly-history',
+    'mcp-benchmarks',
+    'operational-history',
+    'release-scans',
+    'soak-nightly-history',
+  ]);
+  assert.equal(tracked.candidate.version, '4.0.0');
   assert.equal(tracked.value.formatVersion, 2);
   assert.equal(tracked.gates.length, 29);
   assert.equal(tracked.toolchains.java.vendorVersion, 'Corretto-17.0.20.8.1');
@@ -179,6 +247,10 @@ try {
   assert.deepEqual(
     tracked.gates.map(({ id }) => id),
     Object.keys(EXPECTED_GATE_EVIDENCE_CONTRACTS),
+  );
+  assert.equal(
+    EXPECTED_GATE_EVIDENCE_CONTRACTS['mcp-benchmarks'].expectation,
+    'JMH_JSON_351_COMPARISON_AND_SCHEMA_400_BASELINE_RECORDED_WITH_SIGNOFF',
   );
   for (const gate of tracked.gates) {
     const contract = EXPECTED_GATE_EVIDENCE_CONTRACTS[gate.id];
@@ -299,6 +371,104 @@ try {
     releaseValidator,
     /soak-smoke\|release-soak\|localization-fleet\|matrix-closure\|/,
   );
+  assert.match(
+    releaseValidator,
+    /version_transition_inventory="\$project_root\/release\/version-transition-inventory\.json"/,
+  );
+  assert.match(
+    releaseValidator,
+    /version_transition_verifier="\$project_root\/scripts\/verify-version-transition-inventory\.mjs"/,
+  );
+  assert.match(
+    releaseValidator,
+    /version_transition_self_test="\$project_root\/scripts\/verify-version-transition-inventory-self-test\.mjs"/,
+  );
+  assert.match(
+    releaseValidator,
+    /for version_transition_source in[\s\\\n]+"\$version_transition_inventory" "\$version_transition_verifier"[\s\\\n]+"\$version_transition_self_test"; do[\s\S]*?\[\[ -f "\$version_transition_source" && ! -L "\$version_transition_source" \]\]/,
+  );
+  assert.match(
+    releaseValidator,
+    /release_harness_registry="\$project_root\/release\/release-harness-contracts\.json"/,
+  );
+  assert.match(
+    releaseValidator,
+    /release_harness_importer="\$project_root\/scripts\/import-release-harness-evidence\.mjs"/,
+  );
+  assert.match(
+    releaseValidator,
+    /release_harness_importer_self_test="\$project_root\/scripts\/import-release-harness-evidence-self-test\.mjs"/,
+  );
+  assert.match(
+    releaseValidator,
+    /for release_harness_source in[\s\S]*?\[\[ -f "\$release_harness_source" && ! -L "\$release_harness_source" \]\]/,
+  );
+  const harnessConfigIndex = releaseValidator.indexOf(
+    'node "$release_harness_importer" --verify-config',
+  );
+  const harnessSelfTestIndex = releaseValidator.indexOf(
+    'node "$release_harness_importer_self_test"',
+  );
+  const firstEvidenceRecordIndex = releaseValidator.indexOf(
+    'node "$evidence_helper" record-gate',
+  );
+  assert.ok(harnessConfigIndex >= 0);
+  assert.ok(harnessConfigIndex < harnessSelfTestIndex);
+  assert.ok(harnessSelfTestIndex < firstEvidenceRecordIndex);
+  const candidateBuildBlock = releaseValidator.match(
+    /\nbuild_log="\$temporary_directory\/candidate-build\.log"\n\{\n([\s\S]*?)\n\} 2>&1 \| tee "\$build_log"/,
+  );
+  assert.notEqual(candidateBuildBlock, null);
+  assert.equal(
+    candidateBuildBlock[1].match(/node "\$version_transition_self_test"/g)?.length,
+    1,
+  );
+  assert.equal(
+    candidateBuildBlock[1].match(/node "\$version_transition_verifier" --stage final/g)
+      ?.length,
+    1,
+  );
+  assert.equal(
+    candidateBuildBlock[1].match(/mvn -B -ntp -Dgpg\.skip=true clean verify/g)?.length,
+    1,
+  );
+  assert.ok(
+    candidateBuildBlock[1].indexOf('node "$version_transition_self_test"')
+      < candidateBuildBlock[1].indexOf(
+        'node "$version_transition_verifier" --stage final',
+      ),
+  );
+  assert.ok(
+    candidateBuildBlock[1].indexOf(
+      'node "$version_transition_verifier" --stage final',
+    ) < candidateBuildBlock[1].indexOf('mvn -B -ntp -Dgpg.skip=true clean verify'),
+  );
+  const isolatedInstallFunction = releaseValidator.match(
+    /\nrun_isolated_install\(\) \{\n([\s\S]*?)\n\}\n\nrun_core_jdk_21\(\)/,
+  );
+  assert.notEqual(isolatedInstallFunction, null);
+  assert.equal(
+    isolatedInstallFunction[1].match(
+      /node "\$version_transition_verifier" --stage final/g,
+    )?.length,
+    1,
+  );
+  assert.ok(
+    isolatedInstallFunction[1].indexOf(
+      'node "$version_transition_verifier" --stage final',
+    ) < isolatedInstallFunction[1].indexOf('mvn -B -ntp "$install_file_goal"'),
+  );
+  assert.match(
+    isolatedInstallFunction[1],
+    /\} 2>&1 \| tee "\$install_log"/,
+  );
+  assert.equal(
+    releaseValidator.match(
+      /node "\$version_transition_verifier" --stage final/g,
+    )?.length,
+    2,
+  );
+  assert.doesNotMatch(releaseValidator, /record_gate version-transition/);
   const matrixClosureFunction = releaseValidator.match(
     /\nrun_matrix_closure\(\) \{\n([\s\S]*?)\n\}\n\nrun_candidate_conformance\(\)/,
   );
@@ -868,9 +1038,9 @@ try {
   }
 
   const pomPath = fixturePath('pom.xml');
-  const mainJarPath = fixturePath('soklet-3.6.0.jar');
-  const sourcesJarPath = fixturePath('soklet-3.6.0-sources.jar');
-  const javadocJarPath = fixturePath('soklet-3.6.0-javadoc.jar');
+  const mainJarPath = fixturePath('soklet-4.0.0.jar');
+  const sourcesJarPath = fixturePath('soklet-4.0.0-sources.jar');
+  const javadocJarPath = fixturePath('soklet-4.0.0-javadoc.jar');
   const artifactDescriptorPath = fixturePath('evidence/candidate-artifacts.json');
   const gateDirectory = fixturePath('evidence/gates');
   const finalEvidencePath = fixturePath('evidence/release-validation-evidence.json');
@@ -891,7 +1061,7 @@ try {
   mkdirSync(dirname(artifactDescriptorPath), { recursive: true });
   mkdirSync(gateDirectory, { recursive: true });
   writeFileSync(pomPath, `<?xml version="1.0" encoding="UTF-8"?>
-<project><modelVersion>4.0.0</modelVersion><groupId>com.soklet</groupId><artifactId>soklet</artifactId><version>3.6.0</version><packaging>jar</packaging></project>
+<project><modelVersion>4.0.0</modelVersion><groupId>com.soklet</groupId><artifactId>soklet</artifactId><version>4.0.0</version><packaging>jar</packaging></project>
 `);
   for (const path of [mainJarPath, sourcesJarPath, javadocJarPath])
     writeFileSync(path, Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x01]));
@@ -967,7 +1137,7 @@ try {
       coordinates: {
         groupId: 'com.soklet',
         artifactId: 'soklet',
-        version: '3.6.0',
+        version: '4.0.0',
       },
       formatVersion: 1,
       manifestSha256: null,

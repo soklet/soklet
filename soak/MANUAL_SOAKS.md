@@ -1,11 +1,11 @@
 # Manual Soak Evidence
 
-This file tracks durable summaries of manual Soklet 3.6 soak runs. Raw per-run
+This file tracks durable summaries of manual Soklet 4.0 soak runs. Raw per-run
 reports belong under `soak/target/` or another ignored output directory. The
-repository currently has no recorded manual 3.6 run.
+repository currently has no recorded manual 4.0 run.
 
-Pre-3.6 runs used the retired harness contract and remain available in Git
-history; they are not valid 3.6 evidence.
+Pre-4.0 runs used the retired harness contract and remain available in Git
+history; they are not valid 4.0 evidence.
 
 Run and verify the checked-in nightly profile with:
 

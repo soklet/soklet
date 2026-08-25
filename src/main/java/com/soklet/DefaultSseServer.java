@@ -51,7 +51,9 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -64,7 +66,6 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -280,6 +281,9 @@ final class DefaultSseServer implements SseServer {
 	@NonNull
 	private final ConcurrentHashMap<@NonNull DefaultSseConnection, @NonNull DefaultSseBroadcaster> globalConnections;
 	@NonNull
+	private final ConcurrentHashMap<@NonNull SocketChannel,
+			AdmissionFence.@NonNull Admission> activeHandshakes;
+	@NonNull
 	private final AtomicInteger activeConnectionCount;
 	@NonNull
 	private final ConcurrentLruMap<@NonNull ResourcePath, @NonNull DefaultSseBroadcaster> idleBroadcastersByResourcePath;
@@ -291,6 +295,8 @@ final class DefaultSseServer implements SseServer {
 	private final Supplier<ExecutorService> requestReaderExecutorServiceSupplier;
 	@NonNull
 	private final Supplier<ExecutorService> connectionExecutorServiceSupplier;
+	@NonNull
+	private final BuiltInTransportLifecycleAdapter lifecycleAdapter;
 	@NonNull
 	private final Integer concurrentConnectionLimit;
 	@NonNull
@@ -310,10 +316,11 @@ final class DefaultSseServer implements SseServer {
 	@NonNull
 	private volatile Boolean stopping = false;
 	@Nullable
-	private Thread eventLoopThread;
+	private volatile Thread eventLoopThread;
 	@Nullable
 	private volatile ServerSocketChannel serverSocketChannel;
-	private long lifecycleGeneration;
+	@NonNull
+	private final AtomicLong lifecycleGeneration = new AtomicLong();
 	// Tracks back-to-back accept() failures so the loop escalates backoff and coalesces logging
 	// instead of storming. Touched on the sse-event-loop thread; AtomicLong for safe publication on restart.
 	private final AtomicLong consecutiveAcceptFailures = new AtomicLong();
@@ -899,7 +906,10 @@ final class DefaultSseServer implements SseServer {
 		// Initialize the global LRU map with the specified limit.
 		// We do not need an eviction listener because we will not evict active connections.
 		this.globalConnections = new ConcurrentHashMap<>(getConcurrentConnectionLimit() > 0 ? getConcurrentConnectionLimit() : DEFAULT_CONCURRENT_CONNECTION_LIMIT);
+		this.activeHandshakes = new ConcurrentHashMap<>();
 		this.activeConnectionCount = new AtomicInteger(0);
+		this.lifecycleAdapter = new BuiltInTransportLifecycleAdapter(
+				InternalParticipantKind.SSE, new SseLifecycleOperations(), this::getShutdownTimeout);
 	}
 
 	@Override
@@ -931,9 +941,13 @@ final class DefaultSseServer implements SseServer {
 
 	@Override
 	public void start() {
+		BuiltInTransportLifecycleAdapter.Generation adapterGeneration = null;
 		getLock().lock();
 
 		try {
+			if (getLifecycleAdapter().shutdownInProgress())
+				throw new IllegalStateException(
+						"Cannot start SSE server while shutdown is in progress");
 			if (isStarted())
 				return;
 
@@ -948,6 +962,9 @@ final class DefaultSseServer implements SseServer {
 			// Should never happen, this would already be set by the Soklet instance
 			if (getRequestHandler().isEmpty())
 				throw new IllegalStateException(format("No %s was registered for %s", RequestHandler.class, getClass()));
+
+			adapterGeneration = getLifecycleAdapter().beginStart();
+			BuiltInTransportLifecycleAdapter.Generation startedAdapterGeneration = adapterGeneration;
 
 			ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
 			this.serverSocketChannel = serverSocketChannel;
@@ -966,22 +983,36 @@ final class DefaultSseServer implements SseServer {
 			this.stopping = false;
 			getStopPoisonPill().set(false);
 			getGlobalConnections().clear();
+			this.activeHandshakes.clear();
 			getBroadcastersByResourcePath().clear();
 			getIdleBroadcastersByResourcePath().clear();
 			getResourcePathDeclarationsByResourcePathCache().clear();
 			this.activeConnectionCount.set(0);
 			this.consecutiveAcceptFailures.set(0);
-			this.lifecycleGeneration++;
-			long lifecycleGeneration = this.lifecycleGeneration;
+			this.lifecycleGeneration.incrementAndGet();
 			this.started = true; // set before thread starts to avoid early exit races
-			this.eventLoopThread = new Thread(() -> startInternal(lifecycleGeneration), "sse-event-loop");
+			this.eventLoopThread = new Thread(() -> startInternal(
+					startedAdapterGeneration), "sse-event-loop");
 			this.eventLoopThread.start();
+			getLifecycleAdapter().markReady(startedAdapterGeneration);
 		} catch (RuntimeException e) {
-			cleanupAfterFailedStart();
+			if (adapterGeneration != null)
+				getLifecycleAdapter().failedStart(adapterGeneration, e, false);
 			throw e;
 		} catch (IOException e) {
-			cleanupAfterFailedStart();
+			if (adapterGeneration != null)
+				getLifecycleAdapter().failedStart(adapterGeneration, e, false);
 			throw new IllegalStateException("Unable to start SSE server", e);
+		} catch (Error error) {
+			if (adapterGeneration != null) {
+				try {
+					getLifecycleAdapter().failedStart(adapterGeneration, error, false);
+				} catch (Throwable cleanupFailure) {
+					if (cleanupFailure != error)
+						error.addSuppressed(cleanupFailure);
+				}
+			}
+			throw error;
 		} finally {
 			getLock().unlock();
 		}
@@ -1094,10 +1125,14 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	protected void startInternal() {
-		startInternal(this.lifecycleGeneration);
+		BuiltInTransportLifecycleAdapter.Generation adapterGeneration =
+				getLifecycleAdapter().generation().orElse(null);
+		if (adapterGeneration != null)
+			startInternal(adapterGeneration);
 	}
 
-	private void startInternal(long lifecycleGeneration) {
+	private void startInternal(
+			BuiltInTransportLifecycleAdapter.@NonNull Generation adapterGeneration) {
 		if (!isStarted() || isStopping())
 			return;
 
@@ -1125,7 +1160,8 @@ final class DefaultSseServer implements SseServer {
 					if (clientSocketChannel == null)
 						continue;
 
-					handleAcceptedSocketChannel(clientSocketChannel, executorService);
+					handleAcceptedSocketChannel(clientSocketChannel, executorService,
+							adapterGeneration);
 				} catch (IOException e) {
 					if (getStopPoisonPill().get() || isStopping())
 						break;
@@ -1147,20 +1183,28 @@ final class DefaultSseServer implements SseServer {
 				}
 			}
 		} finally {
-			// Close the server socket if we opened it
-			ServerSocketChannel serverSocketChannelToClose = this.serverSocketChannel;
-			this.serverSocketChannel = null;
-
-			if (serverSocketChannelToClose != null) {
-				try {
-					serverSocketChannelToClose.close();
-				} catch (IOException ignored) {
-					// Nothing to do
-				}
+			// The failed loop may close only the listener it captured for its own
+			// generation.  It must not clear the retained reference or touch a
+			// later generation's listener.
+			try {
+				serverSocketChannel.close();
+			} catch (IOException ignored) {
+				// Nothing to do
 			}
 
-			if (unexpectedTermination != null)
-				cleanupAfterUnexpectedEventLoopTermination(unexpectedTermination, lifecycleGeneration);
+			if (unexpectedTermination != null) {
+				// Signal before logging/metrics and before coordinator-owned transport teardown.
+				getLifecycleAdapter().signalUnexpectedFailure(adapterGeneration,
+						unexpectedTermination);
+				notifyDidFailToAcceptConnection(null,
+						ConnectionRejectionReason.INTERNAL_ERROR, unexpectedTermination);
+				safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
+								"SSE event loop terminated unexpectedly")
+						.throwable(unexpectedTermination)
+						.build());
+				recordTransportFailure(MetricsCollector.TransportFailureReason.EVENT_LOOP_TERMINATED,
+						unexpectedTermination, "event_loop_terminate");
+			}
 		}
 	}
 
@@ -1218,13 +1262,34 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	private void handleAcceptedSocketChannel(@NonNull SocketChannel clientSocketChannel,
-																					 @NonNull ExecutorService executorService) {
+																				 @NonNull ExecutorService executorService,
+																				 BuiltInTransportLifecycleAdapter.@NonNull Generation adapterGeneration) {
 		requireNonNull(clientSocketChannel);
 		requireNonNull(executorService);
+		requireNonNull(adapterGeneration);
 
 		HandshakeContext handshakeContext = null;
 		InetSocketAddress remoteAddress = null;
 		boolean submitted = false;
+		AdmissionFence.Admission admission = getLifecycleAdapter()
+				.tryAdmit(adapterGeneration).orElse(null);
+		if (admission == null) {
+			writeFailsafeHandshakeAndClose(clientSocketChannel,
+					FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE);
+			return;
+		}
+		AdmissionFence.Admission existingAdmission = this.activeHandshakes.putIfAbsent(
+				clientSocketChannel, admission);
+		if (existingAdmission != null) {
+			admission.close();
+			writeFailsafeHandshakeAndClose(clientSocketChannel,
+					FAILSAFE_HANDSHAKE_HTTP_503_RESPONSE);
+			return;
+		}
+		if (!getLifecycleAdapter().admissionOpen(adapterGeneration)) {
+			closePendingHandshake(clientSocketChannel);
+			return;
+		}
 
 		try {
 			Socket socket = clientSocketChannel.socket();
@@ -1273,8 +1338,10 @@ final class DefaultSseServer implements SseServer {
 					.build());
 			recordTransportFailure(MetricsCollector.TransportFailureReason.CONNECTION_SETUP_ERROR, t, "connection_setup_error");
 		} finally {
-			if (!submitted)
+			if (!submitted) {
 				closeAcceptedSocketChannel(clientSocketChannel);
+				completeHandshake(clientSocketChannel);
+			}
 		}
 	}
 
@@ -1324,6 +1391,20 @@ final class DefaultSseServer implements SseServer {
 		} catch (IOException ignored) {
 			// Nothing to do
 		}
+	}
+
+	private void closePendingHandshake(@NonNull SocketChannel clientSocketChannel) {
+		requireNonNull(clientSocketChannel);
+		closeAcceptedSocketChannel(clientSocketChannel);
+		if (!clientSocketChannel.isOpen())
+			completeHandshake(clientSocketChannel);
+	}
+
+	private void completeHandshake(@NonNull SocketChannel clientSocketChannel) {
+		AdmissionFence.Admission admission = this.activeHandshakes.remove(
+				requireNonNull(clientSocketChannel));
+		if (admission != null)
+			admission.close();
 	}
 
 	private void handleHandshakeTimeout(@NonNull SocketChannel clientSocketChannel,
@@ -1414,6 +1495,7 @@ final class DefaultSseServer implements SseServer {
 
 		if (handshakeResponseWritten.get()) {
 			closeSocketChannel(clientSocketChannel, channelLock);
+			completeHandshake(clientSocketChannel);
 			return;
 		}
 
@@ -1857,6 +1939,7 @@ final class DefaultSseServer implements SseServer {
 				closeSocketChannel(clientSocketChannel, channelLock);
 				releaseReservedSlot(connectionSlotReserved);
 			}
+			completeHandshake(clientSocketChannel);
 		}
 	}
 
@@ -3608,152 +3691,15 @@ final class DefaultSseServer implements SseServer {
 
 	@Override
 	public void stop() {
-		Thread eventLoopThreadSnapshot;
-		ExecutorService requestHandlerExecutorServiceSnapshot;
-		TimeoutScheduler requestHandlerTimeoutSchedulerSnapshot;
-		ExecutorService requestReaderExecutorServiceSnapshot;
-		ExecutorService connectionExecutorServiceSnapshot;
-		ServerSocketChannel serverSocketChannelSnapshot;
-		long lifecycleGenerationSnapshot;
-		boolean interrupted = false;
-
-		getLock().lock();
+		BuiltInTransportLifecycleAdapter.Generation generation;
+		ReentrantLock lock = getLock();
+		lock.lock();
 		try {
-			if (!this.started)
-				return;
-
-			this.stopping = true;
-			getStopPoisonPill().set(true);
-
-			lifecycleGenerationSnapshot = this.lifecycleGeneration;
-			eventLoopThreadSnapshot = this.eventLoopThread;
-			requestHandlerExecutorServiceSnapshot = this.requestHandlerExecutorService;
-			requestHandlerTimeoutSchedulerSnapshot = this.requestHandlerTimeoutScheduler;
-			requestReaderExecutorServiceSnapshot = this.requestReaderExecutorService;
-			connectionExecutorServiceSnapshot = this.connectionExecutorService;
-			serverSocketChannelSnapshot = this.serverSocketChannel;
+			generation = getLifecycleAdapter().requestStop();
 		} finally {
-			getLock().unlock();
+			lock.unlock();
 		}
-
-		// Close server socket to unblock accept()
-		if (serverSocketChannelSnapshot != null) {
-			try {
-				serverSocketChannelSnapshot.close();
-			} catch (Exception e) {
-				safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to close Server-Sent Event SocketChannel").throwable(e).build());
-			}
-		}
-
-		List<DefaultSseConnection> connectionsSnapshot = new ArrayList<>(getGlobalConnections().keySet());
-		for (DefaultSseConnection connection : connectionsSnapshot)
-			connection.setTerminationReason(StreamTerminationReason.SERVER_STOPPING);
-
-		// Close client connections - sends poison pills to all registered connections
-		for (DefaultSseBroadcaster broadcaster : new ArrayList<>(getBroadcastersByResourcePath().values())) {
-			try {
-				broadcaster.unregisterAllSseConnections(true);
-			} catch (Exception e) {
-				safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to shut down open Server-Sent Event connections")
-						.throwable(e)
-						.build());
-			}
-		}
-
-		// Begin graceful executor shutdown so already-queued callbacks and writes can drain.
-		if (requestHandlerExecutorServiceSnapshot != null)
-			requestHandlerExecutorServiceSnapshot.shutdown();
-
-		if (requestHandlerTimeoutSchedulerSnapshot != null)
-			requestHandlerTimeoutSchedulerSnapshot.shutdown();
-
-		if (requestReaderExecutorServiceSnapshot != null)
-			requestReaderExecutorServiceSnapshot.shutdown();
-
-		if (connectionExecutorServiceSnapshot != null)
-			connectionExecutorServiceSnapshot.shutdown();
-
-		// Shared wall-clock deadline
-		final long deadlineNanos = System.nanoTime() + getShutdownTimeout().toNanos();
-
-		// Await the accept-loop thread and all executors **in parallel** for the configured shutdown budget.
-		long grace = remainingMillis(deadlineNanos);
-
-		List<CompletableFuture<Boolean>> waits = new ArrayList<>(3);
-		waits.add(joinAsync(eventLoopThreadSnapshot, grace));
-
-		if (requestHandlerExecutorServiceSnapshot != null)
-			waits.add(awaitTerminationAsync(requestHandlerExecutorServiceSnapshot, grace));
-
-		if (requestHandlerTimeoutSchedulerSnapshot != null)
-			waits.add(awaitTerminationAsync(requestHandlerTimeoutSchedulerSnapshot, grace));
-
-		if (requestReaderExecutorServiceSnapshot != null)
-			waits.add(awaitTerminationAsync(requestReaderExecutorServiceSnapshot, grace));
-
-		if (connectionExecutorServiceSnapshot != null)
-			waits.add(awaitTerminationAsync(connectionExecutorServiceSnapshot, grace));
-
-		// Wait for all, but no longer than the single budget
-		try {
-			CompletableFuture.allOf(waits.toArray(CompletableFuture[]::new)).get(grace, TimeUnit.MILLISECONDS);
-		} catch (TimeoutException te) {
-			// Budget exhausted; escalate below
-		} catch (InterruptedException e) {
-			interrupted = true;
-			Thread.currentThread().interrupt();
-		} catch (ExecutionException e) {
-			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Exception while awaiting SSE shutdown").throwable(e).build());
-		}
-
-		forceCloseConnections(connectionsSnapshot);
-
-		// Escalate for any stragglers using remaining time
-		hardenJoin(eventLoopThreadSnapshot, remainingMillis(deadlineNanos));
-
-		shutdownNowIfNeeded(requestHandlerExecutorServiceSnapshot);
-
-		if (requestHandlerTimeoutSchedulerSnapshot != null)
-			requestHandlerTimeoutSchedulerSnapshot.shutdownNow();
-
-		shutdownNowIfNeeded(requestReaderExecutorServiceSnapshot);
-		shutdownNowIfNeeded(connectionExecutorServiceSnapshot);
-
-		if (requestHandlerExecutorServiceSnapshot != null)
-			awaitPoolTermination(requestHandlerExecutorServiceSnapshot, remainingMillis(deadlineNanos));
-
-		if (requestHandlerTimeoutSchedulerSnapshot != null)
-			awaitSchedulerTermination(requestHandlerTimeoutSchedulerSnapshot, remainingMillis(deadlineNanos));
-
-		if (requestReaderExecutorServiceSnapshot != null)
-			awaitPoolTermination(requestReaderExecutorServiceSnapshot, remainingMillis(deadlineNanos));
-
-		if (connectionExecutorServiceSnapshot != null)
-			awaitPoolTermination(connectionExecutorServiceSnapshot, remainingMillis(deadlineNanos));
-
-		getLock().lock();
-		try {
-			if (this.lifecycleGeneration == lifecycleGenerationSnapshot) {
-				this.started = false;
-				this.stopping = false; // allow future restarts
-				this.eventLoopThread = null;
-				this.serverSocketChannel = null;
-				this.requestHandlerExecutorService = null;
-				this.requestHandlerTimeoutScheduler = null;
-				this.requestReaderExecutorService = null;
-				this.connectionExecutorService = null;
-				this.getBroadcastersByResourcePath().clear();
-				this.getIdleBroadcastersByResourcePath().clear();
-				this.getResourcePathDeclarationsByResourcePathCache().clear();
-				this.activeConnectionCount.set(0);
-				getStopPoisonPill().set(false);
-			}
-
-			if (interrupted)
-				Thread.currentThread().interrupt();
-		} finally {
-			getLock().unlock();
-		}
+		getLifecycleAdapter().awaitStop(generation);
 	}
 
 	private void forceCloseConnections(@NonNull List<@NonNull DefaultSseConnection> connections) {
@@ -3773,253 +3719,219 @@ final class DefaultSseServer implements SseServer {
 			}
 		}
 
-		// Clear global connections map for sanity (though it should be empty by this point).
-		getGlobalConnections().clear();
-	}
-
-	private void cleanupAfterFailedStart() {
-		ServerSocketChannel serverSocketChannelSnapshot = this.serverSocketChannel;
-
-		if (serverSocketChannelSnapshot != null) {
-			try {
-				serverSocketChannelSnapshot.close();
-			} catch (IOException ignored) {
-				// Nothing to do
-			}
-		}
-
-		if (this.requestHandlerExecutorService != null)
-			this.requestHandlerExecutorService.shutdownNow();
-
-		if (this.requestHandlerTimeoutScheduler != null)
-			this.requestHandlerTimeoutScheduler.shutdownNow();
-
-		if (this.requestReaderExecutorService != null)
-			this.requestReaderExecutorService.shutdownNow();
-
-		if (this.connectionExecutorService != null)
-			this.connectionExecutorService.shutdownNow();
-
-		this.serverSocketChannel = null;
-		this.eventLoopThread = null;
-		this.requestHandlerExecutorService = null;
-		this.requestHandlerTimeoutScheduler = null;
-		this.requestReaderExecutorService = null;
-		this.connectionExecutorService = null;
-		this.started = false;
-		this.stopping = false;
-		this.activeConnectionCount.set(0);
-		getStopPoisonPill().set(false);
-	}
-
-	private void cleanupAfterUnexpectedEventLoopTermination(@NonNull Throwable throwable,
-																												 long lifecycleGeneration) {
-		requireNonNull(throwable);
-
-		ExecutorService requestHandlerExecutorServiceSnapshot;
-		TimeoutScheduler requestHandlerTimeoutSchedulerSnapshot;
-		ExecutorService requestReaderExecutorServiceSnapshot;
-		ExecutorService connectionExecutorServiceSnapshot;
-		ServerSocketChannel serverSocketChannelSnapshot;
-		List<DefaultSseConnection> connectionsSnapshot;
-		boolean cleanupRequired = false;
-
-		getLock().lock();
-
-		try {
-			if (this.started && this.lifecycleGeneration == lifecycleGeneration) {
-				cleanupRequired = true;
-				this.stopping = true;
-				getStopPoisonPill().set(true);
-				requestHandlerExecutorServiceSnapshot = this.requestHandlerExecutorService;
-				requestHandlerTimeoutSchedulerSnapshot = this.requestHandlerTimeoutScheduler;
-				requestReaderExecutorServiceSnapshot = this.requestReaderExecutorService;
-				connectionExecutorServiceSnapshot = this.connectionExecutorService;
-				serverSocketChannelSnapshot = this.serverSocketChannel;
-				connectionsSnapshot = new ArrayList<>(getGlobalConnections().keySet());
-				this.started = false;
-				this.eventLoopThread = null;
-				this.serverSocketChannel = null;
-				this.requestHandlerExecutorService = null;
-				this.requestHandlerTimeoutScheduler = null;
-				this.requestReaderExecutorService = null;
-				this.connectionExecutorService = null;
-			} else {
-				requestHandlerExecutorServiceSnapshot = null;
-				requestHandlerTimeoutSchedulerSnapshot = null;
-				requestReaderExecutorServiceSnapshot = null;
-				connectionExecutorServiceSnapshot = null;
-				serverSocketChannelSnapshot = null;
-				connectionsSnapshot = List.of();
-			}
-		} finally {
-			getLock().unlock();
-		}
-
-		if (!cleanupRequired)
-			return;
-
-		try {
-			notifyDidFailToAcceptConnection(null, ConnectionRejectionReason.INTERNAL_ERROR, throwable);
-			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
-							"SSE event loop terminated unexpectedly")
-					.throwable(throwable)
-					.build());
-			recordTransportFailure(MetricsCollector.TransportFailureReason.EVENT_LOOP_TERMINATED,
-					throwable, "event_loop_terminate");
-
-			if (serverSocketChannelSnapshot != null) {
-				try {
-					serverSocketChannelSnapshot.close();
-				} catch (IOException ignored) {
-					// Nothing to do
-				}
-			}
-
-			for (DefaultSseConnection connection : connectionsSnapshot)
-				connection.setTerminationReason(StreamTerminationReason.INTERNAL_ERROR);
-
-			forceCloseConnections(connectionsSnapshot);
-			shutdownNowIfNeeded(requestHandlerExecutorServiceSnapshot);
-
-			if (requestHandlerTimeoutSchedulerSnapshot != null)
-				requestHandlerTimeoutSchedulerSnapshot.shutdownNow();
-
-			shutdownNowIfNeeded(requestReaderExecutorServiceSnapshot);
-			shutdownNowIfNeeded(connectionExecutorServiceSnapshot);
-		} finally {
-			ReentrantLock lock = getLock();
-			lock.lock();
-
-			try {
-				if (this.lifecycleGeneration == lifecycleGeneration) {
-					this.stopping = false;
-					this.getBroadcastersByResourcePath().clear();
-					this.getIdleBroadcastersByResourcePath().clear();
-					this.getResourcePathDeclarationsByResourcePathCache().clear();
-					this.activeConnectionCount.set(0);
-					getStopPoisonPill().set(false);
-				}
-			} finally {
-				lock.unlock();
-			}
-		}
-	}
-
-	private void awaitPoolTermination(@Nullable ExecutorService executorService,
-																		@NonNull Long millis) {
-		requireNonNull(millis);
-
-		if (executorService == null || executorService.isTerminated())
-			return;
-
-		try {
-			executorService.awaitTermination(Math.max(100L, millis), TimeUnit.MILLISECONDS);
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-		}
-	}
-
-	private void shutdownNowIfNeeded(@Nullable ExecutorService executorService) {
-		if (executorService != null && !executorService.isTerminated())
-			executorService.shutdownNow();
-	}
-
-	private void awaitSchedulerTermination(@Nullable TimeoutScheduler timeoutScheduler,
-																				 @NonNull Long millis) {
-		requireNonNull(millis);
-
-		if (timeoutScheduler == null)
-			return;
-
-		try {
-			timeoutScheduler.awaitTermination(Math.max(100L, millis), TimeUnit.MILLISECONDS);
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-		}
+		// Do not erase unresolved connection evidence.  Successful unregister
+		// removes individual entries; anything left is retained for classification.
 	}
 
 	@NonNull
-	protected CompletableFuture<Boolean> awaitTerminationAsync(@Nullable ExecutorService executorService,
-																														 @NonNull Long millis) {
-		requireNonNull(millis);
-
-		if (executorService == null || millis <= 0)
-			return CompletableFuture.completedFuture(false);
-
-		return CompletableFuture.supplyAsync(() -> {
-			try {
-				return executorService.awaitTermination(millis, TimeUnit.MILLISECONDS);
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-				return false;
-			}
-		});
+	BuiltInTransportLifecycleAdapter getLifecycleAdapter() {
+		return this.lifecycleAdapter;
 	}
 
 	@NonNull
-	protected CompletableFuture<Boolean> awaitTerminationAsync(@Nullable TimeoutScheduler timeoutScheduler,
-																														 @NonNull Long millis) {
-		requireNonNull(millis);
-
-		if (timeoutScheduler == null || millis <= 0)
-			return CompletableFuture.completedFuture(false);
-
-		return CompletableFuture.supplyAsync(() -> {
-			try {
-				return timeoutScheduler.awaitTermination(millis, TimeUnit.MILLISECONDS);
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-				return false;
-			}
-		});
+	private SseRuntimeSnapshot runtimeSnapshot() {
+		return new SseRuntimeSnapshot(this.lifecycleGeneration.get(), this.eventLoopThread,
+				this.serverSocketChannel, this.requestHandlerExecutorService,
+				this.requestHandlerTimeoutScheduler, this.requestReaderExecutorService,
+				this.connectionExecutorService);
 	}
 
-	@NonNull
-	protected CompletableFuture<Boolean> joinAsync(@Nullable Thread thread,
-																								 @NonNull Long millis) {
-		requireNonNull(millis);
-
-		if (thread == null || millis <= 0)
-			return CompletableFuture.completedFuture(true);
-
+	private static boolean joinUntil(@Nullable Thread thread,
+			long absoluteDeadlineNanos) throws InterruptedException {
+		if (thread == null || !thread.isAlive())
+			return true;
 		if (thread == Thread.currentThread())
-			return CompletableFuture.completedFuture(true);
-
-		return CompletableFuture.supplyAsync(() -> {
-			try {
-				thread.join(millis);
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
+			return false;
+		while (thread.isAlive()) {
+			long remainingNanos = LifecycleDeadlines.remainingNanos(
+					absoluteDeadlineNanos, System.nanoTime());
+			if (remainingNanos == 0L)
 				return false;
+			long millis = remainingNanos / 1_000_000L;
+			int nanos = (int) (remainingNanos % 1_000_000L);
+			thread.join(millis, nanos);
+		}
+		return true;
+	}
+
+	private static boolean awaitExecutor(@Nullable ExecutorService executor,
+			long absoluteDeadlineNanos) throws InterruptedException {
+		if (executor == null || executor.isTerminated())
+			return true;
+		long remainingNanos = LifecycleDeadlines.remainingNanos(
+				absoluteDeadlineNanos, System.nanoTime());
+		return remainingNanos > 0L
+				&& executor.awaitTermination(remainingNanos, TimeUnit.NANOSECONDS);
+	}
+
+	private static boolean awaitScheduler(@Nullable TimeoutScheduler scheduler,
+			long absoluteDeadlineNanos) throws InterruptedException {
+		if (scheduler == null)
+			return true;
+		return scheduler.awaitTerminationUntil(absoluteDeadlineNanos);
+	}
+
+	private record SseRuntimeSnapshot(long lifecycleGeneration,
+			@Nullable Thread eventLoopThread,
+			@Nullable ServerSocketChannel serverSocketChannel,
+			@Nullable ExecutorService requestHandlerExecutor,
+			@Nullable TimeoutScheduler requestTimeoutScheduler,
+			@Nullable ExecutorService requestReaderExecutor,
+			@Nullable ExecutorService connectionExecutor) {
+	}
+
+	private final class SseLifecycleOperations
+			implements BuiltInTransportLifecycleAdapter.Operations {
+		@NonNull
+		private final AtomicReference<SseRuntimeSnapshot> retainedSnapshot =
+				new AtomicReference<>();
+
+		@Override
+		public void quiesce() {
+			SseRuntimeSnapshot snapshot = runtimeSnapshot();
+			this.retainedSnapshot.compareAndSet(null, snapshot);
+			if (DefaultSseServer.this.lifecycleGeneration.get()
+					== snapshot.lifecycleGeneration()) {
+				DefaultSseServer.this.stopping = true;
+				getStopPoisonPill().set(true);
 			}
 
-			return !thread.isAlive();
-		});
-	}
+			if (snapshot.serverSocketChannel() != null) {
+				try {
+					snapshot.serverSocketChannel().close();
+				} catch (IOException exception) {
+					safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
+								"Unable to close Server-Sent Event listener during quiesce")
+						.throwable(exception).build());
+				}
+			}
+			for (SocketChannel pendingHandshake :
+					new ArrayList<>(DefaultSseServer.this.activeHandshakes.keySet()))
+				closePendingHandshake(pendingHandshake);
 
-	protected void hardenJoin(@Nullable Thread thread,
-														@NonNull Long millis) {
-		requireNonNull(millis);
-
-		if (thread == null || !thread.isAlive() || thread == Thread.currentThread())
-			return;
-
-		thread.interrupt();
-
-		try {
-			thread.join(Math.max(100L, millis));
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
+			for (DefaultSseConnection connection :
+					new ArrayList<>(getGlobalConnections().keySet()))
+				connection.setTerminationReason(StreamTerminationReason.SERVER_STOPPING);
+			for (DefaultSseBroadcaster broadcaster :
+					new ArrayList<>(getBroadcastersByResourcePath().values())) {
+				try {
+					broadcaster.unregisterAllSseConnections(true);
+				} catch (RuntimeException exception) {
+					safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
+								"Unable to quiesce open Server-Sent Event connections")
+						.throwable(exception).build());
+				}
+			}
+			if (snapshot.requestHandlerExecutor() != null)
+				snapshot.requestHandlerExecutor().shutdown();
+			if (snapshot.requestTimeoutScheduler() != null)
+				snapshot.requestTimeoutScheduler().shutdown();
+			if (snapshot.requestReaderExecutor() != null)
+				snapshot.requestReaderExecutor().shutdown();
+			if (snapshot.connectionExecutor() != null)
+				snapshot.connectionExecutor().shutdown();
 		}
-	}
 
-	@NonNull
-	protected Long remainingMillis(@NonNull Long deadlineNanos) {
-		requireNonNull(deadlineNanos);
+		@Override
+		public void force() {
+			quiesce();
+			SseRuntimeSnapshot snapshot = retained();
+			forceCloseConnections(new ArrayList<>(getGlobalConnections().keySet()));
+			if (snapshot.eventLoopThread() != null)
+				snapshot.eventLoopThread().interrupt();
+			if (snapshot.requestHandlerExecutor() != null)
+				snapshot.requestHandlerExecutor().shutdownNow();
+			if (snapshot.requestTimeoutScheduler() != null)
+				snapshot.requestTimeoutScheduler().shutdownNow();
+			if (snapshot.requestReaderExecutor() != null)
+				snapshot.requestReaderExecutor().shutdownNow();
+			if (snapshot.connectionExecutor() != null)
+				snapshot.connectionExecutor().shutdownNow();
+		}
 
-		long rem = TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime());
-		return Math.max(0L, rem);
+		@Override
+		public boolean awaitTermination(long absoluteDeadlineNanos)
+				throws InterruptedException {
+			SseRuntimeSnapshot snapshot = retained();
+			boolean eventLoopTerminated = joinUntil(snapshot.eventLoopThread(),
+					absoluteDeadlineNanos);
+			boolean requestHandlersTerminated = awaitExecutor(
+					snapshot.requestHandlerExecutor(), absoluteDeadlineNanos);
+			boolean requestTimeoutsTerminated = awaitScheduler(
+					snapshot.requestTimeoutScheduler(), absoluteDeadlineNanos);
+			boolean readersTerminated = awaitExecutor(snapshot.requestReaderExecutor(),
+					absoluteDeadlineNanos);
+			boolean connectionsTerminated = awaitExecutor(snapshot.connectionExecutor(),
+					absoluteDeadlineNanos);
+			boolean listenerClosed = snapshot.serverSocketChannel() == null
+					|| !snapshot.serverSocketChannel().isOpen();
+			return eventLoopTerminated && requestHandlersTerminated
+					&& requestTimeoutsTerminated && readersTerminated
+					&& connectionsTerminated && listenerClosed
+					&& DefaultSseServer.this.activeHandshakes.isEmpty()
+					&& getGlobalConnections().isEmpty()
+					&& DefaultSseServer.this.activeConnectionCount.get() == 0;
+		}
+
+		@Override
+		@NonNull
+		public Set<InternalResidualActivityKind> residualActivity() {
+			SseRuntimeSnapshot snapshot = retained();
+			Set<InternalResidualActivityKind> kinds =
+					EnumSet.noneOf(InternalResidualActivityKind.class);
+			if (snapshot.eventLoopThread() != null && snapshot.eventLoopThread().isAlive())
+				kinds.add(InternalResidualActivityKind.EVENT_LOOP);
+			if (!DefaultSseServer.this.activeHandshakes.isEmpty()
+					|| !getGlobalConnections().isEmpty()
+					|| DefaultSseServer.this.activeConnectionCount.get() > 0)
+				kinds.add(InternalResidualActivityKind.CONNECTION);
+			if (!terminated(snapshot.requestHandlerExecutor())
+					|| !terminated(snapshot.requestTimeoutScheduler())
+					|| !terminated(snapshot.requestReaderExecutor())
+					|| !terminated(snapshot.connectionExecutor()))
+				kinds.add(InternalResidualActivityKind.EXECUTOR_TASK);
+			return Collections.unmodifiableSet(kinds);
+		}
+
+		@Override
+		public void releaseTerminatedEvidence() {
+			SseRuntimeSnapshot snapshot = retained();
+			if (DefaultSseServer.this.lifecycleGeneration.get()
+					!= snapshot.lifecycleGeneration())
+				return;
+			DefaultSseServer.this.started = false;
+			DefaultSseServer.this.stopping = false;
+			DefaultSseServer.this.eventLoopThread = null;
+			DefaultSseServer.this.serverSocketChannel = null;
+			DefaultSseServer.this.requestHandlerExecutorService = null;
+			DefaultSseServer.this.requestHandlerTimeoutScheduler = null;
+			DefaultSseServer.this.requestReaderExecutorService = null;
+			DefaultSseServer.this.connectionExecutorService = null;
+			getBroadcastersByResourcePath().clear();
+			getIdleBroadcastersByResourcePath().clear();
+			getResourcePathDeclarationsByResourcePathCache().clear();
+			DefaultSseServer.this.activeConnectionCount.set(0);
+			getStopPoisonPill().set(false);
+			this.retainedSnapshot.compareAndSet(snapshot, null);
+		}
+
+		@NonNull
+		private SseRuntimeSnapshot retained() {
+			SseRuntimeSnapshot snapshot = this.retainedSnapshot.get();
+			if (snapshot != null)
+				return snapshot;
+			snapshot = runtimeSnapshot();
+			this.retainedSnapshot.compareAndSet(null, snapshot);
+			return requireNonNull(this.retainedSnapshot.get());
+		}
+
+		private boolean terminated(@Nullable ExecutorService executor) {
+			return executor == null || executor.isTerminated();
+		}
+
+		private boolean terminated(@Nullable TimeoutScheduler scheduler) {
+			return scheduler == null || scheduler.isTerminated();
+		}
 	}
 
 	@NonNull
@@ -4028,6 +3940,10 @@ final class DefaultSseServer implements SseServer {
 		getLock().lock();
 
 		try {
+			// Preserve the temporary public-adapter projection until the
+			// coordinator has affirmative termination proof and releases the
+			// retained generation.  Entering quiesce must not make the transport
+			// appear stopped while loops or executors remain live.
 			return this.started;
 		} finally {
 			getLock().unlock();

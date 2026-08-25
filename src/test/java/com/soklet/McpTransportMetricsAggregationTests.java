@@ -497,7 +497,7 @@ public class McpTransportMetricsAggregationTests {
 		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp/transport-metrics")
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"transport-metrics-test", "3.6.0-SNAPSHOT").build())
+						"transport-metrics-test", "4.0.0-SNAPSHOT").build())
 				.build();
 		McpServer server = McpServer.withPort(0)
 				.host("127.0.0.1")

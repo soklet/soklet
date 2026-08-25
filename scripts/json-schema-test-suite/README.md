@@ -71,7 +71,7 @@ manifest.
 6. Run the Node verifier and the complete Maven test suite before accepting the
    new pin.
 
-Soklet 3.6.0 uses this corpus selectively for its documented closed MCP schema
+Soklet 4.0.0 uses this corpus selectively for its documented closed MCP schema
 profile. The checked-in applicability manifest names every reviewed upstream
 group as selected or rejected. Passing the selection and rejecting the excluded
 schemas is evidence for the closed profile only; it is not a claim of full JSON
