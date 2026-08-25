@@ -61,8 +61,8 @@ class McpLocalizationMrtrRuntimeTests {
 		List<Optional<Locale>> retryObserved = new CopyOnWriteArrayList<>();
 
 		// Instance one selects fr-CA freely and mints the continuation.
-		Capture initial = call(server(localizer(mintObserved,
-				continuation -> Locale.CANADA_FRENCH), new AtomicInteger()),
+		Capture initial = call(localizer(mintObserved,
+				continuation -> Locale.CANADA_FRENCH), new AtomicInteger(),
 				request("mint", ""));
 		assertEquals(200, initial.statusCode(), initial.body());
 		assertTrue(initial.body().contains("\"resultType\":\"input_required\""),
@@ -73,8 +73,8 @@ class McpLocalizationMrtrRuntimeTests {
 
 		// A separately constructed instance with the same key material honors
 		// the verified continuation exactly.
-		Capture retry = call(server(localizer(retryObserved,
-				continuation -> continuation.orElseThrow()), new AtomicInteger()),
+		Capture retry = call(localizer(retryObserved,
+				continuation -> continuation.orElseThrow()), new AtomicInteger(),
 				request("retry", ",\"requestState\":\"" + state + "\""));
 		assertEquals(200, retry.statusCode(), retry.body());
 		assertTrue(retry.body().contains("\"resultType\":\"complete\""),
@@ -86,14 +86,14 @@ class McpLocalizationMrtrRuntimeTests {
 
 	@Test
 	void aContextReportingADifferentLocaleFailsBeforeHandlerEntry() {
-		Capture initial = call(server(localizer(new CopyOnWriteArrayList<>(),
-				continuation -> Locale.CANADA_FRENCH), new AtomicInteger()),
+		Capture initial = call(localizer(new CopyOnWriteArrayList<>(),
+				continuation -> Locale.CANADA_FRENCH), new AtomicInteger(),
 				request("mismatch-mint", ""));
 		String state = extractRequestState(initial.body());
 
 		AtomicInteger handlerInvocations = new AtomicInteger();
-		Capture retry = call(server(localizer(new CopyOnWriteArrayList<>(),
-				continuation -> Locale.GERMAN), handlerInvocations),
+		Capture retry = call(localizer(new CopyOnWriteArrayList<>(),
+				continuation -> Locale.GERMAN), handlerInvocations,
 				request("mismatch-retry", ",\"requestState\":\"" + state + "\""));
 
 		assertEquals(500, retry.statusCode(), retry.body());
@@ -106,13 +106,13 @@ class McpLocalizationMrtrRuntimeTests {
 
 	@Test
 	void aVersionTwoContinuationOnADisabledNodeFailsSanitizedWithoutDowngrade() {
-		Capture initial = call(server(localizer(new CopyOnWriteArrayList<>(),
-				continuation -> Locale.CANADA_FRENCH), new AtomicInteger()),
+		Capture initial = call(localizer(new CopyOnWriteArrayList<>(),
+				continuation -> Locale.CANADA_FRENCH), new AtomicInteger(),
 				request("disabled-mint", ""));
 		String state = extractRequestState(initial.body());
 
 		AtomicInteger handlerInvocations = new AtomicInteger();
-		Capture retry = call(server(null, handlerInvocations),
+		Capture retry = call(null, handlerInvocations,
 				request("disabled-retry", ",\"requestState\":\"" + state + "\""));
 
 		assertEquals(500, retry.statusCode(), retry.body());
@@ -127,7 +127,7 @@ class McpLocalizationMrtrRuntimeTests {
 	@Test
 	void aVersionOneContinuationRemainsUsableOnALocalizedNode() {
 		// Minted without localization: version-1 state.
-		Capture initial = call(server(null, new AtomicInteger()),
+		Capture initial = call(null, new AtomicInteger(),
 				request("plain-mint", ""));
 		assertEquals(200, initial.statusCode(), initial.body());
 		String state = extractRequestState(initial.body());
@@ -135,8 +135,8 @@ class McpLocalizationMrtrRuntimeTests {
 		// A localized node continues it; the provider sees no continuation
 		// locale and selects freely.
 		List<Optional<Locale>> observed = new CopyOnWriteArrayList<>();
-		Capture retry = call(server(localizer(observed,
-				continuation -> Locale.CANADA_FRENCH), new AtomicInteger()),
+		Capture retry = call(localizer(observed,
+				continuation -> Locale.CANADA_FRENCH), new AtomicInteger(),
 				request("plain-retry", ",\"requestState\":\"" + state + "\""));
 
 		assertEquals(200, retry.statusCode(), retry.body());
@@ -164,7 +164,8 @@ class McpLocalizationMrtrRuntimeTests {
 				.build();
 	}
 
-	private static McpServer server(McpLocalizer localizer,
+	private static McpServer server(SimulatorTransports transports,
+			McpLocalizer localizer,
 			AtomicInteger handlerInvocations) {
 		McpInputRequestDeclaration roots = McpInputRequestDeclaration
 				.fromRoots(McpInputRequirement.REQUIRED);
@@ -197,7 +198,7 @@ class McpLocalizationMrtrRuntimeTests {
 						.withNameAndVersion("localization-mrtr", "1.0").build())
 				.tool(tool)
 				.build();
-		McpServer.Builder builder = McpServer.withPort(0)
+		McpServer.Builder builder = transports.newMcpServerBuilder(0)
 				.host(LOOPBACK)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.admissionController(McpAdmissionController.acceptAllInstance())
@@ -221,13 +222,14 @@ class McpLocalizationMrtrRuntimeTests {
 
 	private record Capture(int statusCode, String body) {}
 
-	private static Capture call(McpServer server, Request request) {
-		SokletConfig config = SokletConfig.withMcpServer(server)
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.build();
+	private static Capture call(McpLocalizer localizer,
+			AtomicInteger handlerInvocations, Request request) {
 		AtomicReference<Capture> captured = new AtomicReference<>();
 
-		Soklet.runSimulator(config, simulator -> {
+		SokletSimulator.run(transports -> SokletConfig
+				.withMcpServer(server(transports, localizer, handlerInvocations))
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.build(), simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(request);
 
 			try {

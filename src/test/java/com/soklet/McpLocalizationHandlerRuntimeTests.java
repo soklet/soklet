@@ -267,37 +267,40 @@ class McpLocalizationHandlerRuntimeTests {
 	private static Capture call(McpEndpoint endpoint, McpLocalizer localizer,
 			McpHandlerInterceptor interceptor, Request request,
 			List<Throwable> observedThrowables) {
-		McpServer.Builder builder = McpServer.withPort(0)
-				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
-				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
-				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
-				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
-				.allowedHosts(Set.of(LOOPBACK));
-
-		if (localizer != null)
-			builder.localizer(localizer);
-		if (interceptor != null)
-			builder.handlerInterceptor(interceptor);
-
-		SokletConfig config = SokletConfig.withMcpServer(builder.build())
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.lifecycleObservers(List.of(new LifecycleObserver() {
-					@Override
-					public void didFinishMcpRequestHandling(
-							@NonNull McpRequestContext context,
-							@NonNull McpRequestOutcome requestOutcome,
-							@Nullable McpJsonRpcError error,
-							@NonNull Duration duration,
-							@NonNull List<@NonNull Throwable> throwables) {
-						observedThrowables.addAll(throwables);
-					}
-				}))
-				.build();
 		AtomicReference<Capture> captured = new AtomicReference<>();
 
-		Soklet.runSimulator(config, simulator -> {
+		SokletSimulator.run(transports -> {
+			McpServer.Builder builder = transports.newMcpServerBuilder(0)
+					.host(LOOPBACK)
+					.endpointRegistry(McpEndpointRegistry.fromEndpoints(
+							List.of(endpoint)))
+					.admissionController(McpAdmissionController.acceptAllInstance())
+					.requestRateLimiter(context -> McpRateLimitDecision.allowed())
+					.toolRateLimiter(context -> McpRateLimitDecision.allowed())
+					.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+					.allowedHosts(Set.of(LOOPBACK));
+
+			if (localizer != null)
+				builder.localizer(localizer);
+			if (interceptor != null)
+				builder.handlerInterceptor(interceptor);
+
+			return SokletConfig.withMcpServer(builder.build())
+					.resourceMethodResolver(
+							ResourceMethodResolver.fromMethods(Set.of()))
+					.lifecycleObservers(List.of(new LifecycleObserver() {
+						@Override
+						public void didFinishMcpRequestHandling(
+								@NonNull McpRequestContext context,
+								@NonNull McpRequestOutcome requestOutcome,
+								@Nullable McpJsonRpcError error,
+								@NonNull Duration duration,
+								@NonNull List<@NonNull Throwable> throwables) {
+							observedThrowables.addAll(throwables);
+						}
+					}))
+					.build();
+		}, simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(request);
 
 			try {

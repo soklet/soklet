@@ -331,8 +331,8 @@ class McpLocalizationCatalogExtractionTests {
 		assertEquals(0, contextInvocations.get());
 		assertEquals(0, localizationInvocations.get());
 
-		WireResponse baselineResponse = captureDiscovery(baseline);
-		WireResponse localizedResponse = captureDiscovery(localized);
+		WireResponse baselineResponse = captureDiscovery(registry, null);
+		WireResponse localizedResponse = captureDiscovery(registry, localizer);
 		assertEquals(baselineResponse.statusCode(), localizedResponse.statusCode());
 		assertArrayEquals(baselineResponse.body(), localizedResponse.body());
 		assertEquals(200, localizedResponse.statusCode());
@@ -397,21 +397,41 @@ class McpLocalizationCatalogExtractionTests {
 				.allowedHosts(Set.of(LOOPBACK));
 	}
 
+	private static McpServer.Builder wireServerBuilder(
+			SimulatorTransports transports, McpEndpointRegistry registry) {
+		return transports.newMcpServerBuilder(0)
+				.host(LOOPBACK)
+				.endpointRegistry(registry)
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.allowedHosts(Set.of(LOOPBACK));
+	}
+
 	/**
 	 * Replays canonical discovery entirely off-network through
-	 * {@link Soklet#runSimulator}, so no listener socket is ever bound and the
+	 * {@link SokletSimulator}, so no listener socket is ever bound and the
 	 * server under test stays {@link McpServerStatus#STOPPED} throughout.
 	 */
-	private static WireResponse captureDiscovery(McpServer server) {
+	private static WireResponse captureDiscovery(McpEndpointRegistry registry,
+			McpLocalizer localizer) {
 		OffNetworkMetrics metrics = new OffNetworkMetrics();
-		SokletConfig config = SokletConfig.withMcpServer(server)
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.metricsCollector(metrics)
-				.build();
+		AtomicReference<McpServer> serverReference = new AtomicReference<>();
 		AtomicReference<WireResponse> captured = new AtomicReference<>();
 
-		assertServerNeverListened(server);
-		Soklet.runSimulator(config, simulator -> {
+		SokletSimulator.run(transports -> {
+			McpServer.Builder builder = wireServerBuilder(transports, registry);
+			if (localizer != null)
+				builder.localizer(localizer);
+			McpServer server = builder.build();
+			serverReference.set(server);
+			return SokletConfig.withMcpServer(server)
+					.resourceMethodResolver(
+							ResourceMethodResolver.fromMethods(Set.of()))
+					.metricsCollector(metrics)
+					.build();
+		}, simulator -> {
+			McpServer server = serverReference.get();
 			assertServerNeverListened(server);
 			McpSimulation simulation = simulator.startMcpRequest(discoveryRequest());
 			McpSimulationResponse response = awaitSimulatorResponse(simulation);
@@ -422,7 +442,7 @@ class McpLocalizationCatalogExtractionTests {
 					awaitSimulatorCompletion(simulation).getReason());
 			assertServerNeverListened(server);
 		});
-		assertServerNeverListened(server);
+		assertServerNeverListened(serverReference.get());
 		metrics.assertNoListenerSocketActivity();
 		return captured.get();
 	}

@@ -32,6 +32,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Public-API evidence for the JSON-RPC notification identifier boundary.
@@ -72,29 +73,7 @@ public class McpNotificationPublicRuntimeTests {
 						"notification-boundary-test", "4.0.0-SNAPSHOT").build())
 				.tool(tool)
 				.build();
-		McpServer server = baseServerBuilder(endpoint)
-				.admissionController(context -> {
-					admissionContexts.add(context);
-					String caseName = caseName(context.getRequest());
-					stageTrace.add("admission:" + caseName);
-					if (caseName.equals("admission-rejected"))
-						return McpAdmissionDecision.rejected(admissionRejection);
-					return McpAdmissionDecision.accepted();
-				})
-				.requestRateLimiter(context -> {
-					limiterCalls.incrementAndGet();
-					String caseName = caseName(context.getRequest());
-					stageTrace.add("limiter:" + caseName);
-					if (caseName.equals("rate-limited"))
-						return McpRateLimitDecision.denied(Duration.ofMillis(1));
-					return McpRateLimitDecision.allowed();
-				})
-				.handlerInterceptor((context, continuation) -> {
-					interceptorCalls.incrementAndGet();
-					return continuation.proceed();
-				})
-				.build();
-		SokletConfig config = config(server);
+		AtomicReference<McpServer> serverReference = new AtomicReference<>();
 		List<InboundCase> cases = List.of(
 				new InboundCase("accepted-cancellation",
 						"notifications/cancelled",
@@ -122,7 +101,32 @@ public class McpNotificationPublicRuntimeTests {
 						Map.of("Cache-Control", Set.of("no-store"),
 								"Retry-After", Set.of("1"))));
 
-		Soklet.runSimulator(config, simulator -> {
+		SokletSimulator.run(transports -> {
+			McpServer server = baseServerBuilder(transports, endpoint)
+					.admissionController(context -> {
+						admissionContexts.add(context);
+						String caseName = caseName(context.getRequest());
+						stageTrace.add("admission:" + caseName);
+						if (caseName.equals("admission-rejected"))
+							return McpAdmissionDecision.rejected(admissionRejection);
+						return McpAdmissionDecision.accepted();
+					})
+					.requestRateLimiter(context -> {
+						limiterCalls.incrementAndGet();
+						String caseName = caseName(context.getRequest());
+						stageTrace.add("limiter:" + caseName);
+						if (caseName.equals("rate-limited"))
+							return McpRateLimitDecision.denied(Duration.ofMillis(1));
+						return McpRateLimitDecision.allowed();
+					})
+					.handlerInterceptor((context, continuation) -> {
+						interceptorCalls.incrementAndGet();
+						return continuation.proceed();
+					})
+					.build();
+			serverReference.set(server);
+			return config(server);
+		}, simulator -> {
 			for (InboundCase testCase : cases) {
 				try (McpSimulation simulation = simulator.startMcpRequest(
 						notification(testCase))) {
@@ -172,7 +176,7 @@ public class McpNotificationPublicRuntimeTests {
 				"limiter:rate-limited"), stageTrace);
 		Assertions.assertEquals(0, interceptorCalls.get());
 		Assertions.assertEquals(0, handlerCalls.get());
-		assertStopped(server);
+		assertStopped(serverReference.get());
 	}
 
 	@Test
@@ -215,16 +219,20 @@ public class McpNotificationPublicRuntimeTests {
 						.build())
 				.subscriptions(subscriptions)
 				.build();
-		McpServer server = baseServerBuilder(endpoint)
-				.admissionController(McpAdmissionController.acceptAllInstance())
-				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
-				.handlerInterceptor((context, continuation) -> {
-					interceptorCalls.incrementAndGet();
-					return continuation.proceed();
-				})
-				.build();
+		AtomicReference<McpServer> serverReference = new AtomicReference<>();
 
-		Soklet.runSimulator(config(server), simulator -> {
+		SokletSimulator.run(transports -> {
+			McpServer server = baseServerBuilder(transports, endpoint)
+					.admissionController(McpAdmissionController.acceptAllInstance())
+					.requestRateLimiter(context -> McpRateLimitDecision.allowed())
+					.handlerInterceptor((context, continuation) -> {
+						interceptorCalls.incrementAndGet();
+						return continuation.proceed();
+					})
+					.build();
+			serverReference.set(server);
+			return config(server);
+		}, simulator -> {
 			try (McpSimulation progress = simulator.startMcpRequest(
 					progressRequest(requestId))) {
 				assertSseResponse(awaitResponse(progress));
@@ -314,12 +322,13 @@ public class McpNotificationPublicRuntimeTests {
 
 		Assertions.assertEquals(1, handlerCalls.get());
 		Assertions.assertEquals(1, interceptorCalls.get());
-		assertStopped(server);
+		assertStopped(serverReference.get());
 	}
 
 	private static McpServer.Builder baseServerBuilder(
+			@NonNull SimulatorTransports transports,
 			@NonNull McpEndpoint endpoint) {
-		return McpServer.withPort(0)
+		return transports.newMcpServerBuilder(0)
 				.host(LOOPBACK)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())

@@ -282,6 +282,8 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		private McpLocalizer localizer;
 		@NonNull
 		private Set<@NonNull String> allowedHosts;
+		@Nullable
+		private SimulatorMcpBuildRegistrar simulatorBuildRegistrar;
 
 		private Builder(int port) {
 			this.port = port;
@@ -309,6 +311,17 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 			this.handlerInterceptor = McpHandlerInterceptor.passThroughInstance();
 			this.toolOutputSanitizer =
 					McpToolOutputSanitizer.passThroughInstance();
+		}
+
+		@NonNull
+		Builder simulatorBuildRegistrar(
+				@NonNull SimulatorMcpBuildRegistrar simulatorBuildRegistrar) {
+			if (this.simulatorBuildRegistrar != null)
+				throw new IllegalStateException(
+						"The MCP builder is already assigned to a simulator scope");
+			this.simulatorBuildRegistrar = requireNonNull(
+					simulatorBuildRegistrar);
+			return this;
 		}
 
 		/**
@@ -866,7 +879,7 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 							requireRegisteredLimiter(name,
 									"tool " + tool.getName()));
 			}
-			return new DefaultMcpServer(this.port, this.host,
+			DefaultMcpServer server = new DefaultMcpServer(this.port, this.host,
 					this.maximumCursorSizeInBytes,
 					this.requestHandlerConcurrency,
 					this.requestHandlerQueueCapacity, this.requestTimeout,
@@ -885,6 +898,9 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 					this.requestRateLimiter, this.toolRateLimiter,
 					this.rateLimiterRegistry, this.protectionConfig,
 					this.traceCorrelationKey, this.localizer);
+			if (this.simulatorBuildRegistrar != null)
+				this.simulatorBuildRegistrar.register(server);
+			return server;
 		}
 
 		private void requireRegisteredLimiter(@NonNull String name,

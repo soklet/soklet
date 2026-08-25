@@ -64,8 +64,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 public class SokletTests {
 	@Test
 	public void requestHandlingBasics() {
-		SokletConfig configuration = configurationForResourceClasses(Set.of(RequestHandlingBasicsResource.class));
-		Soklet.runSimulator(configuration, (simulator -> {
+		SokletSimulator.run(transports -> configurationForResourceClasses(transports,
+				Set.of(RequestHandlingBasicsResource.class)), simulator -> {
 			// Response body should be "hello world" as bytes
 			HttpRequestResult requestResult = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/hello-world").build());
@@ -179,13 +179,13 @@ public class SokletTests {
 			Assertions.assertArrayEquals("0".getBytes(StandardCharsets.UTF_8), // 0 is understood to be the default value for uninitialized int
 					requestResult.getMarshaledResponse().bodyBytesOrEmpty(),
 					"Response body doesn't match");
-		}));
+		});
 	}
 
 	@Test
 	public void requestResults() {
-		SokletConfig configuration = configurationForResourceClasses(Set.of(RequestHandlingBasicsResource.class));
-		Soklet.runSimulator(configuration, (simulator -> {
+		SokletSimulator.run(transports -> configurationForResourceClasses(transports,
+				Set.of(RequestHandlingBasicsResource.class)), simulator -> {
 			// Response body should be "hello world" as bytes
 			HttpRequestResult requestResult = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/hello-world").build());
@@ -205,13 +205,13 @@ public class SokletTests {
 			}
 
 			assertEquals(expectedMethod, resourceMethod.getMethod(), "Resource method doesn't match");
-		}));
+		});
 	}
 
 	@Test
 	public void testMultipart() {
-		SokletConfig configuration = configurationForResourceClasses(Set.of(MultipartResource.class));
-		Soklet.runSimulator(configuration, (simulator -> {
+		SokletSimulator.run(transports -> configurationForResourceClasses(transports,
+				Set.of(MultipartResource.class)), simulator -> {
 			byte[] requestBody;
 
 			try {
@@ -230,7 +230,7 @@ public class SokletTests {
 							.build());
 
 			assertEquals(Integer.valueOf(204), requestResult.getMarshaledResponse().getStatusCode());
-		}));
+		});
 	}
 
 	@ThreadSafe
@@ -325,8 +325,8 @@ public class SokletTests {
 
 	@Test
 	public void testVarargs() {
-		SokletConfig configuration = configurationForResourceClasses(Set.of(VarargsResource.class));
-		Soklet.runSimulator(configuration, (simulator -> {
+		SokletSimulator.run(transports -> configurationForResourceClasses(transports,
+				Set.of(VarargsResource.class)), simulator -> {
 			HttpRequestResult requestResult = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/static/js/some/file/example.js")
 							.build()
@@ -350,7 +350,7 @@ public class SokletTests {
 			);
 
 			assertEquals(Integer.valueOf(500), requestResult.getMarshaledResponse().getStatusCode());
-		}));
+		});
 	}
 
 	@ThreadSafe
@@ -374,8 +374,8 @@ public class SokletTests {
 
 	@Test
 	public void httpHead() {
-		SokletConfig configuration = configurationForResourceClasses(Set.of(HttpHeadResource.class));
-		Soklet.runSimulator(configuration, (simulator -> {
+		SokletSimulator.run(transports -> configurationForResourceClasses(transports,
+				Set.of(HttpHeadResource.class)), simulator -> {
 			// Response headers should be the same as the GET equivalent, but HTTP 204 and no response body
 			HttpRequestResult getMethodResult = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/hello-world").build());
@@ -399,7 +399,7 @@ public class SokletTests {
 
 			Assertions.assertArrayEquals(emptyByteArray(), explicitHeadMethodResult.getMarshaledResponse().bodyBytesOrEmpty(),
 					"Received a response body but didn't expect one");
-		}));
+		});
 	}
 
 	@ThreadSafe
@@ -416,8 +416,9 @@ public class SokletTests {
 	}
 
 	@NonNull
-	protected SokletConfig configurationForResourceClasses(@NonNull Set<Class<?>> resourceClasses) {
-		return SokletConfig.forSimulatorTesting()
+	protected SokletConfig configurationForResourceClasses(@NonNull SimulatorTransports transports,
+			@NonNull Set<Class<?>> resourceClasses) {
+		return SokletConfig.forSimulatorTesting(transports)
 				// Use a resource method resolver that explicitly specifies resource classes
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(resourceClasses))
 				// Quiet logging to keep the console clean
@@ -441,11 +442,9 @@ public class SokletTests {
 
 	@Test
 	public void simulatorPerformRequestFailsFastWhenNoHttpServerConfigured() {
-		SokletConfig config = SokletConfig.withSseServer(SseServer.withPort(0).build())
+		SokletSimulator.run(transports -> SokletConfig.withSseServer(transports.getSseServer())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseOnlyResource.class)))
-				.build();
-
-		Soklet.runSimulator(config, simulator -> assertThrows(IllegalStateException.class,
+				.build(), simulator -> assertThrows(IllegalStateException.class,
 				() -> simulator.performHttpRequest(Request.fromPath(HttpMethod.GET, "/sse-only"))));
 	}
 
@@ -600,11 +599,9 @@ public class SokletTests {
 
 	@Test
 	public void encodedSpaceInPath_isDecodedInSimulatorToo() {
-		var cfg = SokletConfig.forSimulatorTesting()
+		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SimulatorDecodingResource.class)))
-				.build();
-
-		Soklet.runSimulator(cfg, sim -> {
+				.build(), sim -> {
 			var res = sim.performHttpRequest(Request.withRawUrl(HttpMethod.GET, "/widgets/ab%20c").build());
 			assertEquals(200, res.getMarshaledResponse().getStatusCode());
 			assertEquals("ab c", new String(res.getMarshaledResponse().bodyBytesOrEmpty(), StandardCharsets.UTF_8));
@@ -698,17 +695,11 @@ public class SokletTests {
 				.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=" + boundary)))
 				.build();
 
-		ResourceMethodResolver resolver = ResourceMethodResolver.fromClasses(
-				Set.of(MultipartResource2.class)
-		);
-
-		SokletConfig config = SokletConfig.forSimulatorTesting()
-				.resourceMethodResolver(resolver)
-				.build();
-
 		// Act & Assert: Valid boundary should work correctly
 		assertDoesNotThrow(() -> {
-			Soklet.runSimulator(config, simulator -> {
+			SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
+					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(MultipartResource2.class)))
+					.build(), simulator -> {
 				HttpRequestResult requestResult = simulator.performHttpRequest(request);
 				assertEquals(200, requestResult.getMarshaledResponse().getStatusCode(), "Valid multipart request should succeed");
 			});
@@ -730,17 +721,11 @@ public class SokletTests {
 				.headers(Map.of("Content-Type", Set.of("multipart/form-data; boundary=\"" + boundary + "\"")))
 				.build();
 
-		ResourceMethodResolver resolver = ResourceMethodResolver.fromClasses(
-				Set.of(MultipartResource2.class)
-		);
-
-		SokletConfig config = SokletConfig.forSimulatorTesting()
-				.resourceMethodResolver(resolver)
-				.build();
-
 		// Act & Assert: Quoted boundary should be handled correctly
 		assertDoesNotThrow(() -> {
-			Soklet.runSimulator(config, simulator -> {
+			SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
+					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(MultipartResource2.class)))
+					.build(), simulator -> {
 				HttpRequestResult requestResult = simulator.performHttpRequest(request);
 				assertEquals(200, requestResult.getMarshaledResponse().getStatusCode(), "Quoted boundary should be handled correctly");
 			});
@@ -846,7 +831,7 @@ public class SokletTests {
 
 	@Test
 	public void duplicateValueTests() {
-		SokletConfig config = SokletConfig.forSimulatorTesting()
+		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(DuplicateValueResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
@@ -854,9 +839,7 @@ public class SokletTests {
 						// Quiet logging
 					}
 				})
-				.build();
-
-		Soklet.runSimulator(config, simulator -> {
+				.build(), simulator -> {
 			Request queryRequest = Request.withRawUrl(HttpMethod.GET, "/query?singleOnly=one&singleOnly=two")
 					.build();
 

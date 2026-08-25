@@ -345,13 +345,12 @@ class McpLocalizationRenderingRuntimeTests {
 				.build();
 
 		McpEndpoint endpoint = richEndpoint();
-		McpServer server = server(endpoint, localizer);
-		SokletConfig config = SokletConfig.withMcpServer(server)
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.build();
 		List<String> bodies = new CopyOnWriteArrayList<>();
 
-		Soklet.runSimulator(config, simulator -> {
+		SokletSimulator.run(transports -> SokletConfig
+				.withMcpServer(server(transports, endpoint, localizer))
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.build(), simulator -> {
 			bodies.add(awaitBody(simulator, request("server/discover", Set.of())));
 			mode.set("default");
 			bodies.add(awaitBody(simulator, request("server/discover", Set.of())));
@@ -388,12 +387,10 @@ class McpLocalizationRenderingRuntimeTests {
 				})
 				.build();
 
-		McpServer server = server(richEndpoint(), localizer);
-		SokletConfig config = SokletConfig.withMcpServer(server)
+		SokletSimulator.run(transports -> SokletConfig
+				.withMcpServer(server(transports, richEndpoint(), localizer))
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.build();
-
-		Soklet.runSimulator(config, simulator -> {
+				.build(), simulator -> {
 			McpSimulation first = simulator.startMcpRequest(
 					request("server/discover", Set.of()));
 			McpSimulation second = simulator.startMcpRequest(
@@ -421,9 +418,11 @@ class McpLocalizationRenderingRuntimeTests {
 	private static Capture capture(McpEndpoint endpoint, McpLocalizer localizer,
 			String method, Set<String> acceptLanguageValues,
 			List<Throwable> observedThrowables) {
-		McpServer server = server(endpoint, localizer);
 		AtomicReference<McpRequestOutcome> outcome = new AtomicReference<>();
-		SokletConfig config = SokletConfig.withMcpServer(server)
+		AtomicReference<Capture> captured = new AtomicReference<>();
+
+		SokletSimulator.run(transports -> SokletConfig
+				.withMcpServer(server(transports, endpoint, localizer))
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObservers(List.of(new LifecycleObserver() {
 					@Override
@@ -437,10 +436,7 @@ class McpLocalizationRenderingRuntimeTests {
 						observedThrowables.addAll(throwables);
 					}
 				}))
-				.build();
-		AtomicReference<Capture> captured = new AtomicReference<>();
-
-		Soklet.runSimulator(config, simulator -> {
+				.build(), simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(
 					request(endpoint.getPath(), method, acceptLanguageValues));
 
@@ -465,9 +461,10 @@ class McpLocalizationRenderingRuntimeTests {
 				capture.body(), outcome.get());
 	}
 
-	private static McpServer server(McpEndpoint endpoint,
+	private static McpServer server(SimulatorTransports transports,
+			McpEndpoint endpoint,
 			McpLocalizer localizer) {
-		McpServer.Builder builder = McpServer.withPort(0)
+		McpServer.Builder builder = transports.newMcpServerBuilder(0)
 				.host(LOOPBACK)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.admissionController(McpAdmissionController.acceptAllInstance())
@@ -599,20 +596,23 @@ class McpLocalizationRenderingRuntimeTests {
 						.build())
 				.instructions("Use canonical instructions.")
 				.build();
-		McpServer server = McpServer.withPort(0)
-				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
-				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
-				.allowedHosts(Set.of(LOOPBACK))
-				.localizer(localizer)
-				.build();
-		SokletConfig config = SokletConfig.withMcpServer(server)
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.build();
 		AtomicReference<String> captured = new AtomicReference<>();
 
-		Soklet.runSimulator(config, simulator -> {
+		SokletSimulator.run(transports -> {
+			McpServer server = transports.newMcpServerBuilder(0)
+					.host(LOOPBACK)
+					.endpointRegistry(McpEndpointRegistry.fromEndpoints(
+							List.of(endpoint)))
+					.admissionController(McpAdmissionController.acceptAllInstance())
+					.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+					.allowedHosts(Set.of(LOOPBACK))
+					.localizer(localizer)
+					.build();
+			return SokletConfig.withMcpServer(server)
+					.resourceMethodResolver(
+							ResourceMethodResolver.fromMethods(Set.of()))
+					.build();
+		}, simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(
 					discoveryRequest(acceptLanguageValues));
 

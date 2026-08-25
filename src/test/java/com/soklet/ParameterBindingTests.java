@@ -47,15 +47,13 @@ import java.util.Set;
 public class ParameterBindingTests {
 	@Test
 	public void required_and_optional_query_parameters() {
-		SokletConfig cfg = SokletConfig.forSimulatorTesting()
+		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ParamResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
-				.build();
-
-		Soklet.runSimulator(cfg, simulator -> {
+				.build(), simulator -> {
 			// Missing required param -> 400
 			HttpRequestResult r1 = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/param/required").build());
 			Assertions.assertEquals(400, r1.getMarshaledResponse().getStatusCode());
@@ -78,15 +76,13 @@ public class ParameterBindingTests {
 
 	@Test
 	public void headers_cookies_path_and_body_conversions() {
-		SokletConfig cfg = SokletConfig.forSimulatorTesting()
+		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ParamResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
-				.build();
-
-		Soklet.runSimulator(cfg, simulator -> {
+				.build(), simulator -> {
 			// Header case-insensitivity
 			HttpRequestResult h = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/param/header")
@@ -129,9 +125,8 @@ public class ParameterBindingTests {
 
 	@Test
 	public void object_parameters_are_not_hijacked_by_request_injection() {
-		SokletConfig cfg = specialInjectionConfiguration(new SpecialLifecycleObserver("configured-observer"));
-
-		Soklet.runSimulator(cfg, simulator -> {
+		SokletSimulator.run(transports -> specialInjectionConfiguration(transports,
+				new SpecialLifecycleObserver("configured-observer")), simulator -> {
 			HttpRequestResult objectResult = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/param/object-instance").build());
 			Assertions.assertEquals(200, objectResult.getMarshaledResponse().getStatusCode());
 			Assertions.assertEquals(Object.class.getName(), responseBody(objectResult));
@@ -152,10 +147,8 @@ public class ParameterBindingTests {
 
 	@Test
 	public void configured_component_concrete_subtypes_are_injected_when_assignable() {
-		SpecialLifecycleObserver lifecycleObserver = new SpecialLifecycleObserver("configured-observer");
-		SokletConfig cfg = specialInjectionConfiguration(lifecycleObserver);
-
-		Soklet.runSimulator(cfg, simulator -> {
+		SokletSimulator.run(transports -> specialInjectionConfiguration(transports,
+				new SpecialLifecycleObserver("configured-observer")), simulator -> {
 			HttpRequestResult lifecycleResult = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/param/lifecycle-special").build());
 			Assertions.assertEquals(200, lifecycleResult.getMarshaledResponse().getStatusCode());
 			Assertions.assertEquals("configured-observer", responseBody(lifecycleResult));
@@ -180,6 +173,16 @@ public class ParameterBindingTests {
 
 	private static SokletConfig specialInjectionConfiguration(@NonNull LifecycleObserver lifecycleObserver) {
 		return SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ParamResource.class, SpecialInjectionResource.class)))
+				.valueConverterRegistry(ValueConverterRegistry.fromDefaultsSupplementedBy(Set.of(new StringToObjectValueConverter())))
+				.lifecycleObserver(lifecycleObserver)
+				.build();
+	}
+
+	private static SokletConfig specialInjectionConfiguration(
+			@NonNull SimulatorTransports transports,
+			@NonNull LifecycleObserver lifecycleObserver) {
+		return SokletConfig.forSimulatorTesting(transports)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ParamResource.class, SpecialInjectionResource.class)))
 				.valueConverterRegistry(ValueConverterRegistry.fromDefaultsSupplementedBy(Set.of(new StringToObjectValueConverter())))
 				.lifecycleObserver(lifecycleObserver)

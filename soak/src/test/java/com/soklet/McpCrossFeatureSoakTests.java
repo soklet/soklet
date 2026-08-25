@@ -255,12 +255,9 @@ public class McpCrossFeatureSoakTests {
 		CountingMcpMetricsCollector metricsCollector =
 				new CountingMcpMetricsCollector();
 		CountingLifecycle lifecycle = new CountingLifecycle();
-		McpServer mcpServer = mcpServer(state, publisher);
-		SokletConfig config = SokletConfig.withMcpServer(mcpServer)
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.metricsCollector(metricsCollector)
-				.lifecycleObserver(lifecycle)
-				.build();
+		AtomicReference<McpServer> mcpServer = new AtomicReference<>();
+		SimulatorConfigFactory configFactory = simulatorConfigFactory(state,
+				publisher, metricsCollector, lifecycle, mcpServer);
 		AtomicIntegerArray caseCounts =
 				new AtomicIntegerArray(SIMULATOR_CASE_COUNT);
 		int workloadCycles = PROFILE.concurrentClients()
@@ -284,7 +281,7 @@ public class McpCrossFeatureSoakTests {
 		try {
 			// Warm all deterministic paths and the executor before measuring the
 			// stopped, off-network resource baseline.
-			Soklet.runSimulator(config, simulator -> {
+			SokletSimulator.run(configFactory, simulator -> {
 				try {
 					for (int caseIndex = 0; caseIndex < SIMULATOR_CASE_COUNT;
 							caseIndex++)
@@ -297,12 +294,13 @@ public class McpCrossFeatureSoakTests {
 			awaitSimulatorIdle("simulator warmup", metricsCollector, state,
 					warmupTotals, PROFILE.settleTimeout(),
 					PROFILE.metricDeliveryTimeout());
-			assertSimulatorStoppedAndDrained(mcpServer, state, publisher,
+			assertSimulatorStoppedAndDrained(requireNonNull(mcpServer.get()),
+					state, publisher,
 					metricsCollector, lifecycle);
 			baseline = SoakResourceSnapshot.captureAfterGc();
 
 			AtomicReference<RunResult> runResult = new AtomicReference<>();
-			Soklet.runSimulator(config, simulator -> {
+			SokletSimulator.run(configFactory, simulator -> {
 				try {
 					runResult.set(runConcurrent(PROFILE.concurrentClients(),
 							PROFILE.cyclesPerClient(), (clientIndex, iteration) -> {
@@ -332,12 +330,13 @@ public class McpCrossFeatureSoakTests {
 			awaitSimulatorIdle("measured simulator churn", metricsCollector,
 					state, measuredTotals, PROFILE.settleTimeout(),
 					PROFILE.metricDeliveryTimeout());
-			performSimulatorResidualWave(config, mcpServer, state,
+			performSimulatorResidualWave(configFactory, mcpServer, state,
 					metricsCollector, residualTotals);
 			awaitSimulatorIdle("post-residual simulator recovery",
 					metricsCollector, state, finalTotals, PROFILE.settleTimeout(),
 					PROFILE.metricDeliveryTimeout());
-			assertSimulatorStoppedAndDrained(mcpServer, state, publisher,
+			McpServer finalServer = requireNonNull(mcpServer.get());
+			assertSimulatorStoppedAndDrained(finalServer, state, publisher,
 					metricsCollector, lifecycle);
 			finalSnapshot = SoakResourceSnapshot.assertReturnsNear(
 					"MCP off-network simulator churn", baseline,
@@ -378,7 +377,7 @@ public class McpCrossFeatureSoakTests {
 							lifecycle.serversStarted() + "/"
 									+ lifecycle.serversStopped(),
 							"Final MCP status",
-							mcpServer.getDiagnostics().getStatus().name(),
+							finalServer.getDiagnostics().getStatus().name(),
 							"Active publisher registrations",
 							Integer.toString(publisher.activeRegistrationCount()),
 							"Open client sockets",
@@ -390,12 +389,25 @@ public class McpCrossFeatureSoakTests {
 		} finally {
 			state.releaseAllBlockingHandlers();
 			state.releaseResidualHandler();
-			mcpServer.stop();
 		}
 	}
 
 	@NonNull
 	private static McpServer mcpServer(@NonNull SoakState state,
+			@NonNull CountingSubscriptionPublisher publisher) {
+		return mcpServer(McpServer.withPort(0), state, publisher);
+	}
+
+	@NonNull
+	private static McpServer mcpServer(@NonNull SimulatorTransports transports,
+			@NonNull SoakState state,
+			@NonNull CountingSubscriptionPublisher publisher) {
+		return mcpServer(transports.newMcpServerBuilder(0), state, publisher);
+	}
+
+	@NonNull
+	private static McpServer mcpServer(McpServer.@NonNull Builder builder,
+			@NonNull SoakState state,
 			@NonNull CountingSubscriptionPublisher publisher) {
 		requireNonNull(state);
 		requireNonNull(publisher);
@@ -581,7 +593,7 @@ public class McpCrossFeatureSoakTests {
 				.subscriptions(subscriptions)
 				.build();
 
-		return McpServer.withPort(0)
+		return builder
 				.host(LOOPBACK)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.admissionController(
@@ -609,6 +621,29 @@ public class McpCrossFeatureSoakTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
+	}
+
+	@NonNull
+	private static SimulatorConfigFactory simulatorConfigFactory(
+			@NonNull SoakState state,
+			@NonNull CountingSubscriptionPublisher publisher,
+			@NonNull CountingMcpMetricsCollector metricsCollector,
+			@NonNull CountingLifecycle lifecycle,
+			@NonNull AtomicReference<McpServer> serverReference) {
+		return transports -> {
+			McpServer server = mcpServer(transports, state, publisher);
+			serverReference.set(server);
+			return SokletConfig.withMcpServer(server)
+					.resourceMethodResolver(
+							ResourceMethodResolver.fromMethods(Set.of()))
+					.metricsCollector(metricsCollector)
+					.lifecycleObserver(lifecycle)
+					.internalLifecyclePolicy(new InternalLifecyclePolicy(
+							java.util.Optional.of(Duration.ofSeconds(30)),
+							Duration.ofSeconds(2), Duration.ZERO,
+							PROFILE.shutdownTimeout()))
+					.build();
+		};
 	}
 
 	private static void performSimulatorCase(@NonNull Simulator simulator,
@@ -862,15 +897,17 @@ public class McpCrossFeatureSoakTests {
 		}
 	}
 
-	private static void performSimulatorResidualWave(@NonNull SokletConfig config,
-			@NonNull McpServer mcpServer, @NonNull SoakState state,
+	private static void performSimulatorResidualWave(
+			@NonNull SimulatorConfigFactory configFactory,
+			@NonNull AtomicReference<McpServer> mcpServer,
+			@NonNull SoakState state,
 			@NonNull CountingMcpMetricsCollector metricsCollector,
 			@NonNull RuntimeMetricTotals expectedTotals)
 			throws Exception {
 		AtomicReference<Simulator> escapedSimulator = new AtomicReference<>();
 		AtomicReference<McpSimulation> escapedSimulation = new AtomicReference<>();
 		IllegalStateException cleanupFailure = Assertions.assertThrows(
-				IllegalStateException.class, () -> Soklet.runSimulator(config,
+				IllegalStateException.class, () -> SokletSimulator.run(configFactory,
 						simulator -> {
 							escapedSimulator.set(simulator);
 							escapedSimulation.set(simulator.startMcpRequest(
@@ -893,15 +930,16 @@ public class McpCrossFeatureSoakTests {
 		McpSimulation retainedSimulation = escapedSimulation.get();
 		Assertions.assertNotNull(retainedSimulator);
 		Assertions.assertNotNull(retainedSimulation);
+		McpServer residualServer = requireNonNull(mcpServer.get());
 		Assertions.assertThrows(IllegalStateException.class,
 				() -> retainedSimulator.startMcpRequest(simulatorToolRequest(
 						"residual-rejected", SIMULATOR_JSON_TOOL, "{}", null,
 						null, null)));
-		Assertions.assertThrows(IllegalStateException.class, mcpServer::start,
+		Assertions.assertThrows(IllegalStateException.class, residualServer::start,
 				"Live start must reject residual simulator work before binding.");
-		assertNeverBoundStopped(mcpServer);
+		assertNeverBoundStopped(residualServer);
 		Assertions.assertEquals(0,
-				mcpServer.getDiagnostics().getActiveHandlerExecutions());
+				residualServer.getDiagnostics().getActiveHandlerExecutions());
 		Assertions.assertTrue(metricsCollector.handlerExecutionsStarted()
 				> metricsCollector.handlerExecutionsFinished(),
 				"Residual simulator work must remain accounted internally.");
@@ -917,7 +955,7 @@ public class McpCrossFeatureSoakTests {
 
 		// A new private generation must be available after the retained handler
 		// actually exits; this remains off-network and leaves diagnostics stopped.
-		Soklet.runSimulator(config, simulator -> {
+		SokletSimulator.run(configFactory, simulator -> {
 			try {
 				performSimulatorJson(simulator, "post-residual-recovery");
 			} catch (Exception e) {
@@ -925,7 +963,9 @@ public class McpCrossFeatureSoakTests {
 						e);
 			}
 		});
-		assertNeverBoundStopped(mcpServer);
+		McpServer recoveredServer = requireNonNull(mcpServer.get());
+		Assertions.assertNotSame(residualServer, recoveredServer);
+		assertNeverBoundStopped(recoveredServer);
 	}
 
 	@NonNull

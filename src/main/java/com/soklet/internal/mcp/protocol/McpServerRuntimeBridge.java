@@ -1215,6 +1215,20 @@ public final class McpServerRuntimeBridge {
 		return new SimulationSession(this.runtime.openSimulationSession());
 	}
 
+	@NonNull
+	public SimulationSession openSimulationSession(
+			@NonNull Consumer<@NonNull SimulationSession> sessionOwner) {
+		Consumer<SimulationSession> requiredOwner = requireNonNull(sessionOwner);
+		AtomicReference<SimulationSession> claimedSession = new AtomicReference<>();
+		this.runtime.openSimulationSession(delegate -> {
+			SimulationSession session = new SimulationSession(delegate);
+			claimedSession.set(session);
+			requiredOwner.accept(session);
+		});
+		return requireNonNull(claimedSession.get(),
+				"The MCP simulation session was not claimed");
+	}
+
 	public void stop() {
 		this.runtime.stop();
 	}
@@ -1292,6 +1306,36 @@ public final class McpServerRuntimeBridge {
 				@NonNull McpSimulationOptions options) {
 			return this.delegate.start(requireNonNull(request),
 					requireNonNull(options));
+		}
+
+		/** Fences new simulation requests and begins cooperative drain. */
+		public void quiesce() {
+			this.delegate.quiesce();
+		}
+
+		/** Applies the idempotent force phase to this simulation generation. */
+		public void force() {
+			this.delegate.force();
+		}
+
+		/** Observes this simulation generation's complete runtime barrier. */
+		public boolean awaitTermination(@NonNull Duration remainingTime)
+				throws InterruptedException {
+			return this.delegate.awaitTermination(requireNonNull(remainingTime));
+		}
+
+		/** Captures positive residual evidence for this simulation generation. */
+		@NonNull
+		public LifecycleEvidence lifecycleEvidence() {
+			McpLifecycleEvidence evidence = this.delegate.lifecycleEvidence();
+			return new LifecycleEvidence(evidence.eventLoop(), evidence.connection(),
+					evidence.executorTask(), evidence.stream(), evidence.callback(),
+					evidence.subscriptionRegistration());
+		}
+
+		/** Releases proof-bearing references after complete termination. */
+		public void releaseLifecycleEvidence() {
+			this.delegate.releaseLifecycleEvidence();
 		}
 
 		@Override

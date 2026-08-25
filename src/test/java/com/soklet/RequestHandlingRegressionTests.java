@@ -45,7 +45,7 @@ public class RequestHandlingRegressionTests {
 
 	@Test
 	public void wrappedRequestIsUsedForInterceptAndResponseLogic() {
-		SokletConfig configuration = SokletConfig.forSimulatorTesting()
+		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(WrappedRequestResource.class)))
 				.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
 				.requestInterceptor(new RequestInterceptor() {
@@ -77,9 +77,7 @@ public class RequestHandlingRegressionTests {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
-				.build();
-
-		Soklet.runSimulator(configuration, simulator -> {
+				.build(), simulator -> {
 			HttpRequestResult result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/greet").build());
 
@@ -93,15 +91,13 @@ public class RequestHandlingRegressionTests {
 
 	@Test
 	public void responseMarshalerRespectsCaseInsensitiveContentType() {
-		SokletConfig configuration = SokletConfig.forSimulatorTesting()
+		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ContentTypeResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
-				.build();
-
-		Soklet.runSimulator(configuration, simulator -> {
+				.build(), simulator -> {
 			HttpRequestResult result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/content-type").build());
 
@@ -115,7 +111,7 @@ public class RequestHandlingRegressionTests {
 	public void wrapRequestMustAdvanceRequestFlow() {
 		List<LogEvent> logEvents = new ArrayList<>();
 
-		SokletConfig configuration = SokletConfig.forSimulatorTesting()
+		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(WrappedRequestResource.class)))
 				.requestInterceptor(new RequestInterceptor() {
 					@Override
@@ -131,9 +127,7 @@ public class RequestHandlingRegressionTests {
 						logEvents.add(logEvent);
 					}
 				})
-				.build();
-
-		Soklet.runSimulator(configuration, simulator -> {
+				.build(), simulator -> {
 			HttpRequestResult result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/greet").build());
 
@@ -148,7 +142,7 @@ public class RequestHandlingRegressionTests {
 	public void interceptRequestMustWriteResponse() {
 		List<LogEvent> logEvents = new ArrayList<>();
 
-		SokletConfig configuration = SokletConfig.forSimulatorTesting()
+		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(WrappedRequestResource.class)))
 				.requestInterceptor(new RequestInterceptor() {
 					@Override
@@ -166,9 +160,7 @@ public class RequestHandlingRegressionTests {
 						logEvents.add(logEvent);
 					}
 				})
-				.build();
-
-		Soklet.runSimulator(configuration, simulator -> {
+				.build(), simulator -> {
 			HttpRequestResult result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/greet").build());
 
@@ -181,7 +173,7 @@ public class RequestHandlingRegressionTests {
 
 	@Test
 	public void wrappedRequestRewritesPathAndMethod() {
-		SokletConfig configuration = SokletConfig.forSimulatorTesting()
+		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(WrappedRequestRewriteResource.class)))
 				.requestInterceptor(new RequestInterceptor() {
 					@Override
@@ -200,9 +192,7 @@ public class RequestHandlingRegressionTests {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
-				.build();
-
-		Soklet.runSimulator(configuration, simulator -> {
+				.build(), simulator -> {
 			HttpRequestResult result = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/rewrite-source").build());
 
@@ -213,15 +203,13 @@ public class RequestHandlingRegressionTests {
 
 	@Test
 	public void explicitRouteBeatsPlaceholder() {
-		SokletConfig configuration = SokletConfig.forSimulatorTesting()
+		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(RouteSpecificityResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
-				.build();
-
-		Soklet.runSimulator(configuration, simulator -> {
+				.build(), simulator -> {
 			HttpRequestResult specialResult = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/items/special").build());
 
@@ -238,15 +226,13 @@ public class RequestHandlingRegressionTests {
 
 	@Test
 	public void conditionalRequestsWorkFromResourceMethods() {
-		SokletConfig configuration = SokletConfig.forSimulatorTesting()
+		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ConditionalResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
-				.build();
-
-		Soklet.runSimulator(configuration, simulator -> {
+				.build(), simulator -> {
 			HttpRequestResult cacheHitResult = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/conditional")
 							.headers(Map.of("If-None-Match", Set.of("W/\"account-7\"")))

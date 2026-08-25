@@ -70,11 +70,14 @@ class McpLocalizationReloadRuntimeTests {
 
 	@Test
 	void catalogsChangedDeliversOneCoarseInvalidationPerLocalizedFamily() {
-		McpServer server = server(true, localizer(
-				text -> McpLocalizationResult.useDefaultText()));
-
+		AtomicReference<McpServer> scopedServer = new AtomicReference<>();
 		List<String> frames = new ArrayList<>();
-		Soklet.runSimulator(config(server), simulator -> {
+		SokletSimulator.run(transports -> {
+			McpServer server = server(transports, true, localizer(
+					text -> McpLocalizationResult.useDefaultText()));
+			scopedServer.set(server);
+			return config(server);
+		}, simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(
 					subscriptionRequest("invalidation",
 							"\"toolsListChanged\":true,"
@@ -88,7 +91,7 @@ class McpLocalizationReloadRuntimeTests {
 			assertTrue(acknowledgment.contains("\"resourcesListChanged\":true"),
 					acknowledgment);
 
-			server.getLocalizationControl().catalogsChanged();
+			scopedServer.get().getLocalizationControl().catalogsChanged();
 
 			for (int index = 0; index < 3; ++index)
 				frames.add(nextFrame(simulation));
@@ -129,10 +132,13 @@ class McpLocalizationReloadRuntimeTests {
 								McpSubscriptionNotificationType.RESOURCE_UPDATED))
 						.build())
 				.build();
-		McpServer server = server(endpoint, localizer(
-				text -> McpLocalizationResult.useDefaultText()));
-
-		Soklet.runSimulator(config(server), simulator -> {
+		AtomicReference<McpServer> scopedServer = new AtomicReference<>();
+		SokletSimulator.run(transports -> {
+			McpServer server = server(transports, endpoint, localizer(
+					text -> McpLocalizationResult.useDefaultText()));
+			scopedServer.set(server);
+			return config(server);
+		}, simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(
 					subscriptionRequest("prompts-only",
 							"\"toolsListChanged\":true,"
@@ -146,7 +152,7 @@ class McpLocalizationReloadRuntimeTests {
 			assertFalse(acknowledgment.contains("resourcesListChanged"),
 					acknowledgment);
 
-			server.getLocalizationControl().catalogsChanged();
+			scopedServer.get().getLocalizationControl().catalogsChanged();
 
 			String frame = nextFrame(simulation);
 			assertTrue(frame.contains("notifications/prompts/list_changed"),
@@ -158,8 +164,8 @@ class McpLocalizationReloadRuntimeTests {
 
 	@Test
 	void discoveryAdvertisesListChangedOnlyForLocalizedCatalogsWithSubscriptions() {
-		String localized = discoveryBody(server(true, localizer(
-				text -> McpLocalizationResult.useDefaultText())));
+		String localized = discoveryBody(true, localizer(
+				text -> McpLocalizationResult.useDefaultText()));
 		assertTrue(localized.contains("\"tools\":{\"listChanged\":true}"),
 				localized);
 		assertTrue(localized.contains("\"prompts\":{\"listChanged\":true}"),
@@ -167,26 +173,30 @@ class McpLocalizationReloadRuntimeTests {
 		assertTrue(localized.contains("\"resources\":{\"listChanged\":true"),
 				localized);
 
-		String unlocalized = discoveryBody(server(true, null));
+		String unlocalized = discoveryBody(true, null);
 		assertTrue(unlocalized.contains("\"tools\":{}"), unlocalized);
 		assertTrue(unlocalized.contains("\"prompts\":{}"), unlocalized);
 
 		// Without subscriptions/listen there is no delivery channel, so a
 		// localized catalog still advertises nothing.
-		String noSubscriptions = discoveryBody(server(false, localizer(
-				text -> McpLocalizationResult.useDefaultText())));
+		String noSubscriptions = discoveryBody(false, localizer(
+				text -> McpLocalizationResult.useDefaultText()));
 		assertTrue(noSubscriptions.contains("\"tools\":{}"), noSubscriptions);
 		assertTrue(noSubscriptions.contains("\"prompts\":{}"), noSubscriptions);
 	}
 
 	@Test
 	void aStaleLocalizedTerminalIsReleasedByInvalidation() {
-		McpServer server = server(true, localizer(
-				text -> McpLocalizationResult.localized(
-						"FR:" + text.getDefaultText())));
+		AtomicReference<McpServer> scopedServer = new AtomicReference<>();
 		AtomicReference<McpSimulation> escaped = new AtomicReference<>();
 
-		Soklet.runSimulator(config(server), simulator -> {
+		SokletSimulator.run(transports -> {
+			McpServer server = server(transports, true, localizer(
+					text -> McpLocalizationResult.localized(
+							"FR:" + text.getDefaultText())));
+			scopedServer.set(server);
+			return config(server);
+		}, simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(
 					subscriptionRequest("stale-terminal",
 							"\"resourcesListChanged\":true"));
@@ -196,7 +206,7 @@ class McpLocalizationReloadRuntimeTests {
 			// The invalidation clears the pre-rendered localized terminal, so
 			// the close that follows publishes canonical text instead of
 			// retaining the obsolete translation graph.
-			server.getLocalizationControl().catalogsChanged();
+			scopedServer.get().getLocalizationControl().catalogsChanged();
 			nextFrame(simulation);
 
 			try {
@@ -231,10 +241,14 @@ class McpLocalizationReloadRuntimeTests {
 							.build();
 				})
 				.build();
-		McpServer server = server(true, localizer);
+		AtomicReference<McpServer> scopedServer = new AtomicReference<>();
 		AtomicReference<McpSimulation> escaped = new AtomicReference<>();
 
-		Soklet.runSimulator(config(server), simulator -> {
+		SokletSimulator.run(transports -> {
+			McpServer server = server(transports, true, localizer);
+			scopedServer.set(server);
+			return config(server);
+		}, simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(
 					subscriptionRequest("open-race",
 							"\"resourcesListChanged\":true"));
@@ -242,7 +256,7 @@ class McpLocalizationReloadRuntimeTests {
 			try {
 				await(contextCaptured);
 				snapshot.set("NEW:");
-				server.getLocalizationControl().catalogsChanged();
+				scopedServer.get().getLocalizationControl().catalogsChanged();
 			} finally {
 				releaseContext.countDown();
 			}
@@ -454,13 +468,21 @@ class McpLocalizationReloadRuntimeTests {
 
 	@Test
 	void twoNodesInvalidateIndependently() {
-		McpServer first = server(true, localizer(
-				text -> McpLocalizationResult.useDefaultText()));
-		McpServer second = server(true, localizer(
-				text -> McpLocalizationResult.useDefaultText()));
+		AtomicReference<McpServer> first = new AtomicReference<>();
+		AtomicReference<McpServer> second = new AtomicReference<>();
 
-		Soklet.runSimulator(config(first), firstSimulator ->
-				Soklet.runSimulator(config(second), secondSimulator -> {
+		SokletSimulator.run(firstTransports -> {
+			McpServer server = server(firstTransports, true, localizer(
+					text -> McpLocalizationResult.useDefaultText()));
+			first.set(server);
+			return config(server);
+		}, firstSimulator ->
+				SokletSimulator.run(secondTransports -> {
+					McpServer server = server(secondTransports, true, localizer(
+							text -> McpLocalizationResult.useDefaultText()));
+					second.set(server);
+					return config(server);
+				}, secondSimulator -> {
 					McpSimulation firstSubscription = firstSimulator
 							.startMcpRequest(subscriptionRequest("node-one",
 									"\"toolsListChanged\":true"));
@@ -472,14 +494,14 @@ class McpLocalizationReloadRuntimeTests {
 
 					// The control is a local-server operation: each node's call
 					// reaches only its own streams.
-					first.getLocalizationControl().catalogsChanged();
+					first.get().getLocalizationControl().catalogsChanged();
 					assertTrue(nextFrame(firstSubscription)
 							.contains("notifications/tools/list_changed"));
 					assertTrue(pollFrame(secondSubscription,
 							Duration.ofMillis(150)).isEmpty(),
 							"Node one's invalidation must not reach node two.");
 
-					second.getLocalizationControl().catalogsChanged();
+					second.get().getLocalizationControl().catalogsChanged();
 					assertTrue(nextFrame(secondSubscription)
 							.contains("notifications/tools/list_changed"));
 				}));
@@ -497,7 +519,7 @@ class McpLocalizationReloadRuntimeTests {
 				sharedPublisherEndpoint("/localization/shared-one", "One", subscriptions),
 				sharedPublisherEndpoint("/localization/shared-two", "Two", subscriptions),
 				sharedPublisherEndpoint("/localization/shared-plain", null, subscriptions));
-		McpServer server = McpServer.withPort(0)
+		SokletSimulator.run(transports -> config(transports.newMcpServerBuilder(0)
 				.host(LOOPBACK)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints))
 				.admissionController(McpAdmissionController.acceptAllInstance())
@@ -505,9 +527,7 @@ class McpLocalizationReloadRuntimeTests {
 				.allowedHosts(Set.of(LOOPBACK))
 				.localizer(localizer(text ->
 						McpLocalizationResult.useDefaultText()))
-				.build();
-
-		Soklet.runSimulator(config(server), simulator -> {
+				.build()), simulator -> {
 			List<McpSimulation> simulations = List.of(
 					simulator.startMcpRequest(request(
 							"/localization/shared-one", "shared-one",
@@ -697,6 +717,16 @@ class McpLocalizationReloadRuntimeTests {
 			McpLocalizer localizer,
 			Optional<java.util.concurrent.ExecutorService> handlerExecutor,
 			Optional<Duration> shutdownTimeout) {
+		return server(reloadEndpoint(subscriptions), localizer, handlerExecutor,
+				shutdownTimeout);
+	}
+
+	private static McpServer server(SimulatorTransports transports,
+			boolean subscriptions, McpLocalizer localizer) {
+		return server(transports, reloadEndpoint(subscriptions), localizer);
+	}
+
+	private static McpEndpoint reloadEndpoint(boolean subscriptions) {
 		McpEndpoint.Builder builder = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation
 						.withNameAndVersion("localization-reload", "1.0")
@@ -732,7 +762,7 @@ class McpLocalizationReloadRuntimeTests {
 		if (subscriptions)
 			builder.subscriptions(subscriptions());
 
-		return server(builder.build(), localizer, handlerExecutor, shutdownTimeout);
+		return builder.build();
 	}
 
 	private static McpServer server(McpEndpoint endpoint,
@@ -750,7 +780,21 @@ class McpLocalizationReloadRuntimeTests {
 			McpLocalizer localizer,
 			Optional<java.util.concurrent.ExecutorService> handlerExecutor,
 			Optional<Duration> shutdownTimeout) {
-		McpServer.Builder builder = McpServer.withPort(0)
+		return server(McpServer.withPort(0), endpoint, localizer, handlerExecutor,
+				shutdownTimeout);
+	}
+
+	private static McpServer server(SimulatorTransports transports,
+			McpEndpoint endpoint, McpLocalizer localizer) {
+		return server(transports.newMcpServerBuilder(0), endpoint, localizer,
+				Optional.empty(), Optional.empty());
+	}
+
+	private static McpServer server(McpServer.Builder builder,
+			McpEndpoint endpoint, McpLocalizer localizer,
+			Optional<java.util.concurrent.ExecutorService> handlerExecutor,
+			Optional<Duration> shutdownTimeout) {
+		builder
 				.host(LOOPBACK)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.admissionController(McpAdmissionController.acceptAllInstance())
@@ -798,10 +842,12 @@ class McpLocalizationReloadRuntimeTests {
 				.build();
 	}
 
-	private static String discoveryBody(McpServer server) {
+	private static String discoveryBody(boolean subscriptions,
+			McpLocalizer localizer) {
 		AtomicReference<String> captured = new AtomicReference<>();
 
-		Soklet.runSimulator(config(server), simulator -> {
+		SokletSimulator.run(transports -> config(
+				server(transports, subscriptions, localizer)), simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(
 					request("discover", "server/discover", ""));
 

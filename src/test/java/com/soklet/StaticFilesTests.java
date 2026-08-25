@@ -966,13 +966,17 @@ public class StaticFilesTests {
 		Path appJs = tempDir.resolve("app.js");
 		Files.writeString(appJs, "console.log('hi');", StandardCharsets.UTF_8);
 		String appJsLength = String.valueOf(Files.size(appJs));
-		StaticFiles staticFiles = StaticFiles.withRoot(tempDir)
-				.cacheControlResolver((path, attributes) -> Optional.of(path.getFileName().toString().endsWith(".js")
-						? "public, max-age=31536000, immutable"
-						: "no-cache"))
-				.build();
-		StaticAssetResource resource = new StaticAssetResource(staticFiles);
-		SokletConfig config = SokletConfig.forSimulatorTesting()
+
+		SokletSimulator.run(transports -> {
+			StaticFiles staticFiles = StaticFiles.withRoot(tempDir)
+					.cacheControlResolver((path, attributes) -> Optional.of(path.getFileName().toString().endsWith(".js")
+							? "public, max-age=31536000, immutable"
+							: "no-cache"))
+					.build();
+			StaticAssetResource resource = new StaticAssetResource(staticFiles);
+			InstanceProvider defaultProvider = InstanceProvider.defaultInstance();
+
+			return SokletConfig.forSimulatorTesting(transports)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StaticAssetResource.class)))
 				.instanceProvider(new InstanceProvider() {
 					@Override
@@ -981,7 +985,7 @@ public class StaticFilesTests {
 						if (instanceClass == StaticAssetResource.class)
 							return instanceClass.cast(resource);
 
-						return InstanceProvider.defaultInstance().provide(instanceClass);
+						return defaultProvider.provide(instanceClass);
 					}
 				})
 				.lifecycleObserver(new LifecycleObserver() {
@@ -991,8 +995,7 @@ public class StaticFilesTests {
 					}
 				})
 				.build();
-
-		Soklet.runSimulator(config, simulator -> {
+		}, simulator -> {
 			HttpRequestResult result = simulator.performHttpRequest(Request.fromPath(HttpMethod.GET, "/assets/app.js"));
 			Assertions.assertEquals(200, result.getMarshaledResponse().getStatusCode());
 			Assertions.assertEquals(Set.of("public, max-age=31536000, immutable"), result.getMarshaledResponse().getHeaders().get("Cache-Control"));
@@ -1008,7 +1011,7 @@ public class StaticFilesTests {
 
 	@Test
 	public void simulatorStillEmitsDateHeaderAfterHttpDateMigration() {
-		SokletConfig config = SokletConfig.forSimulatorTesting()
+		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(DateResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
@@ -1016,9 +1019,7 @@ public class StaticFilesTests {
 						// Quiet
 					}
 				})
-				.build();
-
-		Soklet.runSimulator(config, simulator -> {
+				.build(), simulator -> {
 			HttpRequestResult result = simulator.performHttpRequest(Request.fromPath(HttpMethod.GET, "/date"));
 			String date = result.getMarshaledResponse().getHeaders().get("Date").stream().findFirst().orElse(null);
 			Assertions.assertNotNull(date);

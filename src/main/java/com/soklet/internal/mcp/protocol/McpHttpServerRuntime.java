@@ -892,7 +892,21 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 	@NonNull
 	SimulationSession openSimulationSession() {
+		return openSimulationSession(ignored -> {}, false);
+	}
+
+	@NonNull
+	SimulationSession openSimulationSession(
+			@NonNull Consumer<@NonNull SimulationSession> sessionOwner) {
+		return openSimulationSession(requireNonNull(sessionOwner), true);
+	}
+
+	@NonNull
+	private SimulationSession openSimulationSession(
+			@NonNull Consumer<@NonNull SimulationSession> sessionOwner,
+			boolean retainFailedGenerationForOwner) {
 		SimulationGeneration generation;
+		SimulationSession session;
 		synchronized (lifecycleLock) {
 			reapSimulationResidualsWhileLocked();
 			reapLiveResidualsForSimulationWhileLocked();
@@ -914,24 +928,62 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					this.applicationExecutionObserver);
 			List<SubscriptionSourceRegistrationControl> registrations =
 					new ArrayList<>();
+			generation = new SimulationGeneration(processor, application,
+					InetSocketAddress.createUnresolved(
+							transportConfiguration.host(),
+							transportConfiguration.port()), registrations);
+			session = new SimulationSession(generation);
+			simulationGeneration = generation;
 			try {
+				sessionOwner.accept(session);
 				application.start();
 				subscribeToSubscriptionEventSources(registrations);
 				startAcceptingSubscriptions();
-				generation = new SimulationGeneration(processor, application,
-						InetSocketAddress.createUnresolved(
-								transportConfiguration.host(),
-								transportConfiguration.port()), registrations);
-				simulationGeneration = generation;
 			} catch (RuntimeException | Error failure) {
-				stopAcceptingSubscriptions();
-				application.stop(StreamTerminationReason.CLIENT_DISCONNECTED);
-				processor.shutdownNow();
-				beginClosingSubscriptionEventSourceRegistrations(registrations);
+				generation.beginClosing();
+				Throwable cleanupFailure = null;
+				cleanupFailure = runLifecycleStep(cleanupFailure,
+						() -> stopAcceptingSubscriptions());
+				cleanupFailure = runLifecycleStep(cleanupFailure, () -> application
+						.stop(StreamTerminationReason.CLIENT_DISCONNECTED));
+				cleanupFailure = runLifecycleStep(cleanupFailure,
+						processor::shutdownNow);
+				try {
+					SubscriptionRegistrationCloseBatch closeBatch =
+							beginClosingSubscriptionEventSourceRegistrations(
+									registrations);
+					generation.mergeCloseBatch(closeBatch);
+				} catch (Throwable closeFailure) {
+					cleanupFailure = retainLifecycleFailure(cleanupFailure,
+							closeFailure);
+				}
+				if (!retainFailedGenerationForOwner) {
+					try {
+						if (simulationGenerationBarrierComplete(generation))
+							releaseSimulationGenerationEvidence(generation);
+						else
+							retainSimulationGenerationEvidence(generation);
+					} catch (Throwable retentionFailure) {
+						cleanupFailure = retainLifecycleFailure(cleanupFailure,
+								retentionFailure);
+					}
+				}
+				if (cleanupFailure != null && cleanupFailure != failure)
+					failure.addSuppressed(cleanupFailure);
 				throw failure;
 			}
 		}
-		return new SimulationSession(generation);
+		return session;
+	}
+
+	private @Nullable Throwable retainLifecycleFailure(
+			@Nullable Throwable first, @NonNull Throwable next) {
+		Throwable requiredNext = requireNonNull(next);
+		if (first == null)
+			return requiredNext;
+		if (first != requiredNext)
+			first.addSuppressed(requiredNext);
+		return first;
 	}
 
 	private void reapLiveResidualsForSimulationWhileLocked() {
@@ -966,83 +1018,324 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 	private void closeSimulationGeneration(
 			@NonNull SimulationGeneration generation) {
-		requireNonNull(generation);
-		synchronized (lifecycleLock) {
-			if (simulationGeneration != generation)
-				return;
-			generation.beginClosing();
-		}
-
-		for (McpSimulationRuntime simulation : generation.activeSimulations())
-			simulation.cancel();
-
+		SimulationGeneration requiredGeneration = requireNonNull(generation);
 		boolean interrupted = Thread.interrupted();
-		boolean applicationTerminated = false;
-		SubscriptionRegistrationCloseOutcome subscriptionCloseOutcome =
-				new SubscriptionRegistrationCloseOutcome(generation.registrations());
-		long shutdownStartedAt = System.nanoTime();
-		long shutdownTimeoutNanos = transportConfiguration.shutdownTimeout().toNanos();
+		Throwable forceFailure = null;
+		long deadline = saturatingAdd(System.nanoTime(),
+				transportConfiguration.shutdownTimeout().toNanos());
 		try {
-			stopAcceptingSubscriptions();
-			SubscriptionRegistrationCloseBatch closeBatch =
-					beginClosingSubscriptionEventSourceRegistrations(
-							generation.registrations());
-			generation.application().stop(
-					StreamTerminationReason.CLIENT_DISCONNECTED);
-			cancelAllRequests(StreamTerminationReason.CLIENT_DISCONNECTED, null);
-			generation.processor().shutdownNow();
-			cancelAllRequests(StreamTerminationReason.CLIENT_DISCONNECTED, null);
+			try {
+				forceSimulationGenerationForCompatibility(requiredGeneration);
+			} catch (RuntimeException | Error failure) {
+				forceFailure = failure;
+			}
 
-			while (!generation.processor().isTerminated()) {
-				long remaining = remainingShutdownNanos(shutdownStartedAt,
-						shutdownTimeoutNanos);
-				if (remaining <= 0L)
-					break;
+			boolean terminated = false;
+			while (!terminated && remainingUntil(deadline) > 0L) {
 				try {
-					generation.processor().awaitTermination(remaining,
-							TimeUnit.NANOSECONDS);
+					terminated = awaitSimulationGenerationTermination(
+							requiredGeneration, deadline);
 				} catch (InterruptedException exception) {
 					interrupted = true;
 				}
 			}
+			if (!terminated)
+				terminated = simulationGenerationBarrierComplete(
+						requiredGeneration);
 
-			while (!applicationTerminated) {
-				long remaining = remainingShutdownNanos(shutdownStartedAt,
-						shutdownTimeoutNanos);
-				if (remaining <= 0L)
-					break;
-				try {
-					applicationTerminated = generation.application()
-							.awaitTermination(Duration.ofNanos(remaining));
-				} catch (InterruptedException exception) {
-					interrupted = true;
-				}
-			}
-			subscriptionCloseOutcome = awaitSubscriptionEventSourceRegistrations(
-					closeBatch, shutdownStartedAt, shutdownTimeoutNanos);
+			if (terminated)
+				releaseSimulationGenerationEvidence(requiredGeneration);
+			else
+				retainSimulationGenerationEvidence(requiredGeneration);
+
+			if (forceFailure != null)
+				rethrowLifecycleFailure(forceFailure);
+			if (!terminated)
+				throw new IllegalStateException(SIMULATION_SHUTDOWN_TIMED_OUT);
 		} finally {
-			synchronized (lifecycleLock) {
-				if (simulationGeneration == generation)
-					simulationGeneration = null;
-				residualSimulationRequestProcessor =
-						generation.processor().isTerminated()
-								? null : generation.processor();
-				residualSimulationApplicationExecution = applicationTerminated
-						|| generation.application().isTerminated()
-						? null : generation.application();
-				residualSimulationSubscriptionSourceRegistrations =
-						unclosedSubscriptionSourceRegistrations(
-								subscriptionCloseOutcome.residualRegistrations());
-				lifecycleLock.notifyAll();
-			}
 			if (interrupted)
 				Thread.currentThread().interrupt();
 		}
+	}
 
-		if (residualSimulationRequestProcessor != null
-				|| residualSimulationApplicationExecution != null
-				|| !residualSimulationSubscriptionSourceRegistrations.isEmpty())
-			throw new IllegalStateException(SIMULATION_SHUTDOWN_TIMED_OUT);
+	/** Preserves the legacy simulator-close cancellation order and time budget. */
+	private void forceSimulationGenerationForCompatibility(
+			@NonNull SimulationGeneration generation) {
+		SimulationGeneration requiredGeneration = requireNonNull(generation);
+		synchronized (lifecycleLock) {
+			if (requiredGeneration.evidenceReleased())
+				return;
+			if (simulationGeneration != requiredGeneration)
+				throw new IllegalStateException(SIMULATION_REQUIRES_STOPPED_SERVER);
+			if (!requiredGeneration.claimForce())
+				return;
+			requiredGeneration.claimQuiesce();
+			requiredGeneration.beginClosing();
+		}
+
+		Throwable failure = null;
+		for (McpSimulationRuntime simulation
+				: requiredGeneration.activeSimulations())
+			failure = runLifecycleStep(failure, simulation::cancel);
+		stopAcceptingSubscriptions();
+		SubscriptionRegistrationCloseBatch closeBatch =
+				beginClosingSubscriptionEventSourceRegistrations(
+						requiredGeneration.registrations());
+		synchronized (lifecycleLock) {
+			requiredGeneration.mergeCloseBatch(closeBatch);
+		}
+		failure = runLifecycleStep(failure, () -> requiredGeneration.application()
+				.stop(StreamTerminationReason.CLIENT_DISCONNECTED));
+		failure = runLifecycleStep(failure, () -> cancelAllRequests(
+				StreamTerminationReason.CLIENT_DISCONNECTED, null));
+		failure = runLifecycleStep(failure,
+				requiredGeneration.processor()::shutdownNow);
+		failure = runLifecycleStep(failure, () -> cancelAllRequests(
+				StreamTerminationReason.CLIENT_DISCONNECTED, null));
+		rethrowLifecycleFailure(failure);
+	}
+
+	/** Fences one simulation generation and begins cooperative, noninterrupting drain. */
+	private void quiesceSimulationGeneration(
+			@NonNull SimulationGeneration generation) {
+		SimulationGeneration requiredGeneration = requireNonNull(generation);
+		synchronized (lifecycleLock) {
+			if (requiredGeneration.evidenceReleased())
+				return;
+			if (simulationGeneration != requiredGeneration)
+				throw new IllegalStateException(SIMULATION_REQUIRES_STOPPED_SERVER);
+			if (!requiredGeneration.claimQuiesce())
+				return;
+			requiredGeneration.beginClosing();
+		}
+
+		Set<RequestControl> subscriptions = stopAcceptingSubscriptions();
+		completeSubscriptions(subscriptions);
+		for (RequestControl control : requestControlsSnapshot())
+			control.quiesceSimulationTransport();
+		beginGracefulSimulationSubscriptionCloses(requiredGeneration);
+		ThreadPoolExecutor processor = requiredGeneration.processor();
+		McpApplicationExecution application = requiredGeneration.application();
+		if (processor instanceof LifecycleRequestProcessor lifecycleProcessor)
+			lifecycleProcessor.afterTermination(application::beginGracefulDrain);
+		processor.shutdown();
+		if (!(processor instanceof LifecycleRequestProcessor))
+			application.beginGracefulDrain();
+	}
+
+	/** Idempotent simulation force phase; force-first subsumes quiesce. */
+	private void forceSimulationGeneration(
+			@NonNull SimulationGeneration generation) {
+		SimulationGeneration requiredGeneration = requireNonNull(generation);
+		synchronized (lifecycleLock) {
+			if (requiredGeneration.evidenceReleased())
+				return;
+			if (simulationGeneration != requiredGeneration)
+				throw new IllegalStateException(SIMULATION_REQUIRES_STOPPED_SERVER);
+			if (!requiredGeneration.claimForce())
+				return;
+		}
+
+		Throwable failure = null;
+		failure = runLifecycleStep(failure,
+				() -> quiesceSimulationGeneration(requiredGeneration));
+		for (McpSimulationRuntime simulation
+				: requiredGeneration.activeSimulations())
+			failure = runLifecycleStep(failure, simulation::cancel);
+		Set<RequestControl> subscriptions = stopAcceptingSubscriptions();
+		failure = runLifecycleStep(failure,
+				() -> completeSubscriptions(subscriptions));
+		for (RequestControl control : requestControlsSnapshot())
+			failure = runLifecycleStep(failure, control::quiesceTransport);
+		SubscriptionRegistrationCloseBatch closeBatch =
+				beginClosingSubscriptionEventSourceRegistrations(
+						requiredGeneration.registrations());
+		synchronized (lifecycleLock) {
+			requiredGeneration.mergeCloseBatch(closeBatch);
+			closeBatch = requiredGeneration.closeBatch();
+		}
+		if (closeBatch != null) {
+			for (SubscriptionRegistrationCloseAttempt closeAttempt
+					: closeBatch.closeAttempts())
+				closeAttempt.cancel();
+		}
+		failure = runLifecycleStep(failure, () -> requiredGeneration.application()
+				.stop(StreamTerminationReason.CLIENT_DISCONNECTED));
+		failure = runLifecycleStep(failure, () -> cancelAllRequests(
+				StreamTerminationReason.CLIENT_DISCONNECTED, null));
+		failure = runLifecycleStep(failure,
+				requiredGeneration.processor()::shutdownNow);
+		failure = runLifecycleStep(failure, () -> cancelAllRequests(
+				StreamTerminationReason.CLIENT_DISCONNECTED, null));
+		rethrowLifecycleFailure(failure);
+	}
+
+	private void beginGracefulSimulationSubscriptionCloses(
+			@NonNull SimulationGeneration generation) {
+		synchronized (lifecycleLock) {
+			if (generation.forced())
+				return;
+			SubscriptionRegistrationCloseBatch closeBatch =
+					beginClosingSubscriptionEventSourceRegistrations(
+							generation.registrations());
+			generation.mergeCloseBatch(closeBatch);
+		}
+	}
+
+	private boolean awaitSimulationGenerationTermination(
+			@NonNull SimulationGeneration generation,
+			long absoluteDeadlineNanos) throws InterruptedException {
+		SimulationGeneration requiredGeneration = requireNonNull(generation);
+		if (requiredGeneration.evidenceReleased())
+			return true;
+		boolean processorTerminated = requiredGeneration.processor().isTerminated();
+		if (!processorTerminated) {
+			long remaining = remainingUntil(absoluteDeadlineNanos);
+			if (remaining > 0L)
+				processorTerminated = requiredGeneration.processor().awaitTermination(
+						remaining, TimeUnit.NANOSECONDS);
+		}
+		boolean applicationTerminated = requiredGeneration.application()
+				.isTerminated();
+		if (!applicationTerminated) {
+			long remaining = remainingUntil(absoluteDeadlineNanos);
+			if (remaining > 0L)
+				applicationTerminated = requiredGeneration.application()
+						.awaitTermination(Duration.ofNanos(remaining));
+		}
+		SubscriptionRegistrationCloseBatch closeBatch;
+		synchronized (lifecycleLock) {
+			closeBatch = requiredGeneration.closeBatch();
+		}
+		boolean registrationsClosed = awaitSimulationRegistrations(
+				requiredGeneration, closeBatch, absoluteDeadlineNanos);
+		return processorTerminated && applicationTerminated
+				&& registrationsClosed
+				&& simulationGenerationBarrierComplete(requiredGeneration);
+	}
+
+	private boolean awaitSimulationRegistrations(
+			@NonNull SimulationGeneration generation,
+			@Nullable SubscriptionRegistrationCloseBatch closeBatch,
+			long absoluteDeadlineNanos) throws InterruptedException {
+		boolean closeAttemptsCompleted = true;
+		if (closeBatch == null)
+			return unclosedSubscriptionSourceRegistrations(
+					generation.registrations()).isEmpty();
+		for (SubscriptionRegistrationCloseAttempt attempt
+				: closeBatch.closeAttempts()) {
+			if (!attempt.completed()) {
+				long remaining = remainingUntil(absoluteDeadlineNanos);
+				if (remaining > 0L)
+					attempt.await(remaining);
+			}
+			closeAttemptsCompleted &= attempt.completed();
+		}
+		return closeAttemptsCompleted
+				&& unclosedSubscriptionSourceRegistrations(
+						generation.registrations()).isEmpty();
+	}
+
+	private boolean simulationGenerationBarrierComplete(
+			@NonNull SimulationGeneration generation) {
+		SimulationGeneration requiredGeneration = requireNonNull(generation);
+		if (requiredGeneration.evidenceReleased())
+			return true;
+		SubscriptionRegistrationCloseBatch closeBatch;
+		synchronized (lifecycleLock) {
+			closeBatch = requiredGeneration.closeBatch();
+		}
+		boolean closeAttemptsComplete = closeBatch == null
+				|| closeBatch.closeAttempts().stream()
+						.allMatch(SubscriptionRegistrationCloseAttempt::completed);
+		requiredGeneration.removeCompletedSimulations();
+		return requiredGeneration.processor().isTerminated()
+				&& requiredGeneration.application().isTerminated()
+				&& closeAttemptsComplete
+				&& unclosedSubscriptionSourceRegistrations(
+						requiredGeneration.registrations()).isEmpty()
+				&& requestControlsSnapshot().isEmpty()
+				&& activeStreamsAndSubscriptionsEnded()
+				&& requiredGeneration.activeSimulations().isEmpty();
+	}
+
+	@NonNull
+	private McpLifecycleEvidence simulationLifecycleEvidence(
+			@NonNull SimulationGeneration generation) {
+		SimulationGeneration requiredGeneration = requireNonNull(generation);
+		if (requiredGeneration.evidenceReleased())
+			return new McpLifecycleEvidence(false, false, false, false,
+					false, false);
+		McpApplicationExecutionSnapshot applicationSnapshot =
+				requiredGeneration.application().snapshot(
+						activeIdentifiedRequestExchangeCount.get());
+		boolean streams;
+		synchronized (streamDiagnosticsLock) {
+			streams = activeRequestStreams != 0 || activeSubscriptions != 0;
+		}
+		requiredGeneration.removeCompletedSimulations();
+		SubscriptionRegistrationCloseBatch closeBatch;
+		synchronized (lifecycleLock) {
+			closeBatch = requiredGeneration.closeBatch();
+		}
+		boolean registrationCloseInProgress = closeBatch != null
+				&& closeBatch.closeAttempts().stream()
+						.anyMatch(attempt -> !attempt.completed());
+		return new McpLifecycleEvidence(false, false,
+				!requiredGeneration.processor().isTerminated()
+						|| !requiredGeneration.application().isTerminated(),
+				streams || !requestControlsSnapshot().isEmpty()
+						|| !requiredGeneration.activeSimulations().isEmpty(),
+				applicationSnapshot.activeHandlerSlots() > 0,
+				registrationCloseInProgress
+						|| !unclosedSubscriptionSourceRegistrations(
+								requiredGeneration.registrations()).isEmpty());
+	}
+
+	private void releaseSimulationGenerationEvidence(
+			@NonNull SimulationGeneration generation) {
+		SimulationGeneration requiredGeneration = requireNonNull(generation);
+		if (requiredGeneration.evidenceReleased())
+			return;
+		if (!simulationGenerationBarrierComplete(requiredGeneration))
+			throw new IllegalStateException(
+					"MCP simulation lifecycle evidence cannot be released before termination is proven.");
+		synchronized (lifecycleLock) {
+			if (requiredGeneration.evidenceReleased())
+				return;
+			if (simulationGeneration == requiredGeneration)
+				simulationGeneration = null;
+			if (residualSimulationRequestProcessor
+					== requiredGeneration.processor())
+				residualSimulationRequestProcessor = null;
+			if (residualSimulationApplicationExecution
+					== requiredGeneration.application())
+				residualSimulationApplicationExecution = null;
+			residualSimulationSubscriptionSourceRegistrations =
+					unclosedSubscriptionSourceRegistrations(
+							residualSimulationSubscriptionSourceRegistrations);
+			requiredGeneration.markEvidenceReleased();
+			lifecycleLock.notifyAll();
+		}
+	}
+
+	private void retainSimulationGenerationEvidence(
+			@NonNull SimulationGeneration generation) {
+		SimulationGeneration requiredGeneration = requireNonNull(generation);
+		synchronized (lifecycleLock) {
+			if (simulationGeneration == requiredGeneration)
+				simulationGeneration = null;
+			residualSimulationRequestProcessor =
+					requiredGeneration.processor().isTerminated()
+							? null : requiredGeneration.processor();
+			residualSimulationApplicationExecution =
+					requiredGeneration.application().isTerminated()
+							? null : requiredGeneration.application();
+			residualSimulationSubscriptionSourceRegistrations =
+					unclosedSubscriptionSourceRegistrations(
+							requiredGeneration.registrations());
+			lifecycleLock.notifyAll();
+		}
 	}
 
 	@NonNull
@@ -6683,6 +6976,26 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 		}
 
+		/**
+		 * Gracefully drains one off-network request. Bounded application work keeps
+		 * its response channel through the grace phase; only already-open streams
+		 * and subscriptions receive the immediate server-stopping terminal.
+		 */
+		private void quiesceSimulationTransport() {
+			if (hasSubscriptionRegistration()) {
+				completeSubscription(StreamTerminationReason.SERVER_STOPPING);
+				return;
+			}
+			McpRequestSseStream stream;
+			synchronized (lock) {
+				if (terminal || canceled)
+					return;
+				stream = responseStream;
+			}
+			if (stream != null)
+				stream.close(StreamTerminationReason.SERVER_STOPPING, null);
+		}
+
 		private boolean applicationEntryAllowed() {
 			synchronized (lock) {
 				return applicationOwned && !canceled && !terminal;
@@ -8480,42 +8793,102 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	@ThreadSafe
 	final class SimulationSession implements AutoCloseable {
 		@NonNull
-		private final SimulationGeneration generation;
+		private final AtomicReference<@Nullable SimulationGeneration> generation;
 		@NonNull
 		private final AtomicBoolean closed;
+		@NonNull
+		private final AtomicBoolean compatibilityCloseClaimed;
 
 		private SimulationSession(@NonNull SimulationGeneration generation) {
-			this.generation = requireNonNull(generation);
+			this.generation = new AtomicReference<>(requireNonNull(generation));
 			this.closed = new AtomicBoolean();
+			this.compatibilityCloseClaimed = new AtomicBoolean();
 		}
 
 		@NonNull
 		McpSimulation start(@NonNull Request request,
 				@NonNull McpSimulationOptions options) {
-			if (closed.get())
+			SimulationGeneration activeGeneration = this.generation.get();
+			if (closed.get() || activeGeneration == null)
 				throw new IllegalStateException(SIMULATION_REQUIRES_STOPPED_SERVER);
 			McpSimulationRuntime simulation = new McpSimulationRuntime(
-					requireNonNull(options), generation::removeCompletedSimulations);
-			synchronized (generation.simulations) {
-				if (closed.get() || generation.closing())
+					requireNonNull(options),
+					activeGeneration::removeCompletedSimulations);
+			synchronized (activeGeneration.simulations) {
+				if (closed.get() || this.generation.get() != activeGeneration
+						|| activeGeneration.closing())
 					throw new IllegalStateException(SIMULATION_REQUIRES_STOPPED_SERVER);
-				generation.simulations.add(simulation);
+				activeGeneration.simulations.add(simulation);
 				try {
-					RequestControl control = submitSimulationRequest(generation,
+					RequestControl control = submitSimulationRequest(activeGeneration,
 							requireNonNull(request), simulation);
 					simulation.bindController(control::cancelFromSimulation);
 					return simulation;
 				} catch (RuntimeException | Error failure) {
-					generation.simulations.remove(simulation);
+					activeGeneration.simulations.remove(simulation);
 					throw failure;
 				}
 			}
 		}
 
+		void quiesce() {
+			this.closed.set(true);
+			SimulationGeneration activeGeneration = this.generation.get();
+			if (activeGeneration != null)
+				quiesceSimulationGeneration(activeGeneration);
+		}
+
+		void force() {
+			this.closed.set(true);
+			SimulationGeneration activeGeneration = this.generation.get();
+			if (activeGeneration != null)
+				forceSimulationGeneration(activeGeneration);
+		}
+
+		boolean awaitTermination(@NonNull Duration remainingTime)
+				throws InterruptedException {
+			SimulationGeneration activeGeneration = this.generation.get();
+			Duration requiredRemainingTime = requireNonNull(remainingTime);
+			if (requiredRemainingTime.isNegative())
+				throw new IllegalArgumentException(
+						"The MCP simulation termination budget must not be negative.");
+			long absoluteDeadlineNanos = saturatingAdd(System.nanoTime(),
+					requiredRemainingTime.toNanos());
+			return activeGeneration == null
+					|| awaitSimulationGenerationTermination(activeGeneration,
+							absoluteDeadlineNanos);
+		}
+
+		@NonNull
+		McpLifecycleEvidence lifecycleEvidence() {
+			SimulationGeneration activeGeneration = this.generation.get();
+			return activeGeneration == null
+					? new McpLifecycleEvidence(false, false, false, false,
+							false, false)
+					: simulationLifecycleEvidence(activeGeneration);
+		}
+
+		void releaseLifecycleEvidence() {
+			SimulationGeneration activeGeneration = this.generation.get();
+			if (activeGeneration == null)
+				return;
+			releaseSimulationGenerationEvidence(activeGeneration);
+			this.generation.compareAndSet(activeGeneration, null);
+		}
+
 		@Override
 		public void close() {
-			if (closed.compareAndSet(false, true))
-				closeSimulationGeneration(generation);
+			this.closed.set(true);
+			if (!this.compatibilityCloseClaimed.compareAndSet(false, true))
+				return;
+			SimulationGeneration activeGeneration = this.generation.get();
+			if (activeGeneration == null)
+				return;
+			try {
+				closeSimulationGeneration(activeGeneration);
+			} finally {
+				this.generation.compareAndSet(activeGeneration, null);
+			}
 		}
 	}
 
@@ -8534,6 +8907,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private final Set<@NonNull McpSimulationRuntime> simulations;
 		@NonNull
 		private final AtomicBoolean closing;
+		@NonNull
+		private final AtomicBoolean quiesced;
+		@NonNull
+		private final AtomicBoolean forced;
+		@NonNull
+		private final AtomicBoolean evidenceReleased;
+		private @Nullable SubscriptionRegistrationCloseBatch closeBatch;
 
 		private SimulationGeneration(@NonNull ThreadPoolExecutor processor,
 				@NonNull McpApplicationExecution application,
@@ -8543,10 +8923,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			this.processor = requireNonNull(processor);
 			this.application = requireNonNull(application);
 			this.effectiveAddress = requireNonNull(effectiveAddress);
-			this.registrations = List.copyOf(requireNonNull(registrations));
+			this.registrations = requireNonNull(registrations);
 			this.simulations = Collections.synchronizedSet(
 					Collections.newSetFromMap(new IdentityHashMap<>()));
 			this.closing = new AtomicBoolean();
+			this.quiesced = new AtomicBoolean();
+			this.forced = new AtomicBoolean();
+			this.evidenceReleased = new AtomicBoolean();
 		}
 
 		@NonNull
@@ -8567,7 +8950,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		@NonNull
 		private List<@NonNull SubscriptionSourceRegistrationControl>
 		registrations() {
-			return this.registrations;
+			return List.copyOf(this.registrations);
 		}
 
 		private void removeCompletedSimulations() {
@@ -8591,6 +8974,68 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		private boolean closing() {
 			return this.closing.get();
+		}
+
+		private boolean claimQuiesce() {
+			return this.quiesced.compareAndSet(false, true);
+		}
+
+		private boolean claimForce() {
+			return this.forced.compareAndSet(false, true);
+		}
+
+		private boolean forced() {
+			return this.forced.get();
+		}
+
+		private @Nullable SubscriptionRegistrationCloseBatch closeBatch() {
+			return this.closeBatch;
+		}
+
+		private void mergeCloseBatch(
+				@NonNull SubscriptionRegistrationCloseBatch next) {
+			SubscriptionRegistrationCloseBatch requiredNext = requireNonNull(next);
+			if (this.closeBatch == null) {
+				this.closeBatch = requiredNext;
+				return;
+			}
+			Set<SubscriptionSourceRegistrationControl> seenRegistrations =
+					Collections.newSetFromMap(new IdentityHashMap<>());
+			List<SubscriptionSourceRegistrationControl> registrations =
+					new ArrayList<>();
+			for (SubscriptionSourceRegistrationControl registration
+					: this.closeBatch.registrations()) {
+				if (seenRegistrations.add(registration))
+					registrations.add(registration);
+			}
+			for (SubscriptionSourceRegistrationControl registration
+					: requiredNext.registrations()) {
+				if (seenRegistrations.add(registration))
+					registrations.add(registration);
+			}
+			Set<SubscriptionRegistrationCloseAttempt> seenAttempts =
+					Collections.newSetFromMap(new IdentityHashMap<>());
+			List<SubscriptionRegistrationCloseAttempt> attempts = new ArrayList<>();
+			for (SubscriptionRegistrationCloseAttempt attempt
+					: this.closeBatch.closeAttempts()) {
+				if (seenAttempts.add(attempt))
+					attempts.add(attempt);
+			}
+			for (SubscriptionRegistrationCloseAttempt attempt
+					: requiredNext.closeAttempts()) {
+				if (seenAttempts.add(attempt))
+					attempts.add(attempt);
+			}
+			this.closeBatch = new SubscriptionRegistrationCloseBatch(
+					registrations, attempts);
+		}
+
+		private boolean evidenceReleased() {
+			return this.evidenceReleased.get();
+		}
+
+		private void markEvidenceReleased() {
+			this.evidenceReleased.set(true);
 		}
 	}
 

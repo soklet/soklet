@@ -1869,30 +1869,40 @@ public final class Soklet implements AutoCloseable {
 		@NonNull
 		private final SimulatorOptions simulatorOptions;
 		private final @Nullable DefaultMcpServer mcpServer;
+		private final @Nullable SimulatorScopeDispatchGate scopeDispatchGate;
 		@NonNull
 		private final Object mcpSimulationLock;
 		private @Nullable SimulationSession mcpSimulationSession;
 		private boolean closed;
 
 		public DefaultSimulator(@Nullable MockHttpServer server,
-														@Nullable MockSseServer sseServer) {
-			this(server, sseServer, SimulatorOptions.defaultInstance());
+											 @Nullable MockSseServer sseServer) {
+			this(server, sseServer, SimulatorOptions.defaultInstance(), null, null);
 		}
 
 		public DefaultSimulator(@Nullable MockHttpServer server,
-												@Nullable MockSseServer sseServer,
-												@NonNull SimulatorOptions simulatorOptions) {
-			this(server, sseServer, simulatorOptions, null);
+										@Nullable MockSseServer sseServer,
+										@NonNull SimulatorOptions simulatorOptions) {
+			this(server, sseServer, simulatorOptions, null, null);
 		}
 
 		DefaultSimulator(@Nullable MockHttpServer server,
 				@Nullable MockSseServer sseServer,
 				@NonNull SimulatorOptions simulatorOptions,
 				@Nullable DefaultMcpServer mcpServer) {
+			this(server, sseServer, simulatorOptions, mcpServer, null);
+		}
+
+		DefaultSimulator(@Nullable MockHttpServer server,
+				@Nullable MockSseServer sseServer,
+				@NonNull SimulatorOptions simulatorOptions,
+				@Nullable DefaultMcpServer mcpServer,
+				@Nullable SimulatorScopeDispatchGate scopeDispatchGate) {
 			this.server = server;
 			this.sseServer = sseServer;
 			this.simulatorOptions = requireNonNull(simulatorOptions);
 			this.mcpServer = mcpServer;
+			this.scopeDispatchGate = scopeDispatchGate;
 			this.mcpSimulationLock = new Object();
 		}
 
@@ -1907,38 +1917,141 @@ public final class Soklet implements AutoCloseable {
 		@NonNull
 		public McpSimulation startMcpRequest(@NonNull Request request,
 				@NonNull McpSimulationOptions options) {
+			Runnable releaseScope = enterScope(InternalParticipantKind.MCP);
+			try {
+				synchronized (this.mcpSimulationLock) {
+					if (this.mcpServer == null)
+						throw new IllegalStateException(
+								"You must specify a McpServer in your SokletConfig to simulate MCP requests");
+					if (this.mcpSimulationSession == null
+							&& this.scopeDispatchGate == null)
+						this.mcpSimulationSession = this.mcpServer
+								.openSimulationSession();
+					if (this.mcpSimulationSession == null)
+						throw new IllegalStateException(
+								"The MCP simulator participant is not ready");
+					return this.mcpSimulationSession.start(requireNonNull(request),
+							requireNonNull(options));
+				}
+			} finally {
+				releaseScope.run();
+			}
+		}
+
+		void openMcpScope() {
 			synchronized (this.mcpSimulationLock) {
-				if (this.closed)
-					throw new IllegalStateException(
-							"The MCP simulator scope is closed.");
+				requireScopeOpenWhileLocked();
 				if (this.mcpServer == null)
 					throw new IllegalStateException(
-							"You must specify a McpServer in your SokletConfig to simulate MCP requests");
-				if (this.mcpSimulationSession == null)
-					this.mcpSimulationSession = this.mcpServer
-							.openSimulationSession();
-				return this.mcpSimulationSession.start(requireNonNull(request),
-						requireNonNull(options));
+							"The simulator scope has no MCP participant");
+				if (this.mcpSimulationSession != null)
+					throw new IllegalStateException(
+							"The MCP simulator participant was already started");
+				this.mcpServer.openSimulationSession(session -> {
+					if (this.mcpSimulationSession != null)
+						throw new IllegalStateException(
+								"The MCP simulator participant was already started");
+					this.mcpSimulationSession = requireNonNull(session);
+				});
 			}
 		}
 
 		private void closeScope() {
-			SimulationSession session;
+			if (!sealScope())
+				return;
+			SimulationSession session = mcpSimulationSession();
+			try {
+				if (session != null)
+					session.close();
+			} finally {
+				clearMcpSimulationSession(session);
+			}
+		}
+
+		boolean sealScope() {
 			synchronized (this.mcpSimulationLock) {
 				if (this.closed)
-					return;
+					return false;
 				this.closed = true;
-				session = this.mcpSimulationSession;
-				this.mcpSimulationSession = null;
+				if (this.scopeDispatchGate != null)
+					this.scopeDispatchGate.seal();
+				return true;
 			}
+		}
+
+		void quiesceMcpScope() {
+			SimulationSession session = mcpSimulationSession();
 			if (session != null)
-				session.close();
+				session.quiesce();
+		}
+
+		void forceMcpScope() {
+			SimulationSession session = mcpSimulationSession();
+			if (session != null)
+				session.force();
+		}
+
+		boolean awaitMcpScopeTermination(@NonNull Duration remainingTime)
+				throws InterruptedException {
+			SimulationSession session = mcpSimulationSession();
+			return session == null
+					|| session.awaitTermination(requireNonNull(remainingTime));
+		}
+
+		@NonNull
+		Set<InternalResidualActivityKind> mcpScopeResidualActivity() {
+			SimulationSession session = mcpSimulationSession();
+			if (session == null)
+				return Set.of();
+			com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.LifecycleEvidence
+					evidence = session.lifecycleEvidence();
+			EnumSet<InternalResidualActivityKind> residual =
+					EnumSet.noneOf(InternalResidualActivityKind.class);
+			if (evidence.executorTask() || evidence.subscriptionRegistration())
+				residual.add(InternalResidualActivityKind.EXECUTOR_TASK);
+			if (evidence.stream())
+				residual.add(InternalResidualActivityKind.STREAM);
+			if (evidence.callback())
+				residual.add(InternalResidualActivityKind.CALLBACK);
+			return Collections.unmodifiableSet(residual);
+		}
+
+		void releaseMcpScopeEvidence() {
+			SimulationSession session = mcpSimulationSession();
+			if (session != null)
+				session.releaseLifecycleEvidence();
+			clearMcpSimulationSession(session);
+		}
+
+		@Nullable
+		private SimulationSession mcpSimulationSession() {
+			synchronized (this.mcpSimulationLock) {
+				return this.mcpSimulationSession;
+			}
+		}
+
+		private void clearMcpSimulationSession(@Nullable SimulationSession session) {
+			synchronized (this.mcpSimulationLock) {
+				if (this.mcpSimulationSession == session)
+					this.mcpSimulationSession = null;
+			}
 		}
 
 		@NonNull
 		@Override
 		public HttpRequestResult performHttpRequest(@NonNull Request request) {
-			MockHttpServer server = getHttpServer().orElse(null);
+			Runnable releaseScope = enterScope(InternalParticipantKind.HTTP);
+			try {
+				return performHttpRequestWhileAdmitted(requireNonNull(request));
+			} finally {
+				releaseScope.run();
+			}
+		}
+
+		@NonNull
+		private HttpRequestResult performHttpRequestWhileAdmitted(
+				@NonNull Request request) {
+			MockHttpServer server = this.server;
 
 			if (server == null)
 				throw new IllegalStateException(format("You must specify a %s in your %s to simulate requests",
@@ -2019,7 +2132,7 @@ public final class Soklet implements AutoCloseable {
 			requireNonNull(establishedAt);
 			requireNonNull(streamDuration);
 
-			MockHttpServer server = getHttpServer().orElse(null);
+			MockHttpServer server = this.server;
 			SokletConfig sokletConfig = server == null ? null : server.getSokletConfig().orElse(null);
 
 			if (sokletConfig == null)
@@ -2075,7 +2188,7 @@ public final class Soklet implements AutoCloseable {
 			requireNonNull(requestResult);
 			requireNonNull(throwable);
 
-			MockHttpServer server = getHttpServer().orElse(null);
+			MockHttpServer server = this.server;
 			SokletConfig sokletConfig = server == null ? null : server.getSokletConfig().orElse(null);
 
 			if (sokletConfig == null)
@@ -2324,7 +2437,18 @@ public final class Soklet implements AutoCloseable {
 		@NonNull
 		@Override
 		public SseRequestResult performSseRequest(@NonNull Request request) {
-			MockSseServer sseServer = getSseServer().orElse(null);
+			Runnable releaseScope = enterScope(InternalParticipantKind.SSE);
+			try {
+				return performSseRequestWhileAdmitted(requireNonNull(request));
+			} finally {
+				releaseScope.run();
+			}
+		}
+
+		@NonNull
+		private SseRequestResult performSseRequestWhileAdmitted(
+				@NonNull Request request) {
+			MockSseServer sseServer = this.sseServer;
 
 			if (sseServer == null)
 				throw new IllegalStateException(format("You must specify a %s in your %s to simulate Server-Sent Event requests",
@@ -2374,33 +2498,64 @@ public final class Soklet implements AutoCloseable {
 		@NonNull
 		@Override
 		public Simulator onBroadcastError(@Nullable Consumer<Throwable> onBroadcastError) {
-			MockSseServer sseServer = getSseServer().orElse(null);
-
-			if (sseServer != null)
-				sseServer.onBroadcastError(onBroadcastError);
-
-			return this;
+			Runnable releaseScope = enterScope(InternalParticipantKind.SSE);
+			try {
+				MockSseServer sseServer = this.sseServer;
+				if (sseServer != null)
+					sseServer.onBroadcastError(onBroadcastError);
+				return this;
+			} finally {
+				releaseScope.run();
+			}
 		}
 
 		@NonNull
 		@Override
 		public Simulator onUnicastError(@Nullable Consumer<Throwable> onUnicastError) {
-			MockSseServer sseServer = getSseServer().orElse(null);
-
-			if (sseServer != null)
-				sseServer.onUnicastError(onUnicastError);
-
-			return this;
+			Runnable releaseScope = enterScope(InternalParticipantKind.SSE);
+			try {
+				MockSseServer sseServer = this.sseServer;
+				if (sseServer != null)
+					sseServer.onUnicastError(onUnicastError);
+				return this;
+			} finally {
+				releaseScope.run();
+			}
 		}
 
 		@NonNull
 		Optional<MockHttpServer> getHttpServer() {
+			requireScopeOpen();
 			return Optional.ofNullable(this.server);
 		}
 
 		@NonNull
 		Optional<MockSseServer> getSseServer() {
+			requireScopeOpen();
 			return Optional.ofNullable(this.sseServer);
+		}
+
+		@NonNull
+		private Runnable enterScope(
+				@NonNull InternalParticipantKind kind) {
+			synchronized (this.mcpSimulationLock) {
+				requireScopeOpenWhileLocked();
+				return this.scopeDispatchGate == null
+						? () -> {
+						}
+						: this.scopeDispatchGate.enter(requireNonNull(kind));
+			}
+		}
+
+		private void requireScopeOpen() {
+			synchronized (this.mcpSimulationLock) {
+				requireScopeOpenWhileLocked();
+			}
+		}
+
+		private void requireScopeOpenWhileLocked() {
+			if (this.closed)
+				throw new IllegalStateException("The simulator scope is closed.");
 		}
 
 		@NonNull

@@ -115,15 +115,13 @@ public class MultipartEdgeCaseTests {
 
 	@Test
 	public void missing_required_field_yields_400() {
-		SokletConfig cfg = SokletConfig.forSimulatorTesting()
+		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(UploadResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
-				.build();
-
-		Soklet.runSimulator(cfg, simulator -> {
+				.build(), simulator -> {
 			byte[] body = simpleMultipartBody();
 			HttpRequestResult r = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.POST, "/upload")
@@ -139,15 +137,13 @@ public class MultipartEdgeCaseTests {
 
 	@Test
 	public void missing_optional_field_is_ok() {
-		SokletConfig cfg = SokletConfig.forSimulatorTesting()
+		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(UploadResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
-				.build();
-
-		Soklet.runSimulator(cfg, simulator -> {
+				.build(), simulator -> {
 			byte[] body = simpleMultipartBody();
 			HttpRequestResult r = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.POST, "/upload-optional")
@@ -163,15 +159,13 @@ public class MultipartEdgeCaseTests {
 
 	@Test
 	public void comma_in_boundary_is_accepted() {
-		SokletConfig cfg = SokletConfig.forSimulatorTesting()
+		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(UploadResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
-				.build();
-
-		Soklet.runSimulator(cfg, simulator -> {
+				.build(), simulator -> {
 			String boundary = "----AaB03x,XYZ";
 			byte[] body = multipartBody(boundary);
 			HttpRequestResult r = simulator.performHttpRequest(

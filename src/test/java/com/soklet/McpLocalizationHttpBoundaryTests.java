@@ -285,24 +285,27 @@ class McpLocalizationHttpBoundaryTests {
 								McpCompleteResult.fromToolText("unused"))
 						.build())
 				.build();
-		McpServer.Builder builder = McpServer.withPort(0)
-				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(admissionController)
-				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
-				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
-				.corsAuthorizer(corsAuthorizer)
-				.allowedHosts(Set.of(LOOPBACK));
-
-		if (localizer != null)
-			builder.localizer(localizer);
-
-		SokletConfig config = SokletConfig.withMcpServer(builder.build())
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.build();
 		AtomicReference<Capture> captured = new AtomicReference<>();
 
-		Soklet.runSimulator(config, simulator -> {
+		SokletSimulator.run(transports -> {
+			McpServer.Builder builder = transports.newMcpServerBuilder(0)
+					.host(LOOPBACK)
+					.endpointRegistry(McpEndpointRegistry.fromEndpoints(
+							List.of(endpoint)))
+					.admissionController(admissionController)
+					.requestRateLimiter(context -> McpRateLimitDecision.allowed())
+					.toolRateLimiter(context -> McpRateLimitDecision.allowed())
+					.corsAuthorizer(corsAuthorizer)
+					.allowedHosts(Set.of(LOOPBACK));
+
+			if (localizer != null)
+				builder.localizer(localizer);
+
+			return SokletConfig.withMcpServer(builder.build())
+					.resourceMethodResolver(
+							ResourceMethodResolver.fromMethods(Set.of()))
+					.build();
+		}, simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(request);
 
 			try {

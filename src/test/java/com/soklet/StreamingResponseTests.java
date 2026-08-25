@@ -312,7 +312,7 @@ public class StreamingResponseTests {
 		AtomicBoolean streamTerminated = new AtomicBoolean(false);
 		AtomicReference<StreamTerminationReason> cancelationReasonRef = new AtomicReference<>();
 		List<String> lifecycleEvents = new java.util.concurrent.CopyOnWriteArrayList<>();
-		SokletConfig config = SokletConfig.withHttpServer(HttpServer.fromPort(0))
+		SokletSimulator.run(transports -> SokletConfig.withHttpServer(transports.getHttpServer())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
@@ -329,9 +329,7 @@ public class StreamingResponseTests {
 						cancelationReasonRef.set(termination.getReason());
 					}
 				})
-				.build();
-
-		Soklet.runSimulator(config, simulator -> {
+				.build(), simulator -> {
 			HttpRequestResult result = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/input-stream").build());
 
 			Assertions.assertFalse(result.getMarshaledResponse().isStreaming());
@@ -344,11 +342,9 @@ public class StreamingResponseTests {
 
 	@Test
 	public void simulator_streaming_response_context_exposes_originating_request() {
-		SokletConfig config = SokletConfig.withHttpServer(HttpServer.fromPort(0))
+		SokletSimulator.run(transports -> SokletConfig.withHttpServer(transports.getHttpServer())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
-				.build();
-
-		Soklet.runSimulator(config, simulator -> {
+				.build(), simulator -> {
 			HttpRequestResult result = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/context-request")
 					.id("simulator-request")
 					.build());
@@ -360,23 +356,21 @@ public class StreamingResponseTests {
 	@Test
 	public void simulator_enforces_streaming_response_body_limit() {
 		AtomicReference<StreamTerminationReason> cancelationReasonRef = new AtomicReference<>();
-		SokletConfig config = SokletConfig.withHttpServer(HttpServer.fromPort(0))
-				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
-				.lifecycleObserver(new LifecycleObserver() {
-					@Override
-					public void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponse,
-																  @NonNull StreamTermination termination) {
-						cancelationReasonRef.set(termination.getReason());
-					}
-				})
-				.build();
-
 		SimulatorOptions simulatorOptions = SimulatorOptions.builder()
 				.streamingResponseBodyLimitInBytes(4)
 				.build();
 
 		Assertions.assertThrows(IllegalStateException.class, () ->
-				Soklet.runSimulator(config, simulatorOptions, simulator ->
+				SokletSimulator.run(transports -> SokletConfig.withHttpServer(transports.getHttpServer())
+						.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
+						.lifecycleObserver(new LifecycleObserver() {
+							@Override
+							public void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponse,
+															  @NonNull StreamTermination termination) {
+								cancelationReasonRef.set(termination.getReason());
+							}
+						})
+						.build(), simulatorOptions, simulator ->
 						simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/writer").build())));
 		Assertions.assertEquals(StreamTerminationReason.SIMULATOR_LIMIT_EXCEEDED, cancelationReasonRef.get());
 	}
@@ -384,19 +378,17 @@ public class StreamingResponseTests {
 	@Test
 	public void simulator_preserves_client_disconnected_reason_for_interrupted_producers() {
 		AtomicReference<StreamTerminationReason> cancelationReasonRef = new AtomicReference<>();
-		SokletConfig config = SokletConfig.withHttpServer(HttpServer.fromPort(0))
-				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
-				.lifecycleObserver(new LifecycleObserver() {
-					@Override
-					public void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponse,
-																  @NonNull StreamTermination termination) {
-						cancelationReasonRef.set(termination.getReason());
-					}
-				})
-				.build();
-
 		IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class, () ->
-				Soklet.runSimulator(config, simulator ->
+				SokletSimulator.run(transports -> SokletConfig.withHttpServer(transports.getHttpServer())
+						.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
+						.lifecycleObserver(new LifecycleObserver() {
+							@Override
+							public void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponse,
+															  @NonNull StreamTermination termination) {
+								cancelationReasonRef.set(termination.getReason());
+							}
+						})
+						.build(), simulator ->
 						simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/interrupt").build())));
 
 		Assertions.assertInstanceOf(InterruptedException.class, exception.getCause());
@@ -406,25 +398,105 @@ public class StreamingResponseTests {
 	@Test
 	public void simulator_logs_cancelation_callback_failures() {
 		List<LogEventType> logEventTypes = new java.util.concurrent.CopyOnWriteArrayList<>();
-		SokletConfig config = SokletConfig.withHttpServer(HttpServer.fromPort(0))
-				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
-				.lifecycleObserver(new LifecycleObserver() {
-					@Override
-					public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
-						logEventTypes.add(logEvent.getLogEventType());
-					}
-				})
-				.build();
-
 		SimulatorOptions simulatorOptions = SimulatorOptions.builder()
 				.streamingResponseBodyLimitInBytes(4)
 				.build();
 
 		Assertions.assertThrows(IllegalStateException.class, () ->
-				Soklet.runSimulator(config, simulatorOptions, simulator ->
+				SokletSimulator.run(transports -> SokletConfig.withHttpServer(transports.getHttpServer())
+						.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
+						.lifecycleObserver(new LifecycleObserver() {
+							@Override
+							public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+								logEventTypes.add(logEvent.getLogEventType());
+							}
+						})
+						.build(), simulatorOptions, simulator ->
 						simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/cancel-callback-failure").build())));
 
 		Assertions.assertTrue(logEventTypes.contains(LogEventType.RESPONSE_STREAM_CANCELATION_CALLBACK_FAILED));
+	}
+
+	@Test
+	public void simulator_admitted_stream_error_callbacks_survive_scope_seal()
+			throws Exception {
+		SealDuringStreamResource.streamEntered = new CountDownLatch(1);
+		SealDuringStreamResource.releaseStream = new CountDownLatch(1);
+		CountDownLatch requestFinished = new CountDownLatch(1);
+		AtomicReference<Throwable> requestFailure = new AtomicReference<>();
+		AtomicReference<StreamTermination> termination = new AtomicReference<>();
+		AtomicReference<LogEventType> logEventType = new AtomicReference<>();
+		AtomicReference<Thread> requestThread = new AtomicReference<>();
+		LifecycleWorkers workers = new LifecycleWorkers((name, task) -> {
+			if ("lifecycle-quiesce-http".equals(name))
+				SealDuringStreamResource.releaseStream.countDown();
+			Thread worker = new Thread(task, name + "-seal-during-stream-test");
+			worker.setDaemon(true);
+			worker.start();
+		});
+
+		try {
+			InternalShutdownResult shutdownResult = SokletSimulator.run(
+					transports -> SokletConfig
+							.withHttpServer(transports.getHttpServer())
+							.resourceMethodResolver(ResourceMethodResolver.fromClasses(
+									Set.of(SealDuringStreamResource.class)))
+							.lifecycleObserver(new LifecycleObserver() {
+								@Override
+								public void didTerminateResponseStream(
+										@NonNull StreamingResponseHandle streamingResponse,
+										@NonNull StreamTermination streamTermination) {
+									termination.set(streamTermination);
+								}
+
+								@Override
+								public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+									logEventType.set(logEvent.getLogEventType());
+								}
+							})
+							.build(), SimulatorOptions.defaultInstance(), simulator -> {
+					Thread worker = new Thread(() -> {
+						try {
+							simulator.performHttpRequest(Request.withPath(
+									HttpMethod.GET, "/seal-during-stream").build());
+						} catch (Throwable failure) {
+							requestFailure.set(failure);
+						} finally {
+							requestFinished.countDown();
+						}
+					}, "simulator-seal-during-stream-request");
+					worker.setDaemon(true);
+					requestThread.set(worker);
+					worker.start();
+					Assertions.assertTrue(SealDuringStreamResource.streamEntered
+							.await(5, TimeUnit.SECONDS),
+							"The simulated stream did not begin.");
+				}, NanoClock.system(), workers);
+
+			Assertions.assertTrue(shutdownResult.isComplete());
+			Assertions.assertTrue(requestFinished.await(5, TimeUnit.SECONDS),
+					"The admitted simulated request did not finish.");
+			IllegalStateException failure = Assertions.assertInstanceOf(
+					IllegalStateException.class, requestFailure.get());
+			Assertions.assertInstanceOf(SealDuringStreamFailure.class,
+					failure.getCause());
+			Assertions.assertEquals(
+					LogEventType.RESPONSE_STREAM_CANCELATION_CALLBACK_FAILED,
+					logEventType.get());
+			StreamTermination observedTermination = termination.get();
+			Assertions.assertNotNull(observedTermination);
+			Assertions.assertEquals(StreamTerminationReason.PRODUCER_FAILED,
+					observedTermination.getReason());
+			Assertions.assertInstanceOf(SealDuringStreamFailure.class,
+					observedTermination.getCause().orElseThrow());
+		} finally {
+			SealDuringStreamResource.releaseStream.countDown();
+			Thread worker = requestThread.get();
+			if (worker != null) {
+				worker.interrupt();
+				worker.join(TimeUnit.SECONDS.toMillis(5));
+			}
+		}
 	}
 
 	@Test
@@ -447,11 +519,9 @@ public class StreamingResponseTests {
 
 	@Test
 	public void publisher_streams_one_item_at_a_time_in_simulator() {
-		SokletConfig config = SokletConfig.withHttpServer(HttpServer.fromPort(0))
+		SokletSimulator.run(transports -> SokletConfig.withHttpServer(transports.getHttpServer())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
-				.build();
-
-		Soklet.runSimulator(config, simulator -> {
+				.build(), simulator -> {
 			HttpRequestResult result = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/publisher").build());
 
 			Assertions.assertEquals("published", new String(result.getMarshaledResponse().bodyBytesOrEmpty(), StandardCharsets.UTF_8));
@@ -541,6 +611,36 @@ public class StreamingResponseTests {
 					}))
 					.build();
 		}
+	}
+
+	public static class SealDuringStreamResource {
+		private static volatile CountDownLatch streamEntered =
+				new CountDownLatch(0);
+		private static volatile CountDownLatch releaseStream =
+				new CountDownLatch(0);
+
+		@GET("/seal-during-stream")
+		public MarshaledResponse sealDuringStream() {
+			return MarshaledResponse.withStatusCode(200)
+					.headers(Map.of("Content-Type",
+							Set.of("text/plain; charset=UTF-8")))
+					.stream(StreamingResponseBody.fromWriter((output, context) -> {
+						context.onCancel(() -> {
+							throw new IllegalStateException(
+									"Expected cancelation callback failure");
+						});
+						streamEntered.countDown();
+						if (!releaseStream.await(5, TimeUnit.SECONDS))
+							throw new IllegalStateException(
+									"The sealed stream was not released");
+						throw new SealDuringStreamFailure();
+					}))
+					.build();
+		}
+	}
+
+	private static final class SealDuringStreamFailure
+			extends RuntimeException {
 	}
 
 	public static class BlockingSourceResource {

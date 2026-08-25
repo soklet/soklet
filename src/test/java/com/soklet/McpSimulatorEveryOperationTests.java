@@ -108,7 +108,7 @@ public class McpSimulatorEveryOperationTests {
 		return OPERATIONS.stream().map(operation -> DynamicTest.dynamicTest(
 				operation.method(), () -> {
 			Fixture fixture = new Fixture(1, false);
-			Soklet.runSimulator(fixture.config(), simulator -> {
+			SokletSimulator.run(fixture.configFactory(), simulator -> {
 				String transcript = replay(simulator, fixture, operation);
 				Assertions.assertTrue(transcript.contains(operation.id()), transcript);
 				assertStoppedDiagnostics(fixture.server());
@@ -126,7 +126,7 @@ public class McpSimulatorEveryOperationTests {
 		Fixture fixture = new Fixture(2, true);
 
 		try {
-			Soklet.runSimulator(fixture.config(), simulator -> {
+			SokletSimulator.run(fixture.configFactory(), simulator -> {
 				McpSimulation target = simulator.startMcpRequest(
 						request(new OperationCase("tools/call", "cancel-target",
 								TOOL_NAME, ",\"name\":\"" + TOOL_NAME
@@ -194,7 +194,7 @@ public class McpSimulatorEveryOperationTests {
 		List<Future<ReplayResult>> futures = new CopyOnWriteArrayList<>();
 
 		try {
-			Soklet.runSimulator(fixture.config(), simulator -> {
+			SokletSimulator.run(fixture.configFactory(), simulator -> {
 				for (OperationCase operation : OPERATIONS)
 					futures.add(executor.submit(() -> {
 						ready.countDown();
@@ -516,6 +516,7 @@ public class McpSimulatorEveryOperationTests {
 				McpLocalSubscriptionEventPublisher.fromDefaults();
 		private final RecordingMetrics metrics;
 		private final RecordingLifecycle lifecycle;
+		private final boolean blockingTool;
 		private final AtomicInteger handlerCalls = new AtomicInteger();
 		private final AtomicInteger interceptorCalls = new AtomicInteger();
 		private final CountDownLatch blockingToolEntered = new CountDownLatch(1);
@@ -525,21 +526,26 @@ public class McpSimulatorEveryOperationTests {
 		private final CountDownLatch concurrentAdmissions;
 		@Nullable
 		private final CountDownLatch releaseConcurrentAdmissions;
-		private final McpServer server;
-		private final SokletConfig config;
+		private final AtomicReference<McpServer> server = new AtomicReference<>();
 
 		private Fixture(int expectedFinishes, boolean blockingTool) {
 			this.metrics = new RecordingMetrics(expectedFinishes);
 			this.lifecycle = new RecordingLifecycle(expectedFinishes);
+			this.blockingTool = blockingTool;
 			this.concurrentAdmissions = expectedFinishes == OPERATIONS.size()
 					? new CountDownLatch(expectedFinishes) : null;
 			this.releaseConcurrentAdmissions = this.concurrentAdmissions == null
 					? null : new CountDownLatch(1);
-			McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+		}
+
+		@NonNull
+		private SimulatorConfigFactory configFactory() {
+			return transports -> {
+				McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 					.withName(TOOL_NAME).jsonArguments()
 					.handler((request, arguments, features) -> {
 						this.handlerCalls.incrementAndGet();
-						if (blockingTool) {
+						if (this.blockingTool) {
 							CancelationToken token = features.require(CancelationToken.class);
 							token.onCancel(this.cancelObserved::countDown);
 							this.blockingToolEntered.countDown();
@@ -547,7 +553,7 @@ public class McpSimulatorEveryOperationTests {
 						}
 						return McpCompleteResult.fromToolText("matrix tool complete");
 					}).build();
-			McpPromptRegistration prompt = McpPromptRegistration
+				McpPromptRegistration prompt = McpPromptRegistration
 					.withName(PROMPT_NAME)
 					.handler((request, get, features) -> {
 						this.handlerCalls.incrementAndGet();
@@ -558,24 +564,24 @@ public class McpSimulatorEveryOperationTests {
 												"matrix prompt complete")))
 								.build());
 					}).build();
-			McpResourceRegistration exact = McpResourceRegistration
+				McpResourceRegistration exact = McpResourceRegistration
 					.withUriAndName(URI.create(RESOURCE_URI), "Matrix resource")
 					.handler((request, read, features) -> {
 						this.handlerCalls.incrementAndGet();
 						return completeText(read.getUri(), "matrix resource complete");
 					}).build();
-			McpResourceRegistration template = McpResourceRegistration
+				McpResourceRegistration template = McpResourceRegistration
 					.withUriTemplateAndName(TEMPLATE_URI, "Matrix template")
 					.handler((request, read, features) -> {
 						this.handlerCalls.incrementAndGet();
 						return completeText(read.getUri(), "matrix template complete");
 					}).build();
-			McpSubscriptionConfig subscriptions = McpSubscriptionConfig
+				McpSubscriptionConfig subscriptions = McpSubscriptionConfig
 					.withEventPublisher(this.publisher)
 					.notificationTypes(EnumSet.of(
 							McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
 					.build();
-			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
+				McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 					.serverInformation(McpImplementation.withNameAndVersion(
 							"simulator-every-operation-test",
 							"4.0.0-SNAPSHOT").build())
@@ -585,7 +591,7 @@ public class McpSimulatorEveryOperationTests {
 					.resource(template)
 					.subscriptions(subscriptions)
 					.build();
-			this.server = McpServer.withPort(0)
+				McpServer server = transports.newMcpServerBuilder(0)
 					.host(LOOPBACK)
 					.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 					.admissionController(context -> {
@@ -609,11 +615,17 @@ public class McpSimulatorEveryOperationTests {
 					.requestHandlerConcurrency(16)
 					.shutdownTimeout(Duration.ofMillis(250))
 					.build();
-			this.config = SokletConfig.withMcpServer(this.server)
+				this.server.set(server);
+				return SokletConfig.withMcpServer(server)
 					.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 					.metricsCollector(this.metrics)
 					.lifecycleObservers(List.of(this.lifecycle))
+					.internalLifecyclePolicy(new InternalLifecyclePolicy(
+							Optional.of(Duration.ofSeconds(30)),
+							Duration.ofSeconds(2), Duration.ZERO,
+							Duration.ofMillis(250)))
 					.build();
+			};
 		}
 
 		@NonNull
@@ -710,7 +722,7 @@ public class McpSimulatorEveryOperationTests {
 		private void assertOffNetwork() {
 			this.metrics.assertOffNetwork();
 			Assertions.assertEquals(0, this.lifecycle.serverCallbacks());
-			assertStoppedDiagnostics(this.server);
+			assertStoppedDiagnostics(this.server.get());
 		}
 
 		private McpLocalSubscriptionEventPublisher publisher() {
@@ -742,11 +754,9 @@ public class McpSimulatorEveryOperationTests {
 		}
 
 		private McpServer server() {
-			return this.server;
-		}
-
-		private SokletConfig config() {
-			return this.config;
+			return Optional.ofNullable(this.server.get()).orElseThrow(() ->
+					new IllegalStateException(
+							"The simulator server has not been created."));
 		}
 	}
 

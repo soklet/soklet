@@ -131,15 +131,17 @@ public class SseTests {
 
 	@Test
 	public void sseServerSimulator() {
-		SokletConfig configuration = SokletConfig.forSimulatorTesting()
-				.corsAuthorizer(CorsAuthorizer.fromWhitelistedOrigins(Set.of("https://www.revetkn.com")))
-				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseEventSimulatorResource.class)))
-				.build();
-
 		List<SseEvent> events = new ArrayList<>();
 		List<SseComment> comments = new ArrayList<>();
+		AtomicReference<SseServer> sseServer = new AtomicReference<>();
 
-		Soklet.runSimulator(configuration, (simulator -> {
+		SokletSimulator.run(transports -> {
+			sseServer.set(transports.getSseServer());
+			return SokletConfig.forSimulatorTesting(transports)
+					.corsAuthorizer(CorsAuthorizer.fromWhitelistedOrigins(Set.of("https://www.revetkn.com")))
+					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseEventSimulatorResource.class)))
+					.build();
+		}, simulator -> {
 			// Perform initial handshake with /examples/abc and verify 200 response
 			Request request = Request.withPath(HttpMethod.GET, "/examples/abc")
 					.headers(Map.of("Origin", Set.of("https://www.revetkn.com")))
@@ -187,7 +189,7 @@ public class SseTests {
 						.build();
 
 				// ...and broadcast it to all /examples/abc listeners
-				SseBroadcaster broadcaster = configuration.getSseServer().get().acquireBroadcaster(ResourcePath.fromPath("/examples/abc")).get();
+				SseBroadcaster broadcaster = sseServer.get().acquireBroadcaster(ResourcePath.fromPath("/examples/abc")).get();
 				broadcaster.broadcastEvent(sseEvent);
 
 				// Now try a comment
@@ -200,7 +202,7 @@ public class SseTests {
 				// Should never happen
 				throw new IllegalStateException(format("Unexpected SSE result: %s", requestResult.getClass()));
 			}
-		}));
+		});
 
 		Assertions.assertEquals(2, events.size(), "Wrong number of events");
 		Assertions.assertEquals(2, comments.size(), "Wrong number of comments");
@@ -214,11 +216,9 @@ public class SseTests {
 	public void sseHandshakeRequestExposesTraceContext() {
 		SseTraceContextResource.capturedTraceContext.set(null);
 
-		SokletConfig configuration = SokletConfig.forSimulatorTesting()
+		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseTraceContextResource.class)))
-				.build();
-
-		Soklet.runSimulator(configuration, (simulator -> {
+				.build(), simulator -> {
 			Request request = Request.withPath(HttpMethod.GET, "/trace")
 					.headers(Map.of("traceparent", Set.of(TRACEPARENT)))
 					.build();
@@ -226,7 +226,7 @@ public class SseTests {
 			SseRequestResult requestResult = simulator.performSseRequest(request);
 
 			Assertions.assertInstanceOf(HandshakeAccepted.class, requestResult);
-		}));
+		});
 
 		TraceContext traceContext = SseTraceContextResource.capturedTraceContext.get();
 
@@ -236,13 +236,11 @@ public class SseTests {
 
 	@Test
 	public void sseServerSimulator_unicastErrorHandler() {
-		SokletConfig configuration = SokletConfig.forSimulatorTesting()
-				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseEventSimulatorResource.class)))
-				.build();
-
 		AtomicInteger errorCount = new AtomicInteger();
 
-		Soklet.runSimulator(configuration, (simulator -> {
+		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseEventSimulatorResource.class)))
+				.build(), simulator -> {
 			simulator.onUnicastError((throwable) -> errorCount.incrementAndGet());
 
 			Request request = Request.withPath(HttpMethod.GET, "/examples/abc")
@@ -266,7 +264,7 @@ public class SseTests {
 				// Should never happen
 				throw new IllegalStateException(format("Unexpected SSE result: %s", requestResult.getClass()));
 			}
-		}));
+		});
 
 		Assertions.assertEquals(2, errorCount.get(), "Unexpected number of unicast errors");
 	}
@@ -274,17 +272,20 @@ public class SseTests {
 	@Test
 	public void sseServerSimulator_logsConsumerErrorsWhenNoErrorHandlerConfigured() {
 		List<LogEvent> logEvents = new ArrayList<>();
-		SokletConfig configuration = SokletConfig.forSimulatorTesting()
-				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseEventSimulatorResource.class)))
-				.lifecycleObserver(new LifecycleObserver() {
-					@Override
-					public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
-						logEvents.add(logEvent);
-					}
-				})
-				.build();
+		AtomicReference<SseServer> sseServer = new AtomicReference<>();
 
-		Soklet.runSimulator(configuration, (simulator -> {
+		SokletSimulator.run(transports -> {
+			sseServer.set(transports.getSseServer());
+			return SokletConfig.forSimulatorTesting(transports)
+					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseEventSimulatorResource.class)))
+					.lifecycleObserver(new LifecycleObserver() {
+						@Override
+						public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+							logEvents.add(logEvent);
+						}
+					})
+					.build();
+		}, simulator -> {
 			Request request = Request.withPath(HttpMethod.GET, "/examples/abc")
 					.build();
 
@@ -299,7 +300,7 @@ public class SseTests {
 					throw new IllegalStateException("Unicast comment error");
 				});
 
-				SseBroadcaster broadcaster = configuration.getSseServer().orElseThrow()
+				SseBroadcaster broadcaster = sseServer.get()
 						.acquireBroadcaster(ResourcePath.fromPath("/examples/abc"))
 						.orElseThrow();
 				broadcaster.broadcastEvent(SseEvent.withData("broadcast").build());
@@ -310,7 +311,7 @@ public class SseTests {
 			} else {
 				throw new IllegalStateException(format("Unexpected SSE result: %s", requestResult.getClass()));
 			}
-		}));
+		});
 
 		Assertions.assertEquals(3, logEvents.size(), "Unexpected number of simulator consumer errors");
 		Assertions.assertTrue(logEvents.stream().allMatch(logEvent ->

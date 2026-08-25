@@ -67,6 +67,8 @@ public final class SokletConfig {
 	private final SseServer sseServer;
 	@Nullable
 	private final McpServer mcpServer;
+	@NonNull
+	private final InternalLifecyclePolicy internalLifecyclePolicy;
 
 	/**
 	 * Vends a configuration builder, primed with the given HTTP {@link HttpServer}.
@@ -112,6 +114,13 @@ public final class SokletConfig {
 		return SokletConfig.withHttpServer(HttpServer.withPort(0).build()).sseServer(SseServer.withPort(0).build());
 	}
 
+	@NonNull
+	static Builder forSimulatorTesting(@NonNull SimulatorTransports transports) {
+		requireNonNull(transports);
+		return SokletConfig.withHttpServer(transports.getHttpServer())
+				.sseServer(transports.getSseServer());
+	}
+
 	SokletConfig(@NonNull Builder builder) {
 		requireNonNull(builder);
 
@@ -122,6 +131,8 @@ public final class SokletConfig {
 		this.httpServer = httpServerProxy;
 		this.sseServer = sseServerProxy;
 		this.mcpServer = builder.mcpServer;
+		this.internalLifecyclePolicy = builder.internalLifecyclePolicy != null
+				? builder.internalLifecyclePolicy : InternalLifecyclePolicy.defaults();
 		this.instanceProvider = builder.instanceProvider != null ? builder.instanceProvider : InstanceProvider.defaultInstance();
 		this.valueConverterRegistry = builder.valueConverterRegistry != null ? builder.valueConverterRegistry : ValueConverterRegistry.fromDefaults();
 		this.requestBodyMarshaler = builder.requestBodyMarshaler != null ? builder.requestBodyMarshaler : RequestBodyMarshaler.fromValueConverterRegistry(getValueConverterRegistry());
@@ -280,6 +291,25 @@ public final class SokletConfig {
 		return Optional.ofNullable(this.mcpServer);
 	}
 
+	@NonNull
+	InternalLifecyclePolicy getInternalLifecyclePolicy() {
+		return this.internalLifecyclePolicy;
+	}
+
+	@NonNull
+	static HttpServer unwrapHttpServer(@NonNull HttpServer httpServer) {
+		requireNonNull(httpServer);
+		return httpServer instanceof HttpServerProxy proxy
+				? proxy.getRealImplementation() : httpServer;
+	}
+
+	@NonNull
+	static SseServer unwrapSseServer(@NonNull SseServer sseServer) {
+		requireNonNull(sseServer);
+		return sseServer instanceof SseServerProxy proxy
+				? proxy.getRealImplementation() : sseServer;
+	}
+
 	/**
 	 * Builder used to construct instances of {@link SokletConfig}.
 	 * <p>
@@ -297,6 +327,8 @@ public final class SokletConfig {
 		private SseServer sseServer;
 		@Nullable
 		private McpServer mcpServer;
+		@Nullable
+		private InternalLifecyclePolicy internalLifecyclePolicy;
 		@Nullable
 		private InstanceProvider instanceProvider;
 		@Nullable
@@ -355,6 +387,13 @@ public final class SokletConfig {
 		@NonNull
 		public Builder mcpServer(@Nullable McpServer mcpServer) {
 			this.mcpServer = mcpServer;
+			return this;
+		}
+
+		@NonNull
+		Builder internalLifecyclePolicy(
+				@NonNull InternalLifecyclePolicy internalLifecyclePolicy) {
+			this.internalLifecyclePolicy = requireNonNull(internalLifecyclePolicy);
 			return this;
 		}
 
@@ -522,41 +561,15 @@ public final class SokletConfig {
 		@NonNull
 		private final Builder builder;
 
-		/**
-		 * Unwraps a HttpServer proxy to get the underlying real implementation.
-		 */
-		@NonNull
-		private static HttpServer unwrapHttpServer(@NonNull HttpServer httpServer) {
-			requireNonNull(httpServer);
-
-			if (httpServer instanceof HttpServerProxy)
-				return ((HttpServerProxy) httpServer).getRealImplementation();
-
-			return httpServer;
-		}
-
-		/**
-		 * Unwraps a SseServer proxy to get the underlying real implementation.
-		 */
-		@NonNull
-		private static SseServer unwrapSseServer(@NonNull SseServer sseServer) {
-			requireNonNull(sseServer);
-
-			if (sseServer instanceof SseServerProxy)
-				return ((SseServerProxy) sseServer).getRealImplementation();
-
-			return sseServer;
-		}
-
 		Copier(@NonNull SokletConfig sokletConfig) {
 			requireNonNull(sokletConfig);
 
 			// Unwrap proxies to get the real implementations for copying
 			HttpServer realHttpServer = sokletConfig.getHttpServer()
-					.map(Copier::unwrapHttpServer)
+					.map(SokletConfig::unwrapHttpServer)
 					.orElse(null);
 			SseServer realSseServer = sokletConfig.getSseServer()
-					.map(Copier::unwrapSseServer)
+					.map(SokletConfig::unwrapSseServer)
 					.orElse(null);
 
 			this.builder = new Builder()
@@ -572,7 +585,8 @@ public final class SokletConfig {
 					.requestInterceptor(sokletConfig.requestInterceptor)
 					.lifecycleObservers(sokletConfig.lifecycleObservers)
 					.metricsCollector(sokletConfig.metricsCollector)
-					.corsAuthorizer(sokletConfig.corsAuthorizer);
+					.corsAuthorizer(sokletConfig.corsAuthorizer)
+					.internalLifecyclePolicy(sokletConfig.internalLifecyclePolicy);
 		}
 
 		/**

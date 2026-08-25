@@ -424,82 +424,153 @@ public class AdvancedTests {
 	// Explicitly supplies a virtual-thread-per-task executor, so it requires JDK 21+.
 	@EnabledForJreRange(min = JRE.JAVA_21)
 	public void testConcurrentRequestProcessing() throws Exception {
-		// Test thread safety of request processing under high concurrency
-		HttpServer httpServer = HttpServer.withPort(findFreePort())
+		// Test thread safety of request processing under high concurrency while
+		// proving simulator scopes cannot mutate a live runtime.
+		int livePort = findFreePort();
+		HttpServer httpServer = HttpServer.withPort(livePort)
 				.requestHandlerExecutorServiceSupplier(() ->
 						Utilities.createVirtualThreadsNewThreadPerTaskExecutor("test-thread", (Thread thread, Throwable throwable) -> {
 							throwable.printStackTrace();
 						}))
 				.build();
+		RuntimeRequestMetrics liveMetrics = new RuntimeRequestMetrics("live-");
 
-		SokletConfig config = SokletConfig.withHttpServer(httpServer)
+		SokletConfig liveConfig = SokletConfig.withHttpServer(httpServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ConcurrentTestResource.class)))
+				.instanceProvider(new ConcurrentInstanceProvider("live"))
+				.metricsCollector(liveMetrics)
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
+		try (Soklet soklet = Soklet.fromConfig(liveConfig)) {
 			soklet.start();
 
-			int numThreads = 100;
+			int simulatorScopeCount = 2;
+			int threadsPerScope = 50;
 			int requestsPerThread = 100;
-			ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-			CountDownLatch startLatch = new CountDownLatch(1);
-			CountDownLatch doneLatch = new CountDownLatch(numThreads);
+			int expectedRequestCount = simulatorScopeCount * threadsPerScope * requestsPerThread;
+			ExecutorService scopeExecutor = Executors.newFixedThreadPool(simulatorScopeCount);
+			CountDownLatch scopesReady = new CountDownLatch(simulatorScopeCount);
+			CountDownLatch startRequests = new CountDownLatch(1);
+			CountDownLatch scopesDone = new CountDownLatch(simulatorScopeCount);
 			AtomicInteger successCount = new AtomicInteger(0);
 			AtomicInteger errorCount = new AtomicInteger(0);
 			Set<String> uniqueResponses = Collections.newSetFromMap(new ConcurrentHashMap<>());
+			List<HttpServer> simulatorHttpServers = Collections.synchronizedList(new ArrayList<>());
+			Map<Integer, RuntimeRequestMetrics> simulatorMetrics = new ConcurrentHashMap<>();
 
-			for (int i = 0; i < numThreads; i++) {
-				final int threadId = i;
-				executor.submit(() -> {
+			for (int scopeIndex = 0; scopeIndex < simulatorScopeCount; scopeIndex++) {
+				final int scopeId = scopeIndex;
+				scopeExecutor.submit(() -> {
 					try {
-						startLatch.await();
-
-						for (int j = 0; j < requestsPerThread; j++) {
-							String uniqueId = threadId + "-" + j;
-							Request request = Request.withPath(HttpMethod.POST, "/concurrent")
-									.body(uniqueId.getBytes(StandardCharsets.UTF_8))
+						SokletSimulator.run(transports -> {
+							String runtimeCanary = "scope-" + scopeId;
+							RuntimeRequestMetrics metrics = new RuntimeRequestMetrics(runtimeCanary + "-");
+							simulatorHttpServers.add(transports.getHttpServer());
+							simulatorMetrics.put(scopeId, metrics);
+							return SokletConfig.withHttpServer(transports.getHttpServer())
+									.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ConcurrentTestResource.class)))
+									.instanceProvider(new ConcurrentInstanceProvider(runtimeCanary))
+									.metricsCollector(metrics)
 									.build();
+						}, simulator -> {
+							String runtimeCanary = "scope-" + scopeId;
+							ExecutorService requestExecutor = Executors.newFixedThreadPool(threadsPerScope);
+							CountDownLatch requestsDone = new CountDownLatch(threadsPerScope);
+							try {
+								for (int threadIndex = 0; threadIndex < threadsPerScope; threadIndex++) {
+									final int threadId = threadIndex;
+									requestExecutor.submit(() -> {
+										try {
+											startRequests.await();
 
-							Soklet.runSimulator(config, simulator -> {
-								MarshaledResponse response = simulator.performHttpRequest(request).getMarshaledResponse();
-								if (response.getStatusCode() == 200) {
-									String responseBody = new String(
-											response.bodyBytesOrEmpty(),
-											StandardCharsets.UTF_8
-									);
+											for (int requestIndex = 0; requestIndex < requestsPerThread; requestIndex++) {
+												String uniqueId = runtimeCanary + "-" + threadId + "-" + requestIndex;
+												Request request = Request.withPath(HttpMethod.POST, "/concurrent")
+														.body(uniqueId.getBytes(StandardCharsets.UTF_8))
+														.build();
+												MarshaledResponse response = simulator.performHttpRequest(request).getMarshaledResponse();
 
-									// Verify response matches request
-									if (responseBody.equals("Processed: " + uniqueId)) {
-										successCount.incrementAndGet();
-										uniqueResponses.add(responseBody);
-									} else {
-										errorCount.incrementAndGet();
-										System.err.println("Mismatch: expected " + uniqueId +
-												" but got " + responseBody);
-									}
-								} else {
-									errorCount.incrementAndGet();
+												if (response.getStatusCode() == 200) {
+													String responseBody = new String(
+															response.bodyBytesOrEmpty(),
+															StandardCharsets.UTF_8
+													);
+
+													// Verify response matches request
+													if (responseBody.equals(runtimeCanary + ":Processed: " + uniqueId)) {
+														successCount.incrementAndGet();
+														uniqueResponses.add(responseBody);
+													} else {
+														errorCount.incrementAndGet();
+														System.err.println("Mismatch: expected " + uniqueId +
+																" but got " + responseBody);
+													}
+												} else {
+													errorCount.incrementAndGet();
+												}
+											}
+										} catch (Exception e) {
+											if (e instanceof InterruptedException)
+												Thread.currentThread().interrupt();
+											errorCount.incrementAndGet();
+											e.printStackTrace();
+										} finally {
+											requestsDone.countDown();
+										}
+									});
 								}
-							});
-						}
-					} catch (Exception e) {
+
+								scopesReady.countDown();
+								Assertions.assertTrue(requestsDone.await(30, TimeUnit.SECONDS),
+										"Simulator scope requests didn't complete in time");
+							} finally {
+								shutdownExecutorAndAwait(requestExecutor,
+										"Simulator request workers did not stop");
+							}
+						});
+					} catch (Throwable e) {
+						if (e instanceof InterruptedException)
+							Thread.currentThread().interrupt();
 						errorCount.incrementAndGet();
 						e.printStackTrace();
 					} finally {
-						doneLatch.countDown();
+						scopesDone.countDown();
 					}
 				});
 			}
 
-			startLatch.countDown(); // Start all threads
-			boolean completed = doneLatch.await(30, TimeUnit.SECONDS);
+			try {
+				Assertions.assertTrue(scopesReady.await(10, TimeUnit.SECONDS),
+						"Simulator scopes didn't become ready in time");
+				Assertions.assertTrue(soklet.isStarted(), "Live Soklet status changed while simulator scopes were open");
+				Assertions.assertTrue(httpServer.isStarted(), "Live HTTP listener stopped while simulator scopes were open");
+				assertLiveConcurrentRequest(livePort, "live-during-scopes");
 
-			Assertions.assertTrue(completed, "Test didn't complete in time");
-			Assertions.assertEquals(0, errorCount.get(), "Errors occurred during concurrent processing");
-			Assertions.assertEquals(numThreads * requestsPerThread, successCount.get(), "Not all requests succeeded");
-			Assertions.assertEquals(numThreads * requestsPerThread, uniqueResponses.size(), "Duplicate or missing responses detected");
+				startRequests.countDown();
+				Assertions.assertTrue(scopesDone.await(30, TimeUnit.SECONDS),
+						"Simulator scopes didn't complete in time");
 
-			executor.shutdown();
+				Assertions.assertEquals(0, errorCount.get(), "Errors occurred during concurrent processing");
+				Assertions.assertEquals(expectedRequestCount, successCount.get(), "Not all requests succeeded");
+				Assertions.assertEquals(expectedRequestCount, uniqueResponses.size(), "Duplicate or missing responses detected");
+				Assertions.assertEquals(simulatorScopeCount, simulatorHttpServers.size());
+				Assertions.assertNotSame(simulatorHttpServers.get(0), simulatorHttpServers.get(1));
+				for (HttpServer simulatorHttpServer : simulatorHttpServers)
+					Assertions.assertNotSame(httpServer, simulatorHttpServer);
+				Assertions.assertEquals(simulatorScopeCount, simulatorMetrics.size());
+				for (int scopeId = 0; scopeId < simulatorScopeCount; scopeId++)
+					simulatorMetrics.get(scopeId).assertOwnsExactly(
+							threadsPerScope * requestsPerThread);
+
+				Assertions.assertTrue(soklet.isStarted(), "Live Soklet status changed after simulator scopes closed");
+				Assertions.assertTrue(httpServer.isStarted(), "Live HTTP listener stopped after simulator scopes closed");
+				assertLiveConcurrentRequest(livePort, "live-after-scopes");
+				liveMetrics.assertOwnsExactly(2);
+			} finally {
+				startRequests.countDown();
+				shutdownExecutorAndAwait(scopeExecutor,
+						"Simulator scope workers did not stop");
+			}
 		}
 	}
 
@@ -978,7 +1049,9 @@ public class AdvancedTests {
 						.body(largeBody)
 						.build();
 
-				Soklet.runSimulator(config, simulator -> {
+				SokletSimulator.run(transports -> SokletConfig.withHttpServer(transports.getHttpServer())
+						.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(LargeBodyTestResource.class)))
+						.build(), simulator -> {
 					MarshaledResponse response = simulator.performHttpRequest(request).getMarshaledResponse();
 					Assertions.assertEquals(200, response.getStatusCode().intValue());
 				});
@@ -1244,6 +1317,12 @@ public class AdvancedTests {
 	// ==================== Helper Classes ====================
 
 	public static class ConcurrentTestResource {
+		private final String runtimeCanary;
+
+		private ConcurrentTestResource(String runtimeCanary) {
+			this.runtimeCanary = runtimeCanary;
+		}
+
 		@POST("/concurrent")
 		public String handleConcurrent(@RequestBody String data) {
 			// Simulate some processing
@@ -1252,7 +1331,73 @@ public class AdvancedTests {
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 			}
-			return "Processed: " + data;
+			return this.runtimeCanary + ":Processed: " + data;
+		}
+	}
+
+	private static final class ConcurrentInstanceProvider implements InstanceProvider {
+		private final String runtimeCanary;
+		private final InstanceProvider fallback = InstanceProvider.defaultInstance();
+
+		private ConcurrentInstanceProvider(@NonNull String runtimeCanary) {
+			this.runtimeCanary = runtimeCanary;
+		}
+
+		@NonNull
+		@Override
+		public <T> T provide(@NonNull Class<T> instanceClass) {
+			if (instanceClass == ConcurrentTestResource.class)
+				return instanceClass.cast(new ConcurrentTestResource(this.runtimeCanary));
+			return this.fallback.provide(instanceClass);
+		}
+	}
+
+	private static final class RuntimeRequestMetrics implements MetricsCollector {
+		private final String ownedBodyPrefix;
+		private final List<String> startedBodies = new ArrayList<>();
+		private final List<String> finishedBodies = new ArrayList<>();
+
+		private RuntimeRequestMetrics(@NonNull String ownedBodyPrefix) {
+			this.ownedBodyPrefix = ownedBodyPrefix;
+		}
+
+		@Override
+		public synchronized void didStartRequestHandling(
+				@NonNull ServerType serverType, @NonNull Request request,
+				@Nullable ResourceMethod resourceMethod) {
+			this.startedBodies.add(requestBody(request));
+		}
+
+		@Override
+		public synchronized void didFinishRequestHandling(
+				@NonNull ServerType serverType, @NonNull Request request,
+				@Nullable ResourceMethod resourceMethod,
+				@NonNull MarshaledResponse marshaledResponse,
+				@NonNull Duration duration,
+				@NonNull List<@NonNull Throwable> throwables) {
+			this.finishedBodies.add(requestBody(request));
+		}
+
+		private synchronized void assertOwnsExactly(int expectedRequests) {
+			Set<String> uniqueStarts = new HashSet<>(this.startedBodies);
+			Set<String> uniqueFinishes = new HashSet<>(this.finishedBodies);
+			Assertions.assertEquals(expectedRequests, this.startedBodies.size());
+			Assertions.assertEquals(expectedRequests, this.finishedBodies.size());
+			Assertions.assertEquals(expectedRequests, uniqueStarts.size());
+			Assertions.assertEquals(uniqueStarts, uniqueFinishes);
+			Assertions.assertTrue(this.startedBodies.stream().allMatch(
+					body -> body.startsWith(this.ownedBodyPrefix)),
+					this.startedBodies.toString());
+			Assertions.assertTrue(this.finishedBodies.stream().allMatch(
+					body -> body.startsWith(this.ownedBodyPrefix)),
+					this.finishedBodies.toString());
+		}
+
+		@NonNull
+		private static String requestBody(@NonNull Request request) {
+			return request.getBody()
+					.map(body -> new String(body, StandardCharsets.UTF_8))
+					.orElse("<missing-body>");
 		}
 	}
 
@@ -1286,6 +1431,42 @@ public class AdvancedTests {
 		public SseHandshakeResult handleSSE(Request request) {
 			return SseHandshakeResult.accept();
 		}
+	}
+
+	private void assertLiveConcurrentRequest(int port, String requestBody) throws Exception {
+		HttpResponse<String> response = HttpClient.newHttpClient().send(
+				HttpRequest.newBuilder()
+						.uri(URI.create("http://127.0.0.1:" + port + "/concurrent"))
+						.timeout(Duration.ofSeconds(5))
+						.header("Content-Type", "text/plain; charset=UTF-8")
+						.POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
+						.build(),
+				HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+		Assertions.assertEquals(200, response.statusCode());
+		Assertions.assertEquals("live:Processed: " + requestBody, response.body());
+	}
+
+	private static void shutdownExecutorAndAwait(@NonNull ExecutorService executor,
+			@NonNull String failureMessage) {
+		executor.shutdownNow();
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+		boolean interrupted = false;
+		boolean terminated = executor.isTerminated();
+		while (!terminated) {
+			long remaining = deadline - System.nanoTime();
+			if (remaining <= 0L)
+				break;
+			try {
+				terminated = executor.awaitTermination(remaining,
+						TimeUnit.NANOSECONDS);
+			} catch (InterruptedException e) {
+				interrupted = true;
+				executor.shutdownNow();
+			}
+		}
+		if (interrupted)
+			Thread.currentThread().interrupt();
+		Assertions.assertTrue(terminated, failureMessage);
 	}
 
 	private SokletConfig config(int port) {

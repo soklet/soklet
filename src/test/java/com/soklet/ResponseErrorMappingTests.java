@@ -32,15 +32,13 @@ import java.util.Set;
 public class ResponseErrorMappingTests {
 	@Test
 	public void runtime_exception_maps_to_500() {
-		SokletConfig cfg = SokletConfig.forSimulatorTesting()
+		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ExplodeResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
-				.build();
-
-		Soklet.runSimulator(cfg, simulator -> {
+				.build(), simulator -> {
 			HttpRequestResult result = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/explode").build());
 			Assertions.assertEquals(500, result.getMarshaledResponse().getStatusCode());
 		});
@@ -48,15 +46,13 @@ public class ResponseErrorMappingTests {
 
 	@Test
 	public void bad_request_exception_maps_to_400() {
-		SokletConfig cfg = SokletConfig.forSimulatorTesting()
+		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ExplodeResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
-				.build();
-
-		Soklet.runSimulator(cfg, simulator -> {
+				.build(), simulator -> {
 			HttpRequestResult result = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/bad-request").build());
 			Assertions.assertEquals(400, result.getMarshaledResponse().getStatusCode());
 		});
@@ -64,15 +60,13 @@ public class ResponseErrorMappingTests {
 
 	@Test
 	public void bodyless_response_with_body_maps_to_500() {
-		SokletConfig cfg = SokletConfig.forSimulatorTesting()
+		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ExplodeResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
-				.build();
-
-		Soklet.runSimulator(cfg, simulator -> {
+				.build(), simulator -> {
 			HttpRequestResult result = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/bodyless").build());
 			Assertions.assertEquals(500, result.getMarshaledResponse().getStatusCode());
 		});

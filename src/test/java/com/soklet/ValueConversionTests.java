@@ -41,15 +41,13 @@ public class ValueConversionTests {
 
 	@Test
 	public void converts_common_types_from_query_params() {
-		SokletConfig cfg = SokletConfig.forSimulatorTesting()
+		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ConversionResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
-				.build();
-
-		Soklet.runSimulator(cfg, simulator -> {
+				.build(), simulator -> {
 			// LocalDate
 			HttpRequestResult r1 = simulator.performHttpRequest(Request.withRawUrl(HttpMethod.GET, "/conv/date?d=2024-09-30").build());
 			Assertions.assertEquals(200, r1.getMarshaledResponse().getStatusCode());

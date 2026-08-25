@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -63,89 +64,87 @@ class McpLocalizationSoakTests {
 			throws Exception {
 		long startedAt = System.nanoTime();
 		LocalizationState state = new LocalizationState();
-		McpServer server = server(state);
-		SokletConfig config = SokletConfig.withMcpServer(server)
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.build();
+		AtomicReference<McpServer> server = new AtomicReference<>();
+		SimulatorConfigFactory configFactory =
+				simulatorConfigFactory(state, server);
 		SoakResourceSnapshot baseline;
 		SoakResourceSnapshot finalSnapshot;
 
-		try {
-			runSimulatorWorkload(config, server, state, 1, 1, "warmup");
-			assertStoppedAndDrained(server);
-			LocalizationCounts warmCounts = state.snapshot();
-			baseline = SoakResourceSnapshot.captureAfterGc();
+		runSimulatorWorkload(configFactory, server, state, 1, 1, "warmup");
+		assertStoppedAndDrained(requireNonNull(server.get()));
+		LocalizationCounts warmCounts = state.snapshot();
+		baseline = SoakResourceSnapshot.captureAfterGc();
 
-			runSimulatorWorkload(config, server, state,
-					PROFILE.concurrentClients(), PROFILE.cyclesPerClient(),
-					"measured");
-			assertStoppedAndDrained(server);
-			LocalizationCounts measured = state.snapshot().minus(warmCounts);
-			int localizedCatalogResponses = PROFILE.concurrentClients()
-					* PROFILE.cyclesPerClient();
-			int localizationCapableResponses = localizedCatalogResponses + 1;
+		runSimulatorWorkload(configFactory, server, state,
+				PROFILE.concurrentClients(), PROFILE.cyclesPerClient(),
+				"measured");
+		McpServer finalServer = requireNonNull(server.get());
+		assertStoppedAndDrained(finalServer);
+		LocalizationCounts measured = state.snapshot().minus(warmCounts);
+		int localizedCatalogResponses = PROFILE.concurrentClients()
+				* PROFILE.cyclesPerClient();
+		int localizationCapableResponses = localizedCatalogResponses + 1;
 
-			Assertions.assertEquals(localizedCatalogResponses,
-					measured.localizedCatalogResponses());
-			Assertions.assertEquals(localizationCapableResponses,
-					measured.contextsCreated(),
-					"Every tools/list response and the subscription terminal must "
-							+ "create exactly one context.");
-			Assertions.assertEquals(localizationCapableResponses,
-					measured.localizationLookups(),
-					"The fixture exposes exactly one localizable field per response.");
-			Assertions.assertEquals(localizationCapableResponses,
-					measured.boundedPreferenceMatches(),
-					"Every context must receive the bounded fr-CA preference.");
-			Assertions.assertEquals(PROFILE.cyclesPerClient(),
-					measured.invalidationsRequested());
-			Assertions.assertEquals(measured.invalidationsRequested(),
-					measured.invalidationsDelivered());
+		Assertions.assertEquals(localizedCatalogResponses,
+				measured.localizedCatalogResponses());
+		Assertions.assertEquals(localizationCapableResponses,
+				measured.contextsCreated(),
+				"Every tools/list response and the subscription terminal must "
+						+ "create exactly one context.");
+		Assertions.assertEquals(localizationCapableResponses,
+				measured.localizationLookups(),
+				"The fixture exposes exactly one localizable field per response.");
+		Assertions.assertEquals(localizationCapableResponses,
+				measured.boundedPreferenceMatches(),
+				"Every context must receive the bounded fr-CA preference.");
+		Assertions.assertEquals(PROFILE.cyclesPerClient(),
+				measured.invalidationsRequested());
+		Assertions.assertEquals(measured.invalidationsRequested(),
+				measured.invalidationsDelivered());
 
-			finalSnapshot = SoakResourceSnapshot.assertReturnsNear(
-					"MCP localization render and invalidation churn", baseline,
-					PROFILE.settleTimeout(), PROFILE.resourceTolerance());
-			SoakReport.recordPassedScenario(
-					"MCP localization render and invalidation churn",
-					"clients=%d, revisionWaves=%d, localizedCatalogResponses=%d"
-							.formatted(PROFILE.concurrentClients(),
-									PROFILE.cyclesPerClient(),
-									localizedCatalogResponses),
-					Duration.ofNanos(System.nanoTime() - startedAt), baseline,
-					finalSnapshot, PROFILE.resourceTolerance(),
-					SoakReport.observations(
-							"Localized catalog responses",
-							Integer.toString(localizedCatalogResponses),
-							"Subscription terminals pre-rendered", "1",
-							"Localization contexts created",
-							Integer.toString(measured.contextsCreated()),
-							"Localization lookups completed",
-							Integer.toString(measured.localizationLookups()),
-							"Bounded locale preferences matched",
-							Integer.toString(measured.boundedPreferenceMatches()),
-							"Catalog invalidations requested/delivered",
-							measured.invalidationsRequested() + "/"
-									+ measured.invalidationsDelivered(),
-							"Final active handlers/queued/streams/subscriptions",
-							"0/0/0/0",
-							"Final MCP status",
-							server.getDiagnostics().getStatus().name(),
-							"Settle timeout", PROFILE.settleTimeout().toString()));
-		} finally {
-			server.stop();
-		}
+		finalSnapshot = SoakResourceSnapshot.assertReturnsNear(
+				"MCP localization render and invalidation churn", baseline,
+				PROFILE.settleTimeout(), PROFILE.resourceTolerance());
+		SoakReport.recordPassedScenario(
+				"MCP localization render and invalidation churn",
+				"clients=%d, revisionWaves=%d, localizedCatalogResponses=%d"
+						.formatted(PROFILE.concurrentClients(),
+								PROFILE.cyclesPerClient(), localizedCatalogResponses),
+				Duration.ofNanos(System.nanoTime() - startedAt), baseline,
+				finalSnapshot, PROFILE.resourceTolerance(),
+				SoakReport.observations(
+						"Localized catalog responses",
+						Integer.toString(localizedCatalogResponses),
+						"Subscription terminals pre-rendered", "1",
+						"Localization contexts created",
+						Integer.toString(measured.contextsCreated()),
+						"Localization lookups completed",
+						Integer.toString(measured.localizationLookups()),
+						"Bounded locale preferences matched",
+						Integer.toString(measured.boundedPreferenceMatches()),
+						"Catalog invalidations requested/delivered",
+						measured.invalidationsRequested() + "/"
+								+ measured.invalidationsDelivered(),
+						"Final active handlers/queued/streams/subscriptions",
+						"0/0/0/0",
+						"Final MCP status",
+						finalServer.getDiagnostics().getStatus().name(),
+						"Settle timeout", PROFILE.settleTimeout().toString()));
 	}
 
-	private static void runSimulatorWorkload(@NonNull SokletConfig config,
-			@NonNull McpServer server, @NonNull LocalizationState state,
+	private static void runSimulatorWorkload(
+			@NonNull SimulatorConfigFactory configFactory,
+			@NonNull AtomicReference<McpServer> server,
+			@NonNull LocalizationState state,
 			int concurrentClients, int revisionWaves, @NonNull String runId) {
-		requireNonNull(config);
+		requireNonNull(configFactory);
 		requireNonNull(server);
 		requireNonNull(state);
 		requireNonNull(runId);
-		Soklet.runSimulator(config, simulator -> {
+		SokletSimulator.run(configFactory, simulator -> {
 			try {
-				performWorkload(simulator, server, state, concurrentClients,
+				performWorkload(simulator, requireNonNull(server.get()), state,
+						concurrentClients,
 						revisionWaves, runId);
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
@@ -251,7 +250,8 @@ class McpLocalizationSoakTests {
 	}
 
 	@NonNull
-	private static McpServer server(@NonNull LocalizationState state) {
+	private static McpServer server(@NonNull SimulatorTransports transports,
+			@NonNull LocalizationState state) {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
 				.jsonArguments()
@@ -283,7 +283,7 @@ class McpLocalizationSoakTests {
 						.build())
 				.build();
 
-		return McpServer.withPort(0)
+		return transports.newMcpServerBuilder(0)
 				.host(LOOPBACK)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.admissionController(
@@ -305,6 +305,24 @@ class McpLocalizationSoakTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
+	}
+
+	@NonNull
+	private static SimulatorConfigFactory simulatorConfigFactory(
+			@NonNull LocalizationState state,
+			@NonNull AtomicReference<McpServer> serverReference) {
+		return transports -> {
+			McpServer server = server(transports, state);
+			serverReference.set(server);
+			return SokletConfig.withMcpServer(server)
+					.resourceMethodResolver(
+							ResourceMethodResolver.fromMethods(Set.of()))
+					.internalLifecyclePolicy(new InternalLifecyclePolicy(
+							Optional.of(Duration.ofSeconds(30)),
+							Duration.ofSeconds(2), Duration.ZERO,
+							PROFILE.shutdownTimeout()))
+					.build();
+		};
 	}
 
 	@NonNull

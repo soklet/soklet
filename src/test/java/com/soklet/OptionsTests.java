@@ -33,15 +33,13 @@ import java.util.Set;
 public class OptionsTests {
 	@Test
 	public void options_includes_allow_header() {
-		SokletConfig cfg = SokletConfig.forSimulatorTesting()
+		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EchoResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
-				.build();
-
-		Soklet.runSimulator(cfg, simulator -> {
+				.build(), simulator -> {
 			HttpRequestResult result = simulator.performHttpRequest(Request.withPath(HttpMethod.OPTIONS, "/echo").build());
 			Assertions.assertEquals(204, result.getMarshaledResponse().getStatusCode());
 			Map<String, Set<String>> headers = result.getMarshaledResponse().getHeaders();
@@ -55,15 +53,13 @@ public class OptionsTests {
 
 	@Test
 	public void options_excludes_head_when_no_get_or_head() {
-		SokletConfig cfg = SokletConfig.forSimulatorTesting()
+		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(PostOnlyResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
-				.build();
-
-		Soklet.runSimulator(cfg, simulator -> {
+				.build(), simulator -> {
 			HttpRequestResult result = simulator.performHttpRequest(Request.withPath(HttpMethod.OPTIONS, "/submit").build());
 			Assertions.assertEquals(204, result.getMarshaledResponse().getStatusCode());
 			Map<String, Set<String>> headers = result.getMarshaledResponse().getHeaders();

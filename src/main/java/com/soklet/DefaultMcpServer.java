@@ -159,6 +159,7 @@ final class DefaultMcpServer implements McpServer {
 	private volatile McpShutdownOutcome lastShutdownOutcome;
 	private McpTransportLifecycleAdapter.@Nullable Generation
 			pendingListenerGeneration;
+	private boolean simulatorOwned;
 
 	DefaultMcpServer(int port, @NonNull String host,
 			int maximumCursorSizeInBytes,
@@ -224,6 +225,7 @@ final class DefaultMcpServer implements McpServer {
 		this.metricsCollector = MetricsCollector.disabledInstance();
 		this.lastShutdownOutcome = McpShutdownOutcome.CLEAN;
 		this.pendingListenerGeneration = null;
+		this.simulatorOwned = false;
 		List<EndpointPlan> endpointPlans = endpointRegistry.getEndpoints().stream()
 				.map(this::toEndpointPlan)
 				.toList();
@@ -671,6 +673,23 @@ final class DefaultMcpServer implements McpServer {
 		}
 	}
 
+	void openSimulationSession(
+			@NonNull Consumer<@NonNull SimulationSession> sessionOwner) {
+		synchronized (this.lifecycleLock) {
+			this.runtimeBridge.openSimulationSession(requireNonNull(sessionOwner));
+		}
+	}
+
+	void claimSimulatorScope(@NonNull Object simulatorScope) {
+		requireNonNull(simulatorScope);
+		synchronized (this.lifecycleLock) {
+			if (this.simulatorOwned)
+				throw new IllegalStateException(
+						"The MCP server already belongs to a simulator scope");
+			this.simulatorOwned = true;
+		}
+	}
+
 	@Override
 	public void start() {
 		beginMcpMetricsDeferral();
@@ -704,6 +723,9 @@ final class DefaultMcpServer implements McpServer {
 
 		try {
 			synchronized (this.lifecycleLock) {
+				if (this.simulatorOwned)
+					throw new IllegalStateException(
+							"A simulator-owned MCP server cannot bind a listener");
 				if (this.lifecycleAdapter.shutdownInProgress())
 					throw new IllegalStateException(
 							"Cannot start MCP server while shutdown is in progress");

@@ -113,11 +113,11 @@ class McpLocalizationSubscriptionRuntimeTests {
 				})
 				.failurePolicy(McpLocalizationFailurePolicy.FAIL_REQUEST)
 				.build();
-		SokletConfig config = config(localizer, 2);
 		List<Integer> statusCodes = new ArrayList<>();
 		List<String> bodies = new ArrayList<>();
 
-		Soklet.runSimulator(config, simulator -> {
+		SokletSimulator.run(transports -> config(transports, localizer, 2),
+				simulator -> {
 			// With a per-authorization-partition cap of 2, any reservation leak
 			// would turn the third and later attempts into capacity rejections
 			// instead of the sanitized localization failure.
@@ -156,10 +156,10 @@ class McpLocalizationSubscriptionRuntimeTests {
 
 	private static List<String> subscribeAndDrain(McpLocalizer localizer,
 			int maximumSubscriptionsPerPrincipal, ResponseProbe probe) {
-		SokletConfig config = config(localizer, maximumSubscriptionsPerPrincipal);
 		AtomicReference<McpSimulation> escaped = new AtomicReference<>();
 
-		Soklet.runSimulator(config, simulator -> {
+		SokletSimulator.run(transports -> config(transports, localizer,
+				maximumSubscriptionsPerPrincipal), simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(
 					subscriptionRequest("terminal-render"));
 			escaped.set(simulation);
@@ -207,7 +207,8 @@ class McpLocalizationSubscriptionRuntimeTests {
 		return frames;
 	}
 
-	private static SokletConfig config(McpLocalizer localizer,
+	private static SokletConfig config(SimulatorTransports transports,
+			McpLocalizer localizer,
 			int maximumSubscriptionsPerPrincipal) {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation
@@ -235,7 +236,7 @@ class McpLocalizationSubscriptionRuntimeTests {
 										.RESOURCES_LIST_CHANGED))
 						.build())
 				.build();
-		McpServer server = McpServer.withPort(0)
+		McpServer server = transports.newMcpServerBuilder(0)
 				.host(LOOPBACK)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.admissionController(McpAdmissionController.acceptAllInstance())
