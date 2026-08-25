@@ -98,6 +98,8 @@ final class McpApplicationHandlerDispatcher {
 
 		void requestInterrupt() {
 			synchronized (interruptLock) {
+				if (interruptRequested)
+					return;
 				interruptRequested = true;
 
 				if (handlerThread != null)

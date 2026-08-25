@@ -425,6 +425,50 @@ public class McpApplicationHandlerDispatcherTests {
 	}
 
 	@Test
+	public void repeated_interrupt_requests_deliver_one_signal() throws Exception {
+		ExecutorService executor = singleThreadExecutor(
+				"mcp-application-idempotent-interrupt-test");
+		McpApplicationHandlerDispatcher dispatcher =
+				new McpApplicationHandlerDispatcher(1, 1, executor);
+		CountDownLatch handlerEntered = new CountDownLatch(1);
+		CountDownLatch firstInterruptObserved = new CountDownLatch(1);
+		CountDownLatch releaseAfterInterrupt = new CountDownLatch(1);
+		CountDownLatch handlerExited = new CountDownLatch(1);
+		AtomicInteger interruptions = new AtomicInteger();
+		AtomicReference<Throwable> failure = new AtomicReference<>();
+		McpApplicationHandlerDispatcher.Ticket ticket = dispatcher.newTicket(() -> {
+			handlerEntered.countDown();
+			try {
+				new CountDownLatch(1).await();
+			} catch (InterruptedException expected) {
+				interruptions.incrementAndGet();
+				firstInterruptObserved.countDown();
+			}
+			try {
+				releaseAfterInterrupt.await();
+			} catch (InterruptedException duplicate) {
+				interruptions.incrementAndGet();
+			}
+			handlerExited.countDown();
+		}, failure::set);
+
+		try {
+			dispatcher.admit(ticket);
+			Assertions.assertTrue(handlerEntered.await(3, TimeUnit.SECONDS));
+			ticket.requestInterrupt();
+			Assertions.assertTrue(firstInterruptObserved.await(3, TimeUnit.SECONDS));
+			ticket.requestInterrupt();
+			releaseAfterInterrupt.countDown();
+			Assertions.assertTrue(handlerExited.await(3, TimeUnit.SECONDS));
+			Assertions.assertEquals(1, interruptions.get());
+			Assertions.assertNull(failure.get());
+		} finally {
+			releaseAfterInterrupt.countDown();
+			stop(dispatcher, executor);
+		}
+	}
+
+	@Test
 	public void interruption_does_not_release_a_slot_until_work_actually_exits()
 			throws Exception {
 		ExecutorService executor = singleThreadExecutor("mcp-application-interrupt-test");

@@ -157,7 +157,8 @@ final class DefaultMcpServer implements McpServer {
 	private volatile MetricsCollector metricsCollector;
 	@NonNull
 	private volatile McpShutdownOutcome lastShutdownOutcome;
-	private boolean listenerGenerationStopPending;
+	private McpTransportLifecycleAdapter.@Nullable Generation
+			pendingListenerGeneration;
 
 	DefaultMcpServer(int port, @NonNull String host,
 			int maximumCursorSizeInBytes,
@@ -222,7 +223,7 @@ final class DefaultMcpServer implements McpServer {
 		this.lifecycleObserver = LifecycleObserver.defaultInstance();
 		this.metricsCollector = MetricsCollector.disabledInstance();
 		this.lastShutdownOutcome = McpShutdownOutcome.CLEAN;
-		this.listenerGenerationStopPending = false;
+		this.pendingListenerGeneration = null;
 		List<EndpointPlan> endpointPlans = endpointRegistry.getEndpoints().stream()
 				.map(this::toEndpointPlan)
 				.toList();
@@ -693,61 +694,107 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	private void startForSokletWhileMetricsDeferred(
-			@NonNull Consumer<@NonNull McpShutdownOutcome>
-					stoppedGenerationConsumer) {
+				@NonNull Consumer<@NonNull McpShutdownOutcome>
+						stoppedGenerationConsumer) {
 		requireNonNull(stoppedGenerationConsumer);
 		McpShutdownOutcome normalizedShutdownOutcome = null;
-		McpMetricEventDeliveryEntry provisionalServerStarted;
-		McpTransportLifecycleAdapter.Generation lifecycleGeneration;
-		synchronized (this.lifecycleLock) {
-			if (this.lifecycleAdapter.shutdownInProgress())
-				throw new IllegalStateException(
-						"Cannot start MCP server while shutdown is in progress");
-			RuntimeState runtimeState = this.runtimeBridge.getRuntimeState();
-			if (runtimeState.started())
-				return;
-			if (this.listenerGenerationStopPending) {
-				this.listenerGenerationStopPending = false;
-				normalizedShutdownOutcome = outcomeForLifecycleResult();
-				this.lastShutdownOutcome = normalizedShutdownOutcome;
-				this.mcpMetricEventDelivery.record(McpMetricsEvent.serverStopped(
-						normalizedShutdownOutcome));
+		McpMetricEventDeliveryEntry provisionalServerStarted = null;
+		McpTransportLifecycleAdapter.@Nullable Generation lifecycleGeneration = null;
+		boolean retainedPreviousGeneration = false;
+
+		try {
+			synchronized (this.lifecycleLock) {
+				if (this.lifecycleAdapter.shutdownInProgress())
+					throw new IllegalStateException(
+							"Cannot start MCP server while shutdown is in progress");
+				RuntimeState runtimeState = this.runtimeBridge.getRuntimeState();
+				if (runtimeState.started())
+					return;
+				McpTransportLifecycleAdapter.Generation pendingGeneration =
+						this.pendingListenerGeneration;
+				if (pendingGeneration != null) {
+					InternalShutdownResult pendingResult = this.lifecycleAdapter
+							.result(pendingGeneration).orElse(null);
+					if (pendingResult == null)
+						throw new IllegalStateException(
+								"Cannot start MCP server before the previous lifecycle generation completes");
+					normalizedShutdownOutcome = normalizeCompletedListenerGeneration(
+							pendingGeneration).shutdownOutcome();
+					retainedPreviousGeneration = !pendingResult.isComplete();
+				}
+				if (!retainedPreviousGeneration) {
+					lifecycleGeneration = this.lifecycleAdapter.beginStart();
+					this.runtimeBridge.prepareLifecycleStart(lifecycleGeneration);
+				}
 			}
-			lifecycleGeneration = this.lifecycleAdapter.beginStart();
+
+			if (normalizedShutdownOutcome != null)
+				stoppedGenerationConsumer.accept(normalizedShutdownOutcome);
+			if (retainedPreviousGeneration)
+				throw new IllegalStateException(
+						"Cannot restart MCP server with retained termination evidence");
 			if (this.securityControls.getProtectionMode()
 					== McpProtectionMode.DEVELOPMENT_EPHEMERAL)
 				safelyLogStartupDiagnostic(
 						DEVELOPMENT_EPHEMERAL_PROTECTION_DIAGNOSTIC);
 			provisionalServerStarted = this.mcpMetricEventDelivery.record(
 					McpMetricsEvent.serverStarted());
-		}
-
-		if (normalizedShutdownOutcome != null)
-			stoppedGenerationConsumer.accept(normalizedShutdownOutcome);
-		try {
-			this.runtimeBridge.start();
-			this.lifecycleAdapter.markReady(lifecycleGeneration);
+			this.runtimeBridge.start(requireNonNull(lifecycleGeneration));
 			synchronized (this.lifecycleLock) {
+				// Readiness and the exact pending-listener identity are one server-level
+				// transition. A concurrent stop cannot consume the ready generation in
+				// between these two publications.
+				this.lifecycleAdapter.markReady(
+						requireNonNull(lifecycleGeneration));
 				this.lastShutdownOutcome = McpShutdownOutcome.CLEAN;
-				this.listenerGenerationStopPending = true;
+				this.pendingListenerGeneration = lifecycleGeneration;
 			}
 		} catch (IOException | RuntimeException | Error throwable) {
-			this.mcpMetricEventDelivery.discard(provisionalServerStarted);
-			try {
-				this.lifecycleAdapter.failedStart(lifecycleGeneration, throwable, false);
-			} catch (Throwable cleanupFailure) {
-				if (cleanupFailure != throwable)
-					throwable.addSuppressed(cleanupFailure);
+			Throwable primary = exactStartupFailure(throwable);
+			if (provisionalServerStarted != null) {
+				try {
+					this.mcpMetricEventDelivery.discard(provisionalServerStarted);
+				} catch (Throwable cleanupFailure) {
+					if (cleanupFailure != primary)
+						primary.addSuppressed(cleanupFailure);
+				}
 			}
-			synchronized (this.lifecycleLock) {
-				this.lastShutdownOutcome = outcomeForLifecycleResult();
+			if (lifecycleGeneration != null) {
+				try {
+					this.lifecycleAdapter.failedStart(lifecycleGeneration, primary,
+							false);
+				} catch (Throwable cleanupFailure) {
+					if (cleanupFailure != primary)
+						primary.addSuppressed(cleanupFailure);
+				}
+				try {
+					synchronized (this.lifecycleLock) {
+						if (this.lifecycleAdapter.currentGeneration()
+								== lifecycleGeneration)
+							this.lastShutdownOutcome = outcomeForLifecycleResult(
+									lifecycleGeneration);
+					}
+				} catch (Throwable cleanupFailure) {
+					if (cleanupFailure != primary)
+						primary.addSuppressed(cleanupFailure);
+				}
 			}
-			if (throwable instanceof IOException exception)
+			if (primary instanceof IOException exception)
 				throw new UncheckedIOException("Unable to start the MCP server.", exception);
-			if (throwable instanceof RuntimeException exception)
+			if (primary instanceof RuntimeException exception)
 				throw exception;
-			throw (Error) throwable;
+			throw (Error) primary;
 		}
+	}
+
+	@NonNull
+	private Throwable exactStartupFailure(@NonNull Throwable failure) {
+		Throwable requiredFailure = requireNonNull(failure);
+		if (requiredFailure instanceof BuiltInTransportLifecycleAdapter
+				.PrematureTerminationException
+				&& requiredFailure.getCause() != null)
+			return requiredFailure.getCause();
+		return requiredFailure;
 	}
 
 	@Override
@@ -773,31 +820,59 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	private McpServerStopResult stopForSokletWhileMetricsDeferred() {
 		McpTransportLifecycleAdapter.Generation generation;
-		boolean realListenerGeneration;
 		synchronized (this.lifecycleLock) {
-			if (!this.listenerGenerationStopPending
+			McpTransportLifecycleAdapter.Generation pendingGeneration =
+					this.pendingListenerGeneration;
+			if (pendingGeneration != null
+					&& this.lifecycleAdapter.result(pendingGeneration).isPresent())
+				return normalizeCompletedListenerGeneration(pendingGeneration);
+			if (pendingGeneration == null
 					&& this.lifecycleAdapter.result().isPresent())
 				return new McpServerStopResult(this.lastShutdownOutcome, false);
-			realListenerGeneration = this.listenerGenerationStopPending;
 			generation = this.lifecycleAdapter.requestStop();
-		}
-		this.lifecycleAdapter.awaitStop(generation);
-		McpShutdownOutcome shutdownOutcome = outcomeForLifecycleResult();
-		synchronized (this.lifecycleLock) {
-			this.lastShutdownOutcome = shutdownOutcome;
-			if (realListenerGeneration && this.listenerGenerationStopPending) {
-				this.listenerGenerationStopPending = false;
-				this.mcpMetricEventDelivery.record(
-						McpMetricsEvent.serverStopped(shutdownOutcome));
-				return new McpServerStopResult(shutdownOutcome, true);
+			// Unexpected termination can complete between the exact-result check and
+			// requestStop().  Consume that same listener generation here rather than
+			// leaving requiresStop() permanently true.
+			if (generation == null) {
+				pendingGeneration = this.pendingListenerGeneration;
+				if (pendingGeneration != null
+						&& this.lifecycleAdapter.result(pendingGeneration).isPresent())
+					return normalizeCompletedListenerGeneration(pendingGeneration);
 			}
+		}
+		if (generation == null)
+			return new McpServerStopResult(this.lastShutdownOutcome, false);
+		if (this.runtimeBridge.lifecycleWaitWouldSelfJoin())
+			throw new IllegalStateException(
+					"MCP lifecycle wait cannot join its own proof-bearing execution");
+		this.lifecycleAdapter.awaitStop(generation);
+		McpShutdownOutcome shutdownOutcome = outcomeForLifecycleResult(generation);
+		synchronized (this.lifecycleLock) {
+			if (this.pendingListenerGeneration == generation)
+				return normalizeCompletedListenerGeneration(generation);
+		}
+		return new McpServerStopResult(shutdownOutcome, false);
+	}
+
+	/** Caller holds {@link #lifecycleLock}; the exact generation is complete. */
+	@NonNull
+	private McpServerStopResult normalizeCompletedListenerGeneration(
+			McpTransportLifecycleAdapter.@NonNull Generation generation) {
+		McpShutdownOutcome shutdownOutcome = outcomeForLifecycleResult(generation);
+		this.lastShutdownOutcome = shutdownOutcome;
+		if (this.pendingListenerGeneration == generation) {
+			this.pendingListenerGeneration = null;
+			this.mcpMetricEventDelivery.record(
+					McpMetricsEvent.serverStopped(shutdownOutcome));
+			return new McpServerStopResult(shutdownOutcome, true);
 		}
 		return new McpServerStopResult(shutdownOutcome, false);
 	}
 
 	@NonNull
-	private McpShutdownOutcome outcomeForLifecycleResult() {
-		return this.lifecycleAdapter.result()
+	private McpShutdownOutcome outcomeForLifecycleResult(
+			McpTransportLifecycleAdapter.@NonNull Generation generation) {
+		return this.lifecycleAdapter.result(requireNonNull(generation))
 				.filter(InternalShutdownResult::isComplete)
 				.isPresent() ? McpShutdownOutcome.CLEAN
 				: McpShutdownOutcome.RESIDUAL_HANDLERS;
@@ -805,7 +880,7 @@ final class DefaultMcpServer implements McpServer {
 
 	boolean hasPendingListenerGenerationStop() {
 		synchronized (this.lifecycleLock) {
-			return this.listenerGenerationStopPending;
+			return this.pendingListenerGeneration != null;
 		}
 	}
 
@@ -819,7 +894,7 @@ final class DefaultMcpServer implements McpServer {
 
 	boolean requiresStop() {
 		synchronized (this.lifecycleLock) {
-			return this.listenerGenerationStopPending
+			return this.pendingListenerGeneration != null
 					|| this.lifecycleAdapter.hasActiveGeneration();
 		}
 	}

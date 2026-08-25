@@ -300,14 +300,15 @@ public class McpShutdownObservabilityTests {
 	}
 
 	@Test
-	public void failedSubscriptionRegistrationCloseEmitsOnlyAfterSuccessfulRetry()
+	public void failedSubscriptionRegistrationCloseRetriesAtForceBeforeOneCleanOutcome()
 			throws Exception {
+		Duration shutdownTimeout = Duration.ofMillis(150);
 		FailingClosePublisher publisher = new FailingClosePublisher();
 		McpEndpoint endpoint = subscriptionEndpoint(
 				"/mcp/subscription-close-retry", publisher);
 		RecordingMetricsCollector collector = new RecordingMetricsCollector();
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver();
-		McpServer server = serverFor(endpoint);
+		McpServer server = serverFor(List.of(endpoint), shutdownTimeout);
 		Soklet soklet = newSoklet(server, collector, observer);
 
 		try {
@@ -315,24 +316,14 @@ public class McpShutdownObservabilityTests {
 			Assertions.assertEquals(1, publisher.getSubscribeAttempts());
 
 			Assertions.assertDoesNotThrow(soklet::stop);
-			Assertions.assertEquals(1, publisher.getCloseAttempts());
-			Assertions.assertEquals(1, observer.getStopFailures().size());
-			Assertions.assertTrue(observer.getStopOutcomes().isEmpty());
-			Assertions.assertTrue(collector.getServerStopOutcomes().isEmpty());
-			Assertions.assertTrue(collector.snapshot().orElseThrow()
-					.getMcpMetrics().getShutdowns().isEmpty());
-			Assertions.assertTrue(runtimeBridge(server).getRuntimeState()
-					.stopRequired());
-
-			Assertions.assertDoesNotThrow(soklet::stop);
 			Assertions.assertEquals(2, publisher.getCloseAttempts());
-			Assertions.assertEquals(1, observer.getStopFailures().size());
+			Assertions.assertTrue(observer.getStopFailures().isEmpty());
 			assertShutdownParity(observer, collector,
 					List.of(McpShutdownOutcome.CLEAN));
 			Assertions.assertFalse(runtimeBridge(server).getRuntimeState()
 					.stopRequired());
 
-			soklet.stop();
+			Assertions.assertDoesNotThrow(soklet::stop);
 			server.stop();
 			Assertions.assertEquals(2, publisher.getCloseAttempts());
 			assertShutdownParity(observer, collector,
@@ -344,7 +335,7 @@ public class McpShutdownObservabilityTests {
 
 	@Test
 	@Timeout(30)
-	public void blockingSubscriptionRegistrationClosePublishesAfterLateCleanup()
+	public void blockingSubscriptionRegistrationCloseFreezesOneResidualOutcome()
 			throws Exception {
 		Duration shutdownTimeout = Duration.ofMillis(150);
 		BlockingClosePublisher publisher = new BlockingClosePublisher();
@@ -363,44 +354,48 @@ public class McpShutdownObservabilityTests {
 			Duration stopDuration = Duration.ofNanos(
 					System.nanoTime() - stopStartedAt);
 			Assertions.assertTrue(stopDuration.compareTo(
-					shutdownTimeout.plusSeconds(1)) < 0,
+					shutdownTimeout.plusSeconds(4)) < 0,
 					() -> "Blocking registration cleanup exceeded its bounded "
-							+ "shutdown budget: " + stopDuration);
+							+ "shared grace-plus-force budget: " + stopDuration);
 			publisher.awaitCloseEntered();
 			Assertions.assertEquals(1, publisher.getCloseAttempts());
 			Assertions.assertEquals(1, observer.getWillStopMcpCallbacks());
-			Assertions.assertEquals(1, observer.getStopFailures().size());
-			Assertions.assertTrue(observer.getStopOutcomes().isEmpty());
-			Assertions.assertTrue(collector.getServerStopOutcomes().isEmpty());
-			Assertions.assertTrue(collector.snapshot().orElseThrow()
-					.getMcpMetrics().getShutdowns().isEmpty());
+			Assertions.assertTrue(observer.getStopFailures().isEmpty());
+			assertShutdownParity(observer, collector,
+					List.of(McpShutdownOutcome.RESIDUAL_HANDLERS));
 			Assertions.assertTrue(bridge.getRuntimeState().stopRequired());
 
 			publisher.releaseClose();
 			publisher.awaitClosed();
-			awaitStopRequired(bridge, false);
-			Assertions.assertTrue(collector.getServerStopOutcomes().isEmpty(),
-					"Asynchronous cleanup alone must not duplicate delivery.");
+			awaitSubscriptionRegistrationEvidence(bridge, false);
+			Assertions.assertTrue(bridge.getRuntimeState().stopRequired(),
+					"Late cleanup must not rewrite the frozen incomplete generation.");
+			assertShutdownParity(observer, collector,
+					List.of(McpShutdownOutcome.RESIDUAL_HANDLERS));
 
 			soklet.stop();
 			Assertions.assertEquals(1, publisher.getCloseAttempts(),
 					"A completed registration close must not be invoked again.");
-			Assertions.assertEquals(2, observer.getWillStopMcpCallbacks());
-			Assertions.assertEquals(1, observer.getStopFailures().size());
+			Assertions.assertEquals(1, observer.getWillStopMcpCallbacks());
+			Assertions.assertTrue(observer.getStopFailures().isEmpty());
 			assertShutdownParity(observer, collector,
-					List.of(McpShutdownOutcome.CLEAN));
+					List.of(McpShutdownOutcome.RESIDUAL_HANDLERS));
+			Assertions.assertThrows(IllegalStateException.class, server::start,
+					"Late physical cleanup cannot make an incomplete generation restartable.");
 
 			soklet.stop();
 			server.stop();
-			Assertions.assertEquals(2, observer.getWillStopMcpCallbacks());
+			Assertions.assertEquals(1, observer.getWillStopMcpCallbacks());
 			Assertions.assertEquals(1, publisher.getCloseAttempts());
 			assertShutdownParity(observer, collector,
-					List.of(McpShutdownOutcome.CLEAN));
+					List.of(McpShutdownOutcome.RESIDUAL_HANDLERS));
 		} finally {
 			publisher.releaseClose();
-			soklet.stop();
-			if (bridge.getRuntimeState().stopRequired())
-				bridge.stop();
+			try {
+				soklet.stop();
+			} finally {
+				server.stop();
+			}
 		}
 	}
 
@@ -417,7 +412,8 @@ public class McpShutdownObservabilityTests {
 			soklet.start();
 			terminateUnexpectedly(eventLoop(bridge));
 			Assertions.assertFalse(bridge.getRuntimeState().started());
-			Assertions.assertTrue(bridge.getRuntimeState().stopRequired());
+			Assertions.assertTrue(((DefaultMcpServer) server)
+					.hasPendingListenerGenerationStop());
 
 			soklet.stop();
 			assertShutdownParity(observer, collector,
@@ -447,11 +443,17 @@ public class McpShutdownObservabilityTests {
 		McpServer server = newServer("/mcp/direct-unexpected-restart");
 		Soklet soklet = newSoklet(server, collector, observer);
 		McpServerRuntimeBridge bridge = runtimeBridge(server);
+		McpTransportLifecycleAdapter lifecycleAdapter = lifecycleAdapter(server);
 
 		try {
 			server.start();
+			McpTransportLifecycleAdapter.Generation failedGeneration =
+					(McpTransportLifecycleAdapter.Generation)
+							lifecycleAdapter.currentGeneration();
 			terminateUnexpectedly(eventLoop(bridge));
-			Assertions.assertTrue(bridge.getRuntimeState().stopRequired());
+			Assertions.assertTrue(((DefaultMcpServer) server)
+					.hasPendingListenerGenerationStop());
+			lifecycleAdapter.awaitStop(failedGeneration);
 
 			server.start();
 			Assertions.assertTrue(server.isStarted());
@@ -489,12 +491,18 @@ public class McpShutdownObservabilityTests {
 		McpServer server = newServer("/mcp/managed-unexpected-restart");
 		Soklet soklet = newSoklet(server, collector, observer);
 		McpServerRuntimeBridge bridge = runtimeBridge(server);
+		McpTransportLifecycleAdapter lifecycleAdapter = lifecycleAdapter(server);
 
 		try {
 			soklet.start();
+			McpTransportLifecycleAdapter.Generation failedGeneration =
+					(McpTransportLifecycleAdapter.Generation)
+							lifecycleAdapter.currentGeneration();
 			terminateUnexpectedly(eventLoop(bridge));
 			Assertions.assertFalse(server.isStarted());
-			Assertions.assertTrue(bridge.getRuntimeState().stopRequired());
+			Assertions.assertTrue(((DefaultMcpServer) server)
+					.hasPendingListenerGenerationStop());
+			lifecycleAdapter.awaitStop(failedGeneration);
 
 			soklet.start();
 			Assertions.assertTrue(server.isStarted());
@@ -537,7 +545,8 @@ public class McpShutdownObservabilityTests {
 				"/mcp/failed-start-second", secondPublisher);
 		RecordingMetricsCollector collector = new RecordingMetricsCollector();
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver();
-		McpServer server = serverFor(List.of(firstEndpoint, secondEndpoint));
+		McpServer server = serverFor(List.of(firstEndpoint, secondEndpoint),
+				Duration.ofMillis(150));
 		Soklet soklet = newSoklet(server, collector, observer);
 		McpServerRuntimeBridge bridge = runtimeBridge(server);
 
@@ -547,8 +556,9 @@ public class McpShutdownObservabilityTests {
 			Assertions.assertSame(secondPublisher.getFirstSubscribeFailure(),
 					startupFailure);
 			Assertions.assertFalse(server.isStarted());
-			Assertions.assertTrue(bridge.getRuntimeState().stopRequired());
-			Assertions.assertEquals(1, firstPublisher.getCloseAttempts());
+			Assertions.assertFalse(bridge.getRuntimeState().stopRequired());
+			Assertions.assertEquals(2, firstPublisher.getCloseAttempts(),
+					"Failed-start cleanup must retry the failed close at force.");
 			assertNoMcpStopCallbacks(observer);
 			Assertions.assertTrue(collector.getServerStopOutcomes().isEmpty());
 			Assertions.assertTrue(collector.snapshot().orElseThrow()
@@ -557,7 +567,7 @@ public class McpShutdownObservabilityTests {
 			Assertions.assertDoesNotThrow(soklet::stop);
 			Assertions.assertFalse(bridge.getRuntimeState().stopRequired());
 			Assertions.assertEquals(2, firstPublisher.getCloseAttempts(),
-					"Managed cleanup must retry the failed registration close.");
+					"A later stop must not repeat completed failed-start cleanup.");
 			assertNoMcpStopCallbacks(observer);
 			Assertions.assertTrue(collector.getServerStopOutcomes().isEmpty(),
 					"Cleanup of a never-started generation must not emit ServerStopped.");
@@ -939,6 +949,19 @@ public class McpShutdownObservabilityTests {
 				bridge.getRuntimeState().stopRequired());
 	}
 
+	private static void awaitSubscriptionRegistrationEvidence(
+			@NonNull McpServerRuntimeBridge bridge, boolean expected)
+			throws InterruptedException {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+		while (System.nanoTime() - deadline < 0L) {
+			if (bridge.getLifecycleEvidence().subscriptionRegistration() == expected)
+				return;
+			Thread.sleep(10L);
+		}
+		Assertions.assertEquals(expected,
+				bridge.getLifecycleEvidence().subscriptionRegistration());
+	}
+
 	@NonNull
 	private static McpServerRuntimeBridge runtimeBridge(
 			@NonNull McpServer server) throws Exception {
@@ -946,6 +969,16 @@ public class McpShutdownObservabilityTests {
 				"runtimeBridge");
 		bridgeField.setAccessible(true);
 		return (McpServerRuntimeBridge) bridgeField.get(requireNonNull(server));
+	}
+
+	@NonNull
+	private static McpTransportLifecycleAdapter lifecycleAdapter(
+			@NonNull McpServer server) throws Exception {
+		Field adapterField = DefaultMcpServer.class.getDeclaredField(
+				"lifecycleAdapter");
+		adapterField.setAccessible(true);
+		return (McpTransportLifecycleAdapter) adapterField.get(
+				requireNonNull(server));
 	}
 
 	@NonNull

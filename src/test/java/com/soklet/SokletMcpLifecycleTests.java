@@ -49,7 +49,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class SokletMcpLifecycleTests {
 	@Test
 	@Timeout(30)
-	public void noncooperativeMcpHandlerProducesOneResidualStopOutcomeAndBlocksRestartUntilExit()
+	public void noncooperativeMcpHandlerFreezesOneResidualOutcomeAndBlocksRestart()
 			throws Exception {
 		String host = "127.0.0.1";
 		String path = "/mcp/residual-lifecycle";
@@ -135,8 +135,9 @@ public class SokletMcpLifecycleTests {
 					System.nanoTime() - stopStartedAt);
 
 			Assertions.assertTrue(stopDuration.compareTo(
-					shutdownTimeout.plusSeconds(1)) < 0,
-					() -> "MCP shutdown exceeded its bounded deadline: "
+					shutdownTimeout.plusSeconds(4)) < 0,
+					() -> "MCP shutdown exceeded its grace, fixed three-second "
+							+ "forced-observation window, and scheduling tolerance: "
 							+ stopDuration);
 			Assertions.assertTrue(handlerInterrupted.await(5, TimeUnit.SECONDS),
 					"Shutdown did not interrupt the noncooperative handler.");
@@ -155,7 +156,7 @@ public class SokletMcpLifecycleTests {
 			IllegalStateException restartFailure = Assertions.assertThrows(
 					IllegalStateException.class, soklet::start);
 			Assertions.assertEquals(
-					"Cannot start MCP server while residual handler executions remain",
+					"Built-in transport with retained termination evidence cannot restart",
 					restartFailure.getMessage());
 
 			releaseHandler.countDown();
@@ -166,9 +167,12 @@ public class SokletMcpLifecycleTests {
 					stopOutcomes,
 					"A residual handler's late exit must not emit another stop callback.");
 
-			Assertions.assertDoesNotThrow(soklet::start);
-			Assertions.assertEquals(McpServerStatus.STARTED,
-					mcpServer.getDiagnostics().getStatus());
+			IllegalStateException lateRestartFailure = Assertions.assertThrows(
+					IllegalStateException.class, soklet::start);
+			Assertions.assertEquals(
+					"Built-in transport with retained termination evidence cannot restart",
+					lateRestartFailure.getMessage(),
+					"Late physical cleanup cannot rewrite an immutable residual result.");
 		} finally {
 			releaseHandler.countDown();
 			if (request != null)

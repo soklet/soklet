@@ -90,9 +90,16 @@ final class LifecycleWorkers {
 
 	void start(@NonNull Role role, @NonNull String name,
 			@NonNull Runnable runnable) {
+		start(role, name, runnable, () -> {});
+	}
+
+	void start(@NonNull Role role, @NonNull String name,
+			@NonNull Runnable runnable,
+			@NonNull Runnable afterRoleRelease) {
 		requireNonNull(role);
 		requireNonNull(name);
 		requireNonNull(runnable);
+		requireNonNull(afterRoleRelease);
 		AtomicInteger activeForRole = this.active.get(role);
 		int current = activeForRole.incrementAndGet();
 		if (current > this.limits.get(role)) {
@@ -100,16 +107,37 @@ final class LifecycleWorkers {
 			throw new IllegalStateException("Lifecycle worker bound exceeded for " + role);
 		}
 		this.created.get(role).incrementAndGet();
+		AtomicBoolean roleReleased = new AtomicBoolean();
 		try {
 			this.launcher.launch(name, () -> {
+				Throwable taskFailure = null;
 				try {
 					runnable.run();
+				} catch (Throwable throwable) {
+					taskFailure = throwable;
 				} finally {
-					activeForRole.decrementAndGet();
+					if (roleReleased.compareAndSet(false, true))
+						activeForRole.decrementAndGet();
 				}
+				try {
+					afterRoleRelease.run();
+				} catch (Throwable throwable) {
+					if (taskFailure == null)
+						taskFailure = throwable;
+					else if (throwable != taskFailure)
+						taskFailure.addSuppressed(throwable);
+				}
+				if (taskFailure instanceof RuntimeException runtimeException)
+					throw runtimeException;
+				if (taskFailure instanceof Error error)
+					throw error;
+				if (taskFailure != null)
+					throw new IllegalStateException(
+							"Lifecycle worker failed", taskFailure);
 			});
 		} catch (RuntimeException | Error throwable) {
-			activeForRole.decrementAndGet();
+			if (roleReleased.compareAndSet(false, true))
+				activeForRole.decrementAndGet();
 			throw throwable;
 		}
 	}

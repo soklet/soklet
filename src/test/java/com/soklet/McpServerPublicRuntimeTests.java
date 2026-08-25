@@ -197,7 +197,9 @@ public class McpServerPublicRuntimeTests {
 			McpServerDiagnostics firstStopped = server.getDiagnostics();
 			Assertions.assertFalse(server.isStarted());
 			Assertions.assertEquals(McpServerStatus.STOPPED, firstStopped.getStatus());
-			Assertions.assertTrue(firstStopped.getBoundAddress().isEmpty());
+			Assertions.assertEquals(firstAddress,
+					firstStopped.getBoundAddress().orElseThrow(),
+					"A once-bound address remains historical generation evidence.");
 			assertHandlerDiagnostics(firstStopped, 32, 128, 0, 0);
 			Assertions.assertEquals(McpServerStatus.STARTED, firstStarted.getStatus(),
 					"A retained started snapshot must not change after stop.");
@@ -214,7 +216,8 @@ public class McpServerPublicRuntimeTests {
 			assertHandlerDiagnostics(secondStarted, 32, 128, 0, 0);
 			Assertions.assertEquals(McpServerStatus.STOPPED, firstStopped.getStatus(),
 					"A retained stopped snapshot must not change after restart.");
-			Assertions.assertTrue(firstStopped.getBoundAddress().isEmpty());
+			Assertions.assertEquals(firstAddress,
+					firstStopped.getBoundAddress().orElseThrow());
 			assertHandlerDiagnostics(firstStopped, 32, 128, 0, 0);
 			assertSuccessfulDiscovery(sendDiscovery(secondPort,
 					"second-generation", "{}"), "second-generation");
@@ -273,9 +276,10 @@ public class McpServerPublicRuntimeTests {
 				() -> defaultSecurityDiagnosticSnapshot(
 						McpServerStatus.STARTED, Optional.empty(), 2, 3, 0, 0, 0, 0),
 				"A STARTED snapshot without a bound address violates the public contract.");
-		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> defaultSecurityDiagnosticSnapshot(
-						McpServerStatus.STOPPED, Optional.of(address), 2, 3, 0, 0, 0, 0));
+		McpServerDiagnostics retainedStopped = defaultSecurityDiagnosticSnapshot(
+				McpServerStatus.STOPPED, Optional.of(address), 2, 3, 0, 0, 0, 0);
+		Assertions.assertEquals(address,
+				retainedStopped.getBoundAddress().orElseThrow());
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> defaultSecurityDiagnosticSnapshot(
 						McpServerStatus.STARTED, Optional.of(address), 0, 3, 0, 0, 0, 0));
@@ -394,7 +398,8 @@ public class McpServerPublicRuntimeTests {
 			RuntimeState stoppedAgain = bridge.getRuntimeState();
 			Assertions.assertFalse(stoppedAgain.started());
 			Assertions.assertFalse(stoppedAgain.stopRequired());
-			Assertions.assertTrue(stoppedAgain.boundAddress().isEmpty());
+			Assertions.assertEquals(address,
+					stoppedAgain.boundAddress().orElseThrow());
 			Assertions.assertFalse(stoppedAgain.residualHandlers());
 		} finally {
 			bridge.stop();
@@ -417,21 +422,26 @@ public class McpServerPublicRuntimeTests {
 
 		try {
 			soklet.start();
+			InetSocketAddress failedAddress = bridge.getRuntimeState()
+					.boundAddress().orElseThrow();
 			terminateUnexpectedly(eventLoop(bridge));
 			assertTransportFailureEvent(events);
 
 			RuntimeState failed = bridge.getRuntimeState();
 			Assertions.assertFalse(failed.started());
-			Assertions.assertTrue(failed.stopRequired(),
-					"A failed listener generation must still require cleanup.");
-			Assertions.assertTrue(failed.boundAddress().isEmpty());
+			Assertions.assertTrue(((DefaultMcpServer) server)
+					.hasPendingListenerGenerationStop(),
+					"The failed listener generation must remain pending normalization.");
+			Assertions.assertEquals(failedAddress,
+					failed.boundAddress().orElseThrow());
 			Assertions.assertFalse(server.isStarted());
 
 			soklet.stop();
 			RuntimeState stopped = bridge.getRuntimeState();
 			Assertions.assertFalse(stopped.started());
 			Assertions.assertFalse(stopped.stopRequired());
-			Assertions.assertTrue(stopped.boundAddress().isEmpty());
+			Assertions.assertEquals(failedAddress,
+					stopped.boundAddress().orElseThrow());
 
 			soklet.start();
 			int restartedPort = server.getDiagnostics().getBoundAddress()
@@ -456,14 +466,22 @@ public class McpServerPublicRuntimeTests {
 
 		try {
 			server.start();
+			McpTransportLifecycleAdapter lifecycleAdapter = lifecycleAdapter(server);
+			McpTransportLifecycleAdapter.Generation failedGeneration =
+					(McpTransportLifecycleAdapter.Generation)
+							lifecycleAdapter.currentGeneration();
+			InetSocketAddress failedAddress = bridge.getRuntimeState()
+					.boundAddress().orElseThrow();
 			EventLoop failedEventLoop = eventLoop(bridge);
 			terminateUnexpectedly(failedEventLoop);
 
 			RuntimeState failed = bridge.getRuntimeState();
 			Assertions.assertFalse(failed.started());
 			Assertions.assertTrue(failed.stopRequired());
-			Assertions.assertTrue(failed.boundAddress().isEmpty());
+			Assertions.assertEquals(failedAddress,
+					failed.boundAddress().orElseThrow());
 
+			lifecycleAdapter.awaitStop(failedGeneration);
 			server.start();
 			RuntimeState restarted = bridge.getRuntimeState();
 			Assertions.assertTrue(restarted.started());
@@ -748,6 +766,42 @@ public class McpServerPublicRuntimeTests {
 	}
 
 	@Test
+	public void restartPublishesNeverBoundGenerationBeforeStartupCallbacks()
+			throws Exception {
+		List<Optional<InetSocketAddress>> startupAddresses = new ArrayList<>();
+		McpServer server = McpServer.withPort(0)
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
+						List.of(newEndpoint())))
+				.admissionController(McpAdmissionController.acceptAllInstance())
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.protectionConfig(McpProtectionConfig
+						.withDevelopmentEphemeralProtection().build())
+				.build();
+		Soklet soklet = mcpOnlySoklet(server, new LifecycleObserver() {
+			@Override
+			public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+				if (DefaultMcpServer.DEVELOPMENT_EPHEMERAL_PROTECTION_DIAGNOSTIC
+						.equals(logEvent.getMessage()))
+					startupAddresses.add(server.getDiagnostics().getBoundAddress());
+			}
+		});
+
+		try {
+			soklet.start();
+			soklet.stop();
+			Assertions.assertTrue(server.getDiagnostics().getBoundAddress().isPresent(),
+					"A stopped generation retains its successfully bound address.");
+
+			soklet.start();
+			Assertions.assertEquals(List.of(Optional.empty(), Optional.empty()),
+					startupAddresses,
+					"A startup callback must never expose the prior generation's address.");
+		} finally {
+			soklet.stop();
+		}
+	}
+
+	@Test
 	public void startupDoesNotPublishReadyBeforeConfigurationDiagnosticsReturn()
 			throws Exception {
 		int port = findFreePort();
@@ -947,6 +1001,15 @@ public class McpServerPublicRuntimeTests {
 		Field bridgeField = DefaultMcpServer.class.getDeclaredField("runtimeBridge");
 		bridgeField.setAccessible(true);
 		return (McpServerRuntimeBridge) bridgeField.get(server);
+	}
+
+	@NonNull
+	private static McpTransportLifecycleAdapter lifecycleAdapter(
+			@NonNull McpServer server) throws Exception {
+		Field adapterField = DefaultMcpServer.class.getDeclaredField(
+				"lifecycleAdapter");
+		adapterField.setAccessible(true);
+		return (McpTransportLifecycleAdapter) adapterField.get(server);
 	}
 
 	@NonNull

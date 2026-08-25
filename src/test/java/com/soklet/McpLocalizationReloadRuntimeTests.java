@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Timeout;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Field;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -40,7 +41,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -268,12 +268,14 @@ class McpLocalizationReloadRuntimeTests {
 			throws Exception {
 		CountDownLatch contextCaptured = new CountDownLatch(1);
 		CountDownLatch releaseContext = new CountDownLatch(1);
+		CountDownLatch contextResumed = new CountDownLatch(1);
 		BlockingShutdownExecutorService handlerExecutor =
 				new BlockingShutdownExecutorService();
 		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
 				.contextProvider(request -> {
 					contextCaptured.countDown();
 					await(releaseContext);
+					contextResumed.countDown();
 					return McpLocalizationContext.withLocale(Locale.CANADA_FRENCH)
 							.localizer(text ->
 									McpLocalizationResult.useDefaultText())
@@ -281,14 +283,16 @@ class McpLocalizationReloadRuntimeTests {
 				})
 				.build();
 		McpServer server = server(true, localizer,
-				Optional.of(handlerExecutor));
+				Optional.of(handlerExecutor), Duration.ofSeconds(2));
 		CountDownLatch requestFinished = new CountDownLatch(1);
+		AtomicInteger requestFinishes = new AtomicInteger();
 		AtomicReference<McpRequestOutcome> requestOutcome = new AtomicReference<>();
 		LifecycleObserver observer = new LifecycleObserver() {
 			@Override
 			public void didFinishMcpRequestHandling(McpRequestContext context,
 					McpRequestOutcome outcome, McpJsonRpcError error,
 					Duration duration, List<Throwable> throwables) {
+				requestFinishes.incrementAndGet();
 				requestOutcome.set(outcome);
 				requestFinished.countDown();
 			}
@@ -308,9 +312,15 @@ class McpLocalizationReloadRuntimeTests {
 		}, "mcp-localization-stop-race");
 		CompletableFuture<HttpResponse<InputStream>> responseFuture = null;
 		boolean stopStarted = false;
+		boolean clientCanceledBeforeResponseHead = false;
 
 		try {
 			soklet.start();
+			McpTransportLifecycleAdapter lifecycleAdapter =
+					lifecycleAdapter(server);
+			McpTransportLifecycleAdapter.Generation lifecycleGeneration =
+					(McpTransportLifecycleAdapter.Generation)
+							lifecycleAdapter.currentGeneration();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			Request publicRequest = subscriptionRequest("shutdown-open-race",
@@ -332,31 +342,71 @@ class McpLocalizationReloadRuntimeTests {
 			stopThread.start();
 			stopStarted = true;
 
-			// Application-executor shutdown happens after subscription acceptance
-			// closes. Holding it here makes that otherwise tiny interleaving exact.
-			await(handlerExecutor.shutdownStarted());
+			awaitShutdownRequested(lifecycleGeneration);
+			assertEquals(0, handlerExecutor.shutdownInterruptions(),
+					"Graceful quiesce must not interrupt executor shutdown.");
+			assertEquals(0, handlerExecutor.shutdownNowCalls(),
+					"Graceful quiesce must not invoke force-style executor shutdown.");
+			assertEquals(1L, handlerExecutor.shutdownStarted().getCount(),
+					"The active terminal pre-render must unwind before executor shutdown.");
 			releaseContext.countDown();
+			await(contextResumed);
+			// Once terminal pre-render resumes against the fenced generation, let the
+			// exact request observation and cooperative executor drain complete.
+			await(handlerExecutor.shutdownStarted());
 			await(requestFinished);
-			assertEquals(McpRequestOutcome.CANCELED, requestOutcome.get());
 			handlerExecutor.releaseShutdown();
+			assertEquals(1, requestFinishes.get(),
+					"The request must publish exactly one terminal observation.");
+			assertTrue(EnumSet.of(McpRequestOutcome.COMPLETE,
+					McpRequestOutcome.CANCELED).contains(requestOutcome.get()),
+					"Semantic completion or shutdown cancellation may win observation, "
+							+ "but neither may commit the fenced subscription.");
 			stopThread.join(WAIT.toMillis());
 			assertFalse(stopThread.isAlive(), "Server stop did not finish.");
+			if (!responseFuture.isDone())
+				clientCanceledBeforeResponseHead = responseFuture.cancel(true);
 			if (stopFailure.get() != null)
 				throw new AssertionError("Server stop failed.", stopFailure.get());
+			InternalShutdownResult shutdownResult = lifecycleAdapter
+					.result(lifecycleGeneration).orElseThrow();
+			InternalParticipantShutdownResult participant = shutdownResult
+					.participantResult(InternalParticipantKind.MCP).orElseThrow();
+			assertTrue(EnumSet.of(InternalShutdownDisposition.GRACEFUL,
+					InternalShutdownDisposition.FORCED).contains(
+							shutdownResult.disposition()),
+					() -> "participant=" + participant.disposition()
+							+ ", residual=" + participant.residualActivity()
+							+ ", failures=" + participant.failures());
+			InternalParticipantShutdownDisposition expectedParticipantDisposition =
+					shutdownResult.disposition()
+							== InternalShutdownDisposition.GRACEFUL
+							? InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION
+							: InternalParticipantShutdownDisposition.FORCED_TERMINATION;
+			assertEquals(expectedParticipantDisposition,
+					participant.disposition(),
+					"The participant phase must match the exact shared-deadline winner.");
+			assertTrue(participant.residualActivity().isEmpty());
+			assertTrue(participant.failures().isEmpty());
+			assertEquals(0, handlerExecutor.shutdownNowCalls(),
+					"Application executor shutdown remains cooperative during force.");
 
-			try {
-				HttpResponse<InputStream> response = responseFuture
-						.orTimeout(WAIT.toMillis(), TimeUnit.MILLISECONDS)
-						.join();
-				try (InputStream ignored = response.body()) {
-					assertNotEquals(200, response.statusCode(),
-							"Shutdown must not commit an SSE head after acceptance closes.");
+			if (!clientCanceledBeforeResponseHead) {
+				try {
+					HttpResponse<InputStream> response = responseFuture
+							.orTimeout(WAIT.toMillis(),
+									java.util.concurrent.TimeUnit.MILLISECONDS)
+							.join();
+					try (InputStream ignored = response.body()) {
+						assertNotEquals(200, response.statusCode(),
+								"Shutdown must not commit an SSE head after acceptance closes.");
+					}
+				} catch (CompletionException exception) {
+					// Shutdown closes an exchange for which no response head was committed.
+					assertTrue(exception.getCause() instanceof IOException,
+							() -> "Expected a connection failure, but received "
+									+ exception.getCause());
 				}
-			} catch (CompletionException exception) {
-				// A connection closed without a response is the expected alternative.
-				assertTrue(exception.getCause() instanceof IOException,
-						() -> "Expected a connection failure, but received "
-								+ exception.getCause());
 			}
 		} finally {
 			releaseContext.countDown();
@@ -377,7 +427,15 @@ class McpLocalizationReloadRuntimeTests {
 		assertFalse(stopThread.isAlive(), "Server stop did not finish.");
 		if (stopFailure.get() != null)
 			throw new AssertionError("Server stop failed.", stopFailure.get());
-		assertEquals(0, server.getDiagnostics().getActiveSubscriptions());
+		assertEquals(0, handlerExecutor.shutdownNowCalls(),
+				"MCP force signals exchanges but preserves graceful executor shutdown.");
+		assertEquals(1, requestFinishes.get());
+		assertTrue(lifecycleAdapter(server).retentionSummary().isEmpty());
+		McpServerDiagnostics diagnostics = server.getDiagnostics();
+		assertEquals(0, diagnostics.getActiveHandlerExecutions());
+		assertEquals(0, diagnostics.getQueuedRequests());
+		assertEquals(0, diagnostics.getActiveRequestStreams());
+		assertEquals(0, diagnostics.getActiveSubscriptions());
 	}
 
 	@Test
@@ -545,16 +603,24 @@ class McpLocalizationReloadRuntimeTests {
 				java.util.concurrent.Executors.newSingleThreadExecutor();
 		private final CountDownLatch shutdownStarted = new CountDownLatch(1);
 		private final CountDownLatch releaseShutdown = new CountDownLatch(1);
+		private final AtomicInteger shutdownInterruptions = new AtomicInteger();
+		private final AtomicInteger shutdownNowCalls = new AtomicInteger();
 
 		@Override
 		public void shutdown() {
 			this.shutdownStarted.countDown();
-			await(this.releaseShutdown);
+			try {
+				this.releaseShutdown.await();
+			} catch (InterruptedException exception) {
+				this.shutdownInterruptions.incrementAndGet();
+				Thread.currentThread().interrupt();
+			}
 			this.delegate.shutdown();
 		}
 
 		@Override
 		public List<Runnable> shutdownNow() {
+			this.shutdownNowCalls.incrementAndGet();
 			this.releaseShutdown.countDown();
 			return this.delegate.shutdownNow();
 		}
@@ -587,6 +653,14 @@ class McpLocalizationReloadRuntimeTests {
 		private void releaseShutdown() {
 			this.releaseShutdown.countDown();
 		}
+
+		private int shutdownInterruptions() {
+			return this.shutdownInterruptions.get();
+		}
+
+		private int shutdownNowCalls() {
+			return this.shutdownNowCalls.get();
+		}
 	}
 
 	private static McpLocalizer localizer(
@@ -608,6 +682,21 @@ class McpLocalizationReloadRuntimeTests {
 	private static McpServer server(boolean subscriptions,
 			McpLocalizer localizer,
 			Optional<java.util.concurrent.ExecutorService> handlerExecutor) {
+		return server(subscriptions, localizer, handlerExecutor, Optional.empty());
+	}
+
+	private static McpServer server(boolean subscriptions,
+			McpLocalizer localizer,
+			Optional<java.util.concurrent.ExecutorService> handlerExecutor,
+			Duration shutdownTimeout) {
+		return server(subscriptions, localizer, handlerExecutor,
+				Optional.of(shutdownTimeout));
+	}
+
+	private static McpServer server(boolean subscriptions,
+			McpLocalizer localizer,
+			Optional<java.util.concurrent.ExecutorService> handlerExecutor,
+			Optional<Duration> shutdownTimeout) {
 		McpEndpoint.Builder builder = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation
 						.withNameAndVersion("localization-reload", "1.0")
@@ -643,7 +732,7 @@ class McpLocalizationReloadRuntimeTests {
 		if (subscriptions)
 			builder.subscriptions(subscriptions());
 
-		return server(builder.build(), localizer, handlerExecutor);
+		return server(builder.build(), localizer, handlerExecutor, shutdownTimeout);
 	}
 
 	private static McpServer server(McpEndpoint endpoint,
@@ -654,6 +743,13 @@ class McpLocalizationReloadRuntimeTests {
 	private static McpServer server(McpEndpoint endpoint,
 			McpLocalizer localizer,
 			Optional<java.util.concurrent.ExecutorService> handlerExecutor) {
+		return server(endpoint, localizer, handlerExecutor, Optional.empty());
+	}
+
+	private static McpServer server(McpEndpoint endpoint,
+			McpLocalizer localizer,
+			Optional<java.util.concurrent.ExecutorService> handlerExecutor,
+			Optional<Duration> shutdownTimeout) {
 		McpServer.Builder builder = McpServer.withPort(0)
 				.host(LOOPBACK)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
@@ -666,6 +762,7 @@ class McpLocalizationReloadRuntimeTests {
 
 		if (localizer != null)
 			builder.localizer(localizer);
+		shutdownTimeout.ifPresent(builder::shutdownTimeout);
 		handlerExecutor.ifPresent(executor -> builder
 				.requestHandlerExecutorServiceSupplier(() -> executor));
 
@@ -752,6 +849,24 @@ class McpLocalizationReloadRuntimeTests {
 			Thread.currentThread().interrupt();
 			throw new AssertionError(e);
 		}
+	}
+
+	private static void awaitShutdownRequested(
+			McpTransportLifecycleAdapter.Generation generation) {
+		long deadline = System.nanoTime() + WAIT.toNanos();
+		while (!generation.shutdownRequested()
+				&& System.nanoTime() - deadline < 0L)
+			Thread.onSpinWait();
+		assertTrue(generation.shutdownRequested(),
+				"MCP shutdown intent was not published before the test deadline.");
+	}
+
+	private static McpTransportLifecycleAdapter lifecycleAdapter(
+			McpServer server) throws ReflectiveOperationException {
+		Field adapterField = DefaultMcpServer.class.getDeclaredField(
+				"lifecycleAdapter");
+		adapterField.setAccessible(true);
+		return (McpTransportLifecycleAdapter) adapterField.get(server);
 	}
 
 	private static List<String> drain(McpSimulation simulation) {

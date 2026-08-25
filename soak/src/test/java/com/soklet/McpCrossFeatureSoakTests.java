@@ -132,13 +132,14 @@ public class McpCrossFeatureSoakTests {
 			// Warm every feature and lifecycle path before taking a stopped-state
 			// resource baseline. The same Soklet and MCP server are then restarted.
 			soklet.start();
-			performFeatureCycle(boundPort(mcpServer), "warmup", state,
+			InetSocketAddress warmupAddress = boundAddress(mcpServer);
+			performFeatureCycle(warmupAddress.getPort(), "warmup", state,
 					publisher, true);
 			awaitRuntimeIdle("warmup", mcpServer, metricsCollector,
 					warmupTotals, state, PROFILE.settleTimeout(),
 					PROFILE.metricDeliveryTimeout());
 			soklet.stop();
-			assertStopped(mcpServer);
+			assertStoppedAfterBinding(mcpServer, warmupAddress);
 			Assertions.assertEquals(0, state.openClientSockets.get());
 			Assertions.assertEquals(0, publisher.activeRegistrationCount());
 			baseline = SoakResourceSnapshot.captureAfterGc();
@@ -147,7 +148,8 @@ public class McpCrossFeatureSoakTests {
 			for (int shutdownCycle = 0;
 					shutdownCycle < PROFILE.shutdownCycles(); shutdownCycle++) {
 				soklet.start();
-				int port = boundPort(mcpServer);
+				InetSocketAddress cycleAddress = boundAddress(mcpServer);
+				int port = cycleAddress.getPort();
 
 				if (shutdownCycle == 0) {
 					RunResult run = runConcurrent(PROFILE.concurrentClients(),
@@ -171,7 +173,7 @@ public class McpCrossFeatureSoakTests {
 						"shutdown-" + shutdownCycle, state, publisher,
 						metricsCollector, expectedRuntimeMetricTotals(
 								1 + workloadFeatureCycles, shutdownCycle + 1));
-				assertStopped(mcpServer);
+				assertStoppedAfterBinding(mcpServer, cycleAddress);
 			}
 
 			Assertions.assertNotNull(mixedRun);
@@ -897,7 +899,7 @@ public class McpCrossFeatureSoakTests {
 						null, null)));
 		Assertions.assertThrows(IllegalStateException.class, mcpServer::start,
 				"Live start must reject residual simulator work before binding.");
-		assertStopped(mcpServer);
+		assertNeverBoundStopped(mcpServer);
 		Assertions.assertEquals(0,
 				mcpServer.getDiagnostics().getActiveHandlerExecutions());
 		Assertions.assertTrue(metricsCollector.handlerExecutionsStarted()
@@ -923,7 +925,7 @@ public class McpCrossFeatureSoakTests {
 						e);
 			}
 		});
-		assertStopped(mcpServer);
+		assertNeverBoundStopped(mcpServer);
 	}
 
 	@NonNull
@@ -1050,7 +1052,7 @@ public class McpCrossFeatureSoakTests {
 			@NonNull CountingSubscriptionPublisher publisher,
 			@NonNull CountingMcpMetricsCollector metrics,
 			@NonNull CountingLifecycle lifecycle) {
-		assertStopped(mcpServer);
+		assertNeverBoundStopped(mcpServer);
 		McpServerDiagnostics diagnostics = mcpServer.getDiagnostics();
 		Assertions.assertEquals(0, diagnostics.getActiveHandlerExecutions());
 		Assertions.assertEquals(0, diagnostics.getQueuedRequests());
@@ -1245,6 +1247,8 @@ public class McpCrossFeatureSoakTests {
 		String blockingInvocation = cycleId + "-blocking";
 		String notifications = "{\"resourcesListChanged\":true,"
 				+ "\"resourceSubscriptions\":[]}";
+		InetSocketAddress expectedAddress = boundAddress(mcpServer);
+		Assertions.assertEquals(port, expectedAddress.getPort());
 		RawMcpClient subscription = RawMcpClient.post(port,
 				subscriptionBody(subscriptionId, notifications),
 				"subscriptions/listen", null, state);
@@ -1292,7 +1296,7 @@ public class McpCrossFeatureSoakTests {
 			observation.awaitCanceledAndExited(PROFILE.settleTimeout(),
 					StreamTerminationReason.SERVER_STOPPING);
 			joinStopThread(stopThread, stopFailure);
-			assertStopped(mcpServer);
+			assertStoppedAfterBinding(mcpServer, expectedAddress);
 			Assertions.assertEquals(0, publisher.activeRegistrationCount());
 			blocking.close();
 			blocking = null;
@@ -1531,7 +1535,17 @@ public class McpCrossFeatureSoakTests {
 						diagnostics.getActiveSubscriptions());
 	}
 
-	private static void assertStopped(@NonNull McpServer mcpServer) {
+	private static void assertStoppedAfterBinding(@NonNull McpServer mcpServer,
+			@NonNull InetSocketAddress expectedAddress) {
+		McpServerDiagnostics diagnostics = mcpServer.getDiagnostics();
+		Assertions.assertFalse(mcpServer.isStarted());
+		Assertions.assertEquals(McpServerStatus.STOPPED,
+				diagnostics.getStatus());
+		Assertions.assertEquals(requireNonNull(expectedAddress),
+				diagnostics.getBoundAddress().orElseThrow());
+	}
+
+	private static void assertNeverBoundStopped(@NonNull McpServer mcpServer) {
 		McpServerDiagnostics diagnostics = mcpServer.getDiagnostics();
 		Assertions.assertFalse(mcpServer.isStarted());
 		Assertions.assertEquals(McpServerStatus.STOPPED,
@@ -1539,14 +1553,15 @@ public class McpCrossFeatureSoakTests {
 		Assertions.assertTrue(diagnostics.getBoundAddress().isEmpty());
 	}
 
-	private static int boundPort(@NonNull McpServer mcpServer) {
+	@NonNull
+	private static InetSocketAddress boundAddress(@NonNull McpServer mcpServer) {
 		McpServerDiagnostics diagnostics = mcpServer.getDiagnostics();
 		Assertions.assertEquals(McpServerStatus.STARTED,
 				diagnostics.getStatus());
 		InetSocketAddress address = diagnostics.getBoundAddress().orElseThrow();
 		Assertions.assertTrue(address.getAddress().isLoopbackAddress());
 		Assertions.assertTrue(address.getPort() > 0);
-		return address.getPort();
+		return address;
 	}
 
 	@NonNull

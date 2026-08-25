@@ -314,6 +314,172 @@ class BuiltInTransportLifecycleAdapterTests {
 		Assertions.assertTrue(adapter.retentionSummary().isPresent());
 	}
 
+	@Test
+	void completedResultIsPublishedOnlyAfterCoordinatorRoleRelease() {
+		LifecycleWorkers workers = new LifecycleWorkers(
+				(name, runnable) -> runnable.run());
+		RecordingOperations operations = new RecordingOperations(
+				attempt -> true, Set.of());
+		operations.onRelease = () -> Assertions.assertEquals(0,
+				workers.active(LifecycleWorkers.Role.COORDINATOR),
+				"Restart eligibility cannot precede coordinator role release.");
+		BuiltInTransportLifecycleAdapter adapter =
+				new BuiltInTransportLifecycleAdapter(InternalParticipantKind.HTTP,
+						operations, () -> Duration.ZERO, Duration.ZERO,
+						() -> 0L, workers);
+
+		BuiltInTransportLifecycleAdapter.Generation first = adapter.beginStart();
+		adapter.markReady(first);
+		adapter.stop();
+		BuiltInTransportLifecycleAdapter.Generation second = adapter.beginStart();
+		adapter.markReady(second);
+		adapter.stop();
+
+		Assertions.assertNotSame(first, second);
+		Assertions.assertEquals(2, operations.releaseCount.get());
+		Assertions.assertEquals(0,
+				workers.active(LifecycleWorkers.Role.COORDINATOR));
+	}
+
+	@Test
+	void exactGenerationOperationsRejectForeignTokensWithoutMutation() {
+		RecordingOperations firstOperations = new RecordingOperations(
+				attempt -> true, Set.of());
+		RecordingOperations secondOperations = new RecordingOperations(
+				attempt -> true, Set.of());
+		BuiltInTransportLifecycleAdapter first = adapter(firstOperations);
+		BuiltInTransportLifecycleAdapter second = adapter(secondOperations);
+		BuiltInTransportLifecycleAdapter.Generation firstGeneration =
+				first.beginStart();
+		BuiltInTransportLifecycleAdapter.Generation secondGeneration =
+				second.beginStart();
+		first.markReady(firstGeneration);
+		second.markReady(secondGeneration);
+
+		IllegalStateException resultFailure = Assertions.assertThrows(
+				IllegalStateException.class, () -> first.result(secondGeneration));
+		IllegalStateException waitFailure = Assertions.assertThrows(
+				IllegalStateException.class, () -> first.awaitStop(secondGeneration));
+		Assertions.assertEquals("Foreign built-in transport lifecycle generation",
+				resultFailure.getMessage());
+		Assertions.assertEquals("Foreign built-in transport lifecycle generation",
+				waitFailure.getMessage());
+		Assertions.assertTrue(first.result(firstGeneration).isEmpty());
+		Assertions.assertTrue(second.result(secondGeneration).isEmpty());
+		Assertions.assertEquals(0, firstOperations.quiesceCount.get());
+		Assertions.assertEquals(0, secondOperations.quiesceCount.get());
+
+		first.stop();
+		second.stop();
+		Assertions.assertTrue(first.result(firstGeneration).orElseThrow().isComplete());
+		Assertions.assertTrue(second.result(secondGeneration).orElseThrow().isComplete());
+	}
+
+	@Test
+	void coordinatorLaunchFailureFreezesUnknownResultInsteadOfStrandingStop() {
+		RuntimeException launchFailure = new IllegalStateException(
+				"expected coordinator launch failure");
+		LifecycleWorkers workers = new LifecycleWorkers((name, runnable) -> {
+			throw launchFailure;
+		});
+		RecordingOperations operations = new RecordingOperations(
+				attempt -> false, Set.of(InternalResidualActivityKind.EVENT_LOOP));
+		BuiltInTransportLifecycleAdapter adapter =
+				new BuiltInTransportLifecycleAdapter(InternalParticipantKind.HTTP,
+						operations, () -> Duration.ZERO, Duration.ZERO,
+						() -> 0L, workers);
+		BuiltInTransportLifecycleAdapter.Generation generation = adapter.beginStart();
+		adapter.markReady(generation);
+
+		adapter.stop();
+
+		InternalParticipantShutdownResult participant = participant(adapter);
+		Assertions.assertEquals(
+				InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+				participant.disposition());
+		Assertions.assertEquals(List.of(launchFailure), participant.failures());
+		Assertions.assertEquals(Set.of(InternalResidualActivityKind.EVENT_LOOP),
+				participant.residualActivity());
+		Assertions.assertFalse(adapter.result(generation).orElseThrow().isComplete());
+		Assertions.assertEquals(0,
+				workers.active(LifecycleWorkers.Role.COORDINATOR));
+	}
+
+	@Test
+	void launchedThenThrowingCoordinatorCannotRepublishOrReleaseEvidence()
+			throws Exception {
+		RuntimeException launchFailure = new IllegalStateException(
+				"expected post-launch failure");
+		CountDownLatch releaseLaunchedWorker = new CountDownLatch(1);
+		AtomicReference<Thread> launchedWorker = new AtomicReference<>();
+		LifecycleWorkers workers = new LifecycleWorkers((name, runnable) -> {
+			if (!name.endsWith("lifecycle-coordinator")) {
+				runnable.run();
+				return;
+			}
+			Thread worker = new Thread(() -> {
+				awaitUninterruptibly(releaseLaunchedWorker);
+				runnable.run();
+			}, "adapter-launched-then-throwing-coordinator");
+			worker.setDaemon(true);
+			launchedWorker.set(worker);
+			worker.start();
+			throw launchFailure;
+		});
+		RecordingOperations operations = new RecordingOperations(
+				attempt -> true, Set.of(InternalResidualActivityKind.EVENT_LOOP));
+		BuiltInTransportLifecycleAdapter adapter =
+				new BuiltInTransportLifecycleAdapter(InternalParticipantKind.HTTP,
+						operations, () -> Duration.ZERO, Duration.ZERO,
+						() -> 0L, workers);
+		BuiltInTransportLifecycleAdapter.Generation generation = adapter.beginStart();
+		adapter.markReady(generation);
+
+		adapter.stop();
+		InternalShutdownResult frozen = adapter.result(generation).orElseThrow();
+		releaseLaunchedWorker.countDown();
+		Thread worker = launchedWorker.get();
+		Assertions.assertNotNull(worker);
+		worker.join(TimeUnit.SECONDS.toMillis(2));
+
+		Assertions.assertFalse(worker.isAlive());
+		Assertions.assertSame(frozen, adapter.result(generation).orElseThrow());
+		Assertions.assertEquals(List.of(launchFailure),
+				participant(adapter).failures());
+		Assertions.assertEquals(0, operations.releaseCount.get(),
+				"A losing late publisher must not release retained evidence.");
+		Assertions.assertEquals(0,
+				workers.active(LifecycleWorkers.Role.COORDINATOR));
+	}
+
+	@Test
+	void evidenceReleaseFailureFreezesUnknownAndPreservesEarlierFailure() {
+		Throwable transportFailure = new IllegalStateException(
+				"expected transport failure");
+		RuntimeException releaseFailure = new IllegalStateException(
+				"expected evidence release failure");
+		RecordingOperations operations = new RecordingOperations(
+				attempt -> true, Set.of(InternalResidualActivityKind.EVENT_LOOP));
+		operations.releaseFailure = releaseFailure;
+		BuiltInTransportLifecycleAdapter adapter = adapter(operations);
+		BuiltInTransportLifecycleAdapter.Generation generation = adapter.beginStart();
+		adapter.markReady(generation);
+
+		adapter.signalUnexpectedFailure(generation, transportFailure);
+
+		InternalParticipantShutdownResult participant = participant(adapter);
+		Assertions.assertEquals(
+				InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+				participant.disposition());
+		Assertions.assertEquals(List.of(transportFailure, releaseFailure),
+				participant.failures());
+		Assertions.assertEquals(Set.of(InternalResidualActivityKind.EVENT_LOOP),
+				participant.residualActivity());
+		Assertions.assertEquals(1, operations.releaseCount.get());
+		Assertions.assertFalse(adapter.result(generation).orElseThrow().isComplete());
+		Assertions.assertThrows(IllegalStateException.class, adapter::beginStart);
+	}
+
 	@NonNull
 	private static BuiltInTransportLifecycleAdapter adapter(
 			@NonNull RecordingOperations operations) {
@@ -374,7 +540,9 @@ class BuiltInTransportLifecycleAdapterTests {
 		private final List<Long> observedDeadlines = new ArrayList<>();
 		private volatile Runnable onQuiesce = () -> {};
 		private volatile Runnable onAwait = () -> {};
+		private volatile Runnable onRelease = () -> {};
 		private volatile RuntimeException quiesceFailure;
+		private volatile RuntimeException releaseFailure;
 
 		private RecordingOperations(@NonNull IntPredicate proofOnAttempt,
 				@NonNull Set<InternalResidualActivityKind> residual) {
@@ -411,6 +579,9 @@ class BuiltInTransportLifecycleAdapterTests {
 		@Override
 		public void releaseTerminatedEvidence() {
 			this.releaseCount.incrementAndGet();
+			this.onRelease.run();
+			if (this.releaseFailure != null)
+				throw this.releaseFailure;
 		}
 	}
 }

@@ -324,10 +324,11 @@ public class McpQueuedExecutionWinnerElectionTests {
 		Method submitRequest = McpHttpServerRuntime.class.getDeclaredMethod(
 				"submitRequest", ThreadPoolExecutor.class,
 				McpApplicationExecution.class, InetSocketAddress.class,
-				MicrohttpRequest.class, Consumer.class);
+				MicrohttpRequest.class, com.soklet.Request.class,
+				McpSimulationRuntime.class, Runnable.class, Consumer.class);
 		submitRequest.setAccessible(true);
 		invoke(submitRequest, runtime, processor(runtime), application(runtime),
-				address, request, callback);
+				address, request, null, null, null, callback);
 	}
 
 	private static void cancel(McpHttpServerRuntime runtime,

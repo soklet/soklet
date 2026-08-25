@@ -481,6 +481,7 @@ public final class McpOutboundChannel {
 				? StreamTerminationReason.CLIENT_DISCONNECTED
 				: reason;
 		boolean notify;
+		Runnable wake;
 
 		synchronized (lock) {
 			if (closed)
@@ -488,12 +489,22 @@ public final class McpOutboundChannel {
 
 			closed = true;
 			clearBufferedData();
+			// Closing an idle streaming source changes hasRemaining() from true to
+			// false without making the source write-ready.  Wake the installed writer
+			// explicitly so it can observe completion instead of waiting until a later
+			// force-phase selector wakeup.
+			wake = reserveTerminalWakeIfNeeded();
 			notify = reserveTerminationNotification();
 			lock.notifyAll();
 		}
 
-		if (notify)
-			listener.didTerminate(terminalWritten ? StreamTerminationReason.COMPLETED : effectiveReason, cause);
+		try {
+			if (notify)
+				listener.didTerminate(terminalWritten
+						? StreamTerminationReason.COMPLETED : effectiveReason, cause);
+		} finally {
+			wake.run();
+		}
 	}
 
 	private final class WritableSourceFacade implements WritableSource {
@@ -552,6 +563,14 @@ public final class McpOutboundChannel {
 	@NonNull
 	private Runnable reserveWakeIfNeeded() {
 		if (!callbackInstalled || wakePending || !isReadyToWriteUnderLock())
+			return McpOutboundChannel::noOp;
+
+		wakePending = true;
+		return writeReadyCallback;
+	}
+
+	private Runnable reserveTerminalWakeIfNeeded() {
+		if (!callbackInstalled || wakePending)
 			return McpOutboundChannel::noOp;
 
 		wakePending = true;

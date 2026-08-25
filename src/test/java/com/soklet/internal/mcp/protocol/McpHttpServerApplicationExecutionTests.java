@@ -1299,7 +1299,7 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	@Test
-	public void shutdown_interrupts_active_handler_without_promoting_queued_work()
+	public void lifecycle_grace_preserves_active_handler_then_force_interrupts_without_promoting_queued_work()
 			throws Exception {
 		CountDownLatch firstEntered = new CountDownLatch(1);
 		CountDownLatch firstInterrupted = new CountDownLatch(1);
@@ -1327,7 +1327,8 @@ public class McpHttpServerApplicationExecutionTests {
 		Socket queuedClient = null;
 
 		try {
-			int port = runtime.start().getPort();
+			InetSocketAddress boundAddress = runtime.start();
+			int port = boundAddress.getPort();
 			activeClient = openRequest(port, "\"active-at-stop\"");
 			Assertions.assertTrue(firstEntered.await(5, TimeUnit.SECONDS),
 					"The active shutdown handler did not enter.");
@@ -1338,16 +1339,26 @@ public class McpHttpServerApplicationExecutionTests {
 							&& snapshot.retainedExchanges() == 2);
 			Assertions.assertEquals(2, beforeStop.retainedTransportLeases());
 
-			runtime.stop();
+			runtime.quiesceLifecycle();
+			Assertions.assertEquals(1L, firstInterrupted.getCount(),
+					"Graceful MCP quiesce must not interrupt the active handler.");
+			Assertions.assertEquals(1, invocations.get(),
+					"Graceful quiesce must not promote queued work.");
+
+			runtime.forceLifecycle();
 
 			Assertions.assertTrue(firstInterrupted.await(5, TimeUnit.SECONDS),
-					"Shutdown did not interrupt the active handler.");
+					"The force phase did not interrupt the active handler.");
 			Assertions.assertTrue(firstExited.await(5, TimeUnit.SECONDS),
 					"The interrupted active handler did not exit promptly.");
 			Assertions.assertEquals(1, invocations.get(),
-					"Shutdown must cancel queued work without promoting it.");
+					"Force must cancel queued work without promoting it.");
+			Assertions.assertTrue(runtime.awaitLifecycleTermination(
+					System.nanoTime() + TimeUnit.SECONDS.toNanos(5)));
+			runtime.releaseLifecycleEvidence();
 			Assertions.assertFalse(runtime.isStarted());
-			Assertions.assertTrue(runtime.boundAddress().isEmpty());
+			Assertions.assertEquals(boundAddress,
+					runtime.boundAddress().orElseThrow());
 			Assertions.assertTrue(runtime.applicationExecutionSnapshot().isEmpty(),
 					"Clean shutdown must not retain exchanges, transport leases, or handler work.");
 

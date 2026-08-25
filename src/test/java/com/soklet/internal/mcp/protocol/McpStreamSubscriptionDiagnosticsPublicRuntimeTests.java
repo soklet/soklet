@@ -48,8 +48,8 @@ import org.junit.jupiter.api.Timeout;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.net.URI;
+import java.nio.channels.Selector;
 import java.time.Duration;
 import java.util.List;
 import java.util.Set;
@@ -248,8 +248,10 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 
 			McpServerDiagnostics failedBeforeCleanup;
 			synchronized (subscriptionLock) {
-				termination = terminationExecutor.submit(() ->
-						handleUnexpectedTermination(runtime, eventLoop));
+				termination = terminationExecutor.submit(() -> {
+					terminateUnexpectedly(eventLoop);
+					return null;
+				});
 				failedBeforeCleanup = awaitDiagnostics(server,
 						diagnostics -> diagnostics.getStatus()
 								== McpServerStatus.STOPPED_WITH_RESIDUAL_HANDLERS
@@ -259,8 +261,8 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 			McpServerDiagnostics failedAfterCleanup = awaitDiagnostics(server,
 					diagnostics -> diagnostics.getStatus() == McpServerStatus.STOPPED
 							&& streamPair(diagnostics, 0, 0));
-			// Transport termination is the callback precondition; this seam owns
-			// diagnostics cleanup only, and the still-live test EventLoop owns writes.
+			// The terminated-EventLoop callback signals the exact generation while
+			// this interposition delays coordinator-owned quiesce/force cleanup.
 			assertStreamPair(failedBeforeCleanup, 1, 1);
 			assertStreamPair(failedAfterCleanup, 0, 0);
 
@@ -500,18 +502,13 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 		return field.get(target);
 	}
 
-	private static void handleUnexpectedTermination(@NonNull Object runtime,
-			@NonNull EventLoop eventLoop) {
-		try {
-			Method method = runtime.getClass().getDeclaredMethod(
-					"handleUnexpectedTermination", EventLoop.class, Throwable.class);
-			method.setAccessible(true);
-			method.invoke(runtime, eventLoop,
-					new IllegalStateException("expected diagnostics test failure"));
-		} catch (ReflectiveOperationException exception) {
-			throw new AssertionError("Unable to invoke unexpected termination.",
-					exception.getCause() == null ? exception : exception.getCause());
-		}
+	private static void terminateUnexpectedly(@NonNull EventLoop eventLoop)
+			throws Exception {
+		Field selectorField = EventLoop.class.getDeclaredField("selector");
+		selectorField.setAccessible(true);
+		((Selector) selectorField.get(eventLoop)).close();
+		Assertions.assertTrue(eventLoop.join(Duration.ofSeconds(2)),
+				"The unexpectedly terminated MCP event loop did not exit.");
 	}
 
 	@SuppressWarnings("unchecked")

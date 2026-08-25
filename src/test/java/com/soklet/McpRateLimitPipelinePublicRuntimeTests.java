@@ -485,7 +485,7 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 		server.stop();
 		McpServerDiagnostics diagnostics = server.getDiagnostics();
 		Assertions.assertEquals(McpServerStatus.STOPPED, diagnostics.getStatus());
-		Assertions.assertTrue(diagnostics.getBoundAddress().isEmpty());
+		Assertions.assertTrue(diagnostics.getBoundAddress().isPresent());
 		assertZeroLoad(diagnostics);
 	}
 

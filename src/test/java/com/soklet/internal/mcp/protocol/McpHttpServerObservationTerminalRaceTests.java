@@ -69,6 +69,82 @@ class McpHttpServerObservationTerminalRaceTests {
 	private static final String APPLICATION_METHOD = "test/execute";
 
 	@Test
+	void lifecycleLeaseOutlivesBodyCompletionUntilApplicationExchangeUnwinds()
+			throws Exception {
+		RecordingObservation observation = new RecordingObservation();
+		AtomicInteger releases = new AtomicInteger();
+		AtomicInteger releaseCountDuringCallback = new AtomicInteger(-1);
+		AtomicReference<Throwable> callbackFailure = new AtomicReference<>();
+		McpHttpServerRuntime runtime = runtime(acceptingPolicy(),
+				invocation -> completeResult("body-first"), observation,
+				McpApplicationClock.SYSTEM);
+
+		try {
+			InetSocketAddress address = runtime.start();
+			MicrohttpRequest request = request(address, "body-first-lease");
+			submit(runtime, address, request, releases::incrementAndGet, response -> {
+				try {
+					completeBody(response);
+					releaseCountDuringCallback.set(releases.get());
+				} catch (Throwable throwable) {
+					callbackFailure.set(throwable);
+				}
+			});
+
+			awaitCondition(() -> releaseCountDuringCallback.get() >= 0,
+					"The response body did not complete in the application callback.");
+			Assertions.assertNull(callbackFailure.get());
+			Assertions.assertEquals(0, releaseCountDuringCallback.get(),
+					"Body completion cannot release the generation lease while the "
+							+ "application exchange remains on the handler stack.");
+			awaitCondition(() -> releases.get() == 1,
+					"Application unwind did not release the completed-body lease.");
+			awaitClean(runtime);
+			Assertions.assertEquals(1, releases.get());
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
+	void lifecycleLeaseOutlivesApplicationExchangeUntilBodyCompletion()
+			throws Exception {
+		RecordingObservation observation = new RecordingObservation();
+		AtomicInteger releases = new AtomicInteger();
+		AtomicReference<MicrohttpResponse> response = new AtomicReference<>();
+		McpHttpServerRuntime runtime = runtime(acceptingPolicy(),
+				invocation -> completeResult("handler-first"), observation,
+				McpApplicationClock.SYSTEM);
+
+		try {
+			InetSocketAddress address = runtime.start();
+			MicrohttpRequest request = request(address, "handler-first-lease");
+			submit(runtime, address, request, releases::incrementAndGet,
+					offered -> Assertions.assertTrue(
+							response.compareAndSet(null, offered)));
+
+			awaitValue(response, "The nonstreaming response was not offered.");
+			awaitCondition(() -> {
+				McpApplicationExecutionSnapshot snapshot = runtime
+						.applicationExecutionSnapshot().orElseThrow();
+				return snapshot.activeHandlerSlots() == 0
+						&& snapshot.retainedExchanges() == 0;
+			}, "The application exchange did not unwind.");
+			Assertions.assertEquals(0, releases.get(),
+					"Application unwind cannot release the generation lease before "
+							+ "the response body terminates.");
+			Assertions.assertEquals(1,
+					runtime.requestExecutionSnapshot().retainedRequestControls());
+
+			completeBody(response.get());
+			awaitClean(runtime);
+			Assertions.assertEquals(1, releases.get());
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
 	void protocol_completion_cannot_preempt_inline_stream_terminal_owner()
 			throws Exception {
 		InlineExecutorService executor = new InlineExecutorService();
@@ -726,12 +802,21 @@ class McpHttpServerObservationTerminalRaceTests {
 	private static void submit(McpHttpServerRuntime runtime,
 			InetSocketAddress address, MicrohttpRequest request,
 			Consumer<MicrohttpResponse> callback) throws Exception {
+		submit(runtime, address, request, null, callback);
+	}
+
+	private static void submit(McpHttpServerRuntime runtime,
+			InetSocketAddress address, MicrohttpRequest request,
+			@Nullable Runnable lifecycleAdmission,
+			Consumer<MicrohttpResponse> callback) throws Exception {
 		Method submitRequest = McpHttpServerRuntime.class.getDeclaredMethod(
 				"submitRequest", ThreadPoolExecutor.class, McpApplicationExecution.class,
-				InetSocketAddress.class, MicrohttpRequest.class, Consumer.class);
+				InetSocketAddress.class, MicrohttpRequest.class,
+				com.soklet.Request.class, McpSimulationRuntime.class, Runnable.class,
+				Consumer.class);
 		submitRequest.setAccessible(true);
 		invoke(submitRequest, runtime, processor(runtime), application(runtime),
-				address, request, callback);
+				address, request, null, null, lifecycleAdmission, callback);
 	}
 
 	private static void cancel(McpHttpServerRuntime runtime,

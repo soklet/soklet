@@ -228,12 +228,20 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 		Soklet owner = soklet(server, collector,
 				LifecycleObserver.defaultInstance());
 		McpServerRuntimeBridge bridge = runtimeBridge(server);
+		McpTransportLifecycleAdapter lifecycleAdapter = lifecycleAdapter(server);
 
 		try {
 			server.start();
+			McpTransportLifecycleAdapter.Generation terminatedGeneration =
+					(McpTransportLifecycleAdapter.Generation)
+							lifecycleAdapter.currentGeneration();
 			terminateUnexpectedly(eventLoop(bridge));
 			Assertions.assertFalse(server.isStarted());
-			Assertions.assertTrue(bridge.getRuntimeState().stopRequired());
+			Assertions.assertTrue(terminatedGeneration.shutdownRequested());
+			lifecycleAdapter.awaitStop(terminatedGeneration);
+			Assertions.assertTrue(lifecycleAdapter.result(terminatedGeneration)
+					.orElseThrow().isComplete(),
+					"The exact unexpectedly terminated generation must be proven before restart.");
 
 			server.start();
 			Assertions.assertTrue(server.isStarted());
@@ -490,6 +498,16 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 				"runtimeBridge");
 		bridgeField.setAccessible(true);
 		return (McpServerRuntimeBridge) bridgeField.get(requireNonNull(server));
+	}
+
+	@NonNull
+	private static McpTransportLifecycleAdapter lifecycleAdapter(
+			@NonNull McpServer server) throws Exception {
+		Field adapterField = DefaultMcpServer.class.getDeclaredField(
+				"lifecycleAdapter");
+		adapterField.setAccessible(true);
+		return (McpTransportLifecycleAdapter) adapterField.get(
+				requireNonNull(server));
 	}
 
 	@NonNull

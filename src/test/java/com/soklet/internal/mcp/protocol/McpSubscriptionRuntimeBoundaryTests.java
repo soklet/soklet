@@ -21,6 +21,8 @@ import com.soklet.McpRequestContext;
 import com.soklet.McpRequestOutcome;
 import com.soklet.StreamTerminationReason;
 import com.soklet.internal.mcp.transport.McpOutboundChannel;
+import com.soklet.internal.microhttp.ConnectionListener;
+import com.soklet.internal.microhttp.EventLoop;
 import com.soklet.internal.microhttp.Header;
 import com.soklet.internal.microhttp.MicrohttpRequest;
 import com.soklet.internal.microhttp.MicrohttpResponse;
@@ -294,14 +296,23 @@ public class McpSubscriptionRuntimeBoundaryTests {
 
 		try {
 			Assertions.assertThrows(IllegalStateException.class, runtime::start);
-			Assertions.assertFalse(runtime.lifecycleSnapshot().started());
-			Assertions.assertTrue(runtime.lifecycleSnapshot().boundAddress().isEmpty());
+			McpHttpServerLifecycleSnapshot failed = runtime.lifecycleSnapshot();
+			Assertions.assertFalse(failed.started());
+			InetSocketAddress failedAddress = failed.boundAddress().orElseThrow();
+			Assertions.assertTrue(failedAddress.getPort() > 0,
+					"Registration setup fails after the listener has bound.");
 			Assertions.assertEquals(2, first.subscriptionAttempts()
 					+ second.subscriptionAttempts());
 			Assertions.assertEquals(1, first.closedRegistrationCount()
 					+ second.closedRegistrationCount());
 			Assertions.assertEquals(0, first.publisherCloseCount());
 			Assertions.assertEquals(0, second.publisherCloseCount());
+			runtime.stop();
+			Assertions.assertEquals(failedAddress,
+					runtime.lifecycleSnapshot().boundAddress().orElseThrow());
+			Assertions.assertEquals(failedAddress,
+					failed.boundAddress().orElseThrow(),
+					"The retained failed-start snapshot must remain immutable.");
 
 			Assertions.assertNotNull(runtime.start());
 			Assertions.assertTrue(runtime.lifecycleSnapshot().started());
@@ -419,6 +430,236 @@ public class McpSubscriptionRuntimeBoundaryTests {
 			Assertions.assertEquals(1,
 					source.generation(1).successfulCloseCount());
 		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
+	public void commonLifecycleForceRetriesAQuiesceRegistrationCloseFailure()
+			throws Exception {
+		TestEventSource source = TestEventSource.failingFirstClose();
+		McpHttpServerRuntime runtime = runtime(MCP_PATH, source,
+				McpRuntimeObservationSink.disabledInstance(), McpApplicationClock.SYSTEM,
+				subscriptionConfiguration(4, Duration.ofSeconds(1),
+						Duration.ofMinutes(1)));
+
+		try {
+			runtime.start();
+			runtime.quiesceLifecycle();
+			Assertions.assertFalse(runtime.awaitLifecycleTermination(
+					System.nanoTime() + TimeUnit.SECONDS.toNanos(2)));
+			TestEventSource.Generation generation = source.generation(0);
+			Assertions.assertEquals(1, generation.closeInvocationCount());
+			Assertions.assertEquals(0, generation.successfulCloseCount());
+			Assertions.assertTrue(runtime.lifecycleEvidence()
+					.subscriptionRegistration());
+
+			runtime.forceLifecycle();
+			generation.awaitSuccessfulClose();
+			Assertions.assertTrue(runtime.awaitLifecycleTermination(
+					System.nanoTime() + TimeUnit.SECONDS.toNanos(5)));
+			Assertions.assertEquals(2, generation.closeInvocationCount(),
+					"Force must retry a completed failed quiesce close exactly once.");
+			Assertions.assertEquals(1, generation.successfulCloseCount());
+			Assertions.assertEquals(1, generation.maximumConcurrentCloses());
+			runtime.releaseLifecycleEvidence();
+			Assertions.assertFalse(runtime.lifecycleEvidence()
+					.subscriptionRegistration());
+		} finally {
+			cleanupCommonLifecycle(runtime, source);
+		}
+	}
+
+	@Test
+	public void commonLifecycleForceInterruptsAnOwnedBlockingRegistrationClose()
+			throws Exception {
+		TestEventSource source = TestEventSource.interruptibleFirstClose();
+		McpHttpServerRuntime runtime = runtime(MCP_PATH, source,
+				McpRuntimeObservationSink.disabledInstance(), McpApplicationClock.SYSTEM,
+				subscriptionConfiguration(4, Duration.ofSeconds(1),
+						Duration.ofMinutes(1)));
+
+		try {
+			runtime.start();
+			runtime.quiesceLifecycle();
+			source.awaitFirstCloseEntered();
+			Assertions.assertTrue(runtime.lifecycleEvidence()
+					.subscriptionRegistration());
+
+			runtime.forceLifecycle();
+
+			source.awaitFirstCloseInterrupted();
+			Assertions.assertTrue(runtime.awaitLifecycleTermination(
+					System.nanoTime() + TimeUnit.SECONDS.toNanos(5)));
+			TestEventSource.Generation generation = source.generation(0);
+			Assertions.assertEquals(1, generation.closeInvocationCount());
+			Assertions.assertEquals(1, generation.successfulCloseCount());
+			Assertions.assertEquals(1, generation.maximumConcurrentCloses());
+			runtime.releaseLifecycleEvidence();
+			Assertions.assertFalse(runtime.lifecycleEvidence()
+					.subscriptionRegistration());
+		} finally {
+			cleanupCommonLifecycle(runtime, source);
+		}
+	}
+
+	@Test
+	public void commonLifecycleForceCancelsTheExactRetryAttemptItCreates()
+			throws Exception {
+		TestEventSource source = TestEventSource.failingThenInterruptibleClose();
+		McpHttpServerRuntime runtime = runtime(MCP_PATH, source,
+				McpRuntimeObservationSink.disabledInstance(), McpApplicationClock.SYSTEM,
+				subscriptionConfiguration(4, Duration.ofSeconds(1),
+						Duration.ofMinutes(1)));
+
+		try {
+			runtime.start();
+			runtime.quiesceLifecycle();
+			Assertions.assertFalse(runtime.awaitLifecycleTermination(
+					System.nanoTime() + TimeUnit.SECONDS.toNanos(2)));
+
+			runtime.forceLifecycle();
+
+			source.awaitFirstCloseInterrupted();
+			Assertions.assertTrue(runtime.awaitLifecycleTermination(
+					System.nanoTime() + TimeUnit.SECONDS.toNanos(5)));
+			TestEventSource.Generation generation = source.generation(0);
+			Assertions.assertEquals(2, generation.closeInvocationCount());
+			Assertions.assertEquals(1, generation.successfulCloseCount());
+			Assertions.assertEquals(1, generation.maximumConcurrentCloses());
+			runtime.releaseLifecycleEvidence();
+		} finally {
+			cleanupCommonLifecycle(runtime, source);
+		}
+	}
+
+	@Test
+	public void commonLifecycleRejectsPostForceGracefulRegistrationRetry()
+			throws Exception {
+		TestEventSource source = TestEventSource.failingFirstClose();
+		McpHttpServerRuntime runtime = runtime(MCP_PATH, source,
+				McpRuntimeObservationSink.disabledInstance(), McpApplicationClock.SYSTEM,
+				subscriptionConfiguration(4, Duration.ofSeconds(1),
+						Duration.ofMinutes(1)));
+
+		try {
+			runtime.start();
+			List<?> controls = subscriptionRegistrationControls(runtime);
+			runtime.forceLifecycle();
+			Assertions.assertFalse(runtime.awaitLifecycleTermination(
+					System.nanoTime() + TimeUnit.SECONDS.toNanos(2)));
+			TestEventSource.Generation generation = source.generation(0);
+			Assertions.assertEquals(1, generation.closeInvocationCount());
+
+			beginGracefulCloseBatch(runtime, controls);
+
+			Assertions.assertEquals(1, generation.closeInvocationCount(),
+					"A canceled graceful call must not create work after force.");
+			Object closeBatch = lifecycleCloseBatch(runtime);
+			Assertions.assertEquals(1,
+					closeBatchList(closeBatch, "closeAttempts").size());
+		} finally {
+			cleanupCommonLifecycle(runtime, source);
+		}
+	}
+
+	@Test
+	public void staleCloseBatchPublicationUnionsLateAttemptsByIdentity()
+			throws Exception {
+		TestEventSource firstSource = TestEventSource.blockingFirstClose();
+		TestEventSource secondSource = TestEventSource.blockingFirstClose();
+		McpHttpServerRuntime runtime = runtime(List.of(
+				binding("/mcp/close-batch-first", firstSource,
+						McpRuntimeObservationSink.disabledInstance()),
+				binding("/mcp/close-batch-second", secondSource,
+						McpRuntimeObservationSink.disabledInstance())),
+				McpApplicationClock.SYSTEM,
+				subscriptionConfiguration(4, Duration.ofSeconds(1),
+						Duration.ofMinutes(1)));
+
+		try {
+			runtime.start();
+			List<?> controls = subscriptionRegistrationControls(runtime);
+			Assertions.assertEquals(2, controls.size());
+			Object firstBatch = beginClosingBatch(runtime, List.of(controls.get(0)));
+			Object lateBatch = beginClosingBatch(runtime, List.of(controls.get(1)));
+			firstSource.awaitFirstCloseEntered();
+			secondSource.awaitFirstCloseEntered();
+
+			publishCloseBatch(runtime, lateBatch);
+			publishCloseBatch(runtime, firstBatch);
+
+			Object mergedBatch = lifecycleCloseBatch(runtime);
+			List<?> mergedRegistrations = closeBatchList(
+					mergedBatch, "registrations");
+			List<?> mergedAttempts = closeBatchList(mergedBatch, "closeAttempts");
+			Assertions.assertEquals(2, mergedRegistrations.size());
+			Assertions.assertSame(controls.get(1), mergedRegistrations.get(0),
+					"The late batch is the existing publication and retains order.");
+			Assertions.assertSame(controls.get(0), mergedRegistrations.get(1));
+			Assertions.assertEquals(2, mergedAttempts.size());
+			Assertions.assertNotSame(mergedAttempts.get(0), mergedAttempts.get(1));
+		} finally {
+			firstSource.releaseFirstClose();
+			secondSource.releaseFirstClose();
+			runtime.close();
+			firstSource.close();
+			secondSource.close();
+		}
+	}
+
+	@Test
+	public void preReadinessFailurePublicationWaitsForLifecycleElectionLock()
+			throws Exception {
+		TestEventSource source = new TestEventSource();
+		McpHttpServerRuntime runtime = runtime(MCP_PATH, source,
+				McpRuntimeObservationSink.disabledInstance(), McpApplicationClock.SYSTEM,
+				subscriptionConfiguration(4, Duration.ofSeconds(1),
+						Duration.ofMinutes(1)));
+		Thread callback = null;
+
+		try {
+			runtime.start();
+			Object starting = listenerState("STARTING");
+			AtomicReference<Object> readiness = new AtomicReference<>(starting);
+			AtomicReference<Throwable> startupFailure = new AtomicReference<>();
+			AtomicBoolean startupFailureSignaled = new AtomicBoolean();
+			AtomicReference<Throwable> startupSignalFailure = new AtomicReference<>();
+			ConnectionListener listener = connectionListener(runtime, readiness,
+					startupFailure, startupFailureSignaled, startupSignalFailure);
+			Throwable exactFailure = new IllegalStateException(
+					"simulated pre-readiness EventLoop failure");
+			CountDownLatch callbackStarted = new CountDownLatch(1);
+			AtomicReference<Throwable> callbackFailure = new AtomicReference<>();
+			callback = new Thread(() -> {
+				callbackStarted.countDown();
+				try {
+					listener.didTerminateEventLoop(eventLoop(runtime), exactFailure);
+				} catch (Throwable failure) {
+					callbackFailure.set(failure);
+				}
+			}, "mcp-pre-readiness-failure-election-test");
+			callback.setDaemon(true);
+
+			synchronized (lifecycleLock(runtime)) {
+				callback.start();
+				Assertions.assertTrue(callbackStarted.await(5, TimeUnit.SECONDS));
+				awaitBlocked(callback);
+				Assertions.assertSame(starting, readiness.get(),
+						"TERMINATED must not be visible before exact-cause election.");
+				Assertions.assertNull(startupFailure.get(),
+						"The cause and listener state must publish in one election.");
+			}
+
+			callback.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertFalse(callback.isAlive());
+			Assertions.assertNull(callbackFailure.get());
+			Assertions.assertEquals("TERMINATED",
+					((Enum<?>) readiness.get()).name());
+			Assertions.assertSame(exactFailure, startupFailure.get());
+		} finally {
+			if (callback != null)
+				callback.join(TimeUnit.SECONDS.toMillis(5));
 			runtime.close();
 		}
 	}
@@ -680,6 +921,30 @@ public class McpSubscriptionRuntimeBoundaryTests {
 				failed.offerCoalescing(ascii("after-failure"), firstKey));
 	}
 
+	@Test
+	public void idleOutboundCloseWakesInstalledWriterExactlyOnce() throws Exception {
+		McpOutboundChannel channel = new McpOutboundChannel(
+				1, 16, 16, System::nanoTime, new NoOpChannelListener());
+		WritableSource source = channel.newWritableSource();
+		AtomicInteger wakes = new AtomicInteger();
+		source.writeReadyCallback(wakes::incrementAndGet);
+		source.start();
+
+		Assertions.assertEquals(0, wakes.get());
+		Assertions.assertTrue(source.hasRemaining());
+		Assertions.assertFalse(source.isReadyToWrite());
+
+		channel.close(StreamTerminationReason.SERVER_STOPPING, null);
+
+		Assertions.assertEquals(1, wakes.get());
+		Assertions.assertFalse(source.hasRemaining());
+		Assertions.assertFalse(source.isReadyToWrite());
+		channel.close(StreamTerminationReason.SERVER_STOPPING, null);
+		source.close(StreamTerminationReason.CLIENT_DISCONNECTED, null);
+		Assertions.assertEquals(1, wakes.get(),
+				"Idempotent terminal close must not wake an idle writer twice.");
+	}
+
 	@NonNull
 	private static McpHttpServerRuntime runtime(@NonNull String path,
 			@NonNull TestEventSource source,
@@ -814,10 +1079,11 @@ public class McpSubscriptionRuntimeBoundaryTests {
 		Method submitRequest = McpHttpServerRuntime.class.getDeclaredMethod(
 				"submitRequest", ThreadPoolExecutor.class,
 				McpApplicationExecution.class, InetSocketAddress.class,
-				MicrohttpRequest.class, Consumer.class);
+				MicrohttpRequest.class, com.soklet.Request.class,
+				McpSimulationRuntime.class, Runnable.class, Consumer.class);
 		submitRequest.setAccessible(true);
 		invoke(submitRequest, runtime, processor(runtime), application(runtime),
-				address, request, callback);
+				address, request, null, null, null, callback);
 	}
 
 	@NonNull
@@ -847,6 +1113,121 @@ public class McpSubscriptionRuntimeBoundaryTests {
 		return (McpApplicationExecution) field.get(runtime);
 	}
 
+	@NonNull
+	private static List<?> subscriptionRegistrationControls(
+			@NonNull McpHttpServerRuntime runtime) throws Exception {
+		Field field = McpHttpServerRuntime.class.getDeclaredField(
+				"subscriptionSourceRegistrations");
+		field.setAccessible(true);
+		return (List<?>) field.get(runtime);
+	}
+
+	@NonNull
+	private static Object beginClosingBatch(
+			@NonNull McpHttpServerRuntime runtime,
+			@NonNull List<?> registrations) throws Exception {
+		Method method = McpHttpServerRuntime.class.getDeclaredMethod(
+				"beginClosingSubscriptionEventSourceRegistrations", List.class);
+		method.setAccessible(true);
+		return invoke(method, runtime, registrations);
+	}
+
+	private static void beginGracefulCloseBatch(
+			@NonNull McpHttpServerRuntime runtime,
+			@NonNull List<?> registrations) throws Exception {
+		Method method = McpHttpServerRuntime.class.getDeclaredMethod(
+				"beginGracefulSubscriptionEventSourceRegistrationCloses",
+				List.class);
+		method.setAccessible(true);
+		invoke(method, runtime, registrations);
+	}
+
+	private static void publishCloseBatch(
+			@NonNull McpHttpServerRuntime runtime,
+			@NonNull Object closeBatch) throws Exception {
+		Method method = McpHttpServerRuntime.class.getDeclaredMethod(
+				"publishLifecycleCloseBatch", closeBatch.getClass());
+		method.setAccessible(true);
+		invoke(method, runtime, closeBatch);
+	}
+
+	@NonNull
+	private static Object lifecycleCloseBatch(
+			@NonNull McpHttpServerRuntime runtime) throws Exception {
+		Field field = McpHttpServerRuntime.class.getDeclaredField(
+				"lifecycleCloseBatch");
+		field.setAccessible(true);
+		return java.util.Objects.requireNonNull(field.get(runtime));
+	}
+
+	@NonNull
+	private static Object lifecycleLock(
+			@NonNull McpHttpServerRuntime runtime) throws Exception {
+		Field field = McpHttpServerRuntime.class.getDeclaredField("lifecycleLock");
+		field.setAccessible(true);
+		return java.util.Objects.requireNonNull(field.get(runtime));
+	}
+
+	@NonNull
+	private static EventLoop eventLoop(
+			@NonNull McpHttpServerRuntime runtime) throws Exception {
+		Field field = McpHttpServerRuntime.class.getDeclaredField("eventLoop");
+		field.setAccessible(true);
+		return (EventLoop) java.util.Objects.requireNonNull(field.get(runtime));
+	}
+
+	@NonNull
+	private static Object listenerState(@NonNull String name) throws Exception {
+		Class<?> listenerState = Class.forName(
+				McpHttpServerRuntime.class.getName() + "$ListenerState");
+		for (Object constant : listenerState.getEnumConstants()) {
+			if (((Enum<?>) constant).name().equals(name))
+				return constant;
+		}
+		throw new AssertionError("Unknown listener state: " + name);
+	}
+
+	@NonNull
+	private static ConnectionListener connectionListener(
+			@NonNull McpHttpServerRuntime runtime,
+			@NonNull AtomicReference<Object> readiness,
+			@NonNull AtomicReference<Throwable> startupFailure,
+			@NonNull AtomicBoolean startupFailureSignaled,
+			@NonNull AtomicReference<Throwable> startupSignalFailure)
+			throws Exception {
+		Method method = McpHttpServerRuntime.class.getDeclaredMethod(
+				"connectionListener", AtomicReference.class,
+				McpServerRuntimeBridge.LifecycleAdapter.Generation.class,
+				AtomicReference.class, AtomicBoolean.class, AtomicReference.class);
+		method.setAccessible(true);
+		return (ConnectionListener) invoke(method, runtime, readiness,
+				McpServerRuntimeBridge.LifecycleAdapter.disabledInstance()
+						.currentGeneration(),
+				startupFailure, startupFailureSignaled, startupSignalFailure);
+	}
+
+	private static void awaitBlocked(@NonNull Thread thread) {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+		do {
+			Thread.State state = thread.getState();
+			if (state == Thread.State.BLOCKED)
+				return;
+			if (state == Thread.State.TERMINATED)
+				Assertions.fail(
+						"The termination callback bypassed the lifecycle election lock.");
+			Thread.onSpinWait();
+		} while (System.nanoTime() - deadline < 0L);
+		Assertions.fail("The termination callback did not reach the election lock.");
+	}
+
+	@NonNull
+	private static List<?> closeBatchList(@NonNull Object closeBatch,
+			@NonNull String accessor) throws Exception {
+		Method method = closeBatch.getClass().getDeclaredMethod(accessor);
+		method.setAccessible(true);
+		return (List<?>) invoke(method, closeBatch);
+	}
+
 	private static Object invoke(@NonNull Method method, @NonNull Object target,
 			Object @NonNull ... arguments) throws Exception {
 		try {
@@ -865,7 +1246,8 @@ public class McpSubscriptionRuntimeBoundaryTests {
 			@NonNull McpHttpServerRuntime runtime) {
 		McpHttpServerLifecycleSnapshot lifecycle = runtime.lifecycleSnapshot();
 		Assertions.assertFalse(lifecycle.started());
-		Assertions.assertTrue(lifecycle.boundAddress().isEmpty());
+		Assertions.assertTrue(lifecycle.boundAddress().isPresent(),
+				"A residual post-bind registration retains its generation address.");
 		Assertions.assertTrue(lifecycle.stopRequired(),
 				"A residual publisher registration must retain cleanup ownership.");
 	}
@@ -967,6 +1349,30 @@ public class McpSubscriptionRuntimeBoundaryTests {
 		throw new AssertionError("Subscription state was retained: " + snapshot);
 	}
 
+	private static void cleanupCommonLifecycle(
+			@NonNull McpHttpServerRuntime runtime,
+			@NonNull TestEventSource source) {
+		try {
+			if (!runtime.lifecycleEvidence().empty()) {
+				source.releaseFirstClose();
+				if (!source.generations.isEmpty())
+					source.generation(0).close();
+				try {
+					runtime.awaitLifecycleTermination(
+							System.nanoTime() + TimeUnit.SECONDS.toNanos(2));
+				} catch (InterruptedException exception) {
+					Thread.currentThread().interrupt();
+				}
+			}
+			// Common-lifecycle proof can be complete while the manually driven
+			// runtime remains STOPPING. Always publish that proof before legacy
+			// close() so an earlier assertion cannot hide behind a cleanup wait.
+			runtime.releaseLifecycleEvidence();
+		} finally {
+			runtime.close();
+		}
+	}
+
 	private static byte @NonNull [] ascii(@NonNull String value) {
 		return value.getBytes(StandardCharsets.US_ASCII);
 	}
@@ -993,9 +1399,11 @@ public class McpSubscriptionRuntimeBoundaryTests {
 			private final IllegalStateException firstCloseFailure =
 					new IllegalStateException("simulated registration close failure");
 			@NonNull
-			private final CountDownLatch firstCloseEntered = new CountDownLatch(1);
-			@NonNull
-			private final CountDownLatch firstCloseRelease = new CountDownLatch(1);
+		private final CountDownLatch firstCloseEntered = new CountDownLatch(1);
+		@NonNull
+		private final CountDownLatch firstCloseRelease = new CountDownLatch(1);
+		@NonNull
+		private final CountDownLatch firstCloseInterrupted = new CountDownLatch(1);
 
 			private TestEventSource() {
 				this(() -> {
@@ -1023,11 +1431,25 @@ public class McpSubscriptionRuntimeBoundaryTests {
 			}
 
 			@NonNull
-			private static TestEventSource blockingFirstClose() {
+		private static TestEventSource blockingFirstClose() {
 				return new TestEventSource(() -> {
 					// No-op before registration.
-				}, FirstCloseBehavior.BLOCK_UNTIL_RELEASED);
-			}
+			}, FirstCloseBehavior.BLOCK_UNTIL_RELEASED);
+		}
+
+		@NonNull
+		private static TestEventSource interruptibleFirstClose() {
+			return new TestEventSource(() -> {
+				// No-op before registration.
+			}, FirstCloseBehavior.BLOCK_UNTIL_INTERRUPTED);
+		}
+
+		@NonNull
+		private static TestEventSource failingThenInterruptibleClose() {
+			return new TestEventSource(() -> {
+				// No-op before registration.
+			}, FirstCloseBehavior.FAIL_THEN_BLOCK_UNTIL_INTERRUPTED);
+		}
 
 			@NonNull
 			private McpSubscriptionEventSource source() {
@@ -1065,9 +1487,14 @@ public class McpSubscriptionRuntimeBoundaryTests {
 						"The registration close did not reach its blocking boundary.");
 			}
 
-			private void releaseFirstClose() {
-				this.firstCloseRelease.countDown();
-			}
+		private void releaseFirstClose() {
+			this.firstCloseRelease.countDown();
+		}
+
+		private void awaitFirstCloseInterrupted() throws InterruptedException {
+			Assertions.assertTrue(this.firstCloseInterrupted.await(5, TimeUnit.SECONDS),
+					"Force did not interrupt the owned registration-close worker.");
+		}
 
 		private int subscriptionAttempts() {
 			return this.subscriptionAttempts.get();
@@ -1086,10 +1513,12 @@ public class McpSubscriptionRuntimeBoundaryTests {
 				this.publisherCloses.incrementAndGet();
 			}
 
-			private enum FirstCloseBehavior {
-				SUCCEED,
-				FAIL_ONCE,
-				BLOCK_UNTIL_RELEASED
+		private enum FirstCloseBehavior {
+			SUCCEED,
+			FAIL_ONCE,
+			BLOCK_UNTIL_RELEASED,
+			BLOCK_UNTIL_INTERRUPTED,
+			FAIL_THEN_BLOCK_UNTIL_INTERRUPTED
 			}
 
 			@ThreadSafe
@@ -1119,7 +1548,9 @@ public class McpSubscriptionRuntimeBoundaryTests {
 					this.listener = java.util.Objects.requireNonNull(listener);
 					this.closeBehavior = java.util.Objects.requireNonNull(closeBehavior);
 					this.closeFailureRemaining = new AtomicBoolean(
-							closeBehavior == FirstCloseBehavior.FAIL_ONCE);
+							closeBehavior == FirstCloseBehavior.FAIL_ONCE
+									|| closeBehavior
+									== FirstCloseBehavior.FAIL_THEN_BLOCK_UNTIL_INTERRUPTED);
 				}
 
 				private void publish(McpSubscriptionEventSource.@NonNull Event event) {
@@ -1135,14 +1566,26 @@ public class McpSubscriptionRuntimeBoundaryTests {
 					try {
 						if (this.closed.get())
 							return;
-						if (this.closeBehavior == FirstCloseBehavior.FAIL_ONCE
+						if ((this.closeBehavior == FirstCloseBehavior.FAIL_ONCE
+								|| this.closeBehavior
+								== FirstCloseBehavior.FAIL_THEN_BLOCK_UNTIL_INTERRUPTED)
 								&& this.closeFailureRemaining.compareAndSet(true, false))
 							throw firstCloseFailure;
-						if (this.closeBehavior
-								== FirstCloseBehavior.BLOCK_UNTIL_RELEASED) {
-							firstCloseEntered.countDown();
-							awaitFirstCloseReleaseUninterruptibly();
+					if (this.closeBehavior
+							== FirstCloseBehavior.BLOCK_UNTIL_RELEASED) {
+						firstCloseEntered.countDown();
+						awaitFirstCloseReleaseUninterruptibly();
+					} else if (this.closeBehavior
+							== FirstCloseBehavior.BLOCK_UNTIL_INTERRUPTED
+							|| this.closeBehavior
+							== FirstCloseBehavior.FAIL_THEN_BLOCK_UNTIL_INTERRUPTED) {
+						firstCloseEntered.countDown();
+						try {
+							firstCloseRelease.await();
+						} catch (InterruptedException expected) {
+							firstCloseInterrupted.countDown();
 						}
+					}
 						if (this.closed.compareAndSet(false, true)) {
 							currentGeneration.compareAndSet(this, null);
 							closedRegistrations.incrementAndGet();

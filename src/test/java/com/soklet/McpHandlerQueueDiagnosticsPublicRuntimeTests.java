@@ -154,36 +154,37 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 		McpServer server = serverFor(List.of(emptyEndpoint("/mcp/idle")),
 				2, 3, Duration.ofSeconds(5), Duration.ofSeconds(1));
 		McpServerDiagnostics beforeStart = server.getDiagnostics();
-		assertDiagnostics(beforeStart, McpServerStatus.STOPPED, 2, 3, 0, 0);
+		assertDiagnostics(beforeStart, McpServerStatus.STOPPED, false,
+				2, 3, 0, 0);
 
 		server.stop();
 		try {
 			server.start();
 			McpServerDiagnostics firstStarted = server.getDiagnostics();
-			assertDiagnostics(firstStarted, McpServerStatus.STARTED,
+			assertDiagnostics(firstStarted, McpServerStatus.STARTED, true,
 					2, 3, 0, 0);
 			var firstAddress = firstStarted.getBoundAddress().orElseThrow();
 
 			server.stop();
 			McpServerDiagnostics firstStopped = server.getDiagnostics();
-			assertDiagnostics(firstStopped, McpServerStatus.STOPPED,
+			assertDiagnostics(firstStopped, McpServerStatus.STOPPED, true,
 					2, 3, 0, 0);
 
 			server.start();
-			assertDiagnostics(server.getDiagnostics(), McpServerStatus.STARTED,
+			assertDiagnostics(server.getDiagnostics(), McpServerStatus.STARTED, true,
 					2, 3, 0, 0);
-			assertDiagnostics(beforeStart, McpServerStatus.STOPPED,
+			assertDiagnostics(beforeStart, McpServerStatus.STOPPED, false,
 					2, 3, 0, 0);
-			assertDiagnostics(firstStarted, McpServerStatus.STARTED,
+			assertDiagnostics(firstStarted, McpServerStatus.STARTED, true,
 					2, 3, 0, 0);
 			Assertions.assertEquals(firstAddress,
 					firstStarted.getBoundAddress().orElseThrow());
-			assertDiagnostics(firstStopped, McpServerStatus.STOPPED,
+			assertDiagnostics(firstStopped, McpServerStatus.STOPPED, true,
 					2, 3, 0, 0);
 		} finally {
 			server.stop();
 		}
-		assertDiagnostics(server.getDiagnostics(), McpServerStatus.STOPPED,
+		assertDiagnostics(server.getDiagnostics(), McpServerStatus.STOPPED, true,
 				2, 3, 0, 0);
 	}
 
@@ -230,14 +231,15 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 			McpServerDiagnostics saturated = awaitDiagnostics(server,
 					diagnostics -> diagnostics.getActiveHandlerExecutions() == 1
 							&& diagnostics.getQueuedRequests() == 1);
-			assertDiagnostics(saturated, McpServerStatus.STARTED, 1, 1, 1, 1);
+			assertDiagnostics(saturated, McpServerStatus.STARTED, true,
+					1, 1, 1, 1);
 			Assertions.assertEquals(1, firstInvocations.get());
 			Assertions.assertEquals(0, secondInvocations.get());
 			HttpResponse<String> rejected = callTool(port,
 					"/mcp/diagnostics-second", "rejected",
 					"diagnostics.second").get(5, TimeUnit.SECONDS);
 			Assertions.assertEquals(503, rejected.statusCode(), rejected.body());
-			assertDiagnostics(server.getDiagnostics(), McpServerStatus.STARTED,
+			assertDiagnostics(server.getDiagnostics(), McpServerStatus.STARTED, true,
 					1, 1, 1, 1);
 			Assertions.assertEquals(1, firstInvocations.get());
 			Assertions.assertEquals(0, secondInvocations.get(),
@@ -258,7 +260,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 			assertDiagnostics(awaitDiagnostics(server,
 					diagnostics -> diagnostics.getActiveHandlerExecutions() == 1
 							&& diagnostics.getQueuedRequests() == 0),
-					McpServerStatus.STARTED, 1, 1, 1, 0);
+					McpServerStatus.STARTED, true, 1, 1, 1, 0);
 			releaseSecond.countDown();
 			Assertions.assertEquals(200,
 					requireNonNull(first).get(5, TimeUnit.SECONDS).statusCode());
@@ -267,12 +269,13 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 			assertDiagnostics(awaitDiagnostics(server,
 					diagnostics -> diagnostics.getActiveHandlerExecutions() == 0
 							&& diagnostics.getQueuedRequests() == 0),
-					McpServerStatus.STARTED, 1, 1, 0, 0);
+					McpServerStatus.STARTED, true, 1, 1, 0, 0);
 
 			readSnapshots.set(false);
 			requireNonNull(reader).get(5, TimeUnit.SECONDS);
 			Assertions.assertTrue(snapshotReads.get() > 0);
-			assertDiagnostics(saturated, McpServerStatus.STARTED, 1, 1, 1, 1);
+			assertDiagnostics(saturated, McpServerStatus.STARTED, true,
+					1, 1, 1, 1);
 		} finally {
 			readSnapshots.set(false);
 			releaseFirst.countDown();
@@ -329,10 +332,14 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 			McpServerDiagnostics residual = server.getDiagnostics();
 			assertDiagnostics(residual,
 					McpServerStatus.STOPPED_WITH_RESIDUAL_HANDLERS,
-					1, 1, 1, 0);
+					true, 1, 1, 1, 0);
 			Assertions.assertEquals(1, invocations.get(),
 					"Stop must not promote queued work.");
-			Assertions.assertThrows(IllegalStateException.class, server::start);
+			IllegalStateException residualRestartFailure = Assertions.assertThrows(
+					IllegalStateException.class, server::start);
+			Assertions.assertEquals(
+					"Built-in transport with retained termination evidence cannot restart",
+					residualRestartFailure.getMessage());
 
 			releaseActive.countDown();
 			Assertions.assertTrue(activeExited.await(5, TimeUnit.SECONDS));
@@ -340,17 +347,20 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 					diagnostics -> diagnostics.getStatus() == McpServerStatus.STOPPED
 							&& diagnostics.getActiveHandlerExecutions() == 0
 							&& diagnostics.getQueuedRequests() == 0),
-					McpServerStatus.STOPPED, 1, 1, 0, 0);
-			assertDiagnostics(saturated, McpServerStatus.STARTED, 1, 1, 1, 1);
+					McpServerStatus.STOPPED, true, 1, 1, 0, 0);
+			assertDiagnostics(saturated, McpServerStatus.STARTED, true,
+					1, 1, 1, 1);
 			assertDiagnostics(residual,
 					McpServerStatus.STOPPED_WITH_RESIDUAL_HANDLERS,
-					1, 1, 1, 0);
+					true, 1, 1, 1, 0);
 
-			server.start();
-			assertDiagnostics(server.getDiagnostics(), McpServerStatus.STARTED,
-					1, 1, 0, 0);
-			server.stop();
-			assertDiagnostics(server.getDiagnostics(), McpServerStatus.STOPPED,
+			IllegalStateException lateRestartFailure = Assertions.assertThrows(
+					IllegalStateException.class, server::start);
+			Assertions.assertEquals(
+					"Built-in transport with retained termination evidence cannot restart",
+					lateRestartFailure.getMessage(),
+					"Late physical cleanup cannot rewrite an immutable residual result.");
+			assertDiagnostics(server.getDiagnostics(), McpServerStatus.STOPPED, true,
 					1, 1, 0, 0);
 		} finally {
 			releaseActive.countDown();
@@ -409,9 +419,10 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 	private static void assertDiagnostics(
 			@NonNull McpServerDiagnostics diagnostics,
 			@NonNull McpServerStatus status,
-			int concurrency, int queueCapacity, int active, int queued) {
+			boolean addressPresent, int concurrency, int queueCapacity,
+			int active, int queued) {
 		Assertions.assertEquals(requireNonNull(status), diagnostics.getStatus());
-		Assertions.assertEquals(status == McpServerStatus.STARTED,
+		Assertions.assertEquals(addressPresent,
 				diagnostics.getBoundAddress().isPresent());
 		Assertions.assertEquals(Integer.valueOf(concurrency),
 				diagnostics.getRequestHandlerConcurrency());

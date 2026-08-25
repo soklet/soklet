@@ -21,6 +21,7 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
@@ -82,6 +83,10 @@ final class BuiltInTransportLifecycleAdapter {
 		private final AtomicBoolean shutdownClaimed;
 		@NonNull
 		private final AtomicReference<GenerationStartupState> startupState;
+		@NonNull
+		private final AtomicReference<@Nullable Throwable> startupFailure;
+		@NonNull
+		private final AtomicBoolean resultPublicationClaimed;
 		@Nullable
 		private volatile LifecycleRetentionAnchor retentionAnchor;
 		private volatile long gracefulDeadlineNanos;
@@ -99,6 +104,8 @@ final class BuiltInTransportLifecycleAdapter {
 			this.result = new CompletableFuture<>();
 			this.shutdownClaimed = new AtomicBoolean();
 			this.startupState = new AtomicReference<>(GenerationStartupState.STARTING);
+			this.startupFailure = new AtomicReference<>();
+			this.resultPublicationClaimed = new AtomicBoolean();
 			this.group.commit();
 		}
 	}
@@ -236,15 +243,20 @@ final class BuiltInTransportLifecycleAdapter {
 		if (premature.isPresent()) {
 			generation.startupState.compareAndSet(GenerationStartupState.STARTING,
 					GenerationStartupState.FAILED);
-			Throwable cause = premature.get().cause().orElseGet(() ->
-					new IllegalStateException("Built-in transport terminated before readiness"));
-			throw new IllegalStateException("Built-in transport terminated before readiness", cause);
+			Throwable cause = premature.get().cause().orElse(null);
+			if (cause != null)
+				throw new PrematureTerminationException(cause);
+			throw new IllegalStateException(
+					"Built-in transport terminated before readiness");
 		}
 		if (!generation.startupState.compareAndSet(GenerationStartupState.STARTING,
 				GenerationStartupState.READY)) {
 			if (generation.startupState.get() == GenerationStartupState.READY)
 				throw new IllegalStateException(
 						"Built-in transport readiness was already published");
+			Throwable startupFailure = generation.startupFailure.get();
+			if (startupFailure != null)
+				throw new PrematureTerminationException(startupFailure);
 			throw new IllegalStateException(
 					"Built-in transport shutdown began before readiness");
 		}
@@ -257,9 +269,11 @@ final class BuiltInTransportLifecycleAdapter {
 	void failedStart(@NonNull Generation generation, @NonNull Throwable cause,
 			boolean terminationProven) {
 		requireCurrent(generation);
+		generation.startupFailure.compareAndSet(null, requireNonNull(cause));
+		Throwable primary = requireNonNull(generation.startupFailure.get());
 		generation.startupState.compareAndSet(GenerationStartupState.STARTING,
 				GenerationStartupState.FAILED);
-		generation.signal.signalTerminationFailure(requireNonNull(cause));
+		generation.signal.signalTerminationFailure(primary);
 		if (terminationProven)
 			generation.signal.signalTerminated();
 		requestShutdown(generation);
@@ -271,10 +285,19 @@ final class BuiltInTransportLifecycleAdapter {
 		if (this.current.get() != generation || generation.result.isDone())
 			return;
 		// Failure is recorded before any transport-wide lifecycle consequence.
+		generation.startupFailure.compareAndSet(null, requireNonNull(cause));
+		Throwable primary = requireNonNull(generation.startupFailure.get());
 		generation.startupState.compareAndSet(GenerationStartupState.STARTING,
 				GenerationStartupState.FAILED);
-		generation.signal.signalTerminationFailure(requireNonNull(cause));
+		generation.signal.signalTerminationFailure(primary);
 		requestShutdown(generation);
+	}
+
+	static final class PrematureTerminationException extends IllegalStateException {
+		private PrematureTerminationException(@NonNull Throwable cause) {
+			super("Built-in transport terminated before readiness",
+					requireNonNull(cause));
+		}
 	}
 
 	void stop() {
@@ -292,8 +315,10 @@ final class BuiltInTransportLifecycleAdapter {
 	}
 
 	void awaitStop(@Nullable Generation generation) {
-		if (generation != null)
+		if (generation != null) {
+			requireOwned(generation);
 			awaitResultUninterruptibly(generation);
+		}
 	}
 
 	@NonNull
@@ -308,6 +333,12 @@ final class BuiltInTransportLifecycleAdapter {
 		requireNonNull(generation);
 		return this.current.get() == generation && !generation.result.isDone()
 				&& generation.admissionFence.isOpen();
+	}
+
+	boolean shutdownRequested(@NonNull Generation generation) {
+		requireNonNull(generation);
+		return this.current.get() != generation || generation.result.isDone()
+				|| generation.shutdownClaimed.get();
 	}
 
 	private void awaitResultUninterruptibly(@NonNull Generation generation) {
@@ -334,7 +365,13 @@ final class BuiltInTransportLifecycleAdapter {
 	@NonNull
 	Optional<InternalShutdownResult> result() {
 		Generation generation = this.current.get();
-		return generation == null || !generation.result.isDone()
+		return generation == null ? Optional.empty() : result(generation);
+	}
+
+	@NonNull
+	Optional<InternalShutdownResult> result(@NonNull Generation generation) {
+		requireOwned(generation);
+		return !generation.result.isDone()
 				? Optional.empty() : Optional.of(generation.result.join());
 	}
 
@@ -377,13 +414,34 @@ final class BuiltInTransportLifecycleAdapter {
 		generation.gracefulDeadlineNanos = LifecycleDeadlines.after(intentNanos, grace);
 		generation.forcedDeadlineNanos = LifecycleDeadlines.after(
 				generation.gracefulDeadlineNanos, this.forcedTimeout);
-		this.workers.start(LifecycleWorkers.Role.COORDINATOR,
-				"built-in-" + this.kind.name().toLowerCase(Locale.ROOT)
-						+ "-lifecycle-coordinator",
-				() -> coordinate(generation));
+		AtomicReference<InternalShutdownResult> coordinatedResult =
+				new AtomicReference<>();
+		try {
+			this.workers.start(LifecycleWorkers.Role.COORDINATOR,
+					"built-in-" + this.kind.name().toLowerCase(Locale.ROOT)
+							+ "-lifecycle-coordinator",
+					() -> coordinatedResult.set(coordinate(generation)),
+					() -> {
+						InternalShutdownResult result = coordinatedResult.get();
+						if (result == null) {
+							IllegalStateException failure = new IllegalStateException(
+									"Built-in lifecycle coordination produced no result");
+							generation.signal.signalTerminationFailure(failure);
+							result = coordinationFailureResult(generation, failure);
+						}
+						publishResult(generation, result);
+					});
+		} catch (RuntimeException | Error launchFailure) {
+			if (generation.result.isDone())
+				return;
+			generation.signal.signalTerminationFailure(launchFailure);
+			publishResult(generation,
+					coordinationFailureResult(generation, launchFailure));
+		}
 	}
 
-	private void coordinate(@NonNull Generation generation) {
+	@NonNull
+	private InternalShutdownResult coordinate(@NonNull Generation generation) {
 		try {
 			InternalLifecycleCoordinator coordinator = new InternalLifecycleCoordinator(
 					this.clock, generation.waiter, this.callRunner);
@@ -394,49 +452,99 @@ final class BuiltInTransportLifecycleAdapter {
 					generation.startupState.get() == GenerationStartupState.READY
 							? InternalStartupDisposition.READY
 							: InternalStartupDisposition.FAILED;
-			result = new InternalShutdownResult(result.disposition(), startupDisposition,
+			return new InternalShutdownResult(result.disposition(), startupDisposition,
 					result.participantResults());
-			publishResult(generation, result);
 		} catch (InterruptedException exception) {
 			Thread.currentThread().interrupt();
 			generation.signal.signalTerminationFailure(exception);
-			InternalParticipantShutdownResult participant =
-					new InternalParticipantShutdownResult(this.kind,
-							InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
-							ListSupport.throwables(exception), this.operations.residualActivity());
-			InternalStartupDisposition startupDisposition =
-					generation.startupState.get() == GenerationStartupState.READY
-							? InternalStartupDisposition.READY
-							: InternalStartupDisposition.FAILED;
-			publishResult(generation, new InternalShutdownResultAggregator().aggregate(
-					startupDisposition, ListSupport.participants(participant)));
+			return coordinationFailureResult(generation, exception);
+		} catch (RuntimeException | Error failure) {
+			generation.signal.signalTerminationFailure(failure);
+			return coordinationFailureResult(generation, failure);
 		}
+	}
+
+	@NonNull
+	private InternalShutdownResult coordinationFailureResult(
+			@NonNull Generation generation, @NonNull Throwable failure) {
+		Set<InternalResidualActivityKind> residual;
+		try {
+			residual = requireNonNull(this.operations.residualActivity(),
+					"operations.residualActivity()");
+		} catch (Throwable diagnosticFailure) {
+			if (diagnosticFailure != failure)
+				failure.addSuppressed(diagnosticFailure);
+			residual = Set.of();
+		}
+		InternalParticipantShutdownResult participant =
+				new InternalParticipantShutdownResult(this.kind,
+						InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+						coordinationFailures(generation, failure), residual);
+		InternalStartupDisposition startupDisposition =
+				generation.startupState.get() == GenerationStartupState.READY
+						? InternalStartupDisposition.READY
+						: InternalStartupDisposition.FAILED;
+		return new InternalShutdownResultAggregator().aggregate(startupDisposition,
+				ListSupport.participants(participant));
+	}
+
+	@NonNull
+	private List<@NonNull Throwable> coordinationFailures(
+			@NonNull Generation generation, @NonNull Throwable failure) {
+		List<Throwable> failures = new ArrayList<>(generation.group
+				.primaryEventsInSequence().stream()
+				.flatMap(event -> event.cause().stream())
+				.toList());
+		if (failures.stream().noneMatch(candidate -> candidate == failure))
+			failures.add(failure);
+		return List.copyOf(failures);
 	}
 
 	private void publishResult(@NonNull Generation generation,
 			@NonNull InternalShutdownResult result) {
-		if (result.isComplete()) {
-			if (generation.runtime.evidenceReleased.compareAndSet(false, true))
+		if (!generation.resultPublicationClaimed.compareAndSet(false, true))
+			return;
+		InternalShutdownResult publishedResult = requireNonNull(result);
+		if (publishedResult.isComplete()
+				&& generation.runtime.evidenceReleased.compareAndSet(false, true)) {
+			try {
 				this.operations.releaseTerminatedEvidence();
-		} else {
-			Set<InternalResidualActivityKind> residual = result
-					.participantResult(this.kind)
-					.map(InternalParticipantShutdownResult::residualActivity)
-					.orElseGet(Set::of);
-			EnumMap<InternalResidualActivityKind, Integer> counts =
-					new EnumMap<>(InternalResidualActivityKind.class);
-			for (InternalResidualActivityKind kind : residual)
-				counts.put(kind, 1);
-			generation.retentionAnchor = new LifecycleRetentionAnchor(generation,
-					counts, "Built-in " + this.kind
-							+ " transport retained because termination was not proven");
+			} catch (Throwable releaseFailure) {
+				generation.runtime.evidenceReleased.set(false);
+				generation.signal.signalTerminationFailure(releaseFailure);
+				publishedResult = coordinationFailureResult(generation,
+						releaseFailure);
+			}
 		}
-		generation.result.complete(result);
+		if (!publishedResult.isComplete())
+			retainIncompleteResult(generation, publishedResult);
+		generation.result.complete(publishedResult);
+	}
+
+	private void retainIncompleteResult(@NonNull Generation generation,
+			@NonNull InternalShutdownResult result) {
+		Set<InternalResidualActivityKind> residual = requireNonNull(result)
+				.participantResult(this.kind)
+				.map(InternalParticipantShutdownResult::residualActivity)
+				.orElseGet(Set::of);
+		EnumMap<InternalResidualActivityKind, Integer> counts =
+				new EnumMap<>(InternalResidualActivityKind.class);
+		for (InternalResidualActivityKind kind : residual)
+			counts.put(kind, 1);
+		generation.retentionAnchor = new LifecycleRetentionAnchor(generation,
+				counts, "Built-in " + this.kind
+						+ " transport retained because termination was not proven");
 	}
 
 	private void requireCurrent(@NonNull Generation generation) {
-		if (this.current.get() != requireNonNull(generation))
+		requireOwned(generation);
+		if (this.current.get() != generation)
 			throw new IllegalStateException("Stale built-in transport lifecycle generation");
+	}
+
+	private void requireOwned(@NonNull Generation generation) {
+		if (requireNonNull(generation).runtime.owner != this)
+			throw new IllegalStateException("Foreign built-in transport lifecycle generation");
 	}
 
 	private final class AdapterParticipant implements InternalLifecycleCoordinator.Participant {
@@ -481,11 +589,6 @@ final class BuiltInTransportLifecycleAdapter {
 	/** Avoid generic varargs arrays and keep package-private call sites concise. */
 	private static final class ListSupport {
 		private ListSupport() {
-		}
-
-		@NonNull
-		static List<Throwable> throwables(@NonNull Throwable throwable) {
-			return java.util.List.of(throwable);
 		}
 
 		@NonNull

@@ -18,18 +18,23 @@ package com.soklet;
 
 import com.soklet.annotation.GET;
 import com.soklet.annotation.SseEventSource;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.condition.EnabledForJreRange;
 import org.junit.jupiter.api.condition.JRE;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.lang.reflect.Field;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -153,6 +158,54 @@ public class ResourceLeakTests {
 				new ResourceSnapshot.ResourceTolerance(4L, 24L * 1024L * 1024L, 12));
 	}
 
+	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
+	public void mcpListenerAndRequestReturnResourcesAfterCompleteShutdown()
+			throws Exception {
+		ResourceSnapshot stoppedBaseline = ResourceSnapshot.captureAfterGc();
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp-resource-leak")
+				.serverInformation(McpImplementation.withNameAndVersion(
+						"resource-leak", "4.0.0-SNAPSHOT").build())
+				.build();
+		McpServer server = McpServer.withPort(0)
+				.host("127.0.0.1")
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(McpAdmissionController.acceptAllInstance())
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.allowedHosts(Set.of("127.0.0.1"))
+				.shutdownTimeout(Duration.ofSeconds(2))
+				.build();
+		SokletConfig config = SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new QuietLifecycle())
+				.build();
+		InetSocketAddress address;
+
+		try (Soklet soklet = Soklet.fromConfig(config)) {
+			soklet.start();
+			address = server.getDiagnostics().getBoundAddress().orElseThrow();
+			assertMcpDiscovery(address.getPort());
+		}
+
+		Assertions.assertEquals(McpServerStatus.STOPPED,
+				server.getDiagnostics().getStatus());
+		Assertions.assertEquals(address,
+				server.getDiagnostics().getBoundAddress().orElseThrow());
+		McpServerRuntimeBridge.LifecycleEvidence evidence = bridge(server)
+				.getLifecycleEvidence();
+		Assertions.assertFalse(evidence.eventLoop());
+		Assertions.assertFalse(evidence.connection());
+		Assertions.assertFalse(evidence.executorTask());
+		Assertions.assertFalse(evidence.stream());
+		Assertions.assertFalse(evidence.callback());
+		Assertions.assertFalse(evidence.subscriptionRegistration());
+		ResourceSnapshot.assertReturnsNear("MCP request after complete shutdown",
+				stoppedBaseline, Duration.ofSeconds(5),
+				new ResourceSnapshot.ResourceTolerance(
+						4L, 24L * 1024L * 1024L, 12));
+	}
+
 	private static void assertOkResponse(int port) throws Exception {
 		try (Socket socket = connectWithRetry("127.0.0.1", port, 2_000)) {
 			socket.setSoTimeout(2_000);
@@ -167,6 +220,43 @@ public class ResourceLeakTests {
 			String response = new String(readAll(socket.getInputStream()), StandardCharsets.ISO_8859_1);
 			Assertions.assertTrue(response.startsWith("HTTP/1.1 200"), "Unexpected response: " + firstLine(response));
 			Assertions.assertTrue(response.endsWith("ok"), "Unexpected response body: " + response);
+		}
+	}
+
+	private static void assertMcpDiscovery(int port) throws Exception {
+		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"leak\","
+				+ "\"method\":\"server/discover\",\"params\":{\"_meta\":{"
+				+ "\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\","
+				+ "\"io.modelcontextprotocol/clientCapabilities\":{}}}}";
+		byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
+		try (Socket socket = connectWithRetry("127.0.0.1", port, 2_000)) {
+			socket.setSoTimeout(2_000);
+			String head = "POST /mcp-resource-leak HTTP/1.1\r\n"
+					+ "Host: 127.0.0.1:" + port + "\r\n"
+					+ "Content-Type: application/json; charset=UTF-8\r\n"
+					+ "Accept: application/json, text/event-stream\r\n"
+					+ "MCP-Protocol-Version: 2026-07-28\r\n"
+					+ "Mcp-Method: server/discover\r\n"
+					+ "Content-Length: " + bodyBytes.length + "\r\n"
+					+ "Connection: close\r\n\r\n";
+			socket.getOutputStream().write(head.getBytes(StandardCharsets.ISO_8859_1));
+			socket.getOutputStream().write(bodyBytes);
+			socket.getOutputStream().flush();
+			String response = new String(readAll(socket.getInputStream()),
+					StandardCharsets.UTF_8);
+			Assertions.assertTrue(response.startsWith("HTTP/1.1 200"), response);
+			Assertions.assertTrue(response.contains("\"id\":\"leak\""), response);
+		}
+	}
+
+	@NonNull
+	private static McpServerRuntimeBridge bridge(@NonNull McpServer server) {
+		try {
+			Field field = DefaultMcpServer.class.getDeclaredField("runtimeBridge");
+			field.setAccessible(true);
+			return (McpServerRuntimeBridge) field.get(server);
+		} catch (ReflectiveOperationException exception) {
+			throw new AssertionError(exception);
 		}
 	}
 

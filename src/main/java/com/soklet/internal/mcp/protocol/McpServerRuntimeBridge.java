@@ -1196,6 +1196,21 @@ public final class McpServerRuntimeBridge {
 	}
 
 	@NonNull
+	public InetSocketAddress start(
+			LifecycleAdapter.@NonNull Generation lifecycleGeneration)
+			throws IOException {
+		return this.runtime.start(requireNonNull(lifecycleGeneration));
+	}
+
+	/**
+	 * Publishes the never-bound state for the exact pending lifecycle generation.
+	 */
+	public void prepareLifecycleStart(
+			LifecycleAdapter.@NonNull Generation lifecycleGeneration) {
+		this.runtime.prepareLifecycleStart(requireNonNull(lifecycleGeneration));
+	}
+
+	@NonNull
 	public SimulationSession openSimulationSession() {
 		return new SimulationSession(this.runtime.openSimulationSession());
 	}
@@ -1215,6 +1230,10 @@ public final class McpServerRuntimeBridge {
 	public boolean awaitLifecycleTermination(long absoluteDeadlineNanos)
 			throws InterruptedException {
 		return this.runtime.awaitLifecycleTermination(absoluteDeadlineNanos);
+	}
+
+	public boolean lifecycleWaitWouldSelfJoin() {
+		return this.runtime.lifecycleWaitWouldSelfJoin();
 	}
 
 	@NonNull
@@ -2527,6 +2546,12 @@ public final class McpServerRuntimeBridge {
 			@NonNull
 			Optional<@NonNull Runnable> tryAdmit();
 
+			boolean shutdownRequested();
+
+			boolean tracksAdmissionLifetime();
+
+			boolean coordinatorOwnsUnexpectedTermination();
+
 			void signalTerminationFailure(@NonNull Throwable cause);
 		}
 
@@ -2553,6 +2578,21 @@ public final class McpServerRuntimeBridge {
 		@NonNull
 		public Optional<@NonNull Runnable> tryAdmit() {
 			return Optional.of(() -> {});
+		}
+
+		@Override
+		public boolean shutdownRequested() {
+			return false;
+		}
+
+		@Override
+		public boolean tracksAdmissionLifetime() {
+			return false;
+		}
+
+		@Override
+		public boolean coordinatorOwnsUnexpectedTermination() {
+			return false;
 		}
 
 		@Override

@@ -735,6 +735,11 @@ public class McpHandlerMetricsObservabilityTests {
 
 		try {
 			soklet.start();
+			McpTransportLifecycleAdapter lifecycleAdapter =
+					lifecycleAdapter(server);
+			McpTransportLifecycleAdapter.Generation terminatedGeneration =
+					(McpTransportLifecycleAdapter.Generation)
+							lifecycleAdapter.currentGeneration();
 			int port = port(server);
 			active = callTool(port, "/mcp/unexpected-lock-probe",
 					"unexpected-probe-active",
@@ -755,7 +760,8 @@ public class McpHandlerMetricsObservabilityTests {
 			McpServerDiagnostics failedBeforeDrain;
 			synchronized (subscriptionLock) {
 				termination = terminationExecutor.submit(() ->
-						handleUnexpectedTermination(runtime, eventLoop));
+						handleUnexpectedTermination(runtime, eventLoop,
+								terminatedGeneration));
 				failedBeforeDrain = awaitDiagnostics(server, diagnostics ->
 						diagnostics.getStatus()
 								== McpServerStatus.STOPPED_WITH_RESIDUAL_HANDLERS
@@ -764,12 +770,16 @@ public class McpHandlerMetricsObservabilityTests {
 			}
 			Assertions.assertTrue(activeInterrupted.await(5, TimeUnit.SECONDS),
 					"Unexpected termination did not interrupt the active handler.");
+			requireNonNull(termination).get(5, TimeUnit.SECONDS);
+			lifecycleAdapter.awaitStop(terminatedGeneration);
+			Assertions.assertFalse(lifecycleAdapter.result(terminatedGeneration)
+					.orElseThrow().isComplete(),
+					"The still-running exact generation must freeze with retained evidence.");
 			McpServerDiagnostics failedAfterDrain = awaitDiagnostics(server,
 					diagnostics -> diagnostics.getStatus()
 							== McpServerStatus.STOPPED_WITH_RESIDUAL_HANDLERS
 							&& diagnostics.getActiveHandlerExecutions() == 1
 							&& diagnostics.getQueuedRequests() == 0);
-			requireNonNull(termination).get(5, TimeUnit.SECONDS);
 			collector.awaitProbeCount(1);
 			Assertions.assertNull(collector.probeFailure(),
 					"A handler callback ran while the runtime lifecycle lock was held.");
@@ -1037,6 +1047,16 @@ public class McpHandlerMetricsObservabilityTests {
 	}
 
 	@NonNull
+	private static McpTransportLifecycleAdapter lifecycleAdapter(
+			@NonNull McpServer server) throws Exception {
+		Field adapterField = DefaultMcpServer.class.getDeclaredField(
+				"lifecycleAdapter");
+		adapterField.setAccessible(true);
+		return (McpTransportLifecycleAdapter) adapterField.get(
+				requireNonNull(server));
+	}
+
+	@NonNull
 	private static Object runtime(@NonNull McpServerRuntimeBridge bridge)
 			throws Exception {
 		Field runtimeField = McpServerRuntimeBridge.class.getDeclaredField(
@@ -1063,13 +1083,17 @@ public class McpHandlerMetricsObservabilityTests {
 	}
 
 	private static void handleUnexpectedTermination(@NonNull Object runtime,
-			@NonNull EventLoop eventLoop) {
+			@NonNull EventLoop eventLoop,
+			McpServerRuntimeBridge.LifecycleAdapter.@NonNull Generation
+					terminatedGeneration) {
 		try {
 			Method method = requireNonNull(runtime).getClass().getDeclaredMethod(
-					"handleUnexpectedTermination", EventLoop.class, Throwable.class);
+					"handleUnexpectedTermination", EventLoop.class, Throwable.class,
+					McpServerRuntimeBridge.LifecycleAdapter.Generation.class);
 			method.setAccessible(true);
 			method.invoke(runtime, requireNonNull(eventLoop),
-					new IllegalStateException("expected test termination"));
+					new IllegalStateException("expected test termination"),
+					requireNonNull(terminatedGeneration));
 		} catch (ReflectiveOperationException exception) {
 			throw new AssertionError("Unable to invoke unexpected termination.",
 					exception.getCause() == null ? exception : exception.getCause());

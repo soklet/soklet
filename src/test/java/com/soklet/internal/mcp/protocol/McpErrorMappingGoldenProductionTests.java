@@ -595,7 +595,7 @@ public class McpErrorMappingGoldenProductionTests {
 		server.stop();
 		McpServerDiagnostics diagnostics = server.getDiagnostics();
 		Assertions.assertEquals(McpServerStatus.STOPPED, diagnostics.getStatus());
-		Assertions.assertTrue(diagnostics.getBoundAddress().isEmpty());
+		Assertions.assertTrue(diagnostics.getBoundAddress().isPresent());
 		Assertions.assertTrue(zeroLoad(diagnostics));
 	}
 

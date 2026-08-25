@@ -124,8 +124,8 @@ class McpLocalizationFleetPublicRuntimeTests {
 			close(firstSubscription);
 			close(secondSubscription);
 			fleet.close();
-			assertStoppedAndEmpty(fleet.first());
-			assertStoppedAndEmpty(fleet.second());
+			assertStoppedWithRetainedAddress(fleet.first());
+			assertStoppedWithRetainedAddress(fleet.second());
 		}
 	}
 
@@ -197,8 +197,8 @@ class McpLocalizationFleetPublicRuntimeTests {
 			close(firstSubscription);
 			close(secondSubscription);
 			fleet.close();
-			assertStoppedAndEmpty(fleet.first());
-			assertStoppedAndEmpty(fleet.second());
+			assertStoppedWithRetainedAddress(fleet.first());
+			assertStoppedWithRetainedAddress(fleet.second());
 		}
 	}
 
@@ -222,7 +222,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 
 			fleet.first().stop();
 			firstSubscription.awaitTransportClosed(WAIT);
-			assertStoppedAndEmpty(fleet.first());
+			assertStoppedWithRetainedAddress(fleet.first());
 			assertEquals(0, fleet.second().server().getDiagnostics()
 					.getActiveSubscriptions());
 
@@ -256,13 +256,13 @@ class McpLocalizationFleetPublicRuntimeTests {
 			reconnectedSubscription.close();
 			awaitRuntime(fleet.second(), 0, 0);
 			fleet.second().stop();
-			assertStoppedAndEmpty(fleet.second());
+			assertStoppedWithRetainedAddress(fleet.second());
 		} finally {
 			close(firstSubscription);
 			close(reconnectedSubscription);
 			fleet.close();
-			assertStoppedAndEmpty(fleet.first());
-			assertStoppedAndEmpty(fleet.second());
+			assertStoppedWithRetainedAddress(fleet.first());
+			assertStoppedWithRetainedAddress(fleet.second());
 		}
 	}
 
@@ -343,10 +343,10 @@ class McpLocalizationFleetPublicRuntimeTests {
 				+ diagnostics);
 	}
 
-	private static void assertStoppedAndEmpty(FleetNode node) {
+	private static void assertStoppedWithRetainedAddress(FleetNode node) {
 		McpServerDiagnostics diagnostics = node.server().getDiagnostics();
 		assertEquals(McpServerStatus.STOPPED, diagnostics.getStatus());
-		assertTrue(diagnostics.getBoundAddress().isEmpty());
+		assertTrue(diagnostics.getBoundAddress().isPresent());
 		assertEquals(0, diagnostics.getActiveHandlerExecutions());
 		assertEquals(0, diagnostics.getQueuedRequests());
 		assertEquals(0, diagnostics.getActiveRequestStreams());

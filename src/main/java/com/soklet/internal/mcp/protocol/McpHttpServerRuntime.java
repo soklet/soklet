@@ -293,6 +293,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	@NonNull
 	private final McpHttpTransportConfiguration transportConfiguration;
 	@NonNull
+	private final ThreadLocal<AtomicInteger> lifecycleProofExecutionDepth;
+	@NonNull
 	private final McpJsonLimits jsonLimits;
 	@NonNull
 	private final McpJsonCodec jsonCodec;
@@ -393,6 +395,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private @Nullable SubscriptionRegistrationCloseBatch lifecycleCloseBatch;
 	private boolean lifecycleQuiesced;
 	private boolean lifecycleForced;
+	private boolean lifecycleStartupInProgress;
+	private boolean lifecycleStartupClaimed;
+	private McpServerRuntimeBridge.LifecycleAdapter.@Nullable Generation
+			lifecycleStartupGeneration;
 
 	McpHttpServerRuntime(
 			@NonNull McpHttpTransportConfiguration transportConfiguration,
@@ -675,6 +681,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			@NonNull McpProtocolProfileRegistry protocolProfiles,
 			McpServerRuntimeBridge.@NonNull LifecycleAdapter lifecycleAdapter) {
 		this.transportConfiguration = requireNonNull(transportConfiguration);
+		this.lifecycleProofExecutionDepth = ThreadLocal.withInitial(AtomicInteger::new);
 		this.jsonLimits = requireNonNull(jsonLimits);
 		this.applicationConfiguration = requireNonNull(applicationConfiguration);
 		this.applicationClock = requireNonNull(applicationClock);
@@ -733,6 +740,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		this.lifecycleState = LifecycleState.STOPPED;
 		this.lifecycleQuiesced = false;
 		this.lifecycleForced = false;
+		this.lifecycleStartupInProgress = false;
+		this.lifecycleStartupClaimed = false;
+		this.lifecycleStartupGeneration = null;
 	}
 
 	@NonNull
@@ -1037,95 +1047,193 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 	@NonNull
 	InetSocketAddress start() throws IOException {
-		this.applicationExecutionObserver.beginDeferral();
-		try {
-			return startWhileMetricsDeferred();
-		} finally {
-			this.applicationExecutionObserver.endDeferral();
-		}
+		return start(requireNonNull(lifecycleAdapter.currentGeneration()));
 	}
 
 	@NonNull
-	private InetSocketAddress startWhileMetricsDeferred() throws IOException {
-		InetSocketAddress effectiveAddress;
-
+	InetSocketAddress start(
+			McpServerRuntimeBridge.LifecycleAdapter.@NonNull Generation
+					expectedGeneration) throws IOException {
+		requireNonNull(expectedGeneration);
+		boolean preparationRequired;
 		synchronized (lifecycleLock) {
-			reapSimulationResidualsWhileLocked();
-			if (simulationGeneration != null
-					|| residualSimulationRequestProcessor != null
-					|| residualSimulationApplicationExecution != null
-					|| !residualSimulationSubscriptionSourceRegistrations.isEmpty())
-				throw new IllegalStateException(SIMULATION_REQUIRES_STOPPED_SERVER);
+			preparationRequired = lifecycleState == LifecycleState.STOPPED;
+		}
+		if (preparationRequired) {
+			if (expectedGeneration.shutdownRequested())
+				throw new IOException(
+						"MCP shutdown began before listener startup.");
+			prepareLifecycleStart(expectedGeneration);
+		}
+		McpServerRuntimeBridge.LifecycleAdapter.Generation lifecycleGeneration =
+				claimLifecycleStart(expectedGeneration);
+		this.applicationExecutionObserver.beginDeferral();
+		enterStartupExecution();
+		try {
+			return startWhileMetricsDeferred(lifecycleGeneration);
+		} finally {
+			try {
+				exitStartupExecution();
+			} finally {
+				this.applicationExecutionObserver.endDeferral();
+			}
+		}
+	}
+
+	/** Publishes the never-bound state for one exact generation before callbacks. */
+	void prepareLifecycleStart(
+			McpServerRuntimeBridge.LifecycleAdapter.@NonNull Generation
+					expectedGeneration) {
+		requireNonNull(expectedGeneration);
+		synchronized (lifecycleLock) {
+			if (lifecycleAdapter.currentGeneration() != expectedGeneration)
+				throw new IllegalStateException(
+						"The MCP lifecycle generation is no longer current.");
 			if (lifecycleState != LifecycleState.STOPPED)
 				throw new IllegalStateException("The MCP HTTP server is not stopped.");
-			if (residualRequestProcessor != null) {
-				if (!residualRequestProcessor.isTerminated())
-					throw new IllegalStateException(
-							"Cannot start MCP server while residual handler executions remain");
-				residualRequestProcessor = null;
-			}
-			if (residualApplicationExecution != null) {
-				if (!residualApplicationExecution.isTerminated())
-					throw new IllegalStateException(
-							"Cannot start MCP server while residual handler executions remain");
-				residualApplicationExecution = null;
-			}
-			if (residualEventLoop != null) {
-				if (!residualEventLoop.isTerminated())
-					throw new IllegalStateException(
-							"Cannot start MCP server while residual transport threads remain");
-				residualEventLoop = null;
-			}
-			residualSubscriptionSourceRegistrations =
-					unclosedSubscriptionSourceRegistrations(
-							residualSubscriptionSourceRegistrations);
-			if (!residualSubscriptionSourceRegistrations.isEmpty())
-				throw new IllegalStateException(
-						RESIDUAL_SUBSCRIPTION_EVENT_SOURCE_RESTART_DIAGNOSTIC);
-
 			lifecycleState = LifecycleState.STARTING;
-			// A new generation is never allowed to inherit an earlier generation's
-			// retained diagnostic address.  This remains empty until this generation
-			// has actually bound.
+			lifecycleStartupInProgress = true;
+			lifecycleStartupClaimed = false;
+			lifecycleStartupGeneration = expectedGeneration;
 			boundAddress = null;
 			lifecycleCloseBatch = null;
 			lifecycleQuiesced = false;
 			lifecycleForced = false;
-			ThreadPoolExecutor candidateProcessor = null;
-			McpApplicationExecution candidateApplicationExecution = null;
-			AtomicReference<ListenerState> candidateReadiness =
-					new AtomicReference<>(ListenerState.STARTING);
-			McpServerRuntimeBridge.LifecycleAdapter.Generation
-					candidateLifecycleGeneration = requireNonNull(
-							lifecycleAdapter.currentGeneration());
-			AtomicReference<InetSocketAddress> candidateAddress = new AtomicReference<>();
-			EventLoop candidateEventLoop = null;
-			List<SubscriptionSourceRegistrationControl>
-					candidateSubscriptionRegistrations = new ArrayList<>();
+			currentReadiness = null;
+			subscriptionSourceRegistrations = List.of();
+		}
+	}
 
-			try {
-				candidateProcessor = newRequestProcessor();
-				candidateApplicationExecution = new McpApplicationExecution(
-						applicationConfiguration, applicationClock,
-						applicationExecutorFactory, this::runProtocolDeadlineCycle,
-						this.applicationExecutionObserver);
-				ThreadPoolExecutor readyProcessor = candidateProcessor;
-				McpApplicationExecution readyApplicationExecution =
-						candidateApplicationExecution;
-				Handler handler = new Handler() {
-					@Override
+	private McpServerRuntimeBridge.LifecycleAdapter.@NonNull Generation
+			claimLifecycleStart(
+					McpServerRuntimeBridge.LifecycleAdapter.@NonNull Generation
+							expectedGeneration) {
+		requireNonNull(expectedGeneration);
+		synchronized (lifecycleLock) {
+			if (lifecycleState != LifecycleState.STARTING
+					|| !lifecycleStartupInProgress
+					|| lifecycleStartupClaimed
+					|| lifecycleStartupGeneration != expectedGeneration
+					|| lifecycleAdapter.currentGeneration() != expectedGeneration)
+				throw new IllegalStateException(
+						"The MCP HTTP server has no matching prepared startup to claim.");
+			lifecycleStartupClaimed = true;
+			return lifecycleStartupGeneration;
+		}
+	}
+
+	boolean lifecycleWaitWouldSelfJoin() {
+		AtomicInteger depth = lifecycleProofExecutionDepth.get();
+		boolean selfJoin = depth.get() != 0;
+		if (!selfJoin)
+			lifecycleProofExecutionDepth.remove();
+		return selfJoin;
+	}
+
+	private void enterStartupExecution() {
+		enterLifecycleProofExecution();
+	}
+
+	private void exitStartupExecution() {
+		exitLifecycleProofExecution();
+	}
+
+	private void enterLifecycleProofExecution() {
+		lifecycleProofExecutionDepth.get().incrementAndGet();
+	}
+
+	private void exitLifecycleProofExecution() {
+		AtomicInteger depth = lifecycleProofExecutionDepth.get();
+		if (depth.decrementAndGet() == 0)
+			lifecycleProofExecutionDepth.remove();
+	}
+
+	@NonNull
+	private InetSocketAddress startWhileMetricsDeferred(
+			McpServerRuntimeBridge.LifecycleAdapter.@NonNull Generation
+					lifecycleGeneration) throws IOException {
+		ThreadPoolExecutor candidateProcessor = null;
+		McpApplicationExecution candidateApplicationExecution = null;
+		AtomicReference<ListenerState> candidateReadiness =
+				new AtomicReference<>(ListenerState.STARTING);
+		AtomicReference<InetSocketAddress> candidateAddress = new AtomicReference<>();
+		AtomicReference<Throwable> startupFailure = new AtomicReference<>();
+		AtomicReference<Throwable> startupSignalFailure = new AtomicReference<>();
+		AtomicBoolean startupFailureSignaled = new AtomicBoolean();
+		EventLoop candidateEventLoop = null;
+		InetSocketAddress effectiveAddress = null;
+		List<SubscriptionSourceRegistrationControl>
+				candidateSubscriptionRegistrations = new ArrayList<>();
+
+		try {
+			synchronized (lifecycleLock) {
+				reapSimulationResidualsWhileLocked();
+				if (simulationGeneration != null
+						|| residualSimulationRequestProcessor != null
+						|| residualSimulationApplicationExecution != null
+						|| !residualSimulationSubscriptionSourceRegistrations.isEmpty())
+					throw new IllegalStateException(SIMULATION_REQUIRES_STOPPED_SERVER);
+				if (residualRequestProcessor != null) {
+					if (!residualRequestProcessor.isTerminated())
+						throw new IllegalStateException(
+								"Cannot start MCP server while residual handler executions remain");
+					residualRequestProcessor = null;
+				}
+				if (residualApplicationExecution != null) {
+					if (!residualApplicationExecution.isTerminated())
+						throw new IllegalStateException(
+								"Cannot start MCP server while residual handler executions remain");
+					residualApplicationExecution = null;
+				}
+				if (residualEventLoop != null) {
+					if (!residualEventLoop.isTerminated())
+						throw new IllegalStateException(
+								"Cannot start MCP server while residual transport threads remain");
+					residualEventLoop = null;
+				}
+				residualSubscriptionSourceRegistrations =
+						unclosedSubscriptionSourceRegistrations(
+								residualSubscriptionSourceRegistrations);
+				if (!residualSubscriptionSourceRegistrations.isEmpty())
+					throw new IllegalStateException(
+							RESIDUAL_SUBSCRIPTION_EVENT_SOURCE_RESTART_DIAGNOSTIC);
+			}
+			ensureStartupMayContinue(lifecycleGeneration, startupFailure);
+
+			candidateProcessor = newRequestProcessor();
+			synchronized (lifecycleLock) {
+				requestProcessor = candidateProcessor;
+			}
+			catchUpStartupProcessor(candidateProcessor);
+			ensureStartupMayContinue(lifecycleGeneration, startupFailure);
+
+			candidateApplicationExecution = new McpApplicationExecution(
+					applicationConfiguration, applicationClock,
+					applicationExecutorFactory, this::runProtocolDeadlineCycle,
+					this.applicationExecutionObserver);
+			synchronized (lifecycleLock) {
+				applicationExecution = candidateApplicationExecution;
+			}
+			catchUpStartupApplication(candidateApplicationExecution);
+			ensureStartupMayContinue(lifecycleGeneration, startupFailure);
+
+			ThreadPoolExecutor readyProcessor = candidateProcessor;
+			McpApplicationExecution readyApplicationExecution =
+					candidateApplicationExecution;
+			Handler handler = new Handler() {
+				@Override
 				public void handle(@NonNull MicrohttpRequest request,
 						@NonNull Consumer<@NonNull MicrohttpResponse> callback) {
 					if (candidateReadiness.get() != ListenerState.READY) {
-							applicationExecutionObserver.recordRequestRejected();
-							applicationExecutionObserver.drain();
-							List<Header> headers = localizationVaryRequired(request)
-									? withAcceptLanguageVary(List.of()) : List.of();
-							callback.accept(emptyResponse(
-									503, "Service Unavailable", headers));
+						applicationExecutionObserver.recordRequestRejected();
+						applicationExecutionObserver.drain();
+						List<Header> headers = localizationVaryRequired(request)
+								? withAcceptLanguageVary(List.of()) : List.of();
+						callback.accept(emptyResponse(
+								503, "Service Unavailable", headers));
 						return;
 					}
-					Runnable lifecycleAdmission = candidateLifecycleGeneration.tryAdmit()
+					Runnable lifecycleAdmission = lifecycleGeneration.tryAdmit()
 							.orElse(null);
 					if (lifecycleAdmission == null) {
 						applicationExecutionObserver.recordRequestRejected();
@@ -1138,80 +1246,353 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					}
 
 					try {
+						Runnable trackedLifecycleAdmission = lifecycleGeneration
+								.tracksAdmissionLifetime() ? lifecycleAdmission : null;
 						submitRequest(readyProcessor, readyApplicationExecution,
-							candidateAddress.get(), request, lifecycleAdmission,
-							callback);
+								candidateAddress.get(), request,
+								trackedLifecycleAdmission, callback);
 					} catch (RuntimeException | Error failure) {
 						lifecycleAdmission.run();
 						throw failure;
 					}
-					}
+				}
 
-					@Override
-					public boolean monitorClientDisconnectsBeforeResponse(
-							@NonNull MicrohttpRequest request) {
-						return true;
-					}
+				@Override
+				public boolean monitorClientDisconnectsBeforeResponse(
+						@NonNull MicrohttpRequest request) {
+					return true;
+				}
 
-					@Override
-					public boolean monitorClientDisconnectsDuringStreamingResponse(
-							@NonNull MicrohttpRequest request) {
-						return true;
-					}
+				@Override
+				public boolean monitorClientDisconnectsDuringStreamingResponse(
+						@NonNull MicrohttpRequest request) {
+					return true;
+				}
 
-					@Override
-					public void cancel(@NonNull MicrohttpRequest request,
-							@NonNull StreamTerminationReason reason,
-							@Nullable Throwable cause) {
-						cancelRequest(request, reason, cause);
-					}
-				};
-				Options options = microhttpOptions();
-				candidateEventLoop = new EventLoop(options, NoopLogger.instance(), handler,
-						connectionListener(candidateReadiness,
-								candidateLifecycleGeneration),
-						this.transportFailureObserver);
-				effectiveAddress = candidateEventLoop.getLocalAddress();
-				candidateAddress.set(effectiveAddress);
+				@Override
+				public void cancel(@NonNull MicrohttpRequest request,
+						@NonNull StreamTerminationReason reason,
+						@Nullable Throwable cause) {
+					cancelRequest(request, reason, cause);
+				}
+			};
+
+			Options options = microhttpOptions();
+			candidateEventLoop = new EventLoop(options, NoopLogger.instance(), handler,
+					connectionListener(candidateReadiness, lifecycleGeneration,
+							startupFailure, startupFailureSignaled,
+							startupSignalFailure),
+					this.transportFailureObserver);
+			if (lifecycleGeneration.coordinatorOwnsUnexpectedTermination())
+				candidateEventLoop.useCoordinatorOwnedUnexpectedTermination();
+			effectiveAddress = candidateEventLoop.getLocalAddress();
+			candidateAddress.set(effectiveAddress);
+			synchronized (lifecycleLock) {
+				eventLoop = candidateEventLoop;
+				currentReadiness = candidateReadiness;
 				// Binding is the address-retention linearization point.  Every later
-				// snapshot for this generation retains this value, including startup
-				// failure and incomplete termination.
-				this.boundAddress = effectiveAddress;
-				candidateEventLoop.start();
-				candidateApplicationExecution.start();
-				subscribeToSubscriptionEventSources(
-						candidateSubscriptionRegistrations);
-				emitOmittedCorsAuthorizerDiagnostic();
-				startAcceptingSubscriptions();
-
-				this.requestProcessor = candidateProcessor;
-				this.applicationExecution = candidateApplicationExecution;
-				this.eventLoop = candidateEventLoop;
-				this.currentReadiness = candidateReadiness;
-				this.subscriptionSourceRegistrations = List.copyOf(
-						candidateSubscriptionRegistrations);
-				this.lifecycleState = LifecycleState.STARTED;
-				if (!candidateReadiness.compareAndSet(
-						ListenerState.STARTING, ListenerState.READY))
-					throw new IOException("The MCP HTTP listener terminated during startup.");
-			} catch (IOException | RuntimeException | Error throwable) {
-				candidateReadiness.set(ListenerState.TERMINATED);
-				// Publish the exact generation failure before any cancellation or
-				// teardown.  The common coordinator receives all candidate resources
-				// below and exclusively owns their quiesce/force progression.
-				candidateLifecycleGeneration.signalTerminationFailure(throwable);
-				this.requestProcessor = candidateProcessor;
-				this.applicationExecution = candidateApplicationExecution;
-				this.eventLoop = candidateEventLoop;
-				this.currentReadiness = null;
-				this.subscriptionSourceRegistrations = List.copyOf(
-						candidateSubscriptionRegistrations);
-				this.lifecycleState = LifecycleState.FAILED;
-				throw throwable;
+				// snapshot for this generation retains this value.
+				boundAddress = effectiveAddress;
 			}
-		}
+			catchUpStartupEventLoop(candidateEventLoop);
+			ensureStartupMayContinue(lifecycleGeneration, startupFailure);
 
-		return effectiveAddress;
+			candidateEventLoop.start();
+			ensureStartupMayContinue(lifecycleGeneration, startupFailure);
+			candidateApplicationExecution.start();
+			ensureStartupMayContinue(lifecycleGeneration, startupFailure);
+
+			subscribeToSubscriptionEventSources(
+					candidateSubscriptionRegistrations,
+					this::publishStartupSubscriptionRegistration);
+			ensureStartupMayContinue(lifecycleGeneration, startupFailure);
+			emitOmittedCorsAuthorizerDiagnostic();
+			ensureStartupMayContinue(lifecycleGeneration, startupFailure);
+
+			boolean ready;
+			synchronized (lifecycleLock) {
+				ready = lifecycleState == LifecycleState.STARTING
+						&& !lifecycleQuiesced && !lifecycleForced
+						&& !lifecycleGeneration.shutdownRequested()
+						&& startupFailure.get() == null;
+				if (ready) {
+					startAcceptingSubscriptions();
+					ready = candidateReadiness.compareAndSet(
+							ListenerState.STARTING, ListenerState.READY);
+				}
+				if (ready) {
+					lifecycleState = LifecycleState.STARTED;
+					lifecycleStartupInProgress = false;
+					lifecycleStartupClaimed = false;
+					lifecycleStartupGeneration = null;
+					lifecycleLock.notifyAll();
+				}
+			}
+			if (!ready) {
+				Throwable exactFailure = startupFailure.get();
+				if (exactFailure != null)
+					rethrowStartupFailure(exactFailure);
+				throw new IOException(
+						"MCP shutdown began before listener readiness.");
+			}
+			return requireNonNull(effectiveAddress);
+		} catch (IOException | RuntimeException | Error throwable) {
+			Throwable primary;
+			synchronized (lifecycleLock) {
+				// Startup and EventLoop termination elect one exact primary while
+				// serialized with the final STARTING -> READY transition.  Publishing
+				// TERMINATED before the cause would allow startup to synthesize a
+				// different failure and win the common coordinator signal.
+				startupFailure.compareAndSet(null, throwable);
+				primary = requireNonNull(startupFailure.get());
+				candidateReadiness.set(ListenerState.TERMINATED);
+			}
+			if (primary != throwable && throwable != primary)
+				primary.addSuppressed(throwable);
+
+			boolean candidatesPublished = candidateProcessor != null
+					|| candidateApplicationExecution != null
+					|| candidateEventLoop != null
+					|| !candidateSubscriptionRegistrations.isEmpty();
+			synchronized (lifecycleLock) {
+				if (candidateProcessor != null)
+					requestProcessor = candidateProcessor;
+				if (candidateApplicationExecution != null)
+					applicationExecution = candidateApplicationExecution;
+				if (candidateEventLoop != null) {
+					eventLoop = candidateEventLoop;
+					if (effectiveAddress != null)
+						boundAddress = effectiveAddress;
+				}
+				publishStartupSubscriptionRegistrationsWhileLocked(
+						candidateSubscriptionRegistrations);
+				currentReadiness = null;
+				if (candidatesPublished) {
+					if (lifecycleState == LifecycleState.STARTING)
+						lifecycleState = LifecycleState.FAILED;
+				} else {
+					lifecycleState = LifecycleState.STOPPED;
+				}
+			}
+
+			Throwable signalFailure = signalStartupFailure(lifecycleGeneration,
+					primary, startupFailureSignaled, startupSignalFailure);
+			if (signalFailure != null && signalFailure != primary)
+				primary.addSuppressed(signalFailure);
+
+			Throwable catchUpFailure = null;
+			if (candidateProcessor != null) {
+				ThreadPoolExecutor processorToCatchUp = candidateProcessor;
+				catchUpFailure = runLifecycleStep(catchUpFailure,
+						() -> catchUpStartupProcessor(processorToCatchUp));
+			}
+			if (candidateApplicationExecution != null) {
+				McpApplicationExecution applicationToCatchUp =
+						candidateApplicationExecution;
+				catchUpFailure = runLifecycleStep(catchUpFailure,
+						() -> catchUpStartupApplication(
+								applicationToCatchUp));
+			}
+			if (candidateEventLoop != null) {
+				EventLoop eventLoopToCatchUp = candidateEventLoop;
+				catchUpFailure = runLifecycleStep(catchUpFailure,
+						() -> catchUpStartupEventLoop(eventLoopToCatchUp));
+			}
+			for (SubscriptionSourceRegistrationControl registration
+					: candidateSubscriptionRegistrations)
+				catchUpFailure = runLifecycleStep(catchUpFailure,
+						() -> catchUpStartupSubscriptionRegistration(registration));
+			if (catchUpFailure != null && catchUpFailure != primary)
+				primary.addSuppressed(catchUpFailure);
+
+			synchronized (lifecycleLock) {
+				lifecycleStartupInProgress = false;
+				lifecycleStartupClaimed = false;
+				lifecycleStartupGeneration = null;
+				lifecycleLock.notifyAll();
+			}
+
+			if (!lifecycleGeneration.coordinatorOwnsUnexpectedTermination()
+					&& candidatesPublished) {
+				try {
+					stopAndReportResidualApplicationExecutionsWhileMetricsDeferred();
+				} catch (Throwable cleanupFailure) {
+					if (cleanupFailure != primary)
+						primary.addSuppressed(cleanupFailure);
+				}
+			}
+			rethrowStartupFailure(primary);
+			throw new AssertionError("Unreachable startup failure");
+		}
+	}
+
+	private void ensureStartupMayContinue(
+			McpServerRuntimeBridge.LifecycleAdapter.@NonNull Generation generation,
+			@NonNull AtomicReference<Throwable> startupFailure) throws IOException {
+		Throwable exactFailure = requireNonNull(startupFailure).get();
+		if (exactFailure != null)
+			rethrowStartupFailure(exactFailure);
+		boolean stopping;
+		synchronized (lifecycleLock) {
+			stopping = lifecycleState != LifecycleState.STARTING
+					|| lifecycleQuiesced || lifecycleForced;
+		}
+		if (stopping || requireNonNull(generation).shutdownRequested())
+			throw new IOException("MCP shutdown began during listener startup.");
+	}
+
+	private void rethrowStartupFailure(@NonNull Throwable failure)
+			throws IOException {
+		if (requireNonNull(failure) instanceof IOException exception)
+			throw exception;
+		if (failure instanceof RuntimeException exception)
+			throw exception;
+		if (failure instanceof Error error)
+			throw error;
+		throw new IOException("The MCP HTTP listener terminated during startup.",
+				failure);
+	}
+
+	private void catchUpStartupProcessor(@NonNull ThreadPoolExecutor processor) {
+		boolean quiesced;
+		boolean forced;
+		synchronized (lifecycleLock) {
+			quiesced = lifecycleQuiesced;
+			forced = lifecycleForced;
+		}
+		if (forced)
+			requireNonNull(processor).shutdownNow();
+		else if (quiesced)
+			processor.shutdown();
+	}
+
+	private void catchUpStartupApplication(
+			@NonNull McpApplicationExecution application) {
+		boolean quiesced;
+		boolean forced;
+		synchronized (lifecycleLock) {
+			quiesced = lifecycleQuiesced;
+			forced = lifecycleForced;
+		}
+		if (forced)
+			requireNonNull(application).stop(
+					StreamTerminationReason.SERVER_STOPPING);
+		else if (quiesced)
+			application.beginGracefulDrain();
+	}
+
+	private void catchUpStartupEventLoop(@NonNull EventLoop loop) {
+		boolean quiesced;
+		boolean forced;
+		synchronized (lifecycleLock) {
+			quiesced = lifecycleQuiesced;
+			forced = lifecycleForced;
+		}
+		if (quiesced || forced) {
+			requireNonNull(loop).stopAccepting();
+			loop.beginDrain();
+		}
+		if (forced)
+			loop.stopConnections();
+	}
+
+	private void publishStartupSubscriptionRegistration(
+			@NonNull SubscriptionSourceRegistrationControl registration) {
+		synchronized (lifecycleLock) {
+			publishStartupSubscriptionRegistrationsWhileLocked(
+					List.of(requireNonNull(registration)));
+		}
+		catchUpStartupSubscriptionRegistration(registration);
+	}
+
+	private void publishStartupSubscriptionRegistrationsWhileLocked(
+			@NonNull List<@NonNull SubscriptionSourceRegistrationControl>
+					registrations) {
+		if (!Thread.holdsLock(lifecycleLock))
+			throw new IllegalStateException("The MCP lifecycle lock is required.");
+		if (lifecycleQuiesced || lifecycleForced)
+			residualSubscriptionSourceRegistrations =
+					mergeSubscriptionSourceRegistrations(
+							residualSubscriptionSourceRegistrations,
+							requireNonNull(registrations));
+		else
+			subscriptionSourceRegistrations = mergeSubscriptionSourceRegistrations(
+					subscriptionSourceRegistrations, requireNonNull(registrations));
+	}
+
+	private void catchUpStartupSubscriptionRegistration(
+			@NonNull SubscriptionSourceRegistrationControl registration) {
+		boolean quiesced;
+		boolean forced;
+		synchronized (lifecycleLock) {
+			quiesced = lifecycleQuiesced;
+			forced = lifecycleForced;
+		}
+		if (!quiesced && !forced)
+			return;
+		SubscriptionSourceRegistrationControl requiredRegistration =
+				requireNonNull(registration);
+		requiredRegistration.deactivateListener();
+		SubscriptionRegistrationCloseAttempt closeAttempt =
+				requiredRegistration.beginClose(
+						subscriptionCloseThreadSequence.incrementAndGet());
+		synchronized (lifecycleLock) {
+			forced = lifecycleForced;
+		}
+		if (forced)
+			closeAttempt.cancel();
+		publishLifecycleCloseBatch(new SubscriptionRegistrationCloseBatch(
+				List.of(requiredRegistration), List.of(closeAttempt)));
+	}
+
+	private void publishLifecycleCloseBatch(
+			@NonNull SubscriptionRegistrationCloseBatch closeBatch) {
+		synchronized (lifecycleLock) {
+			lifecycleCloseBatch = mergeSubscriptionRegistrationCloseBatches(
+					lifecycleCloseBatch, requireNonNull(closeBatch));
+		}
+	}
+
+	@NonNull
+	private SubscriptionRegistrationCloseBatch mergeSubscriptionRegistrationCloseBatches(
+			@Nullable SubscriptionRegistrationCloseBatch first,
+			@NonNull SubscriptionRegistrationCloseBatch second) {
+		if (first == null)
+			return requireNonNull(second);
+		SubscriptionRegistrationCloseBatch requiredSecond = requireNonNull(second);
+		List<SubscriptionSourceRegistrationControl> registrations =
+				mergeSubscriptionSourceRegistrations(first.registrations(),
+						requiredSecond.registrations());
+		Set<SubscriptionRegistrationCloseAttempt> mergedAttempts =
+				Collections.newSetFromMap(new IdentityHashMap<>());
+		List<SubscriptionRegistrationCloseAttempt> attempts = new ArrayList<>();
+		for (SubscriptionRegistrationCloseAttempt attempt : first.closeAttempts()) {
+			if (mergedAttempts.add(attempt))
+				attempts.add(attempt);
+		}
+		for (SubscriptionRegistrationCloseAttempt attempt
+				: requiredSecond.closeAttempts()) {
+			if (mergedAttempts.add(attempt))
+				attempts.add(attempt);
+		}
+		return new SubscriptionRegistrationCloseBatch(registrations, attempts);
+	}
+
+	private @Nullable Throwable signalStartupFailure(
+			McpServerRuntimeBridge.LifecycleAdapter.@NonNull Generation generation,
+			@NonNull Throwable failure,
+			@NonNull AtomicBoolean failureSignaled,
+			@NonNull AtomicReference<Throwable> signalFailure) {
+		if (!requireNonNull(failureSignaled).compareAndSet(false, true))
+			return requireNonNull(signalFailure).get();
+		try {
+			requireNonNull(generation).signalTerminationFailure(
+					requireNonNull(failure));
+			return null;
+		} catch (Throwable throwable) {
+			requireNonNull(signalFailure).compareAndSet(null, throwable);
+			return throwable;
+		}
 	}
 
 	private void emitOmittedCorsAuthorizerDiagnostic() {
@@ -1232,14 +1613,24 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private void subscribeToSubscriptionEventSources(
 			@NonNull List<@NonNull SubscriptionSourceRegistrationControl>
 					registrations) {
+		subscribeToSubscriptionEventSources(registrations, ignored -> {});
+	}
+
+	private void subscribeToSubscriptionEventSources(
+			@NonNull List<@NonNull SubscriptionSourceRegistrationControl>
+					registrations,
+			@NonNull Consumer<@NonNull SubscriptionSourceRegistrationControl>
+					registrationConsumer) {
 		requireNonNull(registrations);
+		requireNonNull(registrationConsumer);
 		for (SubscriptionSourceGroup group : subscriptionSourceGroups) {
 			subscribeToSubscriptionEventSource(registrations,
-					group.endpointPaths(), group.source().subscriber());
+					group.endpointPaths(), group.source().subscriber(),
+					registrationConsumer);
 			for (EndpointSubscriptionSource endpointSource : group.endpointSources())
 				subscribeToSubscriptionEventSource(registrations,
 					Set.of(endpointSource.endpointPath()),
-					endpointSource.subscriber());
+					endpointSource.subscriber(), registrationConsumer);
 		}
 	}
 
@@ -1247,7 +1638,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			@NonNull List<@NonNull SubscriptionSourceRegistrationControl>
 					registrations,
 			@NonNull Set<@NonNull String> endpointPaths,
-			McpSubscriptionEventSource.@NonNull Subscriber subscriber) {
+			McpSubscriptionEventSource.@NonNull Subscriber subscriber,
+			@NonNull Consumer<@NonNull SubscriptionSourceRegistrationControl>
+					registrationConsumer) {
 		SubscriptionEventSourceGeneration generation =
 				new SubscriptionEventSourceGeneration();
 		SubscriptionEventListenerFence listenerFence =
@@ -1258,17 +1651,34 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					} catch (Throwable ignored) {
 						// Runtime fan-out must never escape into an application publisher.
 					}
-				});
+		});
+		SubscriptionSourceRegistrationControl control = null;
 		try {
 			Registration registration = requireNonNull(subscriber).subscribe(
 					listenerFence::onEvent);
 			if (registration == null)
 				throw new NullPointerException(
 						"An MCP subscription event source returned a null registration.");
-			registrations.add(new SubscriptionSourceRegistrationControl(
-					registration, listenerFence));
+			control = new SubscriptionSourceRegistrationControl(
+					registration, listenerFence);
+			registrations.add(control);
+			requireNonNull(registrationConsumer).accept(control);
 		} catch (RuntimeException | Error failure) {
 			listenerFence.deactivate();
+			// Once subscribe() returns, the framework owns the registration even if
+			// later bookkeeping fails.  Start a retained close attempt before
+			// propagating so startup cleanup cannot lose that application resource.
+			if (control != null) {
+				SubscriptionSourceRegistrationControl retainedControl = control;
+				retainedControl.beginClose(
+						subscriptionCloseThreadSequence.incrementAndGet());
+				synchronized (lifecycleLock) {
+					residualSubscriptionSourceRegistrations =
+							mergeSubscriptionSourceRegistrations(
+									residualSubscriptionSourceRegistrations,
+									List.of(retainedControl));
+				}
+			}
 			throw failure;
 		}
 	}
@@ -1440,7 +1850,14 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					subscriptionSourceRegistrations);
 			subscriptionSourceRegistrations = List.of();
 			residualSubscriptionSourceRegistrations = registrations;
-			if (lifecycleState == LifecycleState.STARTED
+			if (lifecycleState == LifecycleState.STARTING
+					&& !lifecycleStartupClaimed) {
+				lifecycleStartupInProgress = false;
+				lifecycleStartupGeneration = null;
+				lifecycleLock.notifyAll();
+			}
+			if (lifecycleState == LifecycleState.STARTING
+					|| lifecycleState == LifecycleState.STARTED
 					|| lifecycleState == LifecycleState.FAILED)
 				lifecycleState = LifecycleState.STOPPING;
 		}
@@ -1453,12 +1870,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		completeSubscriptions(subscriptions);
 		for (RequestControl control : requestControlsSnapshot())
 			control.quiesceTransport();
-		SubscriptionRegistrationCloseBatch closeBatch =
-				beginClosingSubscriptionEventSourceRegistrations(registrations);
-		synchronized (lifecycleLock) {
-			if (lifecycleCloseBatch == null)
-				lifecycleCloseBatch = closeBatch;
-		}
+		beginGracefulSubscriptionEventSourceRegistrationCloses(registrations);
 		if (processor != null) {
 			if (application != null && processor instanceof LifecycleRequestProcessor
 					lifecycleProcessor)
@@ -1472,10 +1884,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 	/** Prompt, idempotent force phase; force-first always subsumes quiesce. */
 	void forceLifecycle() {
-		quiesceLifecycle();
 		EventLoop loop;
 		ThreadPoolExecutor processor;
 		McpApplicationExecution application;
+		List<SubscriptionSourceRegistrationControl> registrations;
 		synchronized (lifecycleLock) {
 			if (lifecycleForced)
 				return;
@@ -1485,15 +1897,79 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					? requestProcessor : residualRequestProcessor;
 			application = applicationExecution != null
 					? applicationExecution : residualApplicationExecution;
+			registrations = mergeSubscriptionSourceRegistrations(
+					residualSubscriptionSourceRegistrations,
+					subscriptionSourceRegistrations);
+			subscriptionSourceRegistrations = List.of();
+			residualSubscriptionSourceRegistrations = registrations;
 		}
+
+		Throwable failure = null;
+		failure = runLifecycleStep(failure, this::quiesceLifecycle);
+		if (loop != null) {
+			failure = runLifecycleStep(failure, loop::stopAccepting);
+			failure = runLifecycleStep(failure, loop::beginDrain);
+		}
+		Set<RequestControl> subscriptions = stopAcceptingSubscriptions();
+		failure = runLifecycleStep(failure,
+				() -> completeSubscriptions(subscriptions));
+		for (RequestControl control : requestControlsSnapshot())
+			failure = runLifecycleStep(failure, control::quiesceTransport);
+		SubscriptionRegistrationCloseBatch closeBatch =
+				beginClosingSubscriptionEventSourceRegistrations(registrations);
+		for (SubscriptionRegistrationCloseAttempt closeAttempt
+				: closeBatch.closeAttempts())
+			closeAttempt.cancel();
+		publishLifecycleCloseBatch(closeBatch);
 		if (loop != null)
-			loop.stopConnections();
+			failure = runLifecycleStep(failure, loop::stopConnections);
 		if (application != null)
-			application.stop(StreamTerminationReason.SERVER_STOPPING);
-		cancelAllRequests(StreamTerminationReason.SERVER_STOPPING, null);
+			failure = runLifecycleStep(failure, () -> application.stop(
+					StreamTerminationReason.SERVER_STOPPING));
+		failure = runLifecycleStep(failure, () -> cancelAllRequests(
+				StreamTerminationReason.SERVER_STOPPING, null));
 		if (processor != null)
-			processor.shutdownNow();
-		cancelAllRequests(StreamTerminationReason.SERVER_STOPPING, null);
+			failure = runLifecycleStep(failure, processor::shutdownNow);
+		failure = runLifecycleStep(failure, () -> cancelAllRequests(
+				StreamTerminationReason.SERVER_STOPPING, null));
+		rethrowLifecycleFailure(failure);
+	}
+
+	private void beginGracefulSubscriptionEventSourceRegistrationCloses(
+			@NonNull List<@NonNull SubscriptionSourceRegistrationControl>
+					registrations) {
+		synchronized (lifecycleLock) {
+			// Force may run concurrently with a canceled graceful call.  Either
+			// publish the graceful attempts before force claims the phase, or let
+			// force create and cancel every attempt; never create uncanceled work
+			// after force has returned.
+			if (lifecycleForced)
+				return;
+			SubscriptionRegistrationCloseBatch closeBatch =
+					beginClosingSubscriptionEventSourceRegistrations(registrations);
+			lifecycleCloseBatch = mergeSubscriptionRegistrationCloseBatches(
+					lifecycleCloseBatch, closeBatch);
+		}
+	}
+
+	private @Nullable Throwable runLifecycleStep(@Nullable Throwable first,
+			@NonNull Runnable step) {
+		try {
+			requireNonNull(step).run();
+		} catch (Throwable failure) {
+			if (first == null)
+				return failure;
+			if (failure != first)
+				first.addSuppressed(failure);
+		}
+		return first;
+	}
+
+	private void rethrowLifecycleFailure(@Nullable Throwable failure) {
+		if (failure instanceof RuntimeException runtimeException)
+			throw runtimeException;
+		if (failure instanceof Error error)
+			throw error;
 	}
 
 	/** Observes the complete runtime barrier against the supplied absolute deadline. */
@@ -1503,13 +1979,23 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		ThreadPoolExecutor processor;
 		McpApplicationExecution application;
 		SubscriptionRegistrationCloseBatch closeBatch;
+		List<SubscriptionSourceRegistrationControl> registrations;
 		synchronized (lifecycleLock) {
+			while (lifecycleStartupInProgress) {
+				long remaining = remainingUntil(absoluteDeadlineNanos);
+				if (remaining <= 0L)
+					return false;
+				TimeUnit.NANOSECONDS.timedWait(lifecycleLock, remaining);
+			}
 			loop = eventLoop != null ? eventLoop : residualEventLoop;
 			processor = requestProcessor != null
 					? requestProcessor : residualRequestProcessor;
 			application = applicationExecution != null
 					? applicationExecution : residualApplicationExecution;
 			closeBatch = lifecycleCloseBatch;
+			registrations = mergeSubscriptionSourceRegistrations(
+					residualSubscriptionSourceRegistrations,
+					subscriptionSourceRegistrations);
 		}
 
 		boolean loopTerminated = loop == null || loop.joinUntil(absoluteDeadlineNanos);
@@ -1528,7 +2014,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				applicationTerminated = application.awaitTermination(
 						Duration.ofNanos(remaining));
 		}
-		boolean registrationsClosed = true;
+		boolean registrationsClosed = unclosedSubscriptionSourceRegistrations(
+				registrations).isEmpty();
 		if (closeBatch != null) {
 			for (SubscriptionRegistrationCloseAttempt attempt
 					: closeBatch.closeAttempts()) {
@@ -1539,6 +2026,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				}
 				registrationsClosed &= attempt.completed();
 			}
+			registrationsClosed &= unclosedSubscriptionSourceRegistrations(
+					registrations).isEmpty();
 		}
 		return loopTerminated && processorTerminated && applicationTerminated
 				&& registrationsClosed && requestControlsSnapshot().isEmpty()
@@ -1551,13 +2040,19 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		ThreadPoolExecutor processor;
 		McpApplicationExecution application;
 		List<SubscriptionSourceRegistrationControl> registrations;
+		SubscriptionRegistrationCloseBatch closeBatch;
+		boolean startupInProgress;
 		synchronized (lifecycleLock) {
 			loop = eventLoop != null ? eventLoop : residualEventLoop;
 			processor = requestProcessor != null
 					? requestProcessor : residualRequestProcessor;
 			application = applicationExecution != null
 					? applicationExecution : residualApplicationExecution;
-			registrations = residualSubscriptionSourceRegistrations;
+			registrations = mergeSubscriptionSourceRegistrations(
+					residualSubscriptionSourceRegistrations,
+					subscriptionSourceRegistrations);
+			closeBatch = lifecycleCloseBatch;
+			startupInProgress = lifecycleStartupInProgress;
 		}
 		McpApplicationExecutionSnapshot applicationSnapshot = application == null
 				? null : application.snapshot(activeIdentifiedRequestExchangeCount.get());
@@ -1565,15 +2060,20 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		synchronized (streamDiagnosticsLock) {
 			streams = activeRequestStreams != 0 || activeSubscriptions != 0;
 		}
+		boolean registrationCloseInProgress = closeBatch != null
+				&& closeBatch.closeAttempts().stream()
+						.anyMatch(attempt -> !attempt.completed());
 		return new McpLifecycleEvidence(
 				loop != null && !loop.isTerminated(),
 				loop != null && loop.numAdmittedConnections() > 0,
 				(processor != null && !processor.isTerminated())
 						|| (application != null && !application.isTerminated()),
 				streams || !requestControlsSnapshot().isEmpty(),
-				applicationSnapshot != null
+				startupInProgress || applicationSnapshot != null
 						&& applicationSnapshot.activeHandlerSlots() > 0,
-				!unclosedSubscriptionSourceRegistrations(registrations).isEmpty());
+				registrationCloseInProgress
+						|| !unclosedSubscriptionSourceRegistrations(
+								registrations).isEmpty());
 	}
 
 	/** Releases proof-bearing resources only after the common barrier completed. */
@@ -1589,6 +2089,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			residualSubscriptionSourceRegistrations = List.of();
 			lifecycleCloseBatch = null;
 			currentReadiness = null;
+			lifecycleStartupInProgress = false;
+			lifecycleStartupClaimed = false;
+			lifecycleStartupGeneration = null;
 			lifecycleState = LifecycleState.STOPPED;
 			lifecycleLock.notifyAll();
 		}
@@ -1681,9 +2184,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				lifecycleState = LifecycleState.STOPPING;
 				if (currentReadiness != null)
 					currentReadiness.set(ListenerState.TERMINATED);
-				eventLoopToStop = requireNonNull(eventLoop);
-				processorToStop = requireNonNull(requestProcessor);
-				applicationToStop = requireNonNull(applicationExecution);
+				eventLoopToStop = eventLoop;
+				processorToStop = requestProcessor;
+				applicationToStop = applicationExecution;
 				subscriptionRegistrationsToClose =
 						mergeSubscriptionSourceRegistrations(
 								residualSubscriptionSourceRegistrations,
@@ -1700,14 +2203,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			return retryResidualSubscriptionEventSourceRegistrations(
 					subscriptionRegistrationsToClose);
 
-		EventLoop requiredEventLoopToStop = requireNonNull(eventLoopToStop);
-		ThreadPoolExecutor requiredProcessorToStop =
-				requireNonNull(processorToStop);
-		McpApplicationExecution requiredApplicationToStop =
-				requireNonNull(applicationToStop);
+		EventLoop requiredEventLoopToStop = eventLoopToStop;
+		ThreadPoolExecutor requiredProcessorToStop = processorToStop;
+		McpApplicationExecution requiredApplicationToStop = applicationToStop;
 
-		boolean eventLoopTerminated = false;
-		boolean applicationTerminated = false;
+		boolean eventLoopTerminated = requiredEventLoopToStop == null;
+		boolean applicationTerminated = requiredApplicationToStop == null;
 		List<SubscriptionSourceRegistrationControl>
 				residualSubscriptionRegistrations = List.of();
 		SubscriptionRegistrationCloseOutcome subscriptionCloseOutcome =
@@ -1719,17 +2220,20 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			SubscriptionRegistrationCloseBatch subscriptionCloseBatch =
 					beginClosingSubscriptionEventSourceRegistrations(
 							subscriptionRegistrationsToClose);
-			requiredEventLoopToStop.stopAccepting();
+			if (requiredEventLoopToStop != null)
+				requiredEventLoopToStop.stopAccepting();
 			Set<RequestControl> subscriptionsToComplete =
 					stopAcceptingSubscriptions();
 			// Close application admission and atomically drain its queue before
 			// interrupting active work. Otherwise an interrupted active handler can
 			// promote queued application code during shutdown.
-			requiredApplicationToStop.stop();
+			if (requiredApplicationToStop != null)
+				requiredApplicationToStop.stop();
 			completeSubscriptions(subscriptionsToComplete);
 			cancelAllNonSubscriptionRequests(
 					StreamTerminationReason.SERVER_STOPPING, null);
-			requiredEventLoopToStop.beginDrain();
+			if (requiredEventLoopToStop != null)
+				requiredEventLoopToStop.beginDrain();
 			long remainingBeforeSubscriptionDrain = remainingShutdownNanos(
 					shutdownStartedAt, shutdownTimeoutNanos);
 			long forcedTransportReserveNanos = Math.min(
@@ -1745,11 +2249,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					interrupted = true;
 				}
 			}
-			requiredEventLoopToStop.stopConnections();
-			requiredProcessorToStop.shutdownNow();
+			if (requiredEventLoopToStop != null)
+				requiredEventLoopToStop.stopConnections();
+			if (requiredProcessorToStop != null)
+				requiredProcessorToStop.shutdownNow();
 			cancelAllRequests(StreamTerminationReason.SERVER_STOPPING, null);
 
-			while (!eventLoopTerminated) {
+			while (!eventLoopTerminated && requiredEventLoopToStop != null) {
 				long remainingNanos = remainingShutdownNanos(
 						shutdownStartedAt, shutdownTimeoutNanos);
 				if (remainingNanos <= 0L)
@@ -1762,7 +2268,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				}
 			}
 
-			while (!requiredProcessorToStop.isTerminated()) {
+			while (requiredProcessorToStop != null
+					&& !requiredProcessorToStop.isTerminated()) {
 				long remainingNanos = remainingShutdownNanos(
 						shutdownStartedAt, shutdownTimeoutNanos);
 				if (remainingNanos <= 0L)
@@ -1776,7 +2283,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				}
 			}
 
-			while (!applicationTerminated) {
+			while (!applicationTerminated && requiredApplicationToStop != null) {
 				long remainingNanos = remainingShutdownNanos(
 						shutdownStartedAt, shutdownTimeoutNanos);
 				if (remainingNanos <= 0L)
@@ -1795,16 +2302,19 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		} finally {
 			synchronized (lifecycleLock) {
 				eventLoop = null;
-					residualEventLoop = eventLoopTerminated
+				residualEventLoop = requiredEventLoopToStop == null
+							|| eventLoopTerminated
 							|| requiredEventLoopToStop.isTerminated()
-							? null : requiredEventLoopToStop;
+						? null : requiredEventLoopToStop;
 					residualTransport = residualEventLoop != null;
 				requestProcessor = null;
-				residualRequestProcessor = requiredProcessorToStop.isTerminated()
+				residualRequestProcessor = requiredProcessorToStop == null
+						|| requiredProcessorToStop.isTerminated()
 						? null : requiredProcessorToStop;
 				applicationExecution = null;
-				residualApplicationExecution = applicationTerminated
-						|| requiredApplicationToStop.isTerminated()
+				residualApplicationExecution = requiredApplicationToStop == null
+						|| applicationTerminated
+							|| requiredApplicationToStop.isTerminated()
 						? null : requiredApplicationToStop;
 				residualApplicationExecutions = residualApplicationExecution != null
 						|| residualRequestProcessor != null;
@@ -1879,7 +2389,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					unclosedSubscriptionSourceRegistrations(
 							residualSubscriptionSourceRegistrations);
 			boolean started = lifecycleState == LifecycleState.STARTED;
-			boolean stopRequired = lifecycleState == LifecycleState.STARTED
+			boolean stopRequired = lifecycleState == LifecycleState.STARTING
+					|| lifecycleState == LifecycleState.STARTED
 					|| lifecycleState == LifecycleState.STOPPING
 					|| lifecycleState == LifecycleState.FAILED
 					|| (residualEventLoop != null && !residualEventLoop.isTerminated())
@@ -1909,7 +2420,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					|| residualSimulationApplicationExecution != null
 					|| !residualSimulationSubscriptionSourceRegistrations.isEmpty()) {
 				return new McpHttpServerDiagnosticsSnapshot(false, false,
-						Optional.empty(), false,
+						Optional.ofNullable(boundAddress), false,
 						applicationConfiguration.handlerConcurrency(),
 						applicationConfiguration.handlerQueueCapacity(),
 						0, 0, 0, 0);
@@ -1918,7 +2429,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					unclosedSubscriptionSourceRegistrations(
 							residualSubscriptionSourceRegistrations);
 			boolean started = lifecycleState == LifecycleState.STARTED;
-			boolean stopRequired = lifecycleState == LifecycleState.STARTED
+			boolean stopRequired = lifecycleState == LifecycleState.STARTING
+					|| lifecycleState == LifecycleState.STARTED
 					|| lifecycleState == LifecycleState.STOPPING
 					|| lifecycleState == LifecycleState.FAILED
 					|| (residualEventLoop != null && !residualEventLoop.isTerminated())
@@ -1953,8 +2465,11 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						? 0 : applicationSnapshot.activeHandlerSlots();
 				int queuedRequests = applicationSnapshot == null
 						? 0 : applicationSnapshot.queuedRequests();
+				boolean residualDiagnostics = residualExecutions || !started
+						&& (activeHandlerExecutions != 0 || queuedRequests != 0
+						|| activeRequestStreams != 0 || activeSubscriptions != 0);
 				return new McpHttpServerDiagnosticsSnapshot(started, stopRequired,
-						effectiveAddress, residualExecutions,
+						effectiveAddress, residualDiagnostics,
 						requestHandlerConcurrency, requestHandlerQueueCapacity,
 						activeHandlerExecutions, queuedRequests,
 						activeRequestStreams, activeSubscriptions);
@@ -2139,7 +2654,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private ConnectionListener connectionListener(
 			@NonNull AtomicReference<@NonNull ListenerState> readiness,
 			McpServerRuntimeBridge.LifecycleAdapter.@NonNull Generation
-					lifecycleGeneration) {
+					lifecycleGeneration,
+			@NonNull AtomicReference<Throwable> startupFailure,
+			@NonNull AtomicBoolean startupFailureSignaled,
+			@NonNull AtomicReference<Throwable> startupSignalFailure) {
 		return new ConnectionListener() {
 			@Override
 			public void willAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
@@ -2165,10 +2683,49 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			@Override
 			public void didTerminateEventLoop(@NonNull EventLoop terminatedEventLoop,
 					@NonNull Throwable throwable) {
-				ListenerState previous = readiness.getAndSet(ListenerState.TERMINATED);
-				if (previous == ListenerState.READY)
-					handleUnexpectedTermination(terminatedEventLoop, throwable,
-							lifecycleGeneration);
+				enterLifecycleProofExecution();
+				try {
+					ListenerState previous;
+					Throwable exactStartupFailure = null;
+					boolean coordinatorOwned = lifecycleGeneration
+							.coordinatorOwnsUnexpectedTermination();
+					boolean startupTermination;
+					synchronized (lifecycleLock) {
+						previous = readiness.get();
+						startupTermination = previous == ListenerState.STARTING
+								|| coordinatorOwned
+								&& previous == ListenerState.TERMINATED
+								&& lifecycleStartupInProgress
+								&& lifecycleStartupGeneration == lifecycleGeneration;
+						if (startupTermination) {
+							requireNonNull(startupFailure).compareAndSet(
+									null, throwable);
+							exactStartupFailure = requireNonNull(
+									startupFailure.get());
+						}
+						if (previous != ListenerState.TERMINATED)
+							readiness.set(ListenerState.TERMINATED);
+					}
+					if (startupTermination) {
+						// Preserve and publish the EventLoop's exact pre-readiness cause
+						// before reporting it or allowing startup cleanup to proceed.
+						Throwable primary = requireNonNull(exactStartupFailure);
+						if (primary != throwable)
+							primary.addSuppressed(throwable);
+						signalStartupFailure(lifecycleGeneration, primary,
+								startupFailureSignaled, startupSignalFailure);
+						try {
+							unexpectedTerminationConsumer.accept(primary);
+						} catch (Throwable ignored) {
+							// Failure reporting cannot replace the listener's primary cause.
+						}
+					} else if (previous == ListenerState.READY || coordinatorOwned) {
+						handleUnexpectedTermination(terminatedEventLoop, throwable,
+								lifecycleGeneration);
+					}
+				} finally {
+					exitLifecycleProofExecution();
+				}
 			}
 		};
 	}
@@ -2254,11 +2811,16 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			@NonNull Throwable throwable,
 			McpServerRuntimeBridge.LifecycleAdapter.@NonNull Generation
 					lifecycleGeneration) {
+		if (!lifecycleGeneration.coordinatorOwnsUnexpectedTermination()) {
+			handleLegacyUnexpectedTerminationWhileMetricsDeferred(
+					terminatedEventLoop, throwable);
+			return;
+		}
 		synchronized (lifecycleLock) {
-			if (eventLoop != terminatedEventLoop || lifecycleState != LifecycleState.STARTED)
+			if (eventLoop != terminatedEventLoop)
 				return;
-
-			lifecycleState = LifecycleState.FAILED;
+			if (lifecycleState == LifecycleState.STARTED)
+				lifecycleState = LifecycleState.FAILED;
 		}
 
 		// The common termination signal must be the first framework-visible
@@ -2273,19 +2835,70 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 	}
 
+	/** Compatibility cleanup for package-private/direct runtimes without a coordinator. */
+	private void handleLegacyUnexpectedTerminationWhileMetricsDeferred(
+			@NonNull EventLoop terminatedEventLoop,
+			@NonNull Throwable throwable) {
+		ThreadPoolExecutor processorToStop;
+		McpApplicationExecution applicationToStop;
+		List<SubscriptionSourceRegistrationControl> registrationsToClose;
+		synchronized (lifecycleLock) {
+			if (eventLoop != terminatedEventLoop
+					|| lifecycleState != LifecycleState.STARTED)
+				return;
+			lifecycleState = LifecycleState.FAILED;
+			processorToStop = requestProcessor;
+			applicationToStop = applicationExecution;
+			registrationsToClose = mergeSubscriptionSourceRegistrations(
+					residualSubscriptionSourceRegistrations,
+					subscriptionSourceRegistrations);
+			subscriptionSourceRegistrations = List.of();
+			residualSubscriptionSourceRegistrations = registrationsToClose;
+		}
+
+		stopAcceptingSubscriptions();
+		SubscriptionRegistrationCloseBatch closeBatch =
+				beginClosingSubscriptionEventSourceRegistrations(
+						registrationsToClose);
+		publishLifecycleCloseBatch(closeBatch);
+		if (applicationToStop != null)
+			applicationToStop.stop(StreamTerminationReason.INTERNAL_ERROR);
+		cancelAllRequests(StreamTerminationReason.INTERNAL_ERROR, null);
+		if (processorToStop != null)
+			processorToStop.shutdownNow();
+		cancelAllRequests(StreamTerminationReason.INTERNAL_ERROR, null);
+		try {
+			unexpectedTerminationConsumer.accept(throwable);
+		} catch (Throwable ignored) {
+			// Failure reporting must not strand legacy direct-runtime cleanup.
+		}
+	}
+
 	private void submitRequest(@NonNull ThreadPoolExecutor processor,
 			@NonNull McpApplicationExecution application,
 			@Nullable InetSocketAddress effectiveAddress,
 			@NonNull MicrohttpRequest request,
-			@NonNull Runnable lifecycleAdmission,
+			@Nullable Runnable lifecycleAdmission,
 			@NonNull Consumer<@NonNull MicrohttpResponse> callback) {
 		if (effectiveAddress == null) {
 			this.applicationExecutionObserver.recordRequestRejected();
 			this.applicationExecutionObserver.drain();
 			List<Header> headers = localizationVaryRequired(request)
 					? withAcceptLanguageVary(List.of()) : List.of();
-			requireNonNull(callback).accept(emptyResponse(
-					503, "Service Unavailable", headers));
+			MicrohttpResponse response = emptyResponse(
+					503, "Service Unavailable", headers);
+			if (lifecycleAdmission != null) {
+				Runnable requiredAdmission = lifecycleAdmission;
+				response = response.withBodyTerminationListener((reason, cause) ->
+						requiredAdmission.run());
+			}
+			try {
+				requireNonNull(callback).accept(response);
+			} catch (RuntimeException | Error failure) {
+				if (lifecycleAdmission != null)
+					lifecycleAdmission.run();
+				throw failure;
+			}
 			return;
 		}
 		submitRequest(processor, application, effectiveAddress, request, null,
@@ -2340,7 +2953,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					requestControl, application);
 			requestControl.completeProtocol(response);
 			return null;
-		});
+		}) {
+			@Override
+			protected void done() {
+				requestControl.protocolLifecycleWorkTerminated();
+			}
+		};
 		requestControl.submit(task);
 		return requestControl;
 	}
@@ -5477,6 +6095,11 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private boolean requestObservationReserved;
 		private boolean requestRejectionRecorded;
 		private boolean lifecycleAdmissionReleased;
+		private boolean protocolLifecycleWorkReleased;
+		private boolean applicationLifecycleWorkOwned;
+		private int lifecycleWorkOwners;
+		private boolean lifecycleTransportStarted;
+		private boolean lifecycleTransportTerminated;
 		private boolean gracefulTransportClosed;
 
 		private RequestControl(@NonNull MicrohttpRequest request,
@@ -5501,23 +6124,80 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			this.responseCallback = requireNonNull(responseCallback);
 			this.publicRequestContext = Optional.empty();
 			this.deadlineResponseHeaders = decorateResponseHeaders(List.of());
+			this.lifecycleWorkOwners = lifecycleAdmission == null ? 0 : 1;
 		}
 
-		private void releaseLifecycleAdmission() {
+		private void releaseTrackedLifecycleIfComplete() {
 			Runnable release;
+			boolean remove;
 			synchronized (lock) {
-				if (lifecycleAdmissionReleased)
+				if (lifecycleAdmissionReleased || lifecycleAdmission == null
+						|| lifecycleWorkOwners != 0
+						|| !lifecycleTransportTerminated)
 					return;
 				lifecycleAdmissionReleased = true;
 				release = lifecycleAdmission;
+				remove = true;
 			}
-			if (release != null)
-				release.run();
+			if (remove)
+				requestControls.remove(request, this);
+			requireNonNull(release).run();
 		}
 
-		private void removeRequestControl() {
-			requestControls.remove(request, this);
-			releaseLifecycleAdmission();
+		private void protocolLifecycleWorkTerminated() {
+			if (lifecycleAdmission == null)
+				return;
+			synchronized (lock) {
+				if (protocolLifecycleWorkReleased)
+					return;
+				protocolLifecycleWorkReleased = true;
+				lifecycleWorkOwners--;
+			}
+			releaseTrackedLifecycleIfComplete();
+		}
+
+		private void reserveApplicationLifecycleWorkWhileLocked() {
+			if (!Thread.holdsLock(lock))
+				throw new IllegalStateException(
+						"The request-control lock is required to reserve application lifecycle work.");
+			if (lifecycleAdmission == null)
+				return;
+			if (applicationLifecycleWorkOwned)
+				throw new IllegalStateException(
+						"Application lifecycle work is already reserved.");
+			applicationLifecycleWorkOwned = true;
+			lifecycleWorkOwners++;
+		}
+
+		private void applicationLifecycleWorkTerminated() {
+			if (lifecycleAdmission == null)
+				return;
+			synchronized (lock) {
+				if (!applicationLifecycleWorkOwned)
+					return;
+				applicationLifecycleWorkOwned = false;
+				lifecycleWorkOwners--;
+			}
+			releaseTrackedLifecycleIfComplete();
+		}
+
+		private void markLifecycleTransportStarted() {
+			if (lifecycleAdmission == null)
+				return;
+			synchronized (lock) {
+				lifecycleTransportStarted = true;
+			}
+		}
+
+		private void finishTransportLifecycle() {
+			if (lifecycleAdmission == null) {
+				requestControls.remove(request, this);
+				return;
+			}
+			synchronized (lock) {
+				lifecycleTransportTerminated = true;
+			}
+			releaseTrackedLifecycleIfComplete();
 		}
 
 		@NonNull
@@ -5674,6 +6354,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 								? localizedTerminal : null;
 				}
 			}
+			markLifecycleTransportStarted();
 			try {
 				callback.accept(stream.response(withContentLanguage(
 						additionalHeaders, contentLanguage)));
@@ -5990,12 +6671,15 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				return;
 			}
 			if (callback != null) {
-				MicrohttpResponse response = decorateResponse(emptyResponse(
-						503, "Service Unavailable", List.of()));
-				deliverResponse(callback, response);
+				MicrohttpResponse response = withLifecycleResponseTermination(
+						decorateResponse(emptyResponse(
+								503, "Service Unavailable", List.of())));
+				Throwable deliveryFailure = deliverResponse(callback, response);
+				if (deliveryFailure != null)
+					finishTransportLifecycle();
 				finishRequestObservation(McpRequestOutcome.CANCELED, null, List.of());
-				// The common admission intentionally remains held until the admitted
-				// application handler's terminal cleanup runs.
+				// The common admission joins this response body's termination with the
+				// admitted application handler's terminal cleanup.
 			}
 		}
 
@@ -6365,7 +7049,6 @@ final class McpHttpServerRuntime implements AutoCloseable {
 							canceled = true;
 							markTerminalWhileLocked();
 							responseCallback = null;
-							removeRequestControl();
 							task.cancel(true);
 							processor.remove(task);
 							throw failure;
@@ -6374,23 +7057,37 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					if (submission == null) {
 						canceled = true;
 						markTerminalWhileLocked();
-						responseCallback = null;
+						submission = new ProtocolSubmission(takeResponseCallback());
 					}
 				}
-				if (submission != null && submission.rejectedCallback() != null)
-					removeRequestControl();
+			} catch (RuntimeException | Error failure) {
+				task.cancel(false);
+				finishTransportLifecycle();
+				throw failure;
 			} finally {
 				McpHttpServerRuntime.this.applicationExecutionObserver.endDeferral();
 			}
 
 			if (submission != null && submission.rejectedCallback() != null) {
-				MicrohttpResponse response = decorateResponse(emptyResponse(
+				// No processor owns this task. Cancellation completes the protocol-work
+				// half of the common lifecycle lease before response delivery begins.
+				task.cancel(false);
+				boolean trackBody = tracksLifecycleResponseBody();
+				if (!trackBody)
+					finishTransportLifecycle();
+				MicrohttpResponse terminalResponse = decorateResponse(emptyResponse(
 						503, "Service Unavailable", List.of()));
+				RequestObservationResult fallback =
+						requestObservationResult(terminalResponse);
+				MicrohttpResponse response = withRequestObservationTermination(
+						terminalResponse, fallback);
 				Throwable deliveryFailure = deliverResponse(
 						submission.rejectedCallback(), response);
+				if (deliveryFailure != null && trackBody)
+					finishTransportLifecycle();
 				if (simulation != null)
 					finishDeliveredSimulationResponse(
-							requestObservationResult(response), deliveryFailure);
+							fallback, deliveryFailure);
 				else if (deliveryFailure != null)
 					observeTransportFailure(TransportFailureReason.RESPONSE_READY_ERROR,
 							() -> {});
@@ -6426,6 +7123,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						return new ProtocolProcessingReservation(
 								false, detachProtocolDeadline(true));
 
+					reserveApplicationLifecycleWorkWhileLocked();
 					applicationOwned = true;
 					return new ProtocolProcessingReservation(true, null);
 				}).orElse(null);
@@ -6445,6 +7143,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					if (!terminal)
 						applicationOwned = false;
 				}
+				applicationLifecycleWorkTerminated();
 				throw failure;
 			} finally {
 				StreamTerminationReason pendingCancellationReason;
@@ -6508,7 +7207,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 
 			if (reservation == null) {
-				removeRequestControl();
+				finishTransportLifecycle();
 				finishRequestObservation(McpRequestOutcome.CANCELED, null, List.of());
 				return;
 			}
@@ -6516,8 +7215,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				finishProtocolDeadline(reservation.deadlineExpiration());
 				return;
 			}
-			removeRequestControl();
 			if (reservation.responseCallback() != null) {
+				boolean trackBody = tracksLifecycleResponseBody();
+				if (!trackBody)
+					finishTransportLifecycle();
 				MicrohttpResponse terminalResponse =
 						requireNonNull(reservation.response());
 				RequestObservationResult fallback =
@@ -6526,6 +7227,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						withRequestObservationTermination(terminalResponse, fallback);
 				Throwable deliveryFailure = deliverResponse(
 						reservation.responseCallback(), observedResponse);
+				if (deliveryFailure != null && trackBody)
+					finishTransportLifecycle();
 				if (simulation != null) {
 					finishDeliveredSimulationResponse(fallback, deliveryFailure);
 				} else if (deliveryFailure != null) {
@@ -6536,7 +7239,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 									McpRequestOutcome.WRITE_FAILED, null,
 									List.of(requiredFailure)));
 				}
-			}
+			} else
+				finishTransportLifecycle();
 		}
 
 		private boolean writeApplicationNotification(
@@ -6596,6 +7300,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 
 			if (firstMessage) {
+				markLifecycleTransportStarted();
 				try {
 					requireNonNull(callback).accept(stream.response(additionalHeaders));
 				} catch (Throwable throwable) {
@@ -6643,11 +7348,15 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						protocolProfile(), response, requestId, additionalHeaders,
 						publicRequestContext().orElse(null));
 				planRequestObservation(rendering.observationResult());
-				removeRequestControl();
+				boolean trackBody = tracksLifecycleResponseBody();
+				if (!trackBody)
+					finishTransportLifecycle();
 				MicrohttpResponse observedResponse = withRequestObservationTermination(
 						rendering.response(), rendering.observationResult());
 				Throwable deliveryFailure = deliverResponse(requireNonNull(callback),
 						observedResponse);
+				if (deliveryFailure != null && trackBody)
+					finishTransportLifecycle();
 				if (simulation != null) {
 					finishDeliveredSimulationResponse(
 							rendering.observationResult(), deliveryFailure);
@@ -6823,7 +7532,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				markStreamClosed(completedStream
 						? StreamTerminationReason.COMPLETED : reason);
 			if (remove)
-				removeRequestControl();
+				finishTransportLifecycle();
 			if (completedStream)
 				finishPlannedRequestObservation(requestObservationResult(
 						StreamTerminationReason.COMPLETED, null));
@@ -6996,8 +7705,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			if (subscription != null)
 				removeSubscription(this, subscription);
 			markStreamClosed(observedStreamReason, exactReason);
-			if (!preserveApplication)
-				removeRequestControl();
+			finishTransportLifecycle();
 			if (reason == StreamTerminationReason.COMPLETED)
 				finishPlannedRequestObservation(requestObservationResult(reason, cause));
 			else if (exactReason == McpStreamTerminationReason
@@ -7029,7 +7737,6 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private void finishProtocolDeadline(
 				@NonNull ProtocolDeadlineExpiration expiration) {
 			requireNonNull(expiration);
-			removeRequestControl();
 			if (expiration.task() != null) {
 				expiration.task().cancel(true);
 				processor.remove(expiration.task());
@@ -7041,8 +7748,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			MicrohttpResponse response = withRequestObservationTermination(
 					emptyResponse(504, "Gateway Timeout", expiration.responseHeaders()),
 					fallback);
+			boolean trackBody = tracksLifecycleResponseBody();
+			if (!trackBody)
+				finishTransportLifecycle();
 			Throwable deliveryFailure = deliverResponse(
 					expiration.responseCallback(), response);
+			if (deliveryFailure != null && trackBody)
+				finishTransportLifecycle();
 			if (simulation != null) {
 				finishDeliveredSimulationResponse(fallback, deliveryFailure);
 			} else if (deliveryFailure != null) {
@@ -7057,6 +7769,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private void applicationTerminated() {
 			boolean remove;
 			boolean finishCanceled;
+			boolean noTransportResponse;
 			synchronized (lock) {
 				applicationOwned = false;
 				protocolTask = null;
@@ -7071,9 +7784,11 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					responseCallback = null;
 					releaseIdentifiedRequestExchange();
 				}
+				noTransportResponse = !lifecycleTransportStarted;
 			}
-			if (remove)
-				removeRequestControl();
+			applicationLifecycleWorkTerminated();
+			if (remove && noTransportResponse)
+				finishTransportLifecycle();
 			if (finishCanceled)
 				finishRequestObservation(McpRequestOutcome.CANCELED, null, List.of());
 		}
@@ -7092,20 +7807,50 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				@NonNull RequestObservationResult fallback) {
 			requireNonNull(response);
 			requireNonNull(fallback);
+			boolean observeRequest;
+			boolean trackBody = tracksLifecycleResponseBody();
 			synchronized (lock) {
-				if (requestObservation == null)
-					return response;
+				observeRequest = requestObservation != null;
 			}
-			return response.withBodyTerminationListener((reason, cause) -> {
-				if (reason == StreamTerminationReason.COMPLETED)
-					finishPlannedRequestObservation(fallback);
-				else {
-					RequestObservationResult result =
-							requestObservationResult(reason, cause);
-					finishRequestObservation(result.outcome(), result.error(),
-							result.throwables());
+			if (!observeRequest && !trackBody)
+				return response;
+			MicrohttpResponse observedResponse = response.withBodyTerminationListener(
+					(reason, cause) -> {
+				try {
+					if (observeRequest) {
+						if (reason == StreamTerminationReason.COMPLETED)
+							finishPlannedRequestObservation(fallback);
+						else {
+							RequestObservationResult result =
+									requestObservationResult(reason, cause);
+							finishRequestObservation(result.outcome(), result.error(),
+									result.throwables());
+						}
+					}
+				} finally {
+					if (trackBody)
+						finishTransportLifecycle();
 				}
 			});
+			if (trackBody)
+				markLifecycleTransportStarted();
+			return observedResponse;
+		}
+
+		@NonNull
+		private MicrohttpResponse withLifecycleResponseTermination(
+				@NonNull MicrohttpResponse response) {
+			requireNonNull(response);
+			if (!tracksLifecycleResponseBody())
+				return response;
+			MicrohttpResponse trackedResponse = response.withBodyTerminationListener(
+					(reason, cause) -> finishTransportLifecycle());
+			markLifecycleTransportStarted();
+			return trackedResponse;
+		}
+
+		private boolean tracksLifecycleResponseBody() {
+			return lifecycleAdmission != null;
 		}
 
 		private @Nullable Throwable deliverResponse(
@@ -7517,7 +8262,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 	/** One fenced, independently closable application registration. */
 	@ThreadSafe
-	private static final class SubscriptionSourceRegistrationControl {
+	private final class SubscriptionSourceRegistrationControl {
 		@NonNull
 		private final Object lock;
 		@NonNull
@@ -7556,6 +8301,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 							() -> runClose(attempt),
 							"soklet-mcp-subscription-source-close-" + sequence);
 					closeThread.setDaemon(true);
+					attempt.bindWorker(closeThread);
 					closeThread.start();
 				} catch (Throwable failure) {
 					lastCloseFailure = failure;
@@ -7568,20 +8314,28 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private void runClose(
 				@NonNull SubscriptionRegistrationCloseAttempt attempt) {
 			Throwable failure = null;
+			enterLifecycleProofExecution();
 			try {
 				registration.close();
 			} catch (Throwable throwable) {
 				failure = throwable;
 			} finally {
-				synchronized (lock) {
-					if (failure == null) {
-						closed = true;
-						lastCloseFailure = null;
-					} else {
-						lastCloseFailure = failure;
+				try {
+					synchronized (lock) {
+						if (failure == null) {
+							closed = true;
+							lastCloseFailure = null;
+						} else {
+							lastCloseFailure = failure;
+						}
+					}
+				} finally {
+					try {
+						exitLifecycleProofExecution();
+					} finally {
+						attempt.complete();
 					}
 				}
-				attempt.complete();
 			}
 		}
 
@@ -7602,9 +8356,15 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private static final class SubscriptionRegistrationCloseAttempt {
 		@NonNull
 		private final CountDownLatch completion;
+		@NonNull
+		private final AtomicReference<@Nullable Thread> worker;
+		@NonNull
+		private final AtomicBoolean cancellationRequested;
 
 		private SubscriptionRegistrationCloseAttempt() {
 			this.completion = new CountDownLatch(1);
+			this.worker = new AtomicReference<>();
+			this.cancellationRequested = new AtomicBoolean();
 		}
 
 		@NonNull
@@ -7618,6 +8378,22 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		private void complete() {
 			completion.countDown();
+		}
+
+		private void bindWorker(@NonNull Thread worker) {
+			Thread requiredWorker = requireNonNull(worker);
+			if (!this.worker.compareAndSet(null, requiredWorker))
+				throw new IllegalStateException(
+						"A subscription close attempt already has a worker.");
+			if (cancellationRequested.get())
+				requiredWorker.interrupt();
+		}
+
+		private void cancel() {
+			cancellationRequested.set(true);
+			Thread activeWorker = worker.get();
+			if (activeWorker != null)
+				activeWorker.interrupt();
 		}
 
 		private boolean await(long timeoutNanos) throws InterruptedException {

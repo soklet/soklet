@@ -761,6 +761,8 @@ public class McpResultEnvelopeGoldenProductionTests {
 			Assertions.assertEquals(idFromJson(idJson), response.id());
 			Assertions.assertEquals(localized, terminal.contains("FR:"), terminal);
 			Assertions.assertNull(client.readChunk());
+			Assertions.assertTrue(client.awaitTransportClosure(),
+					"The drained subscription transport did not close.");
 			stopThread.join(5_000L);
 			Assertions.assertFalse(stopThread.isAlive());
 		} finally {

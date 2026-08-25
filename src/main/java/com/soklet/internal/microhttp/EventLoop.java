@@ -460,6 +460,7 @@ public class EventLoop {
         draining.set(true);
         connectionEventLoops.forEach(ConnectionEventLoop::beginDrain);
 		completeDrainIfReady();
+		closeBeforeStartIfNeeded();
     }
 
     /**

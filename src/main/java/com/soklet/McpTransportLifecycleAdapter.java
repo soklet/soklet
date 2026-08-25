@@ -27,6 +27,8 @@ import static java.util.Objects.requireNonNull;
 /**
  * Package-private MCP bridge into the common lifecycle foundation.  Public MCP
  * construction remains sealed and every public descriptor remains unchanged.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 final class McpTransportLifecycleAdapter
@@ -52,6 +54,21 @@ final class McpTransportLifecycleAdapter
 		}
 
 		@Override
+		public boolean shutdownRequested() {
+			return this.owner.delegate.shutdownRequested(this.delegate);
+		}
+
+		@Override
+		public boolean tracksAdmissionLifetime() {
+			return true;
+		}
+
+		@Override
+		public boolean coordinatorOwnsUnexpectedTermination() {
+			return true;
+		}
+
+		@Override
 		public void signalTerminationFailure(@NonNull Throwable cause) {
 			this.owner.delegate.signalUnexpectedFailure(this.delegate,
 					requireNonNull(cause));
@@ -71,6 +88,19 @@ final class McpTransportLifecycleAdapter
 		this.delegate = new BuiltInTransportLifecycleAdapter(
 				InternalParticipantKind.MCP, new Operations(),
 				() -> requireNonNull(gracefulTimeout));
+	}
+
+	/** Deterministic package-private lifecycle seam; production uses the runtime-bound form. */
+	McpTransportLifecycleAdapter(@NonNull Duration gracefulTimeout,
+			@NonNull Duration forcedTimeout, @NonNull NanoClock clock,
+			@NonNull LifecycleWorkers workers,
+			BuiltInTransportLifecycleAdapter.@NonNull Operations operations) {
+		this.runtime = new AtomicReference<>();
+		this.generation = new AtomicReference<>();
+		this.delegate = new BuiltInTransportLifecycleAdapter(
+				InternalParticipantKind.MCP, requireNonNull(operations),
+				() -> requireNonNull(gracefulTimeout), requireNonNull(forcedTimeout),
+				requireNonNull(clock), requireNonNull(workers));
 	}
 
 	void bindRuntime(@NonNull McpServerRuntimeBridge runtimeBridge) {
@@ -108,8 +138,10 @@ final class McpTransportLifecycleAdapter
 	}
 
 	void awaitStop(@Nullable Generation exactGeneration) {
-		if (exactGeneration != null)
+		if (exactGeneration != null) {
+			requireOwned(exactGeneration);
 			this.delegate.awaitStop(exactGeneration.delegate);
+		}
 	}
 
 	boolean shutdownInProgress() {
@@ -126,6 +158,12 @@ final class McpTransportLifecycleAdapter
 	}
 
 	@NonNull
+	Optional<InternalShutdownResult> result(@NonNull Generation exactGeneration) {
+		requireOwned(exactGeneration);
+		return this.delegate.result(exactGeneration.delegate);
+	}
+
+	@NonNull
 	Optional<LifecycleRetentionSummary> retentionSummary() {
 		return this.delegate.retentionSummary();
 	}
@@ -137,8 +175,14 @@ final class McpTransportLifecycleAdapter
 	}
 
 	private void requireCurrent(@NonNull Generation exactGeneration) {
-		if (this.generation.get() != requireNonNull(exactGeneration))
+		requireOwned(exactGeneration);
+		if (this.generation.get() != exactGeneration)
 			throw new IllegalStateException("Stale MCP lifecycle generation");
+	}
+
+	private void requireOwned(@NonNull Generation exactGeneration) {
+		if (requireNonNull(exactGeneration).owner != this)
+			throw new IllegalStateException("Foreign MCP lifecycle generation");
 	}
 
 	@NonNull

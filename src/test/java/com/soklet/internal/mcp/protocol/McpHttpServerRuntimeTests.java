@@ -24,6 +24,7 @@ import com.soklet.CorsResponse;
 import com.soklet.HttpMethod;
 import com.soklet.Request;
 import com.soklet.ResourceMethod;
+import com.soklet.StreamTerminationReason;
 import com.soklet.internal.microhttp.EventLoop;
 import com.soklet.internal.microhttp.MicrohttpRequest;
 import com.soklet.internal.microhttp.MicrohttpResponse;
@@ -42,6 +43,8 @@ import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.channels.ClosedSelectorException;
+import java.nio.channels.Selector;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -83,6 +86,10 @@ public class McpHttpServerRuntimeTests {
 			Assertions.assertThrows(IOException.class, runtime::start);
 			Assertions.assertFalse(runtime.isStarted());
 			Assertions.assertTrue(runtime.boundAddress().isEmpty());
+			runtime.stop();
+			Assertions.assertFalse(runtime.lifecycleSnapshot().stopRequired());
+			Assertions.assertTrue(runtime.boundAddress().isEmpty(),
+					"A generation that never bound retains no address evidence.");
 
 			occupied.close();
 			try {
@@ -380,16 +387,63 @@ public class McpHttpServerRuntimeTests {
 		McpHttpServerRuntime runtime = runtime(configuration(0), defaultPolicy());
 		try {
 			runtime.stop();
-			int firstPort = runtime.start().getPort();
+			InetSocketAddress firstAddress = runtime.start();
+			int firstPort = firstAddress.getPort();
 			Assertions.assertThrows(IllegalStateException.class, runtime::start);
 			Assertions.assertEquals(200, discover(firstPort, "1").status());
 			runtime.stop();
 			runtime.stop();
 			Assertions.assertFalse(runtime.isStarted());
-			Assertions.assertTrue(runtime.boundAddress().isEmpty());
+			Assertions.assertEquals(firstAddress,
+					runtime.boundAddress().orElseThrow());
 
 			int secondPort = runtime.start().getPort();
 			Assertions.assertEquals(200, discover(secondPort, "2").status());
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
+	public void disabledLifecycleUnexpectedEventLoopRetainsFailureUntilLegacyStopCleanup()
+			throws Exception {
+		AtomicReference<Throwable> unexpectedFailure = new AtomicReference<>();
+		CountDownLatch failureObserved = new CountDownLatch(1);
+		McpNormalizedEndpoint endpoint = endpoint("direct-unexpected");
+		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
+				configuration(0), defaultPolicy(), endpoint,
+				McpJsonLimits.productionDefaults(), McpApplicationRequestRouter.empty(),
+				McpApplicationExecutionConfiguration.productionDefaults(),
+				McpApplicationClock.SYSTEM,
+				McpApplicationHandlerExecutorFactory.production(), ignored -> {}, failure -> {
+					unexpectedFailure.set(failure);
+					failureObserved.countDown();
+				});
+
+		try {
+			InetSocketAddress address = runtime.start();
+			terminateUnexpectedly(eventLoop(runtime));
+			Assertions.assertTrue(failureObserved.await(5, TimeUnit.SECONDS));
+			Assertions.assertInstanceOf(ClosedSelectorException.class,
+					unexpectedFailure.get());
+			McpHttpServerLifecycleSnapshot failed = runtime.lifecycleSnapshot();
+			Assertions.assertFalse(failed.started());
+			Assertions.assertTrue(failed.stopRequired());
+			Assertions.assertEquals(address, failed.boundAddress().orElseThrow());
+
+			runtime.stop();
+
+			McpHttpServerLifecycleSnapshot stopped = runtime.lifecycleSnapshot();
+			Assertions.assertFalse(stopped.started());
+			Assertions.assertFalse(stopped.stopRequired());
+			Assertions.assertEquals(address, stopped.boundAddress().orElseThrow());
+			Assertions.assertTrue(runtime.lifecycleEvidence().empty());
+			assertListenerReturned(address);
+
+			InetSocketAddress restarted = runtime.start();
+			Assertions.assertEquals(200,
+					discover(restarted.getPort(), "\"restart\"").status());
+			runtime.stop();
 		} finally {
 			runtime.close();
 		}
@@ -415,6 +469,10 @@ public class McpHttpServerRuntimeTests {
 				Assertions.assertThrows(IOException.class, runtime::start);
 				Assertions.assertTrue(diagnostics.isEmpty(),
 						"A failed listener generation must not emit a startup diagnostic.");
+				runtime.stop();
+				Assertions.assertFalse(runtime.lifecycleSnapshot().stopRequired());
+				Assertions.assertTrue(runtime.boundAddress().isEmpty(),
+						"A generation that never bound retains no address evidence.");
 
 				occupied.close();
 				Assertions.assertEquals(port, runtime.start().getPort());
@@ -525,10 +583,12 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	@Test
-	public void submit_after_stop_boundary_is_suppressed_without_publication_or_callback()
+	public void submit_after_stop_boundary_returns_unavailable_and_releases_lifecycle_admission()
 			throws Exception {
 		McpHttpServerRuntime runtime = runtime(configuration(0), defaultPolicy());
 		AtomicInteger callbacks = new AtomicInteger();
+		AtomicInteger releases = new AtomicInteger();
+		AtomicReference<MicrohttpResponse> terminalResponse = new AtomicReference<>();
 
 		try {
 			InetSocketAddress address = runtime.start();
@@ -548,19 +608,28 @@ public class McpHttpServerRuntimeTests {
 
 			Method submitRequest = McpHttpServerRuntime.class.getDeclaredMethod(
 					"submitRequest", ThreadPoolExecutor.class, McpApplicationExecution.class,
-					InetSocketAddress.class, MicrohttpRequest.class,
+					InetSocketAddress.class, MicrohttpRequest.class, Request.class,
+					McpSimulationRuntime.class, Runnable.class,
 					java.util.function.Consumer.class);
 			submitRequest.setAccessible(true);
 			MicrohttpRequest lateRequest = new MicrohttpRequest(
 					"POST", "/mcp", "HTTP/1.1", List.of(), new byte[0], false,
 					new InetSocketAddress(LOOPBACK, 12_345));
 			submitRequest.invoke(runtime, stoppedProcessor, stoppedApplication, address,
-					lateRequest,
-					(java.util.function.Consumer<MicrohttpResponse>) response ->
-							callbacks.incrementAndGet());
+					lateRequest, null, null, (Runnable) releases::incrementAndGet,
+					(java.util.function.Consumer<MicrohttpResponse>) response -> {
+						callbacks.incrementAndGet();
+						Assertions.assertEquals(503, response.status());
+						terminalResponse.set(response);
+					});
 
-			Assertions.assertEquals(0, callbacks.get(),
-					"A submit that loses the stop boundary must not offer a response.");
+			Assertions.assertEquals(1, callbacks.get(),
+					"A submit that loses the stop boundary must terminate promptly.");
+			Assertions.assertEquals(0, releases.get(),
+					"The full-body lifecycle lease must span terminal response delivery.");
+			completeBody(terminalResponse.get());
+			Assertions.assertEquals(1, releases.get(),
+					"Terminal body delivery must release the lifecycle lease exactly once.");
 			McpRequestExecutionSnapshot snapshot = runtime.requestExecutionSnapshot();
 			Assertions.assertEquals(0, snapshot.retainedRequestControls());
 			Assertions.assertEquals(0, snapshot.queuedProtocolRequests());
@@ -659,7 +728,7 @@ public class McpHttpServerRuntimeTests {
 		HeldTerminationEventLoop heldEventLoop = new HeldTerminationEventLoop();
 
 		try {
-			runtime.start();
+			InetSocketAddress retainedAddress = runtime.start();
 			replaceEventLoop(runtime, heldEventLoop);
 
 			long stopStartedAt = System.nanoTime();
@@ -677,7 +746,8 @@ public class McpHttpServerRuntimeTests {
 			McpHttpServerLifecycleSnapshot stopped = runtime.lifecycleSnapshot();
 			Assertions.assertFalse(stopped.started());
 			Assertions.assertTrue(stopped.stopRequired());
-			Assertions.assertTrue(stopped.boundAddress().isEmpty());
+			Assertions.assertEquals(retainedAddress,
+					stopped.boundAddress().orElseThrow());
 			Assertions.assertFalse(stopped.residualApplicationExecutions());
 			IllegalStateException restartFailure = Assertions.assertThrows(
 					IllegalStateException.class, runtime::start);
@@ -1206,10 +1276,13 @@ public class McpHttpServerRuntimeTests {
 
 	private static McpHttpServerRuntime runtime(McpHttpTransportConfiguration configuration,
 			McpHttpEndpointPolicy policy, String serverName) {
-		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
+		return new McpHttpServerRuntime(configuration, policy, endpoint(serverName));
+	}
+
+	private static McpNormalizedEndpoint endpoint(String serverName) {
+		return McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(serverName, "4.0.0-SNAPSHOT"))
 				.build();
-		return new McpHttpServerRuntime(configuration, policy, endpoint);
 	}
 
 	private static McpHttpServerRuntime runtime(McpHttpTransportConfiguration configuration,
@@ -1560,6 +1633,40 @@ public class McpHttpServerRuntimeTests {
 		Assertions.assertTrue(original.join(Duration.ofSeconds(2)),
 				"The original MCP event loop did not terminate before replacement.");
 		eventLoopField.set(runtime, replacement);
+	}
+
+	private static EventLoop eventLoop(McpHttpServerRuntime runtime) throws Exception {
+		Field eventLoopField = McpHttpServerRuntime.class.getDeclaredField("eventLoop");
+		eventLoopField.setAccessible(true);
+		return (EventLoop) eventLoopField.get(runtime);
+	}
+
+	private static void terminateUnexpectedly(EventLoop eventLoop) throws Exception {
+		Field selectorField = EventLoop.class.getDeclaredField("selector");
+		selectorField.setAccessible(true);
+		((Selector) selectorField.get(eventLoop)).close();
+		Assertions.assertTrue(eventLoop.join(Duration.ofSeconds(2)),
+				"The disabled-lifecycle MCP event loop did not terminate.");
+	}
+
+	private static void assertListenerReturned(InetSocketAddress address)
+			throws Exception {
+		try (ServerSocket socket = new ServerSocket()) {
+			socket.setReuseAddress(true);
+			socket.bind(address);
+		}
+	}
+
+	private static void completeBody(MicrohttpResponse response) throws Exception {
+		Method reserveBodyTermination = MicrohttpResponse.class.getDeclaredMethod(
+				"reserveBodyTermination", StreamTerminationReason.class, Throwable.class);
+		reserveBodyTermination.setAccessible(true);
+		reserveBodyTermination.invoke(response, StreamTerminationReason.COMPLETED, null);
+
+		Method deliverBodyTermination = MicrohttpResponse.class.getDeclaredMethod(
+				"deliverBodyTermination");
+		deliverBodyTermination.setAccessible(true);
+		deliverBodyTermination.invoke(response);
 	}
 
 	private static void assertDiscoveryResponse(RawResponse response, String idJson) {
