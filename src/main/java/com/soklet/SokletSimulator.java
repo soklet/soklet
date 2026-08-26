@@ -128,9 +128,10 @@ final class SokletSimulator {
 
 			ResolvedScopeTransports resolved = validate(config);
 			this.stateMachine.claimStart();
-			// Construction performs attachment only.  It initializes the fresh mocks
-			// and the fresh unbound MCP graph, never a caller-owned transport.
-			Soklet.fromConfig(config);
+			// Construction is deliberately lightweight.  Setup and installation run
+			// below under this scope's startup context, against only its fresh mocks
+			// and fresh unbound MCP graph.
+			Soklet soklet = Soklet.fromConfig(config);
 
 			List<ScopeParticipant> participants = participants(resolved);
 			ScopeDispatchGate dispatchGate = new ScopeDispatchGate(participants);
@@ -142,7 +143,7 @@ final class SokletSimulator {
 			InternalStartupDisposition startupDisposition =
 					InternalStartupDisposition.FAILED;
 			try {
-				startParticipants(participants,
+				startParticipants(soklet, participants,
 						config.getInternalLifecyclePolicy());
 				if (!this.stateMachine.publishReady())
 					throw new IllegalStateException(
@@ -255,7 +256,7 @@ final class SokletSimulator {
 			return List.copyOf(participants);
 		}
 
-		private void startParticipants(
+		private void startParticipants(@NonNull Soklet soklet,
 				@NonNull List<ScopeParticipant> participants,
 				@NonNull InternalLifecyclePolicy policy) {
 			long now = this.clock.nanoTime();
@@ -266,6 +267,7 @@ final class SokletSimulator {
 			InternalStartupContext context = new InternalStartupContext(this.clock,
 					startupDeadline, cancellationDeadline,
 					this.stateMachine::shutdownRequested);
+			soklet.initializeForSimulator(context, this.waiter);
 			for (ScopeParticipant participant : participants)
 				participant.commitAndStart(context);
 			for (ScopeParticipant participant : participants)

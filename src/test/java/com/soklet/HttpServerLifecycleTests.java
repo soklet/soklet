@@ -94,12 +94,14 @@ public class HttpServerLifecycleTests {
 			Assertions.assertEquals("ok", new String(readAll(c.getInputStream()), StandardCharsets.UTF_8));
 		}
 		// try-with-resources calls close(), which stops the server
-		// Can't call isStarted() after close() directly; create again to check false
-		Soklet app2 = Soklet.fromConfig(cfg);
-		try {
-			Assertions.assertFalse(app2.isStarted());
-		} finally {
-			app2.close();
+		// A direct Soklet/transport graph is one-shot; a fresh generation requires
+		// a fresh transport graph rather than reclaiming the prior identity.
+		SokletConfig freshConfig = SokletConfig.withHttpServer(
+				HttpServer.withPort(findFreePort()).build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
+						Set.of(HealthResource.class))).build();
+		try (Soklet fresh = Soklet.fromConfig(freshConfig)) {
+			Assertions.assertFalse(fresh.isStarted());
 		}
 	}
 

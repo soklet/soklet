@@ -47,6 +47,11 @@ final class BuiltInTransportLifecycleAdapter {
 		FAILED
 	}
 
+	private enum CoordinationMode {
+		STANDALONE,
+		EXTERNAL
+	}
+
 	interface Operations {
 		/** Prompt, signal-only graceful wind-up. */
 		void quiesce();
@@ -66,7 +71,12 @@ final class BuiltInTransportLifecycleAdapter {
 	}
 
 	@ThreadSafe
-	static final class Generation {
+	static final class Generation
+			implements InternalLifecycleCoordinator.Participant {
+		@NonNull
+		private final BuiltInTransportLifecycleAdapter owner;
+		@NonNull
+		private final CoordinationMode coordinationMode;
 		@NonNull
 		private final AdmissionFence admissionFence;
 		@NonNull
@@ -78,6 +88,8 @@ final class BuiltInTransportLifecycleAdapter {
 		@NonNull
 		private final AdapterRuntime runtime;
 		@NonNull
+		private final TrackedLifecycleCallRunner callRunner;
+		@NonNull
 		private final CompletableFuture<InternalShutdownResult> result;
 		@NonNull
 		private final AtomicBoolean shutdownClaimed;
@@ -87,26 +99,125 @@ final class BuiltInTransportLifecycleAdapter {
 		private final AtomicReference<@Nullable Throwable> startupFailure;
 		@NonNull
 		private final AtomicBoolean resultPublicationClaimed;
+		@NonNull
+		private final AtomicBoolean transportStartClaimed;
+		@NonNull
+		private final AtomicBoolean unexpectedCallbackPublished;
+		@NonNull
+		private final Runnable externalShutdownRequested;
+		@NonNull
+		private final Runnable externalUnexpectedTermination;
 		@Nullable
 		private volatile LifecycleRetentionAnchor retentionAnchor;
+		@Nullable
+		private volatile InternalParticipantShutdownResult finalizedParticipantResult;
+		private volatile boolean externallyCommitted;
+		private volatile boolean externallyDiscarded;
 		private volatile long gracefulDeadlineNanos;
 		private volatile long forcedDeadlineNanos;
 
 		private Generation(@NonNull BuiltInTransportLifecycleAdapter owner,
 				@NonNull DeadlineWaiter waiter) {
+			this(owner, waiter, owner.workers, null, () -> {}, () -> {},
+					CoordinationMode.STANDALONE, null);
+		}
+
+		private Generation(@NonNull BuiltInTransportLifecycleAdapter owner,
+				@NonNull DeadlineWaiter waiter, @NonNull LifecycleWorkers workers,
+				@NonNull Object executionOwnerToken,
+				@NonNull Runnable externalShutdownRequested,
+				@NonNull Runnable externalUnexpectedTermination,
+				@NonNull InternalControllingEventElection ownerEventElection) {
+			this(owner, waiter, workers, executionOwnerToken,
+					externalShutdownRequested, externalUnexpectedTermination,
+					CoordinationMode.EXTERNAL, ownerEventElection);
+		}
+
+		private Generation(@NonNull BuiltInTransportLifecycleAdapter owner,
+				@NonNull DeadlineWaiter waiter, @NonNull LifecycleWorkers workers,
+				@Nullable Object executionOwnerToken,
+				@NonNull Runnable externalShutdownRequested,
+				@NonNull Runnable externalUnexpectedTermination,
+				@NonNull CoordinationMode coordinationMode,
+				@Nullable InternalControllingEventElection ownerEventElection) {
+			this.owner = requireNonNull(owner);
+			this.coordinationMode = requireNonNull(coordinationMode);
 			this.waiter = requireNonNull(waiter);
+			this.externalShutdownRequested = requireNonNull(
+					externalShutdownRequested);
+			this.externalUnexpectedTermination = requireNonNull(
+					externalUnexpectedTermination);
+			this.unexpectedCallbackPublished = new AtomicBoolean();
 			this.admissionFence = new AdmissionFence(false, waiter::signal);
+			Object exactExecutionOwnerToken = executionOwnerToken == null
+					? LifecycleExecutionContext.legacyOwnerToken()
+					: executionOwnerToken;
 			this.group = new InternalTerminationGroup(this.admissionFence,
-					waiter::signal, owner.workers);
+					this::terminationGroupChanged, requireNonNull(workers),
+					exactExecutionOwnerToken, ownerEventElection);
 			this.signal = new InternalTransportTerminationSignal(this.group,
 					this.group.root());
 			this.runtime = new AdapterRuntime(owner, this);
+			this.callRunner = coordinationMode == CoordinationMode.STANDALONE
+					? owner.callRunner : new TrackedLifecycleCallRunner(workers);
 			this.result = new CompletableFuture<>();
 			this.shutdownClaimed = new AtomicBoolean();
 			this.startupState = new AtomicReference<>(GenerationStartupState.STARTING);
 			this.startupFailure = new AtomicReference<>();
 			this.resultPublicationClaimed = new AtomicBoolean();
-			this.group.commit();
+			this.transportStartClaimed = new AtomicBoolean();
+			if (coordinationMode == CoordinationMode.STANDALONE) {
+				this.group.commit();
+				this.transportStartClaimed.set(true);
+			}
+		}
+
+		private void terminationGroupChanged() {
+			if (this.coordinationMode == CoordinationMode.EXTERNAL
+					&& this.group.controllingEvent().isPresent()
+					&& this.unexpectedCallbackPublished.compareAndSet(false, true))
+				runOwnerCallback(this.externalUnexpectedTermination,
+						this.group.controllingEvent().orElseThrow().cause()
+								.orElse(null));
+			this.waiter.signal();
+		}
+
+		@Override
+		@NonNull
+		public InternalParticipantKind kind() {
+			return this.owner.kind;
+		}
+
+		@Override
+		@NonNull
+		public AdmissionFence admissionFence() {
+			return this.admissionFence;
+		}
+
+		@Override
+		@NonNull
+		public InternalTerminationGroup terminationGroup() {
+			return this.group;
+		}
+
+		@Override
+		@NonNull
+		public InternalTransportRuntime runtime() {
+			return this.runtime;
+		}
+
+		@Override
+		@NonNull
+		public Set<InternalResidualActivityKind> residualActivity() {
+			return this.owner.operations.residualActivity();
+		}
+
+		private boolean externallyCoordinated() {
+			return this.coordinationMode == CoordinationMode.EXTERNAL;
+		}
+
+		boolean startAttempted() {
+			return this.transportStartClaimed.get();
 		}
 	}
 
@@ -166,7 +277,7 @@ final class BuiltInTransportLifecycleAdapter {
 
 		private void startProofObserver(long absoluteDeadlineNanos,
 				@NonNull String phase) {
-			this.owner.callRunner.submit("built-in-" +
+			this.generation.callRunner.submit("built-in-" +
 					this.owner.kind.name().toLowerCase(Locale.ROOT) + "-" + phase + "-proof",
 					this.generation.group, () -> {
 						try {
@@ -199,6 +310,12 @@ final class BuiltInTransportLifecycleAdapter {
 	private final TrackedLifecycleCallRunner callRunner;
 	@NonNull
 	private final AtomicReference<Generation> current;
+	@NonNull
+	private final AtomicReference<Generation> externalCandidate;
+	@NonNull
+	private final AtomicBoolean externalOwnershipClaimed;
+	@NonNull
+	private final ThreadLocal<Generation> externalStartInvocation;
 
 	BuiltInTransportLifecycleAdapter(@NonNull InternalParticipantKind kind,
 			@NonNull Operations operations, @NonNull Supplier<Duration> gracefulTimeout) {
@@ -221,10 +338,29 @@ final class BuiltInTransportLifecycleAdapter {
 		this.callRunner = new TrackedLifecycleCallRunner(workers);
 		this.identity = InternalTransportIdentity.create();
 		this.current = new AtomicReference<>();
+		this.externalCandidate = new AtomicReference<>();
+		this.externalOwnershipClaimed = new AtomicBoolean();
+		this.externalStartInvocation = new ThreadLocal<>();
 	}
 
 	@NonNull
-	Generation beginStart() {
+	synchronized Generation beginStart() {
+		Generation externalGeneration = this.externalStartInvocation.get();
+		if (externalGeneration != null) {
+			requireExternallyCoordinated(externalGeneration);
+			if (this.current.get() != externalGeneration
+					|| !externalGeneration.externallyCommitted)
+				throw new IllegalStateException(
+						"Externally coordinated transport generation is not committed");
+			if (!externalGeneration.transportStartClaimed.compareAndSet(false, true))
+				throw new IllegalStateException(
+						"Externally coordinated transport start was already claimed");
+			return externalGeneration;
+		}
+		if (this.externalOwnershipClaimed.get())
+			throw new IllegalStateException(
+					"Built-in transport lifecycle is permanently externally owned");
+
 		Generation previous = this.current.get();
 		if (previous != null && !previous.result.isDone())
 			throw new IllegalStateException("Built-in transport lifecycle generation is still active");
@@ -235,6 +371,113 @@ final class BuiltInTransportLifecycleAdapter {
 		if (!this.current.compareAndSet(previous, generation))
 			throw new IllegalStateException("Concurrent built-in transport start is not supported");
 		return generation;
+	}
+
+	@NonNull
+	synchronized Generation newExternallyCoordinatedGeneration(
+			@NonNull DeadlineWaiter waiter, @NonNull LifecycleWorkers workers,
+			@NonNull Object executionOwnerToken,
+			@NonNull Runnable externalShutdownRequested,
+			@NonNull Runnable externalUnexpectedTermination) {
+		return newExternallyCoordinatedGeneration(waiter, workers,
+				executionOwnerToken, externalShutdownRequested,
+				externalUnexpectedTermination,
+				new InternalControllingEventElection());
+	}
+
+	@NonNull
+	synchronized Generation newExternallyCoordinatedGeneration(
+			@NonNull DeadlineWaiter waiter, @NonNull LifecycleWorkers workers,
+			@NonNull Object executionOwnerToken,
+			@NonNull Runnable externalShutdownRequested,
+			@NonNull Runnable externalUnexpectedTermination,
+			@NonNull InternalControllingEventElection ownerEventElection) {
+		DeadlineWaiter exactWaiter = requireNonNull(waiter);
+		LifecycleWorkers exactWorkers = requireNonNull(workers);
+		Object exactExecutionOwnerToken = requireNonNull(executionOwnerToken);
+		Runnable exactExternalShutdownRequested = requireNonNull(
+				externalShutdownRequested);
+		Runnable exactExternalUnexpectedTermination = requireNonNull(
+				externalUnexpectedTermination);
+		if (this.externalOwnershipClaimed.get())
+			throw new IllegalStateException(
+					"Built-in transport lifecycle is already externally owned");
+		if (this.current.get() != null)
+			throw new IllegalStateException(
+					"Built-in transport lifecycle was already started outside the external owner");
+
+		Generation generation = new Generation(this, exactWaiter,
+				exactWorkers, exactExecutionOwnerToken,
+				exactExternalShutdownRequested,
+				exactExternalUnexpectedTermination,
+				requireNonNull(ownerEventElection));
+		if (!this.externalOwnershipClaimed.compareAndSet(false, true))
+			throw new IllegalStateException(
+					"Built-in transport lifecycle is already externally owned");
+		if (!this.externalCandidate.compareAndSet(null, generation))
+			throw new IllegalStateException(
+					"An externally coordinated transport generation is already pending");
+		return generation;
+	}
+
+	synchronized void commitExternallyCoordinatedGeneration(
+			@NonNull Generation generation) {
+		requireExternalCandidate(generation);
+		Generation previous = this.current.get();
+		validatePreviousGeneration(previous);
+		generation.group.commit();
+		generation.externallyCommitted = true;
+		this.current.set(generation);
+		this.externalCandidate.compareAndSet(generation, null);
+	}
+
+	void discardExternallyCoordinatedGeneration(
+			@NonNull Generation generation) {
+		requireExternalCandidate(generation);
+		generation.group.discard();
+		generation.externallyDiscarded = true;
+		this.externalCandidate.compareAndSet(generation, null);
+	}
+
+	void runExternallyCoordinatedStart(@NonNull Generation generation,
+			@NonNull Runnable startAction) {
+		requireExternallyCoordinated(generation);
+		requireCurrent(generation);
+		if (!generation.externallyCommitted || generation.externallyDiscarded)
+			throw new IllegalStateException(
+					"Externally coordinated transport generation is not active");
+		if (this.externalStartInvocation.get() != null)
+			throw new IllegalStateException(
+					"Externally coordinated transport start is already active on this thread");
+
+		boolean returned = false;
+		this.externalStartInvocation.set(generation);
+		try {
+			requireNonNull(startAction).run();
+			returned = true;
+		} finally {
+			this.externalStartInvocation.remove();
+		}
+		if (returned && !generation.transportStartClaimed.get())
+			throw new IllegalStateException(
+					"Transport start did not consume the externally coordinated generation");
+	}
+
+	boolean openExternallyCoordinatedAdmission(
+			@NonNull Generation generation) {
+		requireExternallyCoordinated(generation);
+		requireCurrent(generation);
+		if (generation.startupState.get() != GenerationStartupState.READY)
+			throw new IllegalStateException(
+					"Externally coordinated transport is not ready");
+		return generation.admissionFence.open();
+	}
+
+	boolean recordExternallyCoordinatedShutdownIntent(
+			@NonNull Generation generation) {
+		requireExternallyCoordinated(generation);
+		requireCurrent(generation);
+		return recordExternalShutdownIntent(generation);
 	}
 
 	void markReady(@NonNull Generation generation) {
@@ -263,7 +506,8 @@ final class BuiltInTransportLifecycleAdapter {
 		// The state CAS is the readiness linearization point.  If shutdown closes
 		// the still-pending fence immediately afterward, readiness won but no work
 		// is admitted into the concurrently stopping generation.
-		generation.admissionFence.open();
+		if (!generation.externallyCoordinated())
+			generation.admissionFence.open();
 	}
 
 	void failedStart(@NonNull Generation generation, @NonNull Throwable cause,
@@ -273,9 +517,18 @@ final class BuiltInTransportLifecycleAdapter {
 		Throwable primary = requireNonNull(generation.startupFailure.get());
 		generation.startupState.compareAndSet(GenerationStartupState.STARTING,
 				GenerationStartupState.FAILED);
+		if (generation.externallyCoordinated()
+				&& this.externalStartInvocation.get() == generation)
+			// The direct owner's tracked call records this synchronous failure
+			// after the transport call unwinds.  Establish rollback intent first
+			// so the exact event remains evidence without becoming an unexpected
+			// termination controlling event.
+			generation.group.recordShutdownIntent();
 		generation.signal.signalTerminationFailure(primary);
 		if (terminationProven)
 			generation.signal.signalTerminated();
+		if (generation.externallyCoordinated())
+			return;
 		requestShutdown(generation);
 		awaitResultUninterruptibly(generation);
 	}
@@ -290,6 +543,8 @@ final class BuiltInTransportLifecycleAdapter {
 		generation.startupState.compareAndSet(GenerationStartupState.STARTING,
 				GenerationStartupState.FAILED);
 		generation.signal.signalTerminationFailure(primary);
+		if (generation.externallyCoordinated())
+			return;
 		requestShutdown(generation);
 	}
 
@@ -310,6 +565,11 @@ final class BuiltInTransportLifecycleAdapter {
 		Generation generation = this.current.get();
 		if (generation == null || generation.result.isDone())
 			return null;
+		if (generation.externallyCoordinated()) {
+			if (recordExternalShutdownIntent(generation))
+				runOwnerCallback(generation.externalShutdownRequested, null);
+			return generation;
+		}
 		requestShutdown(generation);
 		return generation;
 	}
@@ -317,8 +577,85 @@ final class BuiltInTransportLifecycleAdapter {
 	void awaitStop(@Nullable Generation generation) {
 		if (generation != null) {
 			requireOwned(generation);
+			if (generation.externallyCoordinated())
+				LifecycleExecutionContext.requireNonReentrantWait(
+						generation.group.executionOwnerToken());
 			awaitResultUninterruptibly(generation);
 		}
+	}
+
+	@NonNull
+	Optional<Throwable> finalizeExternallyCoordinatedEvidence(
+			@NonNull Generation generation,
+			@NonNull InternalParticipantShutdownResult participantResult) {
+		requireExternallyCoordinated(generation);
+		requireCurrent(generation);
+		InternalParticipantShutdownResult exactParticipant =
+				requireNonNull(participantResult);
+		if (exactParticipant.kind() != this.kind)
+			throw new IllegalArgumentException(
+					"Externally coordinated participant result kind does not match adapter");
+
+		synchronized (generation) {
+			if (generation.finalizedParticipantResult != null) {
+				if (generation.finalizedParticipantResult != exactParticipant)
+					throw new IllegalStateException(
+							"Externally coordinated evidence was already finalized for another result");
+				return Optional.empty();
+			}
+
+			if (participantTerminationIsProven(exactParticipant)) {
+				if (generation.runtime.evidenceReleased.compareAndSet(false, true)) {
+					try {
+						this.operations.releaseTerminatedEvidence();
+					} catch (Throwable releaseFailure) {
+						generation.runtime.evidenceReleased.set(false);
+						generation.signal.signalTerminationFailure(releaseFailure);
+						return Optional.of(releaseFailure);
+					}
+				}
+			} else {
+				retainIncompleteParticipant(generation, exactParticipant);
+			}
+			generation.finalizedParticipantResult = exactParticipant;
+			return Optional.empty();
+		}
+	}
+
+	void publishExternallyCoordinatedResult(@NonNull Generation generation,
+			@NonNull InternalShutdownResult exactResult) {
+		requireExternallyCoordinated(generation);
+		requireCurrent(generation);
+		InternalShutdownResult result = requireNonNull(exactResult);
+		InternalParticipantShutdownResult participant = result
+				.participantResult(this.kind)
+				.orElseThrow(() -> new IllegalArgumentException(
+						"Externally coordinated result is missing adapter participant"));
+		if (generation.finalizedParticipantResult != participant)
+			throw new IllegalStateException(
+					"Externally coordinated evidence must be finalized before result publication");
+		completeExternallyCoordinatedResult(generation, result);
+	}
+
+	/** Owner-only last resort: core publication must release transport waiters. */
+	void publishExternallyCoordinatedOwnerResultAfterFailure(
+			@NonNull Generation generation,
+			@NonNull InternalShutdownResult exactResult) {
+		requireExternallyCoordinated(generation);
+		completeExternallyCoordinatedResult(generation,
+				requireNonNull(exactResult));
+	}
+
+	private void completeExternallyCoordinatedResult(
+			@NonNull Generation generation,
+			@NonNull InternalShutdownResult result) {
+		if (generation.resultPublicationClaimed.compareAndSet(false, true)) {
+			generation.result.complete(result);
+			return;
+		}
+		if (!generation.result.isDone() || generation.result.join() != result)
+			throw new IllegalStateException(
+					"A different externally coordinated result was already published");
 	}
 
 	@NonNull
@@ -401,6 +738,9 @@ final class BuiltInTransportLifecycleAdapter {
 	}
 
 	private void requestShutdown(@NonNull Generation generation) {
+		if (generation.externallyCoordinated())
+			throw new IllegalStateException(
+					"Externally coordinated shutdown belongs to the Soklet owner");
 		if (!generation.shutdownClaimed.compareAndSet(false, true))
 			return;
 		generation.startupState.compareAndSet(GenerationStartupState.STARTING,
@@ -446,7 +786,7 @@ final class BuiltInTransportLifecycleAdapter {
 			InternalLifecycleCoordinator coordinator = new InternalLifecycleCoordinator(
 					this.clock, generation.waiter, this.callRunner);
 			InternalShutdownResult result = coordinator.shutdown(
-					ListSupport.participants(new AdapterParticipant(generation)),
+					ListSupport.participants(generation),
 					generation.gracefulDeadlineNanos, generation.forcedDeadlineNanos);
 			InternalStartupDisposition startupDisposition =
 					generation.startupState.get() == GenerationStartupState.READY
@@ -523,10 +863,19 @@ final class BuiltInTransportLifecycleAdapter {
 
 	private void retainIncompleteResult(@NonNull Generation generation,
 			@NonNull InternalShutdownResult result) {
-		Set<InternalResidualActivityKind> residual = requireNonNull(result)
-				.participantResult(this.kind)
-				.map(InternalParticipantShutdownResult::residualActivity)
-				.orElseGet(Set::of);
+		InternalParticipantShutdownResult participant = requireNonNull(result)
+				.participantResult(this.kind).orElse(null);
+		if (participant == null)
+			participant = new InternalParticipantShutdownResult(this.kind,
+					InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+					List.of(), Set.of());
+		retainIncompleteParticipant(generation, participant);
+	}
+
+	private void retainIncompleteParticipant(@NonNull Generation generation,
+			@NonNull InternalParticipantShutdownResult participant) {
+		Set<InternalResidualActivityKind> residual = requireNonNull(participant)
+				.residualActivity();
 		EnumMap<InternalResidualActivityKind, Integer> counts =
 				new EnumMap<>(InternalResidualActivityKind.class);
 		for (InternalResidualActivityKind kind : residual)
@@ -536,6 +885,33 @@ final class BuiltInTransportLifecycleAdapter {
 						+ " transport retained because termination was not proven");
 	}
 
+	private boolean recordExternalShutdownIntent(@NonNull Generation generation) {
+		boolean first = generation.shutdownClaimed.compareAndSet(false, true);
+		generation.startupState.compareAndSet(GenerationStartupState.STARTING,
+				GenerationStartupState.FAILED);
+		generation.group.recordShutdownIntent();
+		return first;
+	}
+
+	private static boolean participantTerminationIsProven(
+			@NonNull InternalParticipantShutdownResult result) {
+		return switch (requireNonNull(result).disposition()) {
+			case NOT_STARTED, GRACEFUL_TERMINATION, FORCED_TERMINATION,
+					UNEXPECTED_TERMINATION -> true;
+			case RESIDUAL_ACTIVITY, TERMINATION_UNKNOWN -> false;
+		};
+	}
+
+	private static void runOwnerCallback(@NonNull Runnable callback,
+			@Nullable Throwable primaryFailure) {
+		try {
+			requireNonNull(callback).run();
+		} catch (Throwable callbackFailure) {
+			if (primaryFailure != null && callbackFailure != primaryFailure)
+				primaryFailure.addSuppressed(callbackFailure);
+		}
+	}
+
 	private void requireCurrent(@NonNull Generation generation) {
 		requireOwned(generation);
 		if (this.current.get() != generation)
@@ -543,47 +919,31 @@ final class BuiltInTransportLifecycleAdapter {
 	}
 
 	private void requireOwned(@NonNull Generation generation) {
-		if (requireNonNull(generation).runtime.owner != this)
+		if (requireNonNull(generation).owner != this)
 			throw new IllegalStateException("Foreign built-in transport lifecycle generation");
 	}
 
-	private final class AdapterParticipant implements InternalLifecycleCoordinator.Participant {
-		@NonNull
-		private final Generation generation;
+	private void requireExternallyCoordinated(@NonNull Generation generation) {
+		requireOwned(generation);
+		if (!generation.externallyCoordinated())
+			throw new IllegalStateException(
+					"Built-in transport lifecycle generation is not externally coordinated");
+	}
 
-		private AdapterParticipant(@NonNull Generation generation) {
-			this.generation = requireNonNull(generation);
-		}
+	private void requireExternalCandidate(@NonNull Generation generation) {
+		requireExternallyCoordinated(generation);
+		if (this.externalCandidate.get() != generation)
+			throw new IllegalStateException(
+					"Externally coordinated transport generation is not pending");
+	}
 
-		@Override
-		@NonNull
-		public InternalParticipantKind kind() {
-			return BuiltInTransportLifecycleAdapter.this.kind;
-		}
-
-		@Override
-		@NonNull
-		public AdmissionFence admissionFence() {
-			return this.generation.admissionFence;
-		}
-
-		@Override
-		@NonNull
-		public InternalTerminationGroup terminationGroup() {
-			return this.generation.group;
-		}
-
-		@Override
-		@NonNull
-		public InternalTransportRuntime runtime() {
-			return this.generation.runtime;
-		}
-
-		@Override
-		@NonNull
-		public Set<InternalResidualActivityKind> residualActivity() {
-			return BuiltInTransportLifecycleAdapter.this.operations.residualActivity();
-		}
+	private void validatePreviousGeneration(@Nullable Generation previous) {
+		if (previous != null && !previous.result.isDone())
+			throw new IllegalStateException(
+					"Built-in transport lifecycle generation is still active");
+		if (previous != null && !previous.result.join().isComplete())
+			throw new IllegalStateException(
+					"Built-in transport with retained termination evidence cannot restart");
 	}
 
 	/** Avoid generic varargs arrays and keep package-private call sites concise. */

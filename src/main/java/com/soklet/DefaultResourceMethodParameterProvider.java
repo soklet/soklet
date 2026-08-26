@@ -126,6 +126,12 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		requireNonNull(resourceMethod);
 		requireNonNull(parameter);
 
+		// Defense in depth.  The direct owner validates the complete startup
+		// snapshot and Soklet validates each dynamically resolved method before
+		// instance acquisition; the default provider must never reintroduce the
+		// removed configured-HttpServer injection path.
+		SokletFrameworkSetup.validateNoRemovedHttpServerInjection(resourceMethod);
+
 		// First, support a few special injections based on type.
 		Class<?> basicParameterType = parameter.getType();
 
@@ -356,12 +362,6 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 
 		configuredInjection = extractConfiguredComponentInjection(basicParameterType, CorsAuthorizer.class,
 				sokletConfig.getCorsAuthorizer(), resourceMethod);
-
-		if (configuredInjection != null)
-			return configuredInjection;
-
-		configuredInjection = extractConfiguredComponentInjection(basicParameterType, HttpServer.class,
-				sokletConfig.getHttpServer().orElse(null), resourceMethod);
 
 		if (configuredInjection != null)
 			return configuredInjection;

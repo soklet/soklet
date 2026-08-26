@@ -49,6 +49,7 @@ import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -84,7 +85,8 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 				"void", void.class
 		);
 
-		DEFAULT_INSTANCE = new DefaultResourceMethodResolver();
+		DEFAULT_INSTANCE = new DefaultResourceMethodResolver(
+				DefaultResourceMethodResolver::fromClasspathIntrospection);
 	}
 
 	@NonNull
@@ -111,6 +113,18 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@NonNull
+	static DefaultResourceMethodResolver lazyClasspathResolverForTesting(
+			@NonNull ClasspathResolverLoader loader) {
+		return new DefaultResourceMethodResolver(requireNonNull(loader));
+	}
+
+	@FunctionalInterface
+	interface ClasspathResolverLoader {
+		@NonNull
+		DefaultResourceMethodResolver load(@Nullable ClassLoader classLoader);
+	}
+
+	@NonNull
 	private final Set<@NonNull Method> methods;
 	@NonNull
 	private final Map<@NonNull HttpMethod, @NonNull Set<@NonNull Method>> methodsByHttpMethod;
@@ -120,10 +134,24 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	private final Set<@NonNull ResourceMethod> resourceMethods;
 	@NonNull
 	private final RouteIndex routeIndex;
+	@Nullable
+	private final LazyClasspathResolution lazyClasspathResolution;
 
-	private DefaultResourceMethodResolver() {
+	private DefaultResourceMethodResolver(@NonNull ClasspathResolverLoader loader) {
+		this.methods = Set.of();
+		this.methodsByHttpMethod = Map.of();
+		this.httpMethodResourcePathDeclarationsByMethod = Map.of();
+		this.resourceMethods = Set.of();
+		this.routeIndex = RouteIndex.fromResourceMethods(Set.of());
+		this.lazyClasspathResolution = new LazyClasspathResolution(
+				requireNonNull(loader));
+	}
+
+	private static DefaultResourceMethodResolver fromClasspathIntrospection(
+			@Nullable ClassLoader classLoader) {
 		// Read declarations from SokletProcessor's compile-time lookup table
-		List<ResourceMethodDeclaration> resourceMethodDeclarations = ResourceMethodDeclarationLoader.loadAll(Thread.currentThread().getContextClassLoader());
+		List<ResourceMethodDeclaration> resourceMethodDeclarations =
+				ResourceMethodDeclarationLoader.loadAll(classLoader);
 
 		// Resolve Methods once
 		Set<Method> allMethods = new HashSet<>();
@@ -132,7 +160,9 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		Set<ResourceMethod> resourceMethods = new HashSet<>();
 
 		for (ResourceMethodDeclaration resourceMethodDeclaration : resourceMethodDeclarations) {
-			Method method = resolveMethod(resourceMethodDeclaration.className(), resourceMethodDeclaration.methodName(), resourceMethodDeclaration.parameterTypes());
+			Method method = resolveMethod(resourceMethodDeclaration.className(),
+					resourceMethodDeclaration.methodName(),
+					resourceMethodDeclaration.parameterTypes(), classLoader);
 			allMethods.add(method);
 
 			// Declarations for this method
@@ -146,12 +176,25 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 			resourceMethods.add(ResourceMethod.fromComponents(resourceMethodDeclaration.httpMethod(), rpd, method, sse));
 		}
 
-		this.methods = Collections.unmodifiableSet(allMethods);
-		this.methodsByHttpMethod = Collections.unmodifiableMap(byHttp);
-		this.httpMethodResourcePathDeclarationsByMethod = Collections.unmodifiableMap(byMethod);
-		this.resourceMethods = Collections.unmodifiableSet(resourceMethods);
+		return new DefaultResourceMethodResolver(allMethods, byHttp, byMethod,
+				resourceMethods);
+	}
+
+	private DefaultResourceMethodResolver(@NonNull Set<@NonNull Method> methods,
+			@NonNull Map<@NonNull HttpMethod, @NonNull Set<@NonNull Method>> methodsByHttpMethod,
+			@NonNull Map<@NonNull Method, @NonNull Set<@NonNull HttpMethodResourcePathDeclaration>> httpMethodResourcePathDeclarationsByMethod,
+			@NonNull Set<@NonNull ResourceMethod> resourceMethods) {
+		this.methods = Collections.unmodifiableSet(new HashSet<>(
+				requireNonNull(methods)));
+		this.methodsByHttpMethod = immutableSetMap(
+				requireNonNull(methodsByHttpMethod));
+		this.httpMethodResourcePathDeclarationsByMethod = immutableSetMap(
+				requireNonNull(httpMethodResourcePathDeclarationsByMethod));
+		this.resourceMethods = Collections.unmodifiableSet(new HashSet<>(
+				requireNonNull(resourceMethods)));
 		validateNoAmbiguousResourceMethods(this.resourceMethods);
 		this.routeIndex = RouteIndex.fromResourceMethods(this.resourceMethods);
+		this.lazyClasspathResolution = null;
 	}
 
 	private DefaultResourceMethodResolver(@NonNull Set<@NonNull ResourceMethod> resourceMethods) {
@@ -187,6 +230,275 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		this.resourceMethods = Collections.unmodifiableSet(resourceMethodsCopy);
 		validateNoAmbiguousResourceMethods(this.resourceMethods);
 		this.routeIndex = RouteIndex.fromResourceMethods(this.resourceMethods);
+		this.lazyClasspathResolution = null;
+	}
+
+	@NonNull
+	private static <K, V> Map<K, Set<V>> immutableSetMap(
+			@NonNull Map<K, Set<V>> source) {
+		requireNonNull(source);
+
+		Map<K, Set<V>> copy = new HashMap<>(source.size());
+
+		for (Entry<K, Set<V>> entry : source.entrySet()) {
+			K key = requireNonNull(entry.getKey());
+			Set<V> values = requireNonNull(entry.getValue());
+			copy.put(key, Collections.unmodifiableSet(new HashSet<>(values)));
+		}
+
+		return Collections.unmodifiableMap(copy);
+	}
+
+	@NonNull
+	private DefaultResourceMethodResolver resolvedForPublicUse() {
+		LazyClasspathResolution resolution = this.lazyClasspathResolution;
+		return resolution == null ? this : resolution.resolveForPublicUse();
+	}
+
+	@NonNull
+	Set<@NonNull ResourceMethod> getResourceMethodsForLifecycle(
+			@NonNull InternalStartupContext startupContext,
+			@NonNull DeadlineWaiter deadlineWaiter) {
+		requireNonNull(startupContext);
+		requireNonNull(deadlineWaiter);
+
+		LazyClasspathResolution resolution = this.lazyClasspathResolution;
+		if (resolution == null)
+			return this.resourceMethods;
+
+		return resolution.resolveForStartup(startupContext, deadlineWaiter)
+				.resourceMethods;
+	}
+
+	static final class StartupWaitCancelledException extends RuntimeException {
+		private static final long serialVersionUID = 1L;
+
+		StartupWaitCancelledException() {
+			super("Default Resource Method Resolver startup wait was cancelled",
+					null, false, false);
+		}
+	}
+
+	@ThreadSafe
+	private static final class LazyClasspathResolution {
+		private enum State {
+			UNINITIALIZED,
+			LOADING,
+			SUCCEEDED,
+			FAILED
+		}
+
+		@NonNull
+		private final ClasspathResolverLoader loader;
+		@NonNull
+		private final Object monitor;
+		@NonNull
+		private final IdentityHashMap<DeadlineWaiter, Integer> lifecycleWaiters;
+		@NonNull
+		private State state;
+		@Nullable
+		private Thread ownerThread;
+		@Nullable
+		private ClassLoader capturedClassLoader;
+		@Nullable
+		private DefaultResourceMethodResolver resolved;
+		@Nullable
+		private Throwable failure;
+
+		private LazyClasspathResolution(@NonNull ClasspathResolverLoader loader) {
+			this.loader = requireNonNull(loader);
+			this.monitor = new Object();
+			this.lifecycleWaiters = new IdentityHashMap<>();
+			this.state = State.UNINITIALIZED;
+		}
+
+		@NonNull
+		private DefaultResourceMethodResolver resolveForPublicUse() {
+			boolean owner = false;
+
+			synchronized (this.monitor) {
+				switch (this.state) {
+					case UNINITIALIZED -> {
+						claimOwnership();
+						owner = true;
+					}
+					case LOADING -> rejectRecursiveOwnerCall();
+					case SUCCEEDED -> {
+						return requireNonNull(this.resolved);
+					}
+					case FAILED -> throwTerminalFailure();
+				}
+			}
+
+			if (owner)
+				return loadAndPublish();
+
+			boolean interrupted = false;
+			try {
+				synchronized (this.monitor) {
+					while (this.state == State.LOADING) {
+						try {
+							this.monitor.wait();
+						} catch (InterruptedException exception) {
+							interrupted = true;
+						}
+					}
+
+					if (this.state == State.SUCCEEDED)
+						return requireNonNull(this.resolved);
+
+					throwTerminalFailure();
+					throw new AssertionError("Unreachable resolver state");
+				}
+			} finally {
+				if (interrupted)
+					Thread.currentThread().interrupt();
+			}
+		}
+
+		@NonNull
+		private DefaultResourceMethodResolver resolveForStartup(
+				@NonNull InternalStartupContext startupContext,
+				@NonNull DeadlineWaiter deadlineWaiter) {
+			requireNonNull(startupContext);
+			requireNonNull(deadlineWaiter);
+
+			boolean owner = false;
+
+			synchronized (this.monitor) {
+				switch (this.state) {
+					case UNINITIALIZED -> {
+						claimOwnership();
+						owner = true;
+					}
+					case LOADING -> {
+						rejectRecursiveOwnerCall();
+						registerLifecycleWaiter(deadlineWaiter);
+					}
+					case SUCCEEDED -> {
+						return requireNonNull(this.resolved);
+					}
+					case FAILED -> throwTerminalFailure();
+				}
+			}
+
+			if (owner)
+				return loadAndPublish();
+
+			try {
+				long deadlineNanos = startupContext.activeDeadlineNanos()
+						.orElse(Long.MAX_VALUE);
+				deadlineWaiter.await(deadlineNanos,
+						() -> terminalStatePublished()
+								|| startupContext.isCancellationRequested());
+
+				synchronized (this.monitor) {
+					if (this.state == State.SUCCEEDED)
+						return requireNonNull(this.resolved);
+					if (this.state == State.FAILED)
+						throwTerminalFailure();
+				}
+
+				throw new StartupWaitCancelledException();
+			} catch (InterruptedException exception) {
+				Thread.currentThread().interrupt();
+				throw new StartupWaitCancelledException();
+			} finally {
+				synchronized (this.monitor) {
+					unregisterLifecycleWaiter(deadlineWaiter);
+				}
+			}
+		}
+
+		private void claimOwnership() {
+			this.state = State.LOADING;
+			this.ownerThread = Thread.currentThread();
+			this.capturedClassLoader = this.ownerThread.getContextClassLoader();
+		}
+
+		private void rejectRecursiveOwnerCall() {
+			if (this.ownerThread == Thread.currentThread())
+				throw new IllegalStateException(
+						"Default Resource Method Resolver loading cannot recursively resolve itself");
+		}
+
+		private void registerLifecycleWaiter(
+				@NonNull DeadlineWaiter deadlineWaiter) {
+			Integer count = this.lifecycleWaiters.get(deadlineWaiter);
+			this.lifecycleWaiters.put(deadlineWaiter,
+					count == null ? 1 : count + 1);
+		}
+
+		private void unregisterLifecycleWaiter(
+				@NonNull DeadlineWaiter deadlineWaiter) {
+			Integer count = this.lifecycleWaiters.get(deadlineWaiter);
+			if (count == null)
+				return;
+			if (count == 1) {
+				this.lifecycleWaiters.remove(deadlineWaiter);
+			} else {
+				this.lifecycleWaiters.put(deadlineWaiter, count - 1);
+			}
+		}
+
+		private boolean terminalStatePublished() {
+			synchronized (this.monitor) {
+				return this.state == State.SUCCEEDED || this.state == State.FAILED;
+			}
+		}
+
+		@NonNull
+		private DefaultResourceMethodResolver loadAndPublish() {
+			DefaultResourceMethodResolver loaded = null;
+			Throwable terminalFailure = null;
+
+			try {
+				loaded = requireNonNull(this.loader.load(this.capturedClassLoader),
+						"Classpath resolver loader returned null");
+				if (loaded.lazyClasspathResolution != null)
+					throw new IllegalStateException(
+							"Classpath resolver loader must return a complete resolver snapshot");
+			} catch (RuntimeException | Error failure) {
+				terminalFailure = failure;
+			}
+
+			List<DeadlineWaiter> waitersToSignal;
+			synchronized (this.monitor) {
+				if (terminalFailure == null) {
+					this.resolved = requireNonNull(loaded);
+					this.state = State.SUCCEEDED;
+				} else {
+					this.failure = terminalFailure;
+					this.state = State.FAILED;
+				}
+
+				this.ownerThread = null;
+				this.capturedClassLoader = null;
+				waitersToSignal = new ArrayList<>(this.lifecycleWaiters.keySet());
+				this.lifecycleWaiters.clear();
+				this.monitor.notifyAll();
+			}
+
+			for (DeadlineWaiter waiter : waitersToSignal)
+				waiter.signal();
+
+			if (terminalFailure != null)
+				throwFailure(terminalFailure);
+
+			return requireNonNull(loaded);
+		}
+
+		private void throwTerminalFailure() {
+			throwFailure(requireNonNull(this.failure));
+		}
+
+		private static void throwFailure(@NonNull Throwable failure) {
+			if (failure instanceof RuntimeException runtimeException)
+				throw runtimeException;
+			if (failure instanceof Error error)
+				throw error;
+			throw new AssertionError("Unexpected checked resolver failure", failure);
+		}
 	}
 
 	@ThreadSafe
@@ -194,13 +506,14 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		private ResourceMethodDeclarationLoader() {}
 
 		@SuppressWarnings("unchecked")
-		static List<ResourceMethodDeclaration> loadAll(ClassLoader cl) {
+		static List<ResourceMethodDeclaration> loadAll(@Nullable ClassLoader cl) {
 			List<ResourceMethodDeclaration> out = new ArrayList<>();
 			Enumeration<URL> resources = null;
 
 			try {
 				// Read in Resource Method cache generated by SokletProcessor
-				resources = cl.getResources(SokletProcessor.RESOURCE_METHOD_LOOKUP_TABLE_PATH);
+				resources = requireNonNull(cl, "context ClassLoader")
+						.getResources(SokletProcessor.RESOURCE_METHOD_LOOKUP_TABLE_PATH);
 			} catch (Exception e) {
 				throw new RuntimeException(format("Unable to access Soklet's Resource Method lookup table. Is '%s' on the classpath and well-formed? Did you supply javac with the following options? '-parameters -processor %s'?", SokletProcessor.RESOURCE_METHOD_LOOKUP_TABLE_PATH, SokletProcessor.class.getName()), e);
 			}
@@ -278,18 +591,19 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@NonNull
-	private Method resolveMethod(@NonNull String className,
-															 @NonNull String methodName,
-															 @NonNull String[] paramTypeNames) {
+	private static Method resolveMethod(@NonNull String className,
+														 @NonNull String methodName,
+														 @NonNull String[] paramTypeNames,
+														 @Nullable ClassLoader classLoader) {
 		requireNonNull(className);
 		requireNonNull(methodName);
 		requireNonNull(paramTypeNames);
 
 		try {
-			Class<?> owner = Class.forName(className);
+			Class<?> owner = Class.forName(className, true, classLoader);
 			Class<?>[] paramTypes = new Class<?>[paramTypeNames.length];
 			for (int i = 0; i < paramTypeNames.length; i++)
-				paramTypes[i] = resolveParamType(paramTypeNames[i]);
+				paramTypes[i] = resolveParamType(paramTypeNames[i], classLoader);
 			Method m = owner.getMethod(methodName, paramTypes);
 			m.setAccessible(true);
 			return m;
@@ -299,7 +613,8 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@NonNull
-	private static Class<?> resolveParamType(@NonNull String paramTypeName) throws ClassNotFoundException {
+	private static Class<?> resolveParamType(@NonNull String paramTypeName,
+			@Nullable ClassLoader classLoader) throws ClassNotFoundException {
 		requireNonNull(paramTypeName);
 
 		Class<?> primitiveType = PRIMITIVE_TYPES_BY_NAME.get(paramTypeName);
@@ -307,7 +622,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		if (primitiveType != null)
 			return primitiveType;
 
-		return Class.forName(paramTypeName);
+		return Class.forName(paramTypeName, true, classLoader);
 	}
 
 	private DefaultResourceMethodResolver(@Nullable Set<Class<?>> resourceClasses,
@@ -358,14 +673,19 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		this.resourceMethods = Collections.unmodifiableSet(resourceMethods);
 		validateNoAmbiguousResourceMethods(this.resourceMethods);
 		this.routeIndex = RouteIndex.fromResourceMethods(this.resourceMethods);
+		this.lazyClasspathResolution = null;
 	}
 
 	@NonNull
 	@Override
 	public Optional<ResourceMethod> resourceMethodForRequest(@NonNull Request request,
-																													 @NonNull ServerType serverType) {
+																			 @NonNull ServerType serverType) {
 		requireNonNull(request);
 		requireNonNull(serverType);
+
+		DefaultResourceMethodResolver resolved = resolvedForPublicUse();
+		if (resolved != this)
+			return resolved.resourceMethodForRequest(request, serverType);
 
 		ResourcePath resourcePath = request.getResourcePath();
 		Set<ResourceMethod> matchingResourceMethods = this.routeIndex.matchingResourceMethods(request.getHttpMethod(), serverType, resourcePath);
@@ -877,22 +1197,23 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	@NonNull
 	@Override
 	public Set<@NonNull ResourceMethod> getResourceMethods() {
-		return this.resourceMethods;
+		return resolvedForPublicUse().resourceMethods;
 	}
 
 	@NonNull
 	public Set<@NonNull Method> getMethods() {
-		return this.methods;
+		return resolvedForPublicUse().methods;
 	}
 
 	@NonNull
 	public Map<@NonNull Method, @NonNull Set<@NonNull HttpMethodResourcePathDeclaration>> getHttpMethodResourcePathDeclarationsByMethod() {
-		return this.httpMethodResourcePathDeclarationsByMethod;
+		return resolvedForPublicUse()
+				.httpMethodResourcePathDeclarationsByMethod;
 	}
 
 	@NonNull
 	protected Map<@NonNull HttpMethod, @NonNull Set<@NonNull Method>> getMethodsByHttpMethod() {
-		return this.methodsByHttpMethod;
+		return resolvedForPublicUse().methodsByHttpMethod;
 	}
 
 	@ThreadSafe

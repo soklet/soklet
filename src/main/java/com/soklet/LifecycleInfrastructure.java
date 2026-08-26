@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -54,6 +55,7 @@ final class LifecycleWorkers {
 		COORDINATOR,
 		LIFECYCLE_CALL,
 		PUBLIC_STAGE_HANDOFF,
+		MCP_METRICS_HANDOFF,
 		SUBTREE_PROOF_HANDOFF,
 		TRANSITION_OBSERVER,
 		SHUTDOWN_CLEANUP,
@@ -79,6 +81,7 @@ final class LifecycleWorkers {
 		limits.put(Role.COORDINATOR, 1);
 		limits.put(Role.LIFECYCLE_CALL, 24);
 		limits.put(Role.PUBLIC_STAGE_HANDOFF, 1);
+		limits.put(Role.MCP_METRICS_HANDOFF, 2);
 		limits.put(Role.SUBTREE_PROOF_HANDOFF, 16);
 		limits.put(Role.TRANSITION_OBSERVER, 1);
 		limits.put(Role.SHUTDOWN_CLEANUP, 1);
@@ -179,31 +182,83 @@ final class InternalLifecycleCompletion {
 	private final CompletionStage<InternalShutdownResult> publicView;
 	@NonNull
 	private final Object monitor;
+	@NonNull
+	private final Runnable beforeWait;
+	@NonNull
+	private volatile boolean internalReleased;
+	@NonNull
+	private final AtomicBoolean publicHandoffStarted;
 
 	InternalLifecycleCompletion(@NonNull LifecycleWorkers workers) {
+		this(workers, () -> { });
+	}
+
+	InternalLifecycleCompletion(@NonNull LifecycleWorkers workers,
+			@NonNull Runnable beforeWait) {
 		this.workers = requireNonNull(workers);
 		this.result = new AtomicReference<>();
 		this.publicHandoff = new CompletableFuture<>();
 		this.publicView = this.publicHandoff.minimalCompletionStage();
 		this.monitor = new Object();
+		this.beforeWait = requireNonNull(beforeWait);
+		this.publicHandoffStarted = new AtomicBoolean();
 	}
 
 	void publish(@NonNull InternalShutdownResult immutableResult) {
+		install(requireNonNull(immutableResult));
+		releaseInternalWaiters();
+		startPublicHandoff();
+	}
+
+	void install(@NonNull InternalShutdownResult immutableResult) {
 		requireNonNull(immutableResult);
+		if (!this.result.compareAndSet(null, immutableResult))
+			throw new IllegalStateException("Lifecycle result was already installed");
+	}
+
+	void releaseInternalWaiters() {
+		if (this.result.get() == null)
+			throw new IllegalStateException("Lifecycle result is not installed");
 		synchronized (this.monitor) {
-			if (!this.result.compareAndSet(null, immutableResult))
-				throw new IllegalStateException("Lifecycle result was already published");
+			if (this.internalReleased)
+				throw new IllegalStateException(
+						"Lifecycle internal waiters were already released");
+			this.internalReleased = true;
 			this.monitor.notifyAll();
 		}
-		this.workers.start(LifecycleWorkers.Role.PUBLIC_STAGE_HANDOFF,
-				"soklet-shutdown-result-handoff",
-				() -> this.publicHandoff.complete(immutableResult));
+	}
+
+	void startPublicHandoff() {
+		InternalShutdownResult immutableResult = this.result.get();
+		if (immutableResult == null || !this.internalReleased)
+			throw new IllegalStateException(
+					"Lifecycle result must be installed and internally released first");
+		if (!this.publicHandoffStarted.compareAndSet(false, true))
+			throw new IllegalStateException("Lifecycle public handoff was already started");
+		try {
+			this.workers.start(LifecycleWorkers.Role.PUBLIC_STAGE_HANDOFF,
+					"soklet-shutdown-result-handoff",
+					() -> this.publicHandoff.complete(immutableResult));
+		} catch (RuntimeException | Error launchFailure) {
+			try {
+				Thread fallback = new Thread(
+						() -> this.publicHandoff.complete(immutableResult),
+						"soklet-shutdown-result-handoff-fallback");
+				fallback.setDaemon(true);
+				fallback.start();
+			} catch (RuntimeException | Error fallbackFailure) {
+				if (fallbackFailure != launchFailure)
+					launchFailure.addSuppressed(fallbackFailure);
+			}
+		}
 	}
 
 	@NonNull
 	InternalShutdownResult await() throws InterruptedException {
 		synchronized (this.monitor) {
-			while (this.result.get() == null)
+			if (!this.internalReleased)
+				this.beforeWait.run();
+			while (!this.internalReleased)
 				this.monitor.wait();
 		}
 		return this.result.get();
@@ -211,6 +266,13 @@ final class InternalLifecycleCompletion {
 
 	@NonNull
 	Optional<InternalShutdownResult> result() {
+		return this.internalReleased
+				? Optional.of(requireNonNull(this.result.get())) : Optional.empty();
+	}
+
+	/** Result visibility for terminal diagnostics, independent of join release. */
+	@NonNull
+	Optional<InternalShutdownResult> installedResult() {
 		return Optional.ofNullable(this.result.get());
 	}
 
@@ -234,38 +296,60 @@ final class InternalLifecycleStateMachine {
 	@NonNull
 	private final AtomicReference<State> state;
 	@NonNull
-	private final AtomicBoolean startClaimed;
-	@NonNull
 	private final AtomicBoolean shutdownIntent;
+	@NonNull
+	private final AtomicReference<State> shutdownOrigin;
+	private long shutdownIntentNanos;
+	private boolean shutdownIntentNanosPresent;
 
 	InternalLifecycleStateMachine() {
 		this.state = new AtomicReference<>(State.NEW);
-		this.startClaimed = new AtomicBoolean();
 		this.shutdownIntent = new AtomicBoolean();
+		this.shutdownOrigin = new AtomicReference<>();
 	}
 
-	void claimStart() {
-		if (!this.startClaimed.compareAndSet(false, true)
-				|| !this.state.compareAndSet(State.NEW, State.STARTING))
+	synchronized void claimStart() {
+		if (!this.state.compareAndSet(State.NEW, State.STARTING))
 			throw new IllegalStateException("Soklet lifecycle start was already claimed");
 	}
 
-	boolean publishReady() {
+	synchronized boolean publishReady() {
 		return this.state.compareAndSet(State.STARTING, State.READY);
 	}
 
 	boolean requestShutdown() {
+		return requestShutdownDetailed(System.nanoTime()).firstIntent();
+	}
+
+	@NonNull
+	ShutdownRequest requestShutdownDetailed() {
+		return requestShutdownDetailed(System.nanoTime());
+	}
+
+	@NonNull
+	synchronized ShutdownRequest requestShutdownDetailed(long intentNanos) {
 		boolean first = this.shutdownIntent.compareAndSet(false, true);
 		for (;;) {
 			State current = this.state.get();
-			if (current == State.SHUTTING_DOWN || current == State.CLOSED)
-				return first;
-			if (this.state.compareAndSet(current, State.SHUTTING_DOWN))
-				return first;
+			if (current == State.SHUTTING_DOWN || current == State.CLOSED) {
+				if (!this.shutdownIntentNanosPresent) {
+					this.shutdownIntentNanos = intentNanos;
+					this.shutdownIntentNanosPresent = true;
+				}
+				State origin = this.shutdownOrigin.get();
+				return new ShutdownRequest(first, origin == null ? current : origin,
+						this.shutdownIntentNanos);
+			}
+			if (this.state.compareAndSet(current, State.SHUTTING_DOWN)) {
+				this.shutdownOrigin.compareAndSet(null, current);
+				this.shutdownIntentNanos = intentNanos;
+				this.shutdownIntentNanosPresent = true;
+				return new ShutdownRequest(first, current, intentNanos);
+			}
 		}
 	}
 
-	void publishClosed() {
+	synchronized void publishClosed() {
 		State previous = this.state.getAndSet(State.CLOSED);
 		if (previous == State.CLOSED)
 			throw new IllegalStateException("Soklet lifecycle was already closed");
@@ -279,37 +363,84 @@ final class InternalLifecycleStateMachine {
 	boolean shutdownRequested() {
 		return this.shutdownIntent.get();
 	}
+
+	boolean shutdownWonNew() {
+		return this.shutdownOrigin.get() == State.NEW;
+	}
+
+	synchronized long shutdownIntentNanos() {
+		if (!this.shutdownIntentNanosPresent)
+			throw new IllegalStateException("Soklet shutdown intent is not published");
+		return this.shutdownIntentNanos;
+	}
+
+	record ShutdownRequest(boolean firstIntent, @NonNull State priorState,
+			long intentNanos) {
+		ShutdownRequest {
+			requireNonNull(priorState);
+		}
+	}
 }
 
 /** Thread-local diagnostic used to fail fast on known lifecycle self-joins. */
 final class LifecycleExecutionContext {
 	@NonNull
-	private static final ThreadLocal<AtomicInteger> DEPTH =
-			ThreadLocal.withInitial(AtomicInteger::new);
+	private static final Object LEGACY_OWNER_TOKEN = new Object();
+	@NonNull
+	private static final ThreadLocal<IdentityHashMap<Object, Integer>> DEPTHS =
+			new ThreadLocal<>();
 
 	private LifecycleExecutionContext() {
 	}
 
 	@NonNull
 	static Scope enter() {
-		DEPTH.get().incrementAndGet();
-		return new Scope();
+		return enter(LEGACY_OWNER_TOKEN);
+	}
+
+	@NonNull
+	static Scope enter(@NonNull Object ownerToken) {
+		Object exactOwnerToken = requireNonNull(ownerToken);
+		IdentityHashMap<Object, Integer> depths = DEPTHS.get();
+		if (depths == null) {
+			depths = new IdentityHashMap<>();
+			DEPTHS.set(depths);
+		}
+		depths.put(exactOwnerToken, depths.getOrDefault(exactOwnerToken, 0) + 1);
+		return new Scope(exactOwnerToken);
 	}
 
 	static void requireNonReentrantWait() {
-		if (DEPTH.get().get() != 0)
+		requireNonReentrantWait(LEGACY_OWNER_TOKEN);
+	}
+
+	static void requireNonReentrantWait(@NonNull Object ownerToken) {
+		if (isMarked(requireNonNull(ownerToken)))
 			throw new IllegalStateException("Lifecycle wait cannot run from tracked lifecycle execution");
 	}
 
 	static boolean isMarked() {
-		return DEPTH.get().get() != 0;
+		return isMarked(LEGACY_OWNER_TOKEN);
+	}
+
+	static boolean isMarked(@NonNull Object ownerToken) {
+		IdentityHashMap<Object, Integer> depths = DEPTHS.get();
+		return depths != null && depths.getOrDefault(requireNonNull(ownerToken), 0) != 0;
+	}
+
+	@NonNull
+	static Object legacyOwnerToken() {
+		return LEGACY_OWNER_TOKEN;
 	}
 
 	static final class Scope implements AutoCloseable {
 		@NonNull
+		private final Object ownerToken;
+		@NonNull
 		private final AtomicBoolean closed;
 
-		private Scope() {
+		private Scope(@NonNull Object ownerToken) {
+			this.ownerToken = requireNonNull(ownerToken);
 			this.closed = new AtomicBoolean();
 		}
 
@@ -317,11 +448,18 @@ final class LifecycleExecutionContext {
 		public void close() {
 			if (!this.closed.compareAndSet(false, true))
 				return;
-			int remaining = DEPTH.get().decrementAndGet();
+			IdentityHashMap<Object, Integer> depths = DEPTHS.get();
+			if (depths == null)
+				throw new IllegalStateException("Lifecycle execution-context underflow");
+			int remaining = depths.getOrDefault(this.ownerToken, 0) - 1;
 			if (remaining < 0)
 				throw new IllegalStateException("Lifecycle execution-context underflow");
 			if (remaining == 0)
-				DEPTH.remove();
+				depths.remove(this.ownerToken);
+			else
+				depths.put(this.ownerToken, remaining);
+			if (depths.isEmpty())
+				DEPTHS.remove();
 		}
 	}
 }
@@ -426,6 +564,7 @@ final class LifecycleRetentionDiagnostics {
 /** Lazy serialized observer dispatcher; publication never waits for callbacks. */
 @ThreadSafe
 final class LifecycleTransitionDispatcher {
+	private static final int MAXIMUM_ACCEPTED_RECORDS = 16;
 	@NonNull
 	private final LifecycleWorkers workers;
 	@NonNull
@@ -434,6 +573,8 @@ final class LifecycleTransitionDispatcher {
 	private final Object monitor;
 	private boolean workerStarted;
 	private boolean sealed;
+	private boolean disabled;
+	private int acceptedRecords;
 
 	LifecycleTransitionDispatcher(@NonNull LifecycleWorkers workers) {
 		this.workers = requireNonNull(workers);
@@ -445,18 +586,34 @@ final class LifecycleTransitionDispatcher {
 		requireNonNull(callback);
 		boolean startWorker = false;
 		synchronized (this.monitor) {
+			if (this.disabled)
+				return;
 			if (this.sealed)
 				throw new IllegalStateException("Lifecycle transition dispatcher is sealed");
+			if (this.acceptedRecords == MAXIMUM_ACCEPTED_RECORDS)
+				throw new IllegalStateException(
+						"Lifecycle transition trace exceeds the protocol maximum of 16 records");
 			this.queue.addLast(callback);
+			this.acceptedRecords++;
 			if (!this.workerStarted) {
 				this.workerStarted = true;
 				startWorker = true;
 			}
 			this.monitor.notifyAll();
 		}
-		if (startWorker)
-			this.workers.start(LifecycleWorkers.Role.TRANSITION_OBSERVER,
-					"soklet-lifecycle-observer", this::run);
+		if (startWorker) {
+			try {
+				this.workers.start(LifecycleWorkers.Role.TRANSITION_OBSERVER,
+						"soklet-lifecycle-observer", this::run);
+			} catch (RuntimeException | Error ignored) {
+				synchronized (this.monitor) {
+					this.disabled = true;
+					this.workerStarted = false;
+					this.queue.clear();
+					this.monitor.notifyAll();
+				}
+			}
+		}
 	}
 
 	void seal() {
@@ -570,18 +727,48 @@ final class TrackedLifecycleCallRunner {
 			this.thread.set(Thread.currentThread());
 			if (this.cancellationRequested.get())
 				Thread.currentThread().interrupt();
+			T value = null;
+			Throwable failure = null;
 			try (LifecycleExecutionContext.Scope ignoredContext =
-							 LifecycleExecutionContext.enter()) {
+							 LifecycleExecutionContext.enter(
+									 this.group.executionOwnerToken())) {
 				try {
-					this.completion.complete(this.callable.call());
+					value = this.callable.call();
 				} catch (Throwable throwable) {
-					this.group.signalFailure(this.group.root(), throwable);
-					this.completion.completeExceptionally(throwable);
+					failure = throwable;
+					try {
+						this.group.signalFailure(this.group.root(), throwable);
+					} catch (Throwable signalFailure) {
+						if (signalFailure != throwable)
+							throwable.addSuppressed(signalFailure);
+					}
+				}
+			} catch (Throwable contextFailure) {
+				if (failure == null)
+					failure = contextFailure;
+				else if (failure != contextFailure)
+					failure.addSuppressed(contextFailure);
+				try {
+					this.group.signalFailure(this.group.root(), failure);
+				} catch (Throwable signalFailure) {
+					if (signalFailure != failure)
+						failure.addSuppressed(signalFailure);
 				}
 			} finally {
 				this.thread.set(null);
-				this.tracked.close();
+				try {
+					this.tracked.close();
+				} catch (Throwable closeFailure) {
+					if (failure == null)
+						failure = closeFailure;
+					else if (failure != closeFailure)
+						failure.addSuppressed(closeFailure);
+				}
 			}
+			if (failure == null)
+				this.completion.complete(value);
+			else
+				this.completion.completeExceptionally(failure);
 		}
 	}
 }
@@ -603,6 +790,10 @@ final class InternalLifecycleCoordinator {
 
 		@NonNull
 		Set<InternalResidualActivityKind> residualActivity();
+
+		default boolean startupCallActive() {
+			return false;
+		}
 	}
 
 	@NonNull
@@ -634,48 +825,64 @@ final class InternalLifecycleCoordinator {
 		Map<Participant, TrackedLifecycleCallRunner.Call<Void>> quiesceCalls =
 				new java.util.IdentityHashMap<>();
 		for (Participant participant : ordered) {
-			TrackedLifecycleCallRunner.Call<Void> quiesceCall = this.callRunner.submit(
-					"lifecycle-quiesce-"
-						+ participant.kind().name().toLowerCase(Locale.ROOT),
-					participant.terminationGroup(), () -> {
-						participant.runtime().quiesce(gracefulContext);
-						return null;
-					});
-			quiesceCalls.put(participant, quiesceCall);
+			try {
+				TrackedLifecycleCallRunner.Call<Void> quiesceCall = this.callRunner.submit(
+						"lifecycle-quiesce-"
+								+ participant.kind().name().toLowerCase(Locale.ROOT),
+						participant.terminationGroup(), () -> {
+							participant.runtime().quiesce(gracefulContext);
+							return null;
+						});
+				quiesceCalls.put(participant, quiesceCall);
+			} catch (RuntimeException | Error launchFailure) {
+				participant.terminationGroup().signalFailure(
+						participant.terminationGroup().root(), launchFailure);
+			}
 		}
 
 		this.waiter.await(gracefulDeadlineNanos,
 				() -> ordered.stream().allMatch(candidate ->
 						candidate.terminationGroup().isBarrierComplete()));
 
-		Set<Participant> forced = Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+		Set<Participant> unresolvedAtGrace = Collections.newSetFromMap(
+				new java.util.IdentityHashMap<>());
+		Set<Participant> forceSubmitted = Collections.newSetFromMap(
+				new java.util.IdentityHashMap<>());
 		Map<Participant, TrackedLifecycleCallRunner.Call<Void>> forceCalls =
 				new java.util.IdentityHashMap<>();
 		InternalShutdownContext forcedContext = new InternalShutdownContext(
 				InternalShutdownPhase.FORCED, this.clock, forcedDeadlineNanos);
 		for (Participant participant : ordered) {
-			if (participant.terminationGroup().isBarrierComplete())
+			InternalTerminationGroup group = participant.terminationGroup();
+			if (!group.tryClaimForceSubmission())
 				continue;
-			forced.add(participant);
+			unresolvedAtGrace.add(participant);
 			TrackedLifecycleCallRunner.Call<Void> quiesceCall =
 					quiesceCalls.get(participant);
 			if (quiesceCall != null && !quiesceCall.isDone())
 				quiesceCall.cancel();
-			TrackedLifecycleCallRunner.Call<Void> forceCall = this.callRunner.submit(
-					"lifecycle-force-"
-						+ participant.kind().name().toLowerCase(Locale.ROOT),
-					participant.terminationGroup(), () -> {
-						participant.runtime().force(forcedContext);
-						return null;
-					});
-			forceCalls.put(participant, forceCall);
+			try {
+				TrackedLifecycleCallRunner.Call<Void> forceCall = this.callRunner.submit(
+						"lifecycle-force-"
+								+ participant.kind().name().toLowerCase(Locale.ROOT),
+						participant.terminationGroup(), () -> {
+							participant.runtime().force(forcedContext);
+							return null;
+						});
+				forceCalls.put(participant, forceCall);
+				group.resolveForceSubmission();
+				forceSubmitted.add(participant);
+			} catch (RuntimeException | Error launchFailure) {
+				group.resolveForceSubmission();
+				group.signalFailure(group.root(), launchFailure);
+			}
 		}
 
-		if (!forced.isEmpty()) {
+		if (!unresolvedAtGrace.isEmpty()) {
 			this.waiter.await(forcedDeadlineNanos,
 					() -> ordered.stream().allMatch(candidate ->
 							candidate.terminationGroup().isBarrierComplete()));
-			for (Participant participant : forced) {
+			for (Participant participant : forceSubmitted) {
 				TrackedLifecycleCallRunner.Call<Void> forceCall = forceCalls.get(participant);
 				if (forceCall != null && !forceCall.isDone())
 					forceCall.cancel();
@@ -688,26 +895,30 @@ final class InternalLifecycleCoordinator {
 			InternalParticipantShutdownDisposition disposition;
 			Set<InternalResidualActivityKind> reportedResidual =
 					participant.residualActivity();
+			InternalTerminationGroup.EvidenceSnapshot evidence =
+					group.freezeEvidence();
 			EnumSet<InternalResidualActivityKind> residual =
 					EnumSet.noneOf(InternalResidualActivityKind.class);
 			residual.addAll(reportedResidual);
-			if (group.trackedLifecycleCallCount() > 0)
+			if (evidence.trackedLifecycleCalls() > 0)
 				residual.add(InternalResidualActivityKind.LIFECYCLE_CALL);
-			if (participant.admissionFence().admittedWorkCount() > 0)
+			if (evidence.admittedWork() > 0)
 				residual.add(InternalResidualActivityKind.CALLBACK);
-			if (group.isBarrierComplete()) {
-				if (group.controllingEvent().isPresent())
-					disposition = InternalParticipantShutdownDisposition.UNEXPECTED_TERMINATION;
-				else if (forced.contains(participant))
-					disposition = InternalParticipantShutdownDisposition.FORCED_TERMINATION;
-				else
-					disposition = InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION;
+			if (participant.startupCallActive()) {
+				disposition = InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN;
 			} else if (!residual.isEmpty()) {
 				disposition = InternalParticipantShutdownDisposition.RESIDUAL_ACTIVITY;
+			} else if (evidence.barrierComplete()) {
+				if (forceSubmitted.contains(participant))
+					disposition = InternalParticipantShutdownDisposition.FORCED_TERMINATION;
+				else if (evidence.controllingEvent().isPresent())
+					disposition = InternalParticipantShutdownDisposition.UNEXPECTED_TERMINATION;
+				else
+					disposition = InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION;
 			} else {
 				disposition = InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN;
 			}
-			List<Throwable> failures = group.primaryEventsInSequence().stream()
+			List<Throwable> failures = evidence.primaryEvents().stream()
 					.flatMap(event -> event.cause().stream())
 					.toList();
 			results.add(new InternalParticipantShutdownResult(participant.kind(), disposition,

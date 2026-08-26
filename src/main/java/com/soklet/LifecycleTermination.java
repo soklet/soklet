@@ -21,7 +21,6 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.ThreadSafe;
-import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -36,9 +35,11 @@ import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 import static java.util.Objects.requireNonNull;
 
@@ -137,10 +138,19 @@ final class InternalShutdownResult {
 	private final List<InternalParticipantShutdownResult> participantResults;
 	@NonNull
 	private final Map<InternalParticipantKind, InternalParticipantShutdownResult> participantResultsByKind;
+	@Nullable
+	private final LifecycleRetentionAnchor retentionAnchor;
 
 	InternalShutdownResult(@NonNull InternalShutdownDisposition disposition,
 			@NonNull InternalStartupDisposition startupDisposition,
 			@NonNull List<InternalParticipantShutdownResult> participantResults) {
+		this(disposition, startupDisposition, participantResults, null);
+	}
+
+	private InternalShutdownResult(@NonNull InternalShutdownDisposition disposition,
+			@NonNull InternalStartupDisposition startupDisposition,
+			@NonNull List<InternalParticipantShutdownResult> participantResults,
+			@Nullable LifecycleRetentionAnchor retentionAnchor) {
 		this.disposition = requireNonNull(disposition);
 		this.startupDisposition = requireNonNull(startupDisposition);
 		List<InternalParticipantShutdownResult> sorted = new ArrayList<>(
@@ -154,6 +164,7 @@ final class InternalShutdownResult {
 		}
 		this.participantResults = List.copyOf(sorted);
 		this.participantResultsByKind = Collections.unmodifiableMap(indexed);
+		this.retentionAnchor = retentionAnchor;
 	}
 
 	@NonNull
@@ -179,6 +190,24 @@ final class InternalShutdownResult {
 
 	boolean isComplete() {
 		return getDisposition() != InternalShutdownDisposition.INCOMPLETE;
+	}
+
+	@NonNull
+	InternalShutdownResult withRetentionAnchor(
+			@NonNull LifecycleRetentionAnchor retentionAnchor) {
+		if (this.retentionAnchor != null)
+			throw new IllegalStateException(
+					"Lifecycle retention evidence was already installed");
+		return new InternalShutdownResult(this.disposition,
+				this.startupDisposition, this.participantResults,
+				requireNonNull(retentionAnchor));
+	}
+
+	@NonNull
+	Optional<LifecycleRetentionSummary> retentionSummary() {
+		return this.retentionAnchor == null ? Optional.empty()
+				: Optional.of(LifecycleRetentionDiagnostics.read(
+						this.retentionAnchor));
 	}
 
 	@NonNull
@@ -230,6 +259,8 @@ final class AdmissionFence {
 	private final AtomicInteger admittedWork;
 	@NonNull
 	private final Runnable stateChanged;
+	@NonNull
+	private final List<Runnable> admittedWorkReleased;
 
 	AdmissionFence() {
 		this(true, () -> {
@@ -244,6 +275,7 @@ final class AdmissionFence {
 		this.state = new AtomicReference<>(initiallyOpen ? State.OPEN : State.PENDING);
 		this.admittedWork = new AtomicInteger();
 		this.stateChanged = requireNonNull(stateChanged);
+		this.admittedWorkReleased = new CopyOnWriteArrayList<>();
 	}
 
 	@NonNull
@@ -285,11 +317,22 @@ final class AdmissionFence {
 		return this.admittedWork.get();
 	}
 
+	void onAdmittedWorkReleased(@NonNull Runnable callback) {
+		this.admittedWorkReleased.add(requireNonNull(callback));
+	}
+
 	private void release() {
 		int remaining = this.admittedWork.decrementAndGet();
 		if (remaining < 0)
 			throw new IllegalStateException("Admission count underflow");
-		this.stateChanged.run();
+		try {
+			this.stateChanged.run();
+		} finally {
+			if (remaining == 0) {
+				for (Runnable callback : this.admittedWorkReleased)
+					callback.run();
+			}
+		}
 	}
 
 	@ThreadSafe
@@ -328,7 +371,7 @@ final class InternalTransportIdentity {
 @ThreadSafe
 final class TransportIdentityClaimRegistry {
 	@NonNull
-	private final Map<InternalTransportIdentity, WeakReference<Object>> claims;
+	private final Map<InternalTransportIdentity, StoredClaim> claims;
 
 	TransportIdentityClaimRegistry() {
 		this.claims = new WeakHashMap<>();
@@ -344,19 +387,62 @@ final class TransportIdentityClaimRegistry {
 			requireNonNull(identity, "identity");
 			if (!unique.add(identity))
 				throw new IllegalArgumentException("Transport identity appears more than once in one claim");
-			WeakReference<Object> existing = this.claims.get(identity);
-			if (existing == null)
-				continue;
-			Object existingOwner = existing.get();
-			if (existingOwner != owner)
+			if (this.claims.containsKey(identity))
 				throw new IllegalStateException("Transport identity is already owned by another lifecycle");
 		}
 		for (InternalTransportIdentity identity : identities)
-			this.claims.put(identity, new WeakReference<>(owner));
+			this.claims.put(identity, new StoredClaim(null, null, new Object()));
+	}
+
+	synchronized void claimAllDescriptors(@NonNull List<ClaimDescriptor> descriptors,
+			@NonNull Object owner) {
+		requireNonNull(descriptors);
+		requireNonNull(owner);
+		List<ClaimDescriptor> exactDescriptors =
+				new ArrayList<>(descriptors.size());
+		Set<InternalTransportIdentity> unique =
+				Collections.newSetFromMap(new IdentityHashMap<>());
+		for (ClaimDescriptor descriptor : descriptors) {
+			ClaimDescriptor exact = requireNonNull(descriptor, "descriptor");
+			InternalTransportIdentity identity = requireNonNull(exact.identity(),
+					"descriptor.identity()");
+			requireNonNull(exact.participantKind(), "descriptor.participantKind()");
+			requireNonNull(exact.transportClass(), "descriptor.transportClass()");
+			if (!unique.add(identity))
+				throw new IllegalArgumentException(
+						"Transport identity appears more than once in one claim");
+			exactDescriptors.add(exact);
+		}
+		for (ClaimDescriptor exact : exactDescriptors) {
+			if (this.claims.containsKey(exact.identity()))
+				throw new TransportOwnershipException(exact.participantKind(),
+						exact.transportClass());
+		}
+		for (ClaimDescriptor descriptor : exactDescriptors)
+			this.claims.put(descriptor.identity(), new StoredClaim(
+					descriptor.participantKind(), descriptor.transportClass(),
+					new Object()));
 	}
 
 	synchronized int retainedClaimCountForTests() {
 		return this.claims.size();
+	}
+
+	record ClaimDescriptor(@NonNull InternalTransportIdentity identity,
+			@NonNull InternalParticipantKind participantKind,
+			@NonNull Class<?> transportClass) {
+		ClaimDescriptor {
+			requireNonNull(identity);
+			requireNonNull(participantKind);
+			requireNonNull(transportClass);
+		}
+	}
+
+	private record StoredClaim(@Nullable InternalParticipantKind participantKind,
+			@Nullable Class<?> transportClass, @NonNull Object marker) {
+		private StoredClaim {
+			requireNonNull(marker);
+		}
 	}
 }
 
@@ -443,6 +529,48 @@ final class InternalTerminationEvent {
 }
 
 /**
+ * One owner-wide ordering boundary between shutdown intent and premature
+ * participant events.  Every event accepted before the cutoff may remain a
+ * participant-local controlling event; only the first becomes the owner's
+ * singular unexpected-termination event.  Events accepted after the cutoff
+ * remain ordinary shutdown evidence.
+ */
+@ThreadSafe
+final class InternalControllingEventElection {
+	@Nullable
+	private InternalTerminationEvent firstEvent;
+	private boolean shutdownIntentPublished;
+
+	/** Returns whether this event linearized before owner shutdown intent. */
+	synchronized boolean electBeforeShutdown(
+			@NonNull InternalTerminationEvent event) {
+		InternalTerminationEvent exactEvent = requireNonNull(event);
+		if (this.shutdownIntentPublished)
+			return false;
+		if (this.firstEvent == null)
+			this.firstEvent = exactEvent;
+		return true;
+	}
+
+	/**
+	 * Publishes the owner state transition and cutoff as one operation relative
+	 * to participant event election.
+	 */
+	@NonNull
+	synchronized <T> T publishShutdownIntent(
+			@NonNull Supplier<@NonNull T> publication) {
+		T result = requireNonNull(requireNonNull(publication).get());
+		this.shutdownIntentPublished = true;
+		return result;
+	}
+
+	@NonNull
+	synchronized Optional<InternalTerminationEvent> firstEvent() {
+		return Optional.ofNullable(this.firstEvent);
+	}
+}
+
+/**
  * Root/child termination group.  Signals remain private while the topology is
  * open and are replayed in their group-local order only after commit.
  */
@@ -466,6 +594,8 @@ final class InternalTerminationGroup {
 		@Nullable
 		private InternalTerminationEvent attachDiagnostic;
 		@Nullable
+		private InternalTerminationEvent proofHandoffDiagnostic;
+		@Nullable
 		private CompletableFuture<Void> proofHandoff;
 		@Nullable
 		private CompletionStage<Void> proofView;
@@ -481,6 +611,51 @@ final class InternalTerminationGroup {
 		}
 	}
 
+	/** One immutable classification boundary for coordinator publication. */
+	@Immutable
+	static final class EvidenceSnapshot {
+		private final boolean barrierComplete;
+		private final int trackedLifecycleCalls;
+		private final int admittedWork;
+		@Nullable
+		private final InternalTerminationEvent controllingEvent;
+		@NonNull
+		private final List<InternalTerminationEvent> primaryEvents;
+
+		private EvidenceSnapshot(boolean barrierComplete,
+				int trackedLifecycleCalls, int admittedWork,
+				@Nullable InternalTerminationEvent controllingEvent,
+				@NonNull List<InternalTerminationEvent> primaryEvents) {
+			this.barrierComplete = barrierComplete;
+			this.trackedLifecycleCalls = trackedLifecycleCalls;
+			this.admittedWork = admittedWork;
+			this.controllingEvent = controllingEvent;
+			this.primaryEvents = List.copyOf(requireNonNull(primaryEvents));
+		}
+
+		boolean barrierComplete() {
+			return this.barrierComplete;
+		}
+
+		int trackedLifecycleCalls() {
+			return this.trackedLifecycleCalls;
+		}
+
+		int admittedWork() {
+			return this.admittedWork;
+		}
+
+		@NonNull
+		Optional<InternalTerminationEvent> controllingEvent() {
+			return Optional.ofNullable(this.controllingEvent);
+		}
+
+		@NonNull
+		List<InternalTerminationEvent> primaryEvents() {
+			return this.primaryEvents;
+		}
+	}
+
 	@NonNull
 	private final AdmissionFence admissionFence;
 	@NonNull
@@ -488,27 +663,52 @@ final class InternalTerminationGroup {
 	@NonNull
 	private final LifecycleWorkers workers;
 	@NonNull
+	private final Object executionOwnerToken;
+	@NonNull
 	private final Member root;
 	@NonNull
 	private final List<Member> members;
 	@NonNull
 	private final AtomicReference<InternalTerminationEvent> controllingEvent;
+	@Nullable
+	private final InternalControllingEventElection ownerEventElection;
+	@Nullable
+	private EvidenceSnapshot frozenEvidence;
 	private State state;
 	private long nextSequence;
 	private int trackedLifecycleCalls;
 	private boolean shutdownIntent;
 	private long shutdownIntentSequence;
+	private boolean forceSubmissionClaimed;
+	private boolean forceSubmissionResolved;
 
 	InternalTerminationGroup(@NonNull AdmissionFence admissionFence,
 			@NonNull Runnable stateChanged, @NonNull LifecycleWorkers workers) {
+		this(admissionFence, stateChanged, workers,
+				LifecycleExecutionContext.legacyOwnerToken(), null);
+	}
+
+	InternalTerminationGroup(@NonNull AdmissionFence admissionFence,
+			@NonNull Runnable stateChanged, @NonNull LifecycleWorkers workers,
+			@NonNull Object executionOwnerToken) {
+		this(admissionFence, stateChanged, workers, executionOwnerToken, null);
+	}
+
+	InternalTerminationGroup(@NonNull AdmissionFence admissionFence,
+			@NonNull Runnable stateChanged, @NonNull LifecycleWorkers workers,
+			@NonNull Object executionOwnerToken,
+			@Nullable InternalControllingEventElection ownerEventElection) {
 		this.admissionFence = requireNonNull(admissionFence);
 		this.stateChanged = requireNonNull(stateChanged);
 		this.workers = requireNonNull(workers);
+		this.executionOwnerToken = requireNonNull(executionOwnerToken);
 		this.root = new Member(0);
 		this.members = new ArrayList<>();
 		this.members.add(this.root);
 		this.controllingEvent = new AtomicReference<>();
+		this.ownerEventElection = ownerEventElection;
 		this.state = State.OPEN;
+		this.admissionFence.onAdmittedWorkReleased(this::admittedWorkReleased);
 	}
 
 	@NonNull
@@ -520,10 +720,16 @@ final class InternalTerminationGroup {
 	synchronized Member registerChild(@NonNull Member parent) {
 		requireMember(parent);
 		requireOpen();
-		Member child = new Member(this.members.size());
-		parent.children.add(child);
-		this.members.add(child);
-		return child;
+		return registerChildWhileOpen(parent);
+	}
+
+	@Nullable
+	synchronized Member consumeDelegationSlot(@NonNull Member parent,
+			boolean lifecycleOwning) {
+		requireMember(parent);
+		if (this.state != State.OPEN)
+			return null;
+		return lifecycleOwning ? registerChildWhileOpen(parent) : parent;
 	}
 
 	synchronized boolean isOpen() {
@@ -540,7 +746,7 @@ final class InternalTerminationGroup {
 				this.admissionFence.close();
 				InternalTerminationEvent first = pending.get(0);
 				if (!this.shutdownIntent || first.sequence() < this.shutdownIntentSequence)
-					this.controllingEvent.compareAndSet(null, first);
+					electControllingEvent(first);
 			}
 			ready = proofHandoffsReadyToStart();
 		}
@@ -587,7 +793,7 @@ final class InternalTerminationGroup {
 			if (this.state == State.COMMITTED) {
 				this.admissionFence.close();
 				if (!this.shutdownIntent)
-					this.controllingEvent.compareAndSet(null, event);
+					electControllingEvent(event);
 				ready = proofHandoffsReadyToStart();
 			}
 		}
@@ -611,7 +817,7 @@ final class InternalTerminationGroup {
 			if (this.state == State.COMMITTED) {
 				this.admissionFence.close();
 				if (!this.shutdownIntent)
-					this.controllingEvent.compareAndSet(null, event);
+					electControllingEvent(event);
 				ready = proofHandoffsReadyToStart();
 			}
 		}
@@ -666,13 +872,32 @@ final class InternalTerminationGroup {
 		return new TrackedLifecycleCall(this);
 	}
 
-	boolean isBarrierComplete() {
+	synchronized boolean isBarrierComplete() {
+		return barrierComplete(this.admissionFence.admittedWorkCount());
+	}
+
+	/** Linearizes a pending force submission against final termination proof. */
+	synchronized boolean tryClaimForceSubmission() {
+		if (this.forceSubmissionClaimed
+				|| barrierComplete(this.admissionFence.admittedWorkCount()))
+			return false;
+		this.forceSubmissionClaimed = true;
+		return true;
+	}
+
+	void resolveForceSubmission() {
+		List<Member> ready;
 		synchronized (this) {
-			return this.state == State.COMMITTED
-					&& this.trackedLifecycleCalls == 0
-					&& this.admissionFence.admittedWorkCount() == 0
-					&& this.members.stream().allMatch(member -> member.proof != null);
+			if (!this.forceSubmissionClaimed)
+				throw new IllegalStateException(
+						"Lifecycle force submission was not claimed");
+			if (this.forceSubmissionResolved)
+				return;
+			this.forceSubmissionResolved = true;
+			ready = proofHandoffsReadyToStart();
 		}
+		startProofHandoffs(ready);
+		this.stateChanged.run();
 	}
 
 	boolean hasFailure() {
@@ -701,12 +926,56 @@ final class InternalTerminationGroup {
 		return Optional.ofNullable(this.controllingEvent.get());
 	}
 
+	private void electControllingEvent(
+			@NonNull InternalTerminationEvent event) {
+		InternalTerminationEvent exactEvent = requireNonNull(event);
+		if (this.frozenEvidence != null || this.controllingEvent.get() != null)
+			return;
+		InternalControllingEventElection ownerElection =
+				this.ownerEventElection;
+		if (ownerElection != null
+				&& !ownerElection.electBeforeShutdown(exactEvent))
+			return;
+		this.controllingEvent.compareAndSet(null, exactEvent);
+	}
+
+	/**
+	 * Freezes the exact group/admission facts used by the terminal result.
+	 * Later bounded signal diagnostics may still be retained by the group, but
+	 * cannot change this cached classification boundary.
+	 */
+	@NonNull
+	synchronized EvidenceSnapshot freezeEvidence() {
+		if (this.frozenEvidence != null)
+			return this.frozenEvidence;
+		int admittedWork = this.admissionFence.admittedWorkCount();
+		boolean barrierComplete = barrierComplete(admittedWork);
+		this.frozenEvidence = new EvidenceSnapshot(barrierComplete,
+				this.trackedLifecycleCalls, admittedWork,
+				this.controllingEvent.get(), primaryEventsInSequence());
+		return this.frozenEvidence;
+	}
+
+	private boolean barrierComplete(int admittedWork) {
+		return this.state == State.COMMITTED
+				&& this.trackedLifecycleCalls == 0
+				&& admittedWork == 0
+				&& (!this.forceSubmissionClaimed
+						|| this.forceSubmissionResolved)
+				&& this.members.stream().allMatch(member -> member.proof != null);
+	}
+
 	synchronized int memberCount() {
 		return this.members.size();
 	}
 
 	synchronized int trackedLifecycleCallCount() {
 		return this.trackedLifecycleCalls;
+	}
+
+	@NonNull
+	Object executionOwnerToken() {
+		return this.executionOwnerToken;
 	}
 
 	@NonNull
@@ -727,10 +996,20 @@ final class InternalTerminationGroup {
 		this.stateChanged.run();
 	}
 
+	private void admittedWorkReleased() {
+		List<Member> ready;
+		synchronized (this) {
+			ready = proofHandoffsReadyToStart();
+		}
+		startProofHandoffs(ready);
+	}
+
 	private boolean subtreeBarrierComplete(@NonNull Member member) {
 		return this.state == State.COMMITTED
 				&& this.trackedLifecycleCalls == 0
 				&& this.admissionFence.admittedWorkCount() == 0
+				&& (!this.forceSubmissionClaimed
+						|| this.forceSubmissionResolved)
 				&& subtreeMembers(member).stream().allMatch(candidate -> candidate.proof != null);
 	}
 
@@ -761,10 +1040,50 @@ final class InternalTerminationGroup {
 	private void startProofHandoffs(@NonNull List<Member> members) {
 		for (Member member : members) {
 			CompletableFuture<Void> handoff = member.proofHandoff;
-			if (handoff != null)
+			if (handoff == null)
+				continue;
+			try {
 				this.workers.start(LifecycleWorkers.Role.SUBTREE_PROOF_HANDOFF,
 						"transport-subtree-proof", () -> handoff.complete(null));
+			} catch (RuntimeException | Error launchFailure) {
+				recordProofHandoffLaunchFailure(member, launchFailure);
+			}
 		}
+	}
+
+	private void recordProofHandoffLaunchFailure(@NonNull Member member,
+			@NonNull Throwable cause) {
+		boolean accepted = false;
+		synchronized (this) {
+			requireMember(member);
+			if (this.state == State.DISCARDED)
+				return;
+			InternalTerminationEvent event = new InternalTerminationEvent(
+					++this.nextSequence, InternalTerminationEvent.Type.FAILURE,
+					member, requireNonNull(cause));
+			if (member.failure == null) {
+				member.failure = event;
+				accepted = true;
+			} else if (member.proofHandoffDiagnostic == null) {
+				member.proofHandoffDiagnostic = event;
+				accepted = true;
+			}
+			if (accepted && this.state == State.COMMITTED) {
+				this.admissionFence.close();
+				if (!this.shutdownIntent)
+					electControllingEvent(event);
+			}
+		}
+		if (accepted)
+			this.stateChanged.run();
+	}
+
+	@NonNull
+	private Member registerChildWhileOpen(@NonNull Member parent) {
+		Member child = new Member(this.members.size());
+		parent.children.add(child);
+		this.members.add(child);
+		return child;
 	}
 
 	private void requireOpen() {
@@ -838,6 +1157,8 @@ final class InternalTransportAttachmentContext<H> {
 	private final InternalTerminationGroup group;
 	private final InternalTerminationGroup.@NonNull Member member;
 	@NonNull
+	private final InternalTransportTerminationSignal terminationSignal;
+	@NonNull
 	private final InternalStartupContext startupContext;
 	@NonNull
 	private final AtomicBoolean mediationGuard;
@@ -852,11 +1173,23 @@ final class InternalTransportAttachmentContext<H> {
 			@NonNull InternalTerminationGroup group,
 			InternalTerminationGroup.@NonNull Member member,
 			@NonNull InternalStartupContext startupContext) {
+		this(configuration, requestHandler, configuredIdentity, group, member,
+				new InternalTransportTerminationSignal(group, member), startupContext);
+	}
+
+	private InternalTransportAttachmentContext(@NonNull Object configuration,
+			@NonNull H requestHandler,
+			@NonNull InternalTransportIdentity configuredIdentity,
+			@NonNull InternalTerminationGroup group,
+			InternalTerminationGroup.@NonNull Member member,
+			@NonNull InternalTransportTerminationSignal terminationSignal,
+			@NonNull InternalStartupContext startupContext) {
 		this.configuration = requireNonNull(configuration);
 		this.requestHandler = requireNonNull(requestHandler);
 		this.configuredIdentity = requireNonNull(configuredIdentity);
 		this.group = requireNonNull(group);
 		this.member = requireNonNull(member);
+		this.terminationSignal = requireNonNull(terminationSignal);
 		this.startupContext = requireNonNull(startupContext);
 		this.mediationGuard = new AtomicBoolean();
 	}
@@ -873,7 +1206,7 @@ final class InternalTransportAttachmentContext<H> {
 
 	@NonNull
 	InternalTransportTerminationSignal terminationSignal() {
-		return new InternalTransportTerminationSignal(this.group, this.member);
+		return this.terminationSignal;
 	}
 
 	@NonNull
@@ -933,14 +1266,20 @@ final class InternalTransportAttachmentContext<H> {
 				requireActiveAttachThread();
 				if (this.delegated)
 					throw new IllegalStateException("Transport attachment context already delegated");
+				childMember = this.group.consumeDelegationSlot(this.member,
+						lifecycleOwning);
+				if (childMember == null)
+					throw inactiveException();
 				this.delegated = true;
-				childMember = lifecycleOwning ? this.group.registerChild(this.member) : this.member;
 			}
 
+			InternalTransportTerminationSignal childSignal = lifecycleOwning
+					? new InternalTransportTerminationSignal(this.group, childMember)
+					: this.terminationSignal;
 			InternalTransportAttachmentContext<H> childContext =
 					new InternalTransportAttachmentContext<>(this.configuration,
 							delegateRequestHandler, this.configuredIdentity, this.group,
-							childMember, this.startupContext);
+							childMember, childSignal, this.startupContext);
 			InternalTransportRuntime runtime;
 			childContext.activate();
 			try (InternalTerminationGroup.TrackedLifecycleCall ignored =
@@ -993,7 +1332,17 @@ final class InternalTransportAttachmentSession<H> {
 			@NonNull InternalStartupContext startupContext,
 			@NonNull AdmissionFence admissionFence, @NonNull Runnable stateChanged,
 			@NonNull LifecycleWorkers workers) {
-		this.group = new InternalTerminationGroup(admissionFence, stateChanged, workers);
+		this(configuration, requestHandler, identity, startupContext, admissionFence,
+				stateChanged, workers, LifecycleExecutionContext.legacyOwnerToken());
+	}
+
+	InternalTransportAttachmentSession(@NonNull Object configuration,
+			@NonNull H requestHandler, @NonNull InternalTransportIdentity identity,
+			@NonNull InternalStartupContext startupContext,
+			@NonNull AdmissionFence admissionFence, @NonNull Runnable stateChanged,
+			@NonNull LifecycleWorkers workers, @NonNull Object executionOwnerToken) {
+		this.group = new InternalTerminationGroup(admissionFence, stateChanged, workers,
+				requireNonNull(executionOwnerToken));
 		this.rootContext = new InternalTransportAttachmentContext<>(configuration,
 				requestHandler, identity, this.group, this.group.root(), startupContext);
 		this.startupContext = startupContext;

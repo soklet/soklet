@@ -437,7 +437,8 @@ public class SokletTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(RequestHandlingBasicsResource.class)))
 				.build();
 
-		assertThrows(IllegalStateException.class, () -> Soklet.fromConfig(config));
+		Soklet soklet = Soklet.fromConfig(config);
+		assertThrows(SokletStartupException.class, soklet::start);
 	}
 
 	@Test

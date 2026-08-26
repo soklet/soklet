@@ -157,6 +157,8 @@ final class DefaultMcpServer implements McpServer {
 	private volatile MetricsCollector metricsCollector;
 	@NonNull
 	private volatile McpShutdownOutcome lastShutdownOutcome;
+	@Nullable
+	private volatile Object lifecycleExecutionOwner;
 	private McpTransportLifecycleAdapter.@Nullable Generation
 			pendingListenerGeneration;
 	private boolean simulatorOwned;
@@ -666,6 +668,33 @@ final class DefaultMcpServer implements McpServer {
 		this.metricsCollector = configuration.getMetricsCollector();
 	}
 
+	void installLifecycleExecutionOwner(@NonNull Object ownerToken) {
+		Object exactOwner = requireNonNull(ownerToken);
+		synchronized (this.lifecycleLock) {
+			Object existing = this.lifecycleExecutionOwner;
+			if (existing != null && existing != exactOwner)
+				throw new IllegalStateException(
+						"The MCP application-execution lifecycle owner was already installed");
+			this.lifecycleExecutionOwner = exactOwner;
+		}
+	}
+
+	@NonNull
+	McpTransportLifecycleAdapter getLifecycleAdapter() {
+		return this.lifecycleAdapter;
+	}
+
+	void normalizeExternallyCoordinatedCompletionWhileMetricsDeferred(
+			McpTransportLifecycleAdapter.@NonNull Generation generation) {
+		McpTransportLifecycleAdapter.Generation exactGeneration =
+				requireNonNull(generation);
+		synchronized (this.lifecycleLock) {
+			if (this.pendingListenerGeneration == exactGeneration
+					&& this.lifecycleAdapter.result(exactGeneration).isPresent())
+				normalizeCompletedListenerGeneration(exactGeneration);
+		}
+	}
+
 	@NonNull
 	SimulationSession openSimulationSession() {
 		synchronized (this.lifecycleLock) {
@@ -895,7 +924,12 @@ final class DefaultMcpServer implements McpServer {
 	private McpShutdownOutcome outcomeForLifecycleResult(
 			McpTransportLifecycleAdapter.@NonNull Generation generation) {
 		return this.lifecycleAdapter.result(requireNonNull(generation))
-				.filter(InternalShutdownResult::isComplete)
+				.flatMap(result -> result.participantResult(
+						InternalParticipantKind.MCP))
+				.filter(result -> result.disposition()
+						!= InternalParticipantShutdownDisposition.RESIDUAL_ACTIVITY)
+				.filter(result -> result.disposition()
+						!= InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN)
 				.isPresent() ? McpShutdownOutcome.CLEAN
 				: McpShutdownOutcome.RESIDUAL_HANDLERS;
 	}
@@ -908,6 +942,10 @@ final class DefaultMcpServer implements McpServer {
 
 	void beginMcpMetricsDeferral() {
 		this.mcpMetricEventDelivery.beginDeferral();
+	}
+
+	void beginNonwaitingMcpMetricsDeferral() {
+		this.mcpMetricEventDelivery.beginNonwaitingDeferral();
 	}
 
 	void endMcpMetricsDeferral() {
@@ -1315,6 +1353,23 @@ final class DefaultMcpServer implements McpServer {
 
 	@NonNull
 	private McpOperationResult interceptHandler(
+			@NonNull McpRequestContext requestContext,
+			@NonNull HandlerEntryGuard handlerEntryGuard,
+			@NonNull McpInvocationFeatures invocationFeatures,
+			@NonNull McpHandlerContinuation continuation) throws Exception {
+		Object ownerToken = this.lifecycleExecutionOwner;
+		if (ownerToken == null)
+			return interceptHandlerWhileMarked(requestContext, handlerEntryGuard,
+					invocationFeatures, continuation);
+		try (LifecycleExecutionContext.Scope ignored =
+					 LifecycleExecutionContext.enter(ownerToken)) {
+			return interceptHandlerWhileMarked(requestContext, handlerEntryGuard,
+					invocationFeatures, continuation);
+		}
+	}
+
+	@NonNull
+	private McpOperationResult interceptHandlerWhileMarked(
 			@NonNull McpRequestContext requestContext,
 			@NonNull HandlerEntryGuard handlerEntryGuard,
 			@NonNull McpInvocationFeatures invocationFeatures,

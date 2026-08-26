@@ -459,7 +459,9 @@ class BuiltInTransportLifecycleAdapterTests {
 		RuntimeException releaseFailure = new IllegalStateException(
 				"expected evidence release failure");
 		RecordingOperations operations = new RecordingOperations(
-				attempt -> true, Set.of(InternalResidualActivityKind.EVENT_LOOP));
+				attempt -> true, Set.of());
+		operations.onRelease = () -> operations.residual =
+				Set.of(InternalResidualActivityKind.EVENT_LOOP);
 		operations.releaseFailure = releaseFailure;
 		BuiltInTransportLifecycleAdapter adapter = adapter(operations);
 		BuiltInTransportLifecycleAdapter.Generation generation = adapter.beginStart();
@@ -532,7 +534,7 @@ class BuiltInTransportLifecycleAdapterTests {
 	private static final class RecordingOperations
 			implements BuiltInTransportLifecycleAdapter.Operations {
 		private final IntPredicate proofOnAttempt;
-		private final Set<InternalResidualActivityKind> residual;
+		private volatile Set<InternalResidualActivityKind> residual;
 		private final AtomicInteger awaitCount = new AtomicInteger();
 		private final AtomicInteger quiesceCount = new AtomicInteger();
 		private final AtomicInteger forceCount = new AtomicInteger();

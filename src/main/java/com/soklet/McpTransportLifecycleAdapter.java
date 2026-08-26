@@ -35,7 +35,8 @@ final class McpTransportLifecycleAdapter
 		implements McpServerRuntimeBridge.LifecycleAdapter {
 	@ThreadSafe
 	static final class Generation
-			implements McpServerRuntimeBridge.LifecycleAdapter.Generation {
+			implements McpServerRuntimeBridge.LifecycleAdapter.Generation,
+			InternalLifecycleCoordinator.Participant {
 		@NonNull
 		private final McpTransportLifecycleAdapter owner;
 		private final BuiltInTransportLifecycleAdapter.@NonNull Generation delegate;
@@ -73,6 +74,40 @@ final class McpTransportLifecycleAdapter
 			this.owner.delegate.signalUnexpectedFailure(this.delegate,
 					requireNonNull(cause));
 		}
+
+		@Override
+		@NonNull
+		public InternalParticipantKind kind() {
+			return this.delegate.kind();
+		}
+
+		@Override
+		@NonNull
+		public AdmissionFence admissionFence() {
+			return this.delegate.admissionFence();
+		}
+
+		@Override
+		@NonNull
+		public InternalTerminationGroup terminationGroup() {
+			return this.delegate.terminationGroup();
+		}
+
+		@Override
+		@NonNull
+		public InternalTransportRuntime runtime() {
+			return this.delegate.runtime();
+		}
+
+		@Override
+		@NonNull
+		public Set<InternalResidualActivityKind> residualActivity() {
+			return this.delegate.residualActivity();
+		}
+
+		boolean startAttempted() {
+			return this.delegate.startAttempted();
+		}
 	}
 
 	@NonNull
@@ -81,10 +116,13 @@ final class McpTransportLifecycleAdapter
 	private final AtomicReference<@Nullable McpServerRuntimeBridge> runtime;
 	@NonNull
 	private final AtomicReference<@Nullable Generation> generation;
+	@NonNull
+	private final ThreadLocal<Generation> externalStartInvocation;
 
 	McpTransportLifecycleAdapter(@NonNull Duration gracefulTimeout) {
 		this.runtime = new AtomicReference<>();
 		this.generation = new AtomicReference<>();
+		this.externalStartInvocation = new ThreadLocal<>();
 		this.delegate = new BuiltInTransportLifecycleAdapter(
 				InternalParticipantKind.MCP, new Operations(),
 				() -> requireNonNull(gracefulTimeout));
@@ -97,6 +135,7 @@ final class McpTransportLifecycleAdapter
 			BuiltInTransportLifecycleAdapter.@NonNull Operations operations) {
 		this.runtime = new AtomicReference<>();
 		this.generation = new AtomicReference<>();
+		this.externalStartInvocation = new ThreadLocal<>();
 		this.delegate = new BuiltInTransportLifecycleAdapter(
 				InternalParticipantKind.MCP, requireNonNull(operations),
 				() -> requireNonNull(gracefulTimeout), requireNonNull(forcedTimeout),
@@ -109,10 +148,119 @@ final class McpTransportLifecycleAdapter
 	}
 
 	@NonNull
-	Generation beginStart() {
-		Generation next = new Generation(this, this.delegate.beginStart());
+	synchronized Generation beginStart() {
+		Generation externalGeneration = this.externalStartInvocation.get();
+		BuiltInTransportLifecycleAdapter.Generation delegateGeneration =
+				this.delegate.beginStart();
+		if (externalGeneration != null) {
+			requireCurrent(externalGeneration);
+			if (externalGeneration.delegate != delegateGeneration)
+				throw new IllegalStateException(
+						"MCP lifecycle consumed a different external generation");
+			return externalGeneration;
+		}
+		Generation next = new Generation(this, delegateGeneration);
 		this.generation.set(next);
 		return next;
+	}
+
+	@NonNull
+	Generation newExternallyCoordinatedGeneration(
+			@NonNull DeadlineWaiter waiter, @NonNull LifecycleWorkers workers,
+			@NonNull Object executionOwnerToken,
+			@NonNull Runnable externalShutdownRequested,
+			@NonNull Runnable externalUnexpectedTermination) {
+		return new Generation(this,
+				this.delegate.newExternallyCoordinatedGeneration(
+						requireNonNull(waiter), requireNonNull(workers),
+						requireNonNull(executionOwnerToken),
+						requireNonNull(externalShutdownRequested),
+						requireNonNull(externalUnexpectedTermination)));
+	}
+
+	@NonNull
+	Generation newExternallyCoordinatedGeneration(
+			@NonNull DeadlineWaiter waiter, @NonNull LifecycleWorkers workers,
+			@NonNull Object executionOwnerToken,
+			@NonNull Runnable externalShutdownRequested,
+			@NonNull Runnable externalUnexpectedTermination,
+			@NonNull InternalControllingEventElection ownerEventElection) {
+		return new Generation(this,
+				this.delegate.newExternallyCoordinatedGeneration(
+						requireNonNull(waiter), requireNonNull(workers),
+					requireNonNull(executionOwnerToken),
+					requireNonNull(externalShutdownRequested),
+					requireNonNull(externalUnexpectedTermination),
+					requireNonNull(ownerEventElection)));
+	}
+
+	synchronized void commitExternallyCoordinatedGeneration(
+			@NonNull Generation exactGeneration) {
+		requireOwned(exactGeneration);
+		this.delegate.commitExternallyCoordinatedGeneration(
+				exactGeneration.delegate);
+		this.generation.set(exactGeneration);
+	}
+
+	void discardExternallyCoordinatedGeneration(
+			@NonNull Generation exactGeneration) {
+		requireOwned(exactGeneration);
+		this.delegate.discardExternallyCoordinatedGeneration(
+				exactGeneration.delegate);
+	}
+
+	void runExternallyCoordinatedStart(@NonNull Generation exactGeneration,
+			@NonNull Runnable startAction) {
+		requireCurrent(exactGeneration);
+		if (this.externalStartInvocation.get() != null)
+			throw new IllegalStateException(
+					"Externally coordinated MCP start is already active on this thread");
+		this.externalStartInvocation.set(exactGeneration);
+		try {
+			this.delegate.runExternallyCoordinatedStart(exactGeneration.delegate,
+					requireNonNull(startAction));
+		} finally {
+			this.externalStartInvocation.remove();
+		}
+	}
+
+	boolean openExternallyCoordinatedAdmission(
+			@NonNull Generation exactGeneration) {
+		requireCurrent(exactGeneration);
+		return this.delegate.openExternallyCoordinatedAdmission(
+				exactGeneration.delegate);
+	}
+
+	boolean recordExternallyCoordinatedShutdownIntent(
+			@NonNull Generation exactGeneration) {
+		requireCurrent(exactGeneration);
+		return this.delegate.recordExternallyCoordinatedShutdownIntent(
+				exactGeneration.delegate);
+	}
+
+	@NonNull
+	Optional<Throwable> finalizeExternallyCoordinatedEvidence(
+			@NonNull Generation exactGeneration,
+			@NonNull InternalParticipantShutdownResult participantResult) {
+		requireCurrent(exactGeneration);
+		return this.delegate.finalizeExternallyCoordinatedEvidence(
+				exactGeneration.delegate, requireNonNull(participantResult));
+	}
+
+	void publishExternallyCoordinatedResult(
+			@NonNull Generation exactGeneration,
+			@NonNull InternalShutdownResult exactResult) {
+		requireCurrent(exactGeneration);
+		this.delegate.publishExternallyCoordinatedResult(exactGeneration.delegate,
+				requireNonNull(exactResult));
+	}
+
+	void publishExternallyCoordinatedOwnerResultAfterFailure(
+			@NonNull Generation exactGeneration,
+			@NonNull InternalShutdownResult exactResult) {
+		requireOwned(exactGeneration);
+		this.delegate.publishExternallyCoordinatedOwnerResultAfterFailure(
+				exactGeneration.delegate, requireNonNull(exactResult));
 	}
 
 	void markReady(@NonNull Generation exactGeneration) {
@@ -134,7 +282,12 @@ final class McpTransportLifecycleAdapter
 			return null;
 		BuiltInTransportLifecycleAdapter.Generation requested =
 				this.delegate.requestStop();
-		return requested == null ? null : exactGeneration;
+		if (requested == null)
+			return null;
+		if (requested != exactGeneration.delegate)
+			throw new IllegalStateException(
+					"MCP lifecycle requested a different active generation");
+		return exactGeneration;
 	}
 
 	void awaitStop(@Nullable Generation exactGeneration) {
@@ -166,6 +319,11 @@ final class McpTransportLifecycleAdapter
 	@NonNull
 	Optional<LifecycleRetentionSummary> retentionSummary() {
 		return this.delegate.retentionSummary();
+	}
+
+	@NonNull
+	InternalTransportIdentity identity() {
+		return this.delegate.identity();
 	}
 
 	@Override

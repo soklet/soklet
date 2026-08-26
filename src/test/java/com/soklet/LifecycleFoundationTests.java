@@ -220,6 +220,82 @@ class LifecycleFoundationTests {
 	}
 
 	@Test
+	void subtreeProofReevaluatesWhenAdmittedWorkIsTheLastBarrier() {
+		QueuedLauncher launcher = new QueuedLauncher();
+		LifecycleWorkers workers = new LifecycleWorkers(launcher);
+		AdmissionFence fence = new AdmissionFence();
+		InternalTerminationGroup group = new InternalTerminationGroup(
+				fence, () -> {}, workers);
+		InternalTerminationGroup.Member child = group.registerChild(group.root());
+		CompletionStage<Void> childProof = group.subtreeProofStage(child);
+		AdmissionFence.Admission admission = fence.tryAdmit().orElseThrow();
+		group.signalTerminated(child);
+		group.commit();
+
+		Assertions.assertFalse(childProof.toCompletableFuture().isDone());
+		Assertions.assertEquals(0, launcher.size());
+		admission.close();
+		Assertions.assertEquals(1, launcher.size(),
+				"The admission zero transition must schedule the ready proof handoff");
+		launcher.remove().run();
+		Assertions.assertTrue(childProof.toCompletableFuture().isDone());
+	}
+
+	@Test
+	void admittedWorkZeroReevaluatesEveryGroupSharingTheFence() {
+		QueuedLauncher launcher = new QueuedLauncher();
+		LifecycleWorkers workers = new LifecycleWorkers(launcher);
+		AdmissionFence fence = new AdmissionFence();
+		InternalTerminationGroup first = new InternalTerminationGroup(
+				fence, () -> {}, workers);
+		InternalTerminationGroup second = new InternalTerminationGroup(
+				fence, () -> {}, workers);
+		CompletionStage<Void> firstProof = first.subtreeProofStage(first.root());
+		CompletionStage<Void> secondProof = second.subtreeProofStage(second.root());
+		AdmissionFence.Admission admission = fence.tryAdmit().orElseThrow();
+		first.signalTerminated(first.root());
+		second.signalTerminated(second.root());
+		first.commit();
+		second.commit();
+
+		Assertions.assertEquals(0, launcher.size());
+		admission.close();
+		Assertions.assertEquals(2, launcher.size());
+		launcher.remove().run();
+		launcher.remove().run();
+		Assertions.assertTrue(firstProof.toCompletableFuture().isDone());
+		Assertions.assertTrue(secondProof.toCompletableFuture().isDone());
+	}
+
+	@Test
+	void proofHandoffLaunchFailureIsContainedWithoutCorruptingCommit() {
+		IllegalStateException launchFailure =
+				new IllegalStateException("proof handoff launch failed");
+		LifecycleWorkers workers = new LifecycleWorkers((name, runnable) -> {
+			throw launchFailure;
+		});
+		InternalTerminationGroup group = new InternalTerminationGroup(
+				new AdmissionFence(), () -> {}, workers);
+		InternalTerminationGroup.Member child = group.registerChild(group.root());
+		CompletionStage<Void> childProof = group.subtreeProofStage(child);
+		group.signalTerminated(group.root());
+		group.signalTerminated(child);
+
+		Assertions.assertDoesNotThrow(group::commit);
+		Assertions.assertTrue(group.isBarrierComplete(),
+				"Proof handoff infrastructure is outside the participant barrier");
+		Assertions.assertFalse(childProof.toCompletableFuture().isDone());
+		Assertions.assertTrue(group.primaryEventsInSequence().stream()
+				.flatMap(event -> event.cause().stream())
+				.anyMatch(cause -> cause == launchFailure));
+		Assertions.assertEquals(0,
+				workers.active(LifecycleWorkers.Role.SUBTREE_PROOF_HANDOFF));
+		Assertions.assertThrows(IllegalStateException.class,
+				() -> group.registerChild(group.root()),
+				"A contained launch failure must not roll commit back into OPEN");
+	}
+
+	@Test
 	void discardedGroupLeavesAcquiredProofInertAndCreatesNoWorker() {
 		QueuedLauncher launcher = new QueuedLauncher();
 		LifecycleWorkers workers = new LifecycleWorkers(launcher);
@@ -270,6 +346,43 @@ class LifecycleFoundationTests {
 		Assertions.assertEquals(
 				"Transport delegate attachment is not active on this attach thread",
 				inactive.getMessage());
+	}
+
+	@Test
+	void transparentDelegationPreservesExactSignalAndOwningDelegationForksIt() {
+		InternalTransportIdentity identity = InternalTransportIdentity.create();
+		LifecycleWorkers workers = new LifecycleWorkers((name, runnable) -> runnable.run());
+		AtomicReference<InternalTransportTerminationSignal> rootSignal =
+				new AtomicReference<>();
+		AtomicReference<InternalTransportTerminationSignal> transparentSignal =
+				new AtomicReference<>();
+		AtomicReference<InternalTransportTerminationSignal> owningSignal =
+				new AtomicReference<>();
+
+		InternalTransportEndpoint<String> leaf = endpoint(identity, (context, startup) -> {
+			owningSignal.set(context.terminationSignal());
+			Assertions.assertSame(owningSignal.get(), context.terminationSignal());
+			return noopRuntime();
+		});
+		InternalTransportEndpoint<String> transparent = endpoint(identity,
+				(context, startup) -> {
+					transparentSignal.set(context.terminationSignal());
+					context.attachLifecycleOwningDelegate(leaf, "leaf-handler");
+					return noopRuntime();
+				});
+		InternalTransportEndpoint<String> outer = endpoint(identity, (context, startup) -> {
+			rootSignal.set(context.terminationSignal());
+			return context.attachTransparentDelegate(transparent,
+					"transparent-handler");
+		});
+
+		InternalTransportAttachmentSession<String> session =
+				new InternalTransportAttachmentSession<>(new Object(), "root-handler",
+						identity, unboundedStartup(), new AdmissionFence(), () -> {}, workers);
+		Assertions.assertNotNull(session.attach(outer));
+		Assertions.assertSame(rootSignal.get(), transparentSignal.get());
+		Assertions.assertNotSame(rootSignal.get(), owningSignal.get());
+		Assertions.assertEquals(2, session.group().memberCount());
 	}
 
 	@Test
@@ -455,6 +568,63 @@ class LifecycleFoundationTests {
 	}
 
 	@Test
+	void cancellationDuringIdentityPreflightConsumesNoSlotOrChildMember()
+			throws Exception {
+		InternalTransportIdentity identity = InternalTransportIdentity.create();
+		LifecycleWorkers workers = new LifecycleWorkers((name, runnable) -> runnable.run());
+		CountDownLatch identityEntered = new CountDownLatch(1);
+		CountDownLatch releaseIdentity = new CountDownLatch(1);
+		AtomicInteger childAttachCalls = new AtomicInteger();
+		InternalTransportEndpoint<String> child = new InternalTransportEndpoint<>() {
+			@Override
+			@NonNull
+			public InternalTransportIdentity identity() {
+				identityEntered.countDown();
+				awaitUninterruptibly(releaseIdentity);
+				return identity;
+			}
+
+			@Override
+			@NonNull
+			public InternalTransportRuntime attach(
+					@NonNull InternalTransportAttachmentContext<String> context,
+					@NonNull InternalStartupContext startupContext) {
+				childAttachCalls.incrementAndGet();
+				return noopRuntime();
+			}
+		};
+		InternalTransportEndpoint<String> outer = endpoint(identity, (context, startup) -> {
+			context.attachLifecycleOwningDelegate(child, "child-handler");
+			return noopRuntime();
+		});
+		InternalTransportAttachmentSession<String> session =
+				new InternalTransportAttachmentSession<>(new Object(), "root-handler",
+						identity, unboundedStartup(), new AdmissionFence(), () -> {}, workers);
+		AtomicReference<Throwable> attachmentFailure = new AtomicReference<>();
+		Thread attachment = new Thread(() -> {
+			try {
+				session.attach(outer);
+			} catch (Throwable throwable) {
+				attachmentFailure.set(throwable);
+			}
+		}, "cancelled-transport-attachment");
+		attachment.start();
+		Assertions.assertTrue(identityEntered.await(2, TimeUnit.SECONDS));
+		session.group().discard();
+		releaseIdentity.countDown();
+		attachment.join();
+
+		IllegalStateException failure = Assertions.assertInstanceOf(
+				IllegalStateException.class, attachmentFailure.get());
+		Assertions.assertEquals(
+				"Transport delegate attachment is not active on this attach thread",
+				failure.getMessage());
+		Assertions.assertEquals(0, childAttachCalls.get());
+		Assertions.assertEquals(1, session.group().memberCount(),
+				"Cancellation that wins final preflight must not register a child");
+	}
+
+	@Test
 	void signalAndCommitRaceLinearizesExactlyOnceAndRejectsLateChildren()
 			throws Exception {
 		for (int iteration = 0; iteration < 50; iteration++) {
@@ -560,6 +730,56 @@ class LifecycleFoundationTests {
 			}
 		}
 		Assertions.assertFalse(LifecycleExecutionContext.isMarked());
+	}
+
+	@Test
+	void lifecycleExecutionMarkerIsSpecificToTheExactOwnerToken() {
+		Object firstOwner = new Object();
+		Object secondOwner = new Object();
+		Assertions.assertFalse(LifecycleExecutionContext.isMarked(firstOwner));
+		Assertions.assertFalse(LifecycleExecutionContext.isMarked(secondOwner));
+
+		try (LifecycleExecutionContext.Scope ignored =
+					 LifecycleExecutionContext.enter(firstOwner)) {
+			Assertions.assertTrue(LifecycleExecutionContext.isMarked(firstOwner));
+			Assertions.assertFalse(LifecycleExecutionContext.isMarked(secondOwner));
+			Assertions.assertThrows(IllegalStateException.class,
+					() -> LifecycleExecutionContext.requireNonReentrantWait(firstOwner));
+			Assertions.assertDoesNotThrow(
+					() -> LifecycleExecutionContext.requireNonReentrantWait(secondOwner));
+			try (LifecycleExecutionContext.Scope ignoredNested =
+						 LifecycleExecutionContext.enter(secondOwner)) {
+				Assertions.assertTrue(LifecycleExecutionContext.isMarked(firstOwner));
+				Assertions.assertTrue(LifecycleExecutionContext.isMarked(secondOwner));
+			}
+			Assertions.assertTrue(LifecycleExecutionContext.isMarked(firstOwner));
+			Assertions.assertFalse(LifecycleExecutionContext.isMarked(secondOwner));
+		}
+		Assertions.assertFalse(LifecycleExecutionContext.isMarked(firstOwner));
+		Assertions.assertFalse(LifecycleExecutionContext.isMarked(secondOwner));
+	}
+
+	@Test
+	void trackedLifecycleCallsCarryTheirTerminationGroupOwnerMarker() {
+		Object owner = new Object();
+		Object foreignOwner = new Object();
+		LifecycleWorkers workers = new LifecycleWorkers((name, runnable) -> runnable.run());
+		InternalTerminationGroup group = new InternalTerminationGroup(
+				new AdmissionFence(), () -> {}, workers, owner);
+		AtomicBoolean exactOwnerMarked = new AtomicBoolean();
+		AtomicBoolean foreignOwnerMarked = new AtomicBoolean(true);
+
+		TrackedLifecycleCallRunner.Call<Void> call =
+				new TrackedLifecycleCallRunner(workers).submit("owner-marker", group, () -> {
+					exactOwnerMarked.set(LifecycleExecutionContext.isMarked(owner));
+					foreignOwnerMarked.set(LifecycleExecutionContext.isMarked(foreignOwner));
+					return null;
+				});
+		call.completion().toCompletableFuture().join();
+
+		Assertions.assertTrue(exactOwnerMarked.get());
+		Assertions.assertFalse(foreignOwnerMarked.get());
+		Assertions.assertFalse(LifecycleExecutionContext.isMarked(owner));
 	}
 
 	@Test

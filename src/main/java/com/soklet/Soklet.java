@@ -174,6 +174,10 @@ public final class Soklet implements AutoCloseable {
 	private final ReentrantLock lock;
 	@NonNull
 	private final AtomicReference<@NonNull CountDownLatch> awaitShutdownLatchReference;
+	@NonNull
+	private final SokletFrameworkSetup frameworkSetup;
+	@NonNull
+	private final SokletDirectLifecycle directLifecycle;
 
 	/**
 	 * Creates a Soklet instance with the given configuration.
@@ -186,67 +190,17 @@ public final class Soklet implements AutoCloseable {
 		this.sokletConfig = sokletConfig;
 		this.lock = new ReentrantLock();
 		this.awaitShutdownLatchReference = new AtomicReference<>(new CountDownLatch(1));
+		this.frameworkSetup = new SokletFrameworkSetup(sokletConfig);
+		this.directLifecycle = new SokletDirectLifecycle(this, sokletConfig,
+				this.frameworkSetup);
+	}
 
-		Set<ResourceMethod> resourceMethods = sokletConfig.getResourceMethodResolver().getResourceMethods();
-
-		// Fail fast in the event that Soklet appears misconfigured
-		if (resourceMethods.isEmpty()
-				&& (sokletConfig.getHttpServer().isPresent() || sokletConfig.getSseServer().isPresent()))
-			throw new IllegalStateException(format("No Soklet Resource Methods were found. First, try to rebuild and see if that solves the problem. If not, please ensure your %s is configured correctly. "
-					+ "See https://www.soklet.com/docs/request-handling#resource-method-resolution for details.", ResourceMethodResolver.class.getSimpleName()));
-
-		boolean hasStandardHttpResourceMethods = resourceMethods.stream()
-				.anyMatch(resourceMethod -> !resourceMethod.isSseEventSource());
-
-		if (hasStandardHttpResourceMethods && sokletConfig.getHttpServer().isEmpty())
-			throw new IllegalStateException(format("Resource Methods were found, but no %s is configured. See https://www.soklet.com/docs/server-configuration for details.",
-					HttpServer.class.getSimpleName()));
-
-		// SSE misconfiguration check: @SseEventSource resource methods are declared, but not SseServer exists
-		boolean hasSseResourceMethods = resourceMethods.stream()
-				.anyMatch(resourceMethod -> resourceMethod.isSseEventSource());
-
-		if (hasSseResourceMethods && sokletConfig.getSseServer().isEmpty())
-			throw new IllegalStateException(format("Resource Methods annotated with @%s were found, but no %s is configured. See https://www.soklet.com/docs/server-sent-events for details.",
-					SseEventSource.class.getSimpleName(), SseServer.class.getSimpleName()));
-
-		MetricsCollector metricsCollector = sokletConfig.getMetricsCollector();
-
-		if (metricsCollector instanceof DefaultMetricsCollector defaultMetricsCollector) {
-			try {
-				defaultMetricsCollector.initialize(sokletConfig);
-			} catch (Throwable t) {
-				sokletConfig.getAggregateLifecycleObserver().didReceiveLogEvent(
-						LogEvent.with(LogEventType.METRICS_COLLECTOR_FAILED,
-										format("An exception occurred while initializing %s", metricsCollector.getClass().getSimpleName()))
-								.throwable(t)
-								.build());
-			}
-		}
-
-		// Use a layer of indirection here so the Soklet type does not need to directly implement the `RequestHandler` interface.
-		// Reasoning: the `handleRequest` method for Soklet should not be public, which might lead to accidental invocation by users.
-		// That method should only be called by the managed `HttpServer` instance.
-		Soklet soklet = this;
-
-		sokletConfig.getHttpServer().ifPresent(server -> server.initialize(getSokletConfig(), (request, marshaledResponseConsumer) -> {
-			// Delegate to Soklet's internal request handling method
-			soklet.handleRequest(request, ServerType.STANDARD_HTTP, marshaledResponseConsumer);
-		}));
-
-		SseServer sseServer = sokletConfig.getSseServer().orElse(null);
-
-		if (sseServer != null)
-			sseServer.initialize(sokletConfig, (request, marshaledResponseConsumer) -> {
-				// Delegate to Soklet's internal request handling method
-				soklet.handleRequest(request, ServerType.SSE, marshaledResponseConsumer);
-			});
-
-		McpServer mcpServer = sokletConfig.getMcpServer().orElse(null);
-
-		if (mcpServer instanceof DefaultMcpServer defaultMcpServer)
-			defaultMcpServer.initialize(sokletConfig);
-
+	/**
+	 * Starts this one-shot Soklet lifecycle and returns after every configured
+	 * transport is globally ready.
+	 */
+	public void start() {
+		this.directLifecycle.start();
 	}
 
 	/**
@@ -255,7 +209,8 @@ public final class Soklet implements AutoCloseable {
 	 * Configured servers that are already started are left untouched. If all configured servers are already started,
 	 * this is a no-op.
 	 */
-	public void start() {
+	@SuppressWarnings("UnusedMethod") // Retained until the D1b legacy-expectation migration is complete.
+	private void startLegacy() {
 		List<Runnable> afterLifecycleUnlock = new ArrayList<>();
 		McpServer configuredMcpServer = getSokletConfig().getMcpServer()
 				.orElse(null);
@@ -526,7 +481,8 @@ public final class Soklet implements AutoCloseable {
 	 * <p>
 	 * If the managed server[s] are already stopped, this is a no-op.
 	 */
-	public void stop() {
+	@SuppressWarnings("UnusedMethod") // Retained until the D1b legacy-expectation migration is complete.
+	private void stopLegacy() {
 		List<Runnable> afterLifecycleUnlock = new ArrayList<>();
 		McpServer configuredMcpServer = getSokletConfig().getMcpServer()
 				.orElse(null);
@@ -670,6 +626,15 @@ public final class Soklet implements AutoCloseable {
 		}
 	}
 
+	/**
+	 * Publishes Soklet-wide shutdown intent and joins the shared one-shot
+	 * result. Calls from this Soklet's own tracked handler fail fast after the
+	 * intent is visible, avoiding a lifecycle self-join.
+	 */
+	public void stop() {
+		this.directLifecycle.stop();
+	}
+
 	private static void runAfterLifecycleUnlock(
 			@NonNull List<@NonNull Runnable> actions) {
 		for (Runnable action : requireNonNull(actions))
@@ -735,8 +700,8 @@ public final class Soklet implements AutoCloseable {
 
 			Runtime.getRuntime().addShutdownHook(shutdownHook);
 
-			// Wait until "close" finishes
-			requireNonNull(getAwaitShutdownLatchReference().get()).await();
+			// Wait until the one immutable direct-lifecycle result is installed.
+			this.directLifecycle.awaitCompletion();
 		} finally {
 			if (registeredEnterKeyShutdownTrigger)
 				KeypressManager.unregister(this);
@@ -883,8 +848,18 @@ public final class Soklet implements AutoCloseable {
 	 * provided by a {@link HttpServer} or {@link SseServer} implementation.
 	 */
 	protected void handleRequest(@NonNull Request request,
-															 @NonNull ServerType serverType,
-															 @NonNull Consumer<HttpRequestResult> requestResultConsumer) {
+														 @NonNull ServerType serverType,
+														 @NonNull Consumer<HttpRequestResult> requestResultConsumer) {
+		try (LifecycleExecutionContext.Scope ignored =
+					 this.directLifecycle.enterExecution()) {
+			handleRequestWithinLifecycle(request, serverType,
+					requestResultConsumer);
+		}
+	}
+
+	private void handleRequestWithinLifecycle(@NonNull Request request,
+														 @NonNull ServerType serverType,
+														 @NonNull Consumer<HttpRequestResult> requestResultConsumer) {
 		requireNonNull(request);
 		requireNonNull(serverType);
 		requireNonNull(requestResultConsumer);
@@ -947,7 +922,13 @@ public final class Soklet implements AutoCloseable {
 
 				try {
 					// Resolve after wrapping so path/method rewrites affect routing.
-					resourceMethodHolder.set(resourceMethodResolver.resourceMethodForRequest(requestHolder.get(), serverType).orElse(null));
+					ResourceMethod resolvedResourceMethod = resourceMethodResolver
+							.resourceMethodForRequest(requestHolder.get(), serverType)
+							.orElse(null);
+					if (resolvedResourceMethod != null)
+						SokletFrameworkSetup.validateNoRemovedHttpServerInjection(
+								resolvedResourceMethod);
+					resourceMethodHolder.set(resolvedResourceMethod);
 					resourceMethodResolutionExceptionHolder.set(null);
 				} catch (Throwable t) {
 					safelyLog.accept(LogEvent.with(LogEventType.RESOURCE_METHOD_RESOLUTION_FAILED, "Unable to resolve Resource Method")
@@ -1730,7 +1711,8 @@ public final class Soklet implements AutoCloseable {
 	 * @return {@code true} if at least one configured transport server is started, {@code false} otherwise
 	 */
 	@NonNull
-	public Boolean isStarted() {
+	@SuppressWarnings("UnusedMethod") // Retained until the D1b legacy-expectation migration is complete.
+	private Boolean isStartedLegacy() {
 		getLock().lock();
 
 		try {
@@ -1751,6 +1733,26 @@ public final class Soklet implements AutoCloseable {
 		} finally {
 			getLock().unlock();
 		}
+	}
+
+	/**
+	 * Projects the one-shot owner's internal readiness state.
+	 *
+	 * @return {@code true} only while the lifecycle is globally ready
+	 */
+	@NonNull
+	public Boolean isStarted() {
+		return this.directLifecycle.isStarted();
+	}
+
+	void initializeForSimulator(@NonNull InternalStartupContext startupContext,
+			@NonNull DeadlineWaiter waiter) {
+		this.directLifecycle.initializeForSimulator(startupContext, waiter);
+	}
+
+	@NonNull
+	SokletDirectLifecycle getDirectLifecycle() {
+		return this.directLifecycle;
 	}
 
 	/**
@@ -1804,6 +1806,18 @@ public final class Soklet implements AutoCloseable {
 			sseServerProxy.enableSimulatorMode(mockSseServer);
 
 		try {
+			NanoClock simulatorClock = NanoClock.system();
+			DeadlineWaiter simulatorWaiter = new DeadlineWaiter(simulatorClock);
+			InternalLifecyclePolicy policy = sokletConfig.getInternalLifecyclePolicy();
+			long startupBegan = simulatorClock.nanoTime();
+			Optional<Long> startupDeadline = policy.startupTimeout()
+					.map(duration -> LifecycleDeadlines.after(startupBegan, duration));
+			InternalStartupContext startupContext = new InternalStartupContext(
+					simulatorClock, startupDeadline,
+					LifecycleDeadlines.after(startupBegan,
+							policy.startupCancellationTimeout()), () -> false);
+			soklet.initializeForSimulator(startupContext, simulatorWaiter);
+
 			// Initialize mocks with request handlers that delegate to Soklet's processing
 				if (mockServer != null)
 					mockServer.initialize(sokletConfig, (request, marshaledResponseConsumer) -> {

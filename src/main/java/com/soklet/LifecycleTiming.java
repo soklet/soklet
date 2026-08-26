@@ -23,6 +23,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.function.BooleanSupplier;
+import java.util.function.LongSupplier;
 
 import static java.util.Objects.requireNonNull;
 
@@ -246,18 +247,26 @@ final class InternalStartupContext {
 	private final NanoClock clock;
 	private final long normalDeadlineNanos;
 	private final boolean normalDeadlinePresent;
-	private final long cancellationDeadlineNanos;
+	private final LongSupplier cancellationDeadlineNanos;
 	private final BooleanSupplier cancellationRequested;
 
 	InternalStartupContext(@NonNull NanoClock clock,
 											 @NonNull Optional<Long> normalDeadlineNanos,
 											 long cancellationDeadlineNanos,
 											 @NonNull BooleanSupplier cancellationRequested) {
+		this(clock, normalDeadlineNanos, () -> cancellationDeadlineNanos,
+				cancellationRequested);
+	}
+
+	InternalStartupContext(@NonNull NanoClock clock,
+			@NonNull Optional<Long> normalDeadlineNanos,
+			@NonNull LongSupplier cancellationDeadlineNanos,
+			@NonNull BooleanSupplier cancellationRequested) {
 		this.clock = requireNonNull(clock);
 		requireNonNull(normalDeadlineNanos);
 		this.normalDeadlinePresent = normalDeadlineNanos.isPresent();
 		this.normalDeadlineNanos = normalDeadlineNanos.orElse(0L);
-		this.cancellationDeadlineNanos = cancellationDeadlineNanos;
+		this.cancellationDeadlineNanos = requireNonNull(cancellationDeadlineNanos);
 		this.cancellationRequested = requireNonNull(cancellationRequested);
 	}
 
@@ -265,7 +274,7 @@ final class InternalStartupContext {
 	Optional<Duration> remainingTime() {
 		if (isCancellationRequested())
 			return Optional.of(LifecycleDeadlines.remaining(
-					this.cancellationDeadlineNanos, this.clock.nanoTime()));
+					this.cancellationDeadlineNanos.getAsLong(), this.clock.nanoTime()));
 		if (!this.normalDeadlinePresent)
 			return Optional.empty();
 		return Optional.of(LifecycleDeadlines.remaining(
@@ -274,6 +283,15 @@ final class InternalStartupContext {
 
 	boolean isCancellationRequested() {
 		return this.cancellationRequested.getAsBoolean();
+	}
+
+	@NonNull
+	Optional<Long> activeDeadlineNanos() {
+		if (isCancellationRequested())
+			return Optional.of(this.cancellationDeadlineNanos.getAsLong());
+		if (!this.normalDeadlinePresent)
+			return Optional.empty();
+		return Optional.of(this.normalDeadlineNanos);
 	}
 }
 
