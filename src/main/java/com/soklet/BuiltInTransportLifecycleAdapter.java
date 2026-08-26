@@ -176,9 +176,7 @@ final class BuiltInTransportLifecycleAdapter {
 			if (this.coordinationMode == CoordinationMode.EXTERNAL
 					&& this.group.controllingEvent().isPresent()
 					&& this.unexpectedCallbackPublished.compareAndSet(false, true))
-				runOwnerCallback(this.externalUnexpectedTermination,
-						this.group.controllingEvent().orElseThrow().cause()
-								.orElse(null));
+				runOwnerCallback(this.externalUnexpectedTermination);
 			this.waiter.signal();
 		}
 
@@ -513,10 +511,7 @@ final class BuiltInTransportLifecycleAdapter {
 	void failedStart(@NonNull Generation generation, @NonNull Throwable cause,
 			boolean terminationProven) {
 		requireCurrent(generation);
-		generation.startupFailure.compareAndSet(null, requireNonNull(cause));
-		Throwable primary = requireNonNull(generation.startupFailure.get());
-		generation.startupState.compareAndSet(GenerationStartupState.STARTING,
-				GenerationStartupState.FAILED);
+		Throwable exactCause = requireNonNull(cause);
 		if (generation.externallyCoordinated()
 				&& this.externalStartInvocation.get() == generation)
 			// The direct owner's tracked call records this synchronous failure
@@ -524,7 +519,7 @@ final class BuiltInTransportLifecycleAdapter {
 			// so the exact event remains evidence without becoming an unexpected
 			// termination controlling event.
 			generation.group.recordShutdownIntent();
-		generation.signal.signalTerminationFailure(primary);
+		recordStartupFailure(generation, exactCause);
 		if (terminationProven)
 			generation.signal.signalTerminated();
 		if (generation.externallyCoordinated())
@@ -538,14 +533,27 @@ final class BuiltInTransportLifecycleAdapter {
 		if (this.current.get() != generation || generation.result.isDone())
 			return;
 		// Failure is recorded before any transport-wide lifecycle consequence.
-		generation.startupFailure.compareAndSet(null, requireNonNull(cause));
-		Throwable primary = requireNonNull(generation.startupFailure.get());
-		generation.startupState.compareAndSet(GenerationStartupState.STARTING,
-				GenerationStartupState.FAILED);
-		generation.signal.signalTerminationFailure(primary);
+		Throwable exactCause = requireNonNull(cause);
+		recordStartupFailure(generation, exactCause);
 		if (generation.externallyCoordinated())
 			return;
 		requestShutdown(generation);
+	}
+
+	private void recordStartupFailure(@NonNull Generation generation,
+			@NonNull Throwable cause) {
+		Throwable exactCause = requireNonNull(cause);
+		synchronized (requireNonNull(generation)) {
+			generation.startupFailure.compareAndSet(null, exactCause);
+			Throwable primary = requireNonNull(generation.startupFailure.get());
+			generation.startupState.compareAndSet(GenerationStartupState.STARTING,
+					GenerationStartupState.FAILED);
+			if (primary == exactCause)
+				generation.signal.signalTerminationFailure(primary);
+			else
+				generation.group.trySuppressFailureBeforeFreeze(
+						generation.group.root(), primary, exactCause);
+		}
 	}
 
 	static final class PrematureTerminationException extends IllegalStateException {
@@ -567,7 +575,7 @@ final class BuiltInTransportLifecycleAdapter {
 			return null;
 		if (generation.externallyCoordinated()) {
 			if (recordExternalShutdownIntent(generation))
-				runOwnerCallback(generation.externalShutdownRequested, null);
+			runOwnerCallback(generation.externalShutdownRequested);
 			return generation;
 		}
 		requestShutdown(generation);
@@ -902,13 +910,11 @@ final class BuiltInTransportLifecycleAdapter {
 		};
 	}
 
-	private static void runOwnerCallback(@NonNull Runnable callback,
-			@Nullable Throwable primaryFailure) {
+	private static void runOwnerCallback(@NonNull Runnable callback) {
 		try {
 			requireNonNull(callback).run();
-		} catch (Throwable callbackFailure) {
-			if (primaryFailure != null && callbackFailure != primaryFailure)
-				primaryFailure.addSuppressed(callbackFailure);
+		} catch (Throwable ignored) {
+			// Owner callbacks are lifecycle consequences, not failure evidence.
 		}
 	}
 

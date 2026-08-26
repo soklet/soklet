@@ -590,6 +590,8 @@ final class InternalTerminationGroup {
 		@Nullable
 		private InternalTerminationEvent failure;
 		@Nullable
+		private InternalTerminationEvent failureDiagnostic;
+		@Nullable
 		private InternalTerminationEvent proof;
 		@Nullable
 		private InternalTerminationEvent attachDiagnostic;
@@ -801,6 +803,24 @@ final class InternalTerminationGroup {
 			startProofHandoffs(ready);
 			this.stateChanged.run();
 		}
+	}
+
+	/** Retains one bounded competing failure without racing evidence freeze. */
+	synchronized boolean trySuppressFailureBeforeFreeze(@NonNull Member member,
+			@NonNull Throwable primary, @NonNull Throwable secondary) {
+		requireMember(member);
+		Throwable exactPrimary = requireNonNull(primary);
+		Throwable exactSecondary = requireNonNull(secondary);
+		if (this.state == State.DISCARDED || this.frozenEvidence != null
+				|| exactPrimary == exactSecondary || member.failure == null
+				|| member.failure.cause().orElseThrow() != exactPrimary
+				|| member.failureDiagnostic != null)
+			return false;
+		member.failureDiagnostic = new InternalTerminationEvent(
+				++this.nextSequence, InternalTerminationEvent.Type.FAILURE,
+				member, exactSecondary);
+		exactPrimary.addSuppressed(exactSecondary);
+		return true;
 	}
 
 	void signalTerminated(@NonNull Member member) {

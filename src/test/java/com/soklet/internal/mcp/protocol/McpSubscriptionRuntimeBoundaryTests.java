@@ -609,6 +609,119 @@ public class McpSubscriptionRuntimeBoundaryTests {
 	}
 
 	@Test
+	public void startupFailureDiagnosticClaimCapsAcrossSignalBoundary()
+			throws Exception {
+		TestEventSource source = new TestEventSource();
+		McpHttpServerRuntime runtime = runtime(MCP_PATH, source,
+				McpRuntimeObservationSink.disabledInstance(), McpApplicationClock.SYSTEM,
+				subscriptionConfiguration(4, Duration.ofSeconds(1),
+						Duration.ofMinutes(1)));
+		IllegalStateException primary = new IllegalStateException("startup primary");
+		IllegalStateException preSignal = new IllegalStateException(
+				"pre-signal competitor");
+		IllegalStateException postSignal = new IllegalStateException(
+				"post-signal competitor");
+		AtomicInteger routedDiagnostics = new AtomicInteger();
+		McpServerRuntimeBridge.LifecycleAdapter.Generation generation =
+				new McpServerRuntimeBridge.LifecycleAdapter.Generation() {
+			@Override
+			@NonNull
+			public Optional<@NonNull Runnable> tryAdmit() {
+				return Optional.empty();
+			}
+
+			@Override
+			public boolean shutdownRequested() {
+				return false;
+			}
+
+			@Override
+			public boolean tracksAdmissionLifetime() {
+				return true;
+			}
+
+			@Override
+			public boolean coordinatorOwnsUnexpectedTermination() {
+				return true;
+			}
+
+			@Override
+			public void signalTerminationFailure(@NonNull Throwable cause) {
+				routedDiagnostics.incrementAndGet();
+				primary.addSuppressed(cause);
+			}
+		};
+		AtomicBoolean failureSignaled = new AtomicBoolean();
+		AtomicBoolean diagnosticRetained = new AtomicBoolean();
+		Object failureSignalLock = new Object();
+		Method retain = McpHttpServerRuntime.class.getDeclaredMethod(
+				"retainCompetingStartupFailure",
+				McpServerRuntimeBridge.LifecycleAdapter.Generation.class,
+				Throwable.class, Throwable.class, AtomicBoolean.class,
+				AtomicBoolean.class, Object.class);
+		retain.setAccessible(true);
+
+		try {
+			invoke(retain, runtime, generation, primary, preSignal,
+					failureSignaled, diagnosticRetained, failureSignalLock);
+			failureSignaled.set(true);
+			invoke(retain, runtime, generation, primary, postSignal,
+					failureSignaled, diagnosticRetained, failureSignalLock);
+
+			Assertions.assertArrayEquals(new Throwable[] { preSignal },
+					primary.getSuppressed());
+			Assertions.assertEquals(0, routedDiagnostics.get(),
+					"The consumed pre-signal slot must cap post-signal routing");
+		} finally {
+			runtime.close();
+			source.close();
+		}
+	}
+
+	@Test
+	public void startupUnwindAccumulatorNeverMutatesAliasedPrimary()
+			throws Exception {
+		TestEventSource source = new TestEventSource();
+		McpHttpServerRuntime runtime = runtime(MCP_PATH, source,
+				McpRuntimeObservationSink.disabledInstance(), McpApplicationClock.SYSTEM,
+				subscriptionConfiguration(4, Duration.ofSeconds(1),
+						Duration.ofMinutes(1)));
+		IllegalStateException primary = new IllegalStateException(
+				"already-frozen startup primary");
+		IllegalStateException existing = new IllegalStateException(
+				"existing bounded diagnostic");
+		IllegalStateException secondary = new IllegalStateException(
+				"first distinct unwind failure");
+		IllegalStateException capped = new IllegalStateException(
+				"later capped unwind failure");
+		primary.addSuppressed(existing);
+		Throwable[] frozenSuppressed = primary.getSuppressed();
+		Method accumulator = McpHttpServerRuntime.class.getDeclaredMethod(
+				"runStartupUnwindStep", Throwable.class, Throwable.class,
+				Runnable.class);
+		accumulator.setAccessible(true);
+
+		try {
+			Throwable retained = (Throwable) invoke(accumulator, runtime, null,
+					primary, (Runnable) () -> { throw primary; });
+			Assertions.assertNull(retained,
+					"An alias of the startup primary is not cleanup evidence");
+			retained = (Throwable) invoke(accumulator, runtime, null, primary,
+					(Runnable) () -> { throw secondary; });
+			Assertions.assertSame(secondary, retained);
+			Assertions.assertSame(secondary, invoke(accumulator, runtime, retained,
+					primary, (Runnable) () -> { throw capped; }));
+			Assertions.assertArrayEquals(frozenSuppressed,
+					primary.getSuppressed());
+			Assertions.assertEquals(0, secondary.getSuppressed().length,
+					"Startup unwind aggregation must not build a mutable cause chain");
+		} finally {
+			runtime.close();
+			source.close();
+		}
+	}
+
+	@Test
 	public void preReadinessFailurePublicationWaitsForLifecycleElectionLock()
 			throws Exception {
 		TestEventSource source = new TestEventSource();
@@ -624,9 +737,12 @@ public class McpSubscriptionRuntimeBoundaryTests {
 			AtomicReference<Object> readiness = new AtomicReference<>(starting);
 			AtomicReference<Throwable> startupFailure = new AtomicReference<>();
 			AtomicBoolean startupFailureSignaled = new AtomicBoolean();
-			AtomicReference<Throwable> startupSignalFailure = new AtomicReference<>();
+			AtomicBoolean startupFailureDiagnosticRetained = new AtomicBoolean();
+			Object startupFailureSignalLock = new Object();
 			ConnectionListener listener = connectionListener(runtime, readiness,
-					startupFailure, startupFailureSignaled, startupSignalFailure);
+					startupFailure, startupFailureSignaled,
+					startupFailureDiagnosticRetained,
+					startupFailureSignalLock);
 			Throwable exactFailure = new IllegalStateException(
 					"simulated pre-readiness EventLoop failure");
 			CountDownLatch callbackStarted = new CountDownLatch(1);
@@ -1193,17 +1309,20 @@ public class McpSubscriptionRuntimeBoundaryTests {
 			@NonNull AtomicReference<Object> readiness,
 			@NonNull AtomicReference<Throwable> startupFailure,
 			@NonNull AtomicBoolean startupFailureSignaled,
-			@NonNull AtomicReference<Throwable> startupSignalFailure)
+			@NonNull AtomicBoolean startupFailureDiagnosticRetained,
+			@NonNull Object startupFailureSignalLock)
 			throws Exception {
 		Method method = McpHttpServerRuntime.class.getDeclaredMethod(
 				"connectionListener", AtomicReference.class,
 				McpServerRuntimeBridge.LifecycleAdapter.Generation.class,
-				AtomicReference.class, AtomicBoolean.class, AtomicReference.class);
+				AtomicReference.class, AtomicBoolean.class, AtomicBoolean.class,
+				Object.class);
 		method.setAccessible(true);
 		return (ConnectionListener) invoke(method, runtime, readiness,
 				McpServerRuntimeBridge.LifecycleAdapter.disabledInstance()
 						.currentGeneration(),
-				startupFailure, startupFailureSignaled, startupSignalFailure);
+				startupFailure, startupFailureSignaled,
+				startupFailureDiagnosticRetained, startupFailureSignalLock);
 	}
 
 	private static void awaitBlocked(@NonNull Thread thread) {

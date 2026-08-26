@@ -922,12 +922,10 @@ public final class Soklet implements AutoCloseable {
 
 				try {
 					// Resolve after wrapping so path/method rewrites affect routing.
-					ResourceMethod resolvedResourceMethod = resourceMethodResolver
-							.resourceMethodForRequest(requestHolder.get(), serverType)
-							.orElse(null);
-					if (resolvedResourceMethod != null)
-						SokletFrameworkSetup.validateNoRemovedHttpServerInjection(
-								resolvedResourceMethod);
+					ResourceMethod resolvedResourceMethod =
+							validateResolvedResourceMethod(resourceMethodResolver
+									.resourceMethodForRequest(requestHolder.get(), serverType)
+									.orElse(null));
 					resourceMethodHolder.set(resolvedResourceMethod);
 					resourceMethodResolutionExceptionHolder.set(null);
 				} catch (Throwable t) {
@@ -1327,10 +1325,14 @@ public final class Soklet implements AutoCloseable {
 		CorsPreflight corsPreflight = request.getCorsPreflight().orElse(null);
 
 		// Special short-circuit for big requests
-		if (request.isContentTooLarge())
-			return HttpRequestResult.withMarshaledResponse(responseMarshaler.forContentTooLarge(request, resourceMethodResolver.resourceMethodForRequest(request, serverType).orElse(null)))
+		if (request.isContentTooLarge()) {
+			ResourceMethod contentTooLargeResourceMethod =
+					validateResolvedResourceMethod(resourceMethodResolver
+							.resourceMethodForRequest(request, serverType).orElse(null));
+			return HttpRequestResult.withMarshaledResponse(responseMarshaler.forContentTooLarge(request, contentTooLargeResourceMethod))
 					.resourceMethod(resourceMethod)
 					.build();
+		}
 
 		// Special short-circuit for OPTIONS *
 		if (isOptionsSplat(request.getResourcePath()))
@@ -1384,7 +1386,10 @@ public final class Soklet implements AutoCloseable {
 			} else if (request.getHttpMethod() == HttpMethod.HEAD) {
 				// If there's a matching GET resource method for this HEAD request, then invoke it
 				Request headGetRequest = request.copy().httpMethod(HttpMethod.GET).finish();
-				ResourceMethod headGetResourceMethod = resourceMethodResolver.resourceMethodForRequest(headGetRequest, serverType).orElse(null);
+				ResourceMethod headGetResourceMethod =
+						validateResolvedResourceMethod(resourceMethodResolver
+								.resourceMethodForRequest(headGetRequest, serverType)
+								.orElse(null));
 
 				if (headGetResourceMethod != null)
 					resourceMethod = headGetResourceMethod;
@@ -1416,6 +1421,7 @@ public final class Soklet implements AutoCloseable {
 		// 1. Get an instance of the resource class
 		// 2. Get values to pass to the resource method on the resource class
 		// 3. Invoke the resource method and use its return value to drive a response
+		validateResolvedResourceMethod(resourceMethod);
 		Class<?> resourceClass = resourceMethod.getMethod().getDeclaringClass();
 		Object resourceClassInstance;
 
@@ -1649,13 +1655,25 @@ public final class Soklet implements AutoCloseable {
 		for (HttpMethod httpMethod : HttpMethod.values()) {
 			// Make a quick copy of the request to see if other paths match
 			Request otherRequest = Request.withPath(httpMethod, request.getPath()).build();
-			ResourceMethod resourceMethod = resourceMethodResolver.resourceMethodForRequest(otherRequest, serverType).orElse(null);
+			ResourceMethod resourceMethod =
+					validateResolvedResourceMethod(resourceMethodResolver
+							.resourceMethodForRequest(otherRequest, serverType)
+							.orElse(null));
 
 			if (resourceMethod != null)
 				matchingResourceMethodsByHttpMethod.put(httpMethod, resourceMethod);
 		}
 
 		return matchingResourceMethodsByHttpMethod;
+	}
+
+	@Nullable
+	private static ResourceMethod validateResolvedResourceMethod(
+			@Nullable ResourceMethod resourceMethod) {
+		if (resourceMethod != null)
+			SokletFrameworkSetup.validateNoRemovedHttpServerInjection(
+					resourceMethod);
+		return resourceMethod;
 	}
 
 	@SuppressWarnings("ReferenceEquality")

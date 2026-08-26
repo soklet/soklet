@@ -187,15 +187,22 @@ class ExternallyCoordinatedTransportLifecycleAdapterTests {
 		});
 		adapter.openExternallyCoordinatedAdmission(generation);
 		Throwable firstFailure = new AssertionError("transport failed");
+		Throwable competingFailure = new AssertionError(
+				"competing startup failure");
+		Throwable cappedFailure = new AssertionError(
+				"capped startup failure");
 
 		adapter.signalUnexpectedFailure(generation, firstFailure);
-		adapter.signalUnexpectedFailure(generation,
-				new AssertionError("duplicate transport failure"));
+		adapter.signalUnexpectedFailure(generation, competingFailure);
+		adapter.signalUnexpectedFailure(generation, cappedFailure);
 
 		Assertions.assertEquals(1, unexpectedCallbacks.get());
 		Assertions.assertEquals(1, eventsAtCallback.get().size());
 		Assertions.assertSame(firstFailure,
 				eventsAtCallback.get().get(0).cause().orElseThrow());
+		Assertions.assertArrayEquals(new Throwable[] { competingFailure },
+				firstFailure.getSuppressed(),
+				"Exactly one pre-freeze competing failure is retained by identity");
 		Assertions.assertFalse(generation.admissionFence().isOpen());
 		Assertions.assertEquals(0, operations.quiesceCount.get());
 		Assertions.assertTrue(adapter.result(generation).isEmpty(),
@@ -203,6 +210,12 @@ class ExternallyCoordinatedTransportLifecycleAdapterTests {
 
 		InternalShutdownResult exactResult = coordinator(clock, waiter, workers)
 				.shutdown(List.of(generation), 0L, 0L);
+		Throwable[] frozenSuppressed = firstFailure.getSuppressed();
+		adapter.signalUnexpectedFailure(generation,
+				new AssertionError("late post-freeze failure"));
+		Assertions.assertArrayEquals(frozenSuppressed,
+				firstFailure.getSuppressed(),
+				"A post-freeze failure cannot mutate the elected Throwable");
 		InternalParticipantShutdownResult participant = exactResult
 				.participantResult(InternalParticipantKind.HTTP).orElseThrow();
 		Assertions.assertEquals(

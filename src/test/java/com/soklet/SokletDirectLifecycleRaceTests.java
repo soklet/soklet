@@ -133,11 +133,10 @@ final class SokletDirectLifecycleRaceTests {
 				terminal.startupDisposition());
 		InternalParticipantShutdownResult httpResult = terminal
 				.participantResult(InternalParticipantKind.HTTP).orElseThrow();
-		Assertions.assertTrue(Set.of(
-				InternalParticipantShutdownDisposition.RESIDUAL_ACTIVITY,
-				InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN)
-				.contains(httpResult.disposition()),
-				"The still-running attachment call must remain in terminal evidence");
+		Assertions.assertEquals(
+				InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+				httpResult.disposition(),
+				"A still-running attachment call has exact unknown termination");
 		Assertions.assertFalse(terminal.isComplete());
 		Assertions.assertEquals(0, http.startCalls());
 

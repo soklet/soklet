@@ -79,15 +79,14 @@ final class SokletFrameworkSetup {
 			throw new IllegalStateException("Soklet framework setup is already running");
 
 		try {
-			Set<ResourceMethod> snapshot = resolveResourceMethods(startupContext,
-					waiter);
+			Set<ResourceMethod> snapshot = Set.copyOf(resolveResourceMethods(
+					startupContext, waiter));
 			validateConfiguredTransports(snapshot);
 			validateNoRemovedHttpServerInjection(snapshot);
 			initializeMetrics();
-			Set<ResourceMethod> immutableSnapshot = Set.copyOf(snapshot);
-			this.resourceMethods.set(immutableSnapshot);
+			this.resourceMethods.set(snapshot);
 			this.state.set(State.SUCCEEDED);
-			return immutableSnapshot;
+			return snapshot;
 		} catch (DefaultResourceMethodResolver.StartupWaitCancelledException sentinel) {
 			// A non-owning Soklet may abandon only its wait while the JVM-wide
 			// resolver attempt continues.  Do not turn that lifecycle sentinel into

@@ -1652,12 +1652,14 @@ final class SokletDirectLifecycle {
 				}
 				@Override public void quiesce(@NonNull InternalShutdownContext context) {
 					requestedContext.compareAndSet(null, context);
-					if (!startRunning.get())
+					if (!startRunning.get()
+							|| control.acceptsShutdownPhaseIntentDuringStart())
 						control.runtime().quiesce(context);
 				}
 				@Override public void force(@NonNull InternalShutdownContext context) {
 					requestedContext.set(context);
-					if (!startRunning.get())
+					if (!startRunning.get()
+							|| control.acceptsShutdownPhaseIntentDuringStart())
 						control.runtime().force(context);
 				}
 			};
@@ -1681,6 +1683,7 @@ final class SokletDirectLifecycle {
 		boolean openAdmission();
 		void recordShutdownIntent();
 		boolean startAttempted();
+		default boolean acceptsShutdownPhaseIntentDuringStart() { return false; }
 		@NonNull AdmissionFence admissionFence();
 		@NonNull InternalTerminationGroup terminationGroup();
 		@NonNull InternalTransportRuntime runtime();
@@ -2004,6 +2007,7 @@ final class SokletDirectLifecycle {
 				this.adapter.recordExternallyCoordinatedShutdownIntent(this.generation);
 		}
 		@Override public boolean startAttempted() { return this.generation != null && this.generation.startAttempted(); }
+		@Override public boolean acceptsShutdownPhaseIntentDuringStart() { return true; }
 		@Override @NonNull public AdmissionFence admissionFence() { return requireNonNull(this.generation).admissionFence(); }
 		@Override @NonNull public InternalTerminationGroup terminationGroup() { return requireNonNull(this.generation).terminationGroup(); }
 		@Override @NonNull public InternalTransportRuntime runtime() { return requireNonNull(this.generation).runtime(); }

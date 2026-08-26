@@ -196,6 +196,41 @@ class LifecycleFoundationTests {
 	}
 
 	@Test
+	void competingFailureDiagnosticIsBoundedAndFreezeAware() {
+		QueuedLauncher launcher = new QueuedLauncher();
+		LifecycleWorkers workers = new LifecycleWorkers(launcher);
+		AdmissionFence fence = new AdmissionFence();
+		InternalTerminationGroup group = new InternalTerminationGroup(
+				fence, () -> {}, workers);
+		InternalTerminationGroup.Member root = group.root();
+		Throwable primary = new AssertionError("primary");
+		Throwable secondary = new AssertionError("secondary");
+		Throwable capped = new AssertionError("capped");
+		Throwable late = new AssertionError("late");
+
+		group.signalFailure(root, primary);
+		group.commit();
+		Assertions.assertTrue(group.trySuppressFailureBeforeFreeze(
+				root, primary, secondary));
+		Assertions.assertFalse(group.trySuppressFailureBeforeFreeze(
+				root, primary, capped));
+		Assertions.assertArrayEquals(new Throwable[] { secondary },
+				primary.getSuppressed());
+		Assertions.assertEquals(1, group.primaryEventsInSequence().size());
+		Assertions.assertSame(primary, group.primaryEventsInSequence().get(0)
+				.cause().orElseThrow());
+
+		group.freezeEvidence();
+		Throwable[] frozenSuppressed = primary.getSuppressed();
+		Assertions.assertFalse(group.trySuppressFailureBeforeFreeze(
+				root, primary, late));
+		Assertions.assertArrayEquals(frozenSuppressed, primary.getSuppressed());
+		Assertions.assertEquals(1, group.primaryEventsInSequence().size());
+		Assertions.assertSame(primary, group.primaryEventsInSequence().get(0)
+				.cause().orElseThrow());
+	}
+
+	@Test
 	void subtreeProofWaitsForCommitDescendantsAdmittedWorkAndTrackedCalls() {
 		QueuedLauncher launcher = new QueuedLauncher();
 		LifecycleWorkers workers = new LifecycleWorkers(launcher);
