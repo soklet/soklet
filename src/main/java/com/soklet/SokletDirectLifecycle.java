@@ -1966,8 +1966,9 @@ final class SokletDirectLifecycle {
 		@NonNull private final McpTransportLifecycleAdapter adapter;
 		@NonNull private final AtomicBoolean startupMetricsDeferred =
 				new AtomicBoolean();
-		@NonNull private final AtomicBoolean shutdownMetricsDeferred =
-				new AtomicBoolean();
+		@NonNull private final Object shutdownMetricsLock = new Object();
+		private boolean shutdownMetricsDeferred;
+		private boolean ownerResultPublished;
 		private McpTransportLifecycleAdapter.@Nullable Generation generation;
 		private McpControl(@NonNull DefaultMcpServer server) {
 			this.server = requireNonNull(server);
@@ -2001,8 +2002,15 @@ final class SokletDirectLifecycle {
 		@Override public void start(@NonNull InternalStartupContext context) { markStartAttempted(); this.adapter.runExternallyCoordinatedStart(requireNonNull(this.generation), () -> this.server.startForSoklet(ignored -> { })); }
 		@Override public boolean openAdmission() { return this.adapter.openExternallyCoordinatedAdmission(requireNonNull(this.generation)); }
 		@Override public void recordShutdownIntent() {
-			if (this.shutdownMetricsDeferred.compareAndSet(false, true))
-				this.server.beginNonwaitingMcpMetricsDeferral();
+			synchronized (this.shutdownMetricsLock) {
+				// Terminal publication may outrun the request thread's control fanout.
+				// Linearize acquisition against a permanent terminal seal so a late or
+				// repeated request cannot open a deferral with no remaining release.
+				if (!this.ownerResultPublished && !this.shutdownMetricsDeferred) {
+					this.server.beginNonwaitingMcpMetricsDeferral();
+					this.shutdownMetricsDeferred = true;
+				}
+			}
 			if (this.generation != null)
 				this.adapter.recordExternallyCoordinatedShutdownIntent(this.generation);
 		}
@@ -2038,8 +2046,13 @@ final class SokletDirectLifecycle {
 			int releases = 0;
 			if (this.startupMetricsDeferred.compareAndSet(true, false))
 				releases++;
-			if (this.shutdownMetricsDeferred.compareAndSet(true, false))
-				releases++;
+			synchronized (this.shutdownMetricsLock) {
+				this.ownerResultPublished = true;
+				if (this.shutdownMetricsDeferred) {
+					this.shutdownMetricsDeferred = false;
+					releases++;
+				}
+			}
 			if (releases == 0)
 				return;
 			int exactReleases = releases;

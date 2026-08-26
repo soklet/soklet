@@ -59,6 +59,7 @@ import static java.util.Objects.requireNonNull;
 public class McpShutdownObservabilityTests {
 	private static final String HOST = "127.0.0.1";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
+	private static final Duration WAIT = Duration.ofSeconds(5);
 	private static final String SHUTDOWN_METRIC_NAME =
 			"soklet_mcp_shutdowns_total";
 
@@ -227,7 +228,8 @@ public class McpShutdownObservabilityTests {
 	}
 
 	@Test
-	public void managedCleanStopEmitsOneMatchingLifecycleAndMetricsOutcome() {
+	public void managedCleanStopEmitsOneMatchingLifecycleAndMetricsOutcome()
+			throws Exception {
 		RecordingMetricsCollector collector = new RecordingMetricsCollector();
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver();
 		McpServer server = newServer("/mcp/managed-clean");
@@ -240,7 +242,6 @@ public class McpShutdownObservabilityTests {
 					List.of(McpShutdownOutcome.CLEAN));
 
 			soklet.stop();
-			server.stop();
 			assertShutdownParity(observer, collector,
 					List.of(McpShutdownOutcome.CLEAN));
 		} finally {
@@ -249,32 +250,78 @@ public class McpShutdownObservabilityTests {
 	}
 
 	@Test
-	public void directCleanStopRecordsMetricsWithoutInventingLifecycleCallbacks() {
+	public void lateShutdownFanoutCannotReopenTerminalMetricsDeferral()
+			throws Exception {
 		RecordingMetricsCollector collector = new RecordingMetricsCollector();
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver();
-		McpServer server = newServer("/mcp/direct-clean");
+		McpServer server = newServer("/mcp/terminal-metrics-seal");
+		SokletConfig ownerConfig = SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.metricsCollector(collector)
+				.lifecycleObserver(observer)
+				.build();
+		Soklet callbackSoklet = newSoklet(
+				newServer("/mcp/terminal-metrics-seal-callback"),
+				MetricsCollector.disabledInstance(),
+				LifecycleObserver.defaultInstance());
+		DeferredTerminalMetricsLauncher launcher =
+				new DeferredTerminalMetricsLauncher();
+		SokletDirectLifecycle owner = new SokletDirectLifecycle(callbackSoklet,
+				ownerConfig, new SokletFrameworkSetup(ownerConfig), NanoClock.system(),
+				new LifecycleWorkers(launcher));
+		boolean startAttempted = false;
+
+		try {
+			startAttempted = true;
+			owner.start();
+			collector.awaitServerStarted();
+			owner.stop();
+			launcher.awaitDeferredHandoff();
+
+			InternalShutdownResult result = owner.result().orElseThrow();
+			owner.stop();
+			Assertions.assertSame(result, owner.result().orElseThrow());
+			launcher.runDeferredHandoff();
+
+			assertShutdownParity(observer, collector,
+					List.of(McpShutdownOutcome.CLEAN));
+		} finally {
+			if (startAttempted) {
+				owner.shutdown();
+				owner.awaitCompletion();
+				launcher.awaitDeferredHandoff();
+				launcher.runDeferredHandoffIfPresent();
+			}
+			callbackSoklet.close();
+			McpServerRuntimeBridge bridge = runtimeBridge(server);
+			if (bridge.getRuntimeState().stopRequired())
+				bridge.stop();
+		}
+	}
+
+	@Test
+	public void freshOwnerCleanStopRecordsOneLifecycleAndMetricsOutcome()
+			throws Exception {
+		RecordingMetricsCollector collector = new RecordingMetricsCollector();
+		RecordingLifecycleObserver observer = new RecordingLifecycleObserver();
+		McpServer server = newServer("/mcp/fresh-owner-clean");
 		Soklet soklet = newSoklet(server, collector, observer);
 
 		try {
-			server.start();
-			server.stop();
-			server.stop();
-
-			Assertions.assertTrue(observer.getStopOutcomes().isEmpty(),
-					"Direct server lifecycle does not synthesize Soklet callbacks.");
-			Assertions.assertEquals(List.of(McpShutdownOutcome.CLEAN),
-					collector.getServerStopOutcomes());
-			Assertions.assertEquals(Map.of(McpShutdownOutcome.CLEAN, 1L),
-					collector.snapshot().orElseThrow().getMcpMetrics()
-							.getShutdowns());
+			soklet.start();
+			soklet.stop();
+			soklet.stop();
+			assertShutdownParity(observer, collector,
+					List.of(McpShutdownOutcome.CLEAN));
 		} finally {
-			server.stop();
 			soklet.stop();
 		}
 	}
 
 	@Test
-	public void startupRollbackRecordsOneCleanLifecycleAndMetricsOutcome() {
+	public void didStartObserverFailureDoesNotVetoOwnerOrCleanStop()
+			throws Exception {
 		RuntimeException expectedFailure = new RuntimeException(
 				"expected did-start failure");
 		RecordingMetricsCollector collector = new RecordingMetricsCollector();
@@ -284,13 +331,11 @@ public class McpShutdownObservabilityTests {
 		Soklet soklet = newSoklet(server, collector, observer);
 
 		try {
-			RuntimeException actualFailure = Assertions.assertThrows(
-					RuntimeException.class, soklet::start);
-			Assertions.assertSame(expectedFailure, actualFailure);
-			Assertions.assertFalse(server.isStarted());
-			assertShutdownParity(observer, collector,
-					List.of(McpShutdownOutcome.CLEAN));
-
+			soklet.start();
+			observer.awaitDidStartMcp();
+			Assertions.assertTrue(soklet.isStarted(),
+					"An observer failure must not veto owner readiness.");
+			Assertions.assertEquals(1, observer.getDidStartMcpCallbacks());
 			soklet.stop();
 			assertShutdownParity(observer, collector,
 					List.of(McpShutdownOutcome.CLEAN));
@@ -324,7 +369,6 @@ public class McpShutdownObservabilityTests {
 					.stopRequired());
 
 			Assertions.assertDoesNotThrow(soklet::stop);
-			server.stop();
 			Assertions.assertEquals(2, publisher.getCloseAttempts());
 			assertShutdownParity(observer, collector,
 					List.of(McpShutdownOutcome.CLEAN));
@@ -344,13 +388,19 @@ public class McpShutdownObservabilityTests {
 		RecordingMetricsCollector collector = new RecordingMetricsCollector();
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver();
 		McpServer server = serverFor(List.of(endpoint), shutdownTimeout);
-		Soklet soklet = newSoklet(server, collector, observer);
+		Soklet soklet = newSoklet(server, collector, observer,
+				shortShutdownPolicy());
 		McpServerRuntimeBridge bridge = runtimeBridge(server);
 
 		try {
 			soklet.start();
 			long stopStartedAt = System.nanoTime();
-			Assertions.assertDoesNotThrow(soklet::stop);
+			ShutdownIncompleteException stopFailure = Assertions.assertThrows(
+					ShutdownIncompleteException.class, soklet::stop);
+			InternalShutdownResult result =
+					stopFailure.getInternalShutdownResult();
+			Assertions.assertSame(result,
+					soklet.getDirectLifecycle().result().orElseThrow());
 			Duration stopDuration = Duration.ofNanos(
 					System.nanoTime() - stopStartedAt);
 			Assertions.assertTrue(stopDuration.compareTo(
@@ -359,84 +409,118 @@ public class McpShutdownObservabilityTests {
 							+ "shared grace-plus-force budget: " + stopDuration);
 			publisher.awaitCloseEntered();
 			Assertions.assertEquals(1, publisher.getCloseAttempts());
-			Assertions.assertEquals(1, observer.getWillStopMcpCallbacks());
-			Assertions.assertTrue(observer.getStopFailures().isEmpty());
-			assertShutdownParity(observer, collector,
-					List.of(McpShutdownOutcome.RESIDUAL_HANDLERS));
+			assertIncompleteShutdownParity(observer, collector, result);
 			Assertions.assertTrue(bridge.getRuntimeState().stopRequired());
 
 			publisher.releaseClose();
 			publisher.awaitClosed();
 			awaitSubscriptionRegistrationEvidence(bridge, false);
+			awaitStatus(server, McpServerStatus.STOPPED);
 			Assertions.assertTrue(bridge.getRuntimeState().stopRequired(),
 					"Late cleanup must not rewrite the frozen incomplete generation.");
-			assertShutdownParity(observer, collector,
-					List.of(McpShutdownOutcome.RESIDUAL_HANDLERS));
+			Assertions.assertSame(result,
+					soklet.getDirectLifecycle().result().orElseThrow());
+			assertIncompleteShutdownParity(observer, collector, result);
 
-			soklet.stop();
+			ShutdownIncompleteException repeatedStop = Assertions.assertThrows(
+					ShutdownIncompleteException.class, soklet::stop);
+			Assertions.assertSame(result,
+					repeatedStop.getInternalShutdownResult());
 			Assertions.assertEquals(1, publisher.getCloseAttempts(),
 					"A completed registration close must not be invoked again.");
-			Assertions.assertEquals(1, observer.getWillStopMcpCallbacks());
-			Assertions.assertTrue(observer.getStopFailures().isEmpty());
-			assertShutdownParity(observer, collector,
-					List.of(McpShutdownOutcome.RESIDUAL_HANDLERS));
-			Assertions.assertThrows(IllegalStateException.class, server::start,
+			assertIncompleteShutdownParity(observer, collector, result);
+			IllegalStateException restartRejection = Assertions.assertThrows(
+					IllegalStateException.class, soklet::start,
 					"Late physical cleanup cannot make an incomplete generation restartable.");
+			Assertions.assertEquals(IllegalStateException.class,
+					restartRejection.getClass());
+			Assertions.assertSame(result,
+					soklet.getDirectLifecycle().result().orElseThrow());
 
-			soklet.stop();
-			server.stop();
-			Assertions.assertEquals(1, observer.getWillStopMcpCallbacks());
+			ShutdownIncompleteException finalStop = Assertions.assertThrows(
+					ShutdownIncompleteException.class, soklet::stop);
+			Assertions.assertSame(result, finalStop.getInternalShutdownResult());
 			Assertions.assertEquals(1, publisher.getCloseAttempts());
-			assertShutdownParity(observer, collector,
-					List.of(McpShutdownOutcome.RESIDUAL_HANDLERS));
+			assertIncompleteShutdownParity(observer, collector, result);
 		} finally {
 			publisher.releaseClose();
-			try {
-				soklet.stop();
-			} finally {
-				server.stop();
-			}
+			stopOwnerAllowingTerminalFailure(soklet);
 		}
 	}
 
 	@Test
-	public void unexpectedListenerTerminationCleanupAndRestartHaveExactParity()
+	public void unexpectedListenerTerminationAndFreshOwnerHaveExactParity()
 			throws Exception {
 		RecordingMetricsCollector collector = new RecordingMetricsCollector();
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver();
 		McpServer server = newServer("/mcp/unexpected-termination");
 		Soklet soklet = newSoklet(server, collector, observer);
 		McpServerRuntimeBridge bridge = runtimeBridge(server);
+		McpTransportLifecycleAdapter lifecycleAdapter = lifecycleAdapter(server);
+		Soklet freshOwner = null;
 
 		try {
 			soklet.start();
+			collector.awaitServerStarted();
+			McpTransportLifecycleAdapter.Generation failedGeneration =
+					(McpTransportLifecycleAdapter.Generation)
+							lifecycleAdapter.currentGeneration();
 			terminateUnexpectedly(eventLoop(bridge));
+			lifecycleAdapter.awaitStop(failedGeneration);
 			Assertions.assertFalse(bridge.getRuntimeState().started());
-			Assertions.assertTrue(((DefaultMcpServer) server)
-					.hasPendingListenerGenerationStop());
 
-			soklet.stop();
+			SokletTerminatedUnexpectedlyException stopFailure =
+					Assertions.assertThrows(
+							SokletTerminatedUnexpectedlyException.class,
+							soklet::stop);
+			InternalShutdownResult result =
+					stopFailure.getInternalShutdownResult();
+			Assertions.assertSame(result,
+					soklet.getDirectLifecycle().result().orElseThrow());
+			Assertions.assertSame(result,
+					lifecycleAdapter.result(failedGeneration).orElseThrow());
 			assertShutdownParity(observer, collector,
 					List.of(McpShutdownOutcome.CLEAN));
 			Assertions.assertFalse(bridge.getRuntimeState().stopRequired());
-			soklet.stop();
+			Assertions.assertFalse(((DefaultMcpServer) server)
+					.hasPendingListenerGenerationStop());
+
+			SokletTerminatedUnexpectedlyException repeatedStop =
+					Assertions.assertThrows(
+							SokletTerminatedUnexpectedlyException.class,
+							soklet::stop);
+			Assertions.assertSame(result,
+					repeatedStop.getInternalShutdownResult());
 			assertShutdownParity(observer, collector,
 					List.of(McpShutdownOutcome.CLEAN));
+			IllegalStateException restartRejection = Assertions.assertThrows(
+					IllegalStateException.class, soklet::start);
+			Assertions.assertEquals(IllegalStateException.class,
+					restartRejection.getClass());
 
-			soklet.start();
-			soklet.stop();
-			assertShutdownParity(observer, collector, List.of(
-					McpShutdownOutcome.CLEAN,
-					McpShutdownOutcome.CLEAN));
+			RecordingMetricsCollector freshCollector =
+					new RecordingMetricsCollector();
+			RecordingLifecycleObserver freshObserver =
+					new RecordingLifecycleObserver();
+			McpServer freshServer = newServer(
+					"/mcp/unexpected-termination-fresh");
+			freshOwner = newSoklet(freshServer, freshCollector, freshObserver);
+			freshOwner.start();
+			Assertions.assertTrue(freshOwner.isStarted());
+			freshOwner.stop();
+			assertShutdownParity(freshObserver, freshCollector,
+					List.of(McpShutdownOutcome.CLEAN));
 		} finally {
-			soklet.stop();
+			if (freshOwner != null)
+				freshOwner.stop();
+			stopOwnerAllowingTerminalFailure(soklet);
 			if (bridge.getRuntimeState().stopRequired())
 				bridge.stop();
 		}
 	}
 
 	@Test
-	public void directRestartNormalizesUnexpectedGenerationExactlyOnce()
+	public void ownerNormalizesUnexpectedGenerationExactlyOnceAfterAdapterWait()
 			throws Exception {
 		RecordingMetricsCollector collector = new RecordingMetricsCollector();
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver();
@@ -446,45 +530,47 @@ public class McpShutdownObservabilityTests {
 		McpTransportLifecycleAdapter lifecycleAdapter = lifecycleAdapter(server);
 
 		try {
-			server.start();
+			soklet.start();
+			collector.awaitServerStarted();
 			McpTransportLifecycleAdapter.Generation failedGeneration =
 					(McpTransportLifecycleAdapter.Generation)
 							lifecycleAdapter.currentGeneration();
 			terminateUnexpectedly(eventLoop(bridge));
-			Assertions.assertTrue(((DefaultMcpServer) server)
-					.hasPendingListenerGenerationStop());
 			lifecycleAdapter.awaitStop(failedGeneration);
 
-			server.start();
-			Assertions.assertTrue(server.isStarted());
-			Assertions.assertTrue(observer.getStopOutcomes().isEmpty());
-			Assertions.assertEquals(List.of(McpShutdownOutcome.CLEAN),
-					collector.getServerStopOutcomes());
-			Assertions.assertEquals(Map.of(McpShutdownOutcome.CLEAN, 1L),
-					collector.snapshot().orElseThrow().getMcpMetrics()
-							.getShutdowns());
+			SokletTerminatedUnexpectedlyException stopFailure =
+					Assertions.assertThrows(
+							SokletTerminatedUnexpectedlyException.class,
+							soklet::stop);
+			InternalShutdownResult result =
+					stopFailure.getInternalShutdownResult();
+			Assertions.assertSame(result,
+					lifecycleAdapter.result(failedGeneration).orElseThrow());
+			Assertions.assertFalse(soklet.isStarted());
+			assertShutdownParity(observer, collector,
+					List.of(McpShutdownOutcome.CLEAN));
 
-			server.stop();
-			server.stop();
-			Assertions.assertTrue(observer.getStopOutcomes().isEmpty(),
-					"Direct restart and stop must not synthesize Soklet callbacks.");
-			Assertions.assertEquals(List.of(
-					McpShutdownOutcome.CLEAN,
-					McpShutdownOutcome.CLEAN),
-					collector.getServerStopOutcomes());
-			Assertions.assertEquals(Map.of(McpShutdownOutcome.CLEAN, 2L),
-					collector.snapshot().orElseThrow().getMcpMetrics()
-							.getShutdowns());
+			SokletTerminatedUnexpectedlyException repeatedStop =
+					Assertions.assertThrows(
+							SokletTerminatedUnexpectedlyException.class,
+							soklet::stop);
+			Assertions.assertSame(result,
+					repeatedStop.getInternalShutdownResult());
+			IllegalStateException restartRejection = Assertions.assertThrows(
+					IllegalStateException.class, soklet::start);
+			Assertions.assertEquals(IllegalStateException.class,
+					restartRejection.getClass());
+			assertShutdownParity(observer, collector,
+					List.of(McpShutdownOutcome.CLEAN));
 		} finally {
-			server.stop();
-			soklet.stop();
+			stopOwnerAllowingTerminalFailure(soklet);
 			if (bridge.getRuntimeState().stopRequired())
 				bridge.stop();
 		}
 	}
 
 	@Test
-	public void managedRestartNormalizesUnexpectedGenerationExactlyOnce()
+	public void rejectedUnexpectedRestartDoesNotDuplicateBeforeFreshOwner()
 			throws Exception {
 		RecordingMetricsCollector collector = new RecordingMetricsCollector();
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver();
@@ -492,42 +578,58 @@ public class McpShutdownObservabilityTests {
 		Soklet soklet = newSoklet(server, collector, observer);
 		McpServerRuntimeBridge bridge = runtimeBridge(server);
 		McpTransportLifecycleAdapter lifecycleAdapter = lifecycleAdapter(server);
+		Soklet freshOwner = null;
 
 		try {
 			soklet.start();
+			collector.awaitServerStarted();
 			McpTransportLifecycleAdapter.Generation failedGeneration =
 					(McpTransportLifecycleAdapter.Generation)
 							lifecycleAdapter.currentGeneration();
 			terminateUnexpectedly(eventLoop(bridge));
-			Assertions.assertFalse(server.isStarted());
-			Assertions.assertTrue(((DefaultMcpServer) server)
-					.hasPendingListenerGenerationStop());
+			Assertions.assertFalse(bridge.getRuntimeState().started());
 			lifecycleAdapter.awaitStop(failedGeneration);
 
-			soklet.start();
-			Assertions.assertTrue(server.isStarted());
-			Assertions.assertEquals(0, observer.getWillStopMcpCallbacks(),
-					"Restart normalization must not synthesize stop intent.");
+			IllegalStateException restartRejection = Assertions.assertThrows(
+					IllegalStateException.class, soklet::start);
+			Assertions.assertEquals(IllegalStateException.class,
+					restartRejection.getClass());
+			SokletTerminatedUnexpectedlyException stopFailure =
+					Assertions.assertThrows(
+							SokletTerminatedUnexpectedlyException.class,
+							soklet::stop);
+			InternalShutdownResult result =
+					stopFailure.getInternalShutdownResult();
+			Assertions.assertSame(result,
+					lifecycleAdapter.result(failedGeneration).orElseThrow());
 			assertShutdownParity(observer, collector,
 					List.of(McpShutdownOutcome.CLEAN));
 
-			soklet.start();
+			SokletTerminatedUnexpectedlyException repeatedStop =
+					Assertions.assertThrows(
+							SokletTerminatedUnexpectedlyException.class,
+							soklet::stop);
+			Assertions.assertSame(result,
+					repeatedStop.getInternalShutdownResult());
 			assertShutdownParity(observer, collector,
 					List.of(McpShutdownOutcome.CLEAN));
 
-			soklet.stop();
-			Assertions.assertEquals(1, observer.getWillStopMcpCallbacks());
-			Assertions.assertTrue(observer.getStopFailures().isEmpty());
-			assertShutdownParity(observer, collector, List.of(
-					McpShutdownOutcome.CLEAN,
-					McpShutdownOutcome.CLEAN));
-
-			soklet.stop();
-			assertShutdownParity(observer, collector, List.of(
-					McpShutdownOutcome.CLEAN,
-					McpShutdownOutcome.CLEAN));
+			RecordingMetricsCollector freshCollector =
+					new RecordingMetricsCollector();
+			RecordingLifecycleObserver freshObserver =
+					new RecordingLifecycleObserver();
+			McpServer freshServer = newServer(
+					"/mcp/managed-unexpected-fresh");
+			freshOwner = newSoklet(freshServer, freshCollector, freshObserver);
+			freshOwner.start();
+			Assertions.assertTrue(freshOwner.isStarted());
+			freshOwner.stop();
+			assertShutdownParity(freshObserver, freshCollector,
+					List.of(McpShutdownOutcome.CLEAN));
 		} finally {
-			soklet.stop();
+			if (freshOwner != null)
+				freshOwner.stop();
+			stopOwnerAllowingTerminalFailure(soklet);
 			if (bridge.getRuntimeState().stopRequired())
 				bridge.stop();
 		}
@@ -547,19 +649,29 @@ public class McpShutdownObservabilityTests {
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver();
 		McpServer server = serverFor(List.of(firstEndpoint, secondEndpoint),
 				Duration.ofMillis(150));
-		Soklet soklet = newSoklet(server, collector, observer);
+		Soklet soklet = newSoklet(server, collector, observer,
+				shortShutdownPolicy());
 		McpServerRuntimeBridge bridge = runtimeBridge(server);
+		Soklet freshOwner = null;
 
 		try {
-			IllegalStateException startupFailure = Assertions.assertThrows(
-					IllegalStateException.class, soklet::start);
+			SokletStartupException startupFailure = Assertions.assertThrows(
+					SokletStartupException.class, soklet::start);
 			Assertions.assertSame(secondPublisher.getFirstSubscribeFailure(),
-					startupFailure);
-			Assertions.assertFalse(server.isStarted());
+					startupFailure.getCause());
+			Assertions.assertEquals(InternalStartupDisposition.FAILED,
+					startupFailure.getInternalStartupDisposition());
+			InternalShutdownResult failedResult =
+					startupFailure.getInternalShutdownResult();
+			Assertions.assertSame(failedResult,
+					soklet.getDirectLifecycle().result().orElseThrow());
+			Assertions.assertSame(failedResult,
+					lifecycleAdapter(server).result().orElseThrow());
+			Assertions.assertFalse(soklet.isStarted());
 			Assertions.assertFalse(bridge.getRuntimeState().stopRequired());
 			Assertions.assertEquals(2, firstPublisher.getCloseAttempts(),
 					"Failed-start cleanup must retry the failed close at force.");
-			assertNoMcpStopCallbacks(observer);
+			assertFailedStartLifecycleWithoutServerStoppedMetric(observer);
 			Assertions.assertTrue(collector.getServerStopOutcomes().isEmpty());
 			Assertions.assertTrue(collector.snapshot().orElseThrow()
 					.getMcpMetrics().getShutdowns().isEmpty());
@@ -568,32 +680,39 @@ public class McpShutdownObservabilityTests {
 			Assertions.assertFalse(bridge.getRuntimeState().stopRequired());
 			Assertions.assertEquals(2, firstPublisher.getCloseAttempts(),
 					"A later stop must not repeat completed failed-start cleanup.");
-			assertNoMcpStopCallbacks(observer);
+			assertFailedStartLifecycleWithoutServerStoppedMetric(observer);
 			Assertions.assertTrue(collector.getServerStopOutcomes().isEmpty(),
 					"Cleanup of a never-started generation must not emit ServerStopped.");
 			Assertions.assertTrue(collector.snapshot().orElseThrow()
 					.getMcpMetrics().getShutdowns().isEmpty());
 
-			soklet.start();
-			Assertions.assertTrue(server.isStarted());
+			RecordingLifecycleObserver freshObserver =
+					new RecordingLifecycleObserver();
+			McpServer freshServer = serverFor(
+					List.of(firstEndpoint, secondEndpoint), Duration.ofMillis(150));
+			freshOwner = newSoklet(freshServer, collector, freshObserver,
+					shortShutdownPolicy());
+			freshOwner.start();
+			Assertions.assertTrue(freshOwner.isStarted());
 			Assertions.assertEquals(2, firstPublisher.getSubscribeAttempts());
 			Assertions.assertEquals(2, secondPublisher.getSubscribeAttempts());
 			Assertions.assertTrue(collector.getServerStopOutcomes().isEmpty(),
 					"A never-started generation must not emit ServerStopped.");
-			Assertions.assertTrue(observer.getStopOutcomes().isEmpty());
+			Assertions.assertEquals(List.of(McpShutdownOutcome.CLEAN),
+					observer.getStopOutcomes(),
+					"Owner callbacks retain the completed startup rollback outcome.");
 
-			soklet.stop();
+			freshOwner.stop();
 			Assertions.assertEquals(3, firstPublisher.getCloseAttempts());
-			Assertions.assertEquals(1, observer.getWillStopMcpCallbacks());
-			Assertions.assertTrue(observer.getStopFailures().isEmpty());
-			assertShutdownParity(observer, collector,
+			assertShutdownParity(freshObserver, collector,
 					List.of(McpShutdownOutcome.CLEAN));
 
-			soklet.stop();
-			Assertions.assertEquals(1, observer.getWillStopMcpCallbacks());
-			assertShutdownParity(observer, collector,
+			freshOwner.stop();
+			assertShutdownParity(freshObserver, collector,
 					List.of(McpShutdownOutcome.CLEAN));
 		} finally {
+			if (freshOwner != null)
+				freshOwner.stop();
 			soklet.stop();
 			if (bridge.getRuntimeState().stopRequired())
 				bridge.stop();
@@ -609,6 +728,7 @@ public class McpShutdownObservabilityTests {
 		AtomicReference<McpServerStatus> observedStatus = new AtomicReference<>();
 		AtomicReference<Boolean> observedSokletStarted = new AtomicReference<>();
 		AtomicReference<Throwable> callbackFailure = new AtomicReference<>();
+		CountDownLatch callbackCompleted = new CountDownLatch(1);
 		MetricsCollector collector = new MetricsCollector() {
 			@Override
 			public void didRecordMcpMetricsEvent(@NonNull McpMetricsEvent event) {
@@ -624,6 +744,8 @@ public class McpShutdownObservabilityTests {
 							.get(2, TimeUnit.SECONDS));
 				} catch (Throwable throwable) {
 					callbackFailure.set(throwable);
+				} finally {
+					callbackCompleted.countDown();
 				}
 			}
 		};
@@ -636,6 +758,10 @@ public class McpShutdownObservabilityTests {
 		try {
 			soklet.start();
 			soklet.stop();
+			observer.awaitTerminal();
+			Assertions.assertTrue(callbackCompleted.await(
+					WAIT.toNanos(), TimeUnit.NANOSECONDS),
+					"The shutdown metrics callback did not complete.");
 			Assertions.assertNull(callbackFailure.get(),
 					"The shutdown callback blocked a concurrent diagnostics read.");
 			Assertions.assertEquals(McpServerStatus.STOPPED,
@@ -652,7 +778,8 @@ public class McpShutdownObservabilityTests {
 	}
 
 	@Test
-	public void shutdownMetricsCollectorFailureIsContainedAndLoggedOnce() {
+	public void shutdownMetricsCollectorFailureIsContainedAndLoggedOnce()
+			throws Exception {
 		RuntimeException expectedFailure = new RuntimeException(
 				"expected shutdown metrics failure");
 		AtomicInteger attempts = new AtomicInteger();
@@ -673,6 +800,9 @@ public class McpShutdownObservabilityTests {
 		try {
 			soklet.start();
 			Assertions.assertDoesNotThrow(soklet::stop);
+			observer.awaitTerminal();
+			awaitLogEventCount(observer,
+					LogEventType.METRICS_COLLECTOR_FAILED, 1);
 			Assertions.assertEquals(List.of(McpShutdownOutcome.CLEAN),
 					observer.getStopOutcomes());
 			Assertions.assertEquals(1, attempts.get());
@@ -746,7 +876,8 @@ public class McpShutdownObservabilityTests {
 				.build();
 		RecordingMetricsCollector collector = new RecordingMetricsCollector();
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver();
-		Soklet soklet = newSoklet(server, collector, observer);
+		Soklet soklet = newSoklet(server, collector, observer,
+				shortShutdownPolicy());
 		CompletableFuture<HttpResponse<String>> request = null;
 
 		try {
@@ -757,28 +888,34 @@ public class McpShutdownObservabilityTests {
 			Assertions.assertTrue(handlerEntered.await(5, TimeUnit.SECONDS),
 					"The residual fixture handler did not enter.");
 
-			soklet.stop();
+			ShutdownIncompleteException stopFailure = Assertions.assertThrows(
+					ShutdownIncompleteException.class, soklet::stop);
+			InternalShutdownResult result =
+					stopFailure.getInternalShutdownResult();
+			Assertions.assertSame(result,
+					soklet.getDirectLifecycle().result().orElseThrow());
 			Assertions.assertTrue(handlerInterrupted.await(5, TimeUnit.SECONDS),
 					"Shutdown did not interrupt the held handler.");
 			Assertions.assertEquals(
 					McpServerStatus.STOPPED_WITH_RESIDUAL_HANDLERS,
 					server.getDiagnostics().getStatus());
-			assertShutdownParity(observer, collector,
-					List.of(McpShutdownOutcome.RESIDUAL_HANDLERS));
+			assertIncompleteShutdownParity(observer, collector, result);
 			McpMetricsSnapshot retained = collector.snapshot().orElseThrow()
 					.getMcpMetrics();
 
-			soklet.stop();
-			server.stop();
-			assertShutdownParity(observer, collector,
-					List.of(McpShutdownOutcome.RESIDUAL_HANDLERS));
+			ShutdownIncompleteException repeatedStop = Assertions.assertThrows(
+					ShutdownIncompleteException.class, soklet::stop);
+			Assertions.assertSame(result,
+					repeatedStop.getInternalShutdownResult());
+			assertIncompleteShutdownParity(observer, collector, result);
 
 			releaseHandler.countDown();
 			Assertions.assertTrue(handlerExited.await(5, TimeUnit.SECONDS),
 					"The released residual fixture handler did not exit.");
 			awaitStatus(server, McpServerStatus.STOPPED);
-			assertShutdownParity(observer, collector,
-					List.of(McpShutdownOutcome.RESIDUAL_HANDLERS));
+			Assertions.assertSame(result,
+					soklet.getDirectLifecycle().result().orElseThrow());
+			assertIncompleteShutdownParity(observer, collector, result);
 			Assertions.assertEquals(Map.of(
 					McpShutdownOutcome.RESIDUAL_HANDLERS, 1L),
 					retained.getShutdowns(),
@@ -787,18 +924,24 @@ public class McpShutdownObservabilityTests {
 			releaseHandler.countDown();
 			if (request != null)
 				request.cancel(true);
-			soklet.stop();
+			stopOwnerAllowingTerminalFailure(soklet);
 		}
 	}
 
 	private static void assertShutdownParity(
 			@NonNull RecordingLifecycleObserver observer,
 			@NonNull RecordingMetricsCollector collector,
-			@NonNull List<@NonNull McpShutdownOutcome> expectedOutcomes) {
+			@NonNull List<@NonNull McpShutdownOutcome> expectedOutcomes)
+			throws InterruptedException {
 		requireNonNull(observer);
 		requireNonNull(collector);
 		requireNonNull(expectedOutcomes);
+		observer.awaitTerminal();
+		awaitServerStopOutcomeCount(collector, expectedOutcomes.size());
+		Assertions.assertEquals(1, observer.getWillStopMcpCallbacks());
 		Assertions.assertEquals(expectedOutcomes, observer.getStopOutcomes());
+		Assertions.assertTrue(observer.getStopFailures().isEmpty());
+		Assertions.assertNull(observer.getGlobalStopFailure());
 		Assertions.assertEquals(expectedOutcomes,
 				collector.getServerStopOutcomes());
 
@@ -810,12 +953,87 @@ public class McpShutdownObservabilityTests {
 						.getShutdowns());
 	}
 
-	private static void assertNoMcpStopCallbacks(
-			@NonNull RecordingLifecycleObserver observer) {
+	private static void assertIncompleteShutdownParity(
+			@NonNull RecordingLifecycleObserver observer,
+			@NonNull RecordingMetricsCollector collector,
+			@NonNull InternalShutdownResult result) throws InterruptedException {
 		requireNonNull(observer);
-		Assertions.assertEquals(0, observer.getWillStopMcpCallbacks());
-		Assertions.assertTrue(observer.getStopOutcomes().isEmpty());
+		requireNonNull(collector);
+		requireNonNull(result);
+		observer.awaitTerminal();
+		awaitServerStopOutcomeCount(collector, 1);
+		Assertions.assertEquals(1, observer.getWillStopMcpCallbacks());
+		Assertions.assertTrue(observer.getStopOutcomes().isEmpty(),
+				"An incomplete MCP participant must not publish didStopMcpServer.");
+		Assertions.assertEquals(1, observer.getStopFailures().size());
+		ShutdownIncompleteException globalFailure = Assertions.assertInstanceOf(
+				ShutdownIncompleteException.class,
+				observer.getGlobalStopFailure());
+		Assertions.assertSame(result,
+				globalFailure.getInternalShutdownResult());
+		Assertions.assertEquals(List.of(McpShutdownOutcome.RESIDUAL_HANDLERS),
+				collector.getServerStopOutcomes());
+		Assertions.assertEquals(Map.of(
+				McpShutdownOutcome.RESIDUAL_HANDLERS, 1L),
+				collector.snapshot().orElseThrow().getMcpMetrics().getShutdowns());
+	}
+
+	private static void assertFailedStartLifecycleWithoutServerStoppedMetric(
+			@NonNull RecordingLifecycleObserver observer)
+			throws InterruptedException {
+		requireNonNull(observer);
+		observer.awaitTerminal();
+		Assertions.assertEquals(1, observer.getWillStopMcpCallbacks());
+		Assertions.assertEquals(List.of(McpShutdownOutcome.CLEAN),
+				observer.getStopOutcomes());
 		Assertions.assertTrue(observer.getStopFailures().isEmpty());
+		Assertions.assertNull(observer.getGlobalStopFailure());
+	}
+
+	private static void awaitServerStopOutcomeCount(
+			@NonNull RecordingMetricsCollector collector, int expectedCount)
+			throws InterruptedException {
+		long deadline = System.nanoTime() + WAIT.toNanos();
+		while (System.nanoTime() - deadline < 0L) {
+			if (requireNonNull(collector).getServerStopOutcomes().size()
+					== expectedCount)
+				return;
+			Thread.sleep(10L);
+		}
+		Assertions.assertEquals(expectedCount,
+				collector.getServerStopOutcomes().size(),
+				"The terminal MCP metric was not published.");
+	}
+
+	private static void awaitLogEventCount(
+			@NonNull RecordingLifecycleObserver observer,
+			@NonNull LogEventType eventType, int expectedCount)
+			throws InterruptedException {
+		long deadline = System.nanoTime() + WAIT.toNanos();
+		while (System.nanoTime() - deadline < 0L) {
+			long count = requireNonNull(observer).getLogEvents().stream()
+					.filter(event -> event.getLogEventType()
+							== requireNonNull(eventType))
+					.count();
+			if (count == expectedCount)
+				return;
+			Thread.sleep(10L);
+		}
+		Assertions.assertEquals(expectedCount,
+				observer.getLogEvents().stream()
+						.filter(event -> event.getLogEventType() == eventType)
+						.count(),
+				"The expected lifecycle log event was not delivered.");
+	}
+
+	private static void stopOwnerAllowingTerminalFailure(
+			@NonNull Soklet owner) {
+		try {
+			requireNonNull(owner).stop();
+		} catch (SokletTerminatedUnexpectedlyException
+				| ShutdownIncompleteException ignored) {
+			// Preserve the already-asserted immutable terminal result during cleanup.
+		}
 	}
 
 	private static int occurrences(@NonNull String value,
@@ -835,11 +1053,28 @@ public class McpShutdownObservabilityTests {
 	private static Soklet newSoklet(@NonNull McpServer server,
 			@NonNull MetricsCollector collector,
 			@NonNull LifecycleObserver observer) {
+		return newSoklet(server, collector, observer,
+				InternalLifecyclePolicy.defaults());
+	}
+
+	@NonNull
+	private static Soklet newSoklet(@NonNull McpServer server,
+			@NonNull MetricsCollector collector,
+			@NonNull LifecycleObserver observer,
+			@NonNull InternalLifecyclePolicy lifecyclePolicy) {
 		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(collector)
 				.lifecycleObserver(observer)
+				.internalLifecyclePolicy(lifecyclePolicy)
 				.build());
+	}
+
+	@NonNull
+	private static InternalLifecyclePolicy shortShutdownPolicy() {
+		return new InternalLifecyclePolicy(Optional.of(WAIT),
+				Duration.ofMillis(100), Duration.ofMillis(100),
+				Duration.ofMillis(100));
 	}
 
 	@NonNull
@@ -1008,10 +1243,13 @@ public class McpShutdownObservabilityTests {
 		private final DefaultMetricsCollector delegate;
 		@NonNull
 		private final List<@NonNull McpMetricsEvent> events;
+		@NonNull
+		private final CountDownLatch serverStarted;
 
 		private RecordingMetricsCollector() {
 			this.delegate = DefaultMetricsCollector.defaultInstance();
 			this.events = new CopyOnWriteArrayList<>();
+			this.serverStarted = new CountDownLatch(1);
 		}
 
 		@Override
@@ -1019,6 +1257,8 @@ public class McpShutdownObservabilityTests {
 			McpMetricsEvent requiredEvent = requireNonNull(event);
 			this.events.add(requiredEvent);
 			this.delegate.didRecordMcpMetricsEvent(requiredEvent);
+			if (requiredEvent instanceof McpMetricsEvent.ServerStarted)
+				this.serverStarted.countDown();
 		}
 
 		@Override
@@ -1046,6 +1286,81 @@ public class McpShutdownObservabilityTests {
 					.map(McpMetricsEvent.ServerStopped::getOutcome)
 					.toList();
 		}
+
+		private void awaitServerStarted() throws InterruptedException {
+			Assertions.assertTrue(this.serverStarted.await(
+					WAIT.toNanos(), TimeUnit.NANOSECONDS),
+					"The MCP ServerStarted metric was not published before termination.");
+		}
+	}
+
+	private static final class DeferredTerminalMetricsLauncher
+			implements LifecycleWorkers.Launcher {
+		private static final String HANDOFF_NAME =
+				"soklet-mcp-terminal-metrics";
+		@NonNull
+		private final AtomicReference<@Nullable Runnable> deferredHandoff =
+				new AtomicReference<>();
+		@NonNull
+		private final CountDownLatch handoffDeferred = new CountDownLatch(1);
+
+		@Override
+		public void launch(@NonNull String name, @NonNull Runnable runnable) {
+			Runnable exactRunnable = requireNonNull(runnable);
+			if (HANDOFF_NAME.equals(requireNonNull(name))) {
+				if (!this.deferredHandoff.compareAndSet(null, exactRunnable))
+					throw new IllegalStateException(
+							"The terminal metrics handoff was already deferred.");
+				this.handoffDeferred.countDown();
+				return;
+			}
+			startDaemon(name, exactRunnable);
+		}
+
+		private void awaitDeferredHandoff() throws InterruptedException {
+			Assertions.assertTrue(this.handoffDeferred.await(
+					WAIT.toNanos(), TimeUnit.NANOSECONDS),
+					"The terminal metrics handoff was not deferred.");
+		}
+
+		private void runDeferredHandoff() throws InterruptedException {
+			Runnable handoff = this.deferredHandoff.getAndSet(null);
+			Assertions.assertNotNull(handoff,
+					"The terminal metrics handoff was already consumed.");
+			runAndJoin(HANDOFF_NAME, requireNonNull(handoff));
+		}
+
+		private void runDeferredHandoffIfPresent() throws InterruptedException {
+			Runnable handoff = this.deferredHandoff.getAndSet(null);
+			if (handoff != null)
+				runAndJoin(HANDOFF_NAME, handoff);
+		}
+
+		private static void startDaemon(@NonNull String name,
+				@NonNull Runnable runnable) {
+			Thread thread = new Thread(requireNonNull(runnable), requireNonNull(name));
+			thread.setDaemon(true);
+			thread.start();
+		}
+
+		private static void runAndJoin(@NonNull String name,
+				@NonNull Runnable runnable) throws InterruptedException {
+			AtomicReference<@Nullable Throwable> failure = new AtomicReference<>();
+			Thread thread = new Thread(() -> {
+				try {
+					requireNonNull(runnable).run();
+				} catch (Throwable throwable) {
+					failure.set(throwable);
+				}
+			}, requireNonNull(name));
+			thread.setDaemon(true);
+			thread.start();
+			thread.join(WAIT.toMillis());
+			Assertions.assertFalse(thread.isAlive(),
+					"The deferred terminal metrics handoff did not complete.");
+			Assertions.assertNull(failure.get(),
+					"The deferred terminal metrics handoff failed.");
+		}
 	}
 
 	private static final class RecordingLifecycleObserver
@@ -1058,6 +1373,14 @@ public class McpShutdownObservabilityTests {
 		private final List<@NonNull Throwable> stopFailures;
 		@NonNull
 		private final AtomicInteger willStopMcpCallbacks;
+		@NonNull
+		private final AtomicInteger didStartMcpCallbacks;
+		@NonNull
+		private final CountDownLatch didStartMcp;
+		@NonNull
+		private final CountDownLatch terminal;
+		@NonNull
+		private final AtomicReference<@Nullable Throwable> globalStopFailure;
 		@Nullable
 		private final RuntimeException didStartFailure;
 
@@ -1071,12 +1394,18 @@ public class McpShutdownObservabilityTests {
 			this.logEvents = new CopyOnWriteArrayList<>();
 			this.stopFailures = new CopyOnWriteArrayList<>();
 			this.willStopMcpCallbacks = new AtomicInteger();
+			this.didStartMcpCallbacks = new AtomicInteger();
+			this.didStartMcp = new CountDownLatch(1);
+			this.terminal = new CountDownLatch(1);
+			this.globalStopFailure = new AtomicReference<>();
 			this.didStartFailure = didStartFailure;
 		}
 
 		@Override
 		public void didStartMcpServer(@NonNull McpServer mcpServer) {
 			requireNonNull(mcpServer);
+			this.didStartMcpCallbacks.incrementAndGet();
+			this.didStartMcp.countDown();
 			if (this.didStartFailure != null)
 				throw this.didStartFailure;
 		}
@@ -1102,6 +1431,20 @@ public class McpShutdownObservabilityTests {
 		}
 
 		@Override
+		public void didStopSoklet(@NonNull Soklet soklet) {
+			requireNonNull(soklet);
+			this.terminal.countDown();
+		}
+
+		@Override
+		public void didFailToStopSoklet(@NonNull Soklet soklet,
+				@NonNull Throwable throwable) {
+			requireNonNull(soklet);
+			this.globalStopFailure.set(requireNonNull(throwable));
+			this.terminal.countDown();
+		}
+
+		@Override
 		public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
 			this.logEvents.add(requireNonNull(logEvent));
 		}
@@ -1121,8 +1464,29 @@ public class McpShutdownObservabilityTests {
 			return List.copyOf(this.stopFailures);
 		}
 
+		@Nullable
+		private Throwable getGlobalStopFailure() {
+			return this.globalStopFailure.get();
+		}
+
 		private int getWillStopMcpCallbacks() {
 			return this.willStopMcpCallbacks.get();
+		}
+
+		private int getDidStartMcpCallbacks() {
+			return this.didStartMcpCallbacks.get();
+		}
+
+		private void awaitDidStartMcp() throws InterruptedException {
+			Assertions.assertTrue(this.didStartMcp.await(
+					WAIT.toNanos(), TimeUnit.NANOSECONDS),
+					"The MCP did-start callback was not observed.");
+		}
+
+		private void awaitTerminal() throws InterruptedException {
+			Assertions.assertTrue(this.terminal.await(
+					WAIT.toNanos(), TimeUnit.NANOSECONDS),
+					"The global lifecycle terminal callback was not observed.");
 		}
 	}
 
