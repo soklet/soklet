@@ -30,7 +30,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -47,9 +46,15 @@ import java.util.concurrent.atomic.AtomicReference;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public class SokletMcpLifecycleTests {
+	@NonNull
+	private static final String NO_RESOURCE_METHODS =
+			"No Soklet Resource Methods were found. First, try to rebuild and see if that solves the problem. If not, please ensure your "
+					+ ResourceMethodResolver.class.getSimpleName()
+					+ " is configured correctly. See https://www.soklet.com/docs/request-handling#resource-method-resolution for details.";
+
 	@Test
 	@Timeout(30)
-	public void noncooperativeMcpHandlerFreezesOneResidualOutcomeAndBlocksRestart()
+	public void noncooperativeMcpHandlerFreezesOneResidualOutcomeAcrossLaterCalls()
 			throws Exception {
 		String host = "127.0.0.1";
 		String path = "/mcp/residual-lifecycle";
@@ -60,7 +65,10 @@ public class SokletMcpLifecycleTests {
 		CountDownLatch releaseHandler = new CountDownLatch(1);
 		CountDownLatch handlerExited = new CountDownLatch(1);
 		AtomicInteger willStopMcpCallbacks = new AtomicInteger();
+		AtomicInteger didFailToStopMcpCallbacks = new AtomicInteger();
 		List<McpShutdownOutcome> stopOutcomes = new CopyOnWriteArrayList<>();
+		AtomicReference<Throwable> globalStopFailure = new AtomicReference<>();
+		CountDownLatch terminalObserved = new CountDownLatch(1);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(toolName)
 				.jsonArguments()
@@ -111,6 +119,24 @@ public class SokletMcpLifecycleTests {
 			}
 
 			@Override
+			public void didFailToStopMcpServer(@NonNull McpServer server,
+					@NonNull Throwable throwable) {
+				didFailToStopMcpCallbacks.incrementAndGet();
+			}
+
+			@Override
+			public void didStopSoklet(@NonNull Soklet soklet) {
+				terminalObserved.countDown();
+			}
+
+			@Override
+			public void didFailToStopSoklet(@NonNull Soklet soklet,
+					@NonNull Throwable throwable) {
+				globalStopFailure.set(throwable);
+				terminalObserved.countDown();
+			}
+
+			@Override
 			public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
 				// Keep expected MCP configuration diagnostics out of test output.
 			}
@@ -118,6 +144,9 @@ public class SokletMcpLifecycleTests {
 		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(mcpServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(lifecycleObserver)
+				.internalLifecyclePolicy(new InternalLifecyclePolicy(
+						Optional.of(Duration.ofSeconds(5)), Duration.ofSeconds(2),
+						shutdownTimeout, Duration.ofSeconds(3)))
 				.build());
 		CompletableFuture<HttpResponse<String>> request = null;
 
@@ -130,9 +159,13 @@ public class SokletMcpLifecycleTests {
 					"The public MCP handler did not enter.");
 
 			long stopStartedAt = System.nanoTime();
-			soklet.stop();
+			ShutdownIncompleteException stopFailure = Assertions.assertThrows(
+					ShutdownIncompleteException.class, soklet::stop);
 			Duration stopDuration = Duration.ofNanos(
 					System.nanoTime() - stopStartedAt);
+			InternalShutdownResult result = stopFailure.getInternalShutdownResult();
+			InternalParticipantShutdownResult mcpResult = result.participantResult(
+					InternalParticipantKind.MCP).orElseThrow();
 
 			Assertions.assertTrue(stopDuration.compareTo(
 					shutdownTimeout.plusSeconds(4)) < 0,
@@ -141,57 +174,79 @@ public class SokletMcpLifecycleTests {
 							+ stopDuration);
 			Assertions.assertTrue(handlerInterrupted.await(5, TimeUnit.SECONDS),
 					"Shutdown did not interrupt the noncooperative handler.");
-			Assertions.assertEquals(McpServerStatus.STOPPED_WITH_RESIDUAL_HANDLERS,
+			Assertions.assertEquals(
+					McpServerStatus.STOPPED_WITH_RESIDUAL_HANDLERS,
 					mcpServer.getDiagnostics().getStatus());
-			Assertions.assertEquals(List.of(McpShutdownOutcome.RESIDUAL_HANDLERS),
-					stopOutcomes);
+			Assertions.assertSame(result,
+					soklet.getDirectLifecycle().result().orElseThrow());
+			Assertions.assertEquals(InternalStartupDisposition.READY,
+					result.startupDisposition());
+			Assertions.assertEquals(InternalShutdownDisposition.INCOMPLETE,
+					result.disposition());
+			Assertions.assertEquals(
+					InternalParticipantShutdownDisposition.RESIDUAL_ACTIVITY,
+					mcpResult.disposition());
+			Assertions.assertFalse(mcpResult.residualActivity().isEmpty());
+			Assertions.assertTrue(terminalObserved.await(5, TimeUnit.SECONDS),
+					"The asynchronous terminal transition was not observed.");
+			Assertions.assertTrue(stopOutcomes.isEmpty(),
+					"An incomplete MCP participant must not publish didStopMcpServer.");
 			Assertions.assertEquals(1, willStopMcpCallbacks.get());
+			Assertions.assertEquals(1, didFailToStopMcpCallbacks.get());
+			ShutdownIncompleteException observedGlobalFailure =
+					Assertions.assertInstanceOf(ShutdownIncompleteException.class,
+							globalStopFailure.get());
+			Assertions.assertSame(result,
+					observedGlobalFailure.getInternalShutdownResult());
 
-			soklet.stop();
+			ShutdownIncompleteException repeatedStopFailure = Assertions.assertThrows(
+					ShutdownIncompleteException.class, soklet::stop);
+			Assertions.assertSame(result,
+					repeatedStopFailure.getInternalShutdownResult());
 			Assertions.assertEquals(1, willStopMcpCallbacks.get(),
 					"Repeated stop while only a residual handler remains must be a no-op.");
-			Assertions.assertEquals(List.of(McpShutdownOutcome.RESIDUAL_HANDLERS),
-					stopOutcomes);
+			Assertions.assertEquals(1, didFailToStopMcpCallbacks.get());
+			Assertions.assertTrue(stopOutcomes.isEmpty());
 
-			IllegalStateException restartFailure = Assertions.assertThrows(
+			Assertions.assertThrows(
 					IllegalStateException.class, soklet::start);
-			Assertions.assertEquals(
-					"Built-in transport with retained termination evidence cannot restart",
-					restartFailure.getMessage());
+			Assertions.assertSame(result,
+					soklet.getDirectLifecycle().result().orElseThrow(),
+					"The one-shot start rejection must not replace the frozen result.");
 
 			releaseHandler.countDown();
 			Assertions.assertTrue(handlerExited.await(5, TimeUnit.SECONDS),
 					"The released MCP handler did not exit.");
 			awaitMcpStatus(mcpServer, McpServerStatus.STOPPED);
-			Assertions.assertEquals(List.of(McpShutdownOutcome.RESIDUAL_HANDLERS),
-					stopOutcomes,
-					"A residual handler's late exit must not emit another stop callback.");
-
-			IllegalStateException lateRestartFailure = Assertions.assertThrows(
-					IllegalStateException.class, soklet::start);
-			Assertions.assertEquals(
-					"Built-in transport with retained termination evidence cannot restart",
-					lateRestartFailure.getMessage(),
+			ShutdownIncompleteException lateStopFailure = Assertions.assertThrows(
+					ShutdownIncompleteException.class, soklet::stop);
+			Assertions.assertSame(result, lateStopFailure.getInternalShutdownResult(),
 					"Late physical cleanup cannot rewrite an immutable residual result.");
+			Assertions.assertEquals(1, didFailToStopMcpCallbacks.get(),
+					"Late cleanup must not emit another terminal transition.");
 		} finally {
 			releaseHandler.countDown();
 			if (request != null)
 				request.cancel(true);
-			soklet.stop();
+			try {
+				soklet.stop();
+			} catch (ShutdownIncompleteException ignored) {
+				// The immutable residual result remains the expected terminal result.
+			}
 		}
 
-		Assertions.assertEquals(1, stopOutcomes.stream()
-				.filter(outcome -> outcome == McpShutdownOutcome.RESIDUAL_HANDLERS)
-				.count());
+		Assertions.assertTrue(stopOutcomes.isEmpty());
 	}
 
 	@Test
-	public void mcpOnlySokletDoesNotRequireHttpResourceMethods() {
-		List<String> events = new ArrayList<>();
+	public void mcpOnlySokletDoesNotRequireHttpResourceMethods() throws Exception {
+		List<String> events = new CopyOnWriteArrayList<>();
 		McpServer mcpServer = newMcpServer();
+		RecordingLifecycleObserver observer =
+				new RecordingLifecycleObserver(events, null);
 		SokletConfig config = SokletConfig.withMcpServer(mcpServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.lifecycleObserver(new RecordingLifecycleObserver(events, null))
+				.lifecycleObserver(observer)
 				.build();
 		Soklet soklet = Soklet.fromConfig(config);
 
@@ -199,6 +254,7 @@ public class SokletMcpLifecycleTests {
 			soklet.start();
 			Assertions.assertTrue(soklet.isStarted());
 			soklet.stop();
+			observer.awaitTerminal();
 			Assertions.assertFalse(soklet.isStarted());
 
 			List<String> eventsAfterFirstStop = List.copyOf(events);
@@ -221,15 +277,18 @@ public class SokletMcpLifecycleTests {
 	}
 
 	@Test
-	public void mixedTransportLifecycleUsesConfiguredStartAndStopOrder() {
-		List<String> events = new ArrayList<>();
-		SokletConfig config = mixedTransportConfig(
-				new RecordingLifecycleObserver(events, null));
+	public void mixedTransportLifecycleUsesConfiguredStartAndStopOrder()
+			throws Exception {
+		List<String> events = new CopyOnWriteArrayList<>();
+		RecordingLifecycleObserver observer =
+				new RecordingLifecycleObserver(events, null);
+		SokletConfig config = mixedTransportConfig(observer);
 		Soklet soklet = Soklet.fromConfig(config);
 
 		try {
 			soklet.start();
 			soklet.stop();
+			observer.awaitTerminal();
 
 			Assertions.assertEquals(List.of(
 					"will-start-soklet",
@@ -242,10 +301,10 @@ public class SokletMcpLifecycleTests {
 					"did-start-soklet",
 					"will-stop-soklet",
 					"will-stop-http",
-					"did-stop-http",
 					"will-stop-sse",
-					"did-stop-sse",
 					"will-stop-mcp",
+					"did-stop-http",
+					"did-stop-sse",
 					"did-stop-mcp-CLEAN",
 					"did-stop-soklet"), events);
 		} finally {
@@ -254,118 +313,120 @@ public class SokletMcpLifecycleTests {
 	}
 
 	@Test
-	public void manuallyStartedMcpDoesNotPreventStartingMissingHttpAndSseServers() {
-		List<String> events = new ArrayList<>();
-		SokletConfig config = mixedTransportConfig(
-				new RecordingLifecycleObserver(events, null));
-		Soklet soklet = Soklet.fromConfig(config);
-		McpServer mcpServer = config.getMcpServer().orElseThrow();
+	public void startedMcpOwnerRejectsMixedSecondOwnerAndClaimDoesNotRetry() {
+		McpServer mcpServer = newMcpServer();
+		Soklet firstOwner = Soklet.fromConfig(SokletConfig.withMcpServer(mcpServer)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
+		SokletConfig mixedConfig = SokletConfig
+				.withHttpServer(HttpServer.withPort(0).build())
+				.sseServer(new LifecycleSseServer())
+				.mcpServer(mcpServer)
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
+						Set.of(MixedTransportResource.class)))
+				.build();
 
 		try {
-			mcpServer.start();
-			soklet.start();
+			firstOwner.start();
+			TransportOwnershipException runningConflict = Assertions.assertThrows(
+					TransportOwnershipException.class,
+					() -> Soklet.fromConfig(mixedConfig));
+			Assertions.assertEquals(InternalParticipantKind.MCP,
+					runningConflict.getInternalParticipantKind());
+			Assertions.assertSame(mcpServer.getClass(),
+					runningConflict.getTransportClass());
 
-			Assertions.assertTrue(config.getHttpServer().orElseThrow().isStarted());
-			Assertions.assertTrue(config.getSseServer().orElseThrow().isStarted());
-			Assertions.assertTrue(mcpServer.isStarted());
-			Assertions.assertEquals(List.of(
-					"will-start-soklet",
-					"will-start-http",
-					"did-start-http",
-					"will-start-sse",
-					"did-start-sse",
-					"did-start-soklet"), events);
-
-			List<String> eventsAfterFirstStart = List.copyOf(events);
-			soklet.start();
-			Assertions.assertEquals(eventsAfterFirstStart, events,
-					"Starting when every configured transport is running must be a no-op");
-
-			soklet.stop();
-			Assertions.assertEquals(List.of(
-					"will-start-soklet",
-					"will-start-http",
-					"did-start-http",
-					"will-start-sse",
-					"did-start-sse",
-					"did-start-soklet",
-					"will-stop-soklet",
-					"will-stop-http",
-					"did-stop-http",
-					"will-stop-sse",
-					"did-stop-sse",
-					"will-stop-mcp",
-					"did-stop-mcp-CLEAN",
-					"did-stop-soklet"), events);
+			firstOwner.stop();
+			TransportOwnershipException terminalConflict = Assertions.assertThrows(
+					TransportOwnershipException.class,
+					() -> Soklet.fromConfig(mixedConfig));
+			Assertions.assertEquals(InternalParticipantKind.MCP,
+					terminalConflict.getInternalParticipantKind());
+			Assertions.assertSame(mcpServer.getClass(),
+					terminalConflict.getTransportClass(),
+					"A terminal first owner must not make its transport claim retryable.");
 		} finally {
-			soklet.stop();
+			firstOwner.stop();
 		}
 	}
 
 	@Test
-	public void failedMixedStartLeavesManualMcpRunningAndCanBeRetried() {
-		List<String> events = new ArrayList<>();
-		FailOnceSseServer sseServer = new FailOnceSseServer();
+	public void failedMixedStartIsOneShotAndRetainsItsExactResult()
+			throws Exception {
+		List<String> events = new CopyOnWriteArrayList<>();
+		FailingSseServer sseServer = new FailingSseServer();
+		RecordingLifecycleObserver observer =
+				new RecordingLifecycleObserver(events, null);
 		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(0).build())
 				.sseServer(sseServer)
 				.mcpServer(newMcpServer())
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromClasses(Set.of(MixedTransportResource.class)))
-				.lifecycleObserver(new RecordingLifecycleObserver(events, null))
+				.lifecycleObserver(observer)
 				.build();
 		Soklet soklet = Soklet.fromConfig(config);
 		McpServer mcpServer = config.getMcpServer().orElseThrow();
 
 		try {
-			mcpServer.start();
-			Assertions.assertThrows(IllegalStateException.class, soklet::start);
+			SokletStartupException startupFailure = Assertions.assertThrows(
+					SokletStartupException.class, soklet::start);
+			observer.awaitTerminal();
+			InternalShutdownResult result = startupFailure.getInternalShutdownResult();
 
+			Assertions.assertSame(sseServer.failure(), startupFailure.getCause());
+			Assertions.assertEquals(InternalStartupDisposition.FAILED,
+					startupFailure.getInternalStartupDisposition());
+			Assertions.assertSame(result,
+					soklet.getDirectLifecycle().result().orElseThrow());
 			Assertions.assertFalse(config.getHttpServer().orElseThrow().isStarted());
 			Assertions.assertFalse(sseServer.isStarted());
-			Assertions.assertTrue(mcpServer.isStarted(),
-					"Rollback must not stop a transport that this invocation did not start");
+			Assertions.assertEquals(McpServerStatus.STOPPED,
+					mcpServer.getDiagnostics().getStatus());
 			Assertions.assertEquals(List.of(
 					"will-start-soklet",
 					"will-start-http",
 					"did-start-http",
 					"will-start-sse",
 					"did-fail-start-sse",
+					"did-fail-start-soklet",
+					"will-stop-soklet",
 					"will-stop-http",
+					"will-stop-sse",
+					"will-stop-mcp",
 					"did-stop-http",
-					"did-fail-start-soklet"), events);
+					"did-stop-sse",
+					"did-stop-mcp-CLEAN",
+					"did-stop-soklet"), events);
 
-			events.clear();
-			soklet.start();
-			Assertions.assertTrue(config.getHttpServer().orElseThrow().isStarted());
-			Assertions.assertTrue(sseServer.isStarted());
-			Assertions.assertTrue(mcpServer.isStarted());
-			Assertions.assertEquals(List.of(
-					"will-start-soklet",
-					"will-start-http",
-					"did-start-http",
-					"will-start-sse",
-					"did-start-sse",
-					"did-start-soklet"), events,
-					"Retry must start only transports that remain stopped");
+			Assertions.assertThrows(IllegalStateException.class, soklet::start);
+			Assertions.assertSame(result,
+					soklet.getDirectLifecycle().result().orElseThrow());
+			Assertions.assertEquals(1, sseServer.startAttempts(),
+					"A failed one-shot owner must not retry participant startup.");
 		} finally {
 			soklet.stop();
 		}
 	}
 
 	@Test
-	public void failedMcpDidStartCallbackRollsBackMcpSseAndHttpInReverseOrder() {
-		List<String> events = new ArrayList<>();
+	public void didStartMcpObserverFailureIsObservationalAndDoesNotVetoLifecycle()
+			throws Exception {
+		List<String> events = new CopyOnWriteArrayList<>();
 		RuntimeException expectedFailure = new RuntimeException("expected MCP did-start failure");
-		SokletConfig config = mixedTransportConfig(
-				new RecordingLifecycleObserver(events, expectedFailure));
+		RecordingLifecycleObserver observer =
+				new RecordingLifecycleObserver(events, expectedFailure);
+		SokletConfig config = mixedTransportConfig(observer);
 		Soklet soklet = Soklet.fromConfig(config);
 
 		try {
-			RuntimeException actualFailure = Assertions.assertThrows(
-					RuntimeException.class, soklet::start);
-
-			Assertions.assertSame(expectedFailure, actualFailure);
-			Assertions.assertFalse(soklet.isStarted());
+			soklet.start();
+			observer.awaitReady();
+			Assertions.assertTrue(soklet.isStarted(),
+					"An observer exception must not veto published readiness.");
+			soklet.stop();
+			observer.awaitTerminal();
+			Assertions.assertTrue(soklet.getDirectLifecycle().result()
+					.orElseThrow().isComplete());
 			Assertions.assertEquals(List.of(
 					"will-start-soklet",
 					"will-start-http",
@@ -374,24 +435,27 @@ public class SokletMcpLifecycleTests {
 					"did-start-sse",
 					"will-start-mcp",
 					"did-start-mcp",
-					"did-fail-start-mcp",
-					"will-stop-mcp",
-					"did-stop-mcp-CLEAN",
-					"will-stop-sse",
-					"did-stop-sse",
+					"did-start-soklet",
+					"will-stop-soklet",
 					"will-stop-http",
+					"will-stop-sse",
+					"will-stop-mcp",
 					"did-stop-http",
-					"did-fail-start-soklet"), events);
+					"did-stop-sse",
+					"did-stop-mcp-CLEAN",
+					"did-stop-soklet"), events);
 		} finally {
 			soklet.stop();
 		}
 	}
 
 	@Test
-	public void stopContinuesThroughMcpWhenAnEarlierLifecycleCallbackFails() {
-		List<String> events = new ArrayList<>();
+	public void stopObserverFailureIsObservationalAndPreservesPhaseOrder()
+			throws Exception {
+		List<String> events = new CopyOnWriteArrayList<>();
 		RuntimeException expectedFailure = new RuntimeException("expected HTTP will-stop failure");
 		AtomicReference<Throwable> globalFailure = new AtomicReference<>();
+		CountDownLatch terminalObserved = new CountDownLatch(1);
 		LifecycleObserver observer = new LifecycleObserver() {
 			@Override
 			public void willStopSoklet(@NonNull Soklet soklet) {
@@ -435,6 +499,13 @@ public class SokletMcpLifecycleTests {
 					@NonNull Throwable throwable) {
 				events.add("did-fail-stop-soklet");
 				globalFailure.set(throwable);
+				terminalObserved.countDown();
+			}
+
+			@Override
+			public void didStopSoklet(@NonNull Soklet soklet) {
+				events.add("did-stop-soklet");
+				terminalObserved.countDown();
 			}
 
 			@Override
@@ -447,32 +518,59 @@ public class SokletMcpLifecycleTests {
 		try {
 			soklet.start();
 			soklet.stop();
+			Assertions.assertTrue(terminalObserved.await(5, TimeUnit.SECONDS),
+					"The asynchronous stop observer did not reach its terminal callback.");
 
 			Assertions.assertFalse(soklet.isStarted());
-			Assertions.assertSame(expectedFailure, globalFailure.get());
+			Assertions.assertNull(globalFailure.get(),
+					"An observer callback failure must not change lifecycle outcome.");
+			Assertions.assertTrue(soklet.getDirectLifecycle().result()
+					.orElseThrow().isComplete());
 			Assertions.assertEquals(List.of(
 					"will-stop-soklet",
 					"will-stop-http",
-					"did-stop-http",
 					"will-stop-sse",
-					"did-stop-sse",
 					"will-stop-mcp",
+					"did-stop-http",
+					"did-stop-sse",
 					"did-stop-mcp-CLEAN",
-					"did-fail-stop-soklet"), events);
+					"did-stop-soklet"), events);
 		} finally {
 			soklet.stop();
 		}
 	}
 
 	@Test
-	public void httpTransportStillRequiresResourceMethodsWhenMcpIsAlsoConfigured() {
+	public void httpValidationRunsAtStartAndRetainsItsExactCause() {
 		SokletConfig config = SokletConfig.withMcpServer(newMcpServer())
 				.httpServer(HttpServer.withPort(0).build())
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.build();
 
-		Assertions.assertThrows(IllegalStateException.class,
-				() -> Soklet.fromConfig(config));
+		Soklet soklet = Soklet.fromConfig(config);
+		SokletStartupException startupFailure = Assertions.assertThrows(
+				SokletStartupException.class, soklet::start);
+		InternalShutdownResult result = startupFailure.getInternalShutdownResult();
+
+		Assertions.assertInstanceOf(IllegalStateException.class,
+				startupFailure.getCause());
+		Assertions.assertEquals(NO_RESOURCE_METHODS,
+				startupFailure.getCause().getMessage());
+		Assertions.assertEquals(InternalStartupDisposition.FAILED,
+				startupFailure.getInternalStartupDisposition());
+		Assertions.assertEquals(InternalShutdownDisposition.NOT_STARTED,
+				result.disposition());
+		Assertions.assertSame(result,
+				soklet.getDirectLifecycle().result().orElseThrow());
+		for (InternalParticipantShutdownResult participant :
+				result.participantResults()) {
+			Assertions.assertEquals(
+					InternalParticipantShutdownDisposition.NOT_STARTED,
+					participant.disposition());
+			Assertions.assertEquals(List.of(startupFailure.getCause()),
+					participant.failures());
+		}
+		Assertions.assertDoesNotThrow(soklet::stop);
 	}
 
 	@NonNull
@@ -525,7 +623,7 @@ public class SokletMcpLifecycleTests {
 				.version(HttpClient.Version.HTTP_1_1)
 				.build()
 				.sendAsync(request,
-						HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+					HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
 	}
 
 	private static void awaitMcpStatus(@NonNull McpServer mcpServer,
@@ -534,7 +632,7 @@ public class SokletMcpLifecycleTests {
 		while (System.nanoTime() - deadline < 0L) {
 			if (mcpServer.getDiagnostics().getStatus() == expectedStatus)
 				return;
-			Thread.sleep(10);
+			Thread.sleep(10L);
 		}
 		Assertions.assertEquals(expectedStatus,
 				mcpServer.getDiagnostics().getStatus());
@@ -553,7 +651,10 @@ public class SokletMcpLifecycleTests {
 		}
 	}
 
-	private static final class FailOnceSseServer implements SseServer {
+	private static final class FailingSseServer implements SseServer {
+		@NonNull
+		private final RuntimeException failure = new IllegalStateException(
+				"expected first SSE start failure");
 		private int startAttempts;
 		private boolean started;
 
@@ -561,10 +662,16 @@ public class SokletMcpLifecycleTests {
 		public void start() {
 			this.startAttempts++;
 
-			if (this.startAttempts == 1)
-				throw new IllegalStateException("expected first SSE start failure");
+			throw this.failure;
+		}
 
-			this.started = true;
+		@NonNull
+		private RuntimeException failure() {
+			return this.failure;
+		}
+
+		private int startAttempts() {
+			return this.startAttempts;
 		}
 
 		@Override
@@ -631,11 +738,27 @@ public class SokletMcpLifecycleTests {
 		private final List<String> events;
 		@Nullable
 		private final RuntimeException didStartMcpFailure;
+		@NonNull
+		private final CountDownLatch readyObserved;
+		@NonNull
+		private final CountDownLatch terminalObserved;
 
 		private RecordingLifecycleObserver(@NonNull List<String> events,
 				@Nullable RuntimeException didStartMcpFailure) {
 			this.events = events;
 			this.didStartMcpFailure = didStartMcpFailure;
+			this.readyObserved = new CountDownLatch(1);
+			this.terminalObserved = new CountDownLatch(1);
+		}
+
+		private void awaitReady() throws InterruptedException {
+			Assertions.assertTrue(this.readyObserved.await(5, TimeUnit.SECONDS),
+					"The asynchronous ready transition was not observed.");
+		}
+
+		private void awaitTerminal() throws InterruptedException {
+			Assertions.assertTrue(this.terminalObserved.await(5, TimeUnit.SECONDS),
+					"The asynchronous terminal transition was not observed.");
 		}
 
 		@Override
@@ -646,6 +769,7 @@ public class SokletMcpLifecycleTests {
 		@Override
 		public void didStartSoklet(@NonNull Soklet soklet) {
 			this.events.add("did-start-soklet");
+			this.readyObserved.countDown();
 		}
 
 		@Override
@@ -662,6 +786,14 @@ public class SokletMcpLifecycleTests {
 		@Override
 		public void didStopSoklet(@NonNull Soklet soklet) {
 			this.events.add("did-stop-soklet");
+			this.terminalObserved.countDown();
+		}
+
+		@Override
+		public void didFailToStopSoklet(@NonNull Soklet soklet,
+				@NonNull Throwable throwable) {
+			this.events.add("did-fail-stop-soklet");
+			this.terminalObserved.countDown();
 		}
 
 		@Override

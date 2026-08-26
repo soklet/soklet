@@ -46,6 +46,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -207,7 +208,8 @@ class McpLifecycleB3Tests {
 				});
 		McpServer server = serverBuilder(endpoint(PATH, tool),
 				Duration.ofMillis(250)).build();
-		Fixture fixture = fixture(server);
+		Fixture fixture = fixture(server, shutdownPolicy(
+				Duration.ofMillis(250), Duration.ofMillis(250)));
 		CompletableFuture<HttpResponse<String>> request = null;
 
 		try {
@@ -262,7 +264,7 @@ class McpLifecycleB3Tests {
 				});
 		McpServer server = serverBuilder(endpoint(PATH, tool),
 				Duration.ofMillis(50)).build();
-		Fixture fixture = fixture(server);
+		Fixture fixture = fixture(server, shortShutdownPolicy());
 		CompletableFuture<HttpResponse<String>> request = null;
 
 		try {
@@ -271,7 +273,10 @@ class McpLifecycleB3Tests {
 			request = callTool(address.getPort(), "residual", tool.getName(), false);
 			Assertions.assertTrue(handlerEntered.await(WAIT.toNanos(),
 					TimeUnit.NANOSECONDS));
-			fixture.soklet().stop();
+			ShutdownIncompleteException stopFailure = Assertions.assertThrows(
+					ShutdownIncompleteException.class, fixture.soklet()::stop);
+			InternalShutdownResult result = stopFailure.getInternalShutdownResult();
+			Assertions.assertSame(result, adapter(server).result().orElseThrow());
 
 			Assertions.assertEquals(1, interruptions.get(),
 					"Idempotent force must not repeatedly interrupt one handler.");
@@ -280,7 +285,7 @@ class McpLifecycleB3Tests {
 			Assertions.assertEquals(McpServerStatus.STOPPED_WITH_RESIDUAL_HANDLERS,
 					server.getDiagnostics().getStatus());
 			Assertions.assertEquals(address, boundAddress(server));
-			assertLegacyParity(fixture, McpShutdownOutcome.RESIDUAL_HANDLERS);
+			assertIncompleteLegacyParity(fixture, result);
 			Assertions.assertTrue(adapter(server).retentionSummary().orElseThrow()
 					.counts().containsKey(InternalResidualActivityKind.CALLBACK));
 			Assertions.assertTrue(fixture.bridge().getLifecycleEvidence().callback());
@@ -288,8 +293,18 @@ class McpLifecycleB3Tests {
 			releaseHandler.countDown();
 			Assertions.assertTrue(handlerExited.await(WAIT.toNanos(),
 					TimeUnit.NANOSECONDS));
-			Assertions.assertThrows(IllegalStateException.class, fixture.soklet()::start,
+			awaitCondition(() -> server.getDiagnostics().getStatus()
+					== McpServerStatus.STOPPED,
+					"Late physical cleanup did not reach STOPPED diagnostics.");
+			ShutdownIncompleteException repeatedStop = Assertions.assertThrows(
+					ShutdownIncompleteException.class, fixture.soklet()::stop);
+			Assertions.assertSame(result,
+					repeatedStop.getInternalShutdownResult());
+			IllegalStateException restartRejection = Assertions.assertThrows(
+					IllegalStateException.class, fixture.soklet()::start,
 					"An immutable incomplete result permanently retains restart ownership.");
+			Assertions.assertEquals(IllegalStateException.class,
+					restartRejection.getClass());
 			assertParticipant(server,
 					InternalParticipantShutdownDisposition.RESIDUAL_ACTIVITY);
 		} finally {
@@ -325,8 +340,21 @@ class McpLifecycleB3Tests {
 					"Unexpected failure must fence this exact generation.");
 			Assertions.assertEquals(address, boundAddress(server));
 			assertRuntimeEvidenceReleased(fixture.bridge());
-			fixture.soklet().stop();
+			SokletTerminatedUnexpectedlyException stopFailure =
+					Assertions.assertThrows(
+							SokletTerminatedUnexpectedlyException.class,
+							fixture.soklet()::stop);
+			InternalShutdownResult result = stopFailure.getInternalShutdownResult();
+			Assertions.assertSame(result, adapter(server).result().orElseThrow());
+			Assertions.assertSame(participant.failures().get(0),
+					stopFailure.getCause());
 			assertLegacyParity(fixture, McpShutdownOutcome.CLEAN);
+			SokletTerminatedUnexpectedlyException repeatedStop =
+					Assertions.assertThrows(
+							SokletTerminatedUnexpectedlyException.class,
+							fixture.soklet()::stop);
+			Assertions.assertSame(result,
+					repeatedStop.getInternalShutdownResult());
 			assertListenerReturned(address);
 		} finally {
 			fixture.close();
@@ -400,10 +428,11 @@ class McpLifecycleB3Tests {
 	}
 
 	@Test
-	void restartCannotConsumeUnexpectedGenerationBeforeExactResultPublication()
+	void oneShotOwnerCannotConsumeUnexpectedGenerationBeforeExactResultPublication()
 			throws Exception {
 		McpServer server = serverBuilder(endpoint(PATH), Duration.ofSeconds(1)).build();
 		Fixture fixture = fixture(server);
+		Fixture freshFixture = null;
 		ExecutorService terminator = daemonSingleThreadExecutor(
 				"mcp-b3-unexpected-restart-window");
 		Future<?> termination = null;
@@ -426,7 +455,10 @@ class McpLifecycleB3Tests {
 				Assertions.assertFalse(firstGeneration.shutdownRequested(),
 						"The test must hold the failure signal before shutdown claim.");
 
-				Assertions.assertThrows(IllegalStateException.class, server::start);
+				IllegalStateException restartRejection = Assertions.assertThrows(
+						IllegalStateException.class, fixture.soklet()::start);
+				Assertions.assertEquals(IllegalStateException.class,
+						restartRejection.getClass());
 				Assertions.assertSame(firstGeneration, pendingGeneration(server),
 						"A premature restart must preserve the exact pending identity.");
 				Assertions.assertSame(firstGeneration, generation(server));
@@ -440,49 +472,68 @@ class McpLifecycleB3Tests {
 			Assertions.assertTrue(adapter(server).result(firstGeneration)
 					.orElseThrow().isComplete());
 
-			server.start();
-			McpTransportLifecycleAdapter.Generation secondGeneration =
-					generation(server);
-			Assertions.assertNotSame(firstGeneration, secondGeneration);
-			Assertions.assertEquals(List.of(McpShutdownOutcome.CLEAN),
-					fixture.metrics().shutdownOutcomes);
-			server.stop();
-			Assertions.assertTrue(adapter(server).result(secondGeneration)
+			SokletTerminatedUnexpectedlyException firstStop =
+					Assertions.assertThrows(
+							SokletTerminatedUnexpectedlyException.class,
+							fixture.soklet()::stop);
+			InternalShutdownResult firstResult = firstStop
+					.getInternalShutdownResult();
+			Assertions.assertSame(firstResult, adapter(server)
+					.result(firstGeneration).orElseThrow());
+			Assertions.assertSame(firstResult,
+					fixture.soklet().getDirectLifecycle().result().orElseThrow());
+			SokletTerminatedUnexpectedlyException repeatedStop =
+					Assertions.assertThrows(
+							SokletTerminatedUnexpectedlyException.class,
+							fixture.soklet()::stop);
+			Assertions.assertSame(firstResult,
+					repeatedStop.getInternalShutdownResult());
+
+			McpServer freshServer = serverBuilder(endpoint(PATH),
+					Duration.ofSeconds(1)).build();
+			freshFixture = fixture(freshServer);
+			freshFixture.soklet().start();
+			McpTransportLifecycleAdapter.Generation freshGeneration =
+					generation(freshServer);
+			Assertions.assertNotSame(firstGeneration, freshGeneration);
+			freshFixture.soklet().stop();
+			assertLegacyParity(freshFixture, McpShutdownOutcome.CLEAN);
+			freshFixture.soklet().stop();
+			Assertions.assertTrue(adapter(freshServer).result(freshGeneration)
 					.orElseThrow().isComplete());
 		} finally {
 			if (termination != null)
 				termination.cancel(true);
 			terminator.shutdownNow();
-			fixture.close();
+			if (freshFixture != null)
+				freshFixture.close();
+			closeAfterTerminalFailure(fixture);
 		}
 	}
 
 	@Test
-	void readyEventLoopObserverReentrantStopFailsFastWithoutFalseResidual()
+	void readyEventLoopObserverReentrantShutdownReturnsPromptlyWithoutFalseResidual()
 			throws Exception {
-		AtomicReference<McpServer> serverReference = new AtomicReference<>();
-		AtomicReference<Throwable> nestedStopFailure = new AtomicReference<>();
+		AtomicReference<Soklet> ownerReference = new AtomicReference<>();
+		AtomicReference<CompletionStage<InternalShutdownResult>> nestedShutdown =
+				new AtomicReference<>();
 		CountDownLatch observerReturned = new CountDownLatch(1);
 		LifecycleObserver observer = new LifecycleObserver() {
 			@Override
 			public void didReceiveLogEvent(@NonNull LogEvent event) {
 				if (event.getLogEventType() != LogEventType.SERVER_TRANSPORT_FAILURE)
 					return;
-				try {
-					serverReference.get().stop();
-				} catch (Throwable failure) {
-					nestedStopFailure.set(failure);
-				} finally {
-					observerReturned.countDown();
-				}
+				nestedShutdown.set(ownerReference.get().getDirectLifecycle()
+						.shutdown());
+				observerReturned.countDown();
 			}
 		};
 		McpServer server = serverBuilder(endpoint(PATH), Duration.ofSeconds(1)).build();
-		serverReference.set(server);
 		Soklet owner = Soklet.fromConfig(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(observer)
 				.build());
+		ownerReference.set(owner);
 
 		try {
 			owner.start();
@@ -490,41 +541,46 @@ class McpLifecycleB3Tests {
 			terminateUnexpectedly(eventLoop(bridge(server)));
 			Assertions.assertTrue(observerReturned.await(
 					WAIT.toNanos(), TimeUnit.NANOSECONDS));
-			IllegalStateException nestedFailure = Assertions.assertInstanceOf(
-					IllegalStateException.class, nestedStopFailure.get());
-			Assertions.assertEquals(
-					"MCP lifecycle wait cannot join its own proof-bearing execution",
-					nestedFailure.getMessage());
 			adapter(server).awaitStop(generation);
-			Assertions.assertTrue(adapter(server).result(generation)
-					.orElseThrow().isComplete());
+			InternalShutdownResult result = adapter(server).result(generation)
+					.orElseThrow();
+			Assertions.assertTrue(result.isComplete());
 			Assertions.assertEquals(
 					InternalParticipantShutdownDisposition.UNEXPECTED_TERMINATION,
-					mcpParticipant(adapter(server).result(generation)
-							.orElseThrow()).disposition());
+					mcpParticipant(result).disposition());
+			CompletionStage<InternalShutdownResult> stage = requireNonNull(
+					nestedShutdown.get());
+			Assertions.assertSame(result, stage.toCompletableFuture().get(
+					WAIT.toNanos(), TimeUnit.NANOSECONDS));
+			Assertions.assertSame(result,
+					owner.getDirectLifecycle().result().orElseThrow());
+			SokletTerminatedUnexpectedlyException terminalFailure =
+					Assertions.assertThrows(
+							SokletTerminatedUnexpectedlyException.class,
+							owner::stop);
+			Assertions.assertSame(result,
+					terminalFailure.getInternalShutdownResult());
 		} finally {
-			owner.stop();
+			closeAfterTerminalFailure(owner);
 		}
 	}
 
 	@Test
-	void preReadyEventLoopObserverReentrantStopFailsFastAndPreservesFailure()
+	void preReadyEventLoopObserverReentrantShutdownPreservesFailure()
 			throws Exception {
 		AtomicReference<McpServer> serverReference = new AtomicReference<>();
-		AtomicReference<Throwable> nestedStopFailure = new AtomicReference<>();
+		AtomicReference<Soklet> ownerReference = new AtomicReference<>();
+		AtomicReference<CompletionStage<InternalShutdownResult>> nestedShutdown =
+				new AtomicReference<>();
 		CountDownLatch observerReturned = new CountDownLatch(1);
 		LifecycleObserver observer = new LifecycleObserver() {
 			@Override
 			public void didReceiveLogEvent(@NonNull LogEvent event) {
 				if (event.getLogEventType() != LogEventType.SERVER_TRANSPORT_FAILURE)
 					return;
-				try {
-					serverReference.get().stop();
-				} catch (Throwable failure) {
-					nestedStopFailure.set(failure);
-				} finally {
-					observerReturned.countDown();
-				}
+				nestedShutdown.set(ownerReference.get().getDirectLifecycle()
+						.shutdown());
+				observerReturned.countDown();
 			}
 		};
 		McpSubscriptionEventPublisher publisher =
@@ -561,22 +617,29 @@ class McpLifecycleB3Tests {
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(observer)
 				.build());
+		ownerReference.set(owner);
 
-		RuntimeException startupFailure = Assertions.assertThrows(
-				RuntimeException.class, owner::start);
-		Assertions.assertInstanceOf(ClosedSelectorException.class, startupFailure);
-		IllegalStateException nestedFailure = Assertions.assertInstanceOf(
-				IllegalStateException.class, nestedStopFailure.get());
-		Assertions.assertEquals(
-				"MCP lifecycle wait cannot join its own proof-bearing execution",
-				nestedFailure.getMessage());
-		InternalShutdownResult result = adapter(server).result().orElseThrow();
+		SokletStartupException startupFailure = Assertions.assertThrows(
+				SokletStartupException.class, owner::start);
+		ClosedSelectorException exactFailure = Assertions.assertInstanceOf(
+				ClosedSelectorException.class, startupFailure.getCause());
+		Assertions.assertEquals(InternalStartupDisposition.FAILED,
+				startupFailure.getInternalStartupDisposition());
+		InternalShutdownResult result = startupFailure.getInternalShutdownResult();
+		Assertions.assertSame(result, adapter(server).result().orElseThrow());
+		Assertions.assertSame(result,
+				owner.getDirectLifecycle().result().orElseThrow());
+		CompletionStage<InternalShutdownResult> stage = requireNonNull(
+				nestedShutdown.get());
+		Assertions.assertSame(result, stage.toCompletableFuture().get(
+				WAIT.toNanos(), TimeUnit.NANOSECONDS));
 		Assertions.assertTrue(result.isComplete());
 		Assertions.assertEquals(InternalStartupDisposition.FAILED,
 				result.startupDisposition());
-		Assertions.assertSame(startupFailure,
+		Assertions.assertSame(exactFailure,
 				mcpParticipant(result).failures().get(0));
-		owner.stop();
+		Assertions.assertDoesNotThrow(owner::stop);
+		Assertions.assertDoesNotThrow(owner::stop);
 	}
 
 	@Test
@@ -649,11 +712,18 @@ class McpLifecycleB3Tests {
 
 			Throwable exactFailure = transportFailure.get();
 			Assertions.assertNotNull(exactFailure);
-			Assertions.assertSame(exactFailure, startFailure.get());
+			SokletStartupException startupFailure = Assertions.assertInstanceOf(
+					SokletStartupException.class, startFailure.get());
+			Assertions.assertEquals(InternalStartupDisposition.FAILED,
+					startupFailure.getInternalStartupDisposition());
+			Assertions.assertSame(exactFailure, startupFailure.getCause());
 			Assertions.assertTrue(List.of(exactFailure.getSuppressed()).stream()
 					.anyMatch(failure -> failure == synchronousFailure),
 					"The losing synchronous startup failure must remain suppressed.");
-			InternalShutdownResult result = adapter(server).result().orElseThrow();
+			InternalShutdownResult result = startupFailure.getInternalShutdownResult();
+			Assertions.assertSame(result, adapter(server).result().orElseThrow());
+			Assertions.assertSame(result,
+					owner.getDirectLifecycle().result().orElseThrow());
 			Assertions.assertEquals(InternalStartupDisposition.FAILED,
 					result.startupDisposition());
 			Assertions.assertSame(exactFailure,
@@ -670,6 +740,8 @@ class McpLifecycleB3Tests {
 			throws Exception {
 		CountDownLatch subscriptionEntered = new CountDownLatch(1);
 		CountDownLatch releaseSubscription = new CountDownLatch(1);
+		CountDownLatch startupFailureThrown = new CountDownLatch(1);
+		AtomicReference<Thread> startupWorker = new AtomicReference<>();
 		AtomicReference<Throwable> startFailure = new AtomicReference<>();
 		IllegalStateException exactFailure = new IllegalStateException(
 				"simulated elected synchronous startup failure");
@@ -678,8 +750,10 @@ class McpLifecycleB3Tests {
 					@Override
 					public McpSubscriptionEventRegistration subscribe(
 							@NonNull McpSubscriptionEventListener listener) {
+						startupWorker.set(Thread.currentThread());
 						subscriptionEntered.countDown();
 						awaitUninterruptibly(releaseSubscription);
+						startupFailureThrown.countDown();
 						throw exactFailure;
 					}
 
@@ -716,7 +790,9 @@ class McpLifecycleB3Tests {
 			Object runtime = runtime(bridge(server));
 			synchronized (runtimeLifecycleLock(runtime)) {
 				releaseSubscription.countDown();
-				awaitBlocked(starter,
+				Assertions.assertTrue(startupFailureThrown.await(
+						WAIT.toNanos(), TimeUnit.NANOSECONDS));
+				awaitBlocked(requireNonNull(startupWorker.get()),
 						"Startup did not reach exact-cause election.");
 				Object readiness = currentReadiness(runtime);
 				Assertions.assertNotNull(readiness);
@@ -727,8 +803,15 @@ class McpLifecycleB3Tests {
 
 			starter.join(WAIT.toMillis());
 			Assertions.assertFalse(starter.isAlive());
-			Assertions.assertSame(exactFailure, startFailure.get());
-			InternalShutdownResult result = adapter(server).result().orElseThrow();
+			SokletStartupException startupFailure = Assertions.assertInstanceOf(
+					SokletStartupException.class, startFailure.get());
+			Assertions.assertEquals(InternalStartupDisposition.FAILED,
+					startupFailure.getInternalStartupDisposition());
+			Assertions.assertSame(exactFailure, startupFailure.getCause());
+			InternalShutdownResult result = startupFailure.getInternalShutdownResult();
+			Assertions.assertSame(result, adapter(server).result().orElseThrow());
+			Assertions.assertSame(result,
+					owner.getDirectLifecycle().result().orElseThrow());
 			Assertions.assertEquals(InternalStartupDisposition.FAILED,
 					result.startupDisposition());
 			Assertions.assertSame(exactFailure,
@@ -741,10 +824,11 @@ class McpLifecycleB3Tests {
 	}
 
 	@Test
-	void subscriptionRegistrationCloseReentrantStopFailsFastAndRemainsClean()
+	void subscriptionRegistrationCloseReentrantShutdownSharesCleanResult()
 			throws Exception {
-		AtomicReference<McpServer> serverReference = new AtomicReference<>();
-		AtomicReference<Throwable> nestedStopFailure = new AtomicReference<>();
+		AtomicReference<Soklet> ownerReference = new AtomicReference<>();
+		AtomicReference<CompletionStage<InternalShutdownResult>> nestedShutdown =
+				new AtomicReference<>();
 		AtomicInteger registrationCloses = new AtomicInteger();
 		McpSubscriptionEventPublisher publisher =
 				new McpSubscriptionEventPublisher() {
@@ -753,11 +837,8 @@ class McpLifecycleB3Tests {
 							@NonNull McpSubscriptionEventListener listener) {
 						return () -> {
 							registrationCloses.incrementAndGet();
-							try {
-								serverReference.get().stop();
-							} catch (Throwable failure) {
-								nestedStopFailure.set(failure);
-							}
+							nestedShutdown.set(ownerReference.get().getDirectLifecycle()
+									.shutdown());
 						};
 					}
 
@@ -775,25 +856,27 @@ class McpLifecycleB3Tests {
 						.build())
 				.build();
 		McpServer server = serverBuilder(endpoint, Duration.ofSeconds(1)).build();
-		serverReference.set(server);
 		Soklet owner = Soklet.fromConfig(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.build());
+		ownerReference.set(owner);
 
 		try {
 			owner.start();
 			owner.stop();
-			IllegalStateException nestedFailure = Assertions.assertInstanceOf(
-					IllegalStateException.class, nestedStopFailure.get());
-			Assertions.assertEquals(
-					"MCP lifecycle wait cannot join its own proof-bearing execution",
-					nestedFailure.getMessage());
 			Assertions.assertEquals(1, registrationCloses.get());
 			InternalShutdownResult result = adapter(server).result().orElseThrow();
+			CompletionStage<InternalShutdownResult> stage = requireNonNull(
+					nestedShutdown.get());
+			Assertions.assertSame(result, stage.toCompletableFuture().get(
+					WAIT.toNanos(), TimeUnit.NANOSECONDS));
+			Assertions.assertSame(result,
+					owner.getDirectLifecycle().result().orElseThrow());
 			Assertions.assertTrue(result.isComplete());
 			Assertions.assertEquals(
 					InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION,
 					mcpParticipant(result).disposition());
+			Assertions.assertDoesNotThrow(owner::stop);
 		} finally {
 			owner.stop();
 		}
@@ -860,9 +943,16 @@ class McpLifecycleB3Tests {
 			Assertions.assertFalse(starter.isAlive());
 			Throwable exactFailure = transportFailure.get();
 			Assertions.assertNotNull(exactFailure);
-			Assertions.assertSame(exactFailure, startFailure.get(),
-					"The common readiness adapter must rethrow the exact transport cause.");
-			InternalShutdownResult result = adapter(server).result().orElseThrow();
+			SokletStartupException startupFailure = Assertions.assertInstanceOf(
+					SokletStartupException.class, startFailure.get());
+			Assertions.assertEquals(InternalStartupDisposition.FAILED,
+					startupFailure.getInternalStartupDisposition());
+			Assertions.assertSame(exactFailure, startupFailure.getCause(),
+					"The common readiness adapter must preserve the exact transport cause.");
+			InternalShutdownResult result = startupFailure.getInternalShutdownResult();
+			Assertions.assertSame(result, adapter(server).result().orElseThrow());
+			Assertions.assertSame(result,
+					owner.getDirectLifecycle().result().orElseThrow());
 			Assertions.assertEquals(InternalStartupDisposition.FAILED,
 					result.startupDisposition());
 			Assertions.assertSame(exactFailure,
@@ -922,16 +1012,25 @@ class McpLifecycleB3Tests {
 			Assertions.assertEquals(1, admittedWork(generation));
 
 			releaseHandler.countDown();
-			adapter(server).awaitStop(generation);
+			SokletTerminatedUnexpectedlyException stopFailure =
+					Assertions.assertThrows(
+							SokletTerminatedUnexpectedlyException.class,
+							fixture.soklet()::stop);
+			InternalShutdownResult result = stopFailure.getInternalShutdownResult();
+			Assertions.assertSame(result,
+					adapter(server).result(generation).orElseThrow());
 			Assertions.assertTrue(handlerExited.await(WAIT.toNanos(),
 					TimeUnit.NANOSECONDS));
 			Assertions.assertEquals(0, admittedWork(generation));
-			assertParticipant(server,
+			InternalParticipantShutdownResult participant = assertParticipant(server,
 					InternalParticipantShutdownDisposition.UNEXPECTED_TERMINATION);
 			Assertions.assertEquals(List.of(InternalTerminationEvent.Type.FAILURE,
 					InternalTerminationEvent.Type.PROOF),
 					terminationEvents(server, generation).stream()
 							.map(InternalTerminationEvent::type).toList());
+			Assertions.assertSame(participant.failures().get(0),
+					stopFailure.getCause());
+			assertLegacyParity(fixture, McpShutdownOutcome.CLEAN);
 		} finally {
 			releaseHandler.countDown();
 			if (request != null)
@@ -941,7 +1040,7 @@ class McpLifecycleB3Tests {
 	}
 
 	@Test
-	void retainedUnexpectedGenerationDeliversOneStoppedCallbackBeforeRejectingRestart()
+	void ownerNormalizesRetainedUnexpectedGenerationOnceBeforeRejectingRestart()
 			throws Exception {
 		CountDownLatch handlerEntered = new CountDownLatch(1);
 		CountDownLatch releaseHandler = new CountDownLatch(1);
@@ -963,7 +1062,7 @@ class McpLifecycleB3Tests {
 				});
 		McpServer server = serverBuilder(endpoint(PATH, tool),
 				Duration.ofMillis(50)).build();
-		Fixture fixture = fixture(server);
+		Fixture fixture = fixture(server, shortShutdownPolicy());
 		DefaultMcpServer defaultServer = (DefaultMcpServer) server;
 		List<McpShutdownOutcome> callbacks = new CopyOnWriteArrayList<>();
 		CompletableFuture<HttpResponse<String>> request = null;
@@ -976,24 +1075,40 @@ class McpLifecycleB3Tests {
 			Assertions.assertTrue(handlerEntered.await(
 					WAIT.toNanos(), TimeUnit.NANOSECONDS));
 			terminateUnexpectedly(eventLoop(fixture.bridge()));
-			adapter(server).awaitStop(generation);
-			Assertions.assertFalse(adapter(server).result(generation)
-					.orElseThrow().isComplete());
-			Assertions.assertTrue(defaultServer.hasPendingListenerGenerationStop());
-			Assertions.assertTrue(fixture.metrics().shutdownOutcomes.isEmpty());
+			SokletTerminatedUnexpectedlyException stopFailure =
+					Assertions.assertThrows(
+							SokletTerminatedUnexpectedlyException.class,
+							fixture.soklet()::stop);
+			InternalShutdownResult result = stopFailure.getInternalShutdownResult();
+			Assertions.assertSame(result,
+					adapter(server).result(generation).orElseThrow());
+			Assertions.assertFalse(result.isComplete());
+			assertIncompleteLegacyParity(fixture, result);
+			Assertions.assertFalse(defaultServer.hasPendingListenerGenerationStop());
+
+			releaseHandler.countDown();
+			Assertions.assertTrue(handlerExited.await(
+					WAIT.toNanos(), TimeUnit.NANOSECONDS));
+			awaitCondition(() -> server.getDiagnostics().getStatus()
+					== McpServerStatus.STOPPED,
+					"Late retained-generation cleanup did not reach STOPPED diagnostics.");
+			Assertions.assertSame(result,
+					adapter(server).result(generation).orElseThrow());
+			Assertions.assertSame(result,
+					fixture.soklet().getDirectLifecycle().result().orElseThrow());
 
 			Assertions.assertThrows(IllegalStateException.class,
 					() -> defaultServer.startForSoklet(callbacks::add));
-			Assertions.assertEquals(List.of(McpShutdownOutcome.RESIDUAL_HANDLERS),
-					callbacks);
-			Assertions.assertEquals(callbacks,
-					fixture.metrics().shutdownOutcomes);
+			Assertions.assertTrue(callbacks.isEmpty(),
+					"The owner already normalized the retained generation.");
 			Assertions.assertFalse(defaultServer.hasPendingListenerGenerationStop());
 			Assertions.assertThrows(IllegalStateException.class,
 					() -> defaultServer.startForSoklet(callbacks::add));
+			Assertions.assertTrue(callbacks.isEmpty(),
+					"A rejected restart must not redeliver the normalized generation.");
 			Assertions.assertEquals(List.of(McpShutdownOutcome.RESIDUAL_HANDLERS),
-					callbacks,
-					"The retained generation callback must be delivered exactly once.");
+					fixture.metrics().shutdownOutcomes,
+					"The retained generation metric must be delivered exactly once.");
 			Assertions.assertSame(generation, generation(server));
 		} finally {
 			releaseHandler.countDown();
@@ -1356,77 +1471,104 @@ class McpLifecycleB3Tests {
 	}
 
 	@Test
-	void startupErrorPreservesIdentityCleansNeverBoundGenerationAndRestarts()
+	void startupErrorPreservesIdentityAndFreshOwnerStartsAfterNeverBoundFailure()
 			throws Exception {
 		AssertionError expected = new AssertionError("b3 early executor failure");
 		AtomicInteger supplies = new AtomicInteger();
 		List<ExecutorService> executors = new CopyOnWriteArrayList<>();
-		McpServer server = serverBuilder(endpoint(PATH), Duration.ofSeconds(1))
-				.requestHandlerExecutorServiceSupplier(() -> {
+		McpEndpoint endpoint = endpoint(PATH);
+		Supplier<ExecutorService> executorSupplier = () -> {
 					if (supplies.getAndIncrement() == 0)
 						throw expected;
 					ExecutorService executor = Executors.newSingleThreadExecutor();
 					executors.add(executor);
 					return executor;
-				})
+				};
+		McpServer failedServer = serverBuilder(endpoint, Duration.ofSeconds(1))
+				.requestHandlerExecutorServiceSupplier(executorSupplier)
 				.build();
+		Fixture failedFixture = fixture(failedServer);
+		Fixture freshFixture = null;
 
 		try {
-			AssertionError observed = Assertions.assertThrows(AssertionError.class,
-					server::start);
-			Assertions.assertSame(expected, observed);
-			Assertions.assertTrue(server.getDiagnostics().getBoundAddress().isEmpty());
-			InternalShutdownResult failed = adapter(server).result().orElseThrow();
+			SokletStartupException observed = Assertions.assertThrows(
+					SokletStartupException.class, failedFixture.soklet()::start);
+			Assertions.assertSame(expected, observed.getCause());
+			Assertions.assertTrue(failedServer.getDiagnostics()
+					.getBoundAddress().isEmpty());
+			InternalShutdownResult failed = observed.getInternalShutdownResult();
+			Assertions.assertSame(failed,
+					adapter(failedServer).result().orElseThrow());
 			Assertions.assertEquals(InternalStartupDisposition.FAILED,
 					failed.startupDisposition());
 			Assertions.assertSame(expected, failed.participantResult(
 					InternalParticipantKind.MCP).orElseThrow().failures().get(0));
+			failedFixture.soklet().stop();
+			failedFixture.soklet().stop();
 
-			server.start();
-			InetSocketAddress restarted = boundAddress(server);
-			server.stop();
-			Assertions.assertEquals(restarted, boundAddress(server));
+			McpServer freshServer = serverBuilder(endpoint, Duration.ofSeconds(1))
+					.requestHandlerExecutorServiceSupplier(executorSupplier)
+					.build();
+			freshFixture = fixture(freshServer);
+			freshFixture.soklet().start();
+			InetSocketAddress restarted = boundAddress(freshServer);
+			freshFixture.soklet().stop();
+			freshFixture.soklet().stop();
+			Assertions.assertEquals(restarted, boundAddress(freshServer));
 			Assertions.assertEquals(1, executors.size());
 			Assertions.assertTrue(executors.get(0).isTerminated());
 			assertListenerReturned(restarted);
 		} finally {
-			server.stop();
+			if (freshFixture != null)
+				freshFixture.close();
+			failedFixture.close();
 			for (ExecutorService executor : executors)
 				executor.shutdownNow();
 		}
 	}
 
 	@Test
-	void fixedPortBindIOExceptionPreservesExactCauseAndRestartsAfterRelease()
+	void fixedPortBindIOExceptionPreservesExactCauseForFreshOwnerAfterRelease()
 			throws Exception {
-		McpServer server;
 		int port;
 		try (ServerSocket occupied = new ServerSocket()) {
 			occupied.setReuseAddress(false);
 			occupied.bind(new InetSocketAddress(HOST, 0));
 			port = occupied.getLocalPort();
-			server = serverBuilder(port, endpoint(PATH), Duration.ofSeconds(1))
+			McpServer failedServer = serverBuilder(port, endpoint(PATH),
+					Duration.ofSeconds(1))
 					.build();
+			Fixture failedFixture = fixture(failedServer);
 
-			java.io.UncheckedIOException observed = Assertions.assertThrows(
-					java.io.UncheckedIOException.class, server::start);
-			java.io.IOException exactCause = observed.getCause();
-			InternalShutdownResult failed = adapter(server).result().orElseThrow();
+			SokletStartupException observed = Assertions.assertThrows(
+					SokletStartupException.class, failedFixture.soklet()::start);
+			Throwable exactCause = Assertions.assertInstanceOf(
+					java.net.BindException.class, observed.getCause());
+			InternalShutdownResult failed = observed.getInternalShutdownResult();
+			Assertions.assertSame(failed,
+					adapter(failedServer).result().orElseThrow());
 			Assertions.assertEquals(InternalStartupDisposition.FAILED,
 					failed.startupDisposition());
 			Assertions.assertSame(exactCause, mcpParticipant(failed).failures().get(0));
-			Assertions.assertTrue(server.getDiagnostics().getBoundAddress().isEmpty());
+			Assertions.assertTrue(failedServer.getDiagnostics()
+					.getBoundAddress().isEmpty());
+			failedFixture.soklet().stop();
+			failedFixture.soklet().stop();
 		}
 
+		McpServer freshServer = serverBuilder(port, endpoint(PATH),
+				Duration.ofSeconds(1)).build();
+		Fixture freshFixture = fixture(freshServer);
 		try {
-			server.start();
-			InetSocketAddress restarted = boundAddress(server);
+			freshFixture.soklet().start();
+			InetSocketAddress restarted = boundAddress(freshServer);
 			Assertions.assertEquals(port, restarted.getPort());
-			server.stop();
-			Assertions.assertEquals(restarted, boundAddress(server));
+			freshFixture.soklet().stop();
+			freshFixture.soklet().stop();
+			Assertions.assertEquals(restarted, boundAddress(freshServer));
 			assertListenerReturned(restarted);
 		} finally {
-			server.stop();
+			freshFixture.close();
 		}
 	}
 
@@ -1460,36 +1602,48 @@ class McpLifecycleB3Tests {
 								.RESOURCES_LIST_CHANGED)
 						.build())
 				.build();
-		McpServer server = serverBuilder(endpoint, Duration.ofSeconds(1)).build();
+		McpServer failedServer = serverBuilder(endpoint, Duration.ofSeconds(1)).build();
+		Fixture failedFixture = fixture(failedServer);
+		Fixture freshFixture = null;
 
 		try {
-			IllegalStateException observed = Assertions.assertThrows(
-					IllegalStateException.class, server::start);
-			Assertions.assertSame(expected, observed);
-			InetSocketAddress failedAddress = boundAddress(server);
-			InternalShutdownResult failed = adapter(server).result().orElseThrow();
+			SokletStartupException observed = Assertions.assertThrows(
+					SokletStartupException.class, failedFixture.soklet()::start);
+			Assertions.assertSame(expected, observed.getCause());
+			InetSocketAddress failedAddress = boundAddress(failedServer);
+			InternalShutdownResult failed = observed.getInternalShutdownResult();
+			Assertions.assertSame(failed,
+					adapter(failedServer).result().orElseThrow());
 			Assertions.assertEquals(InternalStartupDisposition.FAILED,
 					failed.startupDisposition());
 			Assertions.assertSame(expected, mcpParticipant(failed).failures().get(0));
 
-			server.stop();
-			Assertions.assertEquals(failedAddress, boundAddress(server));
+			failedFixture.soklet().stop();
+			failedFixture.soklet().stop();
+			Assertions.assertEquals(failedAddress, boundAddress(failedServer));
 			assertListenerReturned(failedAddress);
-			server.start();
-			InetSocketAddress restarted = boundAddress(server);
-			server.stop();
+
+			McpServer freshServer = serverBuilder(endpoint,
+					Duration.ofSeconds(1)).build();
+			freshFixture = fixture(freshServer);
+			freshFixture.soklet().start();
+			InetSocketAddress restarted = boundAddress(freshServer);
+			freshFixture.soklet().stop();
+			freshFixture.soklet().stop();
 			Assertions.assertEquals(1, registrationCloses.get());
-			Assertions.assertEquals(restarted, boundAddress(server));
+			Assertions.assertEquals(restarted, boundAddress(freshServer));
 			assertListenerReturned(restarted);
 		} finally {
-			server.stop();
+			if (freshFixture != null)
+				freshFixture.close();
+			failedFixture.close();
 		}
 	}
 
 	@Test
 	void executorFactoryReentrantStopWinsBeforeReadyWithoutDeadlock()
 			throws Exception {
-		AtomicReference<McpServer> serverReference = new AtomicReference<>();
+		AtomicReference<Soklet> ownerReference = new AtomicReference<>();
 		AtomicBoolean reenter = new AtomicBoolean(true);
 		AtomicReference<Throwable> reentrantStopFailure = new AtomicReference<>();
 		List<ExecutorService> executors = new CopyOnWriteArrayList<>();
@@ -1497,7 +1651,7 @@ class McpLifecycleB3Tests {
 				.requestHandlerExecutorServiceSupplier(() -> {
 					if (reenter.compareAndSet(true, false)) {
 						try {
-							serverReference.get().stop();
+							ownerReference.get().stop();
 						} catch (Throwable throwable) {
 							reentrantStopFailure.set(throwable);
 						}
@@ -1506,41 +1660,49 @@ class McpLifecycleB3Tests {
 					executors.add(executor);
 					return executor;
 				})
-				.build();
-		serverReference.set(server);
+					.build();
+		Soklet owner = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
+		ownerReference.set(owner);
 		ExecutorService starter = daemonSingleThreadExecutor(
 				"mcp-b3-reentrant-stop-start");
-		AtomicBoolean safeToStop = new AtomicBoolean();
 
 		try {
 			Future<Throwable> firstStart = starter.submit(() -> {
 				try {
-					server.start();
+					owner.start();
 					return null;
 				} catch (Throwable throwable) {
 					return throwable;
 				}
 			});
 			Throwable failure = firstStart.get(WAIT.toNanos(), TimeUnit.NANOSECONDS);
-			safeToStop.set(true);
-			Assertions.assertNotNull(failure,
+			SokletStartupException startupFailure = Assertions.assertInstanceOf(
+					SokletStartupException.class, failure,
 					"Stop-before-ready must prevent the outer start from succeeding.");
-			Assertions.assertInstanceOf(java.io.UncheckedIOException.class, failure);
-			Assertions.assertInstanceOf(IllegalStateException.class,
-					reentrantStopFailure.get(),
+			Assertions.assertEquals(InternalStartupDisposition.CANCELLED,
+					startupFailure.getInternalStartupDisposition());
+			IllegalStateException exactCancellation = Assertions.assertInstanceOf(
+					IllegalStateException.class, startupFailure.getCause());
+			Assertions.assertEquals("Soklet shutdown was requested during startup",
+					exactCancellation.getMessage());
+			IllegalStateException nestedStopFailure = Assertions.assertInstanceOf(
+					IllegalStateException.class, reentrantStopFailure.get(),
 					"A same-thread stop must fail fast after publishing shutdown intent.");
+			Assertions.assertEquals(
+					"Lifecycle wait cannot run from tracked lifecycle execution",
+					nestedStopFailure.getMessage());
 			Assertions.assertTrue(server.getDiagnostics().getBoundAddress().isEmpty());
-			Assertions.assertEquals(InternalStartupDisposition.FAILED,
-					adapter(server).result().orElseThrow().startupDisposition());
-
-			server.start();
-			InetSocketAddress restarted = boundAddress(server);
-			server.stop();
-			Assertions.assertEquals(restarted, boundAddress(server));
-			assertListenerReturned(restarted);
+			InternalShutdownResult result = startupFailure
+					.getInternalShutdownResult();
+			Assertions.assertSame(result, adapter(server).result().orElseThrow());
+			owner.stop();
+			owner.stop();
+			Assertions.assertEquals(1, executors.size());
+			Assertions.assertTrue(executors.get(0).isTerminated());
 		} finally {
-			if (safeToStop.get())
-				server.stop();
+			owner.stop();
 			starter.shutdownNow();
 			for (ExecutorService executor : executors)
 				executor.shutdownNow();
@@ -1550,7 +1712,7 @@ class McpLifecycleB3Tests {
 	@Test
 	void executorFactoryReentrantStartFailsPromptlyWithoutCorruptingOuterStart()
 			throws Exception {
-		AtomicReference<McpServer> serverReference = new AtomicReference<>();
+		AtomicReference<Soklet> ownerReference = new AtomicReference<>();
 		AtomicBoolean reenter = new AtomicBoolean(true);
 		AtomicReference<Throwable> nestedFailure = new AtomicReference<>();
 		List<ExecutorService> executors = new CopyOnWriteArrayList<>();
@@ -1558,7 +1720,7 @@ class McpLifecycleB3Tests {
 				.requestHandlerExecutorServiceSupplier(() -> {
 					if (reenter.compareAndSet(true, false)) {
 						try {
-							serverReference.get().start();
+							ownerReference.get().start();
 						} catch (Throwable throwable) {
 							nestedFailure.set(throwable);
 						}
@@ -1567,35 +1729,38 @@ class McpLifecycleB3Tests {
 					executors.add(executor);
 					return executor;
 				})
-				.build();
-		serverReference.set(server);
+					.build();
+		Soklet owner = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
+		ownerReference.set(owner);
 		ExecutorService starter = daemonSingleThreadExecutor(
 				"mcp-b3-reentrant-start-start");
-		AtomicBoolean safeToStop = new AtomicBoolean();
 
 		try {
 			Future<Throwable> outerStart = starter.submit(() -> {
 				try {
-					server.start();
+					owner.start();
 					return null;
 				} catch (Throwable throwable) {
 					return throwable;
 				}
 			});
 			Assertions.assertNull(outerStart.get(WAIT.toNanos(), TimeUnit.NANOSECONDS));
-			safeToStop.set(true);
-			Assertions.assertInstanceOf(IllegalStateException.class,
-					nestedFailure.get());
+			IllegalStateException exactNestedFailure = Assertions.assertInstanceOf(
+					IllegalStateException.class, nestedFailure.get());
+			Assertions.assertEquals("Soklet lifecycle start was already claimed",
+					exactNestedFailure.getMessage());
 			InetSocketAddress address = boundAddress(server);
 			Assertions.assertEquals(200, discovery(address.getPort(),
 					"reentrant-start").get(WAIT.toNanos(),
 					TimeUnit.NANOSECONDS).statusCode());
-			server.stop();
+			owner.stop();
+			owner.stop();
 			Assertions.assertEquals(address, boundAddress(server));
 			assertListenerReturned(address);
 		} finally {
-			if (safeToStop.get())
-				server.stop();
+			owner.stop();
 			starter.shutdownNow();
 			for (ExecutorService executor : executors)
 				executor.shutdownNow();
@@ -1603,14 +1768,18 @@ class McpLifecycleB3Tests {
 	}
 
 	@Test
-	void stoppedUnclaimedGenerationCannotClaimLaterPreparedGeneration()
+	void cancelledFreshOwnerCannotMutateAnotherPreparedOwner()
 			throws Exception {
 		CountDownLatch firstDiagnosticEntered = new CountDownLatch(1);
 		CountDownLatch releaseFirstDiagnostic = new CountDownLatch(1);
 		CountDownLatch secondDiagnosticEntered = new CountDownLatch(1);
 		CountDownLatch releaseSecondDiagnostic = new CountDownLatch(1);
 		AtomicInteger diagnosticGeneration = new AtomicInteger();
-		McpServer server = serverBuilder(endpoint(PATH), Duration.ofSeconds(1))
+		McpServer firstServer = serverBuilder(endpoint(PATH), Duration.ofSeconds(1))
+				.protectionConfig(McpProtectionConfig
+						.withDevelopmentEphemeralProtection().build())
+				.build();
+		McpServer secondServer = serverBuilder(endpoint(PATH), Duration.ofSeconds(1))
 				.protectionConfig(McpProtectionConfig
 						.withDevelopmentEphemeralProtection().build())
 				.build();
@@ -1633,7 +1802,11 @@ class McpLifecycleB3Tests {
 				}
 			}
 		};
-		Soklet owner = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		Soklet firstOwner = Soklet.fromConfig(SokletConfig.withMcpServer(firstServer)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(lifecycle)
+				.build());
+		Soklet secondOwner = Soklet.fromConfig(SokletConfig.withMcpServer(secondServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(lifecycle)
 				.build());
@@ -1645,7 +1818,7 @@ class McpLifecycleB3Tests {
 		try {
 			Future<Throwable> firstStart = firstStarter.submit(() -> {
 				try {
-					server.start();
+					firstOwner.start();
 					return null;
 				} catch (Throwable throwable) {
 					return throwable;
@@ -1654,20 +1827,13 @@ class McpLifecycleB3Tests {
 			Assertions.assertTrue(firstDiagnosticEntered.await(
 					WAIT.toNanos(), TimeUnit.NANOSECONDS));
 			McpTransportLifecycleAdapter.Generation firstGeneration =
-					generation(server);
-			Assertions.assertTrue(server.getDiagnostics().getBoundAddress().isEmpty());
-
-			server.stop();
-			InternalShutdownResult firstResult = adapter(server)
-					.result(firstGeneration).orElseThrow();
-			Assertions.assertTrue(firstResult.isComplete());
-			Assertions.assertEquals(InternalStartupDisposition.FAILED,
-					firstResult.startupDisposition());
-			Assertions.assertTrue(server.getDiagnostics().getBoundAddress().isEmpty());
+					generation(firstServer);
+			Assertions.assertTrue(firstServer.getDiagnostics()
+					.getBoundAddress().isEmpty());
 
 			Future<Throwable> secondStart = secondStarter.submit(() -> {
 				try {
-					server.start();
+					secondOwner.start();
 					return null;
 				} catch (Throwable throwable) {
 					return throwable;
@@ -1676,20 +1842,46 @@ class McpLifecycleB3Tests {
 			Assertions.assertTrue(secondDiagnosticEntered.await(
 					WAIT.toNanos(), TimeUnit.NANOSECONDS));
 			McpTransportLifecycleAdapter.Generation secondGeneration =
-					generation(server);
+					generation(secondServer);
 			Assertions.assertNotSame(firstGeneration, secondGeneration);
-			Assertions.assertTrue(adapter(server).result(secondGeneration).isEmpty());
-			Assertions.assertTrue(server.getDiagnostics().getBoundAddress().isEmpty());
+			Assertions.assertTrue(adapter(secondServer)
+					.result(secondGeneration).isEmpty());
+			Assertions.assertTrue(secondServer.getDiagnostics()
+					.getBoundAddress().isEmpty());
 
+			var firstShutdown = firstOwner.getDirectLifecycle().shutdown();
 			releaseFirstDiagnostic.countDown();
 			Throwable firstFailure = firstStart.get(
 					WAIT.toNanos(), TimeUnit.NANOSECONDS);
-			Assertions.assertInstanceOf(IllegalStateException.class, firstFailure);
-			Assertions.assertTrue(adapter(server).result(secondGeneration).isEmpty(),
-					"The stale first caller cannot fail the later generation.");
-			Assertions.assertTrue(server.getDiagnostics().getBoundAddress().isEmpty(),
-					"The stale first caller cannot bind the later generation.");
-			McpServerRuntimeBridge.LifecycleEvidence preparedEvidence = bridge(server)
+			SokletStartupException cancelled = Assertions.assertInstanceOf(
+					SokletStartupException.class, firstFailure);
+			Assertions.assertEquals(InternalStartupDisposition.CANCELLED,
+					cancelled.getInternalStartupDisposition());
+			IllegalStateException exactCancellation = Assertions.assertInstanceOf(
+					IllegalStateException.class, cancelled.getCause());
+			Assertions.assertEquals("Soklet shutdown was requested during startup",
+					exactCancellation.getMessage());
+			InternalShutdownResult firstResult = cancelled
+					.getInternalShutdownResult();
+			Assertions.assertSame(firstResult,
+					firstShutdown.toCompletableFuture().get(
+							WAIT.toNanos(), TimeUnit.NANOSECONDS));
+			Assertions.assertSame(firstResult, firstOwner.getDirectLifecycle()
+					.result().orElseThrow());
+			Assertions.assertSame(firstResult, adapter(firstServer)
+					.result(firstGeneration).orElseThrow());
+			Assertions.assertTrue(firstResult.isComplete());
+			Assertions.assertTrue(firstServer.getDiagnostics()
+					.getBoundAddress().isEmpty());
+			Assertions.assertFalse(secondStart.isDone(),
+					"The independent prepared owner must remain gated.");
+			Assertions.assertTrue(adapter(secondServer)
+					.result(secondGeneration).isEmpty(),
+					"The stale first caller cannot fail the independent owner.");
+			Assertions.assertTrue(secondServer.getDiagnostics()
+					.getBoundAddress().isEmpty(),
+					"The stale first caller cannot bind the independent owner.");
+			McpServerRuntimeBridge.LifecycleEvidence preparedEvidence = bridge(secondServer)
 					.getLifecycleEvidence();
 			Assertions.assertFalse(preparedEvidence.eventLoop());
 			Assertions.assertFalse(preparedEvidence.executorTask());
@@ -1702,16 +1894,17 @@ class McpLifecycleB3Tests {
 			if (secondFailure != null)
 				throw new AssertionError("The later prepared generation must start.",
 						secondFailure);
-			Assertions.assertSame(secondGeneration, generation(server));
-			InetSocketAddress secondAddress = boundAddress(server);
+			Assertions.assertSame(secondGeneration, generation(secondServer));
+			InetSocketAddress secondAddress = boundAddress(secondServer);
 			Assertions.assertEquals(200, discovery(secondAddress.getPort(),
 					"second-prepared-generation").get(
 							WAIT.toNanos(), TimeUnit.NANOSECONDS).statusCode());
 
-			server.stop();
-			Assertions.assertTrue(adapter(server).result(secondGeneration)
+			secondOwner.stop();
+			secondOwner.stop();
+			Assertions.assertTrue(adapter(secondServer).result(secondGeneration)
 					.orElseThrow().isComplete());
-			Assertions.assertEquals(secondAddress, boundAddress(server));
+			Assertions.assertEquals(secondAddress, boundAddress(secondServer));
 			assertListenerReturned(secondAddress);
 			Assertions.assertEquals(2, diagnosticGeneration.get());
 		} finally {
@@ -1721,8 +1914,8 @@ class McpLifecycleB3Tests {
 			secondStarter.shutdownNow();
 			firstStarter.awaitTermination(WAIT.toNanos(), TimeUnit.NANOSECONDS);
 			secondStarter.awaitTermination(WAIT.toNanos(), TimeUnit.NANOSECONDS);
-			server.stop();
-			owner.stop();
+			firstOwner.stop();
+			secondOwner.stop();
 		}
 	}
 
@@ -1730,12 +1923,15 @@ class McpLifecycleB3Tests {
 	void oneServerStartupDoesNotMakeAnotherServerStopFailFast()
 			throws Exception {
 		McpServer other = serverBuilder(endpoint(PATH), Duration.ofSeconds(1)).build();
+		Soklet otherOwner = Soklet.fromConfig(SokletConfig.withMcpServer(other)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
 		AtomicReference<Throwable> crossServerStopFailure = new AtomicReference<>();
 		List<ExecutorService> executors = new CopyOnWriteArrayList<>();
 		McpServer starting = serverBuilder(endpoint(PATH), Duration.ofSeconds(1))
 				.requestHandlerExecutorServiceSupplier(() -> {
 					try {
-						other.stop();
+						otherOwner.stop();
 					} catch (Throwable throwable) {
 						crossServerStopFailure.set(throwable);
 					}
@@ -1744,11 +1940,14 @@ class McpLifecycleB3Tests {
 					return executor;
 				})
 				.build();
+		Soklet startingOwner = Soklet.fromConfig(SokletConfig.withMcpServer(starting)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
 
 		try {
-			other.start();
+			otherOwner.start();
 			InetSocketAddress otherAddress = boundAddress(other);
-			starting.start();
+			startingOwner.start();
 
 			Assertions.assertNull(crossServerStopFailure.get(),
 					"Server A startup must not make server B's stop look self-joining.");
@@ -1760,8 +1959,10 @@ class McpLifecycleB3Tests {
 					"cross-server-start").get(WAIT.toNanos(),
 							TimeUnit.NANOSECONDS).statusCode());
 		} finally {
-			starting.stop();
-			other.stop();
+			startingOwner.stop();
+			startingOwner.stop();
+			otherOwner.stop();
+			otherOwner.stop();
 			for (ExecutorService executor : executors)
 				executor.shutdownNow();
 		}
@@ -1857,8 +2058,13 @@ class McpLifecycleB3Tests {
 						invocations.incrementAndGet();
 						return McpCompleteResult.fromToolText(marker);
 					});
-			return new PlanFixture(serverBuilder(endpoint(PATH, tool),
-					Duration.ofSeconds(1)).build(), invocations, marker);
+			McpServer server = serverBuilder(endpoint(PATH, tool),
+					Duration.ofSeconds(1)).build();
+			Soklet owner = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+					.resourceMethodResolver(
+							ResourceMethodResolver.fromMethods(Set.of()))
+					.build());
+			return new PlanFixture(server, owner, invocations, marker);
 		};
 		PlanFixture first = factory.get();
 		PlanFixture second = factory.get();
@@ -1876,7 +2082,7 @@ class McpLifecycleB3Tests {
 		Assertions.assertTrue(second.server().getDiagnostics().getBoundAddress().isEmpty());
 
 		try {
-			first.server().start();
+			first.owner().start();
 			Assertions.assertTrue(second.server().getDiagnostics()
 					.getBoundAddress().isEmpty(),
 					"Extracting one plan must not mutate another production generation.");
@@ -1888,7 +2094,7 @@ class McpLifecycleB3Tests {
 			Assertions.assertEquals(1, first.invocations().get());
 			Assertions.assertEquals(0, second.invocations().get());
 
-			second.server().start();
+			second.owner().start();
 			HttpResponse<String> secondResponse = callTool(boundPort(second.server()),
 					"second-plan", "b3.plan", false).get(
 					WAIT.toNanos(), TimeUnit.NANOSECONDS);
@@ -1897,21 +2103,56 @@ class McpLifecycleB3Tests {
 			Assertions.assertEquals(1, first.invocations().get());
 			Assertions.assertEquals(1, second.invocations().get());
 		} finally {
-			first.server().stop();
-			second.server().stop();
+			first.owner().stop();
+			first.owner().stop();
+			second.owner().stop();
+			second.owner().stop();
 		}
 	}
 
 	@NonNull
 	private static Fixture fixture(@NonNull McpServer server) {
+		return fixture(server, InternalLifecyclePolicy.defaults());
+	}
+
+	@NonNull
+	private static Fixture fixture(@NonNull McpServer server,
+			@NonNull InternalLifecyclePolicy lifecyclePolicy) {
 		RecordingMetrics metrics = new RecordingMetrics();
 		RecordingLifecycle lifecycle = new RecordingLifecycle();
 		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(metrics)
 				.lifecycleObserver(lifecycle)
+				.internalLifecyclePolicy(lifecyclePolicy)
 				.build());
 		return new Fixture(server, soklet, metrics, lifecycle, bridge(server));
+	}
+
+	@NonNull
+	private static InternalLifecyclePolicy shortShutdownPolicy() {
+		return shutdownPolicy(Duration.ofMillis(100), Duration.ofMillis(100));
+	}
+
+	@NonNull
+	private static InternalLifecyclePolicy shutdownPolicy(
+			@NonNull Duration gracefulTimeout,
+			@NonNull Duration forcedTimeout) {
+		return new InternalLifecyclePolicy(Optional.of(WAIT),
+				Duration.ofMillis(100), gracefulTimeout, forcedTimeout);
+	}
+
+	private static void closeAfterTerminalFailure(@NonNull Fixture fixture) {
+		closeAfterTerminalFailure(fixture.soklet());
+	}
+
+	private static void closeAfterTerminalFailure(@NonNull Soklet owner) {
+		try {
+			owner.stop();
+		} catch (SokletTerminatedUnexpectedlyException
+				| ShutdownIncompleteException ignored) {
+			// Cleanup must preserve the already-asserted immutable terminal result.
+		}
 	}
 
 	private static McpServer.@NonNull Builder serverBuilder(
@@ -2258,9 +2499,30 @@ class McpLifecycleB3Tests {
 	}
 
 	private static void assertLegacyParity(@NonNull Fixture fixture,
-			@NonNull McpShutdownOutcome expected) {
+			@NonNull McpShutdownOutcome expected) throws InterruptedException {
+		fixture.lifecycle().awaitTerminal();
+		awaitCondition(() -> fixture.metrics().shutdownOutcomes.size() == 1,
+				"The terminal MCP metric was not published.");
 		Assertions.assertEquals(List.of(expected), fixture.lifecycle().outcomes);
-		Assertions.assertEquals(List.of(expected), fixture.metrics().shutdownOutcomes);
+		Assertions.assertEquals(List.of(expected),
+				List.copyOf(fixture.metrics().shutdownOutcomes));
+		Assertions.assertEquals(0, fixture.lifecycle().mcpStopFailures.get());
+		Assertions.assertNull(fixture.lifecycle().globalStopFailure.get());
+	}
+
+	private static void assertIncompleteLegacyParity(@NonNull Fixture fixture,
+			@NonNull InternalShutdownResult result) throws InterruptedException {
+		fixture.lifecycle().awaitTerminal();
+		awaitCondition(() -> fixture.metrics().shutdownOutcomes.size() == 1,
+				"The residual MCP metric was not published.");
+		Assertions.assertTrue(fixture.lifecycle().outcomes.isEmpty());
+		Assertions.assertEquals(1, fixture.lifecycle().mcpStopFailures.get());
+		ShutdownIncompleteException globalFailure = Assertions.assertInstanceOf(
+				ShutdownIncompleteException.class,
+				fixture.lifecycle().globalStopFailure.get());
+		Assertions.assertSame(result, globalFailure.getInternalShutdownResult());
+		Assertions.assertEquals(List.of(McpShutdownOutcome.RESIDUAL_HANDLERS),
+				List.copyOf(fixture.metrics().shutdownOutcomes));
 	}
 
 	private static void assertRuntimeEvidenceReleased(
@@ -2368,11 +2630,11 @@ class McpLifecycleB3Tests {
 			@NonNull McpServerRuntimeBridge bridge) implements AutoCloseable {
 		@Override
 		public void close() {
-			this.soklet.stop();
+			closeAfterTerminalFailure(this.soklet);
 		}
 	}
 
-	private record PlanFixture(@NonNull McpServer server,
+	private record PlanFixture(@NonNull McpServer server, @NonNull Soklet owner,
 			@NonNull AtomicInteger invocations, @NonNull String marker) {
 	}
 
@@ -2436,11 +2698,39 @@ class McpLifecycleB3Tests {
 	@ThreadSafe
 	private static final class RecordingLifecycle implements LifecycleObserver {
 		private final List<McpShutdownOutcome> outcomes = new CopyOnWriteArrayList<>();
+		private final AtomicInteger mcpStopFailures = new AtomicInteger();
+		private final AtomicReference<Throwable> globalStopFailure =
+				new AtomicReference<>();
+		private final CountDownLatch terminal = new CountDownLatch(1);
+
+		private void awaitTerminal() throws InterruptedException {
+			Assertions.assertTrue(this.terminal.await(
+					WAIT.toNanos(), TimeUnit.NANOSECONDS),
+					"The global lifecycle terminal callback was not observed.");
+		}
 
 		@Override
 		public void didStopMcpServer(@NonNull McpServer server,
 				@NonNull McpShutdownOutcome shutdownOutcome) {
 			this.outcomes.add(shutdownOutcome);
+		}
+
+		@Override
+		public void didFailToStopMcpServer(@NonNull McpServer server,
+				@NonNull Throwable throwable) {
+			this.mcpStopFailures.incrementAndGet();
+		}
+
+		@Override
+		public void didStopSoklet(@NonNull Soklet soklet) {
+			this.terminal.countDown();
+		}
+
+		@Override
+		public void didFailToStopSoklet(@NonNull Soklet soklet,
+				@NonNull Throwable throwable) {
+			this.globalStopFailure.set(throwable);
+			this.terminal.countDown();
 		}
 
 		@Override

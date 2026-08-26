@@ -37,6 +37,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static com.soklet.TestSupport.findFreePort;
+
 /**
  * Black-box real-listener coverage for public MCP mirrored-header wiring.
  *
@@ -62,9 +64,10 @@ public class McpMirroredHeaderPublicRuntimeTests {
 				handlers, observed, observedRaw);
 		McpServer server = serverBuilder(List.of(endpoint(MCP_PATH, tool)),
 				admissions, CorsAuthorizer.rejectAllInstance()).build();
+		Soklet soklet = lifecycleSoklet(server, new CopyOnWriteArrayList<>());
 
 		try {
-			server.start();
+			soklet.start();
 			int port = boundPort(server);
 			HttpResponse<String> valid = call(port, MCP_PATH, "valid", TOOL_NAME,
 					mirroredArgumentsJson(), validHeaders());
@@ -94,7 +97,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 			Assertions.assertFalse(ignored.body().contains("administrator-canary"),
 					ignored.body());
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -173,28 +176,29 @@ public class McpMirroredHeaderPublicRuntimeTests {
 	}
 
 	@Test
-	public void diagnosticQuotaIsSharedAcrossEndpointsAndSurvivesRestart()
+	public void diagnosticQuotaIsSharedAcrossEndpointsAndIsolatedAcrossOwners()
 			throws Exception {
 		String firstPath = "/first";
 		String secondPath = "/second";
 		String firstToolName = "catalog.first";
 		String secondToolName = "catalog.second";
-		AtomicInteger admissions = new AtomicInteger();
-		AtomicInteger handlers = new AtomicInteger();
-		List<LogEvent> events = new CopyOnWriteArrayList<>();
-		McpServer server = serverBuilder(List.of(
-				endpoint(firstPath, mirroredTool(firstToolName, handlers,
+		int port = findFreePort();
+		AtomicInteger firstAdmissions = new AtomicInteger();
+		AtomicInteger firstHandlers = new AtomicInteger();
+		List<LogEvent> firstEvents = new CopyOnWriteArrayList<>();
+		McpServer firstServer = serverBuilder(port, List.of(
+				endpoint(firstPath, mirroredTool(firstToolName, firstHandlers,
 						new AtomicReference<>())),
-				endpoint(secondPath, mirroredTool(secondToolName, handlers,
+				endpoint(secondPath, mirroredTool(secondToolName, firstHandlers,
 						new AtomicReference<>()))),
-				admissions, CorsAuthorizer.rejectAllInstance())
+				firstAdmissions, CorsAuthorizer.rejectAllInstance())
 				.unknownMirroredHeaderNameDiagnostics(true)
 				.build();
-		Soklet soklet = lifecycleSoklet(server, events);
+		Soklet firstSoklet = lifecycleSoklet(firstServer, firstEvents);
 
 		try {
-			soklet.start();
-			int port = boundPort(server);
+			firstSoklet.start();
+			Assertions.assertEquals(port, boundPort(firstServer));
 			for (int index = 0; index < 10; index++) {
 				String path = index % 2 == 0 ? firstPath : secondPath;
 				String toolName = index % 2 == 0
@@ -206,8 +210,8 @@ public class McpMirroredHeaderPublicRuntimeTests {
 				assertSuccess(response, "quota-" + index);
 			}
 
-			List<LogEvent> diagnostics = nameDiagnostics(events);
-			Assertions.assertEquals(10, diagnostics.size(), events.toString());
+			List<LogEvent> diagnostics = nameDiagnostics(firstEvents);
+			Assertions.assertEquals(10, diagnostics.size(), firstEvents.toString());
 			for (int index = 0; index < 10; index++) {
 				String path = index % 2 == 0 ? firstPath : secondPath;
 				Assertions.assertEquals(
@@ -221,25 +225,58 @@ public class McpMirroredHeaderPublicRuntimeTests {
 			HttpResponse<String> overBudget = call(port, firstPath, "over-budget",
 					firstToolName, mirroredArgumentsJson(), overBudgetHeaders);
 			assertSuccess(overBudget, "over-budget");
-			Assertions.assertEquals(10, nameDiagnostics(events).size(),
-					events.toString());
-
-			soklet.stop();
-			soklet.start();
-			Map<String, String> restartedHeaders = validHeaders();
-			restartedHeaders.put("Mcp-Param-After-Restart",
-					"private-after-restart");
-			HttpResponse<String> afterRestart = call(boundPort(server), secondPath,
-					"after-restart", secondToolName, mirroredArgumentsJson(),
-					restartedHeaders);
-			assertSuccess(afterRestart, "after-restart");
-			Assertions.assertEquals(10, nameDiagnostics(events).size(),
-					events.toString());
-			Assertions.assertEquals(12, admissions.get());
-			Assertions.assertEquals(12, handlers.get());
+			Assertions.assertEquals(10, nameDiagnostics(firstEvents).size(),
+					firstEvents.toString());
+			Assertions.assertEquals(11, firstAdmissions.get());
+			Assertions.assertEquals(11, firstHandlers.get());
 		} finally {
-			soklet.stop();
+			firstSoklet.stop();
 		}
+
+		Assertions.assertFalse(firstSoklet.isStarted());
+		Assertions.assertEquals(McpServerStatus.STOPPED,
+				firstServer.getDiagnostics().getStatus());
+
+		AtomicInteger secondAdmissions = new AtomicInteger();
+		AtomicInteger secondHandlers = new AtomicInteger();
+		List<LogEvent> secondEvents = new CopyOnWriteArrayList<>();
+		McpServer secondServer = serverBuilder(port, List.of(
+				endpoint(firstPath, mirroredTool(firstToolName, secondHandlers,
+						new AtomicReference<>())),
+				endpoint(secondPath, mirroredTool(secondToolName, secondHandlers,
+						new AtomicReference<>()))),
+				secondAdmissions, CorsAuthorizer.rejectAllInstance())
+				.unknownMirroredHeaderNameDiagnostics(true)
+				.build();
+		Soklet secondSoklet = lifecycleSoklet(secondServer, secondEvents);
+
+		try {
+			secondSoklet.start();
+			Assertions.assertEquals(port, boundPort(secondServer),
+					"The first owner must release its exact fixed port before returning.");
+			Assertions.assertEquals(McpServerStatus.STOPPED,
+					firstServer.getDiagnostics().getStatus(),
+					"The second owner must not revive the first runtime graph.");
+			Map<String, String> secondOwnerHeaders = validHeaders();
+			secondOwnerHeaders.put("Mcp-Param-Second-Owner",
+					"private-second-owner");
+			HttpResponse<String> secondOwnerResponse = call(port, secondPath,
+					"second-owner", secondToolName, mirroredArgumentsJson(),
+					secondOwnerHeaders);
+			assertSuccess(secondOwnerResponse, "second-owner");
+			Assertions.assertEquals(1, nameDiagnostics(secondEvents).size(),
+					secondEvents.toString());
+			Assertions.assertEquals(1, secondAdmissions.get());
+			Assertions.assertEquals(1, secondHandlers.get());
+			Assertions.assertEquals(10, nameDiagnostics(firstEvents).size(),
+					"The second owner must not mutate the first owner's quota state.");
+		} finally {
+			secondSoklet.stop();
+		}
+
+		Assertions.assertFalse(secondSoklet.isStarted());
+		Assertions.assertEquals(McpServerStatus.STOPPED,
+				secondServer.getDiagnostics().getStatus());
 	}
 
 	@Test
@@ -301,9 +338,10 @@ public class McpMirroredHeaderPublicRuntimeTests {
 		McpServer server = serverBuilder(
 				List.of(tenantEndpoint, regionEndpoint), admissions,
 				CorsAuthorizer.fromWhitelistedOrigins(Set.of(origin))).build();
+		Soklet soklet = lifecycleSoklet(server, new CopyOnWriteArrayList<>());
 
 		try {
-			server.start();
+			soklet.start();
 			int port = boundPort(server);
 			Assertions.assertEquals(204, preflight(port, "/tenant", origin,
 					"Mcp-Param-Tenant").statusCode());
@@ -316,7 +354,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 			Assertions.assertEquals(0, admissions.get(),
 					"CORS preflight must not enter public admission.");
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -366,7 +404,13 @@ public class McpMirroredHeaderPublicRuntimeTests {
 
 	private static McpServer.Builder serverBuilder(List<McpEndpoint> endpoints,
 			AtomicInteger admissions, CorsAuthorizer corsAuthorizer) {
-		return McpServer.withPort(0)
+		return serverBuilder(0, endpoints, admissions, corsAuthorizer);
+	}
+
+	private static McpServer.Builder serverBuilder(int port,
+			List<McpEndpoint> endpoints, AtomicInteger admissions,
+			CorsAuthorizer corsAuthorizer) {
+		return McpServer.withPort(port)
 				.host(LOOPBACK)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints))
 				.admissionController(context -> {
