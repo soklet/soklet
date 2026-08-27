@@ -1371,11 +1371,11 @@ class McpLifecycleB3Tests {
 						.map(InternalTerminationEvent::type).toList());
 		Assertions.assertEquals(0, failureOperations.forceCount.get());
 
-		CountDownLatch proofObserved = new CountDownLatch(1);
+		CountDownLatch proofAwaitEntered = new CountDownLatch(1);
 		AtomicReference<Thread> coordinatorThread = new AtomicReference<>();
 		RecordingAdapterOperations lateFailureOperations =
 				new RecordingAdapterOperations(attempt -> true, Set.of());
-		lateFailureOperations.onAwait = deadline -> proofObserved.countDown();
+		lateFailureOperations.onAwait = deadline -> proofAwaitEntered.countDown();
 		LifecycleWorkers asynchronousCoordinator = new LifecycleWorkers((name, runnable) -> {
 			if (name.equals("built-in-mcp-lifecycle-coordinator")) {
 				Thread worker = new Thread(runnable, "mcp-b3-proof-before-failure");
@@ -1395,7 +1395,12 @@ class McpLifecycleB3Tests {
 		Runnable admission = lateFailureGeneration.tryAdmit().orElseThrow();
 		McpTransportLifecycleAdapter.Generation requested =
 				lateFailureAdapter.requestStop();
-		Assertions.assertTrue(proofObserved.await(WAIT.toNanos(), TimeUnit.NANOSECONDS));
+		Assertions.assertTrue(proofAwaitEntered.await(
+				WAIT.toNanos(), TimeUnit.NANOSECONDS));
+		awaitCondition(() -> terminationEvents(lateFailureAdapter,
+				lateFailureGeneration).stream().map(InternalTerminationEvent::type)
+				.toList().equals(List.of(InternalTerminationEvent.Type.PROOF)),
+				"Affirmative transport proof was not recorded before the late failure.");
 		Assertions.assertTrue(lateFailureAdapter.result(lateFailureGeneration).isEmpty(),
 				"Affirmative transport proof cannot bypass admitted application work.");
 		Assertions.assertEquals(0, lateFailureOperations.releaseCount.get());
