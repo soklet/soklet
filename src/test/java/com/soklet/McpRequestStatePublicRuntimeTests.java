@@ -235,9 +235,10 @@ public class McpRequestStatePublicRuntimeTests {
 					return continuation.proceed();
 				})
 				.build();
+		Soklet soklet = managedSoklet(server);
 
 		try {
-			server.start();
+			soklet.start();
 			int port = boundPort(server);
 			HttpResponse<String> initial = callTool(port, "framework-initial",
 					FRAMEWORK_TOOL, "", ROOTS_CAPABILITY);
@@ -264,7 +265,7 @@ public class McpRequestStatePublicRuntimeTests {
 			Assertions.assertEquals(2, handlerInvocations.get());
 			Assertions.assertEquals(2, interceptorInvocations.get());
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -324,9 +325,10 @@ public class McpRequestStatePublicRuntimeTests {
 
 		McpServer emittingServer = stateServer(endpoint, sharedKeyRing,
 				sharedPartition, interceptor);
+		Soklet emittingSoklet = managedSoklet(emittingServer);
 		String protectedState;
 		try {
-			emittingServer.start();
+			emittingSoklet.start();
 			HttpResponse<String> initial = callTool(boundPort(emittingServer),
 					"fleet-initial", FRAMEWORK_TOOL, "", ROOTS_CAPABILITY);
 			assertSuccess(initial, "fleet-initial");
@@ -335,15 +337,16 @@ public class McpRequestStatePublicRuntimeTests {
 			Assertions.assertTrue(protectedState.startsWith(
 					"soklet-mcp-request-state-v1."));
 		} finally {
-			emittingServer.stop();
+			emittingSoklet.stop();
 		}
 		Assertions.assertEquals(1, handlerInvocations.get());
 		Assertions.assertEquals(1, interceptorInvocations.get());
 
 		McpServer acceptingServer = stateServer(endpoint, sharedKeyRing,
 				sharedPartition, interceptor);
+		Soklet acceptingSoklet = managedSoklet(acceptingServer);
 		try {
-			acceptingServer.start();
+			acceptingSoklet.start();
 			HttpResponse<String> retry = callTool(boundPort(acceptingServer),
 					"fleet-retry", FRAMEWORK_TOOL,
 					",\"requestState\":\"" + protectedState + "\"",
@@ -352,37 +355,39 @@ public class McpRequestStatePublicRuntimeTests {
 			assertContains(retry.body(), "\"resultType\":\"complete\"");
 			assertContains(retry.body(), "cross-instance state accepted");
 		} finally {
-			acceptingServer.stop();
+			acceptingSoklet.stop();
 		}
 		Assertions.assertEquals(2, handlerInvocations.get());
 		Assertions.assertEquals(2, interceptorInvocations.get());
 
 		McpServer wrongKeyServer = stateServer(endpoint, mismatchedKeyRing,
 				sharedPartition, interceptor);
+		Soklet wrongKeySoklet = managedSoklet(wrongKeyServer);
 		try {
-			wrongKeyServer.start();
+			wrongKeySoklet.start();
 			HttpResponse<String> retry = callTool(boundPort(wrongKeyServer),
 					"wrong-key-retry", FRAMEWORK_TOOL,
 					",\"requestState\":\"" + protectedState + "\"",
 					ROOTS_CAPABILITY);
 			assertError(retry, 400, -32602, "wrong-key-retry");
 		} finally {
-			wrongKeyServer.stop();
+			wrongKeySoklet.stop();
 		}
 		Assertions.assertEquals(2, handlerInvocations.get());
 		Assertions.assertEquals(2, interceptorInvocations.get());
 
 		McpServer wrongPartitionServer = stateServer(endpoint, sharedKeyRing,
 				mismatchedPartition, interceptor);
+		Soklet wrongPartitionSoklet = managedSoklet(wrongPartitionServer);
 		try {
-			wrongPartitionServer.start();
+			wrongPartitionSoklet.start();
 			HttpResponse<String> retry = callTool(boundPort(wrongPartitionServer),
 					"wrong-partition-retry", FRAMEWORK_TOOL,
 					",\"requestState\":\"" + protectedState + "\"",
 					ROOTS_CAPABILITY);
 			assertError(retry, 400, -32602, "wrong-partition-retry");
 		} finally {
-			wrongPartitionServer.stop();
+			wrongPartitionSoklet.stop();
 		}
 		Assertions.assertEquals(2, handlerInvocations.get());
 		Assertions.assertEquals(2, interceptorInvocations.get());
@@ -422,9 +427,10 @@ public class McpRequestStatePublicRuntimeTests {
 					return continuation.proceed();
 				})
 				.build();
+		Soklet soklet = managedSoklet(server);
 
 		try {
-			server.start();
+			soklet.start();
 			int port = boundPort(server);
 			HttpResponse<String> malformed = callTool(port, "malformed",
 					FRAMEWORK_TOOL, ",\"requestState\":7", "");
@@ -460,7 +466,7 @@ public class McpRequestStatePublicRuntimeTests {
 					protector, interceptorInvocations, handlerInvocations);
 			Assertions.assertEquals(0, protector.seals.get());
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -526,9 +532,10 @@ public class McpRequestStatePublicRuntimeTests {
 				.resource(resource)
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
+		Soklet soklet = managedSoklet(server);
 
 		try {
-			server.start();
+			soklet.start();
 			int port = boundPort(server);
 			HttpResponse<String> response = send(port,
 					request("resource-retry", "resources/read",
@@ -545,7 +552,7 @@ public class McpRequestStatePublicRuntimeTests {
 					response.headers().firstValue("Cache-Control").orElseThrow());
 			Assertions.assertNotNull(handlerContext.get());
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -603,6 +610,13 @@ public class McpRequestStatePublicRuntimeTests {
 						McpCompleteResult.fromToolText("complete"))
 				.requestStateMode(requestStateMode)
 				.build();
+	}
+
+	private static Soklet managedSoklet(McpServer server) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
 	}
 
 	private static Soklet managedSoklet(McpServer server,
