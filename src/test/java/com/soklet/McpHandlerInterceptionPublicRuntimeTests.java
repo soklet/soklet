@@ -149,9 +149,10 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					return result;
 				})
 				.build();
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 
@@ -202,7 +203,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					"after:resources/read", "before:resources/list",
 					"handler:resources/list", "after:resources/list"), stages);
 		} finally {
-			server.stop();
+			owner.stop();
 		}
 	}
 
@@ -240,9 +241,10 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					default -> continuation.proceed();
 				})
 				.build();
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 
@@ -262,7 +264,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 						failure.body());
 			}
 		} finally {
-			server.stop();
+			owner.stop();
 		}
 	}
 
@@ -286,9 +288,10 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					return continuation.proceed();
 				})
 				.build();
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> response = send(port,
@@ -300,7 +303,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					"\"uri\":\"" + RESOURCE_URI + "\"");
 			Assertions.assertEquals(0, interceptorInvocations.get());
 		} finally {
-			server.stop();
+			owner.stop();
 		}
 	}
 
@@ -325,9 +328,10 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 							1_001, "interceptor-secret-must-not-leak"));
 				})
 				.build();
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> read = send(port,
@@ -345,7 +349,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 			Assertions.assertFalse(list.body().contains("interceptor-secret"),
 					list.body());
 		} finally {
-			server.stop();
+			owner.stop();
 		}
 	}
 
@@ -417,9 +421,10 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					default -> throw new AssertionError("Unexpected tool");
 				})
 				.build();
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			for (String toolName : List.of("one-shot", "wrong-thread", "retained")) {
@@ -438,7 +443,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 			Assertions.assertEquals(1,
 					handlerInvocations.get("retained").get());
 		} finally {
-			server.stop();
+			owner.stop();
 		}
 	}
 
@@ -484,9 +489,10 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					}
 				})
 				.build();
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> response = callTool(port, "late", "late", "{}");
@@ -504,7 +510,11 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 			Assertions.assertEquals(0, handlerInvocations.get(),
 					"An expired request must not enter the public handler.");
 		} finally {
-			server.stop();
+			try {
+				lateContinuationCompleted.await(5, TimeUnit.SECONDS);
+			} finally {
+				owner.stop();
+			}
 		}
 	}
 
@@ -533,6 +543,13 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
+	}
+
+	private static Soklet managedSoklet(McpServer server) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
 	}
 
 	private static HttpResponse<String> callTool(int port, String id,

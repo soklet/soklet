@@ -690,7 +690,8 @@ public class McpHandlerMetricsObservabilityTests {
 		LockProbingMetricsCollector collector = new LockProbingMetricsCollector(
 				probeExecutor, server, sokletReference);
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver();
-		Soklet soklet = newSoklet(server, collector, observer);
+		Soklet soklet = newSoklet(server, collector, observer,
+				managedLockProbeShutdownPolicy());
 		sokletReference.set(soklet);
 		CompletableFuture<HttpResponse<String>> active = null;
 		CompletableFuture<HttpResponse<String>> queued = null;
@@ -732,15 +733,18 @@ public class McpHandlerMetricsObservabilityTests {
 			Assertions.assertEquals(List.of(McpShutdownOutcome.CLEAN),
 					observer.stopOutcomes());
 		} finally {
-			emergencyRelease.countDown();
-			if (active != null)
-				active.cancel(true);
-			if (queued != null)
-				queued.cancel(true);
-			soklet.stop();
-			probeExecutor.shutdownNow();
-			Assertions.assertTrue(probeExecutor.awaitTermination(
-					5, TimeUnit.SECONDS));
+			try {
+				emergencyRelease.countDown();
+				if (active != null)
+					active.cancel(true);
+				if (queued != null)
+					queued.cancel(true);
+				soklet.stop();
+			} finally {
+				probeExecutor.shutdownNow();
+				Assertions.assertTrue(probeExecutor.awaitTermination(
+						5, TimeUnit.SECONDS));
+			}
 		}
 	}
 
@@ -1226,6 +1230,13 @@ public class McpHandlerMetricsObservabilityTests {
 		return new InternalLifecyclePolicy(Optional.of(Duration.ofSeconds(5)),
 				Duration.ofMillis(100), Duration.ofMillis(100),
 				Duration.ofMillis(100));
+	}
+
+	@NonNull
+	private static InternalLifecyclePolicy managedLockProbeShutdownPolicy() {
+		return new InternalLifecyclePolicy(Optional.of(Duration.ofSeconds(5)),
+				Duration.ofMillis(100), Duration.ofMillis(100),
+				Duration.ofSeconds(3));
 	}
 
 	@NonNull
