@@ -382,6 +382,7 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 
 		try {
 			soklet.start();
+			collector.awaitServerStartedDrain();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			try (Socket ignored = new Socket(HOST, port)) {
@@ -855,9 +856,14 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 		private final AtomicReference<String> callbackThreadName =
 				new AtomicReference<>();
 		@NonNull
+		private final AtomicReference<Thread> serverStartedDrainThread =
+				new AtomicReference<>();
+		@NonNull
 		private final AtomicBoolean callbackThreadWasDaemon = new AtomicBoolean();
 		@NonNull
 		private final CountDownLatch requestFinished = new CountDownLatch(1);
+		@NonNull
+		private final CountDownLatch serverStartedObserved = new CountDownLatch(1);
 
 		private ReentrantConnectionCollector(
 				@NonNull AtomicReference<McpServer> serverReference,
@@ -872,6 +878,10 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 			this.maximumConcurrentCallbacks.accumulateAndGet(active, Math::max);
 			try {
 				super.didRecordMcpMetricsEvent(event);
+				if (event instanceof McpMetricsEvent.ServerStarted) {
+					this.serverStartedDrainThread.set(Thread.currentThread());
+					this.serverStartedObserved.countDown();
+				}
 				if (event instanceof McpMetricsEvent.ConnectionAccepted
 						&& this.invoked.compareAndSet(false, true)) {
 					Thread callbackThread = Thread.currentThread();
@@ -891,6 +901,19 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 			} finally {
 				this.activeCallbacks.decrementAndGet();
 			}
+		}
+
+		private void awaitServerStartedDrain() throws InterruptedException {
+			Assertions.assertTrue(this.serverStartedObserved.await(
+					5, TimeUnit.SECONDS),
+					"The ServerStarted metric callback did not arrive.");
+			// Lifecycle deferral may adopt events already pending in the FIFO. Let
+			// its one-shot drain finish before isolating transport-worker delivery.
+			Thread drainThread = requireNonNull(
+					this.serverStartedDrainThread.get());
+			drainThread.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertFalse(drainThread.isAlive(),
+					"The ServerStarted metric drain did not finish.");
 		}
 
 		private void awaitRequestFinished() throws InterruptedException {

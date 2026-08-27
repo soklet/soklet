@@ -974,8 +974,8 @@ public final class SokletApplicationProcessTests {
 		public void start() {
 			this.events.add("runtime-start");
 			this.startCalls.incrementAndGet();
-			this.startEntered.countDown();
 			if (this.startMode == StartMode.FAIL_STARTUP) {
+				this.startEntered.countDown();
 				InternalShutdownResult failedResult =
 						this.shutdownResultOverride == null
 								? this.startupFailedResult
@@ -986,9 +986,12 @@ public final class SokletApplicationProcessTests {
 					throw overriddenFailure;
 				throw this.startupFailure;
 			}
-			if (this.core.get() != null)
+			if (this.core.get() != null) {
+				this.startEntered.countDown();
 				throw startupException(this.core.get().result());
+			}
 			if (this.startMode == StartMode.WAIT_IN_START) {
+				this.startEntered.countDown();
 				boolean interrupted = false;
 				while (this.core.get() == null) {
 					try {
@@ -1003,6 +1006,7 @@ public final class SokletApplicationProcessTests {
 				throw startupException(this.core.get().result());
 			}
 			this.startReturned.set(true);
+			this.startEntered.countDown();
 		}
 
 		@Override

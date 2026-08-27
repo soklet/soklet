@@ -3573,7 +3573,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private boolean subscriptionMayCommit(@NonNull RequestControl control) {
 		requireNonNull(control);
 		synchronized (subscriptionLock) {
-			return subscriptionsAccepting && pendingSubscriptions.contains(control);
+			return subscriptionsAccepting
+					&& (control.lifecycleAdmission == null
+					|| !lifecycleAdapter.currentGeneration().shutdownRequested())
+					&& pendingSubscriptions.contains(control);
 		}
 	}
 
