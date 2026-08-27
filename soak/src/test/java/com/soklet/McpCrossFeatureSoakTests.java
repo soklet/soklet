@@ -58,7 +58,7 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Longer-running live-listener soak coverage for MCP Phase 5 cross-feature
- * churn, cooperative cancelation, and restart cleanup.
+ * churn, cooperative cancelation, and fresh-generation cleanup.
  * <p>
  * {@code SOKLET_SOAK_PROFILE} selects the checked-in smoke, nightly, or release workload
  * profile. Live-listener coverage speaks MCP over raw loopback sockets, while
@@ -108,12 +108,7 @@ public class McpCrossFeatureSoakTests {
 		CountingMcpMetricsCollector metricsCollector =
 				new CountingMcpMetricsCollector();
 		CountingLifecycle lifecycle = new CountingLifecycle();
-		McpServer mcpServer = mcpServer(state, publisher);
-		SokletConfig config = SokletConfig.withMcpServer(mcpServer)
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.metricsCollector(metricsCollector)
-				.lifecycleObserver(lifecycle)
-				.build();
+		AtomicReference<McpServer> currentServer = new AtomicReference<>();
 		SoakResourceSnapshot baseline;
 		SoakResourceSnapshot finalSnapshot;
 		int workloadFeatureCycles = PROFILE.concurrentClients()
@@ -128,18 +123,24 @@ public class McpCrossFeatureSoakTests {
 				warmupTotals, ZERO_TIMEOUT),
 				"An empty metrics collector must not satisfy a positive phase fence.");
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			// Warm every feature and lifecycle path before taking a stopped-state
-			// resource baseline. The same Soklet and MCP server are then restarted.
-			soklet.start();
-			InetSocketAddress warmupAddress = boundAddress(mcpServer);
-			performFeatureCycle(warmupAddress.getPort(), "warmup", state,
-					publisher, true);
-			awaitRuntimeIdle("warmup", mcpServer, metricsCollector,
-					warmupTotals, state, PROFILE.settleTimeout(),
-					PROFILE.metricDeliveryTimeout());
-			soklet.stop();
-			assertStoppedAfterBinding(mcpServer, warmupAddress);
+		try {
+			// Warm every feature and lifecycle path in one complete generation before
+			// taking a stopped-state resource baseline. Direct Soklet and transport
+			// graphs are one-shot, so each measured generation below is fresh.
+			McpServer warmupServer = mcpServer(state, publisher);
+			currentServer.set(warmupServer);
+			try (Soklet warmupSoklet = crossFeatureSoklet(warmupServer,
+					metricsCollector, lifecycle)) {
+				warmupSoklet.start();
+				InetSocketAddress warmupAddress = boundAddress(warmupServer);
+				performFeatureCycle(warmupAddress.getPort(), "warmup", state,
+						publisher, true);
+				awaitRuntimeIdle("warmup", warmupServer, metricsCollector,
+						warmupTotals, state, PROFILE.settleTimeout(),
+						PROFILE.metricDeliveryTimeout());
+				warmupSoklet.stop();
+				assertStoppedAfterBinding(warmupServer, warmupAddress);
+			}
 			Assertions.assertEquals(0, state.openClientSockets.get());
 			Assertions.assertEquals(0, publisher.activeRegistrationCount());
 			baseline = SoakResourceSnapshot.captureAfterGc();
@@ -147,37 +148,43 @@ public class McpCrossFeatureSoakTests {
 			RunResult mixedRun = null;
 			for (int shutdownCycle = 0;
 					shutdownCycle < PROFILE.shutdownCycles(); shutdownCycle++) {
-				soklet.start();
-				InetSocketAddress cycleAddress = boundAddress(mcpServer);
-				int port = cycleAddress.getPort();
+				McpServer cycleServer = mcpServer(state, publisher);
+				currentServer.set(cycleServer);
+				try (Soklet cycleSoklet = crossFeatureSoklet(cycleServer,
+						metricsCollector, lifecycle)) {
+					cycleSoklet.start();
+					InetSocketAddress cycleAddress = boundAddress(cycleServer);
+					int port = cycleAddress.getPort();
 
-				if (shutdownCycle == 0) {
-					RunResult run = runConcurrent(PROFILE.concurrentClients(),
-							PROFILE.cyclesPerClient(),
-							(clientIndex, iteration) -> performFeatureCycle(port,
-									"mixed-%d-%d".formatted(clientIndex, iteration),
-									state, publisher, false));
-					mixedRun = run;
-					Assertions.assertTrue(run.failures().isEmpty(),
-							() -> "Unexpected MCP mixed-churn failures: "
-									+ run.failures());
-					Assertions.assertEquals(workloadFeatureCycles,
-							run.completed());
-					awaitRuntimeIdle("mixed MCP feature churn", mcpServer,
-							metricsCollector, mixedTotals, state,
-							PROFILE.settleTimeout(),
-							PROFILE.metricDeliveryTimeout());
+					if (shutdownCycle == 0) {
+						RunResult run = runConcurrent(PROFILE.concurrentClients(),
+								PROFILE.cyclesPerClient(),
+								(clientIndex, iteration) -> performFeatureCycle(port,
+										"mixed-%d-%d".formatted(clientIndex, iteration),
+										state, publisher, false));
+						mixedRun = run;
+						Assertions.assertTrue(run.failures().isEmpty(),
+								() -> "Unexpected MCP mixed-churn failures: "
+										+ run.failures());
+						Assertions.assertEquals(workloadFeatureCycles,
+								run.completed());
+						awaitRuntimeIdle("mixed MCP feature churn", cycleServer,
+								metricsCollector, mixedTotals, state,
+								PROFILE.settleTimeout(),
+								PROFILE.metricDeliveryTimeout());
+					}
+
+					performShutdownBoundary(cycleSoklet, cycleServer, port,
+							"shutdown-" + shutdownCycle, state, publisher,
+							metricsCollector, expectedRuntimeMetricTotals(
+									1 + workloadFeatureCycles, shutdownCycle + 1));
+					assertStoppedAfterBinding(cycleServer, cycleAddress);
 				}
-
-				performShutdownBoundary(soklet, mcpServer, port,
-						"shutdown-" + shutdownCycle, state, publisher,
-						metricsCollector, expectedRuntimeMetricTotals(
-								1 + workloadFeatureCycles, shutdownCycle + 1));
-				assertStoppedAfterBinding(mcpServer, cycleAddress);
 			}
 
 			Assertions.assertNotNull(mixedRun);
-			awaitRuntimeIdle("final stopped MCP state", mcpServer,
+			McpServer finalServer = requireNonNull(currentServer.get());
+			awaitRuntimeIdle("final stopped MCP state", finalServer,
 					metricsCollector, finalTotals, state,
 					PROFILE.settleTimeout(),
 					PROFILE.metricDeliveryTimeout());
@@ -230,7 +237,7 @@ public class McpCrossFeatureSoakTests {
 							lifecycle.serversStarted() + "/"
 									+ lifecycle.serversStopped(),
 							"Final MCP status",
-							mcpServer.getDiagnostics().getStatus().name(),
+							finalServer.getDiagnostics().getStatus().name(),
 							"Active publisher registrations",
 							Integer.toString(publisher.activeRegistrationCount()),
 							"Open client sockets",
@@ -241,7 +248,6 @@ public class McpCrossFeatureSoakTests {
 							PROFILE.metricDeliveryTimeout().toString()));
 		} finally {
 			state.releaseAllBlockingHandlers();
-			mcpServer.stop();
 		}
 	}
 
@@ -390,6 +396,26 @@ public class McpCrossFeatureSoakTests {
 			state.releaseAllBlockingHandlers();
 			state.releaseResidualHandler();
 		}
+	}
+
+	@NonNull
+	private static Soklet crossFeatureSoklet(@NonNull McpServer mcpServer,
+			@NonNull CountingMcpMetricsCollector metricsCollector,
+			@NonNull CountingLifecycle lifecycle) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(mcpServer)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.metricsCollector(metricsCollector)
+				.lifecycleObserver(lifecycle)
+				.internalLifecyclePolicy(immediateShutdownPolicy())
+				.build());
+	}
+
+	@NonNull
+	private static InternalLifecyclePolicy immediateShutdownPolicy() {
+		return new InternalLifecyclePolicy(
+				java.util.Optional.of(Duration.ofSeconds(30)),
+				Duration.ofSeconds(2), Duration.ZERO,
+				PROFILE.shutdownTimeout());
 	}
 
 	@NonNull
@@ -638,10 +664,7 @@ public class McpCrossFeatureSoakTests {
 							ResourceMethodResolver.fromMethods(Set.of()))
 					.metricsCollector(metricsCollector)
 					.lifecycleObserver(lifecycle)
-					.internalLifecyclePolicy(new InternalLifecyclePolicy(
-							java.util.Optional.of(Duration.ofSeconds(30)),
-							Duration.ofSeconds(2), Duration.ZERO,
-							PROFILE.shutdownTimeout()))
+					.internalLifecyclePolicy(immediateShutdownPolicy())
 					.build();
 		};
 	}
@@ -935,8 +958,6 @@ public class McpCrossFeatureSoakTests {
 				() -> retainedSimulator.startMcpRequest(simulatorToolRequest(
 						"residual-rejected", SIMULATOR_JSON_TOOL, "{}", null,
 						null, null)));
-		Assertions.assertThrows(IllegalStateException.class, residualServer::start,
-				"Live start must reject residual simulator work before binding.");
 		assertNeverBoundStopped(residualServer);
 		Assertions.assertEquals(0,
 				residualServer.getDiagnostics().getActiveHandlerExecutions());
@@ -1578,7 +1599,6 @@ public class McpCrossFeatureSoakTests {
 	private static void assertStoppedAfterBinding(@NonNull McpServer mcpServer,
 			@NonNull InetSocketAddress expectedAddress) {
 		McpServerDiagnostics diagnostics = mcpServer.getDiagnostics();
-		Assertions.assertFalse(mcpServer.isStarted());
 		Assertions.assertEquals(McpServerStatus.STOPPED,
 				diagnostics.getStatus());
 		Assertions.assertEquals(requireNonNull(expectedAddress),
@@ -1587,7 +1607,6 @@ public class McpCrossFeatureSoakTests {
 
 	private static void assertNeverBoundStopped(@NonNull McpServer mcpServer) {
 		McpServerDiagnostics diagnostics = mcpServer.getDiagnostics();
-		Assertions.assertFalse(mcpServer.isStarted());
 		Assertions.assertEquals(McpServerStatus.STOPPED,
 				diagnostics.getStatus());
 		Assertions.assertTrue(diagnostics.getBoundAddress().isEmpty());

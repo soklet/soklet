@@ -346,7 +346,7 @@ public class SokletSimulatorIsolationTests {
 		CheckedCanary thrown = Assertions.assertThrows(CheckedCanary.class,
 				() -> SokletSimulator.run(transports -> {
 					failedBodyScope.set(transports);
-					return httpConfig(transports);
+					return immediateTeardownConfig(transports);
 				}, SimulatorOptions.defaultInstance(), simulator -> {
 					throw bodyFailure;
 				}, NanoClock.system(), new LifecycleWorkers((name, task) -> {
@@ -368,7 +368,7 @@ public class SokletSimulatorIsolationTests {
 				ShutdownIncompleteException.class,
 				() -> SokletSimulator.run(transports -> {
 					successfulBodyScope.set(transports);
-					return httpConfig(transports);
+					return immediateTeardownConfig(transports);
 				}, SimulatorOptions.defaultInstance(), simulator -> {
 				}, NanoClock.system(), new LifecycleWorkers((name, task) -> {
 					throw successfulBodyTeardown;
@@ -633,6 +633,17 @@ public class SokletSimulatorIsolationTests {
 				.resourceMethodResolver(resourceMethods())
 				.internalLifecyclePolicy(new InternalLifecyclePolicy(
 						Optional.of(Duration.ZERO), Duration.ZERO,
+						Duration.ZERO, Duration.ZERO))
+				.build();
+	}
+
+	@NonNull
+	private static SokletConfig immediateTeardownConfig(
+			@NonNull SimulatorTransports transports) {
+		return SokletConfig.withHttpServer(transports.getHttpServer())
+				.resourceMethodResolver(resourceMethods())
+				.internalLifecyclePolicy(new InternalLifecyclePolicy(
+						Optional.of(WAIT), Duration.ZERO,
 						Duration.ZERO, Duration.ZERO))
 				.build();
 	}
