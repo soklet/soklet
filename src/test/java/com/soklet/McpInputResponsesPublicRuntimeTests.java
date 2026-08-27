@@ -251,9 +251,10 @@ public class McpInputResponsesPublicRuntimeTests {
 				.resource(resource)
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
+		Soklet soklet = managedSoklet(server);
 
 		try {
-			server.start();
+			soklet.start();
 			int port = boundPort(server);
 			HttpResponse<String> toolResponse = send(port, "none-tool",
 					"tools/call", "none.tool",
@@ -276,7 +277,7 @@ public class McpInputResponsesPublicRuntimeTests {
 			Assertions.assertEquals(1, toolInvocations.get());
 			Assertions.assertEquals(1, resourceInvocations.get());
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -318,9 +319,10 @@ public class McpInputResponsesPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = endpointBuilder().tool(tool).build();
 		McpServer server = serverBuilder(endpoint).build();
+		Soklet soklet = managedSoklet(server);
 
 		try {
-			server.start();
+			soklet.start();
 			int port = boundPort(server);
 			HttpResponse<String> missing = send(port, "missing", "tools/call",
 					"retry.missing", ",\"name\":\"retry.missing\","
@@ -345,7 +347,7 @@ public class McpInputResponsesPublicRuntimeTests {
 					"\"text\":\"accepted\""), complete.body());
 			Assertions.assertEquals(2, handlerInvocations.get());
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -530,6 +532,14 @@ public class McpInputResponsesPublicRuntimeTests {
 
 	private static int boundPort(@NonNull McpServer server) {
 		return server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+	}
+
+	@NonNull
+	private static Soklet managedSoklet(@NonNull McpServer server) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
 	}
 
 	@NonNull

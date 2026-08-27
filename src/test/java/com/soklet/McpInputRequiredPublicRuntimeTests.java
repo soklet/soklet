@@ -128,8 +128,10 @@ public class McpInputRequiredPublicRuntimeTests {
 					return output;
 				});
 
+		Soklet soklet = managedSoklet(server);
+
 		try {
-			server.start();
+			soklet.start();
 			int port = boundPort(server);
 
 			HttpResponse<String> toolResponse = send(port, "tool-input",
@@ -183,7 +185,7 @@ public class McpInputRequiredPublicRuntimeTests {
 					resourceResponse.body());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -290,8 +292,10 @@ public class McpInputRequiredPublicRuntimeTests {
 					return output;
 				});
 
+		Soklet soklet = managedSoklet(server);
+
 		try {
-			server.start();
+			soklet.start();
 			int port = boundPort(server);
 
 			HttpResponse<String> formResponse = callTool(port,
@@ -351,7 +355,7 @@ public class McpInputRequiredPublicRuntimeTests {
 					samplingResponse.body());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -463,8 +467,10 @@ public class McpInputRequiredPublicRuntimeTests {
 					return output;
 				});
 
+		Soklet soklet = managedSoklet(server);
+
 		try {
-			server.start();
+			soklet.start();
 			int port = boundPort(server);
 			HttpResponse<String> toolResponse = callTool(port,
 					"invalid-form", "invalid-form-input", ALL_INPUT_CAPABILITIES);
@@ -492,7 +498,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			Assertions.assertEquals(3, handlerInvocations.get());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -556,8 +562,10 @@ public class McpInputRequiredPublicRuntimeTests {
 			return output;
 		});
 
+		Soklet soklet = managedSoklet(server);
+
 		try {
-			server.start();
+			soklet.start();
 			int port = boundPort(server);
 
 			HttpResponse<String> missingRequired = callTool(port,
@@ -602,7 +610,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			Assertions.assertEquals(2, conditionalInputHandlerInvocations.get());
 			Assertions.assertEquals(1, sanitizerInvocations.get());
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -651,8 +659,10 @@ public class McpInputRequiredPublicRuntimeTests {
 					return output;
 				});
 
+		Soklet soklet = managedSoklet(server);
+
 		try {
-			server.start();
+			soklet.start();
 			int port = boundPort(server);
 			HttpResponse<String> missingCapability = callTool(port,
 					"missing-before-malformed", "conditional-malformed-input", "{}");
@@ -682,7 +692,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			Assertions.assertEquals(2, handlerInvocations.get());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -725,8 +735,10 @@ public class McpInputRequiredPublicRuntimeTests {
 					return output;
 				});
 
+		Soklet soklet = managedSoklet(server);
+
 		try {
-			server.start();
+			soklet.start();
 			HttpResponse<String> response = callTool(boundPort(server),
 					"undeclared", "undeclared-input",
 					FORM_AND_ROOTS_CAPABILITIES);
@@ -745,7 +757,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			Assertions.assertEquals(1, handlerInvocations.get());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -825,8 +837,10 @@ public class McpInputRequiredPublicRuntimeTests {
 					return output;
 				});
 
+		Soklet soklet = managedSoklet(server);
+
 		try {
-			server.start();
+			soklet.start();
 			int port = boundPort(server);
 			HttpResponse<String> toolResponse = callTool(port,
 					"interceptor-undeclared-tool-response",
@@ -867,7 +881,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			Assertions.assertEquals(0, handlerInvocations.get());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -941,8 +955,10 @@ public class McpInputRequiredPublicRuntimeTests {
 					return output;
 				});
 
+		Soklet soklet = managedSoklet(server);
+
 		try {
-			server.start();
+			soklet.start();
 			int port = boundPort(server);
 			HttpResponse<String> valid = callTool(port, "interceptor-valid",
 					"interceptor-valid-input", ROOTS_CAPABILITY);
@@ -990,7 +1006,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			Assertions.assertEquals(0, handlerInvocations.get());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -999,6 +1015,13 @@ public class McpInputRequiredPublicRuntimeTests {
 				.serverInformation(McpImplementation.withNameAndVersion(
 						"input-required-public-runtime-test",
 						"4.0.0-SNAPSHOT").build());
+	}
+
+	private static Soklet managedSoklet(McpServer server) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
 	}
 
 	private static McpServer server(McpEndpoint endpoint,
