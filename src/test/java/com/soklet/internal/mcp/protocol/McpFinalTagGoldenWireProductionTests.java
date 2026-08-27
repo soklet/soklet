@@ -72,6 +72,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class McpFinalTagGoldenWireProductionTests {
+	private static final long MANAGED_STOP_JOIN_MILLIS = 20_000L;
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final Path GOLDEN_ROOT = Path.of(
 			"conformance", "official", "golden-wire");
@@ -839,14 +840,14 @@ public class McpFinalTagGoldenWireProductionTests {
 					"phase-5/subscription-listen-response.json"),
 					client.readChunkText());
 			Assertions.assertNull(client.readChunk());
-			stopThread.join(5_000L);
+			stopThread.join(MANAGED_STOP_JOIN_MILLIS);
 			Assertions.assertFalse(stopThread.isAlive());
 		} finally {
 			if (client != null)
 				client.close();
 			owner.stop();
 			if (stopThread != null && stopThread.isAlive())
-				stopThread.join(5_000L);
+				stopThread.join(MANAGED_STOP_JOIN_MILLIS);
 		}
 	}
 

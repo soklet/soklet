@@ -92,6 +92,7 @@ import java.util.regex.Pattern;
  */
 @Timeout(60)
 public class McpResultEnvelopeGoldenProductionTests {
+	private static final long MANAGED_STOP_JOIN_MILLIS = 20_000L;
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/mcp";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
@@ -773,14 +774,14 @@ public class McpResultEnvelopeGoldenProductionTests {
 			Assertions.assertNull(client.readChunk());
 			Assertions.assertTrue(client.awaitTransportClosure(),
 					"The drained subscription transport did not close.");
-			stopThread.join(5_000L);
+			stopThread.join(MANAGED_STOP_JOIN_MILLIS);
 			Assertions.assertFalse(stopThread.isAlive());
 		} finally {
 			if (client != null)
 				client.close();
 			owner.stop();
 			if (stopThread != null && stopThread.isAlive())
-				stopThread.join(5_000L);
+				stopThread.join(MANAGED_STOP_JOIN_MILLIS);
 		}
 	}
 

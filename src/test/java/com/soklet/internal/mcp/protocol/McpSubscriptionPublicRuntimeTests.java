@@ -79,6 +79,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 @Timeout(30)
 public class McpSubscriptionPublicRuntimeTests {
+	private static final long MANAGED_STOP_JOIN_MILLIS = 20_000L;
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/mcp";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
@@ -94,16 +95,17 @@ public class McpSubscriptionPublicRuntimeTests {
 		McpServer server = server(MCP_PATH, publisher,
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED,
 				McpSubscriptionNotificationType.RESOURCE_UPDATED);
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			int port = boundPort(server);
 			assertAcknowledgment(port, "\"subscription-string\"",
 					"\"subscription-string\"");
 			assertAcknowledgment(port, "37", "37");
 			Assertions.assertEquals(1, publisher.subscriptionCount());
 		} finally {
-			server.stop();
+			owner.stop();
 		}
 		Assertions.assertEquals(1, publisher.closedSubscriptionCount());
 		Assertions.assertEquals(0, publisher.publisherCloseCount());
@@ -116,10 +118,11 @@ public class McpSubscriptionPublicRuntimeTests {
 		McpServer server = server(MCP_PATH, publisher,
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED,
 				McpSubscriptionNotificationType.RESOURCE_UPDATED);
+		Soklet owner = managedSoklet(server);
 		McpChunkedHttpClient client = null;
 
 		try {
-			server.start();
+			owner.start();
 			client = listen(boundPort(server), "\"filtered\"",
 					"{\"resourcesListChanged\":true,"
 							+ "\"resourceSubscriptions\":[\""
@@ -143,7 +146,7 @@ public class McpSubscriptionPublicRuntimeTests {
 		} finally {
 			if (client != null)
 				client.closeWithReset();
-			server.stop();
+			owner.stop();
 		}
 	}
 
@@ -153,10 +156,11 @@ public class McpSubscriptionPublicRuntimeTests {
 		RecordingPublisher publisher = new RecordingPublisher();
 		McpServer server = server(MCP_PATH, publisher,
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED);
+		Soklet owner = managedSoklet(server);
 		McpChunkedHttpClient client = null;
 
 		try {
-			server.start();
+			owner.start();
 			client = listenWithParams(boundPort(server), "\"intersection\"",
 					"{\"toolsListChanged\":true,"
 							+ "\"promptsListChanged\":true,"
@@ -176,7 +180,7 @@ public class McpSubscriptionPublicRuntimeTests {
 		} finally {
 			if (client != null)
 				client.closeWithReset();
-			server.stop();
+			owner.stop();
 		}
 	}
 
@@ -192,9 +196,10 @@ public class McpSubscriptionPublicRuntimeTests {
 		McpServer server = server(MCP_PATH, publisher, admissionController,
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED,
 				McpSubscriptionNotificationType.RESOURCE_UPDATED);
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			int port = boundPort(server);
 			List<InvalidSubscriptionParams> invalidCases = List.of(
 					new InvalidSubscriptionParams("missing-notifications", ""),
@@ -222,7 +227,7 @@ public class McpSubscriptionPublicRuntimeTests {
 			Assertions.assertEquals(0, admissionCalls.get(),
 					"Structurally invalid filters must not reach application admission.");
 		} finally {
-			server.stop();
+			owner.stop();
 		}
 		Assertions.assertEquals(1, publisher.closedSubscriptionCount());
 		Assertions.assertEquals(0, publisher.publisherCloseCount());
@@ -255,9 +260,10 @@ public class McpSubscriptionPublicRuntimeTests {
 					return continuation.proceed();
 				})
 				.build();
+		Soklet allowedOwner = managedSoklet(allowed);
 
 		try {
-			allowed.start();
+			allowedOwner.start();
 			try (McpChunkedHttpClient client = listen(boundPort(allowed),
 					"\"policy-allowed\"", "{\"resourcesListChanged\":true}")) {
 				assertSseHead(client.readHead());
@@ -267,7 +273,7 @@ public class McpSubscriptionPublicRuntimeTests {
 				client.closeWithReset();
 			}
 		} finally {
-			allowed.stop();
+			allowedOwner.stop();
 		}
 		Assertions.assertEquals(1, admissionCalls.get());
 		Assertions.assertEquals(1, requestLimiterCalls.get());
@@ -285,8 +291,9 @@ public class McpSubscriptionPublicRuntimeTests {
 					return McpRateLimitDecision.denied(Duration.ofMillis(1));
 				})
 				.build();
+		Soklet deniedOwner = managedSoklet(denied);
 		try {
-			denied.start();
+			deniedOwner.start();
 			try (McpChunkedHttpClient client = listen(boundPort(denied),
 					"\"policy-denied\"", "{\"resourcesListChanged\":true}")) {
 				McpChunkedHttpClient.HttpResponseHead head = client.readHead();
@@ -300,7 +307,7 @@ public class McpSubscriptionPublicRuntimeTests {
 						client.readFixedBody(head));
 			}
 		} finally {
-			denied.stop();
+			deniedOwner.stop();
 		}
 		Assertions.assertEquals(1, deniedAdmissionCalls.get());
 		Assertions.assertEquals(1, deniedLimiterCalls.get());
@@ -326,10 +333,11 @@ public class McpSubscriptionPublicRuntimeTests {
 		})
 				.maximumSubscriptionsPerPrincipal(1)
 				.build();
+		Soklet owner = managedSoklet(server);
 		McpChunkedHttpClient admitted = null;
 
 		try {
-			server.start();
+			owner.start();
 			int port = boundPort(server);
 			try (McpChunkedHttpClient rejected = listen(port,
 					"\"rejected\"", notifications)) {
@@ -362,7 +370,7 @@ public class McpSubscriptionPublicRuntimeTests {
 		} finally {
 			if (admitted != null)
 				admitted.closeWithReset();
-			server.stop();
+			owner.stop();
 		}
 	}
 
@@ -388,10 +396,11 @@ public class McpSubscriptionPublicRuntimeTests {
 			})
 					.maximumSubscriptionsPerPrincipal(1)
 					.build();
+			Soklet owner = managedSoklet(server);
 			McpChunkedHttpClient admitted = null;
 
 			try {
-				server.start();
+				owner.start();
 				int port = boundPort(server);
 				String failedId = failure.name() + "-admission";
 				try (McpChunkedHttpClient failed = listen(port,
@@ -431,7 +440,7 @@ public class McpSubscriptionPublicRuntimeTests {
 			} finally {
 				if (admitted != null)
 					admitted.closeWithReset();
-				server.stop();
+				owner.stop();
 			}
 		}
 	}
@@ -447,10 +456,11 @@ public class McpSubscriptionPublicRuntimeTests {
 				.requestHandlerConcurrency(1)
 				.requestHandlerQueueCapacity(1)
 				.build();
+		Soklet owner = managedSoklet(server);
 		McpChunkedHttpClient subscription = null;
 
 		try {
-			server.start();
+			owner.start();
 			int port = boundPort(server);
 			subscription = listen(port, "\"handler-slot\"",
 					"{\"resourcesListChanged\":true}");
@@ -485,7 +495,7 @@ public class McpSubscriptionPublicRuntimeTests {
 		} finally {
 			if (subscription != null)
 				subscription.closeWithReset();
-			server.stop();
+			owner.stop();
 		}
 	}
 
@@ -499,10 +509,11 @@ public class McpSubscriptionPublicRuntimeTests {
 				McpAdmissionController.acceptAllInstance())
 				.maximumSubscriptionsPerPrincipal(1)
 				.build();
+		Soklet owner = managedSoklet(server);
 		McpChunkedHttpClient first = null;
 
 		try {
-			server.start();
+			owner.start();
 			int port = boundPort(server);
 			first = listen(port, "\"cap-first\"",
 					"{\"resourcesListChanged\":true}");
@@ -522,7 +533,7 @@ public class McpSubscriptionPublicRuntimeTests {
 		} finally {
 			if (first != null)
 				first.closeWithReset();
-			server.stop();
+			owner.stop();
 		}
 	}
 
@@ -545,12 +556,13 @@ public class McpSubscriptionPublicRuntimeTests {
 		McpServer server = serverBuilder(List.of(endpoint), partitionedAdmission)
 				.maximumSubscriptionsPerPrincipal(1)
 				.build();
+		Soklet owner = managedSoklet(server);
 		McpChunkedHttpClient alpha = null;
 		McpChunkedHttpClient beta = null;
 		McpChunkedHttpClient alphaReplacement = null;
 
 		try {
-			server.start();
+			owner.start();
 			int port = boundPort(server);
 			alpha = listenForTenant(port, "\"shared-subscription\"",
 					"alpha");
@@ -590,7 +602,7 @@ public class McpSubscriptionPublicRuntimeTests {
 				beta.closeWithReset();
 			if (alphaReplacement != null)
 				alphaReplacement.closeWithReset();
-			server.stop();
+			owner.stop();
 		}
 	}
 
@@ -603,12 +615,13 @@ public class McpSubscriptionPublicRuntimeTests {
 		McpEndpoint secondEndpoint = endpoint("/second", groupedPublisher,
 				McpSubscriptionNotificationType.RESOURCE_UPDATED);
 		McpServer groupedServer = server(List.of(firstEndpoint, secondEndpoint));
+		Soklet groupedOwner = managedSoklet(groupedServer);
 		try {
-			groupedServer.start();
+			groupedOwner.start();
 			Assertions.assertEquals(1, groupedPublisher.subscriptionCount(),
 					"One server must register once for one publisher identity.");
 		} finally {
-			groupedServer.stop();
+			groupedOwner.stop();
 		}
 		Assertions.assertEquals(1,
 				groupedPublisher.closedSubscriptionCount());
@@ -621,11 +634,13 @@ public class McpSubscriptionPublicRuntimeTests {
 		McpServer secondServer = server(MCP_PATH, distributedPublisher,
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED,
 				McpSubscriptionNotificationType.RESOURCE_UPDATED);
+		Soklet firstOwner = managedSoklet(firstServer);
+		Soklet secondOwner = managedSoklet(secondServer);
 		McpChunkedHttpClient first = null;
 		McpChunkedHttpClient second = null;
 		try {
-			firstServer.start();
-			secondServer.start();
+			firstOwner.start();
+			secondOwner.start();
 			Assertions.assertEquals(2, distributedPublisher.subscriptionCount());
 			first = listen(boundPort(firstServer), "\"first-server\"",
 					"{\"resourcesListChanged\":true,"
@@ -657,12 +672,21 @@ public class McpSubscriptionPublicRuntimeTests {
 			Assertions.assertEquals(resourceUpdated("\"second-server\"", RESOURCE_URI),
 					second.readChunkText());
 		} finally {
-			if (first != null)
-				first.closeWithReset();
-			if (second != null)
-				second.closeWithReset();
-			firstServer.stop();
-			secondServer.stop();
+			try {
+				if (first != null)
+					first.closeWithReset();
+			} finally {
+				try {
+					if (second != null)
+						second.closeWithReset();
+				} finally {
+					try {
+						firstOwner.stop();
+					} finally {
+						secondOwner.stop();
+					}
+				}
+			}
 		}
 		Assertions.assertEquals(2,
 				distributedPublisher.closedSubscriptionCount());
@@ -673,54 +697,75 @@ public class McpSubscriptionPublicRuntimeTests {
 	public void gracefulHttpShutdownEndsWithOnlyTheTerminalCompleteResult()
 			throws Exception {
 		RecordingPublisher publisher = new RecordingPublisher();
-		McpEndpoint endpoint = endpoint(MCP_PATH, publisher,
+		McpEndpoint firstEndpoint = endpoint(MCP_PATH, publisher,
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED);
-		McpServer server = serverBuilder(List.of(endpoint),
+		McpServer firstServer = serverBuilder(List.of(firstEndpoint),
 				McpAdmissionController.acceptAllInstance())
 				.maximumSubscriptionsPerPrincipal(1)
 				.build();
+		Soklet firstOwner = managedSoklet(firstServer);
 		McpChunkedHttpClient client = null;
 		Thread stopThread = null;
+		Soklet freshOwner = null;
 
 		try {
-			server.start();
-			client = listen(boundPort(server), "\"shutdown\"",
+			firstOwner.start();
+			client = listen(boundPort(firstServer), "\"shutdown\"",
 					"{\"resourcesListChanged\":true}");
 			assertSseHead(client.readHead());
 			Assertions.assertEquals(acknowledgment("\"shutdown\"",
 					"{\"resourcesListChanged\":true}"), client.readChunkText());
 
-			stopThread = new Thread(server::stop, "mcp-subscription-test-stop");
+			stopThread = new Thread(firstOwner::stop,
+					"mcp-subscription-test-stop");
 			stopThread.start();
 			Assertions.assertEquals(terminal("\"shutdown\""),
 					client.readChunkText(),
 					"HTTP teardown must not prepend a server-sent cancellation notification.");
 			Assertions.assertNull(client.readChunk());
-			stopThread.join(5_000L);
+			stopThread.join(MANAGED_STOP_JOIN_MILLIS);
 			Assertions.assertFalse(stopThread.isAlive());
-			Assertions.assertFalse(server.isStarted());
+			Assertions.assertFalse(firstOwner.isStarted());
 
-			server.start();
+			McpEndpoint freshEndpoint = endpoint(MCP_PATH, publisher,
+					McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED);
+			McpServer freshServer = serverBuilder(List.of(freshEndpoint),
+					McpAdmissionController.acceptAllInstance())
+					.maximumSubscriptionsPerPrincipal(1)
+					.build();
+			freshOwner = managedSoklet(freshServer);
+			freshOwner.start();
 			Assertions.assertEquals(2, publisher.subscriptionCount(),
-					"Restart must create exactly one fresh publisher registration.");
-			try (McpChunkedHttpClient restarted = listen(boundPort(server),
+					"A fresh owner generation must create one publisher registration.");
+			try (McpChunkedHttpClient freshClient = listen(boundPort(freshServer),
 					"\"shutdown\"", "{\"resourcesListChanged\":true}")) {
-				assertSseHead(restarted.readHead());
+				assertSseHead(freshClient.readHead());
 				Assertions.assertEquals(acknowledgment("\"shutdown\"",
 						"{\"resourcesListChanged\":true}"),
-						restarted.readChunkText(),
-						"Restart must release the old subscription partition state.");
-				assertCapacityRejected(boundPort(server),
+						freshClient.readChunkText(),
+						"A fresh generation must not retain old partition state.");
+				assertCapacityRejected(boundPort(freshServer),
 						"restart-full-cap");
-				restarted.closeWithReset();
+				freshClient.closeWithReset();
 			}
-			server.stop();
+			freshOwner.stop();
 		} finally {
-			if (client != null)
-				client.close();
-			server.stop();
-			if (stopThread != null && stopThread.isAlive())
-				stopThread.join(5_000L);
+			try {
+				if (client != null)
+					client.close();
+			} finally {
+				try {
+					firstOwner.stop();
+				} finally {
+					try {
+						if (freshOwner != null)
+							freshOwner.stop();
+					} finally {
+						if (stopThread != null && stopThread.isAlive())
+							stopThread.join(MANAGED_STOP_JOIN_MILLIS);
+					}
+				}
+			}
 		}
 		Assertions.assertEquals(2, publisher.closedSubscriptionCount());
 		Assertions.assertEquals(0, publisher.publisherCloseCount());
@@ -948,10 +993,11 @@ public class McpSubscriptionPublicRuntimeTests {
 				.streamQueueCapacity(1)
 				.maximumSubscriptionsPerPrincipal(1)
 				.build();
+		Soklet owner = managedSoklet(server);
 		McpChunkedHttpClient backpressured = null;
 
 		try {
-			server.start();
+			owner.start();
 			int port = boundPort(server);
 			backpressured = listen(port, "\"backpressured\"",
 					largeSubscriptionFilter, 1_024);
@@ -966,7 +1012,7 @@ public class McpSubscriptionPublicRuntimeTests {
 		} finally {
 			if (backpressured != null)
 				backpressured.closeWithReset();
-			server.stop();
+			owner.stop();
 		}
 	}
 
@@ -1282,6 +1328,13 @@ public class McpSubscriptionPublicRuntimeTests {
 
 	private static int boundPort(McpServer server) {
 		return server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+	}
+
+	private static Soklet managedSoklet(McpServer server) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
 	}
 
 	private static Soklet managedSoklet(McpServer server,
