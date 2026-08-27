@@ -81,9 +81,10 @@ public class McpMultiEndpointCapacityPublicRuntimeTests {
 				.requestHandlerConcurrency(1)
 				.requestHandlerQueueCapacity(1)
 				.build();
+		Soklet soklet = managedSoklet(server);
 
 		try {
-			server.start();
+			soklet.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			CompletableFuture<HttpResponse<String>> first = sendAsync(port,
@@ -137,8 +138,15 @@ public class McpMultiEndpointCapacityPublicRuntimeTests {
 					"All endpoint paths must share the server-wide handler slot.");
 		} finally {
 			releaseHandlers.countDown();
-			server.stop();
+			soklet.stop();
 		}
+	}
+
+	private static Soklet managedSoklet(McpServer server) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
 	}
 
 	@NonNull

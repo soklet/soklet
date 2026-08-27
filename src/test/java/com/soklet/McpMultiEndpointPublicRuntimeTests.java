@@ -87,9 +87,10 @@ public class McpMultiEndpointPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
+		Soklet soklet = managedSoklet(server);
 
 		try {
-			server.start();
+			soklet.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 
@@ -157,7 +158,7 @@ public class McpMultiEndpointPublicRuntimeTests {
 			Assertions.assertSame(firstEndpoint, firstObservedEndpoint.get());
 			Assertions.assertSame(secondEndpoint, secondObservedEndpoint.get());
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -199,9 +200,10 @@ public class McpMultiEndpointPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
+		Soklet soklet = managedSoklet(server);
 
 		try {
-			server.start();
+			soklet.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			assertSuccess(send(port, FIRST_PATH,
@@ -225,7 +227,7 @@ public class McpMultiEndpointPublicRuntimeTests {
 			assertEndpointSequence(toolLimitedEndpoints, firstEndpoint,
 					secondEndpoint);
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -264,9 +266,10 @@ public class McpMultiEndpointPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
+		Soklet soklet = managedSoklet(server);
 
 		try {
-			server.start();
+			soklet.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 
@@ -327,8 +330,15 @@ public class McpMultiEndpointPublicRuntimeTests {
 			Assertions.assertSame(firstEndpoint, firstResourceEndpoint.get());
 			Assertions.assertSame(secondEndpoint, secondResourceEndpoint.get());
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
+	}
+
+	private static Soklet managedSoklet(McpServer server) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
 	}
 
 	@NonNull

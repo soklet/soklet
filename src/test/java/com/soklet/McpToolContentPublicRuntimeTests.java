@@ -98,9 +98,10 @@ public class McpToolContentPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 
@@ -134,8 +135,15 @@ public class McpToolContentPublicRuntimeTests {
 			assertInOrder(mixed, textBlock, imageBlock, resourceBlock);
 			assertSuccessfulToolOutput(mixed);
 		} finally {
-			server.stop();
+			owner.stop();
 		}
+	}
+
+	private static Soklet managedSoklet(McpServer server) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
 	}
 
 	private static McpToolRegistration<McpJsonObject> tool(String name,

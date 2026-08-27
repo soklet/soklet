@@ -111,9 +111,10 @@ public class McpTypedToolPublicRuntimeTests {
 					return executor;
 				})
 				.build();
+		Soklet soklet = managedSoklet(server);
 
 		try {
-			server.start();
+			soklet.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			CompletableFuture<HttpResponse<String>> first = sendAsync(port,
@@ -164,10 +165,13 @@ public class McpTypedToolPublicRuntimeTests {
 			Assertions.assertEquals(1, supplierInvocations.get());
 		} finally {
 			releaseFirstHandler.countDown();
-			server.stop();
-			ExecutorService executor = suppliedExecutor.get();
-			if (executor != null)
-				executor.shutdownNow();
+			try {
+				soklet.stop();
+			} finally {
+				ExecutorService executor = suppliedExecutor.get();
+				if (executor != null)
+					executor.shutdownNow();
+			}
 		}
 		Assertions.assertTrue(suppliedExecutor.get().isShutdown());
 	}
@@ -236,9 +240,10 @@ public class McpTypedToolPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
+		Soklet soklet = managedSoklet(server);
 
 		try {
-			server.start();
+			soklet.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 
@@ -330,7 +335,7 @@ public class McpTypedToolPublicRuntimeTests {
 			Assertions.assertTrue(stages.isEmpty(), stages.toString());
 			Assertions.assertEquals(1, handlerInvocations.get());
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -374,9 +379,10 @@ public class McpTypedToolPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
+		Soklet soklet = managedSoklet(server);
 
 		try {
-			server.start();
+			soklet.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			String body = "{\"jsonrpc\":\"2.0\",\"id\":\"propagation-1\","
@@ -402,8 +408,15 @@ public class McpTypedToolPublicRuntimeTests {
 			Assertions.assertEquals(Map.of("userId", "Amélie", "serverNode", "DF 28"),
 					handlerBaggage.get());
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
+	}
+
+	private static Soklet managedSoklet(McpServer server) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
 	}
 
 	private static HttpResponse<String> send(int port, String body,

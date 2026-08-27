@@ -83,9 +83,10 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 		};
 		McpServer server = server(List.of(ordinaryTool, shortCircuitedTool),
 				interceptor, sanitizer);
+		Soklet soklet = managedSoklet(server);
 
 		try {
-			server.start();
+			soklet.start();
 			int port = boundPort(server);
 
 			HttpResponse<String> ordinary = call(port, "ordered-ordinary",
@@ -114,7 +115,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 			Assertions.assertEquals(0,
 					shortCircuitedHandlerInvocations.get());
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -185,9 +186,10 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 		};
 		McpServer server = server(List.of(tool, toolWithoutMirror),
 				McpHandlerInterceptor.passThroughInstance(), sanitizer);
+		Soklet soklet = managedSoklet(server);
 
 		try {
-			server.start();
+			soklet.start();
 			int port = boundPort(server);
 
 			HttpResponse<String> validReplacement = call(port,
@@ -264,7 +266,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 
 			Assertions.assertEquals(8, sanitizerInvocations.get());
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -280,9 +282,10 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 				.build();
 		McpServer server = server(List.of(tool),
 				McpHandlerInterceptor.passThroughInstance(), sanitizer);
+		Soklet soklet = managedSoklet(server);
 
 		try {
-			server.start();
+			soklet.start();
 			String requestId = "failure-" + suffix;
 			HttpResponse<String> response = call(boundPort(server), requestId,
 					toolName, "{}");
@@ -293,8 +296,15 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 					.contains("SANITIZER-EXCEPTION-MUST-NOT-LEAK"),
 					response.body());
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
+	}
+
+	private static Soklet managedSoklet(McpServer server) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
 	}
 
 	private static McpServer server(List<McpToolRegistration<?>> tools,
