@@ -165,7 +165,16 @@ public final class Soklet implements AutoCloseable {
 	@NonNull
 	public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 		requireNonNull(sokletConfig);
-		return new Soklet(sokletConfig);
+		return new Soklet(sokletConfig, LifecycleRuntimeServices.system(),
+				ignored -> { });
+	}
+
+	@NonNull
+	static Soklet fromConfig(@NonNull SokletConfig sokletConfig,
+			@NonNull LifecycleRuntimeServices services,
+			@NonNull Consumer<InternalLifecycleCoreSnapshot> coreSnapshotPublisher) {
+		return new Soklet(requireNonNull(sokletConfig), requireNonNull(services),
+				requireNonNull(coreSnapshotPublisher));
 	}
 
 	@NonNull
@@ -184,7 +193,9 @@ public final class Soklet implements AutoCloseable {
 	 *
 	 * @param sokletConfig configuration that drives the Soklet system
 	 */
-	private Soklet(@NonNull SokletConfig sokletConfig) {
+	private Soklet(@NonNull SokletConfig sokletConfig,
+			@NonNull LifecycleRuntimeServices services,
+			@NonNull Consumer<InternalLifecycleCoreSnapshot> coreSnapshotPublisher) {
 		requireNonNull(sokletConfig);
 
 		this.sokletConfig = sokletConfig;
@@ -192,7 +203,8 @@ public final class Soklet implements AutoCloseable {
 		this.awaitShutdownLatchReference = new AtomicReference<>(new CountDownLatch(1));
 		this.frameworkSetup = new SokletFrameworkSetup(sokletConfig);
 		this.directLifecycle = new SokletDirectLifecycle(this, sokletConfig,
-				this.frameworkSetup);
+				this.frameworkSetup, requireNonNull(services),
+				requireNonNull(coreSnapshotPublisher));
 	}
 
 	/**
@@ -685,7 +697,12 @@ public final class Soklet implements AutoCloseable {
 							format("Ignoring request for %s.%s - it is unsupported in this environment (stdin is unavailable)", ShutdownTrigger.class.getSimpleName(), ShutdownTrigger.ENTER_KEY.name())
 					).build();
 
-					getSokletConfig().getAggregateLifecycleObserver().didReceiveLogEvent(logEvent);
+					try {
+						getSokletConfig().getAggregateLifecycleObserver()
+								.didReceiveLogEvent(logEvent);
+					} catch (Throwable observerFailure) {
+						LifecycleObserverLogFallback.report(observerFailure);
+					}
 				}
 			}
 
@@ -833,8 +850,8 @@ public final class Soklet implements AutoCloseable {
 			for (Soklet soklet : SOKLET_REGISTRY) {
 				try {
 					soklet.getSokletConfig().getAggregateLifecycleObserver().didReceiveLogEvent(logEvent);
-				} catch (Throwable ignored) {
-					// Nothing to do
+				} catch (Throwable observerFailure) {
+					LifecycleObserverLogFallback.report(observerFailure);
 				}
 			}
 		}
@@ -892,7 +909,7 @@ public final class Soklet implements AutoCloseable {
 			try {
 				lifecycleObserver.didReceiveLogEvent(logEvent);
 			} catch (Throwable throwable) {
-				// The LifecycleObserver implementation errored out, but we can't let that affect us.
+				LifecycleObserverLogFallback.report(throwable);
 				throwables.add(throwable);
 			}
 		});
@@ -2191,8 +2208,8 @@ public final class Soklet implements AutoCloseable {
 							.resourceMethod(resourceMethod)
 							.marshaledResponse(marshaledResponse)
 							.build());
-				} catch (Throwable ignored) {
-					// Keep simulator lifecycle observer failures contained.
+				} catch (Throwable observerFailure) {
+					LifecycleObserverLogFallback.report(observerFailure);
 				}
 			}
 
@@ -2207,8 +2224,8 @@ public final class Soklet implements AutoCloseable {
 							.resourceMethod(resourceMethod)
 							.marshaledResponse(marshaledResponse)
 							.build());
-				} catch (Throwable ignored) {
-					// Keep simulator lifecycle observer failures contained.
+				} catch (Throwable observerFailure) {
+					LifecycleObserverLogFallback.report(observerFailure);
 				}
 			}
 		}
@@ -2238,8 +2255,8 @@ public final class Soklet implements AutoCloseable {
 						.resourceMethod(resourceMethod)
 						.marshaledResponse(marshaledResponse)
 						.build());
-			} catch (Throwable ignored) {
-				// Keep simulator lifecycle observer failures contained.
+			} catch (Throwable observerFailure) {
+				LifecycleObserverLogFallback.report(observerFailure);
 			}
 		}
 
@@ -3301,8 +3318,8 @@ public final class Soklet implements AutoCloseable {
 
 			try {
 				sokletConfig.getAggregateLifecycleObserver().didReceiveLogEvent(logEvent);
-			} catch (Throwable ignored) {
-				// No safe fallback sink is available here.
+			} catch (Throwable observerFailure) {
+				LifecycleObserverLogFallback.report(observerFailure);
 			}
 		}
 

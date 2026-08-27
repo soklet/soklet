@@ -41,6 +41,9 @@ import com.soklet.McpSubscriptionEventRegistration;
 import com.soklet.McpSubscriptionNotificationType;
 import com.soklet.McpTextResourceContents;
 import com.soklet.McpToolRegistration;
+import com.soklet.ResourceMethodResolver;
+import com.soklet.Soklet;
+import com.soklet.SokletConfig;
 import com.soklet.StreamTerminationReason;
 import com.soklet.internal.mcp.transport.McpOutboundChannel;
 import com.soklet.internal.microhttp.Header;
@@ -131,10 +134,11 @@ public class McpStreamTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
+		Soklet soklet = managedSoklet(server);
 		Thread stopThread = null;
 
 		try {
-			server.start();
+			soklet.start();
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow()
 					.getPort();
 
@@ -169,7 +173,7 @@ public class McpStreamTests {
 				publisher.publishResourcesListChanged();
 				envelopes.add(readNextSseEnvelope(client));
 
-				stopThread = new Thread(server::stop,
+				stopThread = new Thread(soklet::stop,
 						"mcp-no-independent-request-stop");
 				stopThread.start();
 				envelopes.addAll(readAllSseEnvelopes(client));
@@ -196,7 +200,7 @@ public class McpStreamTests {
 						terminal.id());
 			}
 		} finally {
-			server.stop();
+			soklet.stop();
 			if (stopThread != null && stopThread.isAlive())
 				stopThread.join(5_000L);
 		}
@@ -239,6 +243,13 @@ public class McpStreamTests {
 			Assertions.assertEquals(0, channel.mutations(),
 					"A rejected request must not reach the outbound channel.");
 		}
+	}
+
+	private static Soklet managedSoklet(McpServer server) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
 	}
 
 	private static McpChunkedHttpClient callTool(int port, String idJson,

@@ -115,7 +115,9 @@ final class SokletFrameworkSetupValidationTests {
 		Assertions.assertInstanceOf(IllegalStateException.class,
 				startup.getCause());
 		Assertions.assertEquals(MISSING_HTTP, startup.getCause().getMessage());
-		Assertions.assertFalse(mcp.isStarted());
+		Assertions.assertEquals(McpServerStatus.STOPPED,
+				mcp.getDiagnostics().getStatus());
+		Assertions.assertTrue(mcp.getDiagnostics().getBoundAddress().isEmpty());
 		Assertions.assertEquals(0, instanceProvider.provisionCalls());
 	}
 

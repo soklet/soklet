@@ -207,8 +207,9 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 							return continuation.proceed();
 						})
 						.build();
+				Soklet soklet = managedSoklet(server);
 				try {
-					server.start();
+					soklet.start();
 					int port = server.getDiagnostics().getBoundAddress()
 							.orElseThrow().getPort();
 					HttpResponse<String> listResponse = send(port, "tools/list",
@@ -316,7 +317,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 					Assertions.assertEquals(admissionsBeforeMismatch + 2,
 							admissionInvocations.get());
 				} finally {
-					server.stop();
+					soklet.stop();
 				}
 			}
 		} finally {
@@ -325,6 +326,13 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 			else
 				System.setProperty(INITIALIZED_PROPERTY, previousProperty);
 		}
+	}
+
+	private static Soklet managedSoklet(McpServer server) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
 	}
 
 	private static void compile(@NonNull Path source,

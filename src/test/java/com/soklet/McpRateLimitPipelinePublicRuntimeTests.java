@@ -93,9 +93,10 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 					return output;
 				})
 				.build();
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			HttpResponse<String> response = callTool(server, "ordered");
 
 			assertSuccess(response, "ordered");
@@ -121,7 +122,7 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 					toolLimiter.contexts().get(0).getRequest());
 			assertIdleStartedDiagnostics(server);
 		} finally {
-			stopAndAssertClean(server);
+			stopAndAssertClean(owner, server);
 		}
 	}
 
@@ -159,9 +160,10 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 					return output;
 				})
 				.build();
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			HttpResponse<String> toolDenied = callTool(server, "tool-denied");
 			HttpResponse<String> requestDenied = callTool(server, "request-denied");
 
@@ -190,7 +192,7 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 			Assertions.assertEquals(0, sanitizerInvocations.get());
 			assertIdleStartedDiagnostics(server);
 		} finally {
-			stopAndAssertClean(server);
+			stopAndAssertClean(owner, server);
 		}
 	}
 
@@ -249,9 +251,10 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 					return output;
 				})
 				.build();
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			String failedId = failure.name().toLowerCase(Locale.ROOT) + "-failed";
 			HttpResponse<String> failed = callTool(server, failedId);
 			assertInternalError(failed, failedId);
@@ -279,7 +282,7 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 			Assertions.assertEquals(0, sanitizerInvocations.get());
 			assertIdleStartedDiagnostics(server);
 		} finally {
-			stopAndAssertClean(server);
+			stopAndAssertClean(owner, server);
 		}
 
 		List<String> probeStages = Collections.synchronizedList(new ArrayList<>());
@@ -304,9 +307,10 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 					return output;
 				})
 				.build();
+		Soklet probeOwner = managedSoklet(probeServer);
 
 		try {
-			probeServer.start();
+			probeOwner.start();
 			String toolRetryId = failure.name().toLowerCase(Locale.ROOT)
 					+ "-tool-retry";
 			HttpResponse<String> toolRetry = callTool(probeServer, toolRetryId);
@@ -321,7 +325,7 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 			Assertions.assertEquals(0, probeSanitizerInvocations.get());
 			assertIdleStartedDiagnostics(probeServer);
 		} finally {
-			stopAndAssertClean(probeServer);
+			stopAndAssertClean(probeOwner, probeServer);
 		}
 	}
 
@@ -371,6 +375,13 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 				.toolRateLimiter(toolRateLimiter)
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
+	}
+
+	private static Soklet managedSoklet(McpServer server) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
 	}
 
 	private static HttpResponse<String> callTool(McpServer server, String id)
@@ -481,8 +492,8 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 		throw new AssertionError();
 	}
 
-	private static void stopAndAssertClean(McpServer server) {
-		server.stop();
+	private static void stopAndAssertClean(Soklet owner, McpServer server) {
+		owner.stop();
 		McpServerDiagnostics diagnostics = server.getDiagnostics();
 		Assertions.assertEquals(McpServerStatus.STOPPED, diagnostics.getStatus());
 		Assertions.assertTrue(diagnostics.getBoundAddress().isPresent());

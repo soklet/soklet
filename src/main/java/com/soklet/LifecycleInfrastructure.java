@@ -169,6 +169,48 @@ final class LifecycleWorkers {
 	}
 }
 
+/**
+ * One internally consistent clock/waiter/worker set shared by a direct
+ * lifecycle and its standalone-application finalization.
+ */
+@ThreadSafe
+final class LifecycleRuntimeServices {
+	@NonNull
+	private final NanoClock clock;
+	@NonNull
+	private final DeadlineWaiter waiter;
+	@NonNull
+	private final LifecycleWorkers workers;
+
+	LifecycleRuntimeServices(@NonNull NanoClock clock,
+			@NonNull LifecycleWorkers workers) {
+		this.clock = requireNonNull(clock);
+		this.waiter = new DeadlineWaiter(clock);
+		this.workers = requireNonNull(workers);
+	}
+
+	@NonNull
+	static LifecycleRuntimeServices system() {
+		return new LifecycleRuntimeServices(NanoClock.system(),
+				new LifecycleWorkers());
+	}
+
+	@NonNull
+	NanoClock clock() {
+		return this.clock;
+	}
+
+	@NonNull
+	DeadlineWaiter waiter() {
+		return this.waiter;
+	}
+
+	@NonNull
+	LifecycleWorkers workers() {
+		return this.workers;
+	}
+}
+
 /** Internal-first result publication plus one cached minimal public-stage draft. */
 @ThreadSafe
 final class InternalLifecycleCompletion {
@@ -279,6 +321,15 @@ final class InternalLifecycleCompletion {
 	@NonNull
 	CompletionStage<InternalShutdownResult> publicStage() {
 		return this.publicView;
+	}
+}
+
+/** Exact immutable core-result publication point used by runner deadlines. */
+@Immutable
+record InternalLifecycleCoreSnapshot(@NonNull InternalShutdownResult result,
+		long publicationNanos) {
+	InternalLifecycleCoreSnapshot {
+		requireNonNull(result);
 	}
 }
 
@@ -572,9 +623,13 @@ final class LifecycleTransitionDispatcher {
 	@NonNull
 	private final Object monitor;
 	private boolean workerStarted;
+	private boolean callbackActive;
 	private boolean sealed;
 	private boolean disabled;
 	private int acceptedRecords;
+	private int failedCallbacks;
+	@Nullable
+	private String firstFailureSummary;
 
 	LifecycleTransitionDispatcher(@NonNull LifecycleWorkers workers) {
 		this.workers = requireNonNull(workers);
@@ -586,8 +641,6 @@ final class LifecycleTransitionDispatcher {
 		requireNonNull(callback);
 		boolean startWorker = false;
 		synchronized (this.monitor) {
-			if (this.disabled)
-				return;
 			if (this.sealed)
 				throw new IllegalStateException("Lifecycle transition dispatcher is sealed");
 			if (this.acceptedRecords == MAXIMUM_ACCEPTED_RECORDS)
@@ -595,7 +648,7 @@ final class LifecycleTransitionDispatcher {
 						"Lifecycle transition trace exceeds the protocol maximum of 16 records");
 			this.queue.addLast(callback);
 			this.acceptedRecords++;
-			if (!this.workerStarted) {
+			if (!this.workerStarted && !this.disabled) {
 				this.workerStarted = true;
 				startWorker = true;
 			}
@@ -609,7 +662,6 @@ final class LifecycleTransitionDispatcher {
 				synchronized (this.monitor) {
 					this.disabled = true;
 					this.workerStarted = false;
-					this.queue.clear();
 					this.monitor.notifyAll();
 				}
 			}
@@ -623,6 +675,16 @@ final class LifecycleTransitionDispatcher {
 		}
 	}
 
+	@NonNull
+	LifecycleTransitionSnapshot snapshot() {
+		synchronized (this.monitor) {
+			return new LifecycleTransitionSnapshot(this.acceptedRecords,
+					this.queue.size(), this.callbackActive, this.sealed,
+					this.disabled, this.failedCallbacks,
+					Optional.ofNullable(this.firstFailureSummary));
+		}
+	}
+
 	private void run() {
 		for (;;) {
 			Runnable callback;
@@ -630,21 +692,56 @@ final class LifecycleTransitionDispatcher {
 				while (this.queue.isEmpty() && !this.sealed) {
 					try {
 						this.monitor.wait();
-					} catch (InterruptedException exception) {
-						Thread.currentThread().interrupt();
-						return;
+					} catch (InterruptedException ignored) {
+						// Transition observation is never a framework cancellation
+						// target.  In particular, a callback that interrupts its own
+						// worker cannot strand records accepted later in the trace.
 					}
 				}
 				if (this.queue.isEmpty())
 					return;
 				callback = this.queue.removeFirst();
+				this.callbackActive = true;
 			}
 			try {
 				callback.run();
-			} catch (Throwable ignored) {
-				// Observation is isolated from core lifecycle progress.
+			} catch (Throwable failure) {
+				String failureSummary =
+						DefaultLifecycleTerminalReporter.safeThrowable(failure);
+				synchronized (this.monitor) {
+					this.failedCallbacks++;
+					if (this.firstFailureSummary == null)
+						this.firstFailureSummary = failureSummary;
+				}
+			} finally {
+				synchronized (this.monitor) {
+					this.callbackActive = false;
+					this.monitor.notifyAll();
+				}
 			}
 		}
+	}
+}
+
+/** Bounded observer-delivery diagnostics; no callback object is exposed. */
+@Immutable
+record LifecycleTransitionSnapshot(int acceptedRecords, int pendingRecords,
+		boolean callbackActive, boolean sealed, boolean disabled,
+		int failedCallbacks, @NonNull Optional<String> firstFailureSummary) {
+	LifecycleTransitionSnapshot {
+		requireNonNull(firstFailureSummary);
+		if (acceptedRecords < 0 || acceptedRecords > 16)
+			throw new IllegalArgumentException(
+					"acceptedRecords must be between 0 and 16");
+		if (pendingRecords < 0 || pendingRecords > acceptedRecords)
+			throw new IllegalArgumentException(
+					"pendingRecords must be between 0 and acceptedRecords");
+		if (failedCallbacks < 0 || failedCallbacks > acceptedRecords)
+			throw new IllegalArgumentException(
+					"failedCallbacks must be between 0 and acceptedRecords");
+		if ((failedCallbacks == 0) == firstFailureSummary.isPresent())
+			throw new IllegalArgumentException(
+					"Transition failure summary does not match its count");
 	}
 }
 
@@ -932,11 +1029,13 @@ final class InternalLifecycleCoordinator {
 /** Process/finalization seams established additively for the later runner. */
 interface LifecycleProcessAccess {
 	@NonNull
-	InputStream standardInput();
+	Optional<InputStream> standardInput();
 
 	void addShutdownHook(@NonNull Thread hook);
 
 	boolean removeShutdownHook(@NonNull Thread hook);
+
+	void reportConfigurationWarning(@NonNull String message);
 }
 
 interface LifecycleFinalizationAction {
@@ -944,6 +1043,5 @@ interface LifecycleFinalizationAction {
 }
 
 interface LifecycleTerminalReporter {
-	void report(@NonNull InternalShutdownResult result,
-			@NonNull Optional<LifecycleRetentionSummary> retentionSummary);
+	void report(@NonNull SokletApplicationTerminalSnapshot snapshot);
 }

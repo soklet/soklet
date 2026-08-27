@@ -315,6 +315,9 @@ class McpLocalizationReloadRuntimeTests {
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(observer)
+				.internalLifecyclePolicy(new InternalLifecyclePolicy(
+						Optional.of(Duration.ofSeconds(5)), Duration.ofSeconds(2),
+						Duration.ofSeconds(2), Duration.ofSeconds(1)))
 				.build());
 		AtomicReference<Throwable> stopFailure = new AtomicReference<>();
 		Thread stopThread = new Thread(() -> {

@@ -40,6 +40,9 @@ import com.soklet.McpSubscriptionNotificationType;
 import com.soklet.McpTextResourceContents;
 import com.soklet.McpToolHandler;
 import com.soklet.McpToolRegistration;
+import com.soklet.ResourceMethodResolver;
+import com.soklet.Soklet;
+import com.soklet.SokletConfig;
 import com.soklet.internal.microhttp.EventLoop;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
@@ -49,6 +52,7 @@ import org.junit.jupiter.api.Timeout;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.net.URI;
+import java.nio.channels.ClosedSelectorException;
 import java.nio.channels.Selector;
 import java.time.Duration;
 import java.util.List;
@@ -96,6 +100,7 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 		});
 		McpServer server = server(List.of(toolEndpoint, subscriptionEndpoint()),
 				Duration.ofSeconds(1));
+		Soklet soklet = managedSoklet(server);
 		ExecutorService readerExecutor = Executors.newSingleThreadExecutor();
 		AtomicBoolean readSnapshots = new AtomicBoolean(true);
 		AtomicInteger snapshotReads = new AtomicInteger();
@@ -104,7 +109,7 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 		Future<?> reader = null;
 
 		try {
-			server.start();
+			soklet.start();
 			reader = readerExecutor.submit(() -> {
 				while (readSnapshots.get()) {
 					assertStreamInvariant(server.getDiagnostics());
@@ -154,7 +159,7 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 				ordinary.close();
 			if (subscription != null)
 				subscription.close();
-			server.stop();
+			soklet.stop();
 			readerExecutor.shutdownNow();
 			Assertions.assertTrue(readerExecutor.awaitTermination(
 					5, TimeUnit.SECONDS));
@@ -178,17 +183,23 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 			}
 		});
 		McpServer server = server(List.of(endpoint), Duration.ofMillis(150));
+		Soklet soklet = managedSoklet(server);
 		McpChunkedHttpClient client = null;
+		IllegalStateException terminalFailure = null;
 
 		try {
-			server.start();
+			soklet.start();
 			client = callTool(boundPort(server), TOOL_PATH, "residual");
 			assertSseHead(client.readHead());
 			client.readChunkText();
 			McpServerDiagnostics open = awaitDiagnostics(server,
 					diagnostics -> streamPair(diagnostics, 1, 0));
 
-			server.stop();
+			terminalFailure = captureManagedStopFailure(soklet);
+			assertManagedTerminalFailure(terminalFailure,
+					"com.soklet.ShutdownIncompleteException",
+					"The simulator scope could not prove complete shutdown");
+			Assertions.assertNull(terminalFailure.getCause());
 			Assertions.assertTrue(handlerInterrupted.await(5, TimeUnit.SECONDS));
 			McpServerDiagnostics residual = server.getDiagnostics();
 			Assertions.assertEquals(McpServerStatus.STOPPED_WITH_RESIDUAL_HANDLERS,
@@ -209,9 +220,15 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 			assertStreamPair(residual, 0, 0);
 		} finally {
 			releaseHandler.countDown();
-			if (client != null)
-				client.close();
-			server.stop();
+			try {
+				if (client != null)
+					client.close();
+			} finally {
+				if (terminalFailure == null)
+					soklet.stop();
+				else
+					assertSameManagedTerminalReplay(soklet, terminalFailure);
+			}
 		}
 	}
 
@@ -220,6 +237,7 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 			throws Exception {
 		McpServer server = server(List.of(subscriptionEndpoint()),
 				Duration.ofSeconds(1));
+		Soklet soklet = managedSoklet(server);
 		ExecutorService terminationExecutor = Executors.newSingleThreadExecutor();
 		ExecutorService readerExecutor = Executors.newSingleThreadExecutor();
 		AtomicBoolean readSnapshots = new AtomicBoolean(true);
@@ -227,9 +245,10 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 		McpChunkedHttpClient subscription = null;
 		Future<?> termination = null;
 		Future<?> reader = null;
+		IllegalStateException terminalFailure = null;
 
 		try {
-			server.start();
+			soklet.start();
 			subscription = listen(boundPort(server), SUBSCRIPTION_PATH, "failure");
 			assertSseHead(subscription.readHead());
 			subscription.readChunkText();
@@ -269,17 +288,36 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 			readSnapshots.set(false);
 			requireFuture(reader).get(5, TimeUnit.SECONDS);
 			Assertions.assertTrue(snapshotReads.get() > 0);
+			terminalFailure = captureManagedStopFailure(soklet);
+			assertManagedTerminalFailure(terminalFailure,
+					"com.soklet.SokletTerminatedUnexpectedlyException",
+					"A Soklet transport terminated unexpectedly");
+			Assertions.assertInstanceOf(ClosedSelectorException.class,
+					terminalFailure.getCause());
 		} finally {
 			readSnapshots.set(false);
-			if (subscription != null)
-				subscription.close();
-			server.stop();
-			terminationExecutor.shutdownNow();
-			readerExecutor.shutdownNow();
-			Assertions.assertTrue(terminationExecutor.awaitTermination(
-					5, TimeUnit.SECONDS));
-			Assertions.assertTrue(readerExecutor.awaitTermination(
-					5, TimeUnit.SECONDS));
+			try {
+				if (subscription != null)
+					subscription.close();
+			} finally {
+				try {
+					if (terminalFailure == null)
+						soklet.stop();
+					else
+						assertSameManagedTerminalReplay(soklet,
+								terminalFailure);
+				} finally {
+					terminationExecutor.shutdownNow();
+					readerExecutor.shutdownNow();
+					try {
+						Assertions.assertTrue(terminationExecutor.awaitTermination(
+								5, TimeUnit.SECONDS));
+					} finally {
+						Assertions.assertTrue(readerExecutor.awaitTermination(
+								5, TimeUnit.SECONDS));
+					}
+				}
+			}
 		}
 	}
 
@@ -356,6 +394,13 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 				.requestTimeout(Duration.ofSeconds(10))
 				.shutdownTimeout(shutdownTimeout)
 				.build();
+	}
+
+	private static Soklet managedSoklet(McpServer server) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
 	}
 
 	private static int boundPort(@NonNull McpServer server) {
@@ -486,6 +531,49 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 				interrupted.countDown();
 			}
 		}
+	}
+
+	@NonNull
+	private static IllegalStateException captureManagedStopFailure(
+			@NonNull Soklet soklet) {
+		return Assertions.assertThrows(IllegalStateException.class,
+				soklet::stop);
+	}
+
+	private static void assertManagedTerminalFailure(
+			@NonNull IllegalStateException failure,
+			@NonNull String expectedClassName, @NonNull String expectedMessage) {
+		Assertions.assertEquals(expectedClassName, failure.getClass().getName());
+		Assertions.assertEquals(expectedMessage, failure.getMessage());
+	}
+
+	private static void assertSameManagedTerminalReplay(@NonNull Soklet soklet,
+			@NonNull IllegalStateException expected) {
+		IllegalStateException replay = captureManagedStopFailure(soklet);
+		assertManagedTerminalFailure(replay, expected.getClass().getName(),
+				expected.getMessage());
+		Assertions.assertSame(managedShutdownResult(expected),
+				managedShutdownResult(replay));
+	}
+
+	@NonNull
+	private static Object managedShutdownResult(
+			@NonNull IllegalStateException failure) {
+		Class<?> type = failure.getClass();
+		while (type != null) {
+			try {
+				Field result = type.getDeclaredField("shutdownResult");
+				result.setAccessible(true);
+				return result.get(failure);
+			} catch (NoSuchFieldException exception) {
+				type = type.getSuperclass();
+			} catch (IllegalAccessException exception) {
+				throw new AssertionError("Unable to read managed shutdown result",
+						exception);
+			}
+		}
+		throw new AssertionError("Managed terminal failure has no shutdown result: "
+				+ failure.getClass().getName());
 	}
 
 	@NonNull

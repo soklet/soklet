@@ -538,8 +538,14 @@ public class SseTests {
 					.build();
 
 			try (Soklet app = Soklet.fromConfig(sokletConfig)) {
-				IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class, app::start);
-				Assertions.assertTrue(exception.getMessage().contains("SSE server"));
+				SokletStartupException exception = Assertions.assertThrows(
+						SokletStartupException.class, app::start);
+				Assertions.assertEquals(InternalStartupDisposition.FAILED,
+						exception.getInternalStartupDisposition());
+				Assertions.assertSame(exception.getInternalShutdownResult(),
+						app.getDirectLifecycle().result().orElseThrow());
+				Assertions.assertTrue(exception.getCause().getMessage()
+						.contains("SSE server"));
 				Assertions.assertFalse(app.isStarted());
 			}
 

@@ -576,6 +576,7 @@ final class InternalControllingEventElection {
  */
 @ThreadSafe
 final class InternalTerminationGroup {
+	private static final int MAXIMUM_DIAGNOSTIC_MEMBERS = 16;
 	private enum State {
 		OPEN,
 		COMMITTED,
@@ -658,6 +659,17 @@ final class InternalTerminationGroup {
 		}
 	}
 
+	/** Aggregate-only member diagnostics; no signal or throwable escapes. */
+	@Immutable
+	record DiagnosticSummary(int memberCount, int failedMembers,
+			int provenMembers, boolean truncated) {
+		DiagnosticSummary {
+			if (memberCount < 0 || failedMembers < 0 || provenMembers < 0)
+				throw new IllegalArgumentException(
+						"Termination member counts must be >= 0");
+		}
+	}
+
 	@NonNull
 	private final AdmissionFence admissionFence;
 	@NonNull
@@ -716,6 +728,25 @@ final class InternalTerminationGroup {
 	@NonNull
 	synchronized Member root() {
 		return this.root;
+	}
+
+	@NonNull
+	synchronized DiagnosticSummary diagnosticSummary() {
+		int failed = 0;
+		int proven = 0;
+		int inspectedMembers = Math.min(this.members.size(),
+				MAXIMUM_DIAGNOSTIC_MEMBERS);
+		for (int index = 0; index < inspectedMembers; index++) {
+			Member member = this.members.get(index);
+			if (member.failure != null || member.failureDiagnostic != null
+					|| member.attachDiagnostic != null
+					|| member.proofHandoffDiagnostic != null)
+				failed++;
+			if (member.proof != null)
+				proven++;
+		}
+		return new DiagnosticSummary(this.members.size(), failed, proven,
+				this.members.size() > MAXIMUM_DIAGNOSTIC_MEMBERS);
 	}
 
 	@NonNull

@@ -96,7 +96,6 @@ public class McpSimulatorPublicRuntimeTests {
 		try {
 			SokletSimulator.run(configFactory, simulator -> {
 				assertStoppedDiagnostics(server.server());
-				Assertions.assertFalse(server.server().isStarted());
 				McpSimulation missingHost = simulator.startMcpRequest(request(
 						"missing-host", "blocking", null, null, Optional.empty()));
 				Assertions.assertEquals(421,
@@ -113,7 +112,6 @@ public class McpSimulatorPublicRuntimeTests {
 				McpSimulation simulation = simulator.startMcpRequest(request);
 				Assertions.assertTrue(awaitLatch(handlerEntered));
 				assertStoppedDiagnostics(server.server());
-				Assertions.assertFalse(server.server().isStarted());
 				releaseHandler.countDown();
 				McpSimulationResponse response = awaitResponse(simulation);
 				Assertions.assertEquals(200, response.getStatusCode());
@@ -198,7 +196,6 @@ public class McpSimulatorPublicRuntimeTests {
 		});
 
 		Assertions.assertEquals(1, handlerCalls.get());
-		Assertions.assertFalse(server.server().isStarted());
 		assertStoppedDiagnostics(server.server());
 	}
 
@@ -1049,9 +1046,18 @@ public class McpSimulatorPublicRuntimeTests {
 			Assertions.assertThrows(IllegalStateException.class,
 					() -> escapedSimulator.get().startMcpRequest(request),
 					"A simulator with residual work must reject new requests.");
-			Assertions.assertThrows(IllegalStateException.class,
-					server.server()::start,
+			TransportOwnershipException conflict = Assertions.assertThrows(
+					TransportOwnershipException.class,
+					() -> Soklet.fromConfig(SokletConfig
+							.withMcpServer(server.server())
+							.resourceMethodResolver(ResourceMethodResolver
+									.fromMethods(Set.of()))
+							.build()),
 					"Live start must not overlap residual simulator work.");
+			Assertions.assertEquals(InternalParticipantKind.MCP,
+					conflict.getInternalParticipantKind());
+			Assertions.assertSame(server.server().getClass(),
+					conflict.getTransportClass());
 		} finally {
 			releaseHandler.countDown();
 		}

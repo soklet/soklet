@@ -109,9 +109,10 @@ public class McpProgressPublicRuntimeTests {
 					return McpCompleteResult.fromToolText("progress complete");
 				});
 		McpServer server = server(List.of(progressTool));
+		Soklet soklet = managedSoklet(server);
 
 		try {
-			server.start();
+			soklet.start();
 			int port = boundPort(server);
 			assertExactProgressExchange(port, "\"string-request\"",
 					"\"string-token\"", "\"string-token\"");
@@ -136,7 +137,7 @@ public class McpProgressPublicRuntimeTests {
 			Assertions.assertFalse(lateCallback.get());
 			Assertions.assertFalse(terminalToken.get().isCanceled());
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -153,9 +154,10 @@ public class McpProgressPublicRuntimeTests {
 					return McpCompleteResult.fromToolText("floating progress complete");
 				});
 		McpServer server = server(List.of(progressTool));
+		Soklet soklet = managedSoklet(server);
 
 		try {
-			server.start();
+			soklet.start();
 			try (McpChunkedHttpClient client = callTool(boundPort(server),
 					"\"float-request\"", "progress.float", "{}",
 					"\"float-token\"")) {
@@ -175,7 +177,7 @@ public class McpProgressPublicRuntimeTests {
 				Assertions.assertNull(client.readChunk());
 			}
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -194,9 +196,10 @@ public class McpProgressPublicRuntimeTests {
 					return McpCompleteResult.fromToolText("no token complete");
 				});
 		McpServer server = server(List.of(tool));
+		Soklet soklet = managedSoklet(server);
 
 		try {
-			server.start();
+			soklet.start();
 			try (McpChunkedHttpClient client = callTool(boundPort(server),
 					"\"no-token\"", "progress.no-token", "{}", null)) {
 				McpChunkedHttpClient.HttpResponseHead head = client.readHead();
@@ -212,7 +215,7 @@ public class McpProgressPublicRuntimeTests {
 			Assertions.assertTrue(
 					observedToken.get().getCancelationReason().isEmpty());
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -255,9 +258,10 @@ public class McpProgressPublicRuntimeTests {
 						.mayRequestInput(roots)
 						.build();
 		McpServer server = server(List.of(complete, input));
+		Soklet soklet = managedSoklet(server);
 
 		try {
-			server.start();
+			soklet.start();
 			int port = boundPort(server);
 			try (McpChunkedHttpClient client = callTool(port,
 					"\"conditional-complete\"",
@@ -297,7 +301,7 @@ public class McpProgressPublicRuntimeTests {
 				Assertions.assertNull(client.readChunk());
 			}
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -774,6 +778,13 @@ public class McpProgressPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
+	}
+
+	private static Soklet managedSoklet(McpServer server) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
 	}
 
 	private static int boundPort(McpServer server) {

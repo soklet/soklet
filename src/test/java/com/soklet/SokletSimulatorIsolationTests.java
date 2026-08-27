@@ -356,7 +356,7 @@ public class SokletSimulatorIsolationTests {
 		Assertions.assertEquals(1, thrown.getSuppressed().length);
 		ShutdownIncompleteException suppressed = Assertions.assertInstanceOf(
 				ShutdownIncompleteException.class, thrown.getSuppressed()[0]);
-		Assertions.assertSame(failedBodyTeardown, suppressed.getCause());
+		Assertions.assertNull(suppressed.getCause());
 		Assertions.assertTrue(suppressed.retainsScopeEvidence(
 				failedBodyScope.get()));
 		assertUnknownTeardownFailure(suppressed, failedBodyTeardown);
@@ -373,7 +373,7 @@ public class SokletSimulatorIsolationTests {
 				}, NanoClock.system(), new LifecycleWorkers((name, task) -> {
 					throw successfulBodyTeardown;
 				})));
-		Assertions.assertSame(successfulBodyTeardown, direct.getCause());
+		Assertions.assertNull(direct.getCause());
 		Assertions.assertTrue(direct.retainsScopeEvidence(
 				successfulBodyScope.get()));
 		assertUnknownTeardownFailure(direct, successfulBodyTeardown);
@@ -486,11 +486,15 @@ public class SokletSimulatorIsolationTests {
 		McpServer server = escapedServer.get();
 		Assertions.assertNotNull(server);
 		Assertions.assertEquals(1, handlerCalls.get());
-		Assertions.assertFalse(server.isStarted());
 		Assertions.assertEquals(McpServerStatus.STOPPED,
 				server.getDiagnostics().getStatus());
 		Assertions.assertTrue(server.getDiagnostics().getBoundAddress().isEmpty());
-		Assertions.assertThrows(IllegalStateException.class, server::start);
+		TransportOwnershipException conflict = Assertions.assertThrows(
+				TransportOwnershipException.class,
+				() -> Soklet.fromConfig(mcpConfig(server)));
+		Assertions.assertEquals(InternalParticipantKind.MCP,
+				conflict.getInternalParticipantKind());
+		Assertions.assertSame(server.getClass(), conflict.getTransportClass());
 		Assertions.assertTrue(server.getDiagnostics().getBoundAddress().isEmpty());
 	}
 
@@ -661,8 +665,8 @@ public class SokletSimulatorIsolationTests {
 		Assertions.assertEquals(
 				InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
 				participant.disposition());
-		Assertions.assertTrue(participant.failures().stream()
-				.anyMatch(failure -> failure == expectedFailure));
+		Assertions.assertEquals(1, participant.failures().size());
+		Assertions.assertSame(expectedFailure, participant.failures().get(0));
 	}
 
 	@NonNull

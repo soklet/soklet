@@ -1575,7 +1575,7 @@ final class DefaultHttpServer implements HttpServer {
 		try {
 			getLifecycleObserver().didReceiveLogEvent(logEvent);
 		} catch (Throwable throwable) {
-			// The LifecycleObserver implementation errored out, but we can't let that affect us.
+			LifecycleObserverLogFallback.report(throwable);
 		}
 	}
 

@@ -466,7 +466,6 @@ class McpLocalizationCatalogExtractionTests {
 	}
 
 	private static void assertServerNeverListened(McpServer server) {
-		assertFalse(server.isStarted());
 		McpServerDiagnostics diagnostics = server.getDiagnostics();
 		assertEquals(McpServerStatus.STOPPED, diagnostics.getStatus());
 		assertTrue(diagnostics.getBoundAddress().isEmpty());

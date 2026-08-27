@@ -433,7 +433,6 @@ public class McpSimulatorEveryOperationTests {
 		Assertions.assertEquals(0, diagnostics.getQueuedRequests());
 		Assertions.assertEquals(0, diagnostics.getActiveRequestStreams());
 		Assertions.assertEquals(0, diagnostics.getActiveSubscriptions());
-		Assertions.assertFalse(server.isStarted());
 	}
 
 	@NonNull

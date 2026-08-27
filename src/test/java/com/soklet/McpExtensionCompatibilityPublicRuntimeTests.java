@@ -51,9 +51,10 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 			admissions.add(context);
 			return McpAdmissionDecision.accepted();
 		});
+		Soklet soklet = managedSoklet(server);
 
 		try {
-			server.start();
+			soklet.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> response = discover(port, "valid-extension", "{"
@@ -93,7 +94,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 			Assertions.assertTrue(capabilities.toJson().getMembers()
 					.containsKey("futureCapability"));
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
 	}
 
@@ -105,6 +106,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 			admissions.add(context);
 			return McpAdmissionDecision.accepted();
 		});
+		Soklet soklet = managedSoklet(server);
 		List<String> malformedCapabilities = List.of(
 				"{\"extensions\":[]}",
 				"{\"extensions\":{\"not-prefixed\":{}}}",
@@ -112,7 +114,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 				"{\"extensions\":{\"com.example/client-extension\":true}}");
 
 		try {
-			server.start();
+			soklet.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			for (int index = 0; index < malformedCapabilities.size(); index++) {
@@ -134,8 +136,15 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 			Assertions.assertTrue(admissions.isEmpty(),
 					"Malformed extension metadata must fail before admission.");
 		} finally {
-			server.stop();
+			soklet.stop();
 		}
+	}
+
+	private static Soklet managedSoklet(McpServer server) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
 	}
 
 	private static McpServer server(McpAdmissionController admissionController) {

@@ -84,15 +84,18 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 	@Test
 	public void liveRotationsChangeOnlyFreshSnapshotsAcrossStopAndRestart()
 			throws Exception {
-		McpServer server = serverBuilder("lifecycle")
+		McpTraceCorrelationKey rotatedTraceKey = traceKey("trace-b", 4);
+		McpServer firstServer = serverBuilder("lifecycle")
 				.protectionConfig(productionProtectionConfig())
 				.traceCorrelationKey(traceKey("trace-a", 3))
 				.build();
-		McpServerDiagnostics beforeStart = server.getDiagnostics();
+		Soklet firstOwner = managedSoklet(firstServer);
+		Soklet secondOwner = null;
+		McpServerDiagnostics beforeStart = firstServer.getDiagnostics();
 		McpProtectionKeyRingFingerprint initialProtection =
-				protectionFingerprint(server);
+				protectionFingerprint(firstServer);
 		McpTraceCorrelationConfigurationFingerprint initialTrace =
-				traceFingerprint(server);
+				traceFingerprint(firstServer);
 		assertSecurityDiagnostics(beforeStart,
 				McpProtectionMode.PRODUCTION_KEY_RING, false,
 				Optional.of(initialProtection), Optional.of(initialTrace));
@@ -100,36 +103,55 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 				beforeStart.getStatus());
 
 		try {
-			server.start();
-			McpServerDiagnostics started = server.getDiagnostics();
+			firstOwner.start();
+			McpServerDiagnostics started = firstServer.getDiagnostics();
 			Assertions.assertEquals(McpServerStatus.STARTED,
 					started.getStatus());
 			assertSecurityDiagnostics(started,
 					McpProtectionMode.PRODUCTION_KEY_RING, false,
 					Optional.of(initialProtection), Optional.of(initialTrace));
 
-			server.getProtectionControl().activateStagedKey("protection-b");
-			server.getTraceCorrelationControl().rotateActiveKey(
-					traceKey("trace-b", 4));
+			firstServer.getProtectionControl().activateStagedKey("protection-b");
+			firstServer.getTraceCorrelationControl().rotateActiveKey(
+					rotatedTraceKey);
+			McpProtectionKeyRingSnapshot rotatedProtectionSnapshot = firstServer
+					.getProtectionControl().getKeyRingSnapshot().orElseThrow();
+			Assertions.assertEquals("protection-b",
+					rotatedProtectionSnapshot.getActiveKeyId());
+			Assertions.assertEquals(Set.of("protection-a"),
+					rotatedProtectionSnapshot.getVerificationKeyIds());
+			McpProtectionKeyRing rotatedProtectionKeyRing = McpProtectionKeyRing
+					.withActiveKey(protectionKey("protection-b", 2))
+					.verificationKey(protectionKey("protection-a", 1))
+					.build();
 			McpProtectionKeyRingFingerprint rotatedProtection =
-					protectionFingerprint(server);
+					protectionFingerprint(firstServer);
 			McpTraceCorrelationConfigurationFingerprint rotatedTrace =
-					traceFingerprint(server);
+					traceFingerprint(firstServer);
 			Assertions.assertNotEquals(initialProtection, rotatedProtection);
 			Assertions.assertNotEquals(initialTrace, rotatedTrace);
-			assertSecurityDiagnostics(server.getDiagnostics(),
+			assertSecurityDiagnostics(firstServer.getDiagnostics(),
 					McpProtectionMode.PRODUCTION_KEY_RING, false,
 					Optional.of(rotatedProtection), Optional.of(rotatedTrace));
 
-			server.stop();
-			McpServerDiagnostics stopped = server.getDiagnostics();
+			firstOwner.stop();
+			McpServerDiagnostics stopped = firstServer.getDiagnostics();
 			Assertions.assertEquals(McpServerStatus.STOPPED, stopped.getStatus());
 			assertSecurityDiagnostics(stopped,
 					McpProtectionMode.PRODUCTION_KEY_RING, false,
 					Optional.of(rotatedProtection), Optional.of(rotatedTrace));
 
-			server.start();
-			McpServerDiagnostics restarted = server.getDiagnostics();
+			McpServer secondServer = serverBuilder("lifecycle")
+					.protectionConfig(McpProtectionConfig
+							.withKeyRing(rotatedProtectionKeyRing).build())
+					.traceCorrelationKey(rotatedTraceKey)
+					.build();
+			Assertions.assertEquals(rotatedProtection,
+					protectionFingerprint(secondServer));
+			Assertions.assertEquals(rotatedTrace, traceFingerprint(secondServer));
+			secondOwner = managedSoklet(secondServer);
+			secondOwner.start();
+			McpServerDiagnostics restarted = secondServer.getDiagnostics();
 			Assertions.assertEquals(McpServerStatus.STARTED,
 					restarted.getStatus());
 			assertSecurityDiagnostics(restarted,
@@ -149,7 +171,12 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 					Optional.of(rotatedProtection), Optional.of(rotatedTrace));
 			Assertions.assertEquals(McpServerStatus.STOPPED, stopped.getStatus());
 		} finally {
-			server.stop();
+			try {
+				if (secondOwner != null)
+					secondOwner.stop();
+			} finally {
+				firstOwner.stop();
+			}
 		}
 	}
 
@@ -369,5 +396,12 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 						McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST));
+	}
+
+	private static Soklet managedSoklet(McpServer server) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
 	}
 }

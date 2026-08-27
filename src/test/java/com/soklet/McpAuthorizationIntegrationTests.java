@@ -73,9 +73,10 @@ public class McpAuthorizationIntegrationTests {
 	public void passesSafeBearerChallenge() throws Exception {
 		FixtureState state = new FixtureState();
 		McpServer server = server(state);
+		Soklet soklet = managedSoklet(server);
 
 		try {
-			server.start();
+			soklet.start();
 			int port = boundPort(server);
 			WireResponse request = exchange(port, "POST", toolRequest("auth-request"),
 					toolHeaders());
@@ -126,7 +127,7 @@ public class McpAuthorizationIntegrationTests {
 			state.assertNoDownstreamInvocations();
 			assertIdleStartedDiagnostics(server);
 		} finally {
-			stopAndAssertClean(server);
+			stopAndAssertClean(soklet, server);
 		}
 	}
 
@@ -135,9 +136,10 @@ public class McpAuthorizationIntegrationTests {
 		assertGoldenManifest();
 		FixtureState state = new FixtureState();
 		McpServer server = server(state);
+		Soklet soklet = managedSoklet(server);
 
 		try {
-			server.start();
+			soklet.start();
 			int port = boundPort(server);
 			WireResponse preflight = exchange(port, "OPTIONS", "", List.of(
 					new HeaderLine("Origin", ALLOWED_ORIGIN),
@@ -214,7 +216,7 @@ public class McpAuthorizationIntegrationTests {
 			state.assertNoDownstreamInvocations();
 			assertIdleStartedDiagnostics(server);
 		} finally {
-			stopAndAssertClean(server);
+			stopAndAssertClean(soklet, server);
 		}
 	}
 
@@ -408,8 +410,15 @@ public class McpAuthorizationIntegrationTests {
 		throw new AssertionError();
 	}
 
-	private static void stopAndAssertClean(McpServer server) {
-		server.stop();
+	private static Soklet managedSoklet(McpServer server) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
+	}
+
+	private static void stopAndAssertClean(Soklet soklet, McpServer server) {
+		soklet.stop();
 		McpServerDiagnostics diagnostics = server.getDiagnostics();
 		Assertions.assertEquals(McpServerStatus.STOPPED, diagnostics.getStatus());
 		Assertions.assertTrue(diagnostics.getBoundAddress().isPresent());

@@ -99,9 +99,10 @@ public class McpSelfReportedIdentityPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> alphaResponse = call(port, "alpha",
@@ -136,7 +137,7 @@ public class McpSelfReportedIdentityPublicRuntimeTests {
 			assertHandler(handlers.get(0), "reported-beta", alpha);
 			assertHandler(handlers.get(1), "reported-alpha", beta);
 		} finally {
-			server.stop();
+			owner.stop();
 		}
 	}
 
@@ -204,6 +205,13 @@ public class McpSelfReportedIdentityPublicRuntimeTests {
 				.applicationContext(applicationContext)
 				.build();
 		return new IdentityFixture(name, identity, principal, applicationContext);
+	}
+
+	private static Soklet managedSoklet(McpServer server) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
 	}
 
 	private static HttpResponse<String> call(int port, String id,

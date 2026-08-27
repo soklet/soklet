@@ -437,6 +437,7 @@ public class McpLocalizationPublicApiTests {
 				.contextProvider(request -> context(Locale.ENGLISH))
 				.build();
 		McpServer enabled = serverBuilder(registry).localizer(localizer).build();
+		Soklet enabledSoklet = managedSoklet(enabled);
 		McpLocalizationControl enabledControl = enabled.getLocalizationControl();
 		Assertions.assertSame(enabledControl, enabled.getLocalizationControl());
 		Assertions.assertNotSame(disabledControl, enabledControl);
@@ -445,7 +446,7 @@ public class McpLocalizationPublicApiTests {
 				((DefaultMcpServer) enabled).localizer().orElseThrow());
 		Assertions.assertDoesNotThrow(
 				enabledControl::catalogsChanged);
-		enabled.stop();
+		enabledSoklet.stop();
 		Assertions.assertDoesNotThrow(
 				enabledControl::catalogsChanged);
 
@@ -483,6 +484,13 @@ public class McpLocalizationPublicApiTests {
 				.endpointRegistry(registry)
 				.admissionController(
 						McpAdmissionController.acceptAllInstance());
+	}
+
+	private static Soklet managedSoklet(McpServer server) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
 	}
 
 	private static Set<String> publicDeclaredMethods(Class<?> type) {

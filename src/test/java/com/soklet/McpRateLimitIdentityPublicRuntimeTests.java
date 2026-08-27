@@ -67,9 +67,9 @@ public class McpRateLimitIdentityPublicRuntimeTests {
 			admissions.add(context);
 			return McpAdmissionDecision.accepted(admittedIdentity);
 		}, limiter);
-
+		Soklet owner = managedSoklet(server);
 		try {
-			server.start();
+			owner.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> first = call(port, "first", "forged-a",
@@ -101,7 +101,7 @@ public class McpRateLimitIdentityPublicRuntimeTests {
 			assertSameRequestAndIdentity(admissions.get(1), requestLimits.get(1),
 					admittedIdentity, McpRateLimitTarget.REQUEST);
 		} finally {
-			server.stop();
+			owner.stop();
 		}
 	}
 
@@ -118,9 +118,9 @@ public class McpRateLimitIdentityPublicRuntimeTests {
 		McpServer untrustedServer = server(ipPartitionAdmission(
 				Set.of(InetAddress.getByName("192.0.2.200")), untrustedRequests,
 				untrustedPartitions, untrustedForwardedHeaders), capacityOneLimiter());
-
+		Soklet untrustedOwner = managedSoklet(untrustedServer);
 		try {
-			untrustedServer.start();
+			untrustedOwner.start();
 			int port = untrustedServer.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> firstUntrusted = call(port, "first-untrusted",
@@ -140,7 +140,7 @@ public class McpRateLimitIdentityPublicRuntimeTests {
 			untrustedRequests.forEach(
 					McpRateLimitIdentityPublicRuntimeTests::assertIpv4LoopbackPeer);
 		} finally {
-			untrustedServer.stop();
+			untrustedOwner.stop();
 		}
 
 		List<Request> trustedRequests = new CopyOnWriteArrayList<>();
@@ -151,9 +151,9 @@ public class McpRateLimitIdentityPublicRuntimeTests {
 		McpServer server = server(ipPartitionAdmission(Set.of(trustedLoopback,
 				trustedForwarderOne, trustedForwarderTwo),
 				trustedRequests, admittedPartitions, trustedForwardedHeaders), limiter);
-
+		Soklet owner = managedSoklet(server);
 		try {
-			server.start();
+			owner.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> firstAddress = call(port, "first-address",
@@ -197,7 +197,7 @@ public class McpRateLimitIdentityPublicRuntimeTests {
 			trustedRequests.forEach(
 					McpRateLimitIdentityPublicRuntimeTests::assertIpv4LoopbackPeer);
 		} finally {
-			server.stop();
+			owner.stop();
 		}
 	}
 
@@ -268,6 +268,13 @@ public class McpRateLimitIdentityPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
+	}
+
+	private static Soklet managedSoklet(McpServer server) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
 	}
 
 	private static HttpResponse<String> call(int port, String id,

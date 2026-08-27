@@ -158,6 +158,8 @@ final class SokletDirectMcpLifecycleTests {
 			Assertions.assertTrue(publisher.awaitEntered(),
 					"The publisher did not reach its post-bind startup callback");
 			InetSocketAddress address = boundAddress(fixture.server());
+			EventLoop loop = eventLoop(fixture.server());
+			Assertions.assertTrue(loop.isAccepting());
 			CompletionStage<InternalShutdownResult> stage = fixture.soklet()
 					.getDirectLifecycle().shutdown();
 			Assertions.assertSame(stage,
@@ -180,6 +182,14 @@ final class SokletDirectMcpLifecycleTests {
 			Assertions.assertTrue(publisher.awaitInterrupted(),
 					"External shutdown did not interrupt the blocked startup call");
 			Assertions.assertFalse(publisher.hasReturned());
+			Assertions.assertFalse(runtimeLifecycleFlag(fixture.server(),
+					"lifecycleQuiesced"),
+					"Graceful cleanup entered while subscribe() was live");
+			Assertions.assertFalse(runtimeLifecycleFlag(fixture.server(),
+					"lifecycleForced"),
+					"Forced cleanup entered while subscribe() was live");
+			Assertions.assertTrue(loop.isAccepting(),
+					"The listener was wound up while subscribe() was live");
 			assertPortInUse(address);
 
 			InternalShutdownResult result = fixture.soklet().getDirectLifecycle()
@@ -196,69 +206,6 @@ final class SokletDirectMcpLifecycleTests {
 			assertLateCleanupCannotRewrite(fixture, result, stage, address);
 		} finally {
 			forceCleanup(fixture, publisher, start);
-		}
-	}
-
-	@Test
-	void standaloneBlockingPublisherDefersRuntimePhasesUntilStartReturns()
-			throws Exception {
-		BlockingPublisher publisher = new BlockingPublisher();
-		McpEndpoint endpoint = McpEndpoint.withPath(PATH)
-				.serverInformation(implementation("standalone-blocked-publisher"))
-				.resourceListHandler((request, list, features) ->
-						McpResourcePage.builder().build())
-				.subscriptions(McpSubscriptionConfig.withEventPublisher(publisher)
-						.notificationType(McpSubscriptionNotificationType
-								.RESOURCES_LIST_CHANGED).build())
-				.build();
-		McpServer server = serverBuilder(endpoint, Duration.ofMillis(100)).build();
-		ExecutorService executor = newExecutor();
-		Future<Throwable> start = executor.submit(() ->
-				captureFailure(server::start));
-		Future<Throwable> stop = null;
-
-		try {
-			Assertions.assertTrue(publisher.awaitEntered(),
-					"The standalone publisher did not enter startup");
-			InetSocketAddress address = boundAddress(server);
-			EventLoop loop = eventLoop(server);
-			Assertions.assertTrue(loop.isAccepting());
-
-			stop = executor.submit(() -> captureFailure(server::stop));
-			Assertions.assertNull(stop.get(6, TimeUnit.SECONDS));
-			Assertions.assertFalse(publisher.hasReturned());
-			Assertions.assertFalse(runtimeLifecycleFlag(server,
-					"lifecycleQuiesced"),
-					"Graceful cleanup entered while subscribe() was live");
-			Assertions.assertFalse(runtimeLifecycleFlag(server,
-					"lifecycleForced"),
-					"Forced cleanup entered while subscribe() was live");
-			Assertions.assertTrue(loop.isAccepting(),
-					"The listener was wound up while subscribe() was live");
-			assertPortInUse(address);
-
-			publisher.release();
-			Assertions.assertTrue(publisher.awaitReturned());
-			Assertions.assertTrue(publisher.awaitRegistrationClosed());
-			Assertions.assertNotNull(start.get(3, TimeUnit.SECONDS));
-			awaitCondition(() -> !runtimeLifecycleFlag(server,
-					"lifecycleStartupInProgress"),
-					"Standalone startup did not complete its cleanup handoff");
-			Assertions.assertTrue(runtimeLifecycleFlag(server,
-					"lifecycleForced"),
-					"Standalone startup did not apply the queued force request");
-			awaitCondition(() -> isPortReusable(address),
-					"Standalone late startup unwind did not release the listener");
-		} finally {
-			publisher.release();
-			if (stop != null)
-				stop.cancel(true);
-			try {
-				start.get(3, TimeUnit.SECONDS);
-			} catch (Throwable ignored) {
-				start.cancel(true);
-			}
-			forceRuntimeQuietly(server);
 		}
 	}
 

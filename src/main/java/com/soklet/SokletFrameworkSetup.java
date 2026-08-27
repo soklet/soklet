@@ -147,8 +147,8 @@ final class SokletFrameworkSetup {
 								format("An exception occurred while initializing %s",
 										metricsCollector.getClass().getSimpleName()))
 								.throwable(throwable).build());
-			} catch (Throwable ignored) {
-				// Metrics and observation remain non-controlling setup telemetry.
+			} catch (Throwable observerFailure) {
+				LifecycleObserverLogFallback.report(observerFailure);
 			}
 		}
 	}

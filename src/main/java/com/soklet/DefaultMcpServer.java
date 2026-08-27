@@ -2248,6 +2248,7 @@ final class DefaultMcpServer implements McpServer {
 		try {
 			observer.didReceiveLogEvent(requireNonNull(event));
 		} catch (Throwable throwable) {
+			LifecycleObserverLogFallback.report(throwable);
 			if (requestThrowables != null)
 				requestThrowables.add(throwable);
 		}
@@ -2257,8 +2258,8 @@ final class DefaultMcpServer implements McpServer {
 		try {
 			this.lifecycleObserver.didReceiveLogEvent(LogEvent.with(
 					LogEventType.MCP_SERVER_CONFIGURATION, message).build());
-		} catch (Throwable ignored) {
-			// Informational diagnostics must not change server availability.
+		} catch (Throwable observerFailure) {
+			LifecycleObserverLogFallback.report(observerFailure);
 		}
 	}
 
@@ -2271,8 +2272,8 @@ final class DefaultMcpServer implements McpServer {
 							+ requireNonNull(endpointPath) + ", headerName="
 							+ requireNonNull(headerName))
 					.build());
-		} catch (Throwable ignored) {
-			// Optional diagnostics must not affect request processing.
+		} catch (Throwable observerFailure) {
+			LifecycleObserverLogFallback.report(observerFailure);
 		}
 	}
 
@@ -2283,8 +2284,8 @@ final class DefaultMcpServer implements McpServer {
 					"MCP transport failure: event_loop_terminate")
 					.throwable(throwable)
 					.build());
-		} catch (Throwable ignored) {
-			// Failure reporting must not interfere with runtime cleanup.
+		} catch (Throwable observerFailure) {
+			LifecycleObserverLogFallback.report(observerFailure);
 		}
 	}
 

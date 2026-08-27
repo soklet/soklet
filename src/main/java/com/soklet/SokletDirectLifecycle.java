@@ -36,6 +36,7 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 import static java.util.Objects.requireNonNull;
 
@@ -74,6 +75,11 @@ final class SokletDirectLifecycle {
 	private final InternalLifecycleCompletion completion;
 	@NonNull
 	private final LifecycleTransitionDispatcher transitions;
+	private final long lifecycleBeganNanos;
+	@NonNull
+	private final AtomicReference<InternalLifecycleCoreSnapshot> terminalCoreSnapshot;
+	@NonNull
+	private final Consumer<InternalLifecycleCoreSnapshot> coreSnapshotPublisher;
 	@NonNull
 	private final Object executionOwnerToken;
 	@NonNull
@@ -132,8 +138,17 @@ final class SokletDirectLifecycle {
 	SokletDirectLifecycle(@NonNull Soklet soklet,
 			@NonNull SokletConfig config,
 			@NonNull SokletFrameworkSetup frameworkSetup) {
-		this(soklet, config, frameworkSetup, NanoClock.system(),
-				new LifecycleWorkers());
+		this(soklet, config, frameworkSetup, LifecycleRuntimeServices.system(),
+				ignored -> { });
+	}
+
+	SokletDirectLifecycle(@NonNull Soklet soklet,
+			@NonNull SokletConfig config,
+			@NonNull SokletFrameworkSetup frameworkSetup,
+			@NonNull LifecycleRuntimeServices services,
+			@NonNull Consumer<InternalLifecycleCoreSnapshot> coreSnapshotPublisher) {
+		this(soklet, config, frameworkSetup, services, () -> { }, () -> { },
+				() -> { }, () -> { }, coreSnapshotPublisher);
 	}
 
 	SokletDirectLifecycle(@NonNull Soklet soklet,
@@ -172,19 +187,38 @@ final class SokletDirectLifecycle {
 			@NonNull Runnable afterFirstShutdownIntentPublished,
 			@NonNull Runnable completionWaitHook,
 			@NonNull Runnable afterAttachmentSettled) {
+		this(soklet, config, frameworkSetup,
+				new LifecycleRuntimeServices(clock, workers),
+				readyLinearizationHook, afterFirstShutdownIntentPublished,
+				completionWaitHook, afterAttachmentSettled, ignored -> { });
+	}
+
+	private SokletDirectLifecycle(@NonNull Soklet soklet,
+			@NonNull SokletConfig config,
+			@NonNull SokletFrameworkSetup frameworkSetup,
+			@NonNull LifecycleRuntimeServices services,
+			@NonNull Runnable readyLinearizationHook,
+			@NonNull Runnable afterFirstShutdownIntentPublished,
+			@NonNull Runnable completionWaitHook,
+			@NonNull Runnable afterAttachmentSettled,
+			@NonNull Consumer<InternalLifecycleCoreSnapshot> coreSnapshotPublisher) {
 		this.soklet = requireNonNull(soklet);
 		this.config = requireNonNull(config);
 		this.frameworkSetup = requireNonNull(frameworkSetup);
-		this.clock = requireNonNull(clock);
-		this.waiter = new DeadlineWaiter(clock);
-		this.workers = requireNonNull(workers);
-		this.callRunner = new TrackedLifecycleCallRunner(workers);
-		this.coordinator = new InternalLifecycleCoordinator(clock, this.waiter,
+		LifecycleRuntimeServices exactServices = requireNonNull(services);
+		this.clock = exactServices.clock();
+		this.waiter = exactServices.waiter();
+		this.workers = exactServices.workers();
+		this.callRunner = new TrackedLifecycleCallRunner(this.workers);
+		this.coordinator = new InternalLifecycleCoordinator(this.clock, this.waiter,
 				this.callRunner);
 		this.stateMachine = new InternalLifecycleStateMachine();
-		this.completion = new InternalLifecycleCompletion(workers,
+		this.completion = new InternalLifecycleCompletion(this.workers,
 				requireNonNull(completionWaitHook));
-		this.transitions = new LifecycleTransitionDispatcher(workers);
+		this.transitions = new LifecycleTransitionDispatcher(this.workers);
+		this.lifecycleBeganNanos = this.clock.nanoTime();
+		this.terminalCoreSnapshot = new AtomicReference<>();
+		this.coreSnapshotPublisher = requireNonNull(coreSnapshotPublisher);
 		this.executionOwnerToken = new Object();
 		this.startMonitor = new Object();
 		this.attachmentMonitor = new Object();
@@ -300,7 +334,7 @@ final class SokletDirectLifecycle {
 		return this.completion.publicStage();
 	}
 
-	private void throwIfUnsuccessfulShutdown(
+	void throwIfUnsuccessfulShutdown(
 			@NonNull InternalShutdownResult result) {
 		UnexpectedTerminationClaim unexpected =
 				this.terminalUnexpectedTermination;
@@ -310,6 +344,22 @@ final class SokletDirectLifecycle {
 					unexpected.event(), result, unexpected.failure());
 		if (!result.isComplete())
 			throw new ShutdownIncompleteException(result);
+	}
+
+	@NonNull
+	Optional<RuntimeException> applicationTerminalFailure(
+			@NonNull InternalShutdownResult result) {
+		InternalShutdownResult exactResult = requireNonNull(result);
+		if (exactResult.startupDisposition() == InternalStartupDisposition.FAILED
+				|| exactResult.startupDisposition()
+				== InternalStartupDisposition.TIMED_OUT)
+			return Optional.of(startupException(exactResult));
+		try {
+			throwIfUnsuccessfulShutdown(exactResult);
+			return Optional.empty();
+		} catch (RuntimeException failure) {
+			return Optional.of(failure);
+		}
 	}
 
 	void requestShutdownIntent() {
@@ -567,6 +617,70 @@ final class SokletDirectLifecycle {
 				!= InternalLifecycleStateMachine.State.CLOSED)
 			return Optional.empty();
 		return this.completion.installedResult();
+	}
+
+	@NonNull
+	InternalLifecycleCoreSnapshot terminalCoreSnapshot() {
+		return requireNonNull(this.terminalCoreSnapshot.get(),
+				"The terminal core snapshot is not published");
+	}
+
+	@NonNull
+	LifecycleTransitionSnapshot transitionSnapshot() {
+		return this.transitions.snapshot();
+	}
+
+	@NonNull
+	SokletApplicationCoreDiagnostics applicationDiagnostics() {
+		EnumMap<InternalParticipantKind,
+				SokletApplicationParticipantDiagnostics> diagnostics =
+				new EnumMap<>(InternalParticipantKind.class);
+		for (ParticipantControl control : this.controls) {
+			InternalTerminationGroup.DiagnosticSummary group = null;
+			try {
+				group = control.terminationGroup().diagnosticSummary();
+			} catch (Throwable ignored) {
+				// Terminal diagnostics cannot change lifecycle truth.
+			}
+			InternalTerminationAuthority authority = switch (control.kind()) {
+				case MCP -> InternalTerminationAuthority.FRAMEWORK_PROVEN;
+				case HTTP -> control.transportClass() == DefaultHttpServer.class
+						? InternalTerminationAuthority.FRAMEWORK_PROVEN
+						: InternalTerminationAuthority.TRANSPORT_ATTESTED;
+				case SSE -> control.transportClass() == DefaultSseServer.class
+						? InternalTerminationAuthority.FRAMEWORK_PROVEN
+						: InternalTerminationAuthority.TRANSPORT_ATTESTED;
+				case FRAMEWORK_STARTUP ->
+						InternalTerminationAuthority.FRAMEWORK_PROVEN;
+			};
+			diagnostics.put(control.kind(),
+					new SokletApplicationParticipantDiagnostics(authority,
+							group == null ? 0 : group.memberCount(),
+							group == null ? 0 : group.failedMembers(),
+							group == null ? 0 : group.provenMembers(),
+							group != null && group.truncated()));
+		}
+		InternalLifecycleCoreSnapshot coreSnapshot = this.terminalCoreSnapshot.get();
+		if (coreSnapshot != null) {
+			for (InternalParticipantShutdownResult participant
+					: coreSnapshot.result().participantResults()) {
+				if (diagnostics.containsKey(participant.kind()))
+					continue;
+				boolean proven = participant.disposition()
+						!= InternalParticipantShutdownDisposition.RESIDUAL_ACTIVITY
+						&& participant.disposition()
+						!= InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN;
+				diagnostics.put(participant.kind(),
+						new SokletApplicationParticipantDiagnostics(
+								InternalTerminationAuthority.FRAMEWORK_PROVEN,
+								1, participant.failures().isEmpty() ? 0 : 1,
+								proven ? 1 : 0, false));
+			}
+		}
+		return new SokletApplicationCoreDiagnostics(
+				this.transitions.snapshot(), diagnostics,
+				this.config.getInternalLifecyclePolicy(),
+				this.lifecycleBeganNanos);
 	}
 
 	/** C's simulator uses the exact same setup/installation path without binding. */
@@ -982,6 +1096,12 @@ final class SokletDirectLifecycle {
 		if (this.stateMachine.state()
 				!= InternalLifecycleStateMachine.State.CLOSED)
 			this.stateMachine.publishClosed();
+		InternalLifecycleCoreSnapshot coreSnapshot =
+				new InternalLifecycleCoreSnapshot(exactResult,
+						this.clock.nanoTime());
+		if (!this.terminalCoreSnapshot.compareAndSet(null, coreSnapshot))
+			throw new IllegalStateException(
+					"The terminal core snapshot was already published");
 		try {
 			for (ParticipantControl control : this.controls) {
 				if (!control.isCommitted())
@@ -1008,6 +1128,14 @@ final class SokletDirectLifecycle {
 			try {
 				this.transitions.seal();
 			} finally {
+				try {
+					this.coreSnapshotPublisher.accept(coreSnapshot);
+				} catch (Throwable failure) {
+					// The runner also publishes the same immutable snapshot after
+					// its core join.  Finalization diagnostics must never strand
+					// lifecycle waiters.
+					retainShutdownIntentFailureSafely(failure);
+				}
 				this.completion.releaseInternalWaiters();
 				try {
 					signalStartWaiters();
