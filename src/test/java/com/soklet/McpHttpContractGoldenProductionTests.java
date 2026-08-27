@@ -88,9 +88,10 @@ public class McpHttpContractGoldenProductionTests {
 			throws Exception {
 		FixtureState state = new FixtureState();
 		McpServer server = server(state);
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			int port = boundPort(server);
 			List<RequestCase> cases = List.of(
 					new RequestCase("early-parser",
@@ -222,7 +223,7 @@ public class McpHttpContractGoldenProductionTests {
 			assertIdleStartedDiagnostics(server);
 		} finally {
 			state.releaseHeldHandlers();
-			stopAndAssertClean(server);
+			stopAndAssertClean(owner, server);
 		}
 	}
 
@@ -231,9 +232,10 @@ public class McpHttpContractGoldenProductionTests {
 			throws Exception {
 		FixtureState state = new FixtureState();
 		McpServer server = server(state);
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			int port = boundPort(server);
 			List<RequestCase> cases = List.of(
 					new RequestCase("notification-origin",
@@ -304,7 +306,7 @@ public class McpHttpContractGoldenProductionTests {
 			Assertions.assertTrue(state.stages("preflight").isEmpty());
 			assertIdleStartedDiagnostics(server);
 		} finally {
-			stopAndAssertClean(server);
+			stopAndAssertClean(owner, server);
 		}
 	}
 
@@ -313,10 +315,11 @@ public class McpHttpContractGoldenProductionTests {
 			throws Exception {
 		FixtureState state = new FixtureState();
 		McpServer server = server(state);
+		Soklet owner = managedSoklet(server);
 		ExecutorService clients = Executors.newFixedThreadPool(2);
 
 		try {
-			server.start();
+			owner.start();
 			int port = boundPort(server);
 			Future<WireResponse> held = clients.submit(() -> exchange(port,
 					validToolPost("held", TOOL_NAME, "hold", false)));
@@ -349,7 +352,7 @@ public class McpHttpContractGoldenProductionTests {
 			assertIdleStartedDiagnostics(server);
 		} finally {
 			state.releaseHeldHandlers();
-			stopAndAssertClean(server);
+			stopAndAssertClean(owner, server);
 			clients.shutdownNow();
 			Assertions.assertTrue(clients.awaitTermination(5, TimeUnit.SECONDS));
 		}
@@ -745,8 +748,15 @@ public class McpHttpContractGoldenProductionTests {
 		assertZeroLoad(diagnostics);
 	}
 
-	private static void stopAndAssertClean(McpServer server) {
-		server.stop();
+	private static Soklet managedSoklet(McpServer server) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
+	}
+
+	private static void stopAndAssertClean(Soklet owner, McpServer server) {
+		owner.stop();
 		McpServerDiagnostics diagnostics = server.getDiagnostics();
 		Assertions.assertEquals(McpServerStatus.STOPPED, diagnostics.getStatus());
 		Assertions.assertTrue(diagnostics.getBoundAddress().isPresent());

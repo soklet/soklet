@@ -53,6 +53,9 @@ import com.soklet.McpSubscriptionNotificationType;
 import com.soklet.McpTextResourceContents;
 import com.soklet.McpTextContent;
 import com.soklet.McpToolRegistration;
+import com.soklet.ResourceMethodResolver;
+import com.soklet.Soklet;
+import com.soklet.SokletConfig;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -194,9 +197,10 @@ public class McpFinalTagGoldenWireProductionTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))
 				.build();
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			String response = assertRateLimitedErrorExchange(port,
 					fixture("phase-3/rate-limited-tool-request.json"), List.of(
@@ -227,7 +231,7 @@ public class McpFinalTagGoldenWireProductionTests {
 			Assertions.assertEquals(0, interceptorInvocations.get());
 			Assertions.assertEquals(0, handlerInvocations.get());
 		} finally {
-			server.stop();
+			owner.stop();
 		}
 	}
 
@@ -275,9 +279,10 @@ public class McpFinalTagGoldenWireProductionTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))
 				.build();
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 
 			assertExchange(port, fixture("phase-4/prompts-list-request.json"), List.of(
@@ -293,7 +298,7 @@ public class McpFinalTagGoldenWireProductionTests {
 					new McpChunkedHttpClient.RequestHeader("Mcp-Name", "golden.compose")),
 					200, fixture("phase-4/prompts-get-response.json"));
 		} finally {
-			server.stop();
+			owner.stop();
 		}
 	}
 
@@ -358,9 +363,10 @@ public class McpFinalTagGoldenWireProductionTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))
 				.build();
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 
 			assertExchange(port, fixture("phase-4/resources-list-request.json"), List.of(
@@ -383,7 +389,7 @@ public class McpFinalTagGoldenWireProductionTests {
 			assertResourceRead(port, "text", textResourceUri.toString(), 200);
 			assertResourceRead(port, "unknown", "golden://missing/resource", 400);
 		} finally {
-			server.stop();
+			owner.stop();
 		}
 	}
 
@@ -435,9 +441,10 @@ public class McpFinalTagGoldenWireProductionTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))
 				.build();
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			String response = assertErrorExchange(port,
 					fixture("phase-4/strict-unknown-header-request.json"), List.of(
@@ -463,7 +470,7 @@ public class McpFinalTagGoldenWireProductionTests {
 			Assertions.assertEquals(0, interceptorInvocations.get());
 			Assertions.assertEquals(0, handlerInvocations.get());
 		} finally {
-			server.stop();
+			owner.stop();
 		}
 	}
 
@@ -579,9 +586,10 @@ public class McpFinalTagGoldenWireProductionTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))
 				.build();
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			assertExchange(port,
 					fixture("phase-5/input-required-tool-request.json"), List.of(
@@ -602,7 +610,7 @@ public class McpFinalTagGoldenWireProductionTests {
 									"Mcp-Name", "golden.input-responses")),
 					200, fixture("phase-5/input-responses-tool-response.json"));
 		} finally {
-			server.stop();
+			owner.stop();
 		}
 	}
 
@@ -656,9 +664,10 @@ public class McpFinalTagGoldenWireProductionTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))
 				.build();
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			assertErrorExchange(port,
 					fixture("phase-5/missing-capability-tool-request.json"), List.of(
@@ -676,7 +685,7 @@ public class McpFinalTagGoldenWireProductionTests {
 			Assertions.assertEquals(0, toolLimiterInvocations.get());
 			Assertions.assertEquals(0, handlerInvocations.get());
 		} finally {
-			server.stop();
+			owner.stop();
 		}
 	}
 
@@ -711,9 +720,10 @@ public class McpFinalTagGoldenWireProductionTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))
 				.build();
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			try (McpChunkedHttpClient client = McpChunkedHttpClient.postMcpMessage(
 					port, fixture("phase-5/progress-tool-request.json"), List.of(
@@ -746,7 +756,7 @@ public class McpFinalTagGoldenWireProductionTests {
 				Assertions.assertNull(client.readChunk());
 			}
 		} finally {
-			server.stop();
+			owner.stop();
 		}
 	}
 
@@ -785,11 +795,12 @@ public class McpFinalTagGoldenWireProductionTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))
 				.build();
+		Soklet owner = managedSoklet(server);
 		McpChunkedHttpClient client = null;
 		Thread stopThread = null;
 
 		try {
-			server.start();
+			owner.start();
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			client = McpChunkedHttpClient.postMcpMessage(port,
 					fixture("phase-5/subscription-listen-request.json"), List.of(
@@ -821,7 +832,7 @@ public class McpFinalTagGoldenWireProductionTests {
 					"phase-5/subscription-resource-updated.json"),
 					client.readChunkText());
 
-			stopThread = new Thread(server::stop,
+			stopThread = new Thread(owner::stop,
 					"mcp-subscription-golden-stop");
 			stopThread.start();
 			Assertions.assertEquals(sseFixture(
@@ -833,7 +844,7 @@ public class McpFinalTagGoldenWireProductionTests {
 		} finally {
 			if (client != null)
 				client.close();
-			server.stop();
+			owner.stop();
 			if (stopThread != null && stopThread.isAlive())
 				stopThread.join(5_000L);
 		}
@@ -923,9 +934,10 @@ public class McpFinalTagGoldenWireProductionTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))
 				.build();
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			assertProtectedStateExchange(port,
 					"phase-5/protected-state-initial-request.json",
@@ -934,8 +946,14 @@ public class McpFinalTagGoldenWireProductionTests {
 					"phase-5/protected-state-retry-request.json",
 					"phase-5/protected-state-retry-response.json");
 		} finally {
-			server.stop();
+			owner.stop();
 		}
+	}
+
+	private static Soklet managedSoklet(McpServer server) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
 	}
 
 	private static void assertProtectedStateExchange(int port, String requestFixture,

@@ -55,6 +55,9 @@ import com.soklet.McpTextContent;
 import com.soklet.McpTextResourceContents;
 import com.soklet.McpToolOutput;
 import com.soklet.McpToolRegistration;
+import com.soklet.ResourceMethodResolver;
+import com.soklet.Soklet;
+import com.soklet.SokletConfig;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -307,9 +310,10 @@ public class McpResultEnvelopeGoldenProductionTests {
 					return continuation.proceed();
 				})
 				.build();
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			int port = boundPort(server);
 			assertJsonGolden(port, "complete-server-discover-string.json",
 					"\"discover-complete\"", "server/discover", "", "", null,
@@ -347,7 +351,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 			Assertions.assertEquals(1, resourceHandlerInvocations.get());
 			Assertions.assertEquals(4, interceptorInvocations.get());
 		} finally {
-			server.stop();
+			owner.stop();
 		}
 
 		AtomicInteger listHandlerInvocations = new AtomicInteger();
@@ -374,8 +378,9 @@ public class McpResultEnvelopeGoldenProductionTests {
 					return continuation.proceed();
 				})
 				.build();
+		Soklet customListOwner = managedSoklet(customListServer);
 		try {
-			customListServer.start();
+			customListOwner.start();
 			assertJsonGolden(boundPort(customListServer),
 					"complete-resources-list-handler-string.json",
 					"\"resources-list-handler-complete\"", "resources/list",
@@ -383,7 +388,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 			Assertions.assertEquals(1, listHandlerInvocations.get());
 			Assertions.assertEquals(1, listInterceptorInvocations.get());
 		} finally {
-			customListServer.stop();
+			customListOwner.stop();
 		}
 
 		McpEndpoint localizedEndpoint = localizedEndpointBuilder(
@@ -393,14 +398,15 @@ public class McpResultEnvelopeGoldenProductionTests {
 		McpServer localizedServer = serverBuilder(localizedEndpoint)
 				.localizer(frenchLocalizer())
 				.build();
+		Soklet localizedOwner = managedSoklet(localizedServer);
 		try {
-			localizedServer.start();
+			localizedOwner.start();
 			assertLocalizedJsonGolden(boundPort(localizedServer),
 					"complete-server-discover-localized-string.json",
 					"\"localized-discover-complete\"", "server/discover",
 					"", "", null, "complete");
 		} finally {
-			localizedServer.stop();
+			localizedOwner.stop();
 		}
 	}
 
@@ -478,9 +484,10 @@ public class McpResultEnvelopeGoldenProductionTests {
 				.protectionConfig(McpProtectionConfig
 						.withRequestStateProtector(protector).build())
 				.build();
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			int port = boundPort(server);
 			assertJsonGolden(port,
 					"input-required-tools-call-input-requests-string.json",
@@ -520,7 +527,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 			Assertions.assertEquals(1, protector.seals.get());
 			Assertions.assertEquals(1, protector.opens.get());
 		} finally {
-			server.stop();
+			owner.stop();
 		}
 	}
 
@@ -557,9 +564,10 @@ public class McpResultEnvelopeGoldenProductionTests {
 				.tool(input)
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			int port = boundPort(server);
 			assertRequestSseGolden(port,
 					"complete-tools-call-request-sse-string.sse.hex",
@@ -580,7 +588,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 			Assertions.assertEquals(2, completeInvocations.get());
 			Assertions.assertEquals(2, inputInvocations.get());
 		} finally {
-			server.stop();
+			owner.stop();
 		}
 
 		McpLocalSubscriptionEventPublisher publisher =
@@ -658,9 +666,10 @@ public class McpResultEnvelopeGoldenProductionTests {
 									.build());
 				})
 				.build();
+		Soklet owner = managedSoklet(server);
 
 		try {
-			server.start();
+			owner.start();
 			int port = boundPort(server);
 			assertJsonGolden(port, "complete-tools-list-typed-schema-integer.json",
 					"500", "tools/list", "", "", null, "complete");
@@ -679,7 +688,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 			Assertions.assertEquals(3, handlerInvocations.get());
 			Assertions.assertEquals(2, sanitizerInvocations.get());
 		} finally {
-			server.stop();
+			owner.stop();
 		}
 	}
 
@@ -738,10 +747,11 @@ public class McpResultEnvelopeGoldenProductionTests {
 
 	private static void assertSubscriptionTerminalGolden(McpServer server,
 			String idJson, String fixtureName, boolean localized) throws Exception {
+		Soklet owner = managedSoklet(server);
 		McpChunkedHttpClient client = null;
 		Thread stopThread = null;
 		try {
-			server.start();
+			owner.start();
 			client = send(boundPort(server), idJson, "subscriptions/listen",
 					",\"notifications\":{\"resourcesListChanged\":true}",
 					"", null, null);
@@ -751,7 +761,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 				assertLocalizationHeaders(head);
 			assertNotificationFrame(client.readChunkText(),
 					"notifications/subscriptions/acknowledged");
-			stopThread = new Thread(server::stop,
+			stopThread = new Thread(owner::stop,
 					"result-envelope-subscription-stop");
 			stopThread.start();
 			String terminal = client.readChunkText();
@@ -768,7 +778,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 		} finally {
 			if (client != null)
 				client.close();
-			server.stop();
+			owner.stop();
 			if (stopThread != null && stopThread.isAlive())
 				stopThread.join(5_000L);
 		}
@@ -1009,6 +1019,13 @@ public class McpResultEnvelopeGoldenProductionTests {
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
+	}
+
+	private static Soklet managedSoklet(McpServer server) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
 	}
 
 	private static int boundPort(McpServer server) {

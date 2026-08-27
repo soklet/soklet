@@ -33,6 +33,9 @@ import com.soklet.McpServerDiagnostics;
 import com.soklet.McpServerStatus;
 import com.soklet.McpToolRegistration;
 import com.soklet.McpUnknownMirroredHeaderPolicy;
+import com.soklet.ResourceMethodResolver;
+import com.soklet.Soklet;
+import com.soklet.SokletConfig;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -182,8 +185,9 @@ public class McpErrorMappingGoldenProductionTests {
 			throws Exception {
 		FixtureState state = new FixtureState();
 		McpServer server = server(state);
+		Soklet owner = managedSoklet(server);
 		try {
-			server.start();
+			owner.start();
 			int port = boundPort(server);
 			List<LiveCase> cases = List.of(
 					new LiveCase("rate-limit-string-429.http.hex",
@@ -273,7 +277,7 @@ public class McpErrorMappingGoldenProductionTests {
 			awaitIdle(server);
 		} finally {
 			state.releaseHandlers.countDown();
-			stopAndAssertClean(server);
+			stopAndAssertClean(owner, server);
 		}
 	}
 
@@ -281,9 +285,10 @@ public class McpErrorMappingGoldenProductionTests {
 	public void overloadMappingMatchesProductionListenerGolden() throws Exception {
 		FixtureState state = new FixtureState();
 		McpServer server = server(state);
+		Soklet owner = managedSoklet(server);
 		ExecutorService clients = Executors.newFixedThreadPool(2);
 		try {
-			server.start();
+			owner.start();
 			int port = boundPort(server);
 			Future<WireResponse> active = clients.submit(() -> exchange(port,
 					post("overload-active", requestBody("\"active\"",
@@ -318,7 +323,7 @@ public class McpErrorMappingGoldenProductionTests {
 			awaitIdle(server);
 		} finally {
 			state.releaseHandlers.countDown();
-			stopAndAssertClean(server);
+			stopAndAssertClean(owner, server);
 			clients.shutdownNow();
 			Assertions.assertTrue(clients.awaitTermination(5, TimeUnit.SECONDS));
 		}
@@ -591,8 +596,15 @@ public class McpErrorMappingGoldenProductionTests {
 		awaitCondition(() -> zeroLoad(server.getDiagnostics()));
 	}
 
-	private static void stopAndAssertClean(McpServer server) {
-		server.stop();
+	private static Soklet managedSoklet(McpServer server) {
+		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.build());
+	}
+
+	private static void stopAndAssertClean(Soklet owner, McpServer server) {
+		owner.stop();
 		McpServerDiagnostics diagnostics = server.getDiagnostics();
 		Assertions.assertEquals(McpServerStatus.STOPPED, diagnostics.getStatus());
 		Assertions.assertTrue(diagnostics.getBoundAddress().isPresent());
