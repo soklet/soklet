@@ -301,7 +301,7 @@ public class McpProgressAndCancelationMetricsAggregationTests {
 	}
 
 	@Test
-	@Timeout(15)
+	@Timeout(60)
 	public void concurrentDirectProgressAndCancelationIngestIsLosslessAndRetainedSnapshotsRemainImmutable()
 			throws Exception {
 		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();

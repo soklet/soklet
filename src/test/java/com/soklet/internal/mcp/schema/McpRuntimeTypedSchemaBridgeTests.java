@@ -21,7 +21,7 @@ import com.soklet.McpJsonBoolean;
 import com.soklet.McpJsonNumber;
 import com.soklet.McpJsonObject;
 import com.soklet.McpJsonString;
-import com.soklet.annotation.McpToolArgument;
+import com.soklet.annotation.McpToolProperty;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -172,9 +172,9 @@ class McpRuntimeTypedSchemaBridgeTests {
 	}
 
 	private record AnnotatedResult(
-			@McpToolArgument(name = "publishedName", title = "Published title",
+			@McpToolProperty(name = "publishedName", title = "Published title",
 					description = "Published description") String javaName,
-			@McpToolArgument(title = " ", description = " ")
+			@McpToolProperty(title = " ", description = " ")
 			Optional<Integer> optional) {
 	}
 }

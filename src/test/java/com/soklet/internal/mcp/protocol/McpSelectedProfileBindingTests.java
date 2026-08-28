@@ -27,6 +27,7 @@ import com.soklet.StreamTerminationReason;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.math.BigDecimal;
 import java.lang.reflect.Proxy;
@@ -322,6 +323,7 @@ public class McpSelectedProfileBindingTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void subscriptionAndSimulationRetainTheSelectedProfileForTheirWholeLifetime()
 			throws Exception {
 		TrackingProfile fake = new TrackingProfile();

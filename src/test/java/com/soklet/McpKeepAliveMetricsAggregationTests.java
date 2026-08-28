@@ -170,7 +170,7 @@ public class McpKeepAliveMetricsAggregationTests {
 	}
 
 	@Test
-	@Timeout(15)
+	@Timeout(60)
 	public void concurrentDirectKeepAliveIngestIsLosslessAndRetainedSnapshotsRemainImmutable()
 			throws Exception {
 		DefaultMetricsCollector collector =

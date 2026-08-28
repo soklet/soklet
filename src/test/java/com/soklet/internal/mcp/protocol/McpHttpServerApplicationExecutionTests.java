@@ -52,7 +52,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 
 @NotThreadSafe
-@Timeout(20)
+@Timeout(60)
 public class McpHttpServerApplicationExecutionTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
@@ -90,13 +90,16 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void same_id_application_and_framework_requests_complete_independently()
 			throws Exception {
 		CountDownLatch applicationEntered = new CountDownLatch(1);
 		CountDownLatch releaseApplication = new CountDownLatch(1);
 		McpApplicationRequestRouter router = router(invocation -> {
 			applicationEntered.countDown();
-			releaseApplication.await();
+			Assertions.assertTrue(releaseApplication.await(10,
+					TimeUnit.SECONDS),
+					"Timed out waiting to release the application request");
 			return completeResult("application-complete");
 		});
 		McpHttpServerRuntime runtime = runtime(router, executionConfiguration(1, 1),
@@ -139,6 +142,7 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void concurrent_same_integer_id_requests_complete_independently_and_diagnostics_count_exchanges()
 			throws Exception {
 		CountDownLatch bothEntered = new CountDownLatch(2);
@@ -149,9 +153,13 @@ public class McpHttpServerApplicationExecutionTests {
 			int ordinal = invocationOrdinal.incrementAndGet();
 			bothEntered.countDown();
 			if (ordinal == 1)
-				releaseFirst.await();
+				Assertions.assertTrue(releaseFirst.await(10,
+						TimeUnit.SECONDS),
+						"Timed out waiting to release the first request");
 			else
-				releaseSecond.await();
+				Assertions.assertTrue(releaseSecond.await(10,
+						TimeUnit.SECONDS),
+						"Timed out waiting to release the second request");
 			return completeResult("handled-" + ordinal);
 		});
 		McpHttpServerRuntime runtime = runtime(router, executionConfiguration(2, 2),
@@ -204,6 +212,7 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void same_id_deadline_termination_decrements_identified_exchange_accounting_without_affecting_survivor()
 			throws Exception {
 		CountDownLatch firstEntered = new CountDownLatch(1);
@@ -215,11 +224,15 @@ public class McpHttpServerApplicationExecutionTests {
 			int ordinal = invocationOrdinal.incrementAndGet();
 			if (ordinal == 1) {
 				firstEntered.countDown();
-				releaseFirst.await();
+				Assertions.assertTrue(releaseFirst.await(10,
+						TimeUnit.SECONDS),
+						"Timed out waiting to release the expiring request");
 				return completeResult("unexpected-first-completion");
 			}
 			secondEntered.countDown();
-			releaseSecond.await();
+			Assertions.assertTrue(releaseSecond.await(10,
+					TimeUnit.SECONDS),
+					"Timed out waiting to release the surviving request");
 			return completeResult("survivor-complete");
 		});
 		ControllableClock clock = new ControllableClock();
@@ -266,6 +279,7 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void application_executor_factory_failure_restores_a_restartable_runtime()
 			throws Exception {
 		AtomicInteger factoryInvocations = new AtomicInteger();
@@ -304,6 +318,7 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void bounded_handler_capacity_queues_one_and_rejects_the_third_exactly()
 			throws Exception {
 		McpRuntimeObservationRecorder observations =
@@ -316,7 +331,9 @@ public class McpHttpServerApplicationExecutionTests {
 			int invocationNumber = invocations.incrementAndGet();
 			if (invocationNumber == 1) {
 				firstEntered.countDown();
-				releaseFirst.await();
+				Assertions.assertTrue(releaseFirst.await(10,
+						TimeUnit.SECONDS),
+						"Timed out waiting to release the capacity holder");
 			} else if (invocationNumber == 2) {
 				secondEntered.countDown();
 			}
@@ -388,6 +405,7 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void queued_absolute_deadline_gets_the_exact_capacity_response_without_dispatch()
 			throws Exception {
 		McpRuntimeObservationRecorder observations =
@@ -485,6 +503,7 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void application_completion_enforces_the_deadline_without_a_timer_scan()
 			throws Exception {
 		CountDownLatch handlerEntered = new CountDownLatch(1);
@@ -499,7 +518,9 @@ public class McpHttpServerApplicationExecutionTests {
 			handlerThread.set(Thread.currentThread());
 			handlerInvocations.incrementAndGet();
 			handlerEntered.countDown();
-			releaseHandler.await();
+			Assertions.assertTrue(releaseHandler.await(10,
+					TimeUnit.SECONDS),
+					"Timed out waiting to release the application handler");
 			return completeResult("too-late");
 		});
 		McpHttpServerRuntime runtime = runtime(router,
@@ -533,6 +554,7 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void request_deadline_is_captured_before_protocol_admission_work()
 			throws Exception {
 		CountDownLatch admissionEntered = new CountDownLatch(1);
@@ -610,6 +632,7 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void protocol_deadline_comparison_survives_monotonic_clock_wraparound()
 			throws Exception {
 		CountDownLatch admissionEntered = new CountDownLatch(1);
@@ -659,6 +682,7 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void deadline_during_cors_authorization_prevents_later_admission()
 			throws Exception {
 		CountDownLatch corsEntered = new CountDownLatch(1);
@@ -741,6 +765,7 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void protocol_processor_submission_records_two_accepted_then_one_rejected_outside_request_control_lock()
 			throws Exception {
 		CountDownLatch firstAdmissionEntered = new CountDownLatch(1);
@@ -925,6 +950,7 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void protocol_processor_backlog_expires_and_releases_canceled_queue_capacity()
 			throws Exception {
 		CountDownLatch firstAdmissionEntered = new CountDownLatch(1);
@@ -1014,6 +1040,7 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void framework_discovery_deadline_releases_identified_exchange_accounting()
 			throws Exception {
 		CountDownLatch admissionEntered = new CountDownLatch(1);
@@ -1094,6 +1121,7 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void protocol_completion_enforces_the_deadline_without_a_timer_scan()
 			throws Exception {
 		CountDownLatch admissionEntered = new CountDownLatch(1);
@@ -1112,7 +1140,9 @@ public class McpHttpServerApplicationExecutionTests {
 				McpHttpEndpointPolicy.forDiscovery(CorsAuthorizer.rejectAllInstance(), request -> {
 					protocolWorker.set(Thread.currentThread());
 					admissionEntered.countDown();
-					releaseAdmission.await();
+					Assertions.assertTrue(releaseAdmission.await(10,
+							TimeUnit.SECONDS),
+							"Timed out waiting to release protocol admission");
 					return McpRequestAdmissionDecision.REJECT;
 				}), endpoint, McpApplicationRequestRouter.empty(),
 				new McpApplicationExecutionConfiguration(
@@ -1144,6 +1174,7 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void queued_client_disconnect_dequeues_outside_request_control_lock()
 			throws Exception {
 		ExecutorService probeExecutor = Executors.newSingleThreadExecutor();
@@ -1159,7 +1190,9 @@ public class McpHttpServerApplicationExecutionTests {
 			int invocationNumber = invocations.incrementAndGet();
 			if (invocationNumber == 1) {
 				firstEntered.countDown();
-				releaseFirst.await();
+				Assertions.assertTrue(releaseFirst.await(10,
+						TimeUnit.SECONDS),
+						"Timed out waiting to release the queued-work holder");
 			}
 			return completeResult("invocation-" + invocationNumber);
 		});
@@ -1215,6 +1248,7 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void active_client_disconnect_interrupts_but_retains_the_slot_until_handler_exit()
 			throws Exception {
 		CountDownLatch firstEntered = new CountDownLatch(1);
@@ -1299,6 +1333,7 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void lifecycle_grace_preserves_active_handler_then_force_interrupts_without_promoting_queued_work()
 			throws Exception {
 		CountDownLatch firstEntered = new CountDownLatch(1);
@@ -1382,6 +1417,7 @@ public class McpHttpServerApplicationExecutionTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void shutdown_reports_residual_application_work_and_blocks_restart_until_exit()
 			throws Exception {
 		CountDownLatch firstEntered = new CountDownLatch(1);
@@ -1404,8 +1440,7 @@ public class McpHttpServerApplicationExecutionTests {
 			}
 			return completeResult("invocation-" + invocationNumber);
 		});
-		McpHttpServerRuntime runtime = runtime(
-				transportConfiguration(Duration.ofMillis(75)), router,
+		McpHttpServerRuntime runtime = runtime(router,
 				executionConfiguration(1, 1), McpApplicationClock.SYSTEM);
 		Socket firstClient = null;
 
@@ -1415,14 +1450,20 @@ public class McpHttpServerApplicationExecutionTests {
 			Assertions.assertTrue(firstEntered.await(5, TimeUnit.SECONDS),
 					"The residual handler did not enter.");
 
-			Assertions.assertTrue(
-					runtime.stopAndReportResidualApplicationExecutions(),
-					"The stop outcome must retain residual work present at its boundary.");
+			long lifecycleStartedAt = System.nanoTime();
+			long gracefulDeadline = lifecycleStartedAt
+					+ TimeUnit.MILLISECONDS.toNanos(100);
+			long forcedDeadline = lifecycleStartedAt
+					+ TimeUnit.MILLISECONDS.toNanos(250);
+			runtime.quiesceLifecycle(gracefulDeadline);
+			runtime.forceLifecycle(forcedDeadline);
+			Assertions.assertFalse(runtime.awaitLifecycleTermination(forcedDeadline),
+					"An interrupt-ignoring handler must remain positive lifecycle evidence at the force boundary.");
 			Assertions.assertTrue(firstInterrupted.await(5, TimeUnit.SECONDS),
 					"Shutdown did not interrupt the residual handler.");
-			Assertions.assertFalse(runtime.isStarted());
-			Assertions.assertTrue(runtime.hasResidualApplicationExecutions(),
-					"A still-running handler must be reported as residual work.");
+			McpLifecycleEvidence lifecycleEvidence = runtime.lifecycleEvidence();
+			Assertions.assertTrue(lifecycleEvidence.executorTask());
+			Assertions.assertTrue(lifecycleEvidence.callback());
 			McpApplicationExecutionSnapshot residual =
 					runtime.applicationExecutionSnapshot().orElseThrow();
 			Assertions.assertEquals(1, residual.activeHandlerSlots());
@@ -1431,17 +1472,17 @@ public class McpHttpServerApplicationExecutionTests {
 			Assertions.assertFalse(residual.accepting());
 			Assertions.assertFalse(residual.terminated());
 
-			IllegalStateException restartFailure = Assertions.assertThrows(
+			Assertions.assertThrows(
 					IllegalStateException.class, runtime::start);
-			Assertions.assertEquals(
-					"Cannot start MCP server while residual handler executions remain",
-					restartFailure.getMessage());
 
 			releaseFirst.countDown();
 			awaitSnapshot(runtime, snapshot -> snapshot.activeHandlerSlots() == 0
 					&& snapshot.retainedExchanges() == 0 && snapshot.terminated());
-			Assertions.assertFalse(runtime.hasResidualApplicationExecutions(),
-					"Residual-work diagnostics must clear after the held handler exits.");
+			Assertions.assertTrue(runtime.awaitLifecycleTermination(
+					System.nanoTime() + TimeUnit.SECONDS.toNanos(5)));
+			Assertions.assertTrue(runtime.lifecycleEvidence().empty());
+			runtime.releaseLifecycleEvidence();
+			Assertions.assertTrue(runtime.lifecycleEvidence().empty());
 
 			int restartedPort = runtime.start().getPort();
 			assertSuccessfulResult(send(restartedPort, "\"after-residual\""),

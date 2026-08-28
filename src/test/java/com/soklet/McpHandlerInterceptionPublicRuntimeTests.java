@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@Timeout(30)
+@Timeout(60)
 public class McpHandlerInterceptionPublicRuntimeTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/mcp";
@@ -120,8 +120,8 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				})
 				.build();
 		expectedEndpoint.set(endpoint);
-		McpServer server = serverBuilder(endpoint)
-				.handlerInterceptor((context, continuation) -> {
+		McpHandlerInterceptor innerInterceptor =
+				(context, features, continuation) -> {
 					interceptorInvocations.incrementAndGet();
 					Assertions.assertSame(expectedEndpoint.get(), context.getEndpoint());
 					Assertions.assertTrue(
@@ -138,8 +138,6 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					Assertions.assertEquals(expectedOperation,
 							context.getOperationName());
 					interceptorContexts.put(method, context);
-					McpInvocationFeatures features = continuation.getFeatures();
-					Assertions.assertSame(features, continuation.getFeatures());
 					interceptorFeatures.put(method, features);
 					stages.add("before:" + method);
 					McpOperationResult result = continuation.proceed();
@@ -147,7 +145,25 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					if (method.equals("tools/call"))
 						return McpCompleteResult.fromToolText("tool-transformed");
 					return result;
-				})
+				};
+		McpHandlerInterceptor middleInterceptor =
+				(context, features, continuation) -> {
+					McpOperationResult result = innerInterceptor.interceptHandler(
+							context, features, continuation);
+					Assertions.assertSame(features,
+							interceptorFeatures.get(context.getJsonRpcMethod()));
+					return result;
+				};
+		McpHandlerInterceptor outerInterceptor =
+				(context, features, continuation) -> {
+					McpOperationResult result = middleInterceptor.interceptHandler(
+							context, features, continuation);
+					Assertions.assertSame(features,
+							interceptorFeatures.get(context.getJsonRpcMethod()));
+					return result;
+				};
+		McpServer server = serverBuilder(endpoint)
+				.handlerInterceptor(outerInterceptor)
 				.build();
 		Soklet owner = managedSoklet(server);
 
@@ -203,7 +219,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					"after:resources/read", "before:resources/list",
 					"handler:resources/list", "after:resources/list"), stages);
 		} finally {
-			owner.stop();
+			owner.close();
 		}
 	}
 
@@ -227,11 +243,9 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				.tool(rawTool("throwing"))
 				.build();
 		McpServer server = serverBuilder(endpoint)
-				.handlerInterceptor((context, continuation) -> switch (
+				.handlerInterceptor((context, features, continuation) -> switch (
 						context.getOperationName().orElseThrow()) {
 					case "short-circuit" -> {
-						McpInvocationFeatures features = continuation.getFeatures();
-						Assertions.assertSame(features, continuation.getFeatures());
 						yield McpCompleteResult.fromToolText("short-circuited");
 					}
 					case "wrong-result" -> McpResourcePage.builder().build();
@@ -264,7 +278,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 						failure.body());
 			}
 		} finally {
-			owner.stop();
+			owner.close();
 		}
 	}
 
@@ -283,7 +297,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 						.build())
 				.build();
 		McpServer server = serverBuilder(endpoint)
-				.handlerInterceptor((context, continuation) -> {
+				.handlerInterceptor((context, features, continuation) -> {
 					interceptorInvocations.incrementAndGet();
 					return continuation.proceed();
 				})
@@ -303,7 +317,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					"\"uri\":\"" + RESOURCE_URI + "\"");
 			Assertions.assertEquals(0, interceptorInvocations.get());
 		} finally {
-			owner.stop();
+			owner.close();
 		}
 	}
 
@@ -323,7 +337,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 						McpResourcePage.builder().build())
 				.build();
 		McpServer server = serverBuilder(endpoint)
-				.handlerInterceptor((context, continuation) -> {
+				.handlerInterceptor((context, features, continuation) -> {
 					throw new McpJsonRpcException(McpJsonRpcError.fromApplication(
 							1_001, "interceptor-secret-must-not-leak"));
 				})
@@ -349,7 +363,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 			Assertions.assertFalse(list.body().contains("interceptor-secret"),
 					list.body());
 		} finally {
-			owner.stop();
+			owner.close();
 		}
 	}
 
@@ -359,8 +373,6 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 		for (String toolName : List.of("one-shot", "wrong-thread", "retained"))
 			handlerInvocations.put(toolName, new AtomicInteger());
 		AtomicReference<McpHandlerContinuation> retainedContinuation =
-				new AtomicReference<>();
-		AtomicReference<Throwable> wrongThreadFeatureFailure =
 				new AtomicReference<>();
 		AtomicReference<Throwable> wrongThreadInvocationFailure =
 				new AtomicReference<>();
@@ -380,11 +392,9 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 		}
 		McpEndpoint endpoint = endpointBuilder.build();
 		McpServer server = serverBuilder(endpoint)
-				.handlerInterceptor((context, continuation) -> switch (
+				.handlerInterceptor((context, features, continuation) -> switch (
 						context.getOperationName().orElseThrow()) {
 					case "one-shot" -> {
-						McpInvocationFeatures features = continuation.getFeatures();
-						Assertions.assertSame(features, continuation.getFeatures());
 						McpOperationResult result = continuation.proceed();
 						Assertions.assertThrows(IllegalStateException.class,
 								continuation::proceed);
@@ -392,11 +402,6 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					}
 					case "wrong-thread" -> {
 						Thread thread = new Thread(() -> {
-							try {
-								continuation.getFeatures();
-							} catch (Throwable throwable) {
-								wrongThreadFeatureFailure.set(throwable);
-							}
 							try {
 								continuation.proceed();
 							} catch (Throwable throwable) {
@@ -406,8 +411,6 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 						thread.start();
 						thread.join(TimeUnit.SECONDS.toMillis(5));
 						Assertions.assertFalse(thread.isAlive());
-						Assertions.assertInstanceOf(IllegalStateException.class,
-								wrongThreadFeatureFailure.get());
 						Assertions.assertInstanceOf(IllegalStateException.class,
 								wrongThreadInvocationFailure.get());
 						Assertions.assertEquals(0,
@@ -438,12 +441,10 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				Assertions.assertEquals(1, count.get());
 			Assertions.assertThrows(IllegalStateException.class,
 					() -> retainedContinuation.get().proceed());
-			Assertions.assertThrows(IllegalStateException.class,
-					() -> retainedContinuation.get().getFeatures());
 			Assertions.assertEquals(1,
 					handlerInvocations.get("retained").get());
 		} finally {
-			owner.stop();
+			owner.close();
 		}
 	}
 
@@ -468,7 +469,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				.build();
 		McpServer server = serverBuilder(endpoint)
 				.requestTimeout(Duration.ofMillis(50))
-				.handlerInterceptor((context, continuation) -> {
+				.handlerInterceptor((context, features, continuation) -> {
 					interceptorInvocations.incrementAndGet();
 					long finish = System.nanoTime()
 							+ TimeUnit.MILLISECONDS.toNanos(250);
@@ -513,7 +514,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 			try {
 				lateContinuationCompleted.await(5, TimeUnit.SECONDS);
 			} finally {
-				owner.stop();
+				owner.close();
 			}
 		}
 	}

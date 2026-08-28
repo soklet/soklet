@@ -21,6 +21,8 @@ const EXPECTED_PROFILE_KEYS = new Set([
   'mcp.clientSocketTimeoutMillis',
   'mcp.concurrentClients',
   'mcp.cyclesPerClient',
+  'mcp.forcedShutdownMillis',
+  'mcp.gracefulShutdownMillis',
   'mcp.keepAliveIntervalMillis',
   'mcp.maximumSubscriptionDurationMillis',
   'mcp.maximumSubscriptionsPerPrincipal',
@@ -34,7 +36,6 @@ const EXPECTED_PROFILE_KEYS = new Set([
   'mcp.runTimeoutMillis',
   'mcp.settleTimeoutMillis',
   'mcp.shutdownCycles',
-  'mcp.shutdownTimeoutMillis',
   'mcp.streamQueueCapacity',
   'mcp.writeTimeoutMillis',
   'realtime.clientSocketTimeoutMillis',
@@ -354,7 +355,7 @@ function positiveIntegerObservation(section, name) {
   return Number(value);
 }
 
-function verifyLocalizationScenario(section) {
+function verifyLocalizationScenario(section, profileValues) {
   const localizedResponses = positiveIntegerObservation(
     section,
     'Localized catalog responses',
@@ -402,8 +403,23 @@ function verifyLocalizationScenario(section) {
   ) !== '0/0/0/0')
     fail('Localization runtime resources did not return to zero');
 
-  if (observation(section, 'Final MCP status') !== 'STOPPED')
-    fail('Localization MCP server did not finish stopped');
+  if (observation(section, 'Final MCP status') !== 'TERMINATED')
+    fail('Localization MCP server did not finish terminated');
+
+  const lifecycleCoreBoundMilliseconds =
+    BigInt(profileValues.get('mcp.gracefulShutdownMillis'))
+    + BigInt(profileValues.get('mcp.forcedShutdownMillis'));
+
+  if (lifecycleCoreBoundMilliseconds % 1000n !== 0n)
+    fail('Localization lifecycle core shutdown bound must use whole seconds');
+
+  const expectedLifecycleCoreBound =
+    `PT${lifecycleCoreBoundMilliseconds / 1000n}S`;
+
+  if (observation(section, 'Lifecycle core shutdown bound')
+      !== expectedLifecycleCoreBound) {
+    fail(`Localization lifecycle core shutdown bound did not match the profile: expected=${expectedLifecycleCoreBound}`);
+  }
 }
 
 function verifySurefireSuite(xmlPath, expected) {
@@ -545,7 +561,7 @@ export function verifySoakEvidence(profileName, projectRoot = defaultProjectRoot
       fail(`Expected exactly one PASS result for scenario ${heading.name}, found: ${results.join(', ') || '<none>'}`);
 
     if (heading.name === 'MCP localization render and invalidation churn')
-      verifyLocalizationScenario(section);
+      verifyLocalizationScenario(section, profile.values);
   }
 
   return {

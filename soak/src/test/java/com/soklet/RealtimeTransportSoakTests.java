@@ -69,11 +69,14 @@ public class RealtimeTransportSoakTests {
 				.writeTimeout(Duration.ofSeconds(2))
 				.heartbeatInterval(Duration.ofMillis(100))
 				.concurrentConnectionLimit(PROFILE.sseConcurrentConnectionLimit())
-				.shutdownTimeout(Duration.ofSeconds(3))
 				.build();
 		SokletConfig config = SokletConfig.withSseServer(sseServer)
 				.metricsCollector(metricsCollector)
 				.lifecycleObserver(new QuietLifecycle())
+				.lifecyclePolicy(LifecyclePolicy.builder()
+						.gracefulShutdownDuration(Duration.ofSeconds(3))
+						.forcedShutdownDuration(Duration.ZERO)
+						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SoakSseResource.class)))
 				.build();
 		SoakResourceSnapshot baseline;

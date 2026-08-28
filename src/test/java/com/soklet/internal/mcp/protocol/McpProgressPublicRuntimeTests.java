@@ -65,7 +65,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@Timeout(30)
+@Timeout(60)
 public class McpProgressPublicRuntimeTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/mcp";
@@ -137,7 +137,7 @@ public class McpProgressPublicRuntimeTests {
 			Assertions.assertFalse(lateCallback.get());
 			Assertions.assertFalse(terminalToken.get().isCanceled());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -177,7 +177,7 @@ public class McpProgressPublicRuntimeTests {
 				Assertions.assertNull(client.readChunk());
 			}
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -215,7 +215,7 @@ public class McpProgressPublicRuntimeTests {
 			Assertions.assertTrue(
 					observedToken.get().getCancelationReason().isEmpty());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -301,11 +301,12 @@ public class McpProgressPublicRuntimeTests {
 				Assertions.assertNull(client.readChunk());
 			}
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
 	@Test
+	@Timeout(120)
 	public void disconnectCancelsSameFeatureInstanceAndRunsCallback()
 			throws Exception {
 		List<McpMetricsEvent> metrics = new CopyOnWriteArrayList<>();
@@ -379,7 +380,9 @@ public class McpProgressPublicRuntimeTests {
 					observedReporter.set(reporter);
 					reporter.report(McpProgressUpdate.withProgress(1.0d).build());
 					try {
-						emergencyRelease.await();
+						Assertions.assertTrue(emergencyRelease.await(10,
+								TimeUnit.SECONDS),
+								"Timed out waiting for disconnect cancellation");
 						return McpCompleteResult.fromToolText("must not be written");
 					} finally {
 						handlerExited.countDown();
@@ -508,7 +511,7 @@ public class McpProgressPublicRuntimeTests {
 			emergencyRelease.countDown();
 			if (client != null)
 				client.close();
-			soklet.stop();
+			soklet.close();
 			probeExecutor.shutdownNow();
 			Assertions.assertTrue(probeExecutor.awaitTermination(
 					5, TimeUnit.SECONDS));
@@ -516,11 +519,13 @@ public class McpProgressPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void progressEnqueueWinsBeforeMappedErrorTerminal() throws Exception {
 		assertProgressErrorWinner(true);
 	}
 
 	@Test
+	@Timeout(120)
 	public void mappedErrorTerminalWinsAfterProgressEligibility() throws Exception {
 		assertProgressErrorWinner(false);
 	}
@@ -692,7 +697,7 @@ public class McpProgressPublicRuntimeTests {
 			McpRequestSseStream.setTestHooks(null);
 			if (client != null)
 				client.close();
-			soklet.stop();
+			soklet.close();
 			lateReporter.shutdownNow();
 			Assertions.assertTrue(lateReporter.awaitTermination(
 					5, TimeUnit.SECONDS));

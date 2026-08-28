@@ -60,7 +60,7 @@ final class SokletDirectSseCompositionTests {
 		try (Soklet soklet = Soklet.fromConfig(config)) {
 			exerciseReadyGraph(soklet, config, outer, engine,
 					List.of("transparent", "engine"), List.of("transparent"));
-			soklet.stop();
+			soklet.shutdown().toCompletableFuture().join();
 
 			InternalShutdownResult result = terminalResult(soklet,
 					InternalShutdownDisposition.GRACEFUL);
@@ -91,7 +91,7 @@ final class SokletDirectSseCompositionTests {
 		try (Soklet soklet = Soklet.fromConfig(config)) {
 			exerciseReadyGraph(soklet, config, outer, engine,
 					List.of("owner", "engine"), List.of("owner"));
-			soklet.stop();
+			soklet.shutdown().toCompletableFuture().join();
 			assertTruthfulOwnedCleanup(probe, "owner");
 
 			InternalShutdownResult result = terminalResult(soklet,
@@ -130,7 +130,7 @@ final class SokletDirectSseCompositionTests {
 			ExecutorService stopper = Executors.newSingleThreadExecutor();
 			java.util.concurrent.Future<Throwable> stop = stopper.submit(() -> {
 				try {
-					soklet.stop();
+					soklet.shutdown().toCompletableFuture().join();
 					return null;
 				} catch (Throwable throwable) {
 					return throwable;
@@ -185,7 +185,8 @@ final class SokletDirectSseCompositionTests {
 			@NonNull List<String> expectedBroadcasterRoute,
 			@NonNull List<String> expectedHandlerOrder) {
 		EventResource.INJECTED_SERVER.set(null);
-		Assertions.assertSame(engine.identity(), outer.identity(),
+		Assertions.assertSame(engine.getTransportIdentity(),
+				outer.getTransportIdentity(),
 				"Every decorator must preserve the leaf's exact stable identity");
 		ResourcePath beforeEvents = ResourcePath.fromPath("/events");
 		int beforeReadiness = engine.probe.broadcasterCalls.size();
@@ -197,7 +198,7 @@ final class SokletDirectSseCompositionTests {
 
 		soklet.start();
 
-		Assertions.assertTrue(soklet.isStarted());
+		Assertions.assertEquals(SokletStatus.RUNNING, soklet.getStatus());
 		ResourcePath afterEvents = ResourcePath.fromPath("/events");
 		Assertions.assertNotSame(beforeEvents, afterEvents,
 				"The two forwarding traversals must use distinct path objects");
@@ -225,15 +226,15 @@ final class SokletDirectSseCompositionTests {
 		Assertions.assertEquals(200,
 				response.getMarshaledResponse().getStatusCode());
 		Assertions.assertEquals(expectedHandlerOrder, engine.probe.handlerWrappers);
-		Assertions.assertSame(outer, SokletConfig.unwrapSseServer(
-				requireNonNull(EventResource.INJECTED_SERVER.get())),
+		Assertions.assertSame(outer,
+				requireNonNull(EventResource.INJECTED_SERVER.get()),
 				"SSE injection must resolve to the configured outer graph");
 		for (Object observed : engine.probe.configurations.values())
 			Assertions.assertSame(config, observed,
 					"Every successor context must preserve the exact configuration");
-		InternalStartupContext engineStartup = requireNonNull(
+		StartupContext engineStartup = requireNonNull(
 				engine.probe.startupContexts.get("engine"));
-		for (InternalStartupContext observed
+		for (StartupContext observed
 				: engine.probe.startupContexts.values())
 			Assertions.assertSame(engineStartup, observed,
 					"Every successor must receive the exact startup context");
@@ -364,8 +365,7 @@ final class SokletDirectSseCompositionTests {
 		}
 	}
 
-	private interface ComposedSseEndpoint
-			extends SseServer, InternalSseTransportEndpoint {
+	private interface ComposedSseEndpoint extends SseServer {
 	}
 
 	private static final class GraphProbe {
@@ -397,9 +397,9 @@ final class SokletDirectSseCompositionTests {
 				new CopyOnWriteArrayList<>();
 		@NonNull private final Map<String, Object> configurations =
 				new ConcurrentHashMap<>();
-		@NonNull private final Map<String, InternalStartupContext> startupContexts =
+		@NonNull private final Map<String, StartupContext> startupContexts =
 				new ConcurrentHashMap<>();
-		@NonNull private final Map<String, InternalTransportTerminationSignal> signals =
+		@NonNull private final Map<String, TransportTerminationSignal> signals =
 				new ConcurrentHashMap<>();
 		@NonNull private final Map<String, CountDownLatch> cleanupStarted =
 				new ConcurrentHashMap<>();
@@ -414,12 +414,12 @@ final class SokletDirectSseCompositionTests {
 		}
 
 		private void attached(@NonNull String name,
-				@NonNull InternalTransportAttachmentContext<?> context,
-				@NonNull InternalStartupContext startupContext) {
+				@NonNull SseTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
 			this.attachments.add(name);
-			this.configurations.put(name, context.configuration());
+			this.configurations.put(name, context.getSokletConfig());
 			this.startupContexts.put(name, startupContext);
-			this.signals.put(name, context.terminationSignal());
+			this.signals.put(name, context.getTerminationSignal());
 		}
 
 		private void proofObserved(@NonNull String name) {
@@ -470,7 +470,7 @@ final class SokletDirectSseCompositionTests {
 		}
 
 		@NonNull
-		private InternalTransportTerminationSignal signal(@NonNull String name) {
+		private TransportTerminationSignal signal(@NonNull String name) {
 			return requireNonNull(this.signals.get(name));
 		}
 	}
@@ -479,11 +479,11 @@ final class SokletDirectSseCompositionTests {
 			implements ComposedSseEndpoint {
 		@NonNull final String name;
 		@NonNull final GraphProbe probe;
-		@NonNull final InternalTransportIdentity identity;
+		@NonNull final TransportIdentity identity;
 
 		private AbstractSseEndpoint(@NonNull String name,
 				@NonNull GraphProbe probe,
-				@NonNull InternalTransportIdentity identity) {
+				@NonNull TransportIdentity identity) {
 			this.name = requireNonNull(name);
 			this.probe = requireNonNull(probe);
 			this.identity = requireNonNull(identity);
@@ -491,34 +491,17 @@ final class SokletDirectSseCompositionTests {
 
 		@Override
 		@NonNull
-		public final InternalTransportIdentity identity() {
+		public final TransportIdentity getTransportIdentity() {
 			return this.identity;
-		}
-
-		@Override
-		public final void start() {
-			throw new AssertionError("Direct composition must start its outer runtime");
-		}
-
-		@Override
-		public final void stop() {
-			throw new AssertionError("Direct composition must stop its outer runtime");
-		}
-
-		@Override
-		public final void initialize(@NonNull SokletConfig sokletConfig,
-				SseServer.@NonNull RequestHandler requestHandler) {
-			throw new AssertionError("Direct composition must use attach(...)");
 		}
 	}
 
 	private static final class AlternativeSseEngine extends AbstractSseEndpoint {
 		@NonNull private final ProofPhase proofPhase;
 		@NonNull private final AtomicReference<SseServer.RequestHandler> requestHandler;
-		@NonNull private final AtomicReference<InternalTransportTerminationSignal> signal;
-		@NonNull private final AtomicReference<InternalTransportRuntime> runtime;
+		@NonNull private final AtomicReference<TransportTerminationSignal> signal;
+		@NonNull private final AtomicReference<TransportRuntime> runtime;
 		@NonNull private final AtomicBoolean proofPublished;
-		@NonNull private final AtomicBoolean started;
 		@NonNull private final SseBroadcaster broadcaster;
 		@NonNull private final AtomicBoolean proofBarrierUsed;
 		@NonNull private final CountDownLatch beforeProof;
@@ -533,13 +516,12 @@ final class SokletDirectSseCompositionTests {
 		private AlternativeSseEngine(@NonNull String name,
 				@NonNull GraphProbe probe, @NonNull ProofPhase proofPhase,
 				boolean blockBeforeProof) {
-			super(name, probe, InternalTransportIdentity.create());
+			super(name, probe, TransportIdentity.create());
 			this.proofPhase = requireNonNull(proofPhase);
 			this.requestHandler = new AtomicReference<>();
 			this.signal = new AtomicReference<>();
 			this.runtime = new AtomicReference<>();
 			this.proofPublished = new AtomicBoolean();
-			this.started = new AtomicBoolean();
 			this.broadcaster = new SentinelBroadcaster();
 			this.proofBarrierUsed = new AtomicBoolean();
 			this.beforeProof = new CountDownLatch(1);
@@ -549,31 +531,28 @@ final class SokletDirectSseCompositionTests {
 
 		@Override
 		@NonNull
-		public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<SseServer.RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
+		public TransportRuntime attach(
+				@NonNull SseTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
 			this.probe.attached(this.name, context, startupContext);
-			this.requestHandler.set(context.requestHandler());
-			this.signal.set(context.terminationSignal());
-			InternalTransportRuntime attachedRuntime = new InternalTransportRuntime() {
+			this.requestHandler.set(context.getAdmissionFencedRequestHandler());
+			this.signal.set(context.getTerminationSignal());
+			TransportRuntime attachedRuntime = new TransportRuntime() {
 				@Override
-				public void start(@NonNull InternalStartupContext context) {
+				public void start(@NonNull StartupContext context) {
 					probe.starts.add(name);
-					started.set(true);
 				}
 
 				@Override
-				public void quiesce(@NonNull InternalShutdownContext context) {
+				public void quiesce(@NonNull ShutdownContext context) {
 					probe.quiesces.add(name);
-					started.set(false);
 					if (proofPhase == ProofPhase.QUIESCE)
 						publishProof();
 				}
 
 				@Override
-				public void force(@NonNull InternalShutdownContext context) {
+				public void force(@NonNull ShutdownContext context) {
 					probe.forces.add(name);
-					started.set(false);
 					publishProof();
 				}
 			};
@@ -582,7 +561,7 @@ final class SokletDirectSseCompositionTests {
 		}
 
 		@NonNull
-		private InternalTransportRuntime attachedRuntime() {
+		private TransportRuntime attachedRuntime() {
 			return requireNonNull(this.runtime.get());
 		}
 
@@ -606,12 +585,6 @@ final class SokletDirectSseCompositionTests {
 
 		@Override
 		@NonNull
-		public Boolean isStarted() {
-			return this.started.get();
-		}
-
-		@Override
-		@NonNull
 		public Optional<? extends SseBroadcaster> acquireBroadcaster(
 				@Nullable ResourcePath resourcePath) {
 			this.probe.broadcasterCalled(this.name, resourcePath);
@@ -627,7 +600,7 @@ final class SokletDirectSseCompositionTests {
 
 		private AbstractSseDecorator(@NonNull String name,
 				@NonNull GraphProbe probe, @NonNull ComposedSseEndpoint delegate) {
-			super(name, probe, requireNonNull(delegate).identity());
+			super(name, probe, requireNonNull(delegate).getTransportIdentity());
 			this.delegate = delegate;
 		}
 
@@ -641,12 +614,6 @@ final class SokletDirectSseCompositionTests {
 
 		@Override
 		@NonNull
-		public final Boolean isStarted() {
-			return this.delegate.isStarted();
-		}
-
-		@Override
-		@NonNull
 		public final Optional<? extends SseBroadcaster> acquireBroadcaster(
 				@Nullable ResourcePath resourcePath) {
 			this.probe.broadcasterCalled(this.name, resourcePath);
@@ -656,7 +623,7 @@ final class SokletDirectSseCompositionTests {
 
 	private static final class TransparentSseDecorator
 			extends AbstractSseDecorator {
-		@NonNull private final AtomicReference<InternalTransportRuntime> runtime;
+		@NonNull private final AtomicReference<TransportRuntime> runtime;
 
 		private TransparentSseDecorator(@NonNull String name,
 				@NonNull GraphProbe probe, @NonNull ComposedSseEndpoint delegate) {
@@ -666,25 +633,25 @@ final class SokletDirectSseCompositionTests {
 
 		@Override
 		@NonNull
-		public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<SseServer.RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
+		public TransportRuntime attach(
+				@NonNull SseTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
 			this.probe.attached(this.name, context, startupContext);
-			InternalTransportRuntime attachedRuntime =
+			TransportRuntime attachedRuntime =
 					context.attachTransparentDelegate(this.delegate,
-							wrappedHandler(context.requestHandler()));
+							wrappedHandler(context.getAdmissionFencedRequestHandler()));
 			this.runtime.set(attachedRuntime);
 			return attachedRuntime;
 		}
 
 		@NonNull
-		private InternalTransportRuntime attachedRuntime() {
+		private TransportRuntime attachedRuntime() {
 			return requireNonNull(this.runtime.get());
 		}
 	}
 
 	private static final class OwningSseDecorator extends AbstractSseDecorator {
-		@NonNull private final AtomicReference<InternalTransportTerminationSignal> signal;
+		@NonNull private final AtomicReference<TransportTerminationSignal> signal;
 		@NonNull private final AtomicBoolean proofPublished;
 		@NonNull private final AtomicBoolean forceRequested;
 		@NonNull private final AtomicReference<CleanupState> cleanupState;
@@ -706,19 +673,19 @@ final class SokletDirectSseCompositionTests {
 
 		@Override
 		@NonNull
-		public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<SseServer.RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
+		public TransportRuntime attach(
+				@NonNull SseTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
 			this.probe.attached(this.name, context, startupContext);
-			this.signal.set(context.terminationSignal());
-			InternalTransportDelegateAttachment attachment =
+			this.signal.set(context.getTerminationSignal());
+			TransportDelegateAttachment attachment =
 					context.attachLifecycleOwningDelegate(this.delegate,
-							wrappedHandler(context.requestHandler()));
+							wrappedHandler(context.getAdmissionFencedRequestHandler()));
 			attachment.whenTerminated().thenRun(this::submitOwnedCleanup);
-			InternalTransportRuntime child = attachment.runtime();
-			return new InternalTransportRuntime() {
+			TransportRuntime child = attachment.getRuntime();
+			return new TransportRuntime() {
 				@Override
-				public void start(@NonNull InternalStartupContext phaseContext) {
+				public void start(@NonNull StartupContext phaseContext) {
 					probe.starts.add(name);
 					startOwnedExecutor();
 					try {
@@ -730,13 +697,13 @@ final class SokletDirectSseCompositionTests {
 				}
 
 				@Override
-				public void quiesce(@NonNull InternalShutdownContext phaseContext) {
+				public void quiesce(@NonNull ShutdownContext phaseContext) {
 					probe.quiesces.add(name);
 					child.quiesce(phaseContext);
 				}
 
 				@Override
-				public void force(@NonNull InternalShutdownContext phaseContext) {
+				public void force(@NonNull ShutdownContext phaseContext) {
 					probe.forces.add(name);
 					requestCleanupForce();
 					child.force(phaseContext);

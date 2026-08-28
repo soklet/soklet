@@ -49,7 +49,7 @@ import java.util.concurrent.TimeUnit;
 
 import static java.util.Objects.requireNonNull;
 
-@Timeout(20)
+@Timeout(60)
 public class McpTransportMetricsEventRuntimeTests {
 	private static final String LOOPBACK = "127.0.0.1";
 

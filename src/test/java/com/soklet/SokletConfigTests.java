@@ -20,6 +20,7 @@ import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -43,9 +44,10 @@ public class SokletConfigTests {
 		SokletConfig configured = SokletConfig.withHttpServer(HttpServer.withPort(0).build())
 				.lifecycleObserver(lifecycleObserver)
 				.build();
-		SokletConfig cleared = configured.copy()
+		SokletConfig cleared = SokletConfig.withHttpServer(
+					configured.getHttpServer().orElseThrow())
 				.lifecycleObserver(null)
-				.finish();
+				.build();
 
 		Assertions.assertEquals(List.of(lifecycleObserver), configured.getLifecycleObservers());
 		Assertions.assertEquals(List.of(), cleared.getLifecycleObservers());
@@ -104,23 +106,45 @@ public class SokletConfigTests {
 	}
 
 	@Test
-	public void mcpServerCanAnchorConfigurationAndIsPreservedWhenCopied() {
+	public void mcpServerCanAnchorConfiguration() {
 		McpServer mcpServer = newMcpServer();
 		SokletConfig config = SokletConfig.withMcpServer(mcpServer).build();
-		SokletConfig copy = config.copy().finish();
 
 		Assertions.assertSame(mcpServer, config.getMcpServer().orElseThrow());
-		Assertions.assertSame(mcpServer, copy.getMcpServer().orElseThrow());
 		Assertions.assertTrue(config.getHttpServer().isEmpty());
 		Assertions.assertTrue(config.getSseServer().isEmpty());
 	}
 
 	@Test
 	public void configurationRequiresAtLeastOneTransportServer() {
-		SokletConfig config = SokletConfig.withMcpServer(newMcpServer()).build();
-
 		Assertions.assertThrows(IllegalStateException.class,
-				() -> config.copy().mcpServer(null).finish());
+				() -> SokletConfig.withMcpServer(newMcpServer())
+						.mcpServer(null)
+						.build());
+	}
+
+	@Test
+	public void lifecyclePolicyIsStoredExactlyAndBridgedForInternalCallers() {
+		LifecyclePolicy lifecyclePolicy = LifecyclePolicy.builder()
+				.noStartupTimeout()
+				.startupCancellationTimeout(Duration.ofSeconds(1))
+				.gracefulShutdownDuration(Duration.ofSeconds(2))
+				.forcedShutdownDuration(Duration.ofSeconds(3))
+				.build();
+		SokletConfig config = SokletConfig.withMcpServer(newMcpServer())
+				.lifecyclePolicy(lifecyclePolicy)
+				.build();
+
+		Assertions.assertSame(lifecyclePolicy, config.getLifecyclePolicy());
+		InternalLifecyclePolicy internalPolicy =
+				config.getInternalLifecyclePolicy();
+		Assertions.assertTrue(internalPolicy.startupTimeout().isEmpty());
+		Assertions.assertEquals(Duration.ofSeconds(1),
+				internalPolicy.startupCancellationTimeout());
+		Assertions.assertEquals(Duration.ofSeconds(2),
+				internalPolicy.gracefulShutdownTimeout());
+		Assertions.assertEquals(Duration.ofSeconds(3),
+				internalPolicy.forcedShutdownTimeout());
 	}
 
 	@Test

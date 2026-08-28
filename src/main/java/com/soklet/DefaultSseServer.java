@@ -119,8 +119,6 @@ final class DefaultSseServer implements SseServer {
 	@NonNull
 	private static final Duration DEFAULT_HEARTBEAT_INTERVAL;
 	@NonNull
-	private static final Duration DEFAULT_SHUTDOWN_TIMEOUT;
-	@NonNull
 	private static final Duration REQUEST_READ_PROGRESS_SETTLE;
 	@NonNull
 	private static final Integer DEFAULT_CONNECTION_QUEUE_CAPACITY;
@@ -171,7 +169,6 @@ final class DefaultSseServer implements SseServer {
 		DEFAULT_MAXIMUM_REQUEST_TARGET_LENGTH_IN_BYTES = 8_192;
 		DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES = 1_024;
 		DEFAULT_HEARTBEAT_INTERVAL = Duration.ofSeconds(15);
-		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(1);
 		REQUEST_READ_PROGRESS_SETTLE = Duration.ofMillis(5);
 		DEFAULT_CONNECTION_QUEUE_CAPACITY = 128;
 		DEFAULT_CONCURRENT_CONNECTION_LIMIT = 8_192;
@@ -259,8 +256,6 @@ final class DefaultSseServer implements SseServer {
 	@NonNull
 	private final Duration writeTimeout;
 	@NonNull
-	private final Duration shutdownTimeout;
-	@NonNull
 	private final Duration heartbeatInterval;
 	@NonNull
 	private final Integer maximumRequestSizeInBytes;
@@ -315,6 +310,8 @@ final class DefaultSseServer implements SseServer {
 	private volatile Boolean started;
 	@NonNull
 	private volatile Boolean stopping = false;
+	@NonNull
+	private volatile LifecyclePolicy lifecyclePolicy = LifecyclePolicy.fromDefaults();
 	@Nullable
 	private volatile Thread eventLoopThread;
 	@Nullable
@@ -761,7 +758,6 @@ final class DefaultSseServer implements SseServer {
 				? builder.requestHandlerQueueCapacity
 				: Math.max(1, this.requestHandlerConcurrency * DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY_MULTIPLIER);
 		this.writeTimeout = builder.writeTimeout != null ? builder.writeTimeout : DEFAULT_WRITE_TIMEOUT;
-		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
 		this.heartbeatInterval = builder.heartbeatInterval != null ? builder.heartbeatInterval : DEFAULT_HEARTBEAT_INTERVAL;
 		this.resourceMethodsByResourcePathDeclaration = Map.of(); // Temporary to remain non-null; will be overridden by Soklet via #initialize
 
@@ -794,9 +790,6 @@ final class DefaultSseServer implements SseServer {
 
 		if (this.writeTimeout.isNegative())
 			throw new IllegalArgumentException("Write timeout must be >= 0");
-
-		if (this.shutdownTimeout.isNegative())
-			throw new IllegalArgumentException("Shutdown timeout must be >= 0");
 
 		if (this.heartbeatInterval.isNegative() || this.heartbeatInterval.isZero())
 			throw new IllegalArgumentException("Heartbeat interval must be > 0");
@@ -909,16 +902,57 @@ final class DefaultSseServer implements SseServer {
 		this.activeHandshakes = new ConcurrentHashMap<>();
 		this.activeConnectionCount = new AtomicInteger(0);
 		this.lifecycleAdapter = new BuiltInTransportLifecycleAdapter(
-				InternalParticipantKind.SSE, new SseLifecycleOperations(), this::getShutdownTimeout);
+				InternalParticipantKind.SSE, new SseLifecycleOperations(),
+				this::getGracefulShutdownDuration,
+				this::getForcedShutdownDuration);
 	}
 
+	@NonNull
 	@Override
+	public TransportIdentity getTransportIdentity() {
+		return getLifecycleAdapter().identity().publicIdentity();
+	}
+
+	@NonNull
+	@Override
+	public TransportRuntime attach(
+			@NonNull SseTransportAttachmentContext attachmentContext,
+			@NonNull StartupContext startupContext) {
+		requireNonNull(startupContext);
+		SseTransportAttachmentContext exactContext = requireNonNull(
+				attachmentContext);
+		initialize(exactContext.getSokletConfig(),
+				exactContext.getAdmissionFencedRequestHandler());
+		TransportTerminationSignal signal = exactContext.getTerminationSignal();
+		AtomicBoolean stopObserverStarted = new AtomicBoolean();
+		return new TransportRuntime() {
+			@Override
+			public void start(@NonNull StartupContext context) {
+				requireNonNull(context);
+				DefaultSseServer.this.start();
+			}
+
+			@Override
+			public void quiesce(@NonNull ShutdownContext context) {
+				requireNonNull(context);
+				observeStop(signal, stopObserverStarted);
+			}
+
+			@Override
+			public void force(@NonNull ShutdownContext context) {
+				requireNonNull(context);
+				observeStop(signal, stopObserverStarted);
+			}
+		};
+	}
+
 	public void initialize(@NonNull SokletConfig sokletConfig,
 												 @NonNull RequestHandler requestHandler) {
 		requireNonNull(sokletConfig);
 		requireNonNull(requestHandler);
 
 		this.lifecycleObserver = sokletConfig.getAggregateLifecycleObserver();
+		this.lifecyclePolicy = sokletConfig.getLifecyclePolicy();
 		this.metricsCollector = sokletConfig.getMetricsCollector();
 		this.responseMarshaler = sokletConfig.getResponseMarshaler();
 		this.requestHandler = requestHandler;
@@ -939,7 +973,6 @@ final class DefaultSseServer implements SseServer {
 						));
 	}
 
-	@Override
 	public void start() {
 		BuiltInTransportLifecycleAdapter.Generation adapterGeneration = null;
 		getLock().lock();
@@ -3689,7 +3722,6 @@ final class DefaultSseServer implements SseServer {
 		}
 	}
 
-	@Override
 	public void stop() {
 		BuiltInTransportLifecycleAdapter.Generation generation;
 		ReentrantLock lock = getLock();
@@ -3935,7 +3967,6 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	@NonNull
-	@Override
 	public Boolean isStarted() {
 		getLock().lock();
 
@@ -3948,6 +3979,22 @@ final class DefaultSseServer implements SseServer {
 		} finally {
 			getLock().unlock();
 		}
+	}
+
+	private void observeStop(@NonNull TransportTerminationSignal signal,
+			@NonNull AtomicBoolean observerStarted) {
+		if (!requireNonNull(observerStarted).compareAndSet(false, true))
+			return;
+		Thread observer = new Thread(() -> {
+			try {
+				stop();
+				requireNonNull(signal).signalTerminated();
+			} catch (RuntimeException | Error failure) {
+				requireNonNull(signal).signalTerminationFailure(failure);
+			}
+		}, "soklet-sse-delegate-stop");
+		observer.setDaemon(true);
+		observer.start();
 	}
 
 	@NonNull
@@ -4530,8 +4577,13 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	@NonNull
-	protected Duration getShutdownTimeout() {
-		return this.shutdownTimeout;
+	protected Duration getGracefulShutdownDuration() {
+		return this.lifecyclePolicy.getGracefulShutdownDuration();
+	}
+
+	@NonNull
+	protected Duration getForcedShutdownDuration() {
+		return this.lifecyclePolicy.getForcedShutdownDuration();
 	}
 
 	@NonNull

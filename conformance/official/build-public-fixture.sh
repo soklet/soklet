@@ -42,16 +42,21 @@ javac --release 17 -proc:none -Xlint:all -Werror \
   -classpath "$CANDIDATE_JAR" \
   -d "$CLASSES_DIR" \
   "$SOURCE_ROOT/com/soklet/McpOfficialSchemaConformanceTool.java" \
-  "$SOURCE_ROOT/com/soklet/conformance/McpConformanceFixture.java"
+  "$SOURCE_ROOT/com/soklet/conformance/McpConformanceFixture.java" \
+  "$SOURCE_ROOT/com/soklet/conformance/transport/TransportCompositionFixture.java"
 
 javac --release 17 -proc:none -Xlint:all -Werror \
   -classpath "$CLASSES_DIR:$CANDIDATE_JAR" \
   -d "$TEST_CLASSES_DIR" \
   "$TEST_SOURCE_ROOT/com/soklet/conformance/McpConformanceFixtureContractTest.java" \
-  "$TEST_SOURCE_ROOT/com/soklet/conformance/McpLocalSimulatorScenarioDriver.java"
+  "$TEST_SOURCE_ROOT/com/soklet/conformance/McpLocalSimulatorScenarioDriver.java" \
+  "$TEST_SOURCE_ROOT/com/soklet/conformance/transport/TransportCompositionFixtureContractTest.java"
 
 java -ea -classpath "$TEST_CLASSES_DIR:$CLASSES_DIR:$CANDIDATE_JAR" \
   com.soklet.conformance.McpConformanceFixtureContractTest
+
+java -ea -classpath "$TEST_CLASSES_DIR:$CLASSES_DIR:$CANDIDATE_JAR" \
+  com.soklet.conformance.transport.TransportCompositionFixtureContractTest
 
 jdeps -q --multi-release 17 -verbose:class \
   -classpath "$CANDIDATE_JAR" "$CLASSES_DIR" "$TEST_CLASSES_DIR" \

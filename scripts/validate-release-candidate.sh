@@ -54,6 +54,29 @@ for version_transition_source in \
 	[[ -f "$version_transition_source" && ! -L "$version_transition_source" ]] \
 		|| fail "version-transition inventory source is missing or is a symlink."
 done
+lifecycle_bound_harness_inventory="$project_root/release/lifecycle-bound-harness-inventory.json"
+lifecycle_bound_harness_verifier="$project_root/scripts/verify-lifecycle-bound-harness-inventory.mjs"
+lifecycle_bound_harness_self_test="$project_root/scripts/verify-lifecycle-bound-harness-inventory-self-test.mjs"
+for lifecycle_bound_harness_source in \
+	"$lifecycle_bound_harness_inventory" "$lifecycle_bound_harness_verifier" \
+	"$lifecycle_bound_harness_self_test"; do
+	[[ -f "$lifecycle_bound_harness_source" \
+			&& ! -L "$lifecycle_bound_harness_source" ]] \
+		|| fail "lifecycle-bound harness inventory source is missing or is a symlink."
+done
+d1p_evidence_config="$project_root/release/d1p-evidence-config.json"
+d1p_evidence_contract="$project_root/release/d1p-evidence-contract.md"
+d1p_evidence_library="$project_root/scripts/d1p-evidence-lib.mjs"
+d1p_evidence_generator="$project_root/scripts/generate-d1p-evidence.mjs"
+d1p_evidence_verifier="$project_root/scripts/verify-d1p-evidence.mjs"
+d1p_evidence_self_test="$project_root/scripts/verify-d1p-evidence-self-test.mjs"
+for d1p_evidence_source in \
+	"$d1p_evidence_config" "$d1p_evidence_contract" \
+	"$d1p_evidence_library" "$d1p_evidence_generator" \
+	"$d1p_evidence_verifier" "$d1p_evidence_self_test"; do
+	[[ -f "$d1p_evidence_source" && ! -L "$d1p_evidence_source" ]] \
+		|| fail "D1p evidence-tooling source is missing or is a symlink."
+done
 release_harness_registry="$project_root/release/release-harness-contracts.json"
 release_harness_importer="$project_root/scripts/import-release-harness-evidence.mjs"
 release_harness_importer_self_test="$project_root/scripts/import-release-harness-evidence-self-test.mjs"
@@ -367,6 +390,9 @@ build_log="$temporary_directory/candidate-build.log"
 {
 	node "$version_transition_self_test"
 	node "$version_transition_verifier" --stage final
+	node "$lifecycle_bound_harness_self_test"
+	node "$lifecycle_bound_harness_verifier"
+	node "$d1p_evidence_self_test"
 	mvn -B -ntp -Dgpg.skip=true clean verify
 } 2>&1 | tee "$build_log"
 
@@ -586,6 +612,7 @@ run_api_freeze() {
 		cd "$checkout"
 		env JAVA_HOME="$core_java_home" PATH="$core_java_home/bin:$PATH" \
 			scripts/verify-mcp-api-freezes.sh
+		node scripts/verify-d1p-evidence.mjs --mode candidate --scope tracked
 	) 2>&1 | tee "$log"
 	local raw_root="$evidence_root/raw/api-freeze"
 	mkdir -p "$raw_root"

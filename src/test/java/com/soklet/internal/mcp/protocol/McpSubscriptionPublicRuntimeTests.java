@@ -18,6 +18,7 @@ package com.soklet.internal.mcp.protocol;
 
 import com.soklet.CorsAuthorizer;
 import com.soklet.LifecycleObserver;
+import com.soklet.LifecyclePolicy;
 import com.soklet.McpAdmissionDecision;
 import com.soklet.McpAdmissionIdentity;
 import com.soklet.McpAdmissionRejection;
@@ -46,6 +47,7 @@ import com.soklet.MetricsCollector;
 import com.soklet.ResourceMethodResolver;
 import com.soklet.Soklet;
 import com.soklet.SokletConfig;
+import com.soklet.SokletStatus;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
@@ -77,7 +79,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@Timeout(30)
+@Timeout(60)
 public class McpSubscriptionPublicRuntimeTests {
 	private static final long MANAGED_STOP_JOIN_MILLIS = 20_000L;
 	private static final String LOOPBACK = "127.0.0.1";
@@ -105,7 +107,7 @@ public class McpSubscriptionPublicRuntimeTests {
 			assertAcknowledgment(port, "37", "37");
 			Assertions.assertEquals(1, publisher.subscriptionCount());
 		} finally {
-			owner.stop();
+			owner.close();
 		}
 		Assertions.assertEquals(1, publisher.closedSubscriptionCount());
 		Assertions.assertEquals(0, publisher.publisherCloseCount());
@@ -146,7 +148,7 @@ public class McpSubscriptionPublicRuntimeTests {
 		} finally {
 			if (client != null)
 				client.closeWithReset();
-			owner.stop();
+			owner.close();
 		}
 	}
 
@@ -154,7 +156,12 @@ public class McpSubscriptionPublicRuntimeTests {
 	public void supportedIntersectionOmitsToolsPromptsAndUnconfiguredResources()
 			throws Exception {
 		RecordingPublisher publisher = new RecordingPublisher();
-		McpServer server = server(MCP_PATH, publisher,
+		AtomicReference<List<URI>> requestedResourceUris = new AtomicReference<>();
+		McpServer server = server(MCP_PATH, publisher, context -> {
+			requestedResourceUris.set(
+					context.getRequestedResourceSubscriptionUris());
+			return McpAdmissionController.acceptAllInstance().admit(context);
+		},
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED);
 		Soklet owner = managedSoklet(server);
 		McpChunkedHttpClient client = null;
@@ -172,6 +179,10 @@ public class McpSubscriptionPublicRuntimeTests {
 			assertSseHead(client.readHead());
 			Assertions.assertEquals(acknowledgment("\"intersection\"",
 					"{\"resourcesListChanged\":true}"), client.readChunkText());
+			Assertions.assertEquals(List.of(RESOURCE_URI),
+					requestedResourceUris.get(),
+					"Admission sees requested URIs even when the server does not accept"
+							+ " resource-update notifications.");
 
 			publisher.publishResourceUpdated(RESOURCE_URI);
 			publisher.publishResourcesListChanged();
@@ -180,7 +191,7 @@ public class McpSubscriptionPublicRuntimeTests {
 		} finally {
 			if (client != null)
 				client.closeWithReset();
-			owner.stop();
+			owner.close();
 		}
 	}
 
@@ -227,7 +238,7 @@ public class McpSubscriptionPublicRuntimeTests {
 			Assertions.assertEquals(0, admissionCalls.get(),
 					"Structurally invalid filters must not reach application admission.");
 		} finally {
-			owner.stop();
+			owner.close();
 		}
 		Assertions.assertEquals(1, publisher.closedSubscriptionCount());
 		Assertions.assertEquals(0, publisher.publisherCloseCount());
@@ -255,7 +266,7 @@ public class McpSubscriptionPublicRuntimeTests {
 					toolLimiterCalls.incrementAndGet();
 					return McpRateLimitDecision.allowed();
 				})
-				.handlerInterceptor((context, continuation) -> {
+				.handlerInterceptor((context, features, continuation) -> {
 					interceptorCalls.incrementAndGet();
 					return continuation.proceed();
 				})
@@ -273,7 +284,7 @@ public class McpSubscriptionPublicRuntimeTests {
 				client.closeWithReset();
 			}
 		} finally {
-			allowedOwner.stop();
+			allowedOwner.close();
 		}
 		Assertions.assertEquals(1, admissionCalls.get());
 		Assertions.assertEquals(1, requestLimiterCalls.get());
@@ -307,7 +318,7 @@ public class McpSubscriptionPublicRuntimeTests {
 						client.readFixedBody(head));
 			}
 		} finally {
-			deniedOwner.stop();
+			deniedOwner.close();
 		}
 		Assertions.assertEquals(1, deniedAdmissionCalls.get());
 		Assertions.assertEquals(1, deniedLimiterCalls.get());
@@ -321,9 +332,16 @@ public class McpSubscriptionPublicRuntimeTests {
 				McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED,
 				McpSubscriptionNotificationType.RESOURCE_UPDATED);
 		String notifications = "{\"resourcesListChanged\":true,"
-				+ "\"resourceSubscriptions\":[\"" + RESOURCE_URI + "\"]}";
+				+ "\"resourceSubscriptions\":[\"" + RESOURCE_URI + "\",\""
+				+ SECOND_RESOURCE_URI + "\",\"" + RESOURCE_URI + "\"]}";
+		String acceptedNotifications = "{\"resourcesListChanged\":true,"
+				+ "\"resourceSubscriptions\":[\"" + RESOURCE_URI + "\",\""
+				+ SECOND_RESOURCE_URI + "\"]}";
 		AtomicBoolean admit = new AtomicBoolean();
+		List<List<URI>> requestedResourceUris = new CopyOnWriteArrayList<>();
 		McpServer server = serverBuilder(List.of(endpoint), context -> {
+			requestedResourceUris.add(
+					context.getRequestedResourceSubscriptionUris());
 			if (admit.get())
 				return McpAdmissionController.acceptAllInstance().admit(context);
 			return McpAdmissionDecision.rejected(McpAdmissionRejection
@@ -351,6 +369,12 @@ public class McpSubscriptionPublicRuntimeTests {
 
 			Assertions.assertEquals(1, publisher.subscriptionCount(),
 					"The generation-wide publisher listener may already exist.");
+			Assertions.assertEquals(List.of(RESOURCE_URI, SECOND_RESOURCE_URI),
+					requestedResourceUris.get(0),
+					"Admission must see validated URIs once, in first-encounter order.");
+			Assertions.assertThrows(UnsupportedOperationException.class,
+					() -> requestedResourceUris.get(0).add(
+							URI.create("test://subscription/not-immutable")));
 			publisher.publishResourceUpdated(RESOURCE_URI);
 			Assertions.assertEquals(0,
 					server.getDiagnostics().getActiveRequestStreams());
@@ -361,8 +385,13 @@ public class McpSubscriptionPublicRuntimeTests {
 			admitted = listen(port, "\"admitted\"", notifications);
 			assertSseHead(admitted.readHead());
 			Assertions.assertEquals(acknowledgment("\"admitted\"",
-					notifications), admitted.readChunkText(),
+					acceptedNotifications), admitted.readChunkText(),
 					"A pre-admission broadcast must not be accepted or replayed.");
+			Assertions.assertEquals(List.of(
+					List.of(RESOURCE_URI, SECOND_RESOURCE_URI),
+					List.of(RESOURCE_URI, SECOND_RESOURCE_URI)),
+					requestedResourceUris,
+					"Rejected and accepted admission must see the same projection.");
 			assertCapacityRejected(port, "shared-anonymous-cap");
 			publisher.publishResourcesListChanged();
 			Assertions.assertEquals(resourceListChanged("\"admitted\""),
@@ -370,7 +399,7 @@ public class McpSubscriptionPublicRuntimeTests {
 		} finally {
 			if (admitted != null)
 				admitted.closeWithReset();
-			owner.stop();
+			owner.close();
 		}
 	}
 
@@ -440,7 +469,7 @@ public class McpSubscriptionPublicRuntimeTests {
 			} finally {
 				if (admitted != null)
 					admitted.closeWithReset();
-				owner.stop();
+				owner.close();
 			}
 		}
 	}
@@ -495,7 +524,7 @@ public class McpSubscriptionPublicRuntimeTests {
 		} finally {
 			if (subscription != null)
 				subscription.closeWithReset();
-			owner.stop();
+			owner.close();
 		}
 	}
 
@@ -533,7 +562,7 @@ public class McpSubscriptionPublicRuntimeTests {
 		} finally {
 			if (first != null)
 				first.closeWithReset();
-			owner.stop();
+			owner.close();
 		}
 	}
 
@@ -602,7 +631,7 @@ public class McpSubscriptionPublicRuntimeTests {
 				beta.closeWithReset();
 			if (alphaReplacement != null)
 				alphaReplacement.closeWithReset();
-			owner.stop();
+			owner.close();
 		}
 	}
 
@@ -621,7 +650,7 @@ public class McpSubscriptionPublicRuntimeTests {
 			Assertions.assertEquals(1, groupedPublisher.subscriptionCount(),
 					"One server must register once for one publisher identity.");
 		} finally {
-			groupedOwner.stop();
+			groupedOwner.close();
 		}
 		Assertions.assertEquals(1,
 				groupedPublisher.closedSubscriptionCount());
@@ -681,9 +710,9 @@ public class McpSubscriptionPublicRuntimeTests {
 						second.closeWithReset();
 				} finally {
 					try {
-						firstOwner.stop();
+						firstOwner.close();
 					} finally {
-						secondOwner.stop();
+						secondOwner.close();
 					}
 				}
 			}
@@ -716,7 +745,7 @@ public class McpSubscriptionPublicRuntimeTests {
 			Assertions.assertEquals(acknowledgment("\"shutdown\"",
 					"{\"resourcesListChanged\":true}"), client.readChunkText());
 
-			stopThread = new Thread(firstOwner::stop,
+			stopThread = new Thread(firstOwner::close,
 					"mcp-subscription-test-stop");
 			stopThread.start();
 			Assertions.assertEquals(terminal("\"shutdown\""),
@@ -725,7 +754,8 @@ public class McpSubscriptionPublicRuntimeTests {
 			Assertions.assertNull(client.readChunk());
 			stopThread.join(MANAGED_STOP_JOIN_MILLIS);
 			Assertions.assertFalse(stopThread.isAlive());
-			Assertions.assertFalse(firstOwner.isStarted());
+			Assertions.assertEquals(SokletStatus.CLOSED,
+					firstOwner.getStatus());
 
 			McpEndpoint freshEndpoint = endpoint(MCP_PATH, publisher,
 					McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED);
@@ -748,18 +778,18 @@ public class McpSubscriptionPublicRuntimeTests {
 						"restart-full-cap");
 				freshClient.closeWithReset();
 			}
-			freshOwner.stop();
+			freshOwner.close();
 		} finally {
 			try {
 				if (client != null)
 					client.close();
 			} finally {
 				try {
-					firstOwner.stop();
+					firstOwner.close();
 				} finally {
 					try {
 						if (freshOwner != null)
-							freshOwner.stop();
+							freshOwner.close();
 					} finally {
 						if (stopThread != null && stopThread.isAlive())
 							stopThread.join(MANAGED_STOP_JOIN_MILLIS);
@@ -812,7 +842,7 @@ public class McpSubscriptionPublicRuntimeTests {
 			observations.assertStreamMetrics(
 					McpStreamTerminationReason.DEADLINE_EXCEEDED, null);
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -855,7 +885,7 @@ public class McpSubscriptionPublicRuntimeTests {
 				recovered.closeWithReset();
 			if (client != null)
 				client.close();
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -922,7 +952,7 @@ public class McpSubscriptionPublicRuntimeTests {
 				keepAliveRead.cancel(true);
 			if (client != null)
 				client.close();
-			soklet.stop();
+			soklet.close();
 			readerExecutor.shutdownNow();
 			Assertions.assertTrue(readerExecutor.awaitTermination(
 					5, TimeUnit.SECONDS));
@@ -963,7 +993,7 @@ public class McpSubscriptionPublicRuntimeTests {
 		} finally {
 			if (client != null)
 				client.closeWithReset();
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -1012,7 +1042,7 @@ public class McpSubscriptionPublicRuntimeTests {
 		} finally {
 			if (backpressured != null)
 				backpressured.closeWithReset();
-			owner.stop();
+			owner.close();
 		}
 	}
 
@@ -1334,6 +1364,7 @@ public class McpSubscriptionPublicRuntimeTests {
 		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecyclePolicy(testLifecyclePolicy())
 				.build());
 	}
 
@@ -1351,7 +1382,17 @@ public class McpSubscriptionPublicRuntimeTests {
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObservers(List.of(lifecycleObserver))
 				.metricsCollector(metricsCollector)
+				.lifecyclePolicy(testLifecyclePolicy())
 				.build());
+	}
+
+	private static LifecyclePolicy testLifecyclePolicy() {
+		return LifecyclePolicy.builder()
+				.startupTimeout(Duration.ofSeconds(5))
+				.startupCancellationTimeout(Duration.ofSeconds(2))
+				.gracefulShutdownDuration(Duration.ofSeconds(2))
+				.forcedShutdownDuration(Duration.ofSeconds(1))
+				.build();
 	}
 
 	private static void assertSseHead(

@@ -72,6 +72,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 
 import static java.util.Objects.requireNonNull;
@@ -513,6 +514,55 @@ public final class McpServerRuntimeBridge {
 	/**
 	 * Creates one production listener projection with common lifecycle
 	 * admission and termination signaling.
+	 */
+	public McpServerRuntimeBridge(@NonNull String host, int port,
+			@NonNull List<@NonNull EndpointPlan> endpointPlans,
+			@NonNull Set<@NonNull String> allowedHosts, boolean requireOrigin,
+			@NonNull CorsAuthorizer corsAuthorizer,
+			boolean corsAuthorizerExplicitlyConfigured,
+			@NonNull AdmissionAdapter admissionAdapter,
+			@NonNull Optional<@NonNull RateLimitAdapter> requestRateLimitAdapter,
+			com.soklet.@NonNull McpUnknownMirroredHeaderPolicy
+					unknownMirroredHeaderPolicy,
+			boolean unknownMirroredHeaderNameDiagnostics,
+			@NonNull BiConsumer<@NonNull String, @NonNull String>
+					unknownMirroredHeaderNameDiagnosticConsumer,
+			int requestHandlerConcurrency, int requestHandlerQueueCapacity,
+			@NonNull Duration requestTimeout,
+			@NonNull Optional<@NonNull Supplier<@NonNull ExecutorService>>
+					requestHandlerExecutorServiceSupplier,
+			@NonNull Consumer<@NonNull String> startupDiagnosticConsumer,
+			@NonNull Consumer<@NonNull Throwable> unexpectedTerminationConsumer,
+			@NonNull RequestObservationAdapter requestObservationAdapter,
+			@NonNull Optional<@NonNull RequestStateProtectionPlan>
+					requestStateProtectionPlan,
+			int streamQueueCapacity, @NonNull Duration writeTimeout,
+			@NonNull Duration keepAliveInterval,
+			int maximumSubscriptionsPerPrincipal,
+			@NonNull Duration maximumSubscriptionDuration,
+			@NonNull McpApplicationExecutionObserver applicationExecutionObserver,
+			@NonNull LifecycleAdapter lifecycleAdapter) {
+		this(host, port, endpointPlans, allowedHosts, requireOrigin,
+				corsAuthorizer, corsAuthorizerExplicitlyConfigured,
+				admissionAdapter, requestRateLimitAdapter,
+				unknownMirroredHeaderPolicy,
+				unknownMirroredHeaderNameDiagnostics,
+				unknownMirroredHeaderNameDiagnosticConsumer,
+				requestHandlerConcurrency, requestHandlerQueueCapacity,
+				requestTimeout, requestHandlerExecutorServiceSupplier,
+				startupDiagnosticConsumer, unexpectedTerminationConsumer,
+				requestObservationAdapter, requestStateProtectionPlan,
+				streamQueueCapacity, writeTimeout, keepAliveInterval,
+				McpSubscriptionRuntimeConfiguration.productionDefaults()
+						.shutdownTimeout(),
+				maximumSubscriptionsPerPrincipal, maximumSubscriptionDuration,
+				applicationExecutionObserver, lifecycleAdapter);
+	}
+
+	/**
+	 * Deterministic compatibility seam for direct internal runtime tests.  The
+	 * explicit timeout is not consulted by common-lifecycle quiesce, force, or
+	 * proof observation, which receive the owner's fixed absolute boundaries.
 	 */
 	public McpServerRuntimeBridge(@NonNull String host, int port,
 			@NonNull List<@NonNull EndpointPlan> endpointPlans,
@@ -981,6 +1031,7 @@ public final class McpServerRuntimeBridge {
 					context.clientInformation().map(McpServerRuntimeBridge::toPublic),
 					context.clientCapabilities().map(value ->
 							(McpJsonObject) toPublic(value.toJsonObject())),
+					context.requestedResourceSubscriptionUris(),
 					context.requestMetadata().map(value ->
 							(McpJsonObject) toPublic(value)));
 			McpAdmissionDecision decision = requireNonNull(
@@ -1222,8 +1273,8 @@ public final class McpServerRuntimeBridge {
 		AtomicReference<SimulationSession> claimedSession = new AtomicReference<>();
 		this.runtime.openSimulationSession(delegate -> {
 			SimulationSession session = new SimulationSession(delegate);
-			claimedSession.set(session);
 			requiredOwner.accept(session);
+			claimedSession.set(session);
 		});
 		return requireNonNull(claimedSession.get(),
 				"The MCP simulation session was not claimed");
@@ -1237,8 +1288,16 @@ public final class McpServerRuntimeBridge {
 		this.runtime.quiesceLifecycle();
 	}
 
+	public void quiesceLifecycle(long absoluteDeadlineNanos) {
+		this.runtime.quiesceLifecycle(absoluteDeadlineNanos);
+	}
+
 	public void forceLifecycle() {
 		this.runtime.forceLifecycle();
+	}
+
+	public void forceLifecycle(long absoluteDeadlineNanos) {
+		this.runtime.forceLifecycle(absoluteDeadlineNanos);
 	}
 
 	public boolean awaitLifecycleTermination(long absoluteDeadlineNanos)
@@ -1318,10 +1377,16 @@ public final class McpServerRuntimeBridge {
 			this.delegate.force();
 		}
 
-		/** Observes this simulation generation's complete runtime barrier. */
-		public boolean awaitTermination(@NonNull Duration remainingTime)
-				throws InterruptedException {
-			return this.delegate.awaitTermination(requireNonNull(remainingTime));
+		/** Observes this simulation generation against the owner's fixed deadline. */
+		public boolean awaitTermination(long absoluteDeadlineNanos,
+				@NonNull LongSupplier nanoTime) throws InterruptedException {
+			return this.delegate.awaitTermination(absoluteDeadlineNanos,
+					requireNonNull(nanoTime));
+		}
+
+		/** Nonblocking snapshot of the complete simulation runtime barrier. */
+		public boolean terminationProven() {
+			return this.delegate.terminationProven();
 		}
 
 		/** Captures positive residual evidence for this simulation generation. */
@@ -2932,6 +2997,7 @@ public final class McpServerRuntimeBridge {
 			@NonNull Optional<@NonNull String> operationName,
 			@NonNull Optional<@NonNull McpImplementation> clientInformation,
 			@NonNull Optional<@NonNull McpJsonObject> clientCapabilitiesJson,
+			@NonNull List<@NonNull URI> requestedResourceSubscriptionUris,
 			@NonNull Optional<@NonNull McpJsonObject> requestMetadata) {
 		public AdmissionInput {
 			requireNonNull(request);
@@ -2943,6 +3009,8 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(operationName);
 			requireNonNull(clientInformation);
 			requireNonNull(clientCapabilitiesJson);
+			requestedResourceSubscriptionUris = List.copyOf(
+					requireNonNull(requestedResourceSubscriptionUris));
 			requireNonNull(requestMetadata);
 		}
 	}

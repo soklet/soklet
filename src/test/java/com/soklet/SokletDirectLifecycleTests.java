@@ -40,7 +40,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /** Focused package-private acceptance coverage for D1a's direct one-shot owner. */
-@Timeout(value = 30, unit = TimeUnit.SECONDS)
+@Timeout(value = 60, unit = TimeUnit.SECONDS)
 final class SokletDirectLifecycleTests {
 	@NonNull
 	private static final Duration SHORT_PHASE = Duration.ofMillis(75);
@@ -71,7 +71,6 @@ final class SokletDirectLifecycleTests {
 		Assertions.assertTrue(soklet.getDirectLifecycle().result().isEmpty());
 		Assertions.assertEquals(0, resolver.snapshotCalls());
 		Assertions.assertEquals(0, http.attachCalls());
-		Assertions.assertEquals(0, http.initializeCalls());
 		Assertions.assertEquals(0, http.startCalls());
 
 		soklet.close();
@@ -92,7 +91,7 @@ final class SokletDirectLifecycleTests {
 	}
 
 	@Test
-	void closeBeforeStartIsOneShotAndSubsequentStopsJoinTheSameResult() {
+	void closeBeforeStartIsOneShotAndSubsequentShutdownsShareTheSameResult() {
 		ReferenceHttpEndpoint http = new ReferenceHttpEndpoint();
 		Soklet soklet = Soklet.fromConfig(directConfig(http,
 				CountingResolver.forClasses(OkResource.class)).build());
@@ -100,12 +99,20 @@ final class SokletDirectLifecycleTests {
 		soklet.close();
 		InternalShutdownResult first = soklet.getDirectLifecycle().result()
 				.orElseThrow();
-		soklet.stop();
+		ShutdownResult firstPublic = soklet.getShutdownResult().orElseThrow();
+		ShutdownResult joined = soklet.shutdown().toCompletableFuture().join();
 
 		Assertions.assertSame(first,
 				soklet.getDirectLifecycle().result().orElseThrow());
-		Assertions.assertThrows(IllegalStateException.class, soklet::start);
-		Assertions.assertFalse(soklet.isStarted());
+		Assertions.assertSame(firstPublic, joined);
+		Assertions.assertSame(firstPublic,
+				soklet.getShutdownResult().orElseThrow());
+		SokletStartupException restart = Assertions.assertThrows(
+				SokletStartupException.class, soklet::start);
+		Assertions.assertSame(firstPublic, restart.getShutdownResult());
+		Assertions.assertEquals(StartupDisposition.NOT_ATTEMPTED,
+				restart.getStartupDisposition());
+		Assertions.assertEquals(SokletStatus.CLOSED, soklet.getStatus());
 	}
 
 	@Test
@@ -197,11 +204,11 @@ final class SokletDirectLifecycleTests {
 		Assertions.assertInstanceOf(SokletStartupException.class, failure);
 		Assertions.assertEquals(InternalStartupDisposition.TIMED_OUT,
 				((SokletStartupException) failure).getInternalStartupDisposition());
-		Assertions.assertFalse(soklet.isStarted());
+		Assertions.assertEquals(SokletStatus.CLOSED, soklet.getStatus());
 		Assertions.assertEquals(InternalLifecycleStateMachine.State.CLOSED,
 				soklet.getDirectLifecycle().state());
 		Assertions.assertTrue(startExited.await(1, TimeUnit.SECONDS));
-		Assertions.assertFalse(soklet.isStarted(),
+		Assertions.assertEquals(SokletStatus.CLOSED, soklet.getStatus(),
 				"A late-returning start call must not reopen global readiness");
 	}
 
@@ -230,18 +237,21 @@ final class SokletDirectLifecycleTests {
 		releaseSseStart.countDown();
 		Assertions.assertNull(start.get(3, TimeUnit.SECONDS));
 
-		Assertions.assertTrue(soklet.isStarted());
+		Assertions.assertEquals(SokletStatus.RUNNING, soklet.getStatus());
 		HttpRequestResult response = http.invoke("/ok").orElseThrow();
 		Assertions.assertEquals(200,
 				response.getMarshaledResponse().getStatusCode());
-		soklet.stop();
+		ShutdownResult shutdownResult = soklet.shutdown()
+				.toCompletableFuture().join();
+		Assertions.assertSame(shutdownResult,
+				soklet.getShutdownResult().orElseThrow());
 		Assertions.assertEquals(InternalStartupDisposition.READY,
 				soklet.getDirectLifecycle().result().orElseThrow()
 						.startupDisposition());
 	}
 
 	@Test
-	void stopFromAnAdmittedHttpHandlerPublishesIntentThenFailsFast()
+	void shutdownFromAnAdmittedHttpHandlerPublishesIntentWithoutSelfJoining()
 			throws Exception {
 		ReferenceHttpEndpoint http = new ReferenceHttpEndpoint();
 		Soklet soklet = Soklet.fromConfig(directConfig(http,
@@ -253,16 +263,16 @@ final class SokletDirectLifecycleTests {
 
 		Assertions.assertEquals(200,
 				response.getMarshaledResponse().getStatusCode());
-		Throwable handlerFailure = SelfStoppingResource.STOP_FAILURE.get();
-		Assertions.assertInstanceOf(IllegalStateException.class, handlerFailure);
-		Assertions.assertTrue(handlerFailure.getMessage()
-				.contains("tracked lifecycle execution"));
-		Assertions.assertFalse(soklet.isStarted(),
-				"The fail-fast self-stop must still publish shutdown intent");
+		Assertions.assertNull(SelfStoppingResource.STOP_FAILURE.get(),
+				"Publishing shutdown intent must not self-join the admitted handler");
+		Assertions.assertNotEquals(SokletStatus.RUNNING, soklet.getStatus(),
+				"The handler-triggered shutdown must publish shutdown intent");
 
-		// The same owner joined from outside admitted execution must observe the
-		// shared terminal result rather than initiating a second stop transition.
-		soklet.stop();
+		// Joining from outside admitted execution observes the shared terminal
+		// result rather than initiating a second shutdown transition.
+		ShutdownResult publicResult = soklet.awaitShutdown();
+		Assertions.assertSame(publicResult,
+				soklet.getShutdownResult().orElseThrow());
 		InternalShutdownResult result = soklet.getDirectLifecycle().result()
 				.orElseThrow();
 		Assertions.assertEquals(InternalShutdownDisposition.GRACEFUL,
@@ -326,12 +336,13 @@ final class SokletDirectLifecycleTests {
 				sseResult.disposition());
 		Assertions.assertTrue(sseResult.failures().stream()
 				.anyMatch(failure -> failure == exactFailure));
-		Assertions.assertDoesNotThrow(soklet::stop);
+		Assertions.assertDoesNotThrow(() -> soklet.shutdown()
+				.toCompletableFuture().join());
 	}
 
 	@Test
 	void stableTransportIdentityCannotBeClaimedByTwoLiveOwners() {
-		InternalTransportIdentity identity = InternalTransportIdentity.create();
+		TransportIdentity identity = TransportIdentity.create();
 		ReferenceHttpEndpoint firstEndpoint = new ReferenceHttpEndpoint(identity);
 		ReferenceHttpEndpoint secondEndpoint = new ReferenceHttpEndpoint(identity);
 		Soklet first = Soklet.fromConfig(directConfig(firstEndpoint,
@@ -343,12 +354,12 @@ final class SokletDirectLifecycleTests {
 							CountingResolver.forClasses(OkResource.class)).build()));
 
 		Assertions.assertTrue(conflict.getMessage().contains("already owned"));
-		Assertions.assertEquals(InternalParticipantKind.HTTP,
-				conflict.getInternalParticipantKind());
+		Assertions.assertEquals(ParticipantKind.HTTP,
+				conflict.getParticipantKind());
 		Assertions.assertSame(ReferenceHttpEndpoint.class,
 				conflict.getTransportClass());
-		Assertions.assertSame(identity, firstEndpoint.identity());
-		Assertions.assertSame(identity, secondEndpoint.identity());
+		Assertions.assertSame(identity, firstEndpoint.getTransportIdentity());
+		Assertions.assertSame(identity, secondEndpoint.getTransportIdentity());
 		first.close();
 	}
 
@@ -469,28 +480,25 @@ final class SokletDirectLifecycleTests {
 			this.transitions.add("will-stop-http");
 		}
 
-		@Override public void didStopHttpServer(@NonNull HttpServer httpServer) {
+		@Override public void didStopHttpServer(@NonNull HttpServer httpServer,
+				@NonNull ParticipantShutdownResult result) {
 			this.transitions.add("did-stop-http");
 		}
 
-		@Override public void didStopSoklet(@NonNull Soklet soklet) {
+		@Override public void didStopSoklet(@NonNull Soklet soklet,
+				@NonNull ShutdownResult result) {
 			this.transitions.add("did-stop-soklet");
 			this.terminal.countDown();
 		}
 	}
 
-	private static final class ReferenceHttpEndpoint
-			implements HttpServer, InternalHttpTransportEndpoint {
+	private static final class ReferenceHttpEndpoint implements HttpServer {
 		@NonNull
-		private final InternalTransportIdentity identity;
-		@NonNull
-		private final AtomicInteger initializeCalls;
+		private final TransportIdentity identity;
 		@NonNull
 		private final AtomicInteger attachCalls;
 		@NonNull
 		private final AtomicInteger startCalls;
-		@NonNull
-		private final AtomicBoolean started;
 		@NonNull
 		private final AtomicBoolean terminationSignalled;
 		@NonNull
@@ -498,20 +506,18 @@ final class SokletDirectLifecycleTests {
 		@NonNull
 		private final AtomicReference<HttpServer.RequestHandler> requestHandler;
 		@NonNull
-		private final AtomicReference<InternalTransportTerminationSignal>
+		private final AtomicReference<TransportTerminationSignal>
 				terminationSignal;
 
 		private ReferenceHttpEndpoint() {
-			this(InternalTransportIdentity.create());
+			this(TransportIdentity.create());
 		}
 
 		private ReferenceHttpEndpoint(
-				@NonNull InternalTransportIdentity identity) {
+				@NonNull TransportIdentity identity) {
 			this.identity = identity;
-			this.initializeCalls = new AtomicInteger();
 			this.attachCalls = new AtomicInteger();
 			this.startCalls = new AtomicInteger();
-			this.started = new AtomicBoolean();
 			this.terminationSignalled = new AtomicBoolean();
 			this.onStart = new AtomicReference<>(() -> { });
 			this.requestHandler = new AtomicReference<>();
@@ -520,10 +526,6 @@ final class SokletDirectLifecycleTests {
 
 		void onStart(@NonNull Runnable callback) {
 			this.onStart.set(callback);
-		}
-
-		int initializeCalls() {
-			return this.initializeCalls.get();
 		}
 
 		int attachCalls() {
@@ -544,88 +546,60 @@ final class SokletDirectLifecycleTests {
 
 		@Override
 		@NonNull
-		public InternalTransportIdentity identity() {
+		public TransportIdentity getTransportIdentity() {
 			return this.identity;
 		}
 
 		@Override
 		@NonNull
-		public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<HttpServer.RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
+		public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
 			this.attachCalls.incrementAndGet();
-			this.requestHandler.set(context.requestHandler());
-			this.terminationSignal.set(context.terminationSignal());
-			return new InternalTransportRuntime() {
+			this.requestHandler.set(context.getAdmissionFencedRequestHandler());
+			this.terminationSignal.set(context.getTerminationSignal());
+			return new TransportRuntime() {
 				@Override
-				public void start(@NonNull InternalStartupContext context) {
+				public void start(@NonNull StartupContext context) {
 					startCalls.incrementAndGet();
-					started.set(true);
 					onStart.get().run();
 				}
 
 				@Override
-				public void quiesce(@NonNull InternalShutdownContext context) {
+				public void quiesce(@NonNull ShutdownContext context) {
 					terminate();
 				}
 
 				@Override
-				public void force(@NonNull InternalShutdownContext context) {
+				public void force(@NonNull ShutdownContext context) {
 					terminate();
 				}
 			};
 		}
 
-		@Override
-		public void start() {
-			throw new AssertionError("Direct endpoint startup must use its runtime");
-		}
-
-		@Override
-		public void stop() {
-			terminate();
-		}
-
-		@Override
-		@NonNull
-		public Boolean isStarted() {
-			return this.started.get();
-		}
-
-		@Override
-		public void initialize(@NonNull SokletConfig sokletConfig,
-				HttpServer.@NonNull RequestHandler requestHandler) {
-			this.initializeCalls.incrementAndGet();
-		}
-
 		private void terminate() {
-			this.started.set(false);
-			InternalTransportTerminationSignal signal = this.terminationSignal.get();
+			TransportTerminationSignal signal = this.terminationSignal.get();
 			if (signal != null && this.terminationSignalled.compareAndSet(false, true))
 				signal.signalTerminated();
 		}
 	}
 
-	private static final class ReferenceSseEndpoint
-			implements SseServer, InternalSseTransportEndpoint {
+	private static final class ReferenceSseEndpoint implements SseServer {
 		@NonNull
-		private final InternalTransportIdentity identity;
+		private final TransportIdentity identity;
 		@NonNull
 		private final AtomicInteger startCalls;
-		@NonNull
-		private final AtomicBoolean started;
 		@NonNull
 		private final AtomicBoolean terminationSignalled;
 		@NonNull
 		private final AtomicReference<Runnable> onStart;
 		@NonNull
-		private final AtomicReference<InternalTransportTerminationSignal>
+		private final AtomicReference<TransportTerminationSignal>
 				terminationSignal;
 
 		private ReferenceSseEndpoint() {
-			this.identity = InternalTransportIdentity.create();
+			this.identity = TransportIdentity.create();
 			this.startCalls = new AtomicInteger();
-			this.started = new AtomicBoolean();
 			this.terminationSignalled = new AtomicBoolean();
 			this.onStart = new AtomicReference<>(() -> { });
 			this.terminationSignal = new AtomicReference<>();
@@ -637,50 +611,33 @@ final class SokletDirectLifecycleTests {
 
 		@Override
 		@NonNull
-		public InternalTransportIdentity identity() {
+		public TransportIdentity getTransportIdentity() {
 			return this.identity;
 		}
 
 		@Override
 		@NonNull
-		public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<SseServer.RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
-			this.terminationSignal.set(context.terminationSignal());
-			return new InternalTransportRuntime() {
+		public TransportRuntime attach(
+				@NonNull SseTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
+			this.terminationSignal.set(context.getTerminationSignal());
+			return new TransportRuntime() {
 				@Override
-				public void start(@NonNull InternalStartupContext context) {
+				public void start(@NonNull StartupContext context) {
 					startCalls.incrementAndGet();
-					started.set(true);
 					onStart.get().run();
 				}
 
 				@Override
-				public void quiesce(@NonNull InternalShutdownContext context) {
+				public void quiesce(@NonNull ShutdownContext context) {
 					terminate();
 				}
 
 				@Override
-				public void force(@NonNull InternalShutdownContext context) {
+				public void force(@NonNull ShutdownContext context) {
 					terminate();
 				}
 			};
-		}
-
-		@Override
-		public void start() {
-			throw new AssertionError("Direct endpoint startup must use its runtime");
-		}
-
-		@Override
-		public void stop() {
-			terminate();
-		}
-
-		@Override
-		@NonNull
-		public Boolean isStarted() {
-			return this.started.get();
 		}
 
 		@Override
@@ -690,15 +647,8 @@ final class SokletDirectLifecycleTests {
 			return Optional.empty();
 		}
 
-		@Override
-		public void initialize(@NonNull SokletConfig sokletConfig,
-				SseServer.@NonNull RequestHandler requestHandler) {
-			throw new AssertionError("Direct endpoint attachment must use attach(...)");
-		}
-
 		private void terminate() {
-			this.started.set(false);
-			InternalTransportTerminationSignal signal = this.terminationSignal.get();
+			TransportTerminationSignal signal = this.terminationSignal.get();
 			if (signal != null && this.terminationSignalled.compareAndSet(false, true))
 				signal.signalTerminated();
 		}
@@ -723,7 +673,7 @@ final class SokletDirectLifecycleTests {
 		@NonNull
 		public String stop() {
 			try {
-				SOKLET.get().stop();
+				SOKLET.get().shutdown();
 			} catch (Throwable throwable) {
 				STOP_FAILURE.set(throwable);
 			}

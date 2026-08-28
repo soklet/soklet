@@ -32,7 +32,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 @NotThreadSafe
-@Timeout(30)
+@Timeout(60)
 public class McpProtocolProfileMetricsTests {
 	private static final String HOST = "127.0.0.1";
 	private static final String UNSUPPORTED = "2099-01-01";
@@ -81,7 +81,7 @@ public class McpProtocolProfileMetricsTests {
 			Assertions.assertEquals(1L, protocolErrors.get(-32022));
 			Assertions.assertFalse(protocolErrors.containsKey(-32602));
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 

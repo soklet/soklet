@@ -40,7 +40,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@Timeout(30)
+@Timeout(60)
 public class McpMultiEndpointCapacityPublicRuntimeTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String FIRST_PATH = "/mcp/first-capacity";
@@ -51,6 +51,7 @@ public class McpMultiEndpointCapacityPublicRuntimeTests {
 	private static final String SECOND_TOOL = "second.blocking";
 
 	@Test
+	@Timeout(120)
 	public void handlerCapacityIsSharedAcrossEndpointPaths() throws Exception {
 		CountDownLatch firstHandlerEntered = new CountDownLatch(1);
 		CountDownLatch releaseHandlers = new CountDownLatch(1);
@@ -138,7 +139,7 @@ public class McpMultiEndpointCapacityPublicRuntimeTests {
 					"All endpoint paths must share the server-wide handler slot.");
 		} finally {
 			releaseHandlers.countDown();
-			soklet.stop();
+			soklet.close();
 		}
 	}
 

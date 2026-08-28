@@ -311,6 +311,7 @@ public class McpHttpContractGoldenProductionTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void overloadAndSseAuthoritiesMatchCompleteWireGoldens()
 			throws Exception {
 		FixtureState state = new FixtureState();
@@ -482,7 +483,7 @@ public class McpHttpContractGoldenProductionTests {
 					state.record(state.caseName(context.getRequest()), "tool-limiter");
 					return McpRateLimitDecision.allowed();
 				})
-				.handlerInterceptor((context, continuation) -> {
+				.handlerInterceptor((context, features, continuation) -> {
 					String caseName = state.caseName(context.getRequest());
 					state.record(caseName, "interceptor");
 					if ("interceptor-failure".equals(caseName))
@@ -743,7 +744,7 @@ public class McpHttpContractGoldenProductionTests {
 			throws Exception {
 		awaitCondition(() -> zeroLoad(server.getDiagnostics()));
 		McpServerDiagnostics diagnostics = server.getDiagnostics();
-		Assertions.assertEquals(McpServerStatus.STARTED, diagnostics.getStatus());
+		Assertions.assertEquals(McpServerStatus.RUNNING, diagnostics.getStatus());
 		Assertions.assertTrue(diagnostics.getBoundAddress().isPresent());
 		assertZeroLoad(diagnostics);
 	}
@@ -756,9 +757,9 @@ public class McpHttpContractGoldenProductionTests {
 	}
 
 	private static void stopAndAssertClean(Soklet owner, McpServer server) {
-		owner.stop();
+		owner.close();
 		McpServerDiagnostics diagnostics = server.getDiagnostics();
-		Assertions.assertEquals(McpServerStatus.STOPPED, diagnostics.getStatus());
+		Assertions.assertEquals(McpServerStatus.TERMINATED, diagnostics.getStatus());
 		Assertions.assertTrue(diagnostics.getBoundAddress().isPresent());
 		assertZeroLoad(diagnostics);
 	}

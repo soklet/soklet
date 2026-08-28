@@ -43,7 +43,6 @@ import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ResourceListInvoc
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ResourceListInvocationResult;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ResourceListPlan;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ResourcePlan;
-import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RuntimeState;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SimulationSession;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestError;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestObservation;
@@ -115,8 +114,6 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	private final Duration maximumSubscriptionDuration;
 	@NonNull
-	private final Duration shutdownTimeout;
-	@NonNull
 	private final Duration writeTimeout;
 	private final boolean logRawValidatedTraceIds;
 	@NonNull
@@ -156,11 +153,15 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	private volatile MetricsCollector metricsCollector;
 	@NonNull
-	private volatile McpShutdownOutcome lastShutdownOutcome;
+	private volatile LifecyclePolicy lifecyclePolicy;
 	@Nullable
 	private volatile Object lifecycleExecutionOwner;
 	private McpTransportLifecycleAdapter.@Nullable Generation
 			pendingListenerGeneration;
+	@Nullable
+	private InternalParticipantShutdownResult ownerTerminalResult;
+	private boolean attachmentStarted;
+	private boolean terminalMetricEmitted;
 	private boolean simulatorOwned;
 
 	DefaultMcpServer(int port, @NonNull String host,
@@ -171,7 +172,6 @@ final class DefaultMcpServer implements McpServer {
 					requestHandlerExecutorServiceSupplier,
 			int streamQueueCapacity, @NonNull Duration writeTimeout,
 			@NonNull Duration keepAliveInterval,
-			@NonNull Duration shutdownTimeout,
 			int maximumSubscriptionsPerPrincipal,
 			@NonNull Duration maximumSubscriptionDuration,
 			@NonNull McpEndpointRegistry endpointRegistry,
@@ -198,7 +198,6 @@ final class DefaultMcpServer implements McpServer {
 		this.keepAliveInterval = requireNonNull(keepAliveInterval);
 		this.maximumSubscriptionDuration = requireNonNull(
 				maximumSubscriptionDuration);
-		this.shutdownTimeout = requireNonNull(shutdownTimeout);
 		this.writeTimeout = requireNonNull(writeTimeout);
 		this.logRawValidatedTraceIds = logRawValidatedTraceIds;
 		this.endpointRegistry = requireNonNull(endpointRegistry);
@@ -225,8 +224,11 @@ final class DefaultMcpServer implements McpServer {
 				? CorsAuthorizer.rejectAllInstance() : configuredCorsAuthorizer;
 		this.lifecycleObserver = LifecycleObserver.defaultInstance();
 		this.metricsCollector = MetricsCollector.disabledInstance();
-		this.lastShutdownOutcome = McpShutdownOutcome.CLEAN;
+		this.lifecyclePolicy = LifecyclePolicy.fromDefaults();
 		this.pendingListenerGeneration = null;
+		this.ownerTerminalResult = null;
+		this.attachmentStarted = false;
+		this.terminalMetricEmitted = false;
 		this.simulatorOwned = false;
 		List<EndpointPlan> endpointPlans = endpointRegistry.getEndpoints().stream()
 				.map(this::toEndpointPlan)
@@ -235,7 +237,9 @@ final class DefaultMcpServer implements McpServer {
 		Optional<RequestStateProtectionPlan> requestStateProtectionPlan =
 				Optional.ofNullable(protectionConfig)
 						.map(this::toRequestStateProtectionPlan);
-		this.lifecycleAdapter = new McpTransportLifecycleAdapter(this.shutdownTimeout);
+		this.lifecycleAdapter = new McpTransportLifecycleAdapter(
+				this::getGracefulShutdownDuration,
+				this::getForcedShutdownDuration);
 		this.runtimeBridge = new McpServerRuntimeBridge(host, port, endpointPlans,
 				allowedHosts, absentOriginPolicy == McpAbsentOriginPolicy.REQUIRE_ORIGIN,
 				this.corsAuthorizer, corsAuthorizerExplicitlyConfigured,
@@ -253,7 +257,7 @@ final class DefaultMcpServer implements McpServer {
 				this::safelyLogUnexpectedTermination,
 				this::didStartRequestObservation, requestStateProtectionPlan,
 				this.streamQueueCapacity, this.writeTimeout,
-				this.keepAliveInterval, this.shutdownTimeout,
+				this.keepAliveInterval,
 				this.maximumSubscriptionsPerPrincipal,
 				this.maximumSubscriptionDuration,
 				applicationExecutionObserver(), this.lifecycleAdapter);
@@ -664,8 +668,22 @@ final class DefaultMcpServer implements McpServer {
 
 	void initialize(@NonNull SokletConfig sokletConfig) {
 		SokletConfig configuration = requireNonNull(sokletConfig);
-		this.lifecycleObserver = configuration.getAggregateLifecycleObserver();
-		this.metricsCollector = configuration.getMetricsCollector();
+		synchronized (this.lifecycleLock) {
+			this.attachmentStarted = true;
+			this.lifecycleObserver = configuration.getAggregateLifecycleObserver();
+			this.metricsCollector = configuration.getMetricsCollector();
+			this.lifecyclePolicy = configuration.getLifecyclePolicy();
+		}
+	}
+
+	@NonNull
+	private Duration getGracefulShutdownDuration() {
+		return this.lifecyclePolicy.getGracefulShutdownDuration();
+	}
+
+	@NonNull
+	private Duration getForcedShutdownDuration() {
+		return this.lifecyclePolicy.getForcedShutdownDuration();
 	}
 
 	void installLifecycleExecutionOwner(@NonNull Object ownerToken) {
@@ -684,14 +702,29 @@ final class DefaultMcpServer implements McpServer {
 		return this.lifecycleAdapter;
 	}
 
-	void normalizeExternallyCoordinatedCompletionWhileMetricsDeferred(
-			McpTransportLifecycleAdapter.@NonNull Generation generation) {
-		McpTransportLifecycleAdapter.Generation exactGeneration =
-				requireNonNull(generation);
+	void recordExternallyCoordinatedTerminalResultWhileMetricsDeferred(
+			@NonNull InternalParticipantShutdownResult participantResult,
+			@NonNull SokletConfig sokletConfig) {
+		InternalParticipantShutdownResult exactResult =
+				requireNonNull(participantResult);
+		if (exactResult.kind() != InternalParticipantKind.MCP)
+			throw new IllegalArgumentException(
+					"The terminal metric result must belong to the MCP participant");
+		SokletConfig configuration = requireNonNull(sokletConfig);
 		synchronized (this.lifecycleLock) {
-			if (this.pendingListenerGeneration == exactGeneration
-					&& this.lifecycleAdapter.result(exactGeneration).isPresent())
-				normalizeCompletedListenerGeneration(exactGeneration);
+			if (this.terminalMetricEmitted)
+				return;
+			// A configured participant can freeze as NOT_STARTED before attachment
+			// creates an MCP generation. Install only the observation dependencies
+			// needed to deliver that exact owner result; no listener/runtime state is
+			// initialized or mutated here.
+			this.lifecycleObserver = configuration.getAggregateLifecycleObserver();
+			this.metricsCollector = configuration.getMetricsCollector();
+			this.ownerTerminalResult = exactResult;
+			this.terminalMetricEmitted = true;
+			this.mcpMetricEventDelivery.record(McpMetricsEvent.serverStopped(
+					ParticipantShutdownDisposition.valueOf(
+							exactResult.disposition().name())));
 		}
 	}
 
@@ -719,36 +752,18 @@ final class DefaultMcpServer implements McpServer {
 		}
 	}
 
-	@Override
-	public void start() {
+	void startForSoklet() {
 		beginMcpMetricsDeferral();
 		try {
-			startForSoklet(ignored -> {
-			});
+			startForSokletWhileMetricsDeferred();
 		} finally {
 			endMcpMetricsDeferral();
 		}
 	}
 
-	void startForSoklet(
-			@NonNull Consumer<@NonNull McpShutdownOutcome>
-					stoppedGenerationConsumer) {
-		beginMcpMetricsDeferral();
-		try {
-			startForSokletWhileMetricsDeferred(stoppedGenerationConsumer);
-		} finally {
-			endMcpMetricsDeferral();
-		}
-	}
-
-	private void startForSokletWhileMetricsDeferred(
-				@NonNull Consumer<@NonNull McpShutdownOutcome>
-						stoppedGenerationConsumer) {
-		requireNonNull(stoppedGenerationConsumer);
-		McpShutdownOutcome normalizedShutdownOutcome = null;
+	private void startForSokletWhileMetricsDeferred() {
 		McpMetricEventDeliveryEntry provisionalServerStarted = null;
 		McpTransportLifecycleAdapter.@Nullable Generation lifecycleGeneration = null;
-		boolean retainedPreviousGeneration = false;
 
 		try {
 			synchronized (this.lifecycleLock) {
@@ -758,32 +773,15 @@ final class DefaultMcpServer implements McpServer {
 				if (this.lifecycleAdapter.shutdownInProgress())
 					throw new IllegalStateException(
 							"Cannot start MCP server while shutdown is in progress");
-				RuntimeState runtimeState = this.runtimeBridge.getRuntimeState();
-				if (runtimeState.started())
-					return;
-				McpTransportLifecycleAdapter.Generation pendingGeneration =
-						this.pendingListenerGeneration;
-				if (pendingGeneration != null) {
-					InternalShutdownResult pendingResult = this.lifecycleAdapter
-							.result(pendingGeneration).orElse(null);
-					if (pendingResult == null)
-						throw new IllegalStateException(
-								"Cannot start MCP server before the previous lifecycle generation completes");
-					normalizedShutdownOutcome = normalizeCompletedListenerGeneration(
-							pendingGeneration).shutdownOutcome();
-					retainedPreviousGeneration = !pendingResult.isComplete();
-				}
-				if (!retainedPreviousGeneration) {
-					lifecycleGeneration = this.lifecycleAdapter.beginStart();
-					this.runtimeBridge.prepareLifecycleStart(lifecycleGeneration);
-				}
+				if (this.pendingListenerGeneration != null
+						|| this.lifecycleAdapter.result().isPresent())
+					throw new IllegalStateException(
+							"An MCP listener lifecycle was already attempted");
+				lifecycleGeneration = this.lifecycleAdapter.beginStart();
+				this.pendingListenerGeneration = lifecycleGeneration;
+				this.runtimeBridge.prepareLifecycleStart(lifecycleGeneration);
 			}
 
-			if (normalizedShutdownOutcome != null)
-				stoppedGenerationConsumer.accept(normalizedShutdownOutcome);
-			if (retainedPreviousGeneration)
-				throw new IllegalStateException(
-						"Cannot restart MCP server with retained termination evidence");
 			if (this.securityControls.getProtectionMode()
 					== McpProtectionMode.DEVELOPMENT_EPHEMERAL)
 				safelyLogStartupDiagnostic(
@@ -797,8 +795,6 @@ final class DefaultMcpServer implements McpServer {
 				// between these two publications.
 				this.lifecycleAdapter.markReady(
 						requireNonNull(lifecycleGeneration));
-				this.lastShutdownOutcome = McpShutdownOutcome.CLEAN;
-				this.pendingListenerGeneration = lifecycleGeneration;
 			}
 		} catch (IOException | RuntimeException | Error throwable) {
 			Throwable primary = exactStartupFailure(throwable);
@@ -814,17 +810,6 @@ final class DefaultMcpServer implements McpServer {
 				try {
 					this.lifecycleAdapter.failedStart(lifecycleGeneration, primary,
 							false);
-				} catch (Throwable cleanupFailure) {
-					if (cleanupFailure != primary)
-						primary.addSuppressed(cleanupFailure);
-				}
-				try {
-					synchronized (this.lifecycleLock) {
-						if (this.lifecycleAdapter.currentGeneration()
-								== lifecycleGeneration)
-							this.lastShutdownOutcome = outcomeForLifecycleResult(
-									lifecycleGeneration);
-					}
 				} catch (Throwable cleanupFailure) {
 					if (cleanupFailure != primary)
 						primary.addSuppressed(cleanupFailure);
@@ -848,98 +833,6 @@ final class DefaultMcpServer implements McpServer {
 		return requiredFailure;
 	}
 
-	@Override
-	public void stop() {
-		beginMcpMetricsDeferral();
-		try {
-			stopForSoklet();
-		} finally {
-			endMcpMetricsDeferral();
-		}
-	}
-
-	@NonNull
-	McpServerStopResult stopForSoklet() {
-		beginMcpMetricsDeferral();
-		try {
-			return stopForSokletWhileMetricsDeferred();
-		} finally {
-			endMcpMetricsDeferral();
-		}
-	}
-
-	@NonNull
-	private McpServerStopResult stopForSokletWhileMetricsDeferred() {
-		McpTransportLifecycleAdapter.Generation generation;
-		synchronized (this.lifecycleLock) {
-			McpTransportLifecycleAdapter.Generation pendingGeneration =
-					this.pendingListenerGeneration;
-			if (pendingGeneration != null
-					&& this.lifecycleAdapter.result(pendingGeneration).isPresent())
-				return normalizeCompletedListenerGeneration(pendingGeneration);
-			if (pendingGeneration == null
-					&& this.lifecycleAdapter.result().isPresent())
-				return new McpServerStopResult(this.lastShutdownOutcome, false);
-			generation = this.lifecycleAdapter.requestStop();
-			// Unexpected termination can complete between the exact-result check and
-			// requestStop().  Consume that same listener generation here rather than
-			// leaving requiresStop() permanently true.
-			if (generation == null) {
-				pendingGeneration = this.pendingListenerGeneration;
-				if (pendingGeneration != null
-						&& this.lifecycleAdapter.result(pendingGeneration).isPresent())
-					return normalizeCompletedListenerGeneration(pendingGeneration);
-			}
-		}
-		if (generation == null)
-			return new McpServerStopResult(this.lastShutdownOutcome, false);
-		if (this.runtimeBridge.lifecycleWaitWouldSelfJoin())
-			throw new IllegalStateException(
-					"MCP lifecycle wait cannot join its own proof-bearing execution");
-		this.lifecycleAdapter.awaitStop(generation);
-		McpShutdownOutcome shutdownOutcome = outcomeForLifecycleResult(generation);
-		synchronized (this.lifecycleLock) {
-			if (this.pendingListenerGeneration == generation)
-				return normalizeCompletedListenerGeneration(generation);
-		}
-		return new McpServerStopResult(shutdownOutcome, false);
-	}
-
-	/** Caller holds {@link #lifecycleLock}; the exact generation is complete. */
-	@NonNull
-	private McpServerStopResult normalizeCompletedListenerGeneration(
-			McpTransportLifecycleAdapter.@NonNull Generation generation) {
-		McpShutdownOutcome shutdownOutcome = outcomeForLifecycleResult(generation);
-		this.lastShutdownOutcome = shutdownOutcome;
-		if (this.pendingListenerGeneration == generation) {
-			this.pendingListenerGeneration = null;
-			this.mcpMetricEventDelivery.record(
-					McpMetricsEvent.serverStopped(shutdownOutcome));
-			return new McpServerStopResult(shutdownOutcome, true);
-		}
-		return new McpServerStopResult(shutdownOutcome, false);
-	}
-
-	@NonNull
-	private McpShutdownOutcome outcomeForLifecycleResult(
-			McpTransportLifecycleAdapter.@NonNull Generation generation) {
-		return this.lifecycleAdapter.result(requireNonNull(generation))
-				.flatMap(result -> result.participantResult(
-						InternalParticipantKind.MCP))
-				.filter(result -> result.disposition()
-						!= InternalParticipantShutdownDisposition.RESIDUAL_ACTIVITY)
-				.filter(result -> result.disposition()
-						!= InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN)
-				.isPresent() ? McpShutdownOutcome.CLEAN
-				: McpShutdownOutcome.RESIDUAL_HANDLERS;
-	}
-
-	boolean hasPendingListenerGenerationStop() {
-		synchronized (this.lifecycleLock) {
-			return this.pendingListenerGeneration != null;
-		}
-	}
-
 	void beginMcpMetricsDeferral() {
 		this.mcpMetricEventDelivery.beginDeferral();
 	}
@@ -950,21 +843,6 @@ final class DefaultMcpServer implements McpServer {
 
 	void endMcpMetricsDeferral() {
 		this.mcpMetricEventDelivery.endLifecycleDeferral();
-	}
-
-	boolean requiresStop() {
-		synchronized (this.lifecycleLock) {
-			return this.pendingListenerGeneration != null
-					|| this.lifecycleAdapter.hasActiveGeneration();
-		}
-	}
-
-	@Override
-	@NonNull
-	public Boolean isStarted() {
-		synchronized (this.lifecycleLock) {
-			return this.runtimeBridge.getRuntimeState().started();
-		}
 	}
 
 	@Override
@@ -1068,11 +946,6 @@ final class DefaultMcpServer implements McpServer {
 		return this.keepAliveInterval;
 	}
 
-	@NonNull
-	Duration shutdownTimeout() {
-		return this.shutdownTimeout;
-	}
-
 	int maximumSubscriptionsPerPrincipal() {
 		return this.maximumSubscriptionsPerPrincipal;
 	}
@@ -1094,11 +967,7 @@ final class DefaultMcpServer implements McpServer {
 					.getDiagnosticsState();
 			DefaultMcpSecurityControls.SecurityDiagnosticsState securityState =
 					this.securityControls.getDiagnosticsState();
-			McpServerStatus status = runtimeState.started()
-					? McpServerStatus.STARTED
-					: runtimeState.residualHandlers()
-							? McpServerStatus.STOPPED_WITH_RESIDUAL_HANDLERS
-							: McpServerStatus.STOPPED;
+			McpServerStatus status = mcpServerStatus(runtimeState);
 			return new DefaultMcpServerDiagnostics(status,
 					runtimeState.boundAddress(),
 					runtimeState.requestHandlerConcurrency(),
@@ -1112,6 +981,32 @@ final class DefaultMcpServer implements McpServer {
 					securityState.protectionKeyRingFingerprint(),
 					securityState.traceCorrelationConfigurationFingerprint());
 		}
+	}
+
+	@NonNull
+	private McpServerStatus mcpServerStatus(
+			@NonNull DiagnosticsState runtimeState) {
+		InternalParticipantShutdownResult terminalResult = this.lifecycleAdapter
+				.result()
+				.flatMap(result -> result.participantResult(
+						InternalParticipantKind.MCP))
+				.orElse(this.ownerTerminalResult);
+		if (terminalResult != null)
+			return switch (terminalResult.disposition()) {
+				case RESIDUAL_ACTIVITY -> McpServerStatus.RESIDUAL_ACTIVITY;
+				case TERMINATION_UNKNOWN -> McpServerStatus.TERMINATION_UNKNOWN;
+				case NOT_STARTED, GRACEFUL_TERMINATION, FORCED_TERMINATION,
+						UNEXPECTED_TERMINATION -> McpServerStatus.TERMINATED;
+			};
+		if (this.lifecycleAdapter.shutdownInProgress())
+			return McpServerStatus.SHUTTING_DOWN;
+		if (requireNonNull(runtimeState).started()
+				|| this.lifecycleAdapter.admissionOpen())
+			return McpServerStatus.RUNNING;
+		if (this.lifecycleAdapter.hasActiveGeneration())
+			return McpServerStatus.STARTING;
+		return this.attachmentStarted
+				? McpServerStatus.STARTING : McpServerStatus.NOT_STARTED;
 	}
 
 	@NonNull
@@ -1384,6 +1279,7 @@ final class DefaultMcpServer implements McpServer {
 		McpOperationResult result;
 		try {
 			result = this.handlerInterceptor.interceptHandler(requestContext,
+					invocationFeatures,
 					new McpHandlerContinuation() {
 						private void requireActiveThread() {
 							if (!active.get())
@@ -1392,13 +1288,6 @@ final class DefaultMcpServer implements McpServer {
 							if (Thread.currentThread() != interceptorThread)
 								throw new IllegalStateException(
 										"An MCP interceptor continuation must be used on the interceptor thread.");
-						}
-
-						@Override
-						@NonNull
-						public McpInvocationFeatures getFeatures() {
-							requireActiveThread();
-							return invocationFeatures;
 						}
 
 						@Override
@@ -2493,19 +2382,6 @@ final class DefaultMcpServer implements McpServer {
 }
 
 /**
- * Internal result of one managed MCP stop attempt.
- *
- * @author <a href="https://www.revetkn.com">Mark Allen</a>
- */
-@ThreadSafe
-record McpServerStopResult(@NonNull McpShutdownOutcome shutdownOutcome,
-		boolean listenerGenerationStopped) {
-	McpServerStopResult {
-		requireNonNull(shutdownOutcome);
-	}
-}
-
-/**
  * Immutable built-in MCP diagnostics snapshot.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -2527,9 +2403,6 @@ record DefaultMcpServerDiagnostics(@NonNull McpServerStatus status,
 		requireNonNull(status);
 		boundAddress = requireNonNull(boundAddress).map(address ->
 				new InetSocketAddress(address.getAddress(), address.getPort()));
-		if (status == McpServerStatus.STARTED && boundAddress.isEmpty())
-			throw new IllegalArgumentException(
-					"A STARTED MCP server snapshot must have a retained bound address.");
 		if (requestHandlerConcurrency < 1)
 			throw new IllegalArgumentException(
 					"Request-handler concurrency must be positive.");
@@ -2543,12 +2416,14 @@ record DefaultMcpServerDiagnostics(@NonNull McpServerStatus status,
 		if (queuedRequests < 0 || queuedRequests > requestHandlerQueueCapacity)
 			throw new IllegalArgumentException(
 					"Queued requests must be between zero and the configured queue capacity.");
-		if (status == McpServerStatus.STOPPED && activeHandlerExecutions != 0)
+		boolean terminationProven = status == McpServerStatus.NOT_STARTED
+				|| status == McpServerStatus.TERMINATED;
+		if (terminationProven && activeHandlerExecutions != 0)
 			throw new IllegalArgumentException(
-					"A non-residual stopped MCP server snapshot cannot have active handler executions.");
-		if (status == McpServerStatus.STOPPED && queuedRequests != 0)
+					"A proof-complete MCP server snapshot cannot have active handler executions.");
+		if (terminationProven && queuedRequests != 0)
 			throw new IllegalArgumentException(
-					"A non-residual stopped MCP server snapshot cannot have queued requests.");
+					"A proof-complete MCP server snapshot cannot have queued requests.");
 		if (activeRequestStreams < 0)
 			throw new IllegalArgumentException(
 					"Active request streams must be nonnegative.");
@@ -2556,12 +2431,12 @@ record DefaultMcpServerDiagnostics(@NonNull McpServerStatus status,
 				|| activeSubscriptions > activeRequestStreams)
 			throw new IllegalArgumentException(
 					"Active subscriptions must be between zero and the active request-stream count.");
-		if (status == McpServerStatus.STOPPED && activeRequestStreams != 0)
+		if (terminationProven && activeRequestStreams != 0)
 			throw new IllegalArgumentException(
-					"A non-residual stopped MCP server snapshot cannot have active request streams.");
-		if (status == McpServerStatus.STOPPED && activeSubscriptions != 0)
+					"A proof-complete MCP server snapshot cannot have active request streams.");
+		if (terminationProven && activeSubscriptions != 0)
 			throw new IllegalArgumentException(
-					"A non-residual stopped MCP server snapshot cannot have active subscriptions.");
+					"A proof-complete MCP server snapshot cannot have active subscriptions.");
 		requireNonNull(protectionMode);
 		requireNonNull(protectionKeyRingFingerprint);
 		requireNonNull(traceCorrelationConfigurationFingerprint);
@@ -2698,6 +2573,10 @@ final class DefaultMcpAdmissionContext implements McpAdmissionContext {
 	getClientCapabilities() {
 		return this.clientCapabilities;
 	}
+	@Override public @NonNull List<@NonNull URI>
+	getRequestedResourceSubscriptionUris() {
+		return this.input.requestedResourceSubscriptionUris();
+	}
 	@Override public @NonNull Optional<@NonNull TraceContext> getTraceContext() {
 		return this.requestPropagation.traceContext();
 	}
@@ -2742,7 +2621,6 @@ final class DefaultMcpRateLimitContext implements McpRateLimitContext {
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-@SuppressWarnings("deprecation")
 final class DefaultMcpRequestContext implements McpRequestContext {
 	@NonNull
 	private static final String DEPRECATED_LOG_LEVEL_KEY =
@@ -2786,7 +2664,6 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 			DefaultMcpSecurityControls.@NonNull TraceCorrelationToken>
 			traceCorrelationToken;
 
-	@SuppressWarnings("deprecation")
 	DefaultMcpRequestContext(@NonNull ToolInvocation invocation) {
 		this(requireNonNull(invocation).request(), invocation.endpoint(),
 				invocation.endpointPathParameters(), invocation.jsonRpcMethod(),
@@ -2800,7 +2677,6 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 				invocation.admissionIdentity(), Optional.empty());
 	}
 
-	@SuppressWarnings("deprecation")
 	DefaultMcpRequestContext(@NonNull PromptInvocation invocation) {
 		this(requireNonNull(invocation).request(), invocation.endpoint(),
 				invocation.endpointPathParameters(), invocation.jsonRpcMethod(),
@@ -2814,7 +2690,6 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 				invocation.admissionIdentity(), Optional.empty());
 	}
 
-	@SuppressWarnings("deprecation")
 	DefaultMcpRequestContext(@NonNull ResourceInvocation invocation) {
 		this(requireNonNull(invocation).request(), invocation.endpoint(),
 				invocation.endpointPathParameters(), invocation.jsonRpcMethod(),
@@ -2828,7 +2703,6 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 				invocation.admissionIdentity(), Optional.empty());
 	}
 
-	@SuppressWarnings("deprecation")
 	DefaultMcpRequestContext(@NonNull ResourceListInvocation invocation) {
 		this(requireNonNull(invocation).request(), invocation.endpoint(),
 				invocation.endpointPathParameters(), invocation.jsonRpcMethod(),
@@ -2842,18 +2716,15 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 				invocation.admissionIdentity(), Optional.empty());
 	}
 
-	@SuppressWarnings("deprecation")
 	DefaultMcpRequestContext(@NonNull RequestObservationInput input) {
 		this(input, Optional.empty());
 	}
 
-	@SuppressWarnings("deprecation")
 	DefaultMcpRequestContext(@NonNull RequestObservationInput input,
 			@NonNull DefaultMcpSecurityControls securityControls) {
 		this(input, Optional.of(requireNonNull(securityControls)));
 	}
 
-	@SuppressWarnings("deprecation")
 	private DefaultMcpRequestContext(@NonNull RequestObservationInput input,
 			@NonNull Optional<@NonNull DefaultMcpSecurityControls>
 					securityControls) {
@@ -2867,7 +2738,6 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 				requireNonNull(securityControls));
 	}
 
-	@SuppressWarnings("deprecation")
 	private DefaultMcpRequestContext(@NonNull Request request,
 			@NonNull McpEndpoint endpoint,
 			@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
@@ -2891,7 +2761,6 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 				admissionIdentity, acceptLanguageValues(request), securityControls);
 	}
 
-	@SuppressWarnings("deprecation")
 	private DefaultMcpRequestContext(@NonNull Request request,
 			@NonNull McpEndpoint endpoint,
 			@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
@@ -3001,7 +2870,6 @@ final class DefaultMcpRequestContext implements McpRequestContext {
 		return this.applicationRequestState;
 	}
 	@Override
-	@SuppressWarnings("deprecation")
 	public @NonNull Optional<@NonNull McpLogLevel> getDeprecatedLogLevel() {
 		return this.deprecatedLogLevel;
 	}

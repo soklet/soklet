@@ -51,8 +51,7 @@ public class McpPublicApiInventoryTests {
 			"com.soklet.MetricsCollector$Snapshot$Builder",
 			"com.soklet.Simulator",
 			"com.soklet.SokletConfig",
-			"com.soklet.SokletConfig$Builder",
-			"com.soklet.SokletConfig$Copier");
+			"com.soklet.SokletConfig$Builder");
 
 	@Test
 	public void everyExportedMcpTypeHasExactlyOneReviewedOwner() throws Exception {

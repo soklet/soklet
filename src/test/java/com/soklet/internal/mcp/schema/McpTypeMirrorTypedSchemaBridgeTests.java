@@ -20,7 +20,7 @@ import com.google.testing.compile.Compilation;
 import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
 import com.soklet.annotation.McpHeader;
-import com.soklet.annotation.McpToolArgument;
+import com.soklet.annotation.McpToolProperty;
 import com.soklet.internal.mcp.protocol.McpJsonCodec;
 import com.soklet.internal.mcp.protocol.McpJsonLimits;
 import org.junit.jupiter.api.Test;
@@ -195,7 +195,7 @@ class McpTypeMirrorTypedSchemaBridgeTests {
 						package bridge;
 
 						import com.soklet.annotation.McpHeader;
-						import com.soklet.annotation.McpToolArgument;
+						import com.soklet.annotation.McpToolProperty;
 						import java.util.List;
 						import java.util.Optional;
 
@@ -231,7 +231,7 @@ class McpTypeMirrorTypedSchemaBridgeTests {
 						  }
 						}
 						record CompileOutput(
-						    @McpToolArgument(name = "items", title = "Items title",
+						    @McpToolProperty(name = "items", title = "Items title",
 						        description = "Items description")
 						    List<CompileItem> javaItems) {}
 						record CompileItem(String id, long score) {}
@@ -256,14 +256,14 @@ class McpTypeMirrorTypedSchemaBridgeTests {
 	}
 
 	private record RuntimeInput(
-			@McpToolArgument(name = "query", title = "Query title",
+			@McpToolProperty(name = "query", title = "Query title",
 					description = "Query description") String javaQuery,
-			@McpToolArgument(title = " ", description = "\t")
+			@McpToolProperty(title = " ", description = "\t")
 			Optional<Integer> limit) {
 	}
 
 	private record RuntimeOutput(
-			@McpToolArgument(name = "items", title = "Items title",
+			@McpToolProperty(name = "items", title = "Items title",
 					description = "Items description")
 			List<RuntimeItem> javaItems) {
 	}

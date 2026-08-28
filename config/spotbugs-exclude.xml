@@ -75,10 +75,4 @@
 		<Bug pattern="SING_SINGLETON_HAS_NONPRIVATE_CONSTRUCTOR"/>
 	</Match>
 
-	<!-- Keep the defensive System.in null check even though the JDK normally treats System.in as non-null. -->
-	<Match>
-		<Class name="com.soklet.Soklet$KeypressManager"/>
-		<Method name="canReadFromStdin"/>
-		<Bug pattern="RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE"/>
-	</Match>
 </FindBugsFilter>

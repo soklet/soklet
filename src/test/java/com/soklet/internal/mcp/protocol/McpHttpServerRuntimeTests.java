@@ -32,6 +32,7 @@ import com.soklet.internal.microhttp.Options;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import java.io.ByteArrayOutputStream;
@@ -74,6 +75,7 @@ public class McpHttpServerRuntimeTests {
 	private static final String DISCOVER_METHOD = "server/discover";
 
 	@Test
+	@Timeout(120)
 	public void construction_does_not_bind_and_failed_start_is_restartable() throws Exception {
 		try (ServerSocket occupied = new ServerSocket()) {
 			occupied.setReuseAddress(false);
@@ -205,12 +207,15 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void handler_capacity_is_server_wide_across_endpoint_paths() throws Exception {
 		CountDownLatch alphaEntered = new CountDownLatch(1);
 		CountDownLatch releaseAlpha = new CountDownLatch(1);
 		McpHttpEndpointBinding alpha = endpointBinding("/alpha", "alpha", invocation -> {
 			alphaEntered.countDown();
-			releaseAlpha.await();
+			Assertions.assertTrue(releaseAlpha.await(10,
+					TimeUnit.SECONDS),
+					"Timed out waiting to release the alpha endpoint");
 			return completeResult("alpha");
 		});
 		McpHttpEndpointBinding beta = endpointBinding(
@@ -260,6 +265,7 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void concurrent_same_string_id_completes_independently_across_anonymous_endpoint_paths()
 			throws Exception {
 		CountDownLatch alphaEntered = new CountDownLatch(1);
@@ -268,12 +274,16 @@ public class McpHttpServerRuntimeTests {
 		CountDownLatch releaseBeta = new CountDownLatch(1);
 		McpHttpEndpointBinding alpha = endpointBinding("/alpha", "alpha", invocation -> {
 			alphaEntered.countDown();
-			releaseAlpha.await();
+			Assertions.assertTrue(releaseAlpha.await(10,
+					TimeUnit.SECONDS),
+					"Timed out waiting to release the alpha endpoint");
 			return completeResult("alpha");
 		});
 		McpHttpEndpointBinding beta = endpointBinding("/beta", "beta", ignored -> {
 			betaEntered.countDown();
-			releaseBeta.await();
+			Assertions.assertTrue(releaseBeta.await(10,
+					TimeUnit.SECONDS),
+					"Timed out waiting to release the beta endpoint");
 			return completeResult("beta");
 		});
 		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
@@ -359,6 +369,7 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void alternating_mcp_instances_keep_discovery_state_independent()
 			throws Exception {
 		McpHttpServerRuntime first = runtime(configuration(0), defaultPolicy(), "first");
@@ -383,6 +394,7 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void lifecycle_is_idempotent_and_restartable_with_a_fresh_listener() throws Exception {
 		McpHttpServerRuntime runtime = runtime(configuration(0), defaultPolicy());
 		try {
@@ -405,6 +417,7 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void disabledLifecycleUnexpectedEventLoopRetainsFailureUntilLegacyStopCleanup()
 			throws Exception {
 		AtomicReference<Throwable> unexpectedFailure = new AtomicReference<>();
@@ -450,6 +463,7 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	@Test
+	@Timeout(180)
 	public void omitted_cors_authorizer_emits_fixed_diagnostic_once_per_successful_generation()
 			throws Exception {
 		List<String> diagnostics = new ArrayList<>();
@@ -506,6 +520,7 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	@Test
+	@Timeout(240)
 	public void explicit_cors_authorizer_suppresses_omitted_authorizer_diagnostic()
 			throws Exception {
 		for (CorsAuthorizer authorizer : List.of(
@@ -560,6 +575,7 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void diagnostic_sink_failure_does_not_fail_listener_start() throws Exception {
 		AtomicInteger attempts = new AtomicInteger();
 		McpHttpEndpointPolicy policy =
@@ -583,6 +599,7 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void submit_after_stop_boundary_returns_unavailable_and_releases_lifecycle_admission()
 			throws Exception {
 		McpHttpServerRuntime runtime = runtime(configuration(0), defaultPolicy());
@@ -644,6 +661,7 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void residual_admission_work_blocks_restart_until_it_really_exits()
 			throws Exception {
 		CountDownLatch admissionStarted = new CountDownLatch(1);
@@ -720,6 +738,7 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void residual_transport_is_a_stop_failure_and_blocks_restart_until_exit()
 			throws Exception {
 		McpHttpServerRuntime runtime = runtime(
@@ -987,6 +1006,7 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void cors_rejects_present_origins_by_default_and_reuses_shared_authorizer()
 			throws Exception {
 		McpHttpServerRuntime rejecting = runtime(configuration(0), defaultPolicy());
@@ -1117,6 +1137,7 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void cors_preflight_fails_closed_for_authorizer_values_outside_mcp_surface()
 			throws Exception {
 		for (CorsAuthorizer authorizer : List.of(
@@ -1145,6 +1166,7 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	@Test
+	@Timeout(180)
 	public void absent_origin_policy_and_cors_hook_failures_fail_closed()
 			throws Exception {
 		AtomicInteger admissions = new AtomicInteger();

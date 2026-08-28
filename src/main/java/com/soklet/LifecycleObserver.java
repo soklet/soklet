@@ -28,8 +28,11 @@ import java.util.List;
 /**
  * Read-only hook methods for observing system and request lifecycle events.
  * <p>
- * Note: some of these methods are "fail-fast" - exceptions thrown will bubble out and stop execution - and for others,
- * Soklet will catch exceptions and surface separately via {@link #didReceiveLogEvent(LogEvent)}.
+ * Lifecycle-transition callbacks ({@code willStart*}, {@code didStart*},
+ * {@code didFailToStart*}, {@code willStop*}, and {@code didStop*}) are purely
+ * observational. Soklet contains their failures; they cannot veto, delay, or
+ * change startup, shutdown, or the published lifecycle result. Other callbacks
+ * retain the inline behavior documented on their individual methods.
  * <p>
  * A standard threadsafe implementation can be acquired via the {@link #defaultInstance()} factory method.
  * <p>
@@ -40,6 +43,7 @@ import java.util.List;
 public interface LifecycleObserver {
 	/**
 	 * Called before a {@link Soklet} instance starts.
+	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 */
 	default void willStartSoklet(@NonNull Soklet soklet) {
 		// No-op by default
@@ -47,6 +51,7 @@ public interface LifecycleObserver {
 
 	/**
 	 * Called after a {@link Soklet} instance starts.
+	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 */
 	default void didStartSoklet(@NonNull Soklet soklet) {
 		// No-op by default
@@ -54,6 +59,7 @@ public interface LifecycleObserver {
 
 	/**
 	 * Called after a {@link Soklet} instance was asked to start, but failed due to an exception.
+	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 */
 	default void didFailToStartSoklet(@NonNull Soklet soklet,
 																		@NonNull Throwable throwable) {
@@ -62,28 +68,27 @@ public interface LifecycleObserver {
 
 	/**
 	 * Called before a {@link Soklet} instance stops.
+	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 */
 	default void willStopSoklet(@NonNull Soklet soklet) {
 		// No-op by default
 	}
 
 	/**
-	 * Called after a {@link Soklet} instance stops.
+	 * Called after a {@link Soklet} instance publishes its immutable result.
+	 * This lifecycle-transition callback is observational; exceptions are contained.
+	 *
+	 * @param soklet stopped Soklet
+	 * @param result aggregate lifecycle result
 	 */
-	default void didStopSoklet(@NonNull Soklet soklet) {
-		// No-op by default
-	}
-
-	/**
-	 * Called after a {@link Soklet} instance was asked to stop, but failed due to an exception.
-	 */
-	default void didFailToStopSoklet(@NonNull Soklet soklet,
-																	 @NonNull Throwable throwable) {
+	default void didStopSoklet(@NonNull Soklet soklet,
+			@NonNull ShutdownResult result) {
 		// No-op by default
 	}
 
 	/**
 	 * Called before the server starts.
+	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 */
 	default void willStartHttpServer(@NonNull HttpServer httpServer) {
 		// No-op by default
@@ -91,6 +96,7 @@ public interface LifecycleObserver {
 
 	/**
 	 * Called after the server starts.
+	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 */
 	default void didStartHttpServer(@NonNull HttpServer httpServer) {
 		// No-op by default
@@ -98,6 +104,7 @@ public interface LifecycleObserver {
 
 	/**
 	 * Called after a {@link HttpServer} instance was asked to start, but failed due to an exception.
+	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 */
 	default void didFailToStartHttpServer(@NonNull HttpServer httpServer,
 																		@NonNull Throwable throwable) {
@@ -106,23 +113,21 @@ public interface LifecycleObserver {
 
 	/**
 	 * Called before the server stops.
+	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 */
 	default void willStopHttpServer(@NonNull HttpServer httpServer) {
 		// No-op by default
 	}
 
 	/**
-	 * Called after the server stops.
+	 * Called after the server publishes terminal evidence.
+	 * This lifecycle-transition callback is observational; exceptions are contained.
+	 *
+	 * @param httpServer stopped HTTP server
+	 * @param result participant lifecycle result
 	 */
-	default void didStopHttpServer(@NonNull HttpServer httpServer) {
-		// No-op by default
-	}
-
-	/**
-	 * Called after a {@link HttpServer} instance was asked to stop, but failed due to an exception.
-	 */
-	default void didFailToStopHttpServer(@NonNull HttpServer httpServer,
-																	 @NonNull Throwable throwable) {
+	default void didStopHttpServer(@NonNull HttpServer httpServer,
+			@NonNull ParticipantShutdownResult result) {
 		// No-op by default
 	}
 
@@ -338,6 +343,7 @@ public interface LifecycleObserver {
 
 	/**
 	 * Called before the SSE server starts.
+	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 */
 	default void willStartSseServer(@NonNull SseServer sseServer) {
 		// No-op by default
@@ -345,6 +351,7 @@ public interface LifecycleObserver {
 
 	/**
 	 * Called after the SSE server starts.
+	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 */
 	default void didStartSseServer(@NonNull SseServer sseServer) {
 		// No-op by default
@@ -352,6 +359,7 @@ public interface LifecycleObserver {
 
 	/**
 	 * Called after a {@link SseServer} instance was asked to start, but failed due to an exception.
+	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 */
 	default void didFailToStartSseServer(@NonNull SseServer sseServer,
 																									 @NonNull Throwable throwable) {
@@ -360,28 +368,27 @@ public interface LifecycleObserver {
 
 	/**
 	 * Called before the SSE server stops.
+	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 */
 	default void willStopSseServer(@NonNull SseServer sseServer) {
 		// No-op by default
 	}
 
 	/**
-	 * Called after the SSE server stops.
+	 * Called after the SSE server publishes terminal evidence.
+	 * This lifecycle-transition callback is observational; exceptions are contained.
+	 *
+	 * @param sseServer stopped SSE server
+	 * @param result participant lifecycle result
 	 */
-	default void didStopSseServer(@NonNull SseServer sseServer) {
-		// No-op by default
-	}
-
-	/**
-	 * Called after a {@link SseServer} instance was asked to stop, but failed due to an exception.
-	 */
-	default void didFailToStopSseServer(@NonNull SseServer sseServer,
-																	@NonNull Throwable throwable) {
+	default void didStopSseServer(@NonNull SseServer sseServer,
+			@NonNull ParticipantShutdownResult result) {
 		// No-op by default
 	}
 
 	/**
 	 * Called before the MCP server starts.
+	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 *
 	 * @param mcpServer the MCP server that will start
 	 */
@@ -391,6 +398,7 @@ public interface LifecycleObserver {
 
 	/**
 	 * Called after the MCP server starts.
+	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 *
 	 * @param mcpServer the MCP server that started
 	 */
@@ -400,6 +408,7 @@ public interface LifecycleObserver {
 
 	/**
 	 * Called after an {@link McpServer} instance was asked to start, but failed due to an exception.
+	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 *
 	 * @param mcpServer the MCP server that failed to start
 	 * @param throwable the startup failure
@@ -411,6 +420,7 @@ public interface LifecycleObserver {
 
 	/**
 	 * Called before the MCP server stops.
+	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 *
 	 * @param mcpServer the MCP server that will stop
 	 */
@@ -420,23 +430,13 @@ public interface LifecycleObserver {
 
 	/**
 	 * Called after the MCP server stops.
+	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 *
 	 * @param mcpServer       the MCP server that stopped
-	 * @param shutdownOutcome the result of stopping the MCP server
+	 * @param result participant lifecycle result
 	 */
 	default void didStopMcpServer(@NonNull McpServer mcpServer,
-														 @NonNull McpShutdownOutcome shutdownOutcome) {
-		// No-op by default
-	}
-
-	/**
-	 * Called after an {@link McpServer} instance was asked to stop, but failed due to an exception.
-	 *
-	 * @param mcpServer the MCP server that failed to stop
-	 * @param throwable the shutdown failure
-	 */
-	default void didFailToStopMcpServer(@NonNull McpServer mcpServer,
-														 @NonNull Throwable throwable) {
+			@NonNull ParticipantShutdownResult result) {
 		// No-op by default
 	}
 

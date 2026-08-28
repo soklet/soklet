@@ -53,8 +53,17 @@ class McpLocalizationAdversarialTests {
 	private static final String MCP_PATH = "/localization/adversarial";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final Duration WAIT = Duration.ofSeconds(5);
+	private static final Duration UNIQUE_TAG_FLOOD_WAIT = Duration.ofSeconds(30);
+	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
+			LifecyclePolicy.builder()
+					.startupTimeout(Duration.ofSeconds(5))
+					.startupCancellationTimeout(Duration.ofSeconds(2))
+					.gracefulShutdownDuration(Duration.ofSeconds(2))
+					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.build();
 
 	@Test
+	@Timeout(120)
 	void rejectedAndIrrelevantWorkNeverInvokesTheProvider() {
 		AtomicInteger contexts = new AtomicInteger();
 		List<Request> inertRequests = List.of(
@@ -111,6 +120,7 @@ class McpLocalizationAdversarialTests {
 	}
 
 	@Test
+	@Timeout(120)
 	void aUniqueTagFloodRetainsNoStateOrMetricSeries() {
 		AtomicInteger contexts = new AtomicInteger();
 		List<String> observedTags = new CopyOnWriteArrayList<>();
@@ -125,9 +135,12 @@ class McpLocalizationAdversarialTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(metrics)
 				.build(), simulator -> {
+			long deadline = System.nanoTime()
+					+ UNIQUE_TAG_FLOOD_WAIT.toNanos();
 			for (int index = 0; index < floodSize; ++index)
 				awaitBody(simulator, request("flood-" + index, "server/discover",
-						null, "", Set.of("xx-" + String.format("%03d", index))));
+						null, "", Set.of("xx-" + String.format("%03d", index))),
+						deadline);
 		});
 
 		assertEquals(floodSize, contexts.get(),
@@ -277,6 +290,7 @@ class McpLocalizationAdversarialTests {
 			return SokletConfig.withMcpServer(builder.build())
 					.resourceMethodResolver(
 							ResourceMethodResolver.fromMethods(Set.of()))
+					.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 					.build();
 		}, simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(request);
@@ -297,8 +311,32 @@ class McpLocalizationAdversarialTests {
 		return captured.get();
 	}
 
-	private static String awaitBody(Simulator simulator, Request request) {
-		return awaitStartedBody(simulator.startMcpRequest(request));
+	private static String awaitBody(Simulator simulator, Request request,
+			long deadline) {
+		McpSimulation simulation = simulator.startMcpRequest(request);
+		try {
+			McpSimulationResponse response = simulation.awaitResponse(
+					remainingFloodWait(deadline, "response")).orElseThrow(() ->
+					new AssertionError("Unique-tag flood response timed out."));
+			String body = new String(response.getBody().orElse(new byte[0]),
+					StandardCharsets.UTF_8);
+			simulation.awaitCompletion(remainingFloodWait(deadline, "completion"))
+					.orElseThrow(() -> new AssertionError(
+							"Unique-tag flood completion timed out."));
+			return body;
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new AssertionError(e);
+		}
+	}
+
+	private static Duration remainingFloodWait(long deadline, String phase) {
+		long remainingNanos = deadline - System.nanoTime();
+		if (remainingNanos <= 0L)
+			throw new AssertionError(
+					"Unique-tag flood exceeded its shared 30-second deadline before "
+							+ phase + ".");
+		return Duration.ofNanos(remainingNanos);
 	}
 
 	private static String awaitStartedBody(McpSimulation simulation) {

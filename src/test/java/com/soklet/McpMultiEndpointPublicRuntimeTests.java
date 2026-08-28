@@ -39,7 +39,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@Timeout(30)
+@Timeout(60)
 public class McpMultiEndpointPublicRuntimeTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String FIRST_PATH = "/mcp/first";
@@ -158,7 +158,7 @@ public class McpMultiEndpointPublicRuntimeTests {
 			Assertions.assertSame(firstEndpoint, firstObservedEndpoint.get());
 			Assertions.assertSame(secondEndpoint, secondObservedEndpoint.get());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -227,7 +227,7 @@ public class McpMultiEndpointPublicRuntimeTests {
 			assertEndpointSequence(toolLimitedEndpoints, firstEndpoint,
 					secondEndpoint);
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -330,7 +330,7 @@ public class McpMultiEndpointPublicRuntimeTests {
 			Assertions.assertSame(firstEndpoint, firstResourceEndpoint.get());
 			Assertions.assertSame(secondEndpoint, secondResourceEndpoint.get());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 

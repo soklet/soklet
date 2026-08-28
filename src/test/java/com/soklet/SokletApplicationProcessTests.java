@@ -102,7 +102,7 @@ public final class SokletApplicationProcessTests {
 		RecordingProcessAccess process = new RecordingProcessAccess(events);
 		process.addFailure = new IllegalStateException("shutdown underway");
 		RecordingReporter reporter = new RecordingReporter(events);
-		AtomicReference<InternalShutdownResult> cleanupResult =
+		AtomicReference<ShutdownResult> cleanupResult =
 				new AtomicReference<>();
 		SokletApplicationOptions options = SokletApplicationOptions.builder()
 				.afterCompleteShutdown(Duration.ofSeconds(1), cleanupResult::set)
@@ -113,7 +113,8 @@ public final class SokletApplicationProcessTests {
 						new RecordingTriggerRegistry(events), reporter));
 
 		Assertions.assertSame(runtimeFactory.runtime.notStartedResult, result);
-		Assertions.assertSame(result, cleanupResult.get());
+		Assertions.assertSame(result,
+				requireNonNull(cleanupResult.get()).internalResult());
 		Assertions.assertEquals(0, runtimeFactory.runtime.startCalls.get());
 		Assertions.assertEquals(1, runtimeFactory.runtime.publicationCount.get());
 		Assertions.assertEquals(1, reporter.invocations.get());
@@ -166,7 +167,7 @@ public final class SokletApplicationProcessTests {
 		RecordingReporter reporter = new RecordingReporter(events);
 		IllegalStateException hookFailure = new IllegalStateException(
 				"hook construction failed");
-		AtomicReference<InternalShutdownResult> cleanupResult =
+		AtomicReference<ShutdownResult> cleanupResult =
 				new AtomicReference<>();
 		SokletApplicationOptions options = SokletApplicationOptions.builder()
 				.afterCompleteShutdown(Duration.ofSeconds(1), cleanupResult::set)
@@ -182,7 +183,7 @@ public final class SokletApplicationProcessTests {
 		Assertions.assertSame(runtimeFactory.runtime.notStartedResult,
 				thrown.getInternalShutdownResult());
 		Assertions.assertSame(thrown.getInternalShutdownResult(),
-				cleanupResult.get());
+				requireNonNull(cleanupResult.get()).internalResult());
 		Assertions.assertFalse(events.contains("hook-add"));
 		Assertions.assertEquals(0, runtimeFactory.runtime.startCalls.get());
 		SokletApplicationTerminalSnapshot snapshot =
@@ -301,7 +302,7 @@ public final class SokletApplicationProcessTests {
 		RecordingProcessAccess process = new RecordingProcessAccess(events);
 		RecordingReporter reporter = new RecordingReporter(events);
 		AtomicInteger cleanupCalls = new AtomicInteger();
-		AtomicReference<InternalShutdownResult> cleanupResult =
+		AtomicReference<ShutdownResult> cleanupResult =
 				new AtomicReference<>();
 		SokletApplicationOptions options = SokletApplicationOptions.builder()
 				.afterCompleteShutdown(Duration.ofSeconds(2), result -> {
@@ -319,7 +320,8 @@ public final class SokletApplicationProcessTests {
 		Assertions.assertFalse(hook.isAlive());
 		Assertions.assertNull(call.failure.get());
 		Assertions.assertEquals(1, cleanupCalls.get());
-		Assertions.assertSame(call.result.get(), cleanupResult.get());
+		Assertions.assertSame(call.result.get(),
+				requireNonNull(cleanupResult.get()).internalResult());
 		Assertions.assertEquals(1, reporter.invocations.get());
 		Assertions.assertEquals(1, runtimeFactory.runtime.publicationCount.get());
 	}
@@ -501,6 +503,7 @@ public final class SokletApplicationProcessTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void startupFailureAndTimeoutRemainPrimaryWithIncompleteRollback() {
 		for (InternalStartupDisposition startupDisposition : List.of(
 				InternalStartupDisposition.FAILED,
@@ -674,7 +677,7 @@ public final class SokletApplicationProcessTests {
 				"stdin listener unavailable");
 		triggers.registerFailure = registrationFailure;
 		RecordingReporter reporter = new RecordingReporter(events);
-		AtomicReference<InternalShutdownResult> cleanupResult =
+		AtomicReference<ShutdownResult> cleanupResult =
 				new AtomicReference<>();
 		SokletApplicationOptions options = SokletApplicationOptions.builder()
 				.additionalTrigger(ShutdownTrigger.ENTER_KEY)
@@ -690,7 +693,7 @@ public final class SokletApplicationProcessTests {
 		Assertions.assertSame(runtimeFactory.runtime.notStartedResult,
 				thrown.getInternalShutdownResult());
 		Assertions.assertSame(thrown.getInternalShutdownResult(),
-				cleanupResult.get());
+				requireNonNull(cleanupResult.get()).internalResult());
 		Assertions.assertEquals(0, runtimeFactory.runtime.startCalls.get());
 		Assertions.assertEquals(1, runtimeFactory.runtime.publicationCount.get());
 		Assertions.assertEquals(1, reporter.invocations.get());

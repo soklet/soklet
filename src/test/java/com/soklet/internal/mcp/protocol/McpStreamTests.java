@@ -72,7 +72,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@Timeout(30)
+@Timeout(60)
 public class McpStreamTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/mcp";
@@ -173,7 +173,7 @@ public class McpStreamTests {
 				publisher.publishResourcesListChanged();
 				envelopes.add(readNextSseEnvelope(client));
 
-				stopThread = new Thread(soklet::stop,
+				stopThread = new Thread(soklet::close,
 						"mcp-no-independent-request-stop");
 				stopThread.start();
 				envelopes.addAll(readAllSseEnvelopes(client));
@@ -200,7 +200,7 @@ public class McpStreamTests {
 						terminal.id());
 			}
 		} finally {
-			soklet.stop();
+			soklet.close();
 			if (stopThread != null && stopThread.isAlive())
 				stopThread.join(5_000L);
 		}

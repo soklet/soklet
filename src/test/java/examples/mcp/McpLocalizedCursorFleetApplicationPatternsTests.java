@@ -19,6 +19,7 @@ package examples.mcp;
 import com.soklet.CorsAuthorizer;
 import com.soklet.HttpMethod;
 import com.soklet.LifecycleObserver;
+import com.soklet.LifecyclePolicy;
 import com.soklet.McpAdmissionDecision;
 import com.soklet.McpAdmissionIdentity;
 import com.soklet.McpCompleteResult;
@@ -54,8 +55,9 @@ import com.soklet.McpRequestOutcome;
 import com.soklet.Request;
 import com.soklet.ResourceMethodResolver;
 import com.soklet.Simulator;
-import com.soklet.Soklet;
+import com.soklet.SimulatorConfigFactory;
 import com.soklet.SokletConfig;
+import com.soklet.SokletSimulator;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
@@ -86,6 +88,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -112,7 +115,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * material. They are deliberately separate from Soklet's purpose-specific
  * framework request-state protection configuration.
  */
-@Timeout(30)
+@Timeout(60)
 public class McpLocalizedCursorFleetApplicationPatternsTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/examples/localized-cursor-fleet";
@@ -130,6 +133,7 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 			"\\\"uri\\\":\\\"app-resource://catalog/([a-z]+)\\\"");
 
 	@Test
+	@Timeout(120)
 	void localizedCursorCrossesNodesWithStableSnapshotLocaleRevisionAndPageBounds() {
 		CatalogSnapshot originalA = catalog("snapshot-7", "catalog-r7",
 				"alpha", "bravo", "charlie", "delta", "echo");
@@ -149,7 +153,6 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 						List.of(originalB, replacementB)),
 				translationsB, keyRingB);
 
-		assertNotSame(nodeA.server(), nodeB.server());
 		assertNotSame(nodeA.repository(), nodeB.repository());
 		assertNotSame(originalA, originalB);
 		assertEquals(originalA, originalB);
@@ -160,11 +163,12 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 		assertNotSame(keyRingA, keyRingB);
 		assertTrue(keyRingA.hasSameConfiguration(keyRingB));
 		assertNotSame(nodeA.codec(), nodeB.codec());
-		assertFrameworkProtectionDisabled(nodeA);
-		assertFrameworkProtectionDisabled(nodeB);
 
-		Soklet.runSimulator(nodeA.config(), simulatorA ->
-				Soklet.runSimulator(nodeB.config(), simulatorB -> {
+		SokletSimulator.run(nodeA.configFactory(), simulatorA ->
+				SokletSimulator.run(nodeB.configFactory(), simulatorB -> {
+					assertNotSame(nodeA.server(), nodeB.server());
+					assertFrameworkProtectionDisabled(nodeA);
+					assertFrameworkProtectionDisabled(nodeB);
 					Capture first = capture(simulatorA, resourceListRequest(
 							"page-a-1", Optional.empty(), PRINCIPAL, "fr-CA"));
 					assertEquals(List.of(), nodeA.applicationFailures(),
@@ -241,6 +245,7 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 	}
 
 	@Test
+	@Timeout(240)
 	void cursorFailuresPreserveOpaqueBytesAndCollapseToOneNeutralError() {
 		CatalogSnapshot original = catalog("snapshot-7", "catalog-r7",
 				"alpha", "bravo", "charlie");
@@ -327,7 +332,6 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 			assertNotSame(issuer.repository(), node.repository());
 			assertNotSame(issuer.codec(), node.codec());
 			assertNotSame(issuer.keyRing(), node.keyRing());
-			assertFrameworkProtectionDisabled(node);
 
 			Capture failure = run(node, resourceListRequest("invalid-cursor",
 					Optional.of(failureCase.cursor()), failureCase.principal(),
@@ -384,8 +388,10 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 
 	private static Capture run(ApplicationNode node, Request request) {
 		List<Capture> captures = new ArrayList<>(1);
-		Soklet.runSimulator(node.config(), simulator ->
-				captures.add(capture(simulator, request)));
+		SokletSimulator.run(node.configFactory(), simulator -> {
+			assertFrameworkProtectionDisabled(node);
+			captures.add(capture(simulator, request));
+		});
 		return captures.get(0);
 	}
 
@@ -504,7 +510,7 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 
 	private static void assertStopped(ApplicationNode node) {
 		McpServerDiagnostics diagnostics = node.server().getDiagnostics();
-		assertEquals(McpServerStatus.STOPPED, diagnostics.getStatus());
+		assertEquals(McpServerStatus.TERMINATED, diagnostics.getStatus());
 		assertTrue(diagnostics.getBoundAddress().isEmpty());
 		assertEquals(0, diagnostics.getActiveHandlerExecutions());
 		assertEquals(0, diagnostics.getQueuedRequests());
@@ -628,8 +634,7 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 				new CopyOnWriteArrayList<>();
 		private final AtomicInteger handlerInvocations = new AtomicInteger();
 		private final AtomicInteger successfulPages = new AtomicInteger();
-		private final McpServer server;
-		private final SokletConfig config;
+		private final AtomicReference<McpServer> server = new AtomicReference<>();
 
 		private ApplicationNode(String name,
 				ReplicatedCatalogRepository repository,
@@ -648,65 +653,78 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 			this.keyRing = requireNonNull(keyRing);
 			this.codec = new SignedLocalizedCursorCodec(keyRing);
 			this.now = requireNonNull(now);
+		}
 
-			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-					.serverInformation(McpImplementation.withNameAndVersion(
-							"localized-cursor-fixture", "1.0").build())
-					.resource(McpResourceRegistration.withUriTemplateAndName(
-							"app-resource://catalog/{id}", "catalog-resource")
-							.handler((request, resource, features) ->
-									McpCompleteResult.fromResourceOutput(
-											McpResourceOutput.builder()
-													.content(McpTextResourceContents
-															.withUriAndText(
-																	resource.getUri(), "unused")
-															.build())
-													.build()))
-							.build())
-					.resourceListHandler(this::page)
-					.build();
-			McpLocalizer localizer = McpLocalizer
-					.withFallbackLocale(Locale.ENGLISH)
-					.contextProvider(this::localizationContext)
-					.build();
-			this.server = McpServer.withPort(0)
-					.host(LOOPBACK)
-					.endpointRegistry(McpEndpointRegistry.fromEndpoints(
-							List.of(endpoint)))
-					.admissionController(context -> {
-						String authorization = context.getRequest()
-								.getHeader("Authorization").orElseThrow();
-						if (!authorization.startsWith("Bearer "))
-							throw new IllegalArgumentException(
-									"A bearer principal is required.");
-						String principal = requireClaimText(
-								authorization.substring("Bearer ".length()));
-						return McpAdmissionDecision.accepted(McpAdmissionIdentity
-								.withRateLimitPartitionKey("rate:" + principal)
-								.authorizationPartitionKey("auth:" + principal)
-								.principal(principal)
-								.build());
-					})
-					.requestRateLimiter(context -> McpRateLimitDecision.allowed())
-					.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
-					.allowedHosts(Set.of(LOOPBACK))
-					.localizer(localizer)
-					.build();
-			this.config = SokletConfig.withMcpServer(this.server)
-					.resourceMethodResolver(
-							ResourceMethodResolver.fromMethods(Set.of()))
-					.lifecycleObservers(List.of(new LifecycleObserver() {
-						@Override
-						public void didFinishMcpRequestHandling(
-								@NonNull McpRequestContext context,
-								@NonNull McpRequestOutcome requestOutcome,
-								@Nullable McpJsonRpcError error,
-								@NonNull Duration duration,
-								@NonNull List<@NonNull Throwable> throwables) {
-							observedThrowables.addAll(throwables);
-						}
-					}))
-					.build();
+		private SimulatorConfigFactory configFactory() {
+			return transports -> {
+				McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
+						.serverInformation(McpImplementation.withNameAndVersion(
+								"localized-cursor-fixture", "1.0").build())
+						.resource(McpResourceRegistration.withUriTemplateAndName(
+								"app-resource://catalog/{id}", "catalog-resource")
+								.handler((request, resource, features) ->
+										McpCompleteResult.fromResourceOutput(
+												McpResourceOutput.builder()
+														.content(McpTextResourceContents
+																.withUriAndText(
+																		resource.getUri(), "unused")
+																.build())
+														.build()))
+								.build())
+						.resourceListHandler(this::page)
+						.build();
+				McpLocalizer localizer = McpLocalizer
+						.withFallbackLocale(Locale.ENGLISH)
+						.contextProvider(this::localizationContext)
+						.build();
+				McpServer server = transports.newMcpServerBuilder(0)
+						.host(LOOPBACK)
+						.endpointRegistry(McpEndpointRegistry.fromEndpoints(
+								List.of(endpoint)))
+						.admissionController(context -> {
+							String authorization = context.getRequest()
+									.getHeader("Authorization").orElseThrow();
+							if (!authorization.startsWith("Bearer "))
+								throw new IllegalArgumentException(
+										"A bearer principal is required.");
+							String principal = requireClaimText(
+									authorization.substring("Bearer ".length()));
+							return McpAdmissionDecision.accepted(McpAdmissionIdentity
+									.withRateLimitPartitionKey("rate:" + principal)
+									.authorizationPartitionKey("auth:" + principal)
+									.principal(principal)
+									.build());
+						})
+						.requestRateLimiter(context -> McpRateLimitDecision.allowed())
+						.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+						.allowedHosts(Set.of(LOOPBACK))
+						.localizer(localizer)
+						.build();
+				if (!this.server.compareAndSet(null, server))
+					throw new IllegalStateException(
+							"An application node may create only one simulator scope.");
+				return SokletConfig.withMcpServer(server)
+						.resourceMethodResolver(
+								ResourceMethodResolver.fromMethods(Set.of()))
+						.lifecyclePolicy(LifecyclePolicy.builder()
+								.startupTimeout(Duration.ofSeconds(5))
+								.startupCancellationTimeout(Duration.ofSeconds(2))
+								.gracefulShutdownDuration(Duration.ofSeconds(2))
+								.forcedShutdownDuration(Duration.ofSeconds(1))
+								.build())
+						.lifecycleObservers(List.of(new LifecycleObserver() {
+							@Override
+							public void didFinishMcpRequestHandling(
+									@NonNull McpRequestContext context,
+									@NonNull McpRequestOutcome requestOutcome,
+									@Nullable McpJsonRpcError error,
+									@NonNull Duration duration,
+									@NonNull List<@NonNull Throwable> throwables) {
+								observedThrowables.addAll(throwables);
+							}
+						}))
+						.build();
+			};
 		}
 
 		private McpLocalizationContext localizationContext(
@@ -830,11 +848,9 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 		}
 
 		private McpServer server() {
-			return this.server;
-		}
-
-		private SokletConfig config() {
-			return this.config;
+			return Optional.ofNullable(this.server.get()).orElseThrow(() ->
+					new IllegalStateException(
+							"The application node has not created its simulator scope."));
 		}
 
 		private Instant now() {

@@ -649,7 +649,7 @@ public void sseTest() {
 > **Unreleased API:** This section describes `4.0.0-SNAPSHOT`. The `3.5.1`
 > artifact shown above contains the older, incompatible MCP API.
 
-Soklet 4.0.0 targets the MCP `2026-07-28` server protocol with a dedicated,
+For the 4.0.0 release, Soklet 4.0.x supports exactly the MCP `2026-07-28` server profile through a dedicated,
 stateless `McpServer`. MCP owns a listener and port separate from Soklet's
 ordinary HTTP and SSE servers, can host multiple exact endpoint paths, and
 derives each endpoint's advertised capabilities from its registered
@@ -1904,8 +1904,8 @@ structured/raw-ID emission, downstream OpenTelemetry mapping, sustained/soak,
 simulator or release-candidate proof, and does not freeze Phase 6.
 
 The nineteenth bounded Phase 6 production vertical implements the frozen
-downstream metric matrix in unreleased
-`com.soklet:soklet-otel:1.4.0-SNAPSHOT`, whose default core baseline is
+downstream metric matrix in the then-current
+unreleased `soklet-otel`, whose default core baseline is
 `com.soklet:soklet:3.6.0-SNAPSHOT`. All 23 `McpMetricsEvent` variants map to
 exactly 22 OpenTelemetry instruments: 21 MCP-specific instruments plus the
 existing shared transport-failure counter. The mapping uses seven fixed MCP
@@ -2319,10 +2319,10 @@ privacy/cardinality work, or prove every-operation simulation, sustained,
 release-readiness, review, or the later Phase 6 freeze.
 
 For MCP shutdowns, `snapshot().getMcpMetrics().getShutdowns()` is an immutable,
-enum-ordered `Map<McpShutdownOutcome, Long>`. The default collector omits
-unobserved outcomes, returns the map to empty on reset, and emits only
-`soklet_mcp_shutdowns_total{outcome="clean"}` or
-`soklet_mcp_shutdowns_total{outcome="residual_handlers"}`. Default aggregation
+enum-ordered `Map<ParticipantShutdownDisposition, Long>`. The default collector omits
+unobserved outcomes, resets the map to empty, and emits `soklet_mcp_shutdowns_total`
+only for `not_started`, `graceful_termination`, `forced_termination`,
+`unexpected_termination`, `residual_activity`, or `termination_unknown`. Default aggregation
 now covers `ServerStarted`, `ServerStopped`, `RequestAccepted`,
 `RequestRejected`, `RequestStarted`, `RequestFinished`,
 `RequestStreamOpened`, `RequestStreamClosed`, the five handler variants,
@@ -2356,8 +2356,8 @@ methods relative to V19, with no core inventory change.
 The twenty-first adds seven top-level public simulation types,
 `McpSimulationOptions.Builder`, and two abstract methods to `Simulator`, while
 leaving the metric/snapshot/canary inventories unchanged.
-Those Vxx counts remain historical. The current API inventory is 133/36/65
-Phase 4/5/6 owners (234 total), all three phases are frozen, and
+Those Vxx counts remain historical. The current API inventory is 133/36/64
+Phase 4/5/6 owners (233 total), all three phases are frozen, and
 `api/mcp/provisional.includes` is empty. The release-validation workflow and
 fail-closed evidence assembler are implemented, but no immutable candidate run
 is claimed. The last full pre-typed-state local evidence was green at core
@@ -2781,11 +2781,24 @@ official result, or official 48-message/11-test corpus changed. The pinned
 40-scenario official inventory has no exact unknown-header diagnostic,
 redaction, quota, or cardinality scenario, so this adds no official-suite
 claim. `MCP-HTTP-020` is now `CORE_COMPLETE`; the current report remains
-`FAILED` at 110/117/12/18/5, while the synthetic report remains
-115/117/12/18/0. The remaining IDs are `SOK-VALID-002`, `SOK-STATE-002`,
+`FAILED` at 110/117/12/19/5, while the synthetic report remains
+115/117/12/19/0. The remaining IDs are `SOK-VALID-002`, `SOK-STATE-002`,
 `SOK-STATE-007`, `SOK-PRIV-001`, and `AMB-002`. Generic `Request`,
 `Throwable`, custom-collector, and application-telemetry privacy remain owned
 by `SOK-PRIV-001`.
+
+The selected MCP profile is fixed; Soklet neither selects an automatic
+"latest" profile nor falls back to another revision. SEP-2577 marks Roots,
+Sampling, and Logging deprecated in that profile, with specification removal
+eligible no earlier than 2027-07-28. Their MCP
+lifecycle is independent from Soklet's Java API lifecycle: retained Java surfaces remain supported, have no
+Java deprecation marker, and have no Soklet API-removal decision. Prefer
+explicit tool parameters, resource URIs, or server configuration over Roots
+and direct model-provider integration over Sampling. Soklet parses retained
+Logging metadata but neither advertises nor implements MCP Logging; use the
+existing observability path. Dynamic Client Registration and
+deprecated standalone legacy HTTP+SSE transport are reviewed N/A; current SSE response
+streaming is not that legacy transport.
 
 You can expose a `/metrics` endpoint by injecting [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html)
 into a [`ResourceMethod`](https://javadoc.soklet.com/com/soklet/ResourceMethod.html):

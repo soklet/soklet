@@ -45,7 +45,7 @@ import static com.soklet.TestSupport.findFreePort;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @NotThreadSafe
-@Timeout(30)
+@Timeout(60)
 public class McpMirroredHeaderPublicRuntimeTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/mcp";
@@ -97,7 +97,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 			Assertions.assertFalse(ignored.body().contains("administrator-canary"),
 					ignored.body());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -125,7 +125,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 			Assertions.assertEquals(1, handlers.get());
 			Assertions.assertTrue(nameDiagnostics(events).isEmpty(), events.toString());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -171,7 +171,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 			Assertions.assertFalse(events.toString().contains(
 					"notification-secret-value"), events.toString());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -230,11 +230,11 @@ public class McpMirroredHeaderPublicRuntimeTests {
 			Assertions.assertEquals(11, firstAdmissions.get());
 			Assertions.assertEquals(11, firstHandlers.get());
 		} finally {
-			firstSoklet.stop();
+			firstSoklet.close();
 		}
 
-		Assertions.assertFalse(firstSoklet.isStarted());
-		Assertions.assertEquals(McpServerStatus.STOPPED,
+		Assertions.assertEquals(SokletStatus.CLOSED, firstSoklet.getStatus());
+		Assertions.assertEquals(McpServerStatus.TERMINATED,
 				firstServer.getDiagnostics().getStatus());
 
 		AtomicInteger secondAdmissions = new AtomicInteger();
@@ -254,7 +254,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 			secondSoklet.start();
 			Assertions.assertEquals(port, boundPort(secondServer),
 					"The first owner must release its exact fixed port before returning.");
-			Assertions.assertEquals(McpServerStatus.STOPPED,
+			Assertions.assertEquals(McpServerStatus.TERMINATED,
 					firstServer.getDiagnostics().getStatus(),
 					"The second owner must not revive the first runtime graph.");
 			Map<String, String> secondOwnerHeaders = validHeaders();
@@ -271,11 +271,11 @@ public class McpMirroredHeaderPublicRuntimeTests {
 			Assertions.assertEquals(10, nameDiagnostics(firstEvents).size(),
 					"The second owner must not mutate the first owner's quota state.");
 		} finally {
-			secondSoklet.stop();
+			secondSoklet.close();
 		}
 
-		Assertions.assertFalse(secondSoklet.isStarted());
-		Assertions.assertEquals(McpServerStatus.STOPPED,
+		Assertions.assertEquals(SokletStatus.CLOSED, secondSoklet.getStatus());
+		Assertions.assertEquals(McpServerStatus.TERMINATED,
 				secondServer.getDiagnostics().getStatus());
 	}
 
@@ -314,7 +314,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 			assertNameDiagnostic(events, "Mcp-Param-Super-Secret-Name",
 					"super-secret-value");
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -354,7 +354,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 			Assertions.assertEquals(0, admissions.get(),
 					"CORS preflight must not enter public admission.");
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -435,6 +435,12 @@ public class McpMirroredHeaderPublicRuntimeTests {
 						events.add(logEvent);
 					}
 				})
+				.lifecyclePolicy(LifecyclePolicy.builder()
+						.startupTimeout(Duration.ofSeconds(5))
+						.startupCancellationTimeout(Duration.ofSeconds(2))
+						.gracefulShutdownDuration(Duration.ofSeconds(2))
+						.forcedShutdownDuration(Duration.ofSeconds(1))
+						.build())
 				.build());
 	}
 

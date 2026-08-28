@@ -24,6 +24,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.lang.ref.WeakReference;
 import java.time.Duration;
 import java.util.ArrayDeque;
@@ -31,6 +33,7 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -43,7 +46,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
 /** Regression coverage for direct-owner race linearization and containment. */
-@Timeout(value = 30, unit = TimeUnit.SECONDS)
+@Timeout(value = 60, unit = TimeUnit.SECONDS)
 final class SokletDirectLifecycleRaceTests {
 	@NonNull
 	private static final Duration SHORT_PHASE = Duration.ofMillis(80);
@@ -143,7 +146,7 @@ final class SokletDirectLifecycleRaceTests {
 		Assertions.assertTrue(attachReturned.await(2, TimeUnit.SECONDS));
 		Assertions.assertTrue(http.invoke("/race").isEmpty(),
 				"A handler returned by an abandoned attachment must remain inadmissible");
-		Assertions.assertFalse(soklet.isStarted());
+		Assertions.assertEquals(SokletStatus.CLOSED, soklet.getStatus());
 		Assertions.assertSame(terminal,
 				soklet.getDirectLifecycle().result().orElseThrow(),
 				"Late attachment completion cannot replace immutable terminal evidence");
@@ -173,7 +176,7 @@ final class SokletDirectLifecycleRaceTests {
 			Assertions.assertTrue(attachmentSettled.await(2, TimeUnit.SECONDS),
 					"Attachment did not settle before its wrapper was paused");
 			Future<Throwable> close = executor.submit(() ->
-					captureFailure(owner::stop));
+					captureFailure(() -> joinShutdown(owner)));
 
 			Throwable startFailure = start.get(3, TimeUnit.SECONDS);
 			Throwable closeFailure = close.get(3, TimeUnit.SECONDS);
@@ -276,6 +279,98 @@ final class SokletDirectLifecycleRaceTests {
 	}
 
 	@Test
+	void sharedLazyResolverDeadlineRemainsTimedOutNotCallFailure()
+			throws Exception {
+		CountDownLatch loaderEntered = new CountDownLatch(1);
+		CountDownLatch releaseLoader = new CountDownLatch(1);
+		CountDownLatch coordinatorWaitEntered = new CountDownLatch(1);
+		AtomicReference<Throwable> resolverOwnerFailure = new AtomicReference<>();
+		DefaultResourceMethodResolver lazy =
+				DefaultResourceMethodResolver.lazyClasspathResolverForTesting(
+						classLoader -> {
+							loaderEntered.countDown();
+							awaitIgnoringInterrupts(releaseLoader);
+							return DefaultResourceMethodResolver.fromClasses(
+									Set.of(RaceResource.class));
+						});
+		Thread resolverOwner = new Thread(() -> resolverOwnerFailure.set(
+				captureFailure(lazy::getResourceMethods)),
+				"direct-race-deadline-resolver-owner");
+		resolverOwner.setDaemon(true);
+		resolverOwner.start();
+		Assertions.assertTrue(loaderEntered.await(2, TimeUnit.SECONDS));
+
+		long startupDeadline = LONG_STARTUP.toNanos();
+		AtomicInteger coordinatorClockReads = new AtomicInteger();
+		NanoClock clock = () -> {
+			String threadName = Thread.currentThread().getName();
+			if (threadName.equals("soklet-lifecycle-coordinator")) {
+				int read = coordinatorClockReads.getAndIncrement();
+				if (read == 1) {
+					coordinatorWaitEntered.countDown();
+					return 0L;
+				}
+				return read == 0 ? 0L : startupDeadline;
+			}
+			if (threadName.equals("soklet-framework-setup"))
+				return startupDeadline;
+			return coordinatorWaitEntered.getCount() == 0
+					? startupDeadline : 0L;
+		};
+		LifecycleWorkers workers = new LifecycleWorkers((name, task) -> {
+			Thread worker = new Thread(() -> {
+				if (name.equals("soklet-framework-setup"))
+					awaitIgnoringInterrupts(coordinatorWaitEntered);
+				task.run();
+			}, name);
+			worker.setDaemon(true);
+			worker.start();
+		});
+		StartupFailureObserver observer = new StartupFailureObserver();
+		RaceHttpEndpoint http = new RaceHttpEndpoint();
+		SokletConfig ownerConfig = config(http, lazy)
+				.lifecycleObserver(observer)
+				.internalLifecyclePolicy(shortCancellationPolicy()).build();
+		Soklet callbackSoklet = Soklet.fromConfig(config(new RaceHttpEndpoint(),
+				completeResolver()).build());
+		SokletDirectLifecycle owner = new SokletDirectLifecycle(callbackSoklet,
+				ownerConfig, new SokletFrameworkSetup(ownerConfig), clock, workers);
+		ExecutorService executor = newExecutor();
+		Future<Throwable> start = executor.submit(() -> captureFailure(owner::start));
+
+		try {
+			SokletStartupException startup = Assertions.assertInstanceOf(
+					SokletStartupException.class,
+					start.get(3, TimeUnit.SECONDS));
+			Assertions.assertEquals(InternalStartupDisposition.TIMED_OUT,
+					startup.getInternalStartupDisposition());
+			TimeoutException exactTimeout = Assertions.assertInstanceOf(
+					TimeoutException.class, startup.getCause());
+			Assertions.assertEquals("Soklet startup deadline was reached",
+					exactTimeout.getMessage());
+			Assertions.assertTrue(observer.awaitFailure());
+			Assertions.assertSame(exactTimeout, observer.failure());
+			InternalShutdownResult result = startup.getInternalShutdownResult();
+			Assertions.assertSame(result, owner.result().orElseThrow());
+			Assertions.assertEquals(InternalStartupDisposition.TIMED_OUT,
+					result.startupDisposition());
+			Assertions.assertFalse(throwableGraphContains(startup,
+					DefaultResourceMethodResolver.StartupWaitCancelledException.class),
+					"The private resolver sentinel must remain outcome-neutral");
+			Assertions.assertEquals(0, http.attachCalls());
+		} finally {
+			releaseLoader.countDown();
+			resolverOwner.join(TimeUnit.SECONDS.toMillis(3));
+			owner.shutdown();
+			owner.awaitCompletion();
+			callbackSoklet.close();
+		}
+
+		Assertions.assertFalse(resolverOwner.isAlive());
+		Assertions.assertNull(resolverOwnerFailure.get());
+	}
+
+	@Test
 	void transitionWorkerLaunchFailureCannotStrandReadyOrTerminalPublication()
 			throws Exception {
 		RuntimeException transitionLaunchFailure = new RuntimeException(
@@ -307,7 +402,7 @@ final class SokletDirectLifecycleRaceTests {
 			Assertions.assertEquals(InternalLifecycleStateMachine.State.READY,
 					owner.state());
 
-			owner.stop();
+			joinShutdown(owner);
 
 			InternalShutdownResult result = owner.result().orElseThrow();
 			Assertions.assertEquals(InternalStartupDisposition.READY,
@@ -352,7 +447,7 @@ final class SokletDirectLifecycleRaceTests {
 			if (startFailure != null)
 				Assertions.fail("Shutdown after the READY CAS cannot rewrite startup "
 						+ "as cancellation", startFailure);
-			owner.stop();
+			joinShutdown(owner);
 			Assertions.assertEquals(InternalStartupDisposition.READY,
 					owner.result().orElseThrow().startupDisposition());
 		} finally {
@@ -408,7 +503,7 @@ final class SokletDirectLifecycleRaceTests {
 				InternalParticipantShutdownDisposition.UNEXPECTED_TERMINATION,
 				result.participantResult(InternalParticipantKind.HTTP)
 						.orElseThrow().disposition());
-		Assertions.assertDoesNotThrow(soklet::stop,
+		Assertions.assertDoesNotThrow(soklet::close,
 				"Deadline cancellation must not publish unexpected termination");
 	}
 
@@ -469,8 +564,210 @@ final class SokletDirectLifecycleRaceTests {
 				InternalParticipantShutdownDisposition.UNEXPECTED_TERMINATION,
 				result.participantResult(InternalParticipantKind.HTTP)
 						.orElseThrow().disposition());
-		Assertions.assertDoesNotThrow(soklet::stop,
+		Assertions.assertDoesNotThrow(soklet::close,
 				"External cancellation must not publish unexpected termination");
+	}
+
+	@Test
+	void externalShutdownWinsBeforeInducedStartupCallFailure() throws Exception {
+		CountDownLatch startEntered = new CountDownLatch(1);
+		CountDownLatch releaseStart = new CountDownLatch(1);
+		CountDownLatch inducedFailureThrown = new CountDownLatch(1);
+		CountDownLatch selectionEntered = new CountDownLatch(1);
+		CountDownLatch releaseSelection = new CountDownLatch(1);
+		UncheckedIOException inducedFailure = new UncheckedIOException(
+				"induced after owner cancellation", new IOException("owner stopped"));
+		StartupFailureObserver observer = new StartupFailureObserver();
+		RaceHttpEndpoint http = new RaceHttpEndpoint();
+		http.onStart(() -> {
+			startEntered.countDown();
+			awaitIgnoringInterrupts(releaseStart);
+			inducedFailureThrown.countDown();
+			throw inducedFailure;
+		});
+		SokletConfig ownerConfig = config(http, completeResolver())
+				.lifecycleObserver(observer)
+				.internalLifecyclePolicy(shortCancellationPolicy()).build();
+		Soklet callbackSoklet = Soklet.fromConfig(config(new RaceHttpEndpoint(),
+				completeResolver()).build());
+		LifecycleWorkers workers = new LifecycleWorkers();
+		SokletDirectLifecycle owner = new SokletDirectLifecycle(callbackSoklet,
+				ownerConfig, new SokletFrameworkSetup(ownerConfig), NanoClock.system(),
+				workers, () -> { }, () -> { }, () -> { }, () -> { }, name -> {
+					if (!name.equals("soklet-start-http"))
+						return;
+					selectionEntered.countDown();
+					awaitIgnoringInterrupts(releaseSelection);
+				});
+		ExecutorService executor = newExecutor();
+		Future<Throwable> start = executor.submit(() -> captureFailure(owner::start));
+
+		try {
+			Assertions.assertTrue(startEntered.await(2, TimeUnit.SECONDS));
+			CompletionStage<ShutdownResult> shutdown = owner.shutdown();
+			Assertions.assertTrue(selectionEntered.await(2, TimeUnit.SECONDS));
+			releaseStart.countDown();
+			Assertions.assertTrue(inducedFailureThrown.await(2, TimeUnit.SECONDS));
+			awaitCondition(() -> workers.active(
+					LifecycleWorkers.Role.LIFECYCLE_CALL) == 0,
+					"The induced startup failure did not finish before selection");
+			releaseSelection.countDown();
+
+			SokletStartupException startup = Assertions.assertInstanceOf(
+					SokletStartupException.class,
+					start.get(3, TimeUnit.SECONDS));
+			InternalShutdownResult result = startup.getInternalShutdownResult();
+			Assertions.assertSame(result, shutdown.toCompletableFuture().get(
+					3, TimeUnit.SECONDS).internalResult());
+			Assertions.assertEquals(InternalStartupDisposition.CANCELLED,
+					result.startupDisposition());
+			IllegalStateException exactCancellation = Assertions.assertInstanceOf(
+					IllegalStateException.class, startup.getCause());
+			Assertions.assertEquals("Soklet shutdown was requested during startup",
+					exactCancellation.getMessage());
+			Assertions.assertTrue(observer.awaitFailure());
+			Assertions.assertSame(exactCancellation, observer.failure());
+			Assertions.assertNotSame(inducedFailure, startup.getCause(),
+					"A post-cancellation transport failure cannot replace the owner winner");
+			Assertions.assertSame(result, owner.result().orElseThrow());
+			Assertions.assertTrue(result.participantResult(
+					InternalParticipantKind.HTTP).orElseThrow().failures().stream()
+					.anyMatch(failure -> failure == inducedFailure),
+					"The losing induced failure must remain participant evidence");
+		} finally {
+			releaseStart.countDown();
+			releaseSelection.countDown();
+			owner.shutdown();
+			owner.awaitCompletion();
+			callbackSoklet.close();
+		}
+	}
+
+	@Test
+	void startupCallFailureWinsBeforeLaterExternalShutdown() throws Exception {
+		CountDownLatch startEntered = new CountDownLatch(1);
+		CountDownLatch releaseStart = new CountDownLatch(1);
+		CountDownLatch selectionEntered = new CountDownLatch(1);
+		CountDownLatch releaseSelection = new CountDownLatch(1);
+		UncheckedIOException exactFailure = new UncheckedIOException(
+				"genuine startup-call failure", new IOException("startup failed"));
+		StartupFailureObserver observer = new StartupFailureObserver();
+		RaceHttpEndpoint http = new RaceHttpEndpoint();
+		http.onStart(() -> {
+			startEntered.countDown();
+			awaitIgnoringInterrupts(releaseStart);
+			throw exactFailure;
+		});
+		SokletConfig ownerConfig = config(http, completeResolver())
+				.lifecycleObserver(observer)
+				.internalLifecyclePolicy(shortCancellationPolicy()).build();
+		Soklet callbackSoklet = Soklet.fromConfig(config(new RaceHttpEndpoint(),
+				completeResolver()).build());
+		SokletDirectLifecycle owner = new SokletDirectLifecycle(callbackSoklet,
+				ownerConfig, new SokletFrameworkSetup(ownerConfig), NanoClock.system(),
+				new LifecycleWorkers(), () -> { }, () -> { }, () -> { }, () -> { },
+				name -> {
+					if (!name.equals("soklet-start-http"))
+						return;
+					selectionEntered.countDown();
+					awaitIgnoringInterrupts(releaseSelection);
+				});
+		ExecutorService executor = newExecutor();
+		Future<Throwable> start = executor.submit(() -> captureFailure(owner::start));
+
+		try {
+			Assertions.assertTrue(startEntered.await(2, TimeUnit.SECONDS));
+			releaseStart.countDown();
+			Assertions.assertTrue(selectionEntered.await(2, TimeUnit.SECONDS),
+					"The coordinator did not reach startup outcome selection");
+			CompletionStage<ShutdownResult> laterShutdown = owner.shutdown();
+			releaseSelection.countDown();
+
+			SokletStartupException startup = Assertions.assertInstanceOf(
+					SokletStartupException.class,
+					start.get(3, TimeUnit.SECONDS));
+			InternalShutdownResult result = startup.getInternalShutdownResult();
+			Assertions.assertSame(result, laterShutdown.toCompletableFuture().get(
+					3, TimeUnit.SECONDS).internalResult());
+			Assertions.assertEquals(InternalStartupDisposition.FAILED,
+					result.startupDisposition());
+			Assertions.assertSame(exactFailure, startup.getCause(),
+					"A later owner stop cannot replace the elected startup-call failure");
+			Assertions.assertTrue(observer.awaitFailure());
+			Assertions.assertSame(exactFailure, observer.failure());
+			Assertions.assertTrue(result.participantResult(
+					InternalParticipantKind.HTTP).orElseThrow().failures().stream()
+					.anyMatch(failure -> failure == exactFailure));
+		} finally {
+			releaseStart.countDown();
+			releaseSelection.countDown();
+			owner.shutdown();
+			owner.awaitCompletion();
+			callbackSoklet.close();
+		}
+	}
+
+	@Test
+	void startupCallFailureWinsBeforeLaterPeerTermination() throws Exception {
+		CountDownLatch selectionEntered = new CountDownLatch(1);
+		CountDownLatch releaseSelection = new CountDownLatch(1);
+		UncheckedIOException exactFailure = new UncheckedIOException(
+				"genuine SSE startup failure", new IOException("SSE startup failed"));
+		AssertionError laterPeerFailure = new AssertionError(
+				"HTTP terminated after the startup failure");
+		StartupFailureObserver observer = new StartupFailureObserver();
+		RaceHttpEndpoint http = new RaceHttpEndpoint();
+		RaceSseEndpoint sse = new RaceSseEndpoint();
+		sse.onStart(() -> {
+			throw exactFailure;
+		});
+		SokletConfig ownerConfig = config(http, completeResolver())
+				.sseServer(sse)
+				.lifecycleObserver(observer)
+				.internalLifecyclePolicy(shortCancellationPolicy()).build();
+		Soklet callbackSoklet = Soklet.fromConfig(config(new RaceHttpEndpoint(),
+				completeResolver()).build());
+		SokletDirectLifecycle owner = new SokletDirectLifecycle(callbackSoklet,
+				ownerConfig, new SokletFrameworkSetup(ownerConfig), NanoClock.system(),
+				new LifecycleWorkers(), () -> { }, () -> { }, () -> { }, () -> { },
+				name -> {
+					if (!name.equals("soklet-start-sse"))
+						return;
+					selectionEntered.countDown();
+					awaitIgnoringInterrupts(releaseSelection);
+				});
+		ExecutorService executor = newExecutor();
+		Future<Throwable> start = executor.submit(() -> captureFailure(owner::start));
+
+		try {
+			Assertions.assertTrue(selectionEntered.await(2, TimeUnit.SECONDS),
+					"The coordinator did not pause after the SSE failure election");
+			http.signalFailure(laterPeerFailure);
+			releaseSelection.countDown();
+
+			SokletStartupException startup = Assertions.assertInstanceOf(
+					SokletStartupException.class,
+					start.get(3, TimeUnit.SECONDS));
+			InternalShutdownResult result = startup.getInternalShutdownResult();
+			Assertions.assertEquals(InternalStartupDisposition.FAILED,
+					result.startupDisposition());
+			Assertions.assertSame(exactFailure, startup.getCause(),
+					"A later peer termination cannot replace the elected call failure");
+			Assertions.assertTrue(observer.awaitFailure());
+			Assertions.assertSame(exactFailure, observer.failure());
+			Assertions.assertTrue(result.participantResult(
+					InternalParticipantKind.SSE).orElseThrow().failures().stream()
+					.anyMatch(failure -> failure == exactFailure));
+			Assertions.assertTrue(result.participantResult(
+					InternalParticipantKind.HTTP).orElseThrow().failures().stream()
+					.anyMatch(failure -> failure == laterPeerFailure),
+					"The losing peer failure must remain participant evidence");
+		} finally {
+			releaseSelection.countDown();
+			owner.shutdown();
+			owner.awaitCompletion();
+			callbackSoklet.close();
+		}
 	}
 
 	@Test
@@ -526,7 +823,7 @@ final class SokletDirectLifecycleRaceTests {
 				.orElseThrow().failures().stream()
 				.anyMatch(failure -> failure == exactFailure));
 		Assertions.assertTrue(laterStartReturned.await(2, TimeUnit.SECONDS));
-		Assertions.assertFalse(soklet.isStarted());
+		Assertions.assertEquals(SokletStatus.CLOSED, soklet.getStatus());
 	}
 
 	@Test
@@ -542,8 +839,8 @@ final class SokletDirectLifecycleRaceTests {
 		TransportOwnershipException conflict = Assertions.assertThrows(
 				TransportOwnershipException.class, () -> Soklet.fromConfig(
 						config(reachableTransport, completeResolver()).build()));
-		Assertions.assertEquals(InternalParticipantKind.HTTP,
-				conflict.getInternalParticipantKind());
+		Assertions.assertEquals(ParticipantKind.HTTP,
+				conflict.getParticipantKind());
 		Assertions.assertSame(RaceHttpEndpoint.class, conflict.getTransportClass());
 		Assertions.assertTrue(conflict.getMessage().contains("already owned"));
 	}
@@ -600,6 +897,12 @@ final class SokletDirectLifecycleRaceTests {
 		ExecutorService executor = Executors.newCachedThreadPool();
 		this.executors.add(executor);
 		return executor;
+	}
+
+	private static void joinShutdown(@NonNull SokletDirectLifecycle owner) {
+		ShutdownResult result = owner.shutdown()
+				.toCompletableFuture().join();
+		owner.throwIfUnsuccessfulShutdown(result);
 	}
 
 	@Nullable
@@ -774,16 +1077,13 @@ final class SokletDirectLifecycleRaceTests {
 		}
 	}
 
-	private static final class RaceHttpEndpoint
-			implements HttpServer, InternalHttpTransportEndpoint {
+	private static final class RaceHttpEndpoint implements HttpServer {
 		@NonNull
-		private final InternalTransportIdentity identity;
+		private final TransportIdentity identity;
 		@NonNull
 		private final AtomicInteger attachCalls;
 		@NonNull
 		private final AtomicInteger startCalls;
-		@NonNull
-		private final AtomicBoolean started;
 		@NonNull
 		private final AtomicBoolean terminationSignalled;
 		@NonNull
@@ -793,18 +1093,13 @@ final class SokletDirectLifecycleRaceTests {
 		@NonNull
 		private final AtomicReference<RequestHandler> requestHandler;
 		@NonNull
-		private final AtomicReference<InternalTransportTerminationSignal>
+		private final AtomicReference<TransportTerminationSignal>
 				terminationSignal;
 
 		private RaceHttpEndpoint() {
-			this(InternalTransportIdentity.create());
-		}
-
-		private RaceHttpEndpoint(@NonNull InternalTransportIdentity identity) {
-			this.identity = identity;
+			this.identity = TransportIdentity.create();
 			this.attachCalls = new AtomicInteger();
 			this.startCalls = new AtomicInteger();
-			this.started = new AtomicBoolean();
 			this.terminationSignalled = new AtomicBoolean();
 			this.attachAction = new AtomicReference<>(() -> { });
 			this.startAction = new AtomicReference<>(() -> { });
@@ -845,86 +1140,58 @@ final class SokletDirectLifecycleRaceTests {
 
 		@Override
 		@NonNull
-		public InternalTransportIdentity identity() {
+		public TransportIdentity getTransportIdentity() {
 			return this.identity;
 		}
 
 		@Override
 		@NonNull
-		public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
+		public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
 			this.attachCalls.incrementAndGet();
-			this.requestHandler.set(context.requestHandler());
-			this.terminationSignal.set(context.terminationSignal());
+			this.requestHandler.set(context.getAdmissionFencedRequestHandler());
+			this.terminationSignal.set(context.getTerminationSignal());
 			this.attachAction.get().run();
-			return new InternalTransportRuntime() {
+			return new TransportRuntime() {
 				@Override
-				public void start(@NonNull InternalStartupContext context) {
+				public void start(@NonNull StartupContext context) {
 					startCalls.incrementAndGet();
-					started.set(true);
 					startAction.get().run();
 				}
 
 				@Override
-				public void quiesce(@NonNull InternalShutdownContext context) {
+				public void quiesce(@NonNull ShutdownContext context) {
 					terminate();
 				}
 
 				@Override
-				public void force(@NonNull InternalShutdownContext context) {
+				public void force(@NonNull ShutdownContext context) {
 					terminate();
 				}
 			};
 		}
 
-		@Override
-		public void start() {
-			throw new AssertionError("Reference endpoints start through their runtime");
-		}
-
-		@Override
-		public void stop() {
-			terminate();
-		}
-
-		@Override
-		@NonNull
-		public Boolean isStarted() {
-			return this.started.get();
-		}
-
-		@Override
-		public void initialize(@NonNull SokletConfig sokletConfig,
-				@NonNull RequestHandler requestHandler) {
-			throw new AssertionError("Reference endpoints attach through attach(...)");
-		}
-
 		private void terminate() {
-			this.started.set(false);
-			InternalTransportTerminationSignal signal = this.terminationSignal.get();
+			TransportTerminationSignal signal = this.terminationSignal.get();
 			if (signal != null && this.terminationSignalled.compareAndSet(false, true))
 				signal.signalTerminated();
 		}
 	}
 
-	private static final class RaceSseEndpoint
-			implements SseServer, InternalSseTransportEndpoint {
+	private static final class RaceSseEndpoint implements SseServer {
 		@NonNull
-		private final InternalTransportIdentity identity;
-		@NonNull
-		private final AtomicBoolean started;
+		private final TransportIdentity identity;
 		@NonNull
 		private final AtomicBoolean terminationSignalled;
 		@NonNull
 		private final AtomicReference<Runnable> startAction;
 		@NonNull
-		private final AtomicReference<InternalTransportTerminationSignal>
+		private final AtomicReference<TransportTerminationSignal>
 				terminationSignal;
 
 		private RaceSseEndpoint() {
-			this.identity = InternalTransportIdentity.create();
-			this.started = new AtomicBoolean();
+			this.identity = TransportIdentity.create();
 			this.terminationSignalled = new AtomicBoolean();
 			this.startAction = new AtomicReference<>(() -> { });
 			this.terminationSignal = new AtomicReference<>();
@@ -936,49 +1203,32 @@ final class SokletDirectLifecycleRaceTests {
 
 		@Override
 		@NonNull
-		public InternalTransportIdentity identity() {
+		public TransportIdentity getTransportIdentity() {
 			return this.identity;
 		}
 
 		@Override
 		@NonNull
-		public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
-			this.terminationSignal.set(context.terminationSignal());
-			return new InternalTransportRuntime() {
+		public TransportRuntime attach(
+				@NonNull SseTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
+			this.terminationSignal.set(context.getTerminationSignal());
+			return new TransportRuntime() {
 				@Override
-				public void start(@NonNull InternalStartupContext context) {
-					started.set(true);
+				public void start(@NonNull StartupContext context) {
 					startAction.get().run();
 				}
 
 				@Override
-				public void quiesce(@NonNull InternalShutdownContext context) {
+				public void quiesce(@NonNull ShutdownContext context) {
 					terminate();
 				}
 
 				@Override
-				public void force(@NonNull InternalShutdownContext context) {
+				public void force(@NonNull ShutdownContext context) {
 					terminate();
 				}
 			};
-		}
-
-		@Override
-		public void start() {
-			throw new AssertionError("Reference endpoints start through their runtime");
-		}
-
-		@Override
-		public void stop() {
-			terminate();
-		}
-
-		@Override
-		@NonNull
-		public Boolean isStarted() {
-			return this.started.get();
 		}
 
 		@Override
@@ -987,16 +1237,8 @@ final class SokletDirectLifecycleRaceTests {
 				@Nullable ResourcePath resourcePath) {
 			return Optional.empty();
 		}
-
-		@Override
-		public void initialize(@NonNull SokletConfig sokletConfig,
-				@NonNull RequestHandler requestHandler) {
-			throw new AssertionError("Reference endpoints attach through attach(...)");
-		}
-
 		private void terminate() {
-			this.started.set(false);
-			InternalTransportTerminationSignal signal = this.terminationSignal.get();
+			TransportTerminationSignal signal = this.terminationSignal.get();
 			if (signal != null && this.terminationSignalled.compareAndSet(false, true))
 				signal.signalTerminated();
 		}

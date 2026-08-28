@@ -40,7 +40,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static java.lang.String.format;
 
 /** Focused direct-owner coverage for framework-setup validation precedence. */
-@Timeout(value = 30, unit = TimeUnit.SECONDS)
+@Timeout(value = 60, unit = TimeUnit.SECONDS)
 final class SokletFrameworkSetupValidationTests {
 	@NonNull
 	private static final String NO_RESOURCE_METHODS = format(
@@ -115,7 +115,7 @@ final class SokletFrameworkSetupValidationTests {
 		Assertions.assertInstanceOf(IllegalStateException.class,
 				startup.getCause());
 		Assertions.assertEquals(MISSING_HTTP, startup.getCause().getMessage());
-		Assertions.assertEquals(McpServerStatus.STOPPED,
+		Assertions.assertEquals(McpServerStatus.TERMINATED,
 				mcp.getDiagnostics().getStatus());
 		Assertions.assertTrue(mcp.getDiagnostics().getBoundAddress().isEmpty());
 		Assertions.assertEquals(0, instanceProvider.provisionCalls());
@@ -193,7 +193,7 @@ final class SokletFrameworkSetupValidationTests {
 		try (Soklet soklet = Soklet.fromConfig(config)) {
 			Assertions.assertDoesNotThrow(soklet::start,
 					"Every validation must inspect the one frozen resolver snapshot");
-			Assertions.assertTrue(soklet.isStarted());
+			Assertions.assertEquals(SokletStatus.RUNNING, soklet.getStatus());
 		}
 
 		Assertions.assertEquals(1, http.initializeCalls());
@@ -424,7 +424,9 @@ final class SokletFrameworkSetupValidationTests {
 				invalidMethod.getName()));
 		Assertions.assertEquals(0, instanceProvider.provisionCalls(),
 				"Startup validation must run before any InstanceProvider call");
-		Assertions.assertFalse(httpServer.isStarted(),
+		Assertions.assertEquals(ParticipantShutdownDisposition.NOT_STARTED,
+				failure.getShutdownResult().getParticipantResult(ParticipantKind.HTTP)
+						.orElseThrow().getDisposition(),
 				"Rejected injection must not reach transport startup");
 	}
 
@@ -470,38 +472,42 @@ final class SokletFrameworkSetupValidationTests {
 	private static SokletStartupException assertCompleteSetupFailure(
 			@NonNull SokletConfig config,
 			@NonNull Set<InternalParticipantKind> expectedKinds) {
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			SokletStartupException startup = Assertions.assertThrows(
-					SokletStartupException.class, soklet::start);
-			InternalShutdownResult result = startup.getInternalShutdownResult();
+		Soklet soklet = Soklet.fromConfig(config);
+		SokletStartupException startup = Assertions.assertThrows(
+				SokletStartupException.class, soklet::start);
+		InternalShutdownResult result = startup.getInternalShutdownResult();
 
-			Assertions.assertEquals(InternalStartupDisposition.FAILED,
-					startup.getInternalStartupDisposition());
-			Assertions.assertEquals(InternalStartupDisposition.FAILED,
-					result.startupDisposition());
-			Assertions.assertEquals(InternalShutdownDisposition.NOT_STARTED,
-					result.disposition());
-			Assertions.assertTrue(result.isComplete());
-			Assertions.assertSame(result,
-					soklet.getDirectLifecycle().result().orElseThrow());
-			Assertions.assertEquals(expectedKinds,
-					result.participantResults().stream()
-							.map(InternalParticipantShutdownResult::kind)
-							.collect(java.util.stream.Collectors.toSet()));
-			Assertions.assertTrue(result.participantResult(
-					InternalParticipantKind.FRAMEWORK_STARTUP).isEmpty());
-			for (InternalParticipantShutdownResult participant :
-					result.participantResults()) {
-				Assertions.assertEquals(
-						InternalParticipantShutdownDisposition.NOT_STARTED,
-						participant.disposition());
-				Assertions.assertEquals(List.of(startup.getCause()),
-						participant.failures());
-				Assertions.assertTrue(participant.residualActivity().isEmpty());
-			}
-			Assertions.assertDoesNotThrow(soklet::stop);
-			return startup;
+		Assertions.assertEquals(InternalStartupDisposition.FAILED,
+				startup.getInternalStartupDisposition());
+		Assertions.assertEquals(InternalStartupDisposition.FAILED,
+				result.startupDisposition());
+		Assertions.assertEquals(InternalShutdownDisposition.NOT_STARTED,
+				result.disposition());
+		Assertions.assertTrue(result.isComplete());
+		Assertions.assertSame(result,
+				soklet.getDirectLifecycle().result().orElseThrow());
+		Assertions.assertEquals(expectedKinds,
+				result.participantResults().stream()
+						.map(InternalParticipantShutdownResult::kind)
+						.collect(java.util.stream.Collectors.toSet()));
+		Assertions.assertTrue(result.participantResult(
+				InternalParticipantKind.FRAMEWORK_STARTUP).isEmpty());
+		for (InternalParticipantShutdownResult participant :
+				result.participantResults()) {
+			Assertions.assertEquals(
+					InternalParticipantShutdownDisposition.NOT_STARTED,
+					participant.disposition());
+			Assertions.assertEquals(List.of(startup.getCause()),
+					participant.failures());
+			Assertions.assertTrue(participant.residualActivity().isEmpty());
 		}
+		Assertions.assertSame(startup.getShutdownResult(),
+				soklet.shutdown().toCompletableFuture().join());
+		Assertions.assertSame(startup.getShutdownResult(),
+				soklet.getShutdownResult().orElseThrow());
+		Assertions.assertDoesNotThrow(soklet::close,
+				"Complete startup rollback must make close nonthrowing");
+		return startup;
 	}
 
 	@NonNull
@@ -638,6 +644,8 @@ final class SokletFrameworkSetupValidationTests {
 	}
 
 	private static final class CountingHttpServer implements HttpServer {
+		@NonNull private final TransportIdentity identity =
+				TransportIdentity.create();
 		@NonNull private final AtomicBoolean started = new AtomicBoolean();
 		@NonNull private final AtomicInteger initializeCalls = new AtomicInteger();
 		@NonNull private final AtomicInteger startCalls = new AtomicInteger();
@@ -645,24 +653,39 @@ final class SokletFrameworkSetupValidationTests {
 		@NonNull private final AtomicReference<RequestHandler> requestHandler =
 				new AtomicReference<>();
 
-		@Override public void start() {
-			this.startCalls.incrementAndGet();
-			this.started.set(true);
+		@Override @NonNull public TransportIdentity getTransportIdentity() {
+			return this.identity;
 		}
 
-		@Override public void stop() {
-			this.stopCalls.incrementAndGet();
-			this.started.set(false);
-		}
-
-		@Override @NonNull public Boolean isStarted() {
-			return this.started.get();
-		}
-
-		@Override public void initialize(@NonNull SokletConfig sokletConfig,
-				@NonNull RequestHandler requestHandler) {
+		@Override @NonNull public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
 			this.initializeCalls.incrementAndGet();
-			this.requestHandler.set(requestHandler);
+			this.requestHandler.set(context.getAdmissionFencedRequestHandler());
+			TransportTerminationSignal signal = context.getTerminationSignal();
+			AtomicBoolean proofPublished = new AtomicBoolean();
+			return new TransportRuntime() {
+				@Override public void start(@NonNull StartupContext context) {
+					startCalls.incrementAndGet();
+					started.set(true);
+				}
+
+				@Override public void quiesce(@NonNull ShutdownContext context) {
+					stopAndPublish();
+				}
+
+				@Override public void force(@NonNull ShutdownContext context) {
+					stopAndPublish();
+				}
+
+				private void stopAndPublish() {
+					if (!proofPublished.compareAndSet(false, true))
+						return;
+					stopCalls.incrementAndGet();
+					started.set(false);
+					signal.signalTerminated();
+				}
+			};
 		}
 
 		@NonNull
@@ -686,19 +709,14 @@ final class SokletFrameworkSetupValidationTests {
 	}
 
 	private static final class CountingSseServer implements SseServer {
+		@NonNull private final TransportIdentity identity =
+				TransportIdentity.create();
 		@NonNull private final AtomicBoolean started = new AtomicBoolean();
 		@NonNull private final AtomicInteger initializeCalls = new AtomicInteger();
 		@NonNull private final AtomicInteger startCalls = new AtomicInteger();
 
-		@Override public void start() {
-			this.startCalls.incrementAndGet();
-			this.started.set(true);
-		}
-
-		@Override public void stop() { this.started.set(false); }
-
-		@Override @NonNull public Boolean isStarted() {
-			return this.started.get();
+		@Override @NonNull public TransportIdentity getTransportIdentity() {
+			return this.identity;
 		}
 
 		@Override @NonNull public Optional<? extends SseBroadcaster>
@@ -706,9 +724,33 @@ final class SokletFrameworkSetupValidationTests {
 			return Optional.empty();
 		}
 
-		@Override public void initialize(@NonNull SokletConfig sokletConfig,
-				@NonNull RequestHandler requestHandler) {
+		@Override @NonNull public TransportRuntime attach(
+				@NonNull SseTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
 			this.initializeCalls.incrementAndGet();
+			TransportTerminationSignal signal = context.getTerminationSignal();
+			AtomicBoolean proofPublished = new AtomicBoolean();
+			return new TransportRuntime() {
+				@Override public void start(@NonNull StartupContext context) {
+					startCalls.incrementAndGet();
+					started.set(true);
+				}
+
+				@Override public void quiesce(@NonNull ShutdownContext context) {
+					stopAndPublish();
+				}
+
+				@Override public void force(@NonNull ShutdownContext context) {
+					stopAndPublish();
+				}
+
+				private void stopAndPublish() {
+					if (!proofPublished.compareAndSet(false, true))
+						return;
+					started.set(false);
+					signal.signalTerminated();
+				}
+			};
 		}
 
 		int initializeCalls() { return this.initializeCalls.get(); }

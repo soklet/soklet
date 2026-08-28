@@ -42,9 +42,11 @@ final class SokletDirectStartClaimTruthTableTests {
 		try (Soklet soklet = Soklet.fromConfig(
 				config(http, completeResolver()).build())) {
 			soklet.start();
-			soklet.stop();
+			ShutdownResult publicResult = soklet.shutdown()
+					.toCompletableFuture().join();
 			InternalShutdownResult ownerResult = soklet.getDirectLifecycle().result()
 					.orElseThrow();
+			Assertions.assertSame(ownerResult, publicResult.internalResult());
 
 			IllegalStateException rejection = Assertions.assertThrows(
 					IllegalStateException.class, soklet::start);
@@ -291,27 +293,23 @@ final class SokletDirectStartClaimTruthTableTests {
 			Thread.currentThread().interrupt();
 	}
 
-	private static final class TruthHttpEndpoint
-			implements HttpServer, InternalHttpTransportEndpoint {
+	private static final class TruthHttpEndpoint implements HttpServer {
 		@NonNull
-		private final InternalTransportIdentity identity;
+		private final TransportIdentity identity;
 		@NonNull
 		private final AtomicInteger attachCalls;
 		@NonNull
 		private final AtomicInteger startCalls;
 		@NonNull
-		private final AtomicBoolean started;
-		@NonNull
 		private final AtomicBoolean terminationSignalled;
 		@NonNull
-		private final AtomicReference<InternalTransportTerminationSignal>
+		private final AtomicReference<TransportTerminationSignal>
 				terminationSignal;
 
 		private TruthHttpEndpoint() {
-			this.identity = InternalTransportIdentity.create();
+			this.identity = TransportIdentity.create();
 			this.attachCalls = new AtomicInteger();
 			this.startCalls = new AtomicInteger();
-			this.started = new AtomicBoolean();
 			this.terminationSignalled = new AtomicBoolean();
 			this.terminationSignal = new AtomicReference<>();
 		}
@@ -326,61 +324,37 @@ final class SokletDirectStartClaimTruthTableTests {
 
 		@Override
 		@NonNull
-		public InternalTransportIdentity identity() {
+		public TransportIdentity getTransportIdentity() {
 			return this.identity;
 		}
 
 		@Override
 		@NonNull
-		public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
+		public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
 			this.attachCalls.incrementAndGet();
-			this.terminationSignal.set(context.terminationSignal());
-			return new InternalTransportRuntime() {
+			this.terminationSignal.set(context.getTerminationSignal());
+			return new TransportRuntime() {
 				@Override
-				public void start(@NonNull InternalStartupContext context) {
+				public void start(@NonNull StartupContext context) {
 					startCalls.incrementAndGet();
-					started.set(true);
 				}
 
 				@Override
-				public void quiesce(@NonNull InternalShutdownContext context) {
+				public void quiesce(@NonNull ShutdownContext context) {
 					terminate();
 				}
 
 				@Override
-				public void force(@NonNull InternalShutdownContext context) {
+				public void force(@NonNull ShutdownContext context) {
 					terminate();
 				}
 			};
 		}
 
-		@Override
-		public void start() {
-			throw new AssertionError("Reference endpoints start through their runtime");
-		}
-
-		@Override
-		public void stop() {
-			terminate();
-		}
-
-		@Override
-		@NonNull
-		public Boolean isStarted() {
-			return this.started.get();
-		}
-
-		@Override
-		public void initialize(@NonNull SokletConfig sokletConfig,
-				@NonNull RequestHandler requestHandler) {
-			throw new AssertionError("Reference endpoints attach through attach(...)");
-		}
-
 		private void terminate() {
-			this.started.set(false);
-			InternalTransportTerminationSignal signal = this.terminationSignal.get();
+			TransportTerminationSignal signal = this.terminationSignal.get();
 			if (signal != null
 					&& this.terminationSignalled.compareAndSet(false, true))
 				signal.signalTerminated();

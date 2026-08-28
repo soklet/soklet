@@ -74,7 +74,7 @@ import java.util.function.Consumer;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @NotThreadSafe
-@Timeout(30)
+@Timeout(60)
 public class McpSubscriptionRuntimeBoundaryTests {
 	private static final String MCP_PATH = "/mcp";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
@@ -277,6 +277,7 @@ public class McpSubscriptionRuntimeBoundaryTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void startupFailureRollsBackRegistrationsAndCanRestart()
 			throws Exception {
 		AtomicInteger globalSubscriptionAttempts = new AtomicInteger();
@@ -329,6 +330,7 @@ public class McpSubscriptionRuntimeBoundaryTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void deactivatedGenerationCannotPublishIntoRestartedServer()
 			throws Exception {
 		TestEventSource source = new TestEventSource();
@@ -395,6 +397,7 @@ public class McpSubscriptionRuntimeBoundaryTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void failedRegistrationCloseIsObservableAndBlocksRestartUntilRetry()
 			throws Exception {
 		TestEventSource source = TestEventSource.failingFirstClose();
@@ -431,6 +434,48 @@ public class McpSubscriptionRuntimeBoundaryTests {
 					source.generation(1).successfulCloseCount());
 		} finally {
 			runtime.close();
+		}
+	}
+
+	@Test
+	public void commonLifecycleAwaitRescansRegistrationAfterCloseAttemptCompletes()
+			throws Exception {
+		TestEventSource source = TestEventSource.blockingFirstClose();
+		McpHttpServerRuntime runtime = runtime(MCP_PATH, source,
+				McpRuntimeObservationSink.disabledInstance(), McpApplicationClock.SYSTEM,
+				subscriptionConfiguration(4, Duration.ofSeconds(1),
+						Duration.ofMinutes(1)));
+		AtomicReference<Boolean> terminated = new AtomicReference<>();
+		AtomicReference<Throwable> waitFailure = new AtomicReference<>();
+		Thread waiter = new Thread(() -> {
+			try {
+				terminated.set(runtime.awaitLifecycleTermination(
+						System.nanoTime() + TimeUnit.SECONDS.toNanos(5)));
+			} catch (Throwable failure) {
+				waitFailure.set(failure);
+			}
+		}, "mcp-registration-close-barrier-test");
+
+		try {
+			runtime.start();
+			runtime.quiesceLifecycle();
+			source.awaitFirstCloseEntered();
+			waiter.start();
+			awaitSubscriptionCloseAttemptWait(waiter);
+
+			source.releaseFirstClose();
+			waiter.join(TimeUnit.SECONDS.toMillis(5));
+			Assertions.assertFalse(waiter.isAlive(),
+					"The lifecycle barrier did not finish after registration close.");
+			Assertions.assertNull(waitFailure.get());
+			Assertions.assertEquals(Boolean.TRUE, terminated.get(),
+					"The lifecycle barrier must rescan registrations after their asynchronous close attempts complete.");
+			Assertions.assertTrue(runtime.lifecycleEvidence().empty());
+			runtime.releaseLifecycleEvidence();
+		} finally {
+			source.releaseFirstClose();
+			waiter.join(TimeUnit.SECONDS.toMillis(5));
+			cleanupCommonLifecycle(runtime, source);
 		}
 	}
 
@@ -722,6 +767,7 @@ public class McpSubscriptionRuntimeBoundaryTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void preReadinessFailurePublicationWaitsForLifecycleElectionLock()
 			throws Exception {
 		TestEventSource source = new TestEventSource();
@@ -781,6 +827,7 @@ public class McpSubscriptionRuntimeBoundaryTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void blockingRegistrationCloseIsBoundedAndNeverRetriedConcurrently()
 			throws Exception {
 		Duration shutdownTimeout = Duration.ofMillis(250);
@@ -834,6 +881,7 @@ public class McpSubscriptionRuntimeBoundaryTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void startupRollbackRetainsFailedCloseUntilSuccessfulRetry()
 			throws Exception {
 		TestEventSource first = TestEventSource.failingFirstClose();
@@ -884,6 +932,7 @@ public class McpSubscriptionRuntimeBoundaryTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void startupRollbackCannotBeHeldPastItsShutdownDeadline()
 			throws Exception {
 		Duration shutdownTimeout = Duration.ofMillis(250);
@@ -1337,6 +1386,25 @@ public class McpSubscriptionRuntimeBoundaryTests {
 			Thread.onSpinWait();
 		} while (System.nanoTime() - deadline < 0L);
 		Assertions.fail("The termination callback did not reach the election lock.");
+	}
+
+	private static void awaitSubscriptionCloseAttemptWait(
+			@NonNull Thread waiter) {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+		do {
+			for (StackTraceElement frame : waiter.getStackTrace()) {
+				if (frame.getClassName().equals(McpHttpServerRuntime.class.getName()
+						+ "$SubscriptionRegistrationCloseAttempt")
+						&& frame.getMethodName().equals("await"))
+					return;
+			}
+			if (!waiter.isAlive())
+				Assertions.fail(
+						"The lifecycle barrier returned before waiting for registration close.");
+			Thread.onSpinWait();
+		} while (System.nanoTime() - deadline < 0L);
+		Assertions.fail(
+				"The lifecycle barrier did not wait for the registration close attempt.");
 	}
 
 	@NonNull

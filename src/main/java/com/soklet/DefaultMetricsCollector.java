@@ -110,7 +110,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private final AtomicLong mcpActiveHandlerExecutions;
 	private final AtomicLong mcpHandlerQueueDepth;
 	private final LongAdder mcpHandlerCapacityRejections;
-	private final Map<McpShutdownOutcome, LongAdder> mcpShutdownsByOutcome;
+	private final Map<ParticipantShutdownDisposition, LongAdder>
+			mcpShutdownsByOutcome;
 	private final LongAdder mcpConnectionsAccepted;
 	private final LongAdder mcpConnectionsRejected;
 	private final Map<TransportFailureReason, LongAdder>
@@ -191,9 +192,10 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.mcpActiveHandlerExecutions = new AtomicLong();
 		this.mcpHandlerQueueDepth = new AtomicLong();
 		this.mcpHandlerCapacityRejections = new LongAdder();
-		EnumMap<McpShutdownOutcome, LongAdder> mcpShutdowns =
-				new EnumMap<>(McpShutdownOutcome.class);
-		for (McpShutdownOutcome outcome : McpShutdownOutcome.values())
+		EnumMap<ParticipantShutdownDisposition, LongAdder> mcpShutdowns =
+				new EnumMap<>(ParticipantShutdownDisposition.class);
+		for (ParticipantShutdownDisposition outcome
+				: ParticipantShutdownDisposition.values())
 			mcpShutdowns.put(outcome, new LongAdder());
 		this.mcpShutdownsByOutcome = Collections.unmodifiableMap(mcpShutdowns);
 		this.mcpConnectionsAccepted = new LongAdder();
@@ -1037,7 +1039,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		}
 		appendCounter(sb, "soklet_mcp_shutdowns_total", "Total MCP server shutdowns by outcome",
 				snapshot.getMcpMetrics().getShutdowns(),
-				DefaultMetricsCollector::labelsForMcpShutdownOutcome, options);
+				DefaultMetricsCollector::labelsForMcpShutdownDisposition, options);
 
 		appendHistogram(sb, "soklet_http_request_duration_nanos", "HTTP request duration in nanoseconds",
 				snapshot.getHttpRequestDurations(), DefaultMetricsCollector::labelsForHttpStatusKey, options);
@@ -1265,8 +1267,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	@NonNull
 	McpMetricsSnapshot snapshotMcpMetrics() {
-		EnumMap<McpShutdownOutcome, Long> shutdowns =
-				new EnumMap<>(McpShutdownOutcome.class);
+		EnumMap<ParticipantShutdownDisposition, Long> shutdowns =
+				new EnumMap<>(ParticipantShutdownDisposition.class);
 		this.mcpShutdownsByOutcome.forEach((outcome, counter) -> {
 			long count = counter.sum();
 			if (count != 0L)
@@ -1825,13 +1827,17 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@NonNull
-	private static LabelSet labelsForMcpShutdownOutcome(
-			@NonNull McpShutdownOutcome outcome) {
+	private static LabelSet labelsForMcpShutdownDisposition(
+			@NonNull ParticipantShutdownDisposition outcome) {
 		requireNonNull(outcome);
 
 		String outcomeLabel = switch (outcome) {
-			case CLEAN -> "clean";
-			case RESIDUAL_HANDLERS -> "residual_handlers";
+			case NOT_STARTED -> "not_started";
+			case GRACEFUL_TERMINATION -> "graceful_termination";
+			case FORCED_TERMINATION -> "forced_termination";
+			case UNEXPECTED_TERMINATION -> "unexpected_termination";
+			case RESIDUAL_ACTIVITY -> "residual_activity";
+			case TERMINATION_UNKNOWN -> "termination_unknown";
 		};
 		Map<String, String> labels = new LinkedHashMap<>(1);
 		labels.put("outcome", outcomeLabel);

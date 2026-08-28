@@ -39,8 +39,21 @@ import {
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(scriptDirectory, '..');
 const trackedManifestPath = resolve(projectRoot, 'release/release-validation-manifest.json');
+const ciWorkflowPath = resolve(projectRoot, '.github/workflows/ci.yml');
 const releaseWorkflowPath = resolve(projectRoot, '.github/workflows/release-validation.yml');
 const releaseValidatorPath = resolve(projectRoot, 'scripts/validate-release-candidate.sh');
+const apiFreezeWrapperPath = resolve(projectRoot, 'scripts/verify-mcp-api-freezes.sh');
+
+function assertExactHostBlock(source, lines, label) {
+  const block = lines.join('\n');
+  const escapedBlock = block.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+  const matches = source.match(new RegExp(`(?:^|\\n)${escapedBlock}(?=\\n|$)`, 'gu'));
+  assert.equal(
+    matches?.length ?? 0,
+    1,
+    `${label} must contain its exact executable block once`,
+  );
+}
 const matrixClosureRegistryPath = resolve(
   projectRoot,
   'release/mcp-conformance-matrix-closure.json',
@@ -64,6 +77,27 @@ const versionTransitionVerifierPath = resolve(
 const versionTransitionSelfTestPath = resolve(
   projectRoot,
   'scripts/verify-version-transition-inventory-self-test.mjs',
+);
+const lifecycleBoundHarnessInventoryPath = resolve(
+  projectRoot,
+  'release/lifecycle-bound-harness-inventory.json',
+);
+const lifecycleBoundHarnessVerifierPath = resolve(
+  projectRoot,
+  'scripts/verify-lifecycle-bound-harness-inventory.mjs',
+);
+const lifecycleBoundHarnessSelfTestPath = resolve(
+  projectRoot,
+  'scripts/verify-lifecycle-bound-harness-inventory-self-test.mjs',
+);
+const d1pEvidenceConfigPath = resolve(projectRoot, 'release/d1p-evidence-config.json');
+const d1pEvidenceContractPath = resolve(projectRoot, 'release/d1p-evidence-contract.md');
+const d1pEvidenceLibraryPath = resolve(projectRoot, 'scripts/d1p-evidence-lib.mjs');
+const d1pEvidenceGeneratorPath = resolve(projectRoot, 'scripts/generate-d1p-evidence.mjs');
+const d1pEvidenceVerifierPath = resolve(projectRoot, 'scripts/verify-d1p-evidence.mjs');
+const d1pEvidenceSelfTestPath = resolve(
+  projectRoot,
+  'scripts/verify-d1p-evidence-self-test.mjs',
 );
 const releaseHarnessRegistryPath = resolve(
   projectRoot,
@@ -128,6 +162,15 @@ try {
     ['version-transition inventory', versionTransitionInventoryPath],
     ['version-transition verifier', versionTransitionVerifierPath],
     ['version-transition verifier self-test', versionTransitionSelfTestPath],
+    ['lifecycle-bound harness inventory', lifecycleBoundHarnessInventoryPath],
+    ['lifecycle-bound harness verifier', lifecycleBoundHarnessVerifierPath],
+    ['lifecycle-bound harness verifier self-test', lifecycleBoundHarnessSelfTestPath],
+    ['D1p evidence configuration', d1pEvidenceConfigPath],
+    ['D1p evidence contract', d1pEvidenceContractPath],
+    ['D1p evidence library', d1pEvidenceLibraryPath],
+    ['D1p evidence generator', d1pEvidenceGeneratorPath],
+    ['D1p evidence verifier', d1pEvidenceVerifierPath],
+    ['D1p evidence verifier self-test', d1pEvidenceSelfTestPath],
     ['release-harness registry', releaseHarnessRegistryPath],
     ['release-harness importer', releaseHarnessImporterPath],
     ['release-harness importer self-test', releaseHarnessImporterSelfTestPath],
@@ -157,6 +200,30 @@ try {
     0,
     `Version-transition verifier self-test failed: ${versionTransitionSelfTest.error?.message
       ?? versionTransitionSelfTest.stderr ?? versionTransitionSelfTest.stdout}`,
+  );
+  const lifecycleBoundHarnessSelfTest = spawnSync(
+    process.execPath,
+    [lifecycleBoundHarnessSelfTestPath],
+    { cwd: projectRoot, encoding: 'utf8' },
+  );
+  assert.equal(
+    lifecycleBoundHarnessSelfTest.status,
+    0,
+    `Lifecycle-bound harness verifier self-test failed: ${
+      lifecycleBoundHarnessSelfTest.error?.message
+      ?? lifecycleBoundHarnessSelfTest.stderr
+      ?? lifecycleBoundHarnessSelfTest.stdout}`,
+  );
+  const d1pEvidenceSelfTest = spawnSync(
+    process.execPath,
+    [d1pEvidenceSelfTestPath],
+    { cwd: projectRoot, encoding: 'utf8' },
+  );
+  assert.equal(
+    d1pEvidenceSelfTest.status,
+    0,
+    `D1p evidence verifier self-test failed: ${d1pEvidenceSelfTest.error?.message
+      ?? d1pEvidenceSelfTest.stderr ?? d1pEvidenceSelfTest.stdout}`,
   );
   const releaseHarnessImporterSelfTest = spawnSync(
     process.execPath,
@@ -330,9 +397,191 @@ try {
   assert.match(releaseWorkflow, /runs-on: ubuntu-24\.04/);
   assert.doesNotMatch(releaseWorkflow, /ubuntu-latest/);
   assert.doesNotMatch(releaseWorkflow, /actions\/setup-java/);
+  assert.match(releaseWorkflow, /^\s+fetch-depth: 0$/m);
   assert.match(
     releaseWorkflow,
     /SOKLET_CANDIDATE_COMMIT: \$\{\{ inputs\.candidate_commit \}\}/,
+  );
+
+  const ciWorkflow = readFileSync(ciWorkflowPath, 'utf8');
+  const apiDiffJob = ciWorkflow.match(
+    /\n  api-diff:\n([\s\S]*?)\n  fuzz-regression:/,
+  );
+  assert.notEqual(apiDiffJob, null);
+  const exactHeadCheckoutBlock = [
+    '          fetch-depth: 0',
+    '          # D1p must inspect the exact PR-head preview commit, not GitHub\'s',
+    '          # synthetic two-parent pull-request merge commit.',
+    "          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}",
+  ];
+  assertExactHostBlock(apiDiffJob[1], exactHeadCheckoutBlock, 'api-diff exact-head checkout');
+  assert.throws(
+    () => assertExactHostBlock(
+      apiDiffJob[1].replace(
+        exactHeadCheckoutBlock[3],
+        `${exactHeadCheckoutBlock[3]} # ignored suffix`,
+      ),
+      exactHeadCheckoutBlock,
+      'suffix-mutated api-diff exact-head checkout',
+    ),
+    /exact executable block once/,
+  );
+  const d1pCiBlock = [
+    '      - name: Require tracked D1p public-cutover evidence',
+    '        run: |',
+    '          node scripts/verify-d1p-evidence-self-test.mjs',
+    '          node scripts/verify-d1p-evidence.mjs --mode candidate --scope tracked',
+  ];
+  const lifecycleCiBlock = [
+    '      - name: Verify lifecycle-bound harness closure',
+    '        run: |',
+    '          node scripts/verify-lifecycle-bound-harness-inventory-self-test.mjs',
+    '          node scripts/verify-lifecycle-bound-harness-inventory.mjs',
+  ];
+  assertExactHostBlock(apiDiffJob[1], d1pCiBlock, 'api-diff D1p host');
+  assertExactHostBlock(apiDiffJob[1], lifecycleCiBlock, 'api-diff lifecycle host');
+  assert.throws(
+    () => assertExactHostBlock(
+      apiDiffJob[1].replace(
+        '          node scripts/verify-d1p-evidence-self-test.mjs',
+        '          echo node scripts/verify-d1p-evidence-self-test.mjs',
+      ),
+      d1pCiBlock,
+      'mutated api-diff D1p host',
+    ),
+    /exact executable block once/,
+  );
+  assert.throws(
+    () => assertExactHostBlock(
+      apiDiffJob[1].replace(d1pCiBlock[3], `${d1pCiBlock[3]} || true`),
+      d1pCiBlock,
+      'suffix-neutralized api-diff D1p host',
+    ),
+    /exact executable block once/,
+  );
+  assert.throws(
+    () => assertExactHostBlock(
+      apiDiffJob[1].replace(
+        `${d1pCiBlock[2]}\n${d1pCiBlock[3]}`,
+        `${d1pCiBlock[3]}\n${d1pCiBlock[2]}`,
+      ),
+      d1pCiBlock,
+      'reordered api-diff D1p host',
+    ),
+    /exact executable block once/,
+  );
+  const apiFreezeIndex = ciWorkflow.indexOf('run: scripts/verify-mcp-api-freezes.sh');
+  const d1pCiSelfTestIndex = ciWorkflow.indexOf(
+    'node scripts/verify-d1p-evidence-self-test.mjs',
+  );
+  const d1pCiVerifierIndex = ciWorkflow.indexOf(
+    'node scripts/verify-d1p-evidence.mjs --mode candidate --scope tracked',
+  );
+  const versionInventoryIndex = ciWorkflow.indexOf(
+    'node scripts/verify-version-transition-inventory-self-test.mjs',
+  );
+  assert.ok(apiFreezeIndex >= 0);
+  assert.ok(apiFreezeIndex < d1pCiSelfTestIndex);
+  assert.ok(d1pCiSelfTestIndex < d1pCiVerifierIndex);
+  assert.ok(d1pCiVerifierIndex < versionInventoryIndex);
+  assert.equal(
+    ciWorkflow.match(/node scripts\/verify-d1p-evidence-self-test\.mjs/g)?.length,
+    1,
+  );
+  assert.equal(
+    ciWorkflow.match(/node scripts\/verify-d1p-evidence\.mjs --mode candidate --scope tracked/g)?.length,
+    1,
+  );
+  assert.equal(
+    apiDiffJob[1].match(/node scripts\/verify-lifecycle-bound-harness-inventory-self-test\.mjs/g)?.length,
+    1,
+  );
+  assert.equal(
+    apiDiffJob[1].match(/node scripts\/verify-lifecycle-bound-harness-inventory\.mjs/g)?.length,
+    1,
+  );
+  assert.match(
+    apiDiffJob[1],
+    /node scripts\/verify-lifecycle-bound-harness-inventory-self-test\.mjs\n\s+node scripts\/verify-lifecycle-bound-harness-inventory\.mjs/,
+  );
+  assert.equal(
+    apiDiffJob[1].match(/node scripts\/verify-d1p-evidence-self-test\.mjs/g)?.length,
+    1,
+  );
+  assert.equal(
+    apiDiffJob[1].match(/node scripts\/verify-d1p-evidence\.mjs --mode candidate --scope tracked/g)?.length,
+    1,
+  );
+  assert.match(
+    apiDiffJob[1],
+    /node scripts\/verify-d1p-evidence-self-test\.mjs\n\s+node scripts\/verify-d1p-evidence\.mjs --mode candidate --scope tracked/,
+  );
+  for (const path of [
+    'release/d1p-evidence-config.json',
+    'release/d1p-tracked-blobs.sha256',
+    'release/d1p-canonical-semantic-digests.json',
+    'release/d1p-public-cutover-manifest.json',
+  ]) {
+    assert.equal(ciWorkflow.split(path).length - 1, 1, `${path} must be uploaded once`);
+  }
+
+  const apiFreezeWrapper = readFileSync(apiFreezeWrapperPath, 'utf8');
+  const wrapperD1pBlock = [
+    '"$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-d1p-evidence-self-test.mjs"',
+    '"$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-d1p-evidence.mjs" \\',
+    '  --mode candidate --scope preparation',
+    'if [ -f "$PROJECT_ROOT/release/d1p-public-cutover-manifest.json" ]; then',
+    '  "$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-d1p-evidence.mjs" \\',
+    '    --mode candidate --scope tracked',
+    'fi',
+  ];
+  assertExactHostBlock(apiFreezeWrapper, wrapperD1pBlock, 'API-freeze D1p host');
+  assert.throws(
+    () => assertExactHostBlock(
+      apiFreezeWrapper.replace(wrapperD1pBlock[0], `echo ${wrapperD1pBlock[0]}`),
+      wrapperD1pBlock,
+      'mutated API-freeze D1p host',
+    ),
+    /exact executable block once/,
+  );
+  assert.throws(
+    () => assertExactHostBlock(
+      apiFreezeWrapper.replace(
+        `${wrapperD1pBlock[5]}\n${wrapperD1pBlock[6]}`,
+        `${wrapperD1pBlock[5]}\n${wrapperD1pBlock[6]} || true`,
+      ),
+      wrapperD1pBlock,
+      'suffix-neutralized API-freeze D1p host',
+    ),
+    /exact executable block once/,
+  );
+  const wrapperD1pSelfTestIndex = apiFreezeWrapper.indexOf(
+    '"$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-d1p-evidence-self-test.mjs"',
+  );
+  const wrapperPreparationIndex = apiFreezeWrapper.indexOf(
+    '--mode candidate --scope preparation',
+  );
+  const wrapperConditionalIndex = apiFreezeWrapper.indexOf(
+    'if [ -f "$PROJECT_ROOT/release/d1p-public-cutover-manifest.json" ]; then',
+  );
+  const wrapperTrackedIndex = apiFreezeWrapper.indexOf(
+    '--mode candidate --scope tracked',
+  );
+  assert.ok(wrapperD1pSelfTestIndex >= 0);
+  assert.ok(wrapperD1pSelfTestIndex < wrapperPreparationIndex);
+  assert.ok(wrapperPreparationIndex < wrapperConditionalIndex);
+  assert.ok(wrapperConditionalIndex < wrapperTrackedIndex);
+  assert.equal(
+    apiFreezeWrapper.match(/verify-d1p-evidence-self-test\.mjs/g)?.length,
+    1,
+  );
+  assert.equal(
+    apiFreezeWrapper.match(/--mode candidate --scope preparation/g)?.length,
+    1,
+  );
+  assert.equal(
+    apiFreezeWrapper.match(/--mode candidate --scope tracked/g)?.length,
+    1,
   );
   assert.match(
     releaseWorkflow,
@@ -361,10 +610,27 @@ try {
 
   const releaseValidator = readFileSync(releaseValidatorPath, 'utf8');
   const loopbackPortReserver = readFileSync(loopbackPortReserverPath, 'utf8');
+  assert.match(releaseValidator, /^set -euo pipefail$/m);
   assert.match(releaseValidator, /assert_ready_gate_has_dispatch\(\)/);
   assert.match(
     releaseValidator,
     /gate \$gate_id is READY but has no release-validator dispatch/,
+  );
+  assert.match(
+    releaseValidator,
+    /d1p_evidence_config="\$project_root\/release\/d1p-evidence-config\.json"/,
+  );
+  assert.match(
+    releaseValidator,
+    /d1p_evidence_verifier="\$project_root\/scripts\/verify-d1p-evidence\.mjs"/,
+  );
+  assert.match(
+    releaseValidator,
+    /d1p_evidence_self_test="\$project_root\/scripts\/verify-d1p-evidence-self-test\.mjs"/,
+  );
+  assert.match(
+    releaseValidator,
+    /for d1p_evidence_source in[\s\S]*?\[\[ -f "\$d1p_evidence_source" && ! -L "\$d1p_evidence_source" \]\]/,
   );
   assert.match(releaseValidator, /configured_gate_count" -eq 29/);
   assert.match(
@@ -386,6 +652,22 @@ try {
   assert.match(
     releaseValidator,
     /for version_transition_source in[\s\\\n]+"\$version_transition_inventory" "\$version_transition_verifier"[\s\\\n]+"\$version_transition_self_test"; do[\s\S]*?\[\[ -f "\$version_transition_source" && ! -L "\$version_transition_source" \]\]/,
+  );
+  assert.match(
+    releaseValidator,
+    /lifecycle_bound_harness_inventory="\$project_root\/release\/lifecycle-bound-harness-inventory\.json"/,
+  );
+  assert.match(
+    releaseValidator,
+    /lifecycle_bound_harness_verifier="\$project_root\/scripts\/verify-lifecycle-bound-harness-inventory\.mjs"/,
+  );
+  assert.match(
+    releaseValidator,
+    /lifecycle_bound_harness_self_test="\$project_root\/scripts\/verify-lifecycle-bound-harness-inventory-self-test\.mjs"/,
+  );
+  assert.match(
+    releaseValidator,
+    /for lifecycle_bound_harness_source in[\s\S]*?\[\[ -f "\$lifecycle_bound_harness_source"[\s\\\n]+&& ! -L "\$lifecycle_bound_harness_source" \]\]/,
   );
   assert.match(
     releaseValidator,
@@ -419,6 +701,30 @@ try {
     /\nbuild_log="\$temporary_directory\/candidate-build\.log"\n\{\n([\s\S]*?)\n\} 2>&1 \| tee "\$build_log"/,
   );
   assert.notEqual(candidateBuildBlock, null);
+  const candidateBuildVerificationBlock = [
+    '\tnode "$version_transition_self_test"',
+    '\tnode "$version_transition_verifier" --stage final',
+    '\tnode "$lifecycle_bound_harness_self_test"',
+    '\tnode "$lifecycle_bound_harness_verifier"',
+    '\tnode "$d1p_evidence_self_test"',
+    '\tmvn -B -ntp -Dgpg.skip=true clean verify',
+  ];
+  assertExactHostBlock(
+    candidateBuildBlock[1],
+    candidateBuildVerificationBlock,
+    'candidate-build inventory and D1p host',
+  );
+  assert.throws(
+    () => assertExactHostBlock(
+      candidateBuildBlock[1].replace(
+        '\tnode "$d1p_evidence_self_test"',
+        '\techo node "$d1p_evidence_self_test"',
+      ),
+      candidateBuildVerificationBlock,
+      'mutated candidate-build D1p host',
+    ),
+    /exact executable block once/,
+  );
   assert.equal(
     candidateBuildBlock[1].match(/node "\$version_transition_self_test"/g)?.length,
     1,
@@ -426,6 +732,18 @@ try {
   assert.equal(
     candidateBuildBlock[1].match(/node "\$version_transition_verifier" --stage final/g)
       ?.length,
+    1,
+  );
+  assert.equal(
+    candidateBuildBlock[1].match(/node "\$lifecycle_bound_harness_self_test"/g)?.length,
+    1,
+  );
+  assert.equal(
+    candidateBuildBlock[1].match(/node "\$lifecycle_bound_harness_verifier"/g)?.length,
+    1,
+  );
+  assert.equal(
+    candidateBuildBlock[1].match(/node "\$d1p_evidence_self_test"/g)?.length,
     1,
   );
   assert.equal(
@@ -441,7 +759,59 @@ try {
   assert.ok(
     candidateBuildBlock[1].indexOf(
       'node "$version_transition_verifier" --stage final',
-    ) < candidateBuildBlock[1].indexOf('mvn -B -ntp -Dgpg.skip=true clean verify'),
+    ) < candidateBuildBlock[1].indexOf('node "$lifecycle_bound_harness_self_test"'),
+  );
+  assert.ok(
+    candidateBuildBlock[1].indexOf('node "$lifecycle_bound_harness_self_test"')
+      < candidateBuildBlock[1].indexOf('node "$lifecycle_bound_harness_verifier"'),
+  );
+  assert.ok(
+    candidateBuildBlock[1].indexOf('node "$lifecycle_bound_harness_verifier"')
+      < candidateBuildBlock[1].indexOf('node "$d1p_evidence_self_test"'),
+  );
+  assert.ok(
+    candidateBuildBlock[1].indexOf('node "$d1p_evidence_self_test"')
+      < candidateBuildBlock[1].indexOf('mvn -B -ntp -Dgpg.skip=true clean verify'),
+  );
+  const apiFreezeFunction = releaseValidator.match(
+    /\nrun_api_freeze\(\) \{\n([\s\S]*?)\n\}\n\nrun_candidate_javadocs\(\)/,
+  );
+  assert.notEqual(apiFreezeFunction, null);
+  const releaseD1pBlock = [
+    '\t\tenv JAVA_HOME="$core_java_home" PATH="$core_java_home/bin:$PATH" \\',
+    '\t\t\tscripts/verify-mcp-api-freezes.sh',
+    '\t\tnode scripts/verify-d1p-evidence.mjs --mode candidate --scope tracked',
+  ];
+  assertExactHostBlock(apiFreezeFunction[1], releaseD1pBlock, 'release API-freeze D1p host');
+  assert.throws(
+    () => assertExactHostBlock(
+      apiFreezeFunction[1].replace(releaseD1pBlock[2], `\t\techo ${releaseD1pBlock[2].trim()}`),
+      releaseD1pBlock,
+      'mutated release API-freeze D1p host',
+    ),
+    /exact executable block once/,
+  );
+  assert.throws(
+    () => assertExactHostBlock(
+      apiFreezeFunction[1].replace(releaseD1pBlock[2], `${releaseD1pBlock[2]} || true`),
+      releaseD1pBlock,
+      'suffix-neutralized release API-freeze D1p host',
+    ),
+    /exact executable block once/,
+  );
+  assert.equal(
+    apiFreezeFunction[1].match(/scripts\/verify-mcp-api-freezes\.sh/g)?.length,
+    1,
+  );
+  assert.equal(
+    apiFreezeFunction[1].match(/node scripts\/verify-d1p-evidence\.mjs --mode candidate --scope tracked/g)?.length,
+    1,
+  );
+  assert.ok(
+    apiFreezeFunction[1].indexOf('scripts/verify-mcp-api-freezes.sh')
+      < apiFreezeFunction[1].indexOf(
+        'node scripts/verify-d1p-evidence.mjs --mode candidate --scope tracked',
+      ),
   );
   const isolatedInstallFunction = releaseValidator.match(
     /\nrun_isolated_install\(\) \{\n([\s\S]*?)\n\}\n\nrun_core_jdk_21\(\)/,
@@ -1054,7 +1424,7 @@ try {
   });
   assert.equal(resolvedMatrixClosure.exitCode, 0);
   assert.equal(resolvedMatrixClosure.report.status, 'PASSED');
-  assert.equal(resolvedMatrixClosure.report.rowCount, 262);
+  assert.equal(resolvedMatrixClosure.report.rowCount, 263);
   assert.deepEqual(resolvedMatrixClosure.report.unresolvedRows, []);
   mkdirSync(dirname(matrixReportPath), { recursive: true });
   writeFileSync(matrixReportPath, resolvedMatrixClosure.reportText);

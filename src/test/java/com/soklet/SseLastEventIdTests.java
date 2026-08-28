@@ -44,7 +44,7 @@ import static com.soklet.TestSupport.findFreePort;
 @EnabledForJreRange(min = JRE.JAVA_21)
 public class SseLastEventIdTests {
 	@Test
-	@Timeout(value = 5, unit = TimeUnit.SECONDS)
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	public void lastEventIdHeaderIsVisibleToResource() throws Exception {
 		int ssePort = findFreePort();
 

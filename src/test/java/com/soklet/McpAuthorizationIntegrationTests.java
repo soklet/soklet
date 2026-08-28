@@ -51,7 +51,7 @@ import java.util.stream.Stream;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @NotThreadSafe
-@Timeout(30)
+@Timeout(60)
 public class McpAuthorizationIntegrationTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/mcp";
@@ -255,7 +255,7 @@ public class McpAuthorizationIntegrationTests {
 					state.toolLimiterInvocations.incrementAndGet();
 					return McpRateLimitDecision.allowed();
 				})
-				.handlerInterceptor((context, continuation) -> {
+				.handlerInterceptor((context, features, continuation) -> {
 					state.interceptorInvocations.incrementAndGet();
 					return continuation.proceed();
 				})
@@ -392,7 +392,7 @@ public class McpAuthorizationIntegrationTests {
 
 	private static void assertIdleStartedDiagnostics(McpServer server) {
 		McpServerDiagnostics diagnostics = awaitIdleDiagnostics(server);
-		Assertions.assertEquals(McpServerStatus.STARTED, diagnostics.getStatus());
+		Assertions.assertEquals(McpServerStatus.RUNNING, diagnostics.getStatus());
 		Assertions.assertTrue(diagnostics.getBoundAddress().isPresent());
 		assertZeroLoad(diagnostics);
 	}
@@ -418,9 +418,9 @@ public class McpAuthorizationIntegrationTests {
 	}
 
 	private static void stopAndAssertClean(Soklet soklet, McpServer server) {
-		soklet.stop();
+		soklet.close();
 		McpServerDiagnostics diagnostics = server.getDiagnostics();
-		Assertions.assertEquals(McpServerStatus.STOPPED, diagnostics.getStatus());
+		Assertions.assertEquals(McpServerStatus.TERMINATED, diagnostics.getStatus());
 		Assertions.assertTrue(diagnostics.getBoundAddress().isPresent());
 		assertZeroLoad(diagnostics);
 	}

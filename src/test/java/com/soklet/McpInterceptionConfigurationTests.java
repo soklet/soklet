@@ -45,10 +45,10 @@ public class McpInterceptionConfigurationTests {
 			invoked.set(true);
 			return expectedResult;
 		};
-		Assertions.assertTrue(continuation.getFeatures()
-				.find(McpLocalizationContext.class).isEmpty());
+		McpInvocationFeatures features = McpInvocationFeatures.fromFeatures(
+				java.util.Map.of());
 		McpOperationResult actualResult = interceptor.interceptHandler(request,
-				continuation);
+				features, continuation);
 		McpToolOutput actualOutput = sanitizer.sanitize(request, "tool",
 				McpJsonObject.builder().build(), expectedOutput);
 
@@ -64,7 +64,7 @@ public class McpInterceptionConfigurationTests {
 	@Test
 	public void builderPublishesDefaultsAndConfiguredHookIdentities() {
 		McpServer defaultServer = serverBuilder().build();
-		McpHandlerInterceptor interceptor = (request, continuation) ->
+		McpHandlerInterceptor interceptor = (request, features, continuation) ->
 				McpCompleteResult.fromToolText("intercepted");
 		McpToolOutputSanitizer sanitizer =
 				(request, toolName, rawArguments, output) ->

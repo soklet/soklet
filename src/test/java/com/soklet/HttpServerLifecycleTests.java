@@ -23,699 +23,472 @@ import com.soklet.internal.microhttp.Logger;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import javax.annotation.concurrent.ThreadSafe;
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URL;
+import java.nio.channels.Selector;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
 import static com.soklet.TestSupport.connectWithRetry;
 import static com.soklet.TestSupport.findFreePort;
 import static com.soklet.TestSupport.readAll;
+import static java.util.Objects.requireNonNull;
 
-/*
- * @author <a href="https://www.revetkn.com">Mark Allen</a>
- */
+/** Owner-lifecycle coverage for the built-in HTTP transport. */
 @ThreadSafe
+@Timeout(value = 60, unit = TimeUnit.SECONDS)
 public class HttpServerLifecycleTests {
-	private static HttpURLConnection open(String method, URL url, Map<String, String> headers) throws IOException {
-		HttpURLConnection c = (HttpURLConnection) url.openConnection();
-		c.setRequestMethod(method);
-		c.setConnectTimeout(2000);
-		c.setReadTimeout(2000);
-		for (Map.Entry<String, String> e : headers.entrySet()) c.setRequestProperty(e.getKey(), e.getValue());
-		return c;
-	}
-
 	@Test
-	public void start_stop_isStarted_toggles_and_serves_requests() throws Exception {
+	void ownerLifecycleAttachesServesAndPublishesOneGracefulResult()
+			throws Exception {
 		int port = findFreePort();
-		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port)
-						.requestHeaderTimeout(Duration.ofSeconds(5))
-						.build())
-				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(HealthResource.class)))
-				.lifecycleObserver(new LifecycleObserver() {
-					@Override
-					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
-				})
-				.build();
-
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			Assertions.assertFalse(app.isStarted());
-			app.start();
-			Assertions.assertTrue(app.isStarted());
-
-			URL url = new URL("http://127.0.0.1:" + port + "/health");
-			HttpURLConnection c = open("GET", url, Map.of("Accept", "text/plain"));
-			Assertions.assertEquals(200, c.getResponseCode());
-			Assertions.assertEquals("ok", new String(readAll(c.getInputStream()), StandardCharsets.UTF_8));
-		}
-		// try-with-resources calls close(), which stops the server
-		// A direct Soklet/transport graph is one-shot; a fresh generation requires
-		// a fresh transport graph rather than reclaiming the prior identity.
-		SokletConfig freshConfig = SokletConfig.withHttpServer(
-				HttpServer.withPort(findFreePort()).build())
-				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
-						Set.of(HealthResource.class))).build();
-		try (Soklet fresh = Soklet.fromConfig(freshConfig)) {
-			Assertions.assertFalse(fresh.isStarted());
-		}
-	}
-
-	@Test
-	public void start_without_initialize_fails_fast() {
-		HttpServer httpServer = HttpServer.withPort(0).build();
-
-		IllegalStateException exception =
-				Assertions.assertThrows(IllegalStateException.class, httpServer::start);
-		Assertions.assertTrue(exception.getMessage().contains("RequestHandler"));
-		Assertions.assertFalse(httpServer.isStarted());
-	}
-
-	@Test
-	public void start_port_in_use_cleans_up_state() throws Exception {
-		int port = findFreePort();
-
-		try (ServerSocket ss = new ServerSocket(port)) {
-			ss.setReuseAddress(true);
-
-			HttpServer httpServer = HttpServer.withPort(port).build();
-
-			SokletConfig cfg = SokletConfig.withHttpServer(httpServer)
-					.lifecycleObserver(new QuietLifecycle())
-					.build();
-
-			httpServer.initialize(cfg, (request, consumer) -> {
-				MarshaledResponse response = MarshaledResponse.withStatusCode(200)
-						.headers(Map.of("Content-Type", Set.of("text/plain")))
-						.body("ok".getBytes(StandardCharsets.UTF_8))
-						.build();
-				consumer.accept(HttpRequestResult.withMarshaledResponse(response).build());
-			});
-
-			Assertions.assertThrows(UncheckedIOException.class, httpServer::start);
-			Assertions.assertFalse(httpServer.isStarted());
-
-			DefaultHttpServer internal = (DefaultHttpServer) httpServer;
-			Assertions.assertTrue(internal.getEventLoop().isEmpty());
-			Assertions.assertTrue(internal.getRequestHandlerExecutorService().isEmpty());
-		}
-	}
-
-	@Test
-	public void isStartedReflectsTerminatedHttpEventLoopAndStopStillCleansUp() throws Exception {
-		int port = findFreePort();
-		HttpServer httpServer = HttpServer.withPort(port)
+		HttpServer server = HttpServer.withPort(port)
 				.host("127.0.0.1")
+				.requestHeaderTimeout(Duration.ofSeconds(5))
 				.build();
-		SokletConfig cfg = SokletConfig.withHttpServer(httpServer)
-				.lifecycleObserver(new QuietLifecycle())
-				.build();
-		httpServer.initialize(cfg, (request, consumer) -> {
-			MarshaledResponse response = MarshaledResponse.withStatusCode(200)
-					.headers(Map.of("Content-Type", Set.of("text/plain")))
-					.body("ok".getBytes(StandardCharsets.UTF_8))
-					.build();
-			consumer.accept(HttpRequestResult.withMarshaledResponse(response).build());
-		});
+		TransportIdentity identity = server.getTransportIdentity();
+		SokletConfig config = configuration(server, HealthResource.class);
 
-		httpServer.start();
-		DefaultHttpServer internal = (DefaultHttpServer) httpServer;
-		EventLoop eventLoop = internal.getEventLoop().orElseThrow();
-		eventLoop.stop();
+		Assertions.assertSame(server, config.getHttpServer().orElseThrow(),
+				"The configuration must retain the exact outer transport");
+		Assertions.assertSame(identity, server.getTransportIdentity(),
+				"A transport identity must be stable before ownership");
+		Soklet soklet = Soklet.fromConfig(config);
+		Assertions.assertEquals(SokletStatus.NEW, soklet.getStatus());
+		Assertions.assertTrue(soklet.getShutdownResult().isEmpty());
 
-		Assertions.assertFalse(httpServer.isStarted());
+		soklet.start();
+		Assertions.assertEquals(SokletStatus.RUNNING, soklet.getStatus());
+		Assertions.assertSame(identity, server.getTransportIdentity());
+		HttpURLConnection connection = open("GET",
+				new URL("http://127.0.0.1:" + port + "/health"),
+				Map.of("Accept", "text/plain"));
+		Assertions.assertEquals(200, connection.getResponseCode());
+		Assertions.assertEquals("ok", new String(
+				readAll(connection.getInputStream()), StandardCharsets.UTF_8));
 
-		httpServer.stop();
-		Assertions.assertTrue(internal.getEventLoop().isEmpty());
-		Assertions.assertTrue(internal.getRequestHandlerExecutorService().isEmpty());
+		CompletionStage<ShutdownResult> stage = soklet.shutdown();
+		ShutdownResult result = soklet.awaitShutdown();
+		Assertions.assertSame(result, stage.toCompletableFuture().join());
+		Assertions.assertSame(result, soklet.getShutdownResult().orElseThrow());
+		Assertions.assertEquals(SokletStatus.CLOSED, soklet.getStatus());
+		assertGracefulHttpResult(result);
+		soklet.close();
 	}
 
 	@Test
-	public void stopDrainsInFlightHttpResponseBeforeClosingConnection() throws Exception {
+	void ownerStartupFailurePublishesExactResultAndReleasesBuiltInState()
+			throws Exception {
 		int port = findFreePort();
-		CountDownLatch handlerStarted = new CountDownLatch(1);
-		CountDownLatch releaseHandler = new CountDownLatch(1);
-		AtomicReference<Throwable> stopFailure = new AtomicReference<>();
-		HttpServer httpServer = HttpServer.withPort(port)
-				.host("127.0.0.1")
-				.shutdownTimeout(Duration.ofSeconds(3))
-				.build();
-		SokletConfig cfg = SokletConfig.withHttpServer(httpServer)
-				.lifecycleObserver(new QuietLifecycle())
-				.build();
-		httpServer.initialize(cfg, (request, consumer) -> {
-			handlerStarted.countDown();
-			try {
-				if (!releaseHandler.await(2, TimeUnit.SECONDS))
-					throw new AssertionError("Timed out waiting to release handler");
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-				return;
-			}
+		try (ServerSocket socket = new ServerSocket(port)) {
+			socket.setReuseAddress(true);
+			HttpServer server = HttpServer.withPort(port).build();
+			DefaultHttpServer builtIn = (DefaultHttpServer) server;
+			Soklet soklet = Soklet.fromConfig(configuration(server,
+					HealthResource.class));
 
-			MarshaledResponse response = MarshaledResponse.withStatusCode(200)
-					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
-					.body("done".getBytes(StandardCharsets.UTF_8))
-					.build();
-			consumer.accept(HttpRequestResult.withMarshaledResponse(response).build());
-		});
+			SokletStartupException failure = Assertions.assertThrows(
+					SokletStartupException.class, soklet::start);
+			Assertions.assertEquals(StartupDisposition.FAILED,
+					failure.getStartupDisposition());
+			Assertions.assertInstanceOf(UncheckedIOException.class,
+					failure.getCause());
+			Assertions.assertSame(failure.getShutdownResult(),
+					soklet.getShutdownResult().orElseThrow());
+			Assertions.assertEquals(SokletStatus.CLOSED, soklet.getStatus());
+			Assertions.assertTrue(builtIn.getEventLoop().isEmpty());
+			Assertions.assertTrue(
+					builtIn.getRequestHandlerExecutorService().isEmpty());
+		}
+	}
 
-		httpServer.start();
+	@Test
+	void unexpectedBuiltInTerminationClosesTheOwnerWithPublicEvidence()
+			throws Exception {
+		HttpServer server = HttpServer.withPort(findFreePort())
+				.host("127.0.0.1").build();
+		Soklet soklet = Soklet.fromConfig(configuration(server,
+				HealthResource.class));
+		soklet.start();
+		EventLoop eventLoop = ((DefaultHttpServer) server).getEventLoop()
+				.orElseThrow();
+
+		Field selectorField = EventLoop.class.getDeclaredField("selector");
+		selectorField.setAccessible(true);
+		((Selector) selectorField.get(eventLoop)).close();
+		ShutdownResult result = soklet.awaitShutdown();
+		Assertions.assertEquals(SokletStatus.CLOSED, soklet.getStatus());
+		Assertions.assertEquals(ParticipantKind.HTTP,
+				result.getUnexpectedTermination().orElseThrow()
+						.getParticipantKind());
+		Assertions.assertEquals(
+				ParticipantShutdownDisposition.UNEXPECTED_TERMINATION,
+				result.getParticipantResult(ParticipantKind.HTTP).orElseThrow()
+						.getDisposition());
+		SokletTerminatedUnexpectedlyException replay = Assertions.assertThrows(
+				SokletTerminatedUnexpectedlyException.class, soklet::close);
+		Assertions.assertSame(result, replay.getShutdownResult());
+	}
+
+	@Test
+	void ownerShutdownDrainsInFlightResponseBeforeClosingConnection()
+			throws Exception {
+		int port = findFreePort();
+		SlowInvocation invocation = new SlowInvocation();
+		SlowResource.INVOCATION.set(invocation);
+		HttpServer server = HttpServer.withPort(port).host("127.0.0.1").build();
+		Soklet soklet = Soklet.fromConfig(configuration(server,
+				SlowResource.class));
+		soklet.start();
 
 		try (Socket socket = connectWithRetry("127.0.0.1", port, 2000)) {
 			socket.setSoTimeout(4000);
-			OutputStream outputStream = socket.getOutputStream();
-			outputStream.write(("""
+			OutputStream output = socket.getOutputStream();
+			output.write(("""
 					GET /slow HTTP/1.1\r
 					Host: localhost\r
 					Connection: keep-alive\r
 					\r
 					""").getBytes(StandardCharsets.ISO_8859_1));
-			outputStream.flush();
+			output.flush();
+			Assertions.assertTrue(invocation.started.await(2, TimeUnit.SECONDS));
 
-			Assertions.assertTrue(handlerStarted.await(2, TimeUnit.SECONDS), "Expected request handler to start");
+			CompletionStage<ShutdownResult> shutdown = soklet.shutdown();
+			EventLoop eventLoop = ((DefaultHttpServer) server).getEventLoop()
+					.orElseThrow();
+			assertEventually(() -> !eventLoop.isAccepting(),
+					Duration.ofSeconds(2),
+					"HTTP admission must close before the response is released");
+			invocation.release.countDown();
 
-			EventLoop eventLoop = ((DefaultHttpServer) httpServer).getEventLoop().orElseThrow();
-			Thread stopThread = new Thread(() -> {
-				try {
-					httpServer.stop();
-				} catch (Throwable t) {
-					stopFailure.set(t);
-				}
-			}, "http-graceful-stop-test");
-			stopThread.start();
-
-			assertEventually(() -> !eventLoop.isAccepting(), Duration.ofSeconds(2),
-					"Expected HTTP accept loop to stop before handler response is released");
-
-			releaseHandler.countDown();
-
-			String response = new String(readAll(socket.getInputStream()), StandardCharsets.ISO_8859_1);
-			Assertions.assertTrue(response.startsWith("HTTP/1.1 200 OK"), response);
-			Assertions.assertTrue(response.contains("Connection: close\r\n"), response);
+			String response = new String(readAll(socket.getInputStream()),
+					StandardCharsets.ISO_8859_1);
+			Assertions.assertTrue(response.startsWith("HTTP/1.1 200 OK"),
+					response);
+			Assertions.assertTrue(response.contains("Connection: close\r\n"),
+					response);
 			Assertions.assertTrue(response.endsWith("\r\n\r\ndone"), response);
-
-			stopThread.join(3000);
-			Assertions.assertFalse(stopThread.isAlive(), "HTTP stop did not complete after response drain");
-			if (stopFailure.get() != null)
-				throw new AssertionError("HTTP stop failed", stopFailure.get());
+			assertGracefulHttpResult(shutdown.toCompletableFuture()
+					.get(3, TimeUnit.SECONDS));
 		} finally {
-			httpServer.stop();
+			invocation.release.countDown();
+			SlowResource.INVOCATION.compareAndSet(invocation, null);
+			soklet.close();
 		}
 	}
 
 	@Test
-	public void stopClosesIdleHttpKeepAliveConnections() throws Exception {
+	void ownerShutdownClosesIdleKeepAliveConnection() throws Exception {
 		int port = findFreePort();
-		HttpServer httpServer = HttpServer.withPort(port)
-				.host("127.0.0.1")
-				.shutdownTimeout(Duration.ofSeconds(3))
-				.build();
-		SokletConfig cfg = SokletConfig.withHttpServer(httpServer)
-				.lifecycleObserver(new QuietLifecycle())
-				.build();
-		httpServer.initialize(cfg, (request, consumer) -> {
-			MarshaledResponse response = MarshaledResponse.withStatusCode(200)
-					.headers(Map.of("Content-Type", Set.of("text/plain; charset=UTF-8")))
-					.body("ok".getBytes(StandardCharsets.UTF_8))
-					.build();
-			consumer.accept(HttpRequestResult.withMarshaledResponse(response).build());
-		});
-
-		httpServer.start();
+		HttpServer server = HttpServer.withPort(port).host("127.0.0.1").build();
+		Soklet soklet = Soklet.fromConfig(configuration(server,
+				HealthResource.class));
+		soklet.start();
 
 		try (Socket socket = connectWithRetry("127.0.0.1", port, 2000)) {
 			socket.setSoTimeout(4000);
-			OutputStream outputStream = socket.getOutputStream();
-			InputStream inputStream = socket.getInputStream();
-			outputStream.write(("""
+			OutputStream output = socket.getOutputStream();
+			InputStream input = socket.getInputStream();
+			output.write(("""
 					GET /health HTTP/1.1\r
 					Host: localhost\r
 					Connection: keep-alive\r
 					\r
 					""").getBytes(StandardCharsets.ISO_8859_1));
-			outputStream.flush();
+			output.flush();
+			Assertions.assertTrue(readUntil(input, "ok", 8192).endsWith("ok"));
 
-			String response = readUntil(inputStream, "ok", 8192);
-			Assertions.assertTrue(response.startsWith("HTTP/1.1 200 OK"), response);
-			Assertions.assertTrue(response.endsWith("ok"), response);
-
-			httpServer.stop();
-
-			Assertions.assertEquals(-1, inputStream.read(), "Idle keep-alive connection should close on stop");
+			ShutdownResult result = soklet.shutdown().toCompletableFuture()
+					.get(3, TimeUnit.SECONDS);
+			Assertions.assertEquals(-1, input.read());
+			assertGracefulHttpResult(result);
 		} finally {
-			httpServer.stop();
+			soklet.close();
 		}
 	}
 
 	@Test
-	public void requestHandlerTimeoutDoesNotInterruptReusedHandlerThreadAfterTaskReturns() throws Exception {
-		int port = findFreePort();
-		ExecutorService executorService = Executors.newSingleThreadExecutor();
-		CountDownLatch handlerReturned = new CountDownLatch(1);
-		CountDownLatch sentinelStarted = new CountDownLatch(1);
-		CountDownLatch releaseSentinel = new CountDownLatch(1);
-		AtomicBoolean sentinelInterrupted = new AtomicBoolean(false);
-		HttpServer httpServer = HttpServer.withPort(port)
-				.host("127.0.0.1")
-				.requestHandlerTimeout(Duration.ofMillis(500))
-				.requestHandlerExecutorServiceSupplier(() -> executorService)
-				.build();
-		SokletConfig cfg = SokletConfig.withHttpServer(httpServer)
-				.lifecycleObserver(new QuietLifecycle())
-				.build();
-		httpServer.initialize(cfg, (request, consumer) -> handlerReturned.countDown());
-
-		try {
-			httpServer.start();
-
-			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000)) {
-				socket.setSoTimeout(3000);
-				OutputStream outputStream = socket.getOutputStream();
-				outputStream.write(("""
-						GET /timeout HTTP/1.1\r
-						Host: localhost\r
-						Connection: close\r
-						\r
-						""").getBytes(StandardCharsets.ISO_8859_1));
-				outputStream.flush();
-
-				Assertions.assertTrue(handlerReturned.await(2, TimeUnit.SECONDS), "Expected request handler to return");
-				Future<?> sentinel = executorService.submit(() -> {
-					sentinelStarted.countDown();
-					try {
-						releaseSentinel.await(2, TimeUnit.SECONDS);
-					} catch (InterruptedException e) {
-						sentinelInterrupted.set(true);
-						Thread.currentThread().interrupt();
-					}
-				});
-
-				Assertions.assertTrue(sentinelStarted.await(2, TimeUnit.SECONDS), "Expected sentinel task to start");
-
-				String response = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
-				Assertions.assertNotNull(response, "Expected timeout response");
-				Assertions.assertTrue(response.startsWith("HTTP/1.1 503"), response);
-
-				releaseSentinel.countDown();
-				sentinel.get(2, TimeUnit.SECONDS);
-				Assertions.assertFalse(sentinelInterrupted.get(), "Stale timeout task interrupted a reused handler thread");
-			}
-		} finally {
-			releaseSentinel.countDown();
-			httpServer.stop();
-			executorService.shutdownNow();
-		}
-	}
-
-	@Test
-	public void rejectedExecutor_returns_503() throws Exception {
+	void rejectedRequestExecutorReturns503UnderOwnerLifecycle()
+			throws Exception {
 		int port = findFreePort();
 		ExecutorService executor = Executors.newSingleThreadExecutor();
 		executor.shutdown();
-
-		HttpServer httpServer = HttpServer.withPort(port)
+		HttpServer server = HttpServer.withPort(port)
 				.requestHeaderTimeout(Duration.ofSeconds(5))
 				.requestHandlerExecutorServiceSupplier(() -> executor)
 				.build();
-
-		SokletConfig cfg = SokletConfig.withHttpServer(httpServer)
-				.lifecycleObserver(new QuietLifecycle())
-				.build();
-
-		httpServer.initialize(cfg, (request, consumer) -> {
-			MarshaledResponse response = MarshaledResponse.withStatusCode(200)
-					.headers(Map.of("Content-Type", Set.of("text/plain")))
-					.body("ok".getBytes(StandardCharsets.UTF_8))
-					.build();
-			consumer.accept(HttpRequestResult.withMarshaledResponse(response).build());
-		});
-
-		httpServer.start();
-
-		try {
-			URL url = new URL("http://127.0.0.1:" + port + "/health");
-			HttpURLConnection c = open("GET", url, Map.of("Accept", "text/plain"));
-			int status = c.getResponseCode();
-			Assertions.assertEquals(503, status);
-
-			java.io.InputStream in = c.getErrorStream();
-			if (in == null) in = c.getInputStream();
-			String body = new String(readAll(in), StandardCharsets.UTF_8);
-			Assertions.assertTrue(body.contains("HTTP 503"));
-		} finally {
-			httpServer.stop();
+		try (Soklet soklet = Soklet.fromConfig(configuration(server,
+				HealthResource.class))) {
+			soklet.start();
+			HttpURLConnection connection = open("GET",
+					new URL("http://127.0.0.1:" + port + "/health"), Map.of());
+			Assertions.assertEquals(503, connection.getResponseCode());
+			InputStream input = connection.getErrorStream();
+			if (input == null)
+				input = connection.getInputStream();
+			Assertions.assertTrue(new String(readAll(input),
+					StandardCharsets.UTF_8).contains("HTTP 503"));
 		}
 	}
 
 	@Test
-	public void requestHandlerDefaults_useExpectedConcurrencyAndQueueCapacity() {
-		int concurrency = 3;
-		HttpServer httpServer = HttpServer.withPort(0)
-				.concurrency(concurrency)
-				.build();
-
-		DefaultHttpServer internal = (DefaultHttpServer) httpServer;
-
-		boolean virtualThreadsAvailable = Boolean.TRUE.equals(Utilities.virtualThreadsAvailable());
-		int expectedConcurrency = virtualThreadsAvailable ? concurrency * 16 : concurrency;
-		int expectedQueueCapacity = expectedConcurrency * 64;
-
-		Assertions.assertEquals(Integer.valueOf(expectedConcurrency), internal.getRequestHandlerConcurrency());
-		Assertions.assertEquals(Integer.valueOf(expectedQueueCapacity), internal.getRequestHandlerQueueCapacity());
-	}
-
-	@Test
-	public void defaultRequestHandlerExecutorUsesRuntimeThreadStrategy() throws Exception {
+	void defaultRequestHandlerExecutorUsesRuntimeThreadStrategy()
+			throws Exception {
 		int port = findFreePort();
 		AtomicReference<Boolean> handlerThreadVirtual = new AtomicReference<>();
-
-		HttpServer httpServer = HttpServer.withPort(port)
-				.requestHeaderTimeout(Duration.ofSeconds(5))
-				.build();
-
-		SokletConfig cfg = SokletConfig.withHttpServer(httpServer)
-				.lifecycleObserver(new QuietLifecycle())
-				.build();
-
-		httpServer.initialize(cfg, (request, consumer) -> {
-			handlerThreadVirtual.set(currentThreadIsVirtual());
-			MarshaledResponse response = MarshaledResponse.withStatusCode(200)
-					.headers(Map.of("Content-Type", Set.of("text/plain")))
-					.body("ok".getBytes(StandardCharsets.UTF_8))
-					.build();
-			consumer.accept(HttpRequestResult.withMarshaledResponse(response).build());
-		});
-
-		httpServer.start();
-
-		try {
-			URL url = new URL("http://127.0.0.1:" + port + "/health");
-			HttpURLConnection connection = open("GET", url, Map.of("Accept", "text/plain"));
+		ThreadRecordingResource.HANDLER_THREAD_VIRTUAL.set(handlerThreadVirtual);
+		HttpServer server = HttpServer.withPort(port)
+				.requestHeaderTimeout(Duration.ofSeconds(5)).build();
+		try (Soklet soklet = Soklet.fromConfig(configuration(server,
+				ThreadRecordingResource.class))) {
+			soklet.start();
+			HttpURLConnection connection = open("GET",
+					new URL("http://127.0.0.1:" + port + "/thread"), Map.of());
 			Assertions.assertEquals(200, connection.getResponseCode());
-			Assertions.assertEquals(Boolean.valueOf(Utilities.virtualThreadsAvailable()), handlerThreadVirtual.get());
+			Assertions.assertEquals(Boolean.valueOf(
+					Utilities.virtualThreadsAvailable()),
+					handlerThreadVirtual.get());
 		} finally {
-			httpServer.stop();
+			ThreadRecordingResource.HANDLER_THREAD_VIRTUAL.set(null);
 		}
 	}
 
 	@Test
-	public void enterKeyShutdownTriggerCanBeDisabledWhenStdinIsUnavailable() throws Exception {
-		Soklet.KeypressManager.reset();
-		Soklet.KeypressManager.interactiveConsoleAvailableOverride(false);
-		RecordingLifecycle lifecycleObserver = new RecordingLifecycle();
-		AtomicReference<Throwable> awaitFailure = new AtomicReference<>();
-
-		try (Soklet app = Soklet.fromConfig(lifecycleTestConfig(lifecycleObserver))) {
-			app.start();
-			Thread awaitThread = awaitShutdownOnBackgroundThread(app, awaitFailure);
-
-				try {
-					Assertions.assertTrue(lifecycleObserver.awaitConfigurationUnsupported(Duration.ofSeconds(2)),
-							"Expected ENTER_KEY to be reported as unsupported without stdin");
-					Assertions.assertTrue(app.isStarted(), "ENTER_KEY should be ignored when stdin is unavailable");
-				} finally {
-				app.stop();
-				joinAwaitThread(awaitThread);
-			}
-		} finally {
-			Soklet.KeypressManager.reset();
-		}
-
-		Assertions.assertNull(awaitFailure.get());
-	}
-
-	@Test
-	public void enterKeyShutdownTriggerTreatsStdinEofAsUnsupported() throws Exception {
-		InputStream originalIn = System.in;
-		Soklet.KeypressManager.reset();
-		System.setIn(new ByteArrayInputStream(new byte[0]));
-		RecordingLifecycle lifecycleObserver = new RecordingLifecycle();
-		AtomicReference<Throwable> awaitFailure = new AtomicReference<>();
-
-		try (Soklet app = Soklet.fromConfig(lifecycleTestConfig(lifecycleObserver))) {
-			app.start();
-			Thread awaitThread = awaitShutdownOnBackgroundThread(app, awaitFailure);
-
-			try {
-				Assertions.assertTrue(lifecycleObserver.awaitConfigurationUnsupported(Duration.ofSeconds(2)),
-						"Expected EOF on stdin to be reported as unsupported");
-				assertEventually(() -> !Soklet.KeypressManager.isListenerStarted(), Duration.ofSeconds(2),
-						"Expected ENTER_KEY listener flag to reset after stdin EOF");
-				Assertions.assertTrue(app.isStarted(), "stdin EOF must not stop Soklet");
-			} finally {
-				app.stop();
-				joinAwaitThread(awaitThread);
-			}
-		} finally {
-			System.setIn(originalIn);
-			Soklet.KeypressManager.reset();
-		}
-
-		Assertions.assertNull(awaitFailure.get());
-	}
-
-	@Test
-	public void enterKeyShutdownTriggerStopsOnNewlineAndResetsListener() throws Exception {
-		InputStream originalIn = System.in;
-		Soklet.KeypressManager.reset();
-		System.setIn(new ByteArrayInputStream("\n".getBytes(StandardCharsets.UTF_8)));
-		RecordingLifecycle lifecycleObserver = new RecordingLifecycle();
-		AtomicReference<Throwable> awaitFailure = new AtomicReference<>();
-
-		try (Soklet app = Soklet.fromConfig(lifecycleTestConfig(lifecycleObserver))) {
-			app.start();
-			Thread awaitThread = awaitShutdownOnBackgroundThread(app, awaitFailure);
-
-			assertEventually(() -> !app.isStarted(), Duration.ofSeconds(2),
-					"Expected newline on stdin to stop Soklet");
-			joinAwaitThread(awaitThread);
-			assertEventually(() -> !Soklet.KeypressManager.isListenerStarted(), Duration.ofSeconds(2),
-					"Expected ENTER_KEY listener flag to reset after newline shutdown");
-			Assertions.assertFalse(lifecycleObserver.hasConfigurationUnsupported());
-		} finally {
-			System.setIn(originalIn);
-			Soklet.KeypressManager.reset();
-		}
-
-		Assertions.assertNull(awaitFailure.get());
-	}
-
-	@Test
-	public void transportLoggerEmitsLogEventAndMetric() {
+	void transportLoggerEmitsLogEventAndMetricAfterOwnerAttachment() {
 		List<LogEvent> logEvents = new ArrayList<>();
-		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
-		HttpServer httpServer = HttpServer.withPort(0).build();
-		SokletConfig cfg = SokletConfig.withHttpServer(httpServer)
+		DefaultMetricsCollector metrics = DefaultMetricsCollector.defaultInstance();
+		HttpServer server = HttpServer.withPort(0).build();
+		SokletConfig config = SokletConfig.withHttpServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
+						Set.of(HealthResource.class)))
 				.lifecycleObserver(new QuietLifecycle() {
 					@Override
-					public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
-						logEvents.add(logEvent);
+					public void didReceiveLogEvent(@NonNull LogEvent event) {
+						logEvents.add(event);
 					}
 				})
-				.metricsCollector(metricsCollector)
-				.build();
+				.metricsCollector(metrics).build();
 
-		httpServer.initialize(cfg, (request, consumer) -> {
-			throw new AssertionError("not used");
-		});
+		try (Soklet soklet = Soklet.fromConfig(config)) {
+			soklet.start();
+			AssertionError throwable = new AssertionError("boom");
+			Logger logger = ((DefaultHttpServer) server).transportLogger();
+			logger.logFailure(throwable,
+					new LogEntry("event", "response_ready_error"),
+					new LogEntry("id", "7"));
+			logger.logFailure(
+					new LogEntry("event", "response_write_idle_timeout"),
+					new LogEntry("id", "8"));
 
-		AssertionError throwable = new AssertionError("boom");
-		Logger logger = ((DefaultHttpServer) httpServer).transportLogger();
-		logger.logFailure(throwable,
-				new LogEntry("event", "response_ready_error"),
-				new LogEntry("id", "7"));
-		logger.logFailure(
-				new LogEntry("event", "response_write_idle_timeout"),
-				new LogEntry("id", "8"));
-
-		Assertions.assertEquals(2, logEvents.size());
-		Assertions.assertTrue(logEvents.stream().allMatch(logEvent ->
-				logEvent.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE));
-		Assertions.assertTrue(logEvents.get(0).getMessage().contains("response_ready_error"));
-		Assertions.assertTrue(logEvents.get(0).getMessage().contains("connectionId=7"));
-		Assertions.assertSame(throwable, logEvents.get(0).getThrowable().orElse(null));
-
-		MetricsCollector.Snapshot snapshot = metricsCollector.snapshot().orElseThrow();
-		Assertions.assertEquals(1L, snapshot.getTransportFailures().get(new MetricsCollector.TransportFailureKey(
-				ServerType.STANDARD_HTTP, MetricsCollector.TransportFailureReason.RESPONSE_READY_ERROR)));
-		Assertions.assertEquals(1L, snapshot.getTransportFailures().get(new MetricsCollector.TransportFailureKey(
-				ServerType.STANDARD_HTTP, MetricsCollector.TransportFailureReason.RESPONSE_WRITE_IDLE_TIMEOUT)));
+			Assertions.assertEquals(2, logEvents.size());
+			Assertions.assertTrue(logEvents.stream().allMatch(event ->
+					event.getLogEventType()
+							== LogEventType.SERVER_TRANSPORT_FAILURE));
+			Assertions.assertSame(throwable,
+					logEvents.get(0).getThrowable().orElseThrow());
+			MetricsCollector.Snapshot snapshot = metrics.snapshot().orElseThrow();
+			Assertions.assertEquals(1L,
+					snapshot.getTransportFailures().get(
+							new MetricsCollector.TransportFailureKey(
+									ServerType.STANDARD_HTTP,
+									MetricsCollector.TransportFailureReason
+											.RESPONSE_READY_ERROR)));
+			Assertions.assertEquals(1L,
+					snapshot.getTransportFailures().get(
+							new MetricsCollector.TransportFailureKey(
+									ServerType.STANDARD_HTTP,
+									MetricsCollector.TransportFailureReason
+											.RESPONSE_WRITE_IDLE_TIMEOUT)));
+		}
 	}
 
 	@Test
-	public void requestHandlerQueueCapacity_defaultsFromExplicitConcurrency() {
-		HttpServer httpServer = HttpServer.withPort(0)
-				.requestHandlerConcurrency(4)
-				.build();
+	void requestHandlerDefaultsAndValidationRemainTransportLocal() {
+		HttpServer concurrency = HttpServer.withPort(0).concurrency(3).build();
+		DefaultHttpServer defaults = (DefaultHttpServer) concurrency;
+		int expectedConcurrency = Boolean.TRUE.equals(
+				Utilities.virtualThreadsAvailable()) ? 48 : 3;
+		Assertions.assertEquals(expectedConcurrency,
+				defaults.getRequestHandlerConcurrency());
+		Assertions.assertEquals(expectedConcurrency * 64,
+				defaults.getRequestHandlerQueueCapacity());
 
-		DefaultHttpServer internal = (DefaultHttpServer) httpServer;
-		Assertions.assertEquals(Integer.valueOf(4), internal.getRequestHandlerConcurrency());
-		Assertions.assertEquals(Integer.valueOf(4 * 64), internal.getRequestHandlerQueueCapacity());
-	}
-
-	@Test
-	public void requestHandlerConcurrency_requiresPositiveValue() {
+		HttpServer explicit = HttpServer.withPort(0)
+				.requestHandlerConcurrency(4).build();
+		Assertions.assertEquals(4,
+				((DefaultHttpServer) explicit).getRequestHandlerConcurrency());
+		Assertions.assertEquals(4 * 64,
+				((DefaultHttpServer) explicit).getRequestHandlerQueueCapacity());
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				HttpServer.withPort(0)
-						.requestHandlerConcurrency(0)
-						.build());
+				HttpServer.withPort(0).requestHandlerConcurrency(0).build());
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				HttpServer.withPort(0).requestHandlerQueueCapacity(0).build());
 	}
 
-	@Test
-	public void requestHandlerQueueCapacity_requiresPositiveValue() {
-		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				HttpServer.withPort(0)
-						.requestHandlerQueueCapacity(0)
-						.build());
+	@NonNull
+	private static SokletConfig configuration(@NonNull HttpServer server,
+			@NonNull Class<?> resourceClass) {
+		return SokletConfig.withHttpServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
+						Set.of(resourceClass)))
+				.lifecyclePolicy(LifecyclePolicy.builder()
+						.gracefulShutdownDuration(Duration.ofSeconds(3))
+						.forcedShutdownDuration(Duration.ofSeconds(1)).build())
+				.lifecycleObserver(new QuietLifecycle()).build();
+	}
+
+	private static void assertGracefulHttpResult(@NonNull ShutdownResult result) {
+		Assertions.assertEquals(StartupDisposition.READY,
+				result.getStartupDisposition());
+		Assertions.assertEquals(ShutdownDisposition.GRACEFUL,
+				result.getDisposition());
+		Assertions.assertTrue(result.isComplete());
+		ParticipantShutdownResult http = result
+				.getParticipantResult(ParticipantKind.HTTP).orElseThrow();
+		Assertions.assertEquals(
+				ParticipantShutdownDisposition.GRACEFUL_TERMINATION,
+				http.getDisposition());
+		Assertions.assertTrue(http.getFailures().isEmpty());
+		Assertions.assertTrue(http.getResidualActivityEvidence().isEmpty());
+	}
+
+	private static HttpURLConnection open(@NonNull String method,
+			@NonNull URL url, @NonNull Map<String, String> headers)
+			throws IOException {
+		HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+		connection.setRequestMethod(method);
+		connection.setConnectTimeout(2000);
+		connection.setReadTimeout(4000);
+		for (Map.Entry<String, String> header : headers.entrySet())
+			connection.setRequestProperty(header.getKey(), header.getValue());
+		return connection;
+	}
+
+	@NonNull
+	private static String readUntil(@NonNull InputStream input,
+			@NonNull String delimiter, int maxBytes) throws IOException {
+		byte[] delimiterBytes = delimiter.getBytes(StandardCharsets.ISO_8859_1);
+		ByteArrayOutputStream output = new ByteArrayOutputStream();
+		int matched = 0;
+		while (output.size() < maxBytes) {
+			int value = input.read();
+			if (value < 0)
+				break;
+			output.write(value);
+			if ((byte) value == delimiterBytes[matched]) {
+				if (++matched == delimiterBytes.length)
+					break;
+			} else {
+				matched = (byte) value == delimiterBytes[0] ? 1 : 0;
+			}
+		}
+		return output.toString(StandardCharsets.ISO_8859_1);
+	}
+
+	private static void assertEventually(@NonNull BooleanSupplier condition,
+			@NonNull Duration timeout, @NonNull String message)
+			throws InterruptedException {
+		long deadline = System.nanoTime() + timeout.toNanos();
+		while (System.nanoTime() < deadline) {
+			if (condition.getAsBoolean())
+				return;
+			Thread.sleep(10);
+		}
+		Assertions.assertTrue(condition.getAsBoolean(), message);
 	}
 
 	public static class HealthResource {
 		@GET("/health")
-		public String health() {return "ok";}
+		@NonNull
+		public String health() {
+			return "ok";
+		}
+	}
+
+	public static class SlowResource {
+		private static final AtomicReference<SlowInvocation> INVOCATION =
+				new AtomicReference<>();
+
+		@GET("/slow")
+		@NonNull
+		public String slow() {
+			SlowInvocation invocation = requireNonNull(INVOCATION.get());
+			invocation.started.countDown();
+			boolean interrupted = false;
+			try {
+				for (;;) {
+					try {
+						invocation.release.await();
+						return "done";
+					} catch (InterruptedException ignored) {
+						interrupted = true;
+					}
+				}
+			} finally {
+				if (interrupted)
+					Thread.currentThread().interrupt();
+			}
+		}
+	}
+
+	public static class ThreadRecordingResource {
+		private static final AtomicReference<AtomicReference<Boolean>>
+				HANDLER_THREAD_VIRTUAL = new AtomicReference<>();
+
+		@GET("/thread")
+		@NonNull
+		public String thread() {
+			requireNonNull(HANDLER_THREAD_VIRTUAL.get())
+					.set(currentThreadIsVirtual());
+			return "ok";
+		}
+	}
+
+	private static final class SlowInvocation {
+		@NonNull private final CountDownLatch started = new CountDownLatch(1);
+		@NonNull private final CountDownLatch release = new CountDownLatch(1);
 	}
 
 	private static boolean currentThreadIsVirtual() {
 		try {
 			Method isVirtual = Thread.class.getMethod("isVirtual");
 			return Boolean.TRUE.equals(isVirtual.invoke(Thread.currentThread()));
-		} catch (NoSuchMethodException e) {
+		} catch (NoSuchMethodException ignored) {
 			return false;
-		} catch (ReflectiveOperationException e) {
-			throw new AssertionError("Unable to determine whether current thread is virtual", e);
+		} catch (ReflectiveOperationException exception) {
+			throw new AssertionError(
+					"Unable to determine whether current thread is virtual",
+					exception);
 		}
 	}
 
 	private static class QuietLifecycle implements LifecycleObserver {
 		@Override
-		public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* no-op */ }
-	}
-
-	private static final class RecordingLifecycle extends QuietLifecycle {
-		private final List<LogEvent> logEvents;
-		private final CountDownLatch configurationUnsupportedLatch;
-
-		private RecordingLifecycle() {
-			this.logEvents = new CopyOnWriteArrayList<>();
-			this.configurationUnsupportedLatch = new CountDownLatch(1);
-		}
-
-		@Override
 		public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
-			this.logEvents.add(logEvent);
-
-			if (logEvent.getLogEventType() == LogEventType.CONFIGURATION_UNSUPPORTED)
-				this.configurationUnsupportedLatch.countDown();
+			// No-op.
 		}
-
-		private boolean awaitConfigurationUnsupported(@NonNull Duration timeout) throws InterruptedException {
-			return this.configurationUnsupportedLatch.await(timeout.toMillis(), TimeUnit.MILLISECONDS);
-		}
-
-		private boolean hasConfigurationUnsupported() {
-			return this.logEvents.stream()
-					.anyMatch(logEvent -> logEvent.getLogEventType() == LogEventType.CONFIGURATION_UNSUPPORTED);
-		}
-	}
-
-	private static SokletConfig lifecycleTestConfig(@NonNull LifecycleObserver lifecycleObserver) throws IOException {
-		return SokletConfig.withHttpServer(HttpServer.withPort(findFreePort())
-						.requestHeaderTimeout(Duration.ofSeconds(5))
-						.build())
-				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(HealthResource.class)))
-				.lifecycleObserver(lifecycleObserver)
-				.build();
-	}
-
-	private static Thread awaitShutdownOnBackgroundThread(@NonNull Soklet soklet,
-																												@NonNull AtomicReference<Throwable> awaitFailure) {
-		Thread awaitThread = new Thread(() -> {
-			try {
-				soklet.awaitShutdown(ShutdownTrigger.ENTER_KEY);
-			} catch (Throwable t) {
-				awaitFailure.set(t);
-			}
-		}, "soklet-await-shutdown-test");
-		awaitThread.start();
-		return awaitThread;
-	}
-
-	private static void joinAwaitThread(@NonNull Thread awaitThread) throws InterruptedException {
-		awaitThread.join(2000);
-
-		if (awaitThread.isAlive()) {
-			awaitThread.interrupt();
-			awaitThread.join(1000);
-		}
-
-		Assertions.assertFalse(awaitThread.isAlive(), "awaitShutdown test thread did not finish");
-	}
-
-	@NonNull
-	private static String readUntil(@NonNull InputStream inputStream,
-																	@NonNull String delimiter,
-																	int maxBytes) throws IOException {
-		byte[] delimiterBytes = delimiter.getBytes(StandardCharsets.ISO_8859_1);
-		ByteArrayOutputStream output = new ByteArrayOutputStream();
-		int matched = 0;
-
-		while (output.size() < maxBytes) {
-			int value = inputStream.read();
-
-			if (value < 0)
-				break;
-
-			output.write(value);
-
-			if ((byte) value == delimiterBytes[matched]) {
-				matched++;
-
-				if (matched == delimiterBytes.length)
-					break;
-			} else {
-				matched = (byte) value == delimiterBytes[0] ? 1 : 0;
-			}
-		}
-
-		return output.toString(StandardCharsets.ISO_8859_1);
-	}
-
-	private static void assertEventually(@NonNull BooleanSupplier condition,
-																			 @NonNull Duration timeout,
-																			 @NonNull String message) throws InterruptedException {
-		long deadline = System.nanoTime() + timeout.toNanos();
-
-		while (System.nanoTime() < deadline) {
-			if (condition.getAsBoolean())
-				return;
-
-			Thread.sleep(10);
-		}
-
-		Assertions.assertTrue(condition.getAsBoolean(), message);
 	}
 }

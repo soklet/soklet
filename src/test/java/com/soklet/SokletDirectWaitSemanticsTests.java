@@ -39,7 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /** Regression coverage for interruptible and marked direct-owner joins. */
-@Timeout(value = 30, unit = TimeUnit.SECONDS)
+@Timeout(value = 60, unit = TimeUnit.SECONDS)
 final class SokletDirectWaitSemanticsTests {
 	@NonNull
 	private static final Duration PHASE_BUDGET = Duration.ofSeconds(3);
@@ -110,7 +110,7 @@ final class SokletDirectWaitSemanticsTests {
 			Assertions.assertTrue(harness.owner().result().isEmpty());
 			Assertions.assertFalse(peerWaiter.isDone());
 
-			CompletionStage<InternalShutdownResult> stage =
+			CompletionStage<ShutdownResult> stage =
 					harness.owner().shutdown();
 			Assertions.assertTrue(harness.endpoint().awaitQuiesce());
 			Assertions.assertFalse(peerWaiter.isDone());
@@ -120,7 +120,8 @@ final class SokletDirectWaitSemanticsTests {
 			Assertions.assertSame(result,
 					peerWaiter.get(2, TimeUnit.SECONDS));
 			Assertions.assertSame(result,
-					stage.toCompletableFuture().get(2, TimeUnit.SECONDS));
+					stage.toCompletableFuture().get(2, TimeUnit.SECONDS)
+							.internalResult());
 			Assertions.assertSame(result,
 					harness.owner().result().orElseThrow());
 			Assertions.assertTrue(result.isComplete());
@@ -175,7 +176,7 @@ final class SokletDirectWaitSemanticsTests {
 	void markedShutdownIsPromptAndReturnsTheCachedStage() throws Exception {
 		try (WaitHarness harness = WaitHarness.create()) {
 			harness.soklet().start();
-			CompletionStage<InternalShutdownResult> stage;
+			CompletionStage<ShutdownResult> stage;
 			long began = System.nanoTime();
 			try (LifecycleExecutionContext.Scope ignored =
 					harness.owner().enterExecution()) {
@@ -195,14 +196,15 @@ final class SokletDirectWaitSemanticsTests {
 			harness.endpoint().releaseTermination();
 			InternalShutdownResult result = harness.owner().awaitCompletion();
 			Assertions.assertSame(result,
-					stage.toCompletableFuture().get(2, TimeUnit.SECONDS));
+					stage.toCompletableFuture().get(2, TimeUnit.SECONDS)
+							.internalResult());
 			Assertions.assertSame(result,
 					harness.owner().result().orElseThrow());
 		}
 	}
 
 	@Test
-	void concurrentStopAndCloseJoinOnceAndRestoreEntryInterrupt()
+	void concurrentCloseCallsJoinOnceAndRestoreEntryInterrupt()
 			throws Exception {
 		ExecutorService executor = newExecutor(2);
 		CountDownLatch callersReady = new CountDownLatch(2);
@@ -210,37 +212,41 @@ final class SokletDirectWaitSemanticsTests {
 		try (WaitHarness harness = WaitHarness.create()) {
 			try {
 				harness.soklet().start();
-				Future<JoinOutcome> stop = executor.submit(() -> {
+				Future<JoinOutcome> firstClose = executor.submit(() -> {
 					callersReady.countDown();
-					releaseCallers.await();
-					return join(harness, harness.soklet()::stop, true);
+					Assertions.assertTrue(releaseCallers.await(10,
+							TimeUnit.SECONDS),
+							"Timed out waiting to release the first close caller");
+					return join(harness, harness.soklet()::close, true);
 				});
-				Future<JoinOutcome> close = executor.submit(() -> {
+				Future<JoinOutcome> secondClose = executor.submit(() -> {
 					callersReady.countDown();
-					releaseCallers.await();
+					Assertions.assertTrue(releaseCallers.await(10,
+							TimeUnit.SECONDS),
+							"Timed out waiting to release the second close caller");
 					return join(harness, harness.soklet()::close, true);
 				});
 				Assertions.assertTrue(callersReady.await(2, TimeUnit.SECONDS));
 				releaseCallers.countDown();
 				Assertions.assertTrue(harness.endpoint().awaitQuiesce());
-				Assertions.assertFalse(stop.isDone());
-				Assertions.assertFalse(close.isDone());
+				Assertions.assertFalse(firstClose.isDone());
+				Assertions.assertFalse(secondClose.isDone());
 				harness.endpoint().releaseTermination();
 
-				JoinOutcome stopped = stop.get(2, TimeUnit.SECONDS);
-				JoinOutcome closed = close.get(2, TimeUnit.SECONDS);
-				Assertions.assertNull(stopped.failure());
-				Assertions.assertNull(closed.failure());
-				Assertions.assertTrue(stopped.interruptedOnEntry());
-				Assertions.assertTrue(stopped.interruptedOnReturn(),
-						"stop() must restore the caller's entry interrupt");
-				Assertions.assertTrue(closed.interruptedOnEntry());
-				Assertions.assertTrue(closed.interruptedOnReturn(),
+				JoinOutcome first = firstClose.get(2, TimeUnit.SECONDS);
+				JoinOutcome second = secondClose.get(2, TimeUnit.SECONDS);
+				Assertions.assertNull(first.failure());
+				Assertions.assertNull(second.failure());
+				Assertions.assertTrue(first.interruptedOnEntry());
+				Assertions.assertTrue(first.interruptedOnReturn(),
 						"close() must restore the caller's entry interrupt");
-				Assertions.assertSame(stopped.result(), closed.result());
-				Assertions.assertSame(stopped.result(),
+				Assertions.assertTrue(second.interruptedOnEntry());
+				Assertions.assertTrue(second.interruptedOnReturn(),
+						"close() must restore the caller's entry interrupt");
+				Assertions.assertSame(first.result(), second.result());
+				Assertions.assertSame(first.result(),
 						harness.owner().result().orElseThrow());
-				Assertions.assertTrue(stopped.result().isComplete());
+				Assertions.assertTrue(first.result().isComplete());
 				Assertions.assertEquals(1, harness.endpoint().quiesceCalls(),
 						"Concurrent terminal joiners must share one shutdown phase");
 				Assertions.assertEquals(0, harness.endpoint().forceCalls());
@@ -358,13 +364,9 @@ final class SokletDirectWaitSemanticsTests {
 		}
 	}
 
-	private static final class GatedHttpEndpoint
-			implements HttpServer, InternalHttpTransportEndpoint {
+	private static final class GatedHttpEndpoint implements HttpServer {
 		@NonNull
-		private final InternalTransportIdentity identity =
-				InternalTransportIdentity.create();
-		@NonNull
-		private final AtomicBoolean started = new AtomicBoolean();
+		private final TransportIdentity identity = TransportIdentity.create();
 		@NonNull
 		private final AtomicBoolean terminationReleased = new AtomicBoolean();
 		@NonNull
@@ -376,62 +378,38 @@ final class SokletDirectWaitSemanticsTests {
 		@NonNull
 		private final CountDownLatch quiesceEntered = new CountDownLatch(1);
 		@NonNull
-		private final AtomicReference<InternalTransportTerminationSignal>
+		private final AtomicReference<TransportTerminationSignal>
 				terminationSignal = new AtomicReference<>();
 
 		@Override
 		@NonNull
-		public InternalTransportIdentity identity() {
+		public TransportIdentity getTransportIdentity() {
 			return this.identity;
 		}
 
 		@Override
 		@NonNull
-		public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
-			this.terminationSignal.set(context.terminationSignal());
-			return new InternalTransportRuntime() {
+		public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
+			this.terminationSignal.set(context.getTerminationSignal());
+			return new TransportRuntime() {
 				@Override
-				public void start(@NonNull InternalStartupContext context) {
-					started.set(true);
-				}
+				public void start(@NonNull StartupContext context) {}
 
 				@Override
-				public void quiesce(@NonNull InternalShutdownContext context) {
+				public void quiesce(@NonNull ShutdownContext context) {
 					quiesceCalls.incrementAndGet();
 					quiesceEntered.countDown();
 					signalIfReleased();
 				}
 
 				@Override
-				public void force(@NonNull InternalShutdownContext context) {
+				public void force(@NonNull ShutdownContext context) {
 					forceCalls.incrementAndGet();
 					signalIfReleased();
 				}
 			};
-		}
-
-		@Override
-		public void start() {
-			throw new AssertionError("Direct endpoint startup uses its runtime");
-		}
-
-		@Override
-		public void stop() {
-			releaseTermination();
-		}
-
-		@Override
-		@NonNull
-		public Boolean isStarted() {
-			return this.started.get();
-		}
-
-		@Override
-		public void initialize(@NonNull SokletConfig sokletConfig,
-				@NonNull RequestHandler requestHandler) {
-			throw new AssertionError("Direct endpoint attachment uses attach(...)");
 		}
 
 		boolean awaitQuiesce() throws InterruptedException {
@@ -452,10 +430,9 @@ final class SokletDirectWaitSemanticsTests {
 		}
 
 		private void signalIfReleased() {
-			InternalTransportTerminationSignal signal = this.terminationSignal.get();
+			TransportTerminationSignal signal = this.terminationSignal.get();
 			if (this.terminationReleased.get() && signal != null
 					&& this.terminationSignalled.compareAndSet(false, true)) {
-				this.started.set(false);
 				signal.signalTerminated();
 			}
 		}

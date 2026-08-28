@@ -21,12 +21,14 @@ import java.util.EnumSet;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 import static java.util.Objects.requireNonNull;
 
 /**
- * Package-private MCP bridge into the common lifecycle foundation.  Public MCP
- * construction remains sealed and every public descriptor remains unchanged.
+ * Package-private MCP bridge into the common lifecycle foundation. Public MCP
+ * construction remains sealed while lifecycle status, results, and metrics are
+ * projected onto the shared Soklet 4.0 vocabulary.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -119,13 +121,15 @@ final class McpTransportLifecycleAdapter
 	@NonNull
 	private final ThreadLocal<Generation> externalStartInvocation;
 
-	McpTransportLifecycleAdapter(@NonNull Duration gracefulTimeout) {
+	McpTransportLifecycleAdapter(
+			@NonNull Supplier<@NonNull Duration> gracefulTimeout,
+			@NonNull Supplier<@NonNull Duration> forcedTimeout) {
 		this.runtime = new AtomicReference<>();
 		this.generation = new AtomicReference<>();
 		this.externalStartInvocation = new ThreadLocal<>();
 		this.delegate = new BuiltInTransportLifecycleAdapter(
 				InternalParticipantKind.MCP, new Operations(),
-				() -> requireNonNull(gracefulTimeout));
+				requireNonNull(gracefulTimeout), requireNonNull(forcedTimeout));
 	}
 
 	/** Deterministic package-private lifecycle seam; production uses the runtime-bound form. */
@@ -305,6 +309,12 @@ final class McpTransportLifecycleAdapter
 		return this.generation.get() != null && this.delegate.result().isEmpty();
 	}
 
+	boolean admissionOpen() {
+		Generation exactGeneration = this.generation.get();
+		return exactGeneration != null
+				&& this.delegate.admissionOpen(exactGeneration.delegate);
+	}
+
 	@NonNull
 	Optional<InternalShutdownResult> result() {
 		return this.delegate.result();
@@ -356,8 +366,20 @@ final class McpTransportLifecycleAdapter
 		}
 
 		@Override
+		public void quiesce(@NonNull InternalShutdownContext context) {
+			runtime().quiesceLifecycle(
+					requireNonNull(context).absoluteDeadlineNanos());
+		}
+
+		@Override
 		public void force() {
 			runtime().forceLifecycle();
+		}
+
+		@Override
+		public void force(@NonNull InternalShutdownContext context) {
+			runtime().forceLifecycle(
+					requireNonNull(context).absoluteDeadlineNanos());
 		}
 
 		@Override

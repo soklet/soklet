@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -38,7 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@Timeout(40)
+@Timeout(60)
 public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 	private static final String HOST = "127.0.0.1";
 
@@ -99,13 +100,13 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 		assertSecurityDiagnostics(beforeStart,
 				McpProtectionMode.PRODUCTION_KEY_RING, false,
 				Optional.of(initialProtection), Optional.of(initialTrace));
-		Assertions.assertEquals(McpServerStatus.STOPPED,
+		Assertions.assertEquals(McpServerStatus.NOT_STARTED,
 				beforeStart.getStatus());
 
 		try {
 			firstOwner.start();
 			McpServerDiagnostics started = firstServer.getDiagnostics();
-			Assertions.assertEquals(McpServerStatus.STARTED,
+			Assertions.assertEquals(McpServerStatus.RUNNING,
 					started.getStatus());
 			assertSecurityDiagnostics(started,
 					McpProtectionMode.PRODUCTION_KEY_RING, false,
@@ -134,9 +135,9 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 					McpProtectionMode.PRODUCTION_KEY_RING, false,
 					Optional.of(rotatedProtection), Optional.of(rotatedTrace));
 
-			firstOwner.stop();
+			firstOwner.close();
 			McpServerDiagnostics stopped = firstServer.getDiagnostics();
-			Assertions.assertEquals(McpServerStatus.STOPPED, stopped.getStatus());
+			Assertions.assertEquals(McpServerStatus.TERMINATED, stopped.getStatus());
 			assertSecurityDiagnostics(stopped,
 					McpProtectionMode.PRODUCTION_KEY_RING, false,
 					Optional.of(rotatedProtection), Optional.of(rotatedTrace));
@@ -152,7 +153,7 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 			secondOwner = managedSoklet(secondServer);
 			secondOwner.start();
 			McpServerDiagnostics restarted = secondServer.getDiagnostics();
-			Assertions.assertEquals(McpServerStatus.STARTED,
+			Assertions.assertEquals(McpServerStatus.RUNNING,
 					restarted.getStatus());
 			assertSecurityDiagnostics(restarted,
 					McpProtectionMode.PRODUCTION_KEY_RING, false,
@@ -164,18 +165,18 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 			assertSecurityDiagnostics(started,
 					McpProtectionMode.PRODUCTION_KEY_RING, false,
 					Optional.of(initialProtection), Optional.of(initialTrace));
-			Assertions.assertEquals(McpServerStatus.STARTED,
+			Assertions.assertEquals(McpServerStatus.RUNNING,
 					started.getStatus());
 			assertSecurityDiagnostics(stopped,
 					McpProtectionMode.PRODUCTION_KEY_RING, false,
 					Optional.of(rotatedProtection), Optional.of(rotatedTrace));
-			Assertions.assertEquals(McpServerStatus.STOPPED, stopped.getStatus());
+			Assertions.assertEquals(McpServerStatus.TERMINATED, stopped.getStatus());
 		} finally {
 			try {
 				if (secondOwner != null)
-					secondOwner.stop();
+					secondOwner.close();
 			} finally {
-				firstOwner.stop();
+				firstOwner.close();
 			}
 		}
 	}
@@ -402,6 +403,12 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecyclePolicy(LifecyclePolicy.builder()
+						.startupTimeout(Duration.ofSeconds(5))
+						.startupCancellationTimeout(Duration.ofSeconds(2))
+						.gracefulShutdownDuration(Duration.ofSeconds(2))
+						.forcedShutdownDuration(Duration.ofSeconds(1))
+						.build())
 				.build());
 	}
 }

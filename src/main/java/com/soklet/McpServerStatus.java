@@ -23,23 +23,31 @@ package com.soklet;
  */
 public enum McpServerStatus {
 	/**
-	 * The MCP listener is not accepting connections and has no residual
-	 * application-supplied MCP request-processing executions.
+	 * MCP attachment has not begun, or startup failed before attachment was
+	 * committed.
 	 */
-	STOPPED,
+	NOT_STARTED,
 
 	/**
-	 * The MCP listener is bound and started.
+	 * Attachment or transport startup is in progress before readiness.
 	 */
-	STARTED,
+	STARTING,
 
 	/**
-	 * The listener is no longer accepting connections, but one or more
-	 * application-supplied MCP request-processing executions remain. This
-	 * includes transient failure cleanup and work that remains after the bounded
-	 * shutdown deadline. The compatibility name covers both registered handlers
-	 * and request pipeline callbacks, such as admission, rate-limiting, or
-	 * request-state protection code.
+	 * The MCP transport generation is ready and admission is open. An
+	 * off-network simulator generation can be running without a bound address.
 	 */
-	STOPPED_WITH_RESIDUAL_HANDLERS
+	RUNNING,
+
+	/** Shutdown or rollback is in progress and final proof is pending. */
+	SHUTTING_DOWN,
+
+	/** Final normal, forced, or unexpected termination is proven. */
+	TERMINATED,
+
+	/** Positive MCP activity remained at the final shutdown boundary. */
+	RESIDUAL_ACTIVITY,
+
+	/** Final MCP termination proof could not be established. */
+	TERMINATION_UNKNOWN
 }

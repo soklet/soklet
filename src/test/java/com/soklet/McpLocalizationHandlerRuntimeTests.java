@@ -52,6 +52,13 @@ class McpLocalizationHandlerRuntimeTests {
 	private static final String MCP_PATH = "/localization/handler";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final Duration WAIT = Duration.ofSeconds(5);
+	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
+			LifecyclePolicy.builder()
+					.startupTimeout(Duration.ofSeconds(5))
+					.startupCancellationTimeout(Duration.ofSeconds(2))
+					.gracefulShutdownDuration(Duration.ofSeconds(2))
+					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.build();
 
 	@Test
 	void everyHandlerFamilyReceivesTheExactContextAndTheInterceptorSeesIt() {
@@ -68,8 +75,8 @@ class McpLocalizationHandlerRuntimeTests {
 					return context;
 				})
 				.build();
-		McpHandlerInterceptor interceptor = (context, continuation) -> {
-			interceptorObserved.set(continuation.getFeatures()
+		McpHandlerInterceptor interceptor = (context, features, continuation) -> {
+			interceptorObserved.set(features
 					.find(McpLocalizationContext.class).orElse(null));
 			return continuation.proceed();
 		};
@@ -114,7 +121,7 @@ class McpLocalizationHandlerRuntimeTests {
 					throw new AssertionError("secret-provider-detail");
 				})
 				.build();
-		McpHandlerInterceptor interceptor = (context, continuation) -> {
+		McpHandlerInterceptor interceptor = (context, features, continuation) -> {
 			interceptorInvocations.incrementAndGet();
 			return continuation.proceed();
 		};
@@ -299,6 +306,7 @@ class McpLocalizationHandlerRuntimeTests {
 							observedThrowables.addAll(throwables);
 						}
 					}))
+					.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 					.build();
 		}, simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(request);

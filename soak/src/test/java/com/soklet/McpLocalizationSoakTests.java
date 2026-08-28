@@ -28,7 +28,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -129,6 +128,10 @@ class McpLocalizationSoakTests {
 						"0/0/0/0",
 						"Final MCP status",
 						finalServer.getDiagnostics().getStatus().name(),
+						"Lifecycle core shutdown bound",
+						PROFILE.gracefulShutdownDuration()
+								.plus(PROFILE.forcedShutdownDuration())
+								.toString(),
 						"Settle timeout", PROFILE.settleTimeout().toString()));
 	}
 
@@ -300,7 +303,6 @@ class McpLocalizationSoakTests {
 						PROFILE.maximumSubscriptionsPerPrincipal())
 				.maximumSubscriptionDuration(
 						PROFILE.maximumSubscriptionDuration())
-				.shutdownTimeout(PROFILE.shutdownTimeout())
 				.localizer(state.localizer())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
@@ -317,10 +319,14 @@ class McpLocalizationSoakTests {
 			return SokletConfig.withMcpServer(server)
 					.resourceMethodResolver(
 							ResourceMethodResolver.fromMethods(Set.of()))
-					.internalLifecyclePolicy(new InternalLifecyclePolicy(
-							Optional.of(Duration.ofSeconds(30)),
-							Duration.ofSeconds(2), Duration.ZERO,
-							PROFILE.shutdownTimeout()))
+					.lifecyclePolicy(LifecyclePolicy.builder()
+							.startupTimeout(Duration.ofSeconds(30))
+							.startupCancellationTimeout(Duration.ofSeconds(2))
+							.gracefulShutdownDuration(
+									PROFILE.gracefulShutdownDuration())
+							.forcedShutdownDuration(
+									PROFILE.forcedShutdownDuration())
+							.build())
 					.build();
 		};
 	}
@@ -375,7 +381,8 @@ class McpLocalizationSoakTests {
 
 	private static void assertStoppedAndDrained(@NonNull McpServer server) {
 		McpServerDiagnostics diagnostics = server.getDiagnostics();
-		Assertions.assertEquals(McpServerStatus.STOPPED, diagnostics.getStatus());
+		Assertions.assertEquals(McpServerStatus.TERMINATED,
+				diagnostics.getStatus());
 		Assertions.assertTrue(diagnostics.getBoundAddress().isEmpty());
 		Assertions.assertEquals(0, diagnostics.getActiveHandlerExecutions());
 		Assertions.assertEquals(0, diagnostics.getQueuedRequests());
@@ -408,7 +415,8 @@ class McpLocalizationSoakTests {
 			SoakResourceSnapshot.@NonNull ResourceTolerance resourceTolerance,
 			@NonNull Duration runTimeout,
 			@NonNull Duration settleTimeout,
-			@NonNull Duration shutdownTimeout,
+			@NonNull Duration gracefulShutdownDuration,
+			@NonNull Duration forcedShutdownDuration,
 			int streamQueueCapacity,
 			@NonNull Duration writeTimeout) {
 		@NonNull
@@ -433,7 +441,8 @@ class McpLocalizationSoakTests {
 									"mcp.resourceTolerance.maxLiveThreadGrowth")),
 					profile.durationMillis("mcp.runTimeoutMillis"),
 					profile.durationMillis("mcp.settleTimeoutMillis"),
-					profile.durationMillis("mcp.shutdownTimeoutMillis"),
+					profile.durationMillis("mcp.gracefulShutdownMillis"),
+					profile.durationMillis("mcp.forcedShutdownMillis"),
 					profile.integer("mcp.streamQueueCapacity"),
 					profile.durationMillis("mcp.writeTimeoutMillis"));
 		}

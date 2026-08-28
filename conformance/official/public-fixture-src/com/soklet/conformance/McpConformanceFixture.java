@@ -18,6 +18,7 @@ package com.soklet.conformance;
 
 import com.soklet.CorsAuthorizer;
 import com.soklet.LifecycleObserver;
+import com.soklet.LifecyclePolicy;
 import com.soklet.McpAbsentOriginPolicy;
 import com.soklet.McpAudioContent;
 import com.soklet.McpBlobResourceContents;
@@ -59,18 +60,22 @@ import com.soklet.McpResourceOutput;
 import com.soklet.McpRequestStateMode;
 import com.soklet.McpServer;
 import com.soklet.McpServerStatus;
-import com.soklet.McpShutdownOutcome;
+import com.soklet.ParticipantShutdownDisposition;
 import com.soklet.McpSubscriptionConfig;
 import com.soklet.McpSubscriptionNotificationType;
 import com.soklet.McpTextContent;
 import com.soklet.McpTextResourceContents;
 import com.soklet.McpToolOutput;
 import com.soklet.McpToolRegistration;
+import com.soklet.MetricsCollector;
+import com.soklet.ParticipantKind;
 import com.soklet.ResourceMethodResolver;
+import com.soklet.SimulatorTransports;
+import com.soklet.ShutdownResult;
 import com.soklet.Soklet;
 import com.soklet.SokletConfig;
 import com.soklet.annotation.McpHeader;
-import com.soklet.annotation.McpToolArgument;
+import com.soklet.annotation.McpToolProperty;
 
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -81,7 +86,6 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 /**
@@ -174,21 +178,14 @@ public final class McpConformanceFixture {
 					"Usage: McpConformanceFixture --scenario <supported scenario>");
 
 		AtomicInteger effectivePort = new AtomicInteger(-1);
-		AtomicReference<McpShutdownOutcome> shutdownOutcome =
-				new AtomicReference<>();
 		CorsAuthorizer corsAuthorizer = CorsAuthorizer.fromWhitelistAuthorizer(
 				origin -> origin.equals("http://" + LOOPBACK + ":"
 						+ effectivePort.get()));
-		LifecycleObserver lifecycleObserver = new LifecycleObserver() {
-			@Override
-			public void didStopMcpServer(McpServer server,
-					McpShutdownOutcome outcome) {
-				shutdownOutcome.set(outcome);
-			}
-		};
+		LifecycleObserver lifecycleObserver = LifecycleObserver.defaultInstance();
 		SokletConfig config = configForScenario(arguments[1], corsAuthorizer,
 				lifecycleObserver);
 		McpServer mcpServer = config.getMcpServer().orElseThrow();
+		ShutdownResult shutdownResult;
 
 		try (Soklet soklet = Soklet.fromConfig(config)) {
 			soklet.start();
@@ -206,28 +203,43 @@ public final class McpConformanceFixture {
 			while (System.in.read() >= 0) {
 				// The parent owns this pipe. EOF is the graceful shutdown request.
 			}
+			soklet.shutdown();
+			shutdownResult = soklet.awaitShutdown();
 		}
 
-		if (mcpServer.isStarted()
-				|| mcpServer.getDiagnostics().getStatus()
-				!= McpServerStatus.STOPPED
-				|| shutdownOutcome.get() != McpShutdownOutcome.CLEAN)
+		if (mcpServer.getDiagnostics().getStatus()
+				!= McpServerStatus.TERMINATED
+				|| shutdownResult.getParticipantResult(ParticipantKind.MCP)
+						.orElseThrow().getDisposition()
+						!= ParticipantShutdownDisposition.GRACEFUL_TERMINATION)
 			throw new IllegalStateException(
 					"The public MCP conformance fixture did not shut down cleanly.");
 
 		writeControlLine("{\"format\":1,\"event\":\"stopped\",\"clean\":true}");
 	}
 
-	static SokletConfig simulationConfigForScenario(String scenario) {
+	static SokletConfig simulationConfigForScenario(String scenario,
+			SimulatorTransports transports, MetricsCollector metricsCollector,
+			LifecycleObserver lifecycleObserver) {
 		return configForScenario(scenario,
 				CorsAuthorizer.fromWhitelistAuthorizer(origin ->
 						origin.equals("http://" + LOOPBACK + ":0")),
-				LifecycleObserver.defaultInstance());
+				lifecycleObserver, transports.newMcpServerBuilder(0),
+				metricsCollector);
 	}
 
 	private static SokletConfig configForScenario(String scenario,
 			CorsAuthorizer corsAuthorizer,
 			LifecycleObserver lifecycleObserver) {
+		return configForScenario(scenario, corsAuthorizer, lifecycleObserver,
+				McpServer.withPort(0), null);
+	}
+
+	private static SokletConfig configForScenario(String scenario,
+			CorsAuthorizer corsAuthorizer,
+			LifecycleObserver lifecycleObserver,
+			McpServer.Builder mcpServerBuilder,
+			MetricsCollector metricsCollector) {
 		if (!SUPPORTED_SCENARIOS.contains(scenario))
 			throw new IllegalArgumentException(
 					"Unsupported MCP conformance scenario: " + scenario);
@@ -235,7 +247,7 @@ public final class McpConformanceFixture {
 		McpEndpoint endpoint = endpointForScenario(scenario);
 		McpRateLimiter allowLimiter = context ->
 				McpRateLimitDecision.allowed();
-		McpServer mcpServer = McpServer.withPort(0)
+		McpServer mcpServer = mcpServerBuilder
 				.host(LOOPBACK)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.admissionController(
@@ -247,10 +259,17 @@ public final class McpConformanceFixture {
 				.absentOriginPolicy(McpAbsentOriginPolicy.ALLOW)
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
-		return SokletConfig.withMcpServer(mcpServer)
+		SokletConfig.Builder configBuilder = SokletConfig.withMcpServer(mcpServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(lifecycleObserver)
-				.build();
+				.lifecyclePolicy(LifecyclePolicy.builder()
+						.startupCancellationTimeout(Duration.ofSeconds(1))
+						.gracefulShutdownDuration(Duration.ofSeconds(5))
+						.forcedShutdownDuration(Duration.ofSeconds(1))
+						.build());
+		if (metricsCollector != null)
+			configBuilder.metricsCollector(metricsCollector);
+		return configBuilder.build();
 	}
 
 	static McpEndpoint endpointForScenario(String scenario) {
@@ -800,7 +819,7 @@ public final class McpConformanceFixture {
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	public record CustomHeaderArguments(
-			@McpToolArgument(description = "Mirrored test value")
+			@McpToolProperty(description = "Mirrored test value")
 			@McpHeader("Value") String value) {
 	}
 }

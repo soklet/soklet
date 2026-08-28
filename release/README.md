@@ -35,6 +35,34 @@ immutable-candidate, scheduled-history, sustained-run, or pinned-downstream
 proof is owned by the exact named release gate or gates. It must not be used to
 hide a local implementation, test, documentation, golden, or fixture gap.
 
+The registry contains 263 rows. `MCP-CAP-005` is the nineteenth
+`NOT_APPLICABLE` disposition and records the one jointly declined SEP-2577
+warning SHOULD across logging and developer-tooling channels; its N/A closure
+reason remains empty. The five unrelated `UNRESOLVED` rows remain unchanged.
+
+Lifecycle-bound test and process-harness closure is tracked separately in
+`release/lifecycle-bound-harness-inventory.json`. Its verifier binds the
+accepted-D1 legacy shutdown-timeout baseline, a line-addressed current-source
+discovery census, method-level lifecycle arithmetic and outer guards, the
+standard 60-second JUnit deadlock guard, and the five short-bound harness
+families settled by the lifecycle plan. The verifier fails on source-line or
+policy drift, an unclassified candidate, an unresolved migration action, an
+unbounded startup without controlled-completion proof, or a lifecycle path
+that does not fit its recorded guard. Its adversarial self-test runs before the
+inventory verifier in CI and candidate validation.
+
+D1p public-cutover evidence has a separate deterministic contract in
+`release/d1p-evidence-contract.md` and frozen inputs in
+`release/d1p-evidence-config.json`. The API-freeze wrapper runs its adversarial
+self-test and derives the compiler-backed core evidence in memory before any
+manifest is generated. Once the tracked root exists, CI and the release
+`api-freeze` gate require sibling-blind verification of the tracked root and
+leaves. Later serialized commits rederive the approved tracked leaf from
+preview `P` and recheck current compiler semantics plus the exact protected
+post-D2 conformance/ledger bytes. The final pre-commit workspace command additionally verifies the
+untracked retained JAR/report evidence and all seven sibling-workspace rows;
+candidate mode never opens sibling bytes and does not claim otherwise.
+
 Candidate conformance also verifies
 `conformance/official/protocol-profile-evidence.json` before setup. That index
 binds the sole immutable production revision to its specification, schema,
@@ -377,7 +405,7 @@ behavior, public API, freeze inventory, manifest, version, gate status,
 official result, or official 48-message/11-test corpus changed. The pinned
 40-scenario inventory has no exact scenario for this Soklet policy, so this
 adds no official claim or release gate. `MCP-HTTP-020` is now
-`CORE_COMPLETE`; the report is 110/117/12/18/5 and the remaining IDs are
+`CORE_COMPLETE`; the report is 110/117/12/19/5 and the remaining IDs are
 `SOK-VALID-002`, `SOK-STATE-002`, `SOK-STATE-007`, `SOK-PRIV-001`, and
 `AMB-002`. Generic `Request`, `Throwable`, custom-collector, and
 application-telemetry privacy remain owned by `SOK-PRIV-001`.
@@ -527,11 +555,14 @@ procedure is documented in `release/PROMOTION.md`.
 ## Checks
 
 The dependency-free structural tests are safe to run without Maven or network
-access:
+access. Direct lifecycle-inventory verification requires the accepted-D1 commit
+recorded by the inventory to exist in the local Git object database:
 
 ```sh
 node scripts/release-validation-evidence.mjs \
   validate-config release/release-validation-manifest.json
+node scripts/verify-lifecycle-bound-harness-inventory-self-test.mjs
+node scripts/verify-lifecycle-bound-harness-inventory.mjs
 node scripts/release-validation-self-test.mjs
 bash -n scripts/validate-release-candidate.sh
 bash -n release/scripts/install-pinned-corretto-linux-x64.sh

@@ -107,8 +107,8 @@ public class McpServerPublicRuntimeTests {
 			Assertions.assertEquals(1, suppliedExecutors.size());
 			Assertions.assertFalse(suppliedExecutors.get(0).isShutdown());
 		} finally {
-			firstOwner.stop();
-			firstOwner.stop();
+			firstOwner.close();
+			firstOwner.close();
 		}
 		Assertions.assertTrue(suppliedExecutors.get(0).isShutdown());
 
@@ -126,8 +126,8 @@ public class McpServerPublicRuntimeTests {
 			Assertions.assertFalse(suppliedExecutors.get(1).isShutdown());
 		} finally {
 			try {
-				secondOwner.stop();
-				secondOwner.stop();
+				secondOwner.close();
+				secondOwner.close();
 			} finally {
 				secondExecutorShutdownByOwner = suppliedExecutors.size() == 2
 						&& suppliedExecutors.get(1).isShutdown();
@@ -159,11 +159,11 @@ public class McpServerPublicRuntimeTests {
 					IllegalStateException.class, exception.getCause());
 			Assertions.assertTrue(cause.getMessage().contains("shut-down"),
 					cause.getMessage());
-			Assertions.assertEquals(McpServerStatus.STOPPED,
+			Assertions.assertEquals(McpServerStatus.TERMINATED,
 					invalidServer.getDiagnostics().getStatus());
 		} finally {
-			invalidOwner.stop();
-			invalidOwner.stop();
+			invalidOwner.close();
+			invalidOwner.close();
 		}
 	}
 
@@ -177,13 +177,13 @@ public class McpServerPublicRuntimeTests {
 		McpServerDiagnostics neverStartedSnapshot =
 				neverStartedServer.getDiagnostics();
 
-		Assertions.assertEquals(McpServerStatus.STOPPED,
+		Assertions.assertEquals(McpServerStatus.NOT_STARTED,
 				neverStartedSnapshot.getStatus());
 		Assertions.assertTrue(neverStartedSnapshot.getBoundAddress().isEmpty());
 		assertHandlerDiagnostics(neverStartedSnapshot, 32, 128, 0, 0);
-		neverStartedOwner.stop();
-		neverStartedOwner.stop();
-		Assertions.assertEquals(McpServerStatus.STOPPED,
+		neverStartedOwner.close();
+		neverStartedOwner.close();
+		Assertions.assertEquals(McpServerStatus.TERMINATED,
 				neverStartedServer.getDiagnostics().getStatus());
 
 		McpServer firstServer = newMcpServer(0,
@@ -191,7 +191,7 @@ public class McpServerPublicRuntimeTests {
 		Soklet firstOwner = mcpOnlySoklet(firstServer,
 				quietLifecycleObserver());
 		McpServerDiagnostics firstInitial = firstServer.getDiagnostics();
-		Assertions.assertEquals(McpServerStatus.STOPPED,
+		Assertions.assertEquals(McpServerStatus.NOT_STARTED,
 				firstInitial.getStatus());
 		Assertions.assertTrue(firstInitial.getBoundAddress().isEmpty());
 		assertHandlerDiagnostics(firstInitial, 32, 128, 0, 0);
@@ -202,13 +202,13 @@ public class McpServerPublicRuntimeTests {
 			firstStarted = firstServer.getDiagnostics();
 			firstAddress = firstStarted.getBoundAddress().orElseThrow();
 
-			Assertions.assertTrue(firstOwner.isStarted());
-			Assertions.assertEquals(McpServerStatus.STARTED, firstStarted.getStatus());
+			Assertions.assertEquals(SokletStatus.RUNNING, firstOwner.getStatus());
+			Assertions.assertEquals(McpServerStatus.RUNNING, firstStarted.getStatus());
 			assertHandlerDiagnostics(firstStarted, 32, 128, 0, 0);
 			Assertions.assertEquals(LOOPBACK,
 					firstAddress.getAddress().getHostAddress());
 			Assertions.assertTrue(firstAddress.getPort() > 0);
-			Assertions.assertEquals(McpServerStatus.STOPPED,
+			Assertions.assertEquals(McpServerStatus.NOT_STARTED,
 					firstInitial.getStatus(),
 					"A retained pre-start snapshot must not change.");
 			Assertions.assertTrue(firstInitial.getBoundAddress().isEmpty());
@@ -219,19 +219,19 @@ public class McpServerPublicRuntimeTests {
 			assertSuccessfulDiscovery(sendDiscovery(firstAddress.getPort(),
 					"first-generation", "{}"), "first-generation");
 		} finally {
-			firstOwner.stop();
-			firstOwner.stop();
+			firstOwner.close();
+			firstOwner.close();
 			firstOwner.close();
 			firstOwner.close();
 		}
 		McpServerDiagnostics firstStopped = firstServer.getDiagnostics();
-		Assertions.assertFalse(firstOwner.isStarted());
-		Assertions.assertEquals(McpServerStatus.STOPPED, firstStopped.getStatus());
+		Assertions.assertEquals(SokletStatus.CLOSED, firstOwner.getStatus());
+		Assertions.assertEquals(McpServerStatus.TERMINATED, firstStopped.getStatus());
 		Assertions.assertEquals(firstAddress,
 				firstStopped.getBoundAddress().orElseThrow(),
 				"A once-bound address remains historical generation evidence.");
 		assertHandlerDiagnostics(firstStopped, 32, 128, 0, 0);
-		Assertions.assertEquals(McpServerStatus.STARTED, firstStarted.getStatus(),
+		Assertions.assertEquals(McpServerStatus.RUNNING, firstStarted.getStatus(),
 				"A retained started snapshot must not change after stop.");
 		Assertions.assertEquals(firstAddress,
 				firstStarted.getBoundAddress().orElseThrow());
@@ -245,9 +245,9 @@ public class McpServerPublicRuntimeTests {
 			secondOwner.start();
 			McpServerDiagnostics secondStarted = secondServer.getDiagnostics();
 			int secondPort = secondStarted.getBoundAddress().orElseThrow().getPort();
-			Assertions.assertEquals(McpServerStatus.STARTED, secondStarted.getStatus());
+			Assertions.assertEquals(McpServerStatus.RUNNING, secondStarted.getStatus());
 			assertHandlerDiagnostics(secondStarted, 32, 128, 0, 0);
-			Assertions.assertEquals(McpServerStatus.STOPPED, firstStopped.getStatus(),
+			Assertions.assertEquals(McpServerStatus.TERMINATED, firstStopped.getStatus(),
 					"A retained stopped snapshot must not change for a fresh generation.");
 			Assertions.assertEquals(firstAddress,
 					firstStopped.getBoundAddress().orElseThrow());
@@ -255,15 +255,15 @@ public class McpServerPublicRuntimeTests {
 			assertSuccessfulDiscovery(sendDiscovery(secondPort,
 					"second-generation", "{}"), "second-generation");
 		} finally {
-			secondOwner.stop();
-			secondOwner.stop();
+			secondOwner.close();
+			secondOwner.close();
 			secondOwner.close();
 			secondOwner.close();
 		}
 
-		Assertions.assertFalse(secondOwner.isStarted());
+		Assertions.assertEquals(SokletStatus.CLOSED, secondOwner.getStatus());
 		McpServerDiagnostics finalSnapshot = secondServer.getDiagnostics();
-		Assertions.assertEquals(McpServerStatus.STOPPED,
+		Assertions.assertEquals(McpServerStatus.TERMINATED,
 				finalSnapshot.getStatus());
 		assertHandlerDiagnostics(finalSnapshot, 32, 128, 0, 0);
 	}
@@ -277,11 +277,11 @@ public class McpServerPublicRuntimeTests {
 				McpTraceCorrelationConfigurationFingerprint.fromValue(
 						"E".repeat(43));
 		McpServerDiagnostics started = diagnosticSnapshot(
-				McpServerStatus.STARTED, Optional.of(address), 2, 3, 1, 2, 4, 3,
+				McpServerStatus.RUNNING, Optional.of(address), 2, 3, 1, 2, 4, 3,
 				McpProtectionMode.PRODUCTION_KEY_RING, false,
 				Optional.of(protectionFingerprint), Optional.of(traceFingerprint));
 
-		Assertions.assertEquals(McpServerStatus.STARTED, started.getStatus());
+		Assertions.assertEquals(McpServerStatus.RUNNING, started.getStatus());
 		Assertions.assertEquals(address, started.getBoundAddress().orElseThrow());
 		assertDiagnostics(started, 2, 3, 1, 2, 4, 3);
 		Assertions.assertEquals(McpProtectionMode.PRODUCTION_KEY_RING,
@@ -294,10 +294,10 @@ public class McpServerPublicRuntimeTests {
 				started.getTraceCorrelationConfigurationFingerprint());
 
 		McpServerDiagnostics residualCleanup = diagnosticSnapshot(
-				McpServerStatus.STOPPED_WITH_RESIDUAL_HANDLERS, Optional.empty(),
+				McpServerStatus.RESIDUAL_ACTIVITY, Optional.empty(),
 				2, 3, 1, 2, 1, 1, McpProtectionMode.CUSTOM_PROTECTOR, true,
 				Optional.empty(), Optional.empty());
-		Assertions.assertEquals(McpServerStatus.STOPPED_WITH_RESIDUAL_HANDLERS,
+		Assertions.assertEquals(McpServerStatus.RESIDUAL_ACTIVITY,
 				residualCleanup.getStatus());
 		assertDiagnostics(residualCleanup, 2, 3, 1, 2, 1, 1);
 		Assertions.assertEquals(McpProtectionMode.CUSTOM_PROTECTOR,
@@ -305,100 +305,102 @@ public class McpServerPublicRuntimeTests {
 		Assertions.assertEquals(Boolean.TRUE,
 				residualCleanup.isApplicationRequestStateProtectorConfigured());
 
-		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> defaultSecurityDiagnosticSnapshot(
-						McpServerStatus.STARTED, Optional.empty(), 2, 3, 0, 0, 0, 0),
-				"A STARTED snapshot without a bound address violates the public contract.");
+		McpServerDiagnostics offNetworkRunning = defaultSecurityDiagnosticSnapshot(
+				McpServerStatus.RUNNING, Optional.empty(), 2, 3, 0, 0, 0, 0);
+		Assertions.assertEquals(McpServerStatus.RUNNING,
+				offNetworkRunning.getStatus());
+		Assertions.assertTrue(offNetworkRunning.getBoundAddress().isEmpty(),
+				"An off-network simulator can be running without a bound address.");
 		McpServerDiagnostics retainedStopped = defaultSecurityDiagnosticSnapshot(
-				McpServerStatus.STOPPED, Optional.of(address), 2, 3, 0, 0, 0, 0);
+				McpServerStatus.TERMINATED, Optional.of(address), 2, 3, 0, 0, 0, 0);
 		Assertions.assertEquals(address,
 				retainedStopped.getBoundAddress().orElseThrow());
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> defaultSecurityDiagnosticSnapshot(
-						McpServerStatus.STARTED, Optional.of(address), 0, 3, 0, 0, 0, 0));
+						McpServerStatus.RUNNING, Optional.of(address), 0, 3, 0, 0, 0, 0));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> defaultSecurityDiagnosticSnapshot(
-						McpServerStatus.STARTED, Optional.of(address), 2, 0, 0, 0, 0, 0));
+						McpServerStatus.RUNNING, Optional.of(address), 2, 0, 0, 0, 0, 0));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> defaultSecurityDiagnosticSnapshot(
-						McpServerStatus.STARTED, Optional.of(address), 2, 3, -1, 0, 0, 0));
+						McpServerStatus.RUNNING, Optional.of(address), 2, 3, -1, 0, 0, 0));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> defaultSecurityDiagnosticSnapshot(
-						McpServerStatus.STARTED, Optional.of(address), 2, 3, 3, 0, 0, 0));
+						McpServerStatus.RUNNING, Optional.of(address), 2, 3, 3, 0, 0, 0));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> defaultSecurityDiagnosticSnapshot(
-						McpServerStatus.STARTED, Optional.of(address), 2, 3, 0, -1, 0, 0));
+						McpServerStatus.RUNNING, Optional.of(address), 2, 3, 0, -1, 0, 0));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> defaultSecurityDiagnosticSnapshot(
-						McpServerStatus.STARTED, Optional.of(address), 2, 3, 0, 4, 0, 0));
+						McpServerStatus.RUNNING, Optional.of(address), 2, 3, 0, 4, 0, 0));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> defaultSecurityDiagnosticSnapshot(
-						McpServerStatus.STOPPED, Optional.empty(), 2, 3, 1, 0, 0, 0));
+						McpServerStatus.TERMINATED, Optional.empty(), 2, 3, 1, 0, 0, 0));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> defaultSecurityDiagnosticSnapshot(
-						McpServerStatus.STOPPED, Optional.empty(), 2, 3, 0, 1, 0, 0));
+						McpServerStatus.TERMINATED, Optional.empty(), 2, 3, 0, 1, 0, 0));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> defaultSecurityDiagnosticSnapshot(
-						McpServerStatus.STARTED, Optional.of(address), 2, 3, 0, 0,
+						McpServerStatus.RUNNING, Optional.of(address), 2, 3, 0, 0,
 						-1, 0));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> defaultSecurityDiagnosticSnapshot(
-						McpServerStatus.STARTED, Optional.of(address), 2, 3, 0, 0,
+						McpServerStatus.RUNNING, Optional.of(address), 2, 3, 0, 0,
 						1, -1));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> defaultSecurityDiagnosticSnapshot(
-						McpServerStatus.STARTED, Optional.of(address), 2, 3, 0, 0,
+						McpServerStatus.RUNNING, Optional.of(address), 2, 3, 0, 0,
 						1, 2));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> defaultSecurityDiagnosticSnapshot(
-						McpServerStatus.STOPPED, Optional.empty(), 2, 3, 0, 0,
+						McpServerStatus.TERMINATED, Optional.empty(), 2, 3, 0, 0,
 						1, 0));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> defaultSecurityDiagnosticSnapshot(
-						McpServerStatus.STOPPED, Optional.empty(), 2, 3, 0, 0,
+						McpServerStatus.TERMINATED, Optional.empty(), 2, 3, 0, 0,
 						1, 1));
 
 		Assertions.assertThrows(NullPointerException.class,
-				() -> diagnosticSnapshot(McpServerStatus.STOPPED, Optional.empty(),
+				() -> diagnosticSnapshot(McpServerStatus.TERMINATED, Optional.empty(),
 						2, 3, 0, 0, 0, 0, null, false,
 						Optional.empty(), Optional.empty()));
 		Assertions.assertThrows(NullPointerException.class,
-				() -> diagnosticSnapshot(McpServerStatus.STOPPED, Optional.empty(),
+				() -> diagnosticSnapshot(McpServerStatus.TERMINATED, Optional.empty(),
 						2, 3, 0, 0, 0, 0,
 						McpProtectionMode.NO_FRAMEWORK_KEYS, false,
 						null, Optional.empty()));
 		Assertions.assertThrows(NullPointerException.class,
-				() -> diagnosticSnapshot(McpServerStatus.STOPPED, Optional.empty(),
+				() -> diagnosticSnapshot(McpServerStatus.TERMINATED, Optional.empty(),
 						2, 3, 0, 0, 0, 0,
 						McpProtectionMode.NO_FRAMEWORK_KEYS, false,
 						Optional.empty(), null));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> diagnosticSnapshot(McpServerStatus.STOPPED, Optional.empty(),
+				() -> diagnosticSnapshot(McpServerStatus.TERMINATED, Optional.empty(),
 						2, 3, 0, 0, 0, 0,
 						McpProtectionMode.NO_FRAMEWORK_KEYS, true,
 						Optional.empty(), Optional.empty()));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> diagnosticSnapshot(McpServerStatus.STOPPED, Optional.empty(),
+				() -> diagnosticSnapshot(McpServerStatus.TERMINATED, Optional.empty(),
 						2, 3, 0, 0, 0, 0,
 						McpProtectionMode.CUSTOM_PROTECTOR, false,
 						Optional.empty(), Optional.empty()));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> diagnosticSnapshot(McpServerStatus.STOPPED, Optional.empty(),
+				() -> diagnosticSnapshot(McpServerStatus.TERMINATED, Optional.empty(),
 						2, 3, 0, 0, 0, 0,
 						McpProtectionMode.CUSTOM_PROTECTOR, true,
 						Optional.of(protectionFingerprint), Optional.empty()));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> diagnosticSnapshot(McpServerStatus.STOPPED, Optional.empty(),
+				() -> diagnosticSnapshot(McpServerStatus.TERMINATED, Optional.empty(),
 						2, 3, 0, 0, 0, 0,
 						McpProtectionMode.PRODUCTION_KEY_RING, false,
 						Optional.empty(), Optional.empty()));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> diagnosticSnapshot(McpServerStatus.STOPPED, Optional.empty(),
+				() -> diagnosticSnapshot(McpServerStatus.TERMINATED, Optional.empty(),
 						2, 3, 0, 0, 0, 0,
 						McpProtectionMode.PRODUCTION_KEY_RING, true,
 						Optional.of(protectionFingerprint), Optional.empty()));
 		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> diagnosticSnapshot(McpServerStatus.STOPPED, Optional.empty(),
+				() -> diagnosticSnapshot(McpServerStatus.TERMINATED, Optional.empty(),
 						2, 3, 0, 0, 0, 0,
 						McpProtectionMode.DEVELOPMENT_EPHEMERAL, false,
 						Optional.of(protectionFingerprint), Optional.empty()));
@@ -464,11 +466,11 @@ public class McpServerPublicRuntimeTests {
 			Assertions.assertFalse(failed.started());
 			Assertions.assertEquals(failedAddress,
 					failed.boundAddress().orElseThrow());
-			Assertions.assertNotEquals(McpServerStatus.STARTED,
+			Assertions.assertNotEquals(McpServerStatus.RUNNING,
 					server.getDiagnostics().getStatus());
 
 			Assertions.assertThrows(SokletTerminatedUnexpectedlyException.class,
-					owner::stop);
+					owner::close);
 			RuntimeState stopped = bridge.getRuntimeState();
 			Assertions.assertFalse(stopped.started());
 			Assertions.assertFalse(stopped.stopRequired());
@@ -505,7 +507,7 @@ public class McpServerPublicRuntimeTests {
 					failed.boundAddress().orElseThrow());
 
 			Assertions.assertThrows(SokletTerminatedUnexpectedlyException.class,
-					failedOwner::stop);
+					failedOwner::close);
 			RuntimeState normalized = failedBridge.getRuntimeState();
 			Assertions.assertFalse(normalized.started());
 			Assertions.assertFalse(normalized.stopRequired());
@@ -533,8 +535,8 @@ public class McpServerPublicRuntimeTests {
 					"fresh-after-termination", "{}"),
 					"fresh-after-termination");
 		} finally {
-			freshOwner.stop();
-			freshOwner.stop();
+			freshOwner.close();
+			freshOwner.close();
 		}
 	}
 
@@ -579,8 +581,8 @@ public class McpServerPublicRuntimeTests {
 			Assertions.assertTrue(body.contains(
 					"\"instructions\":\"Use the public discovery endpoint.\""), body);
 		} finally {
-			owner.stop();
-			owner.stop();
+			owner.close();
+			owner.close();
 		}
 	}
 
@@ -658,8 +660,8 @@ public class McpServerPublicRuntimeTests {
 					+ "\"version\":\"1.0\"}}}}", response.body());
 			Assertions.assertEquals(0, publishedEvents.get());
 		} finally {
-			owner.stop();
-			owner.stop();
+			owner.close();
+			owner.close();
 		}
 		Assertions.assertEquals(1, listenerRegistrations.get());
 		Assertions.assertEquals(1, listenerRegistrationCloses.get());
@@ -690,8 +692,8 @@ public class McpServerPublicRuntimeTests {
 			Assertions.assertFalse(response.body().contains(
 					"\"io.modelcontextprotocol/serverInfo\""), response.body());
 		} finally {
-			owner.stop();
-			owner.stop();
+			owner.close();
+			owner.close();
 		}
 	}
 
@@ -746,9 +748,12 @@ public class McpServerPublicRuntimeTests {
 			Assertions.assertTrue(capabilities.supports(McpClientCapability.ROOTS));
 			Assertions.assertFalse(capabilities.supports(McpClientCapability.SAMPLING));
 			Assertions.assertTrue(capabilities.toJson().find("roots").isPresent());
+			Assertions.assertTrue(
+					context.getRequestedResourceSubscriptionUris().isEmpty(),
+					"Non-subscription admission must expose no requested resource URIs.");
 		} finally {
-			owner.stop();
-			owner.stop();
+			owner.close();
+			owner.close();
 		}
 	}
 
@@ -769,12 +774,12 @@ public class McpServerPublicRuntimeTests {
 					SokletStartupException.class, failedOwner::start);
 			Assertions.assertInstanceOf(BindException.class,
 					failure.getCause());
-			Assertions.assertEquals(McpServerStatus.STOPPED,
+			Assertions.assertEquals(McpServerStatus.TERMINATED,
 					failedServer.getDiagnostics().getStatus());
 			Assertions.assertTrue(failedServer.getDiagnostics()
 					.getBoundAddress().isEmpty());
-			failedOwner.stop();
-			failedOwner.stop();
+			failedOwner.close();
+			failedOwner.close();
 		}
 
 		McpServer server = newMcpServer(port,
@@ -782,14 +787,14 @@ public class McpServerPublicRuntimeTests {
 		Soklet owner = mcpOnlySoklet(server, quietLifecycleObserver());
 		try {
 			owner.start();
-			Assertions.assertTrue(owner.isStarted());
+			Assertions.assertEquals(SokletStatus.RUNNING, owner.getStatus());
 			Assertions.assertEquals(port,
 					server.getDiagnostics().getBoundAddress().orElseThrow().getPort());
 			assertSuccessfulDiscovery(sendDiscovery(port, "after-bind-release", "{}"),
 					"after-bind-release");
 		} finally {
-			owner.stop();
-			owner.stop();
+			owner.close();
+			owner.close();
 		}
 	}
 
@@ -812,8 +817,8 @@ public class McpServerPublicRuntimeTests {
 			firstOwner.start();
 			assertOmittedCorsEvents(events, 1);
 		} finally {
-			firstOwner.stop();
-			firstOwner.stop();
+			firstOwner.close();
+			firstOwner.close();
 		}
 		assertOmittedCorsEvents(events, 1);
 
@@ -824,8 +829,8 @@ public class McpServerPublicRuntimeTests {
 			secondOwner.start();
 			assertOmittedCorsEvents(events, 2);
 		} finally {
-			secondOwner.stop();
-			secondOwner.stop();
+			secondOwner.close();
+			secondOwner.close();
 		}
 	}
 
@@ -847,8 +852,8 @@ public class McpServerPublicRuntimeTests {
 		try {
 			firstOwner.start();
 		} finally {
-			firstOwner.stop();
-			firstOwner.stop();
+			firstOwner.close();
+			firstOwner.close();
 		}
 		Assertions.assertTrue(firstServer.getDiagnostics().getBoundAddress().isPresent(),
 				"A stopped generation retains its successfully bound address.");
@@ -869,8 +874,8 @@ public class McpServerPublicRuntimeTests {
 					startupAddresses,
 					"Every fresh startup callback begins with no bound-address history.");
 		} finally {
-			secondOwner.stop();
-			secondOwner.stop();
+			secondOwner.close();
+			secondOwner.close();
 		}
 	}
 
@@ -927,8 +932,8 @@ public class McpServerPublicRuntimeTests {
 			if (startFailure.get() != null)
 				Assertions.fail("MCP startup failed after the diagnostic returned.",
 						startFailure.get());
-			Assertions.assertTrue(soklet.isStarted());
-			Assertions.assertEquals(McpServerStatus.STARTED,
+			Assertions.assertEquals(SokletStatus.RUNNING, soklet.getStatus());
+			Assertions.assertEquals(McpServerStatus.RUNNING,
 					server.getDiagnostics().getStatus());
 			assertSuccessfulDiscovery(sendDiscovery(port, "after-startup", "{}"),
 					"after-startup");
@@ -940,7 +945,7 @@ public class McpServerPublicRuntimeTests {
 				startThread.join(TimeUnit.SECONDS.toMillis(5));
 			}
 			if (!startThread.isAlive())
-				soklet.stop();
+				soklet.close();
 		}
 	}
 
@@ -961,8 +966,8 @@ public class McpServerPublicRuntimeTests {
 		try {
 			firstOwner.start();
 		} finally {
-			firstOwner.stop();
-			firstOwner.stop();
+			firstOwner.close();
+			firstOwner.close();
 		}
 
 		McpServer secondServer = newMcpServer(0,
@@ -974,8 +979,8 @@ public class McpServerPublicRuntimeTests {
 					event.getLogEventType() == LogEventType.MCP_SERVER_CONFIGURATION),
 					events.toString());
 		} finally {
-			secondOwner.stop();
-			secondOwner.stop();
+			secondOwner.close();
+			secondOwner.close();
 		}
 	}
 
@@ -998,15 +1003,15 @@ public class McpServerPublicRuntimeTests {
 
 		try {
 			Assertions.assertDoesNotThrow(soklet::start);
-			Assertions.assertTrue(soklet.isStarted());
-			Assertions.assertEquals(McpServerStatus.STARTED,
+			Assertions.assertEquals(SokletStatus.RUNNING, soklet.getStatus());
+			Assertions.assertEquals(McpServerStatus.RUNNING,
 					server.getDiagnostics().getStatus());
 			Assertions.assertEquals(1, attempts.get());
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			assertSuccessfulDiscovery(sendDiscovery(port, "observer-failure", "{}"),
 					"observer-failure");
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -1037,7 +1042,7 @@ public class McpServerPublicRuntimeTests {
 			assertSuccessfulDiscovery(sendDiscovery(mcpPort,
 					"separate-listener", "{}"), "separate-listener");
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -1108,6 +1113,12 @@ public class McpServerPublicRuntimeTests {
 		SokletConfig config = SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(lifecycleObserver)
+				.lifecyclePolicy(LifecyclePolicy.builder()
+						.startupTimeout(Duration.ofSeconds(5))
+						.startupCancellationTimeout(Duration.ofSeconds(2))
+						.gracefulShutdownDuration(Duration.ofSeconds(2))
+						.forcedShutdownDuration(Duration.ofSeconds(1))
+						.build())
 				.build();
 		return Soklet.fromConfig(config);
 	}
@@ -1157,7 +1168,7 @@ public class McpServerPublicRuntimeTests {
 	private static void stopOwnerAllowingUnexpectedTermination(
 			@NonNull Soklet owner) {
 		try {
-			owner.stop();
+			owner.close();
 		} catch (SokletTerminatedUnexpectedlyException expected) {
 			// Repeated owner shutdown replays the already-asserted terminal evidence.
 		}

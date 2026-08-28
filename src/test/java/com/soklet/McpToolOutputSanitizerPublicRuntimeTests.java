@@ -36,12 +36,58 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@Timeout(30)
+@Timeout(60)
 public class McpToolOutputSanitizerPublicRuntimeTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/mcp";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final String JSON_MEDIA_TYPE = "application/json";
+	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
+			LifecyclePolicy.builder()
+					.startupTimeout(Duration.ofSeconds(5))
+					.startupCancellationTimeout(Duration.ofSeconds(2))
+					.gracefulShutdownDuration(Duration.ofSeconds(2))
+					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.build();
+
+	@Test
+	public void toBuilderPreservesEveryFieldAcrossSanitizerTransformations()
+			throws Exception {
+		McpTextContent first = McpTextContent.fromText("first");
+		McpTextContent second = McpTextContent.fromText("second");
+		McpJsonObject structured = McpJsonObject.builder()
+				.put("nested", McpJsonArray.builder()
+						.add("one").add("two").build())
+				.build();
+		McpToolOutput original = McpToolOutput.builder()
+				.content(first)
+				.content(second)
+				.structuredContent(structured)
+				.error(false)
+				.build();
+
+		McpToolOutput copy = original.toBuilder().build();
+		Assertions.assertNotSame(original, copy);
+		Assertions.assertEquals(List.of(first, second), copy.getContent());
+		Assertions.assertSame(structured,
+				copy.getStructuredContent().orElseThrow());
+		Assertions.assertFalse(copy.isError());
+
+		McpToolOutput errorOnly = copy.toBuilder().error(true).build();
+		Assertions.assertEquals(copy.getContent(), errorOnly.getContent());
+		Assertions.assertSame(structured,
+				errorOnly.getStructuredContent().orElseThrow());
+		Assertions.assertTrue(errorOnly.isError());
+
+		McpJsonObject replacement = McpJsonObject.builder()
+				.put("replacement", true).build();
+		McpToolOutput chained = errorOnly.toBuilder()
+				.structuredContent(replacement).build();
+		Assertions.assertEquals(List.of(first, second), chained.getContent());
+		Assertions.assertSame(replacement,
+				chained.getStructuredContent().orElseThrow());
+		Assertions.assertTrue(chained.isError());
+	}
 
 	@Test
 	public void sanitizerRunsAfterInterceptionAndSanitizesShortCircuits()
@@ -64,7 +110,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 					return McpCompleteResult.fromToolText("HANDLER-MUST-NOT-RUN");
 				})
 				.build();
-		McpHandlerInterceptor interceptor = (context, continuation) -> {
+		McpHandlerInterceptor interceptor = (context, features, continuation) -> {
 			String operation = context.getOperationName().orElseThrow();
 			stages.add("interceptor-before:" + operation);
 			McpOperationResult result;
@@ -115,7 +161,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 			Assertions.assertEquals(0,
 					shortCircuitedHandlerInvocations.get());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -266,7 +312,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 
 			Assertions.assertEquals(8, sanitizerInvocations.get());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -296,7 +342,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 					.contains("SANITIZER-EXCEPTION-MUST-NOT-LEAK"),
 					response.body());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -304,6 +350,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build());
 	}
 

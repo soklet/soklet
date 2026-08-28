@@ -38,7 +38,8 @@ import java.lang.annotation.Target;
  * A method-parameter declaration must also carry {@link McpToolArgument} and
  * belong to an {@link McpTool} method. A record-component declaration applies
  * when that component is reached from a typed tool input solely through record
- * properties. Mirrored properties must derive to the JSON Schema type
+ * properties; it may also carry {@link McpToolProperty} to customize its
+ * published property metadata. Mirrored properties must derive to the JSON Schema type
  * {@code string}, {@code boolean}, or a JavaScript-safe {@code integer}. Soklet
  * rejects unsupported placements, other property types, invalid HTTP
  * field-name suffixes, and case-insensitive name collisions while deriving the

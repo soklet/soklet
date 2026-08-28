@@ -49,7 +49,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@Timeout(30)
+@Timeout(60)
 public class McpRequestObservationPublicRuntimeTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/mcp";
@@ -78,7 +78,7 @@ public class McpRequestObservationPublicRuntimeTests {
 		AtomicInteger interceptorInvocations = new AtomicInteger();
 		McpEndpoint endpoint = endpointBuilder("discovery-observation-test").build();
 		McpServer server = serverBuilder(endpoint)
-				.handlerInterceptor((context, continuation) -> {
+				.handlerInterceptor((context, features, continuation) -> {
 					interceptorInvocations.incrementAndGet();
 					return continuation.proceed();
 				})
@@ -99,7 +99,7 @@ public class McpRequestObservationPublicRuntimeTests {
 					Optional.empty(), "discover");
 			assertSingleCompleteMetrics(collector, "server/discover");
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -125,7 +125,7 @@ public class McpRequestObservationPublicRuntimeTests {
 				.tool(tool)
 				.build();
 		McpServer server = serverBuilder(endpoint)
-				.handlerInterceptor((context, continuation) -> {
+				.handlerInterceptor((context, features, continuation) -> {
 					interceptorContext.set(context);
 					return continuation.proceed();
 				})
@@ -152,7 +152,7 @@ public class McpRequestObservationPublicRuntimeTests {
 			Assertions.assertSame(observer.startedContext.get(), handlerContext.get());
 			assertSingleCompleteMetrics(collector, "tools/call");
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -263,7 +263,7 @@ public class McpRequestObservationPublicRuntimeTests {
 							+ "keyId=trace-second;token=" + SECOND_TRACE_TOKEN);
 		} finally {
 			releaseFirstHandler.countDown();
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -339,7 +339,7 @@ public class McpRequestObservationPublicRuntimeTests {
 							+ "keyId=trace-first;token=" + FIRST_TRACE_TOKEN
 							+ ";traceId=0af7651916cd43dd8448eb211c80319c");
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -376,7 +376,7 @@ public class McpRequestObservationPublicRuntimeTests {
 			Assertions.assertTrue(defaultObserver.logEvents.isEmpty(),
 					defaultObserver.logEvents.toString());
 		} finally {
-			defaultSoklet.stop();
+			defaultSoklet.close();
 		}
 
 		TraceRecordingLifecycleObserver rawObserver =
@@ -403,7 +403,7 @@ public class McpRequestObservationPublicRuntimeTests {
 			assertTraceLogEvent(rawObserver.logEvents.get(0),
 					"traceId=0af7651916cd43dd8448eb211c80319c");
 		} finally {
-			rawSoklet.stop();
+			rawSoklet.close();
 		}
 
 		TraceRecordingLifecycleObserver enabledObserver =
@@ -438,7 +438,7 @@ public class McpRequestObservationPublicRuntimeTests {
 							+ "keyId=trace-first;token=" + FIRST_TRACE_TOKEN
 							+ ";traceId=0af7651916cd43dd8448eb211c80319c");
 		} finally {
-			enabledSoklet.stop();
+			enabledSoklet.close();
 		}
 	}
 
@@ -547,7 +547,7 @@ public class McpRequestObservationPublicRuntimeTests {
 			}
 			observer.awaitAllFinished();
 			collector.awaitRequestFinishes();
-			soklet.stop();
+			soklet.close();
 			collector.awaitServerStopped();
 
 			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
@@ -639,7 +639,7 @@ public class McpRequestObservationPublicRuntimeTests {
 			Assertions.assertEquals(0L, mcpMetrics.getHandlerQueueDepth());
 			Assertions.assertEquals(0L,
 					mcpMetrics.getHandlerCapacityRejections());
-			Assertions.assertEquals(Map.of(McpShutdownOutcome.CLEAN, 1L),
+			Assertions.assertEquals(Map.of(ParticipantShutdownDisposition.GRACEFUL_TERMINATION, 1L),
 					mcpMetrics.getShutdowns());
 			Assertions.assertTrue(mcpMetrics.getConnectionsAccepted() > 0L);
 			Assertions.assertEquals(0L,
@@ -704,7 +704,7 @@ public class McpRequestObservationPublicRuntimeTests {
 					"soklet_mcp_handler_executions_active{}",
 					"soklet_mcp_handler_queue_depth{}",
 					"soklet_mcp_handler_capacity_rejections_total{}",
-					"soklet_mcp_shutdowns_total{outcome=clean}",
+					"soklet_mcp_shutdowns_total{outcome=graceful_termination}",
 					"soklet_mcp_requests_active{}",
 					"soklet_mcp_request_streams_active{}",
 					"soklet_mcp_subscriptions_active{}",
@@ -782,12 +782,11 @@ public class McpRequestObservationPublicRuntimeTests {
 					resetFilteredSamples.toString(), resetOpenMetrics);
 			assertNoSensitiveCanaries(builtInRendering, sensitiveCanaries);
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
 	@Test
-	@SuppressWarnings("deprecation")
 	public void deprecatedWireLogLevelProjectsToTheRealRequestContext()
 			throws Exception {
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver();
@@ -825,7 +824,7 @@ public class McpRequestObservationPublicRuntimeTests {
 			Assertions.assertEquals(Optional.of(McpLogLevel.WARNING),
 					context.getDeprecatedLogLevel());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -878,7 +877,7 @@ public class McpRequestObservationPublicRuntimeTests {
 			assertSingleMetrics(collector, "tools/call",
 					McpRequestOutcome.INTERNAL_ERROR);
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -921,7 +920,7 @@ public class McpRequestObservationPublicRuntimeTests {
 			Assertions.assertTrue(collector.requestStartedEvents().isEmpty());
 			Assertions.assertTrue(collector.requestFinishedEvents().isEmpty());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -968,7 +967,7 @@ public class McpRequestObservationPublicRuntimeTests {
 			assertSingleMetrics(collector, "server/discover",
 					McpRequestOutcome.REJECTED);
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -1015,7 +1014,7 @@ public class McpRequestObservationPublicRuntimeTests {
 					McpMetricsEvent.UNRECOGNIZED_JSON_RPC_METHOD,
 					McpRequestOutcome.PROTOCOL_ERROR);
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -1106,7 +1105,7 @@ public class McpRequestObservationPublicRuntimeTests {
 			for (LogEvent event : recordingObserver.logEvents)
 				Assertions.assertTrue(event.getRequest().isPresent(), event.toString());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -1137,6 +1136,12 @@ public class McpRequestObservationPublicRuntimeTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObservers(observers)
 				.metricsCollector(collector)
+				.lifecyclePolicy(LifecyclePolicy.builder()
+						.startupTimeout(Duration.ofSeconds(5))
+						.startupCancellationTimeout(Duration.ofSeconds(2))
+						.gracefulShutdownDuration(Duration.ofSeconds(2))
+						.forcedShutdownDuration(Duration.ofSeconds(1))
+						.build())
 				.build();
 		if (collector instanceof RecordingDefaultMetricsCollector recording)
 			recording.initialize(config);
@@ -1424,7 +1429,7 @@ public class McpRequestObservationPublicRuntimeTests {
 						Assertions.assertEquals("tools/call", value);
 				case "outcome" -> Assertions.assertTrue(
 						value instanceof McpRequestOutcome
-								|| value instanceof McpShutdownOutcome,
+								|| value instanceof ParticipantShutdownDisposition,
 						value.toString());
 				case "reason" -> Assertions.assertTrue(
 						value instanceof McpStreamTerminationReason

@@ -474,13 +474,17 @@ public class SokletTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
-			assertThrows(IllegalStateException.class, soklet::start);
-		}
+		Soklet soklet = Soklet.fromConfig(sokletConfig);
+		SokletStartupException startup = assertThrows(
+				SokletStartupException.class, soklet::start);
+		Assertions.assertSame(startup.getShutdownResult(),
+				soklet.getShutdownResult().orElseThrow());
+		Assertions.assertDoesNotThrow(soklet::close,
+				"Complete startup rollback must make close nonthrowing");
 
-		Assertions.assertFalse(fakeHttpServer.isStarted());
+		Assertions.assertFalse(fakeHttpServer.isRunning());
 		Assertions.assertTrue(fakeHttpServer.wasStopped());
-		Assertions.assertFalse(failingSseServer.isStarted());
+		Assertions.assertFalse(failingSseServer.isRunning());
 	}
 
 	@Test
@@ -762,30 +766,48 @@ public class SokletTests {
 	}
 
 	private static final class FakeHttpServer implements HttpServer {
+		@NonNull
+		private final TransportIdentity identity = TransportIdentity.create();
 		private final AtomicBoolean started = new AtomicBoolean();
 		private final AtomicBoolean stopped = new AtomicBoolean();
+		private final AtomicBoolean proofPublished = new AtomicBoolean();
 
+		@NonNull
 		@Override
-		public void start() {
-			this.started.set(true);
-		}
-
-		@Override
-		public void stop() {
-			this.stopped.set(true);
-			this.started.set(false);
+		public TransportIdentity getTransportIdentity() {
+			return this.identity;
 		}
 
 		@NonNull
 		@Override
-		public Boolean isStarted() {
-			return this.started.get();
+		public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
+			TransportTerminationSignal signal = context.getTerminationSignal();
+			return new TransportRuntime() {
+				@Override public void start(@NonNull StartupContext context) {
+					started.set(true);
+				}
+
+				@Override public void quiesce(@NonNull ShutdownContext context) {
+					stopAndPublish();
+				}
+
+				@Override public void force(@NonNull ShutdownContext context) {
+					stopAndPublish();
+				}
+
+				private void stopAndPublish() {
+					stopped.set(true);
+					started.set(false);
+					if (proofPublished.compareAndSet(false, true))
+						signal.signalTerminated();
+				}
+			};
 		}
 
-		@Override
-		public void initialize(@NonNull SokletConfig sokletConfig,
-									 @NonNull RequestHandler requestHandler) {
-			// No state is needed for this lifecycle regression fixture.
+		private boolean isRunning() {
+			return this.started.get();
 		}
 
 		private boolean wasStopped() {
@@ -794,20 +816,42 @@ public class SokletTests {
 	}
 
 	private static final class FailingStartSseServer implements SseServer {
-		@Override
-		public void start() {
-			throw new IllegalStateException("boom");
-		}
+		@NonNull
+		private final TransportIdentity identity = TransportIdentity.create();
+		private final AtomicBoolean started = new AtomicBoolean();
+		private final AtomicBoolean proofPublished = new AtomicBoolean();
 
+		@NonNull
 		@Override
-		public void stop() {
-			// No-op.
+		public TransportIdentity getTransportIdentity() {
+			return this.identity;
 		}
 
 		@NonNull
 		@Override
-		public Boolean isStarted() {
-			return false;
+		public TransportRuntime attach(
+				@NonNull SseTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
+			TransportTerminationSignal signal = context.getTerminationSignal();
+			return new TransportRuntime() {
+				@Override public void start(@NonNull StartupContext context) {
+					throw new IllegalStateException("boom");
+				}
+
+				@Override public void quiesce(@NonNull ShutdownContext context) {
+					publishProof();
+				}
+
+				@Override public void force(@NonNull ShutdownContext context) {
+					publishProof();
+				}
+
+				private void publishProof() {
+					started.set(false);
+					if (proofPublished.compareAndSet(false, true))
+						signal.signalTerminated();
+				}
+			};
 		}
 
 		@NonNull
@@ -816,10 +860,8 @@ public class SokletTests {
 			return Optional.empty();
 		}
 
-		@Override
-		public void initialize(@NonNull SokletConfig sokletConfig,
-									 @NonNull RequestHandler requestHandler) {
-			// No state is needed for this lifecycle regression fixture.
+		private boolean isRunning() {
+			return this.started.get();
 		}
 	}
 

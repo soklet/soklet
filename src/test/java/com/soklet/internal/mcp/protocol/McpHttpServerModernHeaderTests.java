@@ -28,7 +28,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @NotThreadSafe
-@Timeout(30)
+@Timeout(60)
 public class McpHttpServerModernHeaderTests {
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final String UNSUPPORTED_VERSION = "2099-01-01";

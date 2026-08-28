@@ -26,12 +26,44 @@ public enum McpClientCapability {
 	ELICITATION_FORM,
 	/** URL-based elicitation. */
 	ELICITATION_URL,
-	/** Base sampling support. */
+	/**
+	 * Base sampling support.
+	 *
+	 * <p>SEP-2577 marks Sampling deprecated in MCP 2026-07-28, with
+	 * specification removal eligible no earlier than 2027-07-28. Prefer direct
+	 * model-provider integration. Soklet keeps this constant functional for
+	 * every supported profile containing it and has made no Java API-removal
+	 * decision.
+	 */
 	SAMPLING,
-	/** Sampling with context inclusion. */
+	/**
+	 * Sampling with context inclusion.
+	 *
+	 * <p>SEP-2596 first deprecated non-{@code none} context inclusion; SEP-2577
+	 * marks Sampling deprecated in MCP 2026-07-28, with specification removal
+	 * eligible no earlier than 2027-07-28. Prefer direct model-provider
+	 * integration. Soklet keeps this constant functional for every supported
+	 * profile containing it and has made no Java API-removal decision.
+	 */
 	SAMPLING_CONTEXT,
-	/** Sampling with tool use. */
+	/**
+	 * Sampling with tool use.
+	 *
+	 * <p>SEP-2577 marks Sampling deprecated in MCP 2026-07-28, with
+	 * specification removal eligible no earlier than 2027-07-28. Prefer direct
+	 * model-provider integration. Soklet keeps this constant functional for
+	 * every supported profile containing it and has made no Java API-removal
+	 * decision.
+	 */
 	SAMPLING_TOOLS,
-	/** Client roots support. */
+	/**
+	 * Client roots support.
+	 *
+	 * <p>SEP-2577 marks Roots deprecated in MCP 2026-07-28, with specification
+	 * removal eligible no earlier than 2027-07-28. Prefer explicit tool
+	 * parameters, resource URIs, or server configuration. Soklet keeps this
+	 * constant functional for every supported profile containing it and has
+	 * made no Java API-removal decision.
+	 */
 	ROOTS
 }

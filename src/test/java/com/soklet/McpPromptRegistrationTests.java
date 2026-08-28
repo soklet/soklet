@@ -266,7 +266,7 @@ class McpPromptRegistrationTests {
 			@Override public McpJsonObject getRequestMetadata() {
 				return McpJsonObject.emptyInstance();
 			}
-			@Override @SuppressWarnings("deprecation")
+			@Override
 			public Optional<McpLogLevel> getDeprecatedLogLevel() {
 				return Optional.empty();
 			}

@@ -10,7 +10,7 @@ This guide describes the implemented and frozen Phase 4, Phase 5, and Phase 6
 surfaces in the current `4.0.0-SNAPSHOT`: multi-round-trip request state,
 progress/cancelation, subscriptions, localization, lifecycle and aggregate
 metrics, bounded off-network simulation, downstream OpenTelemetry integration,
-and bounded structured trace-correlation logging. All 65 Phase 6 owners are
+and bounded structured trace-correlation logging. All 64 Phase 6 owners are
 frozen and the provisional inventory is empty. This is development
 documentation, not a release or final conformance claim.
 Compile-checked programmatic and annotation-driven applications live outside
@@ -306,9 +306,9 @@ Tools, prompt gets, and resource reads may return `McpInputRequiredResult`
 when they need a supported client request, state for a later retry, or both.
 Programmatic operations declare every possible `McpInputRequestDeclaration`
 with `mayRequestInput(...)`; annotated operations use `@McpMayRequestInput`.
-Soklet supports the core `elicitation/create`, `sampling/createMessage`, and
-`roots/list` declarations, validates their method-specific parameters, and
-rejects an emitted declaration that was not registered for that operation.
+Soklet 4.0.x supports exactly the MCP `2026-07-28` profile; it neither selects an automatic
+"latest" profile nor falls back. Active Elicitation is the default teaching surface;
+retained Sampling and Roots declarations are validated and must be registered.
 
 Those client operations are embedded values, not standalone JSON-RPC
 requests. Soklet writes each `method`/`params` pair only inside the
@@ -342,13 +342,11 @@ filesystem containment for returned roots. The public-API-only
 compile-check each of those patterns; [SECURITY.md](SECURITY.md#mcp-deployment-security)
 defines the deployment boundary.
 
-For example, this raw-JSON tool asks the client for roots and lets Soklet carry
-JSON state between calls:
+For example, this raw-JSON tool requests active form Elicitation and lets Soklet
+carry JSON state between calls:
 
 ```java
-McpInputRequestDeclaration roots = McpInputRequestDeclaration.fromRoots(
-  McpInputRequirement.CONDITIONAL
-);
+McpInputRequestDeclaration form = McpInputRequestDeclaration.fromElicitationForm(McpInputRequirement.CONDITIONAL);
 
 McpToolRegistration<McpJsonObject> tool = McpToolRegistration
   .withName("catalog.continue")
@@ -356,23 +354,25 @@ McpToolRegistration<McpJsonObject> tool = McpToolRegistration
   .handler((request, arguments, features) -> {
     if (request.getFrameworkRequestState().isEmpty()) {
       return McpInputRequiredResult.builder()
-        .inputRequest("roots", McpInputRequest.fromDeclaration(
-          roots, McpJsonObject.emptyInstance()))
+        .inputRequest("approval", McpInputRequest.fromDeclaration(
+          form, McpJsonObject.builder()
+            .put("message", "Approve catalog access?")
+			.put("mode", "form")
+			.put("requestedSchema", McpJsonObject.builder()
+			  .put("type", "object").put("properties", McpJsonObject.emptyInstance()).build())
+            .build()))
         .frameworkRequestState(McpJsonObject.builder()
-          .put("phase", "waiting-for-roots")
+          .put("phase", "waiting-for-approval")
           .build())
         .build();
     }
 
-    McpJsonObject state = (McpJsonObject)
-      request.getFrameworkRequestState().orElseThrow();
-    request.getInputResponses().find("roots").orElseThrow();
+    McpJsonObject state = (McpJsonObject) request.getFrameworkRequestState().orElseThrow();
+    request.getInputResponses().find("approval").orElseThrow();
     return McpCompleteResult.fromToolText(((McpJsonString)
       state.find("phase").orElseThrow()).getValue());
   })
-  .mayRequestInput(roots)
-  .requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
-  .build();
+  .mayRequestInput(form).requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED).build();
 ```
 
 `McpRequestStateMode.NONE` is the default. The other modes have deliberately
@@ -697,8 +697,8 @@ and wire serialization. Publisher events contain no endpoint, principal,
 authorization partition, or connected-client target. Two subscriptions to the same URI in different admitted partitions therefore receive the same coarse event.
 The stored partition scopes registration, quota accounting, and stream isolation; it is not a per-event authorization check and does not establish semantic authority to read a URI.
 
-Admission may inspect the original bounded request body when authorizing a listen request.
-Soklet exposes no parsed subscription-filter accessor on the admission context.
+Admission receives the immutable validated, deduplicated requested-resource URI list when authorizing a listen request.
+`McpAdmissionContext.getRequestedResourceSubscriptionUris()` preserves first-encounter order and is empty outside applicable subscription requests.
 Applications must authorize confidential or capability-bearing subscription URIs during admission and must not infer secrecy merely because a URI is difficult to guess.
 A rejected or failed admission never activates a subscription, even though the server generation's single shared publisher listener may already be registered.
 With `McpAdmissionController.acceptAllInstance()`, all anonymous callers on one endpoint share its empty authorization/quota partition; one caller can exhaust the configured per-partition subscription bucket for the rest.
@@ -1354,7 +1354,7 @@ the snapshot-compatible `soklet-otel` matrix; prove sustained cardinality,
 soak, simulator or release-candidate behavior; or freeze Phase 6.
 
 The nineteenth bounded Phase 6 production vertical implements that frozen
-downstream metric matrix in `com.soklet:soklet-otel:1.4.0-SNAPSHOT`, using
+downstream metric matrix in the then-current unreleased `soklet-otel`, using
 `com.soklet:soklet:3.6.0-SNAPSHOT` by default. Its single
 `didRecordMcpMetricsEvent(McpMetricsEvent)` callback maps all 23 sealed event
 variants to exactly 22 OpenTelemetry instruments: 21 MCP-specific instruments
@@ -1620,8 +1620,8 @@ paired stream/subscription counts are captured by the runtime as one atomic
 tuple across every endpoint. The four security fields are captured as a
 separate atomic tuple by the server-owned security controls. Both tuples are
 placed in one immutable public diagnostics view, but they do not claim one shared global
-linearization point. Configured values remain stable before first start and
-across stop/restart; all current counts are
+linearization point. Configured values remain stable across the one-shot owner
+lifecycle; all current counts are
 nonnegative, handler counts remain within their configured bounds, and
 `0 <= activeSubscriptions <= activeRequestStreams`. A positive physical queue
 implies all configured handler slots are occupied. Retaining a snapshot freezes
@@ -1632,7 +1632,7 @@ A completed clean stop reports active `0` and queued `0`. A completed residual
 stop reports queued `0` but keeps a non-cooperative handler active until its
 actual late exit, after which a fresh snapshot reports active `0`. During the
 bounded transient between unexpected listener failure and completed cleanup,
-a `STOPPED_WITH_RESIDUAL_HANDLERS` snapshot may still report the actual bounded
+a `SHUTTING_DOWN` snapshot may still report the actual bounded
 queue depth; cleanup then drains it without promoting work. A queue-full
 rejection does not change either live handler diagnostic count. Disconnecting
 the subscription in a combined `2/1` snapshot leaves `1/0`; disconnecting the
@@ -1640,7 +1640,7 @@ ordinary stream leaves `0/0`. Completed clean and residual-handler stops both
 report stream pair `0/0`, even while a residual handler remains active until
 late exit. During internal `FAILED` cleanup, the public residual status may
 temporarily retain an open subscription pair `1/1`; completed cleanup reports
-`STOPPED` with `0/0`.
+`TERMINATED` with `0/0`.
 
 The protection mode and custom-protector flag are fixed when the server is
 built and remain stable across listener lifecycle transitions. The flag is
@@ -1855,7 +1855,7 @@ vocabulary, or the protocol-code allowlist for arbitrary application-created
 events. The nested variants remain public so collectors can use typed pattern
 matching and their conventional getters. At that checkpoint,
 `McpMetricsSnapshot` was exactly three boxed `Long` values plus the immutable
-`Map<McpShutdownOutcome, Long>`. `DefaultMetricsCollector` aggregated only the
+`Map<ParticipantShutdownDisposition, Long>`. `DefaultMetricsCollector` aggregated only the
 five handler variants and `ServerStopped`; a fresh collector ignored and
 retained none of the other 17 variants.
 
@@ -1865,7 +1865,7 @@ raw-ID opt-in. Built-in MCP events, snapshot values, metric names and labels,
 Prometheus, OpenMetrics, filter-observed samples, and reset rendering contain
 none of those canaries. At that checkpoint, before reset, the exact MCP sample
 set was the three label-free handler samples plus
-`soklet_mcp_shutdowns_total{outcome="clean"}`; after reset, only the three
+`soklet_mcp_shutdowns_total{outcome="graceful_termination"}`; after reset, only the three
 label-free handler samples remained. The production-vertical count remained nine,
 and the fuzz-registration, dormant derivation, and metric-dimensionality
 checkpoints were the three unnumbered checkpoints. `SOK-TRACE-001`,
@@ -1929,10 +1929,10 @@ every-operation simulation, sustained, release-readiness, review, or Phase 6
 freeze evidence.
 
 The default collector separately exposes shutdown counts as an immutable,
-enum-ordered `Map<McpShutdownOutcome, Long>`. It omits zero outcomes, returns
-to an empty map after reset, and renders exactly
-`soklet_mcp_shutdowns_total{outcome="clean"|"residual_handlers"}` in
-Prometheus/OpenMetrics text. Default aggregation now covers all 23 declared
+enum-ordered `Map<ParticipantShutdownDisposition, Long>`. It omits zero outcomes
+and resets to an empty map. Prometheus/OpenMetrics renders only the fixed labels
+`not_started`, `graceful_termination`, `forced_termination`, `unexpected_termination`,
+`residual_activity`, or `termination_unknown`. Default aggregation now covers all 23 declared
 variants: `ServerStarted`,
 `ServerStopped`, `RequestAccepted`, `RequestRejected`, `RequestStarted`,
 `RequestFinished`, `RequestStreamOpened`, `RequestStreamClosed`, the five
@@ -2079,17 +2079,17 @@ Phase 6 review/freeze. Next are scheduled coverage-guided fuzz and sustained
 soak/stress gates, followed by structured-log, privacy, and API review/freeze
 work. Phase 6 remained provisional and unfrozen at that fifth checkpoint.
 
-`McpServer.stop()` is bounded by the configured shutdown timeout. If an
-application-supplied MCP request-processing execution remains afterward,
-`getStatus()` reports `STOPPED_WITH_RESIDUAL_HANDLERS` and
-`LifecycleObserver.didStopMcpServer(...)` receives `RESIDUAL_HANDLERS` exactly
-once. These are compatibility names: they cover registered handlers and
-request-pipeline callbacks such as admission, rate limiting, and request-state
-protection. Repeated stop and the eventual late exit emit no second outcome.
-Restart fails with `Cannot start MCP server while residual handler executions
-remain` until the execution actually exits, and then succeeds. The outcome
-does not claim that an executor or non-cooperative Java code was forcibly
-terminated; process termination is the only hard stop for such code.
+MCP lifecycle is owned by the one `Soklet` configured with the server;
+`McpServer` has no independent start, stop, close, or timeout surface. The
+owner's `LifecyclePolicy` supplies the graceful and forced phase boundaries.
+`LifecycleObserver.didStopMcpServer(...)` receives the exact immutable
+`ParticipantShutdownResult` once, including its
+`ParticipantShutdownDisposition`, failures, and residual evidence. Diagnostics
+use their separate state vocabulary: `RESIDUAL_ACTIVITY` reports positive work
+at the final boundary and `TERMINATION_UNKNOWN` reports missing proof. A bound
+address remains available as historical evidence in all later snapshots.
+Soklet lifecycle is one-shot; late physical cleanup cannot rewrite or emit a
+second terminal result.
 
 ## Compatibility and unsupported features
 
@@ -2111,7 +2111,7 @@ Soklet 4.0.0 does not provide stdio transport, public arbitrary JSON Schema
 registration, MCP Completion, MCP logging capability, mutable tool/prompt list
 publishers, or an application result-extension registry. OAuth protected-
 resource metadata and identity-provider behavior remain deployment
-responsibilities. A deployment claiming MCP Authorization must publish RFC
+responsibilities; core Soklet does not implement DPoP-bound access tokens. A deployment claiming MCP Authorization must publish RFC
 9728 protected-resource metadata with at least one authorization server through
 the applicable challenge URL or well-known URI, and it must not require
 `offline_access` as a protected-resource scope. Applications may implement
@@ -2187,8 +2187,8 @@ unfrozen.
 
 ## Current Phase 6 and release state
 
-The current API universe is 234 owners: 133 Phase 4, 36 Phase 5, and all 65
-Phase 6 owners are frozen; `api/mcp/provisional.includes` is empty. The
+The current MCP API universe is 233 owners: 133 Phase 4, 36 Phase 5, and all 64
+Phase 6 owners are frozen; 39 non-MCP owners bring current-side coverage to 272. The
 bounded `MCP_TRACE_CORRELATION` log contract and its independent raw validated
 trace-ID opt-in are implemented and API-frozen. The current cancellation
 contract is likewise closed: every framework MCP token exposes only a fixed
@@ -2615,10 +2615,40 @@ official result, or official 48-message/11-test corpus changed. The pinned
 40-scenario official inventory has no exact unknown-header diagnostic,
 redaction, quota, or cardinality scenario, so this adds no official-suite
 claim. `MCP-HTTP-020` is now `CORE_COMPLETE`; the current report remains
-`FAILED` at 110/117/12/18/5, while the synthetic report remains
-115/117/12/18/0. The remaining IDs are `SOK-VALID-002`, `SOK-STATE-002`,
+`FAILED` at 110/117/12/19/5, while the synthetic report remains
+115/117/12/19/0. The remaining IDs are `SOK-VALID-002`, `SOK-STATE-002`,
 `SOK-STATE-007`, `SOK-PRIV-001`, and `AMB-002`. Generic `Request`,
 `Throwable`, custom-collector, and application-telemetry privacy remain owned
 by `SOK-PRIV-001`.
+
+SEP-2577 marks Roots, Sampling, and Logging deprecated in MCP `2026-07-28`,
+with specification removal eligible no earlier than 2027-07-28. This upstream
+MCP lifecycle is separate from Soklet's Java API lifecycle: the corresponding
+Java surfaces remain supported and carry no Java deprecation marker, and
+Soklet has made no API-removal decision. New applications should pass files or
+directories through explicit tool parameters, resource URIs, or server
+configuration instead of Roots, and integrate directly with a model provider
+instead of Sampling. Soklet parses retained Logging metadata but neither
+advertises nor implements MCP Logging; applications use Soklet's existing
+observability path. Soklet emits no negotiation-triggered warning through
+`LogEvent` or developer tooling. A future warning requires a separately
+approved default-off, bounded, redacted diagnostic policy.
+
+Dynamic Client Registration is reviewed and not applicable because Soklet has
+no OAuth/DCR implementation. The deprecated standalone legacy HTTP+SSE
+transport is likewise not applicable: the current server has no legacy
+transport path, and current SSE response streaming is not that transport.
+
+For `subscriptions/listen`, admission receives the validated, deduplicated
+resource-subscription URIs through
+`McpAdmissionContext.getRequestedResourceSubscriptionUris()`. The immutable
+list preserves first-encounter order and is empty for non-subscription methods
+and requests without resource URIs. Applications can authorize the requested
+resource set without reparsing raw JSON; rejection occurs before activation.
+
+The handler interceptor receives the exact `McpInvocationFeatures` instance
+supplied to the downstream handler as a separate argument. Interceptor chains
+must forward that instance unchanged with the request context and one-shot
+continuation.
 
 Do not treat this snapshot guide as a release-conformance statement.

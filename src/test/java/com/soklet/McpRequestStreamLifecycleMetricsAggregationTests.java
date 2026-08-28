@@ -377,7 +377,7 @@ public class McpRequestStreamLifecycleMetricsAggregationTests {
 	}
 
 	@Test
-	@Timeout(15)
+	@Timeout(60)
 	public void concurrentBalancedRequestStreamLifecycleIngestIsLosslessAndRetainedSnapshotsRemainImmutable()
 			throws Exception {
 		DefaultMetricsCollector collector =

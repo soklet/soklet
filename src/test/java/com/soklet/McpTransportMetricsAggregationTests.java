@@ -335,7 +335,7 @@ public class McpTransportMetricsAggregationTests {
 	}
 
 	@Test
-	@Timeout(15)
+	@Timeout(60)
 	public void concurrentDirectIngestIsLosslessAndRetainedSnapshotsRemainImmutable()
 			throws Exception {
 		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();

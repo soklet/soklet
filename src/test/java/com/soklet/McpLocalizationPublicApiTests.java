@@ -446,7 +446,7 @@ public class McpLocalizationPublicApiTests {
 				((DefaultMcpServer) enabled).localizer().orElseThrow());
 		Assertions.assertDoesNotThrow(
 				enabledControl::catalogsChanged);
-		enabledSoklet.stop();
+		enabledSoklet.close();
 		Assertions.assertDoesNotThrow(
 				enabledControl::catalogsChanged);
 
@@ -458,11 +458,6 @@ public class McpLocalizationPublicApiTests {
 
 		Assertions.assertThrows(NullPointerException.class,
 				() -> serverBuilder(registry).localizer(null));
-		McpHandlerContinuation continuation = () -> {
-			throw new AssertionError("The default feature lookup must not invoke.");
-		};
-		Assertions.assertTrue(continuation.getFeatures()
-				.find(McpLocalizationContext.class).isEmpty());
 	}
 
 	private static McpLocalizationContext context(Locale locale) {

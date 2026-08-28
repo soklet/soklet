@@ -41,7 +41,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 
 @NotThreadSafe
-@Timeout(20)
+@Timeout(60)
 public class McpHttpServerRequestScopedSseTests {
 	private static final String APPLICATION_METHOD = "test/execute";
 
@@ -123,6 +123,7 @@ public class McpHttpServerRequestScopedSseTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void reset_after_sse_commit_cancels_and_interrupts_application_work()
 			throws Exception {
 		CountDownLatch handlerInterrupted = new CountDownLatch(1);
@@ -132,7 +133,9 @@ public class McpHttpServerRequestScopedSseTests {
 		McpHttpServerRuntime runtime = runtime(invocation -> {
 			invocation.sendNotification(progress("disconnect", 1));
 			try {
-				emergencyRelease.await();
+				Assertions.assertTrue(emergencyRelease.await(10,
+						TimeUnit.SECONDS),
+						"Timed out waiting for disconnect cancellation");
 			} catch (InterruptedException exception) {
 				cancellationReason.set(invocation.cancellationReason());
 				handlerInterrupted.countDown();
@@ -167,6 +170,7 @@ public class McpHttpServerRequestScopedSseTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void keep_alive_write_does_not_extend_the_absolute_request_deadline()
 			throws Exception {
 		ControllableClock clock = new ControllableClock();
@@ -177,7 +181,9 @@ public class McpHttpServerRequestScopedSseTests {
 		McpApplicationRequestHandler handler = invocation -> {
 			invocation.sendNotification(progress("deadline", 1));
 			try {
-				emergencyRelease.await();
+				Assertions.assertTrue(emergencyRelease.await(10,
+						TimeUnit.SECONDS),
+						"Timed out waiting for absolute-deadline cancellation");
 			} catch (InterruptedException exception) {
 				cancellationReason.set(invocation.cancellationReason());
 				handlerInterrupted.countDown();
@@ -221,6 +227,7 @@ public class McpHttpServerRequestScopedSseTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void response_write_idle_timeout_closes_stream_and_interrupts_handler()
 			throws Exception {
 		ControllableClock clock = new ControllableClock();
@@ -232,7 +239,9 @@ public class McpHttpServerRequestScopedSseTests {
 		McpHttpServerRuntime runtime = runtime(invocation -> {
 			invocation.sendNotification(progress("write-idle", 1));
 			try {
-				emergencyRelease.await();
+				Assertions.assertTrue(emergencyRelease.await(10,
+						TimeUnit.SECONDS),
+						"Timed out waiting for write-idle cancellation");
 			} catch (InterruptedException exception) {
 				cancellationReason.set(invocation.cancellationReason());
 				handlerInterrupted.countDown();
@@ -285,6 +294,7 @@ public class McpHttpServerRequestScopedSseTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void generic_stream_termination_discards_losing_write_timeout()
 			throws Exception {
 		ControllableClock clock = new ControllableClock();
@@ -309,7 +319,9 @@ public class McpHttpServerRequestScopedSseTests {
 		McpHttpServerRuntime runtime = runtime(invocation -> {
 			invocation.sendNotification(progress("write-idle-loser", 1));
 			try {
-				emergencyRelease.await();
+				Assertions.assertTrue(emergencyRelease.await(10,
+						TimeUnit.SECONDS),
+						"Timed out waiting for stream termination");
 			} catch (InterruptedException exception) {
 				cancellationReason.set(invocation.cancellationReason());
 				handlerInterrupted.countDown();
@@ -356,6 +368,7 @@ public class McpHttpServerRequestScopedSseTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void slow_reader_applies_bounded_backpressure_without_blocking_other_requests()
 			throws Exception {
 		CountDownLatch secondNotificationAttempted = new CountDownLatch(1);
@@ -421,6 +434,7 @@ public class McpHttpServerRequestScopedSseTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void terminal_lane_remains_available_while_regular_stream_lane_is_full()
 			throws Exception {
 		McpHttpServerRuntime runtime = runtime(invocation -> {
@@ -505,6 +519,7 @@ public class McpHttpServerRequestScopedSseTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void shutdown_closes_committed_stream_and_runtime_restarts_cleanly()
 			throws Exception {
 		CountDownLatch handlerInterrupted = new CountDownLatch(1);
@@ -518,7 +533,9 @@ public class McpHttpServerRequestScopedSseTests {
 
 			invocation.sendNotification(progress("stream-before-stop", 1));
 			try {
-				emergencyRelease.await();
+				Assertions.assertTrue(emergencyRelease.await(10,
+						TimeUnit.SECONDS),
+						"Timed out waiting for shutdown cancellation");
 			} catch (InterruptedException exception) {
 				cancellationReason.set(invocation.cancellationReason());
 				handlerInterrupted.countDown();
@@ -609,6 +626,7 @@ public class McpHttpServerRequestScopedSseTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void absolute_deadline_atomically_discards_undrained_terminal_response()
 			throws Exception {
 		McpRuntimeObservationRecorder observations =

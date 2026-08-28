@@ -16,7 +16,7 @@
 
 package com.soklet.internal.mcp.schema;
 
-import com.soklet.annotation.McpToolArgument;
+import com.soklet.annotation.McpToolProperty;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -218,16 +218,17 @@ final class McpRuntimeTypedJsonBindingCompiler {
 			McpTypedSchemaShape.Property property =
 					shape.properties().get(index);
 			McpTypedSchemaPath propertyPath = path.property(property.name());
-			@Nullable McpToolArgument argument = component.getAnnotation(
-					McpToolArgument.class);
-			String configuredName = argument == null ? ""
-					: requireNonNull(argument.name());
+			@Nullable McpToolProperty propertyMetadata = component.getAnnotation(
+					McpToolProperty.class);
+			String configuredName = propertyMetadata == null ? ""
+					: requireNonNull(propertyMetadata.name());
 			String publishedName = configuredName.isBlank()
 					? component.getName() : configuredName;
-			Optional<String> title = argument == null ? Optional.empty()
-					: optionalMetadata(requireNonNull(argument.title()));
-			Optional<String> description = argument == null ? Optional.empty()
-					: optionalMetadata(requireNonNull(argument.description()));
+			Optional<String> title = propertyMetadata == null ? Optional.empty()
+					: optionalMetadata(requireNonNull(propertyMetadata.title()));
+			Optional<String> description = propertyMetadata == null
+					? Optional.empty()
+					: optionalMetadata(requireNonNull(propertyMetadata.description()));
 			if (!publishedName.equals(property.name())
 					|| !title.equals(property.title())
 					|| !description.equals(property.description())

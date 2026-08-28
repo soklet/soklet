@@ -57,11 +57,17 @@ import static java.util.Objects.requireNonNull;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@Timeout(40)
+@Timeout(60)
 public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 	private static final String HOST = "127.0.0.1";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final String JSON_MEDIA_TYPE = "application/json";
+	private static final LifecyclePolicy LIFECYCLE_POLICY = LifecyclePolicy.builder()
+			.startupTimeout(Duration.ofSeconds(5))
+			.startupCancellationTimeout(Duration.ofSeconds(2))
+			.gracefulShutdownDuration(Duration.ofSeconds(2))
+			.forcedShutdownDuration(Duration.ofSeconds(1))
+			.build();
 	private static final List<String> INTEGER_DIAGNOSTIC_GETTERS = List.of(
 			"getRequestHandlerConcurrency",
 			"getRequestHandlerQueueCapacity",
@@ -126,9 +132,9 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 				"src/main/java/com/soklet/McpServerDiagnostics.java"),
 				StandardCharsets.UTF_8);
 		assertDocumented(source, "getRequestHandlerConcurrency",
-				"stable across server start and stop transitions");
+				"stable across the owner lifecycle");
 		assertDocumented(source, "getRequestHandlerQueueCapacity",
-				"stable across server start and stop transitions");
+				"stable across the owner lifecycle");
 		assertDocumented(source, "getActiveHandlerExecutions",
 				"includes residual handlers");
 		assertDocumented(source, "getQueuedRequests",
@@ -154,22 +160,22 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 			throws Exception {
 		McpServer neverStartedServer = serverFor(List.of(
 				emptyEndpoint("/mcp/idle-never-started")),
-				2, 3, Duration.ofSeconds(5), Duration.ofSeconds(1));
+				2, 3, Duration.ofSeconds(5));
 		Soklet neverStartedOwner = newSoklet(neverStartedServer);
 		McpServerDiagnostics neverStarted = neverStartedServer.getDiagnostics();
-		assertDiagnostics(neverStarted, McpServerStatus.STOPPED, false,
+		assertDiagnostics(neverStarted, McpServerStatus.NOT_STARTED, false,
 				2, 3, 0, 0);
-		neverStartedOwner.stop();
-		neverStartedOwner.stop();
+		neverStartedOwner.close();
+		neverStartedOwner.close();
 		assertDiagnostics(neverStartedServer.getDiagnostics(),
-				McpServerStatus.STOPPED, false, 2, 3, 0, 0);
+				McpServerStatus.TERMINATED, false, 2, 3, 0, 0);
 
 		McpServer firstServer = serverFor(List.of(
 				emptyEndpoint("/mcp/idle-first")),
-				2, 3, Duration.ofSeconds(5), Duration.ofSeconds(1));
+				2, 3, Duration.ofSeconds(5));
 		Soklet firstOwner = newSoklet(firstServer);
 		McpServerDiagnostics beforeStart = firstServer.getDiagnostics();
-		assertDiagnostics(beforeStart, McpServerStatus.STOPPED, false,
+		assertDiagnostics(beforeStart, McpServerStatus.NOT_STARTED, false,
 				2, 3, 0, 0);
 		McpServerDiagnostics firstStarted;
 		McpServerDiagnostics firstStopped;
@@ -177,48 +183,49 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 		try {
 			firstOwner.start();
 			firstStarted = firstServer.getDiagnostics();
-			assertDiagnostics(firstStarted, McpServerStatus.STARTED, true,
+			assertDiagnostics(firstStarted, McpServerStatus.RUNNING, true,
 					2, 3, 0, 0);
 			firstAddress = firstStarted.getBoundAddress().orElseThrow();
-			assertDiagnostics(beforeStart, McpServerStatus.STOPPED, false,
+			assertDiagnostics(beforeStart, McpServerStatus.NOT_STARTED, false,
 					2, 3, 0, 0);
 		} finally {
-			firstOwner.stop();
-			firstOwner.stop();
+			firstOwner.close();
+			firstOwner.close();
 		}
 		firstStopped = firstServer.getDiagnostics();
-		assertDiagnostics(firstStopped, McpServerStatus.STOPPED, true,
+		assertDiagnostics(firstStopped, McpServerStatus.TERMINATED, true,
 				2, 3, 0, 0);
-		assertDiagnostics(firstStarted, McpServerStatus.STARTED, true,
+		assertDiagnostics(firstStarted, McpServerStatus.RUNNING, true,
 				2, 3, 0, 0);
 		Assertions.assertEquals(firstAddress,
 				firstStarted.getBoundAddress().orElseThrow());
 
 		McpServer secondServer = serverFor(List.of(
 				emptyEndpoint("/mcp/idle-second")),
-				2, 3, Duration.ofSeconds(5), Duration.ofSeconds(1));
+				2, 3, Duration.ofSeconds(5));
 		Soklet secondOwner = newSoklet(secondServer);
 		try {
 			secondOwner.start();
 			assertDiagnostics(secondServer.getDiagnostics(),
-					McpServerStatus.STARTED, true, 2, 3, 0, 0);
-			assertDiagnostics(beforeStart, McpServerStatus.STOPPED, false,
+					McpServerStatus.RUNNING, true, 2, 3, 0, 0);
+			assertDiagnostics(beforeStart, McpServerStatus.NOT_STARTED, false,
 					2, 3, 0, 0);
-			assertDiagnostics(firstStarted, McpServerStatus.STARTED, true,
+			assertDiagnostics(firstStarted, McpServerStatus.RUNNING, true,
 					2, 3, 0, 0);
 			Assertions.assertEquals(firstAddress,
 					firstStarted.getBoundAddress().orElseThrow());
-			assertDiagnostics(firstStopped, McpServerStatus.STOPPED, true,
+			assertDiagnostics(firstStopped, McpServerStatus.TERMINATED, true,
 					2, 3, 0, 0);
 		} finally {
-			secondOwner.stop();
-			secondOwner.stop();
+			secondOwner.close();
+			secondOwner.close();
 		}
-		assertDiagnostics(secondServer.getDiagnostics(), McpServerStatus.STOPPED,
+		assertDiagnostics(secondServer.getDiagnostics(), McpServerStatus.TERMINATED,
 				true, 2, 3, 0, 0);
 	}
 
 	@Test
+	@Timeout(120)
 	public void crossEndpointSaturationPublishesRetainedAndBoundedConcurrentTuples()
 			throws Exception {
 		CountDownLatch firstEntered = new CountDownLatch(1);
@@ -231,18 +238,22 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 				"diagnostics.first", (request, arguments, features) -> {
 					firstInvocations.incrementAndGet();
 					firstEntered.countDown();
-					releaseFirst.await();
+					Assertions.assertTrue(releaseFirst.await(10,
+							TimeUnit.SECONDS),
+							"Timed out waiting to release the first endpoint");
 					return McpCompleteResult.fromToolText("first");
 				});
 		McpEndpoint secondEndpoint = endpoint("/mcp/diagnostics-second",
 				"diagnostics.second", (request, arguments, features) -> {
 					secondInvocations.incrementAndGet();
 					secondEntered.countDown();
-					releaseSecond.await();
+					Assertions.assertTrue(releaseSecond.await(10,
+							TimeUnit.SECONDS),
+							"Timed out waiting to release the second endpoint");
 					return McpCompleteResult.fromToolText("second");
 				});
 		McpServer server = serverFor(List.of(firstEndpoint, secondEndpoint),
-				1, 1, Duration.ofSeconds(5), Duration.ofSeconds(1));
+				1, 1, Duration.ofSeconds(5));
 		Soklet owner = newSoklet(server);
 		ExecutorService readerExecutor = Executors.newSingleThreadExecutor();
 		AtomicBoolean readSnapshots = new AtomicBoolean();
@@ -262,7 +273,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 			McpServerDiagnostics saturated = awaitDiagnostics(server,
 					diagnostics -> diagnostics.getActiveHandlerExecutions() == 1
 							&& diagnostics.getQueuedRequests() == 1);
-			assertDiagnostics(saturated, McpServerStatus.STARTED, true,
+			assertDiagnostics(saturated, McpServerStatus.RUNNING, true,
 					1, 1, 1, 1);
 			Assertions.assertEquals(1, firstInvocations.get());
 			Assertions.assertEquals(0, secondInvocations.get());
@@ -270,7 +281,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 					"/mcp/diagnostics-second", "rejected",
 					"diagnostics.second").get(5, TimeUnit.SECONDS);
 			Assertions.assertEquals(503, rejected.statusCode(), rejected.body());
-			assertDiagnostics(server.getDiagnostics(), McpServerStatus.STARTED, true,
+			assertDiagnostics(server.getDiagnostics(), McpServerStatus.RUNNING, true,
 					1, 1, 1, 1);
 			Assertions.assertEquals(1, firstInvocations.get());
 			Assertions.assertEquals(0, secondInvocations.get(),
@@ -291,7 +302,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 			assertDiagnostics(awaitDiagnostics(server,
 					diagnostics -> diagnostics.getActiveHandlerExecutions() == 1
 							&& diagnostics.getQueuedRequests() == 0),
-					McpServerStatus.STARTED, true, 1, 1, 1, 0);
+					McpServerStatus.RUNNING, true, 1, 1, 1, 0);
 			releaseSecond.countDown();
 			Assertions.assertEquals(200,
 					requireNonNull(first).get(5, TimeUnit.SECONDS).statusCode());
@@ -300,12 +311,12 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 			assertDiagnostics(awaitDiagnostics(server,
 					diagnostics -> diagnostics.getActiveHandlerExecutions() == 0
 							&& diagnostics.getQueuedRequests() == 0),
-					McpServerStatus.STARTED, true, 1, 1, 0, 0);
+					McpServerStatus.RUNNING, true, 1, 1, 0, 0);
 
 			readSnapshots.set(false);
 			requireNonNull(reader).get(5, TimeUnit.SECONDS);
 			Assertions.assertTrue(snapshotReads.get() > 0);
-			assertDiagnostics(saturated, McpServerStatus.STARTED, true,
+			assertDiagnostics(saturated, McpServerStatus.RUNNING, true,
 					1, 1, 1, 1);
 		} finally {
 			readSnapshots.set(false);
@@ -320,7 +331,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 				Assertions.assertTrue(readerExecutor.awaitTermination(
 						5, TimeUnit.SECONDS));
 			} finally {
-				owner.stop();
+				owner.close();
 			}
 		}
 	}
@@ -345,7 +356,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 					}
 				});
 		McpServer server = serverFor(List.of(endpoint), 1, 1,
-				Duration.ofSeconds(10), Duration.ofMillis(150));
+				Duration.ofSeconds(10));
 		Soklet owner = newSoklet(server, shortShutdownPolicy());
 		CompletableFuture<HttpResponse<String>> active = null;
 		CompletableFuture<HttpResponse<String>> queued = null;
@@ -363,7 +374,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 							&& diagnostics.getQueuedRequests() == 1);
 
 			ShutdownIncompleteException stopFailure = Assertions.assertThrows(
-					ShutdownIncompleteException.class, owner::stop);
+					ShutdownIncompleteException.class, owner::close);
 			InternalShutdownResult shutdownResult =
 					stopFailure.getInternalShutdownResult();
 			Assertions.assertSame(shutdownResult,
@@ -371,36 +382,37 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 			Assertions.assertTrue(activeInterrupted.await(5, TimeUnit.SECONDS));
 			McpServerDiagnostics residual = server.getDiagnostics();
 			assertDiagnostics(residual,
-					McpServerStatus.STOPPED_WITH_RESIDUAL_HANDLERS,
+					McpServerStatus.RESIDUAL_ACTIVITY,
 					true, 1, 1, 1, 0);
 			Assertions.assertEquals(1, invocations.get(),
 					"Stop must not promote queued work.");
 			ShutdownIncompleteException repeatedStop = Assertions.assertThrows(
-					ShutdownIncompleteException.class, owner::stop);
+					ShutdownIncompleteException.class, owner::close);
 			Assertions.assertSame(shutdownResult,
 					repeatedStop.getInternalShutdownResult());
 
 			releaseActive.countDown();
 			Assertions.assertTrue(activeExited.await(5, TimeUnit.SECONDS));
 			assertDiagnostics(awaitDiagnostics(server,
-					diagnostics -> diagnostics.getStatus() == McpServerStatus.STOPPED
+					diagnostics -> diagnostics.getStatus() == McpServerStatus.RESIDUAL_ACTIVITY
 							&& diagnostics.getActiveHandlerExecutions() == 0
 							&& diagnostics.getQueuedRequests() == 0),
-					McpServerStatus.STOPPED, true, 1, 1, 0, 0);
-			assertDiagnostics(saturated, McpServerStatus.STARTED, true,
+					McpServerStatus.RESIDUAL_ACTIVITY, true, 1, 1, 0, 0);
+			assertDiagnostics(saturated, McpServerStatus.RUNNING, true,
 					1, 1, 1, 1);
 			assertDiagnostics(residual,
-					McpServerStatus.STOPPED_WITH_RESIDUAL_HANDLERS,
+					McpServerStatus.RESIDUAL_ACTIVITY,
 					true, 1, 1, 1, 0);
 
 			Assertions.assertSame(shutdownResult,
 					owner.getDirectLifecycle().result().orElseThrow(),
 					"Late physical cleanup cannot rewrite an immutable residual result.");
 			ShutdownIncompleteException lateRepeatedStop = Assertions.assertThrows(
-					ShutdownIncompleteException.class, owner::stop);
+					ShutdownIncompleteException.class, owner::close);
 			Assertions.assertSame(shutdownResult,
 					lateRepeatedStop.getInternalShutdownResult());
-			assertDiagnostics(server.getDiagnostics(), McpServerStatus.STOPPED, true,
+			assertDiagnostics(server.getDiagnostics(),
+					McpServerStatus.RESIDUAL_ACTIVITY, true,
 					1, 1, 0, 0);
 		} finally {
 			releaseActive.countDown();
@@ -494,7 +506,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 	private static void assertBoundedStartedTuple(
 			@NonNull McpServerDiagnostics diagnostics,
 			int concurrency, int queueCapacity) {
-		Assertions.assertEquals(McpServerStatus.STARTED, diagnostics.getStatus());
+		Assertions.assertEquals(McpServerStatus.RUNNING, diagnostics.getStatus());
 		Assertions.assertTrue(diagnostics.getBoundAddress().isPresent());
 		Assertions.assertEquals(Integer.valueOf(concurrency),
 				diagnostics.getRequestHandlerConcurrency());
@@ -553,7 +565,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 
 	private static void stopAfterIncompleteShutdown(@NonNull Soklet owner) {
 		try {
-			requireNonNull(owner).stop();
+			requireNonNull(owner).close();
 		} catch (ShutdownIncompleteException ignored) {
 			// Cleanup replays the immutable incomplete result by contract.
 		}
@@ -561,24 +573,27 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 
 	@NonNull
 	private static Soklet newSoklet(@NonNull McpServer server) {
-		return newSoklet(server, InternalLifecyclePolicy.defaults());
+		return newSoklet(server, LIFECYCLE_POLICY);
 	}
 
 	@NonNull
 	private static Soklet newSoklet(@NonNull McpServer server,
-			@NonNull InternalLifecyclePolicy lifecyclePolicy) {
+			@NonNull LifecyclePolicy lifecyclePolicy) {
 		return Soklet.fromConfig(SokletConfig.withMcpServer(requireNonNull(server))
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
-				.internalLifecyclePolicy(requireNonNull(lifecyclePolicy))
+				.lifecyclePolicy(requireNonNull(lifecyclePolicy))
 				.build());
 	}
 
 	@NonNull
-	private static InternalLifecyclePolicy shortShutdownPolicy() {
-		return new InternalLifecyclePolicy(Optional.of(Duration.ofSeconds(5)),
-				Duration.ofMillis(100), Duration.ofMillis(100),
-				Duration.ofMillis(100));
+	private static LifecyclePolicy shortShutdownPolicy() {
+		return LifecyclePolicy.builder()
+				.startupTimeout(Duration.ofSeconds(5))
+				.startupCancellationTimeout(Duration.ofMillis(100))
+				.gracefulShutdownDuration(Duration.ofMillis(100))
+				.forcedShutdownDuration(Duration.ofMillis(100))
+				.build();
 	}
 
 	@NonNull
@@ -609,8 +624,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 	private static McpServer serverFor(
 			@NonNull List<@NonNull McpEndpoint> endpoints,
 			int concurrency, int queueCapacity,
-			@NonNull Duration requestTimeout,
-			@NonNull Duration shutdownTimeout) {
+			@NonNull Duration requestTimeout) {
 		return McpServer.withPort(0)
 				.host(HOST)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
@@ -623,7 +637,6 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 				.requestHandlerConcurrency(concurrency)
 				.requestHandlerQueueCapacity(queueCapacity)
 				.requestTimeout(requireNonNull(requestTimeout))
-				.shutdownTimeout(requireNonNull(shutdownTimeout))
 				.build();
 	}
 

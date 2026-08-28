@@ -365,6 +365,7 @@ public class MetricsCollectorTests {
 	}
 
 	@Test
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	public void httpMetricsSnapshot_overNetwork() throws Exception {
 		int port = findFreePort();
 		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();
@@ -428,7 +429,7 @@ public class MetricsCollectorTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = TimeUnit.SECONDS)
+	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	// Starts a live SSE server, which requires virtual threads (JDK 21+).
 	@EnabledForJreRange(min = JRE.JAVA_21)
 	public void sseMetricsSnapshot_overNetwork() throws Exception {

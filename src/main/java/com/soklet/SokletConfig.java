@@ -68,7 +68,7 @@ public final class SokletConfig {
 	@Nullable
 	private final McpServer mcpServer;
 	@NonNull
-	private final InternalLifecyclePolicy internalLifecyclePolicy;
+	private final LifecyclePolicy lifecyclePolicy;
 
 	/**
 	 * Vends a configuration builder, primed with the given HTTP {@link HttpServer}.
@@ -124,15 +124,11 @@ public final class SokletConfig {
 	SokletConfig(@NonNull Builder builder) {
 		requireNonNull(builder);
 
-		// Wrap servers in proxies transparently
-		HttpServerProxy httpServerProxy = builder.httpServer == null ? null : new HttpServerProxy(builder.httpServer);
-		SseServerProxy sseServerProxy = builder.sseServer == null ? null : new SseServerProxy(builder.sseServer);
-
-		this.httpServer = httpServerProxy;
-		this.sseServer = sseServerProxy;
+		this.httpServer = builder.httpServer;
+		this.sseServer = builder.sseServer;
 		this.mcpServer = builder.mcpServer;
-		this.internalLifecyclePolicy = builder.internalLifecyclePolicy != null
-				? builder.internalLifecyclePolicy : InternalLifecyclePolicy.defaults();
+		this.lifecyclePolicy = builder.lifecyclePolicy != null
+				? builder.lifecyclePolicy : LifecyclePolicy.fromDefaults();
 		this.instanceProvider = builder.instanceProvider != null ? builder.instanceProvider : InstanceProvider.defaultInstance();
 		this.valueConverterRegistry = builder.valueConverterRegistry != null ? builder.valueConverterRegistry : ValueConverterRegistry.fromDefaults();
 		this.requestBodyMarshaler = builder.requestBodyMarshaler != null ? builder.requestBodyMarshaler : RequestBodyMarshaler.fromValueConverterRegistry(getValueConverterRegistry());
@@ -144,16 +140,6 @@ public final class SokletConfig {
 		this.metricsCollector = builder.metricsCollector != null ? builder.metricsCollector : MetricsCollector.defaultInstance();
 		this.corsAuthorizer = builder.corsAuthorizer != null ? builder.corsAuthorizer : CorsAuthorizer.rejectAllInstance();
 		this.resourceMethodParameterProvider = builder.resourceMethodParameterProvider != null ? builder.resourceMethodParameterProvider : new DefaultResourceMethodParameterProvider(this);
-	}
-
-	/**
-	 * Vends a mutable copy of this instance's configuration, suitable for building new instances.
-	 *
-	 * @return a mutable copy of this instance's configuration
-	 */
-	@NonNull
-	public Copier copy() {
-		return new Copier(this);
 	}
 
 	/**
@@ -291,23 +277,20 @@ public final class SokletConfig {
 		return Optional.ofNullable(this.mcpServer);
 	}
 
+	/**
+	 * The startup and shutdown deadline policy shared by every configured
+	 * lifecycle participant.
+	 *
+	 * @return the configured lifecycle policy
+	 */
+	@NonNull
+	public LifecyclePolicy getLifecyclePolicy() {
+		return this.lifecyclePolicy;
+	}
+
 	@NonNull
 	InternalLifecyclePolicy getInternalLifecyclePolicy() {
-		return this.internalLifecyclePolicy;
-	}
-
-	@NonNull
-	static HttpServer unwrapHttpServer(@NonNull HttpServer httpServer) {
-		requireNonNull(httpServer);
-		return httpServer instanceof HttpServerProxy proxy
-				? proxy.getRealImplementation() : httpServer;
-	}
-
-	@NonNull
-	static SseServer unwrapSseServer(@NonNull SseServer sseServer) {
-		requireNonNull(sseServer);
-		return sseServer instanceof SseServerProxy proxy
-				? proxy.getRealImplementation() : sseServer;
+		return this.lifecyclePolicy.toInternal();
 	}
 
 	/**
@@ -328,7 +311,7 @@ public final class SokletConfig {
 		@Nullable
 		private McpServer mcpServer;
 		@Nullable
-		private InternalLifecyclePolicy internalLifecyclePolicy;
+		private LifecyclePolicy lifecyclePolicy;
 		@Nullable
 		private InstanceProvider instanceProvider;
 		@Nullable
@@ -390,10 +373,25 @@ public final class SokletConfig {
 			return this;
 		}
 
+		/**
+		 * Sets the startup and shutdown deadline policy shared by every
+		 * configured lifecycle participant.
+		 *
+		 * @param lifecyclePolicy the lifecycle policy
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder lifecyclePolicy(
+				@NonNull LifecyclePolicy lifecyclePolicy) {
+			this.lifecyclePolicy = requireNonNull(lifecyclePolicy);
+			return this;
+		}
+
 		@NonNull
 		Builder internalLifecyclePolicy(
 				@NonNull InternalLifecyclePolicy internalLifecyclePolicy) {
-			this.internalLifecyclePolicy = requireNonNull(internalLifecyclePolicy);
+			this.lifecyclePolicy = LifecyclePolicy.fromInternal(
+					requireNonNull(internalLifecyclePolicy));
 			return this;
 		}
 
@@ -544,230 +542,6 @@ public final class SokletConfig {
 						HttpServer.class.getSimpleName(), SseServer.class.getSimpleName(), McpServer.class.getSimpleName()));
 
 			return new SokletConfig(this);
-		}
-	}
-
-	/**
-	 * Builder used to copy instances of {@link SokletConfig}.
-	 * <p>
-	 * Instances are created by invoking {@link SokletConfig#copy()}.
-	 * <p>
-	 * This class is intended for use by a single thread.
-	 *
-	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
-	 */
-	@NotThreadSafe
-	public static final class Copier {
-		@NonNull
-		private final Builder builder;
-
-		Copier(@NonNull SokletConfig sokletConfig) {
-			requireNonNull(sokletConfig);
-
-			// Unwrap proxies to get the real implementations for copying
-			HttpServer realHttpServer = sokletConfig.getHttpServer()
-					.map(SokletConfig::unwrapHttpServer)
-					.orElse(null);
-			SseServer realSseServer = sokletConfig.getSseServer()
-					.map(SokletConfig::unwrapSseServer)
-					.orElse(null);
-
-			this.builder = new Builder()
-					.httpServer(realHttpServer)
-					.sseServer(realSseServer)
-					.mcpServer(sokletConfig.getMcpServer().orElse(null))
-					.instanceProvider(sokletConfig.getInstanceProvider())
-					.valueConverterRegistry(sokletConfig.valueConverterRegistry)
-					.requestBodyMarshaler(sokletConfig.requestBodyMarshaler)
-					.resourceMethodResolver(sokletConfig.resourceMethodResolver)
-					.resourceMethodParameterProvider(sokletConfig.resourceMethodParameterProvider)
-					.responseMarshaler(sokletConfig.responseMarshaler)
-					.requestInterceptor(sokletConfig.requestInterceptor)
-					.lifecycleObservers(sokletConfig.lifecycleObservers)
-					.metricsCollector(sokletConfig.metricsCollector)
-					.corsAuthorizer(sokletConfig.corsAuthorizer)
-					.internalLifecyclePolicy(sokletConfig.internalLifecyclePolicy);
-		}
-
-		/**
-		 * Replaces the HTTP server managed by the copied configuration.
-		 *
-		 * @param httpServer the HTTP server, or {@code null} to remove it
-		 * @return this copier
-		 */
-		@NonNull
-		public Copier httpServer(@Nullable HttpServer httpServer) {
-			this.builder.httpServer(httpServer);
-			return this;
-		}
-
-		/**
-		 * Replaces the SSE server managed by the copied configuration.
-		 *
-		 * @param sseServer the SSE server, or {@code null} to remove it
-		 * @return this copier
-		 */
-		@NonNull
-		public Copier sseServer(@Nullable SseServer sseServer) {
-			this.builder.sseServer(sseServer);
-			return this;
-		}
-
-		/**
-		 * Replaces the MCP server managed by the copied configuration.
-		 *
-		 * @param mcpServer the MCP server, or {@code null} to remove it
-		 * @return this copier
-		 */
-		@NonNull
-		public Copier mcpServer(@Nullable McpServer mcpServer) {
-			this.builder.mcpServer(mcpServer);
-			return this;
-		}
-
-		/**
-		 * Replaces how Soklet creates application instances.
-		 *
-		 * @param instanceProvider the instance provider, or {@code null} to restore the default
-		 * @return this copier
-		 */
-		@NonNull
-		public Copier instanceProvider(@Nullable InstanceProvider instanceProvider) {
-			this.builder.instanceProvider(instanceProvider);
-			return this;
-		}
-
-		/**
-		 * Replaces the registry used for Java value conversions.
-		 *
-		 * @param valueConverterRegistry the conversion registry, or {@code null} to restore the default registry
-		 * @return this copier
-		 */
-		@NonNull
-		public Copier valueConverterRegistry(@Nullable ValueConverterRegistry valueConverterRegistry) {
-			this.builder.valueConverterRegistry(valueConverterRegistry);
-			return this;
-		}
-
-		/**
-		 * Replaces how request bodies are converted to application values.
-		 *
-		 * @param requestBodyMarshaler the request-body marshaler, or {@code null} to derive one from the copied value-converter registry
-		 * @return this copier
-		 */
-		@NonNull
-		public Copier requestBodyMarshaler(@Nullable RequestBodyMarshaler requestBodyMarshaler) {
-			this.builder.requestBodyMarshaler(requestBodyMarshaler);
-			return this;
-		}
-
-		/**
-		 * Replaces how Soklet discovers and resolves <em>Resource Methods</em>.
-		 *
-		 * @param resourceMethodResolver the resource-method resolver, or {@code null} to restore classpath introspection
-		 * @return this copier
-		 */
-		@NonNull
-		public Copier resourceMethodResolver(@Nullable ResourceMethodResolver resourceMethodResolver) {
-			this.builder.resourceMethodResolver(resourceMethodResolver);
-			return this;
-		}
-
-		/**
-		 * Replaces how parameters are supplied when Soklet invokes <em>Resource Methods</em>.
-		 *
-		 * @param resourceMethodParameterProvider the parameter provider, or {@code null} to restore Soklet's default provider
-		 * @return this copier
-		 */
-		@NonNull
-		public Copier resourceMethodParameterProvider(@Nullable ResourceMethodParameterProvider resourceMethodParameterProvider) {
-			this.builder.resourceMethodParameterProvider(resourceMethodParameterProvider);
-			return this;
-		}
-
-		/**
-		 * Replaces how application response values are converted for transmission.
-		 *
-		 * @param responseMarshaler the response marshaler, or {@code null} to restore the default
-		 * @return this copier
-		 */
-		@NonNull
-		public Copier responseMarshaler(@Nullable ResponseMarshaler responseMarshaler) {
-			this.builder.responseMarshaler(responseMarshaler);
-			return this;
-		}
-
-		/**
-		 * Replaces the interceptor that wraps application request handling.
-		 *
-		 * @param requestInterceptor the request interceptor, or {@code null} to restore the default
-		 * @return this copier
-		 */
-		@NonNull
-		public Copier requestInterceptor(@Nullable RequestInterceptor requestInterceptor) {
-			this.builder.requestInterceptor(requestInterceptor);
-			return this;
-		}
-
-		/**
-		 * Replaces the copied lifecycle observers with one observer.
-		 *
-		 * @param lifecycleObserver the sole lifecycle observer, or {@code null} to configure no observers
-		 * @return this copier
-		 */
-		@NonNull
-		public Copier lifecycleObserver(@Nullable LifecycleObserver lifecycleObserver) {
-			this.builder.lifecycleObserver(lifecycleObserver);
-			return this;
-		}
-
-		/**
-		 * Replaces the copied lifecycle observers, preserving iteration order.
-		 *
-		 * @param lifecycleObservers the lifecycle observers, or {@code null} to configure no observers
-		 * @return this copier
-		 */
-		@NonNull
-		public Copier lifecycleObservers(@Nullable Collection<? extends LifecycleObserver> lifecycleObservers) {
-			this.builder.lifecycleObservers(lifecycleObservers);
-			return this;
-		}
-
-		/**
-		 * Replaces how Soklet records operational metrics.
-		 *
-		 * @param metricsCollector the metrics collector, or {@code null} to restore the default
-		 * @return this copier
-		 */
-		@NonNull
-		public Copier metricsCollector(@Nullable MetricsCollector metricsCollector) {
-			this.builder.metricsCollector(metricsCollector);
-			return this;
-		}
-
-		/**
-		 * Replaces the authorizer used for ordinary HTTP and SSE CORS processing.
-		 * <p>
-		 * MCP servers retain their independently configured {@link McpServer#getCorsAuthorizer() CORS authorizer}.
-		 *
-		 * @param corsAuthorizer the CORS authorizer, or {@code null} to restore the reject-all default
-		 * @return this copier
-		 */
-		@NonNull
-		public Copier corsAuthorizer(@Nullable CorsAuthorizer corsAuthorizer) {
-			this.builder.corsAuthorizer(corsAuthorizer);
-			return this;
-		}
-
-		/**
-		 * Builds an immutable configuration from the copied and replaced settings.
-		 *
-		 * @return the completed copied configuration
-		 * @throws IllegalStateException if no HTTP, SSE, or MCP server remains configured
-		 */
-		@NonNull
-		public SokletConfig finish() {
-			return this.builder.build();
 		}
 	}
 

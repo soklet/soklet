@@ -39,6 +39,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 
+import static java.util.Objects.requireNonNull;
+
 @Timeout(value = 60, unit = TimeUnit.SECONDS)
 class SokletApplicationFinalizationTests {
 	private static final String CLEANUP_WORKER_NAME =
@@ -88,7 +90,7 @@ class SokletApplicationFinalizationTests {
 			FakeClock clock = new FakeClock(publicationNanos++);
 			QueuedLauncher launcher = new QueuedLauncher();
 			AtomicInteger cleanupCalls = new AtomicInteger();
-			AtomicReference<InternalShutdownResult> cleanupResult =
+			AtomicReference<ShutdownResult> cleanupResult =
 					new AtomicReference<>();
 			AtomicReference<Thread> cleanupThread = new AtomicReference<>();
 			AtomicBoolean publishingLockWasAvailable = new AtomicBoolean();
@@ -136,13 +138,16 @@ class SokletApplicationFinalizationTests {
 			Assertions.assertEquals(InternalShutdownCleanupDisposition.SUCCEEDED,
 					joined.cleanupOutcome().disposition());
 			Assertions.assertEquals(1, cleanupCalls.get());
-			Assertions.assertSame(eligible.result(), cleanupResult.get());
+			Assertions.assertSame(eligible.result(),
+					requireNonNull(cleanupResult.get()).internalResult());
 			Assertions.assertTrue(publishingLockWasAvailable.get());
 			Assertions.assertNotSame(publishingThread, cleanupThread.get());
 			Assertions.assertNotSame(waiter.thread(), cleanupThread.get());
 			SokletApplicationTerminalSnapshot terminal = reported.get();
 			Assertions.assertNotNull(terminal);
 			Assertions.assertSame(eligible.result(), terminal.coreSnapshot().result());
+			Assertions.assertSame(terminal.coreSnapshot().publicResult(),
+					cleanupResult.get());
 			Assertions.assertSame(joined.cleanupOutcome(), terminal.cleanupOutcome());
 			Assertions.assertEquals(eligible.primaryOutcome(),
 					terminal.primaryOutcome());
@@ -289,7 +294,7 @@ class SokletApplicationFinalizationTests {
 		CountDownLatch releaseFirstLaunch = new CountDownLatch(1);
 		AtomicInteger takeoverCalls = new AtomicInteger();
 		AtomicInteger deliveredInterrupts = new AtomicInteger();
-		AtomicReference<InternalShutdownResult> takeoverResult =
+		AtomicReference<ShutdownResult> takeoverResult =
 				new AtomicReference<>();
 		LifecycleWorkers takeoverWorkers = new LifecycleWorkers((name, task) -> {
 			if (CLEANUP_WORKER_NAME.equals(name)) {
@@ -342,7 +347,8 @@ class SokletApplicationFinalizationTests {
 				await(runnerWaiter);
 		Assertions.assertSame(takeoverOutcome, runnerJoined.cleanupOutcome());
 		Assertions.assertEquals(1, takeoverCalls.get());
-		Assertions.assertSame(exact, takeoverResult.get());
+		Assertions.assertSame(exact,
+				requireNonNull(takeoverResult.get()).internalResult());
 		Assertions.assertEquals(1, deliveredInterrupts.get(),
 				"A worker starting after timeout must receive the pending interrupt");
 		Assertions.assertSame(takeoverOutcome,

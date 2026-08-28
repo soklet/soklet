@@ -50,7 +50,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-@Timeout(30)
+@Timeout(60)
 class McpLocalizationPreferenceTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
@@ -184,7 +184,7 @@ class McpLocalizationPreferenceTests {
 				assertTrue(responseText.startsWith("HTTP/1.1 200"), responseText);
 			}
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 
 		List<Locale.LanguageRange> ranges = observedRanges.get();

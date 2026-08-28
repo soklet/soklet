@@ -35,30 +35,13 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * MCP always binds its own listener. It is never mounted inside Soklet's
  * ordinary {@link HttpServer} or {@link SseServer}.
- * Server lifecycle and diagnostic methods are safe to invoke concurrently.
+ * Server diagnostics are safe to invoke concurrently. Lifecycle is owned by
+ * the {@link Soklet} configured with this server.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer {
-	/**
-	 * Starts this server and returns only after its listening socket is bound.
-	 * A redundant start while already running is a no-op.
-	 */
-	void start();
-
-	/**
-	 * Stops this server. Stopping an already stopped server is a no-op.
-	 */
-	void stop();
-
-	/**
-	 * Is this server currently accepting MCP requests?
-	 *
-	 * @return {@code true} while started
-	 */
-	@NonNull Boolean isStarted();
-
+public sealed interface McpServer permits DefaultMcpServer {
 	/**
 	 * Returns the immutable endpoint registry.
 	 *
@@ -186,14 +169,6 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 	McpServerDiagnostics getDiagnostics();
 
 	/**
-	 * Stops this server, equivalent to {@link #stop()}.
-	 */
-	@Override
-	default void close() {
-		stop();
-	}
-
-	/**
 	 * Vends a server builder primed with a dedicated TCP port.
 	 * Port {@code 0} requests an operating-system-assigned port.
 	 *
@@ -226,10 +201,6 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 				Duration.ofHours(24);
 		@NonNull
 		private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(60);
-		@NonNull
-		private static final Duration DEFAULT_SHUTDOWN_TIMEOUT =
-				Duration.ofSeconds(30);
-		@NonNull
 		private static final Duration DEFAULT_WRITE_TIMEOUT =
 				Duration.ofSeconds(30);
 		private int port;
@@ -246,8 +217,6 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		private Duration maximumSubscriptionDuration;
 		@NonNull
 		private Duration requestTimeout;
-		@NonNull
-		private Duration shutdownTimeout;
 		@NonNull
 		private Duration writeTimeout;
 		@Nullable
@@ -299,7 +268,6 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 			this.maximumSubscriptionDuration =
 					DEFAULT_MAXIMUM_SUBSCRIPTION_DURATION;
 			this.requestTimeout = DEFAULT_REQUEST_TIMEOUT;
-			this.shutdownTimeout = DEFAULT_SHUTDOWN_TIMEOUT;
 			this.writeTimeout = DEFAULT_WRITE_TIMEOUT;
 			this.absentOriginPolicy = McpAbsentOriginPolicy.ALLOW;
 			this.unknownMirroredHeaderPolicy =
@@ -480,7 +448,7 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 
 		/**
 		 * Sets a supplier for the application handler executor used by each
-		 * listener generation. The supplier is invoked during {@link McpServer#start()}
+		 * listener generation. The supplier is invoked during {@link Soklet#start()}
 		 * and must return a fresh, running executor each time. Soklet owns and shuts
 		 * down every returned executor. Its own handler-slot and queue bounds remain
 		 * authoritative regardless of executor capacity.
@@ -548,23 +516,6 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 		public Builder keepAliveInterval(@NonNull Duration keepAliveInterval) {
 			this.keepAliveInterval = requirePositiveDuration(keepAliveInterval,
 					"MCP keep-alive interval");
-			return this;
-		}
-
-		/**
-		 * Sets the positive finite upper bound for graceful MCP server shutdown.
-		 * The default is 30 seconds. This setting has neutral behavior until the
-		 * graceful-shutdown owner is active.
-		 *
-		 * @param shutdownTimeout graceful-shutdown deadline
-		 * @return this builder
-		 * @throws IllegalArgumentException if the duration is not positive and
-		 *                                  representable as signed nanoseconds
-		 */
-		@NonNull
-		public Builder shutdownTimeout(@NonNull Duration shutdownTimeout) {
-			this.shutdownTimeout = requirePositiveDuration(shutdownTimeout,
-					"MCP shutdown timeout");
 			return this;
 		}
 
@@ -885,7 +836,7 @@ public sealed interface McpServer extends AutoCloseable permits DefaultMcpServer
 					this.requestHandlerQueueCapacity, this.requestTimeout,
 					this.requestHandlerExecutorServiceSupplier,
 					this.streamQueueCapacity, this.writeTimeout,
-					this.keepAliveInterval, this.shutdownTimeout,
+					this.keepAliveInterval,
 					this.maximumSubscriptionsPerPrincipal,
 					this.maximumSubscriptionDuration,
 					this.endpointRegistry,

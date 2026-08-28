@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { delimiter, dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
@@ -74,7 +74,7 @@ function verifyFixture(path, options = {}) {
     manifestPath: options.manifestPath ?? manifestPath,
     registryPath: path,
     ...(options.gitExecutable === undefined
-      ? {}
+      ? { gitExecutable: semanticGitExecutable() }
       : { gitExecutable: options.gitExecutable }),
   });
 }
@@ -98,7 +98,7 @@ function row(registry, id) {
 }
 
 try {
-  const registryBytes = readFileSync(registryPath);
+  const registryBytes = readFileSync(prepareSemanticGit(registryPath));
   const registryText = registryBytes.toString('utf8');
   const registry = JSON.parse(registryText);
   assert.equal(registryText, canonicalJson(registry));
@@ -107,10 +107,10 @@ try {
   assert.equal(current.exitCode, 1);
   assert.equal(current.report.status, 'FAILED');
   assert.deepEqual(Object.keys(current.report), expectedReportKeys);
-  assert.equal(current.report.rowCount, 262);
+  assert.equal(current.report.rowCount, 263);
   assert.equal(
     current.report.rowIdsSha256,
-    'ce16b46738d8033db5770d91c8adfd02ab6894a5dbf7ce80f588c2c3e018b015',
+    'd7a55f3218e4ea8d18e2f6295f56d9b9b70ecdba9deb8be5a624bae3a9b647b0',
   );
   assert.equal(
     current.report.registrySha256,
@@ -119,7 +119,7 @@ try {
   assert.deepEqual(current.report.dispositionCounts, {
     APPLICATION_OWNED: 12,
     CORE_COMPLETE: 110,
-    NOT_APPLICABLE: 18,
+    NOT_APPLICABLE: 19,
     RELEASE_GATED: 117,
     UNRESOLVED: 5,
   });
@@ -401,7 +401,7 @@ try {
 
   const checkedInCli = spawnSync(process.execPath, [verifierPath], {
     cwd: projectRoot,
-    encoding: 'utf8',
+    encoding: 'utf8', env: semanticGitEnvironment(),
   });
   assert.equal(checkedInCli.status, 1);
   assert.equal(checkedInCli.stdout, current.reportText);
@@ -439,7 +439,7 @@ try {
   assert.deepEqual(resolved.report.dispositionCounts, {
     APPLICATION_OWNED: 12,
     CORE_COMPLETE: 115,
-    NOT_APPLICABLE: 18,
+    NOT_APPLICABLE: 19,
     RELEASE_GATED: 117,
     UNRESOLVED: 0,
   });
@@ -454,7 +454,7 @@ try {
   const syntheticProgram = [
     `import { verifyMatrixClosure } from ${JSON.stringify(pathToFileURL(verifierPath).href)};`,
     `const result = verifyMatrixClosure(${JSON.stringify({
-      projectRoot,
+      projectRoot, gitExecutable: semanticGitExecutable(),
       manifestPath,
       registryPath: resolvedPath,
     })});`,
@@ -491,13 +491,13 @@ try {
     /not canonical two-space JSON/,
   );
 
-  expectInvalid('missing-row', resolvedRegistry, (value) => value.rows.pop(), /exactly 262 rows/);
+  expectInvalid('missing-row', resolvedRegistry, (value) => value.rows.pop(), /exactly 263 rows/);
   expectInvalid('extra-row', resolvedRegistry, (value) => {
     value.rows.push({
       ...clone(value.rows.at(-1)),
       id: 'AMB-005',
     });
-  }, /exactly 262 rows/);
+  }, /exactly 263 rows/);
   expectInvalid('duplicate-row', resolvedRegistry, (value) => {
     value.rows[1].id = value.rows[0].id;
   }, /duplicate row ID/);
@@ -554,11 +554,11 @@ try {
   writeFileSync(untrackedEvidencePath, 'untracked\n', { flag: 'wx' });
   expectInvalid('untracked-evidence', resolvedRegistry, (value) => {
     value.rows[0].evidence = [untrackedEvidenceName];
-  }, /not tracked by the candidate/);
+  }, /not tracked by the candidate/, { gitExecutable: 'git' });
   symlinkSync('MCP.md', symlinkEvidencePath);
   expectInvalid('symlink-evidence', resolvedRegistry, (value) => {
     value.rows[0].evidence = [symlinkEvidenceName];
-  }, /contains a symlink/);
+  }, /contains a symlink/, { gitExecutable: 'git' });
   expectInvalid('duplicate-evidence', resolvedRegistry, (value) => {
     const reference = value.rows[0].evidence[0];
     value.rows[0].evidence = [reference, reference];
@@ -652,4 +652,30 @@ try {
   rmSync(untrackedEvidencePath, { force: true });
   rmSync(symlinkEvidencePath, { force: true });
   rmSync(temporaryRoot, { force: true, recursive: true });
+}
+
+function semanticGitExecutable() {
+  return join(temporaryRoot, 'git');
+}
+
+function prepareSemanticGit(nextPath) {
+  writeFileSync(semanticGitExecutable(), `#!/bin/sh
+test "$#" -eq 8 \\
+  && test "$1" = "-c" \\
+  && test "$2" = "safe.directory=$4" \\
+  && test "$3" = "-C" \\
+  && test "$5" = "ls-files" \\
+  && test "$6" = "--error-unmatch" \\
+  && test "$7" = "--" \\
+  && test -n "$8" \\
+  || exit 64
+`, { mode: 0o700 });
+  return nextPath;
+}
+
+function semanticGitEnvironment() {
+  return {
+    ...process.env,
+    PATH: `${temporaryRoot}${delimiter}${process.env.PATH ?? ''}`,
+  };
 }

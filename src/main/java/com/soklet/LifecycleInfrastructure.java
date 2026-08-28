@@ -40,6 +40,7 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static java.util.Objects.requireNonNull;
 
@@ -211,7 +212,7 @@ final class LifecycleRuntimeServices {
 	}
 }
 
-/** Internal-first result publication plus one cached minimal public-stage draft. */
+/** Internal-first result publication plus one cached minimal public stage. */
 @ThreadSafe
 final class InternalLifecycleCompletion {
 	@NonNull
@@ -327,9 +328,18 @@ final class InternalLifecycleCompletion {
 /** Exact immutable core-result publication point used by runner deadlines. */
 @Immutable
 record InternalLifecycleCoreSnapshot(@NonNull InternalShutdownResult result,
-		long publicationNanos) {
+		@NonNull ShutdownResult publicResult, long publicationNanos) {
+	InternalLifecycleCoreSnapshot(@NonNull InternalShutdownResult result,
+			long publicationNanos) {
+		this(result, ShutdownResult.fromInternal(result), publicationNanos);
+	}
+
 	InternalLifecycleCoreSnapshot {
 		requireNonNull(result);
+		requireNonNull(publicResult);
+		if (publicResult.internalResult() != result)
+			throw new IllegalArgumentException(
+					"Core snapshot results must describe the same lifecycle result");
 	}
 }
 
@@ -345,6 +355,8 @@ final class InternalLifecycleStateMachine {
 	}
 
 	@NonNull
+	private final ReentrantLock transitionLock;
+	@NonNull
 	private final AtomicReference<State> state;
 	@NonNull
 	private final AtomicBoolean shutdownIntent;
@@ -354,18 +366,34 @@ final class InternalLifecycleStateMachine {
 	private boolean shutdownIntentNanosPresent;
 
 	InternalLifecycleStateMachine() {
+		this(new ReentrantLock());
+	}
+
+	InternalLifecycleStateMachine(@NonNull ReentrantLock transitionLock) {
+		this.transitionLock = requireNonNull(transitionLock);
 		this.state = new AtomicReference<>(State.NEW);
 		this.shutdownIntent = new AtomicBoolean();
 		this.shutdownOrigin = new AtomicReference<>();
 	}
 
-	synchronized void claimStart() {
-		if (!this.state.compareAndSet(State.NEW, State.STARTING))
-			throw new IllegalStateException("Soklet lifecycle start was already claimed");
+	void claimStart() {
+		this.transitionLock.lock();
+		try {
+			if (!this.state.compareAndSet(State.NEW, State.STARTING))
+				throw new IllegalStateException(
+						"Soklet lifecycle start was already claimed");
+		} finally {
+			this.transitionLock.unlock();
+		}
 	}
 
-	synchronized boolean publishReady() {
-		return this.state.compareAndSet(State.STARTING, State.READY);
+	boolean publishReady() {
+		this.transitionLock.lock();
+		try {
+			return this.state.compareAndSet(State.STARTING, State.READY);
+		} finally {
+			this.transitionLock.unlock();
+		}
 	}
 
 	boolean requestShutdown() {
@@ -378,32 +406,44 @@ final class InternalLifecycleStateMachine {
 	}
 
 	@NonNull
-	synchronized ShutdownRequest requestShutdownDetailed(long intentNanos) {
-		boolean first = this.shutdownIntent.compareAndSet(false, true);
-		for (;;) {
-			State current = this.state.get();
-			if (current == State.SHUTTING_DOWN || current == State.CLOSED) {
-				if (!this.shutdownIntentNanosPresent) {
+	ShutdownRequest requestShutdownDetailed(long intentNanos) {
+		this.transitionLock.lock();
+		try {
+			boolean first = this.shutdownIntent.compareAndSet(false, true);
+			for (;;) {
+				State current = this.state.get();
+				if (current == State.SHUTTING_DOWN || current == State.CLOSED) {
+					if (!this.shutdownIntentNanosPresent) {
+						this.shutdownIntentNanos = intentNanos;
+						this.shutdownIntentNanosPresent = true;
+					}
+					State origin = this.shutdownOrigin.get();
+					return new ShutdownRequest(first,
+							origin == null ? current : origin,
+							this.shutdownIntentNanos);
+				}
+				if (this.state.compareAndSet(current, State.SHUTTING_DOWN)) {
+					this.shutdownOrigin.compareAndSet(null, current);
 					this.shutdownIntentNanos = intentNanos;
 					this.shutdownIntentNanosPresent = true;
+					return new ShutdownRequest(first, current, intentNanos);
 				}
-				State origin = this.shutdownOrigin.get();
-				return new ShutdownRequest(first, origin == null ? current : origin,
-						this.shutdownIntentNanos);
 			}
-			if (this.state.compareAndSet(current, State.SHUTTING_DOWN)) {
-				this.shutdownOrigin.compareAndSet(null, current);
-				this.shutdownIntentNanos = intentNanos;
-				this.shutdownIntentNanosPresent = true;
-				return new ShutdownRequest(first, current, intentNanos);
-			}
+		} finally {
+			this.transitionLock.unlock();
 		}
 	}
 
-	synchronized void publishClosed() {
-		State previous = this.state.getAndSet(State.CLOSED);
-		if (previous == State.CLOSED)
-			throw new IllegalStateException("Soklet lifecycle was already closed");
+	void publishClosed() {
+		this.transitionLock.lock();
+		try {
+			State previous = this.state.getAndSet(State.CLOSED);
+			if (previous == State.CLOSED)
+				throw new IllegalStateException(
+						"Soklet lifecycle was already closed");
+		} finally {
+			this.transitionLock.unlock();
+		}
 	}
 
 	@NonNull
@@ -419,10 +459,16 @@ final class InternalLifecycleStateMachine {
 		return this.shutdownOrigin.get() == State.NEW;
 	}
 
-	synchronized long shutdownIntentNanos() {
-		if (!this.shutdownIntentNanosPresent)
-			throw new IllegalStateException("Soklet shutdown intent is not published");
-		return this.shutdownIntentNanos;
+	long shutdownIntentNanos() {
+		this.transitionLock.lock();
+		try {
+			if (!this.shutdownIntentNanosPresent)
+				throw new IllegalStateException(
+						"Soklet shutdown intent is not published");
+			return this.shutdownIntentNanos;
+		} finally {
+			this.transitionLock.unlock();
+		}
 	}
 
 	record ShutdownRequest(boolean firstIntent, @NonNull State priorState,
@@ -891,6 +937,10 @@ final class InternalLifecycleCoordinator {
 		default boolean startupCallActive() {
 			return false;
 		}
+
+		/** Freezes participant-local facts read by the classification pass. */
+		default void freezeForClassification() {
+		}
 	}
 
 	@NonNull
@@ -985,6 +1035,9 @@ final class InternalLifecycleCoordinator {
 					forceCall.cancel();
 			}
 		}
+
+		for (Participant participant : ordered)
+			participant.freezeForClassification();
 
 		List<InternalParticipantShutdownResult> results = new ArrayList<>();
 		for (Participant participant : ordered) {

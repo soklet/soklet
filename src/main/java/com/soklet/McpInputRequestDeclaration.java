@@ -145,6 +145,12 @@ public final class McpInputRequestDeclaration {
 	/**
 	 * Creates a sampling declaration.
 	 *
+	 * <p>SEP-2577 marks Sampling deprecated in MCP 2026-07-28, with
+	 * specification removal eligible no earlier than 2027-07-28. Prefer direct
+	 * model-provider integration. Soklet keeps this factory functional for every
+	 * supported profile containing Sampling and has made no Java API-removal
+	 * decision.
+	 *
 	 * <p>Base {@link McpClientCapability#SAMPLING} support is included
 	 * automatically. The supplied set may additionally contain only
 	 * {@link McpClientCapability#SAMPLING_CONTEXT} and
@@ -177,6 +183,12 @@ public final class McpInputRequestDeclaration {
 
 	/**
 	 * Creates a roots-list declaration.
+	 *
+	 * <p>SEP-2577 marks Roots deprecated in MCP 2026-07-28, with specification
+	 * removal eligible no earlier than 2027-07-28. Prefer explicit tool
+	 * parameters, resource URIs, or server configuration. Soklet keeps this
+	 * factory functional for every supported profile containing Roots and has
+	 * made no Java API-removal decision.
 	 *
 	 * @param requirement when roots support is required
 	 * @return roots-list declaration

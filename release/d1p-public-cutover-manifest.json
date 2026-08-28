@@ -1,0 +1,20 @@
+{
+  "baseCoreCommit": "315b759b97a3c32b420f34c3c137d72a09db9a11",
+  "baseCoreTree": "270907757a4cfd6d11703838c530cd70906e7d18",
+  "canonicalSemanticManifest": {
+    "path": "release/d1p-canonical-semantic-digests.json",
+    "sha256": "999ee9076f307d7b623188b499568e7df68e02d906e22fd8bcdb04da53b9aa80"
+  },
+  "externalEntrySetSha256": "4a7fae2a2644694b1de58f92db04632b61fc417a74f7316d30373fbbab1d9a53",
+  "externalManifestPath": "mcp/SOKLET_4_0_D1P_EXTERNAL_MANIFEST.json",
+  "externalManifestSha256": "5bedd6f65d365e41a93141a4cb5c3c6d710b77653421b4624c29fb2837926b8b",
+  "formatVersion": 1,
+  "previewEvidenceManifest": {
+    "path": "target/d1p-preview-evidence.json",
+    "sha256": "66960ee6e446c68183371a0bf00108bf05acab6f7eb3839bf2133ac6a3e73b18"
+  },
+  "trackedBlobManifest": {
+    "path": "release/d1p-tracked-blobs.sha256",
+    "sha256": "0fbce83223b680607b841c0a3aa5e01d205539db71c5824fd699fc6868cfc425"
+  }
+}

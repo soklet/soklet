@@ -27,17 +27,17 @@ import java.util.function.Consumer;
  * <p>
  * <a href="https://www.soklet.com/docs/server-sent-events">Server-Sent Event</a> simulation is also supported.
  * <p>
- * Instances of {@link Simulator} are made available via {@link com.soklet.Soklet#runSimulator(SokletConfig, Consumer)}.
+ * Instances of {@link Simulator} are made available through
+ * {@link SokletSimulator#run(SimulatorConfigFactory, SokletSimulator.Body)}.
  * <p>
  * Usage example:
  * <pre>{@code @Test
  * public void basicIntegrationTest () {
- *   // Just use your app's existing configuration
- *   SokletConfig config = obtainMySokletConfig();
- *
  *   // With the Simulator, you can issue requests
  *   // and receive responses just like you would with real servers.
- *   Soklet.runSimulator(config, (simulator) -> {
+ *   SokletSimulator.run(transports -> SokletConfig.withHttpServer(
+ *     transports.getHttpServer()).sseServer(transports.getSseServer()).build(),
+ *     simulator -> {
  *     // Construct a request
  *     Request request = Request.withPath(HttpMethod.GET, "/hello")
  *       .queryParameters(Map.of("name", Set.of("Mark")))
@@ -96,7 +96,7 @@ import java.util.function.Consumer;
  *     } catch (InterruptedException e) {
  *       Assertions.fail("Didn't receive a Server-Sent Event in time");
  *     }
- *   });
+ *     });
  * }}</pre>
  * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/testing">https://www.soklet.com/docs/testing</a>.

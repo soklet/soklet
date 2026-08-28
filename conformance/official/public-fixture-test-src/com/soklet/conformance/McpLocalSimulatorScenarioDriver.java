@@ -22,7 +22,7 @@ import com.soklet.McpMetricsEvent;
 import com.soklet.McpServer;
 import com.soklet.McpServerDiagnostics;
 import com.soklet.McpServerStatus;
-import com.soklet.McpShutdownOutcome;
+import com.soklet.ParticipantShutdownResult;
 import com.soklet.McpSimulation;
 import com.soklet.McpSimulationBodyMode;
 import com.soklet.McpSimulationCompletion;
@@ -33,8 +33,7 @@ import com.soklet.McpStreamTerminationReason;
 import com.soklet.MetricsCollector;
 import com.soklet.Request;
 import com.soklet.Simulator;
-import com.soklet.Soklet;
-import com.soklet.SokletConfig;
+import com.soklet.SokletSimulator;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -48,6 +47,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Candidate-artifact, public-API-only replay of the pinned 39 RUN scenarios
@@ -191,20 +191,27 @@ public final class McpLocalSimulatorScenarioDriver {
 		RecordingMetrics metrics = new RecordingMetrics(
 				expectedSemanticTerminals(row.name()));
 		RecordingLifecycle lifecycle = new RecordingLifecycle();
-		SokletConfig base = McpConformanceFixture
-				.simulationConfigForScenario(row.name());
-		SokletConfig config = base.copy()
-				.metricsCollector(metrics)
-				.lifecycleObserver(lifecycle)
-				.finish();
-		McpServer server = config.getMcpServer().orElseThrow();
-
-		assertStopped(server);
-		Soklet.runSimulator(config, simulator -> {
-			assertStopped(server);
+		AtomicReference<McpServer> serverReference = new AtomicReference<>();
+		SokletSimulator.run(transports -> {
+			var config = McpConformanceFixture.simulationConfigForScenario(
+					row.name(), transports, metrics, lifecycle);
+			McpServer server = config.getMcpServer().orElseThrow();
+			assertNotStarted(server);
+			serverReference.set(server);
+			return config;
+		}, simulator -> {
+			McpServer server = serverReference.get();
+			if (server == null)
+				throw new IllegalStateException(
+						"The simulator config factory did not publish its MCP server.");
+			assertRunningOffNetwork(server);
 			executeScenario(row, simulator, server);
-			assertStopped(server);
+			assertRunningOffNetwork(server);
 		});
+		McpServer server = serverReference.get();
+		if (server == null)
+			throw new IllegalStateException(
+					"The simulator config factory did not publish its MCP server.");
 		metrics.awaitSemanticTerminal();
 		metrics.assertNoListenerOrTransportEvents();
 		lifecycle.assertNoServerLifecycle();
@@ -364,7 +371,7 @@ public final class McpLocalSimulatorScenarioDriver {
 			assertContains(frame, "notifications/subscriptions/acknowledged",
 					"\"io.modelcontextprotocol/subscriptionId\":\""
 							+ subscriptionId + "\"", "resourcesListChanged");
-			assertStopped(server);
+			assertRunningOffNetwork(server);
 			subscription.cancel();
 			McpSimulationCompletion completion = awaitCompletion(subscription);
 			assertEquals(McpStreamTerminationReason.CLIENT_DISCONNECTED,
@@ -988,8 +995,27 @@ public final class McpLocalSimulatorScenarioDriver {
 
 	private static void assertStopped(McpServer server) {
 		McpServerDiagnostics diagnostics = server.getDiagnostics();
-		assertEquals(McpServerStatus.STOPPED, diagnostics.getStatus(),
-				"Simulator must not start the listener");
+		assertEquals(McpServerStatus.TERMINATED, diagnostics.getStatus(),
+				"Simulator scope must publish terminal MCP evidence");
+		assertOffNetworkDiagnostics(diagnostics);
+	}
+
+	private static void assertNotStarted(McpServer server) {
+		McpServerDiagnostics diagnostics = server.getDiagnostics();
+		assertEquals(McpServerStatus.NOT_STARTED, diagnostics.getStatus(),
+				"Simulator MCP construction must not begin attachment");
+		assertOffNetworkDiagnostics(diagnostics);
+	}
+
+	private static void assertRunningOffNetwork(McpServer server) {
+		McpServerDiagnostics diagnostics = server.getDiagnostics();
+		assertEquals(McpServerStatus.RUNNING, diagnostics.getStatus(),
+				"Simulator MCP admission must be open during the scope body");
+		assertOffNetworkDiagnostics(diagnostics);
+	}
+
+	private static void assertOffNetworkDiagnostics(
+			McpServerDiagnostics diagnostics) {
 		assertTrue(diagnostics.getBoundAddress().isEmpty(),
 				"Simulator must not expose a bound address");
 		assertEquals(0, diagnostics.getActiveHandlerExecutions(),
@@ -1000,7 +1026,6 @@ public final class McpLocalSimulatorScenarioDriver {
 				"Simulator stream diagnostics must remain hidden");
 		assertEquals(0, diagnostics.getActiveSubscriptions(),
 				"Simulator subscription diagnostics must remain hidden");
-		assertTrue(!server.isStarted(), "Simulator must not mark server started");
 	}
 
 	private static void assertContains(String value, String... fragments) {
@@ -1060,7 +1085,8 @@ public final class McpLocalSimulatorScenarioDriver {
 		}
 
 		@Override
-		public void didStopMcpServer(McpServer server, McpShutdownOutcome outcome) {
+		public void didStopMcpServer(McpServer server,
+				ParticipantShutdownResult result) {
 			this.serverCallbacks.incrementAndGet();
 		}
 

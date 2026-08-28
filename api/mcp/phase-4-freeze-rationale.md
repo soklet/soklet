@@ -22,7 +22,7 @@ Final greenfield API polish amendment reviewed: 2026-08-17
 
 Greenfield public-record elimination amendment reviewed: 2026-08-18
 Greenfield typed-request-state amendment reviewed: 2026-08-18
-Reserved application-metadata behavioral amendment reviewed: 2026-08-24
+Reserved application-metadata behavioral amendment reviewed: 2026-08-24; pre-G3 public API correction reviewed: 2026-08-28
 
 This record approves the Phase 4 public/protected API snapshot for Soklet
 `3.6.0-SNAPSHOT`. The comparison baseline is released Soklet `3.5.1`, and the
@@ -37,9 +37,9 @@ contained exactly 556 canonical symbols and had SHA-256
 After the later Phase 5/6 additions, localization and trace-log host
 amendments, the naming reviews through the final greenfield polish, and the
 greenfield public-record elimination and typed-request-state amendments, the
-current reviewed set
-contains exactly 565 canonical symbols and has SHA-256
-`3269b4a73d42c035a90735336462aaeb98bf6809d003fa858dbfa4a839e4c2e2`.
+current reviewed set contains exactly 618 canonical symbols and has SHA-256
+`3d9d68bbbdeabae63a78d40a50c9896d3f11f6d0d2305beff0c94bd86476928c`.
+The current lifecycle and pre-G3 API corrections are included in that set.
 `target/japicmp/mcp-api-diff.xml` is the modified-only report used to derive
 that set. It deliberately omits compatible unchanged/restored containers.
 
@@ -63,33 +63,33 @@ was not yet in the then-current inventory because no MCP descriptor had landed
 on that shared host. It was later added to and frozen in Phase 6 when its MCP
 simulation descriptors landed.
 
-After the telemetry, greenfield cohesion, localization-result simplification,
-localization-context builder, final API-polish, and public-record elimination
-amendments, the current exact owner partition is 133 Phase 4, 36 Phase 5, 65
-Phase 6, zero provisional, and 234 total. The cohesion naming amendment was
-one-for-one within each phase; the result simplification removed one redundant
-Phase 6 nested owner, the context amendment added the framework-owned nested
-builder, and converting records to final classes plus privatizing the
-`McpCachePolicy` constructor did not change ownership. The typed-state
-amendment subsequently removed three Phase 5 carrier owners and did not change
-Phase 4 or Phase 6 ownership.
+After the telemetry, greenfield, lifecycle, and pre-G3 API amendments, the
+current exact MCP owner partition is 133 Phase 4, 36 Phase 5, 64 Phase 6, zero
+provisional, and 233 total; the exact non-MCP allowlist adds 39 owners for 272
+current-side owners. The cohesion naming amendment was one-for-one; result and
+context changes adjusted Phase 6; record conversion did not alter ownership.
+The typed-state amendment removed three Phase 5 carrier owners. The lifecycle
+cutover removed one Phase 4 and one Phase 6 owner; the annotation split then
+added one Phase 4 owner. The current partition and exact transitions are
+recorded in the lifecycle and pre-G3 correction sections below, with no
+compatibility alias retained.
 
 ## Frozen Phase 4 snapshot
 
-`phase-4.signatures.jsonl` contains exactly 1,048 canonical records:
+`phase-4.signatures.jsonl` contains exactly 1,029 canonical records:
 
 - 133 classes;
 - one constructor;
 - 79 fields; and
-- 835 methods.
+- 816 methods.
 
 The reviewed file's SHA-256 is
-`0efe130ce6da63230f2bbf5f4c50889209a53bd49995f7da1a42ff713c7f60d4`.
+`ba976dbbe4d72d2b38a7f167bb88164e321064fea5847cc45f6992220b735e2f`.
 The independent reflection contract freezes the Phase 4 JSpecify type-use
 layout with SHA-256
-`1d33a5deb35adb467feccac10ffce635eae903437a096ed63a8c17a1b57d2309`.
+`9cfe146213f1c96cfdd1de6fe05caa58d8055f7abdb491b6141491f2dc8de646`.
 The 133-entry `phase-4.includes` inventory has SHA-256
-`8c0c7f3a0b17cd824d292969b1dd4eb4b52bc64929f65b562a197e8dcf510b6b`.
+`fd3293a1089845a3c90c22cda8bd59986b8a975c3cb10211ab3ea8831a7e5021`.
 
 ### Post-freeze wrapper correction
 
@@ -471,6 +471,44 @@ member, modifier, annotation, hierarchy, or JSpecify change, the reviewed
 1,048/179/422 signature partitions, reflection/nullability digests, and
 565-record released-3.5.1 compatibility ledger remain unchanged.
 
+### 2026-08-27 Soklet 4.0 lifecycle cutover
+
+The 4.0 lifecycle review deliberately changes the frozen Phase 4 hosts rather
+than retaining compatibility aliases for the unreleased intermediate API:
+
+- all four `LifecycleObserver.didStop*` methods now carry the exact aggregate
+  or participant shutdown result, and all four `didFailToStop*` methods are
+  removed because failure evidence is part of those results;
+- `SokletConfig` and its builder gain the shared `LifecyclePolicy`, while the
+  redundant `SokletConfig.Copier` owner and `copy()` surface are removed;
+- `McpLogLevel` loses the Java `@Deprecated` annotation, Javadoc
+  `@deprecated` block tag, and generated annotation record because SEP-2577
+  wire lifecycle is independent from Soklet Java API lifecycle;
+- `McpServer` and its builder lose direct lifecycle, `AutoCloseable`, status,
+  and `shutdownTimeout` descriptors so the Soklet owner is the sole lifecycle
+  authority; and
+- `MetricsCollector`, `MetricsCollector.Snapshot`, and its builder retain
+  their exact descriptors. Their use of the revised Phase 6 disposition type
+  does not create another Phase 4 host change.
+
+Removing `SokletConfig.Copier` leaves 132 Phase 4 owners. The regenerated
+snapshot contains 1,025 records: 132 classes, one constructor, 79 fields, and
+813 methods. Its SHA-256 is
+`89360e07e7813f349b01ae860e19865b62ff35ff40c9bb59c8be4f1fce226658`;
+the reflection/nullability digest is
+`8030cb36ddb7aad8534c601b173e37b99e4b164942f2fd30628f9adde1e35eb3`;
+and the include-inventory SHA-256 is
+`adbdfe675205831336fd0d95f44911b9b4ab94de24bd7ade232805f02b52b785`.
+Phase 5 remains byte-identical at 36 owners and 179 records. The revised
+Phase 6 rationale records its own cutover changes.
+
+The general lifecycle, result, runner, simulator, and transport-SPI owners
+remain outside artificial MCP phase ownership in the exact 39-entry non-MCP
+allowlist. The complete MCP union is 232 owners, while current-side inventory
+verification covers 271 owners including that allowlist. The regenerated
+released-3.5.1 compatibility ledger contains 617 records with SHA-256
+`302f68448fe14b1cc5ad179c076c5b84b16e81b0b21dca55e0cc5edcbaadea41`.
+
 The snapshot includes every final descriptor that a later phase needs on a
 Phase 4-owned host:
 
@@ -486,7 +524,7 @@ Phase 4-owned host:
 - builder inputs for protection configuration, the dedicated trace key, and
   raw-validated-trace-ID logging;
 - the server localizer input and localization-control accessor, plus the
-  interceptor continuation's invocation-feature accessor;
+  interceptor's direct invocation-feature parameter;
 - the dedicated structured trace-correlation log-event type;
 - stream-queue, write-timeout, keep-alive, shutdown-timeout,
   per-authorization-partition-subscription and subscription-duration controls;
@@ -517,6 +555,45 @@ getter, configurable invalid-trace-context policy, a server-level server-
 information switch, the rejected legacy raw transport knobs, and Phase 4
 `Simulator` MCP members. These are exclusions, not deferred additions to a
 frozen Phase 4 host.
+
+### Pre-G3 public API correction
+
+The 2026-08-28 review corrected three unreleased API seams before the D1p
+preview is eligible for G3:
+
+- `McpToolArgument` now targets method parameters only, while the new
+  `McpToolProperty` targets typed input/output record components and carries
+  the same name, title, and description metadata. The processor and runtime
+  schema frontends reject the annotations on each other's targets rather than
+  retaining a dual-purpose compatibility alias.
+- `McpHandlerInterceptor.interceptHandler(...)` receives the exact
+  `McpInvocationFeatures` instance as its second argument. The synchronous
+  one-shot `McpHandlerContinuation` is again a single-method `proceed()`
+  carrier, so composed wrappers cannot silently fall back to an empty default
+  feature lookup.
+- `McpAdmissionContext.getRequestedResourceSubscriptionUris()` exposes an
+  immutable, validated, first-encounter-order URI projection for
+  `subscriptions/listen` admission. Other methods receive an empty list;
+  admission rejection still precedes subscription activation, and capability
+  acceptance still controls delivery.
+
+The annotation split adds one Phase 4 owner. The combined snapshot contains
+1,029 records across 133 owners: 133 classes, one constructor, 79 fields, and
+816 methods. Its SHA-256 is
+`ba976dbbe4d72d2b38a7f167bb88164e321064fea5847cc45f6992220b735e2f`;
+the Phase 4 reflection/nullability digest is
+`9cfe146213f1c96cfdd1de6fe05caa58d8055f7abdb491b6141491f2dc8de646`;
+and the include-inventory SHA-256 is
+`fd3293a1089845a3c90c22cda8bd59986b8a975c3cb10211ab3ea8831a7e5021`.
+Phase 5 and Phase 6 remain byte-identical at 179 and 421 records. The complete
+owner partition is 133/36/64/0, with 233 MCP owners and 272 current-side
+owners after the exact 39-entry non-MCP allowlist. Adding the admission method
+advances the released-3.5.1 compatibility ledger to 618 records with SHA-256
+`3d9d68bbbdeabae63a78d40a50c9896d3f11f6d0d2305beff0c94bd86476928c`.
+Compiler extraction, bidirectional inventory/signature checks, focused
+processor/runtime/schema/interceptor/subscription tests, public reflection and
+Javadoc checks, and the executable Java-17 sketch validate the correction.
+These are local D1p development facts, not G3 or release-candidate evidence.
 
 ## Historical local verification
 

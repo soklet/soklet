@@ -294,7 +294,8 @@ public sealed interface McpMetricsEvent permits
 	 * @return server-stopped event
 	 */
 	@NonNull
-	static ServerStopped serverStopped(@NonNull McpShutdownOutcome outcome) {
+	static ServerStopped serverStopped(
+			@NonNull ParticipantShutdownDisposition outcome) {
 		return new ServerStopped(outcome);
 	}
 
@@ -1348,15 +1349,16 @@ public sealed interface McpMetricsEvent permits
 	@ThreadSafe
 	public final class ServerStopped implements McpMetricsEvent {
 		@NonNull
-		private final McpShutdownOutcome outcome;
+		private final ParticipantShutdownDisposition outcome;
 
-		private ServerStopped(@NonNull McpShutdownOutcome outcome) {
+		private ServerStopped(
+				@NonNull ParticipantShutdownDisposition outcome) {
 			this.outcome = requireNonNull(outcome);
 		}
 
 		/** @return fixed listener shutdown outcome */
 		@NonNull
-		public McpShutdownOutcome getOutcome() {
+		public ParticipantShutdownDisposition getOutcome() {
 			return this.outcome;
 		}
 

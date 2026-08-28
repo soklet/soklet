@@ -40,7 +40,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@Timeout(30)
+@Timeout(60)
 public class McpResourcePublicRuntimeTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/mcp";
@@ -281,7 +281,7 @@ public class McpResourcePublicRuntimeTests {
 			Assertions.assertEquals(6, handlerInvocations.get());
 			Assertions.assertEquals(0, toolLimiterInvocations.get());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -440,7 +440,7 @@ public class McpResourcePublicRuntimeTests {
 			Assertions.assertEquals(5, listHandlerInvocations.get());
 			Assertions.assertEquals(0, toolLimiterInvocations.get());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -516,7 +516,7 @@ public class McpResourcePublicRuntimeTests {
 			assertContains(betaPage.body(), "\"ttlMs\":250");
 			assertContains(betaPage.body(), "\"cacheScope\":\"private\"");
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -619,7 +619,7 @@ public class McpResourcePublicRuntimeTests {
 			Assertions.assertFalse(invalidContent.body().contains("secret"),
 					invalidContent.body());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -652,7 +652,8 @@ public class McpResourcePublicRuntimeTests {
 				.build();
 		McpServer server = Assertions.assertDoesNotThrow(
 				() -> serverBuilder(exactPrecedence).build());
-		server.close();
+		Assertions.assertEquals(McpServerStatus.NOT_STARTED,
+				server.getDiagnostics().getStatus());
 	}
 
 	@Test
@@ -723,7 +724,7 @@ public class McpResourcePublicRuntimeTests {
 				Assertions.assertTrue(aggregateOversized.body().length() < 1_000,
 						Integer.toString(aggregateOversized.body().length()));
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 

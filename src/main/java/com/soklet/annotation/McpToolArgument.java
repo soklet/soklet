@@ -25,31 +25,31 @@ import java.lang.annotation.Target;
 
 /**
  * Binds a parameter of an {@link McpTool} method as a published tool
- * argument, or supplies the published property metadata for a typed record
- * component.
+ * argument.
  * <p>
- * Requiredness is inferred from the declared parameter or component type:
- * {@code T} is required and {@code Optional<T>} is optional. A blank
- * {@link #name()} uses the source-level Java parameter or record-component
- * name. Explicit names provide a stable public contract across Java
- * refactoring.
+ * Requiredness is inferred from the declared parameter type: {@code T} is
+ * required and {@code Optional<T>} is optional. A blank {@link #name()} uses
+ * the source-level Java parameter name. Explicit names provide a stable public
+ * contract across Java refactoring. Use {@link McpToolProperty} to supply the
+ * corresponding schema metadata for a component of an ordinary typed input or
+ * output record.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@Target({ ElementType.PARAMETER, ElementType.RECORD_COMPONENT })
+@Target(ElementType.PARAMETER)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface McpToolArgument {
 	/**
 	 * The published argument name.
 	 *
-	 * @return the argument or property name, or an empty string to use the Java
-	 * parameter or record-component name
+	 * @return the argument name, or an empty string to use the Java
+	 * parameter name
 	 */
 	@Nullable
 	String name() default "";
 
 	/**
-	 * The optional human-readable argument or property title.
+	 * The optional human-readable argument title.
 	 *
 	 * @return the title, or an empty string if none is configured
 	 */
@@ -57,7 +57,7 @@ public @interface McpToolArgument {
 	String title() default "";
 
 	/**
-	 * The optional human-readable argument or property description.
+	 * The optional human-readable argument description.
 	 *
 	 * @return the description, or an empty string if none is configured
 	 */

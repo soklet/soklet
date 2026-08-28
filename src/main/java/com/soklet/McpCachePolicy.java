@@ -30,6 +30,10 @@ import static java.util.Objects.requireNonNull;
  * its owning operation. A result may override only the time to live where the
  * operation's result type explicitly permits it.
  *
+ * <p>The cache vocabulary is revision-sensitive rather than a permanent
+ * closed enum contract. Code switching on cache scope should retain a
+ * forward-compatible default for a future reviewed protocol revision.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe

@@ -195,6 +195,7 @@ final class SokletApplicationObservationTests {
 	}
 
 	@Test
+	@Timeout(value = 120, unit = TimeUnit.SECONDS)
 	@EnabledForJreRange(min = JRE.JAVA_21)
 	void realStandaloneMixedTransportLifecyclePreservesOrderAndSealsSnapshot()
 			throws Exception {
@@ -244,7 +245,7 @@ final class SokletApplicationObservationTests {
 				"will-stop-mcp",
 				"did-stop-http",
 				"did-stop-sse",
-				"did-stop-mcp-CLEAN",
+				"did-stop-mcp-GRACEFUL_TERMINATION",
 				"did-stop-soklet"), transitions);
 		LifecycleTransitionSnapshot snapshot = requireNonNull(runtime.get())
 				.diagnostics().transitionSnapshot();
@@ -271,21 +272,20 @@ final class SokletApplicationObservationTests {
 		BlockingAttachHttpEndpoint http = new BlockingAttachHttpEndpoint(
 				attachEntered, releaseAttach, attachReturned);
 		List<String> transitions = new CopyOnWriteArrayList<>();
-		List<InternalShutdownResult> terminalResults =
+		List<ShutdownResult> terminalResults =
 				new CopyOnWriteArrayList<>();
-		AtomicReference<Soklet> observedSoklet = new AtomicReference<>();
-		AtomicReference<Throwable> terminalSokletFailure =
+		List<ParticipantShutdownResult> participantResults =
+				new CopyOnWriteArrayList<>();
+		AtomicReference<ShutdownResult> terminalSokletResult =
 				new AtomicReference<>();
-		AtomicReference<McpShutdownOutcome> mcpOutcome = new AtomicReference<>();
 		LifecycleObserver observer = new LifecycleObserver() {
-			private void terminal(@NonNull String transition) {
+			private void participant(@NonNull String transition,
+					@NonNull ParticipantShutdownResult result) {
 				transitions.add(transition);
-				terminalResults.add(requireNonNull(observedSoklet.get())
-						.getDirectLifecycle().result().orElseThrow());
+				participantResults.add(result);
 			}
 
 			@Override public void willStartSoklet(@NonNull Soklet soklet) {
-				observedSoklet.set(soklet);
 				transitions.add("will-start-soklet");
 			}
 
@@ -310,25 +310,26 @@ final class SokletApplicationObservationTests {
 				transitions.add("will-stop-mcp");
 			}
 
-			@Override public void didFailToStopHttpServer(@NonNull HttpServer server,
-					@NonNull Throwable throwable) {
-				terminal("did-fail-stop-http");
+			@Override public void didStopHttpServer(@NonNull HttpServer server,
+					@NonNull ParticipantShutdownResult result) {
+				participant("did-stop-http", result);
 			}
 
-			@Override public void didStopSseServer(@NonNull SseServer server) {
-				terminal("did-stop-sse");
+			@Override public void didStopSseServer(@NonNull SseServer server,
+					@NonNull ParticipantShutdownResult result) {
+				participant("did-stop-sse", result);
 			}
 
 			@Override public void didStopMcpServer(@NonNull McpServer server,
-					@NonNull McpShutdownOutcome shutdownOutcome) {
-				mcpOutcome.set(shutdownOutcome);
-				terminal("did-stop-mcp");
+					@NonNull ParticipantShutdownResult result) {
+				participant("did-stop-mcp", result);
 			}
 
-			@Override public void didFailToStopSoklet(@NonNull Soklet soklet,
-					@NonNull Throwable throwable) {
-				terminalSokletFailure.set(throwable);
-				terminal("did-fail-stop-soklet");
+			@Override public void didStopSoklet(@NonNull Soklet soklet,
+					@NonNull ShutdownResult result) {
+				terminalSokletResult.set(result);
+				terminalResults.add(result);
+				transitions.add("did-stop-soklet");
 			}
 		};
 		McpEndpoint mcpEndpoint = McpEndpoint.withPath("/mcp")
@@ -387,6 +388,8 @@ final class SokletApplicationObservationTests {
 			ShutdownIncompleteException failure = Assertions.assertInstanceOf(
 					ShutdownIncompleteException.class, runner.failure.get());
 			InternalShutdownResult result = failure.getInternalShutdownResult();
+			ShutdownResult publicResult = failure.getShutdownResult();
+			Assertions.assertSame(result, publicResult.internalResult());
 			Assertions.assertNull(runner.result.get());
 			Assertions.assertTrue(transitionWorkerDone.await(5, TimeUnit.SECONDS));
 
@@ -410,18 +413,30 @@ final class SokletApplicationObservationTests {
 					"will-stop-http",
 					"will-stop-sse",
 					"will-stop-mcp",
-					"did-fail-stop-http",
+					"did-stop-http",
 					"did-stop-sse",
 					"did-stop-mcp",
-					"did-fail-stop-soklet"), transitions);
-			Assertions.assertEquals(4, terminalResults.size());
-			Assertions.assertTrue(terminalResults.stream()
-					.allMatch(observed -> observed == result));
-			ShutdownIncompleteException terminalFailure = Assertions.assertInstanceOf(
-					ShutdownIncompleteException.class, terminalSokletFailure.get());
-			Assertions.assertSame(result,
-					terminalFailure.getInternalShutdownResult());
-			Assertions.assertEquals(McpShutdownOutcome.CLEAN, mcpOutcome.get());
+					"did-stop-soklet"), transitions);
+			Assertions.assertEquals(List.of(publicResult), terminalResults);
+			Assertions.assertSame(publicResult, terminalSokletResult.get());
+			Assertions.assertEquals(3, participantResults.size());
+			for (ParticipantShutdownResult participant : participantResults)
+				Assertions.assertSame(participant, publicResult.getParticipantResult(
+						participant.getParticipantKind()).orElseThrow());
+			ParticipantShutdownResult publicHttp = publicResult
+					.getParticipantResult(ParticipantKind.HTTP).orElseThrow();
+			Assertions.assertEquals(
+					ParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+					publicHttp.getDisposition());
+			Assertions.assertTrue(publicHttp.getResidualActivityEvidence()
+					.orElseThrow().getActivityKinds()
+					.contains(ResidualActivityKind.LIFECYCLE_CALL));
+			Assertions.assertEquals(ParticipantShutdownDisposition.NOT_STARTED,
+					publicResult.getParticipantResult(ParticipantKind.SSE).orElseThrow()
+							.getDisposition());
+			Assertions.assertEquals(ParticipantShutdownDisposition.NOT_STARTED,
+					publicResult.getParticipantResult(ParticipantKind.MCP).orElseThrow()
+							.getDisposition());
 			LifecycleTransitionSnapshot snapshot = requireNonNull(runtime.get())
 					.diagnostics().transitionSnapshot();
 			Assertions.assertEquals(10, snapshot.acceptedRecords());
@@ -532,6 +547,7 @@ final class SokletApplicationObservationTests {
 	}
 
 	@Test
+	@Timeout(120)
 	void transportLogDuringAttachIsInlineNonqueuedAndTracked()
 			throws Exception {
 		LogEvent exactLog = LogEvent.with(LogEventType.SERVER_TRANSPORT_FAILURE,
@@ -674,6 +690,7 @@ final class SokletApplicationObservationTests {
 	}
 
 	@Test
+	@Timeout(value = 120, unit = TimeUnit.SECONDS)
 	void standaloneCleanupNeverClosesStatefulObserver() throws Exception {
 		CloseTrackingObserver observer = new CloseTrackingObserver();
 		CountDownLatch transitionWorkerDone = new CountDownLatch(1);
@@ -716,18 +733,20 @@ final class SokletApplicationObservationTests {
 	}
 
 	@Test
+	@Timeout(120)
 	void blockedTransitionCannotDelayRunnerCleanupOrTerminalReport()
 			throws Exception {
 		int httpPort = findFreePort();
 		CountDownLatch observerEntered = new CountDownLatch(1);
 		CountDownLatch releaseObserver = new CountDownLatch(1);
 		CountDownLatch terminalCallback = new CountDownLatch(1);
+		CountDownLatch peerTerminalCallback = new CountDownLatch(1);
 		CountDownLatch startReturned = new CountDownLatch(1);
 		CountDownLatch reportReceived = new CountDownLatch(1);
 		CountDownLatch requestStarted = new CountDownLatch(1);
 		CountDownLatch requestFinished = new CountDownLatch(1);
 		List<String> transitions = new CopyOnWriteArrayList<>();
-		AtomicReference<InternalShutdownResult> terminalCallbackResult =
+		AtomicReference<ShutdownResult> terminalCallbackResult =
 				new AtomicReference<>();
 		AtomicReference<Thread> requestStartThread = new AtomicReference<>();
 		AtomicReference<Thread> requestFinishThread = new AtomicReference<>();
@@ -788,15 +807,16 @@ final class SokletApplicationObservationTests {
 			}
 
 			@Override
-			public void didStopHttpServer(@NonNull HttpServer httpServer) {
+			public void didStopHttpServer(@NonNull HttpServer httpServer,
+					@NonNull ParticipantShutdownResult result) {
 				transitions.add("did-stop-http");
 			}
 
 			@Override
-			public void didStopSoklet(@NonNull Soklet soklet) {
+			public void didStopSoklet(@NonNull Soklet soklet,
+					@NonNull ShutdownResult result) {
 				transitions.add("did-stop-soklet");
-				terminalCallbackResult.set(soklet.getDirectLifecycle().result()
-						.orElseThrow());
+				terminalCallbackResult.set(result);
 				terminalCallback.countDown();
 			}
 		};
@@ -819,11 +839,14 @@ final class SokletApplicationObservationTests {
 			@Override public void willStopHttpServer(@NonNull HttpServer server) {
 				peerCallbacks.incrementAndGet();
 			}
-			@Override public void didStopHttpServer(@NonNull HttpServer server) {
+			@Override public void didStopHttpServer(@NonNull HttpServer server,
+					@NonNull ParticipantShutdownResult result) {
 				peerCallbacks.incrementAndGet();
 			}
-			@Override public void didStopSoklet(@NonNull Soklet soklet) {
+			@Override public void didStopSoklet(@NonNull Soklet soklet,
+					@NonNull ShutdownResult result) {
 				peerCallbacks.incrementAndGet();
+				peerTerminalCallback.countDown();
 			}
 		};
 		SokletConfig config = SokletConfig
@@ -837,7 +860,7 @@ final class SokletApplicationObservationTests {
 		RecordingProcessAccess process = new RecordingProcessAccess();
 		RecordingTriggerRegistry triggers = new RecordingTriggerRegistry();
 		AtomicInteger cleanupCalls = new AtomicInteger();
-		AtomicReference<InternalShutdownResult> cleanupResult =
+		AtomicReference<ShutdownResult> cleanupResult =
 				new AtomicReference<>();
 		AtomicReference<SokletApplicationTerminalSnapshot> report =
 				new AtomicReference<>();
@@ -894,7 +917,7 @@ final class SokletApplicationObservationTests {
 			Assertions.assertNull(runner.failure.get());
 			InternalShutdownResult result = requireNonNull(runner.result.get());
 			Assertions.assertTrue(result.isComplete());
-			Assertions.assertSame(result, cleanupResult.get());
+			Assertions.assertSame(result, cleanupResult.get().internalResult());
 			Assertions.assertEquals(1, cleanupCalls.get());
 			LifecycleTransitionSnapshot observerSnapshot = requireNonNull(report.get())
 					.coreDiagnostics().transitionSnapshot();
@@ -915,7 +938,9 @@ final class SokletApplicationObservationTests {
 		}
 
 		Assertions.assertTrue(terminalCallback.await(5, TimeUnit.SECONDS));
-		Assertions.assertSame(runner.result.get(), terminalCallbackResult.get());
+		Assertions.assertTrue(peerTerminalCallback.await(5, TimeUnit.SECONDS));
+		Assertions.assertSame(runner.result.get(),
+				terminalCallbackResult.get().internalResult());
 		Assertions.assertEquals(List.of("will-start-soklet", "will-start-http",
 				"did-start-http", "did-start-soklet", "will-stop-soklet",
 				"will-stop-http", "did-stop-http", "did-stop-soklet"),
@@ -1147,23 +1172,26 @@ final class SokletApplicationObservationTests {
 		}
 
 		@Override
-		public void didStopHttpServer(@NonNull HttpServer httpServer) {
+		public void didStopHttpServer(@NonNull HttpServer httpServer,
+				@NonNull ParticipantShutdownResult result) {
 			this.transitions.add("did-stop-http");
 		}
 
 		@Override
-		public void didStopSseServer(@NonNull SseServer sseServer) {
+		public void didStopSseServer(@NonNull SseServer sseServer,
+				@NonNull ParticipantShutdownResult result) {
 			this.transitions.add("did-stop-sse");
 		}
 
 		@Override
 		public void didStopMcpServer(@NonNull McpServer mcpServer,
-				@NonNull McpShutdownOutcome shutdownOutcome) {
-			this.transitions.add("did-stop-mcp-" + shutdownOutcome.name());
+				@NonNull ParticipantShutdownResult result) {
+			this.transitions.add("did-stop-mcp-" + result.getDisposition().name());
 		}
 
 		@Override
-		public void didStopSoklet(@NonNull Soklet soklet) {
+		public void didStopSoklet(@NonNull Soklet soklet,
+				@NonNull ShutdownResult result) {
 			this.transitions.add("did-stop-soklet");
 		}
 
@@ -1185,7 +1213,8 @@ final class SokletApplicationObservationTests {
 		}
 
 		@Override
-		public void didStopSoklet(@NonNull Soklet soklet) {
+		public void didStopSoklet(@NonNull Soklet soklet,
+				@NonNull ShutdownResult result) {
 			this.state.add("stopped");
 		}
 
@@ -1195,10 +1224,9 @@ final class SokletApplicationObservationTests {
 		}
 	}
 
-	private static final class BlockingAttachHttpEndpoint
-			implements HttpServer, InternalHttpTransportEndpoint {
-		@NonNull private final InternalTransportIdentity identity =
-				InternalTransportIdentity.create();
+	private static final class BlockingAttachHttpEndpoint implements HttpServer {
+		@NonNull private final TransportIdentity identity =
+				TransportIdentity.create();
 		@NonNull private final CountDownLatch attachEntered;
 		@NonNull private final CountDownLatch releaseAttach;
 		@NonNull private final CountDownLatch attachReturned;
@@ -1212,73 +1240,79 @@ final class SokletApplicationObservationTests {
 			this.attachReturned = requireNonNull(attachReturned);
 		}
 
-		@Override @NonNull public InternalTransportIdentity identity() {
+		@Override @NonNull public TransportIdentity getTransportIdentity() {
 			return this.identity;
 		}
 
-		@Override @NonNull public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
+		@Override @NonNull public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
 			this.attachEntered.countDown();
 			awaitUninterruptibly(this.releaseAttach);
 			this.attachReturned.countDown();
-			return new InternalTransportRuntime() {
-				@Override public void start(@NonNull InternalStartupContext ignored) { }
+			return new TransportRuntime() {
+				@Override public void start(@NonNull StartupContext ignored) { }
 				@Override public void quiesce(
-						@NonNull InternalShutdownContext ignored) { }
+						@NonNull ShutdownContext ignored) { }
 				@Override public void force(
-						@NonNull InternalShutdownContext ignored) { }
+						@NonNull ShutdownContext ignored) { }
 			};
-		}
-
-		@Override public void start() {
-			throw new AssertionError("Direct endpoint startup uses its runtime");
-		}
-
-		@Override public void stop() { }
-
-		@Override @NonNull public Boolean isStarted() {
-			return false;
-		}
-
-		@Override public void initialize(@NonNull SokletConfig config,
-				@NonNull RequestHandler requestHandler) {
-			throw new AssertionError("Direct endpoint attachment uses attach(...)");
 		}
 	}
 
 	private static final class LoggingAttachHttpServer implements HttpServer {
+		@NonNull private final TransportIdentity identity =
+				TransportIdentity.create();
 		@NonNull private final LogEvent logEvent;
 		@NonNull private final CountDownLatch attachEntered = new CountDownLatch(1);
 		@NonNull private final CountDownLatch releaseAttach = new CountDownLatch(1);
 		@NonNull private final AtomicReference<Thread> attachThread =
 				new AtomicReference<>();
-		@NonNull private final AtomicBoolean started = new AtomicBoolean();
+		@NonNull private final AtomicBoolean terminationSignalled =
+				new AtomicBoolean();
 
 		private LoggingAttachHttpServer(@NonNull LogEvent logEvent) {
 			this.logEvent = requireNonNull(logEvent);
 		}
 
-		@Override public void initialize(@NonNull SokletConfig config,
-				@NonNull RequestHandler requestHandler) {
-			requireNonNull(requestHandler);
+		@Override @NonNull public TransportIdentity getTransportIdentity() {
+			return this.identity;
+		}
+
+		@Override @NonNull public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext attachmentContext,
+				@NonNull StartupContext startupContext) {
+			requireNonNull(attachmentContext
+					.getAdmissionFencedRequestHandler());
+			requireNonNull(startupContext);
 			this.attachThread.set(Thread.currentThread());
 			this.attachEntered.countDown();
-			requireNonNull(config).getAggregateLifecycleObserver()
+			attachmentContext.getSokletConfig().getAggregateLifecycleObserver()
 					.didReceiveLogEvent(this.logEvent);
 			awaitUninterruptibly(this.releaseAttach);
+			TransportTerminationSignal terminationSignal =
+					attachmentContext.getTerminationSignal();
+			return new TransportRuntime() {
+				@Override public void start(@NonNull StartupContext context) {
+					requireNonNull(context);
+				}
+
+				@Override public void quiesce(@NonNull ShutdownContext context) {
+					requireNonNull(context);
+					terminate(terminationSignal);
+				}
+
+				@Override public void force(@NonNull ShutdownContext context) {
+					requireNonNull(context);
+					terminate(terminationSignal);
+				}
+			};
 		}
 
-		@Override public void start() {
-			this.started.set(true);
-		}
-
-		@Override public void stop() {
-			this.started.set(false);
-		}
-
-		@Override @NonNull public Boolean isStarted() {
-			return this.started.get();
+		private void terminate(
+				@NonNull TransportTerminationSignal terminationSignal) {
+			if (this.terminationSignalled.compareAndSet(false, true))
+				terminationSignal.signalTerminated();
 		}
 	}
 

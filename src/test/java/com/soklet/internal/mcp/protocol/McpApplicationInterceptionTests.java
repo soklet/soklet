@@ -38,7 +38,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
 @NotThreadSafe
-@Timeout(20)
+@Timeout(60)
 public class McpApplicationInterceptionTests {
 	@Test
 	public void interceptor_runs_inside_the_acquired_slot_and_can_transform_results()

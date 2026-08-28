@@ -20,6 +20,7 @@ import com.soklet.CorsAuthorizer;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -102,6 +103,7 @@ public class McpProtocolProfileRegistryTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void fakeProfileEntersOnlyThroughTheExplicitRuntimeTestSeam()
 			throws Exception {
 		AtomicInteger fakeMappings = new AtomicInteger();

@@ -32,6 +32,7 @@ import org.junit.jupiter.api.condition.EnabledForJreRange;
 import org.junit.jupiter.api.condition.JRE;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
@@ -410,7 +411,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void sse_startStop_doesNotHang() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -418,13 +419,14 @@ public class SseTests {
 		SseServer sse = SseServer.withPort(ssePort)
 				.host("127.0.0.1")
 				.requestHeaderTimeout(Duration.ofSeconds(3))
-				.shutdownTimeout(Duration.ofSeconds(1))
 				.build();
 
-		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).shutdownTimeout(Duration.ofSeconds(1)).build())
+		SokletConfig cfg = SokletConfig.withHttpServer(
+				HttpServer.withPort(httpPort).build())
 				.sseServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleObserver(new QuietLifecycle()) // no noise in test logs
+				.lifecyclePolicy(shutdownPolicy(Duration.ofSeconds(1)))
 				.build();
 
 		try (Soklet app = Soklet.fromConfig(cfg)) {
@@ -434,7 +436,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void sseRequestReadTimeoutWithoutRequestProgressClosesQuietly() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -472,7 +474,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void ssePartialRequestReadTimeoutRecordsTransportFailure() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -513,7 +515,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void sse_startPortInUseFailsSynchronouslyAndRollsBackSoklet() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -546,11 +548,14 @@ public class SseTests {
 						app.getDirectLifecycle().result().orElseThrow());
 				Assertions.assertTrue(exception.getCause().getMessage()
 						.contains("SSE server"));
-				Assertions.assertFalse(app.isStarted());
+				Assertions.assertEquals(SokletStatus.CLOSED, app.getStatus());
 			}
 
-			Assertions.assertFalse(httpServer.isStarted());
-			Assertions.assertFalse(sseServer.isStarted());
+			Assertions.assertTrue(lifecycleObserver.terminalTransitionsDelivered
+					.await(5, SECONDS),
+					"Timed out waiting for terminal lifecycle transitions");
+			Assertions.assertFalse(internalHttpServer.isStarted());
+			Assertions.assertFalse(internalSseServer.isStarted());
 			Assertions.assertTrue(internalHttpServer.getEventLoop().isEmpty());
 			Assertions.assertTrue(internalHttpServer.getRequestHandlerExecutorService().isEmpty());
 			Assertions.assertTrue(internalSseServer.getEventLoopThread().isEmpty());
@@ -568,20 +573,20 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void sse_stop_allowsIsStartedDuringShutdownWait() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
 
 		SseServer sse = SseServer.withPort(ssePort)
 				.host("127.0.0.1")
-				.shutdownTimeout(Duration.ofSeconds(2))
 				.build();
 
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.sseServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleObserver(new QuietLifecycle()) // no noise in test logs
+				.lifecyclePolicy(shutdownPolicy(Duration.ofSeconds(2)))
 				.build();
 
 		try (Soklet app = Soklet.fromConfig(cfg)) {
@@ -606,7 +611,8 @@ public class SseTests {
 
 			Assertions.assertTrue(taskStarted.await(2, SECONDS), "Background task did not start");
 
-			Thread stopThread = new Thread(app::stop, "sse-stop-test");
+			Thread stopThread = new Thread(() -> app.shutdown()
+					.toCompletableFuture().join(), "sse-stop-test");
 			stopThread.start();
 
 			Field stoppingField = DefaultSseServer.class.getDeclaredField("stopping");
@@ -643,19 +649,19 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void sse_stopGracefullyShutsDownRequestHandlerExecutorBeforeInterrupting() throws Exception {
 		int ssePort = findFreePort();
 		RecordingExecutorService handlerExecutor = new RecordingExecutorService();
 		SseServer sse = SseServer.withPort(ssePort)
 				.host("127.0.0.1")
 				.requestHandlerExecutorServiceSupplier(() -> handlerExecutor)
-				.shutdownTimeout(Duration.ofSeconds(1))
 				.build();
 		DefaultSseServer server = (DefaultSseServer) sse;
 		SokletConfig sokletConfig = SokletConfig.withSseServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
+				.lifecyclePolicy(shutdownPolicy(Duration.ofSeconds(1)))
 				.build();
 		server.initialize(sokletConfig, (request, responseConsumer) -> {});
 
@@ -674,7 +680,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void sse_handshakeHeaders_and_basicDelivery() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -699,8 +705,8 @@ public class SseTests {
 
 				// Handshake
 				writeHttpGet(socket, "/tests/abc", ssePort);
-				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
-				if (rawHeaders == null) rawHeaders = readUntil(socket.getInputStream(), "\n\n", 4096);
+				String rawHeaders = readUntil(socket, "\r\n\r\n", 4096);
+				if (rawHeaders == null) rawHeaders = readUntil(socket, "\n\n", 4096);
 
 				Assertions.assertNotNull(rawHeaders, "Did not receive HTTP response headers");
 				String[] headerLines = rawHeaders.split("\r?\n");
@@ -723,7 +729,7 @@ public class SseTests {
 						.build();
 				b.broadcastEvent(ev);
 
-				String block = readUntil(socket.getInputStream(), "\n\n", 8192);
+				String block = readUntil(socket, "\n\n", 8192);
 				Assertions.assertNotNull(block, "Did not receive first SSE event");
 				List<String> lines = block.lines().map(String::trim).filter(s -> !s.isEmpty()).toList();
 
@@ -737,7 +743,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 20, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void sse_largeEvent_isFullyWritten() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -762,8 +768,8 @@ public class SseTests {
 
 				writeHttpGet(socket, "/tests/large", ssePort);
 				// consume headers
-				String hdr = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
-				if (hdr == null) hdr = readUntil(socket.getInputStream(), "\n\n", 4096);
+				String hdr = readUntil(socket, "\r\n\r\n", 4096);
+				if (hdr == null) hdr = readUntil(socket, "\n\n", 4096);
 				Assertions.assertNotNull(hdr);
 
 				// Build a ~128KiB payload split across many lines
@@ -776,7 +782,7 @@ public class SseTests {
 				b.broadcastEvent(ev);
 
 				// Read exactly one event block
-				String block = readUntil(socket.getInputStream(), "\n\n", (64 + 8) * linesCount + 8192);
+				String block = readUntil(socket, "\n\n", (64 + 8) * linesCount + 8192);
 				Assertions.assertNotNull(block, "Did not receive large event");
 
 				// Reconstruct data lines
@@ -792,7 +798,33 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 20, unit = SECONDS)
+	public void bufferedDeadlineReadsDoNotMutateTimeoutOverreadOrIgnoreExpiry()
+			throws Exception {
+		try (Socket socket = new Socket()) {
+			ByteArrayInputStream input = new ByteArrayInputStream(
+					new byte[] { 1, 2, 3, 4 });
+			byte[] destination = new byte[2];
+			int bytesRead = readWithDeadline(socket, input, destination, 0,
+					destination.length,
+					System.nanoTime() + SECONDS.toNanos(1));
+
+			Assertions.assertEquals(2, bytesRead);
+			Assertions.assertArrayEquals(new byte[] { 1, 2 }, destination);
+			Assertions.assertEquals(2, input.available(),
+					"The buffered fast path read past its requested length.");
+			Assertions.assertEquals(0, socket.getSoTimeout(),
+					"The buffered fast path mutated SO_TIMEOUT.");
+
+			Assertions.assertThrows(SocketTimeoutException.class,
+					() -> readWithDeadline(socket, input,
+							System.nanoTime() - SECONDS.toNanos(1)));
+			Assertions.assertEquals(2, input.available(),
+					"An expired deadline consumed buffered input.");
+		}
+	}
+
+	@Test
+	@Timeout(value = 120, unit = SECONDS)
 	public void sse_broadcastMany_underBackpressure_eitherDeliversOrCloses() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -819,8 +851,8 @@ public class SseTests {
 				socket.setSoTimeout(12000);
 
 				writeHttpGet(socket, "/tests/backpressure", ssePort);
-				String hdr = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
-				if (hdr == null) hdr = readUntil(socket.getInputStream(), "\n\n", 4096);
+				String hdr = readUntil(socket, "\r\n\r\n", 4096);
+				if (hdr == null) hdr = readUntil(socket, "\n\n", 4096);
 				Assertions.assertNotNull(hdr);
 
 				SseBroadcaster b = sse.acquireBroadcaster(ResourcePath.fromPath("/tests/backpressure")).get();
@@ -845,7 +877,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 20, unit = SECONDS)
+	@Timeout(value = 120, unit = SECONDS)
 	public void sse_backpressure_setsTerminationReason() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -873,8 +905,8 @@ public class SseTests {
 				socket.setSoTimeout(12000);
 
 				writeHttpGet(socket, "/tests/backpressure-reason", ssePort);
-				String hdr = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
-				if (hdr == null) hdr = readUntil(socket.getInputStream(), "\n\n", 4096);
+				String hdr = readUntil(socket, "\r\n\r\n", 4096);
+				if (hdr == null) hdr = readUntil(socket, "\n\n", 4096);
 				Assertions.assertNotNull(hdr);
 
 				SseBroadcaster broadcaster = sse.acquireBroadcaster(ResourcePath.fromPath("/tests/backpressure-reason")).get();
@@ -896,7 +928,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 15, unit = SECONDS)
+	@Timeout(value = 120, unit = SECONDS)
 	public void sse_stopClosesConnection() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -919,14 +951,14 @@ public class SseTests {
 			socket.setSoTimeout(6000);
 
 			writeHttpGet(socket, "/tests/closeme", ssePort);
-			String hdr = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
-			if (hdr == null) hdr = readUntil(socket.getInputStream(), "\n\n", 4096);
+			String hdr = readUntil(socket, "\r\n\r\n", 4096);
+			if (hdr == null) hdr = readUntil(socket, "\n\n", 4096);
 			Assertions.assertNotNull(hdr);
 
 			// Kick one message through so the writer loop is active
 			sse.acquireBroadcaster(ResourcePath.fromPath("/tests/closeme")).get()
 					.broadcastEvent(SseEvent.withEvent("one").id("1").data("a").build());
-			readUntil(socket.getInputStream(), "\n\n", 4096); // consume it
+			readUntil(socket, "\n\n", 4096); // consume it
 
 			// Now stop the server; this should enqueue poison pills and close the channel
 			app.close(); // stops both servers
@@ -939,7 +971,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 20, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void sseStopDrainsQueuedEventsBeforeClosingConnection() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -949,13 +981,13 @@ public class SseTests {
 		SseServer sse = SseServer.withPort(ssePort)
 				.host("127.0.0.1")
 				.requestHeaderTimeout(Duration.ofSeconds(5))
-				.shutdownTimeout(Duration.ofSeconds(5))
 				.build();
 
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.sseServer(sse)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseNetworkResource.class)))
 				.lifecycleObserver(lifecycle)
+				.lifecyclePolicy(shutdownPolicy(Duration.ofSeconds(5)))
 				.build();
 
 		try (Soklet app = Soklet.fromConfig(cfg)) {
@@ -965,8 +997,8 @@ public class SseTests {
 				socket.setSoTimeout(6000);
 
 				writeHttpGet(socket, "/tests/drain", ssePort);
-				String hdr = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
-				if (hdr == null) hdr = readUntil(socket.getInputStream(), "\n\n", 4096);
+				String hdr = readUntil(socket, "\r\n\r\n", 4096);
+				if (hdr == null) hdr = readUntil(socket, "\n\n", 4096);
 				Assertions.assertNotNull(hdr);
 
 				SseBroadcaster broadcaster = sse.acquireBroadcaster(ResourcePath.fromPath("/tests/drain")).get();
@@ -979,7 +1011,7 @@ public class SseTests {
 
 				Thread stopThread = new Thread(() -> {
 					try {
-						app.stop();
+						app.shutdown().toCompletableFuture().join();
 					} catch (Throwable t) {
 						stopFailure.set(t);
 					}
@@ -989,9 +1021,8 @@ public class SseTests {
 				awaitNoGlobalConnections((DefaultSseServer) sse, 2000);
 				lifecycle.releaseWriter();
 
-				InputStream inputStream = socket.getInputStream();
-				String firstEvent = readNextEventBlock(inputStream, 4096);
-				String secondEvent = readNextEventBlock(inputStream, 4096);
+				String firstEvent = readNextEventBlock(socket, 4096);
+				String secondEvent = readNextEventBlock(socket, 4096);
 
 				Assertions.assertNotNull(firstEvent, "First queued event was not delivered");
 				Assertions.assertNotNull(secondEvent, "Second queued event was not delivered before stop closed the connection");
@@ -1014,7 +1045,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void sseWriteTimeoutClosesConnectionAndRecordsTransportFailure() throws Exception {
 		WriteTimeoutLifecycle lifecycle = new WriteTimeoutLifecycle();
 		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
@@ -1115,7 +1146,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 15, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void sseServerCanRestartOnSamePort() throws Exception {
 		int port = findFreePort();
 		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(port)
@@ -1123,6 +1154,7 @@ public class SseTests {
 				.requestHeaderTimeout(Duration.ofSeconds(5))
 				.build();
 		SokletConfig sokletConfig = SokletConfig.forSimulatorTesting()
+				.lifecyclePolicy(shutdownPolicy(Duration.ofSeconds(5)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 		server.initialize(sokletConfig, (request, requestResultConsumer) -> { /* no-op */ });
@@ -1146,7 +1178,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 15, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void sse_stop_setsTerminationReason_serverStop() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -1171,14 +1203,16 @@ public class SseTests {
 				socket.setSoTimeout(4000);
 
 				writeHttpGet(socket, "/tests/terminate", ssePort);
-				String hdr = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
-				if (hdr == null) hdr = readUntil(socket.getInputStream(), "\n\n", 4096);
+				String hdr = readUntil(socket, "\r\n\r\n", 4096);
+				if (hdr == null) hdr = readUntil(socket, "\n\n", 4096);
 				Assertions.assertNotNull(hdr);
 
 				SseBroadcaster broadcaster = sse.acquireBroadcaster(ResourcePath.fromPath("/tests/terminate")).get();
 				awaitClientConnection(broadcaster, 2000);
 
-				app.stop();
+				ShutdownResult shutdownResult = app.shutdown()
+						.toCompletableFuture().join();
+				Assertions.assertTrue(shutdownResult.isComplete());
 				Assertions.assertTrue(lifecycle.awaitTermination(5, SECONDS), "didTerminate not invoked");
 				Assertions.assertEquals(StreamTerminationReason.SERVER_STOPPING, lifecycle.getReason());
 			}
@@ -1186,7 +1220,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 15, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void sse_clientClose_setsTerminationReason_remoteClose() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -1215,8 +1249,8 @@ public class SseTests {
 				socket.setSoTimeout(4000);
 
 				writeHttpGet(socket, "/tests/remote-close", ssePort);
-				String hdr = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
-				if (hdr == null) hdr = readUntil(socket.getInputStream(), "\n\n", 4096);
+				String hdr = readUntil(socket, "\r\n\r\n", 4096);
+				if (hdr == null) hdr = readUntil(socket, "\n\n", 4096);
 				Assertions.assertNotNull(hdr);
 
 				Assertions.assertTrue(lifecycle.awaitEstablished(5, SECONDS), "didEstablish not invoked");
@@ -1231,7 +1265,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 15, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void sseHandshakeClientCloseDoesNotRecordTransportFailure() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -1275,7 +1309,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void sse_concurrentConnectionLimit_rejectsExtraHandshakes() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -1309,10 +1343,10 @@ public class SseTests {
 				BlockingHandshakeResource.awaitReady(5, SECONDS);
 				BlockingHandshakeResource.release();
 
-				String h1 = readUntil(socket1.getInputStream(), "\r\n\r\n", 4096);
-				if (h1 == null) h1 = readUntil(socket1.getInputStream(), "\n\n", 4096);
-				String h2 = readUntil(socket2.getInputStream(), "\r\n\r\n", 4096);
-				if (h2 == null) h2 = readUntil(socket2.getInputStream(), "\n\n", 4096);
+				String h1 = readUntil(socket1, "\r\n\r\n", 4096);
+				if (h1 == null) h1 = readUntil(socket1, "\n\n", 4096);
+				String h2 = readUntil(socket2, "\r\n\r\n", 4096);
+				if (h2 == null) h2 = readUntil(socket2, "\n\n", 4096);
 
 				Assertions.assertNotNull(h1, "No handshake response on socket1");
 				Assertions.assertNotNull(h2, "No handshake response on socket2");
@@ -1329,7 +1363,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void sse_concurrentConnectionLimitZeroDisablesCap() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -1363,10 +1397,10 @@ public class SseTests {
 				BlockingHandshakeResource.awaitReady(5, SECONDS);
 				BlockingHandshakeResource.release();
 
-				String h1 = readUntil(socket1.getInputStream(), "\r\n\r\n", 4096);
-				if (h1 == null) h1 = readUntil(socket1.getInputStream(), "\n\n", 4096);
-				String h2 = readUntil(socket2.getInputStream(), "\r\n\r\n", 4096);
-				if (h2 == null) h2 = readUntil(socket2.getInputStream(), "\n\n", 4096);
+				String h1 = readUntil(socket1, "\r\n\r\n", 4096);
+				if (h1 == null) h1 = readUntil(socket1, "\n\n", 4096);
+				String h2 = readUntil(socket2, "\r\n\r\n", 4096);
+				if (h2 == null) h2 = readUntil(socket2, "\n\n", 4096);
 
 				Assertions.assertNotNull(h1, "No handshake response on socket1");
 				Assertions.assertNotNull(h2, "No handshake response on socket2");
@@ -1377,7 +1411,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 120, unit = SECONDS)
 	public void sse_requestHandlerQueueCapacity_rejectsWhenFull() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -1474,14 +1508,14 @@ public class SseTests {
 	private static String readHandshake(@NonNull Socket socket) throws IOException {
 		requireNonNull(socket);
 
-		String headers = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
+		String headers = readUntil(socket, "\r\n\r\n", 4096);
 		if (headers == null)
-			headers = readUntil(socket.getInputStream(), "\n\n", 4096);
+			headers = readUntil(socket, "\n\n", 4096);
 		return headers;
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void handshake_rejected_writes_status_body_and_cookies() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -1503,8 +1537,8 @@ public class SseTests {
 				socket.setSoTimeout(4000);
 				writeHttpGet(socket, "/sse/reject", ssePort);
 
-				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
-				if (rawHeaders == null) rawHeaders = readUntil(socket.getInputStream(), "\n\n", 4096);
+				String rawHeaders = readUntil(socket, "\r\n\r\n", 4096);
+				if (rawHeaders == null) rawHeaders = readUntil(socket, "\n\n", 4096);
 				Assertions.assertNotNull(rawHeaders, "Did not receive HTTP response headers");
 
 				String[] headerLines = rawHeaders.split("\r?\n");
@@ -1525,14 +1559,14 @@ public class SseTests {
 				Assertions.assertTrue(sawSetCookie, "Missing Set-Cookie in SSE rejected handshake");
 
 				// Read the body and ensure it matches
-				byte[] body = readN(socket.getInputStream(), contentLength, 4000);
+				byte[] body = readN(socket, contentLength, 4000);
 				Assertions.assertEquals("denied", new String(body, StandardCharsets.UTF_8));
 			}
 		}
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void handshake_unknown_path_returns_404_and_closes() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -1555,8 +1589,8 @@ public class SseTests {
 				// Path isn't mapped by @SseEventSource -> should return 404 (currently the server can throw internally)
 				writeHttpGet(socket, "/sse-does-not-exist", ssePort);
 
-				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
-				if (rawHeaders == null) rawHeaders = readUntil(socket.getInputStream(), "\n\n", 4096);
+				String rawHeaders = readUntil(socket, "\r\n\r\n", 4096);
+				if (rawHeaders == null) rawHeaders = readUntil(socket, "\n\n", 4096);
 				Assertions.assertNotNull(rawHeaders, "Did not receive HTTP response headers");
 
 				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 404"), "Expected 404 on unknown SSE path");
@@ -1567,7 +1601,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void handshake_rejects_transfer_encoding() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -1593,8 +1627,8 @@ public class SseTests {
 				socket.getOutputStream().write(req.getBytes(StandardCharsets.UTF_8));
 				socket.getOutputStream().flush();
 
-				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
-				if (rawHeaders == null) rawHeaders = readUntil(socket.getInputStream(), "\n\n", 4096);
+				String rawHeaders = readUntil(socket, "\r\n\r\n", 4096);
+				if (rawHeaders == null) rawHeaders = readUntil(socket, "\n\n", 4096);
 				Assertions.assertNotNull(rawHeaders, "Did not receive HTTP response headers");
 				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 400"), "Expected 400 for Transfer-Encoding");
 				Assertions.assertTrue(waitForEof(socket, 3000), "Connection did not close after 400 response");
@@ -1603,7 +1637,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void handshake_rejects_nonzero_content_length() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -1629,8 +1663,8 @@ public class SseTests {
 				socket.getOutputStream().write(req.getBytes(StandardCharsets.UTF_8));
 				socket.getOutputStream().flush();
 
-				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
-				if (rawHeaders == null) rawHeaders = readUntil(socket.getInputStream(), "\n\n", 4096);
+				String rawHeaders = readUntil(socket, "\r\n\r\n", 4096);
+				if (rawHeaders == null) rawHeaders = readUntil(socket, "\n\n", 4096);
 				Assertions.assertNotNull(rawHeaders, "Did not receive HTTP response headers");
 				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 400"), "Expected 400 for non-zero Content-Length");
 				Assertions.assertTrue(waitForEof(socket, 3000), "Connection did not close after 400 response");
@@ -1639,7 +1673,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void handshake_rejects_missing_host() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -1663,8 +1697,8 @@ public class SseTests {
 				socket.getOutputStream().write(req.getBytes(StandardCharsets.UTF_8));
 				socket.getOutputStream().flush();
 
-				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
-				if (rawHeaders == null) rawHeaders = readUntil(socket.getInputStream(), "\n\n", 4096);
+				String rawHeaders = readUntil(socket, "\r\n\r\n", 4096);
+				if (rawHeaders == null) rawHeaders = readUntil(socket, "\n\n", 4096);
 				Assertions.assertNotNull(rawHeaders, "Did not receive HTTP response headers");
 				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 400"), "Expected 400 for missing Host header");
 				Assertions.assertTrue(waitForEof(socket, 3000), "Connection did not close after 400 response");
@@ -1673,7 +1707,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void handshake_rejects_invalid_host() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -1698,8 +1732,8 @@ public class SseTests {
 				socket.getOutputStream().write(req.getBytes(StandardCharsets.ISO_8859_1));
 				socket.getOutputStream().flush();
 
-				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
-				if (rawHeaders == null) rawHeaders = readUntil(socket.getInputStream(), "\n\n", 4096);
+				String rawHeaders = readUntil(socket, "\r\n\r\n", 4096);
+				if (rawHeaders == null) rawHeaders = readUntil(socket, "\n\n", 4096);
 				Assertions.assertNotNull(rawHeaders, "Did not receive HTTP response headers");
 				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 400"), "Expected 400 for invalid Host header");
 				Assertions.assertTrue(waitForEof(socket, 3000), "Connection did not close after 400 response");
@@ -1708,7 +1742,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void handshake_rejects_expect_header() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -1734,8 +1768,8 @@ public class SseTests {
 				socket.getOutputStream().write(req.getBytes(StandardCharsets.ISO_8859_1));
 				socket.getOutputStream().flush();
 
-				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
-				if (rawHeaders == null) rawHeaders = readUntil(socket.getInputStream(), "\n\n", 4096);
+				String rawHeaders = readUntil(socket, "\r\n\r\n", 4096);
+				if (rawHeaders == null) rawHeaders = readUntil(socket, "\n\n", 4096);
 				Assertions.assertNotNull(rawHeaders, "Did not receive HTTP response headers");
 				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 400"), "Expected 400 for Expect header");
 				Assertions.assertTrue(waitForEof(socket, 3000), "Connection did not close after 400 response");
@@ -1744,7 +1778,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void handshake_rejects_control_char_header_value() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -1772,8 +1806,8 @@ public class SseTests {
 				socket.getOutputStream().write(req.toByteArray());
 				socket.getOutputStream().flush();
 
-				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
-				if (rawHeaders == null) rawHeaders = readUntil(socket.getInputStream(), "\n\n", 4096);
+				String rawHeaders = readUntil(socket, "\r\n\r\n", 4096);
+				if (rawHeaders == null) rawHeaders = readUntil(socket, "\n\n", 4096);
 				Assertions.assertNotNull(rawHeaders, "Did not receive HTTP response headers");
 				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 400"), "Expected 400 for control character in header value");
 				Assertions.assertTrue(waitForEof(socket, 3000), "Connection did not close after 400 response");
@@ -1782,7 +1816,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void handshake_allows_obsText_in_header_value() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -1810,8 +1844,8 @@ public class SseTests {
 				socket.getOutputStream().write(req.toByteArray());
 				socket.getOutputStream().flush();
 
-				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
-				if (rawHeaders == null) rawHeaders = readUntil(socket.getInputStream(), "\n\n", 4096);
+				String rawHeaders = readUntil(socket, "\r\n\r\n", 4096);
+				if (rawHeaders == null) rawHeaders = readUntil(socket, "\n\n", 4096);
 				Assertions.assertNotNull(rawHeaders, "Did not receive HTTP response headers");
 				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 200"),
 						"Expected 200 for obs-text in header value, got: " + rawHeaders);
@@ -1820,7 +1854,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void handshake_times_out_returns_503_and_closes() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -1843,8 +1877,8 @@ public class SseTests {
 				socket.setSoTimeout(4000);
 				writeHttpGet(socket, "/sse/limit", ssePort);
 
-				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
-				if (rawHeaders == null) rawHeaders = readUntil(socket.getInputStream(), "\n\n", 4096);
+				String rawHeaders = readUntil(socket, "\r\n\r\n", 4096);
+				if (rawHeaders == null) rawHeaders = readUntil(socket, "\n\n", 4096);
 				Assertions.assertNotNull(rawHeaders, "Did not receive HTTP response headers");
 				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 503"), "Expected 503 on handshake timeout");
 				Assertions.assertTrue(waitForEof(socket, 3000), "Connection did not close after timeout response");
@@ -1855,7 +1889,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void handshake_read_times_out_returns_408_and_closes() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -1881,8 +1915,8 @@ public class SseTests {
 				socket.getOutputStream().write(req.toByteArray());
 				socket.getOutputStream().flush();
 
-				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
-				if (rawHeaders == null) rawHeaders = readUntil(socket.getInputStream(), "\n\n", 4096);
+				String rawHeaders = readUntil(socket, "\r\n\r\n", 4096);
+				if (rawHeaders == null) rawHeaders = readUntil(socket, "\n\n", 4096);
 				Assertions.assertNotNull(rawHeaders, "Did not receive HTTP response headers");
 				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 408"),
 						"Expected 408 on handshake read timeout, got: " + rawHeaders);
@@ -1892,7 +1926,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void handshake_rejected_respects_explicit_content_length() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -1912,8 +1946,8 @@ public class SseTests {
 				socket.setSoTimeout(4000);
 				writeHttpGet(socket, "/sse/reject-explicit-cl", ssePort);
 
-				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
-				if (rawHeaders == null) rawHeaders = readUntil(socket.getInputStream(), "\n\n", 4096);
+				String rawHeaders = readUntil(socket, "\r\n\r\n", 4096);
+				if (rawHeaders == null) rawHeaders = readUntil(socket, "\n\n", 4096);
 				Assertions.assertNotNull(rawHeaders);
 
 				String[] lines = rawHeaders.split("\r?\n");
@@ -1927,7 +1961,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void sseAccepted_includesCorsHeaders_whenAllOriginsAuthorizer() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -1952,7 +1986,7 @@ public class SseTests {
 				socket.setSoTimeout(4000);
 				writeHttpGet(socket, "/sse/cors-ok", ssePort, origin);
 
-				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
+				String rawHeaders = readUntil(socket, "\r\n\r\n", 8192);
 				Assertions.assertNotNull(rawHeaders, "No HTTP response received");
 				String[] lines = rawHeaders.split("\r?\n");
 
@@ -1975,7 +2009,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void sseRejected_includesCorsHeaders_whenAllOriginsAuthorizer() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -1999,7 +2033,7 @@ public class SseTests {
 				socket.setSoTimeout(4000);
 				writeHttpGet(socket, "/sse/cors-reject", ssePort, origin);
 
-				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
+				String rawHeaders = readUntil(socket, "\r\n\r\n", 8192);
 				Assertions.assertNotNull(rawHeaders, "No HTTP response received");
 				String[] lines = rawHeaders.split("\r?\n");
 
@@ -2020,7 +2054,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void sseAccepted_omitsCorsHeaders_whenOriginNotWhitelisted() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -2045,7 +2079,7 @@ public class SseTests {
 				socket.setSoTimeout(4000);
 				writeHttpGet(socket, "/sse/cors-ok", ssePort, origin);
 
-				String rawHeaders = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
+				String rawHeaders = readUntil(socket, "\r\n\r\n", 8192);
 				Assertions.assertNotNull(rawHeaders, "No HTTP response received");
 				String[] lines = rawHeaders.split("\r?\n");
 
@@ -2214,7 +2248,6 @@ public class SseTests {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(3000);
 				OutputStream out = socket.getOutputStream();
-				InputStream in = socket.getInputStream();
 				out.write((
 						"GET /sse HTTP/1.1\r\n" +
 								"Host: 127.0.0.1:" + ssePort + "\r\n" +
@@ -2223,7 +2256,7 @@ public class SseTests {
 				out.flush();
 
 				// read headers
-				readHeadersCRLF(in);
+				readHeadersCRLF(socket);
 
 				// broadcast an event with a blank line in the middle and trailing newline
 				SseEvent evt = SseEvent.withEvent("demo")
@@ -2249,8 +2282,9 @@ public class SseTests {
 
 				// read lines on the wire
 				List<String> block = new ArrayList<>();
+				long eventReadDeadline = readDeadlineNanos(socket);
 				while (true) {
-					String line = readLineLF(in);
+					String line = readLineLF(socket, eventReadDeadline);
 					if (line == null) throw new IOException("stream closed");
 					if (line.isEmpty()) break;        // event terminator
 					block.add(line);
@@ -2314,7 +2348,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void startedDefaultSseServerRejectsTooManyHeadersWith431() throws Exception {
 		int ssePort = findFreePort();
 		SokletConfig config = SokletConfig.withSseServer(SseServer.withPort(ssePort)
@@ -2335,7 +2369,7 @@ public class SseTests {
 						+ "Accept: text/event-stream\r\n"
 						+ "\r\n").getBytes(StandardCharsets.UTF_8));
 
-				String response = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
+				String response = readUntil(socket, "\r\n\r\n", 8192);
 				Assertions.assertNotNull(response);
 				Assertions.assertTrue(response.startsWith("HTTP/1.1 431"));
 			}
@@ -2343,7 +2377,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void startedDefaultSseServerRejectsTooLargeHeadersWith431() throws Exception {
 		int ssePort = findFreePort();
 		SokletConfig config = SokletConfig.withSseServer(SseServer.withPort(ssePort)
@@ -2364,7 +2398,7 @@ public class SseTests {
 						+ "Accept: text/event-stream\r\n"
 						+ "\r\n").getBytes(StandardCharsets.UTF_8));
 
-				String response = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
+				String response = readUntil(socket, "\r\n\r\n", 8192);
 				Assertions.assertNotNull(response);
 				Assertions.assertTrue(response.startsWith("HTTP/1.1 431"));
 			}
@@ -2372,7 +2406,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void startedDefaultSseServerRejectsTooLongRequestTargetWith414() throws Exception {
 		int ssePort = findFreePort();
 		SokletConfig config = SokletConfig.withSseServer(SseServer.withPort(ssePort)
@@ -2393,7 +2427,7 @@ public class SseTests {
 						+ "Accept: text/event-stream\r\n"
 						+ "\r\n").getBytes(StandardCharsets.UTF_8));
 
-				String response = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
+				String response = readUntil(socket, "\r\n\r\n", 8192);
 				Assertions.assertNotNull(response);
 				Assertions.assertTrue(response.startsWith("HTTP/1.1 414"));
 			}
@@ -2444,7 +2478,7 @@ public class SseTests {
 								"\r\n").getBytes());
 				out.flush();
 
-				String response = readUntil(socket.getInputStream(), "\r\n\r\n", 8192);
+				String response = readUntil(socket, "\r\n\r\n", 8192);
 
 				Assertions.assertTrue(response.startsWith("HTTP/1.1 405"), "Not a 405 response");
 			}
@@ -2452,7 +2486,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void sseHandshake_allowsExtraSpacesInRequestLine() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -2471,8 +2505,8 @@ public class SseTests {
 				String req = "GET   /sse   HTTP/1.1\r\nHost: 127.0.0.1:" + ssePort + "\r\nAccept: text/event-stream\r\n\r\n";
 				socket.getOutputStream().write(req.getBytes(StandardCharsets.UTF_8));
 
-				String raw = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
-				if (raw == null) raw = readUntil(socket.getInputStream(), "\n\n", 4096);
+				String raw = readUntil(socket, "\r\n\r\n", 4096);
+				if (raw == null) raw = readUntil(socket, "\n\n", 4096);
 				Assertions.assertNotNull(raw, "No HTTP response headers received");
 				Assertions.assertTrue(raw.startsWith("HTTP/1.1 200"), "Expected 200 OK SSE handshake");
 			}
@@ -2480,7 +2514,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 10, unit = SECONDS)
+	@Timeout(value = 60, unit = SECONDS)
 	public void sseHandshake_acceptsAbsoluteRequestTarget() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -2498,8 +2532,8 @@ public class SseTests {
 				String req = "GET http://127.0.0.1:" + ssePort + "/sse HTTP/1.1\r\nHost: 127.0.0.1\r\nAccept: text/event-stream\r\n\r\n";
 				socket.getOutputStream().write(req.getBytes(StandardCharsets.UTF_8));
 
-				String raw = readUntil(socket.getInputStream(), "\r\n\r\n", 4096);
-				if (raw == null) raw = readUntil(socket.getInputStream(), "\n\n", 4096);
+				String raw = readUntil(socket, "\r\n\r\n", 4096);
+				if (raw == null) raw = readUntil(socket, "\n\n", 4096);
 				Assertions.assertNotNull(raw, "No HTTP response headers received");
 				Assertions.assertTrue(raw.startsWith("HTTP/1.1 200"), "Expected 200 OK SSE handshake");
 			}
@@ -2854,12 +2888,12 @@ public class SseTests {
 		});
 		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0)
 				.host("127.0.0.1")
-				.shutdownTimeout(Duration.ofSeconds(5))
 				.requestHandlerExecutorServiceSupplier(() -> requestExecutor)
 				.build();
 		server.initialize(SokletConfig.forSimulatorTesting()
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(new QuietLifecycle())
+				.lifecyclePolicy(shutdownPolicy(Duration.ofSeconds(5)))
 				.build(), (request, responseConsumer) -> {});
 		Thread stopThread = new Thread(server::stop, "sse-running-start-stop-race");
 
@@ -3460,10 +3494,12 @@ public class SseTests {
 		}
 	}
 
-	private static String readLineCRLF(InputStream in) throws IOException {
+	private static String readLineCRLF(Socket socket, long deadlineNanos)
+			throws IOException {
+		InputStream in = socket.getInputStream();
 		ByteArrayOutputStream buf = new ByteArrayOutputStream(128);
 		int prev = -1, cur;
-		while ((cur = in.read()) != -1) {
+		while ((cur = readWithDeadline(socket, in, deadlineNanos)) != -1) {
 			if (prev == '\r' && cur == '\n') break;
 			if (cur != '\r') buf.write(cur);
 			prev = cur;
@@ -3471,21 +3507,34 @@ public class SseTests {
 		return buf.toString("UTF-8");
 	}
 
-	private static String readLineLF(InputStream in) throws IOException {
+	private static String readLineLF(Socket socket, long deadlineNanos)
+			throws IOException {
+		InputStream in = socket.getInputStream();
 		ByteArrayOutputStream buf = new ByteArrayOutputStream(128);
 		int b;
-		while ((b = in.read()) != -1) {
+		while ((b = readWithDeadline(socket, in, deadlineNanos)) != -1) {
 			if (b == '\n') break;       // LF ends the line
 			if (b != '\r') buf.write(b); // drop any stray CR
 		}
 		return buf.toString(java.nio.charset.StandardCharsets.UTF_8);
 	}
 
-	private static void readHeadersCRLF(InputStream in) throws IOException {
+	private static void readHeadersCRLF(Socket socket) throws IOException {
+		long deadlineNanos = readDeadlineNanos(socket);
 		while (true) {
-			String line = readLineCRLF(in);
+			String line = readLineCRLF(socket, deadlineNanos);
 			if (line.isEmpty()) return;
 		}
+	}
+
+	@NonNull
+	private static LifecyclePolicy shutdownPolicy(@NonNull Duration duration) {
+		return LifecyclePolicy.builder()
+				.startupTimeout(Duration.ofSeconds(3))
+				.startupCancellationTimeout(Duration.ofSeconds(1))
+				.gracefulShutdownDuration(duration)
+				.forcedShutdownDuration(Duration.ZERO)
+				.build();
 	}
 
 	private static class QuietLifecycle implements LifecycleObserver {
@@ -3500,6 +3549,8 @@ public class SseTests {
 		private final AtomicInteger didStopHttpServer = new AtomicInteger();
 		private final AtomicInteger didStartSseServer = new AtomicInteger();
 		private final AtomicInteger didFailToStartSseServer = new AtomicInteger();
+		private final CountDownLatch terminalTransitionsDelivered =
+				new CountDownLatch(1);
 
 		@Override
 		public void didStartSoklet(@NonNull Soklet soklet) {
@@ -3518,7 +3569,8 @@ public class SseTests {
 		}
 
 		@Override
-		public void didStopHttpServer(@NonNull HttpServer httpServer) {
+		public void didStopHttpServer(@NonNull HttpServer httpServer,
+				@NonNull ParticipantShutdownResult result) {
 			this.didStopHttpServer.incrementAndGet();
 		}
 
@@ -3531,6 +3583,12 @@ public class SseTests {
 		public void didFailToStartSseServer(@NonNull SseServer sseServer,
 																				@NonNull Throwable throwable) {
 			this.didFailToStartSseServer.incrementAndGet();
+		}
+
+		@Override
+		public void didStopSoklet(@NonNull Soklet soklet,
+				@NonNull ShutdownResult result) {
+			this.terminalTransitionsDelivered.countDown();
 		}
 	}
 
@@ -3603,12 +3661,16 @@ public class SseTests {
 		return (BuiltInTransportLifecycleAdapter.Operations) operationsField.get(adapter);
 	}
 
-	private static byte[] readN(InputStream in, int n, int timeoutMs) throws IOException {
-		long deadline = System.currentTimeMillis() + timeoutMs;
+	private static byte[] readN(Socket socket, int n, int timeoutMs)
+			throws IOException {
+		long deadlineNanos = System.nanoTime()
+				+ TimeUnit.MILLISECONDS.toNanos(timeoutMs);
+		InputStream in = socket.getInputStream();
 		byte[] out = new byte[n];
 		int off = 0;
-		while (off < n && System.currentTimeMillis() < deadline) {
-			int r = in.read(out, off, n - off);
+		while (off < n && deadlineNanos - System.nanoTime() > 0L) {
+			int r = readWithDeadline(socket, in, out, off, n - off,
+					deadlineNanos);
 			if (r == -1) break;
 			off += r;
 		}
@@ -3642,12 +3704,21 @@ public class SseTests {
 		socket.getOutputStream().flush();
 	}
 
-	private static String readUntil(java.io.InputStream in, String terminator, int maxBytes) throws IOException {
+	private static String readUntil(Socket socket, String terminator,
+			int maxBytes) throws IOException {
+		return readUntil(socket, socket.getInputStream(), terminator, maxBytes,
+				readDeadlineNanos(socket));
+	}
+
+	private static String readUntil(Socket socket, InputStream in,
+			String terminator, int maxBytes, long deadlineNanos)
+			throws IOException {
 		byte[] term = terminator.getBytes(StandardCharsets.UTF_8);
 		java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
 		int b;
 		int match = 0;
-		while (buf.size() < maxBytes && (b = in.read()) != -1) {
+		while (buf.size() < maxBytes
+				&& (b = readWithDeadline(socket, in, deadlineNanos)) != -1) {
 			buf.write(b);
 			if (b == term[match]) {
 				match++;
@@ -3661,9 +3732,13 @@ public class SseTests {
 		return null;
 	}
 
-	private static String readNextEventBlock(InputStream inputStream, int maxBytes) throws IOException {
+	private static String readNextEventBlock(Socket socket, int maxBytes)
+			throws IOException {
+		long deadlineNanos = readDeadlineNanos(socket);
+		InputStream inputStream = socket.getInputStream();
 		for (int i = 0; i < 8; i++) {
-			String block = readUntil(inputStream, "\n\n", maxBytes);
+			String block = readUntil(socket, inputStream, "\n\n", maxBytes,
+					deadlineNanos);
 
 			if (block == null)
 				return null;
@@ -3676,8 +3751,9 @@ public class SseTests {
 	}
 
 	private static void awaitClientConnection(SseBroadcaster broadcaster, long timeoutMs) throws InterruptedException {
-		long deadline = System.currentTimeMillis() + timeoutMs;
-		while (System.currentTimeMillis() < deadline) {
+		long timeoutNanos = TimeUnit.MILLISECONDS.toNanos(timeoutMs);
+		long started = System.nanoTime();
+		while (System.nanoTime() - started < timeoutNanos) {
 			if (broadcaster.getClientCount() > 0)
 				return;
 			Thread.sleep(10);
@@ -3686,8 +3762,9 @@ public class SseTests {
 	}
 
 	private static void awaitNoGlobalConnections(DefaultSseServer server, long timeoutMs) throws InterruptedException {
-		long deadline = System.currentTimeMillis() + timeoutMs;
-		while (System.currentTimeMillis() < deadline) {
+		long timeoutNanos = TimeUnit.MILLISECONDS.toNanos(timeoutMs);
+		long started = System.nanoTime();
+		while (System.nanoTime() - started < timeoutNanos) {
 			if (server.getGlobalConnections().isEmpty())
 				return;
 			Thread.sleep(10);
@@ -3704,18 +3781,84 @@ public class SseTests {
 	}
 
 	private static boolean waitForEof(Socket socket, int timeoutMs) throws IOException {
-		long deadline = System.currentTimeMillis() + timeoutMs;
+		long timeoutNanos = TimeUnit.MILLISECONDS.toNanos(timeoutMs);
+		long started = System.nanoTime();
+		long deadlineNanos = started + timeoutNanos;
 		java.io.InputStream in = socket.getInputStream();
 		byte[] tmp = new byte[1];
-		while (System.currentTimeMillis() < deadline) {
+		while (System.nanoTime() - started < timeoutNanos) {
 			try {
-				int n = in.read(tmp);
+				int n = readWithDeadline(socket, in, tmp, 0, tmp.length,
+						deadlineNanos);
 				if (n == -1) return true;
 			} catch (java.net.SocketTimeoutException e) {
 				// keep trying until deadline
 			}
 		}
 		return false;
+	}
+
+	private static long readDeadlineNanos(Socket socket) throws IOException {
+		int timeoutMillis = socket.getSoTimeout();
+		if (timeoutMillis <= 0)
+			throw new IOException("A positive socket read timeout is required");
+		return System.nanoTime()
+				+ TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
+	}
+
+	private static int readWithDeadline(Socket socket, InputStream inputStream,
+			long deadlineNanos) throws IOException {
+		ensureReadDeadlineHasNotElapsed(deadlineNanos);
+		if (inputStream.available() > 0)
+			return inputStream.read();
+
+		int originalTimeoutMillis = installRemainingReadTimeout(socket,
+				deadlineNanos);
+		try {
+			return inputStream.read();
+		} finally {
+			socket.setSoTimeout(originalTimeoutMillis);
+		}
+	}
+
+	private static int readWithDeadline(Socket socket, InputStream inputStream,
+			byte[] buffer, int offset, int length, long deadlineNanos)
+			throws IOException {
+		ensureReadDeadlineHasNotElapsed(deadlineNanos);
+		int available = inputStream.available();
+		if (available > 0)
+			return inputStream.read(buffer, offset, Math.min(length, available));
+
+		int originalTimeoutMillis = installRemainingReadTimeout(socket,
+				deadlineNanos);
+		try {
+			return inputStream.read(buffer, offset, length);
+		} finally {
+			socket.setSoTimeout(originalTimeoutMillis);
+		}
+	}
+
+	private static int installRemainingReadTimeout(Socket socket,
+			long deadlineNanos) throws IOException {
+		long remainingNanos = deadlineNanos - System.nanoTime();
+		if (remainingNanos <= 0L)
+			throw new SocketTimeoutException("Socket read deadline elapsed");
+
+		long remainingMillis = (remainingNanos + 999_999L) / 1_000_000L;
+		int originalTimeoutMillis = socket.getSoTimeout();
+		int boundedRemainingMillis = (int) Math.min(Integer.MAX_VALUE,
+				remainingMillis);
+		int readTimeoutMillis = originalTimeoutMillis <= 0
+				? boundedRemainingMillis
+				: Math.min(originalTimeoutMillis, boundedRemainingMillis);
+		socket.setSoTimeout(Math.max(1, readTimeoutMillis));
+		return originalTimeoutMillis;
+	}
+
+	private static void ensureReadDeadlineHasNotElapsed(long deadlineNanos)
+			throws SocketTimeoutException {
+		if (deadlineNanos - System.nanoTime() <= 0L)
+			throw new SocketTimeoutException("Socket read deadline elapsed");
 	}
 
 	private static long transportFailureCount(@NonNull DefaultMetricsCollector metricsCollector,

@@ -44,55 +44,35 @@ import static java.util.Objects.requireNonNull;
  *
  * // Add .httpServer(HttpServer.fromPort(8080)) if you also serve ordinary HTTP resources
  *
- * // Run the app
- * try (Soklet soklet = Soklet.fromConfig(config)) {
- *   soklet.start();
- *   System.out.println("Soklet started, press [enter] to exit");
- *   soklet.awaitShutdown(ShutdownTrigger.ENTER_KEY);
- * }}</pre>
+ * // Run the app until the user presses enter
+ * SokletApplication.run(config, ShutdownTrigger.ENTER_KEY);}</pre>
  * <p>
  * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for detailed documentation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-public interface SseServer extends AutoCloseable {
+public interface SseServer {
 	/**
-	 * Starts the SSE server, which makes it able to accept requests from clients.
-	 * <p>
-	 * If the server is already started, no action is taken.
-	 * <p>
-	 * <strong>This method is designed for internal use by {@link com.soklet.Soklet} only and should not be invoked elsewhere.</strong>
-	 */
-	void start();
-
-	/**
-	 * Stops the SSE server, which makes it unable to accept requests from clients.
-	 * <p>
-	 * If the server is already stopped, no action is taken.
-	 * <p>
-	 * <strong>This method is designed for internal use by {@link com.soklet.Soklet} only and should not be invoked elsewhere.</strong>
-	 */
-	void stop();
-
-	/**
-	 * Is this SSE server started (that is, able to handle requests from clients)?
+	 * Acquires the stable identity for this server's complete lifecycle graph.
+	 * A decorator must return its delegate's exact identity object unchanged.
 	 *
-	 * @return {@code true} if the server is started, {@code false} otherwise
+	 * @return the stable transport identity
 	 */
 	@NonNull
-	Boolean isStarted();
+	TransportIdentity getTransportIdentity();
 
 	/**
-	 * {@link AutoCloseable}-enabled synonym for {@link #stop()}.
-	 * <p>
-	 * <strong>This method is designed for internal use by {@link com.soklet.Soklet} only and should not be invoked elsewhere.</strong>
+	 * Attaches this server to one Soklet lifecycle. Attachment is invoked once,
+	 * remains in-memory and side-effect-free, and returns the runtime that owns
+	 * binding and termination.
 	 *
-	 * @throws Exception if an exception occurs while stopping the server
+	 * @param attachmentContext framework-owned composition and termination context
+	 * @param startupContext startup timing and cancellation information
+	 * @return this server's one-shot runtime
 	 */
-	@Override
-	default void close() throws Exception {
-		stop();
-	}
+	@NonNull
+	TransportRuntime attach(@NonNull SseTransportAttachmentContext attachmentContext,
+			@NonNull StartupContext startupContext);
 
 	/**
 	 * Given a {@link ResourcePath} that corresponds to a <em>Resource Method</em> annotated with {@link com.soklet.annotation.SseEventSource}, acquire a {@link SseBroadcaster} which is capable of "pushing" messages to all connected Server-Sent Event clients.
@@ -110,20 +90,9 @@ public interface SseServer extends AutoCloseable {
 	Optional<? extends SseBroadcaster> acquireBroadcaster(@Nullable ResourcePath resourcePath);
 
 	/**
-	 * The {@link com.soklet.Soklet} instance which manages this {@link SseServer} will invoke this method exactly once at initialization time - this allows {@link com.soklet.Soklet} to "talk" to your {@link SseServer}.
-	 * <p>
-	 * <strong>This method is designed for internal use by {@link com.soklet.Soklet} only and should not be invoked elsewhere.</strong>
-	 *
-	 * @param sokletConfig   configuration for the Soklet instance that controls this server
-	 * @param requestHandler a {@link com.soklet.Soklet}-internal request handler which takes a {@link SseServer}-provided request as input and supplies a {@link MarshaledResponse} as output for the {@link SseServer} to write back to the client
-	 */
-	void initialize(@NonNull SokletConfig sokletConfig,
-									@NonNull RequestHandler requestHandler);
-
-	/**
 	 * Request/response processing contract for {@link SseServer} implementations.
 	 * <p>
-	 * This is used internally by {@link com.soklet.Soklet} instances to "talk" to a {@link SseServer} via {@link SseServer#initialize(SokletConfig, RequestHandler)}.
+	 * This is used internally by {@link com.soklet.Soklet} instances to "talk" to a {@link SseServer}.
 	 * It's the responsibility of the {@link SseServer} to implement HTTP mechanics: read bytes from the request, write bytes to the response, and so forth.
 	 * <p>
 	 * <strong>Most Soklet applications will use Soklet's default {@link SseServer} implementation and therefore do not need to implement this interface directly.</strong>
@@ -197,8 +166,6 @@ public interface SseServer extends AutoCloseable {
 		Integer requestHandlerQueueCapacity;
 		@Nullable
 		Duration writeTimeout;
-		@Nullable
-		Duration shutdownTimeout;
 		@Nullable
 		Duration heartbeatInterval;
 		@Nullable
@@ -288,12 +255,6 @@ public interface SseServer extends AutoCloseable {
 		@NonNull
 		public Builder writeTimeout(@Nullable Duration writeTimeout) {
 			this.writeTimeout = writeTimeout;
-			return this;
-		}
-
-		@NonNull
-		public Builder shutdownTimeout(@Nullable Duration shutdownTimeout) {
-			this.shutdownTimeout = shutdownTimeout;
 			return this;
 		}
 

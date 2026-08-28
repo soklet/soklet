@@ -242,7 +242,7 @@ enum InternalShutdownPhase {
 }
 
 @Immutable
-final class InternalStartupContext {
+final class InternalStartupContext implements StartupContext {
 	@NonNull
 	private final NanoClock clock;
 	private final long normalDeadlineNanos;
@@ -272,6 +272,12 @@ final class InternalStartupContext {
 
 	@NonNull
 	Optional<Duration> remainingTime() {
+		return getRemainingTime();
+	}
+
+	@Override
+	@NonNull
+	public Optional<Duration> getRemainingTime() {
 		if (isCancellationRequested())
 			return Optional.of(LifecycleDeadlines.remaining(
 					this.cancellationDeadlineNanos.getAsLong(), this.clock.nanoTime()));
@@ -281,7 +287,8 @@ final class InternalStartupContext {
 				this.normalDeadlineNanos, this.clock.nanoTime()));
 	}
 
-	boolean isCancellationRequested() {
+	@Override
+	public boolean isCancellationRequested() {
 		return this.cancellationRequested.getAsBoolean();
 	}
 
@@ -296,7 +303,7 @@ final class InternalStartupContext {
 }
 
 @Immutable
-final class InternalShutdownContext {
+final class InternalShutdownContext implements ShutdownContext {
 	@NonNull
 	private final InternalShutdownPhase phase;
 	@NonNull
@@ -316,8 +323,21 @@ final class InternalShutdownContext {
 		return this.phase;
 	}
 
+	@Override
+	@NonNull
+	public ShutdownPhase getPhase() {
+		return this.phase == InternalShutdownPhase.GRACEFUL
+				? ShutdownPhase.GRACEFUL : ShutdownPhase.FORCED;
+	}
+
 	@NonNull
 	Duration remainingTime() {
+		return getRemainingTime();
+	}
+
+	@Override
+	@NonNull
+	public Duration getRemainingTime() {
 		return LifecycleDeadlines.remaining(this.absoluteDeadlineNanos,
 				this.clock.nanoTime());
 	}

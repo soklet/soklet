@@ -26,6 +26,7 @@ import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
+import java.net.URI;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -50,6 +51,7 @@ record McpAdmissionContext(@NonNull Request request,
 		@NonNull Optional<@NonNull String> operationName,
 		@NonNull Optional<@NonNull McpImplementationMetadata> clientInformation,
 		@NonNull Optional<@NonNull McpClientCapabilities> clientCapabilities,
+		@NonNull List<@NonNull URI> requestedResourceSubscriptionUris,
 		@NonNull Optional<@NonNull McpJsonObject> requestMetadata) {
 	McpAdmissionContext {
 		requireNonNull(request);
@@ -63,6 +65,8 @@ record McpAdmissionContext(@NonNull Request request,
 		requireNonNull(operationName);
 		requireNonNull(clientInformation);
 		requireNonNull(clientCapabilities);
+		requestedResourceSubscriptionUris = List.copyOf(
+				requireNonNull(requestedResourceSubscriptionUris));
 		requireNonNull(requestMetadata);
 	}
 
@@ -82,6 +86,8 @@ record McpAdmissionContext(@NonNull Request request,
 				+ ", requestIdPresent=" + requestId.isPresent()
 				+ ", operationNamePresent=" + operationName.isPresent()
 				+ ", clientInformationPresent=" + clientInformation.isPresent()
+				+ ", requestedResourceSubscriptionCount="
+				+ requestedResourceSubscriptionUris.size()
 				+ "]";
 	}
 }

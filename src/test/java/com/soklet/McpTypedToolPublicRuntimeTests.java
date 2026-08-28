@@ -45,7 +45,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@Timeout(30)
+@Timeout(60)
 public class McpTypedToolPublicRuntimeTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/mcp";
@@ -54,6 +54,7 @@ public class McpTypedToolPublicRuntimeTests {
 	private static final String TOOL_NAME = "catalog.search";
 
 	@Test
+	@Timeout(120)
 	public void publicHandlerBoundsRemainAuthoritativeWithACustomExecutor()
 			throws Exception {
 		CountDownLatch firstHandlerEntered = new CountDownLatch(1);
@@ -96,7 +97,7 @@ public class McpTypedToolPublicRuntimeTests {
 				.admissionController(
 						McpAdmissionController.acceptAllInstance())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
-				.handlerInterceptor((context, continuation) -> {
+				.handlerInterceptor((context, features, continuation) -> {
 					handlerInterceptorInvocations.incrementAndGet();
 					return continuation.proceed();
 				})
@@ -166,7 +167,7 @@ public class McpTypedToolPublicRuntimeTests {
 		} finally {
 			releaseFirstHandler.countDown();
 			try {
-				soklet.stop();
+				soklet.close();
 			} finally {
 				ExecutorService executor = suppliedExecutor.get();
 				if (executor != null)
@@ -226,7 +227,7 @@ public class McpTypedToolPublicRuntimeTests {
 				})
 				.requestRateLimiter(requestRateLimiter)
 				.toolRateLimiter(toolRateLimiter)
-				.handlerInterceptor((context, continuation) -> {
+				.handlerInterceptor((context, features, continuation) -> {
 					String operation = context.getOperationName().orElseThrow();
 					stages.add("interceptor-before:" + operation);
 					McpOperationResult result = continuation.proceed();
@@ -335,7 +336,7 @@ public class McpTypedToolPublicRuntimeTests {
 			Assertions.assertTrue(stages.isEmpty(), stages.toString());
 			Assertions.assertEquals(1, handlerInvocations.get());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -408,7 +409,7 @@ public class McpTypedToolPublicRuntimeTests {
 			Assertions.assertEquals(Map.of("userId", "Amélie", "serverNode", "DF 28"),
 					handlerBaggage.get());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 

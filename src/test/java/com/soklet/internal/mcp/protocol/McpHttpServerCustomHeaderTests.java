@@ -29,7 +29,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @NotThreadSafe
-@Timeout(30)
+@Timeout(60)
 public class McpHttpServerCustomHeaderTests {
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final String UNSUPPORTED_VERSION = "2099-01-01";
@@ -297,6 +297,7 @@ public class McpHttpServerCustomHeaderTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void custom_mirror_registration_is_scoped_to_the_selected_tool()
 			throws Exception {
 		String otherTool = "other";

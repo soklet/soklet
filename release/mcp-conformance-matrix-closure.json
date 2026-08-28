@@ -3,8 +3,8 @@
   "protocolVersion": "2026-07-28",
   "releaseVersion": "4.0.0",
   "sourceMatrixPath": "mcp/MCP_CONFORMANCE_MATRIX.md",
-  "sourceMatrixLastUpdated": "2026-08-24",
-  "sourceMatrixSha256": "284c843b6b6f13a0930395137c36e15d5fa437515611dbed759f6c613d78248f",
+  "sourceMatrixLastUpdated": "2026-08-28",
+  "sourceMatrixSha256": "509bf61c509b37549f82d2989aadb44126e9ed6a1dd7456f0790e6c4ad323be7",
   "releaseGateUniverse": [
     "candidate-build",
     "core-jdk-21",
@@ -456,6 +456,17 @@
         "src/test/java/com/soklet/McpRequestObservationPublicRuntimeTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpRequestWireMapperTests.java",
         "src/test/java/com/soklet/internal/mcp/protocol/McpServerCapabilityRegistryTests.java"
+      ],
+      "releaseGates": [],
+      "reason": ""
+    },
+    {
+      "id": "MCP-CAP-005",
+      "disposition": "NOT_APPLICABLE",
+      "evidence": [
+        "api/mcp/mcp-public-evolution-inventory.json",
+        "src/test/java/com/soklet/McpPublicJavadocTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpDeprecatedCapabilityNegotiationTests.java"
       ],
       "releaseGates": [],
       "reason": ""

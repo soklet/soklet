@@ -202,7 +202,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 					admissionInvocations.incrementAndGet();
 					return McpAdmissionDecision.accepted();
 					}).rateLimiterRegistry(rateLimiterRegistry)
-						.handlerInterceptor((context, continuation) -> {
+						.handlerInterceptor((context, features, continuation) -> {
 							handlerInterceptorInvocations.incrementAndGet();
 							return continuation.proceed();
 						})
@@ -317,7 +317,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 					Assertions.assertEquals(admissionsBeforeMismatch + 2,
 							admissionInvocations.get());
 				} finally {
-					soklet.stop();
+					soklet.close();
 				}
 			}
 		} finally {

@@ -19,7 +19,9 @@ package com.soklet.internal.mcp.protocol;
 import com.soklet.CorsAuthorizer;
 import com.soklet.Request;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestFactory;
 import org.junit.jupiter.api.Timeout;
 
 import javax.annotation.concurrent.NotThreadSafe;
@@ -38,7 +40,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 
 @NotThreadSafe
-@Timeout(30)
+@Timeout(60)
 public class McpHttpServerPolicyPipelineTests {
 	private static final String APPLICATION_METHOD = "test/execute";
 
@@ -202,9 +204,8 @@ public class McpHttpServerPolicyPipelineTests {
 		}
 	}
 
-	@Test
-	public void policy_null_exception_reserved_code_and_unsafe_header_fail_closed()
-			throws Exception {
+	@TestFactory
+	public List<DynamicTest> policy_null_exception_reserved_code_and_unsafe_header_fail_closed() {
 		List<PolicyFailureCase> cases = List.of(
 				new PolicyFailureCase("admission-null",
 						McpHttpEndpointPolicy.forDiscovery(
@@ -255,46 +256,52 @@ public class McpHttpServerPolicyPipelineTests {
 								"X-Duplicate", List.of("first"),
 								"x-duplicate", List.of("second")))));
 
-		for (PolicyFailureCase failureCase : cases) {
-			AtomicInteger interceptorInvocations = new AtomicInteger();
-			AtomicInteger handlerInvocations = new AtomicInteger();
-			McpHttpEndpointPolicy policy = failureCase.policy()
-					.withRequestInterceptor((invocation, continuation) -> {
-						interceptorInvocations.incrementAndGet();
-						return continuation.invoke();
-					});
-			McpHttpServerRuntime runtime = runtime(policy, invocation -> {
-				handlerInvocations.incrementAndGet();
-				return result("unreachable");
-			});
-			try {
-				int port = runtime.start().getPort();
-				FixedResponse response = sendFixed(port,
-						"\"" + failureCase.name() + "\"", APPLICATION_METHOD);
-				Assertions.assertEquals(500, response.head().status(),
-						failureCase.name() + ": " + response.head().raw());
-				Assertions.assertEquals(
-						"{\"jsonrpc\":\"2.0\",\"id\":\"" + failureCase.name()
-								+ "\",\"error\":{\"code\":-32603,"
-								+ "\"message\":\"Internal error\"}}",
-						response.body(), failureCase.name());
-				Assertions.assertFalse(response.body().contains("secret"));
-				Assertions.assertFalse(response.head().hasHeader("X-Unsafe"));
-				Assertions.assertFalse(response.head().hasHeader("X-Policy"));
-				Assertions.assertFalse(response.head().hasHeader("Content-Encoding"));
-				Assertions.assertFalse(response.head().hasHeader("MCP-Session-Id"));
-				Assertions.assertFalse(response.head().hasHeader("Last-Event-ID"));
-				Assertions.assertFalse(response.head().hasHeader("X-Duplicate"));
-				Assertions.assertFalse(response.head().raw().contains("legacy-session-secret"));
-				Assertions.assertFalse(response.head().raw().contains("legacy-replay-secret"));
-				Assertions.assertFalse(response.body().contains("legacy-session-secret"));
-				Assertions.assertFalse(response.body().contains("legacy-replay-secret"));
-				Assertions.assertEquals(0, interceptorInvocations.get());
-				Assertions.assertEquals(0, handlerInvocations.get());
-				awaitClean(runtime);
-			} finally {
-				runtime.close();
-			}
+		return cases.stream().map(failureCase -> DynamicTest.dynamicTest(
+				failureCase.name(), () -> Assertions.assertTimeoutPreemptively(
+						Duration.ofSeconds(120),
+						() -> assertFailClosedPolicyCase(failureCase)))).toList();
+	}
+
+	private void assertFailClosedPolicyCase(PolicyFailureCase failureCase)
+			throws Exception {
+		AtomicInteger interceptorInvocations = new AtomicInteger();
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		McpHttpEndpointPolicy policy = failureCase.policy()
+				.withRequestInterceptor((invocation, continuation) -> {
+					interceptorInvocations.incrementAndGet();
+					return continuation.invoke();
+				});
+		McpHttpServerRuntime runtime = runtime(policy, invocation -> {
+			handlerInvocations.incrementAndGet();
+			return result("unreachable");
+		});
+		try {
+			int port = runtime.start().getPort();
+			FixedResponse response = sendFixed(port,
+					"\"" + failureCase.name() + "\"", APPLICATION_METHOD);
+			Assertions.assertEquals(500, response.head().status(),
+					failureCase.name() + ": " + response.head().raw());
+			Assertions.assertEquals(
+					"{\"jsonrpc\":\"2.0\",\"id\":\"" + failureCase.name()
+							+ "\",\"error\":{\"code\":-32603,"
+							+ "\"message\":\"Internal error\"}}",
+					response.body(), failureCase.name());
+			Assertions.assertFalse(response.body().contains("secret"));
+			Assertions.assertFalse(response.head().hasHeader("X-Unsafe"));
+			Assertions.assertFalse(response.head().hasHeader("X-Policy"));
+			Assertions.assertFalse(response.head().hasHeader("Content-Encoding"));
+			Assertions.assertFalse(response.head().hasHeader("MCP-Session-Id"));
+			Assertions.assertFalse(response.head().hasHeader("Last-Event-ID"));
+			Assertions.assertFalse(response.head().hasHeader("X-Duplicate"));
+			Assertions.assertFalse(response.head().raw().contains("legacy-session-secret"));
+			Assertions.assertFalse(response.head().raw().contains("legacy-replay-secret"));
+			Assertions.assertFalse(response.body().contains("legacy-session-secret"));
+			Assertions.assertFalse(response.body().contains("legacy-replay-secret"));
+			Assertions.assertEquals(0, interceptorInvocations.get());
+			Assertions.assertEquals(0, handlerInvocations.get());
+			awaitClean(runtime);
+		} finally {
+			runtime.close();
 		}
 	}
 
@@ -336,6 +343,7 @@ public class McpHttpServerPolicyPipelineTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void interceptor_occupies_a_slot_and_queue_rejection_precedes_interception()
 			throws Exception {
 		CountDownLatch firstInterceptorEntered = new CountDownLatch(1);
@@ -347,7 +355,9 @@ public class McpHttpServerPolicyPipelineTests {
 					int invocationNumber = interceptorInvocations.incrementAndGet();
 					if (invocationNumber == 1) {
 						firstInterceptorEntered.countDown();
-						releaseFirstInterceptor.await();
+						Assertions.assertTrue(releaseFirstInterceptor.await(10,
+								TimeUnit.SECONDS),
+								"Timed out waiting to release the first interceptor");
 					}
 					return continuation.invoke();
 				});

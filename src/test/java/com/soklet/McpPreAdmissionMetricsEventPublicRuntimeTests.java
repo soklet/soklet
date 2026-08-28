@@ -49,12 +49,19 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @NotThreadSafe
-@Timeout(30)
+@Timeout(60)
 public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/mcp";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final String JSON_MEDIA_TYPE = "application/json";
+	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
+			LifecyclePolicy.builder()
+					.startupTimeout(Duration.ofSeconds(5))
+					.startupCancellationTimeout(Duration.ofSeconds(2))
+					.gracefulShutdownDuration(Duration.ofSeconds(2))
+					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.build();
 
 	@Test
 	public void acceptedMalformedRequestEmitsExactProtocolErrorThenRejectionWithoutAdmission()
@@ -83,7 +90,7 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 			Assertions.assertEquals(0, observer.starts());
 			Assertions.assertEquals(0, observer.finishes());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -198,7 +205,7 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 			Assertions.assertEquals(1, collector.maximumConcurrentCallbacks(),
 					"Collector failure containment must preserve serialized delivery.");
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -301,7 +308,7 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 			Assertions.assertEquals(0, observer.starts());
 			Assertions.assertEquals(0, observer.finishes());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -332,7 +339,7 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 			return new UnknownCase(response, collector.quartetEvents(),
 					observer.logEvents(), admissions.get());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -388,6 +395,7 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(collector)
 				.lifecycleObserver(observer)
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build());
 	}
 

@@ -17,17 +17,18 @@
 package com.soklet;
 
 /**
- * Deprecated protocol log-level metadata retained for the MCP 2026-07-28
- * request contract.
+ * Protocol log-level metadata retained for the MCP 2026-07-28 request
+ * contract.
  *
- * <p>Soklet parses and exposes this metadata but does not advertise or
- * implement the MCP Logging capability.
+ * <p>SEP-2577 marks MCP Logging deprecated in the 2026-07-28 profile, with
+ * earliest specification removal eligibility on or after 2027-07-28. Soklet
+ * keeps this Java surface functional for every supported profile containing
+ * it and has made no Java API-removal decision. Soklet parses and exposes this
+ * metadata but does not advertise or implement the MCP Logging capability;
+ * applications use Soklet's existing observability path for logging.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
- * @deprecated the 2026-07-28 protocol retains this deprecated request
- * metadata only for wire compatibility
  */
-@Deprecated(since = "3.6.0")
 public enum McpLogLevel {
 	/** Debug-level messages. */
 	DEBUG,

@@ -17,6 +17,7 @@
 package com.soklet.internal.mcp.protocol;
 
 import com.soklet.CorsAuthorizer;
+import com.soklet.LifecyclePolicy;
 import com.soklet.McpAdmissionController;
 import com.soklet.McpCompleteResult;
 import com.soklet.McpEndpoint;
@@ -302,7 +303,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 				.resource(resource)
 				.build();
 		McpServer server = serverBuilder(endpoint)
-				.handlerInterceptor((context, continuation) -> {
+				.handlerInterceptor((context, features, continuation) -> {
 					interceptorInvocations.incrementAndGet();
 					if (context.getRequestId().orElseThrow().equals(
 							McpRequestId.fromInteger(BigInteger.valueOf(104L))))
@@ -352,7 +353,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 			Assertions.assertEquals(1, resourceHandlerInvocations.get());
 			Assertions.assertEquals(4, interceptorInvocations.get());
 		} finally {
-			owner.stop();
+			owner.close();
 		}
 
 		AtomicInteger listHandlerInvocations = new AtomicInteger();
@@ -374,7 +375,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 				})
 				.build();
 		McpServer customListServer = serverBuilder(customListEndpoint)
-				.handlerInterceptor((context, continuation) -> {
+				.handlerInterceptor((context, features, continuation) -> {
 					listInterceptorInvocations.incrementAndGet();
 					return continuation.proceed();
 				})
@@ -389,7 +390,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 			Assertions.assertEquals(1, listHandlerInvocations.get());
 			Assertions.assertEquals(1, listInterceptorInvocations.get());
 		} finally {
-			customListOwner.stop();
+			customListOwner.close();
 		}
 
 		McpEndpoint localizedEndpoint = localizedEndpointBuilder(
@@ -407,7 +408,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 					"\"localized-discover-complete\"", "server/discover",
 					"", "", null, "complete");
 		} finally {
-			localizedOwner.stop();
+			localizedOwner.close();
 		}
 	}
 
@@ -528,7 +529,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 			Assertions.assertEquals(1, protector.seals.get());
 			Assertions.assertEquals(1, protector.opens.get());
 		} finally {
-			owner.stop();
+			owner.close();
 		}
 	}
 
@@ -589,7 +590,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 			Assertions.assertEquals(2, completeInvocations.get());
 			Assertions.assertEquals(2, inputInvocations.get());
 		} finally {
-			owner.stop();
+			owner.close();
 		}
 
 		McpLocalSubscriptionEventPublisher publisher =
@@ -689,7 +690,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 			Assertions.assertEquals(3, handlerInvocations.get());
 			Assertions.assertEquals(2, sanitizerInvocations.get());
 		} finally {
-			owner.stop();
+			owner.close();
 		}
 	}
 
@@ -762,7 +763,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 				assertLocalizationHeaders(head);
 			assertNotificationFrame(client.readChunkText(),
 					"notifications/subscriptions/acknowledged");
-			stopThread = new Thread(owner::stop,
+			stopThread = new Thread(owner::close,
 					"result-envelope-subscription-stop");
 			stopThread.start();
 			String terminal = client.readChunkText();
@@ -779,7 +780,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 		} finally {
 			if (client != null)
 				client.close();
-			owner.stop();
+			owner.close();
 			if (stopThread != null && stopThread.isAlive())
 				stopThread.join(MANAGED_STOP_JOIN_MILLIS);
 		}
@@ -1026,6 +1027,12 @@ public class McpResultEnvelopeGoldenProductionTests {
 		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecyclePolicy(LifecyclePolicy.builder()
+						.startupTimeout(Duration.ofSeconds(5))
+						.startupCancellationTimeout(Duration.ofSeconds(2))
+						.gracefulShutdownDuration(Duration.ofSeconds(2))
+						.forcedShutdownDuration(Duration.ofSeconds(1))
+						.build())
 				.build());
 	}
 

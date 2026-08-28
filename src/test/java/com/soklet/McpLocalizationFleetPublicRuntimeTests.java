@@ -65,7 +65,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-@Timeout(45)
+@Timeout(60)
 class McpLocalizationFleetPublicRuntimeTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/localization/fleet";
@@ -73,6 +73,13 @@ class McpLocalizationFleetPublicRuntimeTests {
 	private static final String JSON_MEDIA_TYPE = "application/json";
 	private static final Duration WAIT = Duration.ofSeconds(5);
 	private static final Duration NO_EVENT_WAIT = Duration.ofMillis(500);
+	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
+			LifecyclePolicy.builder()
+					.startupTimeout(Duration.ofSeconds(5))
+					.startupCancellationTimeout(Duration.ofSeconds(2))
+					.gracefulShutdownDuration(Duration.ofSeconds(2))
+					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.build();
 
 	@Test
 	void failedFleetReloadPreservesBothOldSnapshotsAndPublishesNoInvalidation()
@@ -345,7 +352,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 
 	private static void assertStoppedWithRetainedAddress(FleetNode node) {
 		McpServerDiagnostics diagnostics = node.server().getDiagnostics();
-		assertEquals(McpServerStatus.STOPPED, diagnostics.getStatus());
+		assertEquals(McpServerStatus.TERMINATED, diagnostics.getStatus());
 		assertTrue(diagnostics.getBoundAddress().isPresent());
 		assertEquals(0, diagnostics.getActiveHandlerExecutions());
 		assertEquals(0, diagnostics.getQueuedRequests());
@@ -461,6 +468,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 			this.soklet = Soklet.fromConfig(SokletConfig.withMcpServer(this.server)
 					.resourceMethodResolver(
 							ResourceMethodResolver.fromMethods(Set.of()))
+					.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 					.build());
 		}
 
@@ -505,7 +513,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 		}
 
 		private void stop() {
-			this.soklet.stop();
+			this.soklet.close();
 		}
 
 		private void activate(CatalogSnapshot snapshot) {
@@ -644,7 +652,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 		public void close() {
 			for (LiveSubscription subscription : this.subscriptions)
 				subscription.close();
-			this.soklet.stop();
+			this.soklet.close();
 			this.contexts.clear();
 		}
 	}

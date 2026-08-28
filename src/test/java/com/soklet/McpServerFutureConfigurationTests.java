@@ -43,7 +43,6 @@ class McpServerFutureConfigurationTests {
 				.streamQueueCapacity(7)
 				.writeTimeout(Duration.ofSeconds(9))
 				.keepAliveInterval(Duration.ofSeconds(8))
-				.shutdownTimeout(Duration.ofSeconds(10))
 				.maximumSubscriptionsPerPrincipal(11)
 				.maximumSubscriptionDuration(Duration.ofSeconds(12))
 				.logRawValidatedTraceIds(true)
@@ -52,7 +51,6 @@ class McpServerFutureConfigurationTests {
 		assertEquals(128, defaults.streamQueueCapacity());
 		assertEquals(Duration.ofSeconds(30), defaults.writeTimeout());
 		assertEquals(Duration.ofSeconds(15), defaults.keepAliveInterval());
-		assertEquals(Duration.ofSeconds(30), defaults.shutdownTimeout());
 		assertEquals(32, defaults.maximumSubscriptionsPerPrincipal());
 		assertEquals(Duration.ofHours(24),
 				defaults.maximumSubscriptionDuration());
@@ -61,7 +59,6 @@ class McpServerFutureConfigurationTests {
 		assertEquals(7, configured.streamQueueCapacity());
 		assertEquals(Duration.ofSeconds(9), configured.writeTimeout());
 		assertEquals(Duration.ofSeconds(8), configured.keepAliveInterval());
-		assertEquals(Duration.ofSeconds(10), configured.shutdownTimeout());
 		assertEquals(11, configured.maximumSubscriptionsPerPrincipal());
 		assertEquals(Duration.ofSeconds(12),
 				configured.maximumSubscriptionDuration());
@@ -91,7 +88,6 @@ class McpServerFutureConfigurationTests {
 		for (DurationSetter setter : List.<DurationSetter>of(
 				McpServer.Builder::writeTimeout,
 				McpServer.Builder::keepAliveInterval,
-				McpServer.Builder::shutdownTimeout,
 				McpServer.Builder::maximumSubscriptionDuration)) {
 			assertThrows(NullPointerException.class,
 					() -> setter.set(builder, null));

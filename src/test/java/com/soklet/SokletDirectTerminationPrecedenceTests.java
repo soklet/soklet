@@ -195,7 +195,8 @@ final class SokletDirectTerminationPrecedenceTests {
 				}, () -> { });
 		AtomicReference<Throwable> stopFailure = new AtomicReference<>();
 		Thread stopper = new Thread(() -> stopFailure.set(
-				captureFailure(owner::stop)), "precedence-owner-intent-gap");
+				captureFailure(() -> joinShutdown(owner))),
+				"precedence-owner-intent-gap");
 		stopper.setDaemon(true);
 
 		try {
@@ -250,10 +251,10 @@ final class SokletDirectTerminationPrecedenceTests {
 			http.signalFailure(failure);
 			SokletTerminatedUnexpectedlyException first = Assertions.assertThrows(
 					SokletTerminatedUnexpectedlyException.class,
-					harness.owner()::stop);
+					() -> joinShutdown(harness.owner()));
 			SokletTerminatedUnexpectedlyException second = Assertions.assertThrows(
 					SokletTerminatedUnexpectedlyException.class,
-					harness.owner()::stop);
+					() -> joinShutdown(harness.owner()));
 
 			InternalShutdownResult result = harness.owner().result().orElseThrow();
 			Assertions.assertNotSame(first, second,
@@ -295,10 +296,10 @@ final class SokletDirectTerminationPrecedenceTests {
 
 			SokletTerminatedUnexpectedlyException first = Assertions.assertThrows(
 					SokletTerminatedUnexpectedlyException.class,
-					harness.owner()::stop);
+					() -> joinShutdown(harness.owner()));
 			SokletTerminatedUnexpectedlyException second = Assertions.assertThrows(
 					SokletTerminatedUnexpectedlyException.class,
-					harness.owner()::stop);
+					() -> joinShutdown(harness.owner()));
 			InternalShutdownResult result = harness.owner().result().orElseThrow();
 
 			Assertions.assertNotSame(first, second);
@@ -335,7 +336,7 @@ final class SokletDirectTerminationPrecedenceTests {
 			SokletTerminatedUnexpectedlyException unexpected =
 					Assertions.assertThrows(
 							SokletTerminatedUnexpectedlyException.class,
-							harness.owner()::stop);
+							() -> joinShutdown(harness.owner()));
 
 			InternalShutdownResult result = harness.owner().result().orElseThrow();
 			Assertions.assertTrue(http.awaitForce(),
@@ -368,7 +369,7 @@ final class SokletDirectTerminationPrecedenceTests {
 			SokletTerminatedUnexpectedlyException unexpected =
 					Assertions.assertThrows(
 							SokletTerminatedUnexpectedlyException.class,
-							harness.owner()::stop,
+							() -> joinShutdown(harness.owner()),
 							"Unexpected termination precedes incomplete shutdown");
 
 			InternalShutdownResult result = harness.owner().result().orElseThrow();
@@ -407,7 +408,8 @@ final class SokletDirectTerminationPrecedenceTests {
 			Assertions.assertEquals(InternalStartupDisposition.FAILED,
 					result.startupDisposition());
 
-			Throwable stopFailure = captureFailure(harness.owner()::stop);
+			Throwable stopFailure = captureFailure(
+					() -> joinShutdown(harness.owner()));
 			Assertions.assertFalse(stopFailure
 					instanceof SokletTerminatedUnexpectedlyException,
 					"Only termination after READY may surface as close-unexpected");
@@ -441,6 +443,11 @@ final class SokletDirectTerminationPrecedenceTests {
 		Assertions.assertEquals(disposition, participant.disposition());
 		Assertions.assertEquals(failures, participant.failures());
 		Assertions.assertTrue(participant.residualActivity().isEmpty());
+	}
+
+	private static void joinShutdown(@NonNull SokletDirectLifecycle owner) {
+		ShutdownResult result = owner.shutdown().toCompletableFuture().join();
+		owner.throwIfUnsuccessfulShutdown(result);
 	}
 
 	@Nullable
@@ -511,13 +518,12 @@ final class SokletDirectTerminationPrecedenceTests {
 	private static final class PhaseControl {
 		@NonNull private final AtomicLong now;
 		@NonNull private final ProofPhase proofPhase;
-		@NonNull private final AtomicBoolean started = new AtomicBoolean();
 		@NonNull private final AtomicBoolean proofSignalled = new AtomicBoolean();
 		@NonNull private final AtomicInteger quiesceCalls = new AtomicInteger();
 		@NonNull private final AtomicInteger forceCalls = new AtomicInteger();
 		@NonNull private final CountDownLatch quiesceEntered = new CountDownLatch(1);
 		@NonNull private final CountDownLatch forceEntered = new CountDownLatch(1);
-		@NonNull private final AtomicReference<InternalTransportTerminationSignal>
+		@NonNull private final AtomicReference<TransportTerminationSignal>
 				signal = new AtomicReference<>();
 		@NonNull private final AtomicReference<Throwable> startFailure =
 				new AtomicReference<>();
@@ -528,7 +534,7 @@ final class SokletDirectTerminationPrecedenceTests {
 			this.proofPhase = proofPhase;
 		}
 
-		void install(@NonNull InternalTransportTerminationSignal signal) {
+		void install(@NonNull TransportTerminationSignal signal) {
 			this.signal.set(signal);
 		}
 
@@ -545,11 +551,10 @@ final class SokletDirectTerminationPrecedenceTests {
 		}
 
 		@NonNull
-		InternalTransportRuntime runtime() {
-			return new InternalTransportRuntime() {
+		TransportRuntime runtime() {
+			return new TransportRuntime() {
 				@Override
-				public void start(@NonNull InternalStartupContext context) {
-					started.set(true);
+				public void start(@NonNull StartupContext context) {
 					Throwable failure = startFailure.get();
 					if (failure != null)
 						signalFailure(failure);
@@ -558,30 +563,26 @@ final class SokletDirectTerminationPrecedenceTests {
 				}
 
 				@Override
-				public void quiesce(@NonNull InternalShutdownContext context) {
+				public void quiesce(@NonNull ShutdownContext context) {
 					quiesceCalls.incrementAndGet();
 					quiesceEntered.countDown();
 					if (proofPhase == ProofPhase.GRACEFUL
 							|| proofPhase == ProofPhase.START)
 						terminate();
 					else
-						advanceTo(context.absoluteDeadlineNanos());
+						advanceBy(context.getRemainingTime());
 				}
 
 				@Override
-				public void force(@NonNull InternalShutdownContext context) {
+				public void force(@NonNull ShutdownContext context) {
 					forceCalls.incrementAndGet();
 					forceEntered.countDown();
 					if (proofPhase == ProofPhase.FORCED)
 						terminate();
 					else
-						advanceTo(context.absoluteDeadlineNanos());
+						advanceBy(context.getRemainingTime());
 				}
 			};
-		}
-
-		boolean started() {
-			return this.started.get();
 		}
 
 		int quiesceCalls() {
@@ -601,26 +602,24 @@ final class SokletDirectTerminationPrecedenceTests {
 		}
 
 		private void terminate() {
-			this.started.set(false);
 			if (this.proofSignalled.compareAndSet(false, true))
 				requireSignal().signalTerminated();
 		}
 
-		private void advanceTo(long deadlineNanos) {
-			this.now.accumulateAndGet(deadlineNanos, Math::max);
+		private void advanceBy(@NonNull Duration remainingTime) {
+			this.now.addAndGet(remainingTime.toNanos());
 		}
 
 		@NonNull
-		private InternalTransportTerminationSignal requireSignal() {
+		private TransportTerminationSignal requireSignal() {
 			return java.util.Objects.requireNonNull(this.signal.get(),
 					"Transport signal is not attached");
 		}
 	}
 
-	private static final class PrecedenceHttpEndpoint
-			implements HttpServer, InternalHttpTransportEndpoint {
-		@NonNull private final InternalTransportIdentity identity =
-				InternalTransportIdentity.create();
+	private static final class PrecedenceHttpEndpoint implements HttpServer {
+		@NonNull private final TransportIdentity identity =
+				TransportIdentity.create();
 		@NonNull private final PhaseControl phase;
 
 		private PrecedenceHttpEndpoint(@NonNull AtomicLong now,
@@ -649,30 +648,20 @@ final class SokletDirectTerminationPrecedenceTests {
 			return this.phase.awaitForce();
 		}
 
-		@Override @NonNull public InternalTransportIdentity identity() {
+		@Override @NonNull public TransportIdentity getTransportIdentity() {
 			return this.identity;
 		}
-		@Override @NonNull public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
-			this.phase.install(context.terminationSignal());
+		@Override @NonNull public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
+			this.phase.install(context.getTerminationSignal());
 			return this.phase.runtime();
-		}
-		@Override public void start() {
-			throw new AssertionError("Direct endpoint startup uses its runtime");
-		}
-		@Override public void stop() { }
-		@Override @NonNull public Boolean isStarted() { return this.phase.started(); }
-		@Override public void initialize(@NonNull SokletConfig sokletConfig,
-				@NonNull RequestHandler requestHandler) {
-			throw new AssertionError("Direct endpoint attachment uses attach(...)");
 		}
 	}
 
-	private static final class PrecedenceSseEndpoint
-			implements SseServer, InternalSseTransportEndpoint {
-		@NonNull private final InternalTransportIdentity identity =
-				InternalTransportIdentity.create();
+	private static final class PrecedenceSseEndpoint implements SseServer {
+		@NonNull private final TransportIdentity identity =
+				TransportIdentity.create();
 		@NonNull private final PhaseControl phase;
 
 		private PrecedenceSseEndpoint(@NonNull AtomicLong now,
@@ -685,26 +674,17 @@ final class SokletDirectTerminationPrecedenceTests {
 			return this.phase.awaitQuiesce();
 		}
 
-		@Override @NonNull public InternalTransportIdentity identity() {
+		@Override @NonNull public TransportIdentity getTransportIdentity() {
 			return this.identity;
 		}
-		@Override @NonNull public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
-			this.phase.install(context.terminationSignal());
+		@Override @NonNull public TransportRuntime attach(
+				@NonNull SseTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
+			this.phase.install(context.getTerminationSignal());
 			return this.phase.runtime();
 		}
-		@Override public void start() {
-			throw new AssertionError("Direct endpoint startup uses its runtime");
-		}
-		@Override public void stop() { }
-		@Override @NonNull public Boolean isStarted() { return this.phase.started(); }
 		@Override @NonNull public Optional<? extends SseBroadcaster> acquireBroadcaster(
 				@Nullable ResourcePath resourcePath) { return Optional.empty(); }
-		@Override public void initialize(@NonNull SokletConfig sokletConfig,
-				@NonNull RequestHandler requestHandler) {
-			throw new AssertionError("Direct endpoint attachment uses attach(...)");
-		}
 	}
 
 	public static final class PrecedenceResource {

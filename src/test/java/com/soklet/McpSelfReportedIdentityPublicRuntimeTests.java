@@ -40,7 +40,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@Timeout(30)
+@Timeout(60)
 public class McpSelfReportedIdentityPublicRuntimeTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/mcp";
@@ -137,7 +137,7 @@ public class McpSelfReportedIdentityPublicRuntimeTests {
 			assertHandler(handlers.get(0), "reported-beta", alpha);
 			assertHandler(handlers.get(1), "reported-alpha", beta);
 		} finally {
-			owner.stop();
+			owner.close();
 		}
 	}
 

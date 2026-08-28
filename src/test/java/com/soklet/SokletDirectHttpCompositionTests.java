@@ -53,7 +53,8 @@ final class SokletDirectHttpCompositionTests {
 		try (Soklet soklet = Soklet.fromConfig(config)) {
 			soklet.start();
 
-			Assertions.assertSame(engine.identity(), outer.identity());
+			Assertions.assertSame(engine.getTransportIdentity(),
+					outer.getTransportIdentity());
 			Assertions.assertSame(config, outer.attachedConfiguration());
 			Assertions.assertSame(config, engine.attachedConfiguration());
 			Assertions.assertSame(outer.attachStartupContext(),
@@ -72,7 +73,7 @@ final class SokletDirectHttpCompositionTests {
 					response.getMarshaledResponse().getStatusCode());
 			Assertions.assertEquals(List.of("outer"), outer.handlerObservations());
 
-			soklet.stop();
+			soklet.shutdown().toCompletableFuture().join();
 
 			Assertions.assertEquals(1, engine.quiesceCalls());
 			Assertions.assertEquals(0, engine.forceCalls());
@@ -81,6 +82,7 @@ final class SokletDirectHttpCompositionTests {
 	}
 
 	@Test
+	@Timeout(value = 120, unit = TimeUnit.SECONDS)
 	void lifecycleOwningDecoratorRequiresDelegateAndOuterProof()
 			throws Exception {
 		AlternativeHttpEngine engine = new AlternativeHttpEngine();
@@ -92,7 +94,8 @@ final class SokletDirectHttpCompositionTests {
 		try {
 			soklet.start();
 
-			Assertions.assertSame(engine.identity(), outer.identity());
+			Assertions.assertSame(engine.getTransportIdentity(),
+					outer.getTransportIdentity());
 			Assertions.assertSame(config, outer.attachedConfiguration());
 			Assertions.assertSame(config, engine.attachedConfiguration());
 			Assertions.assertSame(outer.attachStartupContext(),
@@ -107,7 +110,8 @@ final class SokletDirectHttpCompositionTests {
 					response.getMarshaledResponse().getStatusCode());
 			Assertions.assertEquals(List.of("outer"), outer.handlerObservations());
 
-			Future<?> stopping = executor.submit(soklet::stop);
+			Future<?> stopping = executor.submit(() ->
+					soklet.shutdown().toCompletableFuture().join());
 			Assertions.assertTrue(outer.awaitDelegateProof(2, TimeUnit.SECONDS),
 					"The child proof stage should complete without root proof");
 			Assertions.assertNull(outer.delegateProofFailure());
@@ -142,6 +146,7 @@ final class SokletDirectHttpCompositionTests {
 	}
 
 	@Test
+	@Timeout(value = 120, unit = TimeUnit.SECONDS)
 	void twoLevelOwningDecoratorsRemainOneConfiguredParticipant()
 			throws Exception {
 		AlternativeHttpEngine engine = new AlternativeHttpEngine(false);
@@ -156,15 +161,17 @@ final class SokletDirectHttpCompositionTests {
 			TransportOwnershipException conflict = Assertions.assertThrows(
 					TransportOwnershipException.class,
 					() -> Soklet.fromConfig(config(engine)));
-			Assertions.assertEquals(InternalParticipantKind.HTTP,
-					conflict.getInternalParticipantKind());
+			Assertions.assertEquals(ParticipantKind.HTTP,
+					conflict.getParticipantKind());
 			Assertions.assertSame(AlternativeHttpEngine.class,
 					conflict.getTransportClass());
 
 			soklet.start();
 
-			Assertions.assertSame(engine.identity(), inner.identity());
-			Assertions.assertSame(engine.identity(), outer.identity());
+			Assertions.assertSame(engine.getTransportIdentity(),
+					inner.getTransportIdentity());
+			Assertions.assertSame(engine.getTransportIdentity(),
+					outer.getTransportIdentity());
 			Assertions.assertSame(config, outer.attachedConfiguration());
 			Assertions.assertSame(config, inner.attachedConfiguration());
 			Assertions.assertSame(config, engine.attachedConfiguration());
@@ -191,7 +198,8 @@ final class SokletDirectHttpCompositionTests {
 			Assertions.assertEquals(List.of("inner"), inner.handlerObservations());
 			Assertions.assertEquals(List.of("outer"), outer.handlerObservations());
 
-			Future<?> stopping = executor.submit(soklet::stop);
+			Future<?> stopping = executor.submit(() ->
+					soklet.shutdown().toCompletableFuture().join());
 			Assertions.assertTrue(outer.awaitQuiesceReturned(2, TimeUnit.SECONDS));
 			Assertions.assertTrue(engine.awaitQuiesceReturned(2, TimeUnit.SECONDS));
 			Assertions.assertFalse(inner.delegateProofObserved(),
@@ -243,7 +251,8 @@ final class SokletDirectHttpCompositionTests {
 		try {
 			soklet.start();
 
-			Future<?> stopping = executor.submit(soklet::stop);
+			Future<?> stopping = executor.submit(() ->
+					soklet.shutdown().toCompletableFuture().join());
 			Assertions.assertTrue(engine.awaitQuiesceReturned(2, TimeUnit.SECONDS));
 
 			Assertions.assertTrue(outer.awaitForceReturned(2, TimeUnit.SECONDS));
@@ -331,15 +340,13 @@ final class SokletDirectHttpCompositionTests {
 		FINISHED
 	}
 
-	private interface ComposedHttpEndpoint
-			extends HttpServer, InternalHttpTransportEndpoint {
+	private interface ComposedHttpEndpoint extends HttpServer {
 	}
 
 	private static final class AlternativeHttpEngine
 			implements ComposedHttpEndpoint {
 		@NonNull
-		private final InternalTransportIdentity identity =
-				InternalTransportIdentity.create();
+		private final TransportIdentity identity = TransportIdentity.create();
 		@NonNull
 		private final AtomicInteger attachCalls = new AtomicInteger();
 		@NonNull
@@ -348,8 +355,6 @@ final class SokletDirectHttpCompositionTests {
 		private final AtomicInteger quiesceCalls = new AtomicInteger();
 		@NonNull
 		private final AtomicInteger forceCalls = new AtomicInteger();
-		@NonNull
-		private final AtomicBoolean started = new AtomicBoolean();
 		@NonNull
 		private final AtomicBoolean terminationSignalled = new AtomicBoolean();
 		@NonNull
@@ -366,13 +371,13 @@ final class SokletDirectHttpCompositionTests {
 		private final AtomicReference<HttpServer.RequestHandler> requestHandler =
 				new AtomicReference<>();
 		@NonNull
-		private final AtomicReference<InternalStartupContext> attachStartupContext =
+		private final AtomicReference<StartupContext> attachStartupContext =
 				new AtomicReference<>();
 		@NonNull
-		private final AtomicReference<InternalTransportTerminationSignal>
+		private final AtomicReference<TransportTerminationSignal>
 				terminationSignal = new AtomicReference<>();
 		@NonNull
-		private final AtomicReference<InternalTransportRuntime> attachedRuntime =
+		private final AtomicReference<TransportRuntime> attachedRuntime =
 				new AtomicReference<>();
 
 		private AlternativeHttpEngine() {
@@ -423,17 +428,17 @@ final class SokletDirectHttpCompositionTests {
 		}
 
 		@NonNull
-		InternalStartupContext attachStartupContext() {
+		StartupContext attachStartupContext() {
 			return requireNonNull(this.attachStartupContext.get());
 		}
 
 		@NonNull
-		InternalTransportTerminationSignal terminationSignal() {
+		TransportTerminationSignal terminationSignal() {
 			return requireNonNull(this.terminationSignal.get());
 		}
 
 		@NonNull
-		InternalTransportRuntime attachedRuntime() {
+		TransportRuntime attachedRuntime() {
 			return requireNonNull(this.attachedRuntime.get());
 		}
 
@@ -447,29 +452,28 @@ final class SokletDirectHttpCompositionTests {
 
 		@Override
 		@NonNull
-		public InternalTransportIdentity identity() {
+		public TransportIdentity getTransportIdentity() {
 			return this.identity;
 		}
 
 		@Override
 		@NonNull
-		public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<HttpServer.RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
+		public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
 			this.attachCalls.incrementAndGet();
-			this.attachedConfiguration.set(context.configuration());
-			this.requestHandler.set(context.requestHandler());
+			this.attachedConfiguration.set(context.getSokletConfig());
+			this.requestHandler.set(context.getAdmissionFencedRequestHandler());
 			this.attachStartupContext.set(startupContext);
-			this.terminationSignal.set(context.terminationSignal());
-			InternalTransportRuntime runtime = new InternalTransportRuntime() {
+			this.terminationSignal.set(context.getTerminationSignal());
+			TransportRuntime runtime = new TransportRuntime() {
 				@Override
-				public void start(@NonNull InternalStartupContext context) {
+				public void start(@NonNull StartupContext context) {
 					startCalls.incrementAndGet();
-					started.set(true);
 				}
 
 				@Override
-				public void quiesce(@NonNull InternalShutdownContext context) {
+				public void quiesce(@NonNull ShutdownContext context) {
 					quiesceCalls.incrementAndGet();
 					try {
 						requestTermination();
@@ -479,7 +483,7 @@ final class SokletDirectHttpCompositionTests {
 				}
 
 				@Override
-				public void force(@NonNull InternalShutdownContext context) {
+				public void force(@NonNull ShutdownContext context) {
 					forceCalls.incrementAndGet();
 					if (releaseTerminationOnForce)
 						terminationReleased.set(true);
@@ -490,37 +494,14 @@ final class SokletDirectHttpCompositionTests {
 			return runtime;
 		}
 
-		@Override
-		public void start() {
-			throw new AssertionError("Direct startup must use the attached runtime");
-		}
-
-		@Override
-		public void stop() {
-			requestTermination();
-		}
-
-		@Override
-		@NonNull
-		public Boolean isStarted() {
-			return this.started.get();
-		}
-
-		@Override
-		public void initialize(@NonNull SokletConfig sokletConfig,
-				HttpServer.@NonNull RequestHandler requestHandler) {
-			throw new AssertionError("Direct attachment must use attach(...)");
-		}
-
 		private void requestTermination() {
-			this.started.set(false);
 			this.terminationRequested.set(true);
 			if (this.terminationReleased.get())
 				publishTermination();
 		}
 
 		private void publishTermination() {
-			InternalTransportTerminationSignal signal = this.terminationSignal.get();
+			TransportTerminationSignal signal = this.terminationSignal.get();
 			if (signal != null && this.terminationSignalled.compareAndSet(false, true))
 				signal.signalTerminated();
 		}
@@ -533,7 +514,7 @@ final class SokletDirectHttpCompositionTests {
 		@NonNull
 		private final ComposedHttpEndpoint delegate;
 		@NonNull
-		private final InternalTransportIdentity identity;
+		private final TransportIdentity identity;
 		@NonNull
 		private final AtomicInteger attachCalls = new AtomicInteger();
 		@NonNull
@@ -543,20 +524,20 @@ final class SokletDirectHttpCompositionTests {
 		private final AtomicReference<Object> attachedConfiguration =
 				new AtomicReference<>();
 		@NonNull
-		private final AtomicReference<InternalStartupContext> attachStartupContext =
+		private final AtomicReference<StartupContext> attachStartupContext =
 				new AtomicReference<>();
 		@NonNull
-		private final AtomicReference<InternalTransportTerminationSignal>
+		private final AtomicReference<TransportTerminationSignal>
 				terminationSignal = new AtomicReference<>();
 		@NonNull
-		private final AtomicReference<InternalTransportRuntime> attachedRuntime =
+		private final AtomicReference<TransportRuntime> attachedRuntime =
 				new AtomicReference<>();
 
 		private TransparentHttpDecorator(@NonNull String name,
 				@NonNull ComposedHttpEndpoint delegate) {
 			this.name = requireNonNull(name);
 			this.delegate = requireNonNull(delegate);
-			this.identity = delegate.identity();
+			this.identity = delegate.getTransportIdentity();
 		}
 
 		int attachCalls() {
@@ -574,67 +555,47 @@ final class SokletDirectHttpCompositionTests {
 		}
 
 		@NonNull
-		InternalStartupContext attachStartupContext() {
+		StartupContext attachStartupContext() {
 			return requireNonNull(this.attachStartupContext.get());
 		}
 
 		@NonNull
-		InternalTransportTerminationSignal terminationSignal() {
+		TransportTerminationSignal terminationSignal() {
 			return requireNonNull(this.terminationSignal.get());
 		}
 
 		@NonNull
-		InternalTransportRuntime attachedRuntime() {
+		TransportRuntime attachedRuntime() {
 			return requireNonNull(this.attachedRuntime.get());
 		}
 
 		@Override
 		@NonNull
-		public InternalTransportIdentity identity() {
+		public TransportIdentity getTransportIdentity() {
 			return this.identity;
 		}
 
 		@Override
 		@NonNull
-		public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<HttpServer.RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
+		public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
 			this.attachCalls.incrementAndGet();
-			this.attachedConfiguration.set(context.configuration());
+			this.attachedConfiguration.set(context.getSokletConfig());
 			this.attachStartupContext.set(startupContext);
-			this.terminationSignal.set(context.terminationSignal());
-			HttpServer.RequestHandler upstreamHandler = context.requestHandler();
+			this.terminationSignal.set(context.getTerminationSignal());
+			HttpServer.RequestHandler upstreamHandler =
+					context.getAdmissionFencedRequestHandler();
 			HttpServer.RequestHandler wrappedHandler = (request, consumer) -> {
 				this.handlerObservations.add(this.name);
 				upstreamHandler.handleRequest(request, consumer);
 			};
-			InternalTransportRuntime runtime = context.attachTransparentDelegate(
+			TransportRuntime runtime = context.attachTransparentDelegate(
 					this.delegate, wrappedHandler);
 			this.attachedRuntime.set(runtime);
 			return runtime;
 		}
 
-		@Override
-		public void start() {
-			throw new AssertionError("Direct startup must use the attached runtime");
-		}
-
-		@Override
-		public void stop() {
-			throw new AssertionError("Direct shutdown must use the attached runtime");
-		}
-
-		@Override
-		@NonNull
-		public Boolean isStarted() {
-			return this.delegate.isStarted();
-		}
-
-		@Override
-		public void initialize(@NonNull SokletConfig sokletConfig,
-				HttpServer.@NonNull RequestHandler requestHandler) {
-			throw new AssertionError("Direct attachment must use attach(...)");
-		}
 	}
 
 	private static final class OwningHttpDecorator
@@ -644,7 +605,7 @@ final class SokletDirectHttpCompositionTests {
 		@NonNull
 		private final ComposedHttpEndpoint delegate;
 		@NonNull
-		private final InternalTransportIdentity identity;
+		private final TransportIdentity identity;
 		@NonNull
 		private final AtomicInteger attachCalls = new AtomicInteger();
 		@NonNull
@@ -687,13 +648,13 @@ final class SokletDirectHttpCompositionTests {
 		private final AtomicReference<Object> attachedConfiguration =
 				new AtomicReference<>();
 		@NonNull
-		private final AtomicReference<InternalStartupContext> attachStartupContext =
+		private final AtomicReference<StartupContext> attachStartupContext =
 				new AtomicReference<>();
 		@NonNull
-		private final AtomicReference<InternalTransportTerminationSignal>
+		private final AtomicReference<TransportTerminationSignal>
 				terminationSignal = new AtomicReference<>();
 		@NonNull
-		private final AtomicReference<InternalTransportDelegateAttachment>
+		private final AtomicReference<TransportDelegateAttachment>
 				delegateAttachment = new AtomicReference<>();
 		@NonNull
 		private final AtomicReference<@Nullable Throwable> delegateProofFailure =
@@ -713,7 +674,7 @@ final class SokletDirectHttpCompositionTests {
 				boolean cleanupInitiallyReleased) {
 			this.name = requireNonNull(name);
 			this.delegate = requireNonNull(delegate);
-			this.identity = delegate.identity();
+			this.identity = delegate.getTransportIdentity();
 			if (cleanupInitiallyReleased)
 				this.cleanupRelease.countDown();
 		}
@@ -745,18 +706,18 @@ final class SokletDirectHttpCompositionTests {
 		}
 
 		@NonNull
-		InternalStartupContext attachStartupContext() {
+		StartupContext attachStartupContext() {
 			return requireNonNull(this.attachStartupContext.get());
 		}
 
 		@NonNull
-		InternalTransportTerminationSignal terminationSignal() {
+		TransportTerminationSignal terminationSignal() {
 			return requireNonNull(this.terminationSignal.get());
 		}
 
 		@NonNull
-		InternalTransportRuntime delegateRuntime() {
-			return requireNonNull(this.delegateAttachment.get()).runtime();
+		TransportRuntime delegateRuntime() {
+			return requireNonNull(this.delegateAttachment.get()).getRuntime();
 		}
 
 		boolean awaitDelegateProof(long timeout, @NonNull TimeUnit unit)
@@ -847,27 +808,27 @@ final class SokletDirectHttpCompositionTests {
 
 		@Override
 		@NonNull
-		public InternalTransportIdentity identity() {
+		public TransportIdentity getTransportIdentity() {
 			return this.identity;
 		}
 
 		@Override
 		@NonNull
-		public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<HttpServer.RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
+		public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
 			this.attachCalls.incrementAndGet();
-			this.attachedConfiguration.set(context.configuration());
+			this.attachedConfiguration.set(context.getSokletConfig());
 			this.attachStartupContext.set(startupContext);
-			this.terminationSignal.set(context.terminationSignal());
-			InternalTransportTerminationSignal rootSignal =
-					context.terminationSignal();
-			HttpServer.RequestHandler upstreamHandler = context.requestHandler();
+			this.terminationSignal.set(context.getTerminationSignal());
+			TransportTerminationSignal rootSignal = context.getTerminationSignal();
+			HttpServer.RequestHandler upstreamHandler =
+					context.getAdmissionFencedRequestHandler();
 			HttpServer.RequestHandler wrappedHandler = (request, consumer) -> {
 				this.handlerObservations.add(this.name);
 				upstreamHandler.handleRequest(request, consumer);
 			};
-			InternalTransportDelegateAttachment attachment =
+			TransportDelegateAttachment attachment =
 					context.attachLifecycleOwningDelegate(this.delegate,
 							wrappedHandler);
 			this.delegateAttachment.set(attachment);
@@ -886,9 +847,9 @@ final class SokletDirectHttpCompositionTests {
 				}
 				this.delegateProofObserved.countDown();
 			});
-			return new InternalTransportRuntime() {
+			return new TransportRuntime() {
 				@Override
-				public void start(@NonNull InternalStartupContext context) {
+				public void start(@NonNull StartupContext context) {
 					startCalls.incrementAndGet();
 					OwnedCleanupExecutor executor = new OwnedCleanupExecutor(
 							name, OwningHttpDecorator.this::publishRootProof);
@@ -903,7 +864,7 @@ final class SokletDirectHttpCompositionTests {
 								"Decorator cleanup executor did not prestart");
 					}
 					try {
-						attachment.runtime().start(context);
+						attachment.getRuntime().start(context);
 					} catch (RuntimeException | Error failure) {
 						executor.shutdownNow();
 						throw failure;
@@ -911,49 +872,27 @@ final class SokletDirectHttpCompositionTests {
 				}
 
 				@Override
-				public void quiesce(@NonNull InternalShutdownContext context) {
+				public void quiesce(@NonNull ShutdownContext context) {
 					quiesceCalls.incrementAndGet();
 					try {
-						attachment.runtime().quiesce(context);
+						attachment.getRuntime().quiesce(context);
 					} finally {
 						quiesceReturned.countDown();
 					}
 				}
 
 				@Override
-				public void force(@NonNull InternalShutdownContext context) {
+				public void force(@NonNull ShutdownContext context) {
 					forceCalls.incrementAndGet();
 					requestCleanupForce();
 					try {
-						attachment.runtime().force(context);
+						attachment.getRuntime().force(context);
 					} finally {
 						requestCleanupForce();
 						forceReturned.countDown();
 					}
 				}
 			};
-		}
-
-		@Override
-		public void start() {
-			throw new AssertionError("Direct startup must use the attached runtime");
-		}
-
-		@Override
-		public void stop() {
-			throw new AssertionError("Direct shutdown must use the attached runtime");
-		}
-
-		@Override
-		@NonNull
-		public Boolean isStarted() {
-			return this.delegate.isStarted();
-		}
-
-		@Override
-		public void initialize(@NonNull SokletConfig sokletConfig,
-				HttpServer.@NonNull RequestHandler requestHandler) {
-			throw new AssertionError("Direct attachment must use attach(...)");
 		}
 
 		private void submitOwnedCleanup() {

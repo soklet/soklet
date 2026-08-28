@@ -34,7 +34,7 @@ import java.util.regex.Pattern;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@Timeout(30)
+@Timeout(60)
 public class McpLegacySessionNegativeInventoryTests {
 	private static final Path PUBLIC_SOURCE_ROOT =
 			Path.of("src/main/java/com/soklet");

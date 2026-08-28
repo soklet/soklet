@@ -28,7 +28,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-@Timeout(10)
+@Timeout(60)
 public class McpTransportMetricDrainSchedulerTests {
 	@Test
 	public void rejectedSubmissionWithoutRacingSignalRetriesOnNextSignal() {

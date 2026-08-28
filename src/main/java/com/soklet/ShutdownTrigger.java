@@ -20,7 +20,7 @@ package com.soklet;
  * Events that might trigger a {@link Soklet} instance to shut down.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
- * @see Soklet#awaitShutdown(ShutdownTrigger...)
+ * @see SokletApplication#run(SokletConfig, ShutdownTrigger...)
  */
 public enum ShutdownTrigger {
 	/**

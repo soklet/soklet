@@ -546,18 +546,20 @@ public class EventLoop {
     private boolean joinThread(Thread threadToJoin, long deadlineNanos)
             throws InterruptedException {
         while (threadToJoin.isAlive()) {
-            long nowNanos = System.nanoTime();
-            if (nowNanos >= deadlineNanos) {
+            long remainingNanos = remainingNanos(deadlineNanos,
+                    System.nanoTime());
+            if (remainingNanos <= 0L) {
                 return false;
             }
-            long remainingNanos = deadlineNanos - nowNanos;
-            if (remainingNanos < 0L)
-                remainingNanos = Long.MAX_VALUE;
             long millis = remainingNanos / 1_000_000L;
             int nanos = (int) (remainingNanos % 1_000_000L);
             threadToJoin.join(millis, nanos);
         }
         return true;
+    }
+
+    static long remainingNanos(long deadlineNanos, long nowNanos) {
+        return deadlineNanos - nowNanos;
     }
 
     public boolean awaitConnectionsDrained(Duration timeout) throws InterruptedException {

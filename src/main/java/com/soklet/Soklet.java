@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SimulationSession;
 
 import com.soklet.SseRequestResult.HandshakeAccepted;
@@ -27,10 +28,8 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
-import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.Reader;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
@@ -56,8 +55,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -84,11 +83,12 @@ import static java.util.Objects.requireNonNull;
  *
  * try (Soklet soklet = Soklet.fromConfig(config)) {
  *   soklet.start();
- *   System.out.println("Soklet started, press [enter] to exit");
- *   soklet.awaitShutdown(ShutdownTrigger.ENTER_KEY);
+ *   installApplicationShutdownCallback(soklet::shutdown);
+ *   ShutdownResult result = soklet.awaitShutdown();
  * }}</pre>
  * <p>
- * Soklet also offers an off-network {@link Simulator} concept via {@link #runSimulator(SokletConfig, Consumer)}, useful for integration testing.
+ * Soklet also offers an off-network {@link Simulator} through
+ * {@link SokletSimulator}, useful for integration testing.
  * <p>
  * Given a <em>Resource Method</em>...
  * <pre>{@code public class HelloResource {
@@ -100,13 +100,11 @@ import static java.util.Objects.requireNonNull;
  * ...we might test it like this:
  * <pre>{@code @Test
  * public void integrationTest() {
- *   // Just use your app's existing configuration
- *   SokletConfig config = obtainMySokletConfig();
- *
  *   // Instead of running on a real HTTP server that listens on a port,
  *   // a non-network Simulator is provided against which you can
  *   // issue requests and receive responses.
- *   Soklet.runSimulator(config, (simulator -> {
+ *   SokletSimulator.run(transports -> SokletConfig.withHttpServer(
+ *     transports.getHttpServer()).build(), simulator -> {
  *     // Construct a request
  *     Request request = Request.withPath(HttpMethod.GET, "/hello")
  *       .queryParameters(Map.of("name", Set.of("Mark")))
@@ -130,7 +128,7 @@ import static java.util.Objects.requireNonNull;
  *     }, () -> {
  *       Assertions.fail("No response body");
  *     });
- *   }));
+ *   });
  * }}</pre>
  * <p>
  * The {@link Simulator} also supports Server-Sent Events.
@@ -182,7 +180,10 @@ public final class Soklet implements AutoCloseable {
 	@NonNull
 	private final ReentrantLock lock;
 	@NonNull
-	private final AtomicReference<@NonNull CountDownLatch> awaitShutdownLatchReference;
+	private final CountDownLatch awaitShutdownLatch;
+	@NonNull
+	private final AtomicReference<@NonNull CountDownLatch>
+			awaitShutdownLatchReference;
 	@NonNull
 	private final SokletFrameworkSetup frameworkSetup;
 	@NonNull
@@ -200,7 +201,9 @@ public final class Soklet implements AutoCloseable {
 
 		this.sokletConfig = sokletConfig;
 		this.lock = new ReentrantLock();
-		this.awaitShutdownLatchReference = new AtomicReference<>(new CountDownLatch(1));
+		this.awaitShutdownLatch = new CountDownLatch(1);
+		this.awaitShutdownLatchReference =
+				new AtomicReference<>(this.awaitShutdownLatch);
 		this.frameworkSetup = new SokletFrameworkSetup(sokletConfig);
 		this.directLifecycle = new SokletDirectLifecycle(this, sokletConfig,
 				this.frameworkSetup, requireNonNull(services),
@@ -208,655 +211,42 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	/**
-	 * Starts this one-shot Soklet lifecycle and returns after every configured
-	 * transport is globally ready.
+	 * Claims this one-shot lifecycle's sole start attempt and returns only after
+	 * every configured transport is globally ready.
+	 *
+	 * @throws SokletStartupException if startup ends before readiness, carrying
+	 * the exact immutable lifecycle result
+	 * @throws IllegalStateException if another start call already claimed this
+	 * lifecycle attempt
 	 */
 	public void start() {
 		this.directLifecycle.start();
 	}
 
 	/**
-	 * Starts the managed server instance[s].
-	 * <p>
-	 * Configured servers that are already started are left untouched. If all configured servers are already started,
-	 * this is a no-op.
-	 */
-	@SuppressWarnings("UnusedMethod") // Retained until the D1b legacy-expectation migration is complete.
-	private void startLegacy() {
-		List<Runnable> afterLifecycleUnlock = new ArrayList<>();
-		McpServer configuredMcpServer = getSokletConfig().getMcpServer()
-				.orElse(null);
-		DefaultMcpServer mcpMetricsServer = configuredMcpServer
-				instanceof DefaultMcpServer defaultMcpServer
-				? defaultMcpServer : null;
-		if (mcpMetricsServer != null)
-			mcpMetricsServer.beginMcpMetricsDeferral();
-		boolean lifecycleLockAcquired = false;
-
-		try {
-			getLock().lock();
-			lifecycleLockAcquired = true;
-			SokletConfig sokletConfig = getSokletConfig();
-			HttpServer httpServer = sokletConfig.getHttpServer().orElse(null);
-			SseServer sseServer = sokletConfig.getSseServer().orElse(null);
-			McpServer mcpServer = sokletConfig.getMcpServer().orElse(null);
-			boolean httpServerNeedsStart = httpServer != null && !httpServer.isStarted();
-			boolean sseServerNeedsStart = sseServer != null && !sseServer.isStarted();
-			boolean mcpServerNeedsStart = mcpServer != null && !mcpServer.isStarted();
-
-			if (!httpServerNeedsStart && !sseServerNeedsStart && !mcpServerNeedsStart)
-				return;
-
-			getAwaitShutdownLatchReference().set(new CountDownLatch(1));
-
-			LifecycleObserver lifecycleObserver = sokletConfig.getAggregateLifecycleObserver();
-
-			// 1. Notify global intent to start
-			lifecycleObserver.willStartSoklet(this);
-
-			boolean httpServerStarted = false;
-			boolean sseServerStarted = false;
-			boolean mcpServerStarted = false;
-
-			try {
-				// 2. Attempt to start the main HTTP server
-				if (httpServerNeedsStart) {
-					lifecycleObserver.willStartHttpServer(httpServer);
-					try {
-						httpServer.start();
-						httpServerStarted = true;
-						lifecycleObserver.didStartHttpServer(httpServer);
-					} catch (Throwable t) {
-						lifecycleObserver.didFailToStartHttpServer(httpServer, t);
-						throw t;
-					}
-				}
-
-				// 3. Attempt to start the SSE server
-				if (sseServerNeedsStart) {
-					lifecycleObserver.willStartSseServer(sseServer);
-					try {
-						sseServer.start();
-						sseServerStarted = true;
-						lifecycleObserver.didStartSseServer(sseServer);
-					} catch (Throwable t) {
-						lifecycleObserver.didFailToStartSseServer(sseServer, t);
-						throw t;
-					}
-				}
-
-				// 4. Attempt to start the MCP server
-				if (mcpServerNeedsStart) {
-					lifecycleObserver.willStartMcpServer(mcpServer);
-					AtomicReference<McpShutdownOutcome>
-							normalizedShutdownOutcome = new AtomicReference<>();
-					try {
-						if (mcpServer instanceof DefaultMcpServer defaultMcpServer)
-							defaultMcpServer.startForSoklet(
-									normalizedShutdownOutcome::set);
-						else
-							mcpServer.start();
-						mcpServerStarted = true;
-						reportNormalizedMcpStop(lifecycleObserver, mcpServer,
-								normalizedShutdownOutcome);
-						lifecycleObserver.didStartMcpServer(mcpServer);
-					} catch (Throwable t) {
-						Throwable startupFailure = t;
-						try {
-							reportNormalizedMcpStop(lifecycleObserver, mcpServer,
-									normalizedShutdownOutcome);
-						} catch (Throwable normalizedStopFailure) {
-							startupFailure = retainFirstFailure(startupFailure,
-									normalizedStopFailure);
-						}
-						lifecycleObserver.didFailToStartMcpServer(mcpServer,
-								startupFailure);
-						throw startupFailure;
-					}
-				}
-
-				// 5. Global success
-				lifecycleObserver.didStartSoklet(this);
-			} catch (Throwable t) {
-				rollbackStartedServersAfterFailedStart(lifecycleObserver,
-						httpServer, httpServerStarted,
-						sseServer, sseServerStarted,
-						mcpServer, mcpServerStarted,
-						t, afterLifecycleUnlock);
-
-				// 6. Global failure
-				lifecycleObserver.didFailToStartSoklet(this, t);
-
-				// Ensure the exception bubbles up so the application knows startup failed
-				if (t instanceof RuntimeException)
-					throw (RuntimeException) t;
-
-				throw new RuntimeException(t);
-			}
-		} finally {
-			try {
-				if (lifecycleLockAcquired) {
-					getLock().unlock();
-					runAfterLifecycleUnlock(afterLifecycleUnlock);
-				}
-			} finally {
-				if (mcpMetricsServer != null)
-					mcpMetricsServer.endMcpMetricsDeferral();
-			}
-		}
-	}
-
-	private static void reportNormalizedMcpStop(
-			@NonNull LifecycleObserver lifecycleObserver,
-			@NonNull McpServer mcpServer,
-			@NonNull AtomicReference<@Nullable McpShutdownOutcome>
-					normalizedShutdownOutcome) {
-		requireNonNull(lifecycleObserver);
-		requireNonNull(mcpServer);
-		McpShutdownOutcome shutdownOutcome = requireNonNull(
-				normalizedShutdownOutcome).getAndSet(null);
-		if (shutdownOutcome == null)
-			return;
-		lifecycleObserver.didStopMcpServer(mcpServer, shutdownOutcome);
-	}
-
-	private void rollbackStartedServersAfterFailedStart(@NonNull LifecycleObserver lifecycleObserver,
-																			@Nullable HttpServer httpServer,
-																			boolean httpServerStarted,
-																			@Nullable SseServer sseServer,
-																			boolean sseServerStarted,
-																			@Nullable McpServer mcpServer,
-													boolean mcpServerStarted,
-													@NonNull Throwable startupFailure,
-													@NonNull List<@NonNull Runnable>
-															afterLifecycleUnlock) {
-		requireNonNull(lifecycleObserver);
-		requireNonNull(startupFailure);
-		requireNonNull(afterLifecycleUnlock);
-
-		if (mcpServerStarted && mcpServer != null)
-			stopStartedMcpServerForRollback(lifecycleObserver, mcpServer,
-					startupFailure, afterLifecycleUnlock);
-
-		if (sseServerStarted && sseServer != null)
-			stopStartedSseServerForRollback(lifecycleObserver, sseServer, startupFailure);
-
-		if (httpServerStarted && httpServer != null)
-			stopStartedHttpServerForRollback(lifecycleObserver, httpServer, startupFailure);
-
-		CountDownLatch awaitShutdownLatch = getAwaitShutdownLatchReference().get();
-
-		if (awaitShutdownLatch != null)
-			awaitShutdownLatch.countDown();
-	}
-
-	private void stopStartedHttpServerForRollback(@NonNull LifecycleObserver lifecycleObserver,
-																								@NonNull HttpServer httpServer,
-																								@NonNull Throwable startupFailure) {
-		requireNonNull(lifecycleObserver);
-		requireNonNull(httpServer);
-		requireNonNull(startupFailure);
-
-		try {
-			lifecycleObserver.willStopHttpServer(httpServer);
-		} catch (Throwable t) {
-			startupFailure.addSuppressed(t);
-		}
-
-		try {
-			httpServer.stop();
-			try {
-				lifecycleObserver.didStopHttpServer(httpServer);
-			} catch (Throwable t) {
-				startupFailure.addSuppressed(t);
-			}
-		} catch (Throwable t) {
-			startupFailure.addSuppressed(t);
-
-			try {
-				lifecycleObserver.didFailToStopHttpServer(httpServer, t);
-			} catch (Throwable t2) {
-				startupFailure.addSuppressed(t2);
-			}
-		}
-	}
-
-	private void stopStartedSseServerForRollback(@NonNull LifecycleObserver lifecycleObserver,
-																							 @NonNull SseServer sseServer,
-																							 @NonNull Throwable startupFailure) {
-		requireNonNull(lifecycleObserver);
-		requireNonNull(sseServer);
-		requireNonNull(startupFailure);
-
-		try {
-			lifecycleObserver.willStopSseServer(sseServer);
-		} catch (Throwable t) {
-			startupFailure.addSuppressed(t);
-		}
-
-		try {
-			sseServer.stop();
-			try {
-				lifecycleObserver.didStopSseServer(sseServer);
-			} catch (Throwable t) {
-				startupFailure.addSuppressed(t);
-			}
-		} catch (Throwable t) {
-			startupFailure.addSuppressed(t);
-
-			try {
-				lifecycleObserver.didFailToStopSseServer(sseServer, t);
-			} catch (Throwable t2) {
-				startupFailure.addSuppressed(t2);
-			}
-		}
-	}
-
-	private void stopStartedMcpServerForRollback(@NonNull LifecycleObserver lifecycleObserver,
-																 @NonNull McpServer mcpServer,
-																 @NonNull Throwable startupFailure,
-																 @NonNull List<@NonNull Runnable>
-																 		afterLifecycleUnlock) {
-		requireNonNull(lifecycleObserver);
-		requireNonNull(mcpServer);
-		requireNonNull(startupFailure);
-		requireNonNull(afterLifecycleUnlock);
-
-		try {
-			lifecycleObserver.willStopMcpServer(mcpServer);
-		} catch (Throwable t) {
-			startupFailure.addSuppressed(t);
-		}
-
-		try {
-			DefaultMcpServer defaultMcpServer = (DefaultMcpServer) mcpServer;
-			McpServerStopResult stopResult = defaultMcpServer.stopForSoklet();
-			try {
-				lifecycleObserver.didStopMcpServer(mcpServer,
-						stopResult.shutdownOutcome());
-			} catch (Throwable t) {
-				startupFailure.addSuppressed(t);
-			}
-		} catch (Throwable t) {
-			startupFailure.addSuppressed(t);
-
-			try {
-				lifecycleObserver.didFailToStopMcpServer(mcpServer, t);
-			} catch (Throwable t2) {
-				startupFailure.addSuppressed(t2);
-			}
-		}
-	}
-
-	/**
-	 * Stops the managed server instance[s].
-	 * <p>
-	 * If the managed server[s] are already stopped, this is a no-op.
-	 */
-	@SuppressWarnings("UnusedMethod") // Retained until the D1b legacy-expectation migration is complete.
-	private void stopLegacy() {
-		List<Runnable> afterLifecycleUnlock = new ArrayList<>();
-		McpServer configuredMcpServer = getSokletConfig().getMcpServer()
-				.orElse(null);
-		DefaultMcpServer mcpMetricsServer = configuredMcpServer
-				instanceof DefaultMcpServer defaultMcpServer
-				? defaultMcpServer : null;
-		if (mcpMetricsServer != null)
-			mcpMetricsServer.beginMcpMetricsDeferral();
-		boolean lifecycleLockAcquired = false;
-
-		try {
-			getLock().lock();
-			lifecycleLockAcquired = true;
-			boolean mcpServerRequiresStop = configuredMcpServer
-					instanceof DefaultMcpServer defaultMcpServer
-					&& defaultMcpServer.requiresStop();
-			if (isStarted() || mcpServerRequiresStop) {
-				SokletConfig sokletConfig = getSokletConfig();
-				LifecycleObserver lifecycleObserver = sokletConfig.getAggregateLifecycleObserver();
-
-				// 1. Notify global intent to stop
-				lifecycleObserver.willStopSoklet(this);
-
-				Throwable firstEncounteredException = null;
-				HttpServer httpServer = sokletConfig.getHttpServer().orElse(null);
-
-				// 2. Attempt to stop the main HTTP server
-				if (httpServer != null && httpServer.isStarted()) {
-					try {
-						lifecycleObserver.willStopHttpServer(httpServer);
-					} catch (Throwable t) {
-						firstEncounteredException = retainFirstFailure(firstEncounteredException, t);
-					}
-
-					try {
-						httpServer.stop();
-						try {
-							lifecycleObserver.didStopHttpServer(httpServer);
-						} catch (Throwable t) {
-							firstEncounteredException = retainFirstFailure(firstEncounteredException, t);
-						}
-					} catch (Throwable t) {
-						firstEncounteredException = retainFirstFailure(firstEncounteredException, t);
-						try {
-							lifecycleObserver.didFailToStopHttpServer(httpServer, t);
-						} catch (Throwable t2) {
-							firstEncounteredException = retainFirstFailure(firstEncounteredException, t2);
-						}
-					}
-				}
-
-				// 3. Attempt to stop the SSE server
-				SseServer sseServer = sokletConfig.getSseServer().orElse(null);
-
-				if (sseServer != null && sseServer.isStarted()) {
-					try {
-						lifecycleObserver.willStopSseServer(sseServer);
-					} catch (Throwable t) {
-						firstEncounteredException = retainFirstFailure(firstEncounteredException, t);
-					}
-
-					try {
-						sseServer.stop();
-						try {
-							lifecycleObserver.didStopSseServer(sseServer);
-						} catch (Throwable t) {
-							firstEncounteredException = retainFirstFailure(firstEncounteredException, t);
-						}
-					} catch (Throwable t) {
-						firstEncounteredException = retainFirstFailure(firstEncounteredException, t);
-						try {
-							lifecycleObserver.didFailToStopSseServer(sseServer, t);
-						} catch (Throwable t2) {
-							firstEncounteredException = retainFirstFailure(firstEncounteredException, t2);
-						}
-					}
-				}
-
-				// 4. Attempt to stop the MCP server
-				McpServer mcpServer = sokletConfig.getMcpServer().orElse(null);
-
-				if (mcpServer instanceof DefaultMcpServer defaultMcpServer
-						&& defaultMcpServer.requiresStop()) {
-					boolean realListenerGeneration = defaultMcpServer
-							.hasPendingListenerGenerationStop();
-					if (realListenerGeneration) {
-						try {
-							lifecycleObserver.willStopMcpServer(mcpServer);
-						} catch (Throwable t) {
-							firstEncounteredException = retainFirstFailure(
-									firstEncounteredException, t);
-						}
-					}
-
-					try {
-						McpServerStopResult stopResult = defaultMcpServer
-								.stopForSoklet();
-						if (stopResult.listenerGenerationStopped()) {
-							try {
-								lifecycleObserver.didStopMcpServer(mcpServer,
-										stopResult.shutdownOutcome());
-							} catch (Throwable t) {
-								firstEncounteredException = retainFirstFailure(
-										firstEncounteredException, t);
-							}
-						}
-					} catch (Throwable t) {
-						firstEncounteredException = retainFirstFailure(firstEncounteredException, t);
-						if (realListenerGeneration) {
-							try {
-								lifecycleObserver.didFailToStopMcpServer(mcpServer, t);
-							} catch (Throwable t2) {
-								firstEncounteredException = retainFirstFailure(
-										firstEncounteredException, t2);
-							}
-						}
-					}
-				}
-
-				// 5. Global completion (success or failure)
-				if (firstEncounteredException == null)
-					lifecycleObserver.didStopSoklet(this);
-				else
-					lifecycleObserver.didFailToStopSoklet(this, firstEncounteredException);
-			}
-		} finally {
-			try {
-				if (lifecycleLockAcquired) {
-					try {
-						requireNonNull(getAwaitShutdownLatchReference().get())
-								.countDown();
-					} finally {
-						getLock().unlock();
-						runAfterLifecycleUnlock(afterLifecycleUnlock);
-					}
-				}
-			} finally {
-				if (mcpMetricsServer != null)
-					mcpMetricsServer.endMcpMetricsDeferral();
-			}
-		}
-	}
-
-	/**
-	 * Publishes Soklet-wide shutdown intent and joins the shared one-shot
-	 * result. Calls from this Soklet's own tracked handler fail fast after the
-	 * intent is visible, avoiding a lifecycle self-join.
-	 */
-	public void stop() {
-		this.directLifecycle.stop();
-	}
-
-	private static void runAfterLifecycleUnlock(
-			@NonNull List<@NonNull Runnable> actions) {
-		for (Runnable action : requireNonNull(actions))
-			requireNonNull(action).run();
-	}
-
-	@NonNull
-	private static Throwable retainFirstFailure(@Nullable Throwable firstFailure,
-																				@NonNull Throwable encounteredFailure) {
-		requireNonNull(encounteredFailure);
-
-		if (firstFailure == null)
-			return encounteredFailure;
-
-		if (firstFailure != encounteredFailure)
-			firstFailure.addSuppressed(encounteredFailure);
-
-		return firstFailure;
-	}
-
-	/**
-	 * Blocks the current thread until JVM shutdown ({@code SIGTERM/SIGINT/System.exit(...)} and so forth), <strong>or</strong> if one of the provided {@code shutdownTriggers} occurs.
-	 * <p>
-	 * This method will automatically invoke this instance's {@link #stop()} method once it becomes unblocked.
-	 * <p>
-	 * <strong>Notes regarding {@link ShutdownTrigger#ENTER_KEY}:</strong>
-	 * <ul>
-	 *   <li>It will invoke {@link #stop()} on <i>all</i> Soklet instances, as stdin is process-wide</li>
-	 *   <li>It requires usable standard input. If stdin is unavailable or reaches EOF before a keypress (e.g. running in a Docker container), Soklet will fire {@link LifecycleObserver#didReceiveLogEvent(LogEvent)} with an event of type {@link LogEventType#CONFIGURATION_UNSUPPORTED} and keep running</li>
-	 * </ul>
+	 * Publishes Soklet-wide shutdown intent promptly and returns the one cached,
+	 * read-only completion stage for this lifecycle attempt.
 	 *
-	 * @param shutdownTriggers additional trigger[s] which signal that shutdown should occur, e.g. {@link ShutdownTrigger#ENTER_KEY} for "enter key pressed"
-	 * @throws InterruptedException if the current thread has its interrupted status set on entry to this method, or is interrupted while waiting
+	 * @return cached shutdown-result stage
 	 */
-	public void awaitShutdown(@Nullable ShutdownTrigger... shutdownTriggers) throws InterruptedException {
-		Thread shutdownHook = null;
-		boolean registeredEnterKeyShutdownTrigger = false;
-		Set<ShutdownTrigger> shutdownTriggersAsSet = shutdownTriggers == null || shutdownTriggers.length == 0 ? Set.of() : EnumSet.copyOf(Set.of(shutdownTriggers));
-
-		try {
-			// Optionally listen for enter key
-			if (shutdownTriggersAsSet.contains(ShutdownTrigger.ENTER_KEY)) {
-				registeredEnterKeyShutdownTrigger = KeypressManager.register(this); // returns false if stdin unusable/disabled
-
-				if (!registeredEnterKeyShutdownTrigger) {
-					LogEvent logEvent = LogEvent.with(
-							LogEventType.CONFIGURATION_UNSUPPORTED,
-							format("Ignoring request for %s.%s - it is unsupported in this environment (stdin is unavailable)", ShutdownTrigger.class.getSimpleName(), ShutdownTrigger.ENTER_KEY.name())
-					).build();
-
-					try {
-						getSokletConfig().getAggregateLifecycleObserver()
-								.didReceiveLogEvent(logEvent);
-					} catch (Throwable observerFailure) {
-						LifecycleObserverLogFallback.report(observerFailure);
-					}
-				}
-			}
-
-			// Always register a shutdown hook
-			shutdownHook = new Thread(() -> {
-				try {
-					stop();
-				} catch (Throwable ignored) {
-					// Nothing to do
-				}
-			}, "soklet-shutdown-hook");
-
-			Runtime.getRuntime().addShutdownHook(shutdownHook);
-
-			// Wait until the one immutable direct-lifecycle result is installed.
-			this.directLifecycle.awaitCompletion();
-		} finally {
-			if (registeredEnterKeyShutdownTrigger)
-				KeypressManager.unregister(this);
-
-			try {
-				Runtime.getRuntime().removeShutdownHook(shutdownHook);
-			} catch (IllegalStateException ignored) {
-				// JVM shutting down
-			}
-		}
+	@NonNull
+	public CompletionStage<@NonNull ShutdownResult> shutdown() {
+		return this.directLifecycle.shutdown();
 	}
 
 	/**
-	 * Handles "awaitShutdown" for {@link ShutdownTrigger#ENTER_KEY} by listening to stdin - all Soklet instances are terminated on keypress.
+	 * Blocks until this lifecycle publishes its immutable shutdown result.
+	 *
+	 * @return exact published result
+	 * @throws InterruptedException if the current thread is interrupted while
+	 * waiting
+	 * @throws IllegalStateException as a best-effort diagnostic when the current
+	 * thread is contributing to the unpublished shutdown barrier
 	 */
-	@ThreadSafe
-	static final class KeypressManager {
-		@NonNull
-		private static final Set<@NonNull Soklet> SOKLET_REGISTRY;
-		@NonNull
-		private static final AtomicBoolean LISTENER_STARTED;
-		@NonNull
-		private static final AtomicReference<@Nullable Boolean> INTERACTIVE_CONSOLE_AVAILABLE_OVERRIDE;
-
-		static {
-			SOKLET_REGISTRY = new CopyOnWriteArraySet<>();
-			LISTENER_STARTED = new AtomicBoolean(false);
-			INTERACTIVE_CONSOLE_AVAILABLE_OVERRIDE = new AtomicReference<>();
-		}
-
-		/**
-		 * Register a Soklet for Enter-to-stop support. Returns true iff a listener is (or was already) active.
-		 * If System.in is not usable (or disabled), returns false and does nothing.
-		 */
-		@NonNull
-		synchronized static Boolean register(@NonNull Soklet soklet) {
-			requireNonNull(soklet);
-
-				// If stdin is unavailable, don't start a listener.
-			if (!canReadFromStdin())
-				return false;
-
-			SOKLET_REGISTRY.add(soklet);
-
-			// Start a single process-wide listener once.
-			if (LISTENER_STARTED.compareAndSet(false, true)) {
-				Thread thread = new Thread(KeypressManager::runLoop, "soklet-keypress-shutdown-listener");
-				thread.setDaemon(true); // never block JVM exit
-				thread.start();
-			}
-
-			return true;
-		}
-
-		static void interactiveConsoleAvailableOverride(@Nullable Boolean interactiveConsoleAvailableOverride) {
-			INTERACTIVE_CONSOLE_AVAILABLE_OVERRIDE.set(interactiveConsoleAvailableOverride);
-		}
-
-		static boolean isListenerStarted() {
-			return LISTENER_STARTED.get();
-		}
-
-		synchronized static void reset() {
-			SOKLET_REGISTRY.clear();
-			LISTENER_STARTED.set(false);
-			INTERACTIVE_CONSOLE_AVAILABLE_OVERRIDE.set(null);
-		}
-
-		synchronized static void unregister(@NonNull Soklet soklet) {
-			SOKLET_REGISTRY.remove(soklet);
-			// We intentionally keep the listener alive; it's daemon and cheap.
-			// If stdin hits EOF, the listener exits on its own.
-		}
-
-		/**
-		 * ENTER_KEY shutdown only requires readable stdin. Environments such as IntelliJ often provide stdin without
-		 * a {@link System#console()}; EOF is handled by the listener without stopping the server.
-		 */
-		@NonNull
-		private static Boolean canReadFromStdin() {
-			if (System.in == null)
-				return false;
-
-			Boolean interactiveConsoleAvailableOverride = INTERACTIVE_CONSOLE_AVAILABLE_OVERRIDE.get();
-
-			if (interactiveConsoleAvailableOverride != null)
-				return interactiveConsoleAvailableOverride;
-
-				return true;
-			}
-
-		/**
-		 * Single blocking read on stdin. On any line, stop all registered servers. EOF means stdin is
-		 * unusable for interactive shutdown and must not stop the process.
-		 */
-		private static void runLoop() {
-			try {
-				BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
-				String line = bufferedReader.readLine();
-
-				if (line == null) {
-					logEnterKeyUnsupported("Ignoring request for ENTER_KEY shutdown - stdin reached EOF before an enter keypress");
-					return;
-				}
-
-				stopAllSoklets();
-			} catch (Throwable ignored) {
-				logEnterKeyUnsupported("Ignoring request for ENTER_KEY shutdown - stdin became unusable before an enter keypress");
-			} finally {
-				LISTENER_STARTED.set(false);
-			}
-		}
-
-		synchronized private static void stopAllSoklets() {
-			for (Soklet soklet : SOKLET_REGISTRY) {
-				try {
-					soklet.stop();
-				} catch (Throwable ignored) {
-					// Nothing to do
-				}
-			}
-		}
-
-		private static void logEnterKeyUnsupported(@NonNull String message) {
-			requireNonNull(message);
-
-			LogEvent logEvent = LogEvent.with(LogEventType.CONFIGURATION_UNSUPPORTED, message).build();
-
-			for (Soklet soklet : SOKLET_REGISTRY) {
-				try {
-					soklet.getSokletConfig().getAggregateLifecycleObserver().didReceiveLogEvent(logEvent);
-				} catch (Throwable observerFailure) {
-					LifecycleObserverLogFallback.report(observerFailure);
-				}
-			}
-		}
-
-		private KeypressManager() {}
+	@NonNull
+	@CheckReturnValue
+	public ShutdownResult awaitShutdown() throws InterruptedException {
+		return this.directLifecycle.awaitPublicCompletion();
 	}
 
 	/**
@@ -1733,51 +1123,56 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	/**
-	 * Synonym for {@link #stop()}.
+	 * Publishes shutdown intent, joins the lifecycle uninterruptibly, restores
+	 * the caller's interrupt status, and applies the terminal result.
+	 *
+	 * @throws ShutdownIncompleteException if complete termination cannot be proven
+	 * @throws SokletTerminatedUnexpectedlyException if a participant terminated
+	 * unexpectedly after readiness
+	 * @throws IllegalStateException as a best-effort diagnostic when the current
+	 * thread is contributing to the unpublished shutdown barrier
 	 */
 	@Override
 	public void close() {
-		stop();
-	}
-
-	/**
-	 * Is any managed transport server started?
-	 *
-	 * @return {@code true} if at least one configured transport server is started, {@code false} otherwise
-	 */
-	@NonNull
-	@SuppressWarnings("UnusedMethod") // Retained until the D1b legacy-expectation migration is complete.
-	private Boolean isStartedLegacy() {
-		getLock().lock();
+		shutdown();
+		boolean interrupted = false;
+		ShutdownResult result;
 
 		try {
-			HttpServer httpServer = getSokletConfig().getHttpServer().orElse(null);
+			for (;;) {
+				try {
+					result = awaitShutdown();
+					break;
+				} catch (InterruptedException exception) {
+					interrupted = true;
+				}
+			}
 
-			if (httpServer != null && httpServer.isStarted())
-				return true;
-
-			SseServer sseServer = getSokletConfig().getSseServer().orElse(null);
-			if (sseServer != null && sseServer.isStarted())
-				return true;
-
-			McpServer mcpServer = getSokletConfig().getMcpServer().orElse(null);
-			if (mcpServer != null && mcpServer.isStarted())
-				return true;
-
-			return false;
+			this.directLifecycle.throwIfUnsuccessfulShutdown(result);
 		} finally {
-			getLock().unlock();
+			if (interrupted)
+				Thread.currentThread().interrupt();
 		}
 	}
 
 	/**
-	 * Projects the one-shot owner's internal readiness state.
+	 * Returns a racy diagnostic snapshot of this one-shot lifecycle.
 	 *
-	 * @return {@code true} only while the lifecycle is globally ready
+	 * @return current lifecycle status
 	 */
 	@NonNull
-	public Boolean isStarted() {
-		return this.directLifecycle.isStarted();
+	public SokletStatus getStatus() {
+		return this.directLifecycle.publicStatus();
+	}
+
+	/**
+	 * Returns the immutable terminal result after it has been published.
+	 *
+	 * @return terminal result, otherwise empty
+	 */
+	@NonNull
+	public Optional<@NonNull ShutdownResult> getShutdownResult() {
+		return this.directLifecycle.publicResult();
 	}
 
 	void initializeForSimulator(@NonNull InternalStartupContext startupContext,
@@ -1790,123 +1185,40 @@ public final class Soklet implements AutoCloseable {
 		return this.directLifecycle;
 	}
 
-	/**
-	 * Runs Soklet with special non-network "simulator" implementations of the configured transport servers - useful for integration testing.
-	 * <p>
-	 * See <a href="https://www.soklet.com/docs/testing">https://www.soklet.com/docs/testing</a> for how to write these tests.
-	 *
-	 * @param sokletConfig      configuration that drives the Soklet system
-	 * @param simulatorConsumer code to execute within the context of the simulator
-	 */
-	public static void runSimulator(@NonNull SokletConfig sokletConfig,
-																	@NonNull Consumer<Simulator> simulatorConsumer) {
-		runSimulator(sokletConfig, SimulatorOptions.defaultInstance(), simulatorConsumer);
-	}
-
-	/**
-	 * Runs Soklet with special non-network "simulator" implementations of the configured transport servers - useful for integration testing.
-	 * <p>
-	 * See <a href="https://www.soklet.com/docs/testing">https://www.soklet.com/docs/testing</a> for how to write these tests.
-	 *
-	 * @param sokletConfig      configuration that drives the Soklet system
-	 * @param simulatorOptions  simulator behavior options
-	 * @param simulatorConsumer code to execute within the context of the simulator
-	 */
-	public static void runSimulator(@NonNull SokletConfig sokletConfig,
-																	@NonNull SimulatorOptions simulatorOptions,
-																	@NonNull Consumer<Simulator> simulatorConsumer) {
-		requireNonNull(sokletConfig);
-		requireNonNull(simulatorOptions);
-		requireNonNull(simulatorConsumer);
-
-		// Create Soklet instance - this initializes the REAL implementations through proxies
-		Soklet soklet = Soklet.fromConfig(sokletConfig);
-
-		// Extract proxies (they're guaranteed to be proxies now)
-		HttpServerProxy serverProxy = sokletConfig.getHttpServer()
-				.map(server -> (HttpServerProxy) server)
-				.orElse(null);
-		SseServerProxy sseServerProxy = sokletConfig.getSseServer()
-				.map(s -> (SseServerProxy) s)
-				.orElse(null);
-		// Create mock implementations
-		MockHttpServer mockServer = serverProxy == null ? null : new MockHttpServer();
-		MockSseServer mockSseServer = new MockSseServer();
-
-		// Switch proxies to simulator mode
-		if (serverProxy != null)
-			serverProxy.enableSimulatorMode(mockServer);
-
-		if (sseServerProxy != null)
-			sseServerProxy.enableSimulatorMode(mockSseServer);
-
-		try {
-			NanoClock simulatorClock = NanoClock.system();
-			DeadlineWaiter simulatorWaiter = new DeadlineWaiter(simulatorClock);
-			InternalLifecyclePolicy policy = sokletConfig.getInternalLifecyclePolicy();
-			long startupBegan = simulatorClock.nanoTime();
-			Optional<Long> startupDeadline = policy.startupTimeout()
-					.map(duration -> LifecycleDeadlines.after(startupBegan, duration));
-			InternalStartupContext startupContext = new InternalStartupContext(
-					simulatorClock, startupDeadline,
-					LifecycleDeadlines.after(startupBegan,
-							policy.startupCancellationTimeout()), () -> false);
-			soklet.initializeForSimulator(startupContext, simulatorWaiter);
-
-			// Initialize mocks with request handlers that delegate to Soklet's processing
-				if (mockServer != null)
-					mockServer.initialize(sokletConfig, (request, marshaledResponseConsumer) -> {
-						// Delegate to Soklet's internal request handling
-						soklet.handleRequest(request, ServerType.STANDARD_HTTP, marshaledResponseConsumer);
-					});
-
-			if (mockSseServer != null)
-				mockSseServer.initialize(sokletConfig, (request, marshaledResponseConsumer) -> {
-					// Delegate to Soklet's internal request handling for SSE
-					soklet.handleRequest(request, ServerType.SSE, marshaledResponseConsumer);
-				});
-
-			// Create and provide simulator
-			DefaultMcpServer mcpServer = sokletConfig.getMcpServer()
-					.filter(DefaultMcpServer.class::isInstance)
-					.map(DefaultMcpServer.class::cast)
-					.orElse(null);
-			DefaultSimulator simulator = new DefaultSimulator(mockServer,
-					mockSseServer, simulatorOptions, mcpServer);
-			try {
-				simulatorConsumer.accept(simulator);
-			} catch (RuntimeException | Error failure) {
-				try {
-					simulator.closeScope();
-				} catch (RuntimeException | Error cleanupFailure) {
-					failure.addSuppressed(cleanupFailure);
-				}
-				throw failure;
-			}
-			simulator.closeScope();
-		} finally {
-			// Always restore to real implementations
-			if (serverProxy != null)
-				serverProxy.disableSimulatorMode();
-
-			if (sseServerProxy != null)
-				sseServerProxy.disableSimulatorMode();
-		}
-	}
-
 	@NonNull
 	protected SokletConfig getSokletConfig() {
 		return this.sokletConfig;
 	}
 
+	/**
+	 * Returns the stable compatibility lock retained from earlier Soklet
+	 * versions.  The one-shot lifecycle does not use this caller-obtainable lock
+	 * for its internal state transitions, so holding it cannot delay lifecycle
+	 * progress.
+	 *
+	 * @return passive compatibility lock
+	 */
 	@NonNull
 	protected ReentrantLock getLock() {
 		return this.lock;
 	}
 
+	/**
+	 * Returns the stable compatibility reference initially containing the latch
+	 * released when this one-shot lifecycle publishes its terminal result.
+	 * Soklet retains that original latch directly, so replacing the exposed
+	 * reference value cannot redirect lifecycle publication.
+	 *
+	 * @return one-shot shutdown-latch reference
+	 */
 	@NonNull
-	protected AtomicReference<@NonNull CountDownLatch> getAwaitShutdownLatchReference() {
+	protected AtomicReference<@NonNull CountDownLatch>
+			getAwaitShutdownLatchReference() {
 		return this.awaitShutdownLatchReference;
+	}
+
+	void releaseAwaitShutdownLatch() {
+		this.awaitShutdownLatch.countDown();
 	}
 
 	@ThreadSafe
@@ -1921,8 +1233,12 @@ public final class Soklet implements AutoCloseable {
 		private final @Nullable SimulatorScopeDispatchGate scopeDispatchGate;
 		@NonNull
 		private final Object mcpSimulationLock;
-		private @Nullable SimulationSession mcpSimulationSession;
-		private boolean closed;
+		@NonNull
+		private final Object scopeStateLock;
+		private volatile @Nullable SimulationSession mcpSimulationSession;
+		private volatile @Nullable SimulationSession rejectedMcpSimulationSession;
+		@NonNull
+		private final AtomicBoolean closed;
 
 		public DefaultSimulator(@Nullable MockHttpServer server,
 											 @Nullable MockSseServer sseServer) {
@@ -1953,6 +1269,8 @@ public final class Soklet implements AutoCloseable {
 			this.mcpServer = mcpServer;
 			this.scopeDispatchGate = scopeDispatchGate;
 			this.mcpSimulationLock = new Object();
+			this.scopeStateLock = new Object();
+			this.closed = new AtomicBoolean();
 		}
 
 		@Override
@@ -1997,31 +1315,32 @@ public final class Soklet implements AutoCloseable {
 					throw new IllegalStateException(
 							"The MCP simulator participant was already started");
 				this.mcpServer.openSimulationSession(session -> {
-					if (this.mcpSimulationSession != null)
-						throw new IllegalStateException(
-								"The MCP simulator participant was already started");
-					this.mcpSimulationSession = requireNonNull(session);
+					synchronized (this.scopeStateLock) {
+						if (this.mcpSimulationSession != null
+								|| this.rejectedMcpSimulationSession != null)
+							throw new IllegalStateException(
+									"The MCP simulator participant was already started");
+						SimulationSession exactSession = requireNonNull(session);
+						if (this.closed.get()) {
+							// The runtime will reject and roll back this unclaimed session,
+							// but custom execution or registration cleanup may finish later.
+							// Retain its proof handle without exposing it as an active session.
+							this.rejectedMcpSimulationSession = exactSession;
+							requireScopeOpenWhileLocked();
+						}
+						this.mcpSimulationSession = exactSession;
+					}
 				});
 			}
 		}
 
-		private void closeScope() {
-			if (!sealScope())
-				return;
-			SimulationSession session = mcpSimulationSession();
-			try {
-				if (session != null)
-					session.close();
-			} finally {
-				clearMcpSimulationSession(session);
-			}
-		}
-
 		boolean sealScope() {
-			synchronized (this.mcpSimulationLock) {
-				if (this.closed)
+			// Close dispatch admission without waiting for a startup call that may be
+			// inside the MCP session lock.  A request racing shutdown must lose at the
+			// owner gate, and startup cancellation must remain deadline-bounded.
+			synchronized (this.scopeStateLock) {
+				if (!this.closed.compareAndSet(false, true))
 					return false;
-				this.closed = true;
 				if (this.scopeDispatchGate != null)
 					this.scopeDispatchGate.seal();
 				return true;
@@ -2040,16 +1359,22 @@ public final class Soklet implements AutoCloseable {
 				session.force();
 		}
 
-		boolean awaitMcpScopeTermination(@NonNull Duration remainingTime)
-				throws InterruptedException {
-			SimulationSession session = mcpSimulationSession();
+		boolean awaitMcpScopeTermination(long absoluteDeadlineNanos,
+				@NonNull NanoClock clock) throws InterruptedException {
+			SimulationSession session = mcpEvidenceSession();
 			return session == null
-					|| session.awaitTermination(requireNonNull(remainingTime));
+					|| session.awaitTermination(absoluteDeadlineNanos,
+							requireNonNull(clock)::nanoTime);
+		}
+
+		boolean mcpScopeTerminationProven() {
+			SimulationSession session = mcpEvidenceSession();
+			return session == null || session.terminationProven();
 		}
 
 		@NonNull
 		Set<InternalResidualActivityKind> mcpScopeResidualActivity() {
-			SimulationSession session = mcpSimulationSession();
+			SimulationSession session = mcpEvidenceSession();
 			if (session == null)
 				return Set.of();
 			com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.LifecycleEvidence
@@ -2066,23 +1391,45 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		void releaseMcpScopeEvidence() {
-			SimulationSession session = mcpSimulationSession();
-			if (session != null)
-				session.releaseLifecycleEvidence();
-			clearMcpSimulationSession(session);
+			SimulationSession activeSession = mcpSimulationSession();
+			SimulationSession rejectedSession = rejectedMcpSimulationSession();
+			if (activeSession != null)
+				activeSession.releaseLifecycleEvidence();
+			if (rejectedSession != null && rejectedSession != activeSession)
+				rejectedSession.releaseLifecycleEvidence();
+			clearMcpSimulationSession(activeSession);
+			clearRejectedMcpSimulationSession(rejectedSession);
 		}
 
 		@Nullable
 		private SimulationSession mcpSimulationSession() {
-			synchronized (this.mcpSimulationLock) {
-				return this.mcpSimulationSession;
-			}
+			return this.mcpSimulationSession;
+		}
+
+		@Nullable
+		private SimulationSession rejectedMcpSimulationSession() {
+			return this.rejectedMcpSimulationSession;
+		}
+
+		@Nullable
+		private SimulationSession mcpEvidenceSession() {
+			SimulationSession activeSession = mcpSimulationSession();
+			return activeSession == null
+					? rejectedMcpSimulationSession() : activeSession;
 		}
 
 		private void clearMcpSimulationSession(@Nullable SimulationSession session) {
 			synchronized (this.mcpSimulationLock) {
 				if (this.mcpSimulationSession == session)
 					this.mcpSimulationSession = null;
+			}
+		}
+
+		private void clearRejectedMcpSimulationSession(
+				@Nullable SimulationSession session) {
+			synchronized (this.scopeStateLock) {
+				if (this.rejectedMcpSimulationSession == session)
+					this.rejectedMcpSimulationSession = null;
 			}
 		}
 
@@ -2587,23 +1934,19 @@ public final class Soklet implements AutoCloseable {
 		@NonNull
 		private Runnable enterScope(
 				@NonNull InternalParticipantKind kind) {
-			synchronized (this.mcpSimulationLock) {
-				requireScopeOpenWhileLocked();
-				return this.scopeDispatchGate == null
-						? () -> {
-						}
-						: this.scopeDispatchGate.enter(requireNonNull(kind));
-			}
+			requireScopeOpen();
+			return this.scopeDispatchGate == null
+					? () -> {
+					}
+					: this.scopeDispatchGate.enter(requireNonNull(kind));
 		}
 
 		private void requireScopeOpen() {
-			synchronized (this.mcpSimulationLock) {
-				requireScopeOpenWhileLocked();
-			}
+			requireScopeOpenWhileLocked();
 		}
 
 		private void requireScopeOpenWhileLocked() {
-			if (this.closed)
+			if (this.closed.get())
 				throw new IllegalStateException("The simulator scope is closed.");
 		}
 
@@ -2822,27 +2165,62 @@ public final class Soklet implements AutoCloseable {
 	 */
 	@ThreadSafe
 	static class MockHttpServer implements HttpServer {
+		@NonNull
+		private final TransportIdentity transportIdentity = TransportIdentity.create();
 		@Nullable
 		private SokletConfig sokletConfig;
 		private HttpServer.@Nullable RequestHandler requestHandler;
 
+		@NonNull
 		@Override
+		public TransportIdentity getTransportIdentity() {
+			return this.transportIdentity;
+		}
+
+		@NonNull
+		@Override
+		public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext attachmentContext,
+				@NonNull StartupContext startupContext) {
+			requireNonNull(startupContext);
+			HttpTransportAttachmentContext exactContext = requireNonNull(
+					attachmentContext);
+			initialize(exactContext.getSokletConfig(),
+					exactContext.getAdmissionFencedRequestHandler());
+			TransportTerminationSignal signal = exactContext.getTerminationSignal();
+			return new TransportRuntime() {
+				@Override
+				public void start(@NonNull StartupContext context) {
+					requireNonNull(context);
+				}
+
+				@Override
+				public void quiesce(@NonNull ShutdownContext context) {
+					requireNonNull(context);
+					signal.signalTerminated();
+				}
+
+				@Override
+				public void force(@NonNull ShutdownContext context) {
+					requireNonNull(context);
+					signal.signalTerminated();
+				}
+			};
+		}
+
 		public void start() {
 			// No-op
 		}
 
-		@Override
 		public void stop() {
 			// No-op
 		}
 
 		@NonNull
-		@Override
 		public Boolean isStarted() {
 			return true;
 		}
 
-		@Override
 			public void initialize(@NonNull SokletConfig sokletConfig,
 														 @NonNull RequestHandler requestHandler) {
 				requireNonNull(sokletConfig);
@@ -3184,6 +2562,8 @@ public final class Soklet implements AutoCloseable {
 	 */
 	@ThreadSafe
 	static class MockSseServer implements SseServer {
+		@NonNull
+		private final TransportIdentity transportIdentity;
 		@Nullable
 		private SokletConfig sokletConfig;
 		private SseServer.@Nullable RequestHandler requestHandler;
@@ -3195,23 +2575,58 @@ public final class Soklet implements AutoCloseable {
 		private final AtomicReference<Consumer<Throwable>> unicastErrorHandler;
 
 		public MockSseServer() {
+			this.transportIdentity = TransportIdentity.create();
 			this.broadcastersByResourcePath = new ConcurrentHashMap<>();
 			this.broadcastErrorHandler = new AtomicReference<>();
 			this.unicastErrorHandler = new AtomicReference<>();
 		}
 
+		@NonNull
 		@Override
+		public TransportIdentity getTransportIdentity() {
+			return this.transportIdentity;
+		}
+
+		@NonNull
+		@Override
+		public TransportRuntime attach(
+				@NonNull SseTransportAttachmentContext attachmentContext,
+				@NonNull StartupContext startupContext) {
+			requireNonNull(startupContext);
+			SseTransportAttachmentContext exactContext = requireNonNull(
+					attachmentContext);
+			initialize(exactContext.getSokletConfig(),
+					exactContext.getAdmissionFencedRequestHandler());
+			TransportTerminationSignal signal = exactContext.getTerminationSignal();
+			return new TransportRuntime() {
+				@Override
+				public void start(@NonNull StartupContext context) {
+					requireNonNull(context);
+				}
+
+				@Override
+				public void quiesce(@NonNull ShutdownContext context) {
+					requireNonNull(context);
+					signal.signalTerminated();
+				}
+
+				@Override
+				public void force(@NonNull ShutdownContext context) {
+					requireNonNull(context);
+					signal.signalTerminated();
+				}
+			};
+		}
+
 		public void start() {
 			// No-op
 		}
 
-		@Override
 		public void stop() {
 			// No-op
 		}
 
 		@NonNull
-		@Override
 		public Boolean isStarted() {
 			return true;
 		}
@@ -3290,7 +2705,6 @@ public final class Soklet implements AutoCloseable {
 			return broadcaster.unregisterCommentConsumer(commentConsumer);
 		}
 
-		@Override
 		public void initialize(@NonNull SokletConfig sokletConfig,
 													 SseServer.@NonNull RequestHandler requestHandler) {
 			requireNonNull(sokletConfig);

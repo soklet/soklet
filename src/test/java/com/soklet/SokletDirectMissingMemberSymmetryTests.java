@@ -51,7 +51,7 @@ final class SokletDirectMissingMemberSymmetryTests {
 			assertLifecycleOwningSignals(graph);
 
 			ShutdownIncompleteException failure = Assertions.assertThrows(
-					ShutdownIncompleteException.class, soklet::stop);
+					ShutdownIncompleteException.class, soklet::close);
 
 			assertBothShutdownPhases(graph);
 			Assertions.assertTrue(graph.rootProofPublished());
@@ -93,7 +93,7 @@ final class SokletDirectMissingMemberSymmetryTests {
 			assertLifecycleOwningSignals(graph);
 
 			ShutdownIncompleteException failure = Assertions.assertThrows(
-					ShutdownIncompleteException.class, soklet::stop);
+					ShutdownIncompleteException.class, soklet::close);
 
 			assertBothShutdownPhases(graph);
 			Assertions.assertTrue(graph.childProofPublished());
@@ -194,11 +194,9 @@ final class SokletDirectMissingMemberSymmetryTests {
 		CHILD_ONLY
 	}
 
-	private static final class OwningHttpGraph
-			implements HttpServer, InternalHttpTransportEndpoint {
+	private static final class OwningHttpGraph implements HttpServer {
 		@NonNull
-		private final InternalTransportIdentity identity =
-				InternalTransportIdentity.create();
+		private final TransportIdentity identity = TransportIdentity.create();
 		@NonNull
 		private final ProofSelection proofSelection;
 		@NonNull
@@ -216,7 +214,7 @@ final class SokletDirectMissingMemberSymmetryTests {
 		@NonNull
 		private final AtomicBoolean rootProofPublished = new AtomicBoolean();
 		@NonNull
-		private final AtomicReference<InternalTransportTerminationSignal> rootSignal =
+		private final AtomicReference<TransportTerminationSignal> rootSignal =
 				new AtomicReference<>();
 
 		private OwningHttpGraph(@NonNull ProofSelection proofSelection) {
@@ -268,12 +266,12 @@ final class SokletDirectMissingMemberSymmetryTests {
 		}
 
 		@NonNull
-		InternalTransportTerminationSignal rootSignal() {
+		TransportTerminationSignal rootSignal() {
 			return requireNonNull(this.rootSignal.get());
 		}
 
 		@NonNull
-		InternalTransportTerminationSignal childSignal() {
+		TransportTerminationSignal childSignal() {
 			return this.leaf.signal();
 		}
 
@@ -284,34 +282,34 @@ final class SokletDirectMissingMemberSymmetryTests {
 
 		@Override
 		@NonNull
-		public InternalTransportIdentity identity() {
+		public TransportIdentity getTransportIdentity() {
 			return this.identity;
 		}
 
 		@Override
 		@NonNull
-		public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<HttpServer.RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
-			this.rootSignal.set(context.terminationSignal());
-			InternalTransportDelegateAttachment attachment =
+		public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
+			this.rootSignal.set(context.getTerminationSignal());
+			TransportDelegateAttachment attachment =
 					context.attachLifecycleOwningDelegate(this.leaf,
-							context.requestHandler());
+							context.getAdmissionFencedRequestHandler());
 			attachment.whenTerminated().whenComplete((ignored, failure) -> {
 				if (failure == null)
 					this.childSubtreeProof.countDown();
 			});
-			return new InternalTransportRuntime() {
+			return new TransportRuntime() {
 				@Override
-				public void start(@NonNull InternalStartupContext context) {
-					attachment.runtime().start(context);
+				public void start(@NonNull StartupContext context) {
+					attachment.getRuntime().start(context);
 				}
 
 				@Override
-				public void quiesce(@NonNull InternalShutdownContext context) {
+				public void quiesce(@NonNull ShutdownContext context) {
 					quiesceCalls.incrementAndGet();
 					try {
-						attachment.runtime().quiesce(context);
+						attachment.getRuntime().quiesce(context);
 						publishSelectedRootProof();
 					} finally {
 						quiesceReturned.countDown();
@@ -319,10 +317,10 @@ final class SokletDirectMissingMemberSymmetryTests {
 				}
 
 				@Override
-				public void force(@NonNull InternalShutdownContext context) {
+				public void force(@NonNull ShutdownContext context) {
 					forceCalls.incrementAndGet();
 					try {
-						attachment.runtime().force(context);
+						attachment.getRuntime().force(context);
 						publishSelectedRootProof();
 					} finally {
 						forceReturned.countDown();
@@ -330,50 +328,24 @@ final class SokletDirectMissingMemberSymmetryTests {
 				}
 			};
 		}
-
-		@Override
-		public void start() {
-			throw new AssertionError("Direct startup must use attach(...)");
-		}
-
-		@Override
-		public void stop() {
-			throw new AssertionError("Direct shutdown must use the attached runtime");
-		}
-
-		@Override
-		@NonNull
-		public Boolean isStarted() {
-			return this.leaf.isStarted();
-		}
-
-		@Override
-		public void initialize(@NonNull SokletConfig sokletConfig,
-				HttpServer.@NonNull RequestHandler requestHandler) {
-			throw new AssertionError("Direct attachment must use attach(...)");
-		}
-
 		private void publishSelectedRootProof() {
 			if (this.proofSelection == ProofSelection.ROOT_ONLY)
 				publishRootProof();
 		}
 
 		private void publishRootProof() {
-			InternalTransportTerminationSignal signal = this.rootSignal.get();
+			TransportTerminationSignal signal = this.rootSignal.get();
 			if (signal != null
 					&& this.rootProofPublished.compareAndSet(false, true))
 				signal.signalTerminated();
 		}
 	}
 
-	private static final class AlternativeHttpLeaf
-			implements InternalHttpTransportEndpoint {
+	private static final class AlternativeHttpLeaf implements HttpServer {
 		@NonNull
-		private final InternalTransportIdentity identity;
+		private final TransportIdentity identity;
 		@NonNull
 		private final ProofSelection proofSelection;
-		@NonNull
-		private final AtomicBoolean started = new AtomicBoolean();
 		@NonNull
 		private final AtomicBoolean proofPublished = new AtomicBoolean();
 		@NonNull
@@ -381,10 +353,10 @@ final class SokletDirectMissingMemberSymmetryTests {
 		@NonNull
 		private final AtomicInteger forceCalls = new AtomicInteger();
 		@NonNull
-		private final AtomicReference<InternalTransportTerminationSignal> signal =
+		private final AtomicReference<TransportTerminationSignal> signal =
 				new AtomicReference<>();
 
-		private AlternativeHttpLeaf(@NonNull InternalTransportIdentity identity,
+		private AlternativeHttpLeaf(@NonNull TransportIdentity identity,
 				@NonNull ProofSelection proofSelection) {
 			this.identity = requireNonNull(identity);
 			this.proofSelection = requireNonNull(proofSelection);
@@ -403,17 +375,12 @@ final class SokletDirectMissingMemberSymmetryTests {
 		}
 
 		@NonNull
-		InternalTransportTerminationSignal signal() {
+		TransportTerminationSignal signal() {
 			return requireNonNull(this.signal.get());
 		}
 
-		@NonNull
-		Boolean isStarted() {
-			return this.started.get();
-		}
-
 		void publishProof() {
-			InternalTransportTerminationSignal exactSignal = this.signal.get();
+			TransportTerminationSignal exactSignal = this.signal.get();
 			if (exactSignal != null
 					&& this.proofPublished.compareAndSet(false, true))
 				exactSignal.signalTerminated();
@@ -421,33 +388,30 @@ final class SokletDirectMissingMemberSymmetryTests {
 
 		@Override
 		@NonNull
-		public InternalTransportIdentity identity() {
+		public TransportIdentity getTransportIdentity() {
 			return this.identity;
 		}
 
 		@Override
 		@NonNull
-		public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<HttpServer.RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
-			this.signal.set(context.terminationSignal());
-			return new InternalTransportRuntime() {
+		public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
+			this.signal.set(context.getTerminationSignal());
+			return new TransportRuntime() {
 				@Override
-				public void start(@NonNull InternalStartupContext context) {
-					started.set(true);
+				public void start(@NonNull StartupContext context) {
 				}
 
 				@Override
-				public void quiesce(@NonNull InternalShutdownContext context) {
+				public void quiesce(@NonNull ShutdownContext context) {
 					quiesceCalls.incrementAndGet();
-					started.set(false);
 					publishSelectedProof();
 				}
 
 				@Override
-				public void force(@NonNull InternalShutdownContext context) {
+				public void force(@NonNull ShutdownContext context) {
 					forceCalls.incrementAndGet();
-					started.set(false);
 					publishSelectedProof();
 				}
 			};

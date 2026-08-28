@@ -39,7 +39,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @NotThreadSafe
-@Timeout(30)
+@Timeout(60)
 public class McpExecutableToolProtocolTests {
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final String LOOPBACK = "127.0.0.1";

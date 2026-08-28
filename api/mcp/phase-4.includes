@@ -121,7 +121,6 @@ com.soklet.MetricsCollector$Snapshot
 com.soklet.MetricsCollector$Snapshot$Builder
 com.soklet.SokletConfig
 com.soklet.SokletConfig$Builder
-com.soklet.SokletConfig$Copier
 com.soklet.annotation.McpHeader
 com.soklet.annotation.McpPrompt
 com.soklet.annotation.McpPromptArgument
@@ -131,3 +130,4 @@ com.soklet.annotation.McpResourceUriParameter
 com.soklet.annotation.McpServerEndpoint
 com.soklet.annotation.McpTool
 com.soklet.annotation.McpToolArgument
+com.soklet.annotation.McpToolProperty

@@ -37,68 +37,38 @@ import static java.util.Objects.requireNonNull;
  *   HttpServer.fromPort(8080)
  * ).build();
  *
- * try (Soklet soklet = Soklet.fromConfig(config)) {
- *   soklet.start();
- *   System.out.println("Soklet started, press [enter] to exit");
- *   soklet.awaitShutdown(ShutdownTrigger.ENTER_KEY);
- * }}</pre>
+ * System.out.println("Soklet starting; press [enter] to exit");
+ * SokletApplication.run(config, ShutdownTrigger.ENTER_KEY);}</pre>
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-public interface HttpServer extends AutoCloseable {
+public interface HttpServer {
 	/**
-	 * Starts the server, which makes it able to accept requests from clients.
-	 * <p>
-	 * If the server is already started, no action is taken.
-	 * <p>
-	 * <strong>This method is designed for internal use by {@link com.soklet.Soklet} only and should not be invoked elsewhere.</strong>
-	 */
-	void start();
-
-	/**
-	 * Stops the server, which makes it unable to accept requests from clients.
-	 * <p>
-	 * If the server is already stopped, no action is taken.
-	 * <p>
-	 * <strong>This method is designed for internal use by {@link com.soklet.Soklet} only and should not be invoked elsewhere.</strong>
-	 */
-	void stop();
-
-	/**
-	 * Is this server started (that is, able to handle requests from clients)?
+	 * Acquires the stable identity for this server's complete lifecycle graph.
+	 * A decorator must return its delegate's exact identity object unchanged.
 	 *
-	 * @return {@code true} if the server is started, {@code false} otherwise
+	 * @return the stable transport identity
 	 */
 	@NonNull
-	Boolean isStarted();
+	TransportIdentity getTransportIdentity();
 
 	/**
-	 * The {@link com.soklet.Soklet} instance which manages this {@link HttpServer} will invoke this method exactly once at initialization time - this allows {@link com.soklet.Soklet} to "talk" to your {@link HttpServer}.
-	 * <p>
-	 * <strong>This method is designed for internal use by {@link com.soklet.Soklet} only and should not be invoked elsewhere.</strong>
+	 * Attaches this server to one Soklet lifecycle. Attachment is invoked once,
+	 * remains in-memory and side-effect-free, and returns the runtime that owns
+	 * binding and termination.
 	 *
-	 * @param sokletConfig   configuration for the Soklet instance that controls this server
-	 * @param requestHandler a {@link com.soklet.Soklet}-internal request handler which takes a {@link HttpServer}-provided request as input and supplies a {@link MarshaledResponse} as output for the {@link HttpServer} to write back to the client
+	 * @param attachmentContext framework-owned composition and termination context
+	 * @param startupContext startup timing and cancellation information
+	 * @return this server's one-shot runtime
 	 */
-	void initialize(@NonNull SokletConfig sokletConfig,
-									@NonNull RequestHandler requestHandler);
-
-	/**
-	 * {@link AutoCloseable}-enabled synonym for {@link #stop()}.
-	 * <p>
-	 * <strong>This method is designed for internal use by {@link com.soklet.Soklet} only and should not be invoked elsewhere.</strong>
-	 *
-	 * @throws Exception if an exception occurs while stopping the server
-	 */
-	@Override
-	default void close() throws Exception {
-		stop();
-	}
+	@NonNull
+	TransportRuntime attach(@NonNull HttpTransportAttachmentContext attachmentContext,
+			@NonNull StartupContext startupContext);
 
 	/**
 	 * Request/response processing contract for {@link HttpServer} implementations.
 	 * <p>
-	 * This is used internally by {@link com.soklet.Soklet} instances to "talk" to a {@link HttpServer} via {@link HttpServer#initialize(SokletConfig, RequestHandler)}.  It's the responsibility of the {@link HttpServer} to implement HTTP mechanics: read bytes from the request, write bytes to the response, and so forth.
+	 * This is used internally by {@link com.soklet.Soklet} instances to "talk" to a {@link HttpServer}. It's the responsibility of the {@link HttpServer} to implement HTTP mechanics: read bytes from the request, write bytes to the response, and so forth.
 	 * <p>
 	 * <strong>Most Soklet applications will use Soklet's default {@link HttpServer} implementation and therefore do not need to implement this interface directly.</strong>
 	 *
@@ -176,8 +146,6 @@ public interface HttpServer extends AutoCloseable {
 		Integer requestHandlerQueueCapacity;
 		@Nullable
 		Duration socketSelectTimeout;
-		@Nullable
-		Duration shutdownTimeout;
 		@Nullable
 		Integer maximumRequestSizeInBytes;
 		@Nullable
@@ -347,12 +315,6 @@ public interface HttpServer extends AutoCloseable {
 		@NonNull
 		public Builder concurrentConnectionLimit(@Nullable Integer concurrentConnectionLimit) {
 			this.concurrentConnectionLimit = concurrentConnectionLimit;
-			return this;
-		}
-
-		@NonNull
-		public Builder shutdownTimeout(@Nullable Duration shutdownTimeout) {
-			this.shutdownTimeout = shutdownTimeout;
 			return this;
 		}
 

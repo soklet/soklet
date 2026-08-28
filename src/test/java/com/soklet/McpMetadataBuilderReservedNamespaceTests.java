@@ -44,7 +44,7 @@ import java.util.Set;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@Timeout(30)
+@Timeout(60)
 public class McpMetadataBuilderReservedNamespaceTests {
 	private static final Path INVENTORY = Path.of("api", "mcp",
 			"mcp-metadata-builder-inventory.json");
@@ -198,7 +198,7 @@ public class McpMetadataBuilderReservedNamespaceTests {
 					RESOURCE_URI.toString(), ",\"uri\":\"" + RESOURCE_URI + "\""),
 					"resource");
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 

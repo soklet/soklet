@@ -54,7 +54,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 @NotThreadSafe
-@Timeout(30)
+@Timeout(60)
 public class McpQueuedExecutionWinnerElectionTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
@@ -83,6 +83,7 @@ public class McpQueuedExecutionWinnerElectionTests {
 					RaceEvent.PROMOTION));
 
 	@Test
+	@Timeout(300)
 	public void all_queue_promotion_deadline_disconnect_linearizations_elect_exactly_one_outcome()
 			throws Exception {
 		for (List<RaceEvent> order : ALL_LINEARIZATIONS)

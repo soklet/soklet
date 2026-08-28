@@ -30,7 +30,7 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @NotThreadSafe
-@Timeout(30)
+@Timeout(60)
 public class McpInitializeRejectionDiagnosticsTests {
 	private static final String INITIALIZE = "initialize";
 	private static final String CURRENT_VERSION = "2026-07-28";

@@ -30,7 +30,8 @@ import java.lang.annotation.Target;
  * <p>
  * Soklet's annotation processor derives the input schema from parameters
  * annotated with {@link McpToolArgument} and the output schema from the
- * method's declared return type.
+ * method's declared return type. {@link McpToolProperty} customizes property
+ * metadata on ordinary typed input and output records.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

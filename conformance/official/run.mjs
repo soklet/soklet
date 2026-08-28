@@ -816,14 +816,19 @@ async function stopFixture(fixture, scenarioDirectory) {
         `Fixture exited before graceful shutdown code=${fixture.child.exitCode} `
           + `signal=${fixture.child.signalCode}: ${fixture.stderr.text()}`,
       );
+    const shutdownDeadlineNanoseconds = process.hrtime.bigint()
+      + BigInt(shutdownTimeoutMilliseconds) * 1_000_000n;
     if (fixture.child.exitCode === null) fixture.child.stdin.end();
-    const stoppedLine = await fixture.lines.next(shutdownTimeoutMilliseconds);
+    const stoppedLine = await fixture.lines.next(
+      remainingFixtureShutdownMilliseconds(shutdownDeadlineNanoseconds),
+    );
     const stopped = JSON.parse(stoppedLine);
     if (JSON.stringify(Object.keys(stopped)) !== '["format","event","clean"]'
         || stopped.format !== 1 || stopped.event !== 'stopped' || stopped.clean !== true)
       throw new Error('Fixture emitted an invalid STOPPED control line');
     const exit = await fixture.supervisor.waitForClose(
-      fixture.child, shutdownTimeoutMilliseconds,
+      fixture.child,
+      remainingFixtureShutdownMilliseconds(shutdownDeadlineNanoseconds),
     );
     if (exit.code !== 0 || exit.signal !== null)
       throw new Error(`Fixture exited code=${exit.code} signal=${exit.signal}`);
@@ -849,6 +854,13 @@ async function stopFixture(fixture, scenarioDirectory) {
       `forced=${forced}\nexitCode=${fixture.child.exitCode}\nsignal=${fixture.child.signalCode}\n`);
   }
   if (failure !== undefined) throw failure;
+}
+
+function remainingFixtureShutdownMilliseconds(deadlineNanoseconds) {
+  const remainingNanoseconds = deadlineNanoseconds - process.hrtime.bigint();
+  if (remainingNanoseconds <= 0n)
+    throw new Error('Fixture exceeded its 10-second graceful shutdown bound');
+  return Number((remainingNanoseconds + 999_999n) / 1_000_000n);
 }
 
 function parseReadyLine(line) {

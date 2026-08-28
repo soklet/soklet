@@ -58,6 +58,7 @@ import java.util.function.Predicate;
 public class McpTransportContainmentSpikeTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final Duration TEST_TIMEOUT = Duration.ofSeconds(8);
+	private static final Duration DYNAMIC_TEST_TIMEOUT = Duration.ofSeconds(60);
 	private static final Duration LONG_RUNTIME_TIMEOUT = Duration.ofMinutes(1);
 	private static final int DEFAULT_OUTBOUND_BYTES = 64 * 1_024;
 	private static final int DEFAULT_TERMINAL_BYTES = 4 * 1_024;
@@ -91,7 +92,9 @@ public class McpTransportContainmentSpikeTests {
 			for (NamedScenario scenario : scenarios) {
 				tests.add(DynamicTest.dynamicTest(
 						strategy.name().toLowerCase(Locale.ROOT) + ": " + scenario.name(),
-						() -> scenario.scenario().run(strategy)));
+						() -> Assertions.assertTimeoutPreemptively(
+								DYNAMIC_TEST_TIMEOUT,
+								() -> scenario.scenario().run(strategy))));
 			}
 		}
 
@@ -159,7 +162,8 @@ public class McpTransportContainmentSpikeTests {
 			assertSuccessfulRequest(mcpPort, "before-normal-stop", "mcp-before-normal-stop");
 
 			normalEventLoop.stop();
-			normalEventLoop.join();
+			Assertions.assertTrue(normalEventLoop.join(TEST_TIMEOUT),
+					"ordinary event loop did not terminate");
 			assertSuccessfulRequest(mcpPort, "after-normal-stop", "mcp-after-normal-stop");
 
 			McpTransportRuntime.Snapshot snapshot = awaitSnapshot(
@@ -175,7 +179,8 @@ public class McpTransportContainmentSpikeTests {
 			Assertions.assertEquals(configuration.handlerQueueCapacity(), snapshot.dispatcher().queueCapacity());
 		} finally {
 			normalEventLoop.stop();
-			normalEventLoop.join();
+			Assertions.assertTrue(normalEventLoop.join(TEST_TIMEOUT),
+					"ordinary event loop did not terminate during cleanup");
 			shutdown(runtime);
 		}
 	}
@@ -816,7 +821,8 @@ public class McpTransportContainmentSpikeTests {
 					value -> value.dispatcher().activeSlots() == 0 && value.residualHandlerSlots() == 0,
 					"shutdown-canceled completed handler did not return its slot");
 			Assertions.assertEquals(1L, released.cleanupCount());
-			runtime.join();
+			Assertions.assertTrue(runtime.join(TEST_TIMEOUT),
+					"MCP transport runtime did not terminate");
 		} finally {
 			releaseHandler.countDown();
 			shutdown(runtime);
@@ -962,7 +968,8 @@ public class McpTransportContainmentSpikeTests {
 										&& value.subscriptions() == 1,
 								"shutdown fixture did not reach subscription-plus-active-plus-queued state");
 						runtime.stop();
-						runtime.join();
+						Assertions.assertTrue(runtime.join(TEST_TIMEOUT),
+								"MCP transport runtime did not terminate");
 						await(activeInterrupted,
 								"server shutdown did not signal the active handler");
 						Assertions.assertEquals(
@@ -1118,8 +1125,12 @@ public class McpTransportContainmentSpikeTests {
 					first.start();
 					second.start();
 					startCompetitors.countDown();
-					first.join();
-					second.join();
+					long deadlineNanos = System.nanoTime()
+							+ TEST_TIMEOUT.toNanos();
+					join(first, deadlineNanos,
+							"first terminal competitor did not terminate");
+					join(second, deadlineNanos,
+							"second terminal competitor did not terminate");
 				});
 
 		try {
@@ -1282,10 +1293,23 @@ public class McpTransportContainmentSpikeTests {
 	}
 
 	private static void shutdown(McpTransportRuntime runtime) throws InterruptedException {
-		runtime.close();
+		runtime.stop();
+		Assertions.assertTrue(runtime.join(TEST_TIMEOUT),
+				"MCP transport runtime did not terminate");
 		Assertions.assertTrue(
 				runtime.awaitHandlerTermination(TEST_TIMEOUT),
 				"MCP handler executor did not terminate");
+	}
+
+	private static void join(Thread thread, long deadlineNanos,
+			String failureMessage) throws InterruptedException {
+		while (thread.isAlive()) {
+			long remainingNanos = deadlineNanos - System.nanoTime();
+			Assertions.assertTrue(remainingNanos > 0L, failureMessage);
+			long millis = remainingNanos / 1_000_000L;
+			int nanos = (int) (remainingNanos % 1_000_000L);
+			thread.join(millis, nanos);
+		}
 	}
 
 	@FunctionalInterface

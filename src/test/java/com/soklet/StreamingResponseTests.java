@@ -296,7 +296,9 @@ public class StreamingResponseTests {
 
 				Assertions.assertNotNull(responseHeaders);
 				Assertions.assertTrue(responseHeaders.startsWith("HTTP/1.1 200 OK"), responseHeaders);
-				soklet.stop();
+				ShutdownResult shutdownResult = soklet.shutdown()
+						.toCompletableFuture().join();
+				Assertions.assertTrue(shutdownResult.isComplete());
 				Assertions.assertTrue(BlockingSourceResource.inputStreamClosedLatch.await(2, TimeUnit.SECONDS),
 						"Source was not closed on server shutdown");
 				Assertions.assertTrue(terminatedLatch.await(2, TimeUnit.SECONDS), "Stream termination lifecycle hook was not invoked");
@@ -436,7 +438,8 @@ public class StreamingResponseTests {
 		});
 
 		try {
-			InternalShutdownResult shutdownResult = SokletSimulator.run(
+			ShutdownResult shutdownResult = ShutdownResult.fromInternal(
+					SokletSimulator.run(
 					transports -> SokletConfig
 							.withHttpServer(transports.getHttpServer())
 							.resourceMethodResolver(ResourceMethodResolver.fromClasses(
@@ -471,7 +474,7 @@ public class StreamingResponseTests {
 					Assertions.assertTrue(SealDuringStreamResource.streamEntered
 							.await(5, TimeUnit.SECONDS),
 							"The simulated stream did not begin.");
-				}, NanoClock.system(), workers);
+				}, NanoClock.system(), workers));
 
 			Assertions.assertTrue(shutdownResult.isComplete());
 			Assertions.assertTrue(requestFinished.await(5, TimeUnit.SECONDS),

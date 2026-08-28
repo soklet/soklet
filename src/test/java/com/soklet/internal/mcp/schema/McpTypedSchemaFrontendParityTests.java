@@ -19,7 +19,7 @@ package com.soklet.internal.mcp.schema;
 import com.google.testing.compile.Compilation;
 import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
-import com.soklet.annotation.McpToolArgument;
+import com.soklet.annotation.McpToolProperty;
 import com.soklet.internal.mcp.protocol.McpJsonCodec;
 import com.soklet.internal.mcp.protocol.McpJsonLimits;
 import com.soklet.internal.mcp.protocol.McpJsonObject;
@@ -213,7 +213,7 @@ class McpTypedSchemaFrontendParityTests {
 				package parity;
 
 				import com.soklet.internal.mcp.protocol.McpJsonValue;
-				import com.soklet.annotation.McpToolArgument;
+				import com.soklet.annotation.McpToolProperty;
 				import java.math.BigDecimal;
 				import java.math.BigInteger;
 				import java.util.List;
@@ -271,10 +271,10 @@ class McpTypedSchemaFrontendParityTests {
 				    Map<String, BigDecimal> prices, ParityBox<String> box,
 				    Optional<Double> ratio) {}
 				record ParityAnnotated(
-				    @McpToolArgument(name = "externalName",
+				    @McpToolProperty(name = "externalName",
 				        title = " External title ",
 				        description = "External description") String internalName,
-				    @McpToolArgument(title = "   ", description = "   ")
+				    @McpToolProperty(title = "   ", description = "   ")
 				        Optional<Integer> ordinary) {}
 				record Expanding<T>(Expanding<List<T>> next) {}
 				record Phantom<T>(String value) {}
@@ -302,9 +302,9 @@ class McpTypedSchemaFrontendParityTests {
 	}
 
 	private record ParityAnnotated(
-			@McpToolArgument(name = "externalName", title = " External title ",
+			@McpToolProperty(name = "externalName", title = " External title ",
 					description = "External description") String internalName,
-			@McpToolArgument(title = "   ", description = "   ")
+			@McpToolProperty(title = "   ", description = "   ")
 			Optional<Integer> ordinary) {
 	}
 

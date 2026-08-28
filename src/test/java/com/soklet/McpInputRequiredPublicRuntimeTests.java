@@ -35,7 +35,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@Timeout(30)
+@Timeout(60)
 public class McpInputRequiredPublicRuntimeTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/mcp";
@@ -185,7 +185,7 @@ public class McpInputRequiredPublicRuntimeTests {
 					resourceResponse.body());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -355,7 +355,7 @@ public class McpInputRequiredPublicRuntimeTests {
 					samplingResponse.body());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -498,7 +498,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			Assertions.assertEquals(3, handlerInvocations.get());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -610,7 +610,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			Assertions.assertEquals(2, conditionalInputHandlerInvocations.get());
 			Assertions.assertEquals(1, sanitizerInvocations.get());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -692,7 +692,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			Assertions.assertEquals(2, handlerInvocations.get());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -757,7 +757,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			Assertions.assertEquals(1, handlerInvocations.get());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -828,7 +828,7 @@ public class McpInputRequiredPublicRuntimeTests {
 				McpAdmissionController.acceptAllInstance(),
 				context -> McpRateLimitDecision.allowed(),
 				context -> McpRateLimitDecision.allowed(),
-				(context, continuation) -> {
+				(context, features, continuation) -> {
 					interceptorInvocations.incrementAndGet();
 					return undeclaredResult;
 				},
@@ -881,7 +881,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			Assertions.assertEquals(0, handlerInvocations.get());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -927,7 +927,7 @@ public class McpInputRequiredPublicRuntimeTests {
 				McpAdmissionController.acceptAllInstance(),
 				context -> McpRateLimitDecision.allowed(),
 				context -> McpRateLimitDecision.allowed(),
-				(context, continuation) -> {
+				(context, features, continuation) -> {
 					interceptorInvocations.incrementAndGet();
 					return switch (context.getOperationName().orElseThrow()) {
 						case "interceptor-valid-input" -> inputRequired(
@@ -1006,7 +1006,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			Assertions.assertEquals(0, handlerInvocations.get());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 

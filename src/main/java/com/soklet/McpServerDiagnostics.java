@@ -48,11 +48,13 @@ public interface McpServerDiagnostics {
 	/**
 	 * The effective bound address captured by this snapshot.
 	 * <p>
-	 * The address is present only when {@link #getStatus()} is
-	 * {@link McpServerStatus#STARTED}. It includes the operating-system-assigned
-	 * port when ephemeral port {@code 0} was configured.
+	 * The address is empty until binding succeeds and includes the
+	 * operating-system-assigned port when ephemeral port {@code 0} was
+	 * configured. Once published, the effective address remains available as
+	 * historical evidence in later shutdown and terminal snapshots.
 	 *
-	 * @return the effective bound address, or the empty optional when stopped
+	 * @return the effective or historically retained bound address, or empty when
+	 * this server never bound
 	 */
 	@NonNull
 	Optional<@NonNull InetSocketAddress> getBoundAddress();
@@ -61,7 +63,7 @@ public interface McpServerDiagnostics {
 	 * The configured maximum number of application request handlers that may
 	 * execute concurrently.
 	 * <p>
-	 * This value is stable across server start and stop transitions.
+	 * This value is stable across the owner lifecycle.
 	 *
 	 * @return the configured request-handler concurrency
 	 */
@@ -72,7 +74,7 @@ public interface McpServerDiagnostics {
 	 * The configured maximum number of admitted application requests that may
 	 * wait for a request-handler execution slot.
 	 * <p>
-	 * This value is stable across server start and stop transitions.
+	 * This value is stable across the owner lifecycle.
 	 *
 	 * @return the configured request-handler queue capacity
 	 */
@@ -136,7 +138,7 @@ public interface McpServerDiagnostics {
 	 * The effective framework request-state protection mode in this snapshot.
 	 * <p>
 	 * This value is fixed when the server is built and remains stable across
-	 * listener start, stop, and restart transitions.
+	 * the one-shot owner lifecycle.
 	 *
 	 * @return the effective protection mode
 	 */

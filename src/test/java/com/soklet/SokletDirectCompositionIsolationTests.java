@@ -67,7 +67,7 @@ final class SokletDirectCompositionIsolationTests {
 			soklet.start();
 
 			Future<Throwable> stopping = executor.submit(
-					() -> captureFailure(soklet::stop));
+					() -> captureFailure(soklet::close));
 			Assertions.assertTrue(httpEngine.awaitChildProof(2, TimeUnit.SECONDS),
 					"The private child must publish proof during quiesce");
 			Assertions.assertTrue(http.awaitQuiesceReturned(2, TimeUnit.SECONDS));
@@ -293,21 +293,19 @@ final class SokletDirectCompositionIsolationTests {
 		}
 	}
 
-	private interface ComposedHttpEndpoint
-			extends HttpServer, InternalHttpTransportEndpoint {
+	private interface ComposedHttpEndpoint extends HttpServer {
 	}
 
 	private static final class AlternativeHttpEngine
 			implements ComposedHttpEndpoint {
-		@NonNull private final InternalTransportIdentity identity =
-				InternalTransportIdentity.create();
-		@NonNull private final AtomicBoolean started = new AtomicBoolean();
+		@NonNull private final TransportIdentity identity =
+				TransportIdentity.create();
 		@NonNull private final AtomicBoolean proofPublished = new AtomicBoolean();
 		@NonNull private final AtomicInteger quiesceCalls = new AtomicInteger();
 		@NonNull private final AtomicInteger forceCalls = new AtomicInteger();
 		@NonNull private final CountDownLatch childProof = new CountDownLatch(1);
 		@NonNull private final CountDownLatch forceReturned = new CountDownLatch(1);
-		@NonNull private final AtomicReference<InternalTransportTerminationSignal>
+		@NonNull private final AtomicReference<TransportTerminationSignal>
 				terminationSignal = new AtomicReference<>();
 
 		int quiesceCalls() {
@@ -330,30 +328,29 @@ final class SokletDirectCompositionIsolationTests {
 
 		@Override
 		@NonNull
-		public InternalTransportIdentity identity() {
+		public TransportIdentity getTransportIdentity() {
 			return this.identity;
 		}
 
 		@Override
 		@NonNull
-		public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<HttpServer.RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
-			this.terminationSignal.set(context.terminationSignal());
-			return new InternalTransportRuntime() {
+		public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
+			this.terminationSignal.set(context.getTerminationSignal());
+			return new TransportRuntime() {
 				@Override
-				public void start(@NonNull InternalStartupContext context) {
-					started.set(true);
+				public void start(@NonNull StartupContext context) {
 				}
 
 				@Override
-				public void quiesce(@NonNull InternalShutdownContext context) {
+				public void quiesce(@NonNull ShutdownContext context) {
 					quiesceCalls.incrementAndGet();
 					publishProof();
 				}
 
 				@Override
-				public void force(@NonNull InternalShutdownContext context) {
+				public void force(@NonNull ShutdownContext context) {
 					forceCalls.incrementAndGet();
 					try {
 						publishProof();
@@ -364,30 +361,7 @@ final class SokletDirectCompositionIsolationTests {
 			};
 		}
 
-		@Override
-		public void start() {
-			throw new AssertionError("Direct startup must use the attached runtime");
-		}
-
-		@Override
-		public void stop() {
-			publishProof();
-		}
-
-		@Override
-		@NonNull
-		public Boolean isStarted() {
-			return this.started.get();
-		}
-
-		@Override
-		public void initialize(@NonNull SokletConfig sokletConfig,
-				HttpServer.@NonNull RequestHandler requestHandler) {
-			throw new AssertionError("Direct attachment must use attach(...)");
-		}
-
 		private void publishProof() {
-			this.started.set(false);
 			if (this.proofPublished.compareAndSet(false, true)) {
 				requireNonNull(this.terminationSignal.get()).signalTerminated();
 				this.childProof.countDown();
@@ -399,8 +373,7 @@ final class SokletDirectCompositionIsolationTests {
 			implements ComposedHttpEndpoint {
 		@NonNull private final AlternativeHttpEngine delegate;
 		@NonNull private final ProgressOrder progressOrder;
-		@NonNull private final InternalTransportIdentity identity;
-		@NonNull private final AtomicBoolean started = new AtomicBoolean();
+		@NonNull private final TransportIdentity identity;
 		@NonNull private final AtomicBoolean callbackReturned = new AtomicBoolean();
 		@NonNull private final AtomicBoolean rootProofPublished = new AtomicBoolean();
 		@NonNull private final AtomicInteger quiesceCalls = new AtomicInteger();
@@ -418,7 +391,7 @@ final class SokletDirectCompositionIsolationTests {
 				@NonNull ProgressOrder progressOrder) {
 			this.delegate = requireNonNull(delegate);
 			this.progressOrder = requireNonNull(progressOrder);
-			this.identity = delegate.identity();
+			this.identity = delegate.getTransportIdentity();
 		}
 
 		int quiesceCalls() {
@@ -468,20 +441,20 @@ final class SokletDirectCompositionIsolationTests {
 
 		@Override
 		@NonNull
-		public InternalTransportIdentity identity() {
+		public TransportIdentity getTransportIdentity() {
 			return this.identity;
 		}
 
 		@Override
 		@NonNull
-		public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<HttpServer.RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
-			InternalTransportTerminationSignal rootSignal =
-					context.terminationSignal();
-			InternalTransportDelegateAttachment attachment = context
+		public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
+			TransportTerminationSignal rootSignal =
+					context.getTerminationSignal();
+			TransportDelegateAttachment attachment = context
 					.attachLifecycleOwningDelegate(this.delegate,
-							context.requestHandler());
+							context.getAdmissionFencedRequestHandler());
 			CompletionStage<Void> proofStage = attachment.whenTerminated();
 			this.childProofStage.set(proofStage);
 			proofStage.whenComplete((ignored, failure) -> {
@@ -497,73 +470,47 @@ final class SokletDirectCompositionIsolationTests {
 					this.callbackExit.countDown();
 				}
 			});
-			InternalTransportRuntime delegateRuntime = attachment.runtime();
-			return new InternalTransportRuntime() {
+			TransportRuntime delegateRuntime = attachment.getRuntime();
+			return new TransportRuntime() {
 				@Override
-				public void start(@NonNull InternalStartupContext context) {
-					started.set(true);
+				public void start(@NonNull StartupContext context) {
 					delegateRuntime.start(context);
 				}
 
 				@Override
-				public void quiesce(@NonNull InternalShutdownContext context) {
+				public void quiesce(@NonNull ShutdownContext context) {
 					quiesceCalls.incrementAndGet();
 					try {
 						delegateRuntime.quiesce(context);
 					} finally {
-						started.set(false);
 						quiesceReturned.countDown();
 					}
 				}
 
 				@Override
-				public void force(@NonNull InternalShutdownContext context) {
+				public void force(@NonNull ShutdownContext context) {
 					progressOrder.recordHttpForceAfterCallback();
 					forceCalls.incrementAndGet();
 					try {
 						delegateRuntime.force(context);
 					} finally {
-						started.set(false);
 						forceReturned.countDown();
 					}
 				}
 			};
 		}
 
-		@Override
-		public void start() {
-			throw new AssertionError("Direct startup must use the attached runtime");
-		}
-
-		@Override
-		public void stop() {
-			this.delegate.stop();
-		}
-
-		@Override
-		@NonNull
-		public Boolean isStarted() {
-			return this.started.get();
-		}
-
-		@Override
-		public void initialize(@NonNull SokletConfig sokletConfig,
-				HttpServer.@NonNull RequestHandler requestHandler) {
-			throw new AssertionError("Direct attachment must use attach(...)");
-		}
 	}
 
-	private static final class IndependentSseEngine
-			implements SseServer, InternalSseTransportEndpoint {
+	private static final class IndependentSseEngine implements SseServer {
 		@NonNull private final ProgressOrder progressOrder;
-		@NonNull private final InternalTransportIdentity identity =
-				InternalTransportIdentity.create();
-		@NonNull private final AtomicBoolean started = new AtomicBoolean();
+		@NonNull private final TransportIdentity identity =
+				TransportIdentity.create();
 		@NonNull private final AtomicBoolean proofPublished = new AtomicBoolean();
 		@NonNull private final AtomicInteger quiesceCalls = new AtomicInteger();
 		@NonNull private final AtomicInteger forceCalls = new AtomicInteger();
 		@NonNull private final CountDownLatch quiesceReturned = new CountDownLatch(1);
-		@NonNull private final AtomicReference<InternalTransportTerminationSignal>
+		@NonNull private final AtomicReference<TransportTerminationSignal>
 				terminationSignal = new AtomicReference<>();
 
 		private IndependentSseEngine(@NonNull ProgressOrder progressOrder) {
@@ -589,24 +536,23 @@ final class SokletDirectCompositionIsolationTests {
 
 		@Override
 		@NonNull
-		public InternalTransportIdentity identity() {
+		public TransportIdentity getTransportIdentity() {
 			return this.identity;
 		}
 
 		@Override
 		@NonNull
-		public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<SseServer.RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
-			this.terminationSignal.set(context.terminationSignal());
-			return new InternalTransportRuntime() {
+		public TransportRuntime attach(
+				@NonNull SseTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
+			this.terminationSignal.set(context.getTerminationSignal());
+			return new TransportRuntime() {
 				@Override
-				public void start(@NonNull InternalStartupContext context) {
-					started.set(true);
+				public void start(@NonNull StartupContext context) {
 				}
 
 				@Override
-				public void quiesce(@NonNull InternalShutdownContext context) {
+				public void quiesce(@NonNull ShutdownContext context) {
 					progressOrder.recordSseQuiesceAfterCallback();
 					quiesceCalls.incrementAndGet();
 					try {
@@ -617,27 +563,11 @@ final class SokletDirectCompositionIsolationTests {
 				}
 
 				@Override
-				public void force(@NonNull InternalShutdownContext context) {
+				public void force(@NonNull ShutdownContext context) {
 					forceCalls.incrementAndGet();
 					publishProof();
 				}
 			};
-		}
-
-		@Override
-		public void start() {
-			throw new AssertionError("Direct startup must use the attached runtime");
-		}
-
-		@Override
-		public void stop() {
-			publishProof();
-		}
-
-		@Override
-		@NonNull
-		public Boolean isStarted() {
-			return this.started.get();
 		}
 
 		@Override
@@ -647,14 +577,7 @@ final class SokletDirectCompositionIsolationTests {
 			return Optional.empty();
 		}
 
-		@Override
-		public void initialize(@NonNull SokletConfig sokletConfig,
-				SseServer.@NonNull RequestHandler requestHandler) {
-			throw new AssertionError("Direct attachment must use attach(...)");
-		}
-
 		private void publishProof() {
-			this.started.set(false);
 			if (this.proofPublished.compareAndSet(false, true))
 				requireNonNull(this.terminationSignal.get()).signalTerminated();
 		}

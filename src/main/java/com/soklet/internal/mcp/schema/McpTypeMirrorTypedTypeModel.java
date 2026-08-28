@@ -17,7 +17,7 @@
 package com.soklet.internal.mcp.schema;
 
 import com.soklet.annotation.McpHeader;
-import com.soklet.annotation.McpToolArgument;
+import com.soklet.annotation.McpToolProperty;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -261,18 +261,18 @@ final class McpTypeMirrorTypedTypeModel
 			if (!(accessorAsMember instanceof ExecutableType accessor))
 				throw new IllegalArgumentException(
 						"A record component accessor must have an executable type.");
-			@Nullable McpToolArgument argument = component.getAnnotation(
-					McpToolArgument.class);
+			@Nullable McpToolProperty property = component.getAnnotation(
+					McpToolProperty.class);
 			@Nullable McpHeader header = component.getAnnotation(McpHeader.class);
 			String javaName = component.getSimpleName().toString();
-			String configuredName = argument == null ? ""
-					: requireNonNull(argument.name());
+			String configuredName = property == null ? ""
+					: requireNonNull(property.name());
 			String publishedName = configuredName.isBlank()
 					? javaName : configuredName;
 			described.add(McpTypedTypeDescriptor.RecordComponent.fromNameAndType(
 					publishedName, accessor.getReturnType(),
-					argument == null ? "" : requireNonNull(argument.title()),
-					argument == null ? "" : requireNonNull(argument.description()),
+					property == null ? "" : requireNonNull(property.title()),
+					property == null ? "" : requireNonNull(property.description()),
 					header == null ? Optional.empty()
 							: Optional.of(requireNonNull(header.value()))));
 		}

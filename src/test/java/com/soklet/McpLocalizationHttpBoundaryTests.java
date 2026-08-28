@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
@@ -46,8 +47,16 @@ class McpLocalizationHttpBoundaryTests {
 	private static final String MCP_PATH = "/localization/http";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final Duration WAIT = Duration.ofSeconds(5);
+	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
+			LifecyclePolicy.builder()
+					.startupTimeout(Duration.ofSeconds(5))
+					.startupCancellationTimeout(Duration.ofSeconds(2))
+					.gracefulShutdownDuration(Duration.ofSeconds(2))
+					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.build();
 
 	@Test
+	@Timeout(120)
 	void cacheableResultsAreClampedToPrivateZeroExactlyWhenLocalized() {
 		// Without a localizer the configured positive public policies publish.
 		String plainList = capture(null, CorsAuthorizer.rejectAllInstance(),
@@ -304,6 +313,7 @@ class McpLocalizationHttpBoundaryTests {
 			return SokletConfig.withMcpServer(builder.build())
 					.resourceMethodResolver(
 							ResourceMethodResolver.fromMethods(Set.of()))
+					.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 					.build();
 		}, simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(request);

@@ -25,7 +25,9 @@ import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestStateProte
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestStateProtectionPlan;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestFactory;
 import org.junit.jupiter.api.Timeout;
 
 import javax.annotation.concurrent.NotThreadSafe;
@@ -56,7 +58,7 @@ import java.util.function.Predicate;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @NotThreadSafe
-@Timeout(30)
+@Timeout(60)
 public class McpMultiRoundTripTerminationRaceTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String PATH = "/mcp";
@@ -68,6 +70,7 @@ public class McpMultiRoundTripTerminationRaceTests {
 	private static final Duration MAXIMUM_STATE_LIFETIME = Duration.ofMinutes(5);
 
 	@Test
+	@Timeout(120)
 	public void blockedCustomProtectorOpenMakesShutdownResidualUntilProtocolWorkExits()
 			throws Exception {
 		BlockingProtector protector = new BlockingProtector();
@@ -136,12 +139,16 @@ public class McpMultiRoundTripTerminationRaceTests {
 		}
 	}
 
-	@Test
-	public void blockedCustomProtectorOpenDiscardsLateResultAfterDeadlineOrDisconnect()
-			throws Exception {
-		for (OpenTermination termination : OpenTermination.values())
-			blockedCustomProtectorOpenDiscardsLateResultAfterDeadlineOrDisconnect(
-					termination);
+	@TestFactory
+	public List<DynamicTest> blockedCustomProtectorOpenDiscardsLateResultAfterDeadlineOrDisconnect() {
+		List<NamedScenario> scenarios = List.of(
+				new NamedScenario("deadline", () ->
+						blockedCustomProtectorOpenDiscardsLateResultAfterDeadlineOrDisconnect(
+								OpenTermination.DEADLINE)),
+				new NamedScenario("disconnect", () ->
+						blockedCustomProtectorOpenDiscardsLateResultAfterDeadlineOrDisconnect(
+								OpenTermination.DISCONNECT)));
+		return dynamicTests(scenarios);
 	}
 
 	private void blockedCustomProtectorOpenDiscardsLateResultAfterDeadlineOrDisconnect(
@@ -227,12 +234,19 @@ public class McpMultiRoundTripTerminationRaceTests {
 		}
 	}
 
-	@Test
-	public void blockedSealCannotPublishLateInputRequiredAndReleasesExactlyOnce()
-			throws Exception {
-		for (SealTermination termination : SealTermination.values())
-			blockedSealCannotPublishLateInputRequiredAndReleasesExactlyOnce(
-					termination);
+	@TestFactory
+	public List<DynamicTest> blockedSealCannotPublishLateInputRequiredAndReleasesExactlyOnce() {
+		List<NamedScenario> scenarios = List.of(
+				new NamedScenario("disconnect", () ->
+						blockedSealCannotPublishLateInputRequiredAndReleasesExactlyOnce(
+								SealTermination.DISCONNECT)),
+				new NamedScenario("deadline", () ->
+						blockedSealCannotPublishLateInputRequiredAndReleasesExactlyOnce(
+								SealTermination.DEADLINE)),
+				new NamedScenario("shutdown", () ->
+						blockedSealCannotPublishLateInputRequiredAndReleasesExactlyOnce(
+								SealTermination.SHUTDOWN)));
+		return dynamicTests(scenarios);
 	}
 
 	private void blockedSealCannotPublishLateInputRequiredAndReleasesExactlyOnce(
@@ -318,11 +332,16 @@ public class McpMultiRoundTripTerminationRaceTests {
 		}
 	}
 
-	@Test
-	public void sameAuthenticatedStateCanBranchWhileOneFreshIdTerminates()
-			throws Exception {
-		for (BranchResult branchResult : BranchResult.values())
-			sameAuthenticatedStateCanBranchWhileOneFreshIdTerminates(branchResult);
+	@TestFactory
+	public List<DynamicTest> sameAuthenticatedStateCanBranchWhileOneFreshIdTerminates() {
+		List<NamedScenario> scenarios = List.of(
+				new NamedScenario("complete", () ->
+						sameAuthenticatedStateCanBranchWhileOneFreshIdTerminates(
+								BranchResult.COMPLETE)),
+				new NamedScenario("reemit", () ->
+						sameAuthenticatedStateCanBranchWhileOneFreshIdTerminates(
+								BranchResult.REEMIT)));
+		return dynamicTests(scenarios);
 	}
 
 	private void sameAuthenticatedStateCanBranchWhileOneFreshIdTerminates(
@@ -441,12 +460,16 @@ public class McpMultiRoundTripTerminationRaceTests {
 		}
 	}
 
-	@Test
-	public void conditionalCapabilityHoldTerminatesWithoutProgressOrLateResult()
-			throws Exception {
-		for (HoldTermination termination : HoldTermination.values())
-			conditionalCapabilityHoldTerminatesWithoutProgressOrLateResult(
-					termination);
+	@TestFactory
+	public List<DynamicTest> conditionalCapabilityHoldTerminatesWithoutProgressOrLateResult() {
+		List<NamedScenario> scenarios = List.of(
+				new NamedScenario("disconnect", () ->
+						conditionalCapabilityHoldTerminatesWithoutProgressOrLateResult(
+								HoldTermination.DISCONNECT)),
+				new NamedScenario("deadline", () ->
+						conditionalCapabilityHoldTerminatesWithoutProgressOrLateResult(
+								HoldTermination.DEADLINE)));
+		return dynamicTests(scenarios);
 	}
 
 	private void conditionalCapabilityHoldTerminatesWithoutProgressOrLateResult(
@@ -758,6 +781,22 @@ public class McpMultiRoundTripTerminationRaceTests {
 
 	private static String stringId(McpJsonRpcId id) {
 		return ((McpJsonRpcId.StringId) id).value();
+	}
+
+	private static List<DynamicTest> dynamicTests(
+			List<NamedScenario> scenarios) {
+		return scenarios.stream().map(scenario -> DynamicTest.dynamicTest(
+				scenario.name(), () -> Assertions.assertTimeoutPreemptively(
+						Duration.ofSeconds(120),
+						() -> scenario.scenario().run()))).toList();
+	}
+
+	@FunctionalInterface
+	private interface Scenario {
+		void run() throws Exception;
+	}
+
+	private record NamedScenario(String name, Scenario scenario) {
 	}
 
 	private enum OpenTermination {

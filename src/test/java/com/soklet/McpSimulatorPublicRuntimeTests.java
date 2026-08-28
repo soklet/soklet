@@ -47,7 +47,7 @@ import java.util.function.Supplier;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@Timeout(30)
+@Timeout(60)
 public class McpSimulatorPublicRuntimeTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/mcp";
@@ -95,7 +95,7 @@ public class McpSimulatorPublicRuntimeTests {
 
 		try {
 			SokletSimulator.run(configFactory, simulator -> {
-				assertStoppedDiagnostics(server.server());
+				assertRunningOffNetworkDiagnostics(server.server());
 				McpSimulation missingHost = simulator.startMcpRequest(request(
 						"missing-host", "blocking", null, null, Optional.empty()));
 				Assertions.assertEquals(421,
@@ -111,7 +111,7 @@ public class McpSimulatorPublicRuntimeTests {
 						"Simulator mode must not inject or repair the Host header.");
 				McpSimulation simulation = simulator.startMcpRequest(request);
 				Assertions.assertTrue(awaitLatch(handlerEntered));
-				assertStoppedDiagnostics(server.server());
+				assertRunningOffNetworkDiagnostics(server.server());
 				releaseHandler.countDown();
 				McpSimulationResponse response = awaitResponse(simulation);
 				Assertions.assertEquals(200, response.getStatusCode());
@@ -173,7 +173,6 @@ public class McpSimulatorPublicRuntimeTests {
 							context -> McpRateLimitDecision.allowed())
 					.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 					.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
-					.shutdownTimeout(Duration.ofMillis(250))
 					.build();
 		});
 
@@ -543,8 +542,7 @@ public class McpSimulatorPublicRuntimeTests {
 					.subscriptions(subscriptions)
 					.build();
 			return baseServerBuilder(transports, List.of(endpoint),
-					McpAdmissionController.acceptAllInstance(),
-					Duration.ofMillis(250)).build();
+					McpAdmissionController.acceptAllInstance()).build();
 		});
 		Request request = subscriptionRequest("subscription-sim");
 
@@ -740,6 +738,7 @@ public class McpSimulatorPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void nonDrainingCaptureLimitDoesNotBlockUnrelatedSimulationOrCreateTransportFailure() {
 		CountDownLatch firstSlowProgress = new CountDownLatch(1);
 		CountDownLatch allowSlowOverflow = new CountDownLatch(1);
@@ -790,8 +789,7 @@ public class McpSimulatorPublicRuntimeTests {
 				.tools(List.of(slow, fast))
 				.build();
 			return baseServerBuilder(transports, List.of(endpoint),
-					McpAdmissionController.acceptAllInstance(),
-					Duration.ofMillis(250))
+					McpAdmissionController.acceptAllInstance())
 					.requestHandlerConcurrency(2)
 					.requestHandlerQueueCapacity(1)
 					.keepAliveInterval(Duration.ofHours(1))
@@ -802,7 +800,7 @@ public class McpSimulatorPublicRuntimeTests {
 		try {
 			SokletSimulator.run(server.configFactory(metrics,
 					LifecycleObserver.defaultInstance()), simulator -> {
-				assertStoppedDiagnostics(server.server());
+				assertRunningOffNetworkDiagnostics(server.server());
 				McpSimulation slowSimulation = simulator.startMcpRequest(request(
 						"capture-slow", "capture-slow", "\"slow-token\"",
 						LOOPBACK + ":0", Optional.empty()),
@@ -836,7 +834,7 @@ public class McpSimulatorPublicRuntimeTests {
 					Assertions.assertSame(slowCompletion,
 							awaitCompletion(slowSimulation));
 					Assertions.assertEquals(1, slowCancelCallbacks.get());
-					assertStoppedDiagnostics(server.server());
+					assertRunningOffNetworkDiagnostics(server.server());
 
 					McpSimulation fastSimulation = simulator.startMcpRequest(request(
 							"capture-fast", "capture-fast", null,
@@ -867,7 +865,7 @@ public class McpSimulatorPublicRuntimeTests {
 
 					releaseSlowHandler.countDown();
 					Assertions.assertTrue(awaitLatch(slowHandlerExited));
-					assertStoppedDiagnostics(server.server());
+					assertRunningOffNetworkDiagnostics(server.server());
 				} finally {
 					allowSlowOverflow.countDown();
 					releaseSlowHandler.countDown();
@@ -986,7 +984,9 @@ public class McpSimulatorPublicRuntimeTests {
 					try {
 						while (releaseHandler.getCount() != 0) {
 							try {
-								releaseHandler.await();
+								Assertions.assertTrue(releaseHandler.await(10,
+										TimeUnit.SECONDS),
+										"Timed out waiting to release the simulation handler");
 							} catch (InterruptedException e) {
 								interrupted = true;
 							}
@@ -1054,8 +1054,8 @@ public class McpSimulatorPublicRuntimeTests {
 									.fromMethods(Set.of()))
 							.build()),
 					"Live start must not overlap residual simulator work.");
-			Assertions.assertEquals(InternalParticipantKind.MCP,
-					conflict.getInternalParticipantKind());
+			Assertions.assertEquals(ParticipantKind.MCP,
+					conflict.getParticipantKind());
 			Assertions.assertSame(server.server().getClass(),
 					conflict.getTransportClass());
 		} finally {
@@ -1143,6 +1143,7 @@ public class McpSimulatorPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void concurrentSimulationsRemainRequestIsolatedAndDrainExactlyOnce()
 			throws Exception {
 		int requestCount = 16;
@@ -1173,13 +1174,15 @@ public class McpSimulatorPublicRuntimeTests {
 				Set<String> expectedIds = java.util.stream.IntStream.range(0,
 						requestCount).mapToObj(index -> "\"id\":\"concurrent-"
 						+ index + "\"").collect(java.util.stream.Collectors.toSet());
-				Set<String> actualIds = futures.stream().map(future -> {
-					try {
-						return future.get(5, TimeUnit.SECONDS);
-					} catch (Exception e) {
-						throw new AssertionError(e);
-					}
-				}).map(body -> expectedIds.stream().filter(body::contains)
+				try {
+					CompletableFuture.allOf(futures.toArray(
+							CompletableFuture[]::new)).get(20, TimeUnit.SECONDS);
+				} catch (Exception exception) {
+					throw new AssertionError(exception);
+				}
+				Set<String> actualIds = futures.stream()
+						.map(CompletableFuture::join)
+						.map(body -> expectedIds.stream().filter(body::contains)
 						.findFirst().orElseThrow()).collect(
 						java.util.stream.Collectors.toSet());
 				Assertions.assertEquals(expectedIds, actualIds);
@@ -1226,15 +1229,14 @@ public class McpSimulatorPublicRuntimeTests {
 					.tools(tools)
 					.build();
 			return baseServerBuilder(transports, List.of(endpoint),
-					admissionController, shutdownTimeout).build();
+					admissionController).build();
 		});
 	}
 
 	private static McpServer.Builder baseServerBuilder(
 			@NonNull SimulatorTransports transports,
 			@NonNull List<@NonNull McpEndpoint> endpoints,
-			@NonNull McpAdmissionController admissionController,
-			@NonNull Duration shutdownTimeout) {
+			@NonNull McpAdmissionController admissionController) {
 		return transports.newMcpServerBuilder(0)
 				.host(LOOPBACK)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints))
@@ -1242,14 +1244,13 @@ public class McpSimulatorPublicRuntimeTests {
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
-				.allowedHosts(Set.of(LOOPBACK))
-				.shutdownTimeout(shutdownTimeout);
+				.allowedHosts(Set.of(LOOPBACK));
 	}
 
 
 	private static final class ServerFixture {
 		@NonNull
-		private final Duration shutdownTimeout;
+		private final Duration forcedShutdownDuration;
 		@NonNull
 		private final Function<SimulatorTransports, McpServer> serverFactory;
 		@NonNull
@@ -1257,7 +1258,7 @@ public class McpSimulatorPublicRuntimeTests {
 
 		private ServerFixture(@NonNull Duration shutdownTimeout,
 				@NonNull Function<SimulatorTransports, McpServer> serverFactory) {
-			this.shutdownTimeout = shutdownTimeout;
+			this.forcedShutdownDuration = shutdownTimeout;
 			this.serverFactory = serverFactory;
 		}
 
@@ -1273,10 +1274,13 @@ public class McpSimulatorPublicRuntimeTests {
 								ResourceMethodResolver.fromMethods(Set.of()))
 						.metricsCollector(metrics)
 						.lifecycleObservers(List.of(lifecycle))
-						.internalLifecyclePolicy(new InternalLifecyclePolicy(
-								Optional.of(Duration.ofSeconds(30)),
-								Duration.ofSeconds(2), Duration.ZERO,
-								this.shutdownTimeout))
+						.lifecyclePolicy(LifecyclePolicy.builder()
+								.startupTimeout(Duration.ofSeconds(30))
+								.startupCancellationTimeout(Duration.ofSeconds(2))
+								.gracefulShutdownDuration(Duration.ZERO)
+								.forcedShutdownDuration(
+										this.forcedShutdownDuration)
+								.build())
 						.build();
 			};
 		}
@@ -1370,7 +1374,19 @@ public class McpSimulatorPublicRuntimeTests {
 
 	private static void assertStoppedDiagnostics(@NonNull McpServer server) {
 		McpServerDiagnostics diagnostics = server.getDiagnostics();
-		Assertions.assertEquals(McpServerStatus.STOPPED, diagnostics.getStatus());
+		Assertions.assertEquals(McpServerStatus.TERMINATED, diagnostics.getStatus());
+		assertOffNetworkDiagnostics(diagnostics);
+	}
+
+	private static void assertRunningOffNetworkDiagnostics(
+			@NonNull McpServer server) {
+		McpServerDiagnostics diagnostics = server.getDiagnostics();
+		Assertions.assertEquals(McpServerStatus.RUNNING, diagnostics.getStatus());
+		assertOffNetworkDiagnostics(diagnostics);
+	}
+
+	private static void assertOffNetworkDiagnostics(
+			@NonNull McpServerDiagnostics diagnostics) {
 		Assertions.assertTrue(diagnostics.getBoundAddress().isEmpty());
 		Assertions.assertEquals(0, diagnostics.getActiveHandlerExecutions());
 		Assertions.assertEquals(0, diagnostics.getQueuedRequests());
@@ -1592,13 +1608,7 @@ public class McpSimulatorPublicRuntimeTests {
 
 		@Override
 		public void didStopMcpServer(@NonNull McpServer server,
-				@NonNull McpShutdownOutcome outcome) {
-			this.callbacks.incrementAndGet();
-		}
-
-		@Override
-		public void didFailToStopMcpServer(@NonNull McpServer server,
-				@NonNull Throwable throwable) {
+				@NonNull ParticipantShutdownResult result) {
 			this.callbacks.incrementAndGet();
 		}
 

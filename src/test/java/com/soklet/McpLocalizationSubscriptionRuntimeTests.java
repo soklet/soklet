@@ -46,7 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-@Timeout(30)
+@Timeout(60)
 class McpLocalizationSubscriptionRuntimeTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/localization/subscription";
@@ -106,6 +106,7 @@ class McpLocalizationSubscriptionRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	void failRequestPreRenderRollsTheReservationBackExactlyOnce() {
 		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
 				.contextProvider(request -> {

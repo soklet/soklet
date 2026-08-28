@@ -107,6 +107,24 @@ public final class McpToolOutput implements McpCompletePayload {
 	}
 
 	/**
+	 * Returns a builder initialized with every field of this output.
+	 *
+	 * <p>Content blocks retain their insertion order, structured content is
+	 * copied when present, and the application-level error state is preserved.
+	 * This is the preferred starting point for a sanitizer that changes only
+	 * selected fields while retaining all other tool output.
+	 *
+	 * @return field-preserving builder initialized from this output
+	 */
+	@NonNull
+	public Builder toBuilder() {
+		Builder builder = builder().content(this.content).error(this.error);
+		if (this.structuredContent != null)
+			builder.structuredContent(this.structuredContent);
+		return builder;
+	}
+
+	/**
 	 * Mutable builder for immutable {@link McpToolOutput}.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>

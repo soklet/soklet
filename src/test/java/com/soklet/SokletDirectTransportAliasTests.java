@@ -41,11 +41,11 @@ final class SokletDirectTransportAliasTests {
 		ProbeHttpDecorator nested = new ProbeHttpDecorator(configured);
 
 		try (Soklet owner = Soklet.fromConfig(httpConfig(configured))) {
-			assertOwnershipConflict(base, InternalParticipantKind.HTTP,
+			assertOwnershipConflict(base, ParticipantKind.HTTP,
 					ProbeHttpEngine.class);
-			assertOwnershipConflict(sibling, InternalParticipantKind.HTTP,
+			assertOwnershipConflict(sibling, ParticipantKind.HTTP,
 					ProbeHttpDecorator.class);
-			assertOwnershipConflict(nested, InternalParticipantKind.HTTP,
+			assertOwnershipConflict(nested, ParticipantKind.HTTP,
 					ProbeHttpDecorator.class);
 
 			Assertions.assertSame(identity, base.identity());
@@ -77,8 +77,8 @@ final class SokletDirectTransportAliasTests {
 			TransportOwnershipException conflict = Assertions.assertThrows(
 					TransportOwnershipException.class,
 					() -> Soklet.fromConfig(sseConfig(sse)));
-			Assertions.assertEquals(InternalParticipantKind.SSE,
-					conflict.getInternalParticipantKind());
+			Assertions.assertEquals(ParticipantKind.SSE,
+					conflict.getParticipantKind());
 			Assertions.assertSame(ProbeSseEngine.class,
 					conflict.getTransportClass());
 			Assertions.assertEquals(
@@ -129,8 +129,8 @@ final class SokletDirectTransportAliasTests {
 					TransportOwnershipException.class,
 					() -> Soklet.fromConfig(httpAndSseConfig(freeHttp,
 							conflictingSse)));
-			Assertions.assertEquals(InternalParticipantKind.SSE,
-					conflict.getInternalParticipantKind());
+			Assertions.assertEquals(ParticipantKind.SSE,
+					conflict.getParticipantKind());
 			Assertions.assertSame(ProbeSseEngine.class,
 					conflict.getTransportClass());
 			Assertions.assertEquals(
@@ -152,13 +152,13 @@ final class SokletDirectTransportAliasTests {
 	}
 
 	private static void assertOwnershipConflict(@NonNull HttpServer candidate,
-			@NonNull InternalParticipantKind expectedKind,
+			@NonNull ParticipantKind expectedKind,
 			@NonNull Class<?> expectedClass) {
 		TransportOwnershipException conflict = Assertions.assertThrows(
 				TransportOwnershipException.class,
 				() -> Soklet.fromConfig(httpConfig(candidate)));
 		Assertions.assertEquals(expectedKind,
-				conflict.getInternalParticipantKind());
+				conflict.getParticipantKind());
 		Assertions.assertSame(expectedClass, conflict.getTransportClass());
 		Assertions.assertEquals(
 				"The " + expectedKind + " transport identity for "

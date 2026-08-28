@@ -84,7 +84,8 @@ function reportText() {
         + '- Bounded locale preferences matched: 9\n'
         + '- Catalog invalidations requested/delivered: 2/2\n'
         + '- Final active handlers/queued/streams/subscriptions: 0/0/0/0\n'
-        + '- Final MCP status: STOPPED\n'
+        + '- Final MCP status: TERMINATED\n'
+        + '- Lifecycle core shutdown bound: PT11S\n'
       : '';
 
     return `## ${scenario}\n\n- Result: PASS\n${localizationEvidence}`;
@@ -132,7 +133,7 @@ try {
   for (const checkedInProfileName of ['smoke', 'nightly', 'release']) {
     const checkedInProfile = verifySoakProfile(checkedInProfileName, projectRoot);
     assert.equal(checkedInProfile.profileName, checkedInProfileName);
-    assert.equal(checkedInProfile.values.size, 40);
+    assert.equal(checkedInProfile.values.size, 41);
     assert.match(checkedInProfile.profileSha256, /^[0-9a-f]{64}$/);
   }
 

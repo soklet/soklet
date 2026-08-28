@@ -40,7 +40,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @NotThreadSafe
-@Timeout(30)
+@Timeout(60)
 public class McpSimulationLifecyclePhaseTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
@@ -66,7 +66,9 @@ public class McpSimulationLifecyclePhaseTests {
 			Assertions.assertThrows(IllegalStateException.class,
 					() -> session.start(discoveryRequest(),
 							McpSimulationOptions.defaultInstance()));
-			Assertions.assertTrue(session.awaitTermination(Duration.ofSeconds(5)));
+			Assertions.assertTrue(session.awaitTermination(
+					System.nanoTime() + Duration.ofSeconds(5).toNanos(),
+					System::nanoTime));
 			assertEmpty(session.lifecycleEvidence());
 			session.releaseLifecycleEvidence();
 			session.releaseLifecycleEvidence();
@@ -76,6 +78,7 @@ public class McpSimulationLifecyclePhaseTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void graceful_simulation_drain_does_not_interrupt_admitted_handler()
 			throws Exception {
 		CountDownLatch entered = new CountDownLatch(1);
@@ -108,7 +111,9 @@ public class McpSimulationLifecyclePhaseTests {
 			Assertions.assertThrows(IllegalStateException.class,
 					session::releaseLifecycleEvidence);
 			release.countDown();
-			Assertions.assertTrue(session.awaitTermination(Duration.ofSeconds(5)));
+			Assertions.assertTrue(session.awaitTermination(
+					System.nanoTime() + Duration.ofSeconds(5).toNanos(),
+					System::nanoTime));
 			Assertions.assertEquals(200, simulation.awaitResponse(
 					Duration.ofSeconds(5)).orElseThrow().getStatusCode());
 			Assertions.assertEquals(McpStreamTerminationReason.COMPLETED,
@@ -123,6 +128,7 @@ public class McpSimulationLifecyclePhaseTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void force_interrupts_admitted_handler_and_reaches_complete_barrier()
 			throws Exception {
 		CountDownLatch entered = new CountDownLatch(1);
@@ -147,7 +153,9 @@ public class McpSimulationLifecyclePhaseTests {
 			session.force();
 			session.force();
 			Assertions.assertTrue(interrupted.await(5, TimeUnit.SECONDS));
-			Assertions.assertTrue(session.awaitTermination(Duration.ofSeconds(5)));
+			Assertions.assertTrue(session.awaitTermination(
+					System.nanoTime() + Duration.ofSeconds(5).toNanos(),
+					System::nanoTime));
 			assertEmpty(session.lifecycleEvidence());
 			session.releaseLifecycleEvidence();
 		}

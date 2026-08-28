@@ -379,6 +379,24 @@ final class McpTransportRuntime implements AutoCloseable {
 			timerThread.join();
 	}
 
+	boolean join(@NonNull Duration timeout) throws InterruptedException {
+		requireNonNull(timeout);
+		long deadlineNanos = System.nanoTime()
+				+ Math.max(0L, timeout.toNanos());
+		if (!eventLoop.joinUntil(deadlineNanos))
+			return false;
+
+		while (timerThread.isAlive()) {
+			long remainingNanos = deadlineNanos - System.nanoTime();
+			if (remainingNanos <= 0L)
+				return false;
+			long millis = remainingNanos / 1_000_000L;
+			int nanos = (int) (remainingNanos % 1_000_000L);
+			timerThread.join(millis, nanos);
+		}
+		return true;
+	}
+
 	boolean awaitHandlerTermination(@NonNull Duration timeout)
 			throws InterruptedException {
 		requireNonNull(timeout);

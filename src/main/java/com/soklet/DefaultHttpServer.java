@@ -119,8 +119,6 @@ final class DefaultHttpServer implements HttpServer {
 	@NonNull
 	private static final Integer DEFAULT_CONCURRENT_CONNECTION_LIMIT;
 	@NonNull
-	private static final Duration DEFAULT_SHUTDOWN_TIMEOUT;
-	@NonNull
 	private static final Integer DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY_MULTIPLIER;
 	@NonNull
 	private static final Integer DEFAULT_VIRTUAL_REQUEST_HANDLER_CONCURRENCY_MULTIPLIER;
@@ -150,7 +148,6 @@ final class DefaultHttpServer implements HttpServer {
 		DEFAULT_REQUEST_READ_BUFFER_SIZE_IN_BYTES = 1_024 * 64;
 		DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT = 0;
 		DEFAULT_CONCURRENT_CONNECTION_LIMIT = 8_192;
-		DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
 		DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY_MULTIPLIER = 64;
 		DEFAULT_VIRTUAL_REQUEST_HANDLER_CONCURRENCY_MULTIPLIER = 16;
 		DEFAULT_STREAMING_QUEUE_CAPACITY_IN_BYTES = 1_024 * 1_024;
@@ -183,8 +180,6 @@ final class DefaultHttpServer implements HttpServer {
 	private final Integer requestHandlerQueueCapacity;
 	@NonNull
 	private final Duration socketSelectTimeout;
-	@NonNull
-	private final Duration shutdownTimeout;
 	@NonNull
 	private final Integer maximumRequestSizeInBytes;
 	@NonNull
@@ -233,6 +228,8 @@ final class DefaultHttpServer implements HttpServer {
 	private volatile RequestHandler requestHandler;
 	@NonNull
 	private volatile LifecycleObserver lifecycleObserver = LifecycleObserver.defaultInstance();
+	@NonNull
+	private volatile LifecyclePolicy lifecyclePolicy = LifecyclePolicy.fromDefaults();
 	@Nullable
 	private volatile MetricsCollector metricsCollector;
 	@Nullable
@@ -260,7 +257,6 @@ final class DefaultHttpServer implements HttpServer {
 		this.socketSelectTimeout = builder.socketSelectTimeout != null ? builder.socketSelectTimeout : DEFAULT_SOCKET_SELECT_TIMEOUT;
 		this.socketPendingConnectionLimit = builder.socketPendingConnectionLimit != null ? builder.socketPendingConnectionLimit : DEFAULT_SOCKET_PENDING_CONNECTION_LIMIT;
 		this.concurrentConnectionLimit = builder.concurrentConnectionLimit != null ? builder.concurrentConnectionLimit : DEFAULT_CONCURRENT_CONNECTION_LIMIT;
-		this.shutdownTimeout = builder.shutdownTimeout != null ? builder.shutdownTimeout : DEFAULT_SHUTDOWN_TIMEOUT;
 		this.multipartParser = builder.multipartParser != null ? builder.multipartParser : DefaultMultipartParser.defaultInstance();
 		this.idGenerator = builder.idGenerator != null ? builder.idGenerator : IdGenerator.defaultInstance();
 
@@ -302,9 +298,6 @@ final class DefaultHttpServer implements HttpServer {
 
 		if (this.responseWriteIdleTimeout.isNegative())
 			throw new IllegalArgumentException("Response write idle timeout must be >= 0");
-
-		if (this.shutdownTimeout.isNegative())
-			throw new IllegalArgumentException("Shutdown timeout must be >= 0");
 
 		this.requestHandlerExecutorServiceSupplier = builder.requestHandlerExecutorServiceSupplier != null ? builder.requestHandlerExecutorServiceSupplier : () -> {
 			String threadNamePrefix = "request-handler-";
@@ -403,10 +396,50 @@ final class DefaultHttpServer implements HttpServer {
 			throw new IllegalArgumentException("Concurrent connection limit must be >= 0");
 
 		this.lifecycleAdapter = new BuiltInTransportLifecycleAdapter(
-				InternalParticipantKind.HTTP, new HttpLifecycleOperations(), this::getShutdownTimeout);
+				InternalParticipantKind.HTTP, new HttpLifecycleOperations(),
+				this::getGracefulShutdownDuration,
+				this::getForcedShutdownDuration);
 	}
 
+	@NonNull
 	@Override
+	public TransportIdentity getTransportIdentity() {
+		return getLifecycleAdapter().identity().publicIdentity();
+	}
+
+	@NonNull
+	@Override
+	public TransportRuntime attach(
+			@NonNull HttpTransportAttachmentContext attachmentContext,
+			@NonNull StartupContext startupContext) {
+		requireNonNull(startupContext);
+		HttpTransportAttachmentContext exactContext = requireNonNull(
+				attachmentContext);
+		initialize(exactContext.getSokletConfig(),
+				exactContext.getAdmissionFencedRequestHandler());
+		TransportTerminationSignal signal = exactContext.getTerminationSignal();
+		AtomicBoolean stopObserverStarted = new AtomicBoolean();
+		return new TransportRuntime() {
+			@Override
+			public void start(@NonNull StartupContext context) {
+				requireNonNull(context);
+				DefaultHttpServer.this.start();
+			}
+
+			@Override
+			public void quiesce(@NonNull ShutdownContext context) {
+				requireNonNull(context);
+				observeStop(signal, stopObserverStarted);
+			}
+
+			@Override
+			public void force(@NonNull ShutdownContext context) {
+				requireNonNull(context);
+				observeStop(signal, stopObserverStarted);
+			}
+		};
+	}
+
 	public void start() {
 		getLock().lock();
 
@@ -798,7 +831,6 @@ final class DefaultHttpServer implements HttpServer {
 		}
 	}
 
-	@Override
 	public void stop() {
 		BuiltInTransportLifecycleAdapter.Generation generation;
 		ReentrantLock lock = getLock();
@@ -883,7 +915,6 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	@NonNull
-	@Override
 	public Boolean isStarted() {
 		getLock().lock();
 
@@ -895,7 +926,6 @@ final class DefaultHttpServer implements HttpServer {
 		}
 	}
 
-	@Override
 	public void initialize(@NonNull SokletConfig sokletConfig,
 												 @NonNull RequestHandler requestHandler) {
 		requireNonNull(requestHandler);
@@ -903,7 +933,24 @@ final class DefaultHttpServer implements HttpServer {
 
 		this.requestHandler = requestHandler;
 		this.lifecycleObserver = sokletConfig.getAggregateLifecycleObserver();
+		this.lifecyclePolicy = sokletConfig.getLifecyclePolicy();
 		this.metricsCollector = sokletConfig.getMetricsCollector();
+	}
+
+	private void observeStop(@NonNull TransportTerminationSignal signal,
+			@NonNull AtomicBoolean observerStarted) {
+		if (!requireNonNull(observerStarted).compareAndSet(false, true))
+			return;
+		Thread observer = new Thread(() -> {
+			try {
+				stop();
+				requireNonNull(signal).signalTerminated();
+			} catch (RuntimeException | Error failure) {
+				requireNonNull(signal).signalTerminationFailure(failure);
+			}
+		}, "soklet-http-delegate-stop");
+		observer.setDaemon(true);
+		observer.start();
 	}
 
 	@NonNull
@@ -2014,8 +2061,13 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	@NonNull
-	protected Duration getShutdownTimeout() {
-		return this.shutdownTimeout;
+	protected Duration getGracefulShutdownDuration() {
+		return this.lifecyclePolicy.getGracefulShutdownDuration();
+	}
+
+	@NonNull
+	protected Duration getForcedShutdownDuration() {
+		return this.lifecyclePolicy.getForcedShutdownDuration();
 	}
 
 	@NonNull

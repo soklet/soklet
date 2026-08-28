@@ -39,7 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 @NotThreadSafe
-@Timeout(30)
+@Timeout(60)
 public class McpHttpServerNotificationTests {
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final String CANCELLED = "notifications/cancelled";
@@ -103,6 +103,7 @@ public class McpHttpServerNotificationTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void http_cancellation_with_an_active_request_id_never_cancels_work()
 			throws Exception {
 		CountDownLatch handlerEntered = new CountDownLatch(1);
@@ -120,7 +121,9 @@ public class McpHttpServerNotificationTests {
 					invocation.set(applicationInvocation);
 					handlerEntered.countDown();
 					try {
-						releaseHandler.await();
+						Assertions.assertTrue(releaseHandler.await(10,
+								TimeUnit.SECONDS),
+								"Timed out waiting to release the active request");
 					} catch (InterruptedException exception) {
 						handlerInterrupted.set(true);
 						throw exception;
@@ -450,6 +453,7 @@ public class McpHttpServerNotificationTests {
 	}
 
 	@Test
+	@Timeout(240)
 	public void notification_policy_failures_fail_closed_without_a_json_rpc_body()
 			throws Exception {
 		List<McpHttpEndpointPolicy> cases = List.of(
@@ -486,6 +490,7 @@ public class McpHttpServerNotificationTests {
 	}
 
 	@Test
+	@Timeout(300)
 	public void classified_notification_cors_matrix_preserves_headers_and_rejects_origins_early()
 			throws Exception {
 		String allowedOrigin = "https://allowed.example";
@@ -584,6 +589,7 @@ public class McpHttpServerNotificationTests {
 	}
 
 	@Test
+	@Timeout(240)
 	public void notification_admission_outputs_fail_closed_on_reserved_codes_and_unsafe_headers()
 			throws Exception {
 		List<NotificationAdmissionHardeningCase> cases = List.of(

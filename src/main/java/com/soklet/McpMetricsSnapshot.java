@@ -52,7 +52,8 @@ public final class McpMetricsSnapshot {
 	@NonNull
 	private final Long handlerCapacityRejections;
 	@NonNull
-	private final Map<@NonNull McpShutdownOutcome, @NonNull Long> shutdowns;
+	private final Map<@NonNull ParticipantShutdownDisposition, @NonNull Long>
+			shutdowns;
 	@NonNull
 	private final Long connectionsAccepted;
 	@NonNull
@@ -139,10 +140,11 @@ public final class McpMetricsSnapshot {
 	}
 
 	@NonNull
-	private static Map<@NonNull McpShutdownOutcome, @NonNull Long> copyShutdowns(
-			@NonNull Map<@NonNull McpShutdownOutcome, @NonNull Long> shutdowns) {
-		EnumMap<McpShutdownOutcome, Long> copied =
-				new EnumMap<>(McpShutdownOutcome.class);
+	private static Map<@NonNull ParticipantShutdownDisposition, @NonNull Long>
+			copyShutdowns(@NonNull Map<@NonNull ParticipantShutdownDisposition,
+					@NonNull Long> shutdowns) {
+		EnumMap<ParticipantShutdownDisposition, Long> copied =
+				new EnumMap<>(ParticipantShutdownDisposition.class);
 		requireNonNull(shutdowns).forEach((outcome, count) -> {
 			requireNonNull(outcome);
 			requireNonNull(count);
@@ -316,7 +318,8 @@ public final class McpMetricsSnapshot {
 	 * @return immutable, enum-ordered shutdown counts
 	 */
 	@NonNull
-	public Map<@NonNull McpShutdownOutcome, @NonNull Long> getShutdowns() {
+	public Map<@NonNull ParticipantShutdownDisposition, @NonNull Long>
+			getShutdowns() {
 		return this.shutdowns;
 	}
 
@@ -861,7 +864,8 @@ public final class McpMetricsSnapshot {
 		@NonNull
 		private Long handlerCapacityRejections;
 		@NonNull
-		private Map<@NonNull McpShutdownOutcome, @NonNull Long> shutdowns;
+		private Map<@NonNull ParticipantShutdownDisposition, @NonNull Long>
+				shutdowns;
 		@NonNull
 		private Long connectionsAccepted;
 		@NonNull
@@ -986,7 +990,8 @@ public final class McpMetricsSnapshot {
 		 */
 		@NonNull
 		public Builder shutdowns(
-				@NonNull Map<@NonNull McpShutdownOutcome, @NonNull Long> shutdowns) {
+				@NonNull Map<@NonNull ParticipantShutdownDisposition,
+						@NonNull Long> shutdowns) {
 			this.shutdowns = copyShutdowns(shutdowns);
 			return this;
 		}

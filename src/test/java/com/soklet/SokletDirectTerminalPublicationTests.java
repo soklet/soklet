@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
+import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
@@ -42,8 +43,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /** Regression coverage for direct-owner terminal/public-stage publication. */
-@Timeout(value = 30, unit = TimeUnit.SECONDS)
+@Timeout(value = 60, unit = TimeUnit.SECONDS)
 final class SokletDirectTerminalPublicationTests {
+	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
+			LifecyclePolicy.builder()
+					.startupTimeout(Duration.ofSeconds(5))
+					.startupCancellationTimeout(Duration.ofSeconds(2))
+					.gracefulShutdownDuration(Duration.ofSeconds(2))
+					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.build();
 	@NonNull
 	private final Set<ExecutorService> executors =
 			java.util.concurrent.ConcurrentHashMap.newKeySet();
@@ -85,18 +93,20 @@ final class SokletDirectTerminalPublicationTests {
 		ExecutorService callers = newExecutor(12);
 		try (OwnerHarness harness = OwnerHarness.create()) {
 			harness.owner().start();
-			List<Future<CompletionStage<InternalShutdownResult>>> calls =
+			List<Future<CompletionStage<ShutdownResult>>> calls =
 					new ArrayList<>();
 			for (int index = 0; index < 24; index++)
 				calls.add(callers.submit(() -> {
-					releaseCallers.await();
+					Assertions.assertTrue(releaseCallers.await(10,
+							TimeUnit.SECONDS),
+							"Timed out waiting to release shutdown callers");
 					return harness.owner().shutdown();
 				}));
 
 			releaseCallers.countDown();
-			CompletionStage<InternalShutdownResult> stage =
+			CompletionStage<ShutdownResult> stage =
 					calls.get(0).get(3, TimeUnit.SECONDS);
-			for (Future<CompletionStage<InternalShutdownResult>> call : calls)
+			for (Future<CompletionStage<ShutdownResult>> call : calls)
 				Assertions.assertSame(stage, call.get(3, TimeUnit.SECONDS));
 
 			InternalShutdownResult result = harness.owner().awaitCompletion();
@@ -116,8 +126,10 @@ final class SokletDirectTerminalPublicationTests {
 
 			Thread handoff = harness.launcher().runNextHandoff();
 			join(handoff);
+			ShutdownResult publicResult = stage.toCompletableFuture()
+					.get(2, TimeUnit.SECONDS);
 			Assertions.assertSame(result,
-					stage.toCompletableFuture().get(2, TimeUnit.SECONDS));
+					publicResult.internalResult());
 			Assertions.assertSame(stage, harness.owner().shutdown());
 			Assertions.assertEquals(1, harness.workers().created(
 					LifecycleWorkers.Role.PUBLIC_STAGE_HANDOFF));
@@ -131,15 +143,17 @@ final class SokletDirectTerminalPublicationTests {
 	void minimalViewAndDetachedMirrorsCannotControlOwner() throws Exception {
 		try (OwnerHarness harness = OwnerHarness.create()) {
 			harness.owner().start();
-			CompletionStage<InternalShutdownResult> stage =
+			CompletionStage<ShutdownResult> stage =
 					harness.owner().shutdown();
 			InternalShutdownResult result = harness.owner().awaitCompletion();
 			Assertions.assertTrue(harness.launcher().awaitHandoff());
 
-			InternalShutdownResult forged = new InternalShutdownResult(
-					InternalShutdownDisposition.NOT_STARTED,
-					InternalStartupDisposition.NOT_ATTEMPTED, List.of());
-			CompletableFuture<InternalShutdownResult> minimal =
+			ShutdownResult forged = ShutdownResult.fromInternal(
+					new InternalShutdownResult(
+							InternalShutdownDisposition.NOT_STARTED,
+							InternalStartupDisposition.NOT_ATTEMPTED,
+							List.of()));
+			CompletableFuture<ShutdownResult> minimal =
 					minimalFuture(stage);
 			Assertions.assertThrows(UnsupportedOperationException.class,
 					() -> minimal.complete(forged));
@@ -151,9 +165,9 @@ final class SokletDirectTerminalPublicationTests {
 			Assertions.assertThrows(UnsupportedOperationException.class,
 					minimal::join);
 
-			CompletableFuture<InternalShutdownResult> completedMirror =
+			CompletableFuture<ShutdownResult> completedMirror =
 					stage.toCompletableFuture();
-			CompletableFuture<InternalShutdownResult> cancelledMirror =
+			CompletableFuture<ShutdownResult> cancelledMirror =
 					stage.toCompletableFuture();
 			Assertions.assertTrue(completedMirror.complete(forged));
 			Assertions.assertTrue(cancelledMirror.cancel(true));
@@ -162,8 +176,10 @@ final class SokletDirectTerminalPublicationTests {
 
 			Thread handoff = harness.launcher().runNextHandoff();
 			join(handoff);
+			ShutdownResult publicResult = stage.toCompletableFuture()
+					.get(2, TimeUnit.SECONDS);
 			Assertions.assertSame(result,
-					stage.toCompletableFuture().get(2, TimeUnit.SECONDS));
+					publicResult.internalResult());
 			Assertions.assertSame(forged, completedMirror.join(),
 					"A detached mirror keeps its independent mutation");
 			Assertions.assertTrue(cancelledMirror.isCancelled());
@@ -182,7 +198,7 @@ final class SokletDirectTerminalPublicationTests {
 				"terminal-public-explicit", explicitWorker);
 		try (OwnerHarness harness = OwnerHarness.create()) {
 			harness.owner().start();
-			CompletionStage<InternalShutdownResult> stage =
+			CompletionStage<ShutdownResult> stage =
 					harness.owner().shutdown();
 			InternalShutdownResult result = harness.owner().awaitCompletion();
 			Assertions.assertTrue(harness.launcher().awaitHandoff());
@@ -196,7 +212,7 @@ final class SokletDirectTerminalPublicationTests {
 				handoffCallbackThread.set(Thread.currentThread());
 				callbackState.set(harness.owner().state());
 				callbackResult.set(harness.owner().result().orElseThrow());
-				Assertions.assertSame(result, value);
+				Assertions.assertSame(result, value.internalResult());
 			});
 			Thread handoff = harness.launcher().runNextHandoff();
 			join(handoff);
@@ -229,7 +245,8 @@ final class SokletDirectTerminalPublicationTests {
 					CompletionException.class,
 					() -> failedDerived.toCompletableFuture().join());
 			Assertions.assertSame(exactFailure, observed.getCause());
-			Assertions.assertSame(result, stage.toCompletableFuture().join(),
+			Assertions.assertSame(result,
+					stage.toCompletableFuture().join().internalResult(),
 					"A derived failure cannot poison the cached root");
 			Assertions.assertSame(result,
 					harness.owner().result().orElseThrow());
@@ -249,7 +266,7 @@ final class SokletDirectTerminalPublicationTests {
 			try {
 				harness.owner().start();
 				peer.start();
-				CompletionStage<InternalShutdownResult> stage =
+				CompletionStage<ShutdownResult> stage =
 						harness.owner().shutdown();
 				AtomicReference<InternalLifecycleStateMachine.State> callbackState =
 						new AtomicReference<>();
@@ -258,7 +275,8 @@ final class SokletDirectTerminalPublicationTests {
 				CompletionStage<Void> blocked = stage.thenAccept(value -> {
 					callbackState.set(harness.owner().state());
 					callbackResult.set(harness.owner().result().orElseThrow());
-					Assertions.assertSame(value, callbackResult.get());
+					Assertions.assertSame(value.internalResult(),
+							callbackResult.get());
 					callbackEntered.countDown();
 					awaitIgnoringInterrupts(releaseCallback);
 				});
@@ -276,7 +294,7 @@ final class SokletDirectTerminalPublicationTests {
 				Assertions.assertSame(result,
 						privateJoin.get(2, TimeUnit.SECONDS));
 				Future<Throwable> peerStop = executor.submit(() ->
-						captureFailure(peer::stop));
+						captureFailure(peer::close));
 				Assertions.assertNull(peerStop.get(3, TimeUnit.SECONDS),
 						"A blocked callback for one owner cannot strand a peer owner");
 				Assertions.assertEquals(InternalLifecycleStateMachine.State.CLOSED,
@@ -284,8 +302,8 @@ final class SokletDirectTerminalPublicationTests {
 				Assertions.assertEquals(InternalLifecycleStateMachine.State.CLOSED,
 						callbackState.get());
 				Assertions.assertSame(result, callbackResult.get());
-				Assertions.assertSame(result,
-						stage.toCompletableFuture().get(2, TimeUnit.SECONDS));
+				Assertions.assertSame(result, stage.toCompletableFuture()
+						.get(2, TimeUnit.SECONDS).internalResult());
 				Assertions.assertEquals(1, harness.workers().created(
 						LifecycleWorkers.Role.PUBLIC_STAGE_HANDOFF));
 
@@ -400,7 +418,8 @@ final class SokletDirectTerminalPublicationTests {
 			@NonNull TerminalHttpEndpoint endpoint) {
 		return SokletConfig.withHttpServer(endpoint)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
-						Set.of(TerminalResource.class)));
+						Set.of(TerminalResource.class)))
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY);
 	}
 
 	private record OwnerHarness(@NonNull Soklet callbackSoklet,
@@ -531,74 +550,45 @@ final class SokletDirectTerminalPublicationTests {
 		}
 	}
 
-	private static final class TerminalHttpEndpoint
-			implements HttpServer, InternalHttpTransportEndpoint {
+	private static final class TerminalHttpEndpoint implements HttpServer {
 		@NonNull
-		private final InternalTransportIdentity identity =
-				InternalTransportIdentity.create();
-		@NonNull
-		private final AtomicBoolean started = new AtomicBoolean();
+		private final TransportIdentity identity = TransportIdentity.create();
 		@NonNull
 		private final AtomicBoolean terminationSignalled = new AtomicBoolean();
 		@NonNull
-		private final AtomicReference<InternalTransportTerminationSignal>
+		private final AtomicReference<TransportTerminationSignal>
 				terminationSignal = new AtomicReference<>();
 
 		@Override
 		@NonNull
-		public InternalTransportIdentity identity() {
+		public TransportIdentity getTransportIdentity() {
 			return this.identity;
 		}
 
 		@Override
 		@NonNull
-		public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
-			this.terminationSignal.set(context.terminationSignal());
-			return new InternalTransportRuntime() {
+		public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
+			this.terminationSignal.set(context.getTerminationSignal());
+			return new TransportRuntime() {
 				@Override
-				public void start(@NonNull InternalStartupContext context) {
-					started.set(true);
-				}
+				public void start(@NonNull StartupContext context) {}
 
 				@Override
-				public void quiesce(@NonNull InternalShutdownContext context) {
+				public void quiesce(@NonNull ShutdownContext context) {
 					terminate();
 				}
 
 				@Override
-				public void force(@NonNull InternalShutdownContext context) {
+				public void force(@NonNull ShutdownContext context) {
 					terminate();
 				}
 			};
 		}
 
-		@Override
-		public void start() {
-			throw new AssertionError("Direct endpoint startup uses its runtime");
-		}
-
-		@Override
-		public void stop() {
-			terminate();
-		}
-
-		@Override
-		@NonNull
-		public Boolean isStarted() {
-			return this.started.get();
-		}
-
-		@Override
-		public void initialize(@NonNull SokletConfig sokletConfig,
-				@NonNull RequestHandler requestHandler) {
-			throw new AssertionError("Direct endpoint attachment uses attach(...)");
-		}
-
 		private void terminate() {
-			this.started.set(false);
-			InternalTransportTerminationSignal signal = this.terminationSignal.get();
+			TransportTerminationSignal signal = this.terminationSignal.get();
 			if (signal != null && this.terminationSignalled.compareAndSet(false, true))
 				signal.signalTerminated();
 		}

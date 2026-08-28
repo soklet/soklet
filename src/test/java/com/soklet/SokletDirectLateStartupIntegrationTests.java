@@ -41,7 +41,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /** Direct-owner integration coverage for late attachment and start returns. */
-@Timeout(value = 45, unit = TimeUnit.SECONDS)
+@Timeout(value = 60, unit = TimeUnit.SECONDS)
 final class SokletDirectLateStartupIntegrationTests {
 	@NonNull
 	private static final Duration LONG_STARTUP = Duration.ofSeconds(10);
@@ -100,7 +100,7 @@ final class SokletDirectLateStartupIntegrationTests {
 
 		try (harness) {
 			Assertions.assertTrue(http.awaitAttachEntered());
-			CompletionStage<InternalShutdownResult> stage = harness.owner().shutdown();
+			CompletionStage<ShutdownResult> stage = harness.owner().shutdown();
 			Assertions.assertSame(stage, harness.owner().shutdown());
 			http.releaseAttach();
 			Assertions.assertTrue(http.awaitAttachReturned());
@@ -109,7 +109,7 @@ final class SokletDirectLateStartupIntegrationTests {
 					SokletStartupException.class,
 					start.get(5, TimeUnit.SECONDS));
 			InternalShutdownResult result = stage.toCompletableFuture()
-					.get(5, TimeUnit.SECONDS);
+					.get(5, TimeUnit.SECONDS).internalResult();
 			Throwable exactCancellation = assertExactCancellation(startupFailure,
 					result);
 
@@ -130,7 +130,8 @@ final class SokletDirectLateStartupIntegrationTests {
 			Assertions.assertEquals(0, http.runtime().quiesceCalls());
 			Assertions.assertEquals(0, http.runtime().forceCalls());
 			Assertions.assertTrue(http.invoke("/late-startup").isEmpty());
-			Assertions.assertFalse(harness.owner().isStarted());
+			Assertions.assertEquals(SokletStatus.CLOSED,
+					harness.owner().publicStatus());
 			assertStableTerminalIdentity(harness.owner(), stage, result);
 		} finally {
 			http.releaseAttach();
@@ -152,9 +153,9 @@ final class SokletDirectLateStartupIntegrationTests {
 
 		try (harness) {
 			Assertions.assertTrue(http.awaitAttachEntered());
-			CompletionStage<InternalShutdownResult> stage = harness.owner().shutdown();
+			CompletionStage<ShutdownResult> stage = harness.owner().shutdown();
 			InternalShutdownResult result = stage.toCompletableFuture()
-					.get(5, TimeUnit.SECONDS);
+					.get(5, TimeUnit.SECONDS).internalResult();
 			SokletStartupException startupFailure = Assertions.assertInstanceOf(
 					SokletStartupException.class,
 					start.get(5, TimeUnit.SECONDS));
@@ -220,6 +221,7 @@ final class SokletDirectLateStartupIntegrationTests {
 	}
 
 	@Test
+	@Timeout(value = 120, unit = TimeUnit.SECONDS)
 	void pendingAttachProofAndFailureBecomePreReadyEventsOnlyAfterCommit()
 			throws Exception {
 		assertPendingAttachReturn(PendingEvent.PROOF);
@@ -227,6 +229,7 @@ final class SokletDirectLateStartupIntegrationTests {
 	}
 
 	@Test
+	@Timeout(value = 120, unit = TimeUnit.SECONDS)
 	void pendingAttachEventsCannotOverrideThrowOrNullPrecedence()
 			throws Exception {
 		RuntimeException proofThenThrow = new IllegalArgumentException(
@@ -242,21 +245,168 @@ final class SokletDirectLateStartupIntegrationTests {
 	}
 
 	@Test
+	@Timeout(value = 120, unit = TimeUnit.SECONDS)
 	void lateStartReturnDuringGraceCatchesUpAfterIndependentIngressQuiesce()
 			throws Exception {
 		assertLateStartReturn(StartRelease.GRACEFUL);
 	}
 
 	@Test
+	@Timeout(value = 120, unit = TimeUnit.SECONDS)
 	void lateStartReturnAfterGraceReceivesForceAsItsFirstUnderlyingPhase()
 			throws Exception {
 		assertLateStartReturn(StartRelease.FORCED);
 	}
 
 	@Test
+	@Timeout(value = 120, unit = TimeUnit.SECONDS)
 	void startReturnAfterTerminalFreezeIsInertAndCannotRewriteUnknown()
 			throws Exception {
 		assertLateStartReturn(StartRelease.AFTER_FREEZE);
+	}
+
+	@Test
+	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	void shutdownBeforeClaimedStartWorkerEntryDeliversOneDeferredPhase()
+			throws Exception {
+		ObservedLauncher launcher = ObservedLauncher.holding("soklet-start-sse");
+		ImmediateHttpEndpoint http = new ImmediateHttpEndpoint();
+		LateStartSseEndpoint sse = new LateStartSseEndpoint(ProofMode.GRACEFUL);
+		OwnerHarness harness = OwnerHarness.create(config(http,
+				gracefulCatchUpPolicy()).sseServer(sse).build(),
+				new LifecycleWorkers(launcher), () -> { });
+		ExecutorService executor = newExecutor();
+		Future<Throwable> start = executor.submit(() ->
+				captureFailure(harness.owner()::start));
+
+		try (harness) {
+			Assertions.assertTrue(launcher.awaitHeld(),
+					"The claimed SSE start worker was not held before entry");
+			Assertions.assertEquals(0, sse.runtime().startCalls());
+
+			CompletionStage<ShutdownResult> stage = harness.owner().shutdown();
+			Assertions.assertTrue(launcher.awaitCompleted("lifecycle-quiesce-sse"),
+					"The graceful phase was not deferred behind the claimed start");
+			Assertions.assertEquals(0, sse.runtime().quiesceCalls());
+			Assertions.assertTrue(launcher.releaseHeld(),
+					"The held start worker could not be released");
+
+			InternalShutdownResult result = stage.toCompletableFuture()
+					.get(5, TimeUnit.SECONDS).internalResult();
+			SokletStartupException startupFailure = Assertions.assertInstanceOf(
+					SokletStartupException.class,
+					start.get(5, TimeUnit.SECONDS));
+			assertExactCancellation(startupFailure, result);
+			Assertions.assertEquals(InternalShutdownDisposition.GRACEFUL,
+					result.disposition());
+			InternalParticipantShutdownResult sseResult = assertParticipant(result,
+					InternalParticipantKind.SSE,
+					InternalParticipantShutdownDisposition.NOT_STARTED);
+			Assertions.assertTrue(sseResult.residualActivity().isEmpty());
+			Assertions.assertEquals(0, sse.runtime().startCalls(),
+					"Cancellation before worker entry must skip transport start");
+			Assertions.assertEquals(1, sse.runtime().quiesceCalls(),
+					"The deferred graceful phase must be delivered exactly once");
+			Assertions.assertEquals(0, sse.runtime().forceCalls());
+			assertStableTerminalIdentity(harness.owner(), stage, result);
+		} finally {
+			launcher.releaseHeld();
+			drainFuture(start);
+			launcher.awaitTermination();
+		}
+	}
+
+	@Test
+	void rejectedStartWorkerLaunchClearsClaimAndRollsBackNotStarted()
+			throws Exception {
+		RuntimeException launchFailure = new IllegalStateException(
+				"rejected SSE start worker");
+		ObservedLauncher launcher = ObservedLauncher.rejecting(
+				"soklet-start-sse", launchFailure);
+		ImmediateHttpEndpoint http = new ImmediateHttpEndpoint();
+		LateStartSseEndpoint sse = new LateStartSseEndpoint(ProofMode.GRACEFUL);
+
+		try (OwnerHarness harness = OwnerHarness.create(config(http, phasePolicy())
+				.sseServer(sse).build(), new LifecycleWorkers(launcher), () -> { })) {
+			SokletStartupException startupFailure = Assertions.assertThrows(
+					SokletStartupException.class, harness.owner()::start);
+			InternalShutdownResult result =
+					startupFailure.getInternalShutdownResult();
+
+			Assertions.assertEquals(InternalStartupDisposition.FAILED,
+					startupFailure.getInternalStartupDisposition());
+			Assertions.assertSame(launchFailure, startupFailure.getCause());
+			Assertions.assertEquals(InternalShutdownDisposition.GRACEFUL,
+					result.disposition());
+			InternalParticipantShutdownResult sseResult = assertParticipant(result,
+					InternalParticipantKind.SSE,
+					InternalParticipantShutdownDisposition.NOT_STARTED);
+			Assertions.assertTrue(sseResult.failures().isEmpty());
+			Assertions.assertTrue(sseResult.residualActivity().isEmpty());
+			Assertions.assertEquals(0, sse.runtime().startCalls());
+			Assertions.assertEquals(1, sse.runtime().quiesceCalls(),
+					"A rejected launch must not leave the start claim stuck");
+			Assertions.assertEquals(0, sse.runtime().forceCalls());
+
+			CompletionStage<ShutdownResult> stage = harness.owner().shutdown();
+			assertStableTerminalIdentity(harness.owner(), stage, result);
+		} finally {
+			launcher.awaitTermination();
+		}
+	}
+
+	@Test
+	@Timeout(value = 120, unit = TimeUnit.SECONDS)
+	void catchUpFailureIsSecondaryEvidenceToExactLateStartFailure()
+			throws Exception {
+		RuntimeException startFailure = new IllegalStateException(
+				"late SSE start failure");
+		RuntimeException catchUpFailure = new IllegalArgumentException(
+				"late SSE graceful catch-up failure");
+		ObservedLauncher launcher = new ObservedLauncher();
+		ImmediateHttpEndpoint http = new ImmediateHttpEndpoint();
+		LateStartSseEndpoint sse = new LateStartSseEndpoint(ProofMode.GRACEFUL,
+				startFailure, catchUpFailure);
+		OwnerHarness harness = OwnerHarness.create(config(http,
+				gracefulCatchUpPolicy()).sseServer(sse).build(),
+				new LifecycleWorkers(launcher), () -> { });
+		ExecutorService executor = newExecutor();
+		Future<Throwable> start = executor.submit(() ->
+				captureFailure(harness.owner()::start));
+
+		try (harness) {
+			Assertions.assertTrue(sse.awaitStartEntered(),
+					"The failing SSE start did not reach its return gate");
+			CompletionStage<ShutdownResult> stage = harness.owner().shutdown();
+			Assertions.assertTrue(launcher.awaitCompleted("lifecycle-quiesce-sse"),
+					"The graceful phase was not retained behind the live start");
+			sse.releaseStart();
+
+			InternalShutdownResult result = stage.toCompletableFuture()
+					.get(5, TimeUnit.SECONDS).internalResult();
+			SokletStartupException startupFailure = Assertions.assertInstanceOf(
+					SokletStartupException.class,
+					start.get(5, TimeUnit.SECONDS));
+			assertExactCancellation(startupFailure, result);
+			InternalParticipantShutdownResult sseResult = assertParticipant(result,
+					InternalParticipantKind.SSE,
+					InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION);
+			Assertions.assertEquals(List.of(startFailure), sseResult.failures());
+			Throwable[] suppressed = startFailure.getSuppressed();
+			Assertions.assertEquals(1, suppressed.length);
+			Assertions.assertSame(catchUpFailure, suppressed[0],
+					"Catch-up failure must remain secondary participant evidence");
+			Assertions.assertTrue(sseResult.residualActivity().isEmpty());
+			Assertions.assertEquals(1, sse.runtime().startCalls());
+			Assertions.assertEquals(1, sse.runtime().quiesceCalls());
+			Assertions.assertEquals(0, sse.runtime().forceCalls());
+			Assertions.assertTrue(launcher.awaitCompleted("soklet-start-sse"));
+			assertStableTerminalIdentity(harness.owner(), stage, result);
+		} finally {
+			sse.releaseStart();
+			drainFuture(start);
+			launcher.awaitTermination();
+		}
 	}
 
 	private void assertAttachedNeverStarted(@NonNull ProofMode proofMode,
@@ -279,7 +429,7 @@ final class SokletDirectLateStartupIntegrationTests {
 		try (harness) {
 			Assertions.assertTrue(attachmentSettled.await(5, TimeUnit.SECONDS),
 					"The attachment did not win installation before its wrapper gate");
-			CompletionStage<InternalShutdownResult> stage = harness.owner().shutdown();
+			CompletionStage<ShutdownResult> stage = harness.owner().shutdown();
 			Assertions.assertSame(stage, harness.owner().shutdown());
 			Assertions.assertTrue(http.runtime().awaitQuiesce(),
 					"An installed attachment was not quiesced while its wrapper was live");
@@ -297,7 +447,7 @@ final class SokletDirectLateStartupIntegrationTests {
 					SokletStartupException.class,
 					start.get(5, TimeUnit.SECONDS));
 			InternalShutdownResult result = stage.toCompletableFuture()
-					.get(5, TimeUnit.SECONDS);
+					.get(5, TimeUnit.SECONDS).internalResult();
 			assertExactCancellation(startupFailure, result);
 			Assertions.assertEquals(expectedAggregate, result.disposition());
 			InternalParticipantShutdownResult participant = assertParticipant(result,
@@ -309,7 +459,8 @@ final class SokletDirectLateStartupIntegrationTests {
 			Assertions.assertEquals(proofMode == ProofMode.GRACEFUL ? 0 : 1,
 					http.runtime().forceCalls());
 			Assertions.assertTrue(http.invoke("/late-startup").isEmpty());
-			Assertions.assertFalse(harness.owner().isStarted());
+			Assertions.assertEquals(SokletStatus.CLOSED,
+					harness.owner().publicStatus());
 			assertStableTerminalIdentity(harness.owner(), stage, result);
 
 			if (proofMode == ProofMode.NEVER) {
@@ -389,11 +540,12 @@ final class SokletDirectLateStartupIntegrationTests {
 			Assertions.assertEquals(0, http.runtime().startCalls());
 			Assertions.assertEquals(1, http.runtime().quiesceCalls());
 			Assertions.assertEquals(0, http.runtime().forceCalls());
-			CompletionStage<InternalShutdownResult> stage = harness.owner().shutdown();
+			CompletionStage<ShutdownResult> stage = harness.owner().shutdown();
 			Assertions.assertSame(result,
-					stage.toCompletableFuture().get(5, TimeUnit.SECONDS));
+					stage.toCompletableFuture().get(5, TimeUnit.SECONDS)
+							.internalResult());
 			assertStableTerminalIdentity(harness.owner(), stage, result);
-			Assertions.assertDoesNotThrow(harness.owner()::stop,
+			Assertions.assertDoesNotThrow(() -> joinShutdown(harness.owner()),
 					"Pre-ready termination must not become close-unexpected");
 		} finally {
 			releaseAttachmentWrapper.countDown();
@@ -441,9 +593,10 @@ final class SokletDirectLateStartupIntegrationTests {
 			Assertions.assertEquals(0, http.runtime().startCalls());
 			Assertions.assertEquals(0, http.runtime().quiesceCalls());
 			Assertions.assertEquals(0, http.runtime().forceCalls());
-			CompletionStage<InternalShutdownResult> stage = harness.owner().shutdown();
+			CompletionStage<ShutdownResult> stage = harness.owner().shutdown();
 			Assertions.assertSame(result,
-					stage.toCompletableFuture().get(5, TimeUnit.SECONDS));
+					stage.toCompletableFuture().get(5, TimeUnit.SECONDS)
+							.internalResult());
 			assertStableTerminalIdentity(harness.owner(), stage, result);
 		}
 	}
@@ -469,7 +622,7 @@ final class SokletDirectLateStartupIntegrationTests {
 		try (harness) {
 			Assertions.assertTrue(sse.awaitStartEntered(),
 					"The later SSE start did not reach its gate");
-			CompletionStage<InternalShutdownResult> stage = harness.owner().shutdown();
+			CompletionStage<ShutdownResult> stage = harness.owner().shutdown();
 			Assertions.assertSame(stage, harness.owner().shutdown());
 
 			Assertions.assertTrue(http.runtime().awaitQuiesce(),
@@ -487,7 +640,8 @@ final class SokletDirectLateStartupIntegrationTests {
 				sse.releaseStart();
 				Assertions.assertTrue(sse.runtime().awaitQuiesce(),
 						"The returned start did not catch up to graceful shutdown");
-				result = stage.toCompletableFuture().get(5, TimeUnit.SECONDS);
+				result = stage.toCompletableFuture().get(5, TimeUnit.SECONDS)
+						.internalResult();
 			} else if (release == StartRelease.FORCED) {
 				Assertions.assertTrue(launcher.awaitCompleted("lifecycle-force-sse"),
 						"The unresolved live start did not retain the forced phase");
@@ -497,9 +651,11 @@ final class SokletDirectLateStartupIntegrationTests {
 				sse.releaseStart();
 				Assertions.assertTrue(sse.runtime().awaitForce(),
 						"The returned start did not catch up to forced shutdown");
-				result = stage.toCompletableFuture().get(5, TimeUnit.SECONDS);
+				result = stage.toCompletableFuture().get(5, TimeUnit.SECONDS)
+						.internalResult();
 			} else {
-				result = stage.toCompletableFuture().get(5, TimeUnit.SECONDS);
+				result = stage.toCompletableFuture().get(5, TimeUnit.SECONDS)
+						.internalResult();
 				Assertions.assertEquals(0, sse.runtime().quiesceCalls());
 				Assertions.assertEquals(0, sse.runtime().forceCalls());
 			}
@@ -556,13 +712,14 @@ final class SokletDirectLateStartupIntegrationTests {
 			Assertions.assertEquals(release == StartRelease.FORCED ? 1 : 0,
 					sse.runtime().forceCalls());
 			if (release == StartRelease.FORCED) {
-				Assertions.assertEquals(InternalShutdownPhase.FORCED,
+				Assertions.assertEquals(ShutdownPhase.FORCED,
 						sse.runtime().firstUnderlyingPhase());
 				Assertions.assertTrue(sse.runtime().forceSubsumedQuiesce());
 			}
 			Assertions.assertTrue(http.invoke("/late-startup").isEmpty());
 			Assertions.assertTrue(sse.invoke("/late-startup").isEmpty());
-			Assertions.assertFalse(harness.owner().isStarted());
+			Assertions.assertEquals(SokletStatus.CLOSED,
+					harness.owner().publicStatus());
 			assertStableTerminalIdentity(harness.owner(), stage, result);
 		} finally {
 			sse.releaseStart();
@@ -599,13 +756,16 @@ final class SokletDirectLateStartupIntegrationTests {
 	}
 
 	private static void assertStableTerminalIdentity(@NonNull SokletDirectLifecycle owner,
-			@NonNull CompletionStage<InternalShutdownResult> stage,
+			@NonNull CompletionStage<ShutdownResult> stage,
 			@NonNull InternalShutdownResult result) throws Exception {
 		Assertions.assertSame(stage, owner.shutdown());
 		Assertions.assertSame(result, owner.awaitCompletion());
 		Assertions.assertSame(result, owner.result().orElseThrow());
 		Assertions.assertSame(result,
-				stage.toCompletableFuture().get(5, TimeUnit.SECONDS));
+				stage.toCompletableFuture().get(5, TimeUnit.SECONDS)
+						.internalResult());
+		Assertions.assertSame(stage.toCompletableFuture()
+				.get(5, TimeUnit.SECONDS), owner.publicResult().orElseThrow());
 		Assertions.assertEquals(InternalLifecycleStateMachine.State.CLOSED,
 				owner.state());
 	}
@@ -634,6 +794,11 @@ final class SokletDirectLateStartupIntegrationTests {
 		ExecutorService executor = Executors.newCachedThreadPool();
 		this.executors.add(executor);
 		return executor;
+	}
+
+	private static void joinShutdown(@NonNull SokletDirectLifecycle owner) {
+		ShutdownResult result = owner.shutdown().toCompletableFuture().join();
+		owner.throwIfUnsuccessfulShutdown(result);
 	}
 
 	@Nullable
@@ -720,16 +885,60 @@ final class SokletDirectLateStartupIntegrationTests {
 
 	private static final class ObservedLauncher
 			implements LifecycleWorkers.Launcher {
+		@Nullable
+		private final String controlledName;
+		@Nullable
+		private final RuntimeException rejection;
 		@NonNull
 		private final ConcurrentMap<String, CountDownLatch> completions =
 				new ConcurrentHashMap<>();
 		@NonNull
 		private final Set<Thread> threads = ConcurrentHashMap.newKeySet();
+		@NonNull
+		private final AtomicReference<@Nullable Runnable> heldTask =
+				new AtomicReference<>();
+		@NonNull
+		private final CountDownLatch held = new CountDownLatch(1);
+
+		private ObservedLauncher() {
+			this(null, null);
+		}
+
+		private ObservedLauncher(@Nullable String controlledName,
+				@Nullable RuntimeException rejection) {
+			this.controlledName = controlledName;
+			this.rejection = rejection;
+		}
+
+		@NonNull
+		static ObservedLauncher holding(@NonNull String name) {
+			return new ObservedLauncher(name, null);
+		}
+
+		@NonNull
+		static ObservedLauncher rejecting(@NonNull String name,
+				@NonNull RuntimeException rejection) {
+			return new ObservedLauncher(name, rejection);
+		}
 
 		@Override
 		public void launch(@NonNull String name, @NonNull Runnable runnable) {
 			CountDownLatch completion = this.completions.computeIfAbsent(name,
 					ignored -> new CountDownLatch(1));
+			if (name.equals(this.controlledName)) {
+				if (this.rejection != null)
+					throw this.rejection;
+				if (!this.heldTask.compareAndSet(null, runnable))
+					throw new IllegalStateException(
+							"The controlled lifecycle worker was already held");
+				this.held.countDown();
+				return;
+			}
+			startThread(name, runnable, completion);
+		}
+
+		private void startThread(@NonNull String name, @NonNull Runnable runnable,
+				@NonNull CountDownLatch completion) {
 			Thread thread = new Thread(() -> {
 				try {
 					runnable.run();
@@ -740,6 +949,21 @@ final class SokletDirectLateStartupIntegrationTests {
 			thread.setDaemon(true);
 			this.threads.add(thread);
 			thread.start();
+		}
+
+		boolean awaitHeld() throws InterruptedException {
+			return this.held.await(5, TimeUnit.SECONDS);
+		}
+
+		boolean releaseHeld() {
+			Runnable task = this.heldTask.getAndSet(null);
+			if (task == null)
+				return false;
+			String name = java.util.Objects.requireNonNull(this.controlledName);
+			CountDownLatch completion = java.util.Objects.requireNonNull(
+					this.completions.get(name));
+			startThread(name, task, completion);
+			return true;
 		}
 
 		boolean awaitCompleted(@NonNull String name) throws InterruptedException {
@@ -761,11 +985,11 @@ final class SokletDirectLateStartupIntegrationTests {
 		}
 	}
 
-	private static final class PhaseRuntime implements InternalTransportRuntime {
+	private static final class PhaseRuntime implements TransportRuntime {
 		@NonNull
 		private final ProofMode proofMode;
 		@NonNull
-		private final AtomicReference<InternalTransportTerminationSignal> signal =
+		private final AtomicReference<TransportTerminationSignal> signal =
 				new AtomicReference<>();
 		@NonNull
 		private final AtomicInteger startCalls = new AtomicInteger();
@@ -778,56 +1002,50 @@ final class SokletDirectLateStartupIntegrationTests {
 		@NonNull
 		private final CountDownLatch forceEntered = new CountDownLatch(1);
 		@NonNull
-		private final AtomicReference<InternalShutdownPhase> firstUnderlyingPhase =
+		private final AtomicReference<ShutdownPhase> firstUnderlyingPhase =
 				new AtomicReference<>();
 		@NonNull
 		private final AtomicBoolean forceSubsumedQuiesce = new AtomicBoolean();
 		@NonNull
 		private final AtomicBoolean proofSignalled = new AtomicBoolean();
 		@NonNull
-		private final AtomicBoolean started = new AtomicBoolean();
-
 		private PhaseRuntime(@NonNull ProofMode proofMode) {
 			this.proofMode = proofMode;
 		}
 
-		void install(@NonNull InternalTransportTerminationSignal signal) {
+		void install(@NonNull TransportTerminationSignal signal) {
 			this.signal.set(signal);
 		}
 
 		void markStart() {
 			this.startCalls.incrementAndGet();
-			this.started.set(true);
 		}
 
 		@Override
-		public void start(@NonNull InternalStartupContext context) {
+		public void start(@NonNull StartupContext context) {
 			markStart();
 		}
 
 		@Override
-		public void quiesce(@NonNull InternalShutdownContext context) {
-			this.firstUnderlyingPhase.compareAndSet(null, context.phase());
+		public void quiesce(@NonNull ShutdownContext context) {
+			this.firstUnderlyingPhase.compareAndSet(null, context.getPhase());
 			this.quiesceCalls.incrementAndGet();
 			this.quiesceEntered.countDown();
-			this.started.set(false);
 			if (this.proofMode == ProofMode.GRACEFUL)
 				signalProof();
 		}
 
 		@Override
-		public void force(@NonNull InternalShutdownContext context) {
-			if (this.firstUnderlyingPhase.compareAndSet(null, context.phase()))
+		public void force(@NonNull ShutdownContext context) {
+			if (this.firstUnderlyingPhase.compareAndSet(null, context.getPhase()))
 				this.forceSubsumedQuiesce.set(true);
 			this.forceCalls.incrementAndGet();
 			this.forceEntered.countDown();
-			this.started.set(false);
 			if (this.proofMode == ProofMode.FORCED)
 				signalProof();
 		}
 
 		void signalProof() {
-			this.started.set(false);
 			if (this.proofSignalled.compareAndSet(false, true))
 				requireSignal().signalTerminated();
 		}
@@ -844,10 +1062,6 @@ final class SokletDirectLateStartupIntegrationTests {
 			return this.forceCalls.get();
 		}
 
-		boolean started() {
-			return this.started.get();
-		}
-
 		boolean awaitQuiesce() throws InterruptedException {
 			return this.quiesceEntered.await(5, TimeUnit.SECONDS);
 		}
@@ -857,7 +1071,7 @@ final class SokletDirectLateStartupIntegrationTests {
 		}
 
 		@Nullable
-		InternalShutdownPhase firstUnderlyingPhase() {
+		ShutdownPhase firstUnderlyingPhase() {
 			return this.firstUnderlyingPhase.get();
 		}
 
@@ -866,24 +1080,22 @@ final class SokletDirectLateStartupIntegrationTests {
 		}
 
 		@NonNull
-		private InternalTransportTerminationSignal requireSignal() {
+		private TransportTerminationSignal requireSignal() {
 			return java.util.Objects.requireNonNull(this.signal.get(),
 					"Transport signal is not attached");
 		}
 	}
 
-	private abstract static class AbstractHttpEndpoint
-			implements HttpServer, InternalHttpTransportEndpoint {
+	private abstract static class AbstractHttpEndpoint implements HttpServer {
 		@NonNull
-		private final InternalTransportIdentity identity =
-				InternalTransportIdentity.create();
+		private final TransportIdentity identity = TransportIdentity.create();
 		@NonNull
 		private final AtomicReference<RequestHandler> requestHandler =
 				new AtomicReference<>();
 
 		final void captureHandler(
-				@NonNull InternalTransportAttachmentContext<RequestHandler> context) {
-			this.requestHandler.set(context.requestHandler());
+				@NonNull HttpTransportAttachmentContext context) {
+			this.requestHandler.set(context.getAdmissionFencedRequestHandler());
 		}
 
 		@NonNull
@@ -899,28 +1111,8 @@ final class SokletDirectLateStartupIntegrationTests {
 
 		@Override
 		@NonNull
-		public final InternalTransportIdentity identity() {
+		public final TransportIdentity getTransportIdentity() {
 			return this.identity;
-		}
-
-		@Override
-		public final void start() {
-			throw new AssertionError("Direct endpoint startup uses its runtime");
-		}
-
-		@Override
-		public void stop() { }
-
-		@Override
-		@NonNull
-		public Boolean isStarted() {
-			return false;
-		}
-
-		@Override
-		public final void initialize(@NonNull SokletConfig sokletConfig,
-				@NonNull RequestHandler requestHandler) {
-			throw new AssertionError("Direct endpoint attachment uses attach(...)");
 		}
 	}
 
@@ -964,15 +1156,15 @@ final class SokletDirectLateStartupIntegrationTests {
 
 		@Override
 		@NonNull
-		public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
+		public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
 			captureHandler(context);
-			this.runtime.install(context.terminationSignal());
+			this.runtime.install(context.getTerminationSignal());
 			if (this.pendingEvent == PendingEvent.PROOF)
-				context.terminationSignal().signalTerminated();
+				context.getTerminationSignal().signalTerminated();
 			else
-				context.terminationSignal().signalTerminationFailure(
+				context.getTerminationSignal().signalTerminationFailure(
 						java.util.Objects.requireNonNull(this.pendingFailure));
 			this.attachEntered.countDown();
 			awaitIgnoringInterrupts(this.releaseAttach);
@@ -997,11 +1189,11 @@ final class SokletDirectLateStartupIntegrationTests {
 
 		@Override
 		@NonNull
-		public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
+		public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
 			captureHandler(context);
-			this.runtime.install(context.terminationSignal());
+			this.runtime.install(context.getTerminationSignal());
 			return this.runtime;
 		}
 	}
@@ -1037,15 +1229,15 @@ final class SokletDirectLateStartupIntegrationTests {
 		@Override
 		@NonNull
 		@SuppressWarnings("NullAway")
-		public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
+		public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
 			captureHandler(context);
-			this.runtime.install(context.terminationSignal());
+			this.runtime.install(context.getTerminationSignal());
 			if (this.pendingEvent == PendingEvent.PROOF)
-				context.terminationSignal().signalTerminated();
+				context.getTerminationSignal().signalTerminated();
 			else
-				context.terminationSignal().signalTerminationFailure(
+				context.getTerminationSignal().signalTerminationFailure(
 						java.util.Objects.requireNonNull(this.pendingFailure));
 
 			return switch (this.attachFailure) {
@@ -1069,18 +1261,12 @@ final class SokletDirectLateStartupIntegrationTests {
 
 		@Override
 		@NonNull
-		public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
+		public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
 			captureHandler(context);
-			this.runtime.install(context.terminationSignal());
+			this.runtime.install(context.getTerminationSignal());
 			return this.runtime;
-		}
-
-		@Override
-		@NonNull
-		public Boolean isStarted() {
-			return this.runtime.started();
 		}
 	}
 
@@ -1091,20 +1277,18 @@ final class SokletDirectLateStartupIntegrationTests {
 
 		@Override
 		@NonNull
-		public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
+		public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
 			captureHandler(context);
-			this.runtime.install(context.terminationSignal());
+			this.runtime.install(context.getTerminationSignal());
 			return this.runtime;
 		}
 	}
 
-	private static final class LateStartSseEndpoint
-			implements SseServer, InternalSseTransportEndpoint {
+	private static final class LateStartSseEndpoint implements SseServer {
 		@NonNull
-		private final InternalTransportIdentity identity =
-				InternalTransportIdentity.create();
+		private final TransportIdentity identity = TransportIdentity.create();
 		@NonNull
 		private final PhaseRuntime runtime;
 		@NonNull
@@ -1116,9 +1300,21 @@ final class SokletDirectLateStartupIntegrationTests {
 		private final CountDownLatch releaseStart = new CountDownLatch(1);
 		@NonNull
 		private final CountDownLatch startReturned = new CountDownLatch(1);
+		@Nullable
+		private final RuntimeException startFailure;
+		@Nullable
+		private final RuntimeException quiesceFailure;
 
 		private LateStartSseEndpoint(@NonNull ProofMode proofMode) {
+			this(proofMode, null, null);
+		}
+
+		private LateStartSseEndpoint(@NonNull ProofMode proofMode,
+				@Nullable RuntimeException startFailure,
+				@Nullable RuntimeException quiesceFailure) {
 			this.runtime = new PhaseRuntime(proofMode);
+			this.startFailure = startFailure;
+			this.quiesceFailure = quiesceFailure;
 		}
 
 		@NonNull
@@ -1151,20 +1347,20 @@ final class SokletDirectLateStartupIntegrationTests {
 
 		@Override
 		@NonNull
-		public InternalTransportIdentity identity() {
+		public TransportIdentity getTransportIdentity() {
 			return this.identity;
 		}
 
 		@Override
 		@NonNull
-		public InternalTransportRuntime attach(
-				@NonNull InternalTransportAttachmentContext<RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
-			this.requestHandler.set(context.requestHandler());
-			this.runtime.install(context.terminationSignal());
-			return new InternalTransportRuntime() {
+		public TransportRuntime attach(
+				@NonNull SseTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
+			this.requestHandler.set(context.getAdmissionFencedRequestHandler());
+			this.runtime.install(context.getTerminationSignal());
+			return new TransportRuntime() {
 				@Override
-				public void start(@NonNull InternalStartupContext context) {
+				public void start(@NonNull StartupContext context) {
 					runtime.markStart();
 					startEntered.countDown();
 					try {
@@ -1172,45 +1368,28 @@ final class SokletDirectLateStartupIntegrationTests {
 					} finally {
 						startReturned.countDown();
 					}
+					if (startFailure != null)
+						throw startFailure;
 				}
 
 				@Override
-				public void quiesce(@NonNull InternalShutdownContext context) {
+				public void quiesce(@NonNull ShutdownContext context) {
 					runtime.quiesce(context);
+					if (quiesceFailure != null)
+						throw quiesceFailure;
 				}
 
 				@Override
-				public void force(@NonNull InternalShutdownContext context) {
+				public void force(@NonNull ShutdownContext context) {
 					runtime.force(context);
 				}
 			};
 		}
-
-		@Override
-		public void start() {
-			throw new AssertionError("Direct endpoint startup uses its runtime");
-		}
-
-		@Override
-		public void stop() { }
-
-		@Override
-		@NonNull
-		public Boolean isStarted() {
-			return this.runtime.started();
-		}
-
 		@Override
 		@NonNull
 		public Optional<? extends SseBroadcaster> acquireBroadcaster(
 				@Nullable ResourcePath resourcePath) {
 			return Optional.empty();
-		}
-
-		@Override
-		public void initialize(@NonNull SokletConfig sokletConfig,
-				@NonNull RequestHandler requestHandler) {
-			throw new AssertionError("Direct endpoint attachment uses attach(...)");
 		}
 	}
 

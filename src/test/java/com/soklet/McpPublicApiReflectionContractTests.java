@@ -47,6 +47,7 @@ import java.lang.reflect.RecordComponent;
 import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
 import java.lang.reflect.WildcardType;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -83,15 +84,15 @@ public class McpPublicApiReflectionContractTests {
 			Path.of("api/mcp/provisional.includes"));
 	private static final int PHASE_FOUR_TYPE_COUNT = 133;
 	private static final int PHASE_FIVE_TYPE_COUNT = 36;
-	private static final int PHASE_SIX_TYPE_COUNT = 65;
+	private static final int PHASE_SIX_TYPE_COUNT = 64;
 	private static final int PROVISIONAL_TYPE_COUNT = 0;
-	private static final int CURRENT_MCP_TYPE_COUNT = 234;
+	private static final int CURRENT_MCP_TYPE_COUNT = 233;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"1d33a5deb35adb467feccac10ffce635eae903437a096ed63a8c17a1b57d2309";
+			"9cfe146213f1c96cfdd1de6fe05caa58d8055f7abdb491b6141491f2dc8de646";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
 			"6569e3b106ae11e1d30da66c045d1a9bc23aa65016f36052df6b19fc320c06d9";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
-			"2f857d18ae3dfb641fadf00858fec19d594c0ac470c6ed6be70423596b340611";
+			"15f883e66b3194974887899a090e53d33aa27a08db793f4cfd7ff78212b67aaf";
 	private static final Map<String, Object> PHASE_FOUR_PRIMITIVE_CONSTANTS =
 			Map.of(
 					"com.soklet.McpAdmissionIdentity#MAXIMUM_PARTITION_KEY_UTF_8_BYTES",
@@ -321,7 +322,6 @@ public class McpPublicApiReflectionContractTests {
 				"com.soklet.McpRequestOutcome",
 				"com.soklet.McpServerDiagnostics",
 				"com.soklet.McpServerStatus",
-				"com.soklet.McpShutdownOutcome",
 				"com.soklet.McpSimulation",
 				"com.soklet.McpSimulationBodyMode",
 				"com.soklet.McpSimulationCompletion",
@@ -368,12 +368,8 @@ public class McpPublicApiReflectionContractTests {
 		Method localizationControl = assertInstanceMethod(McpServer.class,
 				"getLocalizationControl", McpLocalizationControl.class,
 				MethodShape.ABSTRACT, false);
-		Method invocationFeatures = assertInstanceMethod(
-				McpHandlerContinuation.class, "getFeatures",
-				McpInvocationFeatures.class, MethodShape.DEFAULT, false);
 		assertErasedGenericSignature(localizer);
 		assertErasedGenericSignature(localizationControl);
-		assertErasedGenericSignature(invocationFeatures);
 		assertParameterNames(localizer, "localizer");
 	}
 
@@ -548,7 +544,8 @@ public class McpPublicApiReflectionContractTests {
 				McpInvocationFeatures.class), "request", "list", "features");
 		assertParameterNames(McpHandlerInterceptor.class.getMethod(
 				"interceptHandler", McpRequestContext.class,
-				McpHandlerContinuation.class), "context", "continuation");
+				McpInvocationFeatures.class, McpHandlerContinuation.class),
+				"context", "features", "continuation");
 		assertParameterNames(McpAdmissionController.class.getMethod("admit",
 				McpAdmissionContext.class), "context");
 		assertParameterNames(McpRateLimiter.class.getMethod("acquire",
@@ -571,11 +568,8 @@ public class McpPublicApiReflectionContractTests {
 		assertParameterNames(LifecycleObserver.class.getMethod(
 				"willStopMcpServer", McpServer.class), "mcpServer");
 		assertParameterNames(LifecycleObserver.class.getMethod(
-				"didStopMcpServer", McpServer.class, McpShutdownOutcome.class),
-				"mcpServer", "shutdownOutcome");
-		assertParameterNames(LifecycleObserver.class.getMethod(
-				"didFailToStopMcpServer", McpServer.class, Throwable.class),
-				"mcpServer", "throwable");
+				"didStopMcpServer", McpServer.class, ParticipantShutdownResult.class),
+				"mcpServer", "result");
 		assertParameterNames(LifecycleObserver.class.getMethod(
 				"didStartMcpRequestHandling", McpRequestContext.class), "context");
 		assertParameterNames(LifecycleObserver.class.getMethod(
@@ -800,6 +794,14 @@ public class McpPublicApiReflectionContractTests {
 		assertParameterizedType(endpointSubscriptions.getGenericReturnType(),
 				null, Optional.class, McpSubscriptionConfig.class);
 		assertNoGenericParameters(endpointSubscriptions);
+		Method requestedResourceSubscriptionUris = assertInstanceMethod(
+				McpAdmissionContext.class,
+				"getRequestedResourceSubscriptionUris", List.class,
+				MethodShape.ABSTRACT, false);
+		assertParameterizedType(
+				requestedResourceSubscriptionUris.getGenericReturnType(), null,
+				List.class, URI.class);
+		assertNoGenericParameters(requestedResourceSubscriptionUris);
 		assertErasedGenericSignature(assertInstanceMethod(
 				McpEndpoint.Builder.class, "subscriptions",
 				McpEndpoint.Builder.class, MethodShape.CONCRETE, false,
@@ -875,9 +877,6 @@ public class McpPublicApiReflectionContractTests {
 				false, Duration.class));
 		assertErasedGenericSignature(assertInstanceMethod(McpServer.Builder.class,
 				"keepAliveInterval", McpServer.Builder.class,
-				MethodShape.CONCRETE, false, Duration.class));
-		assertErasedGenericSignature(assertInstanceMethod(McpServer.Builder.class,
-				"shutdownTimeout", McpServer.Builder.class,
 				MethodShape.CONCRETE, false, Duration.class));
 		assertErasedGenericSignature(assertInstanceMethod(McpServer.Builder.class,
 				"maximumSubscriptionsPerPrincipal", McpServer.Builder.class,
@@ -1050,7 +1049,7 @@ public class McpPublicApiReflectionContractTests {
 				MetricsCollector.TransportFailureReason.class);
 		assertFactory(McpMetricsEvent.class, "serverStopped",
 				McpMetricsEvent.ServerStopped.class, List.of("outcome"),
-				McpShutdownOutcome.class);
+				ParticipantShutdownDisposition.class);
 
 		assertRoutedMetricsGetters(McpMetricsEvent.RequestStarted.class);
 		assertRoutedMetricsGetters(McpMetricsEvent.RequestFinished.class);
@@ -1080,7 +1079,7 @@ public class McpPublicApiReflectionContractTests {
 		assertGetter(McpMetricsEvent.TransportFailure.class, "getReason",
 				MetricsCollector.TransportFailureReason.class);
 		assertGetter(McpMetricsEvent.ServerStopped.class, "getOutcome",
-				McpShutdownOutcome.class);
+				ParticipantShutdownDisposition.class);
 	}
 
 	private static void assertMetricsKeyFactoriesAndGetters()

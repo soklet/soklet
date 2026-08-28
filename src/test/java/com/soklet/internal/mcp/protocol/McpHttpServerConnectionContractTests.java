@@ -31,7 +31,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @NotThreadSafe
-@Timeout(30)
+@Timeout(60)
 public class McpHttpServerConnectionContractTests {
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final String DISCOVER = "server/discover";

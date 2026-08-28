@@ -293,9 +293,9 @@ request-stream, subscription lifecycle, progress/cancelation, keep-alive, and
 protocol-error/unknown-header aggregate families, followed by the downstream
 OpenTelemetry metric mapping, modern admitted-request spans, and bounded
 off-network MCP simulation. Shutdown
-metrics have only the fixed
-`McpShutdownOutcome`-derived
-`clean`/`residual_handlers` label. The exact handler-capacity families—
+metrics have only the fixed `ParticipantShutdownDisposition`-derived labels
+`not_started`/`graceful_termination`/`forced_termination`/`unexpected_termination`/
+`residual_activity`/`termination_unknown`. The exact handler-capacity families—
 `soklet_mcp_handler_executions_active`, `soklet_mcp_handler_queue_depth`, and
 `soklet_mcp_handler_capacity_rejections_total`—are label-free. They contain
 only server-wide counts and no endpoint, method, request, principal, URI,
@@ -1308,7 +1308,7 @@ fidelity, release-candidate, or Phase 6 freeze evidence.
 
 ## Current API and release-security state
 
-The current owner inventory is 133 Phase 4, 36 Phase 5, and 65 Phase 6 (234
+The current owner inventory is 133 Phase 4, 36 Phase 5, and 64 Phase 6 (233
 total), with all three phases frozen and no provisional owner. The implemented
 structured-log boundary completes the bounded `MCP_TRACE_CORRELATION` carrier
 and separate raw-ID opt-in, but operator access, storage, retention, and
@@ -1732,8 +1732,18 @@ and local Corretto 21 over 462 main and 211 test sources. The pinned
 40-scenario official inventory has no exact scenario for this policy; this
 test-only slice changes no production behavior, public API, freeze inventory,
 manifest, version, official result, or official corpus. `MCP-HTTP-020` is now
-`CORE_COMPLETE`; the report is 110/117/12/18/5 and the remaining IDs are
+`CORE_COMPLETE`; the report is 110/117/12/19/5 and the remaining IDs are
 `SOK-VALID-002`, `SOK-STATE-002`, `SOK-STATE-007`, `SOK-PRIV-001`, and
 `AMB-002`. This boundary does not close generic `Request`, `Throwable`,
 custom-collector, or application-telemetry privacy; those remain owned by
 `SOK-PRIV-001`.
+
+SEP-2577 deprecates Roots and Sampling at the MCP layer in `2026-07-28`; it
+does not deprecate Soklet's retained Java API. New designs should pass files or
+directories through explicit tool parameters, resource URIs, or server
+configuration and integrate directly with a model provider. Soklet also does
+not advertise or implement MCP Logging: retained log-level metadata is parsed
+for compatibility, while applications use the existing observability path.
+No negotiation-triggered warning is emitted. Adding one requires a separately
+reviewed, default-off, bounded and redacted diagnostic rather than Java
+`@Deprecated`, which describes a different lifecycle and trigger.

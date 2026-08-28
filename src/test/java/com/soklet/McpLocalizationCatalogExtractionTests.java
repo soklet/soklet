@@ -16,7 +16,7 @@
 
 package com.soklet;
 
-import com.soklet.annotation.McpToolArgument;
+import com.soklet.annotation.McpToolProperty;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -58,6 +58,13 @@ class McpLocalizationCatalogExtractionTests {
 	private static final String WIRE_PATH = "/localization/wire";
 	private static final String JSON_MEDIA_TYPE = "application/json";
 	private static final Duration SIMULATOR_WAIT = Duration.ofSeconds(5);
+	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
+			LifecyclePolicy.builder()
+					.startupTimeout(Duration.ofSeconds(5))
+					.startupCancellationTimeout(Duration.ofSeconds(2))
+					.gracefulShutdownDuration(Duration.ofSeconds(2))
+					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.build();
 
 	@Test
 	void extractsEveryProgrammaticSurfaceAndPreservesCanonicalObjects() {
@@ -429,10 +436,11 @@ class McpLocalizationCatalogExtractionTests {
 					.resourceMethodResolver(
 							ResourceMethodResolver.fromMethods(Set.of()))
 					.metricsCollector(metrics)
+					.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 					.build();
 		}, simulator -> {
 			McpServer server = serverReference.get();
-			assertServerNeverListened(server);
+			assertRunningOffNetwork(server);
 			McpSimulation simulation = simulator.startMcpRequest(discoveryRequest());
 			McpSimulationResponse response = awaitSimulatorResponse(simulation);
 			assertEquals(McpSimulationBodyMode.JSON, response.getBodyMode());
@@ -440,7 +448,7 @@ class McpLocalizationCatalogExtractionTests {
 					response.getHeaders(), response.getBody().orElseThrow()));
 			assertEquals(McpStreamTerminationReason.COMPLETED,
 					awaitSimulatorCompletion(simulation).getReason());
-			assertServerNeverListened(server);
+			assertRunningOffNetwork(server);
 		});
 		assertServerNeverListened(serverReference.get());
 		metrics.assertNoListenerSocketActivity();
@@ -467,7 +475,18 @@ class McpLocalizationCatalogExtractionTests {
 
 	private static void assertServerNeverListened(McpServer server) {
 		McpServerDiagnostics diagnostics = server.getDiagnostics();
-		assertEquals(McpServerStatus.STOPPED, diagnostics.getStatus());
+		assertEquals(McpServerStatus.TERMINATED, diagnostics.getStatus());
+		assertOffNetworkDiagnostics(diagnostics);
+	}
+
+	private static void assertRunningOffNetwork(McpServer server) {
+		McpServerDiagnostics diagnostics = server.getDiagnostics();
+		assertEquals(McpServerStatus.RUNNING, diagnostics.getStatus());
+		assertOffNetworkDiagnostics(diagnostics);
+	}
+
+	private static void assertOffNetworkDiagnostics(
+			McpServerDiagnostics diagnostics) {
 		assertTrue(diagnostics.getBoundAddress().isEmpty());
 		assertEquals(0, diagnostics.getActiveHandlerExecutions());
 		assertEquals(0, diagnostics.getQueuedRequests());
@@ -614,6 +633,7 @@ class McpLocalizationCatalogExtractionTests {
 				import com.soklet.annotation.McpServerEndpoint;
 				import com.soklet.annotation.McpTool;
 				import com.soklet.annotation.McpToolArgument;
+				import com.soklet.annotation.McpToolProperty;
 
 				@McpServerEndpoint(
 				    path = "/localized/catalog",
@@ -663,7 +683,7 @@ class McpLocalizationCatalogExtractionTests {
 				      @McpResourceUriParameter("id") String id) { return null; }
 
 				  public record SearchResult(
-				      @McpToolArgument(
+				      @McpToolProperty(
 				          title = "Match title",
 				          description = "Matched value") String match) {}
 				}
@@ -674,11 +694,11 @@ class McpLocalizationCatalogExtractionTests {
 			Map<String, Set<String>> headers, byte[] body) {}
 
 	private record ParityArguments(
-			@McpToolArgument(name = "query", title = "Search query",
+			@McpToolProperty(name = "query", title = "Search query",
 					description = "Text to search for") String query) {}
 
 	private record ParityResult(
-			@McpToolArgument(title = "Match title",
+			@McpToolProperty(title = "Match title",
 					description = "Matched value") String match) {}
 
 	private static McpEndpoint endpoint(boolean customResourceList) {
@@ -766,10 +786,10 @@ class McpLocalizationCatalogExtractionTests {
 	private record EmptyArguments() {}
 
 	private record OutputArguments(
-			@McpToolArgument(title = "Output title") String value) {}
+			@McpToolProperty(title = "Output title") String value) {}
 
 	private record GeneratedArguments(
-			@McpToolArgument(title = "Generated query",
+			@McpToolProperty(title = "Generated query",
 					description = "Generated query description") String query) {}
 
 }

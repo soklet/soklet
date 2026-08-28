@@ -156,7 +156,6 @@ public class HttpSoakTests {
 				.socketPendingConnectionLimit(PROFILE.socketPendingConnectionLimit())
 				.requestHeaderTimeout(Duration.ofSeconds(2))
 				.responseWriteIdleTimeout(Duration.ofSeconds(2))
-				.shutdownTimeout(Duration.ofSeconds(3))
 				.build();
 	}
 
@@ -166,6 +165,10 @@ public class HttpSoakTests {
 		return SokletConfig.withHttpServer(httpServer)
 				.metricsCollector(metricsCollector)
 				.lifecycleObserver(new QuietLifecycle())
+				.lifecyclePolicy(LifecyclePolicy.builder()
+						.gracefulShutdownDuration(Duration.ofSeconds(3))
+						.forcedShutdownDuration(Duration.ZERO)
+						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SoakResource.class)))
 				.build();
 	}

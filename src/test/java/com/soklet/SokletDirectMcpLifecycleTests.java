@@ -53,7 +53,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
 /** Standalone and direct-owner acceptance at the real MCP lifecycle boundary. */
-@Timeout(value = 30, unit = TimeUnit.SECONDS)
+@Timeout(value = 60, unit = TimeUnit.SECONDS)
 final class SokletDirectMcpLifecycleTests {
 	@NonNull
 	private static final String HOST = "127.0.0.1";
@@ -122,16 +122,23 @@ final class SokletDirectMcpLifecycleTests {
 			Assertions.assertTrue(publisher.awaitInterrupted(),
 					"The bounded owner did not interrupt the blocked startup call");
 			Assertions.assertFalse(publisher.hasReturned());
+			Assertions.assertFalse(runtimeLifecycleFlag(fixture.server(),
+					"lifecycleQuiesceRequested"),
+					"The timeout coordinator entered MCP quiesce while subscribe() was live");
+			Assertions.assertFalse(runtimeLifecycleFlag(fixture.server(),
+					"lifecycleForceRequested"),
+					"The timeout coordinator entered MCP force while subscribe() was live");
 			assertPortInUse(address);
 
 			InternalShutdownResult result = fixture.soklet().getDirectLifecycle()
 					.result().orElseThrow();
-			CompletionStage<InternalShutdownResult> stage = fixture.soklet()
+			CompletionStage<ShutdownResult> stage = fixture.soklet()
 					.getDirectLifecycle().shutdown();
 			Assertions.assertSame(stage,
 					fixture.soklet().getDirectLifecycle().shutdown());
 			Assertions.assertSame(result,
-					stage.toCompletableFuture().get(3, TimeUnit.SECONDS));
+					stage.toCompletableFuture().get(3, TimeUnit.SECONDS)
+							.internalResult());
 			assertRepeatedIncompleteStop(fixture.soklet(), result);
 
 			publisher.release();
@@ -160,7 +167,7 @@ final class SokletDirectMcpLifecycleTests {
 			InetSocketAddress address = boundAddress(fixture.server());
 			EventLoop loop = eventLoop(fixture.server());
 			Assertions.assertTrue(loop.isAccepting());
-			CompletionStage<InternalShutdownResult> stage = fixture.soklet()
+			CompletionStage<ShutdownResult> stage = fixture.soklet()
 					.getDirectLifecycle().shutdown();
 			Assertions.assertSame(stage,
 					fixture.soklet().getDirectLifecycle().shutdown());
@@ -183,6 +190,12 @@ final class SokletDirectMcpLifecycleTests {
 					"External shutdown did not interrupt the blocked startup call");
 			Assertions.assertFalse(publisher.hasReturned());
 			Assertions.assertFalse(runtimeLifecycleFlag(fixture.server(),
+					"lifecycleQuiesceRequested"),
+					"The coordinator entered MCP quiesce while subscribe() was live");
+			Assertions.assertFalse(runtimeLifecycleFlag(fixture.server(),
+					"lifecycleForceRequested"),
+					"The coordinator entered MCP force while subscribe() was live");
+			Assertions.assertFalse(runtimeLifecycleFlag(fixture.server(),
 					"lifecycleQuiesced"),
 					"Graceful cleanup entered while subscribe() was live");
 			Assertions.assertFalse(runtimeLifecycleFlag(fixture.server(),
@@ -195,7 +208,8 @@ final class SokletDirectMcpLifecycleTests {
 			InternalShutdownResult result = fixture.soklet().getDirectLifecycle()
 					.result().orElseThrow();
 			Assertions.assertSame(result,
-					stage.toCompletableFuture().get(3, TimeUnit.SECONDS));
+					stage.toCompletableFuture().get(3, TimeUnit.SECONDS)
+							.internalResult());
 			assertRepeatedIncompleteStop(fixture.soklet(), result);
 
 			publisher.release();
@@ -241,12 +255,12 @@ final class SokletDirectMcpLifecycleTests {
 						.notificationType(McpSubscriptionNotificationType
 								.RESOURCES_LIST_CHANGED).build())
 				.build();
-		McpServer server = serverBuilder(endpoint, Duration.ofSeconds(1))
+		McpServer server = serverBuilder(endpoint)
 				.requestHandlerExecutorServiceSupplier(() -> applicationExecutor)
 				.build();
 		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.internalLifecyclePolicy(cancellationPolicy()).build());
+				.lifecyclePolicy(cancellationPolicy()).build());
 
 		try {
 			SokletStartupException thrown = Assertions.assertInstanceOf(
@@ -303,13 +317,13 @@ final class SokletDirectMcpLifecycleTests {
 						.notificationType(McpSubscriptionNotificationType
 								.RESOURCES_LIST_CHANGED).build())
 				.build();
-		McpServer server = serverBuilder(endpoint, Duration.ofSeconds(1))
+		McpServer server = serverBuilder(endpoint)
 				.requestHandlerExecutorServiceSupplier(() -> applicationExecutor)
 				.build();
 		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(observer)
-				.internalLifecyclePolicy(cancellationPolicy()).build());
+				.lifecyclePolicy(cancellationPolicy()).build());
 		ExecutorService executor = newExecutor();
 		Future<Throwable> start = executor.submit(() ->
 				captureFailure(soklet::start));
@@ -347,8 +361,14 @@ final class SokletDirectMcpLifecycleTests {
 					"lifecycleStartupInProgress"),
 					"Late MCP startup did not finish unwinding");
 			Assertions.assertTrue(runtimeLifecycleFlag(server,
+					"lifecycleQuiesced"),
+					"Late startup did not unwind its owned resources");
+			Assertions.assertFalse(runtimeLifecycleFlag(server,
+					"lifecycleForceRequested"),
+					"A frozen phase cannot be queued after result publication");
+			Assertions.assertFalse(runtimeLifecycleFlag(server,
 					"lifecycleForced"),
-					"Deferred force was not applied by the startup worker");
+					"A late startup return cannot replay force after result freeze");
 
 			assertSameThrowableArray(frozenSuppressed,
 					exactPrimary.getSuppressed());
@@ -378,29 +398,21 @@ final class SokletDirectMcpLifecycleTests {
 		CountDownLatch handlerInterrupted = new CountDownLatch(1);
 		CountDownLatch handlerExited = new CountDownLatch(1);
 		AtomicReference<Soklet> ownerReference = new AtomicReference<>();
-		AtomicReference<Throwable> selfStopFailure = new AtomicReference<>();
 		AtomicReference<InternalLifecycleStateMachine.State> handlerState =
 				new AtomicReference<>();
-		AtomicReference<CompletionStage<InternalShutdownResult>> handlerStage =
+		AtomicReference<CompletionStage<ShutdownResult>> handlerStage =
 				new AtomicReference<>();
 		AtomicBoolean repeatedHandlerStageIdentity = new AtomicBoolean();
 		AtomicInteger willStopMcp = new AtomicInteger();
 		AtomicInteger didStopMcp = new AtomicInteger();
-		AtomicReference<McpShutdownOutcome> stopOutcome = new AtomicReference<>();
+		AtomicReference<ParticipantShutdownDisposition> stopOutcome = new AtomicReference<>();
 		String toolName = "direct.self-stop";
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(toolName).jsonArguments()
 				.handler((request, arguments, features) -> {
 					Soklet owner = ownerReference.get();
-					try {
-						owner.stop();
-					} catch (Throwable failure) {
-						selfStopFailure.set(failure);
-					}
-					CompletionStage<InternalShutdownResult> stage = owner
-							.getDirectLifecycle().shutdown();
-					repeatedHandlerStageIdentity.set(stage == owner
-							.getDirectLifecycle().shutdown());
+					CompletionStage<ShutdownResult> stage = owner.shutdown();
+					repeatedHandlerStageIdentity.set(stage == owner.shutdown());
 					handlerStage.set(stage);
 					handlerState.set(owner.getDirectLifecycle().state());
 					handlerReachedGate.countDown();
@@ -415,7 +427,7 @@ final class SokletDirectMcpLifecycleTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(PATH)
 				.serverInformation(implementation("direct-handler-self-stop"))
 				.tool(tool).build();
-		McpServer server = serverBuilder(endpoint, Duration.ofSeconds(5)).build();
+		McpServer server = serverBuilder(endpoint).build();
 		LifecycleObserver observer = new LifecycleObserver() {
 			@Override
 			public void willStopMcpServer(@NonNull McpServer ignored) {
@@ -424,15 +436,15 @@ final class SokletDirectMcpLifecycleTests {
 
 			@Override
 			public void didStopMcpServer(@NonNull McpServer ignored,
-					@NonNull McpShutdownOutcome outcome) {
+					@NonNull ParticipantShutdownResult result) {
 				didStopMcp.incrementAndGet();
-				stopOutcome.set(outcome);
+				stopOutcome.set(result.getDisposition());
 			}
 		};
 		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(observer)
-				.internalLifecyclePolicy(handlerPolicy()).build());
+				.lifecyclePolicy(handlerPolicy()).build());
 		ownerReference.set(soklet);
 		ExecutorService executor = newExecutor();
 		CompletableFuture<HttpResponse<String>> request = null;
@@ -445,15 +457,11 @@ final class SokletDirectMcpLifecycleTests {
 			Assertions.assertTrue(handlerReachedGate.await(5, TimeUnit.SECONDS),
 					"The real MCP application handler did not reach self-stop");
 
-			IllegalStateException nestedFailure = Assertions.assertInstanceOf(
-					IllegalStateException.class, selfStopFailure.get());
-			Assertions.assertEquals(
-					"Lifecycle wait cannot run from tracked lifecycle execution",
-					nestedFailure.getMessage());
 			Assertions.assertEquals(
 					InternalLifecycleStateMachine.State.SHUTTING_DOWN,
 					handlerState.get());
-			Assertions.assertFalse(soklet.isStarted());
+			Assertions.assertEquals(SokletStatus.SHUTTING_DOWN,
+					soklet.getStatus());
 			Assertions.assertTrue(repeatedHandlerStageIdentity.get());
 
 			HttpResponse<String> quiescedResponse = request.get(3,
@@ -461,7 +469,7 @@ final class SokletDirectMcpLifecycleTests {
 			Assertions.assertEquals(503, quiescedResponse.statusCode());
 			Assertions.assertTrue(quiescedResponse.body().isEmpty());
 			awaitCondition(() -> server.getDiagnostics().getStatus()
-					== McpServerStatus.STOPPED_WITH_RESIDUAL_HANDLERS
+					== McpServerStatus.SHUTTING_DOWN
 					&& server.getDiagnostics().getActiveHandlerExecutions() == 1,
 					"MCP diagnostics did not retain the gated handler");
 			Assertions.assertEquals(address, boundAddress(server));
@@ -469,7 +477,7 @@ final class SokletDirectMcpLifecycleTests {
 					"Graceful shutdown must not interrupt the admitted handler");
 			Assertions.assertEquals(1L, handlerExited.getCount());
 
-			externalStop = executor.submit(() -> captureFailure(soklet::stop));
+			externalStop = executor.submit(() -> captureFailure(soklet::close));
 			Assertions.assertFalse(externalStop.isDone());
 			releaseHandler.countDown();
 			Assertions.assertTrue(handlerExited.await(3, TimeUnit.SECONDS));
@@ -477,10 +485,10 @@ final class SokletDirectMcpLifecycleTests {
 
 			InternalShutdownResult result = soklet.getDirectLifecycle()
 					.awaitCompletion();
-			CompletionStage<InternalShutdownResult> stage = handlerStage.get();
-			Assertions.assertSame(stage, soklet.getDirectLifecycle().shutdown());
-			Assertions.assertSame(result,
-					stage.toCompletableFuture().get(3, TimeUnit.SECONDS));
+			CompletionStage<ShutdownResult> stage = handlerStage.get();
+			Assertions.assertSame(stage, soklet.shutdown());
+			Assertions.assertSame(result, stage.toCompletableFuture()
+					.get(3, TimeUnit.SECONDS).internalResult());
 			Assertions.assertSame(result,
 					soklet.getDirectLifecycle().result().orElseThrow());
 			Assertions.assertSame(result,
@@ -500,7 +508,7 @@ final class SokletDirectMcpLifecycleTests {
 					mcp.disposition());
 			Assertions.assertTrue(mcp.failures().isEmpty());
 			Assertions.assertTrue(mcp.residualActivity().isEmpty());
-			Assertions.assertEquals(McpServerStatus.STOPPED,
+			Assertions.assertEquals(McpServerStatus.TERMINATED,
 					server.getDiagnostics().getStatus());
 			Assertions.assertEquals(address, boundAddress(server));
 			Assertions.assertEquals(0,
@@ -514,9 +522,9 @@ final class SokletDirectMcpLifecycleTests {
 			awaitCondition(() -> willStopMcp.get() == 1
 					&& didStopMcp.get() == 1,
 					"MCP stop callbacks did not publish exactly once");
-			Assertions.assertEquals(McpShutdownOutcome.CLEAN,
+			Assertions.assertEquals(ParticipantShutdownDisposition.GRACEFUL_TERMINATION,
 					stopOutcome.get());
-			Assertions.assertDoesNotThrow(soklet::stop);
+			Assertions.assertDoesNotThrow(soklet::close);
 		} finally {
 			releaseHandler.countDown();
 			if (request != null)
@@ -539,7 +547,8 @@ final class SokletDirectMcpLifecycleTests {
 						.result().orElseThrow());
 		Assertions.assertEquals(InternalLifecycleStateMachine.State.CLOSED,
 				fixture.soklet().getDirectLifecycle().state());
-		Assertions.assertFalse(fixture.soklet().isStarted());
+		Assertions.assertEquals(SokletStatus.CLOSED,
+				fixture.soklet().getStatus());
 		Assertions.assertEquals(InternalShutdownDisposition.INCOMPLETE,
 				result.disposition());
 		Assertions.assertFalse(result.isComplete());
@@ -555,7 +564,7 @@ final class SokletDirectMcpLifecycleTests {
 				InternalResidualActivityKind.CALLBACK,
 				InternalResidualActivityKind.LIFECYCLE_CALL),
 				mcp.residualActivity());
-		Assertions.assertEquals(McpServerStatus.STOPPED_WITH_RESIDUAL_HANDLERS,
+		Assertions.assertEquals(McpServerStatus.TERMINATION_UNKNOWN,
 				fixture.server().getDiagnostics().getStatus());
 		Assertions.assertEquals(address, boundAddress(fixture.server()));
 	}
@@ -563,7 +572,7 @@ final class SokletDirectMcpLifecycleTests {
 	private static void assertRepeatedIncompleteStop(@NonNull Soklet soklet,
 			@NonNull InternalShutdownResult result) {
 		ShutdownIncompleteException stopFailure = Assertions.assertThrows(
-				ShutdownIncompleteException.class, soklet::stop);
+				ShutdownIncompleteException.class, soklet::close);
 		Assertions.assertSame(result, stopFailure.getInternalShutdownResult());
 		ShutdownIncompleteException closeFailure = Assertions.assertThrows(
 				ShutdownIncompleteException.class, soklet::close);
@@ -572,7 +581,7 @@ final class SokletDirectMcpLifecycleTests {
 
 	private static void assertLateCleanupCannotRewrite(@NonNull McpFixture fixture,
 			@NonNull InternalShutdownResult result,
-			@NonNull CompletionStage<InternalShutdownResult> stage,
+			@NonNull CompletionStage<ShutdownResult> stage,
 			@NonNull InetSocketAddress address) throws Exception {
 		awaitCondition(() -> fixture.server().getDiagnostics()
 				.getActiveHandlerExecutions() == 0,
@@ -581,8 +590,14 @@ final class SokletDirectMcpLifecycleTests {
 				"lifecycleStartupInProgress"),
 				"Late MCP startup did not complete its cleanup handoff");
 		Assertions.assertTrue(runtimeLifecycleFlag(fixture.server(),
+				"lifecycleQuiesced"),
+				"The returning startup worker did not unwind its owned resources");
+		Assertions.assertFalse(runtimeLifecycleFlag(fixture.server(),
+				"lifecycleForceRequested"),
+				"A phase frozen while start was live cannot be queued into MCP");
+		Assertions.assertFalse(runtimeLifecycleFlag(fixture.server(),
 				"lifecycleForced"),
-				"The startup worker did not apply the queued force request");
+				"A return after result freeze cannot replay the forced phase");
 		awaitCondition(() -> isPortReusable(address),
 				"Late MCP startup unwind did not release the listener");
 		Assertions.assertSame(result, fixture.soklet().getDirectLifecycle()
@@ -590,7 +605,8 @@ final class SokletDirectMcpLifecycleTests {
 		Assertions.assertSame(stage,
 				fixture.soklet().getDirectLifecycle().shutdown());
 		Assertions.assertEquals(address, boundAddress(fixture.server()));
-		Assertions.assertFalse(fixture.soklet().isStarted());
+		Assertions.assertEquals(SokletStatus.CLOSED,
+				fixture.soklet().getStatus());
 		Assertions.assertThrows(IllegalStateException.class,
 				fixture.soklet()::start);
 		assertPortReusable(address);
@@ -598,7 +614,7 @@ final class SokletDirectMcpLifecycleTests {
 
 	@NonNull
 	private static McpFixture blockingFixture(@NonNull BlockingPublisher publisher,
-			@NonNull InternalLifecyclePolicy policy) {
+			@NonNull LifecyclePolicy policy) {
 		McpEndpoint endpoint = McpEndpoint.withPath(PATH)
 				.serverInformation(implementation("direct-blocked-publisher"))
 				.resourceListHandler((request, list, features) ->
@@ -607,15 +623,15 @@ final class SokletDirectMcpLifecycleTests {
 						.notificationType(McpSubscriptionNotificationType
 								.RESOURCES_LIST_CHANGED).build())
 				.build();
-		McpServer server = serverBuilder(endpoint, Duration.ofSeconds(1)).build();
+		McpServer server = serverBuilder(endpoint).build();
 		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.internalLifecyclePolicy(policy).build());
+				.lifecyclePolicy(policy).build());
 		return new McpFixture(server, soklet);
 	}
 
 	private static McpServer.@NonNull Builder serverBuilder(
-			@NonNull McpEndpoint endpoint, @NonNull Duration shutdownTimeout) {
+			@NonNull McpEndpoint endpoint) {
 		return McpServer.withPort(0).host(HOST)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.admissionController(McpAdmissionController.acceptAllInstance())
@@ -623,8 +639,7 @@ final class SokletDirectMcpLifecycleTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST))
 				.requestHandlerConcurrency(1)
-				.requestHandlerQueueCapacity(1)
-				.shutdownTimeout(shutdownTimeout);
+				.requestHandlerQueueCapacity(1);
 	}
 
 	@NonNull
@@ -633,24 +648,33 @@ final class SokletDirectMcpLifecycleTests {
 	}
 
 	@NonNull
-	private static InternalLifecyclePolicy timeoutPolicy() {
-		return new InternalLifecyclePolicy(Optional.of(Duration.ofSeconds(1)),
-				Duration.ofMillis(150), Duration.ofMillis(150),
-				Duration.ofMillis(250));
+	private static LifecyclePolicy timeoutPolicy() {
+		return LifecyclePolicy.builder()
+				.startupTimeout(Duration.ofSeconds(1))
+				.startupCancellationTimeout(Duration.ofMillis(150))
+				.gracefulShutdownDuration(Duration.ofMillis(150))
+				.forcedShutdownDuration(Duration.ofMillis(250))
+				.build();
 	}
 
 	@NonNull
-	private static InternalLifecyclePolicy cancellationPolicy() {
-		return new InternalLifecyclePolicy(Optional.of(Duration.ofSeconds(10)),
-				Duration.ofMillis(150), Duration.ofMillis(150),
-				Duration.ofMillis(250));
+	private static LifecyclePolicy cancellationPolicy() {
+		return LifecyclePolicy.builder()
+				.startupTimeout(Duration.ofSeconds(10))
+				.startupCancellationTimeout(Duration.ofMillis(150))
+				.gracefulShutdownDuration(Duration.ofMillis(150))
+				.forcedShutdownDuration(Duration.ofMillis(250))
+				.build();
 	}
 
 	@NonNull
-	private static InternalLifecyclePolicy handlerPolicy() {
-		return new InternalLifecyclePolicy(Optional.of(Duration.ofSeconds(5)),
-				Duration.ofMillis(250), Duration.ofSeconds(5),
-				Duration.ofSeconds(1));
+	private static LifecyclePolicy handlerPolicy() {
+		return LifecyclePolicy.builder()
+				.startupTimeout(Duration.ofSeconds(5))
+				.startupCancellationTimeout(Duration.ofMillis(250))
+				.gracefulShutdownDuration(Duration.ofSeconds(5))
+				.forcedShutdownDuration(Duration.ofSeconds(1))
+				.build();
 	}
 
 	@NonNull

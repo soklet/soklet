@@ -35,18 +35,18 @@ the current full japicmp report.
 
 ## Compatibility and ownership model
 
-The reviewed current incompatibility set contains exactly 565 canonical
+The reviewed current incompatibility set contains exactly 618 canonical
 symbols and has SHA-256
-`3269b4a73d42c035a90735336462aaeb98bf6809d003fa858dbfa4a839e4c2e2`.
+`3d9d68bbbdeabae63a78d40a50c9896d3f11f6d0d2305beff0c94bd86476928c`.
 The matching full japicmp report establishes an exact owner universe of:
 
 - 133 Phase 4 owners;
 - 36 Phase 5 owners;
-- 65 Phase 6 owners;
+- 64 Phase 6 owners;
 - zero provisional owners; and
-- 234 owners in total.
+- 233 MCP owners, plus 39 reviewed non-MCP owners for 272 current-side owners.
 
-The 65 Phase 6 owners are the exact sorted entries in `phase-6.includes`.
+The 64 Phase 6 owners are the exact sorted entries in `phase-6.includes`.
 The Phase 4 owner inventory remains 133, while its signature snapshot includes
 the one compatible
 `LogEventType.MCP_TRACE_CORRELATION` field. Among the reviewed Phase 4 host
@@ -72,23 +72,23 @@ Phase 5 carrier owners and changes no Phase 6 descriptor.
 
 ## Frozen Phase 6 snapshot
 
-`phase-6.signatures.jsonl` contains exactly 422 canonical records:
+`phase-6.signatures.jsonl` contains exactly 421 canonical records:
 
-- 65 classes;
+- 64 classes;
 - zero constructors;
-- 40 fields; and
-- 317 methods.
+- 42 fields; and
+- 315 methods.
 
 The reviewed file's SHA-256 is
-`f7355c91a0131c4bb9ef7f9b49f0d54e9bbafa0042a16c5932722e5765cee774`.
+`5e8a4aac651374205e126ca8128ec5ca644b1c7f84ad6426d4462cd9712ff12b`.
 The independent reflection contract freezes the Phase 6 JSpecify type-use
 layout with SHA-256
-`2f857d18ae3dfb641fadf00858fec19d594c0ac470c6ed6be70423596b340611`.
-The 65-entry `phase-6.includes` inventory has SHA-256
-`474e1c3079501b286a9eb1b38dee06a532d263aef50b633b46d465813024dacc`.
+`15f883e66b3194974887899a090e53d33aa27a08db793f4cfd7ff78212b67aaf`.
+The 64-entry `phase-6.includes` inventory has SHA-256
+`c14695a4bfea85e88fea713211320b4192db4ca421786ed716dd543d79ded4c5`.
 
 Immediately before the snapshot was checked in, a fresh extraction from the
-current full japicmp report produced the same 422 records and was byte-for-
+current full japicmp report produced the same 421 records and was byte-for-
 byte identical to the reviewed candidate. The aggregate freeze gate now
 compares the Phase 4, Phase 5, and Phase 6 snapshots bidirectionally on every
 run, and `frozen-phases` lists the contiguous sorted prefix `4`, `5`, `6`.
@@ -126,11 +126,11 @@ cross-cutting review fixed the following public contracts:
 - `McpLocalizationControl` is a local-server control plane: `isEnabled()` plus
   `catalogsChanged()`. It distributes nothing, carries no locale, tenant,
   revision, or key, and throws consistently when localization is disabled.
-- The three reviewed Phase 4 host amendments remain exact: default
-  `McpHandlerContinuation.getFeatures()`, abstract
-  `McpServer.getLocalizationControl()`, and concrete
+- The three reviewed Phase 4 host amendments remain exact as corrected: direct
+  `McpInvocationFeatures` input to `McpHandlerInterceptor.interceptHandler(...)`,
+  abstract `McpServer.getLocalizationControl()`, and concrete
   `McpServer.Builder.localizer(McpLocalizer)`. No fourth localization-host
-  descriptor was added, and the Phase 5 snapshot is untouched.
+  descriptor was added, and the Phase 5 snapshot remains untouched.
 - No `com.soklet/localization` MCP extension exists. Soklet advertises no
   localization capability, reserves and interprets no request or result
   `_meta` key, emits no locale or revision metadata, and claims no positive
@@ -441,3 +441,41 @@ insufficient-scope credential, proving that prior identity and authorization
 are never inherited. Its reviewed committed pin and checksum-matched
 immutable-candidate/JDK-25 proof remain an explicit required 3.6.0 downstream
 release gate. The API freeze does not satisfy or defer that gate.
+
+## 2026-08-27 Soklet 4.0 lifecycle cutover
+
+The 4.0 lifecycle review removes the MCP-specific shutdown projection in
+favor of the general Soklet lifecycle/result vocabulary:
+
+- the `McpShutdownOutcome` owner is removed without an alias;
+- `McpServerStatus` replaces the direct-listener vocabulary with
+  `NOT_STARTED`, `STARTING`, `RUNNING`, `SHUTTING_DOWN`, `TERMINATED`,
+  `RESIDUAL_ACTIVITY`, and `TERMINATION_UNKNOWN`;
+- `McpServerDiagnostics` retains its exact descriptors while its status and
+  bound-address Javadocs and reflection expectations are revised. In
+  particular, an off-network running simulator has no bound address;
+- `McpMetricsEvent.serverStopped(...)` and
+  `McpMetricsEvent.ServerStopped` now carry
+  `ParticipantShutdownDisposition`;
+- the shutdown maps on `McpMetricsSnapshot` and its builder use that same
+  general disposition type; and
+- the shared `Simulator` host retains its exact descriptors. The new
+  lifecycle-aware `SokletSimulator` API is owned by the non-MCP allowlist.
+
+Removing `McpShutdownOutcome` leaves 64 Phase 6 owners. The regenerated
+snapshot contains 421 records: 64 classes, zero constructors, 42 fields, and
+315 methods. Its SHA-256 is
+`5e8a4aac651374205e126ca8128ec5ca644b1c7f84ad6426d4462cd9712ff12b`;
+the reflection/nullability digest is
+`15f883e66b3194974887899a090e53d33aa27a08db793f4cfd7ff78212b67aaf`;
+and the include-inventory SHA-256 is
+`c14695a4bfea85e88fea713211320b4192db4ca421786ed716dd543d79ded4c5`.
+Phase 4/5/6/provisional ownership is 132/36/64/0, for an exact 232-owner
+MCP union. The separate 39-entry non-MCP allowlist owns the general lifecycle,
+result, runner, simulator, and transport-SPI types; the complete current-side
+inventory therefore contains 271 owners.
+
+The regenerated released-3.5.1 compatibility ledger contains 617 records
+with SHA-256
+`302f68448fe14b1cc5ad179c076c5b84b16e81b0b21dca55e0cc5edcbaadea41`.
+Phase 5 remains byte-identical at 179 records.

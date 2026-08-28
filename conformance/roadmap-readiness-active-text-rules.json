@@ -1,0 +1,96 @@
+{
+  "formatVersion": 1,
+  "rules": [
+    {
+      "id": "PROFILE-001",
+      "classification": "default-profile",
+      "rationale": "Soklet 4.0.x exposes one explicit profile and no latest/fallback selection.",
+      "required": [
+        {"path":"MCP.md","literal":"Soklet 4.0.x supports exactly the MCP `2026-07-28` profile","minCount":1,"maxCount":1},
+        {"path":"README.md","literal":"Soklet 4.0.x supports exactly the MCP `2026-07-28` server profile","minCount":1,"maxCount":1}
+      ],
+      "forbidden": [
+        {"path":"MCP.md","literal":"automatically selects the latest MCP","maxCount":0},
+        {"path":"README.md","literal":"automatically selects the latest MCP","maxCount":0}
+      ]
+    },
+    {
+      "id": "AUTH-001",
+      "classification": "authorization-isolation",
+      "rationale": "Core transports application-owned decisions without claiming OAuth conformance.",
+      "required": [
+        {"path":"SECURITY.md","literal":"Transporting a challenge does not by itself make core Soklet or","minCount":1,"maxCount":1}
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "CACHE-001",
+      "classification": "cache",
+      "rationale": "MCP transport responses remain no-store independently of protocol cache hints.",
+      "required": [
+        {"path":"SECURITY.md","literal":"Every MCP HTTP response family—including early parser errors","minCount":1,"maxCount":1},
+        {"path":"MCP.md","literal":"transport responses use `Cache-Control: no-store`","minCount":1,"maxCount":1}
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "TRANSPORT-001",
+      "classification": "transport-stdio",
+      "rationale": "Streamable HTTP/SSE response behavior is not stdio or the deprecated standalone transport.",
+      "required": [
+        {"path":"MCP.md","literal":"Soklet 4.0.0 does not provide stdio transport","minCount":1,"maxCount":1},
+        {"path":"README.md","literal":"deprecated standalone legacy HTTP+SSE transport are reviewed N/A","minCount":1,"maxCount":1}
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "DPOP-001",
+      "classification": "dpop",
+      "rationale": "Core does not claim DPoP implementation through the admission seam.",
+      "required": [
+        {"path":"MCP.md","literal":"core Soklet does not implement DPoP-bound access tokens","minCount":1,"maxCount":1}
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "EXTENSION-001",
+      "classification": "extensions",
+      "rationale": "Open client settings do not invent support or server behavior.",
+      "required": [
+        {"path":"MCP.md","literal":"Client extension settings are open but do not implicitly enable server","minCount":1,"maxCount":1}
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "LIFECYCLE-001",
+      "classification": "deprecated-roots-sampling-logging",
+      "rationale": "Deprecated MCP features stay supported Java compatibility surfaces and are not defaults.",
+      "required": [
+        {"path":"MCP.md","literal":"SEP-2577 marks Roots, Sampling, and Logging deprecated in MCP `2026-07-28`","minCount":1,"maxCount":1},
+        {"path":"README.md","literal":"lifecycle is independent from Soklet's Java API lifecycle","minCount":1,"maxCount":1},
+        {"path":"SECURITY.md","literal":"No negotiation-triggered warning is emitted","minCount":1,"maxCount":1}
+      ],
+      "forbidden": [
+        {"path":"MCP.md","literal":"this raw-JSON tool asks the client for roots","maxCount":0}
+      ]
+    },
+    {
+      "id": "DCR-001",
+      "classification": "dynamic-client-registration",
+      "rationale": "DCR is N/A because Soklet does not provide OAuth/DCR.",
+      "required": [
+        {"path":"MCP.md","literal":"Dynamic Client Registration is reviewed and not applicable because Soklet has","minCount":1,"maxCount":1}
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "EXAMPLE-001",
+      "classification": "active-default-example",
+      "rationale": "The flagship input example teaches active form Elicitation.",
+      "required": [
+        {"path":"MCP.md","literal":"this raw-JSON tool requests active form Elicitation","minCount":1,"maxCount":1}
+      ],
+      "forbidden": []
+    }
+  ]
+}

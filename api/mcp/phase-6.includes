@@ -47,7 +47,6 @@ com.soklet.McpMetricsSnapshot$SubscriptionTerminationKey
 com.soklet.McpRequestOutcome
 com.soklet.McpServerDiagnostics
 com.soklet.McpServerStatus
-com.soklet.McpShutdownOutcome
 com.soklet.McpSimulation
 com.soklet.McpSimulationBodyMode
 com.soklet.McpSimulationCompletion

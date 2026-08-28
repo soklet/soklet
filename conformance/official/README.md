@@ -61,6 +61,12 @@ use public APIs.
 One audited same-package, package-private seam registers and enforces the exact
 official JSON Schema fixture because Soklet intentionally has no public
 hand-authored-schema API. The fixture imports no `com.soklet.internal` type.
+The same candidate-JAR-only build also compiles and runs the published
+`com.soklet.conformance.transport` reference fixture. It exercises independent
+HTTP/SSE engines, transparent decorators, lifecycle-owning decorators, and
+two-level owning stacks entirely outside the `com.soklet` package, including
+stable graph identity, wrapped request dispatch, SSE broadcaster forwarding,
+delegate-subtree proof, decorator-owned cleanup, and complete graceful results.
 This is packaged development evidence, not release-candidate evidence; the
 later release gate separately requires checksum-matched JAR/POM provenance and
 the full 39-scenario run.
@@ -382,7 +388,7 @@ official 48-message/11-test corpus changed. The pinned 40-scenario inventory
 has no exact unknown-header diagnostic, redaction, quota, or cardinality
 scenario; the adjacent standard- and registered-custom-header profiles are
 not evidence for this Soklet policy. `MCP-HTTP-020` is now
-`CORE_COMPLETE`; the report is 110/117/12/18/5 and the remaining IDs are
+`CORE_COMPLETE`; the report is 110/117/12/19/5 and the remaining IDs are
 `SOK-VALID-002`, `SOK-STATE-002`, `SOK-STATE-007`, `SOK-PRIV-001`, and
 `AMB-002`. Generic `Request`, `Throwable`, custom-collector, and
 application-telemetry privacy remain under `SOK-PRIV-001`. This checkpoint
@@ -514,14 +520,14 @@ gate; the release orchestrator still owns the
 isolated repository, build, signing, downstream, and publication evidence.
 
 `build-public-fixture.sh` requires empty fixture and test-class directories,
-compiles the fixture and its one same-package schema helper with the candidate
-JAR as their only Soklet compile dependency, explicitly disables annotation
-processing because the fixture uses programmatic registration, and uses
-`jdeps` to reject any compiled dependency on `com.soklet.internal`. It also
-compiles and runs a separate standalone public-API contract test for the exact
-Phase 5 registrations, declarations, handler branches, and application-state
-transitions. The test output also contains a public-API-only local simulator
-driver. `run-local-simulator.mjs` derives the 39 RUN rows from the pinned
+compiles the fixture, transport references, and one same-package schema helper
+with the candidate JAR as their only Soklet compile dependency, explicitly
+disables annotation processing because the fixture uses programmatic
+registration, and uses `jdeps` to reject any compiled dependency on
+`com.soklet.internal`. It also compiles and runs standalone public-API contract
+tests for both the exact Phase 5 registrations and the external transport graph
+shapes. The test output also contains a public-API-only local simulator driver.
+`run-local-simulator.mjs` derives the 39 RUN rows from the pinned
 `scenarios.json` manifest in exact CLI ordinal order, executes every row
 off-network against the packaged candidate, and byte-compares the driver's 39
 PASS records. The driver covers real fixture handlers, response and SSE shapes,

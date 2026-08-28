@@ -1,0 +1,185 @@
+{
+  "baseCoreCommit": "315b759b97a3c32b420f34c3c137d72a09db9a11",
+  "baseCoreTree": "270907757a4cfd6d11703838c530cd70906e7d18",
+  "externalEntries": [
+    {
+      "allowedPostD2Owner": [
+        "MCP-C",
+        "MCP-7"
+      ],
+      "baseSha256": "ecd69178a61b1eb118334dc9ee147e7f490a99f37adcd68f7a50b9e0e04631f8",
+      "changeKind": "modified",
+      "owner": "MCP-4",
+      "path": "mcp/MCP_CONFORMANCE_MATRIX.md",
+      "reason": "Record the MCP-4 conformance disposition while preserving the MCP-C then MCP-7 writer order."
+    },
+    {
+      "allowedPostD2Owner": null,
+      "baseSha256": "7d65cb5ff5ef2fa5b3f5ec3187180d6b085190e0bcd1677a710700f1ad526db3",
+      "changeKind": "modified",
+      "owner": "U5/D1p",
+      "path": "mcp/MCP_PUBLIC_API_SKETCH_V9.md",
+      "reason": "Render the combined cutover with MCP-3B toBuilder and MCP-4 lifecycle and marker-removal attribution."
+    },
+    {
+      "allowedPostD2Owner": [
+        "MCP-7"
+      ],
+      "baseSha256": "a06131fc939e9acdb56f7f1d465e7c8e8eec17ea320a21975e76d1f62e0e0b61",
+      "changeKind": "modified",
+      "owner": "MCP-4",
+      "path": "mcp/README.md",
+      "reason": "Render the MCP-4 API lifecycle and D1p evidence guidance before MCP-7 reconciliation."
+    },
+    {
+      "allowedPostD2Owner": null,
+      "baseSha256": "5eefa94ee7898f206290e3665027be29caadb39333e55a157bbeb54ded1aca20",
+      "changeKind": "modified",
+      "owner": "U5/D1p",
+      "path": "mcp/design/mcp-api-sketch/README.md",
+      "reason": "Reconcile the compiled sketch README with the corrected D1p API surface."
+    },
+    {
+      "allowedPostD2Owner": null,
+      "baseSha256": "c4c5185ab4950125e48f36c0f1e03350cebb8fcb65738440776f874ada917d20",
+      "changeKind": "modified",
+      "owner": "U5/D1p",
+      "path": "mcp/design/mcp-api-sketch/src/examples/java/examples/AnnotatedCatalogServerExample.java",
+      "reason": "Render the corrected D1p argument and property annotation split in the sketch example."
+    },
+    {
+      "allowedPostD2Owner": null,
+      "baseSha256": "70b0021d5a29255113a089f74ac1da1286a78e608e9407e76121a2a64a19eaf6",
+      "changeKind": "modified",
+      "owner": "U5/D1p",
+      "path": "mcp/design/mcp-api-sketch/src/main/java/com/soklet/McpAdmissionContext.java",
+      "reason": "Render the corrected D1p admission-context subscription URI projection."
+    },
+    {
+      "allowedPostD2Owner": null,
+      "baseSha256": "b03561ef42e85f755bc831cef65a22cf636a3553a2e50676d7633e50b500296c",
+      "changeKind": "deleted",
+      "owner": "U5/D1p",
+      "path": "mcp/design/mcp-api-sketch/src/main/java/com/soklet/McpBooleanHint.java",
+      "reason": "Remove the deferred 4.1 annotation hint type from the corrected D1p sketch."
+    },
+    {
+      "allowedPostD2Owner": null,
+      "baseSha256": "69f1472f944101a9338f7eeb1d4c0a108dd190c6b0e4ff4a0eadbb8c50f4903c",
+      "changeKind": "modified",
+      "owner": "U5/D1p",
+      "path": "mcp/design/mcp-api-sketch/src/main/java/com/soklet/McpHandlerContinuation.java",
+      "reason": "Render the corrected D1p continuation API without duplicate feature access."
+    },
+    {
+      "allowedPostD2Owner": null,
+      "baseSha256": "03243703a6628913b39d539a45f4881e3d072316b80b725e7fbfd226ed5117ea",
+      "changeKind": "modified",
+      "owner": "U5/D1p",
+      "path": "mcp/design/mcp-api-sketch/src/main/java/com/soklet/McpHandlerInterceptor.java",
+      "reason": "Render the corrected D1p interceptor signature with explicit negotiated features."
+    },
+    {
+      "allowedPostD2Owner": null,
+      "baseSha256": "55487f395e501b7963493c3b790652914aa3800da12dd25a68571a3de3dfb0b4",
+      "changeKind": "modified",
+      "owner": "MCP-4",
+      "path": "mcp/design/mcp-api-sketch/src/main/java/com/soklet/McpLogLevel.java",
+      "reason": "Render the MCP-4 Java and Javadoc deprecation-marker removal preview."
+    },
+    {
+      "allowedPostD2Owner": null,
+      "baseSha256": "0dabee4cd0f5bcb88564e5b07a797f61d5279dff0abc2781c167093c1afa2270",
+      "changeKind": "modified",
+      "owner": "MCP-4",
+      "path": "mcp/design/mcp-api-sketch/src/main/java/com/soklet/McpRequestContext.java",
+      "reason": "Render the MCP-4 request-context lifecycle documentation preview."
+    },
+    {
+      "allowedPostD2Owner": null,
+      "baseSha256": "cbff2a2a38af0dbe43411805475e1e9cf3c67a68653752321bc08ddaf25c6c2b",
+      "changeKind": "modified",
+      "owner": "MCP-3B",
+      "path": "mcp/design/mcp-api-sketch/src/main/java/com/soklet/McpToolOutput.java",
+      "reason": "Render the MCP-3B McpToolOutput.toBuilder preview."
+    },
+    {
+      "allowedPostD2Owner": null,
+      "baseSha256": "dd3d75ebcea18153d8e5584374b1f7785a71030cb8b1f703ff16b21da4dbcd1c",
+      "changeKind": "modified",
+      "owner": "U5/D1p",
+      "path": "mcp/design/mcp-api-sketch/src/main/java/com/soklet/annotation/McpTool.java",
+      "reason": "Remove the deferred 4.1 annotation icon and hint members from the corrected D1p sketch."
+    },
+    {
+      "allowedPostD2Owner": null,
+      "baseSha256": "447be7b9ed924029818968469c6130c8c8ad462e412dd28249fb66c8a036a399",
+      "changeKind": "modified",
+      "owner": "U5/D1p",
+      "path": "mcp/design/mcp-api-sketch/src/main/java/com/soklet/annotation/McpToolArgument.java",
+      "reason": "Restrict the corrected D1p tool-argument annotation to method parameters."
+    },
+    {
+      "allowedPostD2Owner": null,
+      "baseSha256": null,
+      "changeKind": "added",
+      "owner": "U5/D1p",
+      "path": "mcp/design/mcp-api-sketch/src/main/java/com/soklet/annotation/McpToolProperty.java",
+      "reason": "Add the corrected D1p record-component property annotation to the compiled sketch."
+    },
+    {
+      "allowedPostD2Owner": null,
+      "baseSha256": "255b729f3194c4eb441e1ae14712b06225e275290008e7b1d17c4e911391a0d0",
+      "changeKind": "modified",
+      "owner": "MCP-4",
+      "path": "mcp/design/mcp-api-sketch/verify.sh",
+      "reason": "Render the MCP-4 candidate-root lifecycle assertion and sibling-blind verification path."
+    }
+  ],
+  "formatVersion": 1,
+  "previewArtifactPaths": [
+    "target/japicmp/mcp-api-diff.incompatibilities.jsonl",
+    "target/japicmp/mcp-api-diff.xml",
+    "target/japicmp/mcp-api-freeze.xml",
+    "target/soklet-4.0.0-SNAPSHOT.jar"
+  ],
+  "protectedPostD2Paths": [
+    "api/mcp/current-incompatibilities.jsonl",
+    "api/mcp/non-mcp-public-api.allowlist",
+    "api/mcp/phase-4.includes",
+    "api/mcp/phase-4.signatures.jsonl",
+    "api/mcp/phase-5.includes",
+    "api/mcp/phase-5.signatures.jsonl",
+    "api/mcp/phase-6.includes",
+    "api/mcp/phase-6.signatures.jsonl",
+    "api/mcp/provisional.includes",
+    "conformance/official/build-public-fixture.sh",
+    "conformance/official/public-fixture-src/com/soklet/conformance/McpConformanceFixture.java",
+    "conformance/official/public-fixture-src/com/soklet/conformance/transport/TransportCompositionFixture.java",
+    "conformance/official/public-fixture-test-src/com/soklet/conformance/McpLocalSimulatorScenarioDriver.java",
+    "conformance/official/public-fixture-test-src/com/soklet/conformance/transport/TransportCompositionFixtureContractTest.java",
+    "conformance/official/run.mjs",
+    "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java"
+  ],
+  "reflectionDigestSourcePath": "src/test/java/com/soklet/McpPublicApiReflectionContractTests.java",
+  "semanticExpectations": {
+    "allowlistCount": 39,
+    "incompatibilityCount": 618,
+    "ownerCounts": {
+      "phase-4": 133,
+      "phase-5": 36,
+      "phase-6": 64,
+      "provisional": 0
+    },
+    "signatureCounts": {
+      "phase-4": 1029,
+      "phase-5": 179,
+      "phase-6": 421
+    }
+  },
+  "trackedBlobExclusions": [
+    "release/d1p-canonical-semantic-digests.json",
+    "release/d1p-public-cutover-manifest.json",
+    "release/d1p-tracked-blobs.sha256"
+  ]
+}

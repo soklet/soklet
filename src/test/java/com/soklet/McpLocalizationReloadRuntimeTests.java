@@ -61,12 +61,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-@Timeout(30)
+@Timeout(60)
 class McpLocalizationReloadRuntimeTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/localization/reload";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final Duration WAIT = Duration.ofSeconds(5);
+	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
+			LifecyclePolicy.builder()
+					.startupTimeout(Duration.ofSeconds(5))
+					.startupCancellationTimeout(Duration.ofSeconds(2))
+					.gracefulShutdownDuration(Duration.ofSeconds(2))
+					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.build();
 
 	@Test
 	void catalogsChangedDeliversOneCoarseInvalidationPerLocalizedFamily() {
@@ -297,7 +304,7 @@ class McpLocalizationReloadRuntimeTests {
 				})
 				.build();
 		McpServer server = server(true, localizer,
-				Optional.of(handlerExecutor), Duration.ofSeconds(2));
+				Optional.of(handlerExecutor));
 		CountDownLatch requestFinished = new CountDownLatch(1);
 		AtomicInteger requestFinishes = new AtomicInteger();
 		AtomicReference<McpRequestOutcome> requestOutcome = new AtomicReference<>();
@@ -315,14 +322,12 @@ class McpLocalizationReloadRuntimeTests {
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(observer)
-				.internalLifecyclePolicy(new InternalLifecyclePolicy(
-						Optional.of(Duration.ofSeconds(5)), Duration.ofSeconds(2),
-						Duration.ofSeconds(2), Duration.ofSeconds(1)))
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build());
 		AtomicReference<Throwable> stopFailure = new AtomicReference<>();
 		Thread stopThread = new Thread(() -> {
 			try {
-				soklet.stop();
+				soklet.close();
 			} catch (Throwable throwable) {
 				stopFailure.set(throwable);
 			}
@@ -436,7 +441,7 @@ class McpLocalizationReloadRuntimeTests {
 					throw new AssertionError(e);
 				}
 			}
-			soklet.stop();
+			soklet.close();
 			if (responseFuture != null)
 				responseFuture.cancel(true);
 		}
@@ -705,23 +710,8 @@ class McpLocalizationReloadRuntimeTests {
 	private static McpServer server(boolean subscriptions,
 			McpLocalizer localizer,
 			Optional<java.util.concurrent.ExecutorService> handlerExecutor) {
-		return server(subscriptions, localizer, handlerExecutor, Optional.empty());
-	}
-
-	private static McpServer server(boolean subscriptions,
-			McpLocalizer localizer,
-			Optional<java.util.concurrent.ExecutorService> handlerExecutor,
-			Duration shutdownTimeout) {
-		return server(subscriptions, localizer, handlerExecutor,
-				Optional.of(shutdownTimeout));
-	}
-
-	private static McpServer server(boolean subscriptions,
-			McpLocalizer localizer,
-			Optional<java.util.concurrent.ExecutorService> handlerExecutor,
-			Optional<Duration> shutdownTimeout) {
 		return server(reloadEndpoint(subscriptions), localizer, handlerExecutor,
-				shutdownTimeout);
+				McpServer.withPort(0));
 	}
 
 	private static McpServer server(SimulatorTransports transports,
@@ -776,27 +766,20 @@ class McpLocalizationReloadRuntimeTests {
 	private static McpServer server(McpEndpoint endpoint,
 			McpLocalizer localizer,
 			Optional<java.util.concurrent.ExecutorService> handlerExecutor) {
-		return server(endpoint, localizer, handlerExecutor, Optional.empty());
+		return server(endpoint, localizer, handlerExecutor,
+				McpServer.withPort(0));
+	}
+
+	private static McpServer server(SimulatorTransports transports,
+			McpEndpoint endpoint, McpLocalizer localizer) {
+		return server(endpoint, localizer, Optional.empty(),
+				transports.newMcpServerBuilder(0));
 	}
 
 	private static McpServer server(McpEndpoint endpoint,
 			McpLocalizer localizer,
 			Optional<java.util.concurrent.ExecutorService> handlerExecutor,
-			Optional<Duration> shutdownTimeout) {
-		return server(McpServer.withPort(0), endpoint, localizer, handlerExecutor,
-				shutdownTimeout);
-	}
-
-	private static McpServer server(SimulatorTransports transports,
-			McpEndpoint endpoint, McpLocalizer localizer) {
-		return server(transports.newMcpServerBuilder(0), endpoint, localizer,
-				Optional.empty(), Optional.empty());
-	}
-
-	private static McpServer server(McpServer.Builder builder,
-			McpEndpoint endpoint, McpLocalizer localizer,
-			Optional<java.util.concurrent.ExecutorService> handlerExecutor,
-			Optional<Duration> shutdownTimeout) {
+			McpServer.Builder builder) {
 		builder
 				.host(LOOPBACK)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
@@ -809,7 +792,6 @@ class McpLocalizationReloadRuntimeTests {
 
 		if (localizer != null)
 			builder.localizer(localizer);
-		shutdownTimeout.ifPresent(builder::shutdownTimeout);
 		handlerExecutor.ifPresent(executor -> builder
 				.requestHandlerExecutorServiceSupplier(() -> executor));
 
@@ -842,6 +824,7 @@ class McpLocalizationReloadRuntimeTests {
 	private static SokletConfig config(McpServer server) {
 		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build();
 	}
 

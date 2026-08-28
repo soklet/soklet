@@ -149,13 +149,16 @@ public interface McpRequestContext {
 	/**
 	 * Returns the protocol's deprecated per-request log-level metadata.
 	 *
-	 * <p>The accessor itself is not deprecated: the wire value type carries
-	 * the deprecation, and exposing it does not mean that Soklet advertises
-	 * MCP Logging.
+	 * <p>SEP-2577 marks MCP Logging deprecated in the 2026-07-28 profile, with
+	 * earliest specification removal eligibility on or after 2027-07-28. Both
+	 * this accessor and its returned type remain supported Soklet API for every
+	 * supported profile containing the wire feature; Soklet has made no Java
+	 * API-removal decision. The frozen accessor name describes the upstream
+	 * wire lifecycle. Exposing the value neither advertises nor implements MCP
+	 * Logging; applications use Soklet's existing observability path.
 	 *
 	 * @return deprecated log level, if supplied
 	 */
-	@SuppressWarnings("deprecation")
 	@NonNull
 	Optional<@NonNull McpLogLevel> getDeprecatedLogLevel();
 

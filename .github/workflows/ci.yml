@@ -61,9 +61,12 @@ jobs:
       - name: Check out
         uses: actions/checkout@v6
         with:
-          # The version-transition verifier compares the current tree with the
-          # owner-approved baseline commit recorded in its checked-in inventory.
+          # The version-transition and lifecycle-harness verifiers compare the
+          # current tree with owner-approved commits recorded in their inventories.
           fetch-depth: 0
+          # D1p must inspect the exact PR-head preview commit, not GitHub's
+          # synthetic two-parent pull-request merge commit.
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
@@ -75,10 +78,20 @@ jobs:
       - name: Verify reviewed API incompatibilities and MCP freezes
         run: scripts/verify-mcp-api-freezes.sh
 
+      - name: Require tracked D1p public-cutover evidence
+        run: |
+          node scripts/verify-d1p-evidence-self-test.mjs
+          node scripts/verify-d1p-evidence.mjs --mode candidate --scope tracked
+
       - name: Verify version-transition inventory
         run: |
           node scripts/verify-version-transition-inventory-self-test.mjs
-          node scripts/verify-version-transition-inventory.mjs --stage post-retarget
+          node scripts/verify-version-transition-inventory.mjs --stage post-d2
+
+      - name: Verify lifecycle-bound harness closure
+        run: |
+          node scripts/verify-lifecycle-bound-harness-inventory-self-test.mjs
+          node scripts/verify-lifecycle-bound-harness-inventory.mjs
 
       - name: Upload API-diff evidence
         if: always()
@@ -91,6 +104,10 @@ jobs:
             target/japicmp/mcp-api-diff.incompatibilities.jsonl
             target/japicmp/mcp-api-freeze.xml
             target/mcp-api-freezes/*.signatures.jsonl
+            release/d1p-evidence-config.json
+            release/d1p-tracked-blobs.sha256
+            release/d1p-canonical-semantic-digests.json
+            release/d1p-public-cutover-manifest.json
 
   fuzz-regression:
     name: Fuzz Corpus Replay (JDK 25)

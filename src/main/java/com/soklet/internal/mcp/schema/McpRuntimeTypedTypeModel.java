@@ -17,7 +17,7 @@
 package com.soklet.internal.mcp.schema;
 
 import com.soklet.annotation.McpHeader;
-import com.soklet.annotation.McpToolArgument;
+import com.soklet.annotation.McpToolProperty;
 import com.soklet.internal.mcp.protocol.McpJsonValue;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -231,17 +231,17 @@ final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
 			RecordComponent component = components[index];
 			Type componentType = substitutionTraversal.substitute(
 					sourceComponentTypes.get(index), substitutions);
-			@Nullable McpToolArgument argument = component.getAnnotation(
-					McpToolArgument.class);
+			@Nullable McpToolProperty property = component.getAnnotation(
+					McpToolProperty.class);
 			@Nullable McpHeader header = component.getAnnotation(McpHeader.class);
-			String configuredName = argument == null ? ""
-					: requireNonNull(argument.name());
+			String configuredName = property == null ? ""
+					: requireNonNull(property.name());
 			String publishedName = configuredName.isBlank()
 					? component.getName() : configuredName;
 			described.add(McpTypedTypeDescriptor.RecordComponent.fromNameAndType(
 					publishedName, componentType,
-					argument == null ? "" : requireNonNull(argument.title()),
-					argument == null ? "" : requireNonNull(argument.description()),
+					property == null ? "" : requireNonNull(property.title()),
+					property == null ? "" : requireNonNull(property.description()),
 					header == null ? Optional.empty()
 							: Optional.of(requireNonNull(header.value()))));
 		}

@@ -56,8 +56,25 @@ final class BuiltInTransportLifecycleAdapter {
 		/** Prompt, signal-only graceful wind-up. */
 		void quiesce();
 
+		/**
+		 * Prompt graceful wind-up against the coordinator's already-fixed phase
+		 * boundary.  Most built-ins do not need the context while signaling; MCP
+		 * overrides this form so its internal subscription barrier consumes the
+		 * same absolute deadline instead of deriving a transport-local timeout.
+		 */
+		default void quiesce(@NonNull InternalShutdownContext context) {
+			requireNonNull(context);
+			quiesce();
+		}
+
 		/** Prompt owned-execution cancellation; must subsume quiesce. */
 		void force();
+
+		/** Prompt force against the coordinator's already-fixed phase boundary. */
+		default void force(@NonNull InternalShutdownContext context) {
+			requireNonNull(context);
+			force();
+		}
 
 		/** Observe all proof-bearing runtime resources against this exact deadline. */
 		boolean awaitTermination(long absoluteDeadlineNanos) throws InterruptedException;
@@ -257,7 +274,7 @@ final class BuiltInTransportLifecycleAdapter {
 		public void quiesce(@NonNull InternalShutdownContext context) {
 			requireNonNull(context);
 			if (this.quiesced.compareAndSet(false, true))
-				this.owner.operations.quiesce();
+				this.owner.operations.quiesce(context);
 			if (this.gracefulObserverStarted.compareAndSet(false, true))
 				startProofObserver(context.absoluteDeadlineNanos(), "graceful");
 		}
@@ -266,9 +283,9 @@ final class BuiltInTransportLifecycleAdapter {
 		public void force(@NonNull InternalShutdownContext context) {
 			requireNonNull(context);
 			if (this.quiesced.compareAndSet(false, true))
-				this.owner.operations.quiesce();
+				this.owner.operations.quiesce(context);
 			if (this.forced.compareAndSet(false, true))
-				this.owner.operations.force();
+				this.owner.operations.force(context);
 			if (this.forcedObserverStarted.compareAndSet(false, true))
 				startProofObserver(context.absoluteDeadlineNanos(), "forced");
 		}
@@ -299,7 +316,7 @@ final class BuiltInTransportLifecycleAdapter {
 	@NonNull
 	private final Supplier<Duration> gracefulTimeout;
 	@NonNull
-	private final Duration forcedTimeout;
+	private final Supplier<Duration> forcedTimeout;
 	@NonNull
 	private final NanoClock clock;
 	@NonNull
@@ -317,7 +334,16 @@ final class BuiltInTransportLifecycleAdapter {
 
 	BuiltInTransportLifecycleAdapter(@NonNull InternalParticipantKind kind,
 			@NonNull Operations operations, @NonNull Supplier<Duration> gracefulTimeout) {
-		this(kind, operations, gracefulTimeout, Duration.ofSeconds(3),
+		this(kind, operations, gracefulTimeout,
+				() -> Duration.ofSeconds(3),
+				NanoClock.system(), new LifecycleWorkers());
+	}
+
+	BuiltInTransportLifecycleAdapter(@NonNull InternalParticipantKind kind,
+			@NonNull Operations operations,
+			@NonNull Supplier<Duration> gracefulTimeout,
+			@NonNull Supplier<Duration> forcedTimeout) {
+		this(kind, operations, gracefulTimeout, forcedTimeout,
 				NanoClock.system(), new LifecycleWorkers());
 	}
 
@@ -325,12 +351,21 @@ final class BuiltInTransportLifecycleAdapter {
 			@NonNull Operations operations, @NonNull Supplier<Duration> gracefulTimeout,
 			@NonNull Duration forcedTimeout, @NonNull NanoClock clock,
 			@NonNull LifecycleWorkers workers) {
+		this(kind, operations, gracefulTimeout, () -> forcedTimeout, clock,
+				workers);
+		if (forcedTimeout.isNegative())
+			throw new IllegalArgumentException("forcedTimeout must be >= 0");
+	}
+
+	BuiltInTransportLifecycleAdapter(@NonNull InternalParticipantKind kind,
+			@NonNull Operations operations,
+			@NonNull Supplier<Duration> gracefulTimeout,
+			@NonNull Supplier<Duration> forcedTimeout, @NonNull NanoClock clock,
+			@NonNull LifecycleWorkers workers) {
 		this.kind = requireNonNull(kind);
 		this.operations = requireNonNull(operations);
 		this.gracefulTimeout = requireNonNull(gracefulTimeout);
 		this.forcedTimeout = requireNonNull(forcedTimeout);
-		if (forcedTimeout.isNegative())
-			throw new IllegalArgumentException("forcedTimeout must be >= 0");
 		this.clock = requireNonNull(clock);
 		this.workers = requireNonNull(workers);
 		this.callRunner = new TrackedLifecycleCallRunner(workers);
@@ -759,9 +794,15 @@ final class BuiltInTransportLifecycleAdapter {
 		generation.group.recordShutdownIntent();
 		long intentNanos = this.clock.nanoTime();
 		Duration grace = requireNonNull(this.gracefulTimeout.get(), "gracefulTimeout.get()");
+		Duration force = requireNonNull(this.forcedTimeout.get(),
+				"forcedTimeout.get()");
+		if (grace.isNegative())
+			throw new IllegalStateException("gracefulTimeout must be >= 0");
+		if (force.isNegative())
+			throw new IllegalStateException("forcedTimeout must be >= 0");
 		generation.gracefulDeadlineNanos = LifecycleDeadlines.after(intentNanos, grace);
 		generation.forcedDeadlineNanos = LifecycleDeadlines.after(
-				generation.gracefulDeadlineNanos, this.forcedTimeout);
+				generation.gracefulDeadlineNanos, force);
 		AtomicReference<InternalShutdownResult> coordinatedResult =
 				new AtomicReference<>();
 		try {

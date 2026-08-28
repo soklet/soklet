@@ -39,6 +39,17 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 class EventLoopUnexpectedTerminationTests {
 	@Test
+	void bounded_join_remaining_time_survives_signed_nano_time_wrap() {
+		long beforeWrap = Long.MAX_VALUE - 5L;
+		long afterWrap = Long.MIN_VALUE + 4L;
+
+		Assertions.assertEquals(10L,
+				EventLoop.remainingNanos(afterWrap, beforeWrap));
+		Assertions.assertEquals(-10L,
+				EventLoop.remainingNanos(beforeWrap, afterWrap));
+	}
+
+	@Test
 	void fatal_connection_loop_failure_scope_includes_sibling_cleanup()
 			throws Exception {
 		List<String> order = new CopyOnWriteArrayList<>();

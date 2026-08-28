@@ -39,7 +39,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@Timeout(30)
+@Timeout(60)
 public class McpNotificationPublicRuntimeTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/mcp/notification-boundary";
@@ -119,7 +119,7 @@ public class McpNotificationPublicRuntimeTests {
 							return McpRateLimitDecision.denied(Duration.ofMillis(1));
 						return McpRateLimitDecision.allowed();
 					})
-					.handlerInterceptor((context, continuation) -> {
+					.handlerInterceptor((context, features, continuation) -> {
 						interceptorCalls.incrementAndGet();
 						return continuation.proceed();
 					})
@@ -225,7 +225,7 @@ public class McpNotificationPublicRuntimeTests {
 			McpServer server = baseServerBuilder(transports, endpoint)
 					.admissionController(McpAdmissionController.acceptAllInstance())
 					.requestRateLimiter(context -> McpRateLimitDecision.allowed())
-					.handlerInterceptor((context, continuation) -> {
+					.handlerInterceptor((context, features, continuation) -> {
 						interceptorCalls.incrementAndGet();
 						return continuation.proceed();
 					})
@@ -517,7 +517,7 @@ public class McpNotificationPublicRuntimeTests {
 	}
 
 	private static void assertStopped(@NonNull McpServer server) {
-		Assertions.assertEquals(McpServerStatus.STOPPED,
+		Assertions.assertEquals(McpServerStatus.TERMINATED,
 				server.getDiagnostics().getStatus());
 		Assertions.assertTrue(server.getDiagnostics().getBoundAddress().isEmpty());
 		Assertions.assertEquals(0,

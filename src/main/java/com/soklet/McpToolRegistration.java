@@ -697,6 +697,9 @@ public final class McpToolRegistration<A> {
 		 * Controls canonical JSON text mirroring for structured tool content.
 		 *
 		 * <p>Mirroring is enabled by default. Pass {@code false} to opt out.
+		 * The default is pinned to Soklet's supported MCP profile and may change
+		 * only through a separately reviewed profile/API policy amendment; do not
+		 * infer an automatic "latest revision" behavior.
 		 *
 		 * @param enabled whether mirroring is enabled
 		 * @return this builder
@@ -849,6 +852,9 @@ public final class McpToolRegistration<A> {
 		 * Controls canonical JSON text mirroring for structured tool content.
 		 *
 		 * <p>Mirroring is enabled by default. Pass {@code false} to opt out.
+		 * The default is pinned to Soklet's supported MCP profile and may change
+		 * only through a separately reviewed profile/API policy amendment; do not
+		 * infer an automatic "latest revision" behavior.
 		 *
 		 * @param enabled whether mirroring is enabled
 		 * @return this builder

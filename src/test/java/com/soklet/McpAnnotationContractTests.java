@@ -26,6 +26,7 @@ import com.soklet.annotation.McpResourceUriParameter;
 import com.soklet.annotation.McpServerEndpoint;
 import com.soklet.annotation.McpTool;
 import com.soklet.annotation.McpToolArgument;
+import com.soklet.annotation.McpToolProperty;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -57,7 +58,8 @@ public class McpAnnotationContractTests {
 	public void annotationsHaveReviewedTargetsAndRuntimeRetention() {
 		assertAnnotationContract(McpServerEndpoint.class, ElementType.TYPE);
 		assertAnnotationContract(McpTool.class, ElementType.METHOD);
-		assertAnnotationContract(McpToolArgument.class, ElementType.PARAMETER,
+		assertAnnotationContract(McpToolArgument.class, ElementType.PARAMETER);
+		assertAnnotationContract(McpToolProperty.class,
 				ElementType.RECORD_COMPONENT);
 		assertAnnotationContract(McpHeader.class, ElementType.PARAMETER,
 				ElementType.RECORD_COMPONENT);
@@ -84,6 +86,8 @@ public class McpAnnotationContractTests {
 				elementNames(McpTool.class));
 		Assertions.assertEquals(Set.of("name", "title", "description"),
 				elementNames(McpToolArgument.class));
+		Assertions.assertEquals(Set.of("name", "title", "description"),
+				elementNames(McpToolProperty.class));
 		Assertions.assertEquals(Set.of("value"), elementNames(McpHeader.class));
 		Assertions.assertEquals(Set.of("name", "title", "description",
 				"mayRequestInput", "requestStateMode"),
@@ -140,8 +144,8 @@ public class McpAnnotationContractTests {
 		Assertions.assertEquals("Tenant",
 				parameter.getAnnotation(McpHeader.class).value());
 
-		McpToolArgument recordComponent = AnnotatedRecord.class
-				.getRecordComponents()[0].getAnnotation(McpToolArgument.class);
+		McpToolProperty recordComponent = AnnotatedRecord.class
+				.getRecordComponents()[0].getAnnotation(McpToolProperty.class);
 		Assertions.assertEquals("publishedName", recordComponent.name());
 		Assertions.assertEquals("Published title", recordComponent.title());
 		Assertions.assertEquals("Published description",
@@ -298,7 +302,7 @@ public class McpAnnotationContractTests {
 	public record SearchResult(String query) {}
 
 	public record AnnotatedRecord(
-			@McpToolArgument(name = "publishedName",
+			@McpToolProperty(name = "publishedName",
 					title = "Published title",
 					description = "Published description")
 			@McpHeader("Region") String javaName) {}

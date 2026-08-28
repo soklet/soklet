@@ -38,6 +38,10 @@ import static java.util.Objects.requireNonNull;
  * Soklet discards the original and partial output without exposing output
  * content or exception-derived data. Implementations must be safe for
  * concurrent invocation.
+ * <p>
+ * A sanitizer that changes only selected output fields should start from
+ * {@link McpToolOutput#toBuilder()} so content order, structured content, and
+ * error state are preserved unless changed deliberately.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -53,6 +57,7 @@ public interface McpToolOutputSanitizer {
 	 * @param output complete unsanitized tool output
 	 * @return non-null output to validate and serialize
 	 * @throws Exception if application sanitization fails
+	 * @see McpToolOutput#toBuilder()
 	 */
 	@NonNull
 	McpToolOutput sanitize(@NonNull McpRequestContext request,

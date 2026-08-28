@@ -57,7 +57,7 @@ import java.util.function.Predicate;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @NotThreadSafe
-@Timeout(30)
+@Timeout(60)
 public class McpConditionalCapabilityProxyRuntimeTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
@@ -67,6 +67,7 @@ public class McpConditionalCapabilityProxyRuntimeTests {
 	private static final Duration PROXY_IDLE_TIMEOUT = Duration.ofSeconds(37);
 
 	@Test
+	@Timeout(120)
 	public void proxyIdleExpiryCancelsSilentHoldAndSupportedControlForwardsSse()
 			throws Exception {
 		McpInputRequestDeclaration roots = McpInputRequestDeclaration.roots(

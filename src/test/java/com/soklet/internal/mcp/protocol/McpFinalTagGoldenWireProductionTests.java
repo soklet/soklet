@@ -191,7 +191,7 @@ public class McpFinalTagGoldenWireProductionTests {
 					toolLimiterInvocations.incrementAndGet();
 					return McpRateLimitDecision.allowed();
 				})
-				.handlerInterceptor((context, continuation) -> {
+				.handlerInterceptor((context, features, continuation) -> {
 					interceptorInvocations.incrementAndGet();
 					return continuation.proceed();
 				})
@@ -232,7 +232,7 @@ public class McpFinalTagGoldenWireProductionTests {
 			Assertions.assertEquals(0, interceptorInvocations.get());
 			Assertions.assertEquals(0, handlerInvocations.get());
 		} finally {
-			owner.stop();
+			owner.close();
 		}
 	}
 
@@ -299,7 +299,7 @@ public class McpFinalTagGoldenWireProductionTests {
 					new McpChunkedHttpClient.RequestHeader("Mcp-Name", "golden.compose")),
 					200, fixture("phase-4/prompts-get-response.json"));
 		} finally {
-			owner.stop();
+			owner.close();
 		}
 	}
 
@@ -390,7 +390,7 @@ public class McpFinalTagGoldenWireProductionTests {
 			assertResourceRead(port, "text", textResourceUri.toString(), 200);
 			assertResourceRead(port, "unknown", "golden://missing/resource", 400);
 		} finally {
-			owner.stop();
+			owner.close();
 		}
 	}
 
@@ -433,7 +433,7 @@ public class McpFinalTagGoldenWireProductionTests {
 					toolLimiterInvocations.incrementAndGet();
 					return McpRateLimitDecision.allowed();
 				})
-				.handlerInterceptor((context, continuation) -> {
+				.handlerInterceptor((context, features, continuation) -> {
 					interceptorInvocations.incrementAndGet();
 					return continuation.proceed();
 				})
@@ -471,7 +471,7 @@ public class McpFinalTagGoldenWireProductionTests {
 			Assertions.assertEquals(0, interceptorInvocations.get());
 			Assertions.assertEquals(0, handlerInvocations.get());
 		} finally {
-			owner.stop();
+			owner.close();
 		}
 	}
 
@@ -611,7 +611,7 @@ public class McpFinalTagGoldenWireProductionTests {
 									"Mcp-Name", "golden.input-responses")),
 					200, fixture("phase-5/input-responses-tool-response.json"));
 		} finally {
-			owner.stop();
+			owner.close();
 		}
 	}
 
@@ -686,7 +686,7 @@ public class McpFinalTagGoldenWireProductionTests {
 			Assertions.assertEquals(0, toolLimiterInvocations.get());
 			Assertions.assertEquals(0, handlerInvocations.get());
 		} finally {
-			owner.stop();
+			owner.close();
 		}
 	}
 
@@ -757,7 +757,7 @@ public class McpFinalTagGoldenWireProductionTests {
 				Assertions.assertNull(client.readChunk());
 			}
 		} finally {
-			owner.stop();
+			owner.close();
 		}
 	}
 
@@ -833,7 +833,7 @@ public class McpFinalTagGoldenWireProductionTests {
 					"phase-5/subscription-resource-updated.json"),
 					client.readChunkText());
 
-			stopThread = new Thread(owner::stop,
+			stopThread = new Thread(owner::close,
 					"mcp-subscription-golden-stop");
 			stopThread.start();
 			Assertions.assertEquals(sseFixture(
@@ -845,7 +845,7 @@ public class McpFinalTagGoldenWireProductionTests {
 		} finally {
 			if (client != null)
 				client.close();
-			owner.stop();
+			owner.close();
 			if (stopThread != null && stopThread.isAlive())
 				stopThread.join(MANAGED_STOP_JOIN_MILLIS);
 		}
@@ -947,7 +947,7 @@ public class McpFinalTagGoldenWireProductionTests {
 					"phase-5/protected-state-retry-request.json",
 					"phase-5/protected-state-retry-response.json");
 		} finally {
-			owner.stop();
+			owner.close();
 		}
 	}
 

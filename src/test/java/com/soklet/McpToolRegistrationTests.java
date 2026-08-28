@@ -461,7 +461,6 @@ class McpToolRegistrationTests {
 			}
 
 			@Override
-			@SuppressWarnings("deprecation")
 			public Optional<McpLogLevel> getDeprecatedLogLevel() {
 				return Optional.empty();
 			}

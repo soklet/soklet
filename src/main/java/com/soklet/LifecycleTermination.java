@@ -39,6 +39,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 import static java.util.Objects.requireNonNull;
@@ -355,15 +356,24 @@ final class AdmissionFence {
 	}
 }
 
-/** Stable, reference-identity-only draft of the future public transport token. */
+/** Internal claim key behind one public, reference-identity-only transport token. */
 @Immutable
 final class InternalTransportIdentity {
+	@NonNull
+	private final TransportIdentity publicIdentity;
+
 	private InternalTransportIdentity() {
+		this.publicIdentity = new TransportIdentity(this);
 	}
 
 	@NonNull
 	static InternalTransportIdentity create() {
 		return new InternalTransportIdentity();
+	}
+
+	@NonNull
+	TransportIdentity publicIdentity() {
+		return this.publicIdentity;
 	}
 }
 
@@ -455,6 +465,37 @@ interface InternalTransportRuntime {
 	void force(@NonNull InternalShutdownContext context);
 }
 
+/** Bridges a public custom runtime into the coordinator's private runtime shape. */
+@ThreadSafe
+final class InternalPublicTransportRuntime implements InternalTransportRuntime {
+	@NonNull
+	private final TransportRuntime runtime;
+
+	InternalPublicTransportRuntime(@NonNull TransportRuntime runtime) {
+		this.runtime = requireNonNull(runtime);
+	}
+
+	@NonNull
+	TransportRuntime publicRuntime() {
+		return this.runtime;
+	}
+
+	@Override
+	public void start(@NonNull InternalStartupContext context) {
+		this.runtime.start(requireNonNull(context));
+	}
+
+	@Override
+	public void quiesce(@NonNull InternalShutdownContext context) {
+		this.runtime.quiesce(requireNonNull(context));
+	}
+
+	@Override
+	public void force(@NonNull InternalShutdownContext context) {
+		this.runtime.force(requireNonNull(context));
+	}
+}
+
 interface InternalTransportEndpoint<H> {
 	@NonNull
 	InternalTransportIdentity identity();
@@ -470,11 +511,14 @@ final class InternalTransportTerminationSignal {
 	@NonNull
 	private final InternalTerminationGroup group;
 	private final InternalTerminationGroup.@NonNull Member member;
+	@NonNull
+	private final TransportTerminationSignal publicSignal;
 
 	InternalTransportTerminationSignal(@NonNull InternalTerminationGroup group,
 			InternalTerminationGroup.@NonNull Member member) {
 		this.group = requireNonNull(group);
 		this.member = requireNonNull(member);
+		this.publicSignal = new TransportTerminationSignal(this);
 	}
 
 	void signalTerminated() {
@@ -483,6 +527,11 @@ final class InternalTransportTerminationSignal {
 
 	void signalTerminationFailure(@NonNull Throwable cause) {
 		this.group.signalFailure(this.member, requireNonNull(cause));
+	}
+
+	@NonNull
+	TransportTerminationSignal publicSignal() {
+		return this.publicSignal;
 	}
 }
 
@@ -529,26 +578,43 @@ final class InternalTerminationEvent {
 }
 
 /**
- * One owner-wide ordering boundary between shutdown intent and premature
- * participant events.  Every event accepted before the cutoff may remain a
- * participant-local controlling event; only the first becomes the owner's
- * singular unexpected-termination event.  Events accepted after the cutoff
- * remain ordinary shutdown evidence.
+ * One owner-wide ordering boundary among shutdown intent, synchronous startup
+ * failure, and premature participant events.  Every event accepted before the
+ * cutoff may remain a participant-local controlling event; only the first
+ * becomes the owner's singular unexpected-termination event.  Events accepted
+ * after the cutoff remain ordinary shutdown evidence.
  */
 @ThreadSafe
 final class InternalControllingEventElection {
 	@Nullable
 	private InternalTerminationEvent firstEvent;
+	private boolean startupCallFailurePublished;
 	private boolean shutdownIntentPublished;
 
-	/** Returns whether this event linearized before owner shutdown intent. */
+	/** Returns whether this event linearized before another owner outcome. */
 	synchronized boolean electBeforeShutdown(
 			@NonNull InternalTerminationEvent event) {
 		InternalTerminationEvent exactEvent = requireNonNull(event);
-		if (this.shutdownIntentPublished)
+		if (this.startupCallFailurePublished || this.shutdownIntentPublished)
 			return false;
 		if (this.firstEvent == null)
 			this.firstEvent = exactEvent;
+		return true;
+	}
+
+	/**
+	 * Publishes a genuine startup-call failure only when no earlier participant
+	 * event or owner stop already controls startup.
+	 */
+	synchronized boolean electStartupCallFailure(
+			@NonNull BooleanSupplier publication) {
+		BooleanSupplier exactPublication = requireNonNull(publication);
+		if (this.firstEvent != null || this.startupCallFailurePublished
+				|| this.shutdownIntentPublished)
+			return false;
+		if (!exactPublication.getAsBoolean())
+			return false;
+		this.startupCallFailurePublished = true;
 		return true;
 	}
 
@@ -559,7 +625,24 @@ final class InternalControllingEventElection {
 	@NonNull
 	synchronized <T> T publishShutdownIntent(
 			@NonNull Supplier<@NonNull T> publication) {
-		T result = requireNonNull(requireNonNull(publication).get());
+		return publishShutdownIntent(() -> { }, publication);
+	}
+
+	/**
+	 * Publishes the first owner-stop outcome and state transition atomically
+	 * relative to participant events and startup-call failure election.
+	 */
+	@NonNull
+	synchronized <T> T publishShutdownIntent(
+			@NonNull Runnable outcomePublication,
+			@NonNull Supplier<@NonNull T> statePublication) {
+		Runnable exactOutcomePublication = requireNonNull(outcomePublication);
+		Supplier<@NonNull T> exactStatePublication =
+				requireNonNull(statePublication);
+		if (this.firstEvent == null && !this.startupCallFailurePublished
+				&& !this.shutdownIntentPublished)
+			exactOutcomePublication.run();
+		T result = requireNonNull(exactStatePublication.get());
 		this.shutdownIntentPublished = true;
 		return result;
 	}
@@ -1264,14 +1347,162 @@ final class InternalTransportAttachmentContext<H> {
 	InternalTransportRuntime attachTransparentDelegate(
 			@NonNull InternalTransportEndpoint<H> delegate,
 			@NonNull H delegateRequestHandler) {
-		return attachDelegate(delegate, delegateRequestHandler, false).runtime();
+		return attachDelegate(delegate, delegateRequestHandler, false,
+				new DelegateAccess<>() {
+					@Override
+					public InternalTransportIdentity identity(
+							@NonNull InternalTransportEndpoint<H> exactDelegate) {
+						return exactDelegate.identity();
+					}
+
+					@Override
+					public InternalTransportRuntime attach(
+							@NonNull InternalTransportEndpoint<H> exactDelegate,
+							@NonNull InternalTransportAttachmentContext<H> context,
+							@NonNull InternalStartupContext startupContext) {
+						return exactDelegate.attach(context, startupContext);
+					}
+				}).runtime();
 	}
 
 	@NonNull
 	InternalTransportDelegateAttachment attachLifecycleOwningDelegate(
 			@NonNull InternalTransportEndpoint<H> delegate,
 			@NonNull H delegateRequestHandler) {
-		return attachDelegate(delegate, delegateRequestHandler, true);
+		return attachDelegate(delegate, delegateRequestHandler, true,
+				new DelegateAccess<>() {
+					@Override
+					public InternalTransportIdentity identity(
+							@NonNull InternalTransportEndpoint<H> exactDelegate) {
+						return exactDelegate.identity();
+					}
+
+					@Override
+					public InternalTransportRuntime attach(
+							@NonNull InternalTransportEndpoint<H> exactDelegate,
+							@NonNull InternalTransportAttachmentContext<H> context,
+							@NonNull InternalStartupContext startupContext) {
+						return exactDelegate.attach(context, startupContext);
+					}
+				});
+	}
+
+	@NonNull
+	@SuppressWarnings("unchecked")
+	TransportRuntime attachTransparentHttpDelegate(@NonNull HttpServer delegate,
+			HttpServer.@NonNull RequestHandler delegateRequestHandler) {
+		InternalTransportDelegateAttachment attachment = attachDelegate(delegate,
+				(H) delegateRequestHandler, false, new DelegateAccess<>() {
+					@Override
+					public InternalTransportIdentity identity(
+							@NonNull HttpServer exactDelegate) {
+						TransportIdentity identity = exactDelegate.getTransportIdentity();
+						return identity == null ? null : identity.internalIdentity();
+					}
+
+					@Override
+					public InternalTransportRuntime attach(@NonNull HttpServer exactDelegate,
+							@NonNull InternalTransportAttachmentContext<H> context,
+							@NonNull InternalStartupContext startupContext) {
+						TransportRuntime runtime = exactDelegate.attach(
+								new HttpTransportAttachmentContext(
+										(InternalTransportAttachmentContext<HttpServer.RequestHandler>)
+												(InternalTransportAttachmentContext<?>) context),
+								startupContext);
+						return runtime == null ? null : new InternalPublicTransportRuntime(runtime);
+					}
+				});
+		return ((InternalPublicTransportRuntime) attachment.runtime()).publicRuntime();
+	}
+
+	@NonNull
+	@SuppressWarnings("unchecked")
+	TransportDelegateAttachment attachLifecycleOwningHttpDelegate(
+			@NonNull HttpServer delegate,
+			HttpServer.@NonNull RequestHandler delegateRequestHandler) {
+		InternalTransportDelegateAttachment attachment = attachDelegate(delegate,
+				(H) delegateRequestHandler, true, new DelegateAccess<>() {
+					@Override
+					public InternalTransportIdentity identity(
+							@NonNull HttpServer exactDelegate) {
+						TransportIdentity identity = exactDelegate.getTransportIdentity();
+						return identity == null ? null : identity.internalIdentity();
+					}
+
+					@Override
+					public InternalTransportRuntime attach(@NonNull HttpServer exactDelegate,
+							@NonNull InternalTransportAttachmentContext<H> context,
+							@NonNull InternalStartupContext startupContext) {
+						TransportRuntime runtime = exactDelegate.attach(
+								new HttpTransportAttachmentContext(
+										(InternalTransportAttachmentContext<HttpServer.RequestHandler>)
+												(InternalTransportAttachmentContext<?>) context),
+								startupContext);
+						return runtime == null ? null : new InternalPublicTransportRuntime(runtime);
+					}
+				});
+		TransportRuntime runtime = ((InternalPublicTransportRuntime)
+				attachment.runtime()).publicRuntime();
+		return new TransportDelegateAttachment(runtime, attachment);
+	}
+
+	@NonNull
+	@SuppressWarnings("unchecked")
+	TransportRuntime attachTransparentSseDelegate(@NonNull SseServer delegate,
+			SseServer.@NonNull RequestHandler delegateRequestHandler) {
+		InternalTransportDelegateAttachment attachment = attachDelegate(delegate,
+				(H) delegateRequestHandler, false, new DelegateAccess<>() {
+					@Override
+					public InternalTransportIdentity identity(
+							@NonNull SseServer exactDelegate) {
+						TransportIdentity identity = exactDelegate.getTransportIdentity();
+						return identity == null ? null : identity.internalIdentity();
+					}
+
+					@Override
+					public InternalTransportRuntime attach(@NonNull SseServer exactDelegate,
+							@NonNull InternalTransportAttachmentContext<H> context,
+							@NonNull InternalStartupContext startupContext) {
+						TransportRuntime runtime = exactDelegate.attach(
+								new SseTransportAttachmentContext(
+										(InternalTransportAttachmentContext<SseServer.RequestHandler>)
+												(InternalTransportAttachmentContext<?>) context),
+								startupContext);
+						return runtime == null ? null : new InternalPublicTransportRuntime(runtime);
+					}
+				});
+		return ((InternalPublicTransportRuntime) attachment.runtime()).publicRuntime();
+	}
+
+	@NonNull
+	@SuppressWarnings("unchecked")
+	TransportDelegateAttachment attachLifecycleOwningSseDelegate(
+			@NonNull SseServer delegate,
+			SseServer.@NonNull RequestHandler delegateRequestHandler) {
+		InternalTransportDelegateAttachment attachment = attachDelegate(delegate,
+				(H) delegateRequestHandler, true, new DelegateAccess<>() {
+					@Override
+					public InternalTransportIdentity identity(
+							@NonNull SseServer exactDelegate) {
+						TransportIdentity identity = exactDelegate.getTransportIdentity();
+						return identity == null ? null : identity.internalIdentity();
+					}
+
+					@Override
+					public InternalTransportRuntime attach(@NonNull SseServer exactDelegate,
+							@NonNull InternalTransportAttachmentContext<H> context,
+							@NonNull InternalStartupContext startupContext) {
+						TransportRuntime runtime = exactDelegate.attach(
+								new SseTransportAttachmentContext(
+										(InternalTransportAttachmentContext<SseServer.RequestHandler>)
+												(InternalTransportAttachmentContext<?>) context),
+								startupContext);
+						return runtime == null ? null : new InternalPublicTransportRuntime(runtime);
+					}
+				});
+		TransportRuntime runtime = ((InternalPublicTransportRuntime)
+				attachment.runtime()).publicRuntime();
+		return new TransportDelegateAttachment(runtime, attachment);
 	}
 
 	void activate() {
@@ -1291,9 +1522,9 @@ final class InternalTransportAttachmentContext<H> {
 	}
 
 	@NonNull
-	private InternalTransportDelegateAttachment attachDelegate(
-			@NonNull InternalTransportEndpoint<H> delegate,
-			@NonNull H delegateRequestHandler, boolean lifecycleOwning) {
+	private <D> InternalTransportDelegateAttachment attachDelegate(
+			@NonNull D delegate, @NonNull H delegateRequestHandler,
+			boolean lifecycleOwning, @NonNull DelegateAccess<D, H> delegateAccess) {
 		if (!this.mediationGuard.compareAndSet(false, true))
 			throw inactiveException();
 
@@ -1306,7 +1537,9 @@ final class InternalTransportAttachmentContext<H> {
 
 			requireNonNull(delegate, "delegate");
 			requireNonNull(delegateRequestHandler, "delegateRequestHandler");
-			InternalTransportIdentity delegateIdentity = requireNonNull(delegate.identity(),
+			DelegateAccess<D, H> exactDelegateAccess = requireNonNull(delegateAccess);
+			InternalTransportIdentity delegateIdentity = requireNonNull(
+					exactDelegateAccess.identity(delegate),
 					"delegate.getTransportIdentity()");
 			if (delegateIdentity != this.configuredIdentity)
 				throw new IllegalArgumentException(
@@ -1334,9 +1567,10 @@ final class InternalTransportAttachmentContext<H> {
 			InternalTransportRuntime runtime;
 			childContext.activate();
 			try (InternalTerminationGroup.TrackedLifecycleCall ignored =
-							 this.group.trackLifecycleCall()) {
+						 this.group.trackLifecycleCall()) {
 				try {
-					runtime = delegate.attach(childContext, this.startupContext);
+					runtime = exactDelegateAccess.attach(delegate, childContext,
+							this.startupContext);
 				} catch (RuntimeException | Error throwable) {
 					this.group.recordSyntheticAttachFailure(childMember, throwable);
 					throw throwable;
@@ -1355,6 +1589,16 @@ final class InternalTransportAttachmentContext<H> {
 		} finally {
 			this.mediationGuard.set(false);
 		}
+	}
+
+	private interface DelegateAccess<D, H> {
+		@Nullable
+		InternalTransportIdentity identity(@NonNull D delegate);
+
+		@Nullable
+		InternalTransportRuntime attach(@NonNull D delegate,
+				@NonNull InternalTransportAttachmentContext<H> context,
+				@NonNull InternalStartupContext startupContext);
 	}
 
 	private void requireActiveAttachThread() {

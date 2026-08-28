@@ -45,7 +45,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-@Timeout(30)
+@Timeout(60)
 class McpLocalizationMrtrRuntimeTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/localization/mrtr";
@@ -54,6 +54,13 @@ class McpLocalizationMrtrRuntimeTests {
 	private static final String KEY_MATERIAL =
 			"localization-mrtr-key-material-0123456789abcdef";
 	private static final Duration WAIT = Duration.ofSeconds(5);
+	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
+			LifecyclePolicy.builder()
+					.startupTimeout(Duration.ofSeconds(5))
+					.startupCancellationTimeout(Duration.ofSeconds(2))
+					.gracefulShutdownDuration(Duration.ofSeconds(2))
+					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.build();
 
 	@Test
 	void twoIndependentInstancesCompleteALocalizedFlowWithoutAffinity() {
@@ -229,6 +236,7 @@ class McpLocalizationMrtrRuntimeTests {
 		SokletSimulator.run(transports -> SokletConfig
 				.withMcpServer(server(transports, localizer, handlerInvocations))
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build(), simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(request);
 

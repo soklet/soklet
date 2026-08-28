@@ -29,9 +29,9 @@ import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
 
-/** Descriptor-neutral draft of the standalone application options. */
+/** Immutable options for the standalone {@link SokletApplication} runner. */
 @ThreadSafe
-final class SokletApplicationOptions {
+public final class SokletApplicationOptions {
 	@NonNull
 	private final Set<ShutdownTrigger> additionalTriggers;
 	@Nullable
@@ -50,28 +50,53 @@ final class SokletApplicationOptions {
 				exactBuilder.shutdownCleanupTimeout, exactBuilder.shutdownCleanup);
 	}
 
+	/**
+	 * Acquires options with no additional triggers and no cleanup action.
+	 *
+	 * @return default runner options
+	 */
 	@NonNull
-	static SokletApplicationOptions fromDefaults() {
+	public static SokletApplicationOptions fromDefaults() {
 		return builder().build();
 	}
 
+	/**
+	 * Vends a new mutable options builder.
+	 *
+	 * @return a new builder
+	 */
 	@NonNull
-	static Builder builder() {
+	public static Builder builder() {
 		return new Builder();
 	}
 
+	/**
+	 * Additional runner-scoped shutdown triggers.
+	 *
+	 * @return an immutable trigger set
+	 */
 	@NonNull
-	Set<ShutdownTrigger> getAdditionalTriggers() {
+	public Set<@NonNull ShutdownTrigger> getAdditionalTriggers() {
 		return this.additionalTriggers;
 	}
 
+	/**
+	 * The cleanup action eligible to run after a complete core shutdown.
+	 *
+	 * @return the configured cleanup action, if any
+	 */
 	@NonNull
-	Optional<ShutdownCleanup> getShutdownCleanup() {
+	public Optional<@NonNull ShutdownCleanup> getShutdownCleanup() {
 		return Optional.ofNullable(this.shutdownCleanup);
 	}
 
+	/**
+	 * The explicit deadline budget paired with the cleanup action.
+	 *
+	 * @return the cleanup timeout, if cleanup is configured
+	 */
 	@NonNull
-	Optional<Duration> getShutdownCleanupTimeout() {
+	public Optional<@NonNull Duration> getShutdownCleanupTimeout() {
 		return Optional.ofNullable(this.shutdownCleanupTimeout);
 	}
 
@@ -99,7 +124,7 @@ final class SokletApplicationOptions {
 
 	/** Mutable only until {@link #build()} snapshots its values. */
 	@NotThreadSafe
-	static final class Builder {
+	public static final class Builder {
 		@NonNull
 		private final EnumSet<ShutdownTrigger> additionalTriggers;
 		@Nullable
@@ -111,79 +136,46 @@ final class SokletApplicationOptions {
 			this.additionalTriggers = EnumSet.noneOf(ShutdownTrigger.class);
 		}
 
+		/**
+		 * Adds a runner-scoped shutdown trigger.
+		 *
+		 * @param trigger the trigger to add
+		 * @return this builder
+		 */
 		@NonNull
-		Builder additionalTrigger(@NonNull ShutdownTrigger trigger) {
+		public Builder additionalTrigger(@NonNull ShutdownTrigger trigger) {
 			this.additionalTriggers.add(requireNonNull(trigger));
 			return this;
 		}
 
+		/**
+		 * Configures one at-most-once cleanup action. The action is invoked only
+		 * after a complete core result and must finish synchronously within the
+		 * supplied positive duration. Zero, negative, or durations that cannot be
+		 * represented as signed nanoseconds are rejected by {@link #build()}.
+		 *
+		 * @param timeout explicit cleanup deadline budget
+		 * @param cleanup cleanup action for ingress-exclusive application resources
+		 * @return this builder
+		 */
 		@NonNull
-		Builder afterCompleteShutdown(@NonNull Duration timeout,
+		public Builder afterCompleteShutdown(@NonNull Duration timeout,
 				@NonNull ShutdownCleanup cleanup) {
 			this.shutdownCleanupTimeout = requireNonNull(timeout);
 			this.shutdownCleanup = requireNonNull(cleanup);
 			return this;
 		}
 
+		/**
+		 * Builds an immutable snapshot of these options.
+		 *
+		 * @return immutable runner options
+		 * @throws IllegalArgumentException if cleanup configuration is incomplete,
+		 * non-positive, or exceeds signed-nanosecond range
+		 */
 		@NonNull
-		SokletApplicationOptions build() {
+		public SokletApplicationOptions build() {
 			return new SokletApplicationOptions(this);
 		}
-	}
-}
-
-/**
- * One synchronous, ingress-exclusive cleanup action.  Returning after merely
- * delegating asynchronous work is not proof that the resource was released.
- */
-@FunctionalInterface
-interface ShutdownCleanup {
-	void cleanUp(@NonNull InternalShutdownResult completeResult) throws Exception;
-}
-
-enum ShutdownCleanupFailure {
-	FAILED,
-	TIMED_OUT
-}
-
-/** Descriptor-neutral draft of the public cleanup failure exception. */
-final class SokletApplicationCleanupException extends SokletLifecycleException {
-	@NonNull
-	private final ShutdownCleanupFailure cleanupFailure;
-	@NonNull
-	private final Duration cleanupTimeout;
-
-	SokletApplicationCleanupException(
-			@NonNull ShutdownCleanupFailure cleanupFailure,
-			@NonNull Duration cleanupTimeout,
-			@NonNull InternalShutdownResult shutdownResult,
-			@NonNull Throwable cause) {
-		super(cleanupFailureMessage(requireNonNull(cleanupFailure)),
-				shutdownResult, requireNonNull(cause));
-		this.cleanupFailure = cleanupFailure;
-		this.cleanupTimeout = requireNonNull(cleanupTimeout);
-		if (!shutdownResult.isComplete())
-			throw new IllegalArgumentException(
-					"Cleanup failure requires a complete core result");
-	}
-
-	@NonNull
-	ShutdownCleanupFailure getCleanupFailure() {
-		return this.cleanupFailure;
-	}
-
-	@NonNull
-	Duration getCleanupTimeout() {
-		return this.cleanupTimeout;
-	}
-
-	@NonNull
-	private static String cleanupFailureMessage(
-			@NonNull ShutdownCleanupFailure failure) {
-		return switch (requireNonNull(failure)) {
-			case FAILED -> "Standalone Soklet cleanup failed";
-			case TIMED_OUT -> "Standalone Soklet cleanup timed out; its daemon "
-					+ "action may remain live";
-		};
 	}
 }

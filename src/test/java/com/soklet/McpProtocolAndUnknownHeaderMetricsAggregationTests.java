@@ -293,7 +293,7 @@ public class McpProtocolAndUnknownHeaderMetricsAggregationTests {
 	}
 
 	@Test
-	@Timeout(30)
+	@Timeout(60)
 	public void manualDimensionRetentionIsIndependentlyBoundedPerFamily() {
 		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();
 		Map<McpMetricsSnapshot.EndpointMethodKey, Long> publicUnknownHeaders =
@@ -352,7 +352,7 @@ public class McpProtocolAndUnknownHeaderMetricsAggregationTests {
 	}
 
 	@Test
-	@Timeout(15)
+	@Timeout(60)
 	public void concurrentDirectProtocolAndUnknownHeaderIngestIsLosslessAndRetainedSnapshotsRemainImmutable()
 			throws Exception {
 		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();

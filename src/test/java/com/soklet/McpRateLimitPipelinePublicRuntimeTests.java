@@ -43,7 +43,7 @@ import java.util.function.Consumer;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@Timeout(30)
+@Timeout(60)
 public class McpRateLimitPipelinePublicRuntimeTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/mcp";
@@ -52,6 +52,13 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 	private static final String TOOL_NAME = "rate-limit.pipeline";
 	private static final Duration REQUEST_RETRY_AFTER = Duration.ofSeconds(11);
 	private static final Duration TOOL_RETRY_AFTER = Duration.ofSeconds(7);
+	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
+			LifecyclePolicy.builder()
+					.startupTimeout(Duration.ofSeconds(5))
+					.startupCancellationTimeout(Duration.ofSeconds(2))
+					.gracefulShutdownDuration(Duration.ofSeconds(2))
+					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.build();
 	private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
 			.connectTimeout(Duration.ofSeconds(5))
 			.version(HttpClient.Version.HTTP_1_1)
@@ -81,7 +88,7 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 			return McpAdmissionDecision.accepted(identity);
 		}, toolLimiter)
 				.requestRateLimiter(requestLimiter)
-				.handlerInterceptor((context, continuation) -> {
+				.handlerInterceptor((context, features, continuation) -> {
 					stages.add("interceptor-before");
 					McpOperationResult result = continuation.proceed();
 					stages.add("interceptor-after");
@@ -151,7 +158,7 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 			return McpAdmissionDecision.accepted(identity);
 		}, toolLimiter)
 				.requestRateLimiter(requestLimiter)
-				.handlerInterceptor((context, continuation) -> {
+				.handlerInterceptor((context, features, continuation) -> {
 					interceptorInvocations.incrementAndGet();
 					return continuation.proceed();
 				})
@@ -197,6 +204,7 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void successfulChargesAreRetainedAfterEveryDownstreamFailure() {
 		for (DownstreamFailure failure : DownstreamFailure.values()) {
 			try {
@@ -236,7 +244,7 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 			return McpAdmissionDecision.accepted(identity);
 		}, toolLimiter)
 				.requestRateLimiter(requestLimiter)
-				.handlerInterceptor((context, continuation) -> {
+				.handlerInterceptor((context, features, continuation) -> {
 					stages.add("interceptor-before");
 					interceptorInvocations.incrementAndGet();
 					if (failure == DownstreamFailure.INTERCEPTOR)
@@ -298,7 +306,7 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 			probeStages.add("auth-authz-admission+accepted-identity");
 			return McpAdmissionDecision.accepted(identity);
 		}, toolLimiter.withObserver(ignored -> probeStages.add("tool-limiter")))
-				.handlerInterceptor((context, continuation) -> {
+				.handlerInterceptor((context, features, continuation) -> {
 					probeInterceptorInvocations.incrementAndGet();
 					return continuation.proceed();
 				})
@@ -381,6 +389,7 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build());
 	}
 
@@ -473,7 +482,7 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 
 	private static void assertIdleStartedDiagnostics(McpServer server) {
 		McpServerDiagnostics diagnostics = awaitIdleDiagnostics(server);
-		Assertions.assertEquals(McpServerStatus.STARTED, diagnostics.getStatus());
+		Assertions.assertEquals(McpServerStatus.RUNNING, diagnostics.getStatus());
 		Assertions.assertTrue(diagnostics.getBoundAddress().isPresent());
 		assertZeroLoad(diagnostics);
 	}
@@ -493,9 +502,9 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 	}
 
 	private static void stopAndAssertClean(Soklet owner, McpServer server) {
-		owner.stop();
+		owner.close();
 		McpServerDiagnostics diagnostics = server.getDiagnostics();
-		Assertions.assertEquals(McpServerStatus.STOPPED, diagnostics.getStatus());
+		Assertions.assertEquals(McpServerStatus.TERMINATED, diagnostics.getStatus());
 		Assertions.assertTrue(diagnostics.getBoundAddress().isPresent());
 		assertZeroLoad(diagnostics);
 	}

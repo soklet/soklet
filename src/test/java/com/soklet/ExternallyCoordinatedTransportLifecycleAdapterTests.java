@@ -430,7 +430,9 @@ class ExternallyCoordinatedTransportLifecycleAdapterTests {
 		Assertions.assertSame(generation, adapter.currentGeneration());
 		Assertions.assertTrue(generation.startAttempted());
 		Assertions.assertFalse(generation.admissionFence().isOpen());
+		Assertions.assertFalse(adapter.admissionOpen());
 		Assertions.assertTrue(adapter.openExternallyCoordinatedAdmission(generation));
+		Assertions.assertTrue(adapter.admissionOpen());
 		Assertions.assertSame(identity, adapter.identity());
 		adapter.recordExternallyCoordinatedShutdownIntent(generation);
 
@@ -444,6 +446,7 @@ class ExternallyCoordinatedTransportLifecycleAdapterTests {
 		adapter.publishExternallyCoordinatedResult(generation, exactResult);
 
 		Assertions.assertSame(exactResult, adapter.result(generation).orElseThrow());
+		Assertions.assertFalse(adapter.admissionOpen());
 		Assertions.assertEquals(1, operations.releaseCount.get());
 	}
 

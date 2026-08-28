@@ -49,6 +49,13 @@ public class SokletSimulatorIsolationTests {
 	private static final String MCP_PATH = "/mcp";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final Duration WAIT = Duration.ofSeconds(5);
+	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
+			LifecyclePolicy.builder()
+					.startupTimeout(Duration.ofSeconds(5))
+					.startupCancellationTimeout(Duration.ofSeconds(2))
+					.gracefulShutdownDuration(Duration.ofSeconds(2))
+					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.build();
 
 	@Test
 	public void factoryRunsExactlyOnceAndSequentialScopesUseFreshGraphs()
@@ -102,6 +109,7 @@ public class SokletSimulatorIsolationTests {
 						.withHttpServer(transports.getHttpServer())
 						.resourceMethodResolver(providerResourceMethods())
 						.instanceProvider(instances)
+						.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 						.build();
 				freshConfigs.add(config);
 				freshInstances.add(config.getInstanceProvider());
@@ -155,6 +163,7 @@ public class SokletSimulatorIsolationTests {
 						.resourceMethodResolver(providerResourceMethods())
 						.instanceProvider(instances)
 						.resourceMethodParameterProvider(parameters)
+						.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 						.build();
 				Assertions.assertSame(instances, config.getInstanceProvider());
 				Assertions.assertSame(parameters,
@@ -339,6 +348,396 @@ public class SokletSimulatorIsolationTests {
 	}
 
 	@Test
+	public void blockedFrameworkSetupUsesOneExactStartupAndRollbackSchedule()
+			throws Exception {
+		AtomicLong now = new AtomicLong(100L);
+		CountDownLatch resolverEntered = new CountDownLatch(1);
+		CountDownLatch resolverInterrupted = new CountDownLatch(1);
+		CountDownLatch releaseResolver = new CountDownLatch(1);
+		CountDownLatch setupWorkerDone = new CountDownLatch(1);
+		AtomicInteger bodies = new AtomicInteger();
+		AtomicInteger waitIndex = new AtomicInteger();
+		List<Long> observedDeadlines = new CopyOnWriteArrayList<>();
+		List<String> workerNames = new CopyOnWriteArrayList<>();
+		ResourceMethodResolver complete = resourceMethods();
+		ResourceMethodResolver blocking = new ResourceMethodResolver() {
+			@Override
+			@NonNull
+			public Optional<ResourceMethod> resourceMethodForRequest(
+					@NonNull Request request, @NonNull ServerType serverType) {
+				return complete.resourceMethodForRequest(request, serverType);
+			}
+
+			@Override
+			@NonNull
+			public Set<@NonNull ResourceMethod> getResourceMethods() {
+				resolverEntered.countDown();
+				boolean released = false;
+				while (!released) {
+					try {
+						released = releaseResolver.await(WAIT.toMillis(),
+								TimeUnit.MILLISECONDS);
+					} catch (InterruptedException cancellation) {
+						resolverInterrupted.countDown();
+					}
+				}
+				return complete.getResourceMethods();
+			}
+		};
+		DeadlineWaiter waiter = new DeadlineWaiter(now::get,
+				(monitor, remainingNanos) -> {
+					int phase = waitIndex.getAndIncrement();
+					long expectedRemaining = switch (phase) {
+						case 0 -> 10L;
+						case 1 -> 20L;
+						case 2 -> 30L;
+						case 3 -> 40L;
+						default -> throw new AssertionError(
+								"Unexpected simulator lifecycle wait " + phase);
+					};
+					Assertions.assertEquals(expectedRemaining, remainingNanos);
+					if (phase == 0)
+						Assertions.assertTrue(resolverEntered.await(
+								WAIT.toMillis(), TimeUnit.MILLISECONDS));
+					if (phase == 1)
+						Assertions.assertTrue(resolverInterrupted.await(
+								WAIT.toMillis(), TimeUnit.MILLISECONDS),
+								"Startup cancellation must interrupt the setup call");
+					if (phase == 2)
+						Assertions.assertFalse(workerNames.contains(
+								"lifecycle-force-framework_startup"),
+								"Force cannot be submitted before the grace boundary");
+					if (phase == 3)
+						Assertions.assertTrue(workerNames.contains(
+								"lifecycle-force-framework_startup"));
+					long deadline = now.addAndGet(remainingNanos);
+					observedDeadlines.add(deadline);
+				});
+		LifecycleWorkers workers = new LifecycleWorkers((name, task) -> {
+			workerNames.add(name);
+			Thread worker = new Thread(() -> {
+				try {
+					task.run();
+				} finally {
+					if (name.equals("simulator-framework-setup"))
+						setupWorkerDone.countDown();
+				}
+			}, "simulator-exact-deadline-" + name);
+			worker.setDaemon(true);
+			worker.start();
+		});
+		InternalLifecyclePolicy policy = new InternalLifecyclePolicy(
+				Optional.of(Duration.ofNanos(10L)), Duration.ofNanos(20L),
+				Duration.ofNanos(30L), Duration.ofNanos(40L));
+
+		try {
+			SokletStartupException thrown = Assertions.assertThrows(
+					SokletStartupException.class, () -> SokletSimulator.run(
+							transports -> SokletConfig
+									.withHttpServer(transports.getHttpServer())
+									.resourceMethodResolver(blocking)
+									.internalLifecyclePolicy(policy)
+									.build(),
+							SimulatorOptions.defaultInstance(),
+							simulator -> bodies.incrementAndGet(), now::get,
+							waiter, workers));
+			Assertions.assertEquals(StartupDisposition.TIMED_OUT,
+					thrown.getStartupDisposition());
+			Assertions.assertInstanceOf(java.util.concurrent.TimeoutException.class,
+					thrown.getCause());
+			Assertions.assertEquals(List.of(110L, 130L, 160L, 200L),
+					observedDeadlines);
+			Assertions.assertEquals(0, bodies.get());
+			InternalShutdownResult result = thrown.getInternalShutdownResult();
+			Assertions.assertEquals(InternalStartupDisposition.TIMED_OUT,
+					result.startupDisposition());
+			InternalParticipantShutdownResult setup = result.participantResult(
+					InternalParticipantKind.FRAMEWORK_STARTUP).orElseThrow();
+			Assertions.assertEquals(
+					InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+					setup.disposition());
+			Assertions.assertEquals(Set.of(
+					InternalResidualActivityKind.LIFECYCLE_CALL),
+					setup.residualActivity());
+			Assertions.assertEquals(
+					InternalParticipantShutdownDisposition.NOT_STARTED,
+					result.participantResult(InternalParticipantKind.HTTP)
+							.orElseThrow().disposition());
+		} finally {
+			releaseResolver.countDown();
+			Assertions.assertTrue(setupWorkerDone.await(WAIT.toMillis(),
+					TimeUnit.MILLISECONDS));
+		}
+	}
+
+	@Test
+	public void synchronousSetupFailureLeavesConfiguredIngressNotStarted() {
+		IllegalStateException setupFailure = new IllegalStateException(
+				"simulated resolver failure");
+		ResourceMethodResolver resolver = new ResourceMethodResolver() {
+			@Override
+			@NonNull
+			public Optional<ResourceMethod> resourceMethodForRequest(
+					@NonNull Request request, @NonNull ServerType serverType) {
+				return Optional.empty();
+			}
+
+			@Override
+			@NonNull
+			public Set<@NonNull ResourceMethod> getResourceMethods() {
+				throw setupFailure;
+			}
+		};
+
+		SokletStartupException thrown = Assertions.assertThrows(
+				SokletStartupException.class, () -> SokletSimulator.run(
+						transports -> SokletConfig
+								.withHttpServer(transports.getHttpServer())
+								.resourceMethodResolver(resolver)
+								.build(), simulator -> Assertions.fail(
+								"The body cannot run after setup failure")));
+
+		Assertions.assertSame(setupFailure, thrown.getCause());
+		Assertions.assertEquals(0, thrown.getSuppressed().length);
+		InternalShutdownResult result = thrown.getInternalShutdownResult();
+		Assertions.assertTrue(result.isComplete());
+		Assertions.assertEquals(InternalStartupDisposition.FAILED,
+				result.startupDisposition());
+		Assertions.assertEquals(
+				InternalParticipantShutdownDisposition.NOT_STARTED,
+				result.participantResult(InternalParticipantKind.HTTP)
+						.orElseThrow().disposition());
+		Assertions.assertTrue(result.participantResult(
+				InternalParticipantKind.FRAMEWORK_STARTUP).isEmpty());
+	}
+
+	@Test
+	public void rejectedParticipantStartLaunchRemainsNotStarted() {
+		LifecycleLaunchCanary launchFailure = new LifecycleLaunchCanary();
+		AtomicInteger bodies = new AtomicInteger();
+		LifecycleWorkers workers = new LifecycleWorkers((name, task) -> {
+			if (name.equals("simulator-start-http"))
+				throw launchFailure;
+			task.run();
+		});
+
+		SokletStartupException thrown = Assertions.assertThrows(
+				SokletStartupException.class, () -> SokletSimulator.run(
+						SokletSimulatorIsolationTests::httpConfig,
+						SimulatorOptions.defaultInstance(),
+						simulator -> bodies.incrementAndGet(), NanoClock.system(),
+						workers));
+
+		Assertions.assertSame(launchFailure, thrown.getCause());
+		Assertions.assertEquals(0, bodies.get());
+		InternalShutdownResult result = thrown.getInternalShutdownResult();
+		Assertions.assertTrue(result.isComplete());
+		Assertions.assertEquals(
+				InternalParticipantShutdownDisposition.NOT_STARTED,
+				result.participantResult(InternalParticipantKind.HTTP)
+						.orElseThrow().disposition());
+	}
+
+	@Test
+	public void liveMcpStartQuiescesBeforeCancellationAndCatchesUpToForce()
+			throws Exception {
+		AtomicLong now = new AtomicLong(100L);
+		CountDownLatch startEntered = new CountDownLatch(1);
+		CountDownLatch startInterrupted = new CountDownLatch(1);
+		CountDownLatch releaseStart = new CountDownLatch(1);
+		CountDownLatch registrationClosed = new CountDownLatch(1);
+		List<String> events = new CopyOnWriteArrayList<>();
+		List<String> workerNames = new CopyOnWriteArrayList<>();
+		AtomicInteger waitIndex = new AtomicInteger();
+		McpSubscriptionEventPublisher publisher =
+				new McpSubscriptionEventPublisher() {
+			@Override
+			public McpSubscriptionEventRegistration subscribe(
+					@NonNull McpSubscriptionEventListener listener) {
+				events.add("start-entered");
+				startEntered.countDown();
+				boolean released = false;
+				while (!released) {
+					try {
+						released = releaseStart.await(WAIT.toMillis(),
+								TimeUnit.MILLISECONDS);
+					} catch (InterruptedException cancellation) {
+						events.add("start-interrupted");
+						startInterrupted.countDown();
+					}
+				}
+				return registrationClosed::countDown;
+			}
+
+			@Override
+			public void publish(@NonNull McpSubscriptionEvent event) {
+			}
+		};
+		DeadlineWaiter waiter = new DeadlineWaiter(now::get,
+				(monitor, remainingNanos) -> {
+					int phase = waitIndex.getAndIncrement();
+					if (phase == 0) {
+						Assertions.assertEquals(10L, remainingNanos);
+						Assertions.assertTrue(startEntered.await(WAIT.toMillis(),
+								TimeUnit.MILLISECONDS));
+						now.addAndGet(remainingNanos);
+						return;
+					}
+					if (phase == 1) {
+						Assertions.assertEquals(20L, remainingNanos);
+						Assertions.assertTrue(startInterrupted.await(
+								WAIT.toMillis(), TimeUnit.MILLISECONDS));
+						int quiesce = events.indexOf("cancellation-quiesce");
+						int cancellation = events.indexOf("start-interrupted");
+						Assertions.assertTrue(quiesce >= 0
+								&& quiesce < cancellation,
+								"Safe quiesce submission must precede startup cancellation");
+						now.addAndGet(remainingNanos);
+						return;
+					}
+					if (phase == 2) {
+						Assertions.assertEquals(30L, remainingNanos);
+						Assertions.assertFalse(workerNames.contains(
+								"lifecycle-force-mcp"));
+						now.addAndGet(remainingNanos);
+						return;
+					}
+					Assertions.assertEquals(40L, remainingNanos);
+					Assertions.assertTrue(workerNames.contains(
+							"lifecycle-force-mcp"));
+					releaseStart.countDown();
+					monitor.wait(WAIT.toMillis());
+				});
+		LifecycleWorkers workers = new LifecycleWorkers((name, task) -> {
+			workerNames.add(name);
+			if (name.equals("simulator-cancellation-quiesce-mcp"))
+				events.add("cancellation-quiesce");
+			if (name.equals("simulator-start-mcp")
+					|| name.startsWith("simulator-mcp-termination-observer-")) {
+				Thread worker = new Thread(task, "simulator-live-start-" + name);
+				worker.setDaemon(true);
+				worker.start();
+				return;
+			}
+			task.run();
+		});
+		InternalLifecyclePolicy policy = new InternalLifecyclePolicy(
+				Optional.of(Duration.ofNanos(10L)), Duration.ofNanos(20L),
+				Duration.ofNanos(30L), Duration.ofNanos(40L));
+
+		try {
+			SokletStartupException thrown = Assertions.assertThrows(
+					SokletStartupException.class, () -> SokletSimulator.run(
+							transports -> {
+								McpServer server = subscriptionServer(transports,
+										List.of(subscriptionEndpoint("/blocking", publisher)));
+								return SokletConfig.withMcpServer(server)
+										.resourceMethodResolver(ResourceMethodResolver
+												.fromMethods(Set.of()))
+										.internalLifecyclePolicy(policy)
+										.build();
+							}, SimulatorOptions.defaultInstance(),
+							simulator -> Assertions.fail(
+									"The body cannot run after startup timeout"),
+							now::get, waiter, workers));
+			Assertions.assertEquals(StartupDisposition.TIMED_OUT,
+					thrown.getStartupDisposition());
+			Assertions.assertTrue(registrationClosed.await(WAIT.toMillis(),
+					TimeUnit.MILLISECONDS));
+			Assertions.assertFalse(workerNames.contains(
+					"simulator-mcp-termination-observer-graceful"),
+					"A live start returning after grace must catch up directly to force");
+			Assertions.assertEquals(
+					InternalParticipantShutdownDisposition.FORCED_TERMINATION,
+					thrown.getInternalShutdownResult().participantResult(
+							InternalParticipantKind.MCP).orElseThrow().disposition());
+		} finally {
+			releaseStart.countDown();
+		}
+	}
+
+	@Test
+	public void sealedScopeRetainsRejectedMcpSessionUntilRollbackTerminates()
+			throws Exception {
+		CountDownLatch executorSupplierEntered = new CountDownLatch(1);
+		CountDownLatch releaseExecutorSupplier = new CountDownLatch(1);
+		CountDownLatch executorTaskEntered = new CountDownLatch(1);
+		CountDownLatch releaseExecutorTask = new CountDownLatch(1);
+		AtomicReference<ExecutorService> handlerExecutor = new AtomicReference<>();
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
+				.serverInformation(McpImplementation.withNameAndVersion(
+						"rejected-session-proof-test", "4.0.0-SNAPSHOT").build())
+				.build();
+		DefaultMcpServer server = (DefaultMcpServer) McpServer.withPort(0)
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(McpAdmissionController.acceptAllInstance())
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.requestHandlerExecutorServiceSupplier(() -> {
+					ExecutorService executor = Executors.newSingleThreadExecutor();
+					handlerExecutor.set(executor);
+					executor.submit(() -> {
+						executorTaskEntered.countDown();
+						try {
+							releaseExecutorTask.await();
+						} catch (InterruptedException interruption) {
+							Thread.currentThread().interrupt();
+						}
+					});
+					try {
+						Assertions.assertTrue(executorTaskEntered.await(
+								WAIT.toMillis(), TimeUnit.MILLISECONDS));
+						executorSupplierEntered.countDown();
+						Assertions.assertTrue(releaseExecutorSupplier.await(
+								WAIT.toMillis(), TimeUnit.MILLISECONDS));
+					} catch (InterruptedException interruption) {
+						Thread.currentThread().interrupt();
+						throw new IllegalStateException(
+								"Interrupted while creating the test executor",
+								interruption);
+					}
+					return executor;
+				})
+				.build();
+		Soklet.DefaultSimulator simulator = new Soklet.DefaultSimulator(null, null,
+				SimulatorOptions.defaultInstance(), server);
+		ExecutorService startupWorker = Executors.newSingleThreadExecutor();
+
+		try {
+			Future<?> startup = startupWorker.submit(simulator::openMcpScope);
+			Assertions.assertTrue(executorSupplierEntered.await(WAIT.toMillis(),
+					TimeUnit.MILLISECONDS));
+			Assertions.assertTrue(simulator.sealScope());
+			releaseExecutorSupplier.countDown();
+
+			java.util.concurrent.ExecutionException startupFailure =
+					Assertions.assertThrows(java.util.concurrent.ExecutionException.class,
+							() -> startup.get(WAIT.toMillis(), TimeUnit.MILLISECONDS));
+			Assertions.assertEquals("The simulator scope is closed.",
+					startupFailure.getCause().getMessage());
+			Assertions.assertFalse(simulator.mcpScopeTerminationProven(),
+					"Rejected-session rollback must remain visible while its executor lives");
+			Assertions.assertEquals(Set.of(
+					InternalResidualActivityKind.EXECUTOR_TASK),
+					simulator.mcpScopeResidualActivity());
+
+			releaseExecutorTask.countDown();
+			Assertions.assertTrue(simulator.awaitMcpScopeTermination(
+					System.nanoTime() + WAIT.toNanos(), NanoClock.system()));
+			Assertions.assertTrue(simulator.mcpScopeTerminationProven());
+			simulator.releaseMcpScopeEvidence();
+			Assertions.assertTrue(simulator.mcpScopeResidualActivity().isEmpty());
+		} finally {
+			releaseExecutorSupplier.countDown();
+			releaseExecutorTask.countDown();
+			ExecutorService executor = handlerExecutor.get();
+			if (executor != null)
+				executor.shutdownNow();
+			startupWorker.shutdownNow();
+			startupWorker.awaitTermination(WAIT.toMillis(), TimeUnit.MILLISECONDS);
+		}
+	}
+
+	@Test
 	public void teardownLaunchFailureNeverReplacesPrimaryAndRetainsProofGraph() {
 		CheckedCanary bodyFailure = new CheckedCanary();
 		LifecycleLaunchCanary failedBodyTeardown = new LifecycleLaunchCanary();
@@ -350,6 +749,10 @@ public class SokletSimulatorIsolationTests {
 				}, SimulatorOptions.defaultInstance(), simulator -> {
 					throw bodyFailure;
 				}, NanoClock.system(), new LifecycleWorkers((name, task) -> {
+					if (isSimulatorStartupCall(name)) {
+						task.run();
+						return;
+					}
 					throw failedBodyTeardown;
 				})));
 		Assertions.assertSame(bodyFailure, thrown);
@@ -371,6 +774,10 @@ public class SokletSimulatorIsolationTests {
 					return immediateTeardownConfig(transports);
 				}, SimulatorOptions.defaultInstance(), simulator -> {
 				}, NanoClock.system(), new LifecycleWorkers((name, task) -> {
+					if (isSimulatorStartupCall(name)) {
+						task.run();
+						return;
+					}
 					throw successfulBodyTeardown;
 				})));
 		Assertions.assertNull(direct.getCause());
@@ -412,7 +819,8 @@ public class SokletSimulatorIsolationTests {
 			}
 
 			@Override
-			public void didStopSoklet(@NonNull Soklet soklet) {
+			public void didStopSoklet(@NonNull Soklet soklet,
+					@NonNull ShutdownResult result) {
 				serverTransitions.incrementAndGet();
 			}
 
@@ -450,6 +858,7 @@ public class SokletSimulatorIsolationTests {
 	}
 
 	@Test
+	@Timeout(value = 120, unit = TimeUnit.SECONDS)
 	public void scopeMcpBuilderPreservesPortPolicyWithoutBinding() throws Exception {
 		int configuredPort = 43_217;
 		AtomicReference<McpServer> escapedServer = new AtomicReference<>();
@@ -486,14 +895,14 @@ public class SokletSimulatorIsolationTests {
 		McpServer server = escapedServer.get();
 		Assertions.assertNotNull(server);
 		Assertions.assertEquals(1, handlerCalls.get());
-		Assertions.assertEquals(McpServerStatus.STOPPED,
+		Assertions.assertEquals(McpServerStatus.TERMINATED,
 				server.getDiagnostics().getStatus());
 		Assertions.assertTrue(server.getDiagnostics().getBoundAddress().isEmpty());
 		TransportOwnershipException conflict = Assertions.assertThrows(
 				TransportOwnershipException.class,
 				() -> Soklet.fromConfig(mcpConfig(server)));
-		Assertions.assertEquals(InternalParticipantKind.MCP,
-				conflict.getInternalParticipantKind());
+		Assertions.assertEquals(ParticipantKind.MCP,
+				conflict.getParticipantKind());
 		Assertions.assertSame(server.getClass(), conflict.getTransportClass());
 		Assertions.assertTrue(server.getDiagnostics().getBoundAddress().isEmpty());
 	}
@@ -546,7 +955,8 @@ public class SokletSimulatorIsolationTests {
 				Optional.of(Duration.ofSeconds(2)), Duration.ofSeconds(1),
 				Duration.ofSeconds(2), Duration.ofSeconds(2));
 
-		InternalShutdownResult result = SokletSimulator.run(transports -> {
+		ShutdownResult result = ShutdownResult.fromInternal(SokletSimulator.run(
+				transports -> {
 			McpServer server = subscriptionServer(transports, List.of(
 					subscriptionEndpoint("/ready", publisher)));
 			return SokletConfig.withMcpServer(server)
@@ -557,11 +967,11 @@ public class SokletSimulatorIsolationTests {
 		}, SimulatorOptions.defaultInstance(), simulator -> {
 			Assertions.assertEquals(1, subscriptions.get(),
 					"The MCP generation must start before scope readiness");
-		}, offsetClock, new LifecycleWorkers());
+		}, offsetClock, new LifecycleWorkers()));
 
 		Assertions.assertTrue(result.isComplete());
-		Assertions.assertEquals(InternalStartupDisposition.READY,
-				result.startupDisposition());
+		Assertions.assertEquals(StartupDisposition.READY,
+				result.getStartupDisposition());
 		Assertions.assertEquals(1, closes.get());
 	}
 
@@ -594,15 +1004,17 @@ public class SokletSimulatorIsolationTests {
 			}
 		};
 
-		IllegalStateException thrown = Assertions.assertThrows(
-				IllegalStateException.class, () -> SokletSimulator.run(transports -> {
+		SokletStartupException thrown = Assertions.assertThrows(
+				SokletStartupException.class, () -> SokletSimulator.run(transports -> {
 					McpServer server = subscriptionServer(transports, List.of(
 							subscriptionEndpoint("/first", first),
 							subscriptionEndpoint("/failing", failing)));
 					return mcpConfig(server);
 				}, simulator -> bodies.incrementAndGet()));
 
-		Assertions.assertSame(startupFailure, thrown);
+		Assertions.assertSame(startupFailure, thrown.getCause());
+		Assertions.assertEquals(StartupDisposition.FAILED,
+				thrown.getStartupDisposition());
 		Assertions.assertEquals(0, bodies.get());
 		Assertions.assertEquals(1, firstCloses.get(),
 				"Rollback must prove closure of the registration created before failure");
@@ -612,6 +1024,7 @@ public class SokletSimulatorIsolationTests {
 	private static SokletConfig httpConfig(@NonNull SimulatorTransports transports) {
 		return SokletConfig.withHttpServer(transports.getHttpServer())
 				.resourceMethodResolver(resourceMethods())
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build();
 	}
 
@@ -632,9 +1045,14 @@ public class SokletSimulatorIsolationTests {
 		return SokletConfig.withHttpServer(transports.getHttpServer())
 				.resourceMethodResolver(resourceMethods())
 				.internalLifecyclePolicy(new InternalLifecyclePolicy(
-						Optional.of(Duration.ZERO), Duration.ZERO,
+						Optional.of(WAIT), Duration.ZERO,
 						Duration.ZERO, Duration.ZERO))
 				.build();
+	}
+
+	private static boolean isSimulatorStartupCall(@NonNull String name) {
+		return name.equals("simulator-framework-setup")
+				|| name.startsWith("simulator-start-");
 	}
 
 	@NonNull
@@ -692,6 +1110,7 @@ public class SokletSimulatorIsolationTests {
 			return SokletConfig.withHttpServer(transports.getHttpServer())
 					.resourceMethodResolver(providerResourceMethods())
 					.instanceProvider(instances)
+					.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 					.lifecycleObserver(new LifecycleObserver() {
 						@Override
 						public void willStartSoklet(@NonNull Soklet soklet) {
@@ -709,7 +1128,8 @@ public class SokletSimulatorIsolationTests {
 						}
 
 						@Override
-						public void didStopSoklet(@NonNull Soklet soklet) {
+						public void didStopSoklet(@NonNull Soklet soklet,
+								@NonNull ShutdownResult result) {
 							probe.serverTransitions.incrementAndGet();
 						}
 
@@ -918,6 +1338,10 @@ public class SokletSimulatorIsolationTests {
 		private final List<Runnable> queuedTasks = new ArrayList<>();
 
 		private void launch(@NonNull String name, @NonNull Runnable task) {
+			if (isSimulatorStartupCall(name)) {
+				task.run();
+				return;
+			}
 			synchronized (this.lock) {
 				this.queuedTasks.add(task);
 			}
@@ -956,26 +1380,35 @@ public class SokletSimulatorIsolationTests {
 
 	private static final class TrackingHttpServer implements HttpServer {
 		@NonNull
+		private final TransportIdentity identity = TransportIdentity.create();
+		@NonNull
 		private final AtomicInteger initializeCalls = new AtomicInteger();
 
+		@NonNull
 		@Override
-		public void start() {
-		}
-
-		@Override
-		public void stop() {
+		public TransportIdentity getTransportIdentity() {
+			return this.identity;
 		}
 
 		@NonNull
 		@Override
-		public Boolean isStarted() {
-			return false;
-		}
-
-		@Override
-		public void initialize(@NonNull SokletConfig sokletConfig,
-				@NonNull RequestHandler requestHandler) {
+		public TransportRuntime attach(
+				@NonNull HttpTransportAttachmentContext context,
+				@NonNull StartupContext startupContext) {
 			this.initializeCalls.incrementAndGet();
+			TransportTerminationSignal signal = context.getTerminationSignal();
+			return new TransportRuntime() {
+				@Override public void start(@NonNull StartupContext context) {
+				}
+
+				@Override public void quiesce(@NonNull ShutdownContext context) {
+					signal.signalTerminated();
+				}
+
+				@Override public void force(@NonNull ShutdownContext context) {
+					signal.signalTerminated();
+				}
+			};
 		}
 	}
 }

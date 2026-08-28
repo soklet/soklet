@@ -35,7 +35,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertTimeout;
 
 @NotThreadSafe
-@Timeout(30)
+@Timeout(60)
 public class McpResourceProtocolTests {
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 

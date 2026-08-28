@@ -107,7 +107,10 @@ public class McpCrossFeatureSoakTests {
 				new CountingSubscriptionPublisher();
 		CountingMcpMetricsCollector metricsCollector =
 				new CountingMcpMetricsCollector();
-		CountingLifecycle lifecycle = new CountingLifecycle();
+		int expectedGenerations = 1 + PROFILE.shutdownCycles();
+		CountingLifecycle lifecycle = new CountingLifecycle(expectedGenerations);
+		List<ShutdownResult> shutdownResults = new ArrayList<>(
+				expectedGenerations);
 		AtomicReference<McpServer> currentServer = new AtomicReference<>();
 		SoakResourceSnapshot baseline;
 		SoakResourceSnapshot finalSnapshot;
@@ -138,7 +141,8 @@ public class McpCrossFeatureSoakTests {
 				awaitRuntimeIdle("warmup", warmupServer, metricsCollector,
 						warmupTotals, state, PROFILE.settleTimeout(),
 						PROFILE.metricDeliveryTimeout());
-				warmupSoklet.stop();
+				shutdownResults.add(warmupSoklet.shutdown()
+						.toCompletableFuture().join());
 				assertStoppedAfterBinding(warmupServer, warmupAddress);
 			}
 			Assertions.assertEquals(0, state.openClientSockets.get());
@@ -174,10 +178,10 @@ public class McpCrossFeatureSoakTests {
 								PROFILE.metricDeliveryTimeout());
 					}
 
-					performShutdownBoundary(cycleSoklet, cycleServer, port,
-							"shutdown-" + shutdownCycle, state, publisher,
-							metricsCollector, expectedRuntimeMetricTotals(
-									1 + workloadFeatureCycles, shutdownCycle + 1));
+					shutdownResults.add(performShutdownBoundary(cycleSoklet,
+							cycleServer, port, "shutdown-" + shutdownCycle, state,
+							publisher, metricsCollector, expectedRuntimeMetricTotals(
+									1 + workloadFeatureCycles, shutdownCycle + 1)));
 					assertStoppedAfterBinding(cycleServer, cycleAddress);
 				}
 			}
@@ -188,8 +192,14 @@ public class McpCrossFeatureSoakTests {
 					metricsCollector, finalTotals, state,
 					PROFILE.settleTimeout(),
 					PROFILE.metricDeliveryTimeout());
+			Assertions.assertTrue(lifecycle.awaitExpectedServerCallbacks(
+					PROFILE.metricDeliveryTimeout()),
+					() -> "MCP lifecycle callbacks were not delivered within "
+							+ PROFILE.metricDeliveryTimeout() + ": started="
+							+ lifecycle.serversStarted() + " stopped="
+							+ lifecycle.serversStopped());
 			assertExactCounters(state, publisher, metricsCollector, lifecycle,
-					workloadFeatureCycles);
+					shutdownResults, workloadFeatureCycles);
 			finalSnapshot = SoakResourceSnapshot.assertReturnsNear(
 					"MCP Phase 5 cross-feature churn",
 					baseline,
@@ -260,7 +270,7 @@ public class McpCrossFeatureSoakTests {
 				new CountingSubscriptionPublisher();
 		CountingMcpMetricsCollector metricsCollector =
 				new CountingMcpMetricsCollector();
-		CountingLifecycle lifecycle = new CountingLifecycle();
+		CountingLifecycle lifecycle = new CountingLifecycle(0);
 		AtomicReference<McpServer> mcpServer = new AtomicReference<>();
 		SimulatorConfigFactory configFactory = simulatorConfigFactory(state,
 				publisher, metricsCollector, lifecycle, mcpServer);
@@ -406,16 +416,19 @@ public class McpCrossFeatureSoakTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(metricsCollector)
 				.lifecycleObserver(lifecycle)
-				.internalLifecyclePolicy(immediateShutdownPolicy())
+				.lifecyclePolicy(lifecyclePolicy())
 				.build());
 	}
 
 	@NonNull
-	private static InternalLifecyclePolicy immediateShutdownPolicy() {
-		return new InternalLifecyclePolicy(
-				java.util.Optional.of(Duration.ofSeconds(30)),
-				Duration.ofSeconds(2), Duration.ZERO,
-				PROFILE.shutdownTimeout());
+	private static LifecyclePolicy lifecyclePolicy() {
+		return LifecyclePolicy.builder()
+				.startupTimeout(Duration.ofSeconds(30))
+				.startupCancellationTimeout(Duration.ofSeconds(2))
+				.gracefulShutdownDuration(
+						PROFILE.gracefulShutdownDuration())
+				.forcedShutdownDuration(PROFILE.forcedShutdownDuration())
+				.build();
 	}
 
 	@NonNull
@@ -639,7 +652,6 @@ public class McpCrossFeatureSoakTests {
 				.requestTimeout(PROFILE.requestTimeout())
 				.writeTimeout(PROFILE.writeTimeout())
 				.keepAliveInterval(PROFILE.keepAliveInterval())
-				.shutdownTimeout(PROFILE.shutdownTimeout())
 				.maximumSubscriptionsPerPrincipal(
 						PROFILE.maximumSubscriptionsPerPrincipal())
 				.maximumSubscriptionDuration(
@@ -664,7 +676,7 @@ public class McpCrossFeatureSoakTests {
 							ResourceMethodResolver.fromMethods(Set.of()))
 					.metricsCollector(metricsCollector)
 					.lifecycleObserver(lifecycle)
-					.internalLifecyclePolicy(immediateShutdownPolicy())
+					.lifecyclePolicy(lifecyclePolicy())
 					.build();
 		};
 	}
@@ -929,8 +941,9 @@ public class McpCrossFeatureSoakTests {
 			throws Exception {
 		AtomicReference<Simulator> escapedSimulator = new AtomicReference<>();
 		AtomicReference<McpSimulation> escapedSimulation = new AtomicReference<>();
-		IllegalStateException cleanupFailure = Assertions.assertThrows(
-				IllegalStateException.class, () -> SokletSimulator.run(configFactory,
+		ShutdownIncompleteException cleanupFailure = Assertions.assertThrows(
+				ShutdownIncompleteException.class,
+				() -> SokletSimulator.run(configFactory,
 						simulator -> {
 							escapedSimulator.set(simulator);
 							escapedSimulation.set(simulator.startMcpRequest(
@@ -958,7 +971,7 @@ public class McpCrossFeatureSoakTests {
 				() -> retainedSimulator.startMcpRequest(simulatorToolRequest(
 						"residual-rejected", SIMULATOR_JSON_TOOL, "{}", null,
 						null, null)));
-		assertNeverBoundStopped(residualServer);
+		assertNeverBound(residualServer, McpServerStatus.RESIDUAL_ACTIVITY);
 		Assertions.assertEquals(0,
 				residualServer.getDiagnostics().getActiveHandlerExecutions());
 		Assertions.assertTrue(metricsCollector.handlerExecutionsStarted()
@@ -986,7 +999,7 @@ public class McpCrossFeatureSoakTests {
 		});
 		McpServer recoveredServer = requireNonNull(mcpServer.get());
 		Assertions.assertNotSame(residualServer, recoveredServer);
-		assertNeverBoundStopped(recoveredServer);
+		assertNeverBound(recoveredServer, McpServerStatus.TERMINATED);
 	}
 
 	@NonNull
@@ -1113,7 +1126,7 @@ public class McpCrossFeatureSoakTests {
 			@NonNull CountingSubscriptionPublisher publisher,
 			@NonNull CountingMcpMetricsCollector metrics,
 			@NonNull CountingLifecycle lifecycle) {
-		assertNeverBoundStopped(mcpServer);
+		assertNeverBound(mcpServer, McpServerStatus.TERMINATED);
 		McpServerDiagnostics diagnostics = mcpServer.getDiagnostics();
 		Assertions.assertEquals(0, diagnostics.getActiveHandlerExecutions());
 		Assertions.assertEquals(0, diagnostics.getQueuedRequests());
@@ -1291,7 +1304,9 @@ public class McpCrossFeatureSoakTests {
 		}
 	}
 
-	private static void performShutdownBoundary(@NonNull Soklet soklet,
+	@NonNull
+	private static ShutdownResult performShutdownBoundary(
+			@NonNull Soklet soklet,
 			@NonNull McpServer mcpServer, int port, @NonNull String cycleId,
 			@NonNull SoakState state,
 			@NonNull CountingSubscriptionPublisher publisher,
@@ -1316,6 +1331,7 @@ public class McpCrossFeatureSoakTests {
 		RawMcpClient blocking = null;
 		BlockingObservation observation = null;
 		Thread stopThread = null;
+		AtomicReference<ShutdownResult> stopResult = new AtomicReference<>();
 		AtomicReference<Throwable> stopFailure = new AtomicReference<>();
 
 		try {
@@ -1339,7 +1355,7 @@ public class McpCrossFeatureSoakTests {
 
 			stopThread = new Thread(() -> {
 				try {
-					soklet.stop();
+					stopResult.set(soklet.shutdown().toCompletableFuture().join());
 				} catch (Throwable throwable) {
 					stopFailure.set(throwable);
 				}
@@ -1382,6 +1398,8 @@ public class McpCrossFeatureSoakTests {
 				stopThread.join(PROFILE.settleTimeout().toMillis());
 			}
 		}
+		return requireNonNull(stopResult.get(),
+				"MCP server shutdown did not publish its immutable result.");
 	}
 
 	@NonNull
@@ -1408,8 +1426,9 @@ public class McpCrossFeatureSoakTests {
 
 	private static void joinStopThread(@NonNull Thread stopThread,
 			@NonNull AtomicReference<Throwable> stopFailure) throws Exception {
-		stopThread.join(PROFILE.shutdownTimeout().plus(PROFILE.settleTimeout())
-				.toMillis());
+		stopThread.join(PROFILE.gracefulShutdownDuration()
+				.plus(PROFILE.forcedShutdownDuration())
+				.plus(PROFILE.settleTimeout()).toMillis());
 		Assertions.assertFalse(stopThread.isAlive(),
 				"MCP server stop thread did not terminate within its bound.");
 		Throwable failure = stopFailure.get();
@@ -1421,6 +1440,7 @@ public class McpCrossFeatureSoakTests {
 			@NonNull CountingSubscriptionPublisher publisher,
 			@NonNull CountingMcpMetricsCollector metricsCollector,
 			@NonNull CountingLifecycle lifecycle,
+			@NonNull List<ShutdownResult> shutdownResults,
 			int workloadFeatureCycles) {
 		int fullFeatureCycles = 1 + workloadFeatureCycles;
 		int generations = 1 + PROFILE.shutdownCycles();
@@ -1480,8 +1500,23 @@ public class McpCrossFeatureSoakTests {
 
 		Assertions.assertEquals(generations, lifecycle.serversStarted());
 		Assertions.assertEquals(generations, lifecycle.serversStopped());
-		Assertions.assertEquals(Collections.nCopies(generations,
-				McpShutdownOutcome.CLEAN), lifecycle.shutdownOutcomes());
+		Assertions.assertEquals(generations, shutdownResults.size());
+		List<ParticipantShutdownDisposition> expectedShutdownDispositions =
+				new ArrayList<>(generations);
+		expectedShutdownDispositions.add(
+				ParticipantShutdownDisposition.GRACEFUL_TERMINATION);
+		expectedShutdownDispositions.addAll(Collections.nCopies(
+				PROFILE.shutdownCycles(),
+				ParticipantShutdownDisposition.FORCED_TERMINATION));
+		List<ParticipantShutdownDisposition> actualShutdownDispositions =
+				requireNonNull(shutdownResults).stream()
+						.map(result -> result.getParticipantResult(
+								ParticipantKind.MCP).orElseThrow(() ->
+								new AssertionError("MCP shutdown result was missing.")))
+						.map(ParticipantShutdownResult::getDisposition)
+						.toList();
+		Assertions.assertEquals(expectedShutdownDispositions,
+				actualShutdownDispositions);
 		Assertions.assertEquals(expectedTotals.requests(),
 				metricsCollector.requestsStarted());
 		Assertions.assertEquals(expectedTotals.requests(),
@@ -1599,23 +1634,23 @@ public class McpCrossFeatureSoakTests {
 	private static void assertStoppedAfterBinding(@NonNull McpServer mcpServer,
 			@NonNull InetSocketAddress expectedAddress) {
 		McpServerDiagnostics diagnostics = mcpServer.getDiagnostics();
-		Assertions.assertEquals(McpServerStatus.STOPPED,
+		Assertions.assertEquals(McpServerStatus.TERMINATED,
 				diagnostics.getStatus());
 		Assertions.assertEquals(requireNonNull(expectedAddress),
 				diagnostics.getBoundAddress().orElseThrow());
 	}
 
-	private static void assertNeverBoundStopped(@NonNull McpServer mcpServer) {
+	private static void assertNeverBound(@NonNull McpServer mcpServer,
+			@NonNull McpServerStatus expectedStatus) {
 		McpServerDiagnostics diagnostics = mcpServer.getDiagnostics();
-		Assertions.assertEquals(McpServerStatus.STOPPED,
-				diagnostics.getStatus());
+		Assertions.assertEquals(expectedStatus, diagnostics.getStatus());
 		Assertions.assertTrue(diagnostics.getBoundAddress().isEmpty());
 	}
 
 	@NonNull
 	private static InetSocketAddress boundAddress(@NonNull McpServer mcpServer) {
 		McpServerDiagnostics diagnostics = mcpServer.getDiagnostics();
-		Assertions.assertEquals(McpServerStatus.STARTED,
+		Assertions.assertEquals(McpServerStatus.RUNNING,
 				diagnostics.getStatus());
 		InetSocketAddress address = diagnostics.getBoundAddress().orElseThrow();
 		Assertions.assertTrue(address.getAddress().isLoopbackAddress());
@@ -2274,19 +2309,27 @@ public class McpCrossFeatureSoakTests {
 		@NonNull
 		private final AtomicInteger serversStopped = new AtomicInteger();
 		@NonNull
-		private final Queue<McpShutdownOutcome> shutdownOutcomes =
-				new ConcurrentLinkedQueue<>();
+		private final CountDownLatch expectedServerCallbacks;
+
+		private CountingLifecycle(int expectedServerGenerations) {
+			if (expectedServerGenerations < 0)
+				throw new IllegalArgumentException(
+						"Expected server generations must be nonnegative.");
+			this.expectedServerCallbacks = new CountDownLatch(
+					Math.multiplyExact(expectedServerGenerations, 2));
+		}
 
 		@Override
 		public void didStartMcpServer(@NonNull McpServer mcpServer) {
 			this.serversStarted.incrementAndGet();
+			this.expectedServerCallbacks.countDown();
 		}
 
 		@Override
 		public void didStopMcpServer(@NonNull McpServer mcpServer,
-				@NonNull McpShutdownOutcome shutdownOutcome) {
+				@NonNull ParticipantShutdownResult result) {
 			this.serversStopped.incrementAndGet();
-			this.shutdownOutcomes.add(shutdownOutcome);
+			this.expectedServerCallbacks.countDown();
 		}
 
 		@Override
@@ -2302,9 +2345,10 @@ public class McpCrossFeatureSoakTests {
 			return this.serversStopped.get();
 		}
 
-		@NonNull
-		private List<McpShutdownOutcome> shutdownOutcomes() {
-			return List.copyOf(this.shutdownOutcomes);
+		private boolean awaitExpectedServerCallbacks(@NonNull Duration timeout)
+				throws InterruptedException {
+			return this.expectedServerCallbacks.await(requireNonNull(timeout).toNanos(),
+					TimeUnit.NANOSECONDS);
 		}
 	}
 
@@ -2613,7 +2657,8 @@ public class McpCrossFeatureSoakTests {
 			@NonNull Duration settleTimeout,
 			@NonNull Duration metricDeliveryTimeout,
 			int shutdownCycles,
-			@NonNull Duration shutdownTimeout,
+			@NonNull Duration gracefulShutdownDuration,
+			@NonNull Duration forcedShutdownDuration,
 			int streamQueueCapacity,
 			@NonNull Duration writeTimeout) {
 		@NonNull
@@ -2642,7 +2687,8 @@ public class McpCrossFeatureSoakTests {
 					profile.durationMillis(
 							"mcp.metricDeliveryTimeoutMillis"),
 					profile.integer("mcp.shutdownCycles"),
-					profile.durationMillis("mcp.shutdownTimeoutMillis"),
+					profile.durationMillis("mcp.gracefulShutdownMillis"),
+					profile.durationMillis("mcp.forcedShutdownMillis"),
 					profile.integer("mcp.streamQueueCapacity"),
 					profile.durationMillis("mcp.writeTimeoutMillis"));
 		}

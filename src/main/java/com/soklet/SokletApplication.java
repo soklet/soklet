@@ -36,8 +36,8 @@ import java.util.function.Consumer;
 
 import static java.util.Objects.requireNonNull;
 
-/** Descriptor-neutral standalone process adapter. */
-final class SokletApplication {
+/** Standalone-process adapter for one Soklet lifecycle attempt. */
+public final class SokletApplication {
 	@NonNull
 	static final SystemLifecycleProcessAccess SYSTEM_PROCESS =
 			new SystemLifecycleProcessAccess();
@@ -49,14 +49,37 @@ final class SokletApplication {
 	private SokletApplication() {
 	}
 
+	/**
+	 * Runs one standalone Soklet lifecycle with the default runner options.
+	 *
+	 * @param config the one-shot Soklet configuration
+	 * @return the exact immutable lifecycle result
+	 * @throws SokletStartupException if startup does not reach readiness
+	 * @throws SokletTerminatedUnexpectedlyException if a transport terminates
+	 * unexpectedly after readiness
+	 * @throws ShutdownIncompleteException if shutdown cannot be proven complete
+	 */
 	@NonNull
-	static InternalShutdownResult run(@NonNull SokletConfig config) {
+	public static ShutdownResult run(@NonNull SokletConfig config) {
 		return run(config, SokletApplicationOptions.fromDefaults());
 	}
 
+	/**
+	 * Runs one standalone Soklet lifecycle with the default options plus the
+	 * supplied runner-scoped shutdown triggers.
+	 *
+	 * @param config the one-shot Soklet configuration
+	 * @param additionalTriggers non-null additional triggers; each element must
+	 * be non-null
+	 * @return the exact immutable lifecycle result
+	 * @throws SokletStartupException if startup does not reach readiness
+	 * @throws SokletTerminatedUnexpectedlyException if a transport terminates
+	 * unexpectedly after readiness
+	 * @throws ShutdownIncompleteException if shutdown cannot be proven complete
+	 */
 	@NonNull
-	static InternalShutdownResult run(@NonNull SokletConfig config,
-			@NonNull ShutdownTrigger... additionalTriggers) {
+	public static ShutdownResult run(@NonNull SokletConfig config,
+			@NonNull ShutdownTrigger @NonNull... additionalTriggers) {
 		requireNonNull(additionalTriggers);
 		SokletApplicationOptions.Builder builder =
 				SokletApplicationOptions.builder();
@@ -65,14 +88,38 @@ final class SokletApplication {
 		return run(config, builder.build());
 	}
 
+	/**
+	 * Runs one standalone Soklet lifecycle and its shared, bounded application
+	 * finalization sequence. A configured cleanup action is eligible only after
+	 * the core shutdown result is complete.
+	 *
+	 * @param config the one-shot Soklet configuration
+	 * @param options runner triggers and optional bounded cleanup
+	 * @return the exact immutable lifecycle result
+	 * @throws SokletStartupException if startup does not reach readiness
+	 * @throws SokletTerminatedUnexpectedlyException if a transport terminates
+	 * unexpectedly after readiness
+	 * @throws ShutdownIncompleteException if shutdown cannot be proven complete
+	 * @throws SokletApplicationCleanupException if an eligible cleanup fails or
+	 * exceeds its configured deadline
+	 */
 	@NonNull
-	static InternalShutdownResult run(@NonNull SokletConfig config,
+	public static ShutdownResult run(@NonNull SokletConfig config,
 			@NonNull SokletApplicationOptions options) {
-		return run(config, options, SokletApplicationEnvironment.system());
+		return runCore(config, options, SokletApplicationEnvironment.system())
+				.publicResult();
 	}
 
 	@NonNull
 	static InternalShutdownResult run(@NonNull SokletConfig config,
+			@NonNull SokletApplicationOptions options,
+			@NonNull SokletApplicationEnvironment environment) {
+		return runCore(config, options, environment).result();
+	}
+
+	@NonNull
+	private static InternalLifecycleCoreSnapshot runCore(
+			@NonNull SokletConfig config,
 			@NonNull SokletApplicationOptions options,
 			@NonNull SokletApplicationEnvironment environment) {
 		// Every validation in this block precedes the transport-identity commit
@@ -163,7 +210,7 @@ final class SokletApplication {
 		// callback without moving the absolute deadline.
 		finalization.publishCoreSnapshot(coreSnapshot);
 
-		RuntimeException primary = classifyPrimary(runtime, coreSnapshot.result(),
+		RuntimeException primary = classifyPrimary(runtime, coreSnapshot,
 				processOwnershipFailure, startFailure);
 
 		SokletApplicationFinalization.AwaitResult finalizationResult =
@@ -201,7 +248,7 @@ final class SokletApplication {
 		SokletApplicationCleanupException cleanupFailure =
 				cleanupOutcome.failed()
 						? SokletApplicationFinalization.cleanupException(
-								coreSnapshot.result(), cleanupOutcome)
+								coreSnapshot.publicResult(), cleanupOutcome)
 						: null;
 		if (primary != null) {
 			if (cleanupFailure != null)
@@ -224,7 +271,7 @@ final class SokletApplication {
 					"Unable to release standalone Soklet process ownership",
 					processReleaseFailure);
 		}
-		return coreSnapshot.result();
+		return coreSnapshot;
 	}
 
 	@NonNull
@@ -247,13 +294,13 @@ final class SokletApplication {
 	@Nullable
 	private static RuntimeException classifyPrimary(
 			@NonNull SokletApplicationRuntime runtime,
-			@NonNull InternalShutdownResult result,
+			@NonNull InternalLifecycleCoreSnapshot snapshot,
 			@Nullable Throwable processOwnershipFailure,
 			@Nullable Throwable startFailure) {
-		InternalShutdownResult exactResult = requireNonNull(result);
+		InternalLifecycleCoreSnapshot exactSnapshot = requireNonNull(snapshot);
+		InternalShutdownResult exactResult = exactSnapshot.result();
 		if (processOwnershipFailure != null)
-			return new SokletStartupException(
-					InternalStartupDisposition.NOT_ATTEMPTED, exactResult,
+			return new SokletStartupException(exactSnapshot.publicResult(),
 					processOwnershipFailure);
 		if (startFailure != null) {
 			if (startFailure instanceof SokletStartupException startupFailure
@@ -265,8 +312,8 @@ final class SokletApplication {
 						.orElse(null);
 			if (startFailure instanceof RuntimeException runtimeFailure)
 				return runtimeFailure;
-			return new SokletStartupException(exactResult.startupDisposition(),
-					exactResult, startFailure);
+			return new SokletStartupException(exactSnapshot.publicResult(),
+					startFailure);
 		}
 		return requireNonNull(runtime).terminalFailure(exactResult).orElse(null);
 	}

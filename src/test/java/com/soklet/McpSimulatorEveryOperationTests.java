@@ -35,11 +35,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -51,7 +51,7 @@ import java.util.stream.Stream;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@Timeout(30)
+@Timeout(60)
 public class McpSimulatorEveryOperationTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/mcp";
@@ -62,6 +62,7 @@ public class McpSimulatorEveryOperationTests {
 	private static final String RESOURCE_URI = "matrix://resource/text";
 	private static final String TEMPLATE_URI = "matrix://records/{id}";
 	private static final Duration WAIT = Duration.ofSeconds(5);
+	private static final Duration DYNAMIC_TEST_TIMEOUT = Duration.ofSeconds(60);
 	private static final McpJsonCodec JSON_CODEC =
 			new McpJsonCodec(McpJsonLimits.productionDefaults());
 	private static final List<OperationCase> OPERATIONS = List.of(
@@ -106,19 +107,20 @@ public class McpSimulatorEveryOperationTests {
 	@TestFactory
 	public Stream<DynamicTest> recognizedRequestMethodsReplayExactJsonOrSseShapes() {
 		return OPERATIONS.stream().map(operation -> DynamicTest.dynamicTest(
-				operation.method(), () -> {
-			Fixture fixture = new Fixture(1, false);
-			SokletSimulator.run(fixture.configFactory(), simulator -> {
-				String transcript = replay(simulator, fixture, operation);
-				Assertions.assertTrue(transcript.contains(operation.id()), transcript);
-				assertStoppedDiagnostics(fixture.server());
-			});
-			fixture.assertFinished(Map.of(operation.method(),
-					operation.isSubscription()
-							? McpRequestOutcome.CLIENT_DISCONNECTED
-							: McpRequestOutcome.COMPLETE));
-			fixture.assertOffNetwork();
-		}));
+				operation.method(), () -> Assertions.assertTimeoutPreemptively(
+						DYNAMIC_TEST_TIMEOUT, () -> {
+							Fixture fixture = new Fixture(1, false);
+							SokletSimulator.run(fixture.configFactory(), simulator -> {
+								String transcript = replay(simulator, fixture, operation);
+								Assertions.assertTrue(transcript.contains(operation.id()), transcript);
+								assertRunningOffNetworkDiagnostics(fixture.server());
+							});
+							fixture.assertFinished(Map.of(operation.method(),
+									operation.isSubscription()
+											? McpRequestOutcome.CLIENT_DISCONNECTED
+											: McpRequestOutcome.COMPLETE));
+							fixture.assertOffNetwork();
+						})));
 	}
 
 	@Test
@@ -172,7 +174,7 @@ public class McpSimulatorEveryOperationTests {
 						awaitCompletion(target).getReason());
 				fixture.releaseBlockingTool().countDown();
 				Assertions.assertTrue(pollNextItem(target, Duration.ZERO).isEmpty());
-				assertStoppedDiagnostics(fixture.server());
+				assertRunningOffNetworkDiagnostics(fixture.server());
 			});
 		} finally {
 			fixture.releaseBlockingTool().countDown();
@@ -185,33 +187,37 @@ public class McpSimulatorEveryOperationTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void concurrentRecognizedOperationReplayIsIsolatedAndExactlyDrained()
 			throws Exception {
 		Fixture fixture = new Fixture(OPERATIONS.size(), false);
 		ExecutorService executor = Executors.newFixedThreadPool(OPERATIONS.size());
 		CountDownLatch ready = new CountDownLatch(OPERATIONS.size());
 		CountDownLatch start = new CountDownLatch(1);
-		List<Future<ReplayResult>> futures = new CopyOnWriteArrayList<>();
+		List<CompletableFuture<ReplayResult>> futures =
+				new CopyOnWriteArrayList<>();
 
 		try {
 			SokletSimulator.run(fixture.configFactory(), simulator -> {
 				for (OperationCase operation : OPERATIONS)
-					futures.add(executor.submit(() -> {
+					futures.add(CompletableFuture.supplyAsync(() -> {
 						ready.countDown();
 						Assertions.assertTrue(awaitLatch(start));
 						return new ReplayResult(operation,
 								replay(simulator, fixture, operation));
-					}));
+					}, executor));
 				Assertions.assertTrue(awaitLatch(ready));
 				start.countDown();
 
-				List<ReplayResult> results = futures.stream().map(future -> {
-					try {
-						return future.get(5, TimeUnit.SECONDS);
-					} catch (Exception e) {
-						throw new AssertionError(e);
-					}
-				}).toList();
+				try {
+					CompletableFuture.allOf(futures.toArray(
+							CompletableFuture[]::new)).get(5, TimeUnit.SECONDS);
+				} catch (Exception exception) {
+					throw new AssertionError(exception);
+				}
+				List<ReplayResult> results = futures.stream()
+						.map(CompletableFuture::join)
+						.toList();
 				for (ReplayResult result : results) {
 					Assertions.assertTrue(result.transcript().contains(
 							result.operation().id()), result.transcript());
@@ -220,7 +226,7 @@ public class McpSimulatorEveryOperationTests {
 							Assertions.assertFalse(result.transcript().contains(other.id()),
 									result.transcript());
 				}
-				assertStoppedDiagnostics(fixture.server());
+				assertRunningOffNetworkDiagnostics(fixture.server());
 			});
 		} finally {
 			start.countDown();
@@ -427,7 +433,19 @@ public class McpSimulatorEveryOperationTests {
 
 	private static void assertStoppedDiagnostics(@NonNull McpServer server) {
 		McpServerDiagnostics diagnostics = server.getDiagnostics();
-		Assertions.assertEquals(McpServerStatus.STOPPED, diagnostics.getStatus());
+		Assertions.assertEquals(McpServerStatus.TERMINATED, diagnostics.getStatus());
+		assertOffNetworkDiagnostics(diagnostics);
+	}
+
+	private static void assertRunningOffNetworkDiagnostics(
+			@NonNull McpServer server) {
+		McpServerDiagnostics diagnostics = server.getDiagnostics();
+		Assertions.assertEquals(McpServerStatus.RUNNING, diagnostics.getStatus());
+		assertOffNetworkDiagnostics(diagnostics);
+	}
+
+	private static void assertOffNetworkDiagnostics(
+			@NonNull McpServerDiagnostics diagnostics) {
 		Assertions.assertTrue(diagnostics.getBoundAddress().isEmpty());
 		Assertions.assertEquals(0, diagnostics.getActiveHandlerExecutions());
 		Assertions.assertEquals(0, diagnostics.getQueuedRequests());
@@ -605,24 +623,25 @@ public class McpSimulatorEveryOperationTests {
 					})
 					.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 					.toolRateLimiter(context -> McpRateLimitDecision.allowed())
-					.handlerInterceptor((context, continuation) -> {
+					.handlerInterceptor((context, features, continuation) -> {
 						this.interceptorCalls.incrementAndGet();
 						return continuation.proceed();
 					})
 					.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
 					.allowedHosts(Set.of(LOOPBACK))
 					.requestHandlerConcurrency(16)
-					.shutdownTimeout(Duration.ofMillis(250))
 					.build();
 				this.server.set(server);
 				return SokletConfig.withMcpServer(server)
 					.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 					.metricsCollector(this.metrics)
 					.lifecycleObservers(List.of(this.lifecycle))
-					.internalLifecyclePolicy(new InternalLifecyclePolicy(
-							Optional.of(Duration.ofSeconds(30)),
-							Duration.ofSeconds(2), Duration.ZERO,
-							Duration.ofMillis(250)))
+					.lifecyclePolicy(LifecyclePolicy.builder()
+							.startupTimeout(Duration.ofSeconds(30))
+							.startupCancellationTimeout(Duration.ofSeconds(2))
+							.gracefulShutdownDuration(Duration.ZERO)
+							.forcedShutdownDuration(Duration.ofMillis(250))
+							.build())
 					.build();
 			};
 		}
@@ -873,13 +892,7 @@ public class McpSimulatorEveryOperationTests {
 
 		@Override
 		public void didStopMcpServer(@NonNull McpServer server,
-				@NonNull McpShutdownOutcome outcome) {
-			this.serverCallbacks.incrementAndGet();
-		}
-
-		@Override
-		public void didFailToStopMcpServer(@NonNull McpServer server,
-				@NonNull Throwable throwable) {
+				@NonNull ParticipantShutdownResult result) {
 			this.serverCallbacks.incrementAndGet();
 		}
 

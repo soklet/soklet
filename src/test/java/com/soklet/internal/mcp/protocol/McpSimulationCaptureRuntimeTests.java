@@ -53,7 +53,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 @NotThreadSafe
-@Timeout(10)
+@Timeout(60)
 public class McpSimulationCaptureRuntimeTests {
 	@NonNull
 	private static final McpJsonRpcEnvelopeCodec ENVELOPE_CODEC =

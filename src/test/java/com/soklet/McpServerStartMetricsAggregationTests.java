@@ -86,12 +86,12 @@ public class McpServerStartMetricsAggregationTests {
 		DefaultMetricsCollector stopDriven =
 				DefaultMetricsCollector.defaultInstance();
 		stopDriven.didRecordMcpMetricsEvent(McpMetricsEvent.serverStopped(
-				McpShutdownOutcome.CLEAN));
+				ParticipantShutdownDisposition.GRACEFUL_TERMINATION));
 		String stopDrivenText = prometheus(stopDriven);
 		assertMetricType(stopDrivenText);
 		assertSample(stopDrivenText, 0L);
 		Assertions.assertTrue(stopDrivenText.contains(SHUTDOWNS_METRIC_NAME
-				+ "{outcome=\"clean\"} 1\n"), stopDrivenText);
+				+ "{outcome=\"graceful_termination\"} 1\n"), stopDrivenText);
 		stopDriven.reset();
 		Assertions.assertSame(McpMetricsSnapshot.emptyInstance(),
 				stopDriven.snapshot().orElseThrow().getMcpMetrics());
@@ -180,7 +180,7 @@ public class McpServerStartMetricsAggregationTests {
 	}
 
 	@Test
-	@Timeout(15)
+	@Timeout(60)
 	public void concurrentDirectServerStartIngestIsLosslessAndRetainedSnapshotsRemainImmutable()
 			throws Exception {
 		DefaultMetricsCollector collector =

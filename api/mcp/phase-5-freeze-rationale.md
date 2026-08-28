@@ -41,8 +41,8 @@ The matching full japicmp report establishes an exact owner universe of:
 - 206 owners in total.
 
 That list is the original Phase 5 checkpoint. The current exact owner
-partition is 133 Phase 4, 36 Phase 5, 65 Phase 6, zero provisional, and 234
-total.
+partition is 133 Phase 4, 36 Phase 5, 64 Phase 6, zero provisional, and 233
+MCP owners; the 39-owner non-MCP allowlist brings current-side coverage to 272.
 
 The 36 current Phase 5 owners are the exact sorted entries in
 `phase-5.includes`. At the original Phase 5 checkpoint, the Phase 4 snapshot
@@ -57,11 +57,11 @@ The later 2026-08-17 greenfield cohesion amendment is count-neutral in every
 phase and advanced the complete compatibility set at that checkpoint to 564
 records with SHA-256
 `6e14bcc0ad652b774a62613332cc7b71c93def649ecdd43e603f7d10e8974136`.
-The 2026-08-18 public-record elimination amendment retains the owner partition
-and advances the current compatibility set to 565 records with SHA-256
-`3269b4a73d42c035a90735336462aaeb98bf6809d003fa858dbfa4a839e4c2e2`.
-The subsequent typed-request-state amendment removes three greenfield Phase 5
-carrier owners without changing that released-3.5.1 comparison.
+The 2026-08-18 public-record elimination amendment retained the owner partition
+and advanced that checkpoint to 565 records. Typed request state then removed
+three Phase 5 carrier owners. The lifecycle and pre-G3 API corrections leave
+Phase 5 byte-identical while the current released-3.5.1 comparison advances to
+618 records with SHA-256 `3d9d68bbbdeabae63a78d40a50c9896d3f11f6d0d2305beff0c94bd86476928c`.
 
 ## Frozen Phase 5 snapshot
 

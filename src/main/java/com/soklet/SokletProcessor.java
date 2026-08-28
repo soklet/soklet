@@ -28,6 +28,7 @@ import com.soklet.annotation.McpResourceUriParameter;
 import com.soklet.annotation.McpServerEndpoint;
 import com.soklet.annotation.McpTool;
 import com.soklet.annotation.McpToolArgument;
+import com.soklet.annotation.McpToolProperty;
 import com.soklet.annotation.OPTIONS;
 import com.soklet.annotation.PATCH;
 import com.soklet.annotation.POST;
@@ -337,6 +338,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		out.add(McpServerEndpoint.class.getCanonicalName());
 		out.add(McpTool.class.getCanonicalName());
 		out.add(McpToolArgument.class.getCanonicalName());
+		out.add(McpToolProperty.class.getCanonicalName());
 		out.add(McpHeader.class.getCanonicalName());
 		out.add(McpPrompt.class.getCanonicalName());
 		out.add(McpPromptArgument.class.getCanonicalName());
@@ -753,29 +755,13 @@ public final class SokletProcessor extends AbstractProcessor {
 
 		for (Element element : roundEnv.getElementsAnnotatedWith(
 				argumentAnnotation)) {
-			if (element.getKind() == ElementKind.RECORD_COMPONENT)
-				continue;
 			if (element.getKind() != ElementKind.PARAMETER) {
 				mcpError(element,
-						"Soklet: @McpToolArgument can only be applied to parameters or record components.");
+						"Soklet: @McpToolArgument can only be applied to parameters.");
 				continue;
 			}
 			Element method = element.getEnclosingElement();
 			Element owner = method.getEnclosingElement();
-			// A record-component annotation whose target also includes PARAMETER
-			// is propagated by javac to the canonical constructor parameter.
-			if (method.getKind() == ElementKind.CONSTRUCTOR
-					&& owner instanceof TypeElement recordType
-					&& owner.getKind() == ElementKind.RECORD) {
-				boolean propagatedFromComponent = recordType.getRecordComponents()
-						.stream()
-						.anyMatch(component -> component.getSimpleName().contentEquals(
-								element.getSimpleName())
-								&& findAnnotation(component,
-										argumentAnnotation) != null);
-				if (propagatedFromComponent)
-					continue;
-			}
 			if (findAnnotation(method, toolAnnotation) == null
 					|| findAnnotation(owner, endpointAnnotation) == null)
 				mcpError(element,
@@ -2308,7 +2294,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				if (!first)
 					source.append(", ");
 				first = false;
-				source.append("@com.soklet.annotation.McpToolArgument(name = ")
+				source.append("@com.soklet.annotation.McpToolProperty(name = ")
 						.append(javaStringLiteral(binding.publishedName()))
 						.append(", title = ")
 						.append(javaStringLiteral(binding.title()))

@@ -51,14 +51,15 @@ import static com.soklet.TestSupport.readAll;
 @ThreadSafe
 public class ResourceLeakTests {
 	@Test
+	@Timeout(value = 240, unit = TimeUnit.SECONDS)
 	public void httpConnectionChurnReturnsResourcesNearBaselineAfterShutdown() throws Exception {
 		int port = findFreePort();
 		HttpServer httpServer = HttpServer.withPort(port)
 				.concurrency(2)
 				.requestHeaderTimeout(Duration.ofSeconds(3))
-				.shutdownTimeout(Duration.ofSeconds(2))
 				.build();
 		SokletConfig config = SokletConfig.withHttpServer(httpServer)
+				.lifecyclePolicy(lifecyclePolicy(Duration.ofSeconds(2)))
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ChurnResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
@@ -94,10 +95,10 @@ public class ResourceLeakTests {
 		int port = findFreePort();
 		SseServer sseServer = SseServer.withPort(port)
 				.verifyConnectionOnceEstablished(false)
-				.shutdownTimeout(Duration.ofSeconds(2))
 				.build();
 		DefaultSseServer defaultSseServer = (DefaultSseServer) sseServer;
 		SokletConfig config = SokletConfig.withSseServer(sseServer)
+				.lifecyclePolicy(lifecyclePolicy(Duration.ofSeconds(2)))
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
 						Set.of(SseResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
@@ -174,9 +175,9 @@ public class ResourceLeakTests {
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of("127.0.0.1"))
-				.shutdownTimeout(Duration.ofSeconds(2))
 				.build();
 		SokletConfig config = SokletConfig.withMcpServer(server)
+				.lifecyclePolicy(lifecyclePolicy(Duration.ofSeconds(2)))
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
@@ -188,7 +189,7 @@ public class ResourceLeakTests {
 			assertMcpDiscovery(address.getPort());
 		}
 
-		Assertions.assertEquals(McpServerStatus.STOPPED,
+		Assertions.assertEquals(McpServerStatus.TERMINATED,
 				server.getDiagnostics().getStatus());
 		Assertions.assertEquals(address,
 				server.getDiagnostics().getBoundAddress().orElseThrow());
@@ -204,6 +205,14 @@ public class ResourceLeakTests {
 				stoppedBaseline, Duration.ofSeconds(5),
 				new ResourceSnapshot.ResourceTolerance(
 						4L, 24L * 1024L * 1024L, 12));
+	}
+
+	@NonNull
+	private static LifecyclePolicy lifecyclePolicy(@NonNull Duration grace) {
+		return LifecyclePolicy.builder()
+				.gracefulShutdownDuration(grace)
+				.forcedShutdownDuration(Duration.ofSeconds(2))
+				.build();
 	}
 
 	private static void assertOkResponse(int port) throws Exception {

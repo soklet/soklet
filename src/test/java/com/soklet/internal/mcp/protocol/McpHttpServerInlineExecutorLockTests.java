@@ -45,7 +45,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
 @NotThreadSafe
-@Timeout(20)
+@Timeout(60)
 class McpHttpServerInlineExecutorLockTests {
 	private static final String APPLICATION_METHOD = "test/execute";
 

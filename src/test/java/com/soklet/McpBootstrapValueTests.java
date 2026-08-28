@@ -252,18 +252,25 @@ public class McpBootstrapValueTests {
 				McpAbsentOriginPolicy.REQUIRE_ORIGIN
 		}, McpAbsentOriginPolicy.values());
 		Assertions.assertArrayEquals(new McpServerStatus[]{
-				McpServerStatus.STOPPED,
-				McpServerStatus.STARTED,
-				McpServerStatus.STOPPED_WITH_RESIDUAL_HANDLERS
+				McpServerStatus.NOT_STARTED,
+				McpServerStatus.STARTING,
+				McpServerStatus.RUNNING,
+				McpServerStatus.SHUTTING_DOWN,
+				McpServerStatus.TERMINATED,
+				McpServerStatus.RESIDUAL_ACTIVITY,
+				McpServerStatus.TERMINATION_UNKNOWN
 		}, McpServerStatus.values());
-		Assertions.assertArrayEquals(new McpShutdownOutcome[]{
-				McpShutdownOutcome.CLEAN,
-				McpShutdownOutcome.RESIDUAL_HANDLERS
-		}, McpShutdownOutcome.values());
+		Assertions.assertArrayEquals(new ParticipantShutdownDisposition[]{
+				ParticipantShutdownDisposition.NOT_STARTED,
+				ParticipantShutdownDisposition.GRACEFUL_TERMINATION,
+				ParticipantShutdownDisposition.FORCED_TERMINATION,
+				ParticipantShutdownDisposition.UNEXPECTED_TERMINATION,
+				ParticipantShutdownDisposition.RESIDUAL_ACTIVITY,
+				ParticipantShutdownDisposition.TERMINATION_UNKNOWN
+		}, ParticipantShutdownDisposition.values());
 	}
 
 	@Test
-	@SuppressWarnings("deprecation")
 	public void deprecatedLogLevelExposesTheExactWireVocabulary() {
 		Assertions.assertArrayEquals(new McpLogLevel[]{
 				McpLogLevel.DEBUG,
@@ -275,10 +282,8 @@ public class McpBootstrapValueTests {
 				McpLogLevel.ALERT,
 				McpLogLevel.EMERGENCY
 		}, McpLogLevel.values());
-		Deprecated deprecated = McpLogLevel.class.getAnnotation(Deprecated.class);
-		Assertions.assertNotNull(deprecated);
-		Assertions.assertEquals("3.6.0", deprecated.since());
-		Assertions.assertFalse(deprecated.forRemoval());
+		Assertions.assertNull(McpLogLevel.class.getAnnotation(Deprecated.class),
+				"MCP lifecycle deprecation must not imply Java API deprecation");
 	}
 
 	private static McpEndpoint endpoint(String path) {

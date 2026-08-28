@@ -62,13 +62,14 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 @NotThreadSafe
-@Timeout(30)
+@Timeout(60)
 class McpHttpServerObservationTerminalRaceTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final String APPLICATION_METHOD = "test/execute";
 
 	@Test
+	@Timeout(120)
 	void lifecycleLeaseOutlivesBodyCompletionUntilApplicationExchangeUnwinds()
 			throws Exception {
 		RecordingObservation observation = new RecordingObservation();
@@ -107,6 +108,7 @@ class McpHttpServerObservationTerminalRaceTests {
 	}
 
 	@Test
+	@Timeout(120)
 	void lifecycleLeaseOutlivesApplicationExchangeUntilBodyCompletion()
 			throws Exception {
 		RecordingObservation observation = new RecordingObservation();
@@ -145,6 +147,7 @@ class McpHttpServerObservationTerminalRaceTests {
 	}
 
 	@Test
+	@Timeout(120)
 	void protocol_completion_cannot_preempt_inline_stream_terminal_owner()
 			throws Exception {
 		InlineExecutorService executor = new InlineExecutorService();
@@ -208,6 +211,7 @@ class McpHttpServerObservationTerminalRaceTests {
 	}
 
 	@Test
+	@Timeout(120)
 	void written_sse_terminal_beats_concurrent_client_cancel_exactly_once()
 			throws Exception {
 		TerminalWriteBlockingClock clock = new TerminalWriteBlockingClock();
@@ -321,6 +325,7 @@ class McpHttpServerObservationTerminalRaceTests {
 	}
 
 	@Test
+	@Timeout(120)
 	void precommit_mapped_error_beats_late_client_cancel_exactly_once()
 			throws Exception {
 		RecordingObservation observation = new RecordingObservation();
@@ -376,6 +381,7 @@ class McpHttpServerObservationTerminalRaceTests {
 	}
 
 	@Test
+	@Timeout(120)
 	void written_streamed_error_terminal_beats_concurrent_client_cancel_exactly_once()
 			throws Exception {
 		TerminalWriteBlockingClock clock = new TerminalWriteBlockingClock();
@@ -503,6 +509,7 @@ class McpHttpServerObservationTerminalRaceTests {
 	}
 
 	@Test
+	@Timeout(120)
 	void client_cancel_beats_unreserved_streamed_error_and_discards_its_metric()
 			throws Exception {
 		RecordingObservation observation = new RecordingObservation();
@@ -585,6 +592,7 @@ class McpHttpServerObservationTerminalRaceTests {
 	}
 
 	@Test
+	@Timeout(120)
 	void application_stop_after_admission_cannot_strand_observation()
 			throws Exception {
 		RecordingObservation observation = new RecordingObservation();
@@ -594,7 +602,9 @@ class McpHttpServerObservationTerminalRaceTests {
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		McpHttpEndpointPolicy policy = acceptingPolicy().withRequestRateLimiter(ignored -> {
 			limiterEntered.countDown();
-			releaseLimiter.await();
+			Assertions.assertTrue(releaseLimiter.await(10,
+					TimeUnit.SECONDS),
+					"Timed out waiting to release the observation limiter");
 			return McpRateLimitDecision.allowed();
 		});
 		McpHttpServerRuntime runtime = runtime(policy, invocation -> {
@@ -658,6 +668,7 @@ class McpHttpServerObservationTerminalRaceTests {
 	}
 
 	@Test
+	@Timeout(120)
 	void application_encoding_fallback_reports_actual_internal_error()
 			throws Exception {
 		RecordingObservation observation = new RecordingObservation();

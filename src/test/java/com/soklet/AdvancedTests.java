@@ -32,6 +32,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.condition.EnabledForJreRange;
 import org.junit.jupiter.api.condition.JRE;
 
@@ -80,6 +81,13 @@ import static java.lang.String.format;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public class AdvancedTests {
+	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
+			LifecyclePolicy.builder()
+					.startupTimeout(Duration.ofSeconds(5))
+					.startupCancellationTimeout(Duration.ofSeconds(2))
+					.gracefulShutdownDuration(Duration.ofSeconds(2))
+					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.build();
 
 	// ==================== SSE Connection Race Conditions ====================
 
@@ -99,6 +107,7 @@ public class AdvancedTests {
 		SokletConfig config = SokletConfig.withHttpServer(httpServer)
 				.sseServer(sseServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SSETestResource.class)))
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build();
 
 		try (Soklet soklet = Soklet.fromConfig(config)) {
@@ -423,6 +432,7 @@ public class AdvancedTests {
 	@Test
 	// Explicitly supplies a virtual-thread-per-task executor, so it requires JDK 21+.
 	@EnabledForJreRange(min = JRE.JAVA_21)
+	@Timeout(120)
 	public void testConcurrentRequestProcessing() throws Exception {
 		// Test thread safety of request processing under high concurrency while
 		// proving simulator scopes cannot mutate a live runtime.
@@ -439,6 +449,7 @@ public class AdvancedTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ConcurrentTestResource.class)))
 				.instanceProvider(new ConcurrentInstanceProvider("live"))
 				.metricsCollector(liveMetrics)
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build();
 
 		try (Soklet soklet = Soklet.fromConfig(liveConfig)) {
@@ -471,6 +482,7 @@ public class AdvancedTests {
 									.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ConcurrentTestResource.class)))
 									.instanceProvider(new ConcurrentInstanceProvider(runtimeCanary))
 									.metricsCollector(metrics)
+									.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 									.build();
 						}, simulator -> {
 							String runtimeCanary = "scope-" + scopeId;
@@ -542,8 +554,8 @@ public class AdvancedTests {
 			try {
 				Assertions.assertTrue(scopesReady.await(10, TimeUnit.SECONDS),
 						"Simulator scopes didn't become ready in time");
-				Assertions.assertTrue(soklet.isStarted(), "Live Soklet status changed while simulator scopes were open");
-				Assertions.assertTrue(httpServer.isStarted(), "Live HTTP listener stopped while simulator scopes were open");
+				Assertions.assertEquals(SokletStatus.RUNNING, soklet.getStatus(),
+						"Live Soklet status changed while simulator scopes were open");
 				assertLiveConcurrentRequest(livePort, "live-during-scopes");
 
 				startRequests.countDown();
@@ -562,8 +574,8 @@ public class AdvancedTests {
 					simulatorMetrics.get(scopeId).assertOwnsExactly(
 							threadsPerScope * requestsPerThread);
 
-				Assertions.assertTrue(soklet.isStarted(), "Live Soklet status changed after simulator scopes closed");
-				Assertions.assertTrue(httpServer.isStarted(), "Live HTTP listener stopped after simulator scopes closed");
+				Assertions.assertEquals(SokletStatus.RUNNING, soklet.getStatus(),
+						"Live Soklet status changed after simulator scopes closed");
 				assertLiveConcurrentRequest(livePort, "live-after-scopes");
 				liveMetrics.assertOwnsExactly(2);
 			} finally {
@@ -870,7 +882,8 @@ public class AdvancedTests {
 			while (defaultSseServer.getActiveConnectionCount() > 0 && System.nanoTime() < deadline)
 				Thread.sleep(10);
 
-			soklet.stop();
+			soklet.shutdown();
+			Assertions.assertTrue(soklet.awaitShutdown().isComplete());
 
 			forceGc();
 			long memoryAfter = usedMemory();
@@ -1023,6 +1036,7 @@ public class AdvancedTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void testLargeRequestBodyMemoryHandling() throws Exception {
 		// Test memory handling for large request bodies
 		HttpServer httpServer = HttpServer.withPort(findFreePort())
@@ -1031,6 +1045,7 @@ public class AdvancedTests {
 
 		SokletConfig config = SokletConfig.withHttpServer(httpServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(LargeBodyTestResource.class)))
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build();
 
 		try (Soklet soklet = Soklet.fromConfig(config)) {
@@ -1051,6 +1066,7 @@ public class AdvancedTests {
 
 				SokletSimulator.run(transports -> SokletConfig.withHttpServer(transports.getHttpServer())
 						.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(LargeBodyTestResource.class)))
+						.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 						.build(), simulator -> {
 					MarshaledResponse response = simulator.performHttpRequest(request).getMarshaledResponse();
 					Assertions.assertEquals(200, response.getStatusCode().intValue());

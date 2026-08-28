@@ -33,6 +33,14 @@ import java.util.zip.GZIPInputStream;
 import static com.soklet.TestSupport.readAll;
 
 public class DefaultHttpServerTests {
+	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
+			LifecyclePolicy.builder()
+					.startupTimeout(Duration.ofSeconds(5))
+					.startupCancellationTimeout(Duration.ofSeconds(2))
+					.gracefulShutdownDuration(Duration.ofSeconds(2))
+					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.build();
+
 	@Test
 	public void defaultConcurrentConnectionLimitIsBoundedAndCanBeDisabled() {
 		DefaultHttpServer defaultServer = (DefaultHttpServer) HttpServer.withPort(0).build();
@@ -58,10 +66,10 @@ public class DefaultHttpServerTests {
 	}
 
 	@Test
-	public void shutdownTimeoutMustNotBeNegative() {
-		Assertions.assertDoesNotThrow(() -> HttpServer.withPort(0).shutdownTimeout(Duration.ZERO).build());
-		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				HttpServer.withPort(0).shutdownTimeout(Duration.ofMillis(-1)).build());
+	public void shutdownDeadlineBelongsToLifecyclePolicyNotTransportBuilder() {
+		Assertions.assertThrows(NoSuchMethodException.class, () ->
+				HttpServer.Builder.class.getMethod("shutdownTimeout",
+						Duration.class));
 	}
 
 	@Test
@@ -293,12 +301,14 @@ public class DefaultHttpServerTests {
 		RecordingExecutorService streamingExecutor = new RecordingExecutorService();
 		DefaultHttpServer server = (DefaultHttpServer) HttpServer.withPort(0)
 				.host("127.0.0.1")
-				.shutdownTimeout(Duration.ofSeconds(5))
 				.requestHandlerExecutorServiceSupplier(() -> requestExecutor)
 				.streamingExecutorServiceSupplier(() -> streamingExecutor)
 				.build();
 		server.initialize(SokletConfig.forSimulatorTesting()
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecyclePolicy(LifecyclePolicy.builder()
+						.gracefulShutdownDuration(Duration.ofSeconds(5))
+						.build())
 				.lifecycleObserver(new LifecycleObserver() {})
 				.build(), (request, responseConsumer) -> {});
 		Thread stopThread = new Thread(server::stop, "http-running-start-stop-race");
@@ -369,6 +379,7 @@ public class DefaultHttpServerTests {
 		});
 		server.initialize(SokletConfig.forSimulatorTesting()
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.lifecycleObserver(new LifecycleObserver() {})
 				.build(), (request, responseConsumer) -> {});
 
@@ -442,6 +453,7 @@ public class DefaultHttpServerTests {
 				.build();
 		SokletConfig sokletConfig = SokletConfig.forSimulatorTesting()
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.lifecycleObserver(new LifecycleObserver() {})
 				.build();
 		server.initialize(sokletConfig, (request, requestResultConsumer) -> {});

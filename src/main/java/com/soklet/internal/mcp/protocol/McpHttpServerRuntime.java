@@ -89,6 +89,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.LongSupplier;
 
 import static java.util.Objects.requireNonNull;
 
@@ -397,6 +398,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private boolean lifecycleForceRequested;
 	private boolean lifecycleQuiesced;
 	private boolean lifecycleForced;
+	private boolean lifecycleGracefulDeadlinePresent;
+	private long lifecycleGracefulDeadlineNanos;
+	private boolean lifecycleForcedDeadlinePresent;
+	private long lifecycleForcedDeadlineNanos;
 	private boolean lifecycleStartupInProgress;
 	private boolean lifecycleStartupClaimed;
 	private McpServerRuntimeBridge.LifecycleAdapter.@Nullable Generation
@@ -744,6 +749,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		this.lifecycleForceRequested = false;
 		this.lifecycleQuiesced = false;
 		this.lifecycleForced = false;
+		this.lifecycleGracefulDeadlinePresent = false;
+		this.lifecycleForcedDeadlinePresent = false;
 		this.lifecycleStartupInProgress = false;
 		this.lifecycleStartupClaimed = false;
 		this.lifecycleStartupGeneration = null;
@@ -938,8 +945,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 							transportConfiguration.port()), registrations);
 			session = new SimulationSession(generation);
 			simulationGeneration = generation;
+			boolean sessionClaimed = false;
 			try {
 				sessionOwner.accept(session);
+				sessionClaimed = true;
 				application.start();
 				subscribeToSubscriptionEventSources(registrations);
 				startAcceptingSubscriptions();
@@ -961,7 +970,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					cleanupFailure = retainLifecycleFailure(cleanupFailure,
 							closeFailure);
 				}
-				if (!retainFailedGenerationForOwner) {
+				if (!retainFailedGenerationForOwner || !sessionClaimed) {
 					try {
 						if (simulationGenerationBarrierComplete(generation))
 							releaseSimulationGenerationEvidence(generation);
@@ -1218,6 +1227,28 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				&& simulationGenerationBarrierComplete(requiredGeneration);
 	}
 
+	private boolean awaitSimulationGenerationTermination(
+			@NonNull SimulationGeneration generation, long absoluteDeadlineNanos,
+			@NonNull LongSupplier nanoTime) throws InterruptedException {
+		SimulationGeneration requiredGeneration = requireNonNull(generation);
+		LongSupplier requiredNanoTime = requireNonNull(nanoTime);
+		for (;;) {
+			if (simulationGenerationBarrierComplete(requiredGeneration))
+				return true;
+			long remaining = remainingUntil(absoluteDeadlineNanos,
+					requiredNanoTime.getAsLong());
+			if (remaining == 0L)
+				return false;
+			long observationSlice = Math.min(remaining,
+					TimeUnit.MILLISECONDS.toNanos(1L));
+			synchronized (lifecycleLock) {
+				if (simulationGenerationBarrierComplete(requiredGeneration))
+					return true;
+				TimeUnit.NANOSECONDS.timedWait(lifecycleLock, observationSlice);
+			}
+		}
+	}
+
 	private boolean awaitSimulationRegistrations(
 			@NonNull SimulationGeneration generation,
 			@Nullable SubscriptionRegistrationCloseBatch closeBatch,
@@ -1398,6 +1429,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			lifecycleForceRequested = false;
 			lifecycleQuiesced = false;
 			lifecycleForced = false;
+			lifecycleGracefulDeadlinePresent = false;
+			lifecycleForcedDeadlinePresent = false;
 			currentReadiness = null;
 			subscriptionSourceRegistrations = List.of();
 		}
@@ -1759,7 +1792,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					registrations) {
 		synchronized (lifecycleLock) {
 			// The startup worker owns physical cleanup until it reaches the final
-			// handoff below.  Concurrent coordinator phases publish intent only.
+			// handoff below.  The outer coordinator records phase intent without
+			// entering this runtime while its tracked start call remains live.
 			lifecycleQuiesceRequested = true;
 			if (!lifecycleQuiesced) {
 				lifecycleQuiesced = true;
@@ -2316,13 +2350,30 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		return residualExecutions;
 	}
 
-	/** Prompt, idempotent graceful MCP wind-up for the common coordinator. */
+	/** Prompt, idempotent graceful MCP wind-up for compatibility callers. */
 	void quiesceLifecycle() {
+		quiesceLifecycle(false, 0L);
+	}
+
+	/**
+	 * Prompt, idempotent graceful MCP wind-up against the common coordinator's
+	 * already-fixed absolute boundary.
+	 */
+	void quiesceLifecycle(long absoluteDeadlineNanos) {
+		quiesceLifecycle(true, absoluteDeadlineNanos);
+	}
+
+	private void quiesceLifecycle(boolean deadlinePresent,
+			long absoluteDeadlineNanos) {
 		EventLoop loop;
 		ThreadPoolExecutor processor;
 		McpApplicationExecution application;
 		List<SubscriptionSourceRegistrationControl> registrations;
 		synchronized (lifecycleLock) {
+			if (deadlinePresent && !lifecycleGracefulDeadlinePresent) {
+				lifecycleGracefulDeadlineNanos = absoluteDeadlineNanos;
+				lifecycleGracefulDeadlinePresent = true;
+			}
 			if (lifecycleQuiesced || lifecycleQuiesceRequested)
 				return;
 			lifecycleQuiesceRequested = true;
@@ -2381,13 +2432,30 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			lifecycleState = LifecycleState.STOPPING;
 	}
 
-	/** Prompt, idempotent force phase; force-first always subsumes quiesce. */
+	/** Prompt, idempotent force phase for compatibility callers. */
 	void forceLifecycle() {
+		forceLifecycle(false, 0L);
+	}
+
+	/**
+	 * Prompt, idempotent force phase against the common coordinator's
+	 * already-fixed absolute boundary; force-first always subsumes quiesce.
+	 */
+	void forceLifecycle(long absoluteDeadlineNanos) {
+		forceLifecycle(true, absoluteDeadlineNanos);
+	}
+
+	private void forceLifecycle(boolean deadlinePresent,
+			long absoluteDeadlineNanos) {
 		EventLoop loop;
 		ThreadPoolExecutor processor;
 		McpApplicationExecution application;
 		List<SubscriptionSourceRegistrationControl> registrations;
 		synchronized (lifecycleLock) {
+			if (deadlinePresent && !lifecycleForcedDeadlinePresent) {
+				lifecycleForcedDeadlineNanos = absoluteDeadlineNanos;
+				lifecycleForcedDeadlinePresent = true;
+			}
 			if (lifecycleForced || lifecycleForceRequested)
 				return;
 			lifecycleForceRequested = true;
@@ -2412,7 +2480,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		Throwable failure = null;
-		failure = runLifecycleStep(failure, this::quiesceLifecycle);
+		failure = runLifecycleStep(failure, () -> {
+			if (deadlinePresent)
+				quiesceLifecycle(absoluteDeadlineNanos);
+			else
+				quiesceLifecycle();
+		});
 		if (loop != null) {
 			failure = runLifecycleStep(failure, loop::stopAccepting);
 			failure = runLifecycleStep(failure, loop::beginDrain);
@@ -2497,14 +2570,17 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	/** Observes the complete runtime barrier against the supplied absolute deadline. */
 	boolean awaitLifecycleTermination(long absoluteDeadlineNanos)
 			throws InterruptedException {
+		long phaseDeadlineNanos;
 		EventLoop loop;
 		ThreadPoolExecutor processor;
 		McpApplicationExecution application;
 		SubscriptionRegistrationCloseBatch closeBatch;
 		List<SubscriptionSourceRegistrationControl> registrations;
 		synchronized (lifecycleLock) {
+			phaseDeadlineNanos = activeLifecyclePhaseDeadline(
+					absoluteDeadlineNanos);
 			while (lifecycleStartupInProgress) {
-				long remaining = remainingUntil(absoluteDeadlineNanos);
+				long remaining = remainingUntil(phaseDeadlineNanos);
 				if (remaining <= 0L)
 					return false;
 				TimeUnit.NANOSECONDS.timedWait(lifecycleLock, remaining);
@@ -2520,10 +2596,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					subscriptionSourceRegistrations);
 		}
 
-		boolean loopTerminated = loop == null || loop.joinUntil(absoluteDeadlineNanos);
+		boolean loopTerminated = loop == null || loop.joinUntil(phaseDeadlineNanos);
 		boolean processorTerminated = processor == null || processor.isTerminated();
 		if (!processorTerminated) {
-			long remaining = remainingUntil(absoluteDeadlineNanos);
+			long remaining = remainingUntil(phaseDeadlineNanos);
 			if (remaining > 0L)
 				processorTerminated = processor.awaitTermination(
 						remaining, TimeUnit.NANOSECONDS);
@@ -2531,29 +2607,41 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		boolean applicationTerminated = application == null
 				|| application.isTerminated();
 		if (!applicationTerminated) {
-			long remaining = remainingUntil(absoluteDeadlineNanos);
+			long remaining = remainingUntil(phaseDeadlineNanos);
 			if (remaining > 0L)
 				applicationTerminated = application.awaitTermination(
 						Duration.ofNanos(remaining));
 		}
-		boolean registrationsClosed = unclosedSubscriptionSourceRegistrations(
-				registrations).isEmpty();
+		boolean closeAttemptsCompleted = true;
 		if (closeBatch != null) {
 			for (SubscriptionRegistrationCloseAttempt attempt
 					: closeBatch.closeAttempts()) {
 				if (!attempt.completed()) {
-					long remaining = remainingUntil(absoluteDeadlineNanos);
+					long remaining = remainingUntil(phaseDeadlineNanos);
 					if (remaining > 0L)
 						attempt.await(remaining);
 				}
-				registrationsClosed &= attempt.completed();
+				closeAttemptsCompleted &= attempt.completed();
 			}
-			registrationsClosed &= unclosedSubscriptionSourceRegistrations(
-					registrations).isEmpty();
 		}
+		boolean registrationsClosed = unclosedSubscriptionSourceRegistrations(
+				registrations).isEmpty();
 		return loopTerminated && processorTerminated && applicationTerminated
-				&& registrationsClosed && requestControlsSnapshot().isEmpty()
+				&& closeAttemptsCompleted && registrationsClosed
+				&& requestControlsSnapshot().isEmpty()
 				&& activeStreamsAndSubscriptionsEnded();
+	}
+
+	private long activeLifecyclePhaseDeadline(long observerDeadlineNanos) {
+		long activeDeadlineNanos = lifecycleForcedDeadlinePresent
+				? lifecycleForcedDeadlineNanos
+				: lifecycleGracefulDeadlinePresent
+						? lifecycleGracefulDeadlineNanos : observerDeadlineNanos;
+		return earlierDeadline(observerDeadlineNanos, activeDeadlineNanos);
+	}
+
+	private long earlierDeadline(long first, long second) {
+		return remainingUntil(first) <= remainingUntil(second) ? first : second;
 	}
 
 	@NonNull
@@ -2615,6 +2703,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			lifecycleForceRequested = false;
 			lifecycleQuiesced = false;
 			lifecycleForced = false;
+			lifecycleGracefulDeadlinePresent = false;
+			lifecycleForcedDeadlinePresent = false;
 			lifecycleStartupInProgress = false;
 			lifecycleStartupClaimed = false;
 			lifecycleStartupGeneration = null;
@@ -2637,7 +2727,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	}
 
 	private long remainingUntil(long absoluteDeadlineNanos) {
-		long now = System.nanoTime();
+		return remainingUntil(absoluteDeadlineNanos, System.nanoTime());
+	}
+
+	private long remainingUntil(long absoluteDeadlineNanos, long now) {
 		long remaining = absoluteDeadlineNanos - now;
 		if (((absoluteDeadlineNanos ^ now) & (absoluteDeadlineNanos ^ remaining)) < 0)
 			return absoluteDeadlineNanos >= now ? Long.MAX_VALUE : 0L;
@@ -4178,6 +4271,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				Optional.of(mappedRequest.id()), requestedProtocolVersion,
 				operationName, mappedRequest.params().metadata().clientInformation(),
 				Optional.of(mappedRequest.params().metadata().clientCapabilities()),
+				acceptedSubscriptionFilter
+						.map(AcceptedSubscriptionFilter
+								::requestedResourceSubscriptionUris)
+						.orElseGet(List::of),
 				Optional.of(mappedRequest.params().metadata().toJsonObject()));
 		McpAdmissionDecision admissionDecision;
 		try {
@@ -4459,8 +4556,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				&& supported.contains(McpResourceNotificationType.RESOURCE_UPDATED);
 		return new AcceptedSubscriptionFilter(acceptToolsListChanged,
 				acceptPromptsListChanged, acceptResourcesListChanged,
-				acceptResourceSubscriptions,
-				acceptResourceSubscriptions ? requestedResources : List.of());
+				acceptResourceSubscriptions, requestedResources);
 	}
 
 	private boolean optionalSubscriptionBoolean(
@@ -4895,7 +4991,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		McpAdmissionContext admissionContext = new McpAdmissionContext(
 				sokletRequest, endpoint, Map.of(), notification.method(), true,
 				Optional.empty(), protocolVersion, Optional.empty(), Optional.empty(),
-				Optional.empty(), metadataValidation.metadata());
+				Optional.empty(), List.of(), metadataValidation.metadata());
 		McpAdmissionDecision admissionDecision;
 		try {
 			admissionDecision = endpointPolicy.protocolAdmissionController().admit(admissionContext);
@@ -8671,14 +8767,18 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private AcceptedSubscriptionFilter {
 			resourceSubscriptions = List.copyOf(
 					requireNonNull(resourceSubscriptions));
-			if (!resourceSubscriptionsIncluded && !resourceSubscriptions.isEmpty())
-				throw new IllegalArgumentException(
-						"Unacknowledged resource subscriptions must be empty.");
+		}
+
+		@NonNull
+		private List<@NonNull URI> requestedResourceSubscriptionUris() {
+			return resourceSubscriptions.stream()
+					.map(SubscriptionResource::uri)
+					.toList();
 		}
 
 		private boolean contains(@NonNull URI resourceUri) {
 			requireNonNull(resourceUri);
-			return resourceSubscriptions.stream()
+			return resourceSubscriptionsIncluded && resourceSubscriptions.stream()
 					.anyMatch(resource -> resource.uri().equals(resourceUri));
 		}
 	}
@@ -9085,18 +9185,18 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				forceSimulationGeneration(activeGeneration);
 		}
 
-		boolean awaitTermination(@NonNull Duration remainingTime)
-				throws InterruptedException {
+		boolean awaitTermination(long absoluteDeadlineNanos,
+				@NonNull LongSupplier nanoTime) throws InterruptedException {
 			SimulationGeneration activeGeneration = this.generation.get();
-			Duration requiredRemainingTime = requireNonNull(remainingTime);
-			if (requiredRemainingTime.isNegative())
-				throw new IllegalArgumentException(
-						"The MCP simulation termination budget must not be negative.");
-			long absoluteDeadlineNanos = saturatingAdd(System.nanoTime(),
-					requiredRemainingTime.toNanos());
 			return activeGeneration == null
 					|| awaitSimulationGenerationTermination(activeGeneration,
-							absoluteDeadlineNanos);
+							absoluteDeadlineNanos, requireNonNull(nanoTime));
+		}
+
+		boolean terminationProven() {
+			SimulationGeneration activeGeneration = this.generation.get();
+			return activeGeneration == null
+					|| simulationGenerationBarrierComplete(activeGeneration);
 		}
 
 		@NonNull

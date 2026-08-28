@@ -454,7 +454,8 @@ final class SokletApplicationFinalization {
 		deliverCleanupInterruptIfRequested();
 		Throwable actionFailure = null;
 		try {
-			requireNonNull(action).cleanUp(requireNonNull(snapshot).result());
+			requireNonNull(action).cleanUp(
+					requireNonNull(snapshot).publicResult());
 		} catch (Throwable failure) {
 			actionFailure = failure;
 		} finally {
@@ -745,6 +746,13 @@ final class SokletApplicationFinalization {
 	@NonNull
 	static SokletApplicationCleanupException cleanupException(
 			@NonNull InternalShutdownResult result,
+			@NonNull InternalShutdownCleanupOutcome outcome) {
+		return cleanupException(ShutdownResult.fromInternal(result), outcome);
+	}
+
+	@NonNull
+	static SokletApplicationCleanupException cleanupException(
+			@NonNull ShutdownResult result,
 			@NonNull InternalShutdownCleanupOutcome outcome) {
 		InternalShutdownCleanupOutcome exactOutcome = requireNonNull(outcome);
 		ShutdownCleanupFailure failure = switch (exactOutcome.disposition()) {

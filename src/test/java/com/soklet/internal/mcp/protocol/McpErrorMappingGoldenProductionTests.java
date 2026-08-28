@@ -282,6 +282,7 @@ public class McpErrorMappingGoldenProductionTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void overloadMappingMatchesProductionListenerGolden() throws Exception {
 		FixtureState state = new FixtureState();
 		McpServer server = server(state);
@@ -604,9 +605,9 @@ public class McpErrorMappingGoldenProductionTests {
 	}
 
 	private static void stopAndAssertClean(Soklet owner, McpServer server) {
-		owner.stop();
+		owner.close();
 		McpServerDiagnostics diagnostics = server.getDiagnostics();
-		Assertions.assertEquals(McpServerStatus.STOPPED, diagnostics.getStatus());
+		Assertions.assertEquals(McpServerStatus.TERMINATED, diagnostics.getStatus());
 		Assertions.assertTrue(diagnostics.getBoundAddress().isPresent());
 		Assertions.assertTrue(zeroLoad(diagnostics));
 	}

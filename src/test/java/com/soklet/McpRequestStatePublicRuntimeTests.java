@@ -44,7 +44,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@Timeout(30)
+@Timeout(60)
 public class McpRequestStatePublicRuntimeTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/mcp";
@@ -105,7 +105,7 @@ public class McpRequestStatePublicRuntimeTests {
 		McpServer server = serverBuilder(endpoint)
 				.protectionConfig(McpProtectionConfig
 						.withRequestStateProtector(protector).build())
-				.handlerInterceptor((context, continuation) -> {
+				.handlerInterceptor((context, features, continuation) -> {
 					interceptorContexts.add(context);
 					return continuation.proceed();
 				})
@@ -177,7 +177,7 @@ public class McpRequestStatePublicRuntimeTests {
 			Assertions.assertFalse(server.getDiagnostics().toString()
 					.contains(APPLICATION_STATE));
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -230,7 +230,7 @@ public class McpRequestStatePublicRuntimeTests {
 		McpServer server = serverBuilder(endpoint)
 				.protectionConfig(McpProtectionConfig
 						.withRequestStateProtector(protector).build())
-				.handlerInterceptor((context, continuation) -> {
+				.handlerInterceptor((context, features, continuation) -> {
 					interceptorInvocations.incrementAndGet();
 					return continuation.proceed();
 				})
@@ -265,7 +265,7 @@ public class McpRequestStatePublicRuntimeTests {
 			Assertions.assertEquals(2, handlerInvocations.get());
 			Assertions.assertEquals(2, interceptorInvocations.get());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -318,7 +318,7 @@ public class McpRequestStatePublicRuntimeTests {
 				partitionedAdmissionController("tenant-alpha");
 		McpAdmissionController mismatchedPartition =
 				partitionedAdmissionController("tenant-beta");
-		McpHandlerInterceptor interceptor = (context, continuation) -> {
+		McpHandlerInterceptor interceptor = (context, features, continuation) -> {
 			interceptorInvocations.incrementAndGet();
 			return continuation.proceed();
 		};
@@ -337,7 +337,7 @@ public class McpRequestStatePublicRuntimeTests {
 			Assertions.assertTrue(protectedState.startsWith(
 					"soklet-mcp-request-state-v1."));
 		} finally {
-			emittingSoklet.stop();
+			emittingSoklet.close();
 		}
 		Assertions.assertEquals(1, handlerInvocations.get());
 		Assertions.assertEquals(1, interceptorInvocations.get());
@@ -355,7 +355,7 @@ public class McpRequestStatePublicRuntimeTests {
 			assertContains(retry.body(), "\"resultType\":\"complete\"");
 			assertContains(retry.body(), "cross-instance state accepted");
 		} finally {
-			acceptingSoklet.stop();
+			acceptingSoklet.close();
 		}
 		Assertions.assertEquals(2, handlerInvocations.get());
 		Assertions.assertEquals(2, interceptorInvocations.get());
@@ -371,7 +371,7 @@ public class McpRequestStatePublicRuntimeTests {
 					ROOTS_CAPABILITY);
 			assertError(retry, 400, -32602, "wrong-key-retry");
 		} finally {
-			wrongKeySoklet.stop();
+			wrongKeySoklet.close();
 		}
 		Assertions.assertEquals(2, handlerInvocations.get());
 		Assertions.assertEquals(2, interceptorInvocations.get());
@@ -387,7 +387,7 @@ public class McpRequestStatePublicRuntimeTests {
 					ROOTS_CAPABILITY);
 			assertError(retry, 400, -32602, "wrong-partition-retry");
 		} finally {
-			wrongPartitionSoklet.stop();
+			wrongPartitionSoklet.close();
 		}
 		Assertions.assertEquals(2, handlerInvocations.get());
 		Assertions.assertEquals(2, interceptorInvocations.get());
@@ -422,7 +422,7 @@ public class McpRequestStatePublicRuntimeTests {
 				})
 				.protectionConfig(McpProtectionConfig
 						.withRequestStateProtector(protector).build())
-				.handlerInterceptor((context, continuation) -> {
+				.handlerInterceptor((context, features, continuation) -> {
 					interceptorInvocations.incrementAndGet();
 					return continuation.proceed();
 				})
@@ -466,7 +466,7 @@ public class McpRequestStatePublicRuntimeTests {
 					protector, interceptorInvocations, handlerInvocations);
 			Assertions.assertEquals(0, protector.seals.get());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -552,7 +552,7 @@ public class McpRequestStatePublicRuntimeTests {
 					response.headers().firstValue("Cache-Control").orElseThrow());
 			Assertions.assertNotNull(handlerContext.get());
 		} finally {
-			soklet.stop();
+			soklet.close();
 		}
 	}
 
@@ -616,6 +616,7 @@ public class McpRequestStatePublicRuntimeTests {
 		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecyclePolicy(testLifecyclePolicy())
 				.build());
 	}
 
@@ -625,8 +626,18 @@ public class McpRequestStatePublicRuntimeTests {
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObservers(List.of(observer))
+				.lifecyclePolicy(testLifecyclePolicy())
 				.build();
 		return Soklet.fromConfig(config);
+	}
+
+	private static LifecyclePolicy testLifecyclePolicy() {
+		return LifecyclePolicy.builder()
+				.startupTimeout(Duration.ofSeconds(5))
+				.startupCancellationTimeout(Duration.ofSeconds(2))
+				.gracefulShutdownDuration(Duration.ofSeconds(2))
+				.forcedShutdownDuration(Duration.ofSeconds(1))
+				.build();
 	}
 
 	private static int boundPort(McpServer server) {

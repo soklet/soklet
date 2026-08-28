@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -54,6 +55,13 @@ class McpLocalizationRenderingRuntimeTests {
 	private static final String WIRE_PATH = "/localization/render";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final Duration WAIT = Duration.ofSeconds(5);
+	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
+			LifecyclePolicy.builder()
+					.startupTimeout(Duration.ofSeconds(5))
+					.startupCancellationTimeout(Duration.ofSeconds(2))
+					.gracefulShutdownDuration(Duration.ofSeconds(2))
+					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.build();
 
 	@Test
 	void localizedTextReplacesEveryPlannedDiscoverySlotOnTheWire() {
@@ -168,6 +176,7 @@ class McpLocalizationRenderingRuntimeTests {
 	}
 
 	@Test
+	@Timeout(value = 120, unit = TimeUnit.SECONDS)
 	void everyNonDiscoveryCatalogRendersItsPlannedSlotsLocalized() {
 		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
 				.contextProvider(request -> context(Locale.FRENCH,
@@ -350,6 +359,7 @@ class McpLocalizationRenderingRuntimeTests {
 		SokletSimulator.run(transports -> SokletConfig
 				.withMcpServer(server(transports, endpoint, localizer))
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build(), simulator -> {
 			bodies.add(awaitBody(simulator, request("server/discover", Set.of())));
 			mode.set("default");
@@ -390,6 +400,7 @@ class McpLocalizationRenderingRuntimeTests {
 		SokletSimulator.run(transports -> SokletConfig
 				.withMcpServer(server(transports, richEndpoint(), localizer))
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build(), simulator -> {
 			McpSimulation first = simulator.startMcpRequest(
 					request("server/discover", Set.of()));
@@ -436,6 +447,7 @@ class McpLocalizationRenderingRuntimeTests {
 						observedThrowables.addAll(throwables);
 					}
 				}))
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build(), simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(
 					request(endpoint.getPath(), method, acceptLanguageValues));
@@ -611,6 +623,7 @@ class McpLocalizationRenderingRuntimeTests {
 			return SokletConfig.withMcpServer(server)
 					.resourceMethodResolver(
 							ResourceMethodResolver.fromMethods(Set.of()))
+					.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 					.build();
 		}, simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(

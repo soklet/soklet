@@ -19,6 +19,8 @@ package com.soklet;
 import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.net.URI;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -58,6 +60,17 @@ public interface McpAdmissionContext {
 
 	/** @return validated client capabilities, when the message carries them */
 	@NonNull Optional<@NonNull McpClientCapabilities> getClientCapabilities();
+
+	/**
+	 * Returns the validated, deduplicated resource URIs requested by a
+	 * {@code subscriptions/listen} message, in first-encounter order. The list
+	 * is empty for every other method and when the subscription request does not
+	 * include resource subscriptions.
+	 *
+	 * @return immutable requested resource-subscription URI list
+	 */
+	@NonNull
+	List<@NonNull URI> getRequestedResourceSubscriptionUris();
 
 	/**
 	 * Returns the validated distributed trace context supplied through MCP

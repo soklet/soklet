@@ -187,6 +187,69 @@ public class McpPublicJavadocTests {
 	}
 
 	@Test
+	public void sokletApiLifecycleMatchesDeprecatedBlockTagsBidirectionally()
+			throws IOException {
+		String inventory = Files.readString(Path.of(
+				"api/mcp/mcp-public-evolution-inventory.json"),
+				StandardCharsets.UTF_8);
+		long supportedMappings = Pattern.compile(
+				"\\\"sokletApiLifecycle\\\":\\{\\\"state\\\":\\\"Supported\\\"")
+				.matcher(inventory).results().count();
+		long deprecatedMappings = Pattern.compile(
+				"\\\"sokletApiLifecycle\\\":\\{\\\"state\\\":\\\"Deprecated\\\"")
+				.matcher(inventory).results().count();
+		Assertions.assertTrue(supportedMappings > 0,
+				"The lifecycle inventory must contain supported API mappings");
+		Assertions.assertEquals(0, deprecatedMappings,
+				"A Deprecated API mapping requires a separately reviewed decision");
+
+		JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+		Assertions.assertNotNull(compiler,
+				"McpPublicJavadocTests requires a full JDK, not a JRE");
+		List<Path> sourcePaths;
+		try (var paths = Files.walk(Path.of("src/main/java"))) {
+			sourcePaths = paths.filter(path -> path.getFileName().toString()
+					.endsWith(".java")).sorted().toList();
+		}
+		try (StandardJavaFileManager fileManager = compiler
+				.getStandardFileManager(null, Locale.ROOT,
+						StandardCharsets.UTF_8)) {
+			DiagnosticCollector<JavaFileObject> diagnostics =
+					new DiagnosticCollector<>();
+			JavacTask task = (JavacTask) compiler.getTask(null, fileManager,
+					diagnostics, List.of("--release", "17", "-proc:none",
+							"-classpath", System.getProperty("java.class.path")),
+					null, fileManager.getJavaFileObjectsFromPaths(sourcePaths));
+			List<CompilationUnitTree> units = new ArrayList<>();
+			task.parse().forEach(units::add);
+			task.analyze();
+			List<String> errors = diagnostics.getDiagnostics().stream()
+					.filter(diagnostic -> diagnostic.getKind()
+							== Diagnostic.Kind.ERROR)
+					.map(McpPublicJavadocTests::formatDiagnostic).toList();
+			Assertions.assertTrue(errors.isEmpty(),
+					() -> "Unable to analyze lifecycle markers:\n"
+							+ String.join("\n", errors));
+			DocTrees docTrees = DocTrees.instance(task);
+			Map<String, TypeElement> types = indexSourceTypes(units, docTrees,
+					task.getElements());
+			Set<String> reviewed = loadReviewedLifecycleTypeNames();
+			List<String> markerMismatches = new ArrayList<>();
+			Set<Element> visited = new LinkedHashSet<>();
+			for (String binaryName : reviewed) {
+				TypeElement type = types.get(binaryName);
+				Assertions.assertNotNull(type,
+						() -> "Reviewed lifecycle type is missing: " + binaryName);
+				inspectLifecycleMarkers(type, docTrees, visited,
+						markerMismatches);
+			}
+			Assertions.assertTrue(markerMismatches.isEmpty(),
+					() -> "Soklet API lifecycle marker mismatch:\n - "
+							+ String.join("\n - ", markerMismatches));
+		}
+	}
+
+	@Test
 	public void compilerInspectionCoversEverySupportedPublicApiElement() throws IOException {
 		String source = """
 				package fixtures;
@@ -552,6 +615,41 @@ public class McpPublicJavadocTests {
 	private static boolean isPublicOrProtected(Element element) {
 		Set<Modifier> modifiers = element.getModifiers();
 		return modifiers.contains(Modifier.PUBLIC) || modifiers.contains(Modifier.PROTECTED);
+	}
+
+	private static void inspectLifecycleMarkers(Element element,
+			DocTrees docTrees, Set<Element> visited, List<String> mismatches) {
+		if (!visited.add(element) || !isPublicOrProtected(element))
+			return;
+		boolean annotation = element.getAnnotationMirrors().stream()
+				.anyMatch(marker -> marker.getAnnotationType().toString()
+						.equals("java.lang.Deprecated"));
+		DocCommentTree comment = docTrees.getDocCommentTree(element);
+		boolean blockTag = comment != null && comment.getBlockTags().stream()
+				.anyMatch(tag -> tag.getKind() == DocTree.Kind.DEPRECATED);
+		if (annotation != blockTag)
+			mismatches.add(describe(element) + " (annotation=" + annotation
+					+ ", @deprecated block tag=" + blockTag + ")");
+		if (annotation || blockTag)
+			mismatches.add(describe(element) + " (inventory maps the reviewed "
+					+ "4.0 surface as Supported, so Java deprecation is forbidden)");
+		for (Element enclosed : element.getEnclosedElements())
+			if (isPublicOrProtected(enclosed))
+				inspectLifecycleMarkers(enclosed, docTrees, visited, mismatches);
+	}
+
+	private static Set<String> loadReviewedLifecycleTypeNames()
+			throws IOException {
+		Set<String> result = new LinkedHashSet<>();
+		for (Path includeFile : INCLUDE_FILES.subList(0, 3))
+			for (String raw : Files.readAllLines(includeFile,
+					StandardCharsets.UTF_8)) {
+				String entry = raw.trim();
+				if (!entry.isEmpty() && !entry.startsWith("#"))
+					Assertions.assertTrue(result.add(entry),
+							() -> "Duplicate reviewed lifecycle type: " + entry);
+			}
+		return result;
 	}
 
 	private static void requireDocumentation(Element element,
