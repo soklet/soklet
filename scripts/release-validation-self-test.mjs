@@ -410,7 +410,7 @@ try {
   assert.notEqual(apiDiffJob, null);
   const exactHeadCheckoutBlock = [
     '          fetch-depth: 0',
-    '          # D1p must inspect the exact PR-head preview commit, not GitHub\'s',
+    '          # D1p must inspect the exact cumulative PR-head candidate, not GitHub\'s',
     '          # synthetic two-parent pull-request merge commit.',
     "          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}",
   ];
@@ -530,10 +530,6 @@ try {
     '"$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-d1p-evidence-self-test.mjs"',
     '"$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-d1p-evidence.mjs" \\',
     '  --mode candidate --scope preparation',
-    'if [ -f "$PROJECT_ROOT/release/d1p-public-cutover-manifest.json" ]; then',
-    '  "$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-d1p-evidence.mjs" \\',
-    '    --mode candidate --scope tracked',
-    'fi',
   ];
   assertExactHostBlock(apiFreezeWrapper, wrapperD1pBlock, 'API-freeze D1p host');
   assert.throws(
@@ -544,33 +540,14 @@ try {
     ),
     /exact executable block once/,
   );
-  assert.throws(
-    () => assertExactHostBlock(
-      apiFreezeWrapper.replace(
-        `${wrapperD1pBlock[5]}\n${wrapperD1pBlock[6]}`,
-        `${wrapperD1pBlock[5]}\n${wrapperD1pBlock[6]} || true`,
-      ),
-      wrapperD1pBlock,
-      'suffix-neutralized API-freeze D1p host',
-    ),
-    /exact executable block once/,
-  );
   const wrapperD1pSelfTestIndex = apiFreezeWrapper.indexOf(
     '"$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-d1p-evidence-self-test.mjs"',
   );
   const wrapperPreparationIndex = apiFreezeWrapper.indexOf(
     '--mode candidate --scope preparation',
   );
-  const wrapperConditionalIndex = apiFreezeWrapper.indexOf(
-    'if [ -f "$PROJECT_ROOT/release/d1p-public-cutover-manifest.json" ]; then',
-  );
-  const wrapperTrackedIndex = apiFreezeWrapper.indexOf(
-    '--mode candidate --scope tracked',
-  );
   assert.ok(wrapperD1pSelfTestIndex >= 0);
   assert.ok(wrapperD1pSelfTestIndex < wrapperPreparationIndex);
-  assert.ok(wrapperPreparationIndex < wrapperConditionalIndex);
-  assert.ok(wrapperConditionalIndex < wrapperTrackedIndex);
   assert.equal(
     apiFreezeWrapper.match(/verify-d1p-evidence-self-test\.mjs/g)?.length,
     1,
@@ -579,10 +556,7 @@ try {
     apiFreezeWrapper.match(/--mode candidate --scope preparation/g)?.length,
     1,
   );
-  assert.equal(
-    apiFreezeWrapper.match(/--mode candidate --scope tracked/g)?.length,
-    1,
-  );
+  assert.equal(apiFreezeWrapper.includes('--mode candidate --scope tracked'), false);
   assert.match(
     releaseWorkflow,
     /run: scripts\/validate-release-candidate\.sh "\$SOKLET_CANDIDATE_COMMIT"/,

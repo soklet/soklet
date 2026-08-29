@@ -1510,14 +1510,41 @@ public class McpHandlerMetricsObservabilityTests {
 			Future<Boolean> sokletProbe = this.probeExecutor.submit(() ->
 					requireNonNull(this.sokletReference.get()).getStatus()
 							== SokletStatus.RUNNING);
+			long probeDeadlineNanos = System.nanoTime()
+					+ TimeUnit.SECONDS.toNanos(2);
+			boolean interrupted = false;
 			try {
-				this.observedStatuses.add(statusProbe.get(2, TimeUnit.SECONDS));
-				this.observedSokletStarted.add(
-						sokletProbe.get(2, TimeUnit.SECONDS));
+				McpServerStatus observedStatus;
+				for (;;) {
+					try {
+						observedStatus = statusProbe.get(Math.max(0L,
+								probeDeadlineNanos - System.nanoTime()),
+								TimeUnit.NANOSECONDS);
+						break;
+					} catch (InterruptedException exception) {
+						interrupted = true;
+					}
+				}
+				boolean observedStarted;
+				for (;;) {
+					try {
+						observedStarted = sokletProbe.get(Math.max(0L,
+								probeDeadlineNanos - System.nanoTime()),
+								TimeUnit.NANOSECONDS);
+						break;
+					} catch (InterruptedException exception) {
+						interrupted = true;
+					}
+				}
+				this.observedStatuses.add(observedStatus);
+				this.observedSokletStarted.add(observedStarted);
 			} catch (Throwable throwable) {
 				statusProbe.cancel(true);
 				sokletProbe.cancel(true);
 				this.probeFailure.compareAndSet(null, throwable);
+			} finally {
+				if (interrupted)
+					Thread.currentThread().interrupt();
 			}
 		}
 

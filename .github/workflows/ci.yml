@@ -64,7 +64,7 @@ jobs:
           # The version-transition and lifecycle-harness verifiers compare the
           # current tree with owner-approved commits recorded in their inventories.
           fetch-depth: 0
-          # D1p must inspect the exact PR-head preview commit, not GitHub's
+          # D1p must inspect the exact cumulative PR-head candidate, not GitHub's
           # synthetic two-parent pull-request merge commit.
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 

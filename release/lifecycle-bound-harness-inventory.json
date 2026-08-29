@@ -934,15 +934,15 @@
       "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
     },
     {
-      "id": "CURRENT-LEGACY-2de96c885aa25041",
-      "line": 2321,
+      "id": "CURRENT-LEGACY-9ac618930898f745",
+      "line": 2310,
       "lineSha256": "2f9910897a77b7102e6e9c3e0d8c600f2d8f3cd47cd288483dfdf1ef1090b4d5",
       "occurrenceIndex": 0,
       "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
     },
     {
-      "id": "CURRENT-LEGACY-2c327d1643a86363",
-      "line": 2838,
+      "id": "CURRENT-LEGACY-d56fbf6bf6705b4f",
+      "line": 2827,
       "lineSha256": "af45cebed08c1f25beaea9c8820ab74a8fb7c7b413e9cc383bdf42444de00f8c",
       "occurrenceIndex": 0,
       "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
@@ -1005,8 +1005,8 @@
     }
   ],
   "discoveryCensus": {
-    "candidateCount": 5528,
-    "candidateSha256": "182fa5bff646d9479545e44dd71a89c4662f2f1d2ce90a0dfb5a224d16d92b74",
+    "candidateCount": 5526,
+    "candidateSha256": "071e5d9f2bc66293ab4b35c5d3412e6dad26ed10fe52febf0202285efa779b58",
     "candidates": [
       {
         "kinds": [
@@ -10671,23 +10671,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1514,
-        "lineSha256": "a84d2087013442ee146225b1fe4d219c764104592ac882b6766ea6aca9705450",
-        "path": "src/test/java/com/soklet/McpHandlerMetricsObservabilityTests.java"
-      },
-      {
-        "kinds": [
-          "FIXED_WAIT_CANDIDATE"
-        ],
-        "line": 1516,
-        "lineSha256": "fc61446c444b97a4378abc96513fb474c304bdda7918cf4bbc5bc6fbff7ec0a1",
-        "path": "src/test/java/com/soklet/McpHandlerMetricsObservabilityTests.java"
-      },
-      {
-        "kinds": [
-          "FIXED_WAIT_CANDIDATE"
-        ],
-        "line": 1538,
+        "line": 1565,
         "lineSha256": "b21ffcc9aabbc9960e7f20663b6215fef9a4f867b9857c5483f50c9f98bd8a22",
         "path": "src/test/java/com/soklet/McpHandlerMetricsObservabilityTests.java"
       },
@@ -10695,7 +10679,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1539,
+        "line": 1566,
         "lineSha256": "5853a7b66cc69036f6d719471c852c1ba0903596ca3312709a0941ec6e90e5ec",
         "path": "src/test/java/com/soklet/McpHandlerMetricsObservabilityTests.java"
       },
@@ -10703,7 +10687,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1611,
+        "line": 1638,
         "lineSha256": "31e14cad956365e8056f401622b83633c89a0de955d355dd8632471b4b980c78",
         "path": "src/test/java/com/soklet/McpHandlerMetricsObservabilityTests.java"
       },
@@ -10711,7 +10695,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1616,
+        "line": 1643,
         "lineSha256": "e61a27a38d3324931f6796bd98b8455ac166ac81e17e3c37c3d689cefd4e94de",
         "path": "src/test/java/com/soklet/McpHandlerMetricsObservabilityTests.java"
       },
@@ -10719,7 +10703,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1629,
+        "line": 1656,
         "lineSha256": "6a4cd6c0190dd40da38aeeef9ecdbafb3ad6c9433c02589fcd08612b18766191",
         "path": "src/test/java/com/soklet/McpHandlerMetricsObservabilityTests.java"
       },
@@ -45309,7 +45293,7 @@
       }
     ],
     "countsByKind": {
-      "FIXED_WAIT_CANDIDATE": 1461,
+      "FIXED_WAIT_CANDIDATE": 1459,
       "JUNIT_OUTER_GUARD": 270,
       "LIFECYCLE_SIGNAL": 3060,
       "NAMED_TIMEOUT_CANDIDATE": 795,
@@ -61825,7 +61809,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "4c797bbcadddc93213db8cad70597ad173b3d9499ec845d66fca8077b10b0e48",
+        "fileSha256": "a09e073f60dd92cac31a772b1d68b928db4e3499d265506b52d353cffd613b35",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -61939,7 +61923,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 120000,
-        "fileSha256": "4c797bbcadddc93213db8cad70597ad173b3d9499ec845d66fca8077b10b0e48",
+        "fileSha256": "a09e073f60dd92cac31a772b1d68b928db4e3499d265506b52d353cffd613b35",
         "fixedControlWaitCount": 7,
         "fixedControlWaitMillis": 40000,
         "factoryGenerationHasExecution": false,
@@ -62053,7 +62037,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 120000,
-        "fileSha256": "4c797bbcadddc93213db8cad70597ad173b3d9499ec845d66fca8077b10b0e48",
+        "fileSha256": "a09e073f60dd92cac31a772b1d68b928db4e3499d265506b52d353cffd613b35",
         "fixedControlWaitCount": 10,
         "fixedControlWaitMillis": 45000,
         "factoryGenerationHasExecution": false,
@@ -62167,7 +62151,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 120000,
-        "fileSha256": "4c797bbcadddc93213db8cad70597ad173b3d9499ec845d66fca8077b10b0e48",
+        "fileSha256": "a09e073f60dd92cac31a772b1d68b928db4e3499d265506b52d353cffd613b35",
         "fixedControlWaitCount": 7,
         "fixedControlWaitMillis": 40000,
         "factoryGenerationHasExecution": false,
@@ -62281,7 +62265,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "4c797bbcadddc93213db8cad70597ad173b3d9499ec845d66fca8077b10b0e48",
+        "fileSha256": "a09e073f60dd92cac31a772b1d68b928db4e3499d265506b52d353cffd613b35",
         "fixedControlWaitCount": 8,
         "fixedControlWaitMillis": 35000,
         "factoryGenerationHasExecution": false,
@@ -62394,7 +62378,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "4c797bbcadddc93213db8cad70597ad173b3d9499ec845d66fca8077b10b0e48",
+        "fileSha256": "a09e073f60dd92cac31a772b1d68b928db4e3499d265506b52d353cffd613b35",
         "fixedControlWaitCount": 7,
         "fixedControlWaitMillis": 40000,
         "factoryGenerationHasExecution": false,
@@ -62508,7 +62492,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 120000,
-        "fileSha256": "4c797bbcadddc93213db8cad70597ad173b3d9499ec845d66fca8077b10b0e48",
+        "fileSha256": "a09e073f60dd92cac31a772b1d68b928db4e3499d265506b52d353cffd613b35",
         "fixedControlWaitCount": 12,
         "fixedControlWaitMillis": 55000,
         "factoryGenerationHasExecution": false,
@@ -62621,7 +62605,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 120000,
-        "fileSha256": "4c797bbcadddc93213db8cad70597ad173b3d9499ec845d66fca8077b10b0e48",
+        "fileSha256": "a09e073f60dd92cac31a772b1d68b928db4e3499d265506b52d353cffd613b35",
         "fixedControlWaitCount": 3,
         "fixedControlWaitMillis": 15000,
         "factoryGenerationHasExecution": false,

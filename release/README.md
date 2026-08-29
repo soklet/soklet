@@ -54,12 +54,18 @@ inventory verifier in CI and candidate validation.
 D1p public-cutover evidence has a separate deterministic contract in
 `release/d1p-evidence-contract.md` and frozen inputs in
 `release/d1p-evidence-config.json`. The API-freeze wrapper runs its adversarial
-self-test and derives the compiler-backed core evidence in memory before any
-manifest is generated. Once the tracked root exists, CI and the release
-`api-freeze` gate require sibling-blind verification of the tracked root and
-leaves. Later serialized commits rederive the approved tracked leaf from
-preview `P` and recheck current compiler semantics plus the exact protected
-post-D2 conformance/ledger bytes. The final pre-commit workspace command additionally verifies the
+self-test and derives the compiler-backed current-worktree evidence in memory
+before any manifest is generated. CI and the release `api-freeze` gate require
+sibling-blind verification of the tracked root and leaves against the exact
+clean cumulative `HEAD`. Ordinary pre-G3 remediation commits are supported;
+their evidence must be regenerated from accepted D1 through the new tip before
+that tip can pass candidate verification. After D2, a one-time dedicated
+`release/d1p-approved-preview.json` seal authenticates approved `P` from Git
+history; candidate checks then keep the approved root/leaves fixed at `P` while
+rederiving current protected compiler semantics for the named post-D2 owners.
+`scripts/generate-d1p-approved-preview.mjs` creates that sole seal file from a
+content-addressed durable G3 receipt without staging or committing it.
+The final workspace command additionally verifies the
 untracked retained JAR/report evidence and all seven sibling-workspace rows;
 candidate mode never opens sibling bytes and does not claim otherwise.
 

@@ -20,6 +20,7 @@ import {
   incompatibilityJsonlFromXml,
 } from './api-diff/japicmp-symbols.mjs';
 import {
+  APPROVED_PREVIEW_PATH,
   CONFIG_PATH,
   EXTERNAL_PATH,
   PREVIEW_PATH,
@@ -28,6 +29,7 @@ import {
   TRACKED_BLOB_PATH,
   assertProductionConfig,
   canonicalJson,
+  generateApprovedPreviewSeal,
   generateEvidence,
   productionConfigForSelfTest,
   readConfig,
@@ -137,7 +139,9 @@ function createGoldenFixture() {
   for (const path of [
     '.github/workflows/ci.yml',
     'release/d1p-evidence-contract.md',
+    'scripts/api-diff/japicmp-symbols.mjs',
     'scripts/d1p-evidence-lib.mjs',
+    'scripts/generate-d1p-approved-preview.mjs',
     'scripts/generate-d1p-evidence.mjs',
     'scripts/release-validation-self-test.mjs',
     'scripts/validate-release-candidate.sh',
@@ -188,6 +192,8 @@ function createGoldenFixture() {
   );
   ++passedCases;
 
+  git(goldenCore, 'add', '-A');
+  git(goldenCore, 'commit', '--quiet', '-m', 'D1p implementation tranche');
   generateEvidence({ coreRoot: goldenCore, externalRoot: goldenExternal, config });
   verifyEvidence({
     coreRoot: goldenCore,
@@ -197,12 +203,18 @@ function createGoldenFixture() {
     config,
   });
   git(goldenCore, 'add', '-A');
-  git(goldenCore, 'commit', '--quiet', '-m', 'sole D1p preview');
+  git(goldenCore, 'commit', '--quiet', '-m', 'D1p evidence checkpoint');
   verifyEvidence({
     coreRoot: goldenCore,
     externalRoot: goldenExternal,
     mode: 'workspace',
     scope: 'full',
+    config,
+  });
+  verifyEvidence({
+    coreRoot: goldenCore,
+    mode: 'candidate',
+    scope: 'tracked',
     config,
   });
   return config;
@@ -242,11 +254,66 @@ function verifyCandidate(core) {
   });
 }
 
+function g3ApprovalReceipt(core, mutator = () => {}) {
+  const approvedPreviewCommit = git(core, 'rev-parse', 'HEAD');
+  const approvedPreviewTree = git(core, 'rev-parse', 'HEAD^{tree}');
+  const rootBytes = execFileSync(
+    'git',
+    ['-C', core, 'cat-file', 'blob', `${approvedPreviewCommit}:${ROOT_PATH}`],
+  );
+  const root = JSON.parse(rootBytes.toString('utf8'));
+  const receipt = {
+    approvedAt: '2026-08-28T20:30:00Z',
+    approvedPreviewCommit,
+    approvedPreviewTree,
+    canonicalSemanticManifestSha256: root.canonicalSemanticManifest.sha256,
+    decision: 'APPROVED',
+    externalEntrySetSha256: root.externalEntrySetSha256,
+    externalManifestSha256: root.externalManifestSha256,
+    formatVersion: 1,
+    ownerApprovalReference: 'fixture:g3-owner-approval',
+    previewEvidenceManifestSha256: root.previewEvidenceManifest.sha256,
+    rootManifestSha256: sha256(rootBytes),
+    trackedBlobManifestSha256: root.trackedBlobManifest.sha256,
+  };
+  mutator(receipt);
+  return canonicalJson(receipt);
+}
+
+function addApprovedPreviewSeal(
+  core,
+  approvalReference = `sha256:${'a'.repeat(64)}`,
+  mutator = () => {},
+) {
+  const approvedPreviewCommit = git(core, 'rev-parse', 'HEAD');
+  const approvedPreviewTree = git(core, 'rev-parse', 'HEAD^{tree}');
+  const rootBytes = execFileSync(
+    'git',
+    ['-C', core, 'cat-file', 'blob', `${approvedPreviewCommit}:${ROOT_PATH}`],
+  );
+  const root = JSON.parse(rootBytes.toString('utf8'));
+  const seal = {
+    approvedPreviewCommit,
+    approvedPreviewTree,
+    canonicalSemanticManifestSha256: root.canonicalSemanticManifest.sha256,
+    externalEntrySetSha256: root.externalEntrySetSha256,
+    externalManifestSha256: root.externalManifestSha256,
+    formatVersion: 1,
+    g3ApprovalReference: approvalReference,
+    previewEvidenceManifestSha256: root.previewEvidenceManifest.sha256,
+    rootManifestSha256: sha256(rootBytes),
+    trackedBlobManifestSha256: root.trackedBlobManifest.sha256,
+  };
+  mutator(seal);
+  write(core, APPROVED_PREVIEW_PATH, canonicalJson(seal));
+  git(core, 'add', APPROVED_PREVIEW_PATH);
+  git(core, 'commit', '--quiet', '-m', 'seal G3-approved D1p preview');
+  return approvedPreviewCommit;
+}
+
 function expectRejected(label, mutate, pattern = /./u) {
   const { core, external } = cloneFixture(label);
   mutate({ core, external });
-  git(core, 'add', '-A');
-  git(core, 'commit', '--quiet', '--amend', '--no-edit');
   assert.throws(() => verifyWorkspace(core, external), pattern, label);
   ++passedCases;
 }
@@ -327,28 +394,313 @@ try {
   ++passedCases;
 
   {
-    const { core, external } = cloneFixture('generation after preview commit');
+    const { core, external } = cloneFixture('ordinary linear remediation');
+    write(core, 'README.md', 'ordinary dirty remediation bytes\n');
+    write(core, 'new-untracked-remediation.txt', 'nonignored working-tree bytes\n');
+    generateEvidence({
+      coreRoot: core,
+      externalRoot: external,
+      config: fixtureConfig(core),
+    });
+    assert.match(
+      readFileSync(resolve(core, TRACKED_BLOB_PATH), 'utf8'),
+      new RegExp(`${sha256('nonignored working-tree bytes\n')}  new-untracked-remediation\\.txt`, 'u'),
+    );
+    verifyWorkspace(core, external);
+    assert.throws(
+      () => verifyCandidate(core),
+      /candidate D1p path .* differs from committed HEAD|rejects staged, unstaged/u,
+    );
+    git(core, 'add', '-A');
+    git(core, 'commit', '--quiet', '-m', 'ordinary remediation with refreshed evidence');
+    verifyCandidate(core);
+    verifyWorkspace(core, external);
+    passedCases += 5;
+  }
+  {
+    const { core, external } = cloneFixture('stale evidence after ordinary commit');
+    write(core, 'second-commit.txt', 'ordinary follow-up\n');
+    git(core, 'add', 'second-commit.txt');
+    git(core, 'commit', '--quiet', '-m', 'ordinary follow-up before evidence refresh');
+    assert.throws(
+      () => verifyCandidate(core),
+      /release\/d1p-tracked-blobs\.sha256 does not match deterministic derivation/u,
+    );
+    assert.throws(
+      () => verifyWorkspace(core, external),
+      /release\/d1p-tracked-blobs\.sha256 does not match deterministic derivation/u,
+    );
+    generateEvidence({
+      coreRoot: core,
+      externalRoot: external,
+      config: fixtureConfig(core),
+    });
+    verifyWorkspace(core, external);
+    git(core, 'add', '-A');
+    git(core, 'commit', '--quiet', '-m', 'refresh evidence normally');
+    verifyCandidate(core);
+    verifyWorkspace(core, external);
+    passedCases += 5;
+  }
+  {
+    const { core } = cloneFixture('approved-preview seal generator');
+    const receiptPath = resolve(temporaryRoot, `g3-receipt-${passedCases}.json`);
+    writeFileSync(receiptPath, g3ApprovalReceipt(core));
+    const generated = generateApprovedPreviewSeal({
+      coreRoot: core,
+      g3ApprovalReceiptPath: receiptPath,
+      config: fixtureConfig(core),
+    });
+    assert.equal(
+      generated.seal.g3ApprovalReference,
+      `sha256:${sha256(readFileSync(receiptPath))}`,
+    );
+    assert.deepEqual(readJson(core, APPROVED_PREVIEW_PATH), generated.seal);
+    assert.throws(
+      () => generateApprovedPreviewSeal({
+        coreRoot: core,
+        g3ApprovalReceiptPath: receiptPath,
+        config: fixtureConfig(core),
+      }),
+      /rejects staged, unstaged, or nonignored untracked core state/u,
+    );
+    git(core, 'add', APPROVED_PREVIEW_PATH);
+    git(core, 'commit', '--quiet', '-m', 'seal generated approved preview');
+    verifyCandidate(core);
+    passedCases += 4;
+  }
+  {
+    const { core } = cloneFixture('stale G3 receipt candidate');
+    const receiptPath = resolve(temporaryRoot, `stale-g3-receipt-${passedCases}.json`);
+    writeFileSync(receiptPath, g3ApprovalReceipt(core, (receipt) => {
+      receipt.approvedPreviewCommit = git(core, 'rev-parse', 'HEAD^');
+    }));
+    assert.throws(
+      () => generateApprovedPreviewSeal({
+        coreRoot: core,
+        g3ApprovalReceiptPath: receiptPath,
+        config: fixtureConfig(core),
+      }),
+      /approvedPreviewCommit does not match the candidate evidence tuple/u,
+    );
+    ++passedCases;
+  }
+  {
+    const { core } = cloneFixture('wrong G3 receipt tuple');
+    const receiptPath = resolve(temporaryRoot, `wrong-g3-receipt-${passedCases}.json`);
+    writeFileSync(receiptPath, g3ApprovalReceipt(core, (receipt) => {
+      receipt.externalManifestSha256 = '0'.repeat(64);
+    }));
+    assert.throws(
+      () => generateApprovedPreviewSeal({
+        coreRoot: core,
+        g3ApprovalReceiptPath: receiptPath,
+        config: fixtureConfig(core),
+      }),
+      /externalManifestSha256 does not match the candidate evidence tuple/u,
+    );
+    ++passedCases;
+  }
+  {
+    const { core } = cloneFixture('unapproved G3 receipt');
+    const receiptPath = resolve(temporaryRoot, `unapproved-g3-receipt-${passedCases}.json`);
+    writeFileSync(receiptPath, g3ApprovalReceipt(core, (receipt) => {
+      receipt.decision = 'PENDING';
+    }));
+    assert.throws(
+      () => generateApprovedPreviewSeal({
+        coreRoot: core,
+        g3ApprovalReceiptPath: receiptPath,
+        config: fixtureConfig(core),
+      }),
+      /decision must be exactly APPROVED/u,
+    );
+    ++passedCases;
+  }
+  {
+    const { core, external } = cloneFixture('post-D2 approved-preview seal');
+    const approvedPreviewCommit = addApprovedPreviewSeal(core);
+    verifyCandidate(core);
     assert.throws(
       () => generateEvidence({
         coreRoot: core,
         externalRoot: external,
         config: fixtureConfig(core),
       }),
-      /generation must run before the sole preview commit/u,
+      /history seals post-D2 evidence; evidence generation is pre-G3 only/u,
+    );
+    write(core, 'post-d2-owner.md', 'allowed post-D2 non-semantic owner bytes\n');
+    git(core, 'add', 'post-d2-owner.md');
+    git(core, 'commit', '--quiet', '-m', 'allowed post-D2 owner');
+    verifyCandidate(core);
+    assert.equal(
+      verifyCandidate(core).evidenceCommit,
+      approvedPreviewCommit,
+    );
+    passedCases += 4;
+  }
+  {
+    const { core } = cloneFixture('post-D2 protected semantic drift');
+    addApprovedPreviewSeal(core);
+    write(
+      core,
+      goldenConfig.protectedPostD2Paths.find(
+        (path) => path.endsWith('McpConformanceFixture.java'),
+      ),
+      'changed protected fixture bytes\n',
+    );
+    git(core, 'add', '-A');
+    git(core, 'commit', '--quiet', '-m', 'forbidden protected post-D2 drift');
+    assert.throws(
+      () => verifyCandidate(core),
+      /release\/d1p-canonical-semantic-digests\.json does not match deterministic derivation/u,
     );
     ++passedCases;
   }
   {
-    const { core, external } = cloneFixture('two commit descendant');
-    write(core, 'second-commit.txt', 'forbidden\n');
-    git(core, 'add', 'second-commit.txt');
-    git(core, 'commit', '--quiet', '-m', 'serialized post-D2 package');
-    verifyCandidate(core);
+    const { core } = cloneFixture('approved-preview seal mutation');
+    addApprovedPreviewSeal(core);
+    mutateJson(core, APPROVED_PREVIEW_PATH, (seal) => {
+      seal.g3ApprovalReference = 'fixture:replacement';
+    });
+    git(core, 'add', APPROVED_PREVIEW_PATH);
+    git(core, 'commit', '--quiet', '-m', 'forbidden seal mutation');
+    assert.throws(
+      () => verifyCandidate(core),
+      /must be added exactly once and never changed or deleted/u,
+    );
+    ++passedCases;
+  }
+  {
+    const { core, external } = cloneFixture('dirty approved-preview seal deletion');
+    addApprovedPreviewSeal(core);
+    rmSync(resolve(core, APPROVED_PREVIEW_PATH));
+    assert.throws(
+      () => generateEvidence({
+        coreRoot: core,
+        externalRoot: external,
+        config: fixtureConfig(core),
+      }),
+      /history seals post-D2 evidence; evidence generation is pre-G3 only/u,
+    );
     assert.throws(
       () => verifyWorkspace(core, external),
-      /workspace\/full verification is limited/u,
+      /history seals post-D2 evidence; workspace\/full verification is pre-G3 only/u,
     );
     passedCases += 2;
+  }
+  for (const path of [
+    CONFIG_PATH,
+    'release/d1p-evidence-contract.md',
+    SEMANTIC_PATH,
+    ROOT_PATH,
+    TRACKED_BLOB_PATH,
+    'scripts/api-diff/japicmp-symbols.mjs',
+    'scripts/d1p-evidence-lib.mjs',
+    'scripts/generate-d1p-approved-preview.mjs',
+    'scripts/generate-d1p-evidence.mjs',
+    'scripts/verify-d1p-evidence-self-test.mjs',
+    'scripts/verify-d1p-evidence.mjs',
+  ]) {
+    const { core } = cloneFixture(`sealed immutable path ${path}`);
+    addApprovedPreviewSeal(core);
+    write(core, path, `${readFileSync(resolve(core, path), 'utf8')}post-seal drift\n`);
+    git(core, 'add', path);
+    git(core, 'commit', '--quiet', '-m', `forbidden sealed path drift: ${path}`);
+    assert.throws(() => verifyCandidate(core), /./u);
+    ++passedCases;
+  }
+  {
+    const { core } = cloneFixture('sealed immutable path mode drift');
+    addApprovedPreviewSeal(core);
+    git(core, 'update-index', '--chmod=+x', 'release/d1p-evidence-contract.md');
+    git(core, 'commit', '--quiet', '-m', 'forbidden sealed path mode drift');
+    assert.throws(
+      () => verifyCandidate(core),
+      /Git identity differs from approved preview/u,
+    );
+    ++passedCases;
+  }
+  {
+    const { core } = cloneFixture('approved-preview malformed G3 reference');
+    addApprovedPreviewSeal(core, 'not-content-addressed');
+    assert.throws(
+      () => verifyCandidate(core),
+      /g3ApprovalReference must be sha256:<64 lowercase hex>/u,
+    );
+    ++passedCases;
+  }
+  {
+    const { core } = cloneFixture('approved-preview wrong parent');
+    const wrongParent = git(core, 'rev-parse', 'HEAD^');
+    addApprovedPreviewSeal(core, `sha256:${'a'.repeat(64)}`, (seal) => {
+      seal.approvedPreviewCommit = wrongParent;
+    });
+    assert.throws(
+      () => verifyCandidate(core),
+      /seal commit parent must be the recorded G3-approved preview commit/u,
+    );
+    ++passedCases;
+  }
+  {
+    const { core } = cloneFixture('approved-preview wrong tree');
+    addApprovedPreviewSeal(core, `sha256:${'a'.repeat(64)}`, (seal) => {
+      seal.approvedPreviewTree = '0'.repeat(40);
+    });
+    assert.throws(
+      () => verifyCandidate(core),
+      /tree does not match its recorded preview commit/u,
+    );
+    ++passedCases;
+  }
+  {
+    const { core } = cloneFixture('approved-preview wrong tuple');
+    addApprovedPreviewSeal(core, `sha256:${'a'.repeat(64)}`, (seal) => {
+      seal.rootManifestSha256 = '0'.repeat(64);
+    });
+    assert.throws(
+      () => verifyCandidate(core),
+      /rootManifestSha256 does not match the preview root tuple/u,
+    );
+    ++passedCases;
+  }
+  {
+    const { core } = cloneFixture('approved-preview unknown field');
+    addApprovedPreviewSeal(core, `sha256:${'a'.repeat(64)}`, (seal) => {
+      seal.unapproved = true;
+    });
+    assert.throws(
+      () => verifyCandidate(core),
+      /approved-preview seal keys must be exactly/u,
+    );
+    ++passedCases;
+  }
+  {
+    const { core } = cloneFixture('approved-preview seal is dedicated');
+    const approvedPreviewCommit = git(core, 'rev-parse', 'HEAD');
+    const approvedPreviewTree = git(core, 'rev-parse', 'HEAD^{tree}');
+    const rootBytes = readFileSync(resolve(core, ROOT_PATH));
+    const root = JSON.parse(rootBytes.toString('utf8'));
+    write(core, APPROVED_PREVIEW_PATH, canonicalJson({
+      approvedPreviewCommit,
+      approvedPreviewTree,
+      canonicalSemanticManifestSha256: root.canonicalSemanticManifest.sha256,
+      externalEntrySetSha256: root.externalEntrySetSha256,
+      externalManifestSha256: root.externalManifestSha256,
+      formatVersion: 1,
+      g3ApprovalReference: `sha256:${'a'.repeat(64)}`,
+      previewEvidenceManifestSha256: root.previewEvidenceManifest.sha256,
+      rootManifestSha256: sha256(rootBytes),
+      trackedBlobManifestSha256: root.trackedBlobManifest.sha256,
+    }));
+    write(core, 'extra-seal-change.txt', 'not dedicated\n');
+    git(core, 'add', APPROVED_PREVIEW_PATH, 'extra-seal-change.txt');
+    git(core, 'commit', '--quiet', '-m', 'non-dedicated seal');
+    assert.throws(
+      () => verifyCandidate(core),
+      /must be the only change in its dedicated post-D2 seal commit/u,
+    );
+    ++passedCases;
   }
   {
     const { core, external } = cloneFixture('merge descendant');
@@ -360,9 +712,52 @@ try {
     git(core, 'commit', '--quiet', '-m', 'other parent');
     git(core, 'checkout', '--quiet', '--detach', previewHead);
     git(core, 'merge', '--quiet', '--no-ff', '--no-edit', 'other-parent');
+    const pattern = /linear non-merge first-parent chain/u;
     assert.throws(
-      () => verifyWorkspace(core, external),
-      /workspace\/full verification is limited/u,
+      () => generateEvidence({ coreRoot: core, externalRoot: external, config }),
+      pattern,
+    );
+    assert.throws(() => verifyWorkspace(core, external), pattern);
+    assert.throws(() => verifyCandidate(core), pattern);
+    passedCases += 3;
+  }
+  {
+    const { core } = cloneFixture('accepted D1 is not a candidate');
+    const config = fixtureConfig(core);
+    git(core, 'checkout', '--quiet', '--detach', config.baseCoreCommit);
+    assert.throws(
+      () => verifyEvidence({
+        coreRoot: core,
+        mode: 'candidate',
+        scope: 'tracked',
+        config,
+      }),
+      /requires a committed descendant of accepted D1/u,
+    );
+    ++passedCases;
+  }
+  {
+    const { core } = cloneFixture('accepted D1 is unrelated to candidate HEAD');
+    const candidateHead = git(core, 'rev-parse', 'HEAD');
+    git(core, 'checkout', '--quiet', '--orphan', 'unrelated-base');
+    git(core, 'rm', '--quiet', '-r', '-f', '.');
+    write(core, 'unrelated-base.txt', 'unrelated accepted base\n');
+    git(core, 'add', 'unrelated-base.txt');
+    git(core, 'commit', '--quiet', '-m', 'unrelated accepted base');
+    const unrelatedCommit = git(core, 'rev-parse', 'HEAD');
+    const unrelatedTree = git(core, 'rev-parse', 'HEAD^{tree}');
+    git(core, 'checkout', '--quiet', '--detach', candidateHead);
+    const config = fixtureConfig(core);
+    config.baseCoreCommit = unrelatedCommit;
+    config.baseCoreTree = unrelatedTree;
+    assert.throws(
+      () => verifyEvidence({
+        coreRoot: core,
+        mode: 'candidate',
+        scope: 'tracked',
+        config,
+      }),
+      /is not an ancestor of HEAD/u,
     );
     ++passedCases;
   }
@@ -377,37 +772,20 @@ try {
     git(core, 'commit', '--quiet', '-m', 'forbidden protected drift');
     assert.throws(
       () => verifyCandidate(core),
-      /release\/d1p-canonical-semantic-digests\.json does not match deterministic derivation/u,
+      /release\/d1p-tracked-blobs\.sha256 does not match deterministic derivation/u,
     );
     ++passedCases;
   }
   {
     const { core } = cloneFixture('descendant manifest drift');
     mutateJson(core, ROOT_PATH, (manifest) => {
-      manifest.externalManifestSha256 = '0'.repeat(64);
+      manifest.trackedBlobManifest.sha256 = '0'.repeat(64);
     });
     git(core, 'add', ROOT_PATH);
     git(core, 'commit', '--quiet', '-m', 'forbidden manifest drift');
     assert.throws(
       () => verifyCandidate(core),
-      /immutable D1p path .* differs from preview P/u,
-    );
-    ++passedCases;
-  }
-  {
-    const { core, external } = cloneFixture('dirty postcommit rederivation');
-    write(core, 'README.md', 'dirty postcommit bytes\n');
-    const trackedPath = resolve(core, TRACKED_BLOB_PATH);
-    const trackedLines = readFileSync(trackedPath, 'utf8').trimEnd().split('\n');
-    const readmeIndex = trackedLines.findIndex((line) => line.endsWith('  README.md'));
-    trackedLines[readmeIndex] = `${sha256('dirty postcommit bytes\n')}  README.md`;
-    writeFileSync(trackedPath, `${trackedLines.join('\n')}\n`);
-    mutateJson(core, ROOT_PATH, (manifest) => {
-      manifest.trackedBlobManifest.sha256 = sha256(readFileSync(trackedPath));
-    });
-    assert.throws(
-      () => verifyWorkspace(core, external),
-      /differs from preview P|does not match the final preview commit|rejects staged, unstaged/u,
+      /root trackedBlobManifest SHA-256 does not match leaf bytes/u,
     );
     ++passedCases;
   }
@@ -416,7 +794,7 @@ try {
     write(core, 'untracked-after-preview.txt', 'not part of P\n');
     assert.throws(
       () => verifyWorkspace(core, external),
-      /rejects staged, unstaged, or nonignored untracked core state/u,
+      /release\/d1p-tracked-blobs\.sha256 does not match deterministic derivation/u,
     );
     ++passedCases;
   }
@@ -425,7 +803,7 @@ try {
     rmSync(resolve(core, ROOT_PATH));
     assert.throws(
       () => verifyCandidate(core),
-      /Missing immutable D1p path|rejects staged, unstaged/u,
+      /Missing candidate D1p path|rejects staged, unstaged/u,
     );
     ++passedCases;
   }
@@ -437,7 +815,7 @@ try {
     git(core, 'add', ROOT_PATH);
     assert.throws(
       () => verifyCandidate(core),
-      /immutable D1p path .* differs from preview P/u,
+      /candidate D1p path .* differs from committed HEAD|rejects staged, unstaged/u,
     );
     ++passedCases;
   }
@@ -452,11 +830,11 @@ try {
     ++passedCases;
   }
   {
-    const { core, external } = cloneFixture('postcommit omitted tracked manifests');
+    const { core } = cloneFixture('postcommit omitted tracked manifests');
     git(core, 'rm', '--quiet', '--cached', TRACKED_BLOB_PATH, SEMANTIC_PATH, ROOT_PATH);
-    git(core, 'commit', '--quiet', '--amend', '--no-edit');
+    git(core, 'commit', '--quiet', '-m', 'omit required tracked manifests');
     assert.throws(
-      () => verifyWorkspace(core, external),
+      () => verifyCandidate(core),
       /must be a regular tracked blob in [0-9a-f]{40}/u,
     );
     ++passedCases;
@@ -464,7 +842,7 @@ try {
   {
     const { core, external } = cloneFixture('tracked preview evidence');
     git(core, 'add', '-f', PREVIEW_PATH);
-    git(core, 'commit', '--quiet', '--amend', '--no-edit');
+    git(core, 'commit', '--quiet', '-m', 'incorrectly track preview evidence');
     assert.throws(
       () => verifyWorkspace(core, external),
       /must remain untracked/u,

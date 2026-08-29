@@ -1824,27 +1824,16 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		if (exactCloseBatch != null)
 			failure = runStartupUnwindStep(failure, startupPrimary,
 					() -> publishLifecycleCloseBatch(exactCloseBatch));
-		if (processor != null) {
-			AtomicBoolean applicationDrainDeferred = new AtomicBoolean();
-			AtomicBoolean processorShutdownSucceeded = new AtomicBoolean();
-			if (application != null
-					&& processor instanceof LifecycleRequestProcessor lifecycleProcessor)
-				failure = runStartupUnwindStep(failure, startupPrimary, () -> {
-					lifecycleProcessor.afterTermination(
-							application::beginGracefulDrain);
-					applicationDrainDeferred.set(true);
-				});
-			failure = runStartupUnwindStep(failure, startupPrimary, () -> {
-				processor.shutdown();
-				processorShutdownSucceeded.set(true);
-			});
-			if (application != null && (!applicationDrainDeferred.get()
-					|| !processorShutdownSucceeded.get()))
-				failure = runStartupUnwindStep(failure, startupPrimary,
-						application::beginGracefulDrain);
-		} else if (application != null) {
+		if (processor != null)
 			failure = runStartupUnwindStep(
-					failure, startupPrimary, application::beginGracefulDrain);
+					failure, startupPrimary, processor::shutdown);
+		if (application != null) {
+			// A failed startup never reached readiness, so the request processor
+			// could not admit application work.  Stop synchronously on this tracked
+			// startup worker: exposing graceful-drain state here would let the
+			// deadline thread claim cleanup and lose its failure from startup evidence.
+			failure = runStartupUnwindStep(
+					failure, startupPrimary, application::stop);
 		}
 
 		boolean forceApplied = false;

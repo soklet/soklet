@@ -22,6 +22,7 @@ export const SEMANTIC_PATH = 'release/d1p-canonical-semantic-digests.json';
 export const PREVIEW_PATH = 'target/d1p-preview-evidence.json';
 export const ROOT_PATH = 'release/d1p-public-cutover-manifest.json';
 export const EXTERNAL_PATH = 'mcp/SOKLET_4_0_D1P_EXTERNAL_MANIFEST.json';
+export const APPROVED_PREVIEW_PATH = 'release/d1p-approved-preview.json';
 
 const REQUIRED_COMMITTED_D1P_PATHS = [
   '.github/workflows/ci.yml',
@@ -30,6 +31,7 @@ const REQUIRED_COMMITTED_D1P_PATHS = [
   SEMANTIC_PATH,
   ROOT_PATH,
   TRACKED_BLOB_PATH,
+  'scripts/generate-d1p-approved-preview.mjs',
   'scripts/d1p-evidence-lib.mjs',
   'scripts/generate-d1p-evidence.mjs',
   'scripts/release-validation-self-test.mjs',
@@ -39,8 +41,23 @@ const REQUIRED_COMMITTED_D1P_PATHS = [
   'scripts/verify-mcp-api-freezes.sh',
 ];
 
+const IMMUTABLE_SEALED_D1P_PATHS = [
+  CONFIG_PATH,
+  'release/d1p-evidence-contract.md',
+  SEMANTIC_PATH,
+  ROOT_PATH,
+  TRACKED_BLOB_PATH,
+  'scripts/api-diff/japicmp-symbols.mjs',
+  'scripts/d1p-evidence-lib.mjs',
+  'scripts/generate-d1p-approved-preview.mjs',
+  'scripts/generate-d1p-evidence.mjs',
+  'scripts/verify-d1p-evidence-self-test.mjs',
+  'scripts/verify-d1p-evidence.mjs',
+];
+
 const HEX_40 = /^[0-9a-f]{40}$/;
 const HEX_64 = /^[0-9a-f]{64}$/;
+const G3_APPROVAL_REFERENCE = /^sha256:[0-9a-f]{64}$/;
 const EXPECTED_CONFIG = {
   baseCoreCommit: '315b759b97a3c32b420f34c3c137d72a09db9a11',
   baseCoreTree: '270907757a4cfd6d11703838c530cd70906e7d18',
@@ -573,48 +590,49 @@ export function verifyBaseIdentity(coreRoot, config) {
   }
 }
 
-function candidatePosition(coreRoot, config) {
-  const head = git(coreRoot, ['rev-parse', 'HEAD']).trim();
-  if (head === config.baseCoreCommit)
-    return { head, kind: 'base', previewCommit: null };
+function linearPosition(coreRoot, config, revision) {
+  const commit = git(coreRoot, ['rev-parse', `${revision}^{commit}`]).trim();
+  if (commit === config.baseCoreCommit)
+    return { commit, commitCount: 0, kind: 'base' };
   const firstParentPath = git(coreRoot, [
     'rev-list',
     '--first-parent',
     '--reverse',
-    `${config.baseCoreCommit}..${head}`,
+    '--parents',
+    `${config.baseCoreCommit}..${commit}`,
   ]).trim().split('\n').filter(Boolean);
   if (firstParentPath.length === 0)
-    fail('D1p preview commit is not on the first-parent path after accepted D1');
-  const previewCommit = firstParentPath[0];
-  const parentLine = git(coreRoot, [
-    'rev-list',
-    '--parents',
-    '-n',
-    '1',
-    previewCommit,
-  ]).trim();
-  const fields = parentLine.split(' ');
-  if (fields.length !== 2 || fields[1] !== config.baseCoreCommit) {
-    fail('D1p preview P must be the non-merge direct child of accepted D1 on the first-parent path');
+    fail(`D1p candidate ${revision} is not on the first-parent path after accepted D1`);
+  let expectedParent = config.baseCoreCommit;
+  for (const commitLine of firstParentPath) {
+    const fields = commitLine.split(' ');
+    if (fields.length !== 2 || fields[1] !== expectedParent) {
+      fail(
+        'D1p candidate history after accepted D1 must be a linear non-merge first-parent chain',
+      );
+    }
+    expectedParent = fields[0];
   }
+  if (expectedParent !== commit)
+    fail(`D1p candidate ${revision} does not terminate the accepted linear history`);
   return {
-    head,
-    kind: head === previewCommit ? 'preview' : 'descendant',
-    previewCommit,
+    commit,
+    commitCount: firstParentPath.length,
+    kind: 'descendant',
   };
+}
+
+function candidatePosition(coreRoot, config) {
+  const position = linearPosition(coreRoot, config, 'HEAD');
+  return { ...position, head: position.commit };
 }
 
 function verifyBasePosition(coreRoot, config, position) {
   const candidate = candidatePosition(coreRoot, config);
   if (candidate.kind === 'base') {
     if (!['generation', 'preparation', 'workspace'].includes(position))
-      fail('tracked candidate verification requires one final preview commit over accepted D1');
+      fail('tracked candidate verification requires a committed descendant of accepted D1');
     return candidate;
-  }
-  if (position === 'generation')
-    fail('D1p evidence generation must run before the sole preview commit at accepted D1 HEAD');
-  if (position === 'workspace' && candidate.kind === 'descendant') {
-    fail('workspace/full verification is limited to precommit bytes or exact preview P/D2');
   }
   return candidate;
 }
@@ -643,6 +661,217 @@ function revisionBlob(coreRoot, revision, path, label = path) {
   return git(coreRoot, ['cat-file', 'blob', `${revision}:${path}`], { encoding: 'buffer' });
 }
 
+function revisionHasPath(coreRoot, revision, path) {
+  return git(coreRoot, ['ls-tree', '-z', revision, '--', path], {
+    encoding: 'buffer',
+  }).length !== 0;
+}
+
+function revisionBlobIdentity(coreRoot, revision, path, label = path) {
+  validateRelativePath(path, label);
+  const listing = git(coreRoot, ['ls-tree', '-z', revision, '--', path], {
+    encoding: 'buffer',
+  });
+  const match = /^([0-9]{6}) blob ([0-9a-f]{40})\t([^\0]+)\0$/u.exec(
+    listing.toString('utf8'),
+  );
+  if (match === null || match[3] !== path || !['100644', '100755'].includes(match[1]))
+    fail(`${label} must be a regular tracked blob in ${revision}`);
+  return `${match[1]} blob ${match[2]}`;
+}
+
+function approvedPreviewHistory(coreRoot, config, head) {
+  return git(coreRoot, [
+    'rev-list',
+    '--reverse',
+    `${config.baseCoreCommit}..${head}`,
+    '--',
+    APPROVED_PREVIEW_PATH,
+  ]).trim().split('\n').filter(Boolean);
+}
+
+function pathEntryExists(root, path) {
+  try {
+    lstatSync(resolve(root, path));
+    return true;
+  } catch (error) {
+    if (error?.code === 'ENOENT')
+      return false;
+    throw error;
+  }
+}
+
+function assertProvisionalEvidenceState(coreRoot, config, currentPosition, operation) {
+  if (approvedPreviewHistory(coreRoot, config, currentPosition.head).length !== 0) {
+    fail(`${APPROVED_PREVIEW_PATH} history seals post-D2 evidence; ${operation} is pre-G3 only`);
+  }
+  if (pathEntryExists(coreRoot, APPROVED_PREVIEW_PATH)) {
+    fail(`${APPROVED_PREVIEW_PATH} is reserved for the dedicated post-D2 seal commit`);
+  }
+}
+
+function approvedPreviewSeal(coreRoot, config, currentPosition) {
+  const history = approvedPreviewHistory(coreRoot, config, currentPosition.head);
+  if (history.length === 0) {
+    if (revisionHasPath(coreRoot, currentPosition.head, APPROVED_PREVIEW_PATH))
+      fail(`${APPROVED_PREVIEW_PATH} exists without an auditable add commit`);
+    return null;
+  }
+  if (history.length !== 1)
+    fail(`${APPROVED_PREVIEW_PATH} must be added exactly once and never changed or deleted`);
+
+  const sealCommit = history[0];
+  const changed = git(coreRoot, [
+    'diff-tree',
+    '--no-commit-id',
+    '--name-status',
+    '-r',
+    sealCommit,
+  ]).trim().split('\n').filter(Boolean);
+  if (changed.length !== 1 || changed[0] !== `A\t${APPROVED_PREVIEW_PATH}`) {
+    fail(
+      `${APPROVED_PREVIEW_PATH} must be the only change in its dedicated post-D2 seal commit`,
+    );
+  }
+  const parentLine = git(coreRoot, ['rev-list', '--parents', '-n', '1', sealCommit])
+    .trim().split(' ');
+  if (parentLine.length !== 2)
+    fail(`${APPROVED_PREVIEW_PATH} seal commit must have exactly one parent`);
+  if (!revisionHasPath(coreRoot, currentPosition.head, APPROVED_PREVIEW_PATH))
+    fail(`${APPROVED_PREVIEW_PATH} must not be deleted after sealing`);
+  const sealBytes = revisionBlob(
+    coreRoot,
+    sealCommit,
+    APPROVED_PREVIEW_PATH,
+    'approved-preview seal',
+  );
+  const currentBytes = revisionBlob(
+    coreRoot,
+    currentPosition.head,
+    APPROVED_PREVIEW_PATH,
+    'current approved-preview seal',
+  );
+  if (!currentBytes.equals(sealBytes))
+    fail(`${APPROVED_PREVIEW_PATH} must remain byte-identical to its add commit`);
+  const seal = parseCanonicalJsonBytes(sealBytes, APPROVED_PREVIEW_PATH);
+  assertExactKeys(seal, [
+    'approvedPreviewCommit',
+    'approvedPreviewTree',
+    'canonicalSemanticManifestSha256',
+    'externalEntrySetSha256',
+    'externalManifestSha256',
+    'formatVersion',
+    'g3ApprovalReference',
+    'previewEvidenceManifestSha256',
+    'rootManifestSha256',
+    'trackedBlobManifestSha256',
+  ], 'approved-preview seal');
+  if (seal.formatVersion !== 1)
+    fail('approved-preview seal formatVersion must be exactly 1');
+  if (!HEX_40.test(seal.approvedPreviewCommit))
+    fail('approvedPreviewCommit must be 40 lowercase hexadecimal characters');
+  if (!HEX_40.test(seal.approvedPreviewTree))
+    fail('approvedPreviewTree must be 40 lowercase hexadecimal characters');
+  for (const field of [
+    'canonicalSemanticManifestSha256',
+    'externalEntrySetSha256',
+    'externalManifestSha256',
+    'previewEvidenceManifestSha256',
+    'rootManifestSha256',
+    'trackedBlobManifestSha256',
+  ]) {
+    if (!HEX_64.test(seal[field]))
+      fail(`approved-preview seal ${field} must be lowercase SHA-256`);
+  }
+  if (!G3_APPROVAL_REFERENCE.test(seal.g3ApprovalReference)) {
+    fail('approved-preview seal g3ApprovalReference must be sha256:<64 lowercase hex>');
+  }
+  if (parentLine[1] !== seal.approvedPreviewCommit) {
+    fail('approved-preview seal commit parent must be the recorded G3-approved preview commit');
+  }
+  const previewPosition = linearPosition(coreRoot, config, seal.approvedPreviewCommit);
+  if (previewPosition.kind === 'base')
+    fail('approved preview must be a committed descendant of accepted D1');
+  const actualTree = git(coreRoot, [
+    'rev-parse',
+    `${seal.approvedPreviewCommit}^{tree}`,
+  ]).trim();
+  if (actualTree !== seal.approvedPreviewTree)
+    fail('approved-preview seal tree does not match its recorded preview commit');
+  if (revisionHasPath(coreRoot, seal.approvedPreviewCommit, APPROVED_PREVIEW_PATH))
+    fail('approved-preview seal must not exist in the G3-approved preview commit');
+
+  const rootBytes = revisionBlob(
+    coreRoot,
+    seal.approvedPreviewCommit,
+    ROOT_PATH,
+    'approved-preview root manifest',
+  );
+  const rootManifest = parseCanonicalJsonBytes(
+    rootBytes,
+    `${seal.approvedPreviewCommit}:${ROOT_PATH}`,
+  );
+  validateRootManifest(rootManifest, config);
+  const expectedBindings = {
+    canonicalSemanticManifestSha256: rootManifest.canonicalSemanticManifest.sha256,
+    externalEntrySetSha256: rootManifest.externalEntrySetSha256,
+    externalManifestSha256: rootManifest.externalManifestSha256,
+    previewEvidenceManifestSha256: rootManifest.previewEvidenceManifest.sha256,
+    rootManifestSha256: sha256(rootBytes),
+    trackedBlobManifestSha256: rootManifest.trackedBlobManifest.sha256,
+  };
+  for (const [field, expected] of Object.entries(expectedBindings)) {
+    if (seal[field] !== expected)
+      fail(`approved-preview seal ${field} does not match the preview root tuple`);
+  }
+  return { commit: seal.approvedPreviewCommit, seal, sealCommit };
+}
+
+export function validateG3ApprovalReceipt(bytes, expected) {
+  const receipt = parseCanonicalJsonBytes(bytes, 'G3 approval receipt');
+  assertExactKeys(receipt, [
+    'approvedAt',
+    'approvedPreviewCommit',
+    'approvedPreviewTree',
+    'canonicalSemanticManifestSha256',
+    'decision',
+    'externalEntrySetSha256',
+    'externalManifestSha256',
+    'formatVersion',
+    'ownerApprovalReference',
+    'previewEvidenceManifestSha256',
+    'rootManifestSha256',
+    'trackedBlobManifestSha256',
+  ], 'G3 approval receipt');
+  if (receipt.formatVersion !== 1)
+    fail('G3 approval receipt formatVersion must be exactly 1');
+  if (receipt.decision !== 'APPROVED')
+    fail('G3 approval receipt decision must be exactly APPROVED');
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/u.test(receipt.approvedAt))
+    fail('G3 approval receipt approvedAt must be UTC ISO-8601 with whole seconds');
+  const parsedApprovedAt = new Date(receipt.approvedAt);
+  if (Number.isNaN(parsedApprovedAt.valueOf())
+      || parsedApprovedAt.toISOString() !== receipt.approvedAt.replace('Z', '.000Z')) {
+    fail('G3 approval receipt approvedAt must be a real UTC instant');
+  }
+  assertNonblank(receipt.ownerApprovalReference, 'G3 approval receipt ownerApprovalReference');
+  const expectedFields = [
+    'approvedPreviewCommit',
+    'approvedPreviewTree',
+    'canonicalSemanticManifestSha256',
+    'externalEntrySetSha256',
+    'externalManifestSha256',
+    'previewEvidenceManifestSha256',
+    'rootManifestSha256',
+    'trackedBlobManifestSha256',
+  ];
+  for (const field of expectedFields) {
+    if (receipt[field] !== expected[field])
+      fail(`G3 approval receipt ${field} does not match the candidate evidence tuple`);
+  }
+  return receipt;
+}
+
 function assertPreviewGitPolicy(coreRoot) {
   if (gitCommandSucceeds(coreRoot, ['ls-files', '--error-unmatch', '--', PREVIEW_PATH]))
     fail(`${PREVIEW_PATH} must remain untracked`);
@@ -650,41 +879,47 @@ function assertPreviewGitPolicy(coreRoot) {
     fail(`${PREVIEW_PATH} must remain ignored by Git`);
 }
 
-function assertCommittedCandidateState(coreRoot, position) {
+function assertCommittedCandidateState(coreRoot, position, evidenceCommit) {
   assertPreviewGitPolicy(coreRoot);
   const previewListing = git(coreRoot, [
     'ls-tree',
     '-z',
-    position.previewCommit,
+    position.head,
     '--',
     PREVIEW_PATH,
   ], { encoding: 'buffer' });
   if (previewListing.length !== 0)
-    fail(`${PREVIEW_PATH} must not be tracked by preview P`);
+    fail(`${PREVIEW_PATH} must not be tracked by candidate HEAD`);
   for (const path of REQUIRED_COMMITTED_D1P_PATHS) {
     revisionBlob(
       coreRoot,
-      position.previewCommit,
+      position.head,
       path,
       `committed D1p path ${path}`,
     );
   }
-  for (const path of [
-    CONFIG_PATH,
-    'release/d1p-evidence-contract.md',
-    SEMANTIC_PATH,
-    ROOT_PATH,
-    TRACKED_BLOB_PATH,
-    'scripts/d1p-evidence-lib.mjs',
-    'scripts/generate-d1p-evidence.mjs',
-    'scripts/verify-d1p-evidence-self-test.mjs',
-    'scripts/verify-d1p-evidence.mjs',
-  ]) {
-    const preview = revisionBlob(coreRoot, position.previewCommit, path, `immutable D1p path ${path}`);
-    const current = revisionBlob(coreRoot, 'HEAD', path, `immutable D1p path ${path}`);
-    const working = readFileSync(assertRegularFile(coreRoot, path, `immutable D1p path ${path}`));
-    if (!current.equals(preview) || !working.equals(preview))
-      fail(`immutable D1p path ${path} differs from preview P`);
+  for (const path of IMMUTABLE_SEALED_D1P_PATHS) {
+    const committed = revisionBlob(coreRoot, evidenceCommit, path, `candidate D1p path ${path}`);
+    const current = revisionBlob(coreRoot, position.head, path, `current D1p path ${path}`);
+    const committedIdentity = revisionBlobIdentity(
+      coreRoot,
+      evidenceCommit,
+      path,
+      `candidate D1p path ${path}`,
+    );
+    const currentIdentity = revisionBlobIdentity(
+      coreRoot,
+      position.head,
+      path,
+      `current D1p path ${path}`,
+    );
+    if (currentIdentity !== committedIdentity)
+      fail(`candidate D1p path ${path} Git identity differs from approved preview ${evidenceCommit}`);
+    if (!current.equals(committed))
+      fail(`candidate D1p path ${path} differs from approved preview ${evidenceCommit}`);
+    const working = readFileSync(assertRegularFile(coreRoot, path, `candidate D1p path ${path}`));
+    if (!working.equals(current))
+      fail(`candidate D1p path ${path} differs from committed HEAD`);
   }
   const status = git(coreRoot, [
     'status',
@@ -710,9 +945,15 @@ function nulPaths(bytes, label) {
   return parts;
 }
 
-export function candidateDeltaPaths(coreRoot, config) {
+export function candidateDeltaPaths(
+  coreRoot,
+  config,
+  { revision = 'HEAD', source = 'workspace' } = {},
+) {
+  if (!['head', 'workspace'].includes(source))
+    fail('candidate delta source must be exactly head or workspace');
   verifyBaseIdentity(coreRoot, config);
-  const position = candidatePosition(coreRoot, config);
+  candidatePosition(coreRoot, config);
   const changed = nulPaths(
     git(coreRoot, [
       'diff',
@@ -720,12 +961,12 @@ export function candidateDeltaPaths(coreRoot, config) {
       '-z',
       '--diff-filter=ACMRTUXB',
       config.baseCoreCommit,
-      ...(position.kind === 'base' ? [] : [position.previewCommit]),
+      ...(source === 'head' ? [revision] : []),
       '--',
     ], { encoding: 'buffer' }),
     'git diff path list',
   );
-  const untracked = position.kind === 'base'
+  const untracked = source === 'workspace'
     ? nulPaths(
       git(coreRoot, ['ls-files', '--others', '--exclude-standard', '-z'], {
         encoding: 'buffer',
@@ -740,31 +981,23 @@ export function candidateDeltaPaths(coreRoot, config) {
   if (paths.length === 0)
     fail('D1p candidate delta contains no hashable paths');
   for (const path of paths) {
-    if (position.kind === 'descendant') {
-      revisionBlob(coreRoot, position.previewCommit, path, `candidate delta path ${path}`);
-      continue;
-    }
-    const absolute = assertRegularFile(coreRoot, path, `candidate delta path ${path}`);
-    if (position.kind === 'preview') {
-      const committed = revisionBlob(
-        coreRoot,
-        position.previewCommit,
-        path,
-        `candidate delta path ${path}`,
-      );
-      if (!readFileSync(absolute).equals(committed))
-        fail(`candidate delta path ${path} does not match the final preview commit`);
-    }
+    if (source === 'head')
+      revisionBlob(coreRoot, revision, path, `candidate delta path ${path}`);
+    else
+      assertRegularFile(coreRoot, path, `candidate delta path ${path}`);
   }
   return paths;
 }
 
-export function deriveTrackedBlobManifest(coreRoot, config) {
-  const paths = candidateDeltaPaths(coreRoot, config);
-  const position = candidatePosition(coreRoot, config);
+export function deriveTrackedBlobManifest(
+  coreRoot,
+  config,
+  { revision = 'HEAD', source = 'workspace' } = {},
+) {
+  const paths = candidateDeltaPaths(coreRoot, config, { revision, source });
   return `${paths.map((path) => {
-    const bytes = position.kind !== 'base'
-      ? revisionBlob(coreRoot, position.previewCommit, path, `candidate delta path ${path}`)
+    const bytes = source === 'head'
+      ? revisionBlob(coreRoot, revision, path, `candidate delta path ${path}`)
       : readFileSync(resolve(coreRoot, path));
     return `${sha256(bytes)}  ${path}`;
   })
@@ -1290,10 +1523,12 @@ export function validateRootManifest(manifest, config) {
   return manifest;
 }
 
-function readCanonicalManifest(root, path, label) {
+function readCanonicalManifest(root, path, label, { revision } = {}) {
   return {
-    bytes: readFileSync(assertRegularFile(root, path, label)),
-    path: resolve(root, path),
+    bytes: revision === undefined
+      ? readFileSync(assertRegularFile(root, path, label))
+      : revisionBlob(root, revision, path, label),
+    path: revision === undefined ? resolve(root, path) : `${revision}:${path}`,
   };
 }
 
@@ -1311,8 +1546,14 @@ function safeRoot(path, label) {
   return realpathSync(absolute);
 }
 
-export function deriveCoreEvidence(coreRoot, config, { includePreview = true } = {}) {
-  const trackedBlobBytes = Buffer.from(deriveTrackedBlobManifest(coreRoot, config));
+export function deriveCoreEvidence(
+  coreRoot,
+  config,
+  { includePreview = true, revision = 'HEAD', source = 'workspace' } = {},
+) {
+  const trackedBlobBytes = Buffer.from(
+    deriveTrackedBlobManifest(coreRoot, config, { revision, source }),
+  );
   validateTrackedBlobManifest(trackedBlobBytes, config);
   const semantic = deriveSemanticManifest(coreRoot, config);
   validateSemanticManifest(semantic);
@@ -1332,8 +1573,9 @@ export function generateEvidence({ coreRoot, externalRoot, config: suppliedConfi
     ? readConfig(coreRoot)
     : validateConfig(suppliedConfig);
   verifyBaseIdentity(coreRoot, config);
-  verifyBasePosition(coreRoot, config, 'generation');
+  const position = verifyBasePosition(coreRoot, config, 'generation');
   assertPreviewGitPolicy(coreRoot);
+  assertProvisionalEvidenceState(coreRoot, config, position, 'evidence generation');
   const core = deriveCoreEvidence(coreRoot, config);
   const externalManifest = deriveExternalManifest(externalRoot, config);
   validateExternalManifest(externalManifest, config);
@@ -1411,10 +1653,17 @@ export function verifyEvidence({
     scope === 'preparation' ? 'preparation' : (mode === 'workspace' ? 'workspace' : 'bound'),
   );
   assertPreviewGitPolicy(coreRoot);
-  if (position.kind !== 'base')
-    assertCommittedCandidateState(coreRoot, position);
+  if (mode === 'workspace')
+    assertProvisionalEvidenceState(coreRoot, config, position, 'workspace/full verification');
+  const source = mode === 'workspace' || scope === 'preparation' ? 'workspace' : 'head';
+  const seal = source === 'head' ? approvedPreviewSeal(coreRoot, config, position) : null;
+  const evidenceCommit = seal?.commit ?? position.head;
+  if (source === 'head')
+    assertCommittedCandidateState(coreRoot, position, evidenceCommit);
   const derived = deriveCoreEvidence(coreRoot, config, {
     includePreview: mode === 'workspace',
+    revision: evidenceCommit,
+    source,
   });
   if (scope === 'preparation')
     return { config, derived };
@@ -1423,6 +1672,7 @@ export function verifyEvidence({
     coreRoot,
     TRACKED_BLOB_PATH,
     'tracked-blob manifest',
+    { revision: source === 'head' ? evidenceCommit : undefined },
   );
   validateTrackedBlobManifest(trackedFile.bytes, config);
   assertBytesEqual(trackedFile.bytes, derived.trackedBlobBytes, TRACKED_BLOB_PATH);
@@ -1431,12 +1681,15 @@ export function verifyEvidence({
     coreRoot,
     SEMANTIC_PATH,
     'canonical-semantic manifest',
+    { revision: source === 'head' ? evidenceCommit : undefined },
   );
   const semanticManifest = parseCanonicalJsonBytes(semanticFile.bytes, SEMANTIC_PATH);
   validateSemanticManifest(semanticManifest);
   assertBytesEqual(semanticFile.bytes, derived.semanticBytes, SEMANTIC_PATH);
 
-  const rootFile = readCanonicalManifest(coreRoot, ROOT_PATH, 'root manifest');
+  const rootFile = readCanonicalManifest(coreRoot, ROOT_PATH, 'root manifest', {
+    revision: source === 'head' ? evidenceCommit : undefined,
+  });
   const rootManifest = parseCanonicalJsonBytes(rootFile.bytes, ROOT_PATH);
   validateRootManifest(rootManifest, config);
   if (rootManifest.trackedBlobManifest.sha256 !== sha256(trackedFile.bytes))
@@ -1445,7 +1698,7 @@ export function verifyEvidence({
     fail('root canonicalSemanticManifest SHA-256 does not match leaf bytes');
 
   if (scope === 'tracked')
-    return { config, derived, rootManifest };
+    return { config, derived, evidenceCommit, rootManifest, seal };
 
   const previewFile = readCanonicalManifest(coreRoot, PREVIEW_PATH, 'preview-evidence manifest');
   const previewManifest = parseCanonicalJsonBytes(previewFile.bytes, PREVIEW_PATH);
@@ -1479,6 +1732,81 @@ export function verifyEvidence({
   });
   assertBytesEqual(rootFile.bytes, Buffer.from(canonicalJson(expectedRoot)), ROOT_PATH);
   return { config, derived, externalManifest, rootManifest };
+}
+
+export function generateApprovedPreviewSeal({
+  coreRoot,
+  g3ApprovalReceiptPath,
+  config: suppliedConfig,
+}) {
+  coreRoot = safeRoot(coreRoot, 'core root');
+  if (!isAbsolute(g3ApprovalReceiptPath))
+    fail('G3 approval receipt path must be absolute');
+  const receiptPath = resolve(g3ApprovalReceiptPath);
+  if (!existsSync(receiptPath))
+    fail(`Missing G3 approval receipt: ${receiptPath}`);
+  const receiptStats = lstatSync(receiptPath);
+  if (!receiptStats.isFile() || receiptStats.isSymbolicLink())
+    fail('G3 approval receipt must be a regular non-symlink file');
+  const receiptBytes = readFileSync(receiptPath);
+  if (receiptBytes.length === 0)
+    fail('G3 approval receipt must not be empty');
+
+  const config = suppliedConfig === undefined
+    ? readConfig(coreRoot)
+    : validateConfig(suppliedConfig);
+  const verified = verifyEvidence({
+    coreRoot,
+    mode: 'candidate',
+    scope: 'tracked',
+    config,
+  });
+  if (verified.seal !== null)
+    fail(`${APPROVED_PREVIEW_PATH} already seals the approved preview`);
+  const approvedPreviewCommit = verified.evidenceCommit;
+  const approvedPreviewTree = git(coreRoot, [
+    'rev-parse',
+    `${approvedPreviewCommit}^{tree}`,
+  ]).trim();
+  const rootBytes = revisionBlob(
+    coreRoot,
+    approvedPreviewCommit,
+    ROOT_PATH,
+    'approved-preview root manifest',
+  );
+  const rootManifest = verified.rootManifest;
+  validateG3ApprovalReceipt(receiptBytes, {
+    approvedPreviewCommit,
+    approvedPreviewTree,
+    canonicalSemanticManifestSha256: rootManifest.canonicalSemanticManifest.sha256,
+    externalEntrySetSha256: rootManifest.externalEntrySetSha256,
+    externalManifestSha256: rootManifest.externalManifestSha256,
+    previewEvidenceManifestSha256: rootManifest.previewEvidenceManifest.sha256,
+    rootManifestSha256: sha256(rootBytes),
+    trackedBlobManifestSha256: rootManifest.trackedBlobManifest.sha256,
+  });
+  const seal = {
+    approvedPreviewCommit,
+    approvedPreviewTree,
+    canonicalSemanticManifestSha256: rootManifest.canonicalSemanticManifest.sha256,
+    externalEntrySetSha256: rootManifest.externalEntrySetSha256,
+    externalManifestSha256: rootManifest.externalManifestSha256,
+    formatVersion: 1,
+    g3ApprovalReference: `sha256:${sha256(receiptBytes)}`,
+    previewEvidenceManifestSha256: rootManifest.previewEvidenceManifest.sha256,
+    rootManifestSha256: sha256(rootBytes),
+    trackedBlobManifestSha256: rootManifest.trackedBlobManifest.sha256,
+  };
+  const sealBytes = Buffer.from(canonicalJson(seal));
+  assertMissingPath(coreRoot, APPROVED_PREVIEW_PATH, APPROVED_PREVIEW_PATH);
+  const output = preflightOutputPath(
+    coreRoot,
+    APPROVED_PREVIEW_PATH,
+    APPROVED_PREVIEW_PATH,
+  );
+  createOutputParents(coreRoot, APPROVED_PREVIEW_PATH, APPROVED_PREVIEW_PATH);
+  writeFileSync(output, sealBytes);
+  return { path: output, seal, sealBytes };
 }
 
 export function productionConfigForSelfTest() {

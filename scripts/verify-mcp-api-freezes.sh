@@ -90,9 +90,5 @@ done < "$FROZEN_PHASES"
 "$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-d1p-evidence-self-test.mjs"
 "$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-d1p-evidence.mjs" \
   --mode candidate --scope preparation
-if [ -f "$PROJECT_ROOT/release/d1p-public-cutover-manifest.json" ]; then
-  "$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-d1p-evidence.mjs" \
-    --mode candidate --scope tracked
-fi
 
 echo "Verified frozen MCP API phases against reviewed signature snapshots"
