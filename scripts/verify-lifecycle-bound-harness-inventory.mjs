@@ -4047,23 +4047,6 @@ function requireUniqueLiteral(text, literal, label) {
     fail(`${label} must occur exactly once; found ${count}.`);
 }
 
-function requireExactYamlStep(text, expectedLines, label) {
-  const normalized = normalizeHostText(text);
-  const marker = expectedLines[0];
-  requireUniqueLiteral(normalized, marker, `${label} step marker`);
-  const start = normalized.indexOf(marker);
-  const nextStep = /^      -\s+/gmu;
-  nextStep.lastIndex = start + marker.length;
-  const next = nextStep.exec(normalized);
-  const actual = normalized.slice(start, next?.index ?? normalized.length)
-    .trimEnd();
-  const expected = expectedLines.join('\n');
-  if (actual !== expected)
-    fail(`${label} must be one exact executable step with no neutralizing keys or commands.`);
-  for (const command of expectedLines.slice(2))
-    requireUniqueLiteral(normalized, command.trim(), `${label} command`);
-}
-
 function requireExactShellBlock(text, expectedLines, label) {
   const normalized = normalizeHostText(text);
   const expected = expectedLines.join('\n');
@@ -4076,13 +4059,15 @@ function requireExactShellBlock(text, expectedLines, label) {
 export function verifyLifecycleHostWiring(texts) {
   const ciPath = '.github/workflows/ci.yml';
   const ci = texts.get(ciPath);
-  if (ci === undefined) fail(`Missing lifecycle CI host ${ciPath}.`);
-  requireExactYamlStep(ci, [
-    '      - name: Verify lifecycle-bound harness closure',
-    '        run: |',
-    '          node scripts/verify-lifecycle-bound-harness-inventory-self-test.mjs',
-    '          node scripts/verify-lifecycle-bound-harness-inventory.mjs',
-  ], 'CI lifecycle closure host');
+  if (ci === undefined) fail(`Missing routine CI workflow ${ciPath}.`);
+  const normalizedCi = normalizeHostText(ci);
+  for (const command of [
+    'node scripts/verify-lifecycle-bound-harness-inventory-self-test.mjs',
+    'node scripts/verify-lifecycle-bound-harness-inventory.mjs',
+  ]) {
+    if (literalCount(normalizedCi, command) !== 0)
+      fail('Routine CI must not invoke release-only lifecycle closure checks.');
+  }
 
   const releasePath = 'scripts/validate-release-candidate.sh';
   const release = texts.get(releasePath);

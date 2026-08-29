@@ -70,6 +70,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.zip.GZIPInputStream;
@@ -222,6 +223,8 @@ final class DefaultHttpServer implements HttpServer {
 	private volatile ExecutorService streamingExecutorService;
 	@Nullable
 	private volatile ScheduledExecutorService streamingTimeoutExecutorService;
+	@Nullable
+	private volatile AtomicBoolean streamingForcedShutdownStarted;
 	@Nullable
 	private volatile TimeoutScheduler requestHandlerTimeoutScheduler;
 	@Nullable
@@ -455,6 +458,8 @@ final class DefaultHttpServer implements HttpServer {
 
 			BuiltInTransportLifecycleAdapter.Generation lifecycleGeneration =
 					getLifecycleAdapter().beginStart();
+			AtomicBoolean streamingForcedShutdownStarted = new AtomicBoolean();
+			this.streamingForcedShutdownStarted = streamingForcedShutdownStarted;
 			try {
 				this.startSetupHook.run();
 
@@ -644,7 +649,8 @@ final class DefaultHttpServer implements HttpServer {
 									try {
 										MicrohttpResponse microhttpResponse = toMicrohttpResponse(requestForResponse,
 												requestResult.getResourceMethod().orElse(null),
-												requestResult.getMarshaledResponse());
+												requestResult.getMarshaledResponse(),
+												streamingForcedShutdownStarted::get);
 										if (responseWritten.compareAndSet(false, true)) {
 											cancelTimeout(timeoutFutureRef.getAndSet(null));
 											try {
@@ -1070,14 +1076,24 @@ final class DefaultHttpServer implements HttpServer {
 
 	@NonNull
 	protected MicrohttpResponse toMicrohttpResponse(@NonNull MarshaledResponse marshaledResponse) {
-		return toMicrohttpResponse(null, null, marshaledResponse);
+		return toMicrohttpResponse(null, null, marshaledResponse, () -> false);
 	}
 
 	@NonNull
 	protected MicrohttpResponse toMicrohttpResponse(@Nullable Request request,
-																									@Nullable ResourceMethod resourceMethod,
-																									@NonNull MarshaledResponse marshaledResponse) {
+																	@Nullable ResourceMethod resourceMethod,
+																	@NonNull MarshaledResponse marshaledResponse) {
+		return toMicrohttpResponse(request, resourceMethod, marshaledResponse,
+				() -> false);
+	}
+
+	@NonNull
+	private MicrohttpResponse toMicrohttpResponse(@Nullable Request request,
+																@Nullable ResourceMethod resourceMethod,
+																@NonNull MarshaledResponse marshaledResponse,
+																@NonNull BooleanSupplier streamingForcedShutdownStarted) {
 		requireNonNull(marshaledResponse);
+		requireNonNull(streamingForcedShutdownStarted);
 
 		List<Header> headers = new ArrayList<>();
 
@@ -1147,6 +1163,7 @@ final class DefaultHttpServer implements HttpServer {
 					getStreamingChunkSizeInBytes(),
 					deadline,
 					idleTimeout,
+					streamingForcedShutdownStarted,
 					(establishedAt, streamDuration, cancelationReason, throwable) ->
 							notifyDidTerminateResponseStream(streamingRequest, streamingResourceMethod, marshaledResponse, establishedAt, streamDuration, cancelationReason, throwable),
 					(throwable) -> safelyLog(LogEvent.with(LogEventType.RESPONSE_STREAM_CANCELATION_CALLBACK_FAILED,
@@ -2183,7 +2200,9 @@ final class DefaultHttpServer implements HttpServer {
 	private HttpRuntimeSnapshot runtimeSnapshot() {
 		return new HttpRuntimeSnapshot(this.eventLoop,
 				this.requestHandlerExecutorService, this.streamingExecutorService,
-				this.streamingTimeoutExecutorService, this.requestHandlerTimeoutScheduler);
+				this.streamingTimeoutExecutorService,
+				this.streamingForcedShutdownStarted,
+				this.requestHandlerTimeoutScheduler);
 	}
 
 	private void releaseRuntimeSnapshot(@NonNull HttpRuntimeSnapshot snapshot) {
@@ -2196,6 +2215,8 @@ final class DefaultHttpServer implements HttpServer {
 			this.streamingExecutorService = null;
 		if (this.streamingTimeoutExecutorService == snapshot.streamingTimeoutExecutor())
 			this.streamingTimeoutExecutorService = null;
+		if (this.streamingForcedShutdownStarted == snapshot.streamingForcedShutdownStarted())
+			this.streamingForcedShutdownStarted = null;
 		if (this.requestHandlerTimeoutScheduler == snapshot.requestTimeoutScheduler())
 			this.requestHandlerTimeoutScheduler = null;
 	}
@@ -2222,6 +2243,7 @@ final class DefaultHttpServer implements HttpServer {
 			@Nullable ExecutorService requestHandlerExecutor,
 			@Nullable ExecutorService streamingExecutor,
 			@Nullable ScheduledExecutorService streamingTimeoutExecutor,
+			@Nullable AtomicBoolean streamingForcedShutdownStarted,
 			@Nullable TimeoutScheduler requestTimeoutScheduler) {
 	}
 
@@ -2254,6 +2276,8 @@ final class DefaultHttpServer implements HttpServer {
 		public void force() {
 			quiesce();
 			HttpRuntimeSnapshot snapshot = retained();
+			if (snapshot.streamingForcedShutdownStarted() != null)
+				snapshot.streamingForcedShutdownStarted().set(true);
 			if (snapshot.eventLoop() != null)
 				snapshot.eventLoop().stopConnections();
 			if (snapshot.requestHandlerExecutor() != null)

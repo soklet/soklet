@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Test;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.SocketOption;
@@ -42,8 +43,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -125,6 +129,101 @@ public class StreamingMicrohttpResponsesRaceTests {
 		Assertions.assertNull(callbackFailureRef.get());
 	}
 
+	@Test
+	public void executor_shutdown_interrupt_wrapped_by_source_reports_server_stopping() throws Exception {
+		ExecutorService executorService = Executors.newSingleThreadExecutor();
+		ScheduledExecutorService timeoutExecutorService = Executors.newSingleThreadScheduledExecutor();
+		AtomicReference<StreamTerminationReason> terminationReasonRef = new AtomicReference<>();
+		AtomicReference<Throwable> terminationThrowableRef = new AtomicReference<>();
+		AtomicBoolean forcedShutdownStarted = new AtomicBoolean();
+		CountDownLatch readEnteredLatch = new CountDownLatch(1);
+		CountDownLatch terminatedLatch = new CountDownLatch(1);
+		WritableSource source = null;
+
+		try {
+			StreamingResponseBody body = StreamingResponseBody.fromInputStream(() -> new InputStream() {
+				@Override
+				public int read() throws IOException {
+					return read(new byte[1], 0, 1);
+				}
+
+				@Override
+				public int read(byte[] bytes, int offset, int length) throws IOException {
+					readEnteredLatch.countDown();
+					try {
+						new CountDownLatch(1).await();
+					} catch (InterruptedException e) {
+						// Deliberately erase the interrupt shape. The explicit transport
+						// force boundary, not application exception inspection, owns the reason.
+						throw new IOException("Source read stopped");
+					}
+					return -1;
+				}
+			});
+			source = newStreamingSource(body, executorService, timeoutExecutorService,
+					terminationReasonRef, terminationThrowableRef, terminatedLatch,
+					forcedShutdownStarted::get);
+			source.start();
+			Assertions.assertTrue(readEnteredLatch.await(2, TimeUnit.SECONDS),
+					"Streaming source did not enter its blocking read");
+
+			forcedShutdownStarted.set(true);
+			executorService.shutdownNow();
+
+			Assertions.assertTrue(terminatedLatch.await(2, TimeUnit.SECONDS),
+					"Stream termination lifecycle hook was not invoked");
+			Assertions.assertEquals(StreamTerminationReason.SERVER_STOPPING,
+					terminationReasonRef.get());
+			Assertions.assertNull(terminationThrowableRef.get());
+		} finally {
+			if (source != null)
+				source.close(StreamTerminationReason.SERVER_STOPPING, null);
+			executorService.shutdownNow();
+			timeoutExecutorService.shutdownNow();
+		}
+	}
+
+	@Test
+	public void producer_failure_during_graceful_executor_shutdown_remains_producer_failed() throws Exception {
+		ExecutorService executorService = Executors.newSingleThreadExecutor();
+		ScheduledExecutorService timeoutExecutorService = Executors.newSingleThreadScheduledExecutor();
+		AtomicReference<StreamTerminationReason> terminationReasonRef = new AtomicReference<>();
+		AtomicReference<Throwable> terminationThrowableRef = new AtomicReference<>();
+		CountDownLatch producerEnteredLatch = new CountDownLatch(1);
+		CountDownLatch releaseProducerLatch = new CountDownLatch(1);
+		CountDownLatch terminatedLatch = new CountDownLatch(1);
+		WritableSource source = null;
+
+		try {
+			StreamingResponseBody body = StreamingResponseBody.fromWriter((output, context) -> {
+				producerEnteredLatch.countDown();
+				if (!releaseProducerLatch.await(2, TimeUnit.SECONDS))
+					throw new IllegalStateException("Producer was not released");
+				throw new IOException("Expected producer failure");
+			});
+			source = newStreamingSource(body, executorService, timeoutExecutorService,
+					terminationReasonRef, terminationThrowableRef, terminatedLatch);
+			source.start();
+			Assertions.assertTrue(producerEnteredLatch.await(2, TimeUnit.SECONDS),
+					"Streaming producer did not start");
+
+			executorService.shutdown();
+			releaseProducerLatch.countDown();
+
+			Assertions.assertTrue(terminatedLatch.await(2, TimeUnit.SECONDS),
+					"Stream termination lifecycle hook was not invoked");
+			Assertions.assertEquals(StreamTerminationReason.PRODUCER_FAILED,
+					terminationReasonRef.get());
+			Assertions.assertInstanceOf(IOException.class, terminationThrowableRef.get());
+		} finally {
+			releaseProducerLatch.countDown();
+			if (source != null)
+				source.close();
+			executorService.shutdownNow();
+			timeoutExecutorService.shutdownNow();
+		}
+	}
+
 	private ExerciseResult exerciseTerminalWriteRace(AtomicReference<StreamTerminationReason> callbackReasonRef,
 																									AtomicReference<StreamTerminationReason> terminationReasonRef,
 																									AtomicReference<Throwable> terminationThrowableRef,
@@ -159,6 +258,49 @@ public class StreamingMicrohttpResponsesRaceTests {
 			context.onCancel(() -> callbackReasonRef.set(context.getCancelationReason().orElse(null)));
 			output.write("ok".getBytes(StandardCharsets.UTF_8));
 		});
+		return newStreamingSource(body, executorService, timeoutExecutorService,
+				terminationReasonRef, terminationThrowableRef, terminatedLatch,
+				() -> false,
+				callbackFailureRef::set);
+	}
+
+	private WritableSource newStreamingSource(StreamingResponseBody body,
+													ExecutorService executorService,
+													ScheduledExecutorService timeoutExecutorService,
+													AtomicReference<StreamTerminationReason> terminationReasonRef,
+													AtomicReference<Throwable> terminationThrowableRef,
+													CountDownLatch terminatedLatch) throws IOException {
+		return newStreamingSource(body, executorService, timeoutExecutorService,
+				terminationReasonRef, terminationThrowableRef, terminatedLatch,
+				() -> false,
+				throwable -> {
+					throw new AssertionError("Unexpected cancelation callback failure", throwable);
+				});
+	}
+
+	private WritableSource newStreamingSource(StreamingResponseBody body,
+													ExecutorService executorService,
+													ScheduledExecutorService timeoutExecutorService,
+													AtomicReference<StreamTerminationReason> terminationReasonRef,
+													AtomicReference<Throwable> terminationThrowableRef,
+													CountDownLatch terminatedLatch,
+													BooleanSupplier forcedShutdownStarted) throws IOException {
+		return newStreamingSource(body, executorService, timeoutExecutorService,
+				terminationReasonRef, terminationThrowableRef, terminatedLatch,
+				forcedShutdownStarted,
+				throwable -> {
+					throw new AssertionError("Unexpected cancelation callback failure", throwable);
+				});
+	}
+
+	private WritableSource newStreamingSource(StreamingResponseBody body,
+													ExecutorService executorService,
+													ScheduledExecutorService timeoutExecutorService,
+													AtomicReference<StreamTerminationReason> terminationReasonRef,
+													AtomicReference<Throwable> terminationThrowableRef,
+													CountDownLatch terminatedLatch,
+													BooleanSupplier forcedShutdownStarted,
+													Consumer<Throwable> callbackFailureConsumer) throws IOException {
 		MicrohttpResponse response = StreamingMicrohttpResponses.withStreamingBody(
 				200,
 				"OK",
@@ -171,12 +313,13 @@ public class StreamingMicrohttpResponsesRaceTests {
 				1_024,
 				null,
 				null,
+				forcedShutdownStarted,
 				(establishedAt, streamDuration, cancelationReason, throwable) -> {
 					terminationReasonRef.set(cancelationReason);
 					terminationThrowableRef.set(throwable);
 					terminatedLatch.countDown();
 				},
-				callbackFailureRef::set);
+				callbackFailureConsumer);
 
 		return response.writableSource(response.serializeHead("HTTP/1.1", List.of()));
 	}

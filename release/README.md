@@ -49,15 +49,17 @@ families settled by the lifecycle plan. The verifier fails on source-line or
 policy drift, an unclassified candidate, an unresolved migration action, an
 unbounded startup without controlled-completion proof, or a lifecycle path
 that does not fit its recorded guard. Its adversarial self-test runs before the
-inventory verifier in CI and candidate validation.
+inventory verifier during release-candidate validation. Ordinary push and pull
+request CI does not run this release-governance census.
 
 D1p public-cutover evidence has a separate deterministic contract in
 `release/d1p-evidence-contract.md` and frozen inputs in
-`release/d1p-evidence-config.json`. The API-freeze wrapper runs its adversarial
-self-test and derives the compiler-backed current-worktree evidence in memory
-before any manifest is generated. CI and the release `api-freeze` gate require
-sibling-blind verification of the tracked root and leaves against the exact
-clean cumulative `HEAD`. Ordinary pre-G3 remediation commits are supported;
+`release/d1p-evidence-config.json`. The release validator runs the adversarial
+self-test during its candidate build. Its `api-freeze` gate then produces the
+compiler-backed reports and explicitly runs both preparation and sibling-blind
+tracked verification against the exact clean cumulative `HEAD`. The ordinary
+push and pull request API-freeze wrapper remains API-only. Ordinary pre-G3
+remediation commits are supported;
 their evidence must be regenerated from accepted D1 through the new tip before
 that tip can pass candidate verification. After D2, a one-time dedicated
 `release/d1p-approved-preview.json` seal authenticates approved `P` from Git

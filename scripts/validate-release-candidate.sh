@@ -612,6 +612,7 @@ run_api_freeze() {
 		cd "$checkout"
 		env JAVA_HOME="$core_java_home" PATH="$core_java_home/bin:$PATH" \
 			scripts/verify-mcp-api-freezes.sh
+		node scripts/verify-d1p-evidence.mjs --mode candidate --scope preparation
 		node scripts/verify-d1p-evidence.mjs --mode candidate --scope tracked
 	) 2>&1 | tee "$log"
 	local raw_root="$evidence_root/raw/api-freeze"

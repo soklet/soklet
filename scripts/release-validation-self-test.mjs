@@ -408,155 +408,34 @@ try {
     /\n  api-diff:\n([\s\S]*?)\n  fuzz-regression:/,
   );
   assert.notEqual(apiDiffJob, null);
-  const exactHeadCheckoutBlock = [
-    '          fetch-depth: 0',
-    '          # D1p must inspect the exact cumulative PR-head candidate, not GitHub\'s',
-    '          # synthetic two-parent pull-request merge commit.',
-    "          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}",
+  const apiFreezeCiBlock = [
+    '      - name: Verify reviewed API incompatibilities and MCP freezes',
+    '        run: scripts/verify-mcp-api-freezes.sh',
   ];
-  assertExactHostBlock(apiDiffJob[1], exactHeadCheckoutBlock, 'api-diff exact-head checkout');
-  assert.throws(
-    () => assertExactHostBlock(
-      apiDiffJob[1].replace(
-        exactHeadCheckoutBlock[3],
-        `${exactHeadCheckoutBlock[3]} # ignored suffix`,
-      ),
-      exactHeadCheckoutBlock,
-      'suffix-mutated api-diff exact-head checkout',
-    ),
-    /exact executable block once/,
-  );
-  const d1pCiBlock = [
-    '      - name: Require tracked D1p public-cutover evidence',
-    '        run: |',
-    '          node scripts/verify-d1p-evidence-self-test.mjs',
-    '          node scripts/verify-d1p-evidence.mjs --mode candidate --scope tracked',
-  ];
-  const lifecycleCiBlock = [
-    '      - name: Verify lifecycle-bound harness closure',
-    '        run: |',
-    '          node scripts/verify-lifecycle-bound-harness-inventory-self-test.mjs',
-    '          node scripts/verify-lifecycle-bound-harness-inventory.mjs',
-  ];
-  assertExactHostBlock(apiDiffJob[1], d1pCiBlock, 'api-diff D1p host');
-  assertExactHostBlock(apiDiffJob[1], lifecycleCiBlock, 'api-diff lifecycle host');
-  assert.throws(
-    () => assertExactHostBlock(
-      apiDiffJob[1].replace(
-        '          node scripts/verify-d1p-evidence-self-test.mjs',
-        '          echo node scripts/verify-d1p-evidence-self-test.mjs',
-      ),
-      d1pCiBlock,
-      'mutated api-diff D1p host',
-    ),
-    /exact executable block once/,
-  );
-  assert.throws(
-    () => assertExactHostBlock(
-      apiDiffJob[1].replace(d1pCiBlock[3], `${d1pCiBlock[3]} || true`),
-      d1pCiBlock,
-      'suffix-neutralized api-diff D1p host',
-    ),
-    /exact executable block once/,
-  );
-  assert.throws(
-    () => assertExactHostBlock(
-      apiDiffJob[1].replace(
-        `${d1pCiBlock[2]}\n${d1pCiBlock[3]}`,
-        `${d1pCiBlock[3]}\n${d1pCiBlock[2]}`,
-      ),
-      d1pCiBlock,
-      'reordered api-diff D1p host',
-    ),
-    /exact executable block once/,
-  );
-  const apiFreezeIndex = ciWorkflow.indexOf('run: scripts/verify-mcp-api-freezes.sh');
-  const d1pCiSelfTestIndex = ciWorkflow.indexOf(
-    'node scripts/verify-d1p-evidence-self-test.mjs',
-  );
-  const d1pCiVerifierIndex = ciWorkflow.indexOf(
-    'node scripts/verify-d1p-evidence.mjs --mode candidate --scope tracked',
-  );
-  const versionInventoryIndex = ciWorkflow.indexOf(
-    'node scripts/verify-version-transition-inventory-self-test.mjs',
-  );
-  assert.ok(apiFreezeIndex >= 0);
-  assert.ok(apiFreezeIndex < d1pCiSelfTestIndex);
-  assert.ok(d1pCiSelfTestIndex < d1pCiVerifierIndex);
-  assert.ok(d1pCiVerifierIndex < versionInventoryIndex);
-  assert.equal(
-    ciWorkflow.match(/node scripts\/verify-d1p-evidence-self-test\.mjs/g)?.length,
-    1,
-  );
-  assert.equal(
-    ciWorkflow.match(/node scripts\/verify-d1p-evidence\.mjs --mode candidate --scope tracked/g)?.length,
-    1,
-  );
-  assert.equal(
-    apiDiffJob[1].match(/node scripts\/verify-lifecycle-bound-harness-inventory-self-test\.mjs/g)?.length,
-    1,
-  );
-  assert.equal(
-    apiDiffJob[1].match(/node scripts\/verify-lifecycle-bound-harness-inventory\.mjs/g)?.length,
-    1,
-  );
-  assert.match(
-    apiDiffJob[1],
-    /node scripts\/verify-lifecycle-bound-harness-inventory-self-test\.mjs\n\s+node scripts\/verify-lifecycle-bound-harness-inventory\.mjs/,
-  );
-  assert.equal(
-    apiDiffJob[1].match(/node scripts\/verify-d1p-evidence-self-test\.mjs/g)?.length,
-    1,
-  );
-  assert.equal(
-    apiDiffJob[1].match(/node scripts\/verify-d1p-evidence\.mjs --mode candidate --scope tracked/g)?.length,
-    1,
-  );
-  assert.match(
-    apiDiffJob[1],
-    /node scripts\/verify-d1p-evidence-self-test\.mjs\n\s+node scripts\/verify-d1p-evidence\.mjs --mode candidate --scope tracked/,
-  );
+  assertExactHostBlock(apiDiffJob[1], apiFreezeCiBlock, 'ordinary CI API-freeze host');
+  assert.doesNotMatch(apiDiffJob[1], /fetch-depth:|^\s+ref:/mu);
+  for (const releaseOnlyCommand of [
+    /verify-d1p-evidence/u,
+    /verify-lifecycle-bound-harness-inventory/u,
+    /verify-version-transition-inventory/u,
+  ])
+    assert.doesNotMatch(apiDiffJob[1], releaseOnlyCommand);
   for (const path of [
     'release/d1p-evidence-config.json',
     'release/d1p-tracked-blobs.sha256',
     'release/d1p-canonical-semantic-digests.json',
     'release/d1p-public-cutover-manifest.json',
   ]) {
-    assert.equal(ciWorkflow.split(path).length - 1, 1, `${path} must be uploaded once`);
+    assert.equal(
+      ciWorkflow.includes(path),
+      false,
+      `${path} must not be uploaded by ordinary CI`,
+    );
   }
 
   const apiFreezeWrapper = readFileSync(apiFreezeWrapperPath, 'utf8');
-  const wrapperD1pBlock = [
-    '"$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-d1p-evidence-self-test.mjs"',
-    '"$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-d1p-evidence.mjs" \\',
-    '  --mode candidate --scope preparation',
-  ];
-  assertExactHostBlock(apiFreezeWrapper, wrapperD1pBlock, 'API-freeze D1p host');
-  assert.throws(
-    () => assertExactHostBlock(
-      apiFreezeWrapper.replace(wrapperD1pBlock[0], `echo ${wrapperD1pBlock[0]}`),
-      wrapperD1pBlock,
-      'mutated API-freeze D1p host',
-    ),
-    /exact executable block once/,
-  );
-  const wrapperD1pSelfTestIndex = apiFreezeWrapper.indexOf(
-    '"$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-d1p-evidence-self-test.mjs"',
-  );
-  const wrapperPreparationIndex = apiFreezeWrapper.indexOf(
-    '--mode candidate --scope preparation',
-  );
-  assert.ok(wrapperD1pSelfTestIndex >= 0);
-  assert.ok(wrapperD1pSelfTestIndex < wrapperPreparationIndex);
-  assert.equal(
-    apiFreezeWrapper.match(/verify-d1p-evidence-self-test\.mjs/g)?.length,
-    1,
-  );
-  assert.equal(
-    apiFreezeWrapper.match(/--mode candidate --scope preparation/g)?.length,
-    1,
-  );
-  assert.equal(apiFreezeWrapper.includes('--mode candidate --scope tracked'), false);
+  assert.doesNotMatch(apiFreezeWrapper, /verify-d1p-evidence/u);
+  assert.doesNotMatch(apiFreezeWrapper, /--scope (?:preparation|tracked)/u);
   assert.match(
     releaseWorkflow,
     /run: scripts\/validate-release-candidate\.sh "\$SOKLET_CANDIDATE_COMMIT"/,
@@ -754,6 +633,7 @@ try {
   const releaseD1pBlock = [
     '\t\tenv JAVA_HOME="$core_java_home" PATH="$core_java_home/bin:$PATH" \\',
     '\t\t\tscripts/verify-mcp-api-freezes.sh',
+    '\t\tnode scripts/verify-d1p-evidence.mjs --mode candidate --scope preparation',
     '\t\tnode scripts/verify-d1p-evidence.mjs --mode candidate --scope tracked',
   ];
   assertExactHostBlock(apiFreezeFunction[1], releaseD1pBlock, 'release API-freeze D1p host');
@@ -767,9 +647,20 @@ try {
   );
   assert.throws(
     () => assertExactHostBlock(
-      apiFreezeFunction[1].replace(releaseD1pBlock[2], `${releaseD1pBlock[2]} || true`),
+      apiFreezeFunction[1].replace(releaseD1pBlock[3], `${releaseD1pBlock[3]} || true`),
       releaseD1pBlock,
       'suffix-neutralized release API-freeze D1p host',
+    ),
+    /exact executable block once/,
+  );
+  assert.throws(
+    () => assertExactHostBlock(
+      apiFreezeFunction[1].replace(
+        `${releaseD1pBlock[2]}\n${releaseD1pBlock[3]}`,
+        `${releaseD1pBlock[3]}\n${releaseD1pBlock[2]}`,
+      ),
+      releaseD1pBlock,
+      'reordered release API-freeze D1p host',
     ),
     /exact executable block once/,
   );
@@ -778,11 +669,27 @@ try {
     1,
   );
   assert.equal(
-    apiFreezeFunction[1].match(/node scripts\/verify-d1p-evidence\.mjs --mode candidate --scope tracked/g)?.length,
+    apiFreezeFunction[1].match(
+      /node scripts\/verify-d1p-evidence\.mjs --mode candidate --scope preparation/g,
+    )?.length,
+    1,
+  );
+  assert.equal(
+    apiFreezeFunction[1].match(
+      /node scripts\/verify-d1p-evidence\.mjs --mode candidate --scope tracked/g,
+    )?.length,
     1,
   );
   assert.ok(
     apiFreezeFunction[1].indexOf('scripts/verify-mcp-api-freezes.sh')
+      < apiFreezeFunction[1].indexOf(
+        'node scripts/verify-d1p-evidence.mjs --mode candidate --scope preparation',
+      ),
+  );
+  assert.ok(
+    apiFreezeFunction[1].indexOf(
+      'node scripts/verify-d1p-evidence.mjs --mode candidate --scope preparation',
+    )
       < apiFreezeFunction[1].indexOf(
         'node scripts/verify-d1p-evidence.mjs --mode candidate --scope tracked',
       ),

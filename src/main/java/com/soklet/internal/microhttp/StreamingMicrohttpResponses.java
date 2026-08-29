@@ -57,6 +57,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -132,9 +133,30 @@ public final class StreamingMicrohttpResponses {
 																									 @NonNull Integer queueCapacityInBytes,
 																									 @NonNull Integer chunkSizeInBytes,
 																									 @Nullable Instant deadline,
-																									 @Nullable Duration idleTimeout,
-																									 @NonNull TerminationListener terminationListener,
-																									 @NonNull Consumer<Throwable> cancelationCallbackFailureConsumer) {
+																	 @Nullable Duration idleTimeout,
+																	 @NonNull TerminationListener terminationListener,
+																	 @NonNull Consumer<Throwable> cancelationCallbackFailureConsumer) {
+		return withStreamingBody(status, reason, headers, request, body,
+				executorService, timeoutExecutorService, queueCapacityInBytes,
+				chunkSizeInBytes, deadline, idleTimeout, () -> false,
+				terminationListener, cancelationCallbackFailureConsumer);
+	}
+
+	@NonNull
+	public static MicrohttpResponse withStreamingBody(@NonNull Integer status,
+																	 @NonNull String reason,
+																	 @NonNull List<@NonNull Header> headers,
+																	 @NonNull Request request,
+																	 @NonNull StreamingResponseBody body,
+																	 @NonNull ExecutorService executorService,
+																	 @NonNull ScheduledExecutorService timeoutExecutorService,
+																	 @NonNull Integer queueCapacityInBytes,
+																	 @NonNull Integer chunkSizeInBytes,
+																	 @Nullable Instant deadline,
+																	 @Nullable Duration idleTimeout,
+																	 @NonNull BooleanSupplier forcedShutdownStarted,
+																	 @NonNull TerminationListener terminationListener,
+																	 @NonNull Consumer<Throwable> cancelationCallbackFailureConsumer) {
 		requireNonNull(status);
 		requireNonNull(reason);
 		requireNonNull(headers);
@@ -144,6 +166,7 @@ public final class StreamingMicrohttpResponses {
 		requireNonNull(timeoutExecutorService);
 		requireNonNull(queueCapacityInBytes);
 		requireNonNull(chunkSizeInBytes);
+		requireNonNull(forcedShutdownStarted);
 		requireNonNull(terminationListener);
 		requireNonNull(cancelationCallbackFailureConsumer);
 
@@ -162,6 +185,7 @@ public final class StreamingMicrohttpResponses {
 				chunkSizeInBytes,
 				deadline,
 				idleTimeout,
+				forcedShutdownStarted,
 				terminationListener,
 				cancelationCallbackFailureConsumer));
 	}
@@ -209,6 +233,8 @@ public final class StreamingMicrohttpResponses {
 		@Nullable
 		private final Duration idleTimeout;
 		@NonNull
+		private final BooleanSupplier forcedShutdownStarted;
+		@NonNull
 		private final TerminationListener terminationListener;
 		@NonNull
 		private final DefaultCancelationToken cancelationToken;
@@ -247,9 +273,10 @@ public final class StreamingMicrohttpResponses {
 																		@NonNull ScheduledExecutorService timeoutExecutorService,
 																		@NonNull Integer queueCapacityInBytes,
 																		@NonNull Integer chunkSizeInBytes,
-																		@Nullable Instant deadline,
-																		@Nullable Duration idleTimeout,
-																		@NonNull TerminationListener terminationListener,
+																						@Nullable Instant deadline,
+																						@Nullable Duration idleTimeout,
+																						@NonNull BooleanSupplier forcedShutdownStarted,
+																						@NonNull TerminationListener terminationListener,
 																		@NonNull Consumer<Throwable> cancelationCallbackFailureConsumer) {
 			requireNonNull(request);
 			this.body = requireNonNull(body);
@@ -259,6 +286,7 @@ public final class StreamingMicrohttpResponses {
 			this.chunkSizeInBytes = requireNonNull(chunkSizeInBytes);
 			this.deadline = deadline;
 			this.idleTimeout = idleTimeout;
+			this.forcedShutdownStarted = requireNonNull(forcedShutdownStarted);
 			this.terminationListener = requireNonNull(terminationListener);
 			this.cancelationToken = new DefaultCancelationToken(cancelationCallbackFailureConsumer);
 			this.context = new DefaultStreamingResponseContext(request, this.cancelationToken, deadline, idleTimeout);
@@ -285,7 +313,11 @@ public final class StreamingMicrohttpResponses {
 			try {
 				this.producerFuture = this.executorService.submit(this::runProducer);
 			} catch (RejectedExecutionException e) {
-				fail(StreamTerminationReason.PRODUCER_FAILED, e);
+				boolean serverStopping = this.forcedShutdownStarted.getAsBoolean();
+				fail(serverStopping
+						? StreamTerminationReason.SERVER_STOPPING
+						: StreamTerminationReason.PRODUCER_FAILED,
+						serverStopping ? null : e);
 			}
 		}
 
@@ -443,10 +475,16 @@ public final class StreamingMicrohttpResponses {
 				fail(e.getCancelationReason(), e.getCancelationCause().orElse(null));
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
-				fail(this.cancelationToken.getCancelationReason()
-						.orElse(StreamTerminationReason.CLIENT_DISCONNECTED), e);
+				boolean serverStopping = this.forcedShutdownStarted.getAsBoolean();
+				fail(this.cancelationToken.getCancelationReason().orElse(serverStopping
+						? StreamTerminationReason.SERVER_STOPPING
+						: StreamTerminationReason.CLIENT_DISCONNECTED),
+						serverStopping ? null : e);
 			} catch (Throwable t) {
-				fail(StreamTerminationReason.PRODUCER_FAILED, t);
+				if (this.forcedShutdownStarted.getAsBoolean())
+					fail(StreamTerminationReason.SERVER_STOPPING, null);
+				else
+					fail(StreamTerminationReason.PRODUCER_FAILED, t);
 			}
 		}
 

@@ -25,6 +25,11 @@ node scripts/verify-d1p-evidence.mjs --mode candidate --scope preparation
 node scripts/verify-d1p-evidence.mjs --mode candidate --scope tracked
 ```
 
+These are release-candidate checks, not ordinary push or pull request CI. The
+ordinary API-freeze wrapper produces and verifies API compatibility reports
+without consuming D1p evidence. The release validator runs that wrapper first,
+then invokes `preparation` and `tracked` explicitly in that order.
+
 `preparation` derives the tracked-blob and current canonical-semantic leaves in
 memory without requiring preview artifacts or generated manifests. `tracked`
 additionally requires and verifies the tracked leaves and root, but

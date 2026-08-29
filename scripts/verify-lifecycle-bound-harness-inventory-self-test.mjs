@@ -382,35 +382,19 @@ run('approved JUnit timeout configuration is exact and exclusive', () => {
   }
 });
 
-run('CI lifecycle host is one exact ordered fail-closed step', () => {
+run('routine CI excludes release-only lifecycle closure', () => {
   const ciPath = '.github/workflows/ci.yml';
   const releasePath = 'scripts/validate-release-candidate.sh';
   const pristine = sourceTexts(ciPath, releasePath);
   assert.deepEqual(verifyLifecycleHostWiring(pristine), { ciPath, releasePath });
-  const selfTest =
-    '          node scripts/verify-lifecycle-bound-harness-inventory-self-test.mjs';
-  const verifier =
-    '          node scripts/verify-lifecycle-bound-harness-inventory.mjs';
-  const block = [
-    '      - name: Verify lifecycle-bound harness closure',
-    '        run: |', selfTest, verifier,
-  ].join('\n');
-  for (const mutate of [
-    (text) => text.replace(`${selfTest}\n${verifier}`,
-      `${verifier}\n${selfTest}`),
-    (text) => text.replace(selfTest, `          # ${selfTest.trim()}`),
-    (text) => text.replace(selfTest, `${selfTest} || true`),
-    (text) => text.replace(selfTest, `          echo ${selfTest.trim()}`),
-    (text) => text.replace(selfTest,
-      `          ignored=$(${selfTest.trim()})`),
-    (text) => text.replace(verifier,
-      `${verifier}\n        continue-on-error: true`),
-    (text) => `${text}\n${block}\n`,
+  for (const command of [
+    'node scripts/verify-lifecycle-bound-harness-inventory-self-test.mjs',
+    'node scripts/verify-lifecycle-bound-harness-inventory.mjs',
   ]) {
     const texts = new Map(pristine);
-    texts.set(ciPath, mutate(texts.get(ciPath)));
+    texts.set(ciPath, `${texts.get(ciPath)}\n      - name: Inject release-only check\n        run: ${command}\n`);
     expectFailure(() => verifyLifecycleHostWiring(texts),
-      /CI lifecycle closure host/u);
+      /Routine CI must not invoke release-only lifecycle closure checks/u);
   }
 });
 

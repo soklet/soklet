@@ -1005,8 +1005,8 @@
     }
   ],
   "discoveryCensus": {
-    "candidateCount": 5526,
-    "candidateSha256": "071e5d9f2bc66293ab4b35c5d3412e6dad26ed10fe52febf0202285efa779b58",
+    "candidateCount": 5532,
+    "candidateSha256": "7beabcd94f42279c3ba2cc0de91cae0d3eedcec73418ca6235b33fee8a42d4b0",
     "candidates": [
       {
         "kinds": [
@@ -1020,7 +1020,7 @@
         "kinds": [
           "WORKFLOW_OUTER_GUARD"
         ],
-        "line": 137,
+        "line": 111,
         "lineSha256": "35ab1be1eda9777044b18b8049bda2d28c71e08fbcf39d461486d799c7aa3a5e",
         "path": ".github/workflows/ci.yml"
       },
@@ -1028,7 +1028,7 @@
         "kinds": [
           "WORKFLOW_OUTER_GUARD"
         ],
-        "line": 222,
+        "line": 196,
         "lineSha256": "020a0f8ec5f99750b0b27daf185024fab21c24729657c7f5cbbbe256a52012cf",
         "path": ".github/workflows/ci.yml"
       },
@@ -1036,7 +1036,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 224,
+        "line": 198,
         "lineSha256": "463d0de4e7a0c8d150d6dc0ef514c47f78480d791e05fd3f3700f22212292d1c",
         "path": ".github/workflows/ci.yml"
       },
@@ -1044,7 +1044,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 325,
+        "line": 299,
         "lineSha256": "b081717ee0bdbe7aa1d12e5d80fbd44fbb07a91988bde530a7ee438118aed219",
         "path": ".github/workflows/ci.yml"
       },
@@ -1052,7 +1052,7 @@
         "kinds": [
           "WORKFLOW_OUTER_GUARD"
         ],
-        "line": 355,
+        "line": 329,
         "lineSha256": "725b5e01c0f34fe4b377aab26bb57de4bf1b3fd39e9d37266b30702cad5b8292",
         "path": ".github/workflows/ci.yml"
       },
@@ -1060,7 +1060,7 @@
         "kinds": [
           "WORKFLOW_OUTER_GUARD"
         ],
-        "line": 439,
+        "line": 413,
         "lineSha256": "73658002cf91a5187bf9bbacf96c7004a0f93956595933a718f615c3ce2ab79c",
         "path": ".github/workflows/ci.yml"
       },
@@ -2706,7 +2706,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 888,
+        "line": 889,
         "lineSha256": "ace0c2891126ba2bee893ae1d7e1064a042adb5c5263efc49bddb603039361c8",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -2714,7 +2714,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 900,
+        "line": 901,
         "lineSha256": "2d9db548080610e260aa8d966675ce791f9b39663bc2b7d8eb3d4894d5b924a2",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -2722,7 +2722,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 903,
+        "line": 904,
         "lineSha256": "cc623440c5e3fa3815f0890de2fbca989333f9adacb115d6c746bbaf176bde9e",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -2730,7 +2730,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 907,
+        "line": 908,
         "lineSha256": "983fad083441a43cc36bb2aebc9f779c5e2210676e65c5e50aeee53455fa15be",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -2738,7 +2738,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 978,
+        "line": 979,
         "lineSha256": "8c2793bfcf67b0a5d80932cb6bfdbc13bb24056e671b0bd739335e9eb8b9c987",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -2746,7 +2746,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 988,
+        "line": 989,
         "lineSha256": "608f831db236667ec0e14192eb7f2cb973fe7f115a6c6006ed58d6f854272823",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -2754,7 +2754,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 995,
+        "line": 996,
         "lineSha256": "37ff3384dca19aafa0a0fb1ad38dddf416f0aee0d47547fc478cc7771ec03bbe",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -2762,7 +2762,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1006,
+        "line": 1007,
         "lineSha256": "afc878aeeddd2bbd06bcb3a2b123c3b5fd862c713054e83af349da02c91f4ae2",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -2770,7 +2770,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1058,
+        "line": 1059,
         "lineSha256": "4ee7ada100214d53e6eecc23b8dacfe84de2ef8a889395212f2743f90a79b26f",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -2778,7 +2778,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1098,
+        "line": 1099,
         "lineSha256": "a32b4fb2ebe31aca13f08b9f56e8034b055584a54fddb45c7d62d610ddd1a447",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -2786,7 +2786,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1185,
+        "line": 1186,
         "lineSha256": "bf9c71e7ac6c14f372849ba329f236ae864dc567b9d9eeca4cecb0e267e27779",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -2794,7 +2794,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1202,
+        "line": 1203,
         "lineSha256": "032acdfc0968c05d29039606c4effdd66b12ecdca4662f3da5c610153774f3cb",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -2802,7 +2802,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1219,
+        "line": 1220,
         "lineSha256": "2b915abdec28b8a6f36e8176d0effb99de5caf318de08b4a7e419a084dcb84ef",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -44750,7 +44750,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 69,
+        "line": 73,
         "lineSha256": "7d34cf3f4b769f5f627141af7875d680f36b83f26cf96a671f1c60bf483ebc5c",
         "path": "src/test/java/com/soklet/internal/microhttp/StreamingMicrohttpResponsesRaceTests.java"
       },
@@ -44758,7 +44758,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 71,
+        "line": 75,
         "lineSha256": "295ce28d670dd777cac0602830f2bb93d1acc34c64dcf9c923519d8ec044b19b",
         "path": "src/test/java/com/soklet/internal/microhttp/StreamingMicrohttpResponsesRaceTests.java"
       },
@@ -44766,7 +44766,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 82,
+        "line": 86,
         "lineSha256": "ac91ca441da21088320350439771b69001607ec503415522a0348a3da765f736",
         "path": "src/test/java/com/soklet/internal/microhttp/StreamingMicrohttpResponsesRaceTests.java"
       },
@@ -44774,7 +44774,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 101,
+        "line": 105,
         "lineSha256": "7d34cf3f4b769f5f627141af7875d680f36b83f26cf96a671f1c60bf483ebc5c",
         "path": "src/test/java/com/soklet/internal/microhttp/StreamingMicrohttpResponsesRaceTests.java"
       },
@@ -44782,7 +44782,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 103,
+        "line": 107,
         "lineSha256": "295ce28d670dd777cac0602830f2bb93d1acc34c64dcf9c923519d8ec044b19b",
         "path": "src/test/java/com/soklet/internal/microhttp/StreamingMicrohttpResponsesRaceTests.java"
       },
@@ -44790,7 +44790,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 121,
+        "line": 125,
         "lineSha256": "ac91ca441da21088320350439771b69001607ec503415522a0348a3da765f736",
         "path": "src/test/java/com/soklet/internal/microhttp/StreamingMicrohttpResponsesRaceTests.java"
       },
@@ -44798,7 +44798,55 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 185,
+        "line": 154,
+        "lineSha256": "fe50b8dd9db25a64cfbd9ef9450cf24b8bb0f8e7a7e2f3d241da32cba4d72451",
+        "path": "src/test/java/com/soklet/internal/microhttp/StreamingMicrohttpResponsesRaceTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 167,
+        "lineSha256": "cf5bef9b75ec9fb9922cfc8ec7c1f94aab04a03b358e3c887aff5e1e9039ddc3",
+        "path": "src/test/java/com/soklet/internal/microhttp/StreamingMicrohttpResponsesRaceTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 173,
+        "lineSha256": "f4d45a021b2ec2f2b05b1d542755bd1e59a2ded4362d94d7a554e96821bf8185",
+        "path": "src/test/java/com/soklet/internal/microhttp/StreamingMicrohttpResponsesRaceTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 200,
+        "lineSha256": "7976dd4820f1eabb1ad3f0118a2d3f8ca07be171df982816f8fc127ad64ced12",
+        "path": "src/test/java/com/soklet/internal/microhttp/StreamingMicrohttpResponsesRaceTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 207,
+        "lineSha256": "ad7aa43633bffc01b672d50fb85b6f15533d8d6d083cbed210bd6e2991fb1249",
+        "path": "src/test/java/com/soklet/internal/microhttp/StreamingMicrohttpResponsesRaceTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 213,
+        "lineSha256": "f4d45a021b2ec2f2b05b1d542755bd1e59a2ded4362d94d7a554e96821bf8185",
+        "path": "src/test/java/com/soklet/internal/microhttp/StreamingMicrohttpResponsesRaceTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 328,
         "lineSha256": "682223cdab4c48810e78c7c29ddbbf67a7ad7c904dae6f54b7398f1239d6cf7f",
         "path": "src/test/java/com/soklet/internal/microhttp/StreamingMicrohttpResponsesRaceTests.java"
       },
@@ -44806,7 +44854,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 187,
+        "line": 330,
         "lineSha256": "207e44e2368644697982b3770decebe8f2f85779d46e57b9b07d44ddc45a62b2",
         "path": "src/test/java/com/soklet/internal/microhttp/StreamingMicrohttpResponsesRaceTests.java"
       },
@@ -45293,7 +45341,7 @@
       }
     ],
     "countsByKind": {
-      "FIXED_WAIT_CANDIDATE": 1459,
+      "FIXED_WAIT_CANDIDATE": 1465,
       "JUNIT_OUTER_GUARD": 270,
       "LIFECYCLE_SIGNAL": 3060,
       "NAMED_TIMEOUT_CANDIDATE": 795,

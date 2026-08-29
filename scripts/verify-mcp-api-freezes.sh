@@ -87,8 +87,5 @@ done < "$FROZEN_PHASES"
   "$PROJECT_ROOT/conformance/official/verify-profile-evidence-self-test.mjs"
 "$NODE_EXECUTABLE" \
   "$PROJECT_ROOT/conformance/official/verify-profile-evidence.mjs"
-"$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-d1p-evidence-self-test.mjs"
-"$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-d1p-evidence.mjs" \
-  --mode candidate --scope preparation
 
 echo "Verified frozen MCP API phases against reviewed signature snapshots"
