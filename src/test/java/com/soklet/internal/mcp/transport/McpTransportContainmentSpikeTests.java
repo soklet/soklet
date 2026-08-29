@@ -1146,12 +1146,12 @@ public class McpTransportContainmentSpikeTests {
 				Assertions.assertNull(client.readChunk(), "concurrent completion emitted a second terminal frame");
 			}
 
-			Assertions.assertNull(competitorFailure.get());
-			Assertions.assertEquals(1, terminalWinners.get());
 			McpTransportRuntime.Snapshot cleaned = awaitSnapshot(
 					runtime,
 					value -> value.liveExchanges() == 0 && value.dispatcher().activeSlots() == 0,
 					"single-terminal fixture did not clean up");
+			Assertions.assertNull(competitorFailure.get());
+			Assertions.assertEquals(1, terminalWinners.get());
 			Assertions.assertEquals(1L, cleaned.terminalReservations());
 		} finally {
 			shutdown(runtime);
