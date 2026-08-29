@@ -1,0 +1,12 @@
+{
+  "approvedPreviewCommit": "95594f6594eddc499f3dc789d7a19dadf8efccf9",
+  "approvedPreviewTree": "6c3369484ff14786774186f93cb378fb06111709",
+  "canonicalSemanticManifestSha256": "999ee9076f307d7b623188b499568e7df68e02d906e22fd8bcdb04da53b9aa80",
+  "externalEntrySetSha256": "4a7fae2a2644694b1de58f92db04632b61fc417a74f7316d30373fbbab1d9a53",
+  "externalManifestSha256": "5bedd6f65d365e41a93141a4cb5c3c6d710b77653421b4624c29fb2837926b8b",
+  "formatVersion": 1,
+  "g3ApprovalReference": "sha256:d4461b260a84a8e6db9637cc079b57ee9e503089b0e06bb67b397557878a4b14",
+  "previewEvidenceManifestSha256": "1dd44007cd08f34dad7055b823aa03515f69f3eb16d777c5397cf749fc3fe7ae",
+  "rootManifestSha256": "d7e7abc999652390d3fd38d1acf9913b0dde70d8365ad6ce1f578495dba111e7",
+  "trackedBlobManifestSha256": "413c01c6941c7baae757607a05c5cb9c079007d45c4b4261bf1fdf0d32ebf920"
+}
