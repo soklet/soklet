@@ -11,10 +11,10 @@
   "formatVersion": 1,
   "previewEvidenceManifest": {
     "path": "target/d1p-preview-evidence.json",
-    "sha256": "c7134667c8424058edf7bc41ec78dc37eab8d6f2b1521e3349fcc25299120b0f"
+    "sha256": "1dd44007cd08f34dad7055b823aa03515f69f3eb16d777c5397cf749fc3fe7ae"
   },
   "trackedBlobManifest": {
     "path": "release/d1p-tracked-blobs.sha256",
-    "sha256": "25ef288ca64748040d1c8a039ea339c576192117c37e2e681e04955d21cfb196"
+    "sha256": "413c01c6941c7baae757607a05c5cb9c079007d45c4b4261bf1fdf0d32ebf920"
   }
 }

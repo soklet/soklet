@@ -722,13 +722,13 @@ public class SseTests {
 
 				// Broadcast one event and verify frame formatting
 				SseBroadcaster b = sse.acquireBroadcaster(ResourcePath.fromPath("/tests/abc")).get();
+				awaitClientConnection(b, 2000);
 				SseEvent ev = SseEvent.withEvent("test")
 						.data("hello\nworld")
 						.id("e1")
 						.retry(Duration.ofSeconds(10))
 						.build();
 				b.broadcastEvent(ev);
-
 				String block = readUntil(socket, "\n\n", 8192);
 				Assertions.assertNotNull(block, "Did not receive first SSE event");
 				List<String> lines = block.lines().map(String::trim).filter(s -> !s.isEmpty()).toList();
@@ -778,9 +778,9 @@ public class SseTests {
 				String bigData = java.util.stream.Stream.generate(() -> line).limit(linesCount).collect(java.util.stream.Collectors.joining("\n"));
 
 				SseBroadcaster b = sse.acquireBroadcaster(ResourcePath.fromPath("/tests/large")).get();
+				awaitClientConnection(b, 2000);
 				SseEvent ev = SseEvent.withEvent("big").id("big-1").data(bigData).build();
 				b.broadcastEvent(ev);
-
 				// Read exactly one event block
 				String block = readUntil(socket, "\n\n", (64 + 8) * linesCount + 8192);
 				Assertions.assertNotNull(block, "Did not receive large event");
@@ -954,15 +954,15 @@ public class SseTests {
 			String hdr = readUntil(socket, "\r\n\r\n", 4096);
 			if (hdr == null) hdr = readUntil(socket, "\n\n", 4096);
 			Assertions.assertNotNull(hdr);
-
 			// Kick one message through so the writer loop is active
-			sse.acquireBroadcaster(ResourcePath.fromPath("/tests/closeme")).get()
-					.broadcastEvent(SseEvent.withEvent("one").id("1").data("a").build());
+			SseBroadcaster broadcaster = sse.acquireBroadcaster(
+					ResourcePath.fromPath("/tests/closeme")).get();
+			awaitClientConnection(broadcaster, 2000);
+			broadcaster.broadcastEvent(
+					SseEvent.withEvent("one").id("1").data("a").build());
 			readUntil(socket, "\n\n", 4096); // consume it
-
 			// Now stop the server; this should enqueue poison pills and close the channel
 			app.close(); // stops both servers
-
 			// Attempt to read again; we expect EOF (-1) within timeout
 			boolean sawEof = waitForEof(socket, 6000);
 			socket.close();
