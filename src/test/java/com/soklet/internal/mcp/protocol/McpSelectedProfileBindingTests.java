@@ -50,10 +50,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import static java.util.Objects.requireNonNull;
 
 public class McpSelectedProfileBindingTests {
-	private static final String CURRENT = "2026-07-28";
-	private static final String FAKE = "2099-01-01";
-	private static final String RESULT_MARKER = "com.example/profileResult";
-	private static final String NOTIFICATION_MARKER =
+	static final String CURRENT = "2026-07-28";
+	static final String FAKE = "2099-01-01";
+	static final String RESULT_MARKER = "com.example/profileResult";
+	static final String NOTIFICATION_MARKER =
 			"com.example/profileNotification";
 	private static final String FAKE_NOTIFICATION_METADATA_KEY =
 			"io.modelcontextprotocol/fake/reserved";
@@ -436,12 +436,12 @@ public class McpSelectedProfileBindingTests {
 				input.canonicalDocument().members().containsKey(RESULT_MARKER)));
 	}
 
-	private static McpHttpServerRuntime runtime(@NonNull McpHttpEndpointBinding binding,
+	static McpHttpServerRuntime runtime(@NonNull McpHttpEndpointBinding binding,
 			@NonNull McpProtocolProfileRegistry profiles) {
 		return runtime(binding, profiles, McpJsonLimits.productionDefaults());
 	}
 
-	private static McpHttpServerRuntime runtime(@NonNull McpHttpEndpointBinding binding,
+	static McpHttpServerRuntime runtime(@NonNull McpHttpEndpointBinding binding,
 			@NonNull McpProtocolProfileRegistry profiles,
 			@NonNull McpJsonLimits jsonLimits) {
 		return new McpHttpServerRuntime(
@@ -554,7 +554,7 @@ public class McpSelectedProfileBindingTests {
 				new McpApplicationCancellationState(), notificationWriter, () -> {});
 	}
 
-	private static McpChunkedHttpClient listen(int port, String revision,
+	static McpChunkedHttpClient listen(int port, String revision,
 			String id) throws Exception {
 		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"" + id
 				+ "\",\"method\":\"subscriptions/listen\",\"params\":{\"_meta\":{"
@@ -568,7 +568,7 @@ public class McpSelectedProfileBindingTests {
 						"Mcp-Method", "subscriptions/listen")));
 	}
 
-	private static Request simulationDiscoveryRequest(String revision) {
+	static Request simulationDiscoveryRequest(String revision) {
 		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"simulation\","
 				+ "\"method\":\"server/discover\",\"params\":{\"_meta\":{"
 				+ "\"io.modelcontextprotocol/protocolVersion\":\"" + revision
@@ -583,7 +583,7 @@ public class McpSelectedProfileBindingTests {
 				.body(body.getBytes(StandardCharsets.UTF_8)).build();
 	}
 
-	private static McpRuntimeObservationSink observationWithPublicContext() {
+	static McpRuntimeObservationSink observationWithPublicContext() {
 		McpRequestContext context = (McpRequestContext) Proxy.newProxyInstance(
 				McpRequestContext.class.getClassLoader(),
 				new Class<?>[]{McpRequestContext.class}, (proxy, method, arguments) -> {
@@ -611,7 +611,7 @@ public class McpSelectedProfileBindingTests {
 		};
 	}
 
-	private static final class RecordingLocalizer
+	static final class RecordingLocalizer
 			implements McpRuntimeCatalogLocalizer {
 		private final List<Input> inputs = new java.util.concurrent.CopyOnWriteArrayList<>();
 
@@ -626,23 +626,23 @@ public class McpSelectedProfileBindingTests {
 			return Set.of(ResponseKind.DISCOVERY);
 		}
 
-		private List<Input> inputs() {
+		List<Input> inputs() {
 			return List.copyOf(inputs);
 		}
 	}
 
-	private static final class TestEventSource {
+	static final class TestEventSource {
 		private final AtomicReference<McpSubscriptionEventSource.Listener> listener =
 				new AtomicReference<>();
 
-		private McpSubscriptionEventSource source() {
+		McpSubscriptionEventSource source() {
 			return new McpSubscriptionEventSource(this, next -> {
 				listener.set(next);
 				return () -> listener.compareAndSet(next, null);
 			});
 		}
 
-		private void publish(McpSubscriptionEventSource.Event event) {
+		void publish(McpSubscriptionEventSource.Event event) {
 			requireNonNull(listener.get()).onEvent(requireNonNull(event));
 		}
 	}
@@ -691,7 +691,7 @@ public class McpSelectedProfileBindingTests {
 		Assertions.assertFalse(body.contains(RESULT_MARKER), body);
 	}
 
-	private static final class TrackingProfile implements McpProtocolProfile {
+	static final class TrackingProfile implements McpProtocolProfile {
 		private final EnumSet<McpProfileFrameworkResultKind> resultKinds =
 				EnumSet.noneOf(McpProfileFrameworkResultKind.class);
 		private final EnumSet<McpProfileFrameworkNotificationKind> notificationKinds =
@@ -707,14 +707,32 @@ public class McpSelectedProfileBindingTests {
 		private final AtomicInteger mappings = new AtomicInteger();
 		private final AtomicInteger notificationValidations = new AtomicInteger();
 		private final Optional<McpProfileFrameworkResultKind> oversizedResultKind;
+		private final Optional<String> applicationResultMarker;
+		private final AtomicReference<McpJsonRpcMessage.Request> lastMappedRequest =
+				new AtomicReference<>();
+		private final List<McpResultType> applicationResultTypes =
+				new java.util.concurrent.CopyOnWriteArrayList<>();
 
-		private TrackingProfile() {
-			this.oversizedResultKind = Optional.empty();
+		TrackingProfile() {
+			this(Optional.empty(), Optional.empty());
+		}
+
+		TrackingProfile(
+				@NonNull McpProfileFrameworkResultKind oversizedResultKind) {
+			this(Optional.of(oversizedResultKind), Optional.empty());
+		}
+
+		static TrackingProfile withApplicationResultMarker(
+				@NonNull String applicationResultMarker) {
+			return new TrackingProfile(Optional.empty(),
+					Optional.of(requireNonNull(applicationResultMarker)));
 		}
 
 		private TrackingProfile(
-				@NonNull McpProfileFrameworkResultKind oversizedResultKind) {
-			this.oversizedResultKind = Optional.of(oversizedResultKind);
+				@NonNull Optional<McpProfileFrameworkResultKind> oversizedResultKind,
+				@NonNull Optional<String> applicationResultMarker) {
+			this.oversizedResultKind = requireNonNull(oversizedResultKind);
+			this.applicationResultMarker = requireNonNull(applicationResultMarker);
 		}
 
 		@Override
@@ -732,17 +750,19 @@ public class McpSelectedProfileBindingTests {
 				throw McpWireDecodingException.invalidRequest("Fake mapper failure",
 						Optional.of(wireRequest.id()), Optional.of(wireRequest.method()));
 			McpJsonRpcMessage.Request mapped = mapper.map(wireRequest);
-			if (!wireRequest.extensionFields().members().containsKey(
-					"com.example/bodyMismatch"))
-				return mapped;
-			McpRequestMetadata metadata = mapped.params().metadata();
-			McpRequestMetadata mismatched = new McpRequestMetadata(CURRENT,
-					metadata.clientCapabilities(), metadata.clientInformation(),
-					metadata.deprecatedLogLevel(), metadata.progressToken(),
-					metadata.extensionFields());
-			return new McpJsonRpcMessage.Request(mapped.id(), mapped.method(),
-					new McpRequestParameters(mismatched,
-							mapped.params().fields()), mapped.extensionFields());
+			if (wireRequest.extensionFields().members().containsKey(
+					"com.example/bodyMismatch")) {
+				McpRequestMetadata metadata = mapped.params().metadata();
+				McpRequestMetadata mismatched = new McpRequestMetadata(CURRENT,
+						metadata.clientCapabilities(), metadata.clientInformation(),
+						metadata.deprecatedLogLevel(), metadata.progressToken(),
+						metadata.extensionFields());
+				mapped = new McpJsonRpcMessage.Request(mapped.id(), mapped.method(),
+						new McpRequestParameters(mismatched,
+								mapped.params().fields()), mapped.extensionFields());
+			}
+			lastMappedRequest.set(mapped);
+			return mapped;
 		}
 
 		@Override
@@ -780,7 +800,10 @@ public class McpSelectedProfileBindingTests {
 				@NonNull McpProfileApplicationResultKind kind,
 				@NonNull McpWireResult canonicalResult) {
 			applicationResultKinds.add(kind);
-			return canonicalResult;
+			applicationResultTypes.add(canonicalResult.resultType());
+			return applicationResultMarker
+					.map(marker -> marked(canonicalResult, marker, kind.name()))
+					.orElse(canonicalResult);
 		}
 
 		@Override
@@ -809,16 +832,16 @@ public class McpSelectedProfileBindingTests {
 			return rendered;
 		}
 
-		private synchronized EnumSet<McpProfileFrameworkResultKind> resultKinds() {
+		synchronized EnumSet<McpProfileFrameworkResultKind> resultKinds() {
 			return EnumSet.copyOf(resultKinds);
 		}
 
-		private synchronized EnumSet<McpProfileFrameworkNotificationKind>
+		synchronized EnumSet<McpProfileFrameworkNotificationKind>
 				notificationKinds() {
 			return EnumSet.copyOf(notificationKinds);
 		}
 
-		private synchronized EnumSet<McpProfileErrorKind> errorKinds() {
+		synchronized EnumSet<McpProfileErrorKind> errorKinds() {
 			return EnumSet.copyOf(errorKinds);
 		}
 
@@ -836,12 +859,29 @@ public class McpSelectedProfileBindingTests {
 			return requireNonNull(lastRenderedErrors.get(kind));
 		}
 
-		private int mappingCount() {
+		int mappingCount() {
 			return mappings.get();
+		}
+
+		McpJsonRpcMessage.Request lastMappedRequest() {
+			return requireNonNull(lastMappedRequest.get());
+		}
+
+		List<McpResultType> applicationResultTypes() {
+			return List.copyOf(applicationResultTypes);
 		}
 
 		private int notificationValidationCount() {
 			return notificationValidations.get();
+		}
+
+		private static McpWireResult marked(@NonNull McpWireResult canonical,
+				@NonNull String marker, @NonNull String value) {
+			Map<String, McpJsonValue> fields = new LinkedHashMap<>(
+					canonical.toJsonObject().members());
+			fields.put(marker, new McpJsonString(value));
+			return McpWireResult.withPrecomputedJsonObject(canonical,
+					new McpJsonObject(fields));
 		}
 	}
 }

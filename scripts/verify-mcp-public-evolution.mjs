@@ -1,7 +1,14 @@
 #!/usr/bin/env node
 
-import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
-import { isAbsolute, join, resolve, sep } from 'node:path';
+import {
+  readFileSync,
+  existsSync,
+  lstatSync,
+  realpathSync,
+  statSync,
+  readdirSync,
+} from 'node:fs';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const INVENTORY_PATH = 'api/mcp/mcp-public-evolution-inventory.json';
@@ -20,6 +27,169 @@ const INCLUDE_FILES = [
 const ALLOWED_PARTITIONS = new Set(['candidate', 'externalSketch']);
 const ALLOWED_MCP_STATES = new Set(['Active', 'Deprecated', 'Removed']);
 const ALLOWED_API_STATES = new Set(['Supported', 'Deprecated']);
+const ACTIVE_TEXT_EXPECTATIONS = new Set(['zero', 'nonzero-with-notice']);
+const ACTIVE_TEXT_MATCHER_KINDS = new Set(['literal', 'regex']);
+const ACTIVE_TEXT_ROLES = new Set([
+  'defaultPath',
+  'compatibility',
+  'migration',
+  'security',
+  'factualSupport',
+]);
+const ACTIVE_TEXT_SCOPE_KINDS = new Set([
+  'wholeFile',
+  'headingSubtree',
+  'fencedBlock',
+]);
+const ACTIVE_TEXT_REQUIRED_RULE_EXPECTATIONS = new Map([
+  ['PROFILE-001', 'nonzero-with-notice'],
+  ['PROFILE-002', 'zero'],
+  ['PROFILE-003', 'nonzero-with-notice'],
+  ['AUTH-001', 'zero'],
+  ['AUTH-002', 'nonzero-with-notice'],
+  ['AUTH-003', 'nonzero-with-notice'],
+  ['COUNT-001', 'nonzero-with-notice'],
+  ['CACHE-001', 'zero'],
+  ['CACHE-002', 'nonzero-with-notice'],
+  ['TRANSPORT-001', 'zero'],
+  ['TRANSPORT-002', 'nonzero-with-notice'],
+  ['DPOP-001', 'zero'],
+  ['DPOP-002', 'nonzero-with-notice'],
+  ['EXTENSION-001', 'zero'],
+  ['EXTENSION-002', 'nonzero-with-notice'],
+  ['LIFECYCLE-001', 'nonzero-with-notice'],
+  ['LIFECYCLE-002', 'zero'],
+  ['LIFECYCLE-003', 'zero'],
+  ['LIFECYCLE-004', 'nonzero-with-notice'],
+  ['LIFECYCLE-005', 'nonzero-with-notice'],
+  ['DCR-001', 'nonzero-with-notice'],
+  ['EXAMPLE-001', 'nonzero-with-notice'],
+]);
+const ACTIVE_TEXT_GOVERNED_DOCUMENTS = Object.freeze([
+  Object.freeze({ path: 'MCP.md', role: 'factualSupport' }),
+  Object.freeze({ path: 'README.md', role: 'factualSupport' }),
+  Object.freeze({ path: 'SECURITY.md', role: 'security' }),
+  Object.freeze({ path: 'api/mcp/README.md', role: 'factualSupport' }),
+  Object.freeze({ path: 'CHANGELOG.md', role: 'migration' }),
+  Object.freeze({ path: 'release/README.md', role: 'factualSupport' }),
+]);
+const ACTIVE_TEXT_FULL_CENSUS_RULES = Object.freeze([
+  'PROFILE-002',
+  'AUTH-001',
+  'COUNT-001',
+  'CACHE-001',
+  'TRANSPORT-001',
+  'DPOP-001',
+  'EXTENSION-001',
+]);
+const ACTIVE_TEXT_REQUIRED_LIFECYCLE_SCOPES = Object.freeze([
+  Object.freeze({
+    id: 'LIFECYCLE-001',
+    path: 'MCP.md',
+    scope: Object.freeze({ kind: 'wholeFile', role: 'factualSupport' }),
+  }),
+  Object.freeze({
+    id: 'LIFECYCLE-001',
+    path: 'README.md',
+    scope: Object.freeze({ kind: 'wholeFile', role: 'factualSupport' }),
+  }),
+  Object.freeze({
+    id: 'LIFECYCLE-001',
+    path: 'SECURITY.md',
+    scope: Object.freeze({ kind: 'wholeFile', role: 'security' }),
+  }),
+  Object.freeze({
+    id: 'LIFECYCLE-002',
+    path: 'MCP.md',
+    scope: Object.freeze({
+      headingPath: Object.freeze([
+        'Model Context Protocol (MCP)',
+        'Multi-round-trip input and request state',
+      ]),
+      kind: 'headingSubtree',
+      role: 'defaultPath',
+    }),
+  }),
+  Object.freeze({
+    id: 'LIFECYCLE-002',
+    path: 'MCP.md',
+    scope: Object.freeze({
+      fenceLanguage: 'java',
+      headingPath: Object.freeze([
+        'Model Context Protocol (MCP)',
+        'Multi-round-trip input and request state',
+      ]),
+      kind: 'fencedBlock',
+      role: 'defaultPath',
+    }),
+  }),
+  Object.freeze({
+    id: 'LIFECYCLE-003',
+    path: 'README.md',
+    scope: Object.freeze({
+      headingPath: Object.freeze([
+        'What Else Does It Do?',
+        'Model Context Protocol (MCP)',
+        'Recommended MCP setup',
+      ]),
+      kind: 'headingSubtree',
+      role: 'defaultPath',
+    }),
+  }),
+  Object.freeze({
+    id: 'LIFECYCLE-003',
+    path: 'README.md',
+    scope: Object.freeze({
+      fenceLanguage: 'java',
+      headingPath: Object.freeze([
+        'What Else Does It Do?',
+        'Model Context Protocol (MCP)',
+        'Recommended MCP setup',
+      ]),
+      kind: 'fencedBlock',
+      role: 'defaultPath',
+    }),
+  }),
+  Object.freeze({
+    id: 'LIFECYCLE-004',
+    path: 'MCP.md',
+    scope: Object.freeze({
+      headingPath: Object.freeze([
+        'Model Context Protocol (MCP)',
+        'Compatibility and unsupported features',
+        'Deprecated compatibility surfaces',
+      ]),
+      kind: 'headingSubtree',
+      role: 'compatibility',
+    }),
+  }),
+  Object.freeze({
+    id: 'LIFECYCLE-004',
+    path: 'README.md',
+    scope: Object.freeze({
+      headingPath: Object.freeze([
+        'What Else Does It Do?',
+        'Model Context Protocol (MCP)',
+        'Deprecated compatibility surfaces',
+      ]),
+      kind: 'headingSubtree',
+      role: 'compatibility',
+    }),
+  }),
+  Object.freeze({
+    id: 'LIFECYCLE-004',
+    path: 'SECURITY.md',
+    scope: Object.freeze({
+      headingPath: Object.freeze([
+        'Security Policy',
+        'MCP Deployment Security',
+        'Deprecated compatibility surfaces',
+      ]),
+      kind: 'headingSubtree',
+      role: 'security',
+    }),
+  }),
+]);
 const DEPRECATION_TOKEN = /@SuppressWarnings\s*\(\s*(?:"deprecation"|\{[^}]*"deprecation"[^}]*\})\s*\)/s;
 
 export class McpPublicEvolutionVerificationError extends Error {}
@@ -36,79 +206,604 @@ function readJson(path) {
   }
 }
 
-function literalCount(text, literal) {
-  if (!literal.length) fail('Active-text literals must be nonempty.');
-  let count = 0;
-  let offset = 0;
-  while ((offset = text.indexOf(literal, offset)) !== -1) {
-    count++;
-    offset += literal.length;
-  }
-  return count;
+function activeTextPathSegments(path, label) {
+  if (typeof path !== 'string' || !path.length || isAbsolute(path)
+      || path.includes('\\'))
+    fail(`${label} must be a nonempty POSIX root-relative path: ${String(path)}`);
+  const segments = path.split('/');
+  if (segments.some((segment) => !segment.length
+      || segment === '.' || segment === '..'))
+    fail(`${label} must be a contained POSIX root-relative path: ${path}`);
+  return segments;
 }
 
-export function verifyActiveText(root) {
-  const contract = readJson(join(root, ACTIVE_TEXT_RULES_PATH));
+function readActiveTextCandidateFile(root, path, label = 'Active-text path') {
+  const segments = activeTextPathSegments(path, label);
+  const normalizedRoot = resolve(root);
+  let realRoot;
+  try {
+    const rootEntry = lstatSync(normalizedRoot);
+    if (rootEntry.isSymbolicLink())
+      fail(`Active-text candidate root must not be a symbolic link: ${normalizedRoot}`);
+    if (!rootEntry.isDirectory())
+      fail(`Active-text candidate root is not a directory: ${normalizedRoot}`);
+    realRoot = realpathSync(normalizedRoot);
+  } catch (error) {
+    if (error instanceof McpPublicEvolutionVerificationError) throw error;
+    fail(`Unable to resolve active-text candidate root ${normalizedRoot}: ${error.message}`);
+  }
+  let candidate = normalizedRoot;
+  for (let index = 0; index < segments.length; index++) {
+    candidate = join(candidate, segments[index]);
+    let entry;
+    try {
+      entry = lstatSync(candidate);
+    } catch (error) {
+      fail(`${label} is missing: ${path}`);
+    }
+    if (entry.isSymbolicLink())
+      fail(`${label} must not traverse a symbolic link: ${path}`);
+    if (index < segments.length - 1 && !entry.isDirectory())
+      fail(`${label} has a non-directory path component: ${path}`);
+    if (index === segments.length - 1 && !entry.isFile())
+      fail(`${label} must name a regular file: ${path}`);
+  }
+  const realCandidate = realpathSync(candidate);
+  const containment = relative(realRoot, realCandidate);
+  if (containment.startsWith(`..${sep}`) || containment === '..'
+      || isAbsolute(containment))
+    fail(`${label} escapes the active-text candidate root: ${path}`);
+  return readFileSync(realCandidate, 'utf8');
+}
+
+function activeTextMatcher(value, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    fail(`${label} must be an object.`);
+  exactKeys(value, ['kind', 'pattern', 'caseSensitive'], label);
+  if (!ACTIVE_TEXT_MATCHER_KINDS.has(value.kind)
+      || typeof value.pattern !== 'string' || !value.pattern.length)
+    fail(`${label} must contain a nonempty literal or regex pattern.`);
+  if (typeof value.caseSensitive !== 'boolean')
+    fail(`${label}.caseSensitive must be boolean.`);
+  if (value.kind === 'regex') {
+    try {
+      const regex = new RegExp(value.pattern,
+        value.caseSensitive ? 'gu' : 'giu');
+      if (regex.test('')) fail(`${label} regex must not match empty text.`);
+    } catch (error) {
+      if (error instanceof McpPublicEvolutionVerificationError) throw error;
+      fail(`${label} regex is invalid: ${error.message}`);
+    }
+  }
+  return value;
+}
+
+function activeTextScope(value, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    fail(`${label} must be an object.`);
+  if (!ACTIVE_TEXT_SCOPE_KINDS.has(value.kind)
+      || !ACTIVE_TEXT_ROLES.has(value.role))
+    fail(`${label} has an invalid kind or role.`);
+  if (value.kind === 'wholeFile') {
+    exactKeys(value, ['kind', 'role'], label);
+  } else if (value.kind === 'headingSubtree') {
+    exactKeys(value, ['kind', 'headingPath', 'role'], label);
+    if (!Array.isArray(value.headingPath) || !value.headingPath.length
+        || value.headingPath.some((heading) => typeof heading !== 'string'
+          || !heading.trim()))
+      fail(`${label}.headingPath must contain stable nonblank heading text.`);
+  } else {
+    const expected = value.fenceLanguage === undefined
+      ? ['kind', 'headingPath', 'role']
+      : ['kind', 'headingPath', 'fenceLanguage', 'role'];
+    exactKeys(value, expected, label);
+    if (!Array.isArray(value.headingPath) || !value.headingPath.length
+        || value.headingPath.some((heading) => typeof heading !== 'string'
+          || !heading.trim()))
+      fail(`${label}.headingPath must contain stable nonblank heading text.`);
+    if (value.fenceLanguage !== undefined
+        && (typeof value.fenceLanguage !== 'string'
+          || !value.fenceLanguage.trim()))
+      fail(`${label}.fenceLanguage must be nonblank when present.`);
+  }
+  return value;
+}
+
+function scopeIdentity(scope) {
+  if (scope.kind === 'wholeFile') return `wholeFile|role=${scope.role}`;
+  const heading = JSON.stringify(scope.headingPath);
+  if (scope.kind === 'headingSubtree')
+    return `headingSubtree|headingPath=${heading}|role=${scope.role}`;
+  const language = scope.fenceLanguage === undefined
+    ? '<any>' : JSON.stringify(scope.fenceLanguage);
+  return `fencedBlock|headingPath=${heading}|fenceLanguage=${language}|role=${scope.role}`;
+}
+
+function isMarkdownEscaped(text, offset) {
+  let slashCount = 0;
+  for (let index = offset - 1; index >= 0 && text[index] === '\\'; index--)
+    slashCount++;
+  return slashCount % 2 === 1;
+}
+
+function backtickRunLength(text, offset) {
+  let end = offset;
+  while (text[end] === '`') end++;
+  return end - offset;
+}
+
+function matchingBacktickRun(text, offset, length) {
+  let candidate = offset;
+  while ((candidate = text.indexOf('`', candidate)) !== -1) {
+    const runLength = backtickRunLength(text, candidate);
+    if (runLength === length && !isMarkdownEscaped(text, candidate))
+      return candidate;
+    candidate += runLength;
+  }
+  return -1;
+}
+
+function maskMarkdownHtmlComments(text, path) {
+  const masked = text.split('');
+  let offset = 0;
+  let openFence;
+  while (offset < text.length) {
+    const atLineStart = offset === 0 || text[offset - 1] === '\n';
+    if (atLineStart) {
+      const newline = text.indexOf('\n', offset);
+      const lineEnd = newline === -1 ? text.length : newline + 1;
+      const line = text.slice(offset, newline === -1 ? lineEnd : newline)
+        .replace(/\r$/u, '');
+      if (openFence !== undefined) {
+        const closing = line.match(/^ {0,3}(`{3,}|~{3,})[ \t]*$/u);
+        if (closing && closing[1][0] === openFence.marker
+            && closing[1].length >= openFence.length)
+          openFence = undefined;
+        offset = lineEnd;
+        continue;
+      }
+      const opening = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/u);
+      if (opening) {
+        const information = opening[2].trim();
+        if (opening[1][0] === '`' && information.includes('`'))
+          fail(`Active-text Markdown fence has invalid info text: ${path}`);
+        openFence = {
+          length: opening[1].length,
+          marker: opening[1][0],
+        };
+        offset = lineEnd;
+        continue;
+      }
+      if (/^(?: {4}|\t)/u.test(line)) {
+        offset = lineEnd;
+        continue;
+      }
+    }
+    if (text.startsWith('<!--', offset)) {
+      const closing = text.indexOf('-->', offset + 4);
+      const end = closing === -1 ? text.length : closing + 3;
+      for (let index = offset; index < end; index++) {
+        if (masked[index] !== '\n' && masked[index] !== '\r')
+          masked[index] = ' ';
+      }
+      offset = end;
+      continue;
+    }
+    if (text[offset] === '`' && !isMarkdownEscaped(text, offset)) {
+      const runLength = backtickRunLength(text, offset);
+      const closing = matchingBacktickRun(text, offset + runLength,
+        runLength);
+      offset = closing === -1 ? offset + runLength : closing + runLength;
+      continue;
+    }
+    offset++;
+  }
+  return masked.join('');
+}
+
+function verifyRequiredActiveTextCoverage(rows) {
+  const rowsById = new Map(rows.map((row) => [row.id, row]));
+  for (const [id, expectation] of ACTIVE_TEXT_REQUIRED_RULE_EXPECTATIONS) {
+    const row = rowsById.get(id);
+    if (row === undefined)
+      fail(`Active-text contract is missing required rule ${id}.`);
+    if (row.expectation !== expectation)
+      fail(`Active-text rule ${id} must retain expectation ${expectation}.`);
+  }
+  const requiredScopes = [];
+  for (const id of ACTIVE_TEXT_FULL_CENSUS_RULES) {
+    for (const document of ACTIVE_TEXT_GOVERNED_DOCUMENTS) {
+      requiredScopes.push({
+        id,
+        path: document.path,
+        scope: { kind: 'wholeFile', role: document.role },
+      });
+    }
+  }
+  requiredScopes.push(...ACTIVE_TEXT_REQUIRED_LIFECYCLE_SCOPES);
+  for (const required of requiredScopes) {
+    const row = rowsById.get(required.id);
+    const requiredKey = JSON.stringify([
+      required.path,
+      scopeIdentity(required.scope),
+    ]);
+    const actualKeys = new Set(row.fileScopes.map((fileScope) => JSON.stringify([
+      fileScope.path,
+      scopeIdentity(fileScope.scope),
+    ])));
+    if (!actualKeys.has(requiredKey))
+      fail(`Active-text rule ${required.id} is missing required governed scope ${required.path} at ${scopeIdentity(required.scope)}.`);
+  }
+}
+
+function markdownStructure(text, path) {
+  const lines = [];
+  let offset = 0;
+  while (offset < text.length) {
+    const newline = text.indexOf('\n', offset);
+    const end = newline === -1 ? text.length : newline + 1;
+    const withoutNewline = text.slice(offset, newline === -1 ? end : newline)
+      .replace(/\r$/u, '');
+    lines.push({ start: offset, end, text: withoutNewline });
+    offset = end;
+  }
+  const headings = [];
+  const fences = [];
+  const headingStack = [];
+  let openFence;
+  for (const line of lines) {
+    if (openFence !== undefined) {
+      const closing = line.text.match(/^ {0,3}(`{3,}|~{3,})[ \t]*$/u);
+      if (closing && closing[1][0] === openFence.marker
+          && closing[1].length >= openFence.length) {
+        fences.push({
+          end: line.start,
+          language: openFence.language,
+          start: openFence.contentStart,
+        });
+        openFence = undefined;
+      }
+      continue;
+    }
+    const opening = line.text.match(/^ {0,3}(`{3,}|~{3,})(.*)$/u);
+    if (opening) {
+      const information = opening[2].trim();
+      if (opening[1][0] === '`' && information.includes('`'))
+        fail(`Active-text Markdown fence has invalid info text: ${path}`);
+      openFence = {
+        contentStart: line.end,
+        language: information.split(/[ \t]/u)[0] ?? '',
+        length: opening[1].length,
+        marker: opening[1][0],
+      };
+      continue;
+    }
+    const headingMatch = line.text.match(/^ {0,3}(#{1,6})[ \t]+(.+?)\s*$/u);
+    if (!headingMatch) continue;
+    const level = headingMatch[1].length;
+    const headingText = headingMatch[2].replace(/[ \t]+#+[ \t]*$/u, '').trim();
+    while (headingStack.length
+        && headingStack[headingStack.length - 1].level >= level)
+      headingStack.pop();
+    const heading = {
+      contentStart: line.end,
+      end: text.length,
+      level,
+      lineStart: line.start,
+      path: [...headingStack.map((entry) => entry.text), headingText],
+      text: headingText,
+    };
+    headings.push(heading);
+    headingStack.push(heading);
+  }
+  if (openFence !== undefined)
+    fail(`Active-text Markdown contains an unclosed fenced block: ${path}`);
+  for (let index = 0; index < headings.length; index++) {
+    for (let candidate = index + 1; candidate < headings.length; candidate++) {
+      if (headings[candidate].level <= headings[index].level) {
+        headings[index].end = headings[candidate].lineStart;
+        break;
+      }
+    }
+  }
+  return { fences, headings };
+}
+
+function activeTextRegion(text, path, scope, structure) {
+  if (scope.kind === 'wholeFile')
+    return { end: text.length, start: 0, text };
+  const headings = structure.headings.filter((heading) =>
+    JSON.stringify(heading.path) === JSON.stringify(scope.headingPath));
+  if (headings.length !== 1)
+    fail(`Active-text scope must resolve one heading in ${path}: ${JSON.stringify(scope.headingPath)}; found ${headings.length}.`);
+  const heading = headings[0];
+  if (scope.kind === 'headingSubtree')
+    return {
+      end: heading.end,
+      start: heading.contentStart,
+      text: text.slice(heading.contentStart, heading.end),
+    };
+  const fences = structure.fences.filter((fence) =>
+    fence.start >= heading.contentStart && fence.end <= heading.end
+      && (scope.fenceLanguage === undefined
+        || fence.language === scope.fenceLanguage));
+  if (fences.length !== 1)
+    fail(`Active-text scope must resolve one fenced block in ${path}: ${scopeIdentity(scope)}; found ${fences.length}.`);
+  return {
+    end: fences[0].end,
+    start: fences[0].start,
+    text: text.slice(fences[0].start, fences[0].end),
+  };
+}
+
+function activeTextMatches(text, matcher, label) {
+  if (matcher.kind === 'literal') {
+    const values = [];
+    if (matcher.caseSensitive) {
+      let offset = 0;
+      while ((offset = text.indexOf(matcher.pattern, offset)) !== -1) {
+        values.push({ matchedText: matcher.pattern, start: offset });
+        offset += matcher.pattern.length;
+      }
+      return values;
+    }
+    const escaped = matcher.pattern.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+    for (const match of text.matchAll(new RegExp(escaped, 'giu'))) {
+      values.push({ matchedText: match[0], start: match.index });
+    }
+    return values;
+  }
+  const values = [];
+  const flags = matcher.caseSensitive ? 'gu' : 'giu';
+  for (const match of text.matchAll(new RegExp(matcher.pattern, flags))) {
+    if (!match[0].length) fail(`${label} regex matched empty text.`);
+    values.push({ matchedText: match[0], start: match.index });
+  }
+  return values;
+}
+
+function fingerprintKey(fingerprint) {
+  return JSON.stringify([
+    fingerprint.path,
+    fingerprint.matchedText,
+    scopeIdentity(fingerprint.scope),
+  ]);
+}
+
+function fingerprintCounts(fingerprints) {
+  const counts = new Map();
+  for (const fingerprint of fingerprints) {
+    const key = fingerprintKey(fingerprint);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function fingerprintDifference(left, right) {
+  const rightCounts = fingerprintCounts(right);
+  const result = [];
+  for (const fingerprint of left) {
+    const key = fingerprintKey(fingerprint);
+    const count = rightCounts.get(key) ?? 0;
+    if (count === 0) result.push(fingerprint);
+    else rightCounts.set(key, count - 1);
+  }
+  return result;
+}
+
+function evaluateActiveText(root) {
+  let contract;
+  try {
+    contract = JSON.parse(readActiveTextCandidateFile(root,
+      ACTIVE_TEXT_RULES_PATH, 'Active-text contract'));
+  } catch (error) {
+    if (error instanceof McpPublicEvolutionVerificationError) throw error;
+    fail(`Unable to read active-text contract: ${error.message}`);
+  }
   exactKeys(contract, ['formatVersion', 'rules'], 'active-text contract');
-  if (contract.formatVersion !== 1 || !Array.isArray(contract.rules)
+  if (contract.formatVersion !== 2 || !Array.isArray(contract.rules)
       || contract.rules.length === 0)
-    fail('Active-text contract must be nonempty format version 1.');
+    fail('Active-text contract must be nonempty format version 2.');
   const ids = new Set();
   const rows = [];
   for (const rule of contract.rules) {
-    exactKeys(rule, ['id', 'classification', 'rationale', 'required', 'forbidden'],
-      `active-text rule ${rule.id}`);
-    if (!/^[A-Z]+-[0-9]{3}$/.test(rule.id) || ids.has(rule.id))
-      fail(`Active-text rule ID is malformed or duplicated: ${rule.id}`);
+    const expectedRuleKeys = rule.expectation === 'nonzero-with-notice'
+      ? ['id', 'classification', 'rationale', 'files', 'matcher',
+        'expectation', 'noticePattern', 'allowedMatches']
+      : ['id', 'classification', 'rationale', 'files', 'matcher',
+        'expectation', 'allowedMatches'];
+    exactKeys(rule, expectedRuleKeys,
+      `active-text rule ${String(rule.id)}`);
+    if (!/^[A-Z][A-Z0-9]*-[0-9]{3}$/u.test(rule.id) || ids.has(rule.id))
+      fail(`Active-text rule ID is malformed or duplicated: ${String(rule.id)}`);
     ids.add(rule.id);
-    if (!rule.classification || !rule.rationale) fail(`Active-text rule ${rule.id} lacks policy text.`);
-    let requiredMatches = 0;
-    let forbiddenMatches = 0;
-    for (const assertion of rule.required) {
-      exactKeys(assertion, ['path', 'literal', 'minCount', 'maxCount'],
-        `required assertion ${rule.id}`);
-      const path = join(root, assertion.path);
-      if (!existsSync(path)) fail(`Active-text path is missing: ${assertion.path}`);
-      const count = literalCount(readFileSync(path, 'utf8'), assertion.literal);
-      requiredMatches += count;
-      if (!Number.isInteger(assertion.minCount) || !Number.isInteger(assertion.maxCount)
-          || count < assertion.minCount || count > assertion.maxCount)
-        fail(`${rule.id} required literal count for ${assertion.path} is ${count}; expected ${assertion.minCount}..${assertion.maxCount}.`);
+    if (typeof rule.classification !== 'string' || !rule.classification.trim()
+        || typeof rule.rationale !== 'string' || !rule.rationale.trim())
+      fail(`Active-text rule ${rule.id} lacks policy text.`);
+    if (!ACTIVE_TEXT_EXPECTATIONS.has(rule.expectation))
+      fail(`Active-text rule ${rule.id} has an invalid expectation.`);
+    const matcher = activeTextMatcher(rule.matcher, `${rule.id}.matcher`);
+    const noticePattern = rule.expectation === 'nonzero-with-notice'
+      ? activeTextMatcher(rule.noticePattern, `${rule.id}.noticePattern`)
+      : undefined;
+    if (!Array.isArray(rule.files) || !rule.files.length)
+      fail(`Active-text rule ${rule.id} must scope at least one file.`);
+    const fileScopes = [];
+    const fileScopeKeys = new Set();
+    for (const [index, file] of rule.files.entries()) {
+      if (!file || typeof file !== 'object' || Array.isArray(file))
+        fail(`${rule.id}.files[${index}] must be an object.`);
+      exactKeys(file, ['path', 'scope'], `${rule.id}.files[${index}]`);
+      activeTextPathSegments(file.path, `${rule.id}.files[${index}].path`);
+      const scope = activeTextScope(file.scope,
+        `${rule.id}.files[${index}].scope`);
+      const key = JSON.stringify([file.path, scopeIdentity(scope)]);
+      if (fileScopeKeys.has(key))
+        fail(`Active-text rule ${rule.id} duplicates a file scope: ${key}`);
+      fileScopeKeys.add(key);
+      fileScopes.push({ path: file.path, scope });
     }
-    for (const assertion of rule.forbidden) {
-      exactKeys(assertion, ['path', 'literal', 'maxCount'],
-        `forbidden assertion ${rule.id}`);
-      const path = join(root, assertion.path);
-      if (!existsSync(path)) fail(`Active-text path is missing: ${assertion.path}`);
-      const count = literalCount(readFileSync(path, 'utf8'), assertion.literal);
-      forbiddenMatches += count;
-      if (!Number.isInteger(assertion.maxCount) || count > assertion.maxCount)
-        fail(`${rule.id} forbidden literal count for ${assertion.path} is ${count}; maximum is ${assertion.maxCount}.`);
+    if (!Array.isArray(rule.allowedMatches))
+      fail(`Active-text rule ${rule.id}.allowedMatches must be an array.`);
+    const allowedMatches = rule.allowedMatches.map((fingerprint, index) => {
+      if (!fingerprint || typeof fingerprint !== 'object'
+          || Array.isArray(fingerprint))
+        fail(`${rule.id}.allowedMatches[${index}] must be an object.`);
+      exactKeys(fingerprint, ['path', 'matchedText', 'scope'],
+        `${rule.id}.allowedMatches[${index}]`);
+      activeTextPathSegments(fingerprint.path,
+        `${rule.id}.allowedMatches[${index}].path`);
+      const scope = activeTextScope(fingerprint.scope,
+        `${rule.id}.allowedMatches[${index}].scope`);
+      if (typeof fingerprint.matchedText !== 'string'
+          || !fingerprint.matchedText.length)
+        fail(`${rule.id}.allowedMatches[${index}].matchedText must be nonempty.`);
+      const fileScopeKey = JSON.stringify([
+        fingerprint.path,
+        scopeIdentity(scope),
+      ]);
+      if (!fileScopeKeys.has(fileScopeKey))
+        fail(`${rule.id}.allowedMatches[${index}] does not name a scoped file region.`);
+      return { path: fingerprint.path,
+        matchedText: fingerprint.matchedText, scope };
+    });
+    if (rule.expectation === 'zero' && allowedMatches.length)
+      fail(`Active-text rule ${rule.id} has expectation zero and must not whitelist allowed matches.`);
+    const actualMatches = [];
+    const resolvedScopes = [];
+    const scopesByPath = new Map();
+    for (const fileScope of fileScopes) {
+      if (!scopesByPath.has(fileScope.path)) {
+        const text = maskMarkdownHtmlComments(readActiveTextCandidateFile(root,
+          fileScope.path), fileScope.path);
+        scopesByPath.set(fileScope.path, {
+          structure: markdownStructure(text, fileScope.path),
+          text,
+        });
+      }
+      const source = scopesByPath.get(fileScope.path);
+      resolvedScopes.push({
+        ...fileScope,
+        region: activeTextRegion(source.text, fileScope.path,
+          fileScope.scope, source.structure),
+      });
     }
-    rows.push({ ...rule, requiredMatches, forbiddenMatches });
+    for (const [path, source] of scopesByPath) {
+      const pathScopes = resolvedScopes.filter((entry) => entry.path === path);
+      for (const match of activeTextMatches(source.text, matcher,
+        `${rule.id}.matcher`)) {
+        const matchEnd = match.start + match.matchedText.length;
+        const candidates = pathScopes.filter(({ region }) =>
+          match.start >= region.start && matchEnd <= region.end)
+          .sort((left, right) =>
+            (left.region.end - left.region.start)
+              - (right.region.end - right.region.start));
+        if (!candidates.length) continue;
+        if (candidates.length > 1
+            && candidates[0].region.end - candidates[0].region.start
+              === candidates[1].region.end - candidates[1].region.start)
+          fail(`Active-text rule ${rule.id} has ambiguous equally specific scopes for a match in ${path}.`);
+        actualMatches.push({
+          matchedText: match.matchedText,
+          path,
+          scope: candidates[0].scope,
+        });
+      }
+    }
+    if (rule.expectation === 'zero' && actualMatches.length)
+      fail(`Active-text rule ${rule.id} expected zero matches; found ${actualMatches.length}.`);
+    if (rule.expectation === 'nonzero-with-notice') {
+      if (!actualMatches.length)
+        fail(`Active-text rule ${rule.id} requires at least one allowed match.`);
+      const matchedRegions = new Set(actualMatches.map((fingerprint) =>
+        JSON.stringify([fingerprint.path, scopeIdentity(fingerprint.scope)])));
+      for (const resolved of resolvedScopes) {
+        const key = JSON.stringify([
+          resolved.path,
+          scopeIdentity(resolved.scope),
+        ]);
+        if (!matchedRegions.has(key)) continue;
+        if (!activeTextMatches(resolved.region.text, noticePattern,
+          `${rule.id}.noticePattern`).length)
+          fail(`Active-text rule ${rule.id} lacks its notice in ${resolved.path} at ${scopeIdentity(resolved.scope)}.`);
+      }
+    }
+    const unexpected = fingerprintDifference(actualMatches, allowedMatches);
+    const missing = fingerprintDifference(allowedMatches, actualMatches);
+    if (unexpected.length || missing.length)
+      fail(`Active-text rule ${rule.id} fingerprint mismatch; unexpected=${unexpected.map(fingerprintKey).join(', ') || '<none>'}; missing=${missing.map(fingerprintKey).join(', ') || '<none>'}.`);
+    rows.push({ ...rule, actualMatches, fileScopes });
   }
+  verifyRequiredActiveTextCoverage(rows);
+  return { contract, rows };
+}
+
+function markdownCell(value) {
+  return String(value).replaceAll('\\', '\\\\').replaceAll('|', '\\|');
+}
+
+function htmlCode(value) {
+  return `<code>${String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('|', '&#124;')}</code>`;
+}
+
+function matcherCell(matcher) {
+  if (matcher.kind === 'literal')
+    return `literal (${matcher.caseSensitive ? 'case-sensitive' : 'case-insensitive'}) ${JSON.stringify(matcher.pattern)}`;
+  return `regex (${matcher.caseSensitive ? 'case-sensitive' : 'case-insensitive'}) /${matcher.pattern}/${matcher.caseSensitive ? 'gu' : 'giu'}`;
+}
+
+export function renderActiveTextAudit(root) {
+  const { contract, rows } = evaluateActiveText(root);
   const lines = [
     '# MCP roadmap active-text audit',
     '',
     'Generated deterministically by `scripts/verify-mcp-public-evolution.mjs` from',
     '`conformance/roadmap-readiness-active-text-rules.json`. Do not edit by hand.',
     '',
-    '| Rule | Classification | Required matches | Forbidden matches | Decision |',
-    '| --- | --- | ---: | ---: | --- |',
-    ...rows.map((row) => `| ${row.id} | ${row.classification} | ${row.requiredMatches} | ${row.forbiddenMatches} | PASS |`),
+    `Contract format: ${contract.formatVersion}.`,
+    '',
+    '| Rule | Classification | Matcher | Expectation | Notice matcher | Scoped regions | Allowed matches | Rationale | Decision |',
+    '| --- | --- | --- | --- | --- | ---: | ---: | --- | --- |',
+    ...rows.map((row) => `| ${row.id} | ${markdownCell(row.classification)} | ${htmlCode(matcherCell(row.matcher))} | ${row.expectation} | ${row.noticePattern === undefined ? '—' : htmlCode(matcherCell(row.noticePattern))} | ${row.fileScopes.length} | ${row.actualMatches.length} | ${markdownCell(row.rationale)} | PASS |`),
+    '',
+    '## Scoped regions',
+    '',
+    '| Rule | Path | Complete scope identity |',
+    '| --- | --- | --- |',
+    ...rows.flatMap((row) => row.fileScopes.map((fileScope) =>
+      `| ${row.id} | ${htmlCode(fileScope.path)} | ${htmlCode(scopeIdentity(fileScope.scope))} |`)),
+    '',
+    '## Allowed-match fingerprints',
+    '',
+    '| Rule | Path | Matched text | Complete scope identity |',
+    '| --- | --- | --- | --- |',
+    ...rows.flatMap((row) => row.actualMatches.length
+      ? row.actualMatches.map((fingerprint) =>
+        `| ${row.id} | ${htmlCode(fingerprint.path)} | ${htmlCode(JSON.stringify(fingerprint.matchedText))} | ${htmlCode(scopeIdentity(fingerprint.scope))} |`)
+      : [`| ${row.id} | — | — | — |`]),
     '',
     `Total: ${rows.length} active-text rules passed.`,
     '',
   ];
-  const rendered = `${lines.join('\n')}`;
-  const auditPath = join(root, ACTIVE_TEXT_AUDIT_PATH);
-  if (!existsSync(auditPath)) fail(`Active-text audit is missing: ${ACTIVE_TEXT_AUDIT_PATH}`);
-  if (readFileSync(auditPath, 'utf8') !== rendered)
+  return { ruleCount: rows.length, rendered: lines.join('\n') };
+}
+
+export function verifyActiveText(root) {
+  const result = renderActiveTextAudit(root);
+  const audit = readActiveTextCandidateFile(root, ACTIVE_TEXT_AUDIT_PATH,
+    'Active-text audit');
+  if (audit !== result.rendered)
     fail(`Active-text audit is stale; regenerate ${ACTIVE_TEXT_AUDIT_PATH}.`);
-  return { ruleCount: rows.length, rendered };
+  return result;
 }
 
 function exactKeys(value, keys, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    fail(`${label} must be an object.`);
   const actual = Object.keys(value).sort();
   const expected = [...keys].sort();
   if (JSON.stringify(actual) !== JSON.stringify(expected))

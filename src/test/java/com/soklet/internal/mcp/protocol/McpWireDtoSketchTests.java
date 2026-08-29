@@ -115,6 +115,15 @@ public class McpWireDtoSketchTests {
 				new McpJsonRpcMessage.Request(id, "server/discover", params, extensions);
 		McpJsonRpcMessage.Notification notification = new McpJsonRpcMessage.Notification(
 				"notifications/cancelled", Optional.empty(), extensions);
+		McpRequestMetadata notificationMetadata = new McpRequestMetadata(
+				McpProtocolVersion.CURRENT, McpClientCapabilities.empty(),
+				Optional.empty(), Optional.empty(), Optional.empty(),
+				new McpJsonObject(Map.of("com.example/notification-metadata",
+						new McpJsonString("inside-params"))));
+		McpJsonRpcMessage.Notification notificationWithMetadata =
+				new McpJsonRpcMessage.Notification("notifications/future",
+						Optional.of(new McpRequestParameters(notificationMetadata,
+								McpJsonObject.empty()).toJsonObject()), extensions);
 		McpJsonRpcMessage.ResultResponse result = new McpJsonRpcMessage.ResultResponse(
 				id, McpWireResult.complete(McpJsonObject.empty()), extensions);
 		McpJsonRpcMessage.ErrorResponse error = new McpJsonRpcMessage.ErrorResponse(
@@ -140,6 +149,22 @@ public class McpWireDtoSketchTests {
 		Assertions.assertFalse(notificationJson.members().containsKey("params"));
 		Assertions.assertEquals(McpJsonBoolean.TRUE,
 				notificationJson.members().get("com.example/envelope"));
+		McpJsonObject notificationWithMetadataJson =
+				notificationWithMetadata.toJsonObject();
+		Assertions.assertEquals(Set.of("jsonrpc", "method", "params",
+				"com.example/envelope"),
+				notificationWithMetadataJson.members().keySet());
+		Assertions.assertFalse(notificationWithMetadataJson.members()
+				.containsKey("com.example/notification-metadata"));
+		McpJsonObject notificationParams = (McpJsonObject)
+				notificationWithMetadataJson.members().get("params");
+		McpJsonObject nestedNotificationMetadata = (McpJsonObject)
+				notificationParams.members().get("_meta");
+		Assertions.assertEquals(new McpJsonString("inside-params"),
+				nestedNotificationMetadata.members()
+						.get("com.example/notification-metadata"));
+		Assertions.assertEquals(McpJsonBoolean.TRUE,
+				notificationWithMetadataJson.members().get("com.example/envelope"));
 
 		McpJsonObject resultJson = result.toJsonObject();
 		Assertions.assertTrue(resultJson.members().containsKey("result"));
@@ -450,6 +475,45 @@ public class McpWireDtoSketchTests {
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> McpWireResult.extension(McpResultType.INPUT_REQUIRED,
 						McpJsonObject.empty(), Optional.empty()));
+	}
+
+	@Test
+	public void tasksCapabilityAndMissingCapabilityEnvelopeAreIndependentSep2663Pieces() {
+		String tasksExtension = "io.modelcontextprotocol/tasks";
+		McpJsonObject serializedTasksCapability = McpClientCapabilities.builder()
+				.extension(tasksExtension, McpJsonObject.empty())
+				.build()
+				.toJsonObject();
+		McpJsonObject expectedTasksCapability = new McpJsonObject(Map.of(
+				"extensions", new McpJsonObject(Map.of(
+						tasksExtension, McpJsonObject.empty()))));
+
+		Assertions.assertEquals(expectedTasksCapability, serializedTasksCapability);
+		McpJsonObject sepCompatibleData = new McpJsonObject(Map.of(
+				"requiredCapabilities", serializedTasksCapability));
+		Assertions.assertEquals(expectedTasksCapability,
+				sepCompatibleData.members().get("requiredCapabilities"));
+
+		McpJsonRpcError coreEnvelope =
+				McpJsonRpcError.missingRequiredClientCapabilities(Set.of(
+						McpCoreClientCapability.ELICITATION_FORM));
+		McpJsonObject serializedEnvelope = coreEnvelope.toJsonObject();
+		Assertions.assertEquals(new McpJsonNumber(-32021L),
+				serializedEnvelope.members().get("code"));
+		Assertions.assertEquals(new McpJsonString(
+				"Missing required client capability"),
+				serializedEnvelope.members().get("message"));
+		McpJsonObject envelopeData = (McpJsonObject)
+				serializedEnvelope.members().get("data");
+		Assertions.assertEquals(Set.of("requiredCapabilities"),
+				envelopeData.members().keySet());
+		McpJsonObject coreRequirements = (McpJsonObject)
+				envelopeData.members().get("requiredCapabilities");
+		Assertions.assertTrue(coreRequirements.members().containsKey("elicitation"));
+		Assertions.assertFalse(coreRequirements.members().containsKey("extensions"),
+				"The current factory remains core-only; this is not a Tasks error path.");
+		Assertions.assertArrayEquals(new Class<?>[] { McpCoreClientCapability.class },
+				McpClientCapabilityRequirement.class.getPermittedSubclasses());
 	}
 
 	@Test

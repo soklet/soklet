@@ -27,7 +27,10 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -42,6 +45,8 @@ public class McpInputRequiredPublicRuntimeTests {
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final String JSON_MEDIA_TYPE = "application/json";
 	private static final String ROOTS_CAPABILITY = "{\"roots\":{}}";
+	private static final String FORM_CAPABILITY =
+			"{\"elicitation\":{\"form\":{}}}";
 	private static final String FORM_AND_ROOTS_CAPABILITIES =
 			"{\"elicitation\":{\"form\":{}},\"roots\":{}}";
 	private static final String ALL_INPUT_CAPABILITIES =
@@ -615,6 +620,189 @@ public class McpInputRequiredPublicRuntimeTests {
 	}
 
 	@Test
+	public void staticCatalogIsCallerNeutralWhileRequiredFormCallChecksBeforeAdmission()
+			throws Exception {
+		String toolName = "catalog-required-form";
+		String promptName = "catalog-neutral-prompt";
+		AtomicInteger requestLimiterInvocations = new AtomicInteger();
+		AtomicInteger toolLimiterInvocations = new AtomicInteger();
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		AtomicInteger promptHandlerInvocations = new AtomicInteger();
+		AtomicInteger sanitizerInvocations = new AtomicInteger();
+		AtomicInteger catalogTextRenders = new AtomicInteger();
+		List<String> admissionObservations = new CopyOnWriteArrayList<>();
+		McpInputRequestDeclaration requiredForm = McpInputRequestDeclaration
+				.fromElicitationForm(McpInputRequirement.REQUIRED);
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName(toolName)
+				.jsonArguments()
+				.handler((request, arguments, features) -> {
+					handlerInvocations.incrementAndGet();
+					return McpCompleteResult.fromToolText("supported caller admitted");
+				})
+				.title("Caller-neutral required-form tool")
+				.description("Requires form elicitation when called")
+				.mayRequestInput(requiredForm)
+				.build();
+		McpPromptRegistration prompt = McpPromptRegistration
+				.withName(promptName)
+				.handler((request, promptGet, features) -> {
+					promptHandlerInvocations.incrementAndGet();
+					return McpCompleteResult.fromPromptOutput(
+							McpPromptOutput.fromMessages());
+				})
+				.title("Caller-neutral prompt")
+				.description("Visible to every admitted caller")
+				.build();
+		McpEndpoint endpoint = endpointBuilder()
+				.tool(tool)
+				.prompt(prompt)
+				.build();
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH)
+				.contextProvider(request -> McpLocalizationContext
+						.withLocale(Locale.ENGLISH)
+						.localizer(text -> {
+							catalogTextRenders.incrementAndGet();
+							return McpLocalizationResult.useDefaultText();
+						})
+						.build())
+				.build();
+		McpAdmissionController admissionController = context -> {
+			String requestId = context.getRequestId().orElseThrow()
+					.asString().orElseThrow();
+			String credential = context.getRequest().getHeader("Authorization")
+					.orElseThrow();
+			String caller = credential.substring("Bearer ".length());
+			boolean supportsForm = context.getClientCapabilities().orElseThrow()
+					.supports(McpClientCapability.ELICITATION_FORM);
+			admissionObservations.add(requestId + "|" + caller + "|"
+					+ supportsForm);
+			if (caller.equals("denied"))
+				return McpAdmissionDecision.rejected(McpAdmissionRejection
+						.withStatusCodeAndError(403,
+								McpJsonRpcError.fromApplication(1_001,
+										"Catalog admission denied"))
+						.build());
+			return McpAdmissionDecision.accepted(McpAdmissionIdentity
+					.withRateLimitPartitionKey("rate-" + caller)
+					.authorizationPartitionKey("authorization-" + caller)
+					.build());
+		};
+		McpRateLimiter requestRateLimiter = context -> {
+			requestLimiterInvocations.incrementAndGet();
+			return McpRateLimitDecision.allowed();
+		};
+		McpRateLimiter toolRateLimiter = context -> {
+			toolLimiterInvocations.incrementAndGet();
+			return McpRateLimitDecision.allowed();
+		};
+		McpToolOutputSanitizer sanitizer =
+				(request, observedToolName, rawArguments, output) -> {
+			sanitizerInvocations.incrementAndGet();
+			return output;
+		};
+		McpServer server = McpServer.withPort(0)
+				.host(LOOPBACK)
+				.endpointRegistry(
+						McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(admissionController)
+				.requestRateLimiter(requestRateLimiter)
+				.toolRateLimiter(toolRateLimiter)
+				.handlerInterceptor(McpHandlerInterceptor.passThroughInstance())
+				.toolOutputSanitizer(sanitizer)
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.allowedHosts(Set.of(LOOPBACK))
+				.localizer(localizer)
+				.build();
+		Soklet soklet = managedSoklet(server);
+
+		try {
+			soklet.start();
+			int port = boundPort(server);
+			HttpResponse<String> alphaList = sendAsCaller(port,
+					"caller-neutral-tools", "tools/list", "", "", "{}",
+					"Bearer alpha");
+			HttpResponse<String> betaList = sendAsCaller(port,
+					"caller-neutral-tools", "tools/list", "", "",
+					FORM_CAPABILITY, "Bearer beta");
+
+			Assertions.assertEquals(200, alphaList.statusCode(), alphaList.body());
+			Assertions.assertEquals(200, betaList.statusCode(), betaList.body());
+			Assertions.assertEquals(alphaList.body(), betaList.body(),
+					"Static tool catalogs must not vary by caller identity or capabilities.");
+			assertContains(alphaList.body(), "\"name\":\"" + toolName + "\"");
+			assertContains(alphaList.body(), "\"ttlMs\":0");
+			assertContains(alphaList.body(), "\"cacheScope\":\"private\"");
+			Assertions.assertEquals("no-store",
+					alphaList.headers().firstValue("Cache-Control").orElseThrow());
+			Assertions.assertEquals("no-store",
+					betaList.headers().firstValue("Cache-Control").orElseThrow());
+
+			HttpResponse<String> alphaPrompts = sendAsCaller(port,
+					"caller-neutral-prompts", "prompts/list", "", "", "{}",
+					"Bearer alpha");
+			HttpResponse<String> betaPrompts = sendAsCaller(port,
+					"caller-neutral-prompts", "prompts/list", "", "",
+					FORM_CAPABILITY, "Bearer beta");
+			Assertions.assertEquals(200, alphaPrompts.statusCode(),
+					alphaPrompts.body());
+			Assertions.assertEquals(200, betaPrompts.statusCode(),
+					betaPrompts.body());
+			Assertions.assertEquals(alphaPrompts.body(), betaPrompts.body(),
+					"Static prompt catalogs must not vary by caller identity or capabilities.");
+			assertContains(alphaPrompts.body(), "\"name\":\"" + promptName + "\"");
+			assertContains(alphaPrompts.body(), "\"ttlMs\":0");
+			assertContains(alphaPrompts.body(), "\"cacheScope\":\"private\"");
+			Assertions.assertEquals("no-store", alphaPrompts.headers()
+					.firstValue("Cache-Control").orElseThrow());
+			Assertions.assertEquals("no-store", betaPrompts.headers()
+					.firstValue("Cache-Control").orElseThrow());
+
+			Assertions.assertTrue(catalogTextRenders.get() > 0,
+					"Successful catalog requests must exercise descriptor rendering.");
+			int rendersBeforeDenied = catalogTextRenders.get();
+			HttpResponse<String> deniedList = sendAsCaller(port, "denied-list",
+					"tools/list", "", "", "{}", "Bearer denied");
+			Assertions.assertEquals(403, deniedList.statusCode(), deniedList.body());
+			Assertions.assertFalse(deniedList.body().contains(toolName),
+					"Rejected admission must precede framework catalog rendering.");
+			Assertions.assertEquals(rendersBeforeDenied, catalogTextRenders.get(),
+					"Rejected admission must not invoke catalog text rendering.");
+
+			HttpResponse<String> missingCapability = sendAsCaller(port,
+					"missing-form", "tools/call", toolName,
+					",\"name\":\"" + toolName + "\",\"arguments\":{}",
+					"{}", "Bearer missing");
+			assertMissingCapability(missingCapability, "missing-form",
+					FORM_CAPABILITY);
+			Assertions.assertFalse(admissionObservations.stream()
+					.anyMatch(observation -> observation.startsWith("missing-form|")),
+					"A missing REQUIRED capability must fail before admission.");
+
+			HttpResponse<String> supported = sendAsCaller(port, "supported-form",
+					"tools/call", toolName,
+					",\"name\":\"" + toolName + "\",\"arguments\":{}",
+					FORM_CAPABILITY, "Bearer gamma");
+			assertComplete(supported, "supported-form");
+			assertContains(supported.body(), "supported caller admitted");
+			Assertions.assertEquals(List.of(
+					"caller-neutral-tools|alpha|false",
+					"caller-neutral-tools|beta|true",
+					"caller-neutral-prompts|alpha|false",
+					"caller-neutral-prompts|beta|true",
+					"denied-list|denied|false",
+					"supported-form|gamma|true"), admissionObservations);
+			Assertions.assertEquals(5, requestLimiterInvocations.get());
+			Assertions.assertEquals(1, toolLimiterInvocations.get());
+			Assertions.assertEquals(1, handlerInvocations.get());
+			Assertions.assertEquals(0, promptHandlerInvocations.get());
+			Assertions.assertEquals(1, sanitizerInvocations.get());
+		} finally {
+			soklet.close();
+		}
+	}
+
+	@Test
 	public void missingCapabilityWinsOverMalformedSecretBearingOutputAndRemainsRequestScoped()
 			throws Exception {
 		String parameterSecret = "MISSING-CAPABILITY-PARAMETER-SECRET";
@@ -1075,28 +1263,44 @@ public class McpInputRequiredPublicRuntimeTests {
 	private static HttpResponse<String> send(int port, String requestId,
 			String method, String operationName, String additionalParameters,
 			String clientCapabilities) throws Exception {
+		return send(port, requestId, method, operationName, additionalParameters,
+				clientCapabilities, Map.of());
+	}
+
+	private static HttpResponse<String> sendAsCaller(int port, String requestId,
+			String method, String operationName, String additionalParameters,
+			String clientCapabilities, String authorization) throws Exception {
+		return send(port, requestId, method, operationName, additionalParameters,
+				clientCapabilities, Map.of("Authorization", authorization));
+	}
+
+	private static HttpResponse<String> send(int port, String requestId,
+			String method, String operationName, String additionalParameters,
+			String clientCapabilities, Map<String, String> additionalHeaders)
+			throws Exception {
 		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"" + requestId
 				+ "\",\"method\":\"" + method + "\",\"params\":{\"_meta\":{"
 				+ "\"io.modelcontextprotocol/protocolVersion\":\""
 				+ PROTOCOL_VERSION + "\","
 				+ "\"io.modelcontextprotocol/clientCapabilities\":"
 				+ clientCapabilities + "}" + additionalParameters + "}}";
-		HttpRequest request = HttpRequest.newBuilder()
+		HttpRequest.Builder request = HttpRequest.newBuilder()
 				.uri(URI.create("http://" + LOOPBACK + ":" + port + MCP_PATH))
 				.timeout(Duration.ofSeconds(5))
 				.header("Content-Type", JSON_MEDIA_TYPE + "; charset=UTF-8")
 				.header("Accept", JSON_MEDIA_TYPE + ", text/event-stream")
 				.header("MCP-Protocol-Version", PROTOCOL_VERSION)
-				.header("Mcp-Method", method)
-				.header("Mcp-Name", operationName)
-				.POST(HttpRequest.BodyPublishers.ofString(
-						body, StandardCharsets.UTF_8))
-				.build();
+				.header("Mcp-Method", method);
+		if (!operationName.isEmpty())
+			request.header("Mcp-Name", operationName);
+		additionalHeaders.forEach(request::header);
 		return HttpClient.newBuilder()
 				.connectTimeout(Duration.ofSeconds(5))
 				.version(HttpClient.Version.HTTP_1_1)
 				.build()
-				.send(request, HttpResponse.BodyHandlers.ofString(
+				.send(request.POST(HttpRequest.BodyPublishers.ofString(
+						body, StandardCharsets.UTF_8)).build(),
+						HttpResponse.BodyHandlers.ofString(
 						StandardCharsets.UTF_8));
 	}
 

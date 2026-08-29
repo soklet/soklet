@@ -454,6 +454,15 @@ Change a gate to `READY` only in the same reviewed commit that supplies its
 immutable pin and working validation entry point. A branch, tag, dirty sibling
 checkout, or local substitution is never accepted as a pin.
 
+The 4.0 candidate keeps static `tools/list` and `prompts/list` catalogs
+immutable and caller-neutral after admission; their descriptors are not
+authorization-filtered. A registered tool remains listed when it declares a
+required client capability, while the matching call can receive `-32021`
+before admission if that capability is absent. The list responses retain
+private, zero-TTL protocol cache hints and HTTP `Cache-Control: no-store`;
+this distinction is not an authorization boundary or an ETag/dynamic-catalog
+promise.
+
 ## Contract
 
 Once every gate is ready, the validator:

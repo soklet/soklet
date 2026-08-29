@@ -240,6 +240,22 @@ The immutable prompt catalog follows registration order and is returned as one
 page. A present cursor is invalid because Soklet 4.0.0 does not expose dynamic
 prompt-list pagination or a prompt list-change publisher.
 
+Static tool and prompt catalogs are caller-neutral. Once a request passes
+admission, `tools/list` and `prompts/list` return the same registration-order
+descriptors for every admitted identity and every client-capability set. They
+are not authorization-filtered. Admission still precedes framework catalog
+rendering, so a rejected caller receives no catalog. These list results always
+carry a zero TTL and private scope, and their HTTP responses remain
+`Cache-Control: no-store`. That conservative output is not a promise that a
+future release will make static catalogs shareable.
+
+An operation's descriptor is discoverable even when the operation declares a
+required client capability. For example, a tool that declares required form
+elicitation remains in `tools/list`; a `tools/call` without that capability
+receives the standard `-32021` error before admission, while a call with the
+capability proceeds through admission and the normal application pipeline.
+This list/call distinction must not be used as an authorization boundary.
+
 ## Resources and pagination
 
 An exact resource registration has one concrete URI and contributes to the
@@ -300,6 +316,15 @@ public scope only when the same descriptors are safe to share across callers.
 Protocol cache hints do not turn the HTTP transport into a shared cache: MCP
 transport responses use `Cache-Control: no-store`.
 
+The static exact-resource fallback is registration-ordered and
+caller-neutral, like the static tool and prompt catalogs. A custom
+`McpResourceListHandler` is dynamic and application-owned: it may return
+identity-specific descriptors, but the application must keep the endpoint
+cache scope conservative enough for every page it can return. Framework
+localization can also vary catalog text by request locale. Because locale is
+not a protocol cache-key dimension, localization-enabled cacheable output is
+kept private with a zero TTL; HTTP remains `no-store` in every case.
+
 ## Multi-round-trip input and request state
 
 Tools, prompt gets, and resource reads may return `McpInputRequiredResult`
@@ -308,7 +333,7 @@ Programmatic operations declare every possible `McpInputRequestDeclaration`
 with `mayRequestInput(...)`; annotated operations use `@McpMayRequestInput`.
 Soklet 4.0.x supports exactly the MCP `2026-07-28` profile; it neither selects an automatic
 "latest" profile nor falls back. Active Elicitation is the default teaching surface;
-retained Sampling and Roots declarations are validated and must be registered.
+deprecated compatibility surfaces are documented separately below.
 
 Those client operations are embedded values, not standalone JSON-RPC
 requests. Soklet writes each `method`/`params` pair only inside the
@@ -2107,6 +2132,39 @@ reflecting the setting into the response. Malformed extension containers,
 identifiers, or settings fail before admission, and unsupported extension
 methods retain the normal explicit unknown-method behavior.
 
+Applications can use that compatibility surface on an existing core method:
+admission, an `McpHandlerInterceptor`, and the operation handler observe the
+same request-scoped capabilities; the handler can call `findExtension(...)`,
+inspect namespaced inbound request metadata, and return nonreserved
+`McpCompleteResult` metadata that the interceptor may transform or replace.
+This remains application-owned behavior. It does not advertise matching server
+support or register a new protocol method.
+
+In particular, Soklet 4.0.0 does not implement the
+[MCP Tasks extension (SEP-2663)](https://modelcontextprotocol.io/seps/2663-tasks-extension).
+It advertises no `io.modelcontextprotocol/tasks` server capability, registers
+no `tasks/*` methods, and produces no framework-owned task lifecycle or task
+result. Its open wire seams are deliberately narrower and independently
+testable: client capabilities can serialize the namespaced extension setting;
+`McpResultType.extension("task")` preserves an unknown result discriminator;
+and core owns the `-32021` envelope while a future extension integration would
+own its namespaced `requiredCapabilities.extensions` contribution.
+
+That future integration would require explicit API and compiler work. Today
+`McpClientCapabilityRequirement` is sealed to core requirements and
+`McpClientCapabilities.supports(...)` handles core capability values; both are
+known widening points. An annotated `@McpTool` must still return a typed
+application value that Soklet wraps as a completion result; `void` and direct
+`McpOperationResult` returns are rejected. Per-request Tasks negotiation would
+also have to honor SEP-2663's compatibility boundary:
+the legacy `task` member of `tools/call` is only an unknown parameter, not
+opt-in, and `tasks/result` remains an unknown method.
+
+Finally, the two extension-field locations are distinct. JSON-RPC notification
+envelope extension fields serialize at the top level; namespaced request
+metadata belongs inside `params._meta`. Neither location by itself enables
+Tasks or any other server extension.
+
 Soklet 4.0.0 does not provide stdio transport, public arbitrary JSON Schema
 registration, MCP Completion, MCP logging capability, mutable tool/prompt list
 publishers, or an application result-extension registry. OAuth protected-
@@ -2119,6 +2177,22 @@ authentication and standards-compliant challenges at the admission boundary.
 Doing so does not by itself make core Soklet or the deployment fully conformant
 with MCP Authorization; the deployment must meet every applicable
 authorization-server and resource-server obligation.
+
+### Deprecated compatibility surfaces
+
+SEP-2577 marks Roots, Sampling, and Logging deprecated in MCP `2026-07-28`,
+with specification removal eligible no earlier than 2027-07-28. This upstream
+MCP lifecycle is separate from Soklet's Java API lifecycle: the corresponding
+Java surfaces remain supported and carry no Java deprecation marker, and
+Soklet has made no API-removal decision. New applications should pass files or
+directories through explicit tool parameters, resource URIs, or server
+configuration instead of Roots, and integrate directly with a model provider
+instead of Sampling. Retained Sampling and Roots declarations remain validated
+and must be registered. Soklet parses retained Logging metadata but neither
+advertises nor implements MCP Logging; applications use Soklet's existing
+observability path. Soklet emits no negotiation-triggered warning through
+`LogEvent` or developer tooling. A future warning requires a separately
+approved default-off, bounded, redacted diagnostic policy.
 
 The official MCP conformance suite is pinned and automated as release
 evidence. The earlier frozen Phase 4 candidate passed its then-active reviewed
@@ -2620,19 +2694,6 @@ claim. `MCP-HTTP-020` is now `CORE_COMPLETE`; the current report remains
 `SOK-STATE-007`, `SOK-PRIV-001`, and `AMB-002`. Generic `Request`,
 `Throwable`, custom-collector, and application-telemetry privacy remain owned
 by `SOK-PRIV-001`.
-
-SEP-2577 marks Roots, Sampling, and Logging deprecated in MCP `2026-07-28`,
-with specification removal eligible no earlier than 2027-07-28. This upstream
-MCP lifecycle is separate from Soklet's Java API lifecycle: the corresponding
-Java surfaces remain supported and carry no Java deprecation marker, and
-Soklet has made no API-removal decision. New applications should pass files or
-directories through explicit tool parameters, resource URIs, or server
-configuration instead of Roots, and integrate directly with a model provider
-instead of Sampling. Soklet parses retained Logging metadata but neither
-advertises nor implements MCP Logging; applications use Soklet's existing
-observability path. Soklet emits no negotiation-triggered warning through
-`LogEvent` or developer tooling. A future warning requires a separately
-approved default-off, bounded, redacted diagnostic policy.
 
 Dynamic Client Registration is reviewed and not applicable because Soklet has
 no OAuth/DCR implementation. The deprecated standalone legacy HTTP+SSE

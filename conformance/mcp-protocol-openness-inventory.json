@@ -1,0 +1,854 @@
+{
+  "formatVersion": 1,
+  "matcherRules": [
+    {
+      "description": "Calls to an inbound unknown-key or metadata rejection helper.",
+      "family": "unknown-key-rejection-helper",
+      "id": "OPEN-MATCH-001"
+    },
+    {
+      "description": "Exact allowed-key or literal-vocabulary sets supplied to validators.",
+      "family": "exact-allowed-key-or-vocabulary-set",
+      "id": "OPEN-MATCH-002"
+    },
+    {
+      "description": "Method, capability, or discriminator switches and closed lookup sets.",
+      "family": "selector-switch-or-closed-lookup",
+      "id": "OPEN-MATCH-003"
+    },
+    {
+      "description": "Literal equality chains over method, name, or capability selectors with a closed fallthrough.",
+      "family": "literal-equality-cascade",
+      "id": "OPEN-MATCH-004"
+    }
+  ],
+  "productionProfile": "2026-07-28",
+  "reviewedExclusions": [
+    {
+      "consumer": "metricMethod(java.lang.String)",
+      "field": "com.soklet.DefaultMcpServer#BOUNDED_METRIC_METHODS",
+      "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+      "id": "OPEN-EX-001",
+      "owner": "com.soklet.DefaultMcpServer",
+      "rationale": "Bounds observability cardinality only; it does not accept, route, validate, or serialize a protocol method."
+    }
+  ],
+  "scanRoots": [
+    "src/main/java/com/soklet/internal/mcp/**/*.java",
+    "src/main/java/com/soklet/Mcp*.java"
+  ],
+  "validators": [
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Unknown capability names and settings remain opaque and available, but core capability semantics and constrained member shapes change only with profile evidence.",
+      "conformanceRows": [
+        "MCP-CAP-001",
+        "MCP-CAP-002"
+      ],
+      "file": "src/main/java/com/soklet/McpClientCapabilities.java",
+      "id": "OPEN-001",
+      "key": "src/main/java/com/soklet/McpClientCapabilities.java#com.soklet.McpClientCapabilities#supports",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "supports",
+      "owner": "com.soklet.McpClientCapabilities",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": [
+        "NI-07"
+      ]
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "A new client-input method or extension-contributed requirement needs the named capability-requirement widening point and cannot enter this core-only vocabulary implicitly.",
+      "conformanceRows": [
+        "MCP-ELICIT-001",
+        "MCP-ROOTS-001",
+        "MCP-SAMPLING-001"
+      ],
+      "file": "src/main/java/com/soklet/McpInputRequestDeclaration.java",
+      "id": "OPEN-003",
+      "key": "src/main/java/com/soklet/McpInputRequestDeclaration.java#com.soklet.McpInputRequestDeclaration#McpInputRequestDeclaration",
+      "matcherRuleId": "OPEN-MATCH-004",
+      "method": "McpInputRequestDeclaration",
+      "owner": "com.soklet.McpInputRequestDeclaration",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": [
+        "NI-06",
+        "NI-07"
+      ]
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "A new client-input method or extension-contributed requirement needs the named capability-requirement widening point and cannot enter this core-only vocabulary implicitly.",
+      "conformanceRows": [
+        "MCP-ELICIT-001",
+        "MCP-ROOTS-001",
+        "MCP-SAMPLING-001"
+      ],
+      "file": "src/main/java/com/soklet/McpInputRequestDeclaration.java",
+      "id": "OPEN-004",
+      "key": "src/main/java/com/soklet/McpInputRequestDeclaration.java#com.soklet.McpInputRequestDeclaration#fromSampling",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "fromSampling",
+      "owner": "com.soklet.McpInputRequestDeclaration",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": [
+        "NI-06",
+        "NI-07"
+      ]
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Unknown namespaced notification metadata remains preserved; a newly reserved 2026 member requires an explicit profile-owned validator update.",
+      "conformanceRows": [
+        "MCP-BASE-002",
+        "MCP-HTTP-025"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/Mcp20260728ProtocolProfile.java",
+      "id": "OPEN-005",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/Mcp20260728ProtocolProfile.java#com.soklet.internal.mcp.protocol.Mcp20260728ProtocolProfile#validateNotificationMetadata",
+      "matcherRuleId": "OPEN-MATCH-001",
+      "method": "validateNotificationMetadata",
+      "owner": "com.soklet.internal.mcp.protocol.Mcp20260728ProtocolProfile",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "SOKLET_POLICY",
+      "compatibleOptionalMemberBehavior": "A new framework-owned method or result kind requires an explicit router/profile change; application handlers cannot silently replace framework-owned methods.",
+      "conformanceRows": [
+        "MCP-DISC-001",
+        "MCP-PAGE-005",
+        "MCP-PROMPT-001",
+        "MCP-RESOURCE-001",
+        "MCP-TOOL-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
+      "id": "OPEN-006",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution.Exchange#renderApplicationResult",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "renderApplicationResult",
+      "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution.Exchange",
+      "phase": "deferred-r2c",
+      "roadmapNegativeInventoryKeys": [
+        "NI-07"
+      ]
+    },
+    {
+      "closureAuthority": "SOKLET_POLICY",
+      "compatibleOptionalMemberBehavior": "A new framework-owned method or result kind requires an explicit router/profile change; application handlers cannot silently replace framework-owned methods.",
+      "conformanceRows": [
+        "MCP-DISC-001",
+        "MCP-PAGE-005",
+        "MCP-PROMPT-001",
+        "MCP-RESOURCE-001",
+        "MCP-TOOL-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
+      "id": "OPEN-007",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationRequestRouter#fromHandlersAndOperationRoutes",
+      "matcherRuleId": "OPEN-MATCH-004",
+      "method": "fromHandlersAndOperationRoutes",
+      "owner": "com.soklet.internal.mcp.protocol.McpApplicationRequestRouter",
+      "phase": "deferred-r2c",
+      "roadmapNegativeInventoryKeys": [
+        "NI-07"
+      ]
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Unknown capability names and settings remain opaque and available, but core capability semantics and constrained member shapes change only with profile evidence.",
+      "conformanceRows": [
+        "MCP-CAP-001",
+        "MCP-CAP-002"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpClientCapabilities.java",
+      "id": "OPEN-008",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpClientCapabilities.java#com.soklet.internal.mcp.protocol.McpClientCapabilities#McpClientCapabilities",
+      "matcherRuleId": "OPEN-MATCH-002",
+      "method": "McpClientCapabilities",
+      "owner": "com.soklet.internal.mcp.protocol.McpClientCapabilities",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": [
+        "NI-07"
+      ]
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Unknown capability names and settings remain opaque and available, but core capability semantics and constrained member shapes change only with profile evidence.",
+      "conformanceRows": [
+        "MCP-CAP-001",
+        "MCP-CAP-002"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpClientCapabilities.java",
+      "id": "OPEN-010",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpClientCapabilities.java#com.soklet.internal.mcp.protocol.McpClientCapabilities#supports",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "supports",
+      "owner": "com.soklet.internal.mcp.protocol.McpClientCapabilities",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": [
+        "NI-07"
+      ]
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Unknown capability names and settings remain opaque and available, but core capability semantics and constrained member shapes change only with profile evidence.",
+      "conformanceRows": [
+        "MCP-CAP-001",
+        "MCP-CAP-002"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpClientCapabilities.java",
+      "id": "OPEN-011",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpClientCapabilities.java#com.soklet.internal.mcp.protocol.McpClientCapabilities.Builder#capability",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "capability",
+      "owner": "com.soklet.internal.mcp.protocol.McpClientCapabilities.Builder",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": [
+        "NI-07"
+      ]
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "A new client-input method or extension-contributed requirement needs the named capability-requirement widening point and cannot enter this core-only vocabulary implicitly.",
+      "conformanceRows": [
+        "MCP-ELICIT-001",
+        "MCP-ROOTS-001",
+        "MCP-SAMPLING-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpClientCapabilityRequirement.java",
+      "id": "OPEN-013",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpClientCapabilityRequirement.java#com.soklet.internal.mcp.protocol.McpInputRequestDeclaration#McpInputRequestDeclaration",
+      "matcherRuleId": "OPEN-MATCH-004",
+      "method": "McpInputRequestDeclaration",
+      "owner": "com.soklet.internal.mcp.protocol.McpInputRequestDeclaration",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": [
+        "NI-06",
+        "NI-07"
+      ]
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Open object members remain preserved where the 2026 schema is open; closed discriminators and value vocabularies require an explicit same-revision conformance review.",
+      "conformanceRows": [
+        "MCP-SAMPLING-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java",
+      "id": "OPEN-047",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java#com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator#optionalAnnotations",
+      "matcherRuleId": "OPEN-MATCH-002",
+      "method": "optionalAnnotations",
+      "owner": "com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Open object members remain preserved where the 2026 schema is open; closed discriminators and value vocabularies require an explicit same-revision conformance review.",
+      "conformanceRows": [
+        "MCP-SAMPLING-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java",
+      "id": "OPEN-014",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java#com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator#optionalIcons",
+      "matcherRuleId": "OPEN-MATCH-002",
+      "method": "optionalIcons",
+      "owner": "com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Open object members remain preserved where the 2026 schema is open; closed discriminators and value vocabularies require an explicit same-revision conformance review.",
+      "conformanceRows": [
+        "MCP-ELICIT-001",
+        "MCP-ROOTS-001",
+        "MCP-SAMPLING-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java",
+      "id": "OPEN-015",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java#com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator#validate",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "validate",
+      "owner": "com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Open object members remain preserved where the 2026 schema is open; closed discriminators and value vocabularies require an explicit same-revision conformance review.",
+      "conformanceRows": [
+        "MCP-ELICIT-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java",
+      "id": "OPEN-016",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java#com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator#validateBooleanSchema",
+      "matcherRuleId": "OPEN-MATCH-002",
+      "method": "validateBooleanSchema",
+      "owner": "com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Open object members remain preserved where the 2026 schema is open; closed discriminators and value vocabularies require an explicit same-revision conformance review.",
+      "conformanceRows": [
+        "MCP-ELICIT-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java",
+      "id": "OPEN-017",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java#com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator#validateElicitation",
+      "matcherRuleId": "OPEN-MATCH-002",
+      "method": "validateElicitation",
+      "owner": "com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Open object members remain preserved where the 2026 schema is open; closed discriminators and value vocabularies require an explicit same-revision conformance review.",
+      "conformanceRows": [
+        "MCP-ELICIT-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java",
+      "id": "OPEN-018",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java#com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator#validateLegacyTitledEnumSchema",
+      "matcherRuleId": "OPEN-MATCH-002",
+      "method": "validateLegacyTitledEnumSchema",
+      "owner": "com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Open object members remain preserved where the 2026 schema is open; closed discriminators and value vocabularies require an explicit same-revision conformance review.",
+      "conformanceRows": [
+        "MCP-ELICIT-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java",
+      "id": "OPEN-019",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java#com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator#validateMultiSelectFields",
+      "matcherRuleId": "OPEN-MATCH-002",
+      "method": "validateMultiSelectFields",
+      "owner": "com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Open object members remain preserved where the 2026 schema is open; closed discriminators and value vocabularies require an explicit same-revision conformance review.",
+      "conformanceRows": [
+        "MCP-ELICIT-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java",
+      "id": "OPEN-020",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java#com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator#validateNumberSchema",
+      "matcherRuleId": "OPEN-MATCH-002",
+      "method": "validateNumberSchema",
+      "owner": "com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Open object members remain preserved where the 2026 schema is open; closed discriminators and value vocabularies require an explicit same-revision conformance review.",
+      "conformanceRows": [
+        "MCP-ELICIT-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java",
+      "id": "OPEN-021",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java#com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator#validateRequestedSchema",
+      "matcherRuleId": "OPEN-MATCH-002",
+      "method": "validateRequestedSchema",
+      "owner": "com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Open object members remain preserved where the 2026 schema is open; closed discriminators and value vocabularies require an explicit same-revision conformance review.",
+      "conformanceRows": [
+        "MCP-SAMPLING-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java",
+      "id": "OPEN-022",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java#com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator#validateSampling",
+      "matcherRuleId": "OPEN-MATCH-002",
+      "method": "validateSampling",
+      "owner": "com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Open object members remain preserved where the 2026 schema is open; closed discriminators and value vocabularies require an explicit same-revision conformance review.",
+      "conformanceRows": [
+        "MCP-SAMPLING-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java",
+      "id": "OPEN-023",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java#com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator#validateSamplingContentBlock",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "validateSamplingContentBlock",
+      "owner": "com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Open object members remain preserved where the 2026 schema is open; closed discriminators and value vocabularies require an explicit same-revision conformance review.",
+      "conformanceRows": [
+        "MCP-SAMPLING-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java",
+      "id": "OPEN-044",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java#com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator#validateSamplingMessages",
+      "matcherRuleId": "OPEN-MATCH-002",
+      "method": "validateSamplingMessages",
+      "owner": "com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Open object members remain preserved where the 2026 schema is open; closed discriminators and value vocabularies require an explicit same-revision conformance review.",
+      "conformanceRows": [
+        "MCP-ELICIT-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java",
+      "id": "OPEN-024",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java#com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator#validateStringSchema",
+      "matcherRuleId": "OPEN-MATCH-002",
+      "method": "validateStringSchema",
+      "owner": "com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Open object members remain preserved where the 2026 schema is open; closed discriminators and value vocabularies require an explicit same-revision conformance review.",
+      "conformanceRows": [
+        "MCP-ELICIT-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java",
+      "id": "OPEN-025",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java#com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator#validateTitledSingleSelectSchema",
+      "matcherRuleId": "OPEN-MATCH-002",
+      "method": "validateTitledSingleSelectSchema",
+      "owner": "com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Open object members remain preserved where the 2026 schema is open; closed discriminators and value vocabularies require an explicit same-revision conformance review.",
+      "conformanceRows": [
+        "MCP-SAMPLING-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java",
+      "id": "OPEN-026",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java#com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator#validateTool",
+      "matcherRuleId": "OPEN-MATCH-002",
+      "method": "validateTool",
+      "owner": "com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Open object members remain preserved where the 2026 schema is open; closed discriminators and value vocabularies require an explicit same-revision conformance review.",
+      "conformanceRows": [
+        "MCP-SAMPLING-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java",
+      "id": "OPEN-027",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java#com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator#validateToolChoice",
+      "matcherRuleId": "OPEN-MATCH-002",
+      "method": "validateToolChoice",
+      "owner": "com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Open object members remain preserved where the 2026 schema is open; closed discriminators and value vocabularies require an explicit same-revision conformance review.",
+      "conformanceRows": [
+        "MCP-SAMPLING-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java",
+      "id": "OPEN-028",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java#com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator#validateToolResultContentBlock",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "validateToolResultContentBlock",
+      "owner": "com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Open object members remain preserved where the 2026 schema is open; closed discriminators and value vocabularies require an explicit same-revision conformance review.",
+      "conformanceRows": [
+        "MCP-ELICIT-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java",
+      "id": "OPEN-029",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java#com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator#validateUntitledMultiSelectSchema",
+      "matcherRuleId": "OPEN-MATCH-002",
+      "method": "validateUntitledMultiSelectSchema",
+      "owner": "com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Open object members remain preserved where the 2026 schema is open; closed discriminators and value vocabularies require an explicit same-revision conformance review.",
+      "conformanceRows": [
+        "MCP-ELICIT-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java",
+      "id": "OPEN-030",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpEmbeddedInputRequestValidator.java#com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator#validateUntitledSingleSelectSchema",
+      "matcherRuleId": "OPEN-MATCH-002",
+      "method": "validateUntitledSingleSelectSchema",
+      "owner": "com.soklet.internal.mcp.protocol.McpEmbeddedInputRequestValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "SOKLET_POLICY",
+      "compatibleOptionalMemberBehavior": "A compatible HTTP or CORS preflight surface requires an explicit transport-policy widening; an authorizer cannot add methods or request headers outside Soklet's MCP allowlist.",
+      "conformanceRows": [
+        "SOK-CORS-003",
+        "SOK-CORS-005",
+        "SOK-CORS-006"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "id": "OPEN-050",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#processPreflight",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "processPreflight",
+      "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+      "phase": "common-bootstrap",
+      "roadmapNegativeInventoryKeys": [
+        "NI-03",
+        "NI-11"
+      ]
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Compatible same-revision methods or parameters require an explicit R2C/profile disposition; they never become routed or advertised implicitly.",
+      "conformanceRows": [
+        "MCP-DISC-001",
+        "MCP-PAGE-005",
+        "MCP-PROMPT-001",
+        "MCP-RESOURCE-001",
+        "MCP-TOOL-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "id": "OPEN-032",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#processRequestSafely",
+      "matcherRuleId": "OPEN-MATCH-004",
+      "method": "processRequestSafely",
+      "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+      "phase": "deferred-r2c",
+      "roadmapNegativeInventoryKeys": [
+        "NI-07"
+      ]
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Compatible same-revision methods or parameters require an explicit R2C/profile disposition; they never become routed or advertised implicitly.",
+      "conformanceRows": [
+        "MCP-DISC-001",
+        "MCP-PAGE-005",
+        "MCP-PROMPT-001",
+        "MCP-RESOURCE-001",
+        "MCP-TOOL-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "id": "OPEN-033",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#requiresMcpName",
+      "matcherRuleId": "OPEN-MATCH-004",
+      "method": "requiresMcpName",
+      "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+      "phase": "deferred-r2c",
+      "roadmapNegativeInventoryKeys": [
+        "NI-07"
+      ]
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Unknown inbound result metadata remains preserved; reserved server-information ownership changes only through a reviewed profile update.",
+      "conformanceRows": [
+        "MCP-DISC-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpImplementationMetadata.java",
+      "id": "OPEN-035",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpImplementationMetadata.java#com.soklet.internal.mcp.protocol.McpResultMetadata#McpResultMetadata",
+      "matcherRuleId": "OPEN-MATCH-001",
+      "method": "McpResultMetadata",
+      "owner": "com.soklet.internal.mcp.protocol.McpResultMetadata",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Unknown response members survive on open objects, while a new discriminator or constrained value requires this 2026-profile validator to be widened deliberately.",
+      "conformanceRows": [
+        "MCP-ELICIT-003",
+        "MCP-ROOTS-001",
+        "MCP-SAMPLING-003"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpInputResponseValidator.java",
+      "id": "OPEN-045",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpInputResponseValidator.java#com.soklet.internal.mcp.protocol.McpInputResponseValidator#optionalAnnotations",
+      "matcherRuleId": "OPEN-MATCH-002",
+      "method": "optionalAnnotations",
+      "owner": "com.soklet.internal.mcp.protocol.McpInputResponseValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Unknown response members survive on open objects, while a new discriminator or constrained value requires this 2026-profile validator to be widened deliberately.",
+      "conformanceRows": [
+        "MCP-ELICIT-003",
+        "MCP-ROOTS-001",
+        "MCP-SAMPLING-003"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpInputResponseValidator.java",
+      "id": "OPEN-036",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpInputResponseValidator.java#com.soklet.internal.mcp.protocol.McpInputResponseValidator#optionalMetadata",
+      "matcherRuleId": "OPEN-MATCH-001",
+      "method": "optionalMetadata",
+      "owner": "com.soklet.internal.mcp.protocol.McpInputResponseValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Unknown response members survive on open objects, while a new discriminator or constrained value requires this 2026-profile validator to be widened deliberately.",
+      "conformanceRows": [
+        "MCP-SAMPLING-003"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpInputResponseValidator.java",
+      "id": "OPEN-037",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpInputResponseValidator.java#com.soklet.internal.mcp.protocol.McpInputResponseValidator#validateContentBlock",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "validateContentBlock",
+      "owner": "com.soklet.internal.mcp.protocol.McpInputResponseValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Unknown response members survive on open objects, while a new discriminator or constrained value requires this 2026-profile validator to be widened deliberately.",
+      "conformanceRows": [
+        "MCP-SAMPLING-003"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpInputResponseValidator.java",
+      "id": "OPEN-046",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpInputResponseValidator.java#com.soklet.internal.mcp.protocol.McpInputResponseValidator#validateCreateMessageResult",
+      "matcherRuleId": "OPEN-MATCH-002",
+      "method": "validateCreateMessageResult",
+      "owner": "com.soklet.internal.mcp.protocol.McpInputResponseValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Unknown response members survive on open objects, while a new discriminator or constrained value requires this 2026-profile validator to be widened deliberately.",
+      "conformanceRows": [
+        "MCP-ELICIT-003"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpInputResponseValidator.java",
+      "id": "OPEN-038",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpInputResponseValidator.java#com.soklet.internal.mcp.protocol.McpInputResponseValidator#validateElicitResult",
+      "matcherRuleId": "OPEN-MATCH-002",
+      "method": "validateElicitResult",
+      "owner": "com.soklet.internal.mcp.protocol.McpInputResponseValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Unknown response members survive on open objects, while a new discriminator or constrained value requires this 2026-profile validator to be widened deliberately.",
+      "conformanceRows": [
+        "MCP-SAMPLING-003"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpInputResponseValidator.java",
+      "id": "OPEN-039",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpInputResponseValidator.java#com.soklet.internal.mcp.protocol.McpInputResponseValidator#validateIcon",
+      "matcherRuleId": "OPEN-MATCH-002",
+      "method": "validateIcon",
+      "owner": "com.soklet.internal.mcp.protocol.McpInputResponseValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Unknown response members survive on open objects, while a new discriminator or constrained value requires this 2026-profile validator to be widened deliberately.",
+      "conformanceRows": [
+        "MCP-SAMPLING-003"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpInputResponseValidator.java",
+      "id": "OPEN-040",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpInputResponseValidator.java#com.soklet.internal.mcp.protocol.McpInputResponseValidator#validateSamplingContentBlock",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "validateSamplingContentBlock",
+      "owner": "com.soklet.internal.mcp.protocol.McpInputResponseValidator",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "A compatible namespaced metadata member is accepted; only reserved-name collisions and invalid metadata-key syntax remain closed.",
+      "conformanceRows": [
+        "MCP-BASE-002"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpProtocolSupport.java",
+      "id": "OPEN-041",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpProtocolSupport.java#com.soklet.internal.mcp.protocol.McpProtocolSupport#requireApplicationMetadataFields",
+      "matcherRuleId": "OPEN-MATCH-001",
+      "method": "requireApplicationMetadataFields",
+      "owner": "com.soklet.internal.mcp.protocol.McpProtocolSupport",
+      "phase": "common-bootstrap",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Unknown namespaced request metadata remains preserved unless the 2026 profile deliberately reserves and validates the new member.",
+      "conformanceRows": [
+        "MCP-BASE-002",
+        "MCP-HTTP-025"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpRequestParameters.java",
+      "id": "OPEN-042",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpRequestParameters.java#com.soklet.internal.mcp.protocol.McpRequestMetadata#McpRequestMetadata",
+      "matcherRuleId": "OPEN-MATCH-001",
+      "method": "McpRequestMetadata",
+      "owner": "com.soklet.internal.mcp.protocol.McpRequestMetadata",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "SOKLET_POLICY",
+      "compatibleOptionalMemberBehavior": "The framework-protected request-state plaintext is a versioned closed format; a compatible member requires a new reviewed format version and exact field set rather than silent acceptance.",
+      "conformanceRows": [
+        "SOK-STATE-009"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpRequestStatePlaintextCodec.java",
+      "id": "OPEN-051",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpRequestStatePlaintextCodec.java#com.soklet.internal.mcp.protocol.McpRequestStatePlaintextCodec#decodeValidated",
+      "matcherRuleId": "OPEN-MATCH-002",
+      "method": "decodeValidated",
+      "owner": "com.soklet.internal.mcp.protocol.McpRequestStatePlaintextCodec",
+      "phase": "common-bootstrap",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Unknown object members remain in the mapper's opaque surfaces; a new closed enum value requires a profile-owned mapping update.",
+      "conformanceRows": [
+        "MCP-BASE-002"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpRequestWireMapper.java",
+      "id": "OPEN-034",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpRequestWireMapper.java#com.soklet.internal.mcp.protocol.McpRequestWireMapper#parseLogLevel",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "parseLogLevel",
+      "owner": "com.soklet.internal.mcp.protocol.McpRequestWireMapper",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Unknown object members remain in the mapper's opaque surfaces; a new closed enum value requires a profile-owned mapping update.",
+      "conformanceRows": [
+        "MCP-BASE-002"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpRequestWireMapper.java",
+      "id": "OPEN-043",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpRequestWireMapper.java#com.soklet.internal.mcp.protocol.McpRequestWireMapper#parseTheme",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "parseTheme",
+      "owner": "com.soklet.internal.mcp.protocol.McpRequestWireMapper",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "A new core client capability must be represented deliberately in both public and internal input-requirement models; opaque extension capabilities do not pass through this core enum adapter.",
+      "conformanceRows": [
+        "MCP-ELICIT-001",
+        "MCP-ROOTS-001",
+        "MCP-SAMPLING-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+      "id": "OPEN-048",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java#com.soklet.internal.mcp.protocol.McpServerRuntimeBridge#toInternal",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "toInternal",
+      "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": [
+        "NI-06",
+        "NI-07"
+      ]
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "A compatible server request method gaining input-required support must be added deliberately; extension and Tasks methods do not inherit this core-result permission.",
+      "conformanceRows": [
+        "MCP-ELICIT-001",
+        "MCP-PROMPT-001",
+        "MCP-RESOURCE-001",
+        "MCP-ROOTS-001",
+        "MCP-SAMPLING-001",
+        "MCP-TOOL-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpWireResult.java",
+      "id": "OPEN-049",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpWireResult.java#com.soklet.internal.mcp.protocol.McpWireResult#supportsInputRequired",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "supportsInputRequired",
+      "owner": "com.soklet.internal.mcp.protocol.McpWireResult",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": [
+        "NI-06",
+        "NI-07"
+      ]
+    },
+    {
+      "closureAuthority": "SOKLET_POLICY",
+      "compatibleOptionalMemberBehavior": "A JSON Schema type name outside the reviewed Tool Schema Profile is rejected until the profile enum and compiler are deliberately widened.",
+      "conformanceRows": [
+        "MCP-BASE-017"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaType.java",
+      "id": "OPEN-052",
+      "key": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaType.java#com.soklet.internal.mcp.schema.McpSchemaType#fromSchemaName",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "fromSchemaName",
+      "owner": "com.soklet.internal.mcp.schema.McpSchemaType",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    },
+    {
+      "closureAuthority": "SOKLET_POLICY",
+      "compatibleOptionalMemberBehavior": "A compatible JSON Schema keyword remains rejected until Soklet's documented Tool Schema Profile and compiler are deliberately widened together.",
+      "conformanceRows": [
+        "MCP-BASE-017"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileCompiler.java",
+      "id": "OPEN-053",
+      "key": "src/main/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileCompiler.java#com.soklet.internal.mcp.schema.McpToolSchemaProfileCompiler.Compilation#validateKeywordNames",
+      "matcherRuleId": "OPEN-MATCH-003",
+      "method": "validateKeywordNames",
+      "owner": "com.soklet.internal.mcp.schema.McpToolSchemaProfileCompiler.Compilation",
+      "phase": "profile-2026-07-28",
+      "roadmapNegativeInventoryKeys": []
+    }
+  ]
+}

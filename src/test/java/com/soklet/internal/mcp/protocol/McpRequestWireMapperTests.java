@@ -85,6 +85,50 @@ public class McpRequestWireMapperTests {
 	}
 
 	@Test
+	public void roundTripsObsoleteTaskAndUnknownToolsCallParametersWithoutFoldingThemIntoArguments() {
+		McpJsonRpcMessage.Request mapped = mapRequest("""
+				{"jsonrpc":"2.0","id":"request-1","method":"tools/call","params":{
+				 "_meta":{
+				  "io.modelcontextprotocol/protocolVersion":"2026-07-28",
+				  "io.modelcontextprotocol/clientCapabilities":{}
+				 },
+				 "name":"lookup",
+				 "arguments":{"city":"Philadelphia"},
+				 "task":{"ttl":60000},
+				 "futureOptionalMember":{"name":"not-a-mirrored-header"}
+				}}
+				""");
+		McpJsonObject arguments = Assertions.assertInstanceOf(McpJsonObject.class,
+				mapped.params().fields().members().get("arguments"));
+		McpJsonObject obsoleteTask = Assertions.assertInstanceOf(McpJsonObject.class,
+				mapped.params().fields().members().get("task"));
+		McpJsonObject unknown = Assertions.assertInstanceOf(McpJsonObject.class,
+				mapped.params().fields().members().get("futureOptionalMember"));
+
+		Assertions.assertEquals("tools/call", mapped.method());
+		Assertions.assertEquals(new McpJsonString("lookup"),
+				mapped.params().fields().members().get("name"));
+		Assertions.assertEquals(new McpJsonString("Philadelphia"),
+				arguments.members().get("city"));
+		Assertions.assertFalse(arguments.members().containsKey(
+				"futureOptionalMember"),
+				"An unknown operation member must remain outside tool arguments.");
+		Assertions.assertFalse(arguments.members().containsKey("task"),
+				"The obsolete Tasks opt-in must remain an unknown operation member.");
+		Assertions.assertEquals(new McpJsonNumber(60_000L),
+				obsoleteTask.members().get("ttl"));
+		Assertions.assertEquals(new McpJsonString("not-a-mirrored-header"),
+				unknown.members().get("name"));
+		Assertions.assertEquals(List.of("name", "arguments", "task",
+				"futureOptionalMember"),
+				List.copyOf(mapped.params().fields().members().keySet()));
+		McpJsonRpcEnvelope.Request encodedEnvelope = Assertions.assertInstanceOf(
+				McpJsonRpcEnvelope.Request.class,
+				ENVELOPE_CODEC.decode(ENVELOPE_CODEC.encode(mapped)));
+		Assertions.assertEquals(mapped, MAPPER.map(encodedEnvelope));
+	}
+
+	@Test
 	public void preservesInputResponsesAndRequestStateForMethodValidation() {
 		McpJsonRpcMessage.Request mapped = mapRequest(requestWithParams("""
 				{"_meta":{

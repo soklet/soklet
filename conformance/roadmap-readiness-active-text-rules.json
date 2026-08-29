@@ -1,96 +1,383 @@
 {
-  "formatVersion": 1,
+  "formatVersion": 2,
   "rules": [
     {
       "id": "PROFILE-001",
-      "classification": "default-profile",
-      "rationale": "Soklet 4.0.x exposes one explicit profile and no latest/fallback selection.",
-      "required": [
-        {"path":"MCP.md","literal":"Soklet 4.0.x supports exactly the MCP `2026-07-28` profile","minCount":1,"maxCount":1},
-        {"path":"README.md","literal":"Soklet 4.0.x supports exactly the MCP `2026-07-28` server profile","minCount":1,"maxCount":1}
+      "classification": "latest-profile-qualification",
+      "rationale": "Every retained automatic/latest-profile reference is qualified by explicit fixed-profile and no-fallback language.",
+      "files": [
+        {"path":"MCP.md","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Multi-round-trip input and request state"],"role":"defaultPath"}},
+        {"path":"README.md","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"],"role":"compatibility"}}
       ],
-      "forbidden": [
-        {"path":"MCP.md","literal":"automatically selects the latest MCP","maxCount":0},
-        {"path":"README.md","literal":"automatically selects the latest MCP","maxCount":0}
+      "matcher": {"kind":"regex","pattern":"automatic\\s+\"latest\"\\s+profile","caseSensitive":true},
+      "expectation": "nonzero-with-notice",
+      "noticePattern": {"kind":"regex","pattern":"neither selects an automatic\\s+\"latest\"\\s+profile nor falls back(?: to another revision)?","caseSensitive":true},
+      "allowedMatches": [
+        {"path":"MCP.md","matchedText":"automatic\n\"latest\" profile","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Multi-round-trip input and request state"],"role":"defaultPath"}},
+        {"path":"README.md","matchedText":"automatic\n\"latest\" profile","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"],"role":"compatibility"}}
+      ]
+    },
+    {
+      "id": "PROFILE-002",
+      "classification": "latest-default-profile-prohibition",
+      "rationale": "Public guidance must not claim latest-only selection, automatic latest selection, or an implicit default profile.",
+      "files": [
+        {"path":"MCP.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"README.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"SECURITY.md","scope":{"kind":"wholeFile","role":"security"}},
+        {"path":"api/mcp/README.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"CHANGELOG.md","scope":{"kind":"wholeFile","role":"migration"}},
+        {"path":"release/README.md","scope":{"kind":"wholeFile","role":"factualSupport"}}
+      ],
+      "matcher": {"kind":"regex","pattern":"\\b(?:latest-only|automatically\\s+selects?\\s+(?:the\\s+)?latest|(?:the\\s+)?latest\\s+(?:MCP\\s+)?profile\\s+(?:is\\s+)?selected\\s+automatically|default\\s+profile)\\b","caseSensitive":false},
+      "expectation": "zero",
+      "allowedMatches": []
+    },
+    {
+      "id": "PROFILE-003",
+      "classification": "fixed-production-profile",
+      "rationale": "Default-path guidance names the one production profile explicitly.",
+      "files": [
+        {"path":"MCP.md","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Multi-round-trip input and request state"],"role":"defaultPath"}},
+        {"path":"README.md","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Recommended MCP setup"],"role":"defaultPath"}}
+      ],
+      "matcher": {"kind":"literal","pattern":"Soklet 4.0.x supports exactly the MCP `2026-07-28`","caseSensitive":true},
+      "expectation": "nonzero-with-notice",
+      "noticePattern": {"kind":"literal","pattern":"Soklet 4.0.x supports exactly the MCP `2026-07-28`","caseSensitive":true},
+      "allowedMatches": [
+        {"path":"MCP.md","matchedText":"Soklet 4.0.x supports exactly the MCP `2026-07-28`","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Multi-round-trip input and request state"],"role":"defaultPath"}},
+        {"path":"README.md","matchedText":"Soklet 4.0.x supports exactly the MCP `2026-07-28`","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Recommended MCP setup"],"role":"defaultPath"}}
       ]
     },
     {
       "id": "AUTH-001",
-      "classification": "authorization-isolation",
-      "rationale": "Core transports application-owned decisions without claiming OAuth conformance.",
-      "required": [
-        {"path":"SECURITY.md","literal":"Transporting a challenge does not by itself make core Soklet or","minCount":1,"maxCount":1}
+      "classification": "authorization-isolation-prohibition",
+      "rationale": "Authorization partitions isolate registration, quota, and streams; they do not filter, target, or authorize subscription events.",
+      "files": [
+        {"path":"MCP.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"README.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"SECURITY.md","scope":{"kind":"wholeFile","role":"security"}},
+        {"path":"api/mcp/README.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"CHANGELOG.md","scope":{"kind":"wholeFile","role":"migration"}},
+        {"path":"release/README.md","scope":{"kind":"wholeFile","role":"factualSupport"}}
       ],
-      "forbidden": []
+      "matcher": {"kind":"regex","pattern":"authorization[- ]isolat(?:ed|ion)|authorization\\s+partition[\\s\\S]{0,160}(?:filters|targets|authorizes)\\s+(?:the\\s+)?subscription\\s+events?","caseSensitive":false},
+      "expectation": "zero",
+      "allowedMatches": []
+    },
+    {
+      "id": "AUTH-002",
+      "classification": "subscription-authorization-boundary",
+      "rationale": "Security guidance states the exact non-authorizing role of a subscription authorization partition.",
+      "files": [
+        {"path":"SECURITY.md","scope":{"kind":"headingSubtree","headingPath":["Security Policy","MCP Deployment Security"],"role":"security"}}
+      ],
+      "matcher": {"kind":"literal","pattern":"authorization partition only scopes registration, quota accounting, and stream isolation","caseSensitive":true},
+      "expectation": "nonzero-with-notice",
+      "noticePattern": {"kind":"literal","pattern":"it is not an event target or semantic URI-authorization check","caseSensitive":true},
+      "allowedMatches": [
+        {"path":"SECURITY.md","matchedText":"authorization partition only scopes registration, quota accounting, and stream isolation","scope":{"kind":"headingSubtree","headingPath":["Security Policy","MCP Deployment Security"],"role":"security"}}
+      ]
+    },
+    {
+      "id": "AUTH-003",
+      "classification": "authorization-conformance-isolation",
+      "rationale": "Transporting an application-owned challenge is not itself an MCP Authorization conformance claim.",
+      "files": [
+        {"path":"SECURITY.md","scope":{"kind":"headingSubtree","headingPath":["Security Policy","MCP Deployment Security"],"role":"security"}}
+      ],
+      "matcher": {"kind":"literal","pattern":"Transporting a challenge does not by itself make core Soklet or","caseSensitive":true},
+      "expectation": "nonzero-with-notice",
+      "noticePattern": {"kind":"regex","pattern":"Transporting a challenge does not by itself make core Soklet or\\s+the deployment conformant with MCP Authorization","caseSensitive":true},
+      "allowedMatches": [
+        {"path":"SECURITY.md","matchedText":"Transporting a challenge does not by itself make core Soklet or","scope":{"kind":"headingSubtree","headingPath":["Security Policy","MCP Deployment Security"],"role":"security"}}
+      ]
+    },
+    {
+      "id": "COUNT-001",
+      "classification": "reviewed-event-instrument-snapshots",
+      "rationale": "Exact 23 and exact 22 claims are limited to the reviewed 23-event and 22-instrument snapshots.",
+      "files": [
+        {"path":"MCP.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"MCP.md","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Lifecycle and metrics"],"role":"factualSupport"}},
+        {"path":"README.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"README.md","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Metrics Collection"],"role":"factualSupport"}},
+        {"path":"SECURITY.md","scope":{"kind":"wholeFile","role":"security"}},
+        {"path":"SECURITY.md","scope":{"kind":"headingSubtree","headingPath":["Security Policy","MCP Deployment Security"],"role":"security"}},
+        {"path":"api/mcp/README.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"CHANGELOG.md","scope":{"kind":"wholeFile","role":"migration"}},
+        {"path":"CHANGELOG.md","scope":{"kind":"headingSubtree","headingPath":["Changelog","4.0.0 (Unreleased)","Features"],"role":"migration"}},
+        {"path":"release/README.md","scope":{"kind":"wholeFile","role":"factualSupport"}}
+      ],
+      "matcher": {"kind":"regex","pattern":"(?:exactly\\s+(?:22|23)[\\s\\S]{0,80}(?:OpenTelemetry\\s+instruments?|public\\s+final\\s+(?:event\\s+)?variants?|event\\s+variants?|event-record\\s+schemas?)|(?:event\\s+variants?|event\\s+hierarchy)[\\s\\S]{0,80}exactly\\s+(?:22|23)[\\s\\S]{0,40}(?:downstream|OpenTelemetry\\s+instruments?))","caseSensitive":false},
+      "expectation": "nonzero-with-notice",
+      "noticePattern": {"kind":"regex","pattern":"event variants?|event hierarchy|OpenTelemetry instruments?|event-record schemas?|downstream","caseSensitive":false},
+      "allowedMatches": [
+        {"path":"MCP.md","matchedText":"event\nvariants to exactly 22 OpenTelemetry instruments","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Lifecycle and metrics"],"role":"factualSupport"}},
+        {"path":"MCP.md","matchedText":"exactly 23 public final variants","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Lifecycle and metrics"],"role":"factualSupport"}},
+        {"path":"README.md","matchedText":"exactly 22 OpenTelemetry instruments","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Metrics Collection"],"role":"factualSupport"}},
+        {"path":"README.md","matchedText":"exactly 23 public final event variants","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Metrics Collection"],"role":"factualSupport"}},
+        {"path":"SECURITY.md","matchedText":"event variants map to exactly 22 downstream","scope":{"kind":"headingSubtree","headingPath":["Security Policy","MCP Deployment Security"],"role":"security"}},
+        {"path":"CHANGELOG.md","matchedText":"exactly 23 event-record schemas","scope":{"kind":"headingSubtree","headingPath":["Changelog","4.0.0 (Unreleased)","Features"],"role":"migration"}},
+        {"path":"CHANGELOG.md","matchedText":"exactly 22\n  OpenTelemetry instruments","scope":{"kind":"headingSubtree","headingPath":["Changelog","4.0.0 (Unreleased)","Features"],"role":"migration"}}
+      ]
     },
     {
       "id": "CACHE-001",
-      "classification": "cache",
-      "rationale": "MCP transport responses remain no-store independently of protocol cache hints.",
-      "required": [
-        {"path":"SECURITY.md","literal":"Every MCP HTTP response family—including early parser errors","minCount":1,"maxCount":1},
-        {"path":"MCP.md","literal":"transport responses use `Cache-Control: no-store`","minCount":1,"maxCount":1}
+      "classification": "cache-overclaim-prohibition",
+      "rationale": "No text may narrow no-store to shared caches or promise that MCP ETags can never be added.",
+      "files": [
+        {"path":"MCP.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"README.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"SECURITY.md","scope":{"kind":"wholeFile","role":"security"}},
+        {"path":"api/mcp/README.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"CHANGELOG.md","scope":{"kind":"wholeFile","role":"migration"}},
+        {"path":"release/README.md","scope":{"kind":"wholeFile","role":"factualSupport"}}
       ],
-      "forbidden": []
+      "matcher": {"kind":"regex","pattern":"no-store[\\s\\S]{0,160}(?:only|solely)[\\s\\S]{0,100}shared\\s+caches?|shared\\s+caches?[\\s\\S]{0,160}(?:only|solely)[\\s\\S]{0,100}no-store|ETags?[\\s\\S]{0,160}(?:can\\s+never|cannot|impossible|will\\s+never)|(?:can\\s+never|cannot|impossible|will\\s+never)[\\s\\S]{0,160}ETags?","caseSensitive":false},
+      "expectation": "zero",
+      "allowedMatches": []
+    },
+    {
+      "id": "CACHE-002",
+      "classification": "protocol-cache-versus-http-storage",
+      "rationale": "Protocol cache hints remain separate from the no-store HTTP storage policy.",
+      "files": [
+        {"path":"MCP.md","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Resources and pagination"],"role":"factualSupport"}},
+        {"path":"SECURITY.md","scope":{"kind":"headingSubtree","headingPath":["Security Policy","MCP Deployment Security"],"role":"security"}}
+      ],
+      "matcher": {"kind":"regex","pattern":"Protocol cache hints do not turn the HTTP transport into a shared cache|Every MCP HTTP response family—including early parser errors","caseSensitive":true},
+      "expectation": "nonzero-with-notice",
+      "noticePattern": {"kind":"regex","pattern":"Cache-Control: no-store","caseSensitive":true},
+      "allowedMatches": [
+        {"path":"MCP.md","matchedText":"Protocol cache hints do not turn the HTTP transport into a shared cache","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Resources and pagination"],"role":"factualSupport"}},
+        {"path":"SECURITY.md","matchedText":"Every MCP HTTP response family—including early parser errors","scope":{"kind":"headingSubtree","headingPath":["Security Policy","MCP Deployment Security"],"role":"security"}}
+      ]
     },
     {
       "id": "TRANSPORT-001",
-      "classification": "transport-stdio",
-      "rationale": "Streamable HTTP/SSE response behavior is not stdio or the deprecated standalone transport.",
-      "required": [
-        {"path":"MCP.md","literal":"Soklet 4.0.0 does not provide stdio transport","minCount":1,"maxCount":1},
-        {"path":"README.md","literal":"deprecated standalone legacy HTTP+SSE transport are reviewed N/A","minCount":1,"maxCount":1}
+      "classification": "transport-and-tls-overclaim-prohibition",
+      "rationale": "Guidance must not call Soklet transport-agnostic, call stdio impossible, or conflate TLS deployment policy with the protocol roadmap.",
+      "files": [
+        {"path":"MCP.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"README.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"SECURITY.md","scope":{"kind":"wholeFile","role":"security"}},
+        {"path":"api/mcp/README.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"CHANGELOG.md","scope":{"kind":"wholeFile","role":"migration"}},
+        {"path":"release/README.md","scope":{"kind":"wholeFile","role":"factualSupport"}}
       ],
-      "forbidden": []
+      "matcher": {"kind":"regex","pattern":"\\btransport[- ]agnostic\\b|\\bstdio\\b[\\s\\S]{0,160}\\b(?:impossible|cannot|interface)\\b|\\b(?:impossible|cannot)\\b[\\s\\S]{0,160}\\bstdio\\b|\\bTLS\\b[\\s\\S]{0,160}\\broadmap\\b|\\broadmap\\b[\\s\\S]{0,160}\\bTLS\\b","caseSensitive":false},
+      "expectation": "zero",
+      "allowedMatches": []
+    },
+    {
+      "id": "TRANSPORT-002",
+      "classification": "stdio-current-limitation",
+      "rationale": "The compatibility section describes stdio as an absent current transport, not an impossible one.",
+      "files": [
+        {"path":"MCP.md","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features"],"role":"compatibility"}}
+      ],
+      "matcher": {"kind":"literal","pattern":"Soklet 4.0.0 does not provide stdio transport","caseSensitive":true},
+      "expectation": "nonzero-with-notice",
+      "noticePattern": {"kind":"literal","pattern":"Soklet 4.0.0 does not provide stdio transport","caseSensitive":true},
+      "allowedMatches": [
+        {"path":"MCP.md","matchedText":"Soklet 4.0.0 does not provide stdio transport","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features"],"role":"compatibility"}}
+      ]
     },
     {
       "id": "DPOP-001",
-      "classification": "dpop",
-      "rationale": "Core does not claim DPoP implementation through the admission seam.",
-      "required": [
-        {"path":"MCP.md","literal":"core Soklet does not implement DPoP-bound access tokens","minCount":1,"maxCount":1}
+      "classification": "dpop-overclaim-prohibition",
+      "rationale": "Core must not be described as having built-in or browser-complete DPoP support.",
+      "files": [
+        {"path":"MCP.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"README.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"SECURITY.md","scope":{"kind":"wholeFile","role":"security"}},
+        {"path":"api/mcp/README.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"CHANGELOG.md","scope":{"kind":"wholeFile","role":"migration"}},
+        {"path":"release/README.md","scope":{"kind":"wholeFile","role":"factualSupport"}}
       ],
-      "forbidden": []
+      "matcher": {"kind":"regex","pattern":"(?:built-in|browser-complete|browser\\s+complete)[\\s\\S]{0,120}DPoP|DPoP[\\s\\S]{0,120}(?:built-in|browser-complete|browser\\s+complete)","caseSensitive":false},
+      "expectation": "zero",
+      "allowedMatches": []
+    },
+    {
+      "id": "DPOP-002",
+      "classification": "dpop-implementation-boundary",
+      "rationale": "The retained DPoP reference states that core does not implement DPoP-bound tokens.",
+      "files": [
+        {"path":"MCP.md","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features"],"role":"compatibility"}}
+      ],
+      "matcher": {"kind":"literal","pattern":"DPoP","caseSensitive":true},
+      "expectation": "nonzero-with-notice",
+      "noticePattern": {"kind":"literal","pattern":"core Soklet does not implement DPoP-bound access tokens","caseSensitive":true},
+      "allowedMatches": [
+        {"path":"MCP.md","matchedText":"DPoP","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features"],"role":"compatibility"}}
+      ]
     },
     {
       "id": "EXTENSION-001",
-      "classification": "extensions",
-      "rationale": "Open client settings do not invent support or server behavior.",
-      "required": [
-        {"path":"MCP.md","literal":"Client extension settings are open but do not implicitly enable server","minCount":1,"maxCount":1}
+      "classification": "server-extension-overclaim-prohibition",
+      "rationale": "Public guidance must not claim supported server-extension advertisement or arbitrary extension-method registration.",
+      "files": [
+        {"path":"MCP.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"README.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"SECURITY.md","scope":{"kind":"wholeFile","role":"security"}},
+        {"path":"api/mcp/README.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"CHANGELOG.md","scope":{"kind":"wholeFile","role":"migration"}},
+        {"path":"release/README.md","scope":{"kind":"wholeFile","role":"factualSupport"}}
       ],
-      "forbidden": []
+      "matcher": {"kind":"regex","pattern":"(?:advertis(?:e|es|ed|ing)|support(?:s|ed|ing)?)[\\s\\S]{0,140}server\\s+extensions?|server\\s+extensions?\\s+(?:(?:is|are)\\s+)?support(?:s|ed|ing)?|arbitrary\\s+extension\\s+methods?|extension\\s+methods?[\\s\\S]{0,120}(?:enabled|support(?:s|ed|ing)?)","caseSensitive":false},
+      "expectation": "zero",
+      "allowedMatches": []
+    },
+    {
+      "id": "EXTENSION-002",
+      "classification": "client-extension-isolation",
+      "rationale": "Open client settings remain inspectable without enabling or advertising server behavior.",
+      "files": [
+        {"path":"MCP.md","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features"],"role":"compatibility"}}
+      ],
+      "matcher": {"kind":"literal","pattern":"Client extension settings are open but do not implicitly enable server\nbehavior.","caseSensitive":true},
+      "expectation": "nonzero-with-notice",
+      "noticePattern": {"kind":"literal","pattern":"without inventing a core capability, advertising matching server support","caseSensitive":true},
+      "allowedMatches": [
+        {"path":"MCP.md","matchedText":"Client extension settings are open but do not implicitly enable server\nbehavior.","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features"],"role":"compatibility"}}
+      ]
     },
     {
       "id": "LIFECYCLE-001",
-      "classification": "deprecated-roots-sampling-logging",
-      "rationale": "Deprecated MCP features stay supported Java compatibility surfaces and are not defaults.",
-      "required": [
-        {"path":"MCP.md","literal":"SEP-2577 marks Roots, Sampling, and Logging deprecated in MCP `2026-07-28`","minCount":1,"maxCount":1},
-        {"path":"README.md","literal":"lifecycle is independent from Soklet's Java API lifecycle","minCount":1,"maxCount":1},
-        {"path":"SECURITY.md","literal":"No negotiation-triggered warning is emitted","minCount":1,"maxCount":1}
+      "classification": "mcp-deprecated-whole-file-census",
+      "rationale": "The whole-file census fails closed on every added, removed, or duplicated Roots, Sampling, and Logging token in the three target documents.",
+      "files": [
+        {"path":"MCP.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"README.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"SECURITY.md","scope":{"kind":"wholeFile","role":"security"}}
       ],
-      "forbidden": [
-        {"path":"MCP.md","literal":"this raw-JSON tool asks the client for roots","maxCount":0}
+      "matcher": {"kind":"regex","pattern":"\\b(?:Roots|Sampling|Logging)\\b","caseSensitive":true},
+      "expectation": "nonzero-with-notice",
+      "noticePattern": {"kind":"literal","pattern":"SEP-2577","caseSensitive":true},
+      "allowedMatches": [
+        {"path":"MCP.md","matchedText":"Roots","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"MCP.md","matchedText":"Sampling","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"MCP.md","matchedText":"Logging","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"MCP.md","matchedText":"Roots","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"MCP.md","matchedText":"Sampling","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"MCP.md","matchedText":"Sampling","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"MCP.md","matchedText":"Roots","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"MCP.md","matchedText":"Logging","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"MCP.md","matchedText":"Logging","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"README.md","matchedText":"Logging","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"README.md","matchedText":"Roots","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"README.md","matchedText":"Sampling","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"README.md","matchedText":"Logging","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"README.md","matchedText":"Roots","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"README.md","matchedText":"Sampling","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"README.md","matchedText":"Logging","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"README.md","matchedText":"Logging","scope":{"kind":"wholeFile","role":"factualSupport"}},
+        {"path":"SECURITY.md","matchedText":"Roots","scope":{"kind":"wholeFile","role":"security"}},
+        {"path":"SECURITY.md","matchedText":"Sampling","scope":{"kind":"wholeFile","role":"security"}},
+        {"path":"SECURITY.md","matchedText":"Logging","scope":{"kind":"wholeFile","role":"security"}}
+      ]
+    },
+    {
+      "id": "LIFECYCLE-002",
+      "classification": "mcp-deprecated-default-mrtr",
+      "rationale": "The default MRTR introduction and flagship Java example contain no deprecated MCP capability name.",
+      "files": [
+        {"path":"MCP.md","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Multi-round-trip input and request state"],"role":"defaultPath"}},
+        {"path":"MCP.md","scope":{"kind":"fencedBlock","headingPath":["Model Context Protocol (MCP)","Multi-round-trip input and request state"],"fenceLanguage":"java","role":"defaultPath"}}
+      ],
+      "matcher": {"kind":"regex","pattern":"\\b(?:Roots|Sampling|Logging)\\b","caseSensitive":true},
+      "expectation": "zero",
+      "allowedMatches": []
+    },
+    {
+      "id": "LIFECYCLE-003",
+      "classification": "mcp-deprecated-readme-default",
+      "rationale": "The README recommended MCP setup and its Java quick-start contain no deprecated MCP capability name.",
+      "files": [
+        {"path":"README.md","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Recommended MCP setup"],"role":"defaultPath"}},
+        {"path":"README.md","scope":{"kind":"fencedBlock","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Recommended MCP setup"],"fenceLanguage":"java","role":"defaultPath"}}
+      ],
+      "matcher": {"kind":"regex","pattern":"\\b(?:Roots|Sampling|Logging)\\b","caseSensitive":true},
+      "expectation": "zero",
+      "allowedMatches": []
+    },
+    {
+      "id": "LIFECYCLE-004",
+      "classification": "mcp-deprecated-reviewed-regions",
+      "rationale": "Deprecated MCP capability references are allowed only in clearly labeled compatibility/security regions carrying the lifecycle notice.",
+      "files": [
+        {"path":"MCP.md","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"],"role":"compatibility"}},
+        {"path":"README.md","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"],"role":"compatibility"}},
+        {"path":"SECURITY.md","scope":{"kind":"headingSubtree","headingPath":["Security Policy","MCP Deployment Security","Deprecated compatibility surfaces"],"role":"security"}}
+      ],
+      "matcher": {"kind":"regex","pattern":"\\b(?:Roots|Sampling|Logging)\\b","caseSensitive":true},
+      "expectation": "nonzero-with-notice",
+      "noticePattern": {"kind":"regex","pattern":"SEP-2577 (?:marks Roots,\\s+Sampling, and Logging deprecated|deprecates Roots and Sampling at the MCP layer)","caseSensitive":true},
+      "allowedMatches": [
+        {"path":"MCP.md","matchedText":"Roots","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"],"role":"compatibility"}},
+        {"path":"MCP.md","matchedText":"Sampling","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"],"role":"compatibility"}},
+        {"path":"MCP.md","matchedText":"Logging","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"],"role":"compatibility"}},
+        {"path":"MCP.md","matchedText":"Roots","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"],"role":"compatibility"}},
+        {"path":"MCP.md","matchedText":"Sampling","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"],"role":"compatibility"}},
+        {"path":"MCP.md","matchedText":"Sampling","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"],"role":"compatibility"}},
+        {"path":"MCP.md","matchedText":"Roots","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"],"role":"compatibility"}},
+        {"path":"MCP.md","matchedText":"Logging","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"],"role":"compatibility"}},
+        {"path":"MCP.md","matchedText":"Logging","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Deprecated compatibility surfaces"],"role":"compatibility"}},
+        {"path":"README.md","matchedText":"Roots","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"],"role":"compatibility"}},
+        {"path":"README.md","matchedText":"Sampling","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"],"role":"compatibility"}},
+        {"path":"README.md","matchedText":"Logging","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"],"role":"compatibility"}},
+        {"path":"README.md","matchedText":"Roots","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"],"role":"compatibility"}},
+        {"path":"README.md","matchedText":"Sampling","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"],"role":"compatibility"}},
+        {"path":"README.md","matchedText":"Logging","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"],"role":"compatibility"}},
+        {"path":"README.md","matchedText":"Logging","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Deprecated compatibility surfaces"],"role":"compatibility"}},
+        {"path":"SECURITY.md","matchedText":"Roots","scope":{"kind":"headingSubtree","headingPath":["Security Policy","MCP Deployment Security","Deprecated compatibility surfaces"],"role":"security"}},
+        {"path":"SECURITY.md","matchedText":"Sampling","scope":{"kind":"headingSubtree","headingPath":["Security Policy","MCP Deployment Security","Deprecated compatibility surfaces"],"role":"security"}},
+        {"path":"SECURITY.md","matchedText":"Logging","scope":{"kind":"headingSubtree","headingPath":["Security Policy","MCP Deployment Security","Deprecated compatibility surfaces"],"role":"security"}}
+      ]
+    },
+    {
+      "id": "LIFECYCLE-005",
+      "classification": "reviewed-non-mcp-logging-reference",
+      "rationale": "The README's SLF4J/Logback bullet is an explicit non-MCP Logging false positive.",
+      "files": [
+        {"path":"README.md","scope":{"kind":"headingSubtree","headingPath":["Building Real-World Apps"],"role":"factualSupport"}}
+      ],
+      "matcher": {"kind":"literal","pattern":"Logging","caseSensitive":true},
+      "expectation": "nonzero-with-notice",
+      "noticePattern": {"kind":"literal","pattern":"Logging via","caseSensitive":true},
+      "allowedMatches": [
+        {"path":"README.md","matchedText":"Logging","scope":{"kind":"headingSubtree","headingPath":["Building Real-World Apps"],"role":"factualSupport"}}
       ]
     },
     {
       "id": "DCR-001",
       "classification": "dynamic-client-registration",
-      "rationale": "DCR is N/A because Soklet does not provide OAuth/DCR.",
-      "required": [
-        {"path":"MCP.md","literal":"Dynamic Client Registration is reviewed and not applicable because Soklet has","minCount":1,"maxCount":1}
+      "rationale": "Dynamic Client Registration remains reviewed N/A because Soklet provides no OAuth/DCR implementation.",
+      "files": [
+        {"path":"MCP.md","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Current Phase 6 and release state"],"role":"factualSupport"}}
       ],
-      "forbidden": []
+      "matcher": {"kind":"literal","pattern":"Dynamic Client Registration is reviewed and not applicable because Soklet has","caseSensitive":true},
+      "expectation": "nonzero-with-notice",
+      "noticePattern": {"kind":"literal","pattern":"no OAuth/DCR implementation","caseSensitive":true},
+      "allowedMatches": [
+        {"path":"MCP.md","matchedText":"Dynamic Client Registration is reviewed and not applicable because Soklet has","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Current Phase 6 and release state"],"role":"factualSupport"}}
+      ]
     },
     {
       "id": "EXAMPLE-001",
       "classification": "active-default-example",
-      "rationale": "The flagship input example teaches active form Elicitation.",
-      "required": [
-        {"path":"MCP.md","literal":"this raw-JSON tool requests active form Elicitation","minCount":1,"maxCount":1}
+      "rationale": "The flagship MRTR example explicitly teaches active form Elicitation.",
+      "files": [
+        {"path":"MCP.md","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Multi-round-trip input and request state"],"role":"defaultPath"}}
       ],
-      "forbidden": []
+      "matcher": {"kind":"literal","pattern":"this raw-JSON tool requests active form Elicitation","caseSensitive":true},
+      "expectation": "nonzero-with-notice",
+      "noticePattern": {"kind":"literal","pattern":"this raw-JSON tool requests active form Elicitation","caseSensitive":true},
+      "allowedMatches": [
+        {"path":"MCP.md","matchedText":"this raw-JSON tool requests active form Elicitation","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Multi-round-trip input and request state"],"role":"defaultPath"}}
+      ]
     }
   ]
 }

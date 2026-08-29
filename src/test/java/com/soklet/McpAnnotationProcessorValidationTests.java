@@ -118,6 +118,61 @@ public class McpAnnotationProcessorValidationTests {
 	}
 
 	@Test
+	void annotatedToolsRequireTypedCompletionReturns() {
+		JavaFileObject source = JavaFileObjects.forSourceString(
+				"example.VoidToolEndpoint", """
+						package example;
+
+						import com.soklet.annotation.McpServerEndpoint;
+						import com.soklet.annotation.McpTool;
+
+						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						public final class VoidToolEndpoint {
+						  @McpTool(name = "task-like")
+						  public void taskLike() {}
+						}
+						""");
+
+		Compilation compilation = Compiler.javac()
+				.withProcessors(new SokletProcessor())
+				.compile(source);
+
+		assertThat(compilation).failed();
+		assertThat(compilation).hadErrorContaining(
+				"@McpTool method must declare a typed completion return value")
+				.inFile(source);
+	}
+
+	@Test
+	void annotatedToolsRejectDirectOperationResultReturns() {
+		JavaFileObject source = JavaFileObjects.forSourceString(
+				"example.OperationResultToolEndpoint", """
+						package example;
+
+						import com.soklet.McpOperationResult;
+						import com.soklet.annotation.McpServerEndpoint;
+						import com.soklet.annotation.McpTool;
+
+						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						public final class OperationResultToolEndpoint {
+						  @McpTool(name = "task-like")
+						  public McpOperationResult taskLike() { return null; }
+						}
+						""");
+
+		Compilation compilation = Compiler.javac()
+				.withProcessors(new SokletProcessor())
+				.compile(source);
+
+		assertThat(compilation).failed();
+		assertThat(compilation).hadErrorContaining(
+				"MCP tool 'task-like' output schema is unsupported")
+				.inFile(source);
+		assertThat(compilation).hadErrorContaining("FRAMEWORK_TYPE")
+				.inFile(source);
+	}
+
+	@Test
 	void rejectsRecordConstructorParameterOnlyToolArgumentAnnotation() {
 		JavaFileObject source = JavaFileObjects.forSourceString(
 				"example.ParameterOnlyRecord", """

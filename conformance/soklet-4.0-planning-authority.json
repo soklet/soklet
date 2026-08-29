@@ -1,0 +1,78 @@
+{
+  "approval": {
+    "path": "SOKLET_4_0_U0_APPROVAL.json",
+    "sha256": "451c2be76e76c4803c6b25c1cebbf6fd1468e3df474a1edb1c6eaad2bde4234f"
+  },
+  "approvedDecisionIds": [
+    "G0-UMBRELLA",
+    "LIFECYCLE-GATE-01",
+    "LIFECYCLE-GATE-02",
+    "LIFECYCLE-GATE-03",
+    "LIFECYCLE-GATE-04",
+    "LIFECYCLE-GATE-05",
+    "LIFECYCLE-GATE-06",
+    "MCP-0-01",
+    "MCP-0-02",
+    "MCP-0-03",
+    "MCP-0-04",
+    "MCP-0-05",
+    "MCP-0-06",
+    "MCP-0-07",
+    "MCP-0-08",
+    "MCP-0-09",
+    "MCP-0-10",
+    "MCP-0-11",
+    "MCP-0-12",
+    "MCP-0-13",
+    "MCP-0-14",
+    "MCP-0-15",
+    "MCP-0-16"
+  ],
+  "authorities": [
+    {
+      "path": "SOKLET_4_0_COMPLETION_PLAN.md",
+      "sha256": "cc172c07527c71a99894e228742333443bee6bd8047d228f7615aae7db58b0da"
+    },
+    {
+      "path": "SOKLET_APPLICATION_IMPLEMENTATION_PLAN_V4.md",
+      "sha256": "ad169767cec8e5a70dddde5776d185ba2d543ccc60fabf894e12f7a90c6cc22e"
+    },
+    {
+      "path": "mcp/MCP_IMPLEMENTATION_PLAN_V11.md",
+      "sha256": "07dc4313e771a7489de74170c9c6dc301b8cc9c620be6a3b02952b3d7a776f72"
+    }
+  ],
+  "baselineCore": {
+    "commit": "7c83c20e03be6fc6ac55b6f2b79e5fc8a2ecea23",
+    "tree": "efb3bec1478fce31e561aac0103cf9df9e90a15a"
+  },
+  "formatVersion": 1,
+  "immutableInputs": [
+    {
+      "path": "mcp/MCP_IMPLEMENTATION_PLAN_V10.md",
+      "sha256": "7f06083391cc9e436b1a044b97b99b62beabc0f1b98815a7ec1fc3943b5b05c4"
+    },
+    {
+      "path": "mcp/MCP_LOCALIZATION_HANDOFF.md",
+      "sha256": "76179a5b3207f0fc96b9d2c0e32de424f63aadbed4b98c7d49106c3dfc1bec8b"
+    },
+    {
+      "path": "mcp/MCP_LOCALIZATION_IMPLEMENTATION_PLAN.md",
+      "sha256": "597a71990cca03de21eb05aae3e350c1d104f44ea65bd6e94aed4eb396177d42"
+    },
+    {
+      "path": "mcp/MCP_ROADMAP_READINESS_IMPLEMENTATION_PLAN_V2_3.md",
+      "sha256": "67224453ec45bccde8997b639c4da06af40380e4123ebf34fae4a9ca573db3a7"
+    },
+    {
+      "path": "mcp/PHASE_6_IMPLEMENTATION_PROGRESS.md",
+      "sha256": "b104c31b16cdf21bc10b445b35c3f9f3a308f347e02073da7a50e1bc92fa6e8f"
+    }
+  ],
+  "postD2Core": {
+    "commit": "95594f6594eddc499f3dc789d7a19dadf8efccf9",
+    "tree": "6c3369484ff14786774186f93cb378fb06111709"
+  },
+  "productionProfile": "2026-07-28",
+  "releaseTarget": "4.0.0"
+}

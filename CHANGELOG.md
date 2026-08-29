@@ -31,6 +31,12 @@
   owns an independent listener and port, integrates with `SokletConfig`, and
   supports discovery as the first request without a session or initialization
   handshake.
+- Defined static `tools/list` and `prompts/list` catalogs as immutable and
+  caller-neutral after admission, without authorization filtering. A required
+  client capability does not hide a registered tool from the list, but its call
+  can fail with `-32021` before admission. List responses remain private with a
+  zero protocol TTL and HTTP `Cache-Control: no-store`; this is neither an
+  authorization boundary nor an ETag/dynamic-catalog promise.
 - Added a separate complete-HTTP contract corpus: 21 checksum-bound response
   fixtures plus three production-listener golden tests and one exhaustive
   response-authority inventory freeze request/notification first-failure

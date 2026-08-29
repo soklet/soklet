@@ -1306,6 +1306,18 @@ on both JDKs; neither was rerun. These are bounded development results, not
 every-operation simulator, sustained fuzz/soak, privacy, security, live-network
 fidelity, release-candidate, or Phase 6 freeze evidence.
 
+### Deprecated compatibility surfaces
+
+SEP-2577 deprecates Roots and Sampling at the MCP layer in `2026-07-28`; it
+does not deprecate Soklet's retained Java API. New designs should pass files or
+directories through explicit tool parameters, resource URIs, or server
+configuration and integrate directly with a model provider. Soklet also does
+not advertise or implement MCP Logging: retained log-level metadata is parsed
+for compatibility, while applications use the existing observability path.
+No negotiation-triggered warning is emitted. Adding one requires a separately
+reviewed, default-off, bounded and redacted diagnostic rather than Java
+`@Deprecated`, which describes a different lifecycle and trigger.
+
 ## Current API and release-security state
 
 The current owner inventory is 133 Phase 4, 36 Phase 5, and 64 Phase 6 (233
@@ -1737,13 +1749,3 @@ manifest, version, official result, or official corpus. `MCP-HTTP-020` is now
 `AMB-002`. This boundary does not close generic `Request`, `Throwable`,
 custom-collector, or application-telemetry privacy; those remain owned by
 `SOK-PRIV-001`.
-
-SEP-2577 deprecates Roots and Sampling at the MCP layer in `2026-07-28`; it
-does not deprecate Soklet's retained Java API. New designs should pass files or
-directories through explicit tool parameters, resource URIs, or server
-configuration and integrate directly with a model provider. Soklet also does
-not advertise or implement MCP Logging: retained log-level metadata is parsed
-for compatibility, while applications use the existing observability path.
-No negotiation-triggered warning is emitted. Adding one requires a separately
-reviewed, default-off, bounded and redacted diagnostic rather than Java
-`@Deprecated`, which describes a different lifecycle and trigger.

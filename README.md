@@ -649,6 +649,8 @@ public void sseTest() {
 > **Unreleased API:** This section describes `4.0.0-SNAPSHOT`. The `3.5.1`
 > artifact shown above contains the older, incompatible MCP API.
 
+##### Recommended MCP setup
+
 For the 4.0.0 release, Soklet 4.0.x supports exactly the MCP `2026-07-28` server profile through a dedicated,
 stateless `McpServer`. MCP owns a listener and port separate from Soklet's
 ordinary HTTP and SSE servers, can host multiple exact endpoint paths, and
@@ -691,6 +693,14 @@ fallback tool limiter. The listener binds to `127.0.0.1` by default; configure
 `host(...)`, `allowedHosts(...)`, authentication/admission, and TLS termination
 deliberately before exposing it remotely.
 
+After admission, static `tools/list` and `prompts/list` catalogs are immutable
+and caller-neutral; Soklet does not authorization-filter their descriptors. A
+registered tool remains listed when it declares a required client capability,
+but the matching call can receive `-32021` before admission when that capability
+is absent. These list responses retain private, zero-TTL protocol cache hints
+and HTTP `Cache-Control: no-store`; this list/call distinction is not an
+authorization boundary or a promise of ETag-based dynamic catalogs.
+
 Framework-owned catalog text - server, tool, prompt, resource, and schema
 titles and descriptions - can be localized per request through a
 library-neutral seam that keeps Soklet free of any translation dependency.
@@ -727,6 +737,23 @@ authorization, canonical containment, delivery-intent URI policy, and stable
 cursor snapshots; Soklet does not supply the replicated repository, key
 distribution, or other deployment policies. See also
 [deployment guidance](SECURITY.md#mcp-deployment-security).
+
+##### Deprecated compatibility surfaces
+
+The selected MCP profile is fixed; Soklet neither selects an automatic
+"latest" profile nor falls back to another revision. SEP-2577 marks Roots,
+Sampling, and Logging deprecated in that profile, with specification removal
+eligible no earlier than 2027-07-28. Their MCP
+lifecycle is independent from Soklet's Java API lifecycle: retained Java surfaces remain supported, have no
+Java deprecation marker, and have no Soklet API-removal decision. Prefer
+explicit tool parameters, resource URIs, or server configuration over Roots
+and direct model-provider integration over Sampling. Soklet parses retained
+Logging metadata but neither advertises nor implements MCP Logging; use the
+existing observability path. Dynamic Client Registration and
+deprecated standalone legacy HTTP+SSE transport are reviewed N/A; current SSE response
+streaming is not that legacy transport.
+
+##### Current implementation evidence
 
 Trace correlation remains default-off. Configuring a trace-correlation key
 enables an exactly-once finish-time `MCP_TRACE_CORRELATION` log event carrying
@@ -2786,19 +2813,6 @@ claim. `MCP-HTTP-020` is now `CORE_COMPLETE`; the current report remains
 `SOK-STATE-007`, `SOK-PRIV-001`, and `AMB-002`. Generic `Request`,
 `Throwable`, custom-collector, and application-telemetry privacy remain owned
 by `SOK-PRIV-001`.
-
-The selected MCP profile is fixed; Soklet neither selects an automatic
-"latest" profile nor falls back to another revision. SEP-2577 marks Roots,
-Sampling, and Logging deprecated in that profile, with specification removal
-eligible no earlier than 2027-07-28. Their MCP
-lifecycle is independent from Soklet's Java API lifecycle: retained Java surfaces remain supported, have no
-Java deprecation marker, and have no Soklet API-removal decision. Prefer
-explicit tool parameters, resource URIs, or server configuration over Roots
-and direct model-provider integration over Sampling. Soklet parses retained
-Logging metadata but neither advertises nor implements MCP Logging; use the
-existing observability path. Dynamic Client Registration and
-deprecated standalone legacy HTTP+SSE transport are reviewed N/A; current SSE response
-streaming is not that legacy transport.
 
 You can expose a `/metrics` endpoint by injecting [`MetricsCollector`](https://javadoc.soklet.com/com/soklet/MetricsCollector.html)
 into a [`ResourceMethod`](https://javadoc.soklet.com/com/soklet/ResourceMethod.html):

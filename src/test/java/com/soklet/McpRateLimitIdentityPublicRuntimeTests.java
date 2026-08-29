@@ -88,8 +88,16 @@ public class McpRateLimitIdentityPublicRuntimeTests {
 					.getRequest().getHeader("X-Forwarded-For").orElseThrow());
 			Assertions.assertEquals("203.0.113.20", admissions.get(1)
 					.getRequest().getHeader("X-Forwarded-For").orElseThrow());
-			admissions.forEach(admission ->
-					assertIpv4LoopbackPeer(admission.getRequest()));
+			admissions.forEach(admission -> {
+				Request request = admission.getRequest();
+				assertIpv4LoopbackPeer(request);
+				Assertions.assertEquals(MCP_PATH, request.getRawPath());
+				Assertions.assertEquals("source=identity%2Fboundary&empty=",
+						request.getRawQuery().orElseThrow());
+				Assertions.assertEquals(MCP_PATH
+						+ "?source=identity%2Fboundary&empty=",
+						request.getRawPathAndQuery());
+			});
 
 			Assertions.assertEquals(2, requestLimits.size());
 			Assertions.assertEquals(1, toolLimits.size(),
@@ -287,7 +295,8 @@ public class McpRateLimitIdentityPublicRuntimeTests {
 			String clientName, String forwardedFor) throws Exception {
 		String body = toolCallBody(id, clientName);
 		HttpRequest request = HttpRequest.newBuilder()
-				.uri(URI.create("http://" + LOOPBACK + ":" + port + MCP_PATH))
+				.uri(URI.create("http://" + LOOPBACK + ":" + port + MCP_PATH
+						+ "?source=identity%2Fboundary&empty="))
 				.timeout(Duration.ofSeconds(5))
 				.header("Content-Type", JSON_MEDIA_TYPE + "; charset=UTF-8")
 				.header("Accept", JSON_MEDIA_TYPE + ", text/event-stream")

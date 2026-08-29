@@ -1,0 +1,394 @@
+{
+  "characterizations": [
+    {
+      "evidence": [
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge#progressEmitterFor",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#writeApplicationNotification",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#offerSubscriptionEvent",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime#processRequestSafely::<anonymous McpApplicationResponseWriter>#writeNotification",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution.Exchange#writeNotification",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpApplicationInvocation#sendNotification",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpRequestSseStream#enqueueMessage",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpRequestSseStream#offerCoalescingMessage",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpRequestSseStream.TransportChannel#delegate",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java"
+        }
+      ],
+      "id": "MCP-TRANSPORT-001",
+      "statement": "Progress and subscription notifications use the request-scoped SSE stream and its single bounded McpOutboundChannel delegate."
+    },
+    {
+      "evidence": [
+        {
+          "owner": "com.soklet.internal.microhttp.WritableSource#writeTo",
+          "path": "src/main/java/com/soklet/internal/microhttp/WritableSource.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.transport.McpOutboundChannel.WritableSourceFacade#writeTo",
+          "path": "src/main/java/com/soklet/internal/mcp/transport/McpOutboundChannel.java"
+        }
+      ],
+      "id": "MCP-TRANSPORT-002",
+      "statement": "The streaming write floor remains WritableSource.writeTo(SocketChannel, long)."
+    },
+    {
+      "evidence": [
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime#startWhileMetricsDeferred::<anonymous Handler>#monitorClientDisconnectsDuringStreamingResponse",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
+        },
+        {
+          "owner": "com.soklet.internal.microhttp.ConnectionEventLoop.Connection#doOnReadable",
+          "path": "src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java"
+        },
+        {
+          "owner": "com.soklet.internal.microhttp.ConnectionEventLoop.Connection#prepareToWriteResponse",
+          "path": "src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java"
+        },
+        {
+          "owner": "com.soklet.internal.microhttp.ConnectionEventLoop.Connection#doOnReadableDuringStreamingResponse",
+          "path": "src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java"
+        },
+        {
+          "owner": "com.soklet.internal.microhttp.ConnectionEventLoop.Connection#doOnWritable",
+          "path": "src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java"
+        }
+      ],
+      "id": "MCP-TRANSPORT-003",
+      "statement": "The live MCP handler opts into committed-stream disconnect monitoring; subsequent input is discarded and the connection is closed rather than parsed as another request."
+    },
+    {
+      "evidence": [
+        {
+          "owner": "com.soklet.McpServer#withPort",
+          "path": "src/main/java/com/soklet/McpServer.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime#startWhileMetricsDeferred",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime#processRequest",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime#processRequestSafely",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
+        }
+      ],
+      "id": "MCP-TRANSPORT-004",
+      "statement": "McpServer.withPort reaches a dedicated Microhttp EventLoop and its request processor rejects non-HTTP/1.1 requests."
+    },
+    {
+      "evidence": [
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime#FORBIDDEN_LEGACY_MCP_POLICY_HEADERS",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime#validatedPolicyHeaders",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
+        },
+        {
+          "owner": "MCP production-scope named type and direct-field declarations",
+          "path": "src/main/java/com/soklet/internal/mcp"
+        }
+      ],
+      "id": "MCP-TRANSPORT-005",
+      "statement": "Reviewed production declarations contain no future transport state under the documented exact-field, domain/role, cross-domain, and data-bearing-record rules; legacy session/replay headers remain forbidden."
+    }
+  ],
+  "derivation": {
+    "dependencyLexing": {
+      "fullyQualifiedUses": "comment/string/text-block-free fully-qualified type uses are included",
+      "importParsing": "legal Java whitespace and comments are normalized; reviewed-family static or wildcard imports fail closed",
+      "unicodeEscapes": "eligible Java Unicode escapes are translated before lexical analysis"
+    },
+    "microhttpPackagePrefix": "com.soklet.internal.microhttp.",
+    "networkEventLoopTaxonomy": {
+      "exactTypes": [
+        "java.net.DatagramSocket",
+        "java.net.InetSocketAddress",
+        "java.net.MulticastSocket",
+        "java.net.ServerSocket",
+        "java.net.Socket",
+        "java.net.SocketAddress",
+        "java.net.UnixDomainSocketAddress",
+        "java.nio.channels.AsynchronousServerSocketChannel",
+        "java.nio.channels.AsynchronousSocketChannel",
+        "java.nio.channels.DatagramChannel",
+        "java.nio.channels.MulticastChannel",
+        "java.nio.channels.NetworkChannel",
+        "java.nio.channels.SelectableChannel",
+        "java.nio.channels.SelectionKey",
+        "java.nio.channels.Selector",
+        "java.nio.channels.ServerSocketChannel",
+        "java.nio.channels.SocketChannel",
+        "java.nio.channels.spi.AbstractSelectableChannel",
+        "java.nio.channels.spi.AbstractSelector",
+        "java.nio.channels.spi.SelectorProvider"
+      ],
+      "excludedExamples": [
+        "java.net.InetAddress (host-validation value)",
+        "java.net.URI and java.net.URL (protocol/resource values)",
+        "java.nio.channels.FileChannel (non-network I/O)"
+      ],
+      "packageFamilies": [
+        "io.netty.channel.",
+        "io.netty.incubator.channel.uring.",
+        "org.apache.mina.core.polling.",
+        "org.eclipse.jetty.io.",
+        "org.glassfish.grizzly.nio.",
+        "org.xnio.",
+        "reactor.netty."
+      ],
+      "reviewedSimpleNames": [
+        "EventLoop",
+        "EventLoopGroup"
+      ],
+      "scope": "Reviewed concrete JDK socket, bound-address, selector, and network-channel primitives plus named third-party network/event-loop ownership families and EventLoop/EventLoopGroup simple-name fallbacks; this is an explicit taxonomy, not a claim to recognize every possible library."
+    },
+    "productionScope": {
+      "additionalCompositionOwnerFiles": [
+        "src/main/java/com/soklet/DefaultMcpServer.java",
+        "src/main/java/com/soklet/Soklet.java"
+      ],
+      "directPublicFilePattern": "src/main/java/com/soklet/Mcp*.java",
+      "rationale": "MCP V11 section 15.2 roots plus the two exact public composition owners that can acquire direct transport dependencies.",
+      "recursiveInternalDirectory": "src/main/java/com/soklet/internal/mcp"
+    },
+    "stateStorageDeclarationPolicy": {
+      "crossDomainRule": "An identifier combining two or more future-transport domain terms is state-bearing even without a separate storage-role term.",
+      "dataBearingClassRule": "A class whose name contains a future-transport domain term and that declares direct fields is state-bearing unless it is one exact reviewed preexisting simulation-lifecycle type.",
+      "dataBearingRecordRule": "A nonempty record whose name contains a future-transport domain term is state-bearing.",
+      "directFieldRule": "A direct field name containing any future-transport domain term is state-bearing unless it is one exact reviewed preexisting non-roadmap field.",
+      "domainTerms": [
+        "replay",
+        "session",
+        "stdio",
+        "task"
+      ],
+      "reviewedExistingDomainFields": [
+        {
+          "field": "mcpSimulationSession",
+          "file": "src/main/java/com/soklet/Soklet.java",
+          "owner": "com.soklet.Soklet.DefaultSimulator",
+          "rationale": "Existing single-process simulation lifecycle handle; it is not an MCP wire session or future transport state."
+        },
+        {
+          "field": "rejectedMcpSimulationSession",
+          "file": "src/main/java/com/soklet/Soklet.java",
+          "owner": "com.soklet.Soklet.DefaultSimulator",
+          "rationale": "Existing rejected simulation lifecycle proof handle; it is not an MCP wire session or future transport state."
+        },
+        {
+          "field": "protocolTask",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl",
+          "rationale": "Existing request-local FutureTask ownership; it is not MCP Tasks protocol state."
+        },
+        {
+          "field": "MAXIMUM_SUPPORTED_PENDING_TASK_COUNT",
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaEvaluationLimits",
+          "rationale": "Existing schema-evaluator work bound; task means local evaluation work, not MCP Tasks protocol state."
+        }
+      ],
+      "reviewedExistingDomainTypes": [
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.SimulationSession",
+          "rationale": "Existing in-memory simulator lifecycle object; it is not an MCP wire session or future transport state."
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SimulationSession",
+          "rationale": "Existing public-simulation bridge lifecycle object; it is not an MCP wire session or future transport state."
+        }
+      ],
+      "roleTerms": [
+        "buffer",
+        "cache",
+        "journal",
+        "log",
+        "queue",
+        "registry",
+        "repository",
+        "state",
+        "storage",
+        "store"
+      ],
+      "scope": "Named type declarations in the production scope fail when one identifier combines a future-transport domain term with a state/storage role term or combines multiple domain terms; every unreviewed direct field name containing a future-transport domain term, nonempty domain-named record, and field-bearing domain-named class also fail, while the exact reviewed preexisting fields and simulation-lifecycle types plus fieldless single-domain capability/control declarations remain allowed."
+    }
+  },
+  "directMicrohttpDependencies": [
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
+      "type": "com.soklet.internal.microhttp.MicrohttpRequest"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpCustomMirroredHeaderValidator.java",
+      "type": "com.soklet.internal.microhttp.Header"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "type": "com.soklet.internal.microhttp.ConnectionListener"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "type": "com.soklet.internal.microhttp.EventLoop"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "type": "com.soklet.internal.microhttp.Handler"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "type": "com.soklet.internal.microhttp.Header"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "type": "com.soklet.internal.microhttp.MicrohttpRequest"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "type": "com.soklet.internal.microhttp.MicrohttpResponse"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "type": "com.soklet.internal.microhttp.NoopLogger"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "type": "com.soklet.internal.microhttp.Options"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "type": "com.soklet.internal.microhttp.TransportFailureObserver"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java",
+      "type": "com.soklet.internal.microhttp.Header"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java",
+      "type": "com.soklet.internal.microhttp.MicrohttpResponse"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java",
+      "type": "com.soklet.internal.microhttp.StreamingMicrohttpResponses"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java",
+      "type": "com.soklet.internal.microhttp.Header"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java",
+      "type": "com.soklet.internal.microhttp.MicrohttpResponse"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpOutboundChannel.java",
+      "type": "com.soklet.internal.microhttp.WritableSource"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpTransportRuntime.java",
+      "type": "com.soklet.internal.microhttp.EventLoop"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpTransportRuntime.java",
+      "type": "com.soklet.internal.microhttp.Handler"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpTransportRuntime.java",
+      "type": "com.soklet.internal.microhttp.Header"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpTransportRuntime.java",
+      "type": "com.soklet.internal.microhttp.MicrohttpRequest"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpTransportRuntime.java",
+      "type": "com.soklet.internal.microhttp.MicrohttpResponse"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpTransportRuntime.java",
+      "type": "com.soklet.internal.microhttp.Options"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpTransportRuntime.java",
+      "type": "com.soklet.internal.microhttp.OptionsBuilder"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpTransportRuntime.java",
+      "type": "com.soklet.internal.microhttp.StreamingMicrohttpResponses"
+    }
+  ],
+  "directSocketEventLoopDependencies": [
+    {
+      "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+      "type": "java.net.InetSocketAddress"
+    },
+    {
+      "file": "src/main/java/com/soklet/McpServerDiagnostics.java",
+      "type": "java.net.InetSocketAddress"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "type": "com.soklet.internal.microhttp.EventLoop"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "type": "java.net.InetSocketAddress"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+      "type": "java.net.InetSocketAddress"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpOutboundChannel.java",
+      "type": "java.nio.channels.SocketChannel"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpTransportRuntime.java",
+      "type": "com.soklet.internal.microhttp.EventLoop"
+    }
+  ],
+  "formatVersion": 2,
+  "summary": {
+    "directMicrohttp": {
+      "fileCount": 7,
+      "pairCount": 25,
+      "typeCount": 12
+    },
+    "directSocketEventLoop": {
+      "fileCount": 6,
+      "pairCount": 7,
+      "typeCount": 3
+    }
+  }
+}

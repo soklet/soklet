@@ -32,6 +32,16 @@ greenfield implementation reuses legacy names or adds new API.
 `phase-0-shared-host-rationales.jsonl` explains every removed MCP-owned member
 whose containing public type remains part of Soklet.
 
+## 4.0 catalog compatibility boundary
+
+After admission, static `tools/list` and `prompts/list` catalogs are immutable
+and caller-neutral; Soklet does not authorization-filter their descriptors. A
+registered tool remains listed when it declares a required client capability,
+but the matching call can receive `-32021` before admission when that capability
+is absent. These list responses retain private, zero-TTL protocol cache hints
+and HTTP `Cache-Control: no-store`; this list/call distinction is not an
+authorization boundary or a promise of ETag-based dynamic catalogs.
+
 ## Reviewed ownership
 
 Every current exported MCP type and every shared public/protected host in

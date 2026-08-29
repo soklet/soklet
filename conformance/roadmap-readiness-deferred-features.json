@@ -1,0 +1,288 @@
+{
+  "deferredFeatures": [
+    {
+      "direction": "Same-revision spec/conformance growth",
+      "evidenceClassification": "planned",
+      "id": "DF-01",
+      "landingZone": "Existing 2026 profile plus reviewed openness disposition and regenerated pins/goldens, or an explicit time-bounded re-pin deferral",
+      "negativeInventoryKeys": [],
+      "negativeInventoryReason": "Same-revision growth is a future-change trigger rather than a feature explicitly absent from the frozen 4.0 scope.",
+      "preReleaseHedge": "R2A evidence index, openness inventory, RC upstream-release check",
+      "testEvidence": null,
+      "trigger": "Newly published upstream package/scenario, erratum, or compatible addition for `2026-07-28`"
+    },
+    {
+      "direction": "Next modern MCP revision",
+      "evidenceClassification": "planned",
+      "id": "DF-02",
+      "landingZone": "Complete R2C first; then add an internal core profile with independent pins/goldens and coexistence evidence",
+      "negativeInventoryKeys": [
+        "NI-02",
+        "NI-04"
+      ],
+      "negativeInventoryReason": null,
+      "preReleaseHedge": "R2A/R2B-bind; explicit second-profile prohibition until R2C",
+      "testEvidence": null,
+      "trigger": "Stable published revision plus Soklet support decision"
+    },
+    {
+      "direction": "Legacy/session-era compatibility",
+      "evidenceClassification": "planned",
+      "id": "DF-03",
+      "landingZone": "Separate pipeline, artifact, server mode, or major line; never a string in the modern registry",
+      "negativeInventoryKeys": [
+        "NI-01",
+        "NI-03",
+        "NI-04"
+      ],
+      "negativeInventoryReason": null,
+      "preReleaseHedge": "Explicit non-goal and maintenance policy",
+      "testEvidence": null,
+      "trigger": "Concrete demand and separate product/release decision"
+    },
+    {
+      "direction": "Tasks",
+      "evidenceClassification": "planned",
+      "id": "DF-04",
+      "landingZone": "2026-era negotiated extension descriptor/renderer, or core-owned behavior only in a later absorbing profile after R2C; framework result/feature and shared lifecycle",
+      "negativeInventoryKeys": [
+        "NI-06",
+        "NI-07"
+      ],
+      "negativeInventoryReason": null,
+      "preReleaseHedge": "Open result discriminator, interceptor, `-32021` wire pieces, extension preservation, known capability-requirement widening points",
+      "testEvidence": null,
+      "trigger": "Concrete Soklet support decision with resolved execution/state/handle/auth ownership, or absorption into a candidate core profile; core absorption also triggers DF-02/R2C"
+    },
+    {
+      "direction": "Triggers & Events/webhooks",
+      "evidenceClassification": "planned",
+      "id": "DF-05",
+      "landingZone": "Shared operation/event lifecycle with explicit identity target; distinct from the current resource-only publisher/API",
+      "negativeInventoryKeys": [
+        "NI-06"
+      ],
+      "negativeInventoryReason": null,
+      "preReleaseHedge": "R1 ownership correction and bounded-stream characterization",
+      "testEvidence": null,
+      "trigger": "Accepted targeting, cancellation, error, delivery, and security contract"
+    },
+    {
+      "direction": "Formal SDK extension contract",
+      "evidenceClassification": "planned",
+      "id": "DF-06",
+      "landingZone": "Internal extension descriptor followed by reviewed supported opt-in API",
+      "negativeInventoryKeys": [
+        "NI-07"
+      ],
+      "negativeInventoryReason": null,
+      "preReleaseHedge": "Current client-negotiated extension path and non-reflection tests",
+      "testEvidence": null,
+      "trigger": "Stable role, packaging, version, capability, lifecycle, and auth rules"
+    },
+    {
+      "direction": "Progressive/capability-scoped discovery (SEP-2575 follow-on)",
+      "evidenceClassification": "planned",
+      "id": "DF-07",
+      "landingZone": "Tool/prompt provider APIs symmetric with `McpResourceListHandler`; caller-aware cache keys",
+      "negativeInventoryKeys": [
+        "NI-08"
+      ],
+      "negativeInventoryReason": null,
+      "preReleaseHedge": "Static list/call divergence and private/zero cache characterization",
+      "testEvidence": null,
+      "trigger": "Stable query/filter/cursor/scoping and capability contract"
+    },
+    {
+      "direction": "Standardized errors across surfaces",
+      "evidenceClassification": "planned",
+      "id": "DF-08",
+      "landingZone": "Common bootstrap or profile/extension-owned error contributor according to scope",
+      "negativeInventoryKeys": [],
+      "negativeInventoryReason": "Standardizing existing error allocation is deferred design work, not a separately advertised 4.0 feature absence.",
+      "preReleaseHedge": "Current allocation documented; no renumbering",
+      "testEvidence": null,
+      "trigger": "Accepted allocation/envelope/HTTP mapping contract"
+    },
+    {
+      "direction": "Secure server configuration",
+      "evidenceClassification": "planned",
+      "id": "DF-09",
+      "landingZone": "Typed secret-safe provider/admission surface with explicit identity, lifecycle, and observability rules, including any generic authentication request/response-header, CORS/preflight-allowlist, or exposed-header policy",
+      "negativeInventoryKeys": [
+        "NI-10"
+      ],
+      "negativeInventoryReason": null,
+      "preReleaseHedge": "Raw admission context, protected state, no generic configuration bag",
+      "testEvidence": null,
+      "trigger": "Accepted threat model/configuration contract and deployment demand"
+    },
+    {
+      "direction": "ETags/entity validators",
+      "evidenceClassification": "planned",
+      "id": "DF-10",
+      "landingZone": "Profile-aware identity including revision, auth partition, localization/`Vary` equivalent, capability/query, and resource revision",
+      "negativeInventoryKeys": [
+        "NI-09"
+      ],
+      "negativeInventoryReason": null,
+      "preReleaseHedge": "Deterministic rendering and conservative cache policy; optional upstream localization report",
+      "testEvidence": null,
+      "trigger": "Accepted MCP/HTTP representation semantics"
+    },
+    {
+      "direction": "Tool-result redesign",
+      "evidenceClassification": "planned",
+      "id": "DF-11",
+      "landingZone": "Profile-specific adapter over stable typed/advanced application models",
+      "negativeInventoryKeys": [],
+      "negativeInventoryReason": "A replacement tool-result shape is deferred API evolution, not an unimplemented capability claimed by 4.0.",
+      "preReleaseHedge": "R3B copy-builder and R3C renderer boundary",
+      "testEvidence": null,
+      "trigger": "Accepted replacement shape and migration rules"
+    },
+    {
+      "direction": "Content-annotation retirement",
+      "evidenceClassification": "planned",
+      "id": "DF-12",
+      "landingZone": "Separately approved Soklet API lifecycle/removal process; no automatic mapping from MCP lifecycle",
+      "negativeInventoryKeys": [],
+      "negativeInventoryReason": "Retirement of an existing compatibility surface is a future lifecycle decision, not a feature absent from 4.0.",
+      "preReleaseHedge": "Two-axis evolution policy; no foundational auth/routing dependence",
+      "testEvidence": null,
+      "trigger": "Accepted lifecycle transition"
+    },
+    {
+      "direction": "Upload/range/hierarchy",
+      "evidenceClassification": "planned",
+      "id": "DF-13",
+      "landingZone": "Invocation features and additive result/page builders",
+      "negativeInventoryKeys": [
+        "NI-09"
+      ],
+      "negativeInventoryReason": null,
+      "preReleaseHedge": "Type-keyed feature lookup and builder/value-carrier design",
+      "testEvidence": null,
+      "trigger": "Accepted request/result/resource semantics"
+    },
+    {
+      "direction": "HTTP over stdio/HTTP2",
+      "evidenceClassification": "planned",
+      "id": "DF-14",
+      "landingZone": "New frontend/pipeline reusing profiles/router/results where valid",
+      "negativeInventoryKeys": [
+        "NI-11"
+      ],
+      "negativeInventoryReason": null,
+      "preReleaseHedge": "Mechanical dependency baseline, socket floor, committed-stream limitation",
+      "testEvidence": null,
+      "trigger": "Accepted framing, multiplexing, lifecycle, and security contract"
+    },
+    {
+      "direction": "DPoP/delegation/workload identity",
+      "evidenceClassification": "planned",
+      "id": "DF-15",
+      "landingZone": "Admission/security evidence and reviewed response-header contribution",
+      "negativeInventoryKeys": [
+        "NI-10"
+      ],
+      "negativeInventoryReason": null,
+      "preReleaseHedge": "Raw non-browser headers, safe rejection headers, protected-state binding, honest browser limitation",
+      "testEvidence": null,
+      "trigger": "Concrete deployment/policy need or stable MCP integration contract, according to R5a/R5b"
+    }
+  ],
+  "formatVersion": 1,
+  "negativeInventory": [
+    {
+      "id": "NI-01",
+      "rationale": "Soklet 4.0 is intentionally scoped to the modern 2026 profile and does not revive session-era behavior.",
+      "statement": "support for `2025-11-25` or an earlier/session-era revision",
+      "status": "ABSENT_IN_4_0_0"
+    },
+    {
+      "id": "NI-02",
+      "rationale": "A second production profile requires the deferred R2C dispatcher decomposition and separate approval.",
+      "statement": "more than one production protocol profile",
+      "status": "ABSENT_IN_4_0_0"
+    },
+    {
+      "id": "NI-03",
+      "rationale": "The supported transport remains request-scoped and sessionless.",
+      "statement": "`initialize`, sessions, GET/SSE replay, `MCP-Session-Id`, or `Last-Event-ID` behavior",
+      "status": "ABSENT_IN_4_0_0"
+    },
+    {
+      "id": "NI-04",
+      "rationale": "Profile selection stays internal and bounded to the sole production revision.",
+      "statement": "a public protocol-version enum, codec/profile SPI, arbitrary supported-versions builder, or service loader",
+      "status": "ABSENT_IN_4_0_0"
+    },
+    {
+      "id": "NI-05",
+      "rationale": "MCP feature lifecycle and Soklet Java API lifecycle remain independent axes.",
+      "statement": "automatic Java `@Deprecated` annotations or Javadoc `@deprecated` tags derived only from MCP feature-lifecycle status",
+      "status": "ABSENT_IN_4_0_0"
+    },
+    {
+      "id": "NI-06",
+      "rationale": "No general task or event lifecycle is advertised or implemented in the 4.0 profile.",
+      "statement": "Tasks, Triggers & Events, task persistence, or a general server-event family",
+      "status": "ABSENT_IN_4_0_0"
+    },
+    {
+      "id": "NI-07",
+      "rationale": "Opaque client extension settings do not create server support or arbitrary routing.",
+      "statement": "server-side extension advertisement or an arbitrary-method router",
+      "status": "ABSENT_IN_4_0_0"
+    },
+    {
+      "id": "NI-08",
+      "rationale": "Tool and prompt catalogs remain immutable and caller-neutral in 4.0.",
+      "statement": "dynamic/scoped tool and prompt catalogs, progressive discovery, or a generalized catalog provider SPI",
+      "status": "ABSENT_IN_4_0_0"
+    },
+    {
+      "id": "NI-09",
+      "rationale": "Resource representation and transfer evolution remains outside the 4.0 scope.",
+      "statement": "ETags, `If-None-Match`, `304`, uploads, range reads, or hierarchy",
+      "status": "ABSENT_IN_4_0_0"
+    },
+    {
+      "id": "NI-10",
+      "rationale": "Authentication and identity policy remain application-owned rather than built into core Soklet.",
+      "statement": "built-in OAuth, DPoP, workload identity, delegation, or human-presence policy",
+      "status": "ABSENT_IN_4_0_0"
+    },
+    {
+      "id": "NI-11",
+      "rationale": "McpServer remains a dedicated HTTP/1.1 listener without a public transport SPI.",
+      "statement": "stdio, HTTP/2, or a public transport abstraction",
+      "status": "ABSENT_IN_4_0_0"
+    },
+    {
+      "id": "NI-12",
+      "rationale": "TLS termination remains Soklet's longstanding deployment-boundary non-goal.",
+      "statement": "TLS termination, which remains Soklet's longstanding product non-goal and is not contingent on the MCP transport roadmap",
+      "status": "ABSENT_IN_4_0_0"
+    },
+    {
+      "id": "NI-13",
+      "rationale": "The existing subscription API name remains stable for 4.0.",
+      "statement": "renaming the existing subscription API",
+      "status": "ABSENT_IN_4_0_0"
+    },
+    {
+      "id": "NI-14",
+      "rationale": "MCP roadmap closure does not imply completion of unrelated release work.",
+      "statement": "closure of unrelated inherited blockers, scheduled evidence, or unrelated downstream work",
+      "status": "ABSENT_IN_4_0_0"
+    }
+  ],
+  "planningAuthoritySnapshotSha256": "b89fc7b70aec8b938b17e854372cc35908e093bb3066ee94fe51dcd3241c1831",
+  "planningSource": {
+    "path": "SOKLET_4_0_COMPLETION_PLAN.md",
+    "sha256": "cc172c07527c71a99894e228742333443bee6bd8047d228f7615aae7db58b0da"
+  },
+  "supportedProfile": "2026-07-28"
+}

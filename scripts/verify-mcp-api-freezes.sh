@@ -79,13 +79,17 @@ while IFS= read -r phase || [ -n "$phase" ]; do
     "$reviewed_signatures"
 done < "$FROZEN_PHASES"
 
-"$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-mcp-metadata-builders-self-test.mjs"
-"$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-mcp-metadata-builders.mjs"
-"$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-mcp-public-evolution-self-test.mjs"
-"$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-mcp-public-evolution.mjs"
 "$NODE_EXECUTABLE" \
   "$PROJECT_ROOT/conformance/official/verify-profile-evidence-self-test.mjs"
 "$NODE_EXECUTABLE" \
   "$PROJECT_ROOT/conformance/official/verify-profile-evidence.mjs"
+"$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-mcp-metadata-builders-self-test.mjs"
+"$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-mcp-metadata-builders.mjs"
+"$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-mcp-public-evolution-self-test.mjs"
+"$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-mcp-public-evolution.mjs"
+"$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-mcp-transport-dependencies-self-test.mjs"
+"$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-mcp-transport-dependencies.mjs"
+"$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-mcp-roadmap-readiness-self-test.mjs"
+"$NODE_EXECUTABLE" "$SCRIPT_DIR/verify-mcp-roadmap-readiness.mjs"
 
 echo "Verified frozen MCP API phases against reviewed signature snapshots"
