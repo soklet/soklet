@@ -354,6 +354,7 @@ public class McpHttpServerRequestScopedSseTests {
 			awaitClean(runtime);
 			observation.awaitFinished();
 			runtime.runApplicationTimerCycle();
+			runtime.close();
 			observation.awaitTransportFailureReasons(List.of());
 			Assertions.assertEquals(1L, hookInvocations.get());
 			Assertions.assertTrue(observation.transportFailureReasons().isEmpty(),
