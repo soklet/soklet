@@ -77,6 +77,8 @@ final class McpNormalizedEndpoint {
 		this.tools = immutableOperations(builder.tools, "tool");
 		this.prompts = immutableOperations(builder.prompts, "prompt");
 		this.exactResources = immutableOperations(builder.exactResources, "exact resource URI");
+		McpLevelOneUriTemplate.requireResourceTemplateCount(
+				builder.resourceTemplates.size());
 		this.resourceTemplates = immutableOperations(
 				builder.resourceTemplates, "resource URI template");
 		validateToolDescriptors(this.prompts, this.exactResources,
@@ -209,6 +211,8 @@ final class McpNormalizedEndpoint {
 						"Duplicate resource identity '" + uriTemplate + "'.");
 		}
 
+		McpLevelOneUriTemplate.OverlapComparisonBudget overlapBudget =
+				McpLevelOneUriTemplate.endpointOverlapComparisonBudget();
 		for (int left = 0; left < resourceTemplates.size(); ++left) {
 			McpNormalizedResourceTemplateDescriptor leftDescriptor = resourceTemplates
 					.get(left).resourceTemplateDescriptor().orElseThrow();
@@ -216,7 +220,7 @@ final class McpNormalizedEndpoint {
 				McpNormalizedResourceTemplateDescriptor rightDescriptor = resourceTemplates
 						.get(right).resourceTemplateDescriptor().orElseThrow();
 				if (leftDescriptor.parsedTemplate().potentiallyOverlaps(
-						rightDescriptor.parsedTemplate()))
+						rightDescriptor.parsedTemplate(), overlapBudget))
 					throw new IllegalArgumentException(
 							"Potentially overlapping resource URI templates '"
 									+ leftDescriptor.uriTemplate() + "' and '"

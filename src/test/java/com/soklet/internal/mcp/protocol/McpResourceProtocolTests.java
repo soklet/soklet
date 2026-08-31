@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import javax.annotation.concurrent.NotThreadSafe;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -463,6 +464,13 @@ public class McpResourceProtocolTests {
 		Assertions.assertEquals(Optional.of(Map.of("value", "a")),
 				McpLevelOneUriTemplate.parse("test://h/%2F/{value}")
 						.match("test://h/%2f/a"));
+		String excludedPlaneFourteen = new String(Character.toChars(0xE0FFF));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpLevelOneUriTemplate.parse(
+						"test://h/" + excludedPlaneFourteen + "/{value}"));
+		String includedPlaneFourteen = new String(Character.toChars(0xE1000));
+		Assertions.assertDoesNotThrow(() -> McpLevelOneUriTemplate.parse(
+				"test://h/" + includedPlaneFourteen + "/{value}"));
 		Assertions.assertEquals(Optional.of(Map.of("value", "")),
 				terminal.match("catalog://items/"));
 		Assertions.assertEquals(Optional.of(Map.of("a", "ax", "b", "b")),
@@ -521,6 +529,125 @@ public class McpResourceProtocolTests {
 	}
 
 	@Test
+	public void overlap_search_accepts_exact_state_budget_and_fails_closed_one_over() {
+		McpLevelOneUriTemplate left = McpLevelOneUriTemplate.parse(
+				"x:{left}" + "a".repeat(252) + "X");
+		McpLevelOneUriTemplate exact = McpLevelOneUriTemplate.parse(
+				"x:{right}" + "a".repeat(256) + "Y");
+		McpLevelOneUriTemplate oneOver = McpLevelOneUriTemplate.parse(
+				"x:{right}" + "a".repeat(257) + "Y");
+
+		Assertions.assertEquals(65_536,
+				McpLevelOneUriTemplate.MAXIMUM_OVERLAP_COMPARISON_STATES);
+		Assertions.assertFalse(left.potentiallyOverlaps(exact));
+		Assertions.assertTrue(left.potentiallyOverlaps(oneOver));
+	}
+
+	@Test
+	public void endpoint_overlap_search_accepts_exact_total_budget_and_fails_closed_one_over() {
+		int[] literalLengths = {186, 201, 228, 233, 233, 235, 235};
+		McpNormalizedEndpoint.Builder endpoint = endpointBuilder();
+		for (int index = 0; index < literalLengths.length; ++index)
+			endpoint.resourceTemplate("x:{value" + index + "}"
+					+ "a".repeat(literalLengths[index])
+					+ (char) ('A' + index));
+
+		Assertions.assertEquals(1_048_576,
+				McpLevelOneUriTemplate.MAXIMUM_ENDPOINT_OVERLAP_COMPARISON_STATES);
+		Assertions.assertDoesNotThrow(endpoint::build);
+		endpoint.resourceTemplate("x:{value7}Z");
+		Assertions.assertThrows(IllegalArgumentException.class, endpoint::build);
+	}
+
+	@Test
+	public void resource_uri_and_template_bounds_accept_exact_limits_and_reject_one_over() {
+		String templatePrefix = "test:///";
+		String variable = "{value}";
+		String boundaryTemplate = templatePrefix + "a".repeat(
+				McpLevelOneUriTemplate.MAXIMUM_TEMPLATE_UTF_8_BYTES
+						- templatePrefix.length() - variable.length()) + variable;
+		Assertions.assertEquals(
+				McpLevelOneUriTemplate.MAXIMUM_TEMPLATE_UTF_8_BYTES,
+				boundaryTemplate.getBytes(StandardCharsets.UTF_8).length);
+		Assertions.assertDoesNotThrow(
+				() -> McpLevelOneUriTemplate.parse(boundaryTemplate));
+		IllegalArgumentException oversizedTemplate = Assertions.assertThrows(
+				IllegalArgumentException.class,
+				() -> McpLevelOneUriTemplate.parse(boundaryTemplate + "a"));
+		Assertions.assertTrue(oversizedTemplate.getMessage().contains(
+				"at most 8192 UTF-8 bytes"), oversizedTemplate.getMessage());
+		IllegalArgumentException expandedTemplate = Assertions.assertThrows(
+				IllegalArgumentException.class,
+				() -> McpLevelOneUriTemplate.parse(
+						"test:///" + "é".repeat(1_400) + "{value}"));
+		Assertions.assertTrue(expandedTemplate.getMessage().contains(
+				"Expanded resource URI template may contain at most 8192 UTF-8 bytes"),
+				expandedTemplate.getMessage());
+
+		String boundaryVariableName = "v".repeat(
+				McpLevelOneUriTemplate.MAXIMUM_VARIABLE_NAME_UTF_8_BYTES);
+		Assertions.assertDoesNotThrow(() -> McpLevelOneUriTemplate.parse(
+				"test:///{" + boundaryVariableName + "}"));
+		IllegalArgumentException oversizedVariableName = Assertions.assertThrows(
+				IllegalArgumentException.class,
+				() -> McpLevelOneUriTemplate.parse("test:///{"
+						+ boundaryVariableName + "v}"));
+		Assertions.assertTrue(oversizedVariableName.getMessage().contains(
+				"at most 128 UTF-8 bytes"), oversizedVariableName.getMessage());
+
+		String boundaryUri = templatePrefix + "a".repeat(
+				McpLevelOneUriTemplate.MAXIMUM_RESOURCE_URI_UTF_8_BYTES
+						- templatePrefix.length());
+		Assertions.assertEquals(boundaryUri,
+				McpLevelOneUriTemplate.requireValidAbsoluteUri(
+						boundaryUri, "Resource URI"));
+		IllegalArgumentException oversizedUri = Assertions.assertThrows(
+				IllegalArgumentException.class,
+				() -> McpLevelOneUriTemplate.requireValidAbsoluteUri(
+						boundaryUri + "a", "Resource URI"));
+		Assertions.assertTrue(oversizedUri.getMessage().contains(
+				"at most 1048576 UTF-8 bytes"), oversizedUri.getMessage());
+		String templateBoundaryUri = templatePrefix + "a".repeat(
+				McpLevelOneUriTemplate
+						.MAXIMUM_TEMPLATE_ROUTED_RESOURCE_URI_UTF_8_BYTES
+						- templatePrefix.length());
+		McpLevelOneUriTemplate singleVariableTemplate =
+				McpLevelOneUriTemplate.parse("test:///{value}");
+		Assertions.assertTrue(singleVariableTemplate.match(
+				templateBoundaryUri).isPresent());
+		IllegalArgumentException oversizedTemplateRoute = Assertions.assertThrows(
+				IllegalArgumentException.class,
+				() -> singleVariableTemplate.match(templateBoundaryUri + "a"));
+		Assertions.assertTrue(oversizedTemplateRoute.getMessage().contains(
+				"at most 65535 UTF-8 bytes"),
+				oversizedTemplateRoute.getMessage());
+
+		McpNormalizedEndpoint.Builder endpoint = endpointBuilder();
+		for (int index = 0;
+				index < McpLevelOneUriTemplate.MAXIMUM_TEMPLATE_COUNT_PER_ENDPOINT;
+				++index)
+			endpoint.resourceTemplate("test:///route-" + index + "/{value}");
+		Assertions.assertDoesNotThrow(endpoint::build);
+		endpoint.resourceTemplate("test:///route-overflow/{value}");
+		IllegalArgumentException excessiveRoutes = Assertions.assertThrows(
+				IllegalArgumentException.class, endpoint::build);
+		Assertions.assertTrue(excessiveRoutes.getMessage().contains(
+				"at most 256 resource URI templates"), excessiveRoutes.getMessage());
+
+		McpApplicationResourceReadRoute route =
+				new McpApplicationResourceReadRoute(ignored -> emptyReadResult());
+		List<McpApplicationResourceTemplateRoute> routes = new java.util.ArrayList<>();
+		for (int index = 0;
+				index <= McpLevelOneUriTemplate.MAXIMUM_TEMPLATE_COUNT_PER_ENDPOINT;
+				++index)
+			routes.add(new McpApplicationResourceTemplateRoute(
+					"test:///router-" + index + "/{value}", route));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpApplicationRequestRouter.fromResourceRoutes(
+						Map.of(), routes, Optional.empty()));
+	}
+
+	@Test
 	public void exact_resource_routes_use_rfc3986_syntax_equivalence() {
 		McpApplicationResourceReadRoute route =
 				new McpApplicationResourceReadRoute(ignored -> emptyReadResult());
@@ -542,10 +669,114 @@ public class McpResourceProtocolTests {
 	}
 
 	@Test
+	public void exact_resource_routes_preserve_large_uri_compatibility_beyond_template_limit() {
+		String largeUri = "test:///exact/" + "a".repeat(900_000);
+		McpApplicationResourceReadRoute exactRoute =
+				new McpApplicationResourceReadRoute(ignored -> emptyReadResult());
+		McpApplicationRequestRouter router = McpApplicationRequestRouter
+				.fromResourceRoutes(Map.of(largeUri, exactRoute), List.of(
+						new McpApplicationResourceTemplateRoute(
+								"test:///{value}", exactRoute)), Optional.empty());
+
+		Assertions.assertSame(exactRoute,
+				router.resolveExactResource(largeUri).orElseThrow());
+		IllegalArgumentException templateLimit = Assertions.assertThrows(
+				IllegalArgumentException.class,
+				() -> router.resolveResourceTemplate(largeUri));
+		Assertions.assertTrue(templateLimit.getMessage().contains(
+				"at most 65535 UTF-8 bytes"), templateLimit.getMessage());
+	}
+
+	@Test
+	public void exact_only_router_skips_template_limit_for_large_unknown_uri() {
+		String largeUnknownUri = "test:///unknown/" + "a".repeat(70_000);
+		McpApplicationResourceReadRoute exactRoute =
+				new McpApplicationResourceReadRoute(ignored -> emptyReadResult());
+		McpApplicationRequestRouter router = McpApplicationRequestRouter
+				.fromResourceRoutes(Map.of("test:///known", exactRoute), List.of(),
+						Optional.empty());
+
+		Assertions.assertEquals(Optional.empty(),
+				router.resolveResourceTemplate(largeUnknownUri));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> router.resolveResourceTemplate("relative"));
+		String oversizedUnknownUri = "test:///unknown/" + "a".repeat(
+				McpLevelOneUriTemplate.MAXIMUM_RESOURCE_URI_UTF_8_BYTES);
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> router.resolveResourceTemplate(oversizedUnknownUri));
+	}
+
+	@Test
+	public void maximum_shape_template_route_remains_within_runtime_work_budget() {
+		StringBuilder template = new StringBuilder("test:///");
+		for (int index = 0; index < 32; ++index)
+			template.append("{value").append(index).append("}a");
+		String templateWire = template.append('Z').toString();
+		McpLevelOneUriTemplate parsedTemplate =
+				McpLevelOneUriTemplate.parse(templateWire);
+		McpApplicationResourceReadRoute route =
+				new McpApplicationResourceReadRoute(ignored -> emptyReadResult());
+		McpApplicationRequestRouter router = McpApplicationRequestRouter
+				.fromResourceRoutes(Map.of(), List.of(
+						new McpApplicationResourceTemplateRoute(
+								templateWire, route, parsedTemplate)),
+						Optional.empty());
+		String suffix = "a".repeat(32) + "Z";
+		String uri = "test:///" + "b".repeat(
+				McpLevelOneUriTemplate
+						.MAXIMUM_TEMPLATE_ROUTED_RESOURCE_URI_UTF_8_BYTES
+						- "test:///".length() - suffix.length()) + suffix;
+		McpLevelOneUriTemplate.NormalizedResourceUri normalized =
+				McpLevelOneUriTemplate
+						.normalizeResourceUriForTemplateMatching(uri);
+		Assertions.assertEquals(4_325_376L,
+				parsedTemplate.dynamicProgrammingCellCount(normalized));
+		Assertions.assertTrue(parsedTemplate.dynamicProgrammingCellCount(normalized)
+				< McpLevelOneUriTemplate
+						.MAXIMUM_TEMPLATE_MATCH_DYNAMIC_PROGRAMMING_CELLS);
+
+		McpApplicationResourceTemplateMatch match = assertTimeout(
+				java.time.Duration.ofSeconds(5),
+				() -> router.resolveResourceTemplate(uri).orElseThrow());
+		Assertions.assertSame(route, match.readRoute());
+		Assertions.assertEquals(32, match.templateVariables().size());
+	}
+
+	@Test
+	public void shared_prefix_routes_fail_before_exceeding_aggregate_match_work() {
+		McpApplicationResourceReadRoute route =
+				new McpApplicationResourceReadRoute(ignored -> emptyReadResult());
+		List<McpApplicationResourceTemplateRoute> routes = new ArrayList<>();
+		for (int index = 0;
+				index < McpLevelOneUriTemplate.MAXIMUM_TEMPLATE_COUNT_PER_ENDPOINT;
+				++index)
+			routes.add(new McpApplicationResourceTemplateRoute(
+					"test:///{first}/marker-" + index + "/{second}", route));
+		McpApplicationRequestRouter router = McpApplicationRequestRouter
+				.fromResourceRoutes(Map.of(), routes, Optional.empty());
+		String prefix = "test:///value/marker-0/";
+		String uri = prefix + "a".repeat(
+				McpLevelOneUriTemplate
+						.MAXIMUM_TEMPLATE_ROUTED_RESOURCE_URI_UTF_8_BYTES
+						- prefix.length());
+
+		IllegalArgumentException budgetFailure = assertTimeout(
+				java.time.Duration.ofSeconds(2),
+				() -> Assertions.assertThrows(IllegalArgumentException.class,
+						() -> router.resolveResourceTemplate(uri)));
+		Assertions.assertTrue(budgetFailure.getMessage().contains(
+				"at most 8388608 dynamic-programming cells"),
+				budgetFailure.getMessage());
+	}
+
+	@Test
 	public void level_one_template_matching_is_linear_for_failed_long_values() {
 		McpLevelOneUriTemplate template =
 				McpLevelOneUriTemplate.parse("test:///{value}Z");
-		String uri = "test:///" + "a".repeat(131_072) + "Y";
+		String uri = "test:///" + "a".repeat(
+				McpLevelOneUriTemplate
+						.MAXIMUM_TEMPLATE_ROUTED_RESOURCE_URI_UTF_8_BYTES
+						- "test:///".length() - 1) + "Y";
 
 		assertTimeout(java.time.Duration.ofSeconds(2),
 				() -> Assertions.assertTrue(template.match(uri).isEmpty()));
@@ -558,7 +789,10 @@ public class McpResourceProtocolTests {
 			template.append("{value").append(index).append("}a");
 		McpLevelOneUriTemplate parsed = McpLevelOneUriTemplate.parse(
 				template.append('Z').toString());
-		String uri = "test:///" + "a".repeat(65_536) + "Y";
+		String uri = "test:///" + "a".repeat(
+				McpLevelOneUriTemplate
+						.MAXIMUM_TEMPLATE_ROUTED_RESOURCE_URI_UTF_8_BYTES
+						- "test:///".length() - 1) + "Y";
 
 		assertTimeout(java.time.Duration.ofSeconds(5),
 				() -> Assertions.assertTrue(parsed.match(uri).isEmpty()));

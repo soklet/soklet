@@ -170,7 +170,15 @@ record McpResourceCachePolicy(long timeToLiveMilliseconds,
  */
 @ThreadSafe
 final class McpLevelOneUriTemplate {
-	private static final int MAXIMUM_VARIABLE_COUNT = 32;
+	static final int MAXIMUM_RESOURCE_URI_UTF_8_BYTES = 1_048_576;
+	static final int MAXIMUM_TEMPLATE_ROUTED_RESOURCE_URI_UTF_8_BYTES = 65_535;
+	static final int MAXIMUM_TEMPLATE_COUNT_PER_ENDPOINT = 256;
+	static final int MAXIMUM_TEMPLATE_UTF_8_BYTES = 8_192;
+	static final int MAXIMUM_VARIABLE_COUNT = 32;
+	static final int MAXIMUM_VARIABLE_NAME_UTF_8_BYTES = 128;
+	static final long MAXIMUM_TEMPLATE_MATCH_DYNAMIC_PROGRAMMING_CELLS = 8_388_608L;
+	static final int MAXIMUM_OVERLAP_COMPARISON_STATES = 65_536;
+	static final int MAXIMUM_ENDPOINT_OVERLAP_COMPARISON_STATES = 1_048_576;
 
 	private sealed interface Part permits LiteralPart, VariablePart {
 	}
@@ -188,6 +196,54 @@ final class McpLevelOneUriTemplate {
 	}
 
 	private record MatchState(int leftIndex, int rightIndex) {
+	}
+
+	static final class OverlapComparisonBudget {
+		private int remainingStates;
+		private boolean exhausted;
+
+		private OverlapComparisonBudget(int maximumStates) {
+			this.remainingStates = maximumStates;
+		}
+
+		private boolean chargeState() {
+			if (remainingStates == 0) {
+				exhausted = true;
+				return false;
+			}
+			--remainingStates;
+			return true;
+		}
+
+		private void markExhausted() {
+			exhausted = true;
+		}
+
+		boolean exhausted() {
+			return exhausted;
+		}
+	}
+
+	@ThreadSafe
+	static final class NormalizedResourceUri {
+		@NonNull
+		private final String value;
+
+		private NormalizedResourceUri(@NonNull String value) {
+			this.value = requireNonNull(value);
+		}
+	}
+
+	@ThreadSafe
+	static final class PreparedResourceUri {
+		@NonNull
+		private final NormalizedResourceUri normalized;
+		private final int @NonNull [] tokenLengths;
+
+		private PreparedResourceUri(@NonNull NormalizedResourceUri normalized) {
+			this.normalized = requireNonNull(normalized);
+			this.tokenLengths = levelOneExpansionTokenLengths(normalized.value);
+		}
 	}
 
 	private record OverlapAtom(@NonNull String value, boolean wildcard,
@@ -212,17 +268,33 @@ final class McpLevelOneUriTemplate {
 	private final List<@NonNull Part> parts;
 	@NonNull
 	private final List<@NonNull OverlapAtom> overlapAtoms;
+	@NonNull
+	private final String leadingLiteral;
+	@NonNull
+	private final String trailingLiteral;
+	private final int minimumWireLength;
 
 	private McpLevelOneUriTemplate(@NonNull String template,
 			@NonNull List<@NonNull Part> parts) {
 		this.template = requireNonNull(template);
 		this.parts = List.copyOf(requireNonNull(parts));
 		this.overlapAtoms = overlapAtoms(parts);
+		this.leadingLiteral = parts.get(0) instanceof LiteralPart literal
+				? literal.value() : "";
+		this.trailingLiteral = parts.get(parts.size() - 1)
+				instanceof LiteralPart literal ? literal.value() : "";
+		this.minimumWireLength = parts.stream()
+				.filter(LiteralPart.class::isInstance)
+				.map(LiteralPart.class::cast)
+				.mapToInt(literal -> literal.value().length())
+				.sum();
 	}
 
 	@NonNull
 	static McpLevelOneUriTemplate parse(@NonNull String template) {
 		template = McpProtocolSupport.requireNonBlank(template,
+				"Resource URI template");
+		requireMaximumUtf8Bytes(template, MAXIMUM_TEMPLATE_UTF_8_BYTES,
 				"Resource URI template");
 		List<Part> parts = new ArrayList<>();
 		Set<String> variableNames = new LinkedHashSet<>();
@@ -251,10 +323,13 @@ final class McpLevelOneUriTemplate {
 						"Adjacent resource URI-template variables are ambiguous.");
 
 			int closing = template.indexOf('}', index + 1);
-			if (closing < 0 || template.indexOf('{', index + 1) >= 0
-					&& template.indexOf('{', index + 1) < closing)
+			if (closing < 0 || (template.indexOf('{', index + 1) >= 0
+					&& template.indexOf('{', index + 1) < closing))
 				throw invalidTemplate();
 			String variableName = template.substring(index + 1, closing);
+			requireMaximumUtf8Bytes(variableName,
+					MAXIMUM_VARIABLE_NAME_UTF_8_BYTES,
+					"Resource URI-template variable name");
 			if (!validVariableName(variableName))
 				throw new IllegalArgumentException(
 						"Only RFC 6570 Level-1 variable expressions are supported.");
@@ -280,8 +355,19 @@ final class McpLevelOneUriTemplate {
 		if (parts.stream().noneMatch(VariablePart.class::isInstance))
 			throw new IllegalArgumentException(
 					"A resource URI template must contain at least one variable.");
+		requireMaximumUtf8Bytes(expanded.toString(),
+				MAXIMUM_TEMPLATE_UTF_8_BYTES,
+				"Expanded resource URI template");
 		requireValidAbsoluteUri(expanded.toString(), "Expanded resource URI template");
 		return new McpLevelOneUriTemplate(template, parts);
+	}
+
+	static void requireResourceTemplateCount(int count) {
+		if (count > MAXIMUM_TEMPLATE_COUNT_PER_ENDPOINT)
+			throw new IllegalArgumentException(
+					"An MCP endpoint may contain at most "
+							+ MAXIMUM_TEMPLATE_COUNT_PER_ENDPOINT
+							+ " resource URI templates.");
 	}
 
 	@NonNull
@@ -292,9 +378,35 @@ final class McpLevelOneUriTemplate {
 	@NonNull
 	Optional<@NonNull Map<@NonNull String, @NonNull String>> match(
 			@NonNull String uri) {
-		uri = normalizePercentTripletCase(
-				requireValidAbsoluteUri(uri, "Resource URI"));
-		int[] tokenLengths = levelOneExpansionTokenLengths(uri);
+		NormalizedResourceUri normalized = normalizeResourceUriForTemplateMatching(uri);
+		if (!couldMatch(normalized))
+			return Optional.empty();
+		requireTemplateMatchDynamicProgrammingCellBudget(
+				dynamicProgrammingCellCount(normalized));
+		return match(new PreparedResourceUri(normalized));
+	}
+
+	boolean couldMatch(@NonNull NormalizedResourceUri normalized) {
+		requireNonNull(normalized);
+		String uri = normalized.value;
+		return uri.length() >= minimumWireLength
+				&& (leadingLiteral.isEmpty() || uri.startsWith(leadingLiteral))
+				&& (trailingLiteral.isEmpty() || uri.endsWith(trailingLiteral));
+	}
+
+	long dynamicProgrammingCellCount(@NonNull NormalizedResourceUri normalized) {
+		requireNonNull(normalized);
+		return ((long) parts.size() + 1L) * ((long) normalized.value.length() + 1L);
+	}
+
+	@NonNull
+	Optional<@NonNull Map<@NonNull String, @NonNull String>> match(
+			@NonNull PreparedResourceUri prepared) {
+		requireNonNull(prepared);
+		String uri = prepared.normalized.value;
+		if (!couldMatch(prepared.normalized))
+			return Optional.empty();
+		int[] tokenLengths = prepared.tokenLengths;
 		BitSet[] canMatchFrom = matchReachability(uri, tokenLengths);
 		if (!canMatchFrom[0].get(0))
 			return Optional.empty();
@@ -334,16 +446,49 @@ final class McpLevelOneUriTemplate {
 		return Optional.of(Collections.unmodifiableMap(captured));
 	}
 
+	@NonNull
+	static NormalizedResourceUri normalizeResourceUriForTemplateMatching(
+			@NonNull String uri) {
+		uri = requireValidAbsoluteUri(uri, "Resource URI");
+		requireMaximumUtf8Bytes(uri,
+				MAXIMUM_TEMPLATE_ROUTED_RESOURCE_URI_UTF_8_BYTES,
+				"Template-routed resource URI");
+		return new NormalizedResourceUri(normalizePercentTripletCase(uri));
+	}
+
+	@NonNull
+	static PreparedResourceUri prepareResourceUriForTemplateMatching(
+			@NonNull NormalizedResourceUri normalized) {
+		return new PreparedResourceUri(requireNonNull(normalized));
+	}
+
+	static void requireTemplateMatchDynamicProgrammingCellBudget(long cells) {
+		if (cells > MAXIMUM_TEMPLATE_MATCH_DYNAMIC_PROGRAMMING_CELLS)
+			throw new IllegalArgumentException(
+					"Resource URI-template routing may evaluate at most "
+							+ MAXIMUM_TEMPLATE_MATCH_DYNAMIC_PROGRAMMING_CELLS
+							+ " dynamic-programming cells per request.");
+	}
+
 	boolean potentiallyOverlaps(@NonNull McpLevelOneUriTemplate other) {
+		return potentiallyOverlaps(other, new OverlapComparisonBudget(
+				MAXIMUM_OVERLAP_COMPARISON_STATES));
+	}
+
+	boolean potentiallyOverlaps(@NonNull McpLevelOneUriTemplate other,
+			@NonNull OverlapComparisonBudget endpointBudget) {
 		requireNonNull(other);
+		requireNonNull(endpointBudget);
+		if (!endpointBudget.chargeState())
+			return true;
 		ArrayDeque<MatchState> pending = new ArrayDeque<>();
-		Set<MatchState> visited = new LinkedHashSet<>();
-		pending.add(new MatchState(0, 0));
+		Set<MatchState> discovered = new LinkedHashSet<>();
+		MatchState initial = new MatchState(0, 0);
+		discovered.add(initial);
+		pending.add(initial);
 
 		while (!pending.isEmpty()) {
 			MatchState state = pending.removeFirst();
-			if (!visited.add(state))
-				continue;
 			int left = state.leftIndex();
 			int right = state.rightIndex();
 			if (left == overlapAtoms.size()
@@ -365,21 +510,55 @@ final class McpLevelOneUriTemplate {
 			boolean leftWildcard = leftAtom.wildcard();
 			boolean rightWildcard = rightAtom.wildcard();
 			if (leftWildcard) {
-				pending.add(new MatchState(left + 1, right));
+				if (!enqueueOverlapState(pending, discovered, endpointBudget,
+						new MatchState(left + 1, right)))
+					return true;
 				if (!rightWildcard && rightAtom.variableConsumable())
-					pending.add(new MatchState(left, right + 1));
+					if (!enqueueOverlapState(pending, discovered, endpointBudget,
+							new MatchState(left, right + 1)))
+						return true;
 			}
 			if (rightWildcard) {
-				pending.add(new MatchState(left, right + 1));
+				if (!enqueueOverlapState(pending, discovered, endpointBudget,
+						new MatchState(left, right + 1)))
+					return true;
 				if (!leftWildcard && leftAtom.variableConsumable())
-					pending.add(new MatchState(left + 1, right));
+					if (!enqueueOverlapState(pending, discovered, endpointBudget,
+							new MatchState(left + 1, right)))
+						return true;
 			}
 			if (!leftWildcard && !rightWildcard
 					&& leftAtom.value().equals(rightAtom.value()))
-				pending.add(new MatchState(left + 1, right + 1));
+				if (!enqueueOverlapState(pending, discovered, endpointBudget,
+						new MatchState(left + 1, right + 1)))
+					return true;
 		}
 
 		return false;
+	}
+
+	private static boolean enqueueOverlapState(
+			@NonNull ArrayDeque<@NonNull MatchState> pending,
+			@NonNull Set<@NonNull MatchState> discovered,
+			@NonNull OverlapComparisonBudget endpointBudget,
+			@NonNull MatchState state) {
+		if (discovered.contains(state))
+			return true;
+		if (discovered.size() >= MAXIMUM_OVERLAP_COMPARISON_STATES) {
+			endpointBudget.markExhausted();
+			return false;
+		}
+		if (!endpointBudget.chargeState())
+			return false;
+		discovered.add(state);
+		pending.add(state);
+		return true;
+	}
+
+	@NonNull
+	static OverlapComparisonBudget endpointOverlapComparisonBudget() {
+		return new OverlapComparisonBudget(
+				MAXIMUM_ENDPOINT_OVERLAP_COMPARISON_STATES);
 	}
 
 	@NonNull
@@ -389,6 +568,8 @@ final class McpLevelOneUriTemplate {
 		requireNonNull(description);
 		if (uri.isBlank())
 			throw new IllegalArgumentException(description + " must not be blank.");
+		requireMaximumUtf8Bytes(uri, MAXIMUM_RESOURCE_URI_UTF_8_BYTES,
+				description);
 		requireAsciiUriWireSyntax(uri, description);
 		URI parsed;
 		try {
@@ -400,6 +581,24 @@ final class McpLevelOneUriTemplate {
 		if (!parsed.normalize().equals(parsed))
 			throw new IllegalArgumentException(description + " must be normalized.");
 		return uri;
+	}
+
+	private static void requireMaximumUtf8Bytes(@NonNull String value,
+			int maximumBytes, @NonNull String description) {
+		requireNonNull(value);
+		requireNonNull(description);
+		int bytes = 0;
+		for (int index = 0; index < value.length();) {
+			int codePoint = value.codePointAt(index);
+			bytes += codePoint <= 0x7F ? 1
+					: codePoint <= 0x7FF ? 2
+					: codePoint <= 0xFFFF ? 3 : 4;
+			if (bytes > maximumBytes)
+				throw new IllegalArgumentException(description
+						+ " may contain at most " + maximumBytes
+						+ " UTF-8 bytes.");
+			index += Character.charCount(codePoint);
+		}
 	}
 
 	@NonNull
@@ -479,37 +678,37 @@ final class McpLevelOneUriTemplate {
 
 	private static boolean allowedAsciiLiteral(char character) {
 		return character == 0x21
-				|| character >= 0x23 && character <= 0x24
+				|| (character >= 0x23 && character <= 0x24)
 				|| character == 0x26
-				|| character >= 0x28 && character <= 0x3B
+				|| (character >= 0x28 && character <= 0x3B)
 				|| character == 0x3D
-				|| character >= 0x3F && character <= 0x5B
+				|| (character >= 0x3F && character <= 0x5B)
 				|| character == 0x5D || character == 0x5F
-				|| character >= 0x61 && character <= 0x7A
+				|| (character >= 0x61 && character <= 0x7A)
 				|| character == 0x7E;
 	}
 
 	private static boolean allowedUnicodeLiteral(int codePoint) {
-		return codePoint >= 0xA0 && codePoint <= 0xD7FF
-				|| codePoint >= 0xE000 && codePoint <= 0xF8FF
-				|| codePoint >= 0xF900 && codePoint <= 0xFDCF
-				|| codePoint >= 0xFDF0 && codePoint <= 0xFFEF
-				|| codePoint >= 0x10000 && codePoint <= 0x1FFFD
-				|| codePoint >= 0x20000 && codePoint <= 0x2FFFD
-				|| codePoint >= 0x30000 && codePoint <= 0x3FFFD
-				|| codePoint >= 0x40000 && codePoint <= 0x4FFFD
-				|| codePoint >= 0x50000 && codePoint <= 0x5FFFD
-				|| codePoint >= 0x60000 && codePoint <= 0x6FFFD
-				|| codePoint >= 0x70000 && codePoint <= 0x7FFFD
-				|| codePoint >= 0x80000 && codePoint <= 0x8FFFD
-				|| codePoint >= 0x90000 && codePoint <= 0x9FFFD
-				|| codePoint >= 0xA0000 && codePoint <= 0xAFFFD
-				|| codePoint >= 0xB0000 && codePoint <= 0xBFFFD
-				|| codePoint >= 0xC0000 && codePoint <= 0xCFFFD
-				|| codePoint >= 0xD0000 && codePoint <= 0xDFFFD
-				|| codePoint >= 0xE1000 && codePoint <= 0xEFFFD
-				|| codePoint >= 0xF0000 && codePoint <= 0xFFFFD
-				|| codePoint >= 0x100000 && codePoint <= 0x10FFFD;
+		return (codePoint >= 0xA0 && codePoint <= 0xD7FF)
+				|| (codePoint >= 0xE000 && codePoint <= 0xF8FF)
+				|| (codePoint >= 0xF900 && codePoint <= 0xFDCF)
+				|| (codePoint >= 0xFDF0 && codePoint <= 0xFFEF)
+				|| (codePoint >= 0x10000 && codePoint <= 0x1FFFD)
+				|| (codePoint >= 0x20000 && codePoint <= 0x2FFFD)
+				|| (codePoint >= 0x30000 && codePoint <= 0x3FFFD)
+				|| (codePoint >= 0x40000 && codePoint <= 0x4FFFD)
+				|| (codePoint >= 0x50000 && codePoint <= 0x5FFFD)
+				|| (codePoint >= 0x60000 && codePoint <= 0x6FFFD)
+				|| (codePoint >= 0x70000 && codePoint <= 0x7FFFD)
+				|| (codePoint >= 0x80000 && codePoint <= 0x8FFFD)
+				|| (codePoint >= 0x90000 && codePoint <= 0x9FFFD)
+				|| (codePoint >= 0xA0000 && codePoint <= 0xAFFFD)
+				|| (codePoint >= 0xB0000 && codePoint <= 0xBFFFD)
+				|| (codePoint >= 0xC0000 && codePoint <= 0xCFFFD)
+				|| (codePoint >= 0xD0000 && codePoint <= 0xDFFFD)
+				|| (codePoint >= 0xE1000 && codePoint <= 0xEFFFD)
+				|| (codePoint >= 0xF0000 && codePoint <= 0xFFFFD)
+				|| (codePoint >= 0x100000 && codePoint <= 0x10FFFD);
 	}
 
 	private static void requireAsciiUriWireSyntax(@NonNull String uri,
@@ -563,9 +762,9 @@ final class McpLevelOneUriTemplate {
 	}
 
 	private static boolean asciiLetterOrDigit(char character) {
-		return character >= 'A' && character <= 'Z'
-				|| character >= 'a' && character <= 'z'
-				|| character >= '0' && character <= '9';
+		return (character >= 'A' && character <= 'Z')
+				|| (character >= 'a' && character <= 'z')
+				|| (character >= '0' && character <= '9');
 	}
 
 	private static int hexadecimal(char character) {

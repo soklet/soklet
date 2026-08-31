@@ -443,6 +443,39 @@ final class McpApplicationRequestRouter {
 			@NonNull List<@NonNull McpApplicationResourceTemplateRoute>
 					resourceTemplateRoutes,
 			@NonNull Optional<@NonNull McpApplicationResourceListRoute> resourceListRoute) {
+		return fromHandlersAndOperationRoutes(handlersByMethod, toolRoutesByName,
+				promptRoutesByName, exactResourceRoutesByUri,
+				resourceTemplateRoutes, resourceListRoute, true);
+	}
+
+	@NonNull
+	static McpApplicationRequestRouter fromHandlersAndValidatedOperationRoutes(
+			@NonNull Map<@NonNull String, @NonNull McpApplicationRequestHandler> handlersByMethod,
+			@NonNull Map<@NonNull String, @NonNull McpApplicationToolRoute> toolRoutesByName,
+			@NonNull Map<@NonNull String, @NonNull McpApplicationPromptRoute> promptRoutesByName,
+			@NonNull Map<@NonNull String, @NonNull McpApplicationResourceReadRoute>
+					exactResourceRoutesByUri,
+			@NonNull List<@NonNull McpApplicationResourceTemplateRoute>
+					resourceTemplateRoutes,
+			@NonNull Optional<@NonNull McpApplicationResourceListRoute> resourceListRoute) {
+		// The normalized endpoint built by the public bridge has already checked
+		// every template pair against one endpoint-scoped overlap budget.
+		return fromHandlersAndOperationRoutes(handlersByMethod, toolRoutesByName,
+				promptRoutesByName, exactResourceRoutesByUri,
+				resourceTemplateRoutes, resourceListRoute, false);
+	}
+
+	@NonNull
+	private static McpApplicationRequestRouter fromHandlersAndOperationRoutes(
+			@NonNull Map<@NonNull String, @NonNull McpApplicationRequestHandler> handlersByMethod,
+			@NonNull Map<@NonNull String, @NonNull McpApplicationToolRoute> toolRoutesByName,
+			@NonNull Map<@NonNull String, @NonNull McpApplicationPromptRoute> promptRoutesByName,
+			@NonNull Map<@NonNull String, @NonNull McpApplicationResourceReadRoute>
+					exactResourceRoutesByUri,
+			@NonNull List<@NonNull McpApplicationResourceTemplateRoute>
+					resourceTemplateRoutes,
+			@NonNull Optional<@NonNull McpApplicationResourceListRoute> resourceListRoute,
+			boolean validateResourceTemplateOverlap) {
 		requireNonNull(handlersByMethod);
 		requireNonNull(toolRoutesByName);
 		requireNonNull(promptRoutesByName);
@@ -497,20 +530,28 @@ final class McpApplicationRequestRouter {
 								+ wireUri);
 		}
 
+		McpLevelOneUriTemplate.requireResourceTemplateCount(
+				resourceTemplateRoutes.size());
 		List<McpApplicationResourceTemplateRoute> copiedResourceTemplateRoutes =
 				List.copyOf(resourceTemplateRoutes);
-		for (int left = 0; left < copiedResourceTemplateRoutes.size(); ++left) {
-			McpApplicationResourceTemplateRoute leftRoute = requireNonNull(
-					copiedResourceTemplateRoutes.get(left));
-			for (int right = left + 1; right < copiedResourceTemplateRoutes.size(); ++right) {
-				McpApplicationResourceTemplateRoute rightRoute = requireNonNull(
-						copiedResourceTemplateRoutes.get(right));
-				if (leftRoute.parsedTemplate().potentiallyOverlaps(
-						rightRoute.parsedTemplate()))
-					throw new IllegalArgumentException(
-							"Potentially overlapping resource URI-template routes '"
-									+ leftRoute.uriTemplate() + "' and '"
-									+ rightRoute.uriTemplate() + "'.");
+		if (validateResourceTemplateOverlap) {
+			McpLevelOneUriTemplate.OverlapComparisonBudget overlapBudget =
+					McpLevelOneUriTemplate.endpointOverlapComparisonBudget();
+			for (int left = 0;
+					left < copiedResourceTemplateRoutes.size(); ++left) {
+				McpApplicationResourceTemplateRoute leftRoute = requireNonNull(
+						copiedResourceTemplateRoutes.get(left));
+				for (int right = left + 1;
+						right < copiedResourceTemplateRoutes.size(); ++right) {
+					McpApplicationResourceTemplateRoute rightRoute = requireNonNull(
+							copiedResourceTemplateRoutes.get(right));
+					if (leftRoute.parsedTemplate().potentiallyOverlaps(
+							rightRoute.parsedTemplate(), overlapBudget))
+						throw new IllegalArgumentException(
+								"Potentially overlapping resource URI-template routes '"
+										+ leftRoute.uriTemplate() + "' and '"
+										+ rightRoute.uriTemplate() + "'.");
+				}
 			}
 		}
 
@@ -549,9 +590,33 @@ final class McpApplicationRequestRouter {
 	Optional<@NonNull McpApplicationResourceTemplateMatch> resolveResourceTemplate(
 			@NonNull String uri) {
 		requireNonNull(uri);
-		McpApplicationResourceTemplateMatch match = null;
+		if (resourceTemplateRoutes.isEmpty()) {
+			McpLevelOneUriTemplate.requireValidAbsoluteUri(uri, "Resource URI");
+			return Optional.empty();
+		}
+		McpLevelOneUriTemplate.NormalizedResourceUri normalized =
+				McpLevelOneUriTemplate.normalizeResourceUriForTemplateMatching(
+						uri);
+		List<McpApplicationResourceTemplateRoute> candidates = new ArrayList<>();
+		long dynamicProgrammingCells = 0L;
 		for (McpApplicationResourceTemplateRoute route : resourceTemplateRoutes) {
-			Optional<Map<String, String>> variables = route.parsedTemplate().match(uri);
+			McpLevelOneUriTemplate parsedTemplate = route.parsedTemplate();
+			if (!parsedTemplate.couldMatch(normalized))
+				continue;
+			dynamicProgrammingCells += parsedTemplate
+					.dynamicProgrammingCellCount(normalized);
+			McpLevelOneUriTemplate.requireTemplateMatchDynamicProgrammingCellBudget(
+					dynamicProgrammingCells);
+			candidates.add(route);
+		}
+		if (candidates.isEmpty())
+			return Optional.empty();
+		McpLevelOneUriTemplate.PreparedResourceUri prepared =
+				McpLevelOneUriTemplate.prepareResourceUriForTemplateMatching(normalized);
+		McpApplicationResourceTemplateMatch match = null;
+		for (McpApplicationResourceTemplateRoute route : candidates) {
+			Optional<Map<String, String>> variables =
+					route.parsedTemplate().match(prepared);
 			if (variables.isEmpty())
 				continue;
 			if (match != null)

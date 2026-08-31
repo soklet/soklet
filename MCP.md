@@ -263,6 +263,18 @@ static `resources/list` fallback. A URI-template registration uses bounded RFC
 6570 Level 1 variables, is advertised by `resources/templates/list`, and is
 selected for reads only after exact-resource matching. Exact URI identity uses
 RFC 3986 syntax equivalence; declared descriptor spelling is preserved.
+Programmatic exact-resource registrations and exact-routed read URIs have a
+1,048,576-byte ASCII wire ceiling, aligned with the production JSON string
+ceiling. Java annotation declarations have a separate 65,534-byte exact-URI
+ceiling imposed before the JVM class-file string limit. A read routed through a
+URI template instead has a 65,535-byte URI-wire ceiling. Each endpoint may
+register at most 256 templates; each template has an 8,192-byte UTF-8 source and
+normalized-wire limit, at most 32 variables, and at most 128 UTF-8 bytes per
+variable name. Routing may evaluate at most 8,388,608 dynamic-programming cells
+per request. Overlap validation examines at most 65,536 states per template
+pair and 1,048,576 states per endpoint, failing closed when either limit would
+be exceeded. These fixed limits bound parsing, matching, and pairwise overlap
+validation without introducing a regex engine.
 
 Without a custom list handler, Soklet returns exact registrations in
 registration order as one page, excludes templates, and rejects every present
@@ -1732,14 +1744,17 @@ exchange terminal/execution-boundary, progress-reporter, stream-transition,
 request-control, runtime, MCP-server, and Soklet lifecycle locks or monitors
 are released. Nonwaiting request-transition deferral preserves reentrant
 collector liveness without moving callbacks under those locks. The four
-pre-admission variants are request-free; only a fixed `ProtocolError` produced
-after admitted request observation carries the exact `McpRequestContext` for
-failure attribution. That context may be retained only for bounded pending
-delivery and failure logging, is never rendered, and is not a metric
-dimension. Collector failures are contained without stalling the FIFO. The
-ordering guarantee is FIFO metric record/enqueue order; it is not a universal
-cross-thread causal or per-request total-order guarantee for independently
-racing producers.
+pre-admission variants are request-free. Every queued delivery, including a
+fixed `ProtocolError` produced after admitted request observation, retains only
+its immutable, bounded `McpMetricsEvent`; the metric FIFO does not retain an
+`McpRequestContext`, request, throwable, or application-owned carrier. An
+admitted request's application-lifecycle observation may independently retain
+its exact `McpRequestContext` while lifecycle and handler APIs require it; that
+ownership is separate from metric delivery. Collector-failure logging is
+context-free and redacted, and collector failures are contained without
+stalling the FIFO. The ordering guarantee is FIFO metric record/enqueue order;
+it is not a universal cross-thread causal or per-request total-order guarantee
+for independently racing producers.
 
 The eighth bounded Phase 6 vertical adds `ConnectionAccepted`,
 `ConnectionRejected`, and `TransportFailure` to the same FIFO, so the runtime

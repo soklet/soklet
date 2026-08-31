@@ -17,6 +17,8 @@
 package com.soklet;
 
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestObservation;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestObservationInput;
 import com.soklet.internal.microhttp.EventLoop;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
@@ -24,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.net.Socket;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -33,6 +36,8 @@ import java.nio.channels.Selector;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -56,6 +61,46 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 	private static final String HOST = "127.0.0.1";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final String JSON_MEDIA_TYPE = "application/json";
+
+	@Test
+	public void queuedMetricEntriesRetainOnlyTheBoundedMetricEvent() {
+		Class<?> entryType = java.util.Arrays.stream(
+				DefaultMcpServer.class.getDeclaredClasses())
+				.filter(candidate -> candidate.getSimpleName()
+						.equals("McpMetricEventDeliveryEntry"))
+				.findFirst().orElseThrow();
+
+		Assertions.assertTrue(entryType.isRecord());
+		Assertions.assertEquals(List.of(McpMetricsEvent.class),
+				java.util.Arrays.stream(entryType.getRecordComponents())
+						.map(component -> component.getType()).toList(),
+				"Deferred metric delivery must not retain Request, Throwable, or request-context carriers.");
+	}
+
+	@Test
+	public void requestObservationSnapshotsMetricDimensionsWithoutRetainingInput()
+			throws Exception {
+		McpServer server = server(0, "/mcp/metric-snapshot");
+		McpEndpoint endpoint = server.getEndpointRegistry().getEndpoints()
+				.iterator().next();
+		RequestObservationInput input = new RequestObservationInput(
+				Request.withPath(HttpMethod.POST, endpoint.getPath()).build(),
+				endpoint, Map.of(), "extension/unbounded-method",
+				Optional.of(McpRequestId.fromString("metric-snapshot")),
+				PROTOCOL_VERSION, Optional.empty(), Optional.empty(),
+				McpJsonObject.emptyInstance(), McpJsonObject.emptyInstance(),
+				McpAdmissionIdentity.anonymousInstance());
+		Method startObservation = DefaultMcpServer.class.getDeclaredMethod(
+				"didStartRequestObservation", RequestObservationInput.class);
+		startObservation.setAccessible(true);
+		RequestObservation observation = (RequestObservation) startObservation
+				.invoke(server, input);
+
+		Assertions.assertFalse(java.util.Arrays.stream(
+				observation.getClass().getDeclaredFields())
+				.anyMatch(field -> field.getType() == RequestObservationInput.class),
+				"A live observation may retain its application context, but metrics-only callbacks must not retain the full request input.");
+	}
 
 	@Test
 	public void freshOwnersEmitExactStartedStoppedGenerationsAndShutdownNoOps()

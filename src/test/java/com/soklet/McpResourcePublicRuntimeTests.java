@@ -657,6 +657,61 @@ public class McpResourcePublicRuntimeTests {
 	}
 
 	@Test
+	public void publicServerConstructionEnforcesResourceTemplateCountBound() {
+		McpEndpoint boundary = endpointWithTemplateRegistrations(256);
+		McpServer server = Assertions.assertDoesNotThrow(
+				() -> serverBuilder(boundary).build());
+		Assertions.assertEquals(McpServerStatus.NOT_STARTED,
+				server.getDiagnostics().getStatus());
+
+		McpEndpoint oversized = endpointWithTemplateRegistrations(257);
+		IllegalArgumentException exception = Assertions.assertThrows(
+				IllegalArgumentException.class,
+				() -> serverBuilder(oversized).build());
+		assertContains(exception.getMessage(),
+				"at most 256 resource URI templates");
+	}
+
+	@Test
+	public void publicResourceRoutingEnforcesExactFiniteUriBounds() {
+		String prefix = "test:///";
+		String expression = "{value}";
+		String boundaryTemplate = prefix + "a".repeat(
+				8_192 - prefix.length() - expression.length()) + expression;
+		McpEndpoint acceptedTemplate = endpointBuilder()
+				.resource(templateRegistration(boundaryTemplate)).build();
+		Assertions.assertDoesNotThrow(
+				() -> serverBuilder(acceptedTemplate).build());
+
+		McpEndpoint oversizedTemplate = endpointBuilder()
+				.resource(templateRegistration(boundaryTemplate + "a")).build();
+		IllegalArgumentException templateFailure = Assertions.assertThrows(
+				IllegalArgumentException.class,
+				() -> serverBuilder(oversizedTemplate).build());
+		assertContains(templateFailure.getMessage(),
+				"at most 8192 UTF-8 bytes");
+
+		String boundaryUri = prefix + "a".repeat(1_048_576 - prefix.length());
+		McpEndpoint acceptedUri = endpointBuilder()
+				.resource(McpResourceRegistration.withUriAndName(
+						URI.create(boundaryUri), "Boundary URI")
+						.handler(resourceHandler()).build())
+				.build();
+		Assertions.assertDoesNotThrow(() -> serverBuilder(acceptedUri).build());
+
+		McpEndpoint oversizedUri = endpointBuilder()
+				.resource(McpResourceRegistration.withUriAndName(
+						URI.create(boundaryUri + "a"), "Oversized URI")
+						.handler(resourceHandler()).build())
+				.build();
+		IllegalArgumentException uriFailure = Assertions.assertThrows(
+				IllegalArgumentException.class,
+				() -> serverBuilder(oversizedUri).build());
+		assertContains(uriFailure.getMessage(),
+				"at most 1048576 UTF-8 bytes");
+	}
+
+	@Test
 	public void blobOutputHonorsTheProductionJsonStringBound() throws Exception {
 		URI boundaryUri = URI.create("test://blob-boundary");
 		URI oversizedUri = URI.create("test://blob-oversized");
@@ -752,6 +807,14 @@ public class McpResourcePublicRuntimeTests {
 		return McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
 						"resource-public-runtime-test", "4.0.0-SNAPSHOT").build());
+	}
+
+	private static McpEndpoint endpointWithTemplateRegistrations(int count) {
+		McpEndpoint.Builder endpoint = endpointBuilder();
+		for (int index = 0; index < count; ++index)
+			endpoint.resource(templateRegistration(
+					"test:///bounded/route-" + index + "/{value}"));
+		return endpoint.build();
 	}
 
 	private static McpServer.Builder serverBuilder(McpEndpoint endpoint) {

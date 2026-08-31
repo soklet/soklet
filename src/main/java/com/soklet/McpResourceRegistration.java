@@ -88,6 +88,10 @@ public final class McpResourceRegistration {
 	 * loading or for application-side dereference. Apply a deployment policy
 	 * for the address's intended delivery path.
 	 *
+	 * <p>This method validates the URI's shape. Construction of the enclosing
+	 * {@link McpServer} later applies the 1,048,576-byte ASCII wire limit and
+	 * complete endpoint route validation.
+	 *
 	 * @param uri absolute normalized resource URI in ASCII wire form
 	 * @param name nonblank resource name
 	 * @return required-handler stage
@@ -103,9 +107,12 @@ public final class McpResourceRegistration {
 	/**
 	 * Begins a staged URI-template resource registration.
 	 *
-	 * <p>This method performs inexpensive local validation. Endpoint/server
-	 * construction performs complete RFC 6570 Level 1 parsing and route
-	 * validation.
+	 * <p>This method performs inexpensive local validation. Construction of the
+	 * enclosing {@link McpServer} performs complete RFC 6570 Level 1 parsing and
+	 * route validation, including the template-size, variable-name,
+	 * variable-count, and overlap-work limits documented in the MCP guide. It
+	 * also enforces the limit of 256 URI templates per endpoint at server
+	 * construction.
 	 *
 	 * <p>Neither validation step authorizes expanded URIs or establishes that
 	 * their scheme is safe for the application's delivery intent.

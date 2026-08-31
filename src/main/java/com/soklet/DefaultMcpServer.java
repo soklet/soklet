@@ -325,7 +325,7 @@ final class DefaultMcpServer implements McpServer {
 			public PendingMetricRecord recordProtocolError(int code,
 					@Nullable McpRequestContext requestContext) {
 				return mcpMetricEventDelivery.record(
-						McpMetricsEvent.protocolError(code), requestContext);
+						McpMetricsEvent.protocolError(code));
 			}
 
 			@Override
@@ -1380,14 +1380,13 @@ final class DefaultMcpServer implements McpServer {
 		CancelationToken token = requireNonNull(cancelationToken);
 		Optional<ProgressEmitter> emitter = requireNonNull(progressEmitter);
 		token.onCancel(() -> this.mcpMetricEventDelivery.recordAndDrain(
-				McpMetricsEvent.cancelationSignaled(endpointPath, boundedMethod),
-				requestContext));
+				McpMetricsEvent.cancelationSignaled(endpointPath, boundedMethod)));
 
 		Map<Class<?>, Object> features = new LinkedHashMap<>();
 		features.put(CancelationToken.class, token);
 		emitter.ifPresent(value -> features.put(McpProgressReporter.class,
 				new DefaultMcpProgressReporter(token, value,
-						requestContext, endpointPath, boundedMethod)));
+						endpointPath, boundedMethod)));
 		// Created after queue admission and the handler slot, immediately before
 		// the interceptor, so rejected/dequeued work never calls the provider.
 		applicationLocalizationContext(requestContext, token, pastDeadline,
@@ -1496,8 +1495,6 @@ final class DefaultMcpServer implements McpServer {
 		@NonNull
 		private final ProgressEmitter progressEmitter;
 		@NonNull
-		private final McpRequestContext requestContext;
-		@NonNull
 		private final String endpointPath;
 		@NonNull
 		private final String jsonRpcMethod;
@@ -1507,11 +1504,9 @@ final class DefaultMcpServer implements McpServer {
 		private DefaultMcpProgressReporter(
 				@NonNull CancelationToken cancelationToken,
 				@NonNull ProgressEmitter progressEmitter,
-				@NonNull McpRequestContext requestContext,
 				@NonNull String endpointPath, @NonNull String jsonRpcMethod) {
 			this.cancelationToken = requireNonNull(cancelationToken);
 			this.progressEmitter = requireNonNull(progressEmitter);
-			this.requestContext = requireNonNull(requestContext);
 			this.endpointPath = requireNonNull(endpointPath);
 			this.jsonRpcMethod = requireNonNull(jsonRpcMethod);
 		}
@@ -1550,8 +1545,7 @@ final class DefaultMcpServer implements McpServer {
 					this.lastAcceptedProgress = progress;
 					mcpMetricEventDelivery.record(
 							McpMetricsEvent.progressEmitted(
-									this.endpointPath, this.jsonRpcMethod),
-							this.requestContext);
+									this.endpointPath, this.jsonRpcMethod));
 				}
 			} finally {
 				DefaultMcpServer.this.mcpMetricEventDelivery.endDeferral();
@@ -1975,6 +1969,8 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull RequestObservationInput input) {
 		DefaultMcpRequestContext context = new DefaultMcpRequestContext(
 				requireNonNull(input), this.securityControls);
+		String metricEndpointPath = input.endpoint().getPath();
+		String metricJsonRpcMethod = metricMethod(input.jsonRpcMethod());
 		Optional<McpTraceLogRecord> traceLogRecord = McpTraceLogRecord.capture(
 				context.traceCorrelationToken(),
 				this.logRawValidatedTraceIds
@@ -1993,8 +1989,8 @@ final class DefaultMcpServer implements McpServer {
 					.build(), startThrowables);
 		}
 		this.mcpMetricEventDelivery.recordAndDrain(
-				McpMetricsEvent.requestStarted(input.endpoint().getPath(),
-						metricMethod(input.jsonRpcMethod())), context);
+				McpMetricsEvent.requestStarted(metricEndpointPath,
+						metricJsonRpcMethod));
 
 		List<Throwable> immutableStartThrowables = List.copyOf(startThrowables);
 		return new RequestObservation() {
@@ -2028,9 +2024,9 @@ final class DefaultMcpServer implements McpServer {
 
 				mcpMetricEventDelivery.recordAndDrain(
 						McpMetricsEvent.requestFinished(
-								input.endpoint().getPath(),
-								metricMethod(input.jsonRpcMethod()),
-								outcome, duration), context);
+								metricEndpointPath,
+								metricJsonRpcMethod,
+								outcome, duration));
 				traceLogRecord.ifPresent(record -> safelyLogRequestObservation(
 						observer, LogEvent.with(
 								LogEventType.MCP_TRACE_CORRELATION,
@@ -2050,8 +2046,8 @@ final class DefaultMcpServer implements McpServer {
 			public void didOpenRequestStream() {
 				mcpMetricEventDelivery.record(
 						McpMetricsEvent.requestStreamOpened(
-								input.endpoint().getPath(),
-								metricMethod(input.jsonRpcMethod())), context);
+								metricEndpointPath,
+								metricJsonRpcMethod));
 			}
 
 			@Override
@@ -2060,16 +2056,16 @@ final class DefaultMcpServer implements McpServer {
 					@NonNull Duration duration) {
 				mcpMetricEventDelivery.record(
 						McpMetricsEvent.requestStreamClosed(
-								input.endpoint().getPath(),
-								metricMethod(input.jsonRpcMethod()), reason,
-								duration), context);
+								metricEndpointPath,
+								metricJsonRpcMethod, reason,
+								duration));
 			}
 
 			@Override
 			public void didOpenSubscription() {
 				mcpMetricEventDelivery.record(
 						McpMetricsEvent.subscriptionOpened(
-								input.endpoint().getPath()), context);
+								metricEndpointPath));
 			}
 
 			@Override
@@ -2078,14 +2074,13 @@ final class DefaultMcpServer implements McpServer {
 					@NonNull Duration duration) {
 				mcpMetricEventDelivery.record(
 						McpMetricsEvent.subscriptionClosed(
-								input.endpoint().getPath(), reason, duration),
-						context);
+								metricEndpointPath, reason, duration));
 			}
 
 			@Override
 			public void didEmitKeepAlive() {
 				mcpMetricEventDelivery.record(
-						McpMetricsEvent.keepAliveEmitted(), context);
+						McpMetricsEvent.keepAliveEmitted());
 			}
 		};
 	}
@@ -2096,22 +2091,7 @@ final class DefaultMcpServer implements McpServer {
 				? jsonRpcMethod : McpMetricsEvent.UNRECOGNIZED_JSON_RPC_METHOD;
 	}
 
-	private void safelyRecordMcpMetrics(@NonNull McpMetricsEvent event,
-			@NonNull McpRequestContext context) {
-		MetricsCollector collector = this.metricsCollector;
-		LifecycleObserver observer = this.lifecycleObserver;
-		try {
-			collector.didRecordMcpMetricsEvent(requireNonNull(event));
-		} catch (Throwable throwable) {
-			safelyLogRequestObservation(observer, LogEvent.with(
-					LogEventType.METRICS_COLLECTOR_FAILED,
-					"An exception occurred while invoking MetricsCollector::didRecordMcpMetricsEvent")
-					.build(), null);
-		}
-	}
-
-	private void safelyRecordMcpServerMetrics(
-			@NonNull McpMetricsEvent event) {
+	private void safelyRecordMcpMetrics(@NonNull McpMetricsEvent event) {
 		MetricsCollector collector = this.metricsCollector;
 		LifecycleObserver observer = this.lifecycleObserver;
 		try {
@@ -2217,24 +2197,16 @@ final class DefaultMcpServer implements McpServer {
 		@NonNull
 		private McpMetricEventDeliveryEntry record(
 				@NonNull McpMetricsEvent event) {
-			return record(event, null);
-		}
-
-		@NonNull
-		private McpMetricEventDeliveryEntry record(
-				@NonNull McpMetricsEvent event,
-				@Nullable McpRequestContext requestContext) {
 			McpMetricEventDeliveryEntry entry =
-					new McpMetricEventDeliveryEntry(event, requestContext);
+					new McpMetricEventDeliveryEntry(event);
 			synchronized (this.lock) {
 				this.pendingEvents.add(entry);
 			}
 			return entry;
 		}
 
-		private void recordAndDrain(@NonNull McpMetricsEvent event,
-				@NonNull McpRequestContext requestContext) {
-			record(event, requireNonNull(requestContext));
+		private void recordAndDrain(@NonNull McpMetricsEvent event) {
+			record(event);
 			drain();
 		}
 
@@ -2307,13 +2279,7 @@ final class DefaultMcpServer implements McpServer {
 							this.asynchronousDrainRequired = false;
 						entry = this.pendingEvents.remove();
 					}
-					@Nullable McpRequestContext requestContext =
-							entry.requestContext();
-					if (requestContext == null)
-						safelyRecordMcpServerMetrics(entry.event());
-					else
-						safelyRecordMcpMetrics(entry.event(),
-								requestContext);
+					safelyRecordMcpMetrics(entry.event());
 				}
 			} finally {
 				if (deliveryClaimed) {
@@ -2362,11 +2328,10 @@ final class DefaultMcpServer implements McpServer {
 		}
 	}
 
-	/** Immutable event plus optional request-scoped failure-log context. */
+	/** Immutable metric event without request-scoped application carriers. */
 	@ThreadSafe
 	private record McpMetricEventDeliveryEntry(
-			@NonNull McpMetricsEvent event,
-			@Nullable McpRequestContext requestContext)
+			@NonNull McpMetricsEvent event)
 			implements PendingMetricRecord {
 		private McpMetricEventDeliveryEntry {
 			requireNonNull(event);

@@ -971,6 +971,12 @@ public final class McpServerRuntimeBridge {
 				new LinkedHashMap<>();
 		List<McpApplicationResourceTemplateRoute> resourceTemplateRoutes =
 				new ArrayList<>();
+		int resourceTemplateCount = 0;
+		for (ResourcePlan resourcePlan : endpointPlan.resourcePlans())
+			if (resourcePlan.addressKind() == ResourceAddressKind.URI_TEMPLATE)
+				++resourceTemplateCount;
+		McpLevelOneUriTemplate.requireResourceTemplateCount(
+				resourceTemplateCount);
 		for (ResourcePlan resourcePlan : endpointPlan.resourcePlans()) {
 			McpInputRequestPlan inputRequestPlan = toInternalInputRequestPlan(
 					resourcePlan.inputRequestDeclarations());
@@ -1010,7 +1016,8 @@ public final class McpServerRuntimeBridge {
 				endpointBuilder.resourceTemplate(descriptor, inputRequestPlan);
 				resourceTemplateRoutes.add(
 						new McpApplicationResourceTemplateRoute(
-								resourcePlan.address(), readRoute));
+								resourcePlan.address(), readRoute,
+								descriptor.parsedTemplate()));
 			}
 		}
 		Optional<McpApplicationResourceListRoute> internalResourceListRoute =
@@ -1091,7 +1098,7 @@ public final class McpServerRuntimeBridge {
 		}
 
 		McpApplicationRequestRouter applicationRouter =
-				McpApplicationRequestRouter.fromHandlersAndOperationRoutes(
+				McpApplicationRequestRouter.fromHandlersAndValidatedOperationRoutes(
 						Map.of(), toolRoutes, promptRoutes, exactResourceRoutes,
 						resourceTemplateRoutes, internalResourceListRoute);
 		if (requestObservationAdapter.isEmpty())

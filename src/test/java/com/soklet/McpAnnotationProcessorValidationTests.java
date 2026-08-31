@@ -906,6 +906,16 @@ public class McpAnnotationProcessorValidationTests {
 				.compile(accepted);
 
 		assertThat(acceptedCompilation).succeededWithoutWarnings();
+		String excludedPlaneFourteen = new String(Character.toChars(0xE0FFF));
+		Compilation excludedCompilation = compileResourceTemplate(
+				"test://items/" + excludedPlaneFourteen + "/{id}", "id");
+		assertThat(excludedCompilation).failed();
+		assertThat(excludedCompilation).hadErrorContaining(
+				"valid absolute RFC 6570 Level 1 URI template");
+		String includedPlaneFourteen = new String(Character.toChars(0xE1000));
+		assertThat(compileResourceTemplate(
+				"test://items/" + includedPlaneFourteen + "/{id}", "id"))
+				.succeededWithoutWarnings();
 
 		JavaFileObject overlapping = JavaFileObjects.forSourceString(
 				"example.CanonicalUnicodeResourceTemplateEndpoint", """
@@ -1063,6 +1073,97 @@ public class McpAnnotationProcessorValidationTests {
 		assertThat(rejected).failed();
 		assertThat(rejected).hadErrorContaining(
 				"resource URI template may declare at most 32 variable expressions");
+	}
+
+	@Test
+	void resourceTemplateOverlapSearchAcceptsExactStateBudgetAndFailsClosedOneOver() {
+		String left = "x:{left}" + "a".repeat(252) + "X";
+		String exact = "x:{right}" + "a".repeat(256) + "Y";
+		assertThat(compileResourceTemplatePair(left, "left", exact, "right"))
+				.succeededWithoutWarnings();
+
+		String oneOver = "x:{right}" + "a".repeat(257) + "Y";
+		Compilation failedClosed = compileResourceTemplatePair(
+				left, "left", oneOver, "right");
+		assertThat(failedClosed).failed();
+		assertThat(failedClosed).hadErrorContaining(
+				"Potentially overlapping MCP resource URI templates");
+
+		int[] exactEndpoint = {186, 201, 228, 233, 233, 235, 235};
+		assertThat(compileResourceTemplateOverlapSet(exactEndpoint))
+				.succeededWithoutWarnings();
+		Compilation endpointOneOver = compileResourceTemplateOverlapSet(
+				new int[]{186, 201, 228, 233, 233, 235, 235, 1});
+		assertThat(endpointOneOver).failed();
+		assertThat(endpointOneOver).hadErrorContaining(
+				"Potentially overlapping MCP resource URI templates");
+	}
+
+	@Test
+	void resourceTemplatesEnforceFiniteWireAndVariableNameBounds() {
+		String prefix = "test:///";
+		String expression = "{value}";
+		String boundaryTemplate = prefix + "a".repeat(
+				8_192 - prefix.length() - expression.length()) + expression;
+		assertThat(compileResourceTemplate(boundaryTemplate, "value"))
+				.succeededWithoutWarnings();
+
+		Compilation oversizedTemplate = compileResourceTemplate(
+				boundaryTemplate + "a", "value");
+		assertThat(oversizedTemplate).failed();
+		assertThat(oversizedTemplate).hadErrorContaining(
+				"resource URI template may contain at most 8192 UTF-8 bytes");
+		Assertions.assertEquals(1, oversizedTemplate.errors().size(),
+				oversizedTemplate.errors().toString());
+
+		Compilation oversizedExpandedWire = compileResourceTemplate(
+				"test:///" + "é".repeat(1_400) + "{value}", "value");
+		assertThat(oversizedExpandedWire).failed();
+		assertThat(oversizedExpandedWire).hadErrorContaining(
+				"expanded MCP resource URI template may contain at most 8192 UTF-8 bytes");
+		Assertions.assertEquals(1, oversizedExpandedWire.errors().size(),
+				oversizedExpandedWire.errors().toString());
+
+		String boundaryVariable = "v".repeat(128);
+		assertThat(compileResourceTemplate(
+				"test:///{" + boundaryVariable + "}", boundaryVariable))
+				.succeededWithoutWarnings();
+		Compilation oversizedVariable = compileResourceTemplate(
+				"test:///{" + boundaryVariable + "v}", boundaryVariable + "v");
+		assertThat(oversizedVariable).failed();
+		assertThat(oversizedVariable).hadErrorContaining(
+				"variable name may contain at most 128 UTF-8 bytes");
+		Assertions.assertEquals(1, oversizedVariable.errors().size(),
+				oversizedVariable.errors().toString());
+	}
+
+	@Test
+	void annotatedEndpointsPermitAtMostTwoHundredFiftySixResourceTemplates() {
+		assertThat(compileResourceTemplateCount(256)).succeededWithoutWarnings();
+
+		Compilation oversized = compileResourceTemplateCount(257);
+		assertThat(oversized).failed();
+		assertThat(oversized).hadErrorContaining(
+				"annotated MCP endpoint may declare at most 256 resource URI templates");
+		Assertions.assertEquals(1, oversized.errors().size(),
+				oversized.errors().toString());
+	}
+
+	@Test
+	void annotatedExactResourceUrisStopAtTheClassFileStringBoundaryWithoutCascades() {
+		String prefix = "test:///";
+		String boundaryUri = prefix + "a".repeat(65_534 - prefix.length());
+		assertThat(compileExactResource(boundaryUri)).succeededWithoutWarnings();
+
+		Compilation oversized = compileExactResource(boundaryUri + "a", 0);
+		assertThat(oversized).failed();
+		assertThat(oversized).hadErrorContaining(
+				"exact-resource URI may contain at most 65534 UTF-8 bytes");
+		Assertions.assertEquals(1, oversized.errors().size(),
+				oversized.errors().toString());
+		Assertions.assertFalse(oversized.errors().toString().contains(
+				"resource URI template must not declare size"),
+				oversized.errors().toString());
 	}
 
 	@Test
@@ -1250,6 +1351,153 @@ public class McpAnnotationProcessorValidationTests {
 						      %s) { return null; }
 						}
 						""".formatted(template, parameters));
+		return Compiler.javac().withProcessors(new SokletProcessor())
+				.compile(source);
+	}
+
+	private static Compilation compileResourceTemplate(@NonNull String template,
+			@NonNull String variableName) {
+		JavaFileObject source = JavaFileObjects.forSourceString(
+				"example.ResourceTemplateBoundEndpoint", """
+						package example;
+
+						import com.soklet.McpResourceOutput;
+						import com.soklet.annotation.McpResource;
+						import com.soklet.annotation.McpResourceUriParameter;
+						import com.soklet.annotation.McpServerEndpoint;
+
+						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						public final class ResourceTemplateBoundEndpoint {
+						  @McpResource(uri = "%s", name = "bounded")
+						  public McpResourceOutput read(
+						      @McpResourceUriParameter("%s") String value) {
+						    return null;
+						  }
+						}
+						""".formatted(template, variableName));
+		return Compiler.javac().withProcessors(new SokletProcessor())
+				.compile(source);
+	}
+
+	private static Compilation compileExactResource(@NonNull String uri) {
+		return compileExactResource(uri, -1);
+	}
+
+	private static Compilation compileExactResource(@NonNull String uri,
+			long size) {
+		String sizeDeclaration = size < 0 ? "" : ", size = " + size;
+		JavaFileObject source = JavaFileObjects.forSourceString(
+				"example.ExactResourceBoundEndpoint", """
+						package example;
+
+						import com.soklet.McpResourceOutput;
+						import com.soklet.annotation.McpResource;
+						import com.soklet.annotation.McpServerEndpoint;
+
+						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						public final class ExactResourceBoundEndpoint {
+						  @McpResource(uri = "%s", name = "bounded"%s)
+						  public McpResourceOutput read() { return null; }
+						}
+						""".formatted(uri, sizeDeclaration));
+		return Compiler.javac().withProcessors(new SokletProcessor())
+				.compile(source);
+	}
+
+	private static Compilation compileResourceTemplateCount(int count) {
+		StringBuilder methods = new StringBuilder();
+		for (int index = 0; index < count; ++index) {
+			String variable = "value" + index;
+			methods.append("""
+
+					  @McpResource(uri = "test:///route-%d/{%s}", name = "resource-%d")
+					  public McpResourceOutput resource%d(
+					      @McpResourceUriParameter("%s") String value) {
+					    return null;
+					  }
+					""".formatted(index, variable, index, index, variable));
+		}
+		JavaFileObject source = JavaFileObjects.forSourceString(
+				"example.ResourceTemplateCountEndpoint", """
+						package example;
+
+						import com.soklet.McpResourceOutput;
+						import com.soklet.annotation.McpResource;
+						import com.soklet.annotation.McpResourceUriParameter;
+						import com.soklet.annotation.McpServerEndpoint;
+
+						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						public final class ResourceTemplateCountEndpoint {
+						%s
+						}
+						""".formatted(methods));
+		return Compiler.javac().withProcessors(new SokletProcessor())
+				.compile(source);
+	}
+
+	private static Compilation compileResourceTemplatePair(
+			@NonNull String leftTemplate, @NonNull String leftVariable,
+			@NonNull String rightTemplate, @NonNull String rightVariable) {
+		JavaFileObject source = JavaFileObjects.forSourceString(
+				"example.ResourceTemplateOverlapBoundEndpoint", """
+						package example;
+
+						import com.soklet.McpResourceOutput;
+						import com.soklet.annotation.McpResource;
+						import com.soklet.annotation.McpResourceUriParameter;
+						import com.soklet.annotation.McpServerEndpoint;
+
+						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						public final class ResourceTemplateOverlapBoundEndpoint {
+						  @McpResource(uri = "%s", name = "left")
+						  public McpResourceOutput left(
+						      @McpResourceUriParameter("%s") String value) {
+						    return null;
+						  }
+
+						  @McpResource(uri = "%s", name = "right")
+						  public McpResourceOutput right(
+						      @McpResourceUriParameter("%s") String value) {
+						    return null;
+						  }
+						}
+						""".formatted(leftTemplate, leftVariable,
+						rightTemplate, rightVariable));
+		return Compiler.javac().withProcessors(new SokletProcessor())
+				.compile(source);
+	}
+
+	private static Compilation compileResourceTemplateOverlapSet(
+			int @NonNull [] literalLengths) {
+		StringBuilder methods = new StringBuilder();
+		for (int index = 0; index < literalLengths.length; ++index) {
+			String variable = "value" + index;
+			String template = "x:{" + variable + "}"
+					+ "a".repeat(literalLengths[index])
+					+ (char) ('A' + index);
+			methods.append("""
+
+					  @McpResource(uri = "%s", name = "resource-%d")
+					  public McpResourceOutput resource%d(
+					      @McpResourceUriParameter("%s") String value) {
+					    return null;
+					  }
+					""".formatted(template, index, index, variable));
+		}
+		JavaFileObject source = JavaFileObjects.forSourceString(
+				"example.ResourceTemplateOverlapSetEndpoint", """
+						package example;
+
+						import com.soklet.McpResourceOutput;
+						import com.soklet.annotation.McpResource;
+						import com.soklet.annotation.McpResourceUriParameter;
+						import com.soklet.annotation.McpServerEndpoint;
+
+						@McpServerEndpoint(path = "/mcp", name = "test", version = "1")
+						public final class ResourceTemplateOverlapSetEndpoint {
+						%s
+						}
+						""".formatted(methods));
 		return Compiler.javac().withProcessors(new SokletProcessor())
 				.compile(source);
 	}

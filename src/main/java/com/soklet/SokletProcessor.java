@@ -176,7 +176,18 @@ public final class SokletProcessor extends AbstractProcessor {
 	private static final String PERSISTENT_CACHE_INDEX_DIR = "resource-methods";
 	private static final String MCP_PERSISTENT_CACHE_INDEX_DIR =
 			"mcp-endpoints";
+	private static final int MAXIMUM_MCP_RESOURCE_URI_UTF_8_BYTES = 1_048_576;
+	private static final int MAXIMUM_MCP_ANNOTATED_RESOURCE_URI_UTF_8_BYTES =
+			65_534;
+	private static final int MAXIMUM_MCP_RESOURCE_URI_TEMPLATES = 256;
+	private static final int MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_UTF_8_BYTES = 8_192;
 	private static final int MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_VARIABLES = 32;
+	private static final int MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_VARIABLE_NAME_UTF_8_BYTES =
+			128;
+	private static final int MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_OVERLAP_STATES =
+			65_536;
+	private static final int MAXIMUM_MCP_ENDPOINT_RESOURCE_URI_TEMPLATE_OVERLAP_STATES =
+			1_048_576;
 
 	// ---- Index paths ---------------------------------------------------------
 
@@ -1033,17 +1044,34 @@ public final class SokletProcessor extends AbstractProcessor {
 		}
 		List<McpResourceModel> templates = resources.stream()
 				.filter(McpResourceModel::template).toList();
-		for (int leftIndex = 0; leftIndex < templates.size(); ++leftIndex) {
-			for (int rightIndex = leftIndex + 1;
-					rightIndex < templates.size(); ++rightIndex) {
-				McpResourceModel left = templates.get(leftIndex);
-				McpResourceModel right = templates.get(rightIndex);
-				if (!left.address().equals(right.address())
-						&& resourceTemplatesPotentiallyOverlap(left.address(),
-						right.address()))
-					mcpError(right.method(),
-							"Soklet: Potentially overlapping MCP resource URI templates in endpoint %s.",
-							endpointBinaryName);
+		if (templates.size() > MAXIMUM_MCP_RESOURCE_URI_TEMPLATES) {
+			mcpError(endpointType,
+					"Soklet: An annotated MCP endpoint may declare at most %d resource URI templates.",
+					MAXIMUM_MCP_RESOURCE_URI_TEMPLATES);
+		} else {
+			List<McpLevelOneResourceTemplate> parsedTemplates = templates.stream()
+					.map(template -> parseLevelOneResourceTemplate(
+							template.address()))
+					.toList();
+			McpTemplateOverlapBudget overlapBudget =
+					new McpTemplateOverlapBudget();
+			templatePairs:
+			for (int leftIndex = 0; leftIndex < templates.size(); ++leftIndex) {
+				for (int rightIndex = leftIndex + 1;
+						rightIndex < templates.size(); ++rightIndex) {
+					McpResourceModel left = templates.get(leftIndex);
+					McpResourceModel right = templates.get(rightIndex);
+					if (!left.address().equals(right.address())
+							&& resourceTemplatesPotentiallyOverlap(
+							parsedTemplates.get(leftIndex),
+							parsedTemplates.get(rightIndex), overlapBudget)) {
+						mcpError(right.method(),
+								"Soklet: Potentially overlapping MCP resource URI templates in endpoint %s.",
+								endpointBinaryName);
+						if (overlapBudget.exhausted())
+							break templatePairs;
+					}
+				}
 			}
 		}
 
@@ -1463,20 +1491,50 @@ public final class SokletProcessor extends AbstractProcessor {
 
 		boolean template = address.indexOf('{') >= 0
 				|| address.indexOf('}') >= 0;
-		List<String> templateVariables = template
-				? parseLevelOneTemplateVariables(address) : List.of();
+		int addressUtf8Bytes = address.getBytes(StandardCharsets.UTF_8).length;
+		boolean addressTooLong = addressUtf8Bytes > (template
+				? MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_UTF_8_BYTES
+				: MAXIMUM_MCP_ANNOTATED_RESOURCE_URI_UTF_8_BYTES);
 		boolean tooManyTemplateVariables = template
 				&& resourceTemplateVariableExpressionCount(address)
 				> MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_VARIABLES;
-		if (tooManyTemplateVariables)
+		boolean templateVariableNameTooLong = template && !addressTooLong
+				&& !tooManyTemplateVariables
+				&& resourceTemplateVariableNameExceedsLimit(address);
+		boolean expandedTemplateWireTooLong = template && !addressTooLong
+				&& !tooManyTemplateVariables && !templateVariableNameTooLong
+				&& expandedResourceTemplateWireExceedsLimit(address);
+		List<String> templateVariables;
+		if (!template)
+			templateVariables = List.of();
+		else if (addressTooLong || tooManyTemplateVariables
+				|| templateVariableNameTooLong || expandedTemplateWireTooLong)
+			templateVariables = null;
+		else
+			templateVariables = parseLevelOneTemplateVariables(address);
+		if (addressTooLong)
+			mcpError(method, template
+					? "Soklet: An MCP resource URI template may contain at most %d UTF-8 bytes."
+					: "Soklet: An MCP exact-resource URI may contain at most %d UTF-8 bytes.",
+					template ? MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_UTF_8_BYTES
+							: MAXIMUM_MCP_ANNOTATED_RESOURCE_URI_UTF_8_BYTES);
+		else if (tooManyTemplateVariables)
 			mcpError(method,
 					"Soklet: An MCP resource URI template may declare at most %d variable expressions.",
 					MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_VARIABLES);
+		else if (templateVariableNameTooLong)
+			mcpError(method,
+					"Soklet: An MCP resource URI-template variable name may contain at most %d UTF-8 bytes.",
+					MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_VARIABLE_NAME_UTF_8_BYTES);
+		else if (expandedTemplateWireTooLong)
+			mcpError(method,
+					"Soklet: An expanded MCP resource URI template may contain at most %d UTF-8 bytes.",
+					MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_UTF_8_BYTES);
 		else if (template && templateVariables == null)
 			mcpError(method,
 					"Soklet: @McpResource uri must be a valid absolute RFC 6570 Level 1 URI template.");
 		if (!template) {
-			if (!validExactMcpResourceUri(address)) {
+			if (!addressTooLong && !validExactMcpResourceUri(address)) {
 				mcpError(method,
 						"Soklet: @McpResource uri must be an absolute normalized URI in ASCII RFC 3986 wire form with valid percent triplets.");
 			}
@@ -1705,6 +1763,9 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	private static McpLevelOneResourceTemplate parseLevelOneResourceTemplate(
 			@NonNull String template) {
+		if (template.getBytes(StandardCharsets.UTF_8).length
+				> MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_UTF_8_BYTES)
+			return null;
 		List<String> variables = new ArrayList<>();
 		List<McpTemplateOverlapAtom> overlapAtoms = new ArrayList<>();
 		StringBuilder uriCandidate = new StringBuilder(template.length() + 16);
@@ -1728,11 +1789,13 @@ public final class SokletProcessor extends AbstractProcessor {
 			if (previousWasVariable)
 				return null;
 			int close = template.indexOf('}', index + 1);
-			if (close < 0 || template.indexOf('{', index + 1) >= 0
-					&& template.indexOf('{', index + 1) < close)
+			if (close < 0 || (template.indexOf('{', index + 1) >= 0
+					&& template.indexOf('{', index + 1) < close))
 				return null;
 			String variable = template.substring(index + 1, close);
 			if (!validLevelOneVariableName(variable)
+					|| variable.getBytes(StandardCharsets.UTF_8).length
+					> MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_VARIABLE_NAME_UTF_8_BYTES
 					|| variables.contains(variable)
 					|| variables.size()
 					>= MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_VARIABLES)
@@ -1744,6 +1807,9 @@ public final class SokletProcessor extends AbstractProcessor {
 			index = close + 1;
 		}
 		if (variables.isEmpty())
+			return null;
+		if (uriCandidate.length()
+				> MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_UTF_8_BYTES)
 			return null;
 		if (!validExactMcpResourceUri(uriCandidate.toString()))
 			return null;
@@ -1760,8 +1826,87 @@ public final class SokletProcessor extends AbstractProcessor {
 		return count;
 	}
 
+	private static boolean resourceTemplateVariableNameExceedsLimit(
+			@NonNull String template) {
+		Set<String> variables = new LinkedHashSet<>();
+		boolean previousWasVariable = false;
+		for (int index = 0; index < template.length();) {
+			char character = template.charAt(index);
+			if (character == '}')
+				return false;
+			if (character != '{') {
+				McpTemplateLiteralToken token = templateLiteralToken(template,
+						index);
+				if (token == null)
+					return false;
+				previousWasVariable = false;
+				index += token.sourceLength();
+				continue;
+			}
+			if (previousWasVariable)
+				return false;
+			int close = template.indexOf('}', index + 1);
+			int nestedOpen = template.indexOf('{', index + 1);
+			if (close < 0 || (nestedOpen >= 0 && nestedOpen < close))
+				return false;
+			String variable = template.substring(index + 1, close);
+			if (variable.getBytes(StandardCharsets.UTF_8).length
+					> MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_VARIABLE_NAME_UTF_8_BYTES)
+				return true;
+			if (!validLevelOneVariableName(variable)
+					|| !variables.add(variable))
+				return false;
+			previousWasVariable = true;
+			index = close + 1;
+		}
+		return false;
+	}
+
+	private static boolean expandedResourceTemplateWireExceedsLimit(
+			@NonNull String template) {
+		Set<String> variables = new LinkedHashSet<>();
+		int expandedWireLength = 0;
+		boolean previousWasVariable = false;
+		for (int index = 0; index < template.length();) {
+			char character = template.charAt(index);
+			if (character == '}')
+				return false;
+			if (character != '{') {
+				McpTemplateLiteralToken token = templateLiteralToken(template,
+						index);
+				if (token == null)
+					return false;
+				expandedWireLength += token.value().length();
+				previousWasVariable = false;
+				index += token.sourceLength();
+				continue;
+			}
+			if (previousWasVariable)
+				return false;
+			int close = template.indexOf('}', index + 1);
+			int nestedOpen = template.indexOf('{', index + 1);
+			if (close < 0 || (nestedOpen >= 0 && nestedOpen < close))
+				return false;
+			String variable = template.substring(index + 1, close);
+			if (!validLevelOneVariableName(variable)
+					|| variable.getBytes(StandardCharsets.UTF_8).length
+					> MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_VARIABLE_NAME_UTF_8_BYTES
+					|| !variables.add(variable)
+					|| variables.size()
+					> MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_VARIABLES)
+				return false;
+			++expandedWireLength;
+			previousWasVariable = true;
+			index = close + 1;
+		}
+		return !variables.isEmpty() && expandedWireLength
+				> MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_UTF_8_BYTES;
+	}
+
 	private static boolean validExactMcpResourceUri(@NonNull String address) {
 		if (address.isEmpty())
+			return false;
+		if (address.length() > MAXIMUM_MCP_RESOURCE_URI_UTF_8_BYTES)
 			return false;
 		for (int index = 0; index < address.length();) {
 			char character = address.charAt(index);
@@ -1844,10 +1989,10 @@ public final class SokletProcessor extends AbstractProcessor {
 		int secondByte = percentEncodedByte(value, index + 3);
 		if (secondByte < 0x80 || secondByte > 0xBF)
 			return false;
-		if (firstByte == 0xE0 && secondByte < 0xA0
-				|| firstByte == 0xED && secondByte > 0x9F
-				|| firstByte == 0xF0 && secondByte < 0x90
-				|| firstByte == 0xF4 && secondByte > 0x8F)
+		if ((firstByte == 0xE0 && secondByte < 0xA0)
+				|| (firstByte == 0xED && secondByte > 0x9F)
+				|| (firstByte == 0xF0 && secondByte < 0x90)
+				|| (firstByte == 0xF4 && secondByte > 0x8F))
 			return false;
 		for (int byteIndex = 2; byteIndex < byteCount; ++byteIndex) {
 			int continuation = percentEncodedByte(value,
@@ -1898,22 +2043,24 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private static boolean rfc6570LiteralAscii(char character) {
-		return character == 0x21 || character >= 0x23 && character <= 0x24
+		return character == 0x21
+				|| (character >= 0x23 && character <= 0x24)
 				|| character == 0x26
-				|| character >= 0x28 && character <= 0x3B
+				|| (character >= 0x28 && character <= 0x3B)
 				|| character == 0x3D
-				|| character >= 0x3F && character <= 0x5B
+				|| (character >= 0x3F && character <= 0x5B)
 				|| character == 0x5D || character == 0x5F
-				|| character >= 0x61 && character <= 0x7A
+				|| (character >= 0x61 && character <= 0x7A)
 				|| character == 0x7E;
 	}
 
 	private static boolean rfc6570UnicodeLiteral(int codePoint) {
-		if (codePoint >= 0xA0 && codePoint <= 0xD7FF
-				|| codePoint >= 0xE000 && codePoint <= 0xFDCF
-				|| codePoint >= 0xFDF0 && codePoint <= 0xFFEF)
+		if ((codePoint >= 0xA0 && codePoint <= 0xD7FF)
+				|| (codePoint >= 0xE000 && codePoint <= 0xFDCF)
+				|| (codePoint >= 0xFDF0 && codePoint <= 0xFFEF))
 			return true;
-		return codePoint >= 0x10000 && codePoint <= 0x10FFFD
+		return ((codePoint >= 0x10000 && codePoint <= 0xDFFFD)
+				|| (codePoint >= 0xE1000 && codePoint <= 0x10FFFD))
 				&& (codePoint & 0xFFFF) <= 0xFFFD;
 	}
 
@@ -1954,9 +2101,9 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private static boolean asciiLetterOrDigit(char character) {
-		return character >= 'A' && character <= 'Z'
-				|| character >= 'a' && character <= 'z'
-				|| character >= '0' && character <= '9';
+		return (character >= 'A' && character <= 'Z')
+				|| (character >= 'a' && character <= 'z')
+				|| (character >= '0' && character <= '9');
 	}
 
 	private static int hexadecimal(char character) {
@@ -1970,23 +2117,23 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private static boolean resourceTemplatesPotentiallyOverlap(
-			@NonNull String leftTemplate, @NonNull String rightTemplate) {
-		McpLevelOneResourceTemplate leftParsed =
-				parseLevelOneResourceTemplate(leftTemplate);
-		McpLevelOneResourceTemplate rightParsed =
-				parseLevelOneResourceTemplate(rightTemplate);
+			@Nullable McpLevelOneResourceTemplate leftParsed,
+			@Nullable McpLevelOneResourceTemplate rightParsed,
+			@NonNull McpTemplateOverlapBudget endpointBudget) {
 		if (leftParsed == null || rightParsed == null)
 			return false;
+		if (!endpointBudget.chargeState())
+			return true;
 		List<McpTemplateOverlapAtom> leftAtoms = leftParsed.overlapAtoms();
 		List<McpTemplateOverlapAtom> rightAtoms = rightParsed.overlapAtoms();
 		ArrayDeque<McpTemplateOverlapState> pending = new ArrayDeque<>();
-		Set<McpTemplateOverlapState> visited = new LinkedHashSet<>();
-		pending.add(new McpTemplateOverlapState(0, 0));
+		Set<McpTemplateOverlapState> discovered = new LinkedHashSet<>();
+		McpTemplateOverlapState initial = new McpTemplateOverlapState(0, 0);
+		discovered.add(initial);
+		pending.add(initial);
 
 		while (!pending.isEmpty()) {
 			McpTemplateOverlapState state = pending.removeFirst();
-			if (!visited.add(state))
-				continue;
 			int left = state.leftIndex();
 			int right = state.rightIndex();
 			if (left == leftAtoms.size() && right == rightAtoms.size())
@@ -2007,20 +2154,49 @@ public final class SokletProcessor extends AbstractProcessor {
 			boolean leftWildcard = leftAtom.wildcard();
 			boolean rightWildcard = rightAtom.wildcard();
 			if (leftWildcard) {
-				pending.add(new McpTemplateOverlapState(left + 1, right));
+				if (!enqueueTemplateOverlapState(pending, discovered, endpointBudget,
+						new McpTemplateOverlapState(left + 1, right)))
+					return true;
 				if (!rightWildcard && rightAtom.variableConsumable())
-					pending.add(new McpTemplateOverlapState(left, right + 1));
+					if (!enqueueTemplateOverlapState(pending, discovered, endpointBudget,
+							new McpTemplateOverlapState(left, right + 1)))
+						return true;
 			}
 			if (rightWildcard) {
-				pending.add(new McpTemplateOverlapState(left, right + 1));
+				if (!enqueueTemplateOverlapState(pending, discovered, endpointBudget,
+						new McpTemplateOverlapState(left, right + 1)))
+					return true;
 				if (!leftWildcard && leftAtom.variableConsumable())
-					pending.add(new McpTemplateOverlapState(left + 1, right));
+					if (!enqueueTemplateOverlapState(pending, discovered, endpointBudget,
+							new McpTemplateOverlapState(left + 1, right)))
+						return true;
 			}
 			if (!leftWildcard && !rightWildcard
 					&& leftAtom.value().equals(rightAtom.value()))
-				pending.add(new McpTemplateOverlapState(left + 1, right + 1));
+				if (!enqueueTemplateOverlapState(pending, discovered, endpointBudget,
+						new McpTemplateOverlapState(left + 1, right + 1)))
+					return true;
 		}
 		return false;
+	}
+
+	private static boolean enqueueTemplateOverlapState(
+			@NonNull ArrayDeque<@NonNull McpTemplateOverlapState> pending,
+			@NonNull Set<@NonNull McpTemplateOverlapState> discovered,
+			@NonNull McpTemplateOverlapBudget endpointBudget,
+			@NonNull McpTemplateOverlapState state) {
+		if (discovered.contains(state))
+			return true;
+		if (discovered.size()
+				>= MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_OVERLAP_STATES) {
+			endpointBudget.markExhausted();
+			return false;
+		}
+		if (!endpointBudget.chargeState())
+			return false;
+		discovered.add(state);
+		pending.add(state);
+		return true;
 	}
 
 	private static boolean onlyTemplateWildcardsRemain(
@@ -3872,6 +4048,29 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private record McpTemplateOverlapState(int leftIndex, int rightIndex) {}
+
+	private static final class McpTemplateOverlapBudget {
+		private int remainingStates =
+				MAXIMUM_MCP_ENDPOINT_RESOURCE_URI_TEMPLATE_OVERLAP_STATES;
+		private boolean exhausted;
+
+		private boolean chargeState() {
+			if (remainingStates == 0) {
+				exhausted = true;
+				return false;
+			}
+			--remainingStates;
+			return true;
+		}
+
+		private void markExhausted() {
+			exhausted = true;
+		}
+
+		private boolean exhausted() {
+			return exhausted;
+		}
+	}
 
 	private enum McpResourceListParameterBinding {
 		REQUEST_CONTEXT,
