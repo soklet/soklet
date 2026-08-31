@@ -74,13 +74,18 @@ final class McpRuntimeEnumNameReader {
 		try (InputStream input = enumType.getResourceAsStream(resourceName)) {
 			if (input == null)
 				throw failure("Enum classfile metadata is unavailable.");
-			byte[] bytes = input.readNBytes(MAXIMUM_CLASS_FILE_SIZE_IN_BYTES + 1);
-			if (bytes.length > MAXIMUM_CLASS_FILE_SIZE_IN_BYTES)
-				throw failure("Enum classfile metadata exceeds its size limit.");
-			return bytes;
+			return readBoundedClassFile(input);
 		} catch (IOException exception) {
 			throw failure("Unable to read enum classfile metadata.");
 		}
+	}
+
+	static byte @NonNull [] readBoundedClassFile(
+			@NonNull InputStream input) throws IOException {
+		byte[] bytes = input.readNBytes(MAXIMUM_CLASS_FILE_SIZE_IN_BYTES + 1);
+		if (bytes.length > MAXIMUM_CLASS_FILE_SIZE_IN_BYTES)
+			throw failure("Enum classfile metadata exceeds its size limit.");
+		return bytes;
 	}
 
 	@NonNull

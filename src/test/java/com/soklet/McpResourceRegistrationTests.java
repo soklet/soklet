@@ -271,7 +271,7 @@ class McpResourceRegistrationTests {
 	}
 
 	@Test
-	void serverCursorLimitDefaultsTo4096AndMustBePositive() {
+	void serverCursorLimitUsesTheReviewedJsonWireRange() {
 		McpEndpointRegistry registry = McpEndpointRegistry.fromEndpoints(
 				List.of(endpointBuilder().build()));
 		McpServer defaultServer = McpServer.withPort(0)
@@ -285,15 +285,32 @@ class McpResourceRegistrationTests {
 				.admissionController(
 						McpAdmissionController.acceptAllInstance())
 				.build();
+		McpServer maximumServer = McpServer.withPort(0)
+				.maximumCursorSizeInBytes(174_762)
+				.endpointRegistry(registry)
+				.admissionController(
+						McpAdmissionController.acceptAllInstance())
+				.build();
 
 		assertEquals(Integer.valueOf(4_096),
 				defaultServer.getMaximumCursorSizeInBytes());
 		assertEquals(Integer.valueOf(17),
 				customServer.getMaximumCursorSizeInBytes());
+		assertEquals(Integer.valueOf(174_762),
+				maximumServer.getMaximumCursorSizeInBytes());
 		assertThrows(IllegalArgumentException.class,
 				() -> McpServer.withPort(0).maximumCursorSizeInBytes(0));
 		assertThrows(IllegalArgumentException.class,
 				() -> McpServer.withPort(0).maximumCursorSizeInBytes(-1));
+		IllegalArgumentException excessive = assertThrows(
+				IllegalArgumentException.class,
+				() -> McpServer.withPort(0)
+						.maximumCursorSizeInBytes(174_763));
+		assertEquals("MCP maximum cursor size must not exceed 174762 bytes.",
+				excessive.getMessage());
+		assertThrows(IllegalArgumentException.class,
+				() -> McpServer.withPort(0)
+						.maximumCursorSizeInBytes(Integer.MAX_VALUE));
 		assertThrows(NullPointerException.class,
 				() -> McpServer.withPort(0).maximumCursorSizeInBytes(null));
 	}

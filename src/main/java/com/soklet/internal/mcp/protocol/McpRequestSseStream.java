@@ -144,10 +144,14 @@ final class McpRequestSseStream {
 			McpOutboundChannel.@NonNull Listener listener) {
 		requireNonNull(jsonLimits);
 		this.envelopeCodec = requireNonNull(envelopeCodec);
-		int maximumFrameBytes = Math.addExact(jsonLimits.maximumOutputBytes(),
-				MESSAGE_PREFIX.length + MESSAGE_SUFFIX.length);
+		int maximumFrameBytes = maximumFrameBytes(jsonLimits);
 		this.channel = new TransportChannel(frameCapacity, maximumFrameBytes,
 				requireNonNull(clock), requireNonNull(listener));
+	}
+
+	static int maximumFrameBytes(@NonNull McpJsonLimits jsonLimits) {
+		return Math.addExact(requireNonNull(jsonLimits).maximumOutputBytes(),
+				MESSAGE_PREFIX.length + MESSAGE_SUFFIX.length);
 	}
 
 	McpRequestSseStream(@NonNull McpJsonRpcEnvelopeCodec envelopeCodec,

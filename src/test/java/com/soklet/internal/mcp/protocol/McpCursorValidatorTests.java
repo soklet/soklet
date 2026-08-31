@@ -19,6 +19,8 @@ package com.soklet.internal.mcp.protocol;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+
 public class McpCursorValidatorTests {
 	@Test
 	public void countsUtf8BytesAndRejectsMalformedUtf16() {
@@ -40,5 +42,30 @@ public class McpCursorValidatorTests {
 	public void requiresPositiveLimit() {
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> McpCursorValidator.fitsWithinUtf8ByteLimit("", 0));
+	}
+
+	@Test
+	public void reviewedCeilingExactlyFitsWorstCaseJsonEscaping() {
+		int maximum = McpCursorLimit.MAXIMUM_SUPPORTED_SIZE_IN_BYTES;
+		Assertions.assertEquals(174_762, maximum);
+		char[] characters = new char[maximum];
+		Arrays.fill(characters, '\u0001');
+		String cursor = new String(characters);
+		McpJsonCodec codec = new McpJsonCodec(McpJsonLimits.productionDefaults());
+
+		Assertions.assertTrue(
+				McpCursorValidator.fitsWithinUtf8ByteLimit(cursor, maximum));
+		byte[] serialized = codec.toUtf8Bytes(new McpJsonString(cursor));
+		Assertions.assertEquals((long) maximum * 6L + 2L, serialized.length);
+		Assertions.assertEquals(new McpJsonString(cursor), codec.parse(serialized));
+
+		String oneOver = cursor + '\u0001';
+		Assertions.assertTrue(McpCursorValidator.fitsWithinUtf8ByteLimit(
+				oneOver, maximum + 1));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> codec.toUtf8Bytes(new McpJsonString(oneOver)));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpCursorLimit.requireSupportedMaximumSizeInBytes(
+						maximum + 1));
 	}
 }

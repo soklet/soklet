@@ -1812,9 +1812,9 @@ public final class McpServerRuntimeBridge {
 		public ResourceListPlan {
 			requireNonNull(resourceListCachePolicy);
 			requireNonNull(resourceTemplateListCachePolicy);
-			if (maximumCursorSizeInBytes < 1)
-				throw new IllegalArgumentException(
-						"Maximum cursor size must be positive.");
+			maximumCursorSizeInBytes =
+					McpCursorLimit.requireSupportedMaximumSizeInBytes(
+							maximumCursorSizeInBytes);
 			requireNonNull(invoker);
 		}
 
@@ -1822,7 +1822,9 @@ public final class McpServerRuntimeBridge {
 		@NonNull
 		public static ResourceListPlan staticDefaults() {
 			return new ResourceListPlan(CachePlan.privateNoCache(),
-					CachePlan.privateNoCache(), 4_096, Optional.empty());
+					CachePlan.privateNoCache(),
+					McpCursorLimit.DEFAULT_MAXIMUM_SIZE_IN_BYTES,
+					Optional.empty());
 		}
 	}
 

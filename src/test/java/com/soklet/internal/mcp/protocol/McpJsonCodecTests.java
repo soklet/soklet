@@ -315,6 +315,18 @@ public class McpJsonCodecTests {
 	}
 
 	@Test
+	public void strictJsonParserEnforcesExactUtf8InputBytes() {
+		byte[] value = "\"é\"".getBytes(StandardCharsets.UTF_8);
+		McpJsonCodec fourByteCodec = new McpJsonCodec(limitsWithInputBytes(4));
+		McpJsonCodec threeByteCodec = new McpJsonCodec(limitsWithInputBytes(3));
+
+		Assertions.assertEquals(new McpJsonString("é"),
+				fourByteCodec.parse(value));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> threeByteCodec.parse(value));
+	}
+
+	@Test
 	public void strictJsonParserRejectsEveryUnpairedSurrogateForm() {
 		for (String invalid : List.of(
 				"\"\\uD800\"", "\"\\uD800x\"", "\"\\uD800\\u0041\"", "\"\\uDC00\""))
@@ -459,6 +471,15 @@ public class McpJsonCodecTests {
 				LIMITS.maximumTokenLengthInCharacters(), LIMITS.maximumStringLengthInCharacters(),
 				LIMITS.maximumNumberLengthInCharacters(), LIMITS.maximumExponentMagnitude(),
 				LIMITS.maximumNodeCount(), LIMITS.maximumOutputBytes());
+	}
+
+	private static McpJsonLimits limitsWithInputBytes(int maximumInputBytes) {
+		return new McpJsonLimits(maximumInputBytes, LIMITS.maximumNestingDepth(),
+				LIMITS.maximumTokenLengthInCharacters(),
+				LIMITS.maximumStringLengthInCharacters(),
+				LIMITS.maximumNumberLengthInCharacters(),
+				LIMITS.maximumExponentMagnitude(), LIMITS.maximumNodeCount(),
+				LIMITS.maximumOutputBytes());
 	}
 
 	private static McpJsonLimits limitsWithNodes(int maximumNodes) {

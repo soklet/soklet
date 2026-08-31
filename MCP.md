@@ -291,7 +291,11 @@ authorization-filtered.
 Cursors are opaque application strings. Soklet preserves the distinction
 between absent and present-empty cursor values and enforces a positive UTF-8
 size limit (4,096 bytes by default) on incoming and outgoing cursors. The
-application owns cursor encoding, validation, expiry, integrity,
+largest configurable limit is 174,762 bytes: one sixth of the production JSON
+token-character limit, so even a cursor made entirely of control characters
+fits after worst-case six-character JSON escaping. Values above that reviewed
+wire ceiling fail server construction. The application owns cursor encoding,
+validation, expiry, integrity,
 authorization binding, backing-snapshot behavior, and cross-instance
 portability. Bind each cursor to its page position, retained snapshot, catalog
 revision, expiry, and current authorization context as the deployment

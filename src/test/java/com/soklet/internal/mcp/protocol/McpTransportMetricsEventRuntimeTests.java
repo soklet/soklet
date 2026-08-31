@@ -176,6 +176,39 @@ public class McpTransportMetricsEventRuntimeTests {
 	}
 
 	@Test
+	public void partialRequestBodyTimeoutIsRecordedAtTheMcpBoundary()
+			throws Exception {
+		RecordingExecutionObserver observer = new RecordingExecutionObserver();
+		McpHttpTransportConfiguration defaults =
+				McpHttpTransportConfiguration.productionDefaults(0);
+		McpHttpServerRuntime runtime = runtime(configuration(defaults,
+				Duration.ofSeconds(2), Duration.ofMillis(250), 1), observer);
+
+		try {
+			int port = runtime.start().getPort();
+			try (Socket partial = new Socket(LOOPBACK, port)) {
+				partial.setSoTimeout(5_000);
+				partial.getOutputStream().write(("POST /mcp HTTP/1.1\r\n"
+						+ "Host: " + LOOPBACK + ":" + port + "\r\n"
+						+ "Content-Length: 4\r\n\r\nab")
+						.getBytes(StandardCharsets.US_ASCII));
+				partial.getOutputStream().flush();
+
+				observer.awaitValues(List.of(Marker.CONNECTION_ACCEPTED,
+						MetricsCollector.TransportFailureReason.REQUEST_READ_TIMEOUT));
+				Assertions.assertEquals(-1, partial.getInputStream().read(),
+						"The stalled partial request body did not close.");
+			}
+
+			Assertions.assertEquals(List.of(Marker.CONNECTION_ACCEPTED,
+					MetricsCollector.TransportFailureReason.REQUEST_READ_TIMEOUT),
+					observer.values());
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
 	public void acceptAndSetupFailuresRemainPartitionedFromCapacityRejection()
 			throws Exception {
 		RecordingExecutionObserver acceptObserver = new RecordingExecutionObserver();
@@ -306,9 +339,17 @@ public class McpTransportMetricsEventRuntimeTests {
 	private static McpHttpTransportConfiguration configuration(
 			McpHttpTransportConfiguration defaults,
 			Duration requestHeaderTimeout, int maximumConnections) {
+		return configuration(defaults, requestHeaderTimeout,
+				defaults.requestBodyTimeout(), maximumConnections);
+	}
+
+	private static McpHttpTransportConfiguration configuration(
+			McpHttpTransportConfiguration defaults,
+			Duration requestHeaderTimeout, Duration requestBodyTimeout,
+			int maximumConnections) {
 		return new McpHttpTransportConfiguration(defaults.host(), defaults.port(),
 				Duration.ofMillis(10), requestHeaderTimeout,
-				defaults.requestBodyTimeout(), defaults.responseWriteIdleTimeout(),
+				requestBodyTimeout, defaults.responseWriteIdleTimeout(),
 				defaults.keepAliveInterval(), defaults.shutdownTimeout(),
 				defaults.readBufferSize(), defaults.acceptBacklog(),
 				defaults.maximumAggregateRequestBytes(),

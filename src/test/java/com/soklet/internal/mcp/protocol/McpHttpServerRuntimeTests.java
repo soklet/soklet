@@ -1350,6 +1350,103 @@ public class McpHttpServerRuntimeTests {
 		}
 	}
 
+	@Test
+	public void directTransportDefaultsAndAggregateAccountingAreFrozen() {
+		McpHttpTransportConfiguration defaults = configuration(0);
+
+		Assertions.assertEquals(Duration.ofMillis(100),
+				defaults.selectorResolution());
+		Assertions.assertEquals(Duration.ofSeconds(60),
+				defaults.requestHeaderTimeout());
+		Assertions.assertEquals(Duration.ofSeconds(60),
+				defaults.requestBodyTimeout());
+		Assertions.assertEquals(Duration.ofSeconds(60),
+				defaults.responseWriteIdleTimeout());
+		Assertions.assertEquals(Duration.ofSeconds(15),
+				defaults.keepAliveInterval());
+		Assertions.assertEquals(Duration.ofSeconds(5),
+				defaults.shutdownTimeout());
+		Assertions.assertEquals(65_536, defaults.readBufferSize());
+		Assertions.assertEquals(8_192, defaults.acceptBacklog());
+		Assertions.assertEquals(4_194_304,
+				defaults.maximumRequestBodyBytes());
+		Assertions.assertEquals(100, defaults.maximumHeaderCount());
+		Assertions.assertEquals(65_536, defaults.maximumHeaderBytes());
+		Assertions.assertEquals(8_192,
+				defaults.maximumRequestTargetBytes());
+		Assertions.assertEquals(8_192, defaults.maximumConnections());
+		Assertions.assertEquals(1, defaults.connectionWriterConcurrency());
+		Assertions.assertEquals(32, defaults.requestProcessorConcurrency());
+		Assertions.assertEquals(128,
+				defaults.requestProcessorQueueCapacity());
+		Assertions.assertEquals(64, defaults.streamQueueCapacity());
+
+		long requiredAggregateBytes = (long) defaults.maximumRequestBodyBytes()
+				+ defaults.maximumHeaderBytes()
+				+ defaults.maximumRequestTargetBytes() + 1_024L;
+		Assertions.assertEquals(4_269_056L, requiredAggregateBytes);
+		Assertions.assertEquals(requiredAggregateBytes,
+				defaults.maximumAggregateRequestBytes());
+		Assertions.assertDoesNotThrow(() -> configurationWithAggregateLimit(
+				defaults, Math.toIntExact(requiredAggregateBytes)));
+		IllegalArgumentException oneUnder = Assertions.assertThrows(
+				IllegalArgumentException.class,
+				() -> configurationWithAggregateLimit(defaults,
+						Math.toIntExact(requiredAggregateBytes - 1L)));
+		Assertions.assertEquals("Maximum aggregate request bytes must accommodate "
+				+ "the configured body, headers, request target, and framing allowance.",
+				oneUnder.getMessage());
+	}
+
+	@Test
+	public void headerCountAndEncodedByteLimitsHaveExactListenerBoundaries()
+			throws Exception {
+		byte[] body = discoverBody("1", DISCOVER_METHOD, PROTOCOL_VERSION);
+		int exactHeaderCount = standardHeaders(0, DISCOVER_METHOD).size() + 2;
+
+		McpHttpServerRuntime countRuntime = runtime(
+				configurationWithHeaderLimits(configuration(0),
+						exactHeaderCount, 65_536), defaultPolicy());
+		try {
+			int port = countRuntime.start().getPort();
+			List<HeaderLine> headers = standardHeaders(port, DISCOVER_METHOD);
+			Assertions.assertEquals(200,
+					send(port, "POST", "/mcp", headers, body).status());
+			Assertions.assertEquals(431, send(port, "POST", "/mcp",
+					append(headers, new HeaderLine("X", "y")), body).status());
+		} finally {
+			countRuntime.close();
+		}
+
+		int exactHeaderBytes = 1_024;
+		McpHttpServerRuntime byteRuntime = runtime(
+				configurationWithHeaderLimits(configuration(0),
+						exactHeaderCount + 1, exactHeaderBytes), defaultPolicy());
+		try {
+			int port = byteRuntime.start().getPort();
+			List<HeaderLine> baseHeaders = standardHeaders(port, DISCOVER_METHOD);
+			int emptyPaddingHeaderBytes = "X-Pad: \r\n".length();
+			int paddingCharacters = exactHeaderBytes
+					- encodedHeaderSectionSize(baseHeaders, body.length)
+					- emptyPaddingHeaderBytes;
+			Assertions.assertTrue(paddingCharacters > 0);
+			List<HeaderLine> byteHeaders = append(baseHeaders,
+					new HeaderLine("X-Pad", "p".repeat(paddingCharacters)));
+			List<HeaderLine> oneOverByteHeaders = append(baseHeaders,
+					new HeaderLine("X-Pad", "p".repeat(paddingCharacters + 1)));
+			Assertions.assertEquals(exactHeaderBytes,
+					encodedHeaderSectionSize(byteHeaders, body.length));
+			Assertions.assertEquals(exactHeaderBytes + 1,
+					encodedHeaderSectionSize(oneOverByteHeaders, body.length));
+			Assertions.assertEquals(200,
+					send(port, "POST", "/mcp", byteHeaders, body).status());
+			Assertions.assertEquals(431, send(port, "POST", "/mcp",
+					oneOverByteHeaders, body).status());
+		} finally {
+			byteRuntime.close();
+		}
+	}
+
 	private static McpHttpServerRuntime runtime(McpHttpTransportConfiguration configuration,
 			McpHttpEndpointPolicy policy) {
 		return runtime(configuration, policy, "test-server");
@@ -1475,6 +1572,41 @@ public class McpHttpServerRuntimeTests {
 				defaults.requestProcessorQueueCapacity(), defaults.streamQueueCapacity());
 	}
 
+	private static McpHttpTransportConfiguration configurationWithAggregateLimit(
+			McpHttpTransportConfiguration defaults,
+			int maximumAggregateRequestBytes) {
+		return new McpHttpTransportConfiguration(
+				defaults.host(), defaults.port(), defaults.selectorResolution(),
+				defaults.requestHeaderTimeout(), defaults.requestBodyTimeout(),
+				defaults.responseWriteIdleTimeout(), defaults.keepAliveInterval(),
+				defaults.shutdownTimeout(), defaults.readBufferSize(),
+				defaults.acceptBacklog(), maximumAggregateRequestBytes,
+				defaults.maximumRequestBodyBytes(), defaults.maximumHeaderCount(),
+				defaults.maximumHeaderBytes(), defaults.maximumRequestTargetBytes(),
+				defaults.maximumConnections(), defaults.connectionWriterConcurrency(),
+				defaults.requestProcessorConcurrency(),
+				defaults.requestProcessorQueueCapacity(), defaults.streamQueueCapacity());
+	}
+
+	private static McpHttpTransportConfiguration configurationWithHeaderLimits(
+			McpHttpTransportConfiguration defaults, int maximumHeaderCount,
+			int maximumHeaderBytes) {
+		int maximumAggregateRequestBytes = Math.addExact(
+				Math.addExact(defaults.maximumRequestBodyBytes(), maximumHeaderBytes),
+				Math.addExact(defaults.maximumRequestTargetBytes(), 1_024));
+		return new McpHttpTransportConfiguration(
+				defaults.host(), defaults.port(), defaults.selectorResolution(),
+				defaults.requestHeaderTimeout(), defaults.requestBodyTimeout(),
+				defaults.responseWriteIdleTimeout(), defaults.keepAliveInterval(),
+				defaults.shutdownTimeout(), defaults.readBufferSize(),
+				defaults.acceptBacklog(), maximumAggregateRequestBytes,
+				defaults.maximumRequestBodyBytes(), maximumHeaderCount,
+				maximumHeaderBytes, defaults.maximumRequestTargetBytes(),
+				defaults.maximumConnections(), defaults.connectionWriterConcurrency(),
+				defaults.requestProcessorConcurrency(),
+				defaults.requestProcessorQueueCapacity(), defaults.streamQueueCapacity());
+	}
+
 	private static McpHttpTransportConfiguration configurationWithHost(int port,
 			String host) {
 		McpHttpTransportConfiguration defaults = configuration(port);
@@ -1583,6 +1715,18 @@ public class McpHttpServerRuntimeTests {
 		List<HeaderLine> appended = new ArrayList<>(headers);
 		appended.add(header);
 		return List.copyOf(appended);
+	}
+
+	private static int encodedHeaderSectionSize(List<HeaderLine> headers,
+			int bodyLength) {
+		int size = 2;
+		for (HeaderLine header : headers)
+			size = Math.addExact(size,
+					header.name().length() + 2 + header.value().length() + 2);
+		size = Math.addExact(size,
+				"Content-Length: ".length()
+						+ Integer.toString(bodyLength).length() + 2);
+		return Math.addExact(size, "Connection: close\r\n".length());
 	}
 
 	private static RawResponse send(int port, String method, String path,

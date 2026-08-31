@@ -4387,7 +4387,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			if (openResult == SubscriptionOpenResult.CAPACITY_REJECTED)
 				return observedSubscriptionCapacityRejected(requestControl,
 						mappedRequest.id(), corsHeaders);
-			if (openResult == SubscriptionOpenResult.LOCALIZATION_FAILED)
+			if (openResult == SubscriptionOpenResult.LOCALIZATION_FAILED
+					|| openResult
+						== SubscriptionOpenResult.TERMINAL_PREFLIGHT_FAILED)
 				return observedPolicyHookInternalError(requestControl,
 						mappedRequest.id(), corsHeaders, null);
 			if (openResult == SubscriptionOpenResult.SERVER_STOPPING)
@@ -5231,12 +5233,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	 */
 	private McpRuntimeCatalogLocalizer.@NonNull Outcome localizeSubscriptionTerminal(
 			@NonNull McpHttpEndpointPolicy endpointPolicy,
-			@NonNull McpProtocolProfile protocolProfile,
-			@NonNull McpJsonRpcId subscriptionId,
-			@NonNull McpNormalizedEndpoint endpoint,
+			McpJsonRpcMessage.@NonNull ResultResponse canonicalResponse,
 			@NonNull RequestControl requestControl) {
-		McpJsonRpcMessage.ResultResponse canonicalResponse =
-				subscriptionTerminalResponse(protocolProfile, subscriptionId, endpoint);
+		requireNonNull(canonicalResponse);
 		byte[] canonicalEncoded = envelopeCodec.encode(canonicalResponse);
 		McpJsonObject canonicalDocument = canonicalResponse.result().toJsonObject();
 		long canonicalDocumentBytes =
@@ -6883,6 +6882,16 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				@NonNull McpProtocolProfile protocolProfile) {
 			requireNonNull(additionalHeaders);
 			requireNonNull(protocolProfile);
+			// The terminal carries the request ID both as its JSON-RPC ID and as
+			// subscription metadata. Pre-render that actual request-specific shape so
+			// an acknowledgment can never commit a stream whose terminal cannot fit.
+			McpJsonRpcMessage.ResultResponse preRenderedTerminal;
+			try {
+				preRenderedTerminal = subscriptionTerminalResponse(protocolProfile,
+						subscriptionId, endpoint);
+			} catch (RuntimeException exception) {
+				return SubscriptionOpenResult.TERMINAL_PREFLIGHT_FAILED;
+			}
 			// Two-phase when a localizer is configured: reserve only the cap,
 			// release every lock, retain the original request deadline, create
 			// the context and pre-render the localized terminal metadata, and
@@ -6892,8 +6901,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					&& publicRequestContext().isPresent();
 			SubscriptionRegistration capReservation = null;
 			Object localizationInvalidationToken = null;
-			McpJsonRpcMessage.ResultResponse localizedTerminal = null;
 			Optional<String> contentLanguage = Optional.empty();
+			boolean terminalPreflightComplete = false;
 
 			if (localizeTerminal) {
 				SubscriptionCapReservation cap = reserveSubscriptionCap(
@@ -6910,7 +6919,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 				try {
 					outcome = localizeSubscriptionTerminal(endpointPolicy,
-							protocolProfile, subscriptionId, endpoint, this);
+							preRenderedTerminal, this);
 				} catch (RuntimeException exception) {
 					outcome = null;
 				}
@@ -6923,15 +6932,26 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					return SubscriptionOpenResult.LOCALIZATION_FAILED;
 				}
 				contentLanguage = outcome.contentLanguage();
+				terminalPreflightComplete = outcome.disposition()
+						== McpRuntimeCatalogLocalizer.Disposition.CANONICAL;
 
 				if (outcome.disposition()
 						== McpRuntimeCatalogLocalizer.Disposition.LOCALIZED)
-					localizedTerminal = new McpJsonRpcMessage.ResultResponse(
+					preRenderedTerminal = new McpJsonRpcMessage.ResultResponse(
 							subscriptionId, McpWireResult.withPrecomputedJsonObject(
-									subscriptionTerminalResponse(protocolProfile,
-											subscriptionId, endpoint).result(),
+									preRenderedTerminal.result(),
 									outcome.document()),
 							McpJsonObject.empty());
+			}
+
+			if (!terminalPreflightComplete) {
+				try {
+					envelopeCodec.encode(preRenderedTerminal);
+				} catch (RuntimeException exception) {
+					if (capReservation != null)
+						removeSubscription(this, capReservation);
+					return SubscriptionOpenResult.TERMINAL_PREFLIGHT_FAILED;
+				}
 			}
 			SubscriptionOpenReservation reservation;
 			try {
@@ -6969,7 +6989,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						preRenderedSubscriptionTerminal = activation
 								== SubscriptionActivationResult
 								.ACTIVATED_CURRENT_LOCALIZATION
-								? localizedTerminal : null;
+								? preRenderedTerminal : null;
 				}
 			}
 			markLifecycleTransportStarted();
@@ -8673,7 +8693,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		CAPACITY_REJECTED,
 		SERVER_STOPPING,
 		TERMINATED,
-		LOCALIZATION_FAILED
+		LOCALIZATION_FAILED,
+		TERMINAL_PREFLIGHT_FAILED
 	}
 
 	private enum SubscriptionActivationResult {

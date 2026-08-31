@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.internal.mcp.protocol.McpCursorLimit;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -119,9 +120,11 @@ public sealed interface McpServer permits DefaultMcpServer {
 
 	/**
 	 * Returns the maximum UTF-8 encoded size of an incoming or outgoing
-	 * application cursor.
+	 * application cursor. The value is in the range {@code 1..174762}; the
+	 * upper bound keeps every individually in-bound cursor representable after
+	 * worst-case JSON escaping.
 	 *
-	 * @return positive cursor-size limit in bytes
+	 * @return cursor-size limit in bytes
 	 */
 	@NonNull Integer getMaximumCursorSizeInBytes();
 
@@ -188,7 +191,6 @@ public sealed interface McpServer permits DefaultMcpServer {
 	 */
 	@NotThreadSafe
 	final class Builder {
-		private static final int DEFAULT_MAXIMUM_CURSOR_SIZE_IN_BYTES = 4_096;
 		private static final int DEFAULT_MAXIMUM_SUBSCRIPTIONS_PER_PRINCIPAL = 32;
 		private static final int DEFAULT_REQUEST_HANDLER_CONCURRENCY = 32;
 		private static final int DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY = 128;
@@ -256,7 +258,8 @@ public sealed interface McpServer permits DefaultMcpServer {
 
 		private Builder(int port) {
 			this.port = port;
-			this.maximumCursorSizeInBytes = DEFAULT_MAXIMUM_CURSOR_SIZE_IN_BYTES;
+			this.maximumCursorSizeInBytes =
+					McpCursorLimit.DEFAULT_MAXIMUM_SIZE_IN_BYTES;
 			this.maximumSubscriptionsPerPrincipal =
 					DEFAULT_MAXIMUM_SUBSCRIPTIONS_PER_PRINCIPAL;
 			this.requestHandlerConcurrency = DEFAULT_REQUEST_HANDLER_CONCURRENCY;
@@ -324,21 +327,24 @@ public sealed interface McpServer permits DefaultMcpServer {
 
 		/**
 		 * Sets the maximum UTF-8 encoded size of an incoming or outgoing
-		 * application cursor. The default is {@code 4096} bytes.
+		 * application cursor. The default is {@code 4096} bytes and the maximum
+		 * supported value is {@code 174762} bytes. The hard ceiling accounts for
+		 * worst-case JSON escaping so an individually in-bound cursor remains
+		 * representable by Soklet's strict request and response JSON profiles.
 		 *
-		 * @param maximumCursorSizeInBytes positive cursor-size limit in bytes
+		 * @param maximumCursorSizeInBytes positive cursor-size limit of at most
+		 *                                 {@code 174762} bytes
 		 * @return this builder
 		 * @throws NullPointerException if {@code maximumCursorSizeInBytes} is null
-		 * @throws IllegalArgumentException if the limit is not positive
+		 * @throws IllegalArgumentException if the limit is outside the supported
+		 *                                  range
 		 */
 		@NonNull
 		public Builder maximumCursorSizeInBytes(
 				@NonNull Integer maximumCursorSizeInBytes) {
-			requireNonNull(maximumCursorSizeInBytes);
-			if (maximumCursorSizeInBytes < 1)
-				throw new IllegalArgumentException(
-						"MCP maximum cursor size must be positive.");
-			this.maximumCursorSizeInBytes = maximumCursorSizeInBytes;
+			this.maximumCursorSizeInBytes =
+					McpCursorLimit.requireSupportedMaximumSizeInBytes(
+							requireNonNull(maximumCursorSizeInBytes));
 			return this;
 		}
 

@@ -1,0 +1,721 @@
+{
+  "decisions": [
+    {
+      "accounting": [
+        "Cursor limits count decoded UTF-8 bytes before application dispatch and after application return.",
+        "The hard cursor ceiling is floor(production JSON token characters divided by six-character worst-case escaping).",
+        "One SSE frame retains the exact JSON bytes plus an eight-byte data-frame envelope; regular and terminal lanes are independent."
+      ],
+      "adversarialTests": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpCursorValidatorTests.java#reviewedCeilingExactlyFitsWorstCaseJsonEscaping",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java#dynamic_list_preserves_opaque_cursors_and_bounds_utf8_before_admission"
+      ],
+      "boundaryTests": [
+        "src/test/java/com/soklet/McpResourceRegistrationTests.java#serverCursorLimitUsesTheReviewedJsonWireRange",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java#strictJsonWriterEnforcesExactUtf8OutputBytes",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpStreamTests.java#sseFrameCapacityIncludesExactJsonEnvelopeAndFramingBytes"
+      ],
+      "crossJdkGates": [
+        "candidate-build",
+        "core-jdk-21",
+        "core-jdk-25"
+      ],
+      "finiteBoundIds": [
+        "FINITE-CURSOR-001",
+        "FINITE-QUEUE-STREAM-002"
+      ],
+      "id": "LIMITS-CURSOR-ADJACENT-OUTPUT",
+      "productionOwners": [
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpCursorLimit.java",
+          "member": "DEFAULT_MAXIMUM_SIZE_IN_BYTES/MAXIMUM_SUPPORTED_SIZE_IN_BYTES",
+          "owner": "com.soklet.internal.mcp.protocol.McpCursorLimit"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "member": "productionDefaults",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java",
+          "member": "McpRequestSseStream",
+          "owner": "com.soklet.internal.mcp.protocol.McpRequestSseStream"
+        }
+      ],
+      "rationale": "The existing opaque cursor default remains compatible while configuration cannot admit a value whose worst-case JSON wire form exceeds the production token bound.",
+      "topic": "CURSOR_ADJACENT_OUTPUT",
+      "values": [
+        {
+          "key": "cursor-default-bytes",
+          "unit": "UTF8_BYTES",
+          "value": "4096"
+        },
+        {
+          "key": "cursor-hard-bytes",
+          "unit": "UTF8_BYTES",
+          "value": "174762"
+        },
+        {
+          "key": "json-output-bytes",
+          "unit": "UTF8_BYTES",
+          "value": "4194304"
+        },
+        {
+          "key": "json-string-characters",
+          "unit": "UTF16_CODE_UNITS",
+          "value": "1048576"
+        },
+        {
+          "key": "json-token-characters",
+          "unit": "UTF16_CODE_UNITS",
+          "value": "1048576"
+        },
+        {
+          "key": "regular-lane-bytes",
+          "unit": "BYTES",
+          "value": "4194312"
+        },
+        {
+          "key": "sse-frame-bytes",
+          "unit": "BYTES",
+          "value": "4194312"
+        },
+        {
+          "key": "terminal-lane-bytes",
+          "unit": "BYTES",
+          "value": "4194312"
+        }
+      ]
+    },
+    {
+      "accounting": [
+        "Number length counts raw JSON token UTF-16 code units, including sign, decimal point, exponent marker, and exponent sign.",
+        "Exponent magnitude is the absolute parsed decimal exponent and is independent of token length.",
+        "Production defaults and implementation hard ceilings are inclusive."
+      ],
+      "adversarialTests": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java#strictJsonParserRejectsExponentBeyondMagnitudeLimit",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java#strictJsonParserRejectsNumberBeyondLengthLimit"
+      ],
+      "boundaryTests": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java#productionJsonLimitsAndHardCeilingsAreFrozen",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java#strictJsonParserAcceptsMaximumExponentMagnitude"
+      ],
+      "crossJdkGates": [
+        "candidate-build",
+        "core-jdk-21",
+        "core-jdk-25"
+      ],
+      "finiteBoundIds": [
+        "FINITE-JSON-001"
+      ],
+      "id": "LIMITS-NUMERIC-PARSER",
+      "productionOwners": [
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonCodec.java",
+          "member": "Parser.parseNumber",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonCodec"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "member": "productionDefaults/maximumSupported",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        }
+      ],
+      "rationale": "Separate token-length and exponent-magnitude ceilings prevent pathological decimal parsing while preserving ordinary arbitrary-precision MCP numbers.",
+      "topic": "NUMERIC_PARSER",
+      "values": [
+        {
+          "key": "exponent-magnitude-hard",
+          "unit": "INTEGER",
+          "value": "100000"
+        },
+        {
+          "key": "exponent-magnitude-production",
+          "unit": "INTEGER",
+          "value": "10000"
+        },
+        {
+          "key": "number-characters-hard",
+          "unit": "UTF16_CODE_UNITS",
+          "value": "4096"
+        },
+        {
+          "key": "number-characters-production",
+          "unit": "UTF16_CODE_UNITS",
+          "value": "1024"
+        }
+      ]
+    },
+    {
+      "accounting": [
+        "Compiler counts are charged before retaining nodes, keywords, anchors, references, pointer segments, and collection entries.",
+        "Evaluator operation and traversal budgets are per evaluation; pending tasks are the active iterative-call stack.",
+        "Diagnostic truncation is separately bounded and never changes an invalid evaluation into a valid one."
+      ],
+      "adversarialTests": [
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileLimitTests.java#diagnosticTruncationSkipsLaterDiagnosticConstruction",
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileLimitTests.java#objectAndPointerWorkIsChargedBeforeBoundedAllocations"
+      ],
+      "boundaryTests": [
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileLimitTests.java#collectionAndNameLimitsAcceptTheirBoundaryAndRejectOneOver",
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileLimitTests.java#compilationLimitsAcceptTheirBoundaryAndRejectOneOver",
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileLimitTests.java#hardEvaluationLimitsHaveExactBoundaries",
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileLimitTests.java#maximumPendingDepthCompletesAndOneOverFailsTyped",
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileLimitTests.java#pointerSegmentLengthAcceptsItsBoundaryAndRejectsOneOver",
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileLimitTests.java#productionAndHardSchemaDepthHaveExactBoundaries"
+      ],
+      "crossJdkGates": [
+        "candidate-build",
+        "core-jdk-21",
+        "core-jdk-25"
+      ],
+      "finiteBoundIds": [
+        "FINITE-PROFILE1-COMPILER-001",
+        "FINITE-PROFILE1-EVALUATOR-001"
+      ],
+      "id": "LIMITS-SCHEMA-COMPILER-EVALUATOR",
+      "productionOwners": [
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java",
+          "member": "productionDefaults/maximumSupported",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaCompilationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java",
+          "member": "productionDefaults/maximumSupported",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaEvaluationLimits"
+        }
+      ],
+      "rationale": "Production and hard limits leave large headroom above the selected corpus while making compilation, evaluation, recursion, and diagnostics finite and deterministic.",
+      "topic": "SCHEMA_COMPILER_EVALUATOR",
+      "values": [
+        {
+          "key": "compiler-anchor-name-characters-hard",
+          "unit": "UTF16_CODE_UNITS",
+          "value": "4096"
+        },
+        {
+          "key": "compiler-anchor-name-characters-production",
+          "unit": "UTF16_CODE_UNITS",
+          "value": "256"
+        },
+        {
+          "key": "compiler-anchors-hard",
+          "unit": "ANCHORS",
+          "value": "65536"
+        },
+        {
+          "key": "compiler-anchors-production",
+          "unit": "ANCHORS",
+          "value": "1024"
+        },
+        {
+          "key": "compiler-collection-entries-hard",
+          "unit": "ENTRIES",
+          "value": "65536"
+        },
+        {
+          "key": "compiler-collection-entries-production",
+          "unit": "ENTRIES",
+          "value": "4096"
+        },
+        {
+          "key": "compiler-depth-hard",
+          "unit": "LEVELS",
+          "value": "256"
+        },
+        {
+          "key": "compiler-depth-production",
+          "unit": "LEVELS",
+          "value": "64"
+        },
+        {
+          "key": "compiler-keywords-hard",
+          "unit": "KEYWORDS",
+          "value": "524288"
+        },
+        {
+          "key": "compiler-keywords-production",
+          "unit": "KEYWORDS",
+          "value": "32768"
+        },
+        {
+          "key": "compiler-name-characters-hard",
+          "unit": "UTF16_CODE_UNITS",
+          "value": "16384"
+        },
+        {
+          "key": "compiler-name-characters-production",
+          "unit": "UTF16_CODE_UNITS",
+          "value": "1024"
+        },
+        {
+          "key": "compiler-nodes-hard",
+          "unit": "NODES",
+          "value": "65536"
+        },
+        {
+          "key": "compiler-nodes-production",
+          "unit": "NODES",
+          "value": "4096"
+        },
+        {
+          "key": "compiler-pointer-segment-characters-hard",
+          "unit": "UTF16_CODE_UNITS",
+          "value": "16384"
+        },
+        {
+          "key": "compiler-pointer-segment-characters-production",
+          "unit": "UTF16_CODE_UNITS",
+          "value": "1024"
+        },
+        {
+          "key": "compiler-pointer-segments-hard",
+          "unit": "SEGMENTS",
+          "value": "512"
+        },
+        {
+          "key": "compiler-pointer-segments-production",
+          "unit": "SEGMENTS",
+          "value": "128"
+        },
+        {
+          "key": "compiler-reference-characters-hard",
+          "unit": "UTF16_CODE_UNITS",
+          "value": "65536"
+        },
+        {
+          "key": "compiler-reference-characters-production",
+          "unit": "UTF16_CODE_UNITS",
+          "value": "4096"
+        },
+        {
+          "key": "compiler-references-hard",
+          "unit": "REFERENCES",
+          "value": "65536"
+        },
+        {
+          "key": "compiler-references-production",
+          "unit": "REFERENCES",
+          "value": "4096"
+        },
+        {
+          "key": "evaluator-diagnostic-bytes-hard",
+          "unit": "UTF8_BYTES",
+          "value": "1048576"
+        },
+        {
+          "key": "evaluator-diagnostic-bytes-production",
+          "unit": "UTF8_BYTES",
+          "value": "65536"
+        },
+        {
+          "key": "evaluator-diagnostics-hard",
+          "unit": "DIAGNOSTICS",
+          "value": "1000"
+        },
+        {
+          "key": "evaluator-diagnostics-production",
+          "unit": "DIAGNOSTICS",
+          "value": "100"
+        },
+        {
+          "key": "evaluator-operations-hard",
+          "unit": "OPERATIONS",
+          "value": "10000000"
+        },
+        {
+          "key": "evaluator-operations-production",
+          "unit": "OPERATIONS",
+          "value": "1000000"
+        },
+        {
+          "key": "evaluator-pending-tasks-hard",
+          "unit": "TASKS",
+          "value": "256"
+        },
+        {
+          "key": "evaluator-pending-tasks-production",
+          "unit": "TASKS",
+          "value": "128"
+        },
+        {
+          "key": "evaluator-reference-traversals-hard",
+          "unit": "TRAVERSALS",
+          "value": "1000000"
+        },
+        {
+          "key": "evaluator-reference-traversals-production",
+          "unit": "TRAVERSALS",
+          "value": "100000"
+        }
+      ]
+    },
+    {
+      "accounting": [
+        "Public result conversion counts root depth and JSON value nodes before retaining child containers.",
+        "The final serializer enforces aggregate UTF-8 output bytes independently of tree shape.",
+        "Binary scalar and aggregate Base64 character budgets are charged before encoding materialization."
+      ],
+      "adversarialTests": [
+        "src/test/java/com/soklet/McpToolOutputSanitizerPublicRuntimeTests.java#applicationResultBoundsFailClosedWithoutLeaksAndServerRecovers",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpStaticResponsePreflightTests.java#every_framework_owned_catalog_is_preflighted"
+      ],
+      "boundaryTests": [
+        "src/test/java/com/soklet/McpResourcePublicRuntimeTests.java#blobOutputHonorsTheProductionJsonStringBound",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpPublicJsonValueConverterTests.java#exactCodecValidationAcceptsOutputByteBoundaryAndRejectsOneOver",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpPublicJsonValueConverterTests.java#preflightAcceptsDepthBoundaryAndRejectsOneOver",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpPublicJsonValueConverterTests.java#preflightAcceptsNodeBoundaryAndRejectsOneOver",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeBoundaryTests.java#actualSubscriptionIdMustFitTerminalBeforeAcknowledgementCommit"
+      ],
+      "crossJdkGates": [
+        "candidate-build",
+        "core-jdk-21",
+        "core-jdk-25"
+      ],
+      "finiteBoundIds": [
+        "FINITE-OUTPUT-001",
+        "FINITE-SERIALIZED-RESULT-001"
+      ],
+      "id": "LIMITS-SERIALIZED-RESULT",
+      "productionOwners": [
+        {
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "member": "MAXIMUM_BASE64_CHARACTERS/MAXIMUM_AGGREGATE_BASE64_CHARACTERS",
+          "owner": "com.soklet.DefaultMcpServer"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "member": "productionDefaults",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpPublicJsonValueConverter.java",
+          "member": "PRODUCTION_LIMITS",
+          "owner": "com.soklet.internal.mcp.protocol.McpPublicJsonValueConverter"
+        }
+      ],
+      "rationale": "Every application and framework result is bounded structurally and on its exact wire form; binary output has pre-materialization scalar and aggregate ceilings.",
+      "topic": "SERIALIZED_RESULT",
+      "values": [
+        {
+          "key": "aggregate-base64-characters",
+          "unit": "ASCII_CHARACTERS",
+          "value": "4194304"
+        },
+        {
+          "key": "base64-characters-per-scalar",
+          "unit": "ASCII_CHARACTERS",
+          "value": "1048576"
+        },
+        {
+          "key": "localization-lookups-default",
+          "unit": "LOOKUPS",
+          "value": "32768"
+        },
+        {
+          "key": "localization-lookups-hard",
+          "unit": "LOOKUPS",
+          "value": "100000"
+        },
+        {
+          "key": "raw-binary-bytes-per-scalar",
+          "unit": "BYTES",
+          "value": "786432"
+        },
+        {
+          "key": "result-depth",
+          "unit": "LEVELS",
+          "value": "128"
+        },
+        {
+          "key": "result-nodes",
+          "unit": "NODES",
+          "value": "100000"
+        },
+        {
+          "key": "result-output-bytes",
+          "unit": "UTF8_BYTES",
+          "value": "4194304"
+        },
+        {
+          "key": "simulation-captured-bytes",
+          "unit": "BYTES",
+          "value": "10485760"
+        }
+      ]
+    },
+    {
+      "accounting": [
+        "The aggregate request ceiling is body bytes plus header bytes plus request-target bytes plus 1024 framing bytes.",
+        "Header count includes transport fields parsed by the listener; header bytes include the terminating empty line.",
+        "Direct transport write, shutdown, and stream defaults are distinct from effective public-server subscription defaults."
+      ],
+      "adversarialTests": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpTransportMetricsEventRuntimeTests.java#maximumConnectionCapacityRejectsOnlyAndRecoversAfterRelease",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpTransportMetricsEventRuntimeTests.java#partialRequestBodyTimeoutIsRecordedAtTheMcpBoundary"
+      ],
+      "boundaryTests": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java#directTransportDefaultsAndAggregateAccountingAreFrozen",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java#headerCountAndEncodedByteLimitsHaveExactListenerBoundaries",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java#request_body_limit_has_an_exact_body_only_boundary"
+      ],
+      "crossJdkGates": [
+        "candidate-build",
+        "core-jdk-21",
+        "core-jdk-25"
+      ],
+      "finiteBoundIds": [
+        "FINITE-BODY-001",
+        "FINITE-CONNECTION-001",
+        "FINITE-HEADER-001",
+        "FINITE-QUEUE-STREAM-001",
+        "FINITE-TIME-001"
+      ],
+      "id": "LIMITS-TRANSPORT",
+      "productionOwners": [
+        {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "member": "Builder operational defaults",
+          "owner": "com.soklet.McpServer.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
+          "member": "productionDefaults",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java",
+          "member": "toTransportConfiguration",
+          "owner": "com.soklet.internal.mcp.protocol.McpServerRuntimeBridge"
+        }
+      ],
+      "rationale": "The listener has finite socket, parser, worker, queue, byte, and time ownership, and the public bridge deliberately replaces three lower-level defaults.",
+      "topic": "TRANSPORT",
+      "values": [
+        {
+          "key": "accept-backlog",
+          "unit": "CONNECTIONS",
+          "value": "8192"
+        },
+        {
+          "key": "connection-writer-concurrency",
+          "unit": "WORKERS",
+          "value": "1"
+        },
+        {
+          "key": "direct-shutdown-timeout-nanos",
+          "unit": "NANOSECONDS",
+          "value": "5000000000"
+        },
+        {
+          "key": "direct-stream-queue-capacity",
+          "unit": "FRAMES",
+          "value": "64"
+        },
+        {
+          "key": "direct-write-idle-timeout-nanos",
+          "unit": "NANOSECONDS",
+          "value": "60000000000"
+        },
+        {
+          "key": "effective-keep-alive-interval-nanos",
+          "unit": "NANOSECONDS",
+          "value": "15000000000"
+        },
+        {
+          "key": "effective-shutdown-timeout-nanos",
+          "unit": "NANOSECONDS",
+          "value": "30000000000"
+        },
+        {
+          "key": "effective-stream-queue-capacity",
+          "unit": "FRAMES",
+          "value": "128"
+        },
+        {
+          "key": "effective-write-idle-timeout-nanos",
+          "unit": "NANOSECONDS",
+          "value": "30000000000"
+        },
+        {
+          "key": "http-framing-allowance-bytes",
+          "unit": "WIRE_BYTES",
+          "value": "1024"
+        },
+        {
+          "key": "maximum-aggregate-request-bytes",
+          "unit": "WIRE_BYTES",
+          "value": "4269056"
+        },
+        {
+          "key": "maximum-connections",
+          "unit": "CONNECTIONS",
+          "value": "8192"
+        },
+        {
+          "key": "maximum-header-bytes",
+          "unit": "WIRE_BYTES",
+          "value": "65536"
+        },
+        {
+          "key": "maximum-header-count",
+          "unit": "HEADER_FIELDS",
+          "value": "100"
+        },
+        {
+          "key": "maximum-request-body-bytes",
+          "unit": "BYTES",
+          "value": "4194304"
+        },
+        {
+          "key": "maximum-request-target-bytes",
+          "unit": "ASCII_BYTES",
+          "value": "8192"
+        },
+        {
+          "key": "read-buffer-bytes",
+          "unit": "BYTES_PER_CONNECTION",
+          "value": "65536"
+        },
+        {
+          "key": "request-body-timeout-nanos",
+          "unit": "NANOSECONDS",
+          "value": "60000000000"
+        },
+        {
+          "key": "request-header-timeout-nanos",
+          "unit": "NANOSECONDS",
+          "value": "60000000000"
+        },
+        {
+          "key": "request-processor-concurrency",
+          "unit": "TASKS",
+          "value": "32"
+        },
+        {
+          "key": "request-processor-queue-capacity",
+          "unit": "TASKS",
+          "value": "128"
+        },
+        {
+          "key": "selector-resolution-nanos",
+          "unit": "NANOSECONDS",
+          "value": "100000000"
+        }
+      ]
+    },
+    {
+      "accounting": [
+        "All byte ceilings are inclusive and are measured after the encoding named by the value row.",
+        "Match cells and overlap states are charged before the next bounded work item is retained.",
+        "The annotated exact-URI ceiling is separately constrained by class-file string representation."
+      ],
+      "adversarialTests": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java#maximum_shape_level_one_template_matching_is_bounded",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java#shared_prefix_routes_fail_before_exceeding_aggregate_match_work"
+      ],
+      "boundaryTests": [
+        "src/test/java/com/soklet/McpAnnotationProcessorValidationTests.java#annotatedExactResourceUrisStopAtTheClassFileStringBoundaryWithoutCascades",
+        "src/test/java/com/soklet/McpResourcePublicRuntimeTests.java#publicResourceRoutingEnforcesExactFiniteUriBounds",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java#endpointPathBoundMatchesAndReachesTheProductionListener",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java#endpoint_overlap_search_accepts_exact_total_budget_and_fails_closed_one_over",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java#overlap_search_accepts_exact_state_budget_and_fails_closed_one_over",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpResourceProtocolTests.java#resource_uri_and_template_bounds_accept_exact_limits_and_reject_one_over"
+      ],
+      "crossJdkGates": [
+        "candidate-build",
+        "core-jdk-21",
+        "core-jdk-25"
+      ],
+      "finiteBoundIds": [
+        "FINITE-URI-TEMPLATE-001"
+      ],
+      "id": "LIMITS-URI-TEMPLATE",
+      "productionOwners": [
+        {
+          "file": "src/main/java/com/soklet/SokletProcessor.java",
+          "member": "MAXIMUM_MCP_*RESOURCE_URI*",
+          "owner": "com.soklet.SokletProcessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpEndpointPathLimit.java",
+          "member": "MAXIMUM_REQUEST_TARGET_BYTES",
+          "owner": "com.soklet.internal.mcp.protocol.McpEndpointPathLimit"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpNormalizedResourceDescriptor.java",
+          "member": "McpLevelOneUriTemplate.MAXIMUM_*",
+          "owner": "com.soklet.internal.mcp.protocol.McpLevelOneUriTemplate"
+        }
+      ],
+      "rationale": "The selected Level 1 grammar has finite registration, expansion, match, and overlap work while retaining large exact runtime URIs and class-file-safe annotated URIs.",
+      "topic": "URI_TEMPLATE",
+      "values": [
+        {
+          "key": "annotated-exact-uri-bytes",
+          "unit": "UTF8_BYTES",
+          "value": "65534"
+        },
+        {
+          "key": "match-dynamic-programming-cells",
+          "unit": "CELLS_PER_REQUEST",
+          "value": "8388608"
+        },
+        {
+          "key": "overlap-states-per-endpoint",
+          "unit": "STATES_PER_ENDPOINT",
+          "value": "1048576"
+        },
+        {
+          "key": "overlap-states-per-pair",
+          "unit": "STATES_PER_PAIR",
+          "value": "65536"
+        },
+        {
+          "key": "request-target-bytes",
+          "unit": "ASCII_BYTES",
+          "value": "8192"
+        },
+        {
+          "key": "runtime-exact-uri-bytes",
+          "unit": "UTF8_BYTES",
+          "value": "1048576"
+        },
+        {
+          "key": "template-routed-uri-bytes",
+          "unit": "UTF8_BYTES",
+          "value": "65535"
+        },
+        {
+          "key": "template-source-or-expansion-bytes",
+          "unit": "UTF8_BYTES",
+          "value": "8192"
+        },
+        {
+          "key": "templates-per-endpoint",
+          "unit": "TEMPLATES",
+          "value": "256"
+        },
+        {
+          "key": "variable-name-bytes",
+          "unit": "UTF8_BYTES",
+          "value": "128"
+        },
+        {
+          "key": "variables-per-template",
+          "unit": "VARIABLES",
+          "value": "32"
+        }
+      ]
+    }
+  ],
+  "formatVersion": 1,
+  "numericBoundsAuthority": {
+    "path": "../mcp/PROFILE_1_NUMERIC_BOUNDS.md",
+    "sha256": "9477f26dd0d2bbc2f790b8428dd5ad5de7f9d672ba152cfd33fbbf0ae6a78b70"
+  },
+  "productionProfile": "2026-07-28",
+  "releaseTarget": "4.0.0"
+}

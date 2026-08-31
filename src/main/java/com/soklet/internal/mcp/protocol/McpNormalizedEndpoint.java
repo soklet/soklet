@@ -319,7 +319,8 @@ final class McpNormalizedEndpoint {
 			this.resourceListCachePolicy = McpResourceCachePolicy.privateNoCache();
 			this.resourceTemplateListCachePolicy =
 					McpResourceCachePolicy.privateNoCache();
-			this.maximumCursorSizeInBytes = 4_096;
+			this.maximumCursorSizeInBytes =
+					McpCursorLimit.DEFAULT_MAXIMUM_SIZE_IN_BYTES;
 			this.subscriptions = Optional.empty();
 		}
 
@@ -447,10 +448,9 @@ final class McpNormalizedEndpoint {
 
 		@NonNull
 		Builder maximumCursorSizeInBytes(int maximumCursorSizeInBytes) {
-			if (maximumCursorSizeInBytes < 1)
-				throw new IllegalArgumentException(
-						"Maximum cursor size must be positive.");
-			this.maximumCursorSizeInBytes = maximumCursorSizeInBytes;
+			this.maximumCursorSizeInBytes =
+					McpCursorLimit.requireSupportedMaximumSizeInBytes(
+							maximumCursorSizeInBytes);
 			return this;
 		}
 

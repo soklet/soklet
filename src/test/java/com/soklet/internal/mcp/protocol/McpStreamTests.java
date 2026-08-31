@@ -245,6 +245,63 @@ public class McpStreamTests {
 		}
 	}
 
+	@Test
+	public void sseFrameCapacityIncludesExactJsonEnvelopeAndFramingBytes() {
+		McpJsonRpcMessage.Notification notification =
+				new McpJsonRpcMessage.Notification("notifications/test",
+						Optional.empty(), McpJsonObject.empty());
+		int jsonBytes = ENVELOPE_CODEC.encode(notification).length;
+		McpJsonLimits exactLimits = limitsWithOutputBytes(jsonBytes);
+		McpRequestSseStream exact = new McpRequestSseStream(1, exactLimits,
+				new McpJsonRpcEnvelopeCodec(new McpJsonCodec(exactLimits)),
+				() -> 0L, NO_OP_OUTBOUND_LISTENER);
+
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED,
+				exact.offerMessage(notification));
+		McpOutboundChannel.Snapshot snapshot = exact.snapshot().orElseThrow();
+		Assertions.assertEquals(jsonBytes + 8, snapshot.byteCapacity());
+		Assertions.assertEquals(jsonBytes + 8,
+				snapshot.terminalByteCapacity());
+		Assertions.assertEquals(jsonBytes + 8, snapshot.bufferedBytes());
+
+		McpJsonLimits oneUnderLimits = limitsWithOutputBytes(jsonBytes - 1);
+		McpRequestSseStream oneUnder = new McpRequestSseStream(1,
+				oneUnderLimits, new McpJsonRpcEnvelopeCodec(
+						new McpJsonCodec(oneUnderLimits)), () -> 0L,
+				NO_OP_OUTBOUND_LISTENER);
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> oneUnder.offerMessage(notification));
+		Assertions.assertEquals(0,
+				oneUnder.snapshot().orElseThrow().bufferedBytes());
+	}
+
+	private static final McpOutboundChannel.Listener NO_OP_OUTBOUND_LISTENER =
+			new McpOutboundChannel.Listener() {
+				@Override
+				public void didWrite(long byteCount, long timestampNanos) {
+				}
+
+				@Override
+				public void didApplyBackpressure() {
+				}
+
+				@Override
+				public void didTerminate(@NonNull StreamTerminationReason reason,
+						@Nullable Throwable cause) {
+				}
+			};
+
+	private static McpJsonLimits limitsWithOutputBytes(int maximumOutputBytes) {
+		McpJsonLimits defaults = McpJsonLimits.productionDefaults();
+		return new McpJsonLimits(defaults.maximumInputBytes(),
+				defaults.maximumNestingDepth(),
+				defaults.maximumTokenLengthInCharacters(),
+				defaults.maximumStringLengthInCharacters(),
+				defaults.maximumNumberLengthInCharacters(),
+				defaults.maximumExponentMagnitude(), defaults.maximumNodeCount(),
+				maximumOutputBytes);
+	}
+
 	private static Soklet managedSoklet(McpServer server) {
 		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(

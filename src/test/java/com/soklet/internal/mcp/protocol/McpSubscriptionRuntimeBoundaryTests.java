@@ -142,6 +142,65 @@ public class McpSubscriptionRuntimeBoundaryTests {
 	}
 
 	@Test
+	public void actualSubscriptionIdMustFitTerminalBeforeAcknowledgementCommit()
+			throws Exception {
+		TestEventSource source = new TestEventSource();
+		McpSubscriptionRuntimeConfiguration configuration =
+				new McpSubscriptionRuntimeConfiguration(4,
+						Duration.ofSeconds(10), Duration.ofSeconds(1),
+						Duration.ofSeconds(5), 1, Duration.ofMinutes(1));
+		McpHttpServerRuntime runtime = runtime(MCP_PATH, source,
+				McpRuntimeObservationSink.disabledInstance(),
+				McpApplicationClock.SYSTEM, configuration,
+				limitsWithOutputBytes(1_024));
+		String escapedSubscriptionId = "\\u0000".repeat(100);
+		// The acknowledgment carries the ID once and fits; the terminal carries
+		// it twice and cannot fit. SSE framing contributes eight additional bytes.
+		Assertions.assertEquals(780, acknowledgment(escapedSubscriptionId)
+				.getBytes(StandardCharsets.UTF_8).length - 8);
+		Assertions.assertEquals(1_416, terminal(escapedSubscriptionId)
+				.getBytes(StandardCharsets.UTF_8).length - 8);
+
+		try {
+			int port = runtime.start().getPort();
+			try (McpChunkedHttpClient client = listen(port,
+					escapedSubscriptionId)) {
+				McpChunkedHttpClient.HttpResponseHead head = client.readHead();
+				Assertions.assertEquals(500, head.status(), head.raw());
+				Assertions.assertEquals("application/json",
+						head.singleHeader("Content-Type"));
+				Assertions.assertFalse(head.hasHeader("Transfer-Encoding"),
+						head.raw());
+				String body = client.readFixedBody(head);
+				Assertions.assertEquals("{\"jsonrpc\":\"2.0\",\"id\":\""
+						+ escapedSubscriptionId
+						+ "\",\"error\":{\"code\":-32603,"
+						+ "\"message\":\"Internal error\"}}", body);
+				Assertions.assertTrue(body.getBytes(StandardCharsets.UTF_8).length
+						< 1_024, body);
+				Assertions.assertFalse(body.contains(
+						"notifications/subscriptions/acknowledged"), body);
+			}
+
+			awaitClean(runtime);
+			Assertions.assertEquals(0,
+					runtime.diagnosticsSnapshot().activeSubscriptions());
+
+			try (McpChunkedHttpClient recovered = listen(port,
+					"terminal-preflight-recovery")) {
+				assertSseHead(recovered.readHead());
+				Assertions.assertEquals(
+						acknowledgment("terminal-preflight-recovery"),
+						recovered.readChunkText());
+				recovered.closeWithReset();
+			}
+			awaitClean(runtime);
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
 	public void eventPublishedDuringResponseHandoffFollowsAcknowledgment()
 			throws Exception {
 		TestEventSource source = new TestEventSource();
@@ -1116,8 +1175,19 @@ public class McpSubscriptionRuntimeBoundaryTests {
 			@NonNull McpRuntimeObservationSink observations,
 			@NonNull McpApplicationClock clock,
 			@NonNull McpSubscriptionRuntimeConfiguration configuration) {
+		return runtime(path, source, observations, clock, configuration,
+				McpJsonLimits.productionDefaults());
+	}
+
+	@NonNull
+	private static McpHttpServerRuntime runtime(@NonNull String path,
+			@NonNull TestEventSource source,
+			@NonNull McpRuntimeObservationSink observations,
+			@NonNull McpApplicationClock clock,
+			@NonNull McpSubscriptionRuntimeConfiguration configuration,
+			@NonNull McpJsonLimits jsonLimits) {
 		return runtime(List.of(binding(path, source, observations)), clock,
-				configuration);
+				configuration, jsonLimits);
 	}
 
 	@NonNull
@@ -1125,6 +1195,16 @@ public class McpSubscriptionRuntimeBoundaryTests {
 			@NonNull List<@NonNull McpHttpEndpointBinding> bindings,
 			@NonNull McpApplicationClock clock,
 			@NonNull McpSubscriptionRuntimeConfiguration configuration) {
+		return runtime(bindings, clock, configuration,
+				McpJsonLimits.productionDefaults());
+	}
+
+	@NonNull
+	private static McpHttpServerRuntime runtime(
+			@NonNull List<@NonNull McpHttpEndpointBinding> bindings,
+			@NonNull McpApplicationClock clock,
+			@NonNull McpSubscriptionRuntimeConfiguration configuration,
+			@NonNull McpJsonLimits jsonLimits) {
 		McpHttpTransportConfiguration defaults =
 				McpHttpTransportConfiguration.productionDefaults(0);
 		McpHttpTransportConfiguration transport = new McpHttpTransportConfiguration(
@@ -1139,8 +1219,7 @@ public class McpSubscriptionRuntimeBoundaryTests {
 				defaults.requestProcessorConcurrency(),
 				defaults.requestProcessorQueueCapacity(),
 				configuration.streamQueueCapacity());
-		return new McpHttpServerRuntime(transport, bindings,
-				McpJsonLimits.productionDefaults(),
+		return new McpHttpServerRuntime(transport, bindings, jsonLimits,
 				McpApplicationExecutionConfiguration.productionDefaults(), clock,
 				McpApplicationHandlerExecutorFactory.production(),
 				ignored -> {}, ignored -> {}, Optional.empty(),
@@ -1183,6 +1262,18 @@ public class McpSubscriptionRuntimeBoundaryTests {
 		return new McpSubscriptionRuntimeConfiguration(queueCapacity,
 				Duration.ofSeconds(10), keepAliveInterval, shutdownTimeout,
 				2, maximumDuration);
+	}
+
+	@NonNull
+	private static McpJsonLimits limitsWithOutputBytes(int maximumOutputBytes) {
+		McpJsonLimits defaults = McpJsonLimits.productionDefaults();
+		return new McpJsonLimits(defaults.maximumInputBytes(),
+				defaults.maximumNestingDepth(),
+				defaults.maximumTokenLengthInCharacters(),
+				defaults.maximumStringLengthInCharacters(),
+				defaults.maximumNumberLengthInCharacters(),
+				defaults.maximumExponentMagnitude(), defaults.maximumNodeCount(),
+				maximumOutputBytes);
 	}
 
 	@NonNull

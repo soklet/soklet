@@ -19,6 +19,9 @@ package com.soklet.internal.mcp.schema;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -48,6 +51,22 @@ public class McpRuntimeEnumNameReaderTests {
 	}
 
 	@Test
+	void classFileReadAcceptsExactByteBoundaryAndRejectsOneOver()
+			throws IOException {
+		int maximumBytes = 16 * 1_024 * 1_024;
+		Assertions.assertEquals(maximumBytes,
+				McpRuntimeEnumNameReader.readBoundedClassFile(
+						new RepeatingInputStream(maximumBytes)).length);
+
+		IllegalArgumentException failure = Assertions.assertThrows(
+				IllegalArgumentException.class,
+				() -> McpRuntimeEnumNameReader.readBoundedClassFile(
+						new RepeatingInputStream(maximumBytes + 1)));
+		Assertions.assertEquals("Enum classfile metadata exceeds its size limit.",
+				failure.getMessage());
+	}
+
+	@Test
 	void rejectsResourceMetadataWhoseEnumNamesAreReordered() {
 		McpRuntimeEnumNameReader reader = new McpRuntimeEnumNameReader(3, 6);
 
@@ -70,6 +89,33 @@ public class McpRuntimeEnumNameReaderTests {
 
 		static {
 			ENUM_INITIALIZED.set(true);
+		}
+	}
+
+	private static final class RepeatingInputStream extends InputStream {
+		private int remaining;
+
+		private RepeatingInputStream(int remaining) {
+			this.remaining = remaining;
+		}
+
+		@Override
+		public int read() {
+			if (remaining == 0)
+				return -1;
+			--remaining;
+			return 0;
+		}
+
+		@Override
+		public int read(byte[] destination, int offset, int length)
+				throws IOException {
+			if (remaining == 0)
+				return -1;
+			int count = Math.min(remaining, length);
+			Arrays.fill(destination, offset, offset + count, (byte) 0);
+			remaining -= count;
+			return count;
 		}
 	}
 }

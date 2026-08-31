@@ -430,10 +430,12 @@ class McpTypedSchemaCoreTests {
 		assertFalse(safePath.contains("\t"));
 		assertFalse(safePath.indexOf((char) 0x202E) >= 0);
 
-		String boundedPath = McpTypedSchemaPath.root()
-				.property("x".repeat(10_000)).toString();
-		assertTrue(boundedPath.endsWith("..."), boundedPath);
-		assertTrue(boundedPath.length() <= 272, boundedPath);
+		String exactBoundedPath = McpTypedSchemaPath.root()
+				.property("x".repeat(256)).toString();
+		assertEquals("$/properties/" + "x".repeat(256), exactBoundedPath);
+		String oneOverBoundedPath = McpTypedSchemaPath.root()
+				.property("x".repeat(257)).toString();
+		assertEquals(exactBoundedPath + "...", oneOverBoundedPath);
 	}
 
 	private static FakeTypeModel standardModel() {

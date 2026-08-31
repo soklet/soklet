@@ -27,6 +27,16 @@
 
 ### Features
 
+- Bounded application-owned MCP cursors with one shared wire contract: the
+  existing 4,096-byte default is retained, while configuration is capped at
+  174,762 UTF-8 bytes so worst-case JSON escaping remains representable within
+  the production token limit. Incoming and outgoing cursor validation now use
+  the same reviewed range.
+- Subscription setup now exact-encodes the terminal response with the actual
+  request ID before committing the SSE acknowledgment. An ID whose one-copy
+  acknowledgment fits but whose two-copy terminal would exceed the JSON output
+  limit now receives the normal correlated internal-error response without
+  consuming subscription capacity.
 - Added a dedicated MCP 2026-07-28 Streamable HTTP server in core Soklet. It
   owns an independent listener and port, integrates with `SokletConfig`, and
   supports discovery as the first request without a session or initialization
