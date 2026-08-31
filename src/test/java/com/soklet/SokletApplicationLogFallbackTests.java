@@ -32,12 +32,19 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Timeout(value = 60, unit = TimeUnit.SECONDS)
 class SokletApplicationLogFallbackTests {
 	@Test
-	void fallbackIsBoundedValidUtf8AndDoesNotTraverseThrowableGraphs()
+	void fallbackIsBoundedValidUtf8AndEmitsOnlyTheThrowableClass()
 			throws Exception {
+		String messageCanary = "fallback-message-secret";
+		AtomicInteger messageReads = new AtomicInteger();
 		AtomicInteger stackTraceReads = new AtomicInteger();
 		AtomicInteger causeReads = new AtomicInteger();
-		Throwable failure = new Throwable(
-				"line\n" + "\uD83D\uDE00".repeat(2_000)) {
+		Throwable failure = new Throwable(messageCanary) {
+			@Override
+			public String getMessage() {
+				messageReads.incrementAndGet();
+				return super.getMessage();
+			}
+
 			@Override
 			public void printStackTrace(PrintStream stream) {
 				stackTraceReads.incrementAndGet();
@@ -64,9 +71,10 @@ class SokletApplicationLogFallbackTests {
 				.onMalformedInput(CodingErrorAction.REPORT)
 				.onUnmappableCharacter(CodingErrorAction.REPORT)
 				.decode(ByteBuffer.wrap(bytes)).toString();
-		Assertions.assertTrue(rendered.startsWith(
-				"soklet-lifecycle-observer-log-failure: "));
-		Assertions.assertTrue(rendered.contains("line\\n"));
+		Assertions.assertEquals("soklet-lifecycle-observer-log-failure: "
+				+ failure.getClass().getName() + "\n", rendered);
+		Assertions.assertFalse(rendered.contains(messageCanary), rendered);
+		Assertions.assertEquals(0, messageReads.get());
 		Assertions.assertEquals(0, stackTraceReads.get());
 		Assertions.assertEquals(0, causeReads.get());
 	}
@@ -96,8 +104,9 @@ class SokletApplicationLogFallbackTests {
 
 		Assertions.assertEquals(1, observerCalls.get());
 		String rendered = output.toString(StandardCharsets.UTF_8);
-		Assertions.assertTrue(rendered.contains(
-				IllegalStateException.class.getName() + ": observer failed"));
+		Assertions.assertEquals("soklet-lifecycle-observer-log-failure: "
+				+ IllegalStateException.class.getName() + "\n", rendered);
+		Assertions.assertFalse(rendered.contains("observer failed"), rendered);
 	}
 
 	@Test

@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
@@ -10,17 +12,22 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   ReleaseHarnessEvidenceImportError,
   canonicalJson,
   importReleaseHarnessEvidence,
+  verifyImportedBundleReceipt,
   verifyImportedReceipt,
   verifyReleaseHarnessConfiguration,
+  verifyReleaseHarnessEvidenceDirectory,
+  verifyReleaseHarnessRoleDescriptors,
 } from './import-release-harness-evidence.mjs';
 
 const NOW_TEXT = '2026-08-24T12:00:00Z';
 const NOW = Date.parse(NOW_TEXT);
+const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 let fixtureOrdinal = 0;
 let assertionCount = 0;
 
@@ -86,15 +93,17 @@ function commonEvidence(contract, candidate) {
   };
 }
 
-function historyTimes() {
+function historyTimes(now = NOW) {
+  const alignedNow = Math.floor(now / 1000) * 1000;
   return Array.from({ length: 7 }, (_, index) =>
-    `2026-08-${String(17 + index).padStart(2, '0')}T12:00:00Z`);
+    new Date(alignedNow - (7 - index) * 86_400_000)
+      .toISOString().replace('.000Z', 'Z'));
 }
 
-function fuzzEvidence(contract, candidate) {
+function fuzzEvidence(contract, candidate, now = NOW) {
   return {
     ...commonEvidence(contract, candidate),
-    runs: historyTimes().map((completedAt) => ({
+    runs: historyTimes(now).map((completedAt) => ({
       completedAt,
       corpusHashes: contract.policy.targets.map((target) =>
         digest(`${completedAt}:${target.id}:corpus`)),
@@ -110,10 +119,10 @@ function fuzzEvidence(contract, candidate) {
   };
 }
 
-function soakEvidence(contract, candidate) {
+function soakEvidence(contract, candidate, now = NOW) {
   return {
     ...commonEvidence(contract, candidate),
-    runs: historyTimes().map((completedAt) => ({
+    runs: historyTimes(now).map((completedAt) => ({
       completedAt,
       id: completedAt.slice(0, 10),
       outcome: 'PASS',
@@ -322,10 +331,10 @@ function scanRoles(contract, candidate) {
   return [fileRole(contract.roles[0], summary), reportsRole];
 }
 
-function rolesFor(contract, candidate) {
+function rolesFor(contract, candidate, now = NOW) {
   switch (contract.id) {
     case 'fuzz-nightly-history':
-      return [fileRole(contract.roles[0], fuzzEvidence(contract, candidate))];
+      return [fileRole(contract.roles[0], fuzzEvidence(contract, candidate, now))];
     case 'mcp-benchmarks':
       {
         const { evidence, log } = benchmarkFixture(contract, candidate);
@@ -339,7 +348,7 @@ function rolesFor(contract, candidate) {
     case 'release-scans':
       return scanRoles(contract, candidate);
     case 'soak-nightly-history':
-      return [fileRole(contract.roles[0], soakEvidence(contract, candidate))];
+      return [fileRole(contract.roles[0], soakEvidence(contract, candidate, now))];
     default:
       throw new Error(`No self-test fixture for ${contract.id}`);
   }
@@ -353,7 +362,7 @@ function wrapContent(content) {
   };
 }
 
-function validBundle(contract, candidate) {
+function validBundle(contract, candidate, now = NOW) {
   return wrapContent({
     candidate: clone(candidate),
     contractVersion: contract.contractVersion,
@@ -362,7 +371,7 @@ function validBundle(contract, candidate) {
     policy: clone(contract.policy),
     producer: contract.producer,
     producerStatus: 'PASS',
-    roles: rolesFor(contract, candidate),
+    roles: rolesFor(contract, candidate, now),
     toolchains: clone(contract.toolchains),
   });
 }
@@ -409,6 +418,52 @@ function writeFixture(root, prefix, value, canonical = true) {
   const path = join(root, `${String(fixtureOrdinal++).padStart(3, '0')}-${prefix}.json`);
   writeFileSync(path, canonical ? canonicalJson(value) : JSON.stringify(value), 'utf8');
   return path;
+}
+
+function materializeBundleRoles(root, prefix, contract, bundle) {
+  const evidenceRoot = join(
+    root,
+    `${String(fixtureOrdinal++).padStart(3, '0')}-${prefix}`,
+  );
+  mkdirSync(evidenceRoot);
+  bundle.content.roles.forEach((role, index) => {
+    const expected = contract.roles[index];
+    const rolePath = join(evidenceRoot, expected.path);
+    if (expected.kind === 'file') {
+      mkdirSync(dirname(rolePath), { recursive: true });
+      writeFileSync(rolePath, Buffer.from(role.bytesBase64, 'base64'));
+      return;
+    }
+    mkdirSync(rolePath, { recursive: true });
+    for (const entry of role.entries) {
+      const entryPath = join(rolePath, entry.path);
+      mkdirSync(dirname(entryPath), { recursive: true });
+      writeFileSync(entryPath, Buffer.from(entry.bytesBase64, 'base64'));
+    }
+  });
+  return realpathSync(evidenceRoot);
+}
+
+function verifierInvocation(gate) {
+  if (gate === 'mcp-benchmarks')
+    return [join(SCRIPT_DIRECTORY, 'verify-release-benchmarks.mjs')];
+  if (gate === 'release-scans')
+    return [join(SCRIPT_DIRECTORY, 'verify-release-scans.mjs')];
+  const modeByGate = {
+    'fuzz-nightly-history': 'fuzz-nightly',
+    'operational-history': 'operational',
+    'soak-nightly-history': 'soak-nightly',
+  };
+  return [join(SCRIPT_DIRECTORY, 'verify-release-history.mjs'), modeByGate[gate]];
+}
+
+function runVerifier(gate, evidenceRoot, extraArguments = []) {
+  const [scriptPath, ...argumentsForScript] = verifierInvocation(gate);
+  return spawnSync(process.execPath, [scriptPath, ...argumentsForScript, ...extraArguments], {
+    cwd: evidenceRoot,
+    encoding: 'utf8',
+    maxBuffer: 4 * 1024 * 1024,
+  });
 }
 
 function expectImportFailure({
@@ -485,25 +540,218 @@ function run() {
       assertionCount++;
     }
 
+    const verificationNow = Date.now();
+    const validPathFixtures = new Map();
     let validReceipt;
     for (const [gate, contract] of configuration.contracts) {
-      const bundlePath = writeFixture(root, `${gate}-valid`, validBundle(contract, candidate));
+      const bundle = validBundle(contract, candidate, verificationNow);
+      const bundlePath = writeFixture(root, `${gate}-valid`, bundle);
       const outputPath = join(root, `${String(fixtureOrdinal++).padStart(3, '0')}-${gate}-receipt.json`);
       const receipt = importReleaseHarnessEvidence({
         bundlePath,
         candidateIdentityProvider: () => clone(candidate),
         candidateRoot: root,
         gate,
-        now: NOW,
+        now: verificationNow,
         outputPath,
         registryPath: configuration.registryPath,
       });
       assert.deepEqual(verifyImportedReceipt(outputPath), receipt);
+      assert.deepEqual(verifyImportedBundleReceipt({
+        bundlePath,
+        candidateIdentityProvider: () => clone(candidate),
+        candidateRoot: root,
+        now: verificationNow,
+        receiptPath: outputPath,
+        registryPath: configuration.registryPath,
+      }), receipt);
       assert.equal(receipt.gate, gate);
       assert.equal(receipt.candidateBindings.candidateCommit, candidate.candidateCommit);
+      const evidenceRoot = materializeBundleRoles(root, `${gate}-roles`, contract, bundle);
+      const verified = verifyReleaseHarnessEvidenceDirectory({
+        evidenceRoot,
+        expectedImportedReceipt: receipt,
+        gate,
+        now: verificationNow,
+        registryPath: configuration.registryPath,
+      });
+      assert.deepEqual(verified.roles, receipt.roles);
+      assert.equal(verified.candidate.candidateCommit, candidate.candidateCommit);
+      const cli = runVerifier(gate, evidenceRoot);
+      assert.equal(cli.status, 0, cli.stderr || cli.stdout);
+      assert.match(cli.stdout, /verification PASS/);
+      validPathFixtures.set(gate, {
+        bundle,
+        bundlePath,
+        evidenceRoot,
+        outputPath,
+        receipt,
+        verified,
+      });
       validReceipt = receipt;
-      assertionCount += 3;
+      assertionCount += 8;
     }
+
+    const fuzzContract = configuration.contracts.get('fuzz-nightly-history');
+    const missingHistoryRoot = materializeBundleRoles(
+      root,
+      'missing-history-role',
+      fuzzContract,
+      validPathFixtures.get('fuzz-nightly-history').bundle,
+    );
+    rmSync(join(missingHistoryRoot, fuzzContract.roles[0].path));
+    assert.throws(
+      () => verifyReleaseHarnessEvidenceDirectory({
+        evidenceRoot: missingHistoryRoot,
+        gate: fuzzContract.id,
+        now: verificationNow,
+        registryPath: configuration.registryPath,
+      }),
+      ReleaseHarnessEvidenceImportError,
+      'missing unpacked history role',
+    );
+    assert.equal(runVerifier(fuzzContract.id, missingHistoryRoot).status, 1);
+    assertionCount += 2;
+
+    const scanContract = configuration.contracts.get('release-scans');
+    const tamperedScanRoot = materializeBundleRoles(
+      root,
+      'tampered-scan-role',
+      scanContract,
+      validPathFixtures.get('release-scans').bundle,
+    );
+    writeFileSync(
+      join(tamperedScanRoot, scanContract.roles[1].path, '00-codeql-java.sarif'),
+      'tampered scan report\n',
+      'utf8',
+    );
+    assert.throws(
+      () => verifyReleaseHarnessEvidenceDirectory({
+        evidenceRoot: tamperedScanRoot,
+        gate: scanContract.id,
+        now: verificationNow,
+        registryPath: configuration.registryPath,
+      }),
+      ReleaseHarnessEvidenceImportError,
+      'tampered unpacked scan role',
+    );
+    assert.equal(runVerifier(scanContract.id, tamperedScanRoot).status, 1);
+    assertionCount += 2;
+
+    const benchmarkContract = configuration.contracts.get('mcp-benchmarks');
+    const tamperedBenchmarkRoot = materializeBundleRoles(
+      root,
+      'tampered-benchmark-role',
+      benchmarkContract,
+      validPathFixtures.get('mcp-benchmarks').bundle,
+    );
+    writeFileSync(
+      join(tamperedBenchmarkRoot, benchmarkContract.roles[1].path),
+      'tampered benchmark log\n',
+      'utf8',
+    );
+    assert.throws(
+      () => verifyReleaseHarnessEvidenceDirectory({
+        evidenceRoot: tamperedBenchmarkRoot,
+        gate: benchmarkContract.id,
+        now: verificationNow,
+        registryPath: configuration.registryPath,
+      }),
+      ReleaseHarnessEvidenceImportError,
+      'tampered unpacked benchmark role',
+    );
+    assert.equal(runVerifier(benchmarkContract.id, tamperedBenchmarkRoot).status, 1);
+    assertionCount += 2;
+
+    const mismatchedReceipt = clone(validPathFixtures.get('release-scans').receipt);
+    mismatchedReceipt.roles[0].sha256 = '0'.repeat(64);
+    assert.throws(
+      () => verifyReleaseHarnessRoleDescriptors(
+        mismatchedReceipt,
+        validPathFixtures.get('release-scans').verified.roles,
+      ),
+      ReleaseHarnessEvidenceImportError,
+      'unpacked role descriptor receipt mismatch',
+    );
+    assert.throws(
+      () => verifyReleaseHarnessEvidenceDirectory({
+        evidenceRoot: validPathFixtures.get('release-scans').evidenceRoot,
+        expectedImportedReceipt: mismatchedReceipt,
+        gate: 'release-scans',
+        now: verificationNow,
+        registryPath: configuration.registryPath,
+      }),
+      ReleaseHarnessEvidenceImportError,
+      'unpacked evidence receipt mismatch',
+    );
+    assertionCount += 2;
+
+    const retainedScanFixture = validPathFixtures.get('release-scans');
+    const bundleMismatchedReceipt = clone(retainedScanFixture.receipt);
+    bundleMismatchedReceipt.roles[0].sha256 = '0'.repeat(64);
+    const bundleMismatchedReceiptPath = writeFixture(
+      root,
+      'bundle-receipt-role-mismatch',
+      bundleMismatchedReceipt,
+    );
+    assert.throws(
+      () => verifyImportedBundleReceipt({
+        bundlePath: retainedScanFixture.bundlePath,
+        candidateIdentityProvider: () => clone(candidate),
+        candidateRoot: root,
+        now: verificationNow,
+        receiptPath: bundleMismatchedReceiptPath,
+        registryPath: configuration.registryPath,
+      }),
+      ReleaseHarnessEvidenceImportError,
+      'retained bundle receipt role mismatch',
+    );
+    assertionCount++;
+
+    const substitutedCurrentCandidate = {
+      ...candidate,
+      candidateTree: 'c'.repeat(40),
+      producerWorkflowSha256: digest('substituted-producer-workflow'),
+    };
+    assert.throws(
+      () => verifyImportedBundleReceipt({
+        bundlePath: retainedScanFixture.bundlePath,
+        candidateIdentityProvider: () => clone(substitutedCurrentCandidate),
+        candidateRoot: root,
+        now: verificationNow,
+        receiptPath: retainedScanFixture.outputPath,
+        registryPath: configuration.registryPath,
+      }),
+      /do not match the current candidate root/,
+      'coherent bundle and receipt current-candidate mismatch',
+    );
+    assertionCount++;
+
+    assert.equal(
+      runVerifier(
+        'fuzz-nightly-history',
+        validPathFixtures.get('fuzz-nightly-history').evidenceRoot,
+        ['unexpected'],
+      ).status,
+      64,
+    );
+    assert.equal(
+      runVerifier(
+        'release-scans',
+        validPathFixtures.get('release-scans').evidenceRoot,
+        ['unexpected'],
+      ).status,
+      64,
+    );
+    assert.equal(
+      runVerifier(
+        'mcp-benchmarks',
+        validPathFixtures.get('mcp-benchmarks').evidenceRoot,
+        ['unexpected'],
+      ).status,
+      64,
+    );
+    assertionCount += 3;
 
     expectImportFailure({
       candidate, configuration, gate: 'mcp-benchmarks', label: 'missing-role', root,

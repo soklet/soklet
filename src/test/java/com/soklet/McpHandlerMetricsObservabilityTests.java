@@ -965,13 +965,15 @@ public class McpHandlerMetricsObservabilityTests {
 					.toList();
 			Assertions.assertEquals(2, failures.size());
 			for (LogEvent failure : failures) {
-				Assertions.assertSame(expectedFailure,
-						failure.getThrowable().orElseThrow());
+				Assertions.assertTrue(failure.getThrowable().isEmpty(),
+						failure.toString());
 				Assertions.assertTrue(failure.getRequest().isEmpty(),
 						"Server-wide handler metrics have no request context.");
 				Assertions.assertTrue(failure.getResourceMethod().isEmpty());
 				Assertions.assertTrue(failure.getMarshaledResponse().isEmpty());
 			}
+			Assertions.assertFalse(failures.toString().contains(
+					expectedFailure.getMessage()), failures.toString());
 		} finally {
 			soklet.close();
 		}

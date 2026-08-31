@@ -32,7 +32,6 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 final class DefaultLifecycleTerminalReporter implements LifecycleTerminalReporter {
 	static final int MAXIMUM_UTF8_BYTES = 16 * 1_024;
-	static final int MAXIMUM_THROWABLE_MESSAGE_CODE_POINTS = 512;
 
 	@NonNull
 	private final OutputStream errorStream;
@@ -186,15 +185,7 @@ final class DefaultLifecycleTerminalReporter implements LifecycleTerminalReporte
 	@NonNull
 	static String safeThrowable(@NonNull Throwable throwable) {
 		Throwable exactThrowable = requireNonNull(throwable);
-		String message;
-		try {
-			message = exactThrowable.getMessage();
-		} catch (Throwable ignored) {
-			message = "<message unavailable>";
-		}
-		return exactThrowable.getClass().getName() + ": "
-				+ escapeAndCap(message == null ? "" : message,
-						MAXIMUM_THROWABLE_MESSAGE_CODE_POINTS);
+		return exactThrowable.getClass().getName();
 	}
 
 	@NonNull

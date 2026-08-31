@@ -7,6 +7,7 @@ import {
   existsSync,
   lstatSync,
   openSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   writeFileSync,
@@ -1241,6 +1242,166 @@ function validateGateEvidence(contract, candidate, roles, now) {
   }
 }
 
+function requireEvidenceRoot(evidenceRoot) {
+  if (typeof evidenceRoot !== 'string' || !isAbsolute(evidenceRoot))
+    fail('release-harness evidence root must be an absolute path.');
+  const absoluteRoot = resolve(evidenceRoot);
+  requireNonsymlinkComponents(absoluteRoot, 'release-harness evidence root');
+  if (!existsSync(absoluteRoot))
+    fail(`release-harness evidence root does not exist: ${absoluteRoot}`);
+  const stats = lstatSync(absoluteRoot);
+  if (!stats.isDirectory() || stats.isSymbolicLink()
+      || realpathSync(absoluteRoot) !== absoluteRoot) {
+    fail('release-harness evidence root must be a real nonsymlink directory.');
+  }
+  return absoluteRoot;
+}
+
+function readDirectoryRole(path, expected, label) {
+  requireNonsymlinkComponents(path, label);
+  if (!existsSync(path))
+    fail(`${label} does not exist: ${path}`);
+  const stats = lstatSync(path);
+  if (!stats.isDirectory() || stats.isSymbolicLink() || realpathSync(path) !== resolve(path))
+    fail(`${label} must be a real nonsymlink directory: ${path}`);
+
+  const descriptors = [];
+  let totalBytes = 0;
+  function visit(directoryPath, prefix) {
+    const entries = readdirSync(directoryPath, { withFileTypes: true })
+      .sort((left, right) => compareAscii(left.name, right.name));
+    if (entries.length === 0)
+      fail(`${label} contains an empty directory: ${directoryPath}`);
+    for (const entry of entries) {
+      const relativePath = prefix.length === 0 ? entry.name : `${prefix}/${entry.name}`;
+      validateRelativePath(relativePath, `${label} entry path`);
+      const entryPath = resolve(directoryPath, entry.name);
+      if (entry.isSymbolicLink())
+        fail(`${label} contains a symbolic link: ${relativePath}`);
+      if (entry.isDirectory()) {
+        visit(entryPath, relativePath);
+      } else if (entry.isFile()) {
+        const bytes = readRegularFile(entryPath, `${label} entry ${relativePath}`, MAXIMUM_ROLE_BYTES);
+        totalBytes += bytes.length;
+        if (totalBytes > MAXIMUM_ROLE_BYTES)
+          fail(`${label} exceeds the directory-role byte bound.`);
+        descriptors.push({
+          bytes,
+          path: relativePath,
+          sha256: sha256(bytes),
+          size: bytes.length,
+        });
+      } else {
+        fail(`${label} contains a non-file entry: ${relativePath}`);
+      }
+    }
+  }
+  visit(path, '');
+  if (descriptors.length === 0)
+    fail(`${label} must contain at least one regular file.`);
+  descriptors.sort((left, right) => compareAscii(left.path, right.path));
+  const bundleEntries = descriptors.map(({ bytes, path: entryPath, sha256: digest }) => ({
+    bytesBase64: bytes.toString('base64'),
+    path: entryPath,
+    sha256: digest,
+  }));
+  return {
+    descriptors,
+    descriptor: {
+      ...expected,
+      entries: descriptors.map(({ path: entryPath, sha256: digest, size }) => ({
+        path: entryPath,
+        sha256: digest,
+        size,
+      })),
+      entryCount: descriptors.length,
+      sha256: sha256(Buffer.from(canonicalJson(bundleEntries), 'utf8')),
+      size: totalBytes,
+    },
+  };
+}
+
+function readEvidenceRole(evidenceRoot, expected, index) {
+  const label = `release-harness evidence role ${index + 1} (${expected.name})`;
+  const path = resolve(evidenceRoot, expected.path);
+  if (path !== evidenceRoot && !path.startsWith(`${evidenceRoot}${sep}`))
+    fail(`${label} escapes the evidence root.`);
+  if (expected.kind === 'directory')
+    return readDirectoryRole(path, expected, label);
+  const bytes = readRegularFile(path, label, MAXIMUM_ROLE_BYTES);
+  return {
+    bytes,
+    descriptor: {
+      ...expected,
+      sha256: sha256(bytes),
+      size: bytes.length,
+    },
+  };
+}
+
+export function verifyReleaseHarnessRoleDescriptors(expectedImportedReceipt, roleDescriptors) {
+  requireObject(expectedImportedReceipt, 'expected imported release-harness receipt');
+  const expectedRoles = requireArray(
+    expectedImportedReceipt.roles,
+    'expected imported release-harness receipt roles',
+  );
+  const actualRoles = requireArray(roleDescriptors, 'verified release-harness role descriptors');
+  if (!sameJson(actualRoles, expectedRoles))
+    fail('unpacked release-harness role descriptors do not match the imported receipt.');
+  return true;
+}
+
+export function verifyReleaseHarnessEvidenceDirectory({
+  evidenceRoot = process.cwd(),
+  expectedImportedReceipt,
+  gate,
+  now = Date.now(),
+  registryPath,
+} = {}) {
+  const configuration = verifyReleaseHarnessConfiguration(registryPath);
+  const contract = configuration.contracts.get(gate);
+  if (contract === undefined)
+    fail(`Unknown release harness gate: ${gate}`);
+  requireNumber(now, 'release-harness verification time');
+  const absoluteRoot = requireEvidenceRoot(evidenceRoot);
+  const roles = contract.roles.map((role, index) =>
+    readEvidenceRole(absoluteRoot, role, index));
+  const primaryRole = roles.find((role) => role.bytes !== undefined);
+  if (primaryRole === undefined)
+    fail(`${gate} has no file role from which to obtain its candidate binding.`);
+  const primaryEvidence = requireObject(
+    parseCanonicalJsonBytes(primaryRole.bytes, `${gate} primary evidence`),
+    `${gate} primary evidence`,
+  );
+  const candidate = requireObject(primaryEvidence.candidate, `${gate} primary evidence.candidate`);
+  validateCandidate(candidate, `${gate} primary evidence.candidate`);
+  if (candidate.candidateRegistrySha256 !== configuration.registrySha256)
+    fail(`${gate} candidate registry binding does not match the registry bytes.`);
+  validateGateEvidence(contract, candidate, roles, now);
+  const roleDescriptors = roles.map(({ descriptor }) => descriptor);
+  if (expectedImportedReceipt !== undefined) {
+    requireObject(expectedImportedReceipt, 'expected imported release-harness receipt');
+    if (expectedImportedReceipt.gate !== gate)
+      fail('expected imported release-harness receipt gate does not match the selected gate.');
+    const candidateBindings = requireObject(
+      expectedImportedReceipt.candidateBindings,
+      'expected imported release-harness receipt candidateBindings',
+    );
+    const receiptCandidate = Object.fromEntries(
+      BUNDLE_CANDIDATE_KEYS.map((key) => [key, candidateBindings[key]]),
+    );
+    validateCandidate(receiptCandidate, 'expected imported release-harness receipt candidateBindings');
+    if (!sameJson(candidate, receiptCandidate))
+      fail('unpacked release-harness candidate does not match the imported receipt.');
+    verifyReleaseHarnessRoleDescriptors(expectedImportedReceipt, roleDescriptors);
+  }
+  return Object.freeze({
+    candidate: Object.freeze({ ...candidate }),
+    gate,
+    roles: Object.freeze(roleDescriptors),
+  });
+}
+
 function runGit(candidateRoot, args, label) {
   const result = spawnSync('git', ['-C', candidateRoot, ...args], {
     encoding: 'utf8',
@@ -1291,6 +1452,19 @@ function workflowPaths(contract) {
   return [path];
 }
 
+function verifierSourcePaths(contract) {
+  if (contract.id === 'fuzz-nightly-history'
+      || contract.id === 'operational-history'
+      || contract.id === 'soak-nightly-history') {
+    return ['scripts/verify-release-history.mjs'];
+  }
+  if (contract.id === 'release-scans')
+    return ['scripts/verify-release-scans.mjs'];
+  if (contract.id === 'mcp-benchmarks')
+    return ['scripts/verify-release-benchmarks.mjs'];
+  fail(`No verifier source path exists for ${contract.id}.`);
+}
+
 function digestWorkflow(candidateRoot, contract) {
   const paths = workflowPaths(contract);
   if (paths.length === 1) {
@@ -1334,6 +1508,7 @@ function actualCandidateIdentity(candidateRoot, contract, registrySha256) {
     'scripts/import-release-harness-evidence-self-test.mjs',
     'scripts/release-validation-evidence.mjs',
     'scripts/validate-release-candidate.sh',
+    ...verifierSourcePaths(contract),
     ...workflowPaths(contract),
   ]);
   for (const path of trackedSources)
@@ -1342,6 +1517,7 @@ function actualCandidateIdentity(candidateRoot, contract, registrySha256) {
   for (const path of [
     'scripts/import-release-harness-evidence.mjs',
     'scripts/release-validation-evidence.mjs',
+    ...verifierSourcePaths(contract),
   ]) {
     const executingSource = readRegularFile(
       resolve(executingScriptDirectory, basename(path)),
@@ -1538,6 +1714,58 @@ export function verifyImportedReceipt(path, registryPath) {
     }
   });
   return value;
+}
+
+export function verifyImportedBundleReceipt({
+  bundlePath,
+  candidateIdentityProvider,
+  candidateRoot,
+  now = Date.now(),
+  receiptPath,
+  registryPath,
+}) {
+  const receipt = verifyImportedReceipt(receiptPath, registryPath);
+  const configuration = verifyReleaseHarnessConfiguration(registryPath);
+  const contract = configuration.contracts.get(receipt.gate);
+  const candidate = Object.fromEntries(
+    BUNDLE_CANDIDATE_KEYS.map((key) => [key, receipt.candidateBindings[key]]),
+  );
+  const { bundleSha256, roles } = validateBundle(
+    bundlePath,
+    contract,
+    candidate,
+    now,
+  );
+  if (bundleSha256 !== receipt.candidateBindings.immutableBundleSha256)
+    fail('immutable bundle bytes do not match the imported receipt.');
+  verifyReleaseHarnessRoleDescriptors(
+    receipt,
+    roles.map(({ descriptor }) => descriptor),
+  );
+  if (candidateIdentityProvider !== undefined && candidateRoot === undefined)
+    fail('candidateIdentityProvider requires candidateRoot.');
+  if (candidateRoot !== undefined) {
+    if (typeof candidateRoot !== 'string' || !isAbsolute(candidateRoot))
+      fail('candidate-root must be absolute.');
+    if (candidateIdentityProvider === undefined
+        && configuration.registryPath
+          !== resolve(candidateRoot, 'release/release-harness-contracts.json')) {
+      fail('production verification must use the exact candidate-tracked registry path.');
+    }
+    const currentCandidate = candidateIdentityProvider === undefined
+      ? actualCandidateIdentity(candidateRoot, contract, configuration.registrySha256)
+      : candidateIdentityProvider({
+        candidateRoot,
+        contract,
+        registrySha256: configuration.registrySha256,
+      });
+    validateCandidate(currentCandidate, 'current candidate identity');
+    if (currentCandidate.candidateRegistrySha256 !== configuration.registrySha256)
+      fail('current candidate identity registry SHA-256 does not match the registry bytes.');
+    if (!sameJson(currentCandidate, candidate))
+      fail('imported bundle and receipt do not match the current candidate root.');
+  }
+  return Object.freeze(receipt);
 }
 
 export function importReleaseHarnessEvidence({

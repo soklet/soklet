@@ -52,6 +52,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
+import static java.util.Objects.requireNonNull;
+
 /** Standalone and direct-owner acceptance at the real MCP lifecycle boundary. */
 @Timeout(value = 60, unit = TimeUnit.SECONDS)
 final class SokletDirectMcpLifecycleTests {
@@ -297,15 +299,14 @@ final class SokletDirectMcpLifecycleTests {
 				new ThrowingShutdownExecutorService(lateCleanupFailure);
 		this.executors.add(applicationExecutor);
 		CountDownLatch transportFailureObserved = new CountDownLatch(1);
-		AtomicReference<Throwable> transportFailure = new AtomicReference<>();
+		AtomicReference<LogEvent> transportFailureLog = new AtomicReference<>();
 		LifecycleObserver observer = new LifecycleObserver() {
 			@Override
 			public void didReceiveLogEvent(@NonNull LogEvent event) {
 				if (event.getLogEventType()
 						!= LogEventType.SERVER_TRANSPORT_FAILURE)
 					return;
-				transportFailure.compareAndSet(null,
-						event.getThrowable().orElseThrow());
+				transportFailureLog.compareAndSet(null, event);
 				transportFailureObserved.countDown();
 			}
 		};
@@ -343,9 +344,14 @@ final class SokletDirectMcpLifecycleTests {
 					"The blocked startup call was not canceled before result freeze");
 			Assertions.assertFalse(publisher.hasReturned(),
 					"The publisher must remain live through result freeze");
-			Throwable exactPrimary = transportFailure.get();
-			Assertions.assertNotNull(exactPrimary);
-			Assertions.assertSame(exactPrimary, startupFailure.getCause());
+			LogEvent transportFailure = requireNonNull(transportFailureLog.get());
+			Assertions.assertEquals("MCP transport failure: event_loop_terminate",
+					transportFailure.getMessage());
+			Assertions.assertTrue(transportFailure.getThrowable().isEmpty());
+			Assertions.assertTrue(transportFailure.getRequest().isEmpty());
+			Assertions.assertTrue(transportFailure.getResourceMethod().isEmpty());
+			Assertions.assertTrue(transportFailure.getMarshaledResponse().isEmpty());
+			Throwable exactPrimary = requireNonNull(startupFailure.getCause());
 			InternalShutdownResult frozenResult = startupFailure
 					.getInternalShutdownResult();
 			InternalParticipantShutdownResult mcp = frozenResult

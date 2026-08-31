@@ -123,7 +123,7 @@ class SokletApplicationTerminalReporterTests {
 		SokletApplicationCoreDiagnostics coreDiagnostics =
 				new SokletApplicationCoreDiagnostics(
 						new LifecycleTransitionSnapshot(4, 2, true, true, false,
-								1, Optional.of("java.lang.IllegalStateException: observer")),
+								1, Optional.of(IllegalStateException.class.getName())),
 						diagnostics, InternalLifecyclePolicy.defaults(), 100L);
 		IllegalArgumentException primaryFailure =
 				new IllegalArgumentException("primary-failure");
@@ -138,7 +138,7 @@ class SokletApplicationTerminalReporterTests {
 		Assertions.assertTrue(report.contains("shutdown=INCOMPLETE\n"));
 		Assertions.assertTrue(report.contains("primary=STARTUP_FAILURE\n"));
 		Assertions.assertTrue(report.contains("primaryFailure="
-				+ IllegalArgumentException.class.getName() + ": primary-failure\n"));
+				+ IllegalArgumentException.class.getName() + "\n"));
 		Assertions.assertTrue(report.contains(
 				"participant.HTTP.disposition=RESIDUAL_ACTIVITY\n"));
 		Assertions.assertTrue(report.contains(
@@ -148,19 +148,23 @@ class SokletApplicationTerminalReporterTests {
 		Assertions.assertTrue(report.contains(
 				"participant.HTTP.members=4,failed=1,proven=2,truncated=true\n"));
 		Assertions.assertTrue(report.contains("participant.HTTP.failure="
-				+ IllegalStateException.class.getName() + ": participant-failure\n"));
+				+ IllegalStateException.class.getName() + "\n"));
 		Assertions.assertTrue(report.contains("cleanup=TIMED_OUT\n"));
 		Assertions.assertTrue(report.contains("cleanupWorkerMayRemain=true\n"));
 		Assertions.assertTrue(report.contains("cleanupTimeoutNanos=3000000000\n"));
 		Assertions.assertTrue(report.contains("cleanupFailure="
-				+ TimeoutExceptionForTest.class.getName() + ": cleanup-timeout\n"));
+				+ TimeoutExceptionForTest.class.getName() + "\n"));
 		Assertions.assertTrue(report.contains(
 				"retainedCounts={CALLBACK=2, LIFECYCLE_CALL=1}\n"));
 		Assertions.assertTrue(report.contains("retainedSummary=retained\\nsummary\n"));
 		Assertions.assertTrue(report.contains(
 				"observerAccepted=4,pending=2,active=true,sealed=true,disabled=false,failed=1\n"));
 		Assertions.assertTrue(report.contains(
-				"observerFirstFailure=java.lang.IllegalStateException: observer\n"));
+				"observerFirstFailure=" + IllegalStateException.class.getName()
+						+ "\n"));
+		for (String messageCanary : List.of("primary-failure",
+				"participant-failure", "cleanup-timeout"))
+			Assertions.assertFalse(report.contains(messageCanary), report);
 		Assertions.assertTrue(report.contains("startupBudgetNanos=30000000000\n"));
 		Assertions.assertTrue(report.contains(
 				"startupCancellationBudgetNanos=2000000000\n"));
@@ -172,32 +176,23 @@ class SokletApplicationTerminalReporterTests {
 	}
 
 	@Test
-	void safeThrowableEscapesControlsAndCapsMessagesByUnicodeCodePoint() {
-		String escaped = DefaultLifecycleTerminalReporter.safeThrowable(
-				new IllegalArgumentException("line\nreturn\rtab\tzero\u0000"));
-		Assertions.assertEquals(IllegalArgumentException.class.getName()
-				+ ": line\\nreturn\\rtab\\tzero\\u0000", escaped);
+	void safeThrowableUsesOnlyTheClassAndNeverReadsTheMessage() {
+		String messageCanary = "terminal-throwable-message-secret";
+		AtomicInteger messageReads = new AtomicInteger();
+		RuntimeException failure = new RuntimeException(messageCanary) {
+			@Override
+			public String getMessage() {
+				messageReads.incrementAndGet();
+				throw new AssertionError("Throwable messages must not be rendered");
+			}
+		};
 
-		String emoji = "\uD83D\uDE00";
-		String capped = DefaultLifecycleTerminalReporter.safeThrowable(
-				new RuntimeException(emoji.repeat(600)));
-		String renderedMessage = capped.substring(capped.indexOf(": ") + 2);
-		Assertions.assertEquals(
-				DefaultLifecycleTerminalReporter.MAXIMUM_THROWABLE_MESSAGE_CODE_POINTS,
-				renderedMessage.codePointCount(0, renderedMessage.length()));
-		Assertions.assertEquals(emoji.repeat(
-				DefaultLifecycleTerminalReporter.MAXIMUM_THROWABLE_MESSAGE_CODE_POINTS),
-				renderedMessage);
+		String rendered = Assertions.assertDoesNotThrow(
+				() -> DefaultLifecycleTerminalReporter.safeThrowable(failure));
 
-		String controlHeavy = DefaultLifecycleTerminalReporter.safeThrowable(
-				new RuntimeException("\u0000".repeat(600)));
-		String escapedControls = controlHeavy.substring(
-				controlHeavy.indexOf(": ") + 2);
-		Assertions.assertEquals("\\u0000".repeat(85), escapedControls);
-		Assertions.assertTrue(escapedControls.codePointCount(0,
-				escapedControls.length())
-				<= DefaultLifecycleTerminalReporter
-						.MAXIMUM_THROWABLE_MESSAGE_CODE_POINTS);
+		Assertions.assertEquals(failure.getClass().getName(), rendered);
+		Assertions.assertFalse(rendered.contains(messageCanary), rendered);
+		Assertions.assertEquals(0, messageReads.get());
 	}
 
 	@Test
@@ -215,7 +210,9 @@ class SokletApplicationTerminalReporterTests {
 
 		String report = Assertions.assertDoesNotThrow(() -> render(snapshot));
 
-		Assertions.assertTrue(report.contains("safe-primary"));
+		Assertions.assertTrue(report.contains(
+				TraversalGuardThrowable.class.getName()));
+		Assertions.assertFalse(report.contains("safe-primary"));
 		Assertions.assertFalse(report.contains("cause"));
 		Assertions.assertFalse(report.contains("suppressed"));
 		Assertions.assertEquals(0, cause.messageReads());
@@ -267,9 +264,17 @@ class SokletApplicationTerminalReporterTests {
 				InternalShutdownCleanupDisposition.FAILED,
 				Optional.of(Duration.ofSeconds(1)), Optional.of(largeFailure), false,
 				CORE_PUBLICATION_NANOS);
+		SokletApplicationCoreDiagnostics ordinaryDiagnostics = diagnostics(result);
+		SokletApplicationCoreDiagnostics oversizedDiagnostics =
+				new SokletApplicationCoreDiagnostics(
+						new LifecycleTransitionSnapshot(1, 0, false, true, false,
+								1, Optional.of(emoji.repeat(5_000))),
+						ordinaryDiagnostics.participantDiagnostics(),
+						ordinaryDiagnostics.lifecyclePolicy(),
+						ordinaryDiagnostics.lifecycleBeganNanos());
 		SokletApplicationTerminalSnapshot snapshot = snapshot(result,
 				SokletApplicationPrimaryOutcome.STARTUP_FAILURE,
-				Optional.of(largeFailure), cleanup, diagnostics(result), 50L);
+				Optional.of(largeFailure), cleanup, oversizedDiagnostics, 50L);
 		ByteArrayOutputStream output = new ByteArrayOutputStream();
 
 		new DefaultLifecycleTerminalReporter(output).report(snapshot);
@@ -465,6 +470,11 @@ class SokletApplicationTerminalReporterTests {
 		private TraversalGuardThrowable(@NonNull String message,
 				@NonNull Throwable cause) {
 			super(message, cause);
+		}
+
+		@Override
+		public String getMessage() {
+			throw new AssertionError("throwable message must not be rendered");
 		}
 
 		@Override

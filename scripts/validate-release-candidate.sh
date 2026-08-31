@@ -80,9 +80,13 @@ done
 release_harness_registry="$project_root/release/release-harness-contracts.json"
 release_harness_importer="$project_root/scripts/import-release-harness-evidence.mjs"
 release_harness_importer_self_test="$project_root/scripts/import-release-harness-evidence-self-test.mjs"
+release_history_verifier="$project_root/scripts/verify-release-history.mjs"
+release_scans_verifier="$project_root/scripts/verify-release-scans.mjs"
+release_benchmarks_verifier="$project_root/scripts/verify-release-benchmarks.mjs"
 for release_harness_source in \
 	"$release_harness_registry" "$release_harness_importer" \
-	"$release_harness_importer_self_test"; do
+	"$release_harness_importer_self_test" "$release_history_verifier" \
+	"$release_scans_verifier" "$release_benchmarks_verifier"; do
 	[[ -f "$release_harness_source" && ! -L "$release_harness_source" ]] \
 		|| fail "release-harness contract source is missing or is a symlink."
 done
@@ -114,7 +118,8 @@ assert_ready_gate_has_dispatch() {
 	case "$gate_id" in
 		candidate-build|core-jdk-21|core-jdk-25|isolated-install|api-freeze|\
 		candidate-javadocs|static-analysis|spotbugs|schema-replay|fuzz-replay|\
-		soak-smoke|release-soak|localization-fleet|matrix-closure|\
+		fuzz-nightly-history|soak-smoke|soak-nightly-history|release-soak|\
+		localization-fleet|operational-history|release-scans|mcp-benchmarks|matrix-closure|\
 		candidate-conformance|candidate-localization|barebones-app|\
 		soklet-servlet-javax|soklet-servlet-jakarta|toystore-app|soklet-otel|\
 		soklet-website|typescript-interop|go-interop)
@@ -531,6 +536,30 @@ record_gate() {
 	node "$evidence_helper" record-gate \
 		"$manifest_path" "$candidate_commit" "$artifact_descriptor" "$gate_id" \
 		"$gate_evidence_root/$gate_id.json" "$@"
+}
+
+run_imported_release_harness() {
+	local gate_id=$1
+	local bundle_environment=$2
+	local source_bundle=${!bundle_environment:-}
+	[[ -n "$source_bundle" && "$source_bundle" == /* \
+			&& -f "$source_bundle" && ! -L "$source_bundle" ]] \
+		|| fail "$bundle_environment must name the pre-acquired immutable $gate_id bundle."
+	local raw_root="$evidence_root/raw/$gate_id"
+	local retained_bundle="$raw_root/immutable-bundle.json"
+	local imported_receipt="$raw_root/imported-receipt.json"
+	[[ ! -e "$raw_root" ]] \
+		|| fail "$gate_id retained evidence destination already exists."
+	mkdir -p "$raw_root"
+	cp -- "$source_bundle" "$retained_bundle"
+	node "$release_harness_importer" --import \
+		--gate "$gate_id" \
+		--candidate-root "$project_root" \
+		--bundle "$retained_bundle" \
+		--output "$imported_receipt"
+	node "$evidence_helper" record-imported-gate \
+		"$manifest_path" "$candidate_commit" "$artifact_descriptor" "$gate_id" \
+		"$gate_evidence_root/$gate_id.json" "$imported_receipt" "$retained_bundle"
 }
 
 run_isolated_install() {
@@ -1162,9 +1191,19 @@ run_static_analysis
 run_spotbugs
 run_schema_replay
 run_fuzz_replay
+run_imported_release_harness \
+	fuzz-nightly-history SOKLET_RELEASE_FUZZ_NIGHTLY_HISTORY_BUNDLE
 run_soak_profile soak-smoke smoke 600
+run_imported_release_harness \
+	soak-nightly-history SOKLET_RELEASE_SOAK_NIGHTLY_HISTORY_BUNDLE
 run_soak_profile release-soak release "$soak_timeout_seconds"
 run_localization_fleet
+run_imported_release_harness \
+	operational-history SOKLET_RELEASE_OPERATIONAL_HISTORY_BUNDLE
+run_imported_release_harness \
+	release-scans SOKLET_RELEASE_SCANS_BUNDLE
+run_imported_release_harness \
+	mcp-benchmarks SOKLET_RELEASE_MCP_BENCHMARKS_BUNDLE
 run_matrix_closure
 run_candidate_conformance
 run_candidate_localization

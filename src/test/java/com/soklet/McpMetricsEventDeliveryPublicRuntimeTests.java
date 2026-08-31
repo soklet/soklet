@@ -322,9 +322,9 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 	public void unexpectedTerminationOrdersNormalizedStopBeforeFreshOwnerStart()
 			throws Exception {
 		RecordingMetricsCollector collector = new RecordingMetricsCollector();
+		RecordingLifecycleObserver observer = new RecordingLifecycleObserver();
 		McpServer firstServer = server(0, "/mcp/unexpected-first");
-		Soklet firstOwner = soklet(firstServer, collector,
-				LifecycleObserver.defaultInstance());
+		Soklet firstOwner = soklet(firstServer, collector, observer);
 		McpServerRuntimeBridge firstBridge = runtimeBridge(firstServer);
 		McpTransportLifecycleAdapter firstLifecycleAdapter =
 				lifecycleAdapter(firstServer);
@@ -353,6 +353,23 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 					.orElseThrow().isComplete(),
 					"The exact unexpectedly terminated generation must be proven before a fresh owner starts.");
 			collector.awaitEventCount(3);
+			List<LogEvent> transportFailures = observer.logEvents().stream()
+					.filter(event -> event.getLogEventType()
+							== LogEventType.SERVER_TRANSPORT_FAILURE)
+					.toList();
+			Assertions.assertEquals(1, transportFailures.size(),
+					observer.logEvents().toString());
+			LogEvent transportFailure = transportFailures.get(0);
+			Assertions.assertEquals("MCP transport failure: event_loop_terminate",
+					transportFailure.getMessage());
+			Assertions.assertTrue(transportFailure.getThrowable().isEmpty(),
+					transportFailure.toString());
+			Assertions.assertTrue(transportFailure.getRequest().isEmpty(),
+					transportFailure.toString());
+			Assertions.assertTrue(transportFailure.getResourceMethod().isEmpty(),
+					transportFailure.toString());
+			Assertions.assertTrue(transportFailure.getMarshaledResponse().isEmpty(),
+					transportFailure.toString());
 
 			McpServer secondServer = server(0, "/mcp/unexpected-second");
 			Soklet secondOwner = soklet(secondServer, collector,
@@ -479,7 +496,7 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 	}
 
 	@Test
-	public void collectorFailuresRetainRequestContextAndDoNotStallFifo()
+	public void collectorFailuresKeepRequestContextApplicationOwnedAndLogsRedacted()
 			throws Exception {
 		RuntimeException serverFailure = new RuntimeException(
 				"expected server metric failure");
@@ -498,12 +515,13 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 			Assertions.assertEquals(McpServerStatus.RUNNING,
 					server.getDiagnostics().getStatus(),
 					"A ServerStarted collector failure must not roll back the listener.");
+			String requestBodyCanary = "application-owned-request-canary";
 			HttpResponse<String> response = sendDiscovery(
 					server.getDiagnostics().getBoundAddress().orElseThrow().getPort(),
-					"/mcp/failure-context", "failure-context");
+					"/mcp/failure-context", requestBodyCanary);
 			observer.awaitRequestFinished();
 			collector.awaitRequestFinished();
-			assertSuccessfulDiscovery(response, "failure-context");
+			assertSuccessfulDiscovery(response, requestBodyCanary);
 			Assertions.assertEquals(List.of(
 					McpMetricsEvent.ServerStarted.class,
 					McpMetricsEvent.ConnectionAccepted.class,
@@ -518,28 +536,25 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 							== LogEventType.METRICS_COLLECTOR_FAILED)
 					.toList();
 			Assertions.assertEquals(3, failures.size(), failures.toString());
-			LogEvent serverLog = failures.stream()
-					.filter(event -> event.getThrowable().orElseThrow()
-							== serverFailure)
-					.findFirst().orElseThrow();
-			LogEvent requestLog = failures.stream()
-					.filter(event -> event.getThrowable().orElseThrow()
-							== requestFailure)
-					.findFirst().orElseThrow();
-			LogEvent connectionLog = failures.stream()
-					.filter(event -> event.getThrowable().orElseThrow()
-							== connectionFailure)
-					.findFirst().orElseThrow();
-			Assertions.assertTrue(serverLog.getRequest().isEmpty());
-			Assertions.assertTrue(connectionLog.getRequest().isEmpty(),
-					"A transport event failure must remain request-free.");
-			Assertions.assertSame(observer.requestContext().getRequest(),
-					requestLog.getRequest().orElseThrow(),
-					"A queued admitted event must retain its exact originating request.");
+			Assertions.assertTrue(observer.requestContext().getRequest()
+					.getBodyAsString().orElseThrow().contains(requestBodyCanary),
+					"The application-owned request callback must retain its raw carrier.");
 			for (LogEvent failure : failures) {
+				Assertions.assertEquals(
+						"An exception occurred while invoking MetricsCollector::didRecordMcpMetricsEvent",
+						failure.getMessage());
+				Assertions.assertTrue(failure.getThrowable().isEmpty(),
+						failure.toString());
+				Assertions.assertTrue(failure.getRequest().isEmpty(),
+						failure.toString());
 				Assertions.assertTrue(failure.getResourceMethod().isEmpty());
 				Assertions.assertTrue(failure.getMarshaledResponse().isEmpty());
 			}
+			String ownedLogs = failures.toString();
+			for (String canary : List.of(serverFailure.getMessage(),
+					connectionFailure.getMessage(), requestFailure.getMessage(),
+					requestBodyCanary))
+				Assertions.assertFalse(ownedLogs.contains(canary), ownedLogs);
 		} finally {
 			soklet.close();
 		}

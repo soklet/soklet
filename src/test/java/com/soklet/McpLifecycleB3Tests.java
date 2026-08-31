@@ -672,7 +672,7 @@ class McpLifecycleB3Tests {
 		CountDownLatch subscriptionEntered = new CountDownLatch(1);
 		CountDownLatch releaseSubscription = new CountDownLatch(1);
 		CountDownLatch transportFailureObserved = new CountDownLatch(1);
-		AtomicReference<Throwable> transportFailure = new AtomicReference<>();
+		AtomicReference<LogEvent> transportFailureLog = new AtomicReference<>();
 		AtomicReference<Throwable> startFailure = new AtomicReference<>();
 		IllegalStateException synchronousFailure = new IllegalStateException(
 				"simulated synchronous subscription startup failure");
@@ -681,8 +681,7 @@ class McpLifecycleB3Tests {
 			public void didReceiveLogEvent(@NonNull LogEvent event) {
 				if (event.getLogEventType() != LogEventType.SERVER_TRANSPORT_FAILURE)
 					return;
-				transportFailure.compareAndSet(null,
-						event.getThrowable().orElseThrow());
+				transportFailureLog.compareAndSet(null, event);
 				transportFailureObserved.countDown();
 			}
 		};
@@ -734,13 +733,13 @@ class McpLifecycleB3Tests {
 			starter.join(WAIT.toMillis());
 			Assertions.assertFalse(starter.isAlive());
 
-			Throwable exactFailure = transportFailure.get();
-			Assertions.assertNotNull(exactFailure);
+			assertRedactedTransportFailureLog(requireNonNull(
+					transportFailureLog.get()));
 			SokletStartupException startupFailure = Assertions.assertInstanceOf(
 					SokletStartupException.class, startFailure.get());
+			Throwable exactFailure = requireNonNull(startupFailure.getCause());
 			Assertions.assertEquals(InternalStartupDisposition.FAILED,
 					startupFailure.getInternalStartupDisposition());
-			Assertions.assertSame(exactFailure, startupFailure.getCause());
 			Assertions.assertTrue(List.of(exactFailure.getSuppressed()).stream()
 					.anyMatch(failure -> failure == synchronousFailure),
 					"The losing synchronous startup failure must remain suppressed.");
@@ -913,7 +912,7 @@ class McpLifecycleB3Tests {
 			throws Exception {
 		CountDownLatch diagnosticEntered = new CountDownLatch(1);
 		CountDownLatch releaseDiagnostic = new CountDownLatch(1);
-		AtomicReference<Throwable> transportFailure = new AtomicReference<>();
+		AtomicReference<LogEvent> transportFailureLog = new AtomicReference<>();
 		AtomicReference<Throwable> startFailure = new AtomicReference<>();
 		LifecycleObserver observer = new LifecycleObserver() {
 			@Override
@@ -924,8 +923,7 @@ class McpLifecycleB3Tests {
 					awaitUninterruptibly(releaseDiagnostic);
 				} else if (event.getLogEventType()
 						== LogEventType.SERVER_TRANSPORT_FAILURE) {
-					transportFailure.compareAndSet(null,
-							event.getThrowable().orElseThrow());
+					transportFailureLog.compareAndSet(null, event);
 				}
 			}
 		};
@@ -961,19 +959,18 @@ class McpLifecycleB3Tests {
 				awaitCondition(() -> bridge(server).getRuntimeState().started(),
 						"The private runtime did not publish readiness.");
 				closeSelector(eventLoop(bridge(server)));
-				awaitCondition(() -> transportFailure.get() != null,
-						"The exact EventLoop failure was not published.");
+				awaitCondition(() -> transportFailureLog.get() != null,
+						"The redacted EventLoop failure log was not published.");
 			}
 			starter.join(WAIT.toMillis());
 			Assertions.assertFalse(starter.isAlive());
-			Throwable exactFailure = transportFailure.get();
-			Assertions.assertNotNull(exactFailure);
+			assertRedactedTransportFailureLog(requireNonNull(
+					transportFailureLog.get()));
 			SokletStartupException startupFailure = Assertions.assertInstanceOf(
 					SokletStartupException.class, startFailure.get());
+			Throwable exactFailure = requireNonNull(startupFailure.getCause());
 			Assertions.assertEquals(InternalStartupDisposition.FAILED,
 					startupFailure.getInternalStartupDisposition());
-			Assertions.assertSame(exactFailure, startupFailure.getCause(),
-					"The common readiness adapter must preserve the exact transport cause.");
 			InternalShutdownResult result = startupFailure.getInternalShutdownResult();
 			Assertions.assertSame(result, adapter(server).result().orElseThrow());
 			Assertions.assertSame(result,
@@ -2639,6 +2636,18 @@ class McpLifecycleB3Tests {
 		Field selectorField = EventLoop.class.getDeclaredField("selector");
 		selectorField.setAccessible(true);
 		((Selector) selectorField.get(eventLoop)).close();
+	}
+
+	private static void assertRedactedTransportFailureLog(
+			@NonNull LogEvent event) {
+		Assertions.assertEquals(LogEventType.SERVER_TRANSPORT_FAILURE,
+				event.getLogEventType());
+		Assertions.assertEquals("MCP transport failure: event_loop_terminate",
+				event.getMessage());
+		Assertions.assertTrue(event.getThrowable().isEmpty());
+		Assertions.assertTrue(event.getRequest().isEmpty());
+		Assertions.assertTrue(event.getResourceMethod().isEmpty());
+		Assertions.assertTrue(event.getMarshaledResponse().isEmpty());
 	}
 
 	@NonNull

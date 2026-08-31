@@ -33,7 +33,6 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.channels.ClosedSelectorException;
 import java.nio.channels.Selector;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -1161,8 +1160,14 @@ public class McpServerPublicRuntimeTests {
 		LogEvent transportFailure = transportFailures.get(0);
 		Assertions.assertEquals("MCP transport failure: event_loop_terminate",
 				transportFailure.getMessage());
-		Assertions.assertInstanceOf(ClosedSelectorException.class,
-				transportFailure.getThrowable().orElseThrow());
+		Assertions.assertTrue(transportFailure.getThrowable().isEmpty(),
+				transportFailure.toString());
+		Assertions.assertTrue(transportFailure.getRequest().isEmpty(),
+				transportFailure.toString());
+		Assertions.assertTrue(transportFailure.getResourceMethod().isEmpty(),
+				transportFailure.toString());
+		Assertions.assertTrue(transportFailure.getMarshaledResponse().isEmpty(),
+				transportFailure.toString());
 	}
 
 	private static void stopOwnerAllowingUnexpectedTermination(

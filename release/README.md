@@ -26,6 +26,26 @@ Five gates remain `BLOCKED_HARNESS_MISSING`:
 - `mcp-benchmarks` requires the isolated 3.5.1-versus-4.0.0 JSON comparison
   and 4.0.0 schema-baseline harness.
 
+Their candidate-side consumer path is now fail closed. The producer commands
+validate the exact registered role basenames in their artifact directory, and
+the release validator accepts each result only as a pre-acquired canonical
+bundle named by its dedicated environment variable:
+
+- `SOKLET_RELEASE_FUZZ_NIGHTLY_HISTORY_BUNDLE`;
+- `SOKLET_RELEASE_SOAK_NIGHTLY_HISTORY_BUNDLE`;
+- `SOKLET_RELEASE_OPERATIONAL_HISTORY_BUNDLE`;
+- `SOKLET_RELEASE_SCANS_BUNDLE`; and
+- `SOKLET_RELEASE_MCP_BENCHMARKS_BUNDLE`.
+
+For each gate, candidate validation retains the immutable bundle, runs the
+canonical importer against the clean candidate root, retains the imported
+receipt, and converts only the receipt's verified ordered role descriptors
+into the ordinary format-v2 gate evidence. A missing, symlinked, substituted,
+wrong-candidate, or byte-changed bundle fails before PASS evidence is recorded.
+The five manifest rows remain blocked until their workflow producers can
+actually create those bundles; the existence of this consumer dispatch alone
+does not make a harness `READY`.
+
 The checked-in registry, verifier, and verifier self-test make
 `matrix-closure` `READY`. The registry deliberately produces a canonical
 `FAILED` report while five rows remain `UNRESOLVED`, so the validator cannot

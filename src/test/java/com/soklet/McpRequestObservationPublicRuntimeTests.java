@@ -1019,8 +1019,10 @@ public class McpRequestObservationPublicRuntimeTests {
 	}
 
 	@Test
-	public void throwingObservationCallbacksAreContainedLoggedAndPartitioned()
+	public void throwingObservationCallbacksKeepRawCarriersApplicationOwnedAndLogsRedacted()
 			throws Exception {
+		String requestHeaderCanary = "mcp-request-header-canary";
+		String requestBodyCanary = "mcp-request-body-canary";
 		RuntimeException startFailure = new RuntimeException(
 				"lifecycle-start-secret");
 		RuntimeException finishFailure = new RuntimeException(
@@ -1067,8 +1069,10 @@ public class McpRequestObservationPublicRuntimeTests {
 			soklet.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
-			HttpResponse<String> response = send(port, discoverRequest("contained"),
-					"server/discover", Optional.empty());
+			HttpResponse<String> response = send(port,
+					discoverRequest(requestBodyCanary), "server/discover",
+					Optional.empty(), Map.of("Authorization",
+							"Bearer " + requestHeaderCanary));
 			recordingObserver.awaitFinished();
 			awaitLogCount(recordingObserver.logEvents,
 					LogEventType.LIFECYCLE_OBSERVER_DID_START_MCP_REQUEST_HANDLING_FAILED,
@@ -1079,7 +1083,7 @@ public class McpRequestObservationPublicRuntimeTests {
 			awaitLogCount(recordingObserver.logEvents,
 					LogEventType.METRICS_COLLECTOR_FAILED, 2);
 
-			assertSuccess(response, "contained");
+			assertSuccess(response, requestBodyCanary);
 			Assertions.assertFalse(response.body().contains("secret"), response.body());
 			Assertions.assertEquals(1, recordingObserver.starts.get());
 			Assertions.assertEquals(1, recordingObserver.finishes.get());
@@ -1091,19 +1095,28 @@ public class McpRequestObservationPublicRuntimeTests {
 			Assertions.assertFalse(finishThrowables.contains(metricsFailure));
 			Assertions.assertThrows(UnsupportedOperationException.class,
 					() -> finishThrowables.add(new RuntimeException("must-not-add")));
+			Request applicationOwnedRequest = recordingObserver.startedContext.get()
+					.getRequest();
+			Assertions.assertEquals(Set.of("Bearer " + requestHeaderCanary),
+					applicationOwnedRequest.getHeaders().get("Authorization"));
+			Assertions.assertTrue(applicationOwnedRequest.getBodyAsString().orElseThrow()
+					.contains(requestBodyCanary));
 
-			assertLogCount(recordingObserver.logEvents,
+			assertRedactedLogCount(recordingObserver.logEvents,
 					LogEventType.LIFECYCLE_OBSERVER_DID_START_MCP_REQUEST_HANDLING_FAILED,
-					1, startFailure);
-			assertLogCount(recordingObserver.logEvents,
+					1);
+			assertRedactedLogCount(recordingObserver.logEvents,
 					LogEventType.LIFECYCLE_OBSERVER_DID_FINISH_MCP_REQUEST_HANDLING_FAILED,
-					1, finishFailure);
-			assertLogCount(recordingObserver.logEvents,
-					LogEventType.METRICS_COLLECTOR_FAILED, 2, metricsFailure);
+					1);
+			assertRedactedLogCount(recordingObserver.logEvents,
+					LogEventType.METRICS_COLLECTOR_FAILED, 2);
 			Assertions.assertEquals(4, recordingObserver.logEvents.size(),
 					recordingObserver.logEvents.toString());
-			for (LogEvent event : recordingObserver.logEvents)
-				Assertions.assertTrue(event.getRequest().isPresent(), event.toString());
+			String ownedLogs = recordingObserver.logEvents.toString();
+			for (String canary : List.of(requestHeaderCanary, requestBodyCanary,
+					startFailure.getMessage(), finishFailure.getMessage(),
+					metricsFailure.getMessage()))
+				Assertions.assertFalse(ownedLogs.contains(canary), ownedLogs);
 		} finally {
 			soklet.close();
 		}
@@ -1152,6 +1165,15 @@ public class McpRequestObservationPublicRuntimeTests {
 	private static HttpResponse<String> send(int port, @NonNull String body,
 			@NonNull String method,
 			@NonNull Optional<@NonNull String> operationName) throws Exception {
+		return send(port, body, method, operationName, Map.of());
+	}
+
+	@NonNull
+	private static HttpResponse<String> send(int port, @NonNull String body,
+			@NonNull String method,
+			@NonNull Optional<@NonNull String> operationName,
+			@NonNull Map<@NonNull String, @NonNull String> additionalHeaders)
+			throws Exception {
 		HttpRequest.Builder request = HttpRequest.newBuilder()
 				.uri(URI.create("http://" + LOOPBACK + ":" + port + MCP_PATH))
 				.timeout(Duration.ofSeconds(5))
@@ -1160,6 +1182,7 @@ public class McpRequestObservationPublicRuntimeTests {
 				.header("MCP-Protocol-Version", PROTOCOL_VERSION)
 				.header("Mcp-Method", method);
 		operationName.ifPresent(value -> request.header("Mcp-Name", value));
+		additionalHeaders.forEach(request::header);
 		return HttpClient.newBuilder()
 				.connectTimeout(Duration.ofSeconds(5))
 				.version(HttpClient.Version.HTTP_1_1)
@@ -1374,16 +1397,20 @@ public class McpRequestObservationPublicRuntimeTests {
 		Assertions.assertFalse(finished.get(0).getDuration().isNegative());
 	}
 
-	private static void assertLogCount(@NonNull List<@NonNull LogEvent> events,
-			@NonNull LogEventType eventType, int expectedCount,
-			@NonNull Throwable expectedThrowable) {
+	private static void assertRedactedLogCount(
+			@NonNull List<@NonNull LogEvent> events,
+			@NonNull LogEventType eventType, int expectedCount) {
 		List<LogEvent> matching = events.stream()
 				.filter(event -> event.getLogEventType() == eventType)
 				.toList();
 		Assertions.assertEquals(expectedCount, matching.size(), events.toString());
-		for (LogEvent event : matching)
-			Assertions.assertSame(expectedThrowable,
-					event.getThrowable().orElseThrow());
+		for (LogEvent event : matching) {
+			Assertions.assertTrue(event.getThrowable().isEmpty(), event.toString());
+			Assertions.assertTrue(event.getRequest().isEmpty(), event.toString());
+			Assertions.assertTrue(event.getResourceMethod().isEmpty(), event.toString());
+			Assertions.assertTrue(event.getMarshaledResponse().isEmpty(),
+					event.toString());
+		}
 	}
 
 	private static void awaitLogCount(

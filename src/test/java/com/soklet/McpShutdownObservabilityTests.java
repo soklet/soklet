@@ -833,11 +833,13 @@ public class McpShutdownObservabilityTests {
 							== LogEventType.METRICS_COLLECTOR_FAILED)
 					.toList();
 			Assertions.assertEquals(1, failures.size());
-			Assertions.assertSame(expectedFailure,
-					failures.get(0).getThrowable().orElseThrow());
+			Assertions.assertTrue(failures.get(0).getThrowable().isEmpty(),
+					failures.get(0).toString());
 			Assertions.assertTrue(failures.get(0).getRequest().isEmpty());
 			Assertions.assertTrue(failures.get(0).getResourceMethod().isEmpty());
 			Assertions.assertTrue(failures.get(0).getMarshaledResponse().isEmpty());
+			Assertions.assertFalse(failures.toString().contains(
+					expectedFailure.getMessage()), failures.toString());
 
 			soklet.close();
 			Assertions.assertEquals(1, attempts.get());

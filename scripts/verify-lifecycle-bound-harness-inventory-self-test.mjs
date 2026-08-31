@@ -1015,6 +1015,22 @@ run('construction-only noStartup differs from execution', () => {
     { requireRegistryCompleteness: false }), /controlled-completion override/u);
 });
 
+run('zero-argument lifecycle policy accessor is not an installation', () => {
+  const scopes = syntheticScopes(`
+    import org.junit.jupiter.api.Test;
+    class SyntheticLifecycleTests {
+      @Test void readsPolicy() { diagnostics.lifecyclePolicy(); }
+      @Test void installsPolicy() { config.lifecyclePolicy(policy); }
+    }
+  `);
+  assert.equal(scopes.some((scope) => scope.scopeName === 'readsPolicy'), false);
+  const installation = scopes.find((scope) =>
+    scope.scopeName === 'installsPolicy');
+  assert.ok(installation);
+  assert.deepEqual(installation.observedOperations, ['CONFIGURE_POLICY']);
+  assert.equal(installation.unresolvedPolicyInstallationCount, 1);
+});
+
 run('duplicate lifecycle setters use the effective last value', () => {
   const scopes = syntheticScopes(`
     import java.time.Duration;

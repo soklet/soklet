@@ -9,6 +9,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -25,6 +26,7 @@ import {
   assembleReleaseEvidence,
   recordCandidateArtifacts,
   recordGateEvidence,
+  recordImportedGateEvidence,
   validateReleaseConfiguration,
   verifyReleaseConformanceEvidence,
 } from './release-validation-evidence.mjs';
@@ -32,6 +34,8 @@ import { verifyMavenDownstreamPom } from './verify-maven-downstream-pom.mjs';
 import { createLoopbackPortReservation } from './reserve-loopback-port.mjs';
 import { verifyMatrixClosure } from './verify-release-matrix-closure.mjs';
 import {
+  canonicalJson,
+  importReleaseHarnessEvidence,
   verifyReleaseHarnessConfiguration,
   verifyReleaseHarnessManifestParity,
 } from './import-release-harness-evidence.mjs';
@@ -111,6 +115,12 @@ const releaseHarnessImporterSelfTestPath = resolve(
   projectRoot,
   'scripts/import-release-harness-evidence-self-test.mjs',
 );
+const releaseHistoryVerifierPath = resolve(projectRoot, 'scripts/verify-release-history.mjs');
+const releaseScansVerifierPath = resolve(projectRoot, 'scripts/verify-release-scans.mjs');
+const releaseBenchmarksVerifierPath = resolve(
+  projectRoot,
+  'scripts/verify-release-benchmarks.mjs',
+);
 const loopbackPortReserverPath = resolve(projectRoot, 'scripts/reserve-loopback-port.mjs');
 const promotionHelperPath = resolve(projectRoot, 'scripts/release-promotion.mjs');
 const promotionWrapperPath = resolve(projectRoot, 'scripts/promote-release-candidate.sh');
@@ -118,8 +128,17 @@ const pinnedJavaInstallerPath = resolve(
   projectRoot,
   'release/scripts/install-pinned-corretto-linux-x64.sh',
 );
-const fixtureRoot = mkdtempSync(resolve(tmpdir(), 'soklet-release-validation-'));
+const fixtureRoot = realpathSync(
+  mkdtempSync(resolve(tmpdir(), 'soklet-release-validation-')),
+);
 const candidateCommit = 'a'.repeat(40);
+const importedReleaseHarnessGateIds = new Set([
+  'fuzz-nightly-history',
+  'mcp-benchmarks',
+  'operational-history',
+  'release-scans',
+  'soak-nightly-history',
+]);
 
 function canBindLoopback(port) {
   return new Promise((resolveBind) => {
@@ -174,6 +193,9 @@ try {
     ['release-harness registry', releaseHarnessRegistryPath],
     ['release-harness importer', releaseHarnessImporterPath],
     ['release-harness importer self-test', releaseHarnessImporterSelfTestPath],
+    ['release-history verifier', releaseHistoryVerifierPath],
+    ['release-scans verifier', releaseScansVerifierPath],
+    ['release-benchmarks verifier', releaseBenchmarksVerifierPath],
   ]) {
     const stats = lstatSync(path);
     assert.equal(stats.isFile(), true, `${label} must be a regular file`);
@@ -488,7 +510,7 @@ try {
   assert.match(releaseValidator, /configured_gate_count" -eq 29/);
   assert.match(
     releaseValidator,
-    /soak-smoke\|release-soak\|localization-fleet\|matrix-closure\|/,
+    /fuzz-nightly-history\|soak-smoke\|soak-nightly-history\|release-soak\|[\s\\]*localization-fleet\|operational-history\|release-scans\|mcp-benchmarks\|matrix-closure\|/,
   );
   assert.match(
     releaseValidator,
@@ -534,6 +556,16 @@ try {
     releaseValidator,
     /release_harness_importer_self_test="\$project_root\/scripts\/import-release-harness-evidence-self-test\.mjs"/,
   );
+  for (const verifier of [
+    'verify-release-history.mjs',
+    'verify-release-scans.mjs',
+    'verify-release-benchmarks.mjs',
+  ]) {
+    assert.match(
+      releaseValidator,
+      new RegExp(`\\$project_root\\/scripts\\/${verifier.replaceAll('.', '\\.')}`),
+    );
+  }
   assert.match(
     releaseValidator,
     /for release_harness_source in[\s\S]*?\[\[ -f "\$release_harness_source" && ! -L "\$release_harness_source" \]\]/,
@@ -550,6 +582,30 @@ try {
   assert.ok(harnessConfigIndex >= 0);
   assert.ok(harnessConfigIndex < harnessSelfTestIndex);
   assert.ok(harnessSelfTestIndex < firstEvidenceRecordIndex);
+  const importedHarnessFunction = releaseValidator.match(
+    /\nrun_imported_release_harness\(\) \{\n([\s\S]*?)\n\}\n\nrun_isolated_install\(\)/,
+  );
+  assert.notEqual(importedHarnessFunction, null);
+  assert.match(importedHarnessFunction[1], /source_bundle=\$\{!bundle_environment:-\}/);
+  assert.match(importedHarnessFunction[1], /--candidate-root "\$project_root"/);
+  assert.match(importedHarnessFunction[1], /--bundle "\$retained_bundle"/);
+  assert.match(importedHarnessFunction[1], /--output "\$imported_receipt"/);
+  assert.match(importedHarnessFunction[1], /record-imported-gate/);
+  for (const [gateId, environment] of [
+    ['fuzz-nightly-history', 'SOKLET_RELEASE_FUZZ_NIGHTLY_HISTORY_BUNDLE'],
+    ['soak-nightly-history', 'SOKLET_RELEASE_SOAK_NIGHTLY_HISTORY_BUNDLE'],
+    ['operational-history', 'SOKLET_RELEASE_OPERATIONAL_HISTORY_BUNDLE'],
+    ['release-scans', 'SOKLET_RELEASE_SCANS_BUNDLE'],
+    ['mcp-benchmarks', 'SOKLET_RELEASE_MCP_BENCHMARKS_BUNDLE'],
+  ]) {
+    assert.equal(
+      releaseValidator.match(new RegExp(
+        `^run_imported_release_harness \\\\\\n\\t${gateId} ${environment}$`,
+        'gm',
+      ))?.length,
+      1,
+    );
+  }
   const candidateBuildBlock = releaseValidator.match(
     /\nbuild_log="\$temporary_directory\/candidate-build\.log"\n\{\n([\s\S]*?)\n\} 2>&1 \| tee "\$build_log"/,
   );
@@ -942,6 +998,10 @@ try {
   mkdirSync(fixtureTypeScriptDirectory, { recursive: true });
   mkdirSync(fixtureGoDirectory, { recursive: true });
   mkdirSync(fixturePath('scripts'), { recursive: true });
+  copyFileSync(
+    releaseHarnessRegistryPath,
+    fixturePath('release/release-harness-contracts.json'),
+  );
   copyFileSync(promotionHelperPath, fixturePath('scripts/release-promotion.mjs'));
   copyFileSync(promotionWrapperPath, fixturePath('scripts/promote-release-candidate.sh'));
   copyFileSync(
@@ -1347,6 +1407,198 @@ try {
   );
 
   const descriptor = JSON.parse(readFileSync(artifactDescriptorPath, 'utf8'));
+  const importedContract = releaseHarnessConfiguration.contracts.get(
+    'fuzz-nightly-history',
+  );
+  const importedBundlePath = fixturePath('evidence/imported-fuzz-history-bundle.json');
+  const importedReceiptPath = fixturePath('evidence/imported-fuzz-history-receipt.json');
+  const importedGatePath = fixturePath('evidence/imported-fuzz-history-gate.json');
+  const importedCandidate = {
+    candidateCommit,
+    candidateMainJarSha256: descriptor.artifacts.mainJar.sha256,
+    candidatePomSha256: descriptor.artifacts.pom.sha256,
+    candidateRegistrySha256: releaseHarnessConfiguration.registrySha256,
+    candidateTree: 'b'.repeat(40),
+    producerWorkflowSha256: 'd'.repeat(64),
+  };
+  const importedNow = Math.floor(Date.now() / 1_000) * 1_000;
+  const importedHistory = {
+    candidate: importedCandidate,
+    formatVersion: 1,
+    gate: importedContract.id,
+    policySha256: sha256(Buffer.from(canonicalJson(importedContract.policy), 'utf8')),
+    producerStatus: 'PASS',
+    runs: Array.from({ length: 7 }, (_, runIndex) => {
+      const completedAt = new Date(
+        importedNow - (7 - runIndex) * 86_400_000,
+      ).toISOString().replace('.000Z', 'Z');
+      return {
+        completedAt,
+        corpusHashes: importedContract.policy.targets.map((target) =>
+          sha256(Buffer.from(`${completedAt}:${target.id}:corpus`, 'utf8'))),
+        id: completedAt.slice(0, 10),
+        outcome: 'PASS',
+        targets: importedContract.policy.targets.map((target) => ({
+          durationSeconds: importedContract.policy.perTargetDurationSeconds,
+          id: target.id,
+          ordinal: target.ordinal,
+          outcome: 'PASS',
+        })),
+      };
+    }),
+    toolchainsSha256: sha256(Buffer.from(canonicalJson(importedContract.toolchains), 'utf8')),
+  };
+  const importedRoleBytes = Buffer.from(canonicalJson(importedHistory), 'utf8');
+  const importedHistoryPath = fixturePath('evidence/fuzz-nightly-history.json');
+  writeFileSync(importedHistoryPath, importedRoleBytes);
+  assert.throws(
+    () => recordGateEvidence(
+      fixtureManifestPath,
+      candidateCommit,
+      artifactDescriptorPath,
+      importedContract.id,
+      fixturePath('evidence/generic-fuzz-history-gate.json'),
+      [`history=${importedHistoryPath}`],
+    ),
+    /requires fail-closed imported evidence; use record-imported-gate/,
+  );
+  const importedBundleRole = {
+    bytesBase64: importedRoleBytes.toString('base64'),
+    kind: importedContract.roles[0].kind,
+    mediaType: importedContract.roles[0].mediaType,
+    name: importedContract.roles[0].name,
+    ordinal: importedContract.roles[0].ordinal,
+    required: importedContract.roles[0].required,
+    sha256: sha256(importedRoleBytes),
+  };
+  const importedBundleContent = {
+    candidate: importedCandidate,
+    contractVersion: importedContract.contractVersion,
+    evidenceContract: importedContract.evidenceContract,
+    gate: importedContract.id,
+    policy: importedContract.policy,
+    producer: importedContract.producer,
+    producerStatus: 'PASS',
+    roles: [importedBundleRole],
+    toolchains: importedContract.toolchains,
+  };
+  const importedBundleBytes = Buffer.from(canonicalJson({
+    content: importedBundleContent,
+    contentSha256: sha256(Buffer.from(canonicalJson(importedBundleContent), 'utf8')),
+    formatVersion: 1,
+  }), 'utf8');
+  writeFileSync(importedBundlePath, importedBundleBytes);
+  importReleaseHarnessEvidence({
+    bundlePath: importedBundlePath,
+    candidateIdentityProvider: () => importedCandidate,
+    candidateRoot: fixtureRoot,
+    gate: importedContract.id,
+    now: importedNow,
+    outputPath: importedReceiptPath,
+    registryPath: fixturePath('release/release-harness-contracts.json'),
+  });
+  const importedGate = await recordImportedGateEvidence(
+    fixtureManifestPath,
+    candidateCommit,
+    artifactDescriptorPath,
+    importedContract.id,
+    importedGatePath,
+    importedReceiptPath,
+    importedBundlePath,
+    () => importedCandidate,
+  );
+  assert.deepEqual(importedGate.evidence.map(({ role }) => role), ['history']);
+  assert.deepEqual(importedGate.evidence[0].artifact, {
+    bytes: importedRoleBytes.length,
+    fileName: 'fuzz-nightly-history.json',
+    sha256: sha256(importedRoleBytes),
+    type: 'FILE',
+  });
+  const substitutedBundlePath = fixturePath('evidence/substituted-fuzz-history-bundle.json');
+  writeFileSync(substitutedBundlePath, Buffer.from('{"immutable":"substituted"}\n', 'utf8'));
+  await assert.rejects(
+    recordImportedGateEvidence(
+      fixtureManifestPath,
+      candidateCommit,
+      artifactDescriptorPath,
+      importedContract.id,
+      fixturePath('evidence/substituted-fuzz-history-gate.json'),
+      importedReceiptPath,
+      substitutedBundlePath,
+      () => importedCandidate,
+    ),
+    /release harness bundle|immutable bundle/,
+  );
+  const wrongCandidateReceiptPath = fixturePath(
+    'evidence/wrong-candidate-fuzz-history-receipt.json',
+  );
+  const wrongCandidateReceipt = JSON.parse(readFileSync(importedReceiptPath, 'utf8'));
+  wrongCandidateReceipt.candidateBindings.candidateMainJarSha256 = '9'.repeat(64);
+  writeFileSync(wrongCandidateReceiptPath, canonicalJson(wrongCandidateReceipt));
+  await assert.rejects(
+    recordImportedGateEvidence(
+      fixtureManifestPath,
+      candidateCommit,
+      artifactDescriptorPath,
+      importedContract.id,
+      fixturePath('evidence/wrong-candidate-fuzz-history-gate.json'),
+      wrongCandidateReceiptPath,
+      importedBundlePath,
+      () => importedCandidate,
+    ),
+    /candidate/,
+  );
+  const coherentWrongCandidate = {
+    ...importedCandidate,
+    candidateTree: 'c'.repeat(40),
+    producerWorkflowSha256: 'e'.repeat(64),
+  };
+  const coherentWrongHistory = structuredClone(importedHistory);
+  coherentWrongHistory.candidate = coherentWrongCandidate;
+  const coherentWrongRoleBytes = Buffer.from(canonicalJson(coherentWrongHistory), 'utf8');
+  const coherentWrongBundleRole = {
+    ...importedBundleRole,
+    bytesBase64: coherentWrongRoleBytes.toString('base64'),
+    sha256: sha256(coherentWrongRoleBytes),
+  };
+  const coherentWrongBundleContent = {
+    ...importedBundleContent,
+    candidate: coherentWrongCandidate,
+    roles: [coherentWrongBundleRole],
+  };
+  const coherentWrongBundlePath = fixturePath(
+    'evidence/coherent-wrong-candidate-fuzz-history-bundle.json',
+  );
+  const coherentWrongReceiptPath = fixturePath(
+    'evidence/coherent-wrong-candidate-fuzz-history-receipt.json',
+  );
+  writeFileSync(coherentWrongBundlePath, canonicalJson({
+    content: coherentWrongBundleContent,
+    contentSha256: sha256(Buffer.from(canonicalJson(coherentWrongBundleContent), 'utf8')),
+    formatVersion: 1,
+  }));
+  importReleaseHarnessEvidence({
+    bundlePath: coherentWrongBundlePath,
+    candidateIdentityProvider: () => coherentWrongCandidate,
+    candidateRoot: fixtureRoot,
+    gate: importedContract.id,
+    now: importedNow,
+    outputPath: coherentWrongReceiptPath,
+    registryPath: fixturePath('release/release-harness-contracts.json'),
+  });
+  await assert.rejects(
+    recordImportedGateEvidence(
+      fixtureManifestPath,
+      candidateCommit,
+      artifactDescriptorPath,
+      importedContract.id,
+      fixturePath('evidence/coherent-wrong-candidate-fuzz-history-gate.json'),
+      coherentWrongReceiptPath,
+      coherentWrongBundlePath,
+      () => importedCandidate,
+    ),
+    /do not match the current candidate root/,
+  );
   const conformanceEvidencePath = fixturePath('evidence/conformance-evidence.json');
   const conformanceArtifacts = Object.fromEntries(
     ['pom', 'mainJar', 'sourcesJar', 'javadocJar'].map((name) => [name, {
@@ -1624,7 +1876,7 @@ try {
     };
   }
 
-  function writeSyntheticServletEvidence(gate, outputPath, rolePaths) {
+  function writeSyntheticGateEvidence(gate, outputPath, rolePaths) {
     const contract = EXPECTED_GATE_EVIDENCE_CONTRACTS[gate.id];
     const paths = new Map(rolePaths.map((rolePath) => {
       const separator = rolePath.indexOf('=');
@@ -1722,6 +1974,16 @@ try {
     ),
     /basename must be exactly candidate-localization\.log/,
   );
+  const ordinaryGenericGate = recordGateEvidence(
+    fixtureManifestPath,
+    candidateCommit,
+    artifactDescriptorPath,
+    candidateLocalizationGate.id,
+    fixturePath('evidence/ordinary-generic-gate.json'),
+    localizationPaths,
+  );
+  assert.equal(ordinaryGenericGate.gate.id, candidateLocalizationGate.id);
+  assert.equal(ordinaryGenericGate.status, 'PASS');
 
   const coreJdk21Gate = ready.gates.find(({ id }) => id === 'core-jdk-21');
   const coreJdk21RolePaths = rolePathsForGate(coreJdk21Gate);
@@ -1800,6 +2062,14 @@ try {
 
   for (const gate of ready.gates) {
     const rolePaths = rolePathsForGate(gate);
+    if (importedReleaseHarnessGateIds.has(gate.id)) {
+      const gateOutputPath = resolve(gateDirectory, `${gate.id}.json`);
+      if (gate.id === importedContract.id)
+        copyFileSync(importedGatePath, gateOutputPath);
+      else
+        writeSyntheticGateEvidence(gate, gateOutputPath, rolePaths);
+      continue;
+    }
     if (gate.id === 'soklet-servlet-javax'
         || gate.id === 'soklet-servlet-jakarta') {
       assert.throws(
@@ -1813,7 +2083,7 @@ try {
         ),
         /does not match the gate's exact default artifact identity and SHA-256/,
       );
-      writeSyntheticServletEvidence(
+      writeSyntheticGateEvidence(
         gate,
         resolve(gateDirectory, `${gate.id}.json`),
         rolePaths,

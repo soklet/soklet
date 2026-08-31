@@ -95,7 +95,7 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 	}
 
 	@Test
-	public void applicationCodesAreExcludedWhileAdmittedFixedErrorsRetainExactRequestContext()
+	public void applicationCodesAreExcludedWhileMetricFailureLogsRemainRedacted()
 			throws Exception {
 		RuntimeException preAdmissionFailure = new RuntimeException(
 				"expected pre-admission metric failure");
@@ -194,14 +194,25 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 
 			List<LogEvent> failures = observer.metricFailures();
 			Assertions.assertEquals(2, failures.size(), failures.toString());
-			LogEvent preAdmissionLog = failureFor(failures,
-					preAdmissionFailure);
-			LogEvent admittedLog = failureFor(failures, admittedFailure);
-			Assertions.assertTrue(preAdmissionLog.getRequest().isEmpty(),
-					"A pre-admission ProtocolError must remain request-free.");
-			Assertions.assertSame(observer.requestContext().getRequest(),
-					admittedLog.getRequest().orElseThrow(),
-					"An admitted fixed-code event must retain its exact request context.");
+			for (LogEvent failure : failures) {
+				Assertions.assertTrue(failure.getThrowable().isEmpty(),
+						failure.toString());
+				Assertions.assertTrue(failure.getRequest().isEmpty(),
+						failure.toString());
+				Assertions.assertTrue(failure.getResourceMethod().isEmpty(),
+						failure.toString());
+				Assertions.assertTrue(failure.getMarshaledResponse().isEmpty(),
+						failure.toString());
+			}
+			Assertions.assertTrue(observer.requestContext().getRequest()
+					.getBodyAsString().orElseThrow().contains("fixed-rejected"),
+					"The application-owned callback must retain its request carrier.");
+			String ownedLogs = failures.toString();
+			Assertions.assertFalse(ownedLogs.contains(
+					preAdmissionFailure.getMessage()), ownedLogs);
+			Assertions.assertFalse(ownedLogs.contains(admittedFailure.getMessage()),
+					ownedLogs);
+			Assertions.assertFalse(ownedLogs.contains("fixed-rejected"), ownedLogs);
 			Assertions.assertEquals(1, collector.maximumConcurrentCallbacks(),
 					"Collector failure containment must preserve serialized delivery.");
 		} finally {
@@ -356,14 +367,6 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 	private static long count(@NonNull List<@NonNull McpMetricsEvent> events,
 			@NonNull Class<? extends McpMetricsEvent> type) {
 		return events.stream().filter(type::isInstance).count();
-	}
-
-	@NonNull
-	private static LogEvent failureFor(@NonNull List<@NonNull LogEvent> failures,
-			@NonNull Throwable expected) {
-		return failures.stream()
-				.filter(event -> event.getThrowable().orElseThrow() == expected)
-				.findFirst().orElseThrow();
 	}
 
 	@NonNull

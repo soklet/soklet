@@ -23,6 +23,13 @@ const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const MATRIX_CLOSURE_GATE_ID = 'matrix-closure';
 const MATRIX_CLOSURE_REGISTRY_PATH = 'release/mcp-conformance-matrix-closure.json';
 const MATRIX_CLOSURE_VERIFIER_PATH = 'scripts/verify-release-matrix-closure.mjs';
+const IMPORTED_RELEASE_HARNESS_GATE_IDS = new Set([
+  'fuzz-nightly-history',
+  'mcp-benchmarks',
+  'operational-history',
+  'release-scans',
+  'soak-nightly-history',
+]);
 const SERVLET_DEFAULT_ARTIFACT_IDENTITY = 'com.soklet:soklet:3.1.1';
 const SERVLET_DEFAULT_ARTIFACT_SHA256 =
   'a7acd26b5a8933726615719e8d9d766feba6d0ebdb32939fa8ef1eba8094e7a4';
@@ -1792,6 +1799,13 @@ export function recordGateEvidence(
   if (gate === undefined)
     fail(`Unknown release gate: ${gateId}`);
 
+  if (IMPORTED_RELEASE_HARNESS_GATE_IDS.has(gateId)) {
+    fail(
+      `Gate ${gateId} requires fail-closed imported evidence; `
+        + 'use record-imported-gate with its imported receipt and immutable bundle',
+    );
+  }
+
   if (gate.status !== 'READY')
     fail(`Cannot record PASS for non-ready gate ${gateId}: ${gate.status}`);
 
@@ -1889,6 +1903,145 @@ export function recordGateEvidence(
       toolchain: gate.toolchain,
     },
     interoperability,
+    receipt,
+    status: 'PASS',
+  };
+  writeCanonicalJson(outputPath, value);
+  return value;
+}
+
+function importedRoleArtifact(role, specification, gateId) {
+  const description = `${gateId} imported ${specification.role} evidence`;
+  const expectedKind = specification.type === 'FILE' ? 'file' : 'directory';
+  if (role.name !== specification.role
+      || role.kind !== expectedKind
+      || role.mediaType !== specification.mediaType
+      || basename(role.path) !== specification.fileName) {
+    fail(`${description} does not match its validator-owned role contract`);
+  }
+  if (role.kind === 'file') {
+    const artifact = Object.freeze({
+      bytes: role.size,
+      fileName: specification.fileName,
+      sha256: role.sha256,
+      type: 'FILE',
+    });
+    validateEvidenceItem(artifact, description);
+    return artifact;
+  }
+  const rows = role.entries.map((entry) =>
+    `${entry.sha256}  ${entry.path}\n`).join('');
+  const artifact = Object.freeze({
+    algorithm: "SHA-256 of bytewise-path-sorted '<file-sha256>  <relative-path>\\n' rows",
+    fileCount: role.entryCount,
+    fileName: specification.fileName,
+    sha256: sha256(Buffer.from(rows, 'utf8')),
+    type: 'DIRECTORY',
+  });
+  validateEvidenceItem(artifact, description);
+  return artifact;
+}
+
+/**
+ * Records one of the five externally produced release-harness gates after the
+ * fail-closed importer has bound its immutable bundle to this candidate. The
+ * imported receipt is intentionally an input to the ordinary format-v2 gate
+ * envelope; it does not create a second release gate or change any evidence
+ * role identity.
+ */
+export async function recordImportedGateEvidence(
+  configPath,
+  candidateCommit,
+  artifactDescriptorPath,
+  gateId,
+  outputPath,
+  importedReceiptPath,
+  immutableBundlePath,
+  candidateIdentityProvider,
+) {
+  const config = validateReleaseConfiguration(configPath);
+  requireCommit(candidateCommit);
+  const descriptor = validateCandidateArtifactDescriptor(
+    config,
+    candidateCommit,
+    artifactDescriptorPath,
+  );
+  const gate = config.gates.find(({ id }) => id === gateId);
+  if (gate === undefined)
+    fail(`Unknown release gate: ${gateId}`);
+  if (gate.status !== 'READY')
+    fail(`Cannot record PASS for non-ready gate ${gateId}: ${gate.status}`);
+  const contract = EXPECTED_GATE_EVIDENCE_CONTRACTS[gateId];
+  if (contract === undefined)
+    fail(`Gate ${gateId} has no validator-owned evidence contract`);
+
+  const { verifyImportedBundleReceipt } = await import(
+    './import-release-harness-evidence.mjs'
+  );
+  const imported = verifyImportedBundleReceipt({
+    bundlePath: immutableBundlePath,
+    candidateIdentityProvider,
+    candidateRoot: config.projectRoot,
+    receiptPath: importedReceiptPath,
+    registryPath: resolve(config.projectRoot, 'release/release-harness-contracts.json'),
+  });
+  if (imported.gate !== gateId
+      || imported.evidenceContract !== gate.evidenceContract
+      || imported.verifierCommand !== contract.command
+      || imported.receiptExpectation !== contract.expectation
+      || imported.receiptProfile !== contract.profile
+      || imported.candidateBindings.candidateCommit !== candidateCommit
+      || imported.candidateBindings.candidateMainJarSha256
+        !== descriptor.artifacts.mainJar.sha256
+      || imported.candidateBindings.candidatePomSha256
+        !== descriptor.artifacts.pom.sha256) {
+    fail(`${gateId} imported receipt does not match this candidate and gate contract`);
+  }
+  if (imported.roles.length !== contract.roles.length)
+    fail(`${gateId} imported receipt has an incorrect role count`);
+  const evidence = contract.roles.map((specification, index) => Object.freeze({
+    artifact: importedRoleArtifact(imported.roles[index], specification, gateId),
+    mediaType: specification.mediaType,
+    role: specification.role,
+  }));
+  const workflow = workflowIdentity();
+  if (workflow.sha !== candidateCommit)
+    fail(`Workflow SHA ${workflow.sha} does not match candidate ${candidateCommit}`);
+  const receipt = validateGateReceipt(
+    {
+      candidateCommit,
+      candidateSha256: descriptor.artifacts.mainJar.sha256,
+      command: contract.command,
+      contractId: contract.contractId,
+      expectation: contract.expectation,
+      formatVersion: 1,
+      gateId,
+      profile: contract.profile,
+      result: 'PASS',
+      toolchain: gate.toolchain,
+      workflow,
+    },
+    gate,
+    contract,
+    candidateCommit,
+    descriptor.artifacts.mainJar.sha256,
+  );
+  const value = {
+    candidateCommit,
+    evidence,
+    formatVersion: 2,
+    gate: {
+      artifactChecksum: gate.artifactChecksum,
+      artifactIdentity: gate.artifactIdentity,
+      commit: gate.commit,
+      defaultArtifactIdentity: gate.defaultArtifactIdentity,
+      defaultArtifactSha256: gate.defaultArtifactSha256,
+      evidenceContract: gate.evidenceContract,
+      id: gate.id,
+      repository: gate.repository,
+      toolchain: gate.toolchain,
+    },
+    interoperability: null,
     receipt,
     status: 'PASS',
   };
@@ -2326,6 +2479,9 @@ function usage() {
       + '<manifest> <commit> <output> <pom> <main-jar> <sources-jar> <javadoc-jar>\n'
       + '   or: node scripts/release-validation-evidence.mjs record-gate '
       + '<manifest> <commit> <artifact-descriptor> <gate-id> <output> <role=path>...\n'
+      + '   or: node scripts/release-validation-evidence.mjs record-imported-gate '
+      + '<manifest> <commit> <artifact-descriptor> <gate-id> <output> '
+      + '<imported-receipt> <immutable-bundle>\n'
       + '   or: node scripts/release-validation-evidence.mjs verify-conformance '
       + '<manifest> <commit> <artifact-descriptor> <conformance-evidence>\n'
       + '   or: node scripts/release-validation-evidence.mjs assemble '
@@ -2334,7 +2490,7 @@ function usage() {
   process.exitCode = 64;
 }
 
-function main(args) {
+async function main(args) {
   const command = args.shift();
 
   if (command === 'validate-config' && (args.length === 1
@@ -2401,6 +2557,13 @@ function main(args) {
     return;
   }
 
+  if (command === 'record-imported-gate' && args.length === 7) {
+    await recordImportedGateEvidence(
+      args[0], args[1], args[2], args[3], args[4], args[5], args[6],
+    );
+    return;
+  }
+
   if (command === 'verify-conformance' && args.length === 4) {
     verifyReleaseConformanceEvidence(args[0], args[1], args[2], args[3]);
     console.log('Verified immutable release-candidate conformance evidence.');
@@ -2418,10 +2581,8 @@ function main(args) {
 
 if (process.argv[1] !== undefined
     && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  try {
-    main(process.argv.slice(2));
-  } catch (error) {
+  main(process.argv.slice(2)).catch((error) => {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
-  }
+  });
 }

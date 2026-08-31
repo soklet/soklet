@@ -1990,8 +1990,6 @@ final class DefaultMcpServer implements McpServer {
 			safelyLogRequestObservation(observer, LogEvent.with(
 					LogEventType.LIFECYCLE_OBSERVER_DID_START_MCP_REQUEST_HANDLING_FAILED,
 					"An exception occurred while invoking LifecycleObserver::didStartMcpRequestHandling")
-					.throwable(throwable)
-					.request(context.getRequest())
 					.build(), startThrowables);
 		}
 		this.mcpMetricEventDelivery.recordAndDrain(
@@ -2044,8 +2042,6 @@ final class DefaultMcpServer implements McpServer {
 					safelyLogRequestObservation(observer, LogEvent.with(
 							LogEventType.LIFECYCLE_OBSERVER_DID_FINISH_MCP_REQUEST_HANDLING_FAILED,
 							"An exception occurred while invoking LifecycleObserver::didFinishMcpRequestHandling")
-							.throwable(throwable)
-							.request(context.getRequest())
 							.build(), null);
 				}
 			}
@@ -2110,8 +2106,6 @@ final class DefaultMcpServer implements McpServer {
 			safelyLogRequestObservation(observer, LogEvent.with(
 					LogEventType.METRICS_COLLECTOR_FAILED,
 					"An exception occurred while invoking MetricsCollector::didRecordMcpMetricsEvent")
-					.throwable(throwable)
-					.request(context.getRequest())
 					.build(), null);
 		}
 	}
@@ -2126,7 +2120,6 @@ final class DefaultMcpServer implements McpServer {
 			safelyLogRequestObservation(observer, LogEvent.with(
 					LogEventType.METRICS_COLLECTOR_FAILED,
 					"An exception occurred while invoking MetricsCollector::didRecordMcpMetricsEvent")
-					.throwable(throwable)
 					.build(), null);
 		}
 	}
@@ -2167,11 +2160,11 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	private void safelyLogUnexpectedTermination(@NonNull Throwable throwable) {
+		requireNonNull(throwable);
 		try {
 			this.lifecycleObserver.didReceiveLogEvent(LogEvent.with(
 					LogEventType.SERVER_TRANSPORT_FAILURE,
 					"MCP transport failure: event_loop_terminate")
-					.throwable(throwable)
 					.build());
 		} catch (Throwable observerFailure) {
 			LifecycleObserverLogFallback.report(observerFailure);

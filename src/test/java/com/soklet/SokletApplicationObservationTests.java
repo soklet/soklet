@@ -81,9 +81,10 @@ final class SokletApplicationObservationTests {
 		Assertions.assertEquals(0, drained.pendingRecords());
 		Assertions.assertFalse(drained.callbackActive());
 		Assertions.assertEquals(1, drained.failedCallbacks());
-		Assertions.assertEquals(IllegalStateException.class.getName()
-				+ ": observer\\nfailed",
+		Assertions.assertEquals(IllegalStateException.class.getName(),
 				drained.firstFailureSummary().orElseThrow());
+		Assertions.assertFalse(drained.firstFailureSummary().orElseThrow()
+				.contains("observer"));
 		Assertions.assertEquals(1,
 				workers.created(LifecycleWorkers.Role.TRANSITION_OBSERVER));
 		Assertions.assertEquals(0,
@@ -679,9 +680,10 @@ final class SokletApplicationObservationTests {
 			LifecycleTransitionSnapshot snapshot =
 					soklet.getDirectLifecycle().transitionSnapshot();
 			Assertions.assertEquals(1, snapshot.failedCallbacks());
-			Assertions.assertEquals(IllegalStateException.class.getName()
-					+ ": expected transition observer failure",
+			Assertions.assertEquals(IllegalStateException.class.getName(),
 					snapshot.firstFailureSummary().orElseThrow());
+			Assertions.assertFalse(snapshot.firstFailureSummary().orElseThrow()
+					.contains("expected transition observer failure"));
 			Assertions.assertTrue(logEvents.isEmpty(), logEvents::toString);
 		} finally {
 			soklet.getDirectLifecycle().shutdown();
