@@ -26,6 +26,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -1192,6 +1193,105 @@ public class McpInputRequiredPublicRuntimeTests {
 					missingCapability.body());
 			Assertions.assertEquals(4, interceptorInvocations.get());
 			Assertions.assertEquals(0, handlerInvocations.get());
+			Assertions.assertEquals(0, sanitizerInvocations.get());
+		} finally {
+			soklet.close();
+		}
+	}
+
+	@Test
+	public void aggregateInputRequestTreesFailClosedWithoutCanaryAndServerRecovers()
+			throws Exception {
+		String canary = "AGGREGATE-INPUT-REQUEST-CANARY";
+		AtomicInteger aggregateInvocations = new AtomicInteger();
+		AtomicInteger legalInvocations = new AtomicInteger();
+		AtomicInteger sanitizerInvocations = new AtomicInteger();
+		McpInputRequestDeclaration roots = McpInputRequestDeclaration
+				.fromRoots(McpInputRequirement.CONDITIONAL);
+		McpJsonArray padding = McpJsonArray.fromElements(
+				Collections.nCopies(1_000, McpJsonNull.INSTANCE));
+		McpJsonObject params = McpJsonObject.builder()
+				.put("_meta", McpJsonObject.builder()
+						.put("aggregateCanary", canary)
+						.put("padding", padding)
+						.build())
+				.build();
+		McpInputRequiredResult.Builder aggregateResult =
+				McpInputRequiredResult.builder();
+		for (int index = 0; index < 100; ++index)
+			aggregateResult.inputRequest("request-" + index,
+					McpInputRequest.fromDeclaration(roots, params));
+		McpInputRequiredResult oversizedResult = aggregateResult.build();
+		McpInputRequiredResult individuallyLegalResult =
+				McpInputRequiredResult.builder()
+						.inputRequest("request", McpInputRequest.fromDeclaration(
+								roots, params))
+						.build();
+		McpToolRegistration<McpJsonObject> aggregateTool = McpToolRegistration
+				.withName("aggregate-input-requests")
+				.jsonArguments()
+				.handler((request, arguments, features) -> {
+					aggregateInvocations.incrementAndGet();
+					return oversizedResult;
+				})
+				.mayRequestInput(roots)
+				.build();
+		McpToolRegistration<McpJsonObject> legalTool = McpToolRegistration
+				.withName("legal-input-request")
+				.jsonArguments()
+				.handler((request, arguments, features) -> {
+					legalInvocations.incrementAndGet();
+					return individuallyLegalResult;
+				})
+				.mayRequestInput(roots)
+				.build();
+		McpEndpoint endpoint = endpointBuilder()
+				.tool(aggregateTool)
+				.tool(legalTool)
+				.build();
+		McpServer server = server(endpoint,
+				McpAdmissionController.acceptAllInstance(),
+				context -> McpRateLimitDecision.allowed(),
+				context -> McpRateLimitDecision.allowed(),
+				(request, toolName, rawArguments, output) -> {
+					sanitizerInvocations.incrementAndGet();
+					return output;
+				});
+		Soklet soklet = managedSoklet(server);
+
+		try {
+			soklet.start();
+			int port = boundPort(server);
+			HttpResponse<String> missingCapability = callTool(port,
+					"aggregate-input-missing-capability",
+					"aggregate-input-requests", "{}");
+			assertMissingCapability(missingCapability,
+					"aggregate-input-missing-capability", ROOTS_CAPABILITY);
+			Assertions.assertFalse(missingCapability.body().contains(canary),
+					missingCapability.body());
+			Assertions.assertFalse(
+					missingCapability.body().contains("inputRequests"),
+					missingCapability.body());
+
+			HttpResponse<String> oversized = callTool(port, "aggregate-input",
+					"aggregate-input-requests", ROOTS_CAPABILITY);
+			Assertions.assertEquals(500, oversized.statusCode(), oversized.body());
+			Assertions.assertEquals(
+					"{\"jsonrpc\":\"2.0\",\"id\":\"aggregate-input\","
+							+ "\"error\":{\"code\":-32603,"
+							+ "\"message\":\"Internal error\"}}",
+					oversized.body());
+			Assertions.assertFalse(oversized.body().contains(canary),
+					oversized.body());
+			Assertions.assertFalse(oversized.body().contains("inputRequests"),
+					oversized.body());
+
+			HttpResponse<String> recovered = callTool(port, "legal-input",
+					"legal-input-request", ROOTS_CAPABILITY);
+			assertInputRequired(recovered, "legal-input");
+			assertContains(recovered.body(), canary);
+			Assertions.assertEquals(2, aggregateInvocations.get());
+			Assertions.assertEquals(1, legalInvocations.get());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
 		} finally {
 			soklet.close();

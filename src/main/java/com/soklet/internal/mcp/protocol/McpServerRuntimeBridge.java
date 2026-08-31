@@ -870,6 +870,17 @@ public final class McpServerRuntimeBridge {
 		requireNonNull(endpointPlan);
 		requireNonNull(requestStateRuntime);
 		McpEndpoint publicEndpoint = endpointPlan.endpoint();
+		McpPublicJsonValueConverter.requireCollectionCouldFitProductionNodeBudget(
+				endpointPlan.toolPlans().size(), 4, 8, "MCP tool catalog");
+		McpPublicJsonValueConverter.requireCollectionCouldFitProductionNodeBudget(
+				endpointPlan.promptPlans().size(), 2, 8, "MCP prompt catalog");
+		if (endpointPlan.resourceListPlan().invoker().isEmpty()) {
+			long exactResourceCount = endpointPlan.resourcePlans().stream()
+					.filter(plan -> plan.addressKind() == ResourceAddressKind.URI)
+					.count();
+			McpPublicJsonValueConverter.requireCollectionCouldFitProductionNodeBudget(
+					exactResourceCount, 3, 8, "MCP resource catalog");
+		}
 		McpImplementation publicInformation = publicEndpoint.getServerInformation();
 		McpImplementationMetadata implementation = new McpImplementationMetadata(
 				publicInformation.getName(), publicInformation.getVersion(),
@@ -3441,7 +3452,6 @@ public final class McpServerRuntimeBridge {
 		requireNonNull(invocation);
 		requireNonNull(publicEndpoint);
 		requireNonNull(requestStateRuntime);
-
 		Set<McpClientCapabilityRequirement> missingCapabilities =
 				new LinkedHashSet<>();
 		Map<String, McpInputRequestDeclaration> internalDeclarations =
@@ -3466,6 +3476,7 @@ public final class McpServerRuntimeBridge {
 		for (McpInputRequestDeclaration internalDeclaration
 				: internalDeclarations.values())
 			inputRequestPlan.requireDeclared(internalDeclaration);
+		requireInputRequiredResultFitsJsonNodeBudget(publicResult);
 
 		com.soklet.internal.mcp.protocol.McpJsonObject internalMetadata =
 				(com.soklet.internal.mcp.protocol.McpJsonObject)
@@ -3784,27 +3795,45 @@ public final class McpServerRuntimeBridge {
 
 	private static com.soklet.internal.mcp.protocol.@NonNull McpJsonValue toInternal(
 			@NonNull McpJsonValue value) {
-		if (value instanceof McpJsonString string)
-			return new com.soklet.internal.mcp.protocol.McpJsonString(string.getValue());
-		if (value instanceof McpJsonNumber number)
-			return new com.soklet.internal.mcp.protocol.McpJsonNumber(number.getValue());
-		if (value instanceof McpJsonBoolean bool)
-			return com.soklet.internal.mcp.protocol.McpJsonBoolean
-					.fromBoolean(bool.getValue());
-		if (value instanceof McpJsonNull)
-			return com.soklet.internal.mcp.protocol.McpJsonNull.INSTANCE;
-		if (value instanceof McpJsonArray array) {
-			List<com.soklet.internal.mcp.protocol.McpJsonValue> elements = new ArrayList<>();
-			array.getElements().forEach(element -> elements.add(toInternal(element)));
-			return new com.soklet.internal.mcp.protocol.McpJsonArray(elements);
+		return McpPublicJsonValueConverter.toInternal(value);
+	}
+
+	private static void requireInputRequiredResultFitsJsonNodeBudget(
+			@NonNull McpInputRequiredResult result) {
+		requireNonNull(result);
+		long nodeCount = 5L;
+		if (!result.getInputRequests().isEmpty())
+			nodeCount = addJsonNodeCount(nodeCount, 1L,
+					"MCP input-required result");
+		for (McpInputRequest request : result.getInputRequests().values()) {
+			nodeCount = addJsonNodeCount(nodeCount, 2L,
+					"MCP input-required result");
+			nodeCount = addJsonNodeCount(nodeCount,
+					McpPublicJsonValueConverter.productionNodeCount(
+							request.getParams()),
+					"MCP input-required result");
 		}
-		if (value instanceof McpJsonObject object) {
-			Map<String, com.soklet.internal.mcp.protocol.McpJsonValue> members =
-					new LinkedHashMap<>();
-			object.getMembers().forEach((name, member) ->
-					members.put(name, toInternal(member)));
-			return new com.soklet.internal.mcp.protocol.McpJsonObject(members);
-		}
-		throw new IllegalArgumentException("Unsupported public MCP JSON value.");
+		if (result.getFrameworkRequestState().isPresent()
+				|| result.getApplicationRequestState().isPresent())
+			nodeCount = addJsonNodeCount(nodeCount, 1L,
+					"MCP input-required result");
+		if (!result.getMetadata().getMembers().isEmpty())
+			addJsonNodeCount(nodeCount,
+					McpPublicJsonValueConverter.productionNodeCount(
+							result.getMetadata()),
+					"MCP input-required result");
+	}
+
+	private static long addJsonNodeCount(long currentCount, long additionalCount,
+			@NonNull String description) {
+		requireNonNull(description);
+		if (currentCount < 0L || additionalCount < 0L
+				|| currentCount > Long.MAX_VALUE - additionalCount)
+			throw new IllegalArgumentException(
+					"Invalid MCP JSON node-budget accounting.");
+		long nodeCount = currentCount + additionalCount;
+		McpPublicJsonValueConverter.requireProductionNodeCount(
+				nodeCount, description);
+		return nodeCount;
 	}
 }

@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.internal.mcp.protocol.McpEndpointPathLimit;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -71,10 +72,13 @@ public final class McpEndpoint {
 	/**
 	 * Vends a builder primed with an MCP endpoint path.
 	 *
-	 * @param path the absolute endpoint path
+	 * @param path the absolute endpoint path in ASCII raw URI form; percent-encode
+	 *             non-ASCII characters
 	 * @return a builder for endpoint registrations
 	 * @throws IllegalArgumentException if the path is not a non-root absolute
-	 *                                  path or contains a query or fragment
+	 *                                  path, is not valid ASCII raw URI form,
+	 *                                  contains a query or fragment, or exceeds
+	 *                                  8192 bytes after normalization
 	 */
 	@NonNull
 	public static Builder withPath(@NonNull String path) {
@@ -320,7 +324,7 @@ public final class McpEndpoint {
 		if (normalizedPath.length() == 1)
 			throw new IllegalArgumentException("MCP endpoint path must not be the root path.");
 
-		return normalizedPath;
+		return McpEndpointPathLimit.requireValidWirePath(normalizedPath);
 	}
 
 	/**

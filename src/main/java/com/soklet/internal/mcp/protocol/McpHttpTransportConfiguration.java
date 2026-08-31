@@ -47,7 +47,8 @@ record McpHttpTransportConfiguration(@NonNull String host, int port,
 	private static final int MEBIBYTE = 1_024 * 1_024;
 	private static final int DEFAULT_MAXIMUM_REQUEST_BODY_BYTES = 4 * MEBIBYTE;
 	private static final int DEFAULT_MAXIMUM_HEADER_BYTES = 64 * 1_024;
-	private static final int DEFAULT_MAXIMUM_REQUEST_TARGET_BYTES = 8 * 1_024;
+	private static final int DEFAULT_MAXIMUM_REQUEST_TARGET_BYTES =
+			McpEndpointPathLimit.MAXIMUM_REQUEST_TARGET_BYTES;
 	private static final int HTTP_FRAMING_ALLOWANCE_BYTES = 1 * 1_024;
 	private static final int DEFAULT_MAXIMUM_AGGREGATE_REQUEST_BYTES =
 			DEFAULT_MAXIMUM_REQUEST_BODY_BYTES + DEFAULT_MAXIMUM_HEADER_BYTES
@@ -224,6 +225,7 @@ record McpHttpEndpointPolicy(@NonNull String path,
 				|| path.contains("#"))
 			throw new IllegalArgumentException(
 					"MCP endpoint path must be an absolute path without a query or fragment.");
+		McpEndpointPathLimit.requireValidWirePath(path);
 
 		requireNonNull(allowedHosts);
 		LinkedHashSet<String> copiedHosts = new LinkedHashSet<>();

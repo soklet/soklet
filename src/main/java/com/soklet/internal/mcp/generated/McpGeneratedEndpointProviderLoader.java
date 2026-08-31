@@ -22,7 +22,7 @@ import com.soklet.McpToolSchema;
 import com.soklet.McpToolRegistration;
 import com.soklet.internal.mcp.protocol.McpJsonCodec;
 import com.soklet.internal.mcp.protocol.McpJsonLimits;
-import com.soklet.internal.mcp.protocol.McpJsonValue;
+import com.soklet.internal.mcp.protocol.McpPublicJsonValueConverter;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -398,7 +398,7 @@ public final class McpGeneratedEndpointProviderLoader {
 	private static String schemaDigest(@NonNull McpToolSchema schema) {
 		byte[] canonicalBytes = new McpJsonCodec(
 				McpJsonLimits.productionDefaults()).toUtf8Bytes(
-				toInternal(schema.getDocument()));
+				McpPublicJsonValueConverter.toInternal(schema.getDocument()));
 		try {
 			byte[] digest = MessageDigest.getInstance("SHA-256")
 					.digest(canonicalBytes);
@@ -413,36 +413,6 @@ public final class McpGeneratedEndpointProviderLoader {
 		} catch (NoSuchAlgorithmException exception) {
 			throw new IllegalStateException("SHA-256 is not available.", exception);
 		}
-	}
-
-	@NonNull
-	private static McpJsonValue toInternal(
-			com.soklet.@NonNull McpJsonValue value) {
-		if (value instanceof com.soklet.McpJsonString string)
-			return new com.soklet.internal.mcp.protocol.McpJsonString(
-					string.getValue());
-		if (value instanceof com.soklet.McpJsonNumber number)
-			return new com.soklet.internal.mcp.protocol.McpJsonNumber(
-					number.getValue());
-		if (value instanceof com.soklet.McpJsonBoolean bool)
-			return com.soklet.internal.mcp.protocol.McpJsonBoolean
-					.fromBoolean(bool.getValue());
-		if (value == com.soklet.McpJsonNull.INSTANCE)
-			return com.soklet.internal.mcp.protocol.McpJsonNull.INSTANCE;
-		if (value instanceof com.soklet.McpJsonArray array) {
-			List<McpJsonValue> elements = new ArrayList<>(
-					array.getElements().size());
-			array.getElements().forEach(element -> elements.add(
-					toInternal(element)));
-			return new com.soklet.internal.mcp.protocol.McpJsonArray(elements);
-		}
-		if (value instanceof com.soklet.McpJsonObject object) {
-			Map<String, McpJsonValue> members = new LinkedHashMap<>();
-			object.getMembers().forEach((name, member) -> members.put(name,
-					toInternal(member)));
-			return new com.soklet.internal.mcp.protocol.McpJsonObject(members);
-		}
-		throw new IllegalStateException("Unsupported public MCP JSON value.");
 	}
 
 	@NonNull

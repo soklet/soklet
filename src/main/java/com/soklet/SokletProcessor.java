@@ -35,6 +35,7 @@ import com.soklet.annotation.POST;
 import com.soklet.annotation.PUT;
 import com.soklet.annotation.SseEventSource;
 import com.soklet.internal.mcp.generated.McpGeneratedEndpointProviderIndex;
+import com.soklet.internal.mcp.protocol.McpEndpointPathLimit;
 import com.soklet.internal.mcp.schema.McpTypeMirrorTypedSchemaBridge;
 import com.google.errorprone.annotations.FormatMethod;
 import org.jspecify.annotations.NonNull;
@@ -895,6 +896,12 @@ public final class SokletProcessor extends AbstractProcessor {
 			if (path.length() == 1)
 				mcpError(endpointType,
 						"Soklet: MCP endpoint path must not normalize to the root path.");
+			else if (!McpEndpointPathLimit.isValidWirePath(path))
+				mcpError(endpointType,
+						"Soklet: MCP endpoint path must be a normalized ASCII raw URI path; percent-encode non-ASCII characters.");
+			else if (!McpEndpointPathLimit.isWithinLimit(path))
+				mcpError(endpointType,
+						"Soklet: MCP endpoint path must not exceed 8192 ASCII request-target bytes.");
 		}
 
 		String name = annotationString(annotation, "name");

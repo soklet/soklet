@@ -17,6 +17,7 @@
 package com.soklet.internal.mcp.generated;
 
 import com.soklet.ResourcePathDeclaration;
+import com.soklet.internal.mcp.protocol.McpEndpointPathLimit;
 import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -134,7 +135,7 @@ public final class McpGeneratedEndpointProviderIndex {
 						.equals(endpointPath))
 			throw new IllegalArgumentException(
 					"Generated MCP endpoint path must be a normalized, fixed, non-root absolute path.");
-		return endpointPath;
+		return McpEndpointPathLimit.requireValidWirePath(endpointPath);
 	}
 
 	/**

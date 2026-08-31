@@ -42,7 +42,9 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface McpServerEndpoint {
 	/**
-	 * The URL path exposed by the dedicated MCP server.
+	 * The fixed, non-root URL path exposed by the dedicated MCP server. It must
+	 * be a normalized ASCII raw URI path of at most 8192 bytes; non-ASCII
+	 * characters must be percent-encoded.
 	 *
 	 * @return the endpoint URL path
 	 */

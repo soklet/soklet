@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.internal.mcp.protocol.McpJsonLimits;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -27,6 +28,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -175,6 +177,67 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 					throw new IllegalStateException(
 							"SANITIZER-EXCEPTION-MUST-NOT-LEAK");
 				});
+	}
+
+	@Test
+	public void applicationResultBoundsFailClosedWithoutLeaksAndServerRecovers()
+			throws Exception {
+		String deepHandlerCanary = "DEEP-HANDLER-RESULT-MUST-NOT-LEAK";
+		String deepMetadataCanary = "DEEP-METADATA-MUST-NOT-LEAK";
+		String sanitizerCanary = "DEEP-SANITIZER-RESULT-MUST-NOT-LEAK";
+		String wideCanary = "WIDE-CONTENT-MUST-NOT-LEAK";
+		McpJsonValue deepHandlerResult = deeplyNestedJson(deepHandlerCanary);
+		McpJsonObject deepMetadata = deeplyNestedObject(deepMetadataCanary);
+		McpJsonValue deepSanitizerResult = deeplyNestedJson(sanitizerCanary);
+		int wideContentCount = (McpJsonLimits.productionDefaults()
+				.maximumNodeCount() - 6) / 3 + 1;
+		McpToolOutput wideOutput = McpToolOutput.builder()
+				.content(Collections.nCopies(wideContentCount,
+						McpTextContent.fromText(wideCanary)))
+				.build();
+
+		List<McpToolRegistration<?>> tools = List.of(
+				jsonTool("deep-handler", () ->
+						McpCompleteResult.fromToolStructuredContent(
+								deepHandlerResult)),
+				jsonTool("deep-metadata", () ->
+						McpCompleteResult.fromToolText("safe")
+								.withMetadata(deepMetadata)),
+				jsonTool("deep-sanitizer", () ->
+						McpCompleteResult.fromToolText("raw-safe")),
+				jsonTool("wide-content", () ->
+						McpCompleteResult.fromToolOutput(wideOutput)),
+				jsonTool("healthy", () ->
+						McpCompleteResult.fromToolText("HEALTHY-AFTER-BOUNDS")));
+		McpToolOutputSanitizer sanitizer = (request, toolName, rawArguments,
+				output) -> toolName.equals("deep-sanitizer")
+						? McpToolOutput.fromStructuredContent(deepSanitizerResult)
+						: output;
+		McpServer server = server(tools,
+				McpHandlerInterceptor.passThroughInstance(), sanitizer);
+		Soklet soklet = managedSoklet(server);
+
+		try {
+			soklet.start();
+			int port = boundPort(server);
+			for (String toolName : List.of("deep-handler", "deep-metadata",
+					"deep-sanitizer", "wide-content")) {
+				HttpResponse<String> response = call(port, "bounded-" + toolName,
+						toolName, "{}");
+				assertFixedInternalError(response, "bounded-" + toolName);
+				for (String canary : List.of(deepHandlerCanary,
+						deepMetadataCanary, sanitizerCanary, wideCanary))
+					Assertions.assertFalse(response.body().contains(canary),
+							response.body());
+			}
+
+			HttpResponse<String> healthy = call(port, "bounded-healthy",
+					"healthy", "{}");
+			assertSuccess(healthy, "bounded-healthy");
+			assertContains(healthy.body(), "HEALTHY-AFTER-BOUNDS");
+		} finally {
+			soklet.close();
+		}
 	}
 
 	@Test
@@ -344,6 +407,28 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 		} finally {
 			soklet.close();
 		}
+	}
+
+	private static McpToolRegistration<McpJsonObject> jsonTool(String name,
+			java.util.function.Supplier<McpCompleteResult> resultSupplier) {
+		return McpToolRegistration.withName(name)
+				.jsonArguments()
+				.handler((request, arguments, features) -> resultSupplier.get())
+				.build();
+	}
+
+	private static McpJsonValue deeplyNestedJson(String canary) {
+		McpJsonValue value = McpJsonString.fromValue(canary);
+		for (int depth = 0; depth < 512; depth++)
+			value = McpJsonArray.fromElements(List.of(value));
+		return value;
+	}
+
+	private static McpJsonObject deeplyNestedObject(String canary) {
+		McpJsonValue value = McpJsonString.fromValue(canary);
+		for (int depth = 0; depth < 512; depth++)
+			value = McpJsonObject.builder().put("next", value).build();
+		return (McpJsonObject) value;
 	}
 
 	private static Soklet managedSoklet(McpServer server) {

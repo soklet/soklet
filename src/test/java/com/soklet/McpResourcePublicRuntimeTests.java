@@ -712,6 +712,80 @@ public class McpResourcePublicRuntimeTests {
 	}
 
 	@Test
+	public void aggregateDynamicResourcePageFailsClosedWithoutCanaryAndRecovers()
+			throws Exception {
+		String canary = "AGGREGATE-RESOURCE-PAGE-CANARY";
+		AtomicInteger listHandlerInvocations = new AtomicInteger();
+		McpJsonArray padding = McpJsonArray.fromElements(
+				Collections.nCopies(50_000, McpJsonNull.INSTANCE));
+		McpJsonObject metadata = McpJsonObject.builder()
+				.put("aggregateCanary", canary)
+				.put("padding", padding)
+				.build();
+		McpResourceDescriptor first = McpResourceDescriptor
+				.withUriAndName(URI.create("test://aggregate-page/first"), "First")
+				.metadata(metadata)
+				.build();
+		McpResourceDescriptor second = McpResourceDescriptor
+				.withUriAndName(URI.create("test://aggregate-page/second"), "Second")
+				.metadata(metadata)
+				.build();
+		McpResourceListHandler listHandler = (request, list, features) -> {
+			listHandlerInvocations.incrementAndGet();
+			return switch (list.getCursor().orElseThrow()) {
+				case "oversized" -> McpResourcePage.builder()
+						.resource(first)
+						.resource(second)
+						.build();
+				case "legal" -> McpResourcePage.builder()
+						.resource(first)
+						.build();
+				default -> throw new AssertionError("Unexpected cursor");
+			};
+		};
+		McpEndpoint endpoint = endpointBuilder()
+				.resource(McpResourceRegistration.withUriTemplateAndName(
+						"test://aggregate-page/{id}", "Aggregate page resource")
+						.handler(resourceHandler())
+						.build())
+				.resourceListHandler(listHandler)
+				.build();
+		McpServer server = serverBuilder(endpoint).build();
+		Soklet soklet = managedSoklet(server);
+
+		try {
+			soklet.start();
+			int port = server.getDiagnostics().getBoundAddress()
+					.orElseThrow().getPort();
+			HttpResponse<String> oversized = send(port,
+					request("aggregate-page", "resources/list",
+							",\"cursor\":\"oversized\""),
+					"resources/list");
+			assertError(oversized, 500, -32603, "aggregate-page");
+			Assertions.assertEquals(
+					"{\"jsonrpc\":\"2.0\",\"id\":\"aggregate-page\","
+							+ "\"error\":{\"code\":-32603,"
+							+ "\"message\":\"Internal error\"}}",
+					oversized.body());
+			Assertions.assertFalse(oversized.body().contains(canary),
+					oversized.body());
+			Assertions.assertFalse(oversized.body().contains("aggregate-page/first"),
+					oversized.body());
+
+			HttpResponse<String> recovered = send(port,
+					request("legal-page", "resources/list",
+							",\"cursor\":\"legal\""),
+					"resources/list");
+			assertSuccess(recovered, "legal-page");
+			assertContains(recovered.body(), canary);
+			assertContains(recovered.body(), "test://aggregate-page/first");
+			Assertions.assertEquals(2, listHandlerInvocations.get());
+		} finally {
+			soklet.close();
+		}
+	}
+
+	@Test
 	public void blobOutputHonorsTheProductionJsonStringBound() throws Exception {
 		URI boundaryUri = URI.create("test://blob-boundary");
 		URI oversizedUri = URI.create("test://blob-oversized");
@@ -801,6 +875,85 @@ public class McpResourcePublicRuntimeTests {
 				() -> serverBuilder(endpoint.build()).build());
 		assertContains(exception.getMessage(), "'resources/list'");
 		assertContains(exception.getMessage(), "maximum UTF-8 bytes: 4194304");
+	}
+
+	@Test
+	public void aggregateToolCatalogNodeBudgetFailsAtBuildWithoutCanaryAndRecovers() {
+		String canary = "AGGREGATE-TOOL-CATALOG-CANARY";
+		McpJsonObject metadata = McpJsonObject.builder()
+				.put("aggregateCanary", canary)
+				.put("padding", McpJsonArray.fromElements(
+						Collections.nCopies(50_000, McpJsonNull.INSTANCE)))
+				.build();
+		McpToolRegistration<McpJsonObject> first = McpToolRegistration
+				.withName("aggregate-catalog-first")
+				.jsonArguments()
+				.handler((request, arguments, features) ->
+						McpCompleteResult.fromToolText("first"))
+				.metadata(metadata)
+				.build();
+		McpToolRegistration<McpJsonObject> second = McpToolRegistration
+				.withName("aggregate-catalog-second")
+				.jsonArguments()
+				.handler((request, arguments, features) ->
+						McpCompleteResult.fromToolText("second"))
+				.metadata(metadata)
+				.build();
+		McpEndpoint oversized = endpointBuilder()
+				.tool(first)
+				.tool(second)
+				.build();
+
+		IllegalArgumentException exception = Assertions.assertThrows(
+				IllegalArgumentException.class,
+				() -> serverBuilder(oversized)
+						.toolRateLimiter(context ->
+								McpRateLimitDecision.allowed())
+						.build());
+		assertContains(exception.getMessage(), "MCP tool catalog");
+		assertContains(exception.getMessage(), "JSON node limit");
+		Assertions.assertFalse(exception.getMessage().contains(canary),
+				exception.getMessage());
+
+		McpEndpoint individuallyLegal = endpointBuilder()
+				.tool(first)
+				.build();
+		McpServer recovered = Assertions.assertDoesNotThrow(
+				() -> serverBuilder(individuallyLegal)
+						.toolRateLimiter(context ->
+								McpRateLimitDecision.allowed())
+						.build());
+		Assertions.assertEquals(McpServerStatus.NOT_STARTED,
+				recovered.getDiagnostics().getStatus());
+	}
+
+	@Test
+	public void customResourceListDoesNotBudgetUnpublishedStaticCatalog() {
+		McpJsonObject metadata = McpJsonObject.builder()
+				.put("padding", McpJsonArray.fromElements(
+						Collections.nCopies(50_000, McpJsonNull.INSTANCE)))
+				.build();
+		McpResourceRegistration first = McpResourceRegistration
+				.withUriAndName(URI.create("test://custom-list/first"), "First")
+				.handler(resourceHandler())
+				.metadata(metadata)
+				.build();
+		McpResourceRegistration second = McpResourceRegistration
+				.withUriAndName(URI.create("test://custom-list/second"), "Second")
+				.handler(resourceHandler())
+				.metadata(metadata)
+				.build();
+		McpEndpoint endpoint = endpointBuilder()
+				.resource(first)
+				.resource(second)
+				.resourceListHandler((request, list, features) ->
+						McpResourcePage.builder().build())
+				.build();
+
+		McpServer server = Assertions.assertDoesNotThrow(
+				() -> serverBuilder(endpoint).build());
+		Assertions.assertEquals(McpServerStatus.NOT_STARTED,
+				server.getDiagnostics().getStatus());
 	}
 
 	private static McpEndpoint.Builder endpointBuilder() {

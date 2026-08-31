@@ -146,6 +146,65 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	@Test
+	public void endpointPathBoundMatchesAndReachesTheProductionListener()
+			throws Exception {
+		McpHttpTransportConfiguration configuration = configuration(0);
+		Assertions.assertEquals(McpEndpointPathLimit.MAXIMUM_REQUEST_TARGET_BYTES,
+				configuration.maximumRequestTargetBytes());
+		String asciiBoundary = "/" + "a".repeat(8_191);
+		String percentEncodedPath = "/caf%C3%A9";
+		String percentEncodedBoundary = "/" + "%C3%A9".repeat(1_365) + "a";
+
+		Assertions.assertDoesNotThrow(() -> new McpHttpEndpointPolicy(
+				percentEncodedBoundary, Set.of(), McpAbsentOriginPolicy.ALLOW,
+				CorsAuthorizer.rejectAllInstance(),
+				request -> McpRequestAdmissionDecision.ACCEPT));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> new McpHttpEndpointPolicy(
+						"/café", Set.of(), McpAbsentOriginPolicy.ALLOW,
+						CorsAuthorizer.rejectAllInstance(),
+						request -> McpRequestAdmissionDecision.ACCEPT));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> new McpHttpEndpointPolicy(
+						asciiBoundary + "a", Set.of(), McpAbsentOriginPolicy.ALLOW,
+						CorsAuthorizer.rejectAllInstance(),
+						request -> McpRequestAdmissionDecision.ACCEPT));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> new McpHttpEndpointPolicy(
+						percentEncodedBoundary + "a", Set.of(),
+						McpAbsentOriginPolicy.ALLOW,
+						CorsAuthorizer.rejectAllInstance(),
+						request -> McpRequestAdmissionDecision.ACCEPT));
+
+		McpHttpServerRuntime runtime = new McpHttpServerRuntime(configuration,
+				List.of(
+						endpointBinding(asciiBoundary, "boundary",
+								ignored -> completeResult("boundary")),
+						endpointBinding(percentEncodedPath, "encoded",
+								ignored -> completeResult("encoded"))));
+		try {
+			int port = runtime.start().getPort();
+			RawResponse response = send(port, "POST", asciiBoundary,
+					standardHeaders(port, DISCOVER_METHOD),
+					discoverBody("\"boundary\"", DISCOVER_METHOD,
+							PROTOCOL_VERSION));
+			Assertions.assertEquals(200, response.status(), response.bodyText());
+			RawResponse encodedResponse = send(port, "POST", percentEncodedPath,
+					standardHeaders(port, DISCOVER_METHOD),
+					discoverBody("\"encoded\"", DISCOVER_METHOD,
+							PROTOCOL_VERSION));
+			Assertions.assertEquals(200, encodedResponse.status(),
+					encodedResponse.bodyText());
+			RawResponse oversizedResponse = sendRequestLine(port, "POST",
+					asciiBoundary + "a");
+			Assertions.assertEquals(414, oversizedResponse.status(),
+					oversizedResponse.bodyText());
+		} finally {
+			runtime.close();
+		}
+	}
+
+	@Test
 	public void exact_path_routing_selects_each_endpoint_policy_catalog_and_router()
 			throws Exception {
 		AtomicInteger alphaAdmissions = new AtomicInteger();
@@ -1558,6 +1617,27 @@ public class McpHttpServerRuntimeTests {
 					requestHead.toString().getBytes(StandardCharsets.ISO_8859_1));
 			socket.getOutputStream().write(body);
 			socket.getOutputStream().flush();
+
+			ByteArrayOutputStream response = new ByteArrayOutputStream();
+			InputStream input = socket.getInputStream();
+			byte[] buffer = new byte[4_096];
+			int read;
+			while ((read = input.read(buffer)) >= 0)
+				response.write(buffer, 0, read);
+
+			return RawResponse.parse(response.toByteArray());
+		}
+	}
+
+	private static RawResponse sendRequestLine(int port, String method, String path)
+			throws Exception {
+		try (Socket socket = new Socket()) {
+			socket.connect(new InetSocketAddress(LOOPBACK, port), 3_000);
+			socket.setSoTimeout(5_000);
+			socket.getOutputStream().write((method + " " + path
+					+ " HTTP/1.1\r\n").getBytes(StandardCharsets.ISO_8859_1));
+			socket.getOutputStream().flush();
+			socket.shutdownOutput();
 
 			ByteArrayOutputStream response = new ByteArrayOutputStream();
 			InputStream input = socket.getInputStream();

@@ -20,6 +20,7 @@ import com.soklet.internal.mcp.protocol.McpJsonLimits;
 import com.soklet.internal.mcp.protocol.McpApplicationExecutionObserver;
 import com.soklet.internal.mcp.protocol.McpApplicationExecutionObserver.PendingMetricRecord;
 import com.soklet.internal.mcp.protocol.McpLocalizationContextUnavailableException;
+import com.soklet.internal.mcp.protocol.McpPublicJsonValueConverter;
 import com.soklet.internal.mcp.protocol.McpRuntimeCatalogLocalizer;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.AdmissionInput;
@@ -455,6 +456,7 @@ final class DefaultMcpServer implements McpServer {
 
 	@NonNull
 	private EndpointPlan toEndpointPlan(@NonNull McpEndpoint endpoint) {
+		requireEndpointCatalogsFitJsonNodeBudget(endpoint);
 		List<ToolPlan> toolPlans = endpoint.getTools().stream()
 				.map(tool -> toToolPlan(endpoint, tool))
 				.toList();
@@ -1151,6 +1153,9 @@ final class DefaultMcpServer implements McpServer {
 
 		Optional<McpJsonValue> structuredContent =
 				sanitizedOutput.getStructuredContent();
+		requireToolResultFitsJsonNodeBudget(sanitizedOutput,
+				completeResult.getMetadata(),
+				tool.isStructuredContentTextMirroringEnabled());
 		if (structuredContent.isPresent()
 				&& !tool.isStructuredOutputValid(structuredContent.orElseThrow()))
 			throw new IllegalArgumentException(
@@ -1195,6 +1200,8 @@ final class DefaultMcpServer implements McpServer {
 		if (!(completeResult.getPayload() instanceof McpPromptOutput output))
 			throw new IllegalArgumentException(
 					"An MCP prompt handler must return prompt output.");
+		requirePromptResultFitsJsonNodeBudget(output,
+				completeResult.getMetadata());
 
 		return PromptInvocationResult.complete(promptOutputFields(output),
 				completeResult.getMetadata());
@@ -1241,6 +1248,8 @@ final class DefaultMcpServer implements McpServer {
 		if (!(completeResult.getPayload() instanceof McpResourceOutput output))
 			throw new IllegalArgumentException(
 					"An MCP resource handler must return resource output.");
+		requireResourceResultFitsJsonNodeBudget(output,
+				completeResult.getMetadata());
 
 		return ResourceInvocationResult.complete(resourceOutputFields(output),
 				completeResult.getMetadata());
@@ -1346,6 +1355,7 @@ final class DefaultMcpServer implements McpServer {
 		if (!(result instanceof McpResourcePage page))
 			throw new IllegalArgumentException(
 					"An MCP resource-list handler must return a resource page.");
+		requireResourcePageFitsJsonNodeBudget(page);
 
 		return ResourceListInvocationResult.complete(resourcePageFields(page),
 				page.getMetadata());
@@ -1578,6 +1588,286 @@ final class DefaultMcpServer implements McpServer {
 		}
 	}
 
+	private static void requireEndpointCatalogsFitJsonNodeBudget(
+			@NonNull McpEndpoint endpoint) {
+		requireNonNull(endpoint);
+		JsonNodeBudget toolBudget = new JsonNodeBudget("MCP tool catalog", 8L);
+		for (McpToolRegistration<?> tool : endpoint.getTools())
+			addToolCatalogNodes(toolBudget, tool);
+
+		JsonNodeBudget promptBudget = new JsonNodeBudget(
+				"MCP prompt catalog", 8L);
+		for (McpPromptRegistration prompt : endpoint.getPrompts())
+			addPromptCatalogNodes(promptBudget, prompt);
+
+		JsonNodeBudget templateResourceBudget = new JsonNodeBudget(
+				"MCP resource-template catalog", 8L);
+		JsonNodeBudget exactResourceBudget = endpoint.getResourceListHandler()
+				.isEmpty() ? new JsonNodeBudget("MCP resource catalog", 8L) : null;
+		for (McpResourceRegistration resource : endpoint.getResources()) {
+			if (resource.getAddressType() == McpResourceAddressType.URI) {
+				if (exactResourceBudget != null)
+					addResourceCatalogNodes(exactResourceBudget, resource);
+			} else {
+				addResourceCatalogNodes(templateResourceBudget, resource);
+			}
+		}
+	}
+
+	private static void addToolCatalogNodes(@NonNull JsonNodeBudget budget,
+			@NonNull McpToolRegistration<?> tool) {
+		requireNonNull(budget);
+		requireNonNull(tool);
+		budget.add(2L);
+		budget.add(tool.getInputSchema().getDocument());
+		tool.getOutputSchema().ifPresent(schema ->
+				budget.add(schema.getDocument()));
+		budget.add(tool.getTitle().isPresent() ? 1L : 0L);
+		budget.add(tool.getDescription().isPresent() ? 1L : 0L);
+		addIconsNodes(budget, tool.getIcons());
+		tool.getAnnotations().ifPresent(annotations ->
+				addToolAnnotationNodes(budget, annotations));
+		addMetadataNodes(budget, tool.getMetadata());
+	}
+
+	private static void addPromptCatalogNodes(@NonNull JsonNodeBudget budget,
+			@NonNull McpPromptRegistration prompt) {
+		requireNonNull(budget);
+		requireNonNull(prompt);
+		budget.add(2L);
+		budget.add(prompt.getTitle().isPresent() ? 1L : 0L);
+		budget.add(prompt.getDescription().isPresent() ? 1L : 0L);
+		addIconsNodes(budget, prompt.getIcons());
+		if (!prompt.getArguments().isEmpty()) {
+			budget.add(1L);
+			for (McpPromptArgumentDefinition argument : prompt.getArguments()) {
+				budget.add(2L);
+				budget.add(argument.getTitle().isPresent() ? 1L : 0L);
+				budget.add(argument.getDescription().isPresent() ? 1L : 0L);
+				budget.add(argument.isRequired() ? 1L : 0L);
+			}
+		}
+		addMetadataNodes(budget, prompt.getMetadata());
+	}
+
+	private static void addResourceCatalogNodes(@NonNull JsonNodeBudget budget,
+			@NonNull McpResourceRegistration resource) {
+		requireNonNull(budget);
+		requireNonNull(resource);
+		budget.add(3L);
+		addResourceDescriptorFieldNodes(budget, resource.getTitle(),
+				resource.getDescription(), resource.getMimeType(),
+				resource.getIcons(), resource.getAnnotations(), resource.getSize());
+		addMetadataNodes(budget, resource.getMetadata());
+	}
+
+	private static void requireToolResultFitsJsonNodeBudget(
+			@NonNull McpToolOutput output, @NonNull McpJsonObject metadata,
+			boolean mirrorStructuredContentAsText) {
+		requireNonNull(output);
+		JsonNodeBudget budget = new JsonNodeBudget("MCP tool result", 6L);
+		for (McpContentBlock content : output.getContent())
+			addContentBlockNodes(budget, content);
+		Optional<McpJsonValue> structuredContent = output.getStructuredContent();
+		structuredContent.ifPresent(budget::add);
+		budget.add(output.isError() ? 1L : 0L);
+		addMetadataNodes(budget, metadata);
+		if (mirrorStructuredContentAsText && structuredContent.isPresent())
+			budget.add(3L);
+	}
+
+	private static void requirePromptResultFitsJsonNodeBudget(
+			@NonNull McpPromptOutput output, @NonNull McpJsonObject metadata) {
+		requireNonNull(output);
+		JsonNodeBudget budget = new JsonNodeBudget("MCP prompt result", 6L);
+		budget.add(output.getDescription().isPresent() ? 1L : 0L);
+		for (McpPromptMessage message : output.getMessages()) {
+			budget.add(2L);
+			addContentBlockNodes(budget, message.getContent());
+		}
+		addMetadataNodes(budget, metadata);
+	}
+
+	private static void requireResourceResultFitsJsonNodeBudget(
+			@NonNull McpResourceOutput output, @NonNull McpJsonObject metadata) {
+		requireNonNull(output);
+		JsonNodeBudget budget = new JsonNodeBudget("MCP resource result", 8L);
+		for (McpResourceContents contents : output.getContents())
+			addResourceContentsNodes(budget, contents);
+		addMetadataNodes(budget, metadata);
+	}
+
+	private static void requireResourcePageFitsJsonNodeBudget(
+			@NonNull McpResourcePage page) {
+		requireNonNull(page);
+		JsonNodeBudget budget = new JsonNodeBudget(
+				"MCP resource-list result", 8L);
+		for (McpResourceDescriptor resource : page.getResources())
+			addResourceDescriptorNodes(budget, resource);
+		budget.add(page.getNextCursor().isPresent() ? 1L : 0L);
+		addMetadataNodes(budget, page.getMetadata());
+	}
+
+	private static void addContentBlockNodes(@NonNull JsonNodeBudget budget,
+			@NonNull McpContentBlock content) {
+		requireNonNull(budget);
+		requireNonNull(content);
+		if (content instanceof McpTextContent text) {
+			budget.add(3L);
+			addContentAnnotationAndMetadataNodes(budget, text.getAnnotations(),
+					text.getMetadata());
+		} else if (content instanceof McpImageContent image) {
+			budget.add(4L);
+			addContentAnnotationAndMetadataNodes(budget, image.getAnnotations(),
+					image.getMetadata());
+		} else if (content instanceof McpAudioContent audio) {
+			budget.add(4L);
+			addContentAnnotationAndMetadataNodes(budget, audio.getAnnotations(),
+					audio.getMetadata());
+		} else if (content instanceof McpResourceLink link) {
+			budget.add(4L);
+			budget.add(link.getTitle().isPresent() ? 1L : 0L);
+			budget.add(link.getDescription().isPresent() ? 1L : 0L);
+			budget.add(link.getMimeType().isPresent() ? 1L : 0L);
+			budget.add(link.getSize().isPresent() ? 1L : 0L);
+			addIconsNodes(budget, link.getIcons());
+			addContentAnnotationAndMetadataNodes(budget, link.getAnnotations(),
+					link.getMetadata());
+		} else if (content instanceof McpEmbeddedResource embedded) {
+			budget.add(2L);
+			addResourceContentsNodes(budget, embedded.getResource());
+			addContentAnnotationAndMetadataNodes(budget,
+					embedded.getAnnotations(), embedded.getMetadata());
+		} else {
+			throw new IllegalArgumentException(
+					"Unsupported MCP content block: " + content.getClass().getName());
+		}
+	}
+
+	private static void addResourceContentsNodes(@NonNull JsonNodeBudget budget,
+			@NonNull McpResourceContents contents) {
+		requireNonNull(budget);
+		requireNonNull(contents);
+		budget.add(3L);
+		budget.add(contents.getMimeType().isPresent() ? 1L : 0L);
+		if (contents instanceof McpTextResourceContents text)
+			addMetadataNodes(budget, text.getMetadata());
+		else if (contents instanceof McpBlobResourceContents blob)
+			addMetadataNodes(budget, blob.getMetadata());
+		else
+			throw new IllegalArgumentException(
+					"Unsupported MCP resource contents: "
+							+ contents.getClass().getName());
+	}
+
+	private static void addResourceDescriptorNodes(@NonNull JsonNodeBudget budget,
+			@NonNull McpResourceDescriptor resource) {
+		requireNonNull(budget);
+		requireNonNull(resource);
+		budget.add(3L);
+		addResourceDescriptorFieldNodes(budget, resource.getTitle(),
+				resource.getDescription(), resource.getMimeType(),
+				resource.getIcons(), resource.getAnnotations(), resource.getSize());
+		addMetadataNodes(budget, resource.getMetadata());
+	}
+
+	private static void addResourceDescriptorFieldNodes(
+			@NonNull JsonNodeBudget budget,
+			@NonNull Optional<@NonNull String> title,
+			@NonNull Optional<@NonNull String> description,
+			@NonNull Optional<@NonNull String> mimeType,
+			@NonNull List<@NonNull McpIcon> icons,
+			@NonNull Optional<@NonNull McpContentAnnotations> annotations,
+			@NonNull Optional<@NonNull Long> size) {
+		budget.add(title.isPresent() ? 1L : 0L);
+		budget.add(description.isPresent() ? 1L : 0L);
+		budget.add(mimeType.isPresent() ? 1L : 0L);
+		addIconsNodes(budget, icons);
+		annotations.ifPresent(value -> addContentAnnotationNodes(budget, value));
+		budget.add(size.isPresent() ? 1L : 0L);
+	}
+
+	private static void addIconsNodes(@NonNull JsonNodeBudget budget,
+			@NonNull List<@NonNull McpIcon> icons) {
+		requireNonNull(budget);
+		requireNonNull(icons);
+		if (icons.isEmpty())
+			return;
+		budget.add(1L);
+		for (McpIcon icon : icons) {
+			budget.add(2L);
+			budget.add(icon.getMimeType().isPresent() ? 1L : 0L);
+			budget.add(icon.getTheme().isPresent() ? 1L : 0L);
+			if (!icon.getSizes().isEmpty())
+				budget.add(1L + icon.getSizes().size());
+		}
+	}
+
+	private static void addToolAnnotationNodes(@NonNull JsonNodeBudget budget,
+			@NonNull McpToolAnnotations annotations) {
+		requireNonNull(budget);
+		requireNonNull(annotations);
+		budget.add(1L);
+		budget.add(annotations.getTitle().isPresent() ? 1L : 0L);
+		budget.add(annotations.getReadOnlyHint().isPresent() ? 1L : 0L);
+		budget.add(annotations.getDestructiveHint().isPresent() ? 1L : 0L);
+		budget.add(annotations.getIdempotentHint().isPresent() ? 1L : 0L);
+		budget.add(annotations.getOpenWorldHint().isPresent() ? 1L : 0L);
+	}
+
+	private static void addContentAnnotationAndMetadataNodes(
+			@NonNull JsonNodeBudget budget,
+			@NonNull Optional<@NonNull McpContentAnnotations> annotations,
+			@NonNull McpJsonObject metadata) {
+		annotations.ifPresent(value -> addContentAnnotationNodes(budget, value));
+		addMetadataNodes(budget, metadata);
+	}
+
+	private static void addContentAnnotationNodes(@NonNull JsonNodeBudget budget,
+			@NonNull McpContentAnnotations annotations) {
+		requireNonNull(budget);
+		requireNonNull(annotations);
+		budget.add(1L);
+		if (!annotations.getAudience().isEmpty())
+			budget.add(1L + annotations.getAudience().size());
+		budget.add(annotations.getPriority().isPresent() ? 1L : 0L);
+		budget.add(annotations.getLastModified().isPresent() ? 1L : 0L);
+	}
+
+	private static void addMetadataNodes(@NonNull JsonNodeBudget budget,
+			@NonNull McpJsonObject metadata) {
+		requireNonNull(budget);
+		requireNonNull(metadata);
+		if (!metadata.getMembers().isEmpty())
+			budget.add(metadata);
+	}
+
+	@NotThreadSafe
+	private static final class JsonNodeBudget {
+		@NonNull
+		private final String description;
+		private long nodeCount;
+
+		private JsonNodeBudget(@NonNull String description, long fixedNodes) {
+			this.description = requireNonNull(description);
+			add(fixedNodes);
+		}
+
+		private void add(long nodes) {
+			if (nodes < 0L || this.nodeCount > Long.MAX_VALUE - nodes)
+				throw new IllegalArgumentException(
+						"Invalid MCP JSON node-budget accounting.");
+			this.nodeCount += nodes;
+			McpPublicJsonValueConverter.requireProductionNodeCount(
+					this.nodeCount, this.description);
+		}
+
+		private void add(@NonNull McpJsonValue value) {
+			add(McpPublicJsonValueConverter.productionNodeCount(
+					requireNonNull(value)));
+		}
+	}
+
 	@NonNull
 	private static McpJsonObject toolDescriptorFields(
 			@NonNull McpToolRegistration<?> tool) {
@@ -1586,10 +1876,14 @@ final class DefaultMcpServer implements McpServer {
 				fields.put("title", McpJsonString.fromValue(value)));
 		tool.getDescription().ifPresent(value ->
 				fields.put("description", McpJsonString.fromValue(value)));
-		if (!tool.getIcons().isEmpty())
+		if (!tool.getIcons().isEmpty()) {
+			McpPublicJsonValueConverter.requireCollectionCouldFitProductionNodeBudget(
+					tool.getIcons().size(),
+					2, 2, "MCP tool icons");
 			fields.put("icons", McpJsonArray.fromElements(tool.getIcons().stream()
 					.map(DefaultMcpServer::iconToJson)
 					.toList()));
+		}
 		tool.getAnnotations().ifPresent(value ->
 				fields.put("annotations", toolAnnotationsToJson(value)));
 		return McpJsonObject.fromMembers(fields);
@@ -1603,10 +1897,14 @@ final class DefaultMcpServer implements McpServer {
 				fields.put("title", McpJsonString.fromValue(value)));
 		prompt.getDescription().ifPresent(value ->
 				fields.put("description", McpJsonString.fromValue(value)));
-		if (!prompt.getIcons().isEmpty())
+		if (!prompt.getIcons().isEmpty()) {
+			McpPublicJsonValueConverter.requireCollectionCouldFitProductionNodeBudget(
+					prompt.getIcons().size(),
+					2, 2, "MCP prompt icons");
 			fields.put("icons", McpJsonArray.fromElements(prompt.getIcons().stream()
 					.map(DefaultMcpServer::iconToJson)
 					.toList()));
+		}
 		return McpJsonObject.fromMembers(fields);
 	}
 
@@ -1620,10 +1918,14 @@ final class DefaultMcpServer implements McpServer {
 				fields.put("description", McpJsonString.fromValue(value)));
 		resource.getMimeType().ifPresent(value ->
 				fields.put("mimeType", McpJsonString.fromValue(value)));
-		if (!resource.getIcons().isEmpty())
+		if (!resource.getIcons().isEmpty()) {
+			McpPublicJsonValueConverter.requireCollectionCouldFitProductionNodeBudget(
+					resource.getIcons().size(),
+					2, 2, "MCP resource icons");
 			fields.put("icons", McpJsonArray.fromElements(resource.getIcons().stream()
 					.map(DefaultMcpServer::iconToJson)
 					.toList()));
+		}
 		resource.getAnnotations().ifPresent(value ->
 				fields.put("annotations", contentAnnotationsToJson(value)));
 		resource.getSize().ifPresent(value ->
@@ -1642,10 +1944,14 @@ final class DefaultMcpServer implements McpServer {
 				fields.put("description", McpJsonString.fromValue(value)));
 		resource.getMimeType().ifPresent(value ->
 				fields.put("mimeType", McpJsonString.fromValue(value)));
-		if (!resource.getIcons().isEmpty())
+		if (!resource.getIcons().isEmpty()) {
+			McpPublicJsonValueConverter.requireCollectionCouldFitProductionNodeBudget(
+					resource.getIcons().size(),
+					2, 2, "MCP resource icons");
 			fields.put("icons", McpJsonArray.fromElements(resource.getIcons().stream()
 					.map(DefaultMcpServer::iconToJson)
 					.toList()));
+		}
 		resource.getAnnotations().ifPresent(value ->
 				fields.put("annotations", contentAnnotationsToJson(value)));
 		resource.getSize().ifPresent(value ->
@@ -1671,10 +1977,14 @@ final class DefaultMcpServer implements McpServer {
 		fields.put("src", McpJsonString.fromValue(icon.getSource().toString()));
 		icon.getMimeType().ifPresent(value ->
 				fields.put("mimeType", McpJsonString.fromValue(value)));
-		if (!icon.getSizes().isEmpty())
+		if (!icon.getSizes().isEmpty()) {
+			McpPublicJsonValueConverter.requireCollectionCouldFitProductionNodeBudget(
+					icon.getSizes().size(),
+					1, 3, "MCP icon sizes");
 			fields.put("sizes", McpJsonArray.fromElements(icon.getSizes().stream()
 					.map(McpJsonString::fromValue)
 					.toList()));
+		}
 		icon.getTheme().ifPresent(value -> fields.put("theme",
 				McpJsonString.fromValue(value.name().toLowerCase(Locale.ROOT))));
 		return McpJsonObject.fromMembers(fields);
@@ -1699,6 +2009,9 @@ final class DefaultMcpServer implements McpServer {
 
 	@NonNull
 	private static McpJsonObject toolOutputFields(@NonNull McpToolOutput output) {
+		McpPublicJsonValueConverter.requireCollectionCouldFitProductionNodeBudget(
+				output.getContent().size(),
+				3, 2, "MCP tool output content");
 		requireAggregateBinaryDataFitsOutput(output.getContent());
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
 		fields.put("content", McpJsonArray.fromElements(output.getContent().stream()
@@ -1714,6 +2027,9 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	private static McpJsonObject promptOutputFields(
 			@NonNull McpPromptOutput output) {
+		McpPublicJsonValueConverter.requireCollectionCouldFitProductionNodeBudget(
+				output.getMessages().size(),
+				5, 2, "MCP prompt output messages");
 		requireAggregatePromptBinaryDataFitsOutput(output.getMessages());
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
 		output.getDescription().ifPresent(value ->
@@ -1728,6 +2044,9 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	private static McpJsonObject resourceOutputFields(
 			@NonNull McpResourceOutput output) {
+		McpPublicJsonValueConverter.requireCollectionCouldFitProductionNodeBudget(
+				output.getContents().size(),
+				3, 2, "MCP resource output contents");
 		requireAggregateResourceBinaryDataFitsOutput(output.getContents());
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
 		fields.put("contents", McpJsonArray.fromElements(output.getContents().stream()
@@ -1741,6 +2060,9 @@ final class DefaultMcpServer implements McpServer {
 
 	@NonNull
 	private static McpJsonObject resourcePageFields(@NonNull McpResourcePage page) {
+		McpPublicJsonValueConverter.requireCollectionCouldFitProductionNodeBudget(
+				page.getResources().size(),
+				3, 2, "MCP resource-list page");
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
 		fields.put("resources", McpJsonArray.fromElements(page.getResources().stream()
 				.map(DefaultMcpServer::resourceDescriptorToJson)
@@ -1823,10 +2145,14 @@ final class DefaultMcpServer implements McpServer {
 					fields.put("description", McpJsonString.fromValue(value)));
 			link.getMimeType().ifPresent(value ->
 					fields.put("mimeType", McpJsonString.fromValue(value)));
-			if (!link.getIcons().isEmpty())
+			if (!link.getIcons().isEmpty()) {
+				McpPublicJsonValueConverter.requireCollectionCouldFitProductionNodeBudget(
+						link.getIcons().size(),
+						2, 2, "MCP resource-link icons");
 				fields.put("icons", McpJsonArray.fromElements(link.getIcons().stream()
 						.map(DefaultMcpServer::iconToJson)
 						.toList()));
+			}
 			link.getSize().ifPresent(value ->
 					fields.put("size", McpJsonNumber.fromValue(
 							java.math.BigDecimal.valueOf(value))));

@@ -26,6 +26,7 @@ import com.soklet.McpJsonValue;
 import com.soklet.internal.mcp.protocol.McpJsonCodec;
 import com.soklet.internal.mcp.protocol.McpJsonLimits;
 import com.soklet.internal.mcp.protocol.McpMirroredHeaderPlan;
+import com.soklet.internal.mcp.protocol.McpPublicJsonValueConverter;
 import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -160,16 +161,23 @@ public final class McpRuntimeTypedSchemaBridge<T> {
 	 * Evaluates a public JSON value against the compiled schema using production
 	 * limits.
 	 *
-	 * <p>An invalid value and an evaluation that exhausts a production limit both
-	 * return {@code false}. No diagnostic retains or reflects the supplied
-	 * value.</p>
+	 * <p>An invalid value, a value that exceeds a production JSON limit, and an
+	 * evaluation that exhausts a production limit all return {@code false}. No
+	 * diagnostic retains or reflects the supplied value.</p>
 	 *
 	 * @param value the JSON value to validate
 	 * @return {@code true} exactly when the value satisfies the compiled schema
 	 * @throws NullPointerException if {@code value} is {@code null}
 	 */
 	public boolean isValid(@NonNull McpJsonValue value) {
-		return validationOutcome(toInternal(requireNonNull(value)))
+		com.soklet.internal.mcp.protocol.McpJsonValue internalValue;
+		try {
+			internalValue = McpPublicJsonValueConverter.toInternal(
+					requireNonNull(value));
+		} catch (IllegalArgumentException exception) {
+			return false;
+		}
+		return validationOutcome(internalValue)
 				instanceof McpSchemaValidationOutcome.Valid;
 	}
 
@@ -180,14 +188,16 @@ public final class McpRuntimeTypedSchemaBridge<T> {
 	 * @param value the JSON value to validate and decode
 	 * @return the decoded Java value
 	 * @throws NullPointerException     if {@code value} is {@code null}
-	 * @throws IllegalArgumentException if schema validation fails or exhausts a
-	 *                                  production limit, or if intrinsic binding
-	 *                                  cannot construct the declared Java value
+	 * @throws IllegalArgumentException if the value exceeds a production JSON
+	 *                                  limit, schema validation fails or exhausts
+	 *                                  a production evaluation limit, or
+	 *                                  intrinsic binding cannot construct the
+	 *                                  declared Java value
 	 */
 	@NonNull
 	public T decode(@NonNull McpJsonValue value) {
 		com.soklet.internal.mcp.protocol.McpJsonValue internalValue =
-				toInternal(requireNonNull(value));
+				McpPublicJsonValueConverter.toInternal(requireNonNull(value));
 		requireValid(internalValue,
 				"The JSON value does not satisfy the compiled tool schema.");
 		return this.compiledSchema.fromJson(internalValue);
@@ -280,30 +290,4 @@ public final class McpRuntimeTypedSchemaBridge<T> {
 		throw new IllegalArgumentException("Unsupported internal MCP JSON value.");
 	}
 
-	private static com.soklet.internal.mcp.protocol.@NonNull McpJsonValue toInternal(
-			@NonNull McpJsonValue value) {
-		if (value instanceof McpJsonString string)
-			return new com.soklet.internal.mcp.protocol.McpJsonString(string.getValue());
-		if (value instanceof McpJsonNumber number)
-			return new com.soklet.internal.mcp.protocol.McpJsonNumber(number.getValue());
-		if (value instanceof McpJsonBoolean bool)
-			return com.soklet.internal.mcp.protocol.McpJsonBoolean
-					.fromBoolean(bool.getValue());
-		if (value instanceof McpJsonNull)
-			return com.soklet.internal.mcp.protocol.McpJsonNull.INSTANCE;
-		if (value instanceof McpJsonArray array) {
-			List<com.soklet.internal.mcp.protocol.McpJsonValue> elements =
-					new ArrayList<>(array.getElements().size());
-			array.getElements().forEach(element -> elements.add(toInternal(element)));
-			return new com.soklet.internal.mcp.protocol.McpJsonArray(elements);
-		}
-		if (value instanceof McpJsonObject object) {
-			Map<String, com.soklet.internal.mcp.protocol.McpJsonValue> members =
-					new LinkedHashMap<>(object.getMembers().size());
-			object.getMembers().forEach((name, member) ->
-					members.put(name, toInternal(member)));
-			return new com.soklet.internal.mcp.protocol.McpJsonObject(members);
-		}
-		throw new IllegalArgumentException("Unsupported public MCP JSON value.");
-	}
 }

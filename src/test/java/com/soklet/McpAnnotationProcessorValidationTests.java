@@ -1167,6 +1167,33 @@ public class McpAnnotationProcessorValidationTests {
 	}
 
 	@Test
+	void annotatedEndpointPathsUseTheListenerWireFormAndByteBound() {
+		String asciiBoundary = "/" + "a".repeat(8_191);
+		String percentEncodedBoundary = "/" + "%C3%A9".repeat(1_365) + "a";
+
+		assertThat(compileEndpointPath(asciiBoundary)).succeededWithoutWarnings();
+		assertThat(compileEndpointPath(percentEncodedBoundary))
+				.succeededWithoutWarnings();
+		assertThat(compileEndpointPath("/caf%C3%A9")).succeededWithoutWarnings();
+
+		Compilation rawUnicode = compileEndpointPath("/café");
+		assertThat(rawUnicode).failed();
+		assertThat(rawUnicode).hadErrorContaining(
+				"MCP endpoint path must be a normalized ASCII raw URI path");
+
+		Compilation oversizedAscii = compileEndpointPath(asciiBoundary + "a");
+		assertThat(oversizedAscii).failed();
+		assertThat(oversizedAscii).hadErrorContaining(
+				"MCP endpoint path must not exceed 8192 ASCII request-target bytes");
+
+		Compilation oversizedEncoded = compileEndpointPath(
+				percentEncodedBoundary + "a");
+		assertThat(oversizedEncoded).failed();
+		assertThat(oversizedEncoded).hadErrorContaining(
+				"MCP endpoint path must not exceed 8192 ASCII request-target bytes");
+	}
+
+	@Test
 	void rejectsPotentiallyOverlappingResourceTemplatesButAllowsExactRoute() {
 		JavaFileObject source = JavaFileObjects.forSourceString(
 				"example.OverlappingResourceEndpoint", """
@@ -1351,6 +1378,20 @@ public class McpAnnotationProcessorValidationTests {
 						      %s) { return null; }
 						}
 						""".formatted(template, parameters));
+		return Compiler.javac().withProcessors(new SokletProcessor())
+				.compile(source);
+	}
+
+	private static Compilation compileEndpointPath(@NonNull String path) {
+		JavaFileObject source = JavaFileObjects.forSourceString(
+				"example.EndpointPathBoundEndpoint", """
+						package example;
+
+						import com.soklet.annotation.McpServerEndpoint;
+
+						@McpServerEndpoint(path = "%s", name = "test", version = "1")
+						public final class EndpointPathBoundEndpoint {}
+						""".formatted(path));
 		return Compiler.javac().withProcessors(new SokletProcessor())
 				.compile(source);
 	}

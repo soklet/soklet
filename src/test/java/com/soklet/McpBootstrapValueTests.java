@@ -211,6 +211,25 @@ public class McpBootstrapValueTests {
 	}
 
 	@Test
+	public void endpointPathUsesTheListenerWireFormAndByteBound() {
+		String asciiBoundary = "/" + "a".repeat(8_191);
+		String percentEncodedBoundary = "/" + "%C3%A9".repeat(1_365) + "a";
+
+		Assertions.assertEquals(asciiBoundary,
+				endpoint(asciiBoundary).getPath());
+		Assertions.assertEquals(percentEncodedBoundary,
+				endpoint(percentEncodedBoundary).getPath());
+		Assertions.assertEquals("/caf%C3%A9",
+				endpoint("/caf%C3%A9").getPath());
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpEndpoint.withPath("/café"));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpEndpoint.withPath(asciiBoundary + "a"));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> McpEndpoint.withPath(percentEncodedBoundary + "a"));
+	}
+
+	@Test
 	public void endpointRegistryIsAnOwnedImmutableValue() {
 		Assertions.assertFalse(McpEndpointRegistry.class.isInterface());
 		Assertions.assertTrue(Modifier.isFinal(

@@ -48,6 +48,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
@@ -303,6 +304,51 @@ public class McpGeneratedEndpointProviderLoaderTests {
 							InstanceProvider.defaultInstance()));
 			assertTrue(exception.getMessage().contains(
 					"top-level owner does not match"));
+		}
+	}
+
+	@Test
+	void generatedIndexUsesTheListenerEndpointWireContract() throws Exception {
+		String asciiBoundary = "/" + "a".repeat(8_191);
+		String percentEncodedBoundary = "/" + "%C3%A9".repeat(1_365) + "a";
+
+		assertEquals(asciiBoundary,
+				McpGeneratedEndpointProviderIndex.parseLine(
+						indexLine(ENDPOINT_A, PROVIDER_A,
+								FIXTURES_CLASS_NAME, asciiBoundary))
+						.endpointPath());
+		assertEquals(percentEncodedBoundary,
+				McpGeneratedEndpointProviderIndex.parseLine(
+						indexLine(ENDPOINT_A, PROVIDER_A,
+								FIXTURES_CLASS_NAME, percentEncodedBoundary))
+						.endpointPath());
+		assertEquals("/caf%C3%A9",
+				McpGeneratedEndpointProviderIndex.parseLine(
+						indexLine(ENDPOINT_A, PROVIDER_A,
+								FIXTURES_CLASS_NAME, "/caf%C3%A9"))
+						.endpointPath());
+		assertThrows(IllegalArgumentException.class,
+				() -> indexLine(ENDPOINT_A, PROVIDER_A,
+						FIXTURES_CLASS_NAME, "/café"));
+		assertThrows(IllegalArgumentException.class,
+				() -> indexLine(ENDPOINT_A, PROVIDER_A,
+						FIXTURES_CLASS_NAME, asciiBoundary + "a"));
+		assertThrows(IllegalArgumentException.class,
+				() -> indexLine(ENDPOINT_A, PROVIDER_A,
+						FIXTURES_CLASS_NAME, percentEncodedBoundary + "a"));
+
+		String[] oversizedFields = indexLine(ENDPOINT_A, PROVIDER_A,
+				FIXTURES_CLASS_NAME, asciiBoundary).split("\\|", -1);
+		oversizedFields[4] = Base64.getEncoder().encodeToString(
+				(asciiBoundary + "a").getBytes(StandardCharsets.UTF_8));
+		try (IndexedClassLoader oversized = newClassLoader(
+				String.join("|", oversizedFields))) {
+			IllegalStateException exception = assertThrows(
+					IllegalStateException.class,
+					() -> McpGeneratedEndpointProviderLoader.loadAll(
+							oversized, InstanceProvider.defaultInstance()));
+			assertTrue(exception.getMessage().contains(
+					"Malformed generated MCP endpoint-provider index"));
 		}
 	}
 
