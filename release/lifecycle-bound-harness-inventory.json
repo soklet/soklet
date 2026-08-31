@@ -795,12 +795,15 @@
       "paths": [
         ".github/workflows/ci.yml",
         ".github/workflows/release-validation.yml",
+        "benchmarks/README.md",
         "benchmarks/pom.xml",
         "benchmarks/src/main/java/com/soklet/DefaultHttpServerRequestConversionJmhBenchmark.java",
         "benchmarks/src/main/java/com/soklet/EndToEndHttpBenchmark.java",
+        "benchmarks/src/main/java/com/soklet/McpReleaseBenchmarkRuntime.java",
         "benchmarks/src/main/java/com/soklet/RequestConstructionJmhBenchmark.java",
         "benchmarks/src/main/java/com/soklet/ResponseWritePathJmhBenchmark.java",
         "benchmarks/src/main/java/com/soklet/StartupAndMemoryBenchmark.java",
+        "benchmarks/src/test/java/com/soklet/McpReleaseBenchmarkRuntimeTests.java",
         "conformance/MCP_PROTOCOL_OPENNESS_INVENTORY_2026-07-28.md",
         "conformance/MCP_ROADMAP_ACTIVE_TEXT_AUDIT.md",
         "conformance/MCP_ROADMAP_READINESS_POLICY.md",
@@ -829,7 +832,11 @@
         "scripts/api-diff/japicmp-symbols.mjs",
         "scripts/api-diff/self-test.mjs",
         "scripts/api-diff/verify.sh",
+        "scripts/import-release-harness-evidence-self-test.mjs",
+        "scripts/import-release-harness-evidence.mjs",
         "scripts/json-schema-test-suite/README.md",
+        "scripts/produce-release-benchmarks-self-test.mjs",
+        "scripts/produce-release-benchmarks.mjs",
         "scripts/release-promotion.mjs",
         "scripts/release-validation-evidence.mjs",
         "scripts/validate-release-candidate.sh",
@@ -1016,8 +1023,8 @@
     }
   ],
   "discoveryCensus": {
-    "candidateCount": 5689,
-    "candidateSha256": "3f1d679bd80a05d93df29eac81ee9679fb998706629bcc9cc2ee8b3b5ad40bd1",
+    "candidateCount": 5707,
+    "candidateSha256": "867ec7e02649212fe979f3fe925f8d32eb12a4294bf7af3a6c59b18e81cd8bf7",
     "candidates": [
       {
         "kinds": [
@@ -1071,7 +1078,15 @@
         "kinds": [
           "WORKFLOW_OUTER_GUARD"
         ],
-        "line": 413,
+        "line": 492,
+        "lineSha256": "73658002cf91a5187bf9bbacf96c7004a0f93956595933a718f615c3ce2ab79c",
+        "path": ".github/workflows/ci.yml"
+      },
+      {
+        "kinds": [
+          "WORKFLOW_OUTER_GUARD"
+        ],
+        "line": 594,
         "lineSha256": "73658002cf91a5187bf9bbacf96c7004a0f93956595933a718f615c3ce2ab79c",
         "path": ".github/workflows/ci.yml"
       },
@@ -1087,9 +1102,33 @@
         "kinds": [
           "WORKFLOW_OUTER_GUARD"
         ],
-        "line": 22,
+        "line": 37,
+        "lineSha256": "020a0f8ec5f99750b0b27daf185024fab21c24729657c7f5cbbbe256a52012cf",
+        "path": ".github/workflows/release-validation.yml"
+      },
+      {
+        "kinds": [
+          "WORKFLOW_OUTER_GUARD"
+        ],
+        "line": 134,
+        "lineSha256": "73658002cf91a5187bf9bbacf96c7004a0f93956595933a718f615c3ce2ab79c",
+        "path": ".github/workflows/release-validation.yml"
+      },
+      {
+        "kinds": [
+          "WORKFLOW_OUTER_GUARD"
+        ],
+        "line": 217,
         "lineSha256": "fb6f8af9be3540e8bde49c1cf617079ffc36d17d239321ae9e9cec40565a9da8",
         "path": ".github/workflows/release-validation.yml"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 7,
+        "lineSha256": "8f5f121f2a9381b9b66f036f4c6d4c4f8a9eddf7796124c4125f89a91f2329be",
+        "path": "benchmarks/README.md"
       },
       {
         "kinds": [
@@ -1194,6 +1233,54 @@
         "line": 246,
         "lineSha256": "c00601b6322dea07ab3001d37454b59593e7223a874522987a01eb74845c96a2",
         "path": "benchmarks/src/main/java/com/soklet/EndToEndHttpBenchmark.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 36,
+        "lineSha256": "091212fbd71e7baec7fdd1a3257332d78d2f7856f8e1346d1ccda50c0bcb27b9",
+        "path": "benchmarks/src/main/java/com/soklet/McpReleaseBenchmarkRuntime.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 105,
+        "lineSha256": "3a34c595af6a07df37fca07082785ce8ad9c3ad269b305ef4d60d1728ba25a14",
+        "path": "benchmarks/src/main/java/com/soklet/McpReleaseBenchmarkRuntime.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 120,
+        "lineSha256": "3a34c595af6a07df37fca07082785ce8ad9c3ad269b305ef4d60d1728ba25a14",
+        "path": "benchmarks/src/main/java/com/soklet/McpReleaseBenchmarkRuntime.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 125,
+        "lineSha256": "a0bc9b33db85a4a0129e0efffb90f7c856f1272add6ec35726fe9717ef269fa9",
+        "path": "benchmarks/src/main/java/com/soklet/McpReleaseBenchmarkRuntime.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 141,
+        "lineSha256": "21ee306df0d8f35e065c8bf24197623b2a19aec722f480a35dc9a2702312121c",
+        "path": "benchmarks/src/main/java/com/soklet/McpReleaseBenchmarkRuntime.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 298,
+        "lineSha256": "38d0a5fd5ffda9609fea1d9ae99f6987e2a8deff574a9dd25ecc0cb7f16d07ce",
+        "path": "benchmarks/src/main/java/com/soklet/McpReleaseBenchmarkRuntime.java"
       },
       {
         "kinds": [
@@ -1346,6 +1433,14 @@
         "line": 463,
         "lineSha256": "23d3d5c3f1bd5d099920cf5660c5feb518b99760942bbe0e0712ee222126fb15",
         "path": "benchmarks/src/main/java/com/soklet/StartupAndMemoryBenchmark.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 73,
+        "lineSha256": "5fe9a4d451727c33cda34ef0d2d93d57aa4e502103c412026ee918107a981dfa",
+        "path": "benchmarks/src/test/java/com/soklet/McpReleaseBenchmarkRuntimeTests.java"
       },
       {
         "kinds": [
@@ -3357,6 +3452,22 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
+        "line": 281,
+        "lineSha256": "dcd3262a211f1af40edc1807e505aa216d55de274c06a72e7390044f0cd313c6",
+        "path": "scripts/import-release-harness-evidence-self-test.mjs"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 1507,
+        "lineSha256": "3874f56e0ef6aec09350d49e83df58f7f87f4b6d30a29f96b0fdd9ce86669c67",
+        "path": "scripts/import-release-harness-evidence.mjs"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
         "line": 3,
         "lineSha256": "7f258b92ebc5fee51ea834aa98dcb4d35e3f490f3e1f9b9fc49da3905d4b062e",
         "path": "scripts/json-schema-test-suite/README.md"
@@ -3376,6 +3487,46 @@
         "line": 74,
         "lineSha256": "4573b201eb1797f81f865fd9461629c6c4554098f34cd069bdcd9438c5ebedeb",
         "path": "scripts/json-schema-test-suite/README.md"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 184,
+        "lineSha256": "dcd3262a211f1af40edc1807e505aa216d55de274c06a72e7390044f0cd313c6",
+        "path": "scripts/produce-release-benchmarks-self-test.mjs"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 472,
+        "lineSha256": "a09bd11ed16de532fd66ea6f237e87fd2b4c761c45bf71f8717d36f53da1ec3c",
+        "path": "scripts/produce-release-benchmarks.mjs"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 474,
+        "lineSha256": "359102407b5fa069c68d7dcf5f422aaed1f6132e7c07811e461b3d448db3cbf5",
+        "path": "scripts/produce-release-benchmarks.mjs"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 475,
+        "lineSha256": "45d548c5357376484bc69314c5ea92f6618f292740f8400276547bbd82507c88",
+        "path": "scripts/produce-release-benchmarks.mjs"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 489,
+        "lineSha256": "dcd3262a211f1af40edc1807e505aa216d55de274c06a72e7390044f0cd313c6",
+        "path": "scripts/produce-release-benchmarks.mjs"
       },
       {
         "kinds": [
@@ -3429,7 +3580,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 375,
+        "line": 404,
         "lineSha256": "942ad7f3a9bf02c3ba386971a9a498b21b08df7a6259d7b0a62e125e8ec37f20",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3437,7 +3588,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 432,
+        "line": 461,
         "lineSha256": "4d15f05ce5758c979e51784114806866257976c622e641fb4b532ccfefd700c2",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3445,7 +3596,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 918,
+        "line": 947,
         "lineSha256": "ace0c2891126ba2bee893ae1d7e1064a042adb5c5263efc49bddb603039361c8",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3453,7 +3604,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 930,
+        "line": 959,
         "lineSha256": "2d9db548080610e260aa8d966675ce791f9b39663bc2b7d8eb3d4894d5b924a2",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3461,7 +3612,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 933,
+        "line": 962,
         "lineSha256": "cc623440c5e3fa3815f0890de2fbca989333f9adacb115d6c746bbaf176bde9e",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3469,7 +3620,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 937,
+        "line": 966,
         "lineSha256": "983fad083441a43cc36bb2aebc9f779c5e2210676e65c5e50aeee53455fa15be",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3477,7 +3628,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1008,
+        "line": 1037,
         "lineSha256": "8c2793bfcf67b0a5d80932cb6bfdbc13bb24056e671b0bd739335e9eb8b9c987",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3485,7 +3636,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1018,
+        "line": 1047,
         "lineSha256": "608f831db236667ec0e14192eb7f2cb973fe7f115a6c6006ed58d6f854272823",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3493,7 +3644,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1025,
+        "line": 1054,
         "lineSha256": "37ff3384dca19aafa0a0fb1ad38dddf416f0aee0d47547fc478cc7771ec03bbe",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3501,7 +3652,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1036,
+        "line": 1065,
         "lineSha256": "afc878aeeddd2bbd06bcb3a2b123c3b5fd862c713054e83af349da02c91f4ae2",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3509,7 +3660,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1088,
+        "line": 1117,
         "lineSha256": "4ee7ada100214d53e6eecc23b8dacfe84de2ef8a889395212f2743f90a79b26f",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3517,7 +3668,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1128,
+        "line": 1157,
         "lineSha256": "a32b4fb2ebe31aca13f08b9f56e8034b055584a54fddb45c7d62d610ddd1a447",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3525,7 +3676,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1225,
+        "line": 1254,
         "lineSha256": "bf9c71e7ac6c14f372849ba329f236ae864dc567b9d9eeca4cecb0e267e27779",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3533,7 +3684,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1242,
+        "line": 1271,
         "lineSha256": "032acdfc0968c05d29039606c4effdd66b12ecdca4662f3da5c610153774f3cb",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3541,7 +3692,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1259,
+        "line": 1288,
         "lineSha256": "2b915abdec28b8a6f36e8176d0effb99de5caf318de08b4a7e419a084dcb84ef",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -46610,12 +46761,12 @@
     "countsByKind": {
       "FIXED_WAIT_CANDIDATE": 1466,
       "JUNIT_OUTER_GUARD": 272,
-      "LIFECYCLE_SIGNAL": 3211,
+      "LIFECYCLE_SIGNAL": 3226,
       "NAMED_TIMEOUT_CANDIDATE": 798,
       "PROCESS_OUTER_GUARD": 11,
-      "WORKFLOW_OUTER_GUARD": 6
+      "WORKFLOW_OUTER_GUARD": 9
     },
-    "pathCount": 261
+    "pathCount": 268
   },
   "formatVersion": 2,
   "javascriptGuards": [

@@ -335,55 +335,86 @@ jobs:
         include:
           - target_id: request-parser
             test_selector: RequestParserFuzzTest#parseIncrementalRequestOnlyRejectsWithDeclaredExceptions
+            corpus_path: com.soklet.internal.microhttp.RequestParserFuzzTest/parseIncrementalRequestOnlyRejectsWithDeclaredExceptions
           - target_id: multipart-parser
             test_selector: DefaultMultipartParserFuzzTest#extractMultipartFieldsOnlyRejectsWithExpectedExceptions
+            corpus_path: com.soklet.DefaultMultipartParserFuzzTest/extractMultipartFieldsOnlyRejectsWithExpectedExceptions
           - target_id: http-date
             test_selector: HttpDateFuzzTest#fromHeaderValueNeverThrows
+            corpus_path: com.soklet.HttpDateFuzzTest/fromHeaderValueNeverThrows
           - target_id: parameterized-header-value
             test_selector: ParameterizedHeaderValueFuzzTest#builderOnlyRejectsWithIllegalArgumentException
+            corpus_path: com.soklet.ParameterizedHeaderValueFuzzTest/builderOnlyRejectsWithIllegalArgumentException
           - target_id: media-range
             test_selector: MediaRangeFuzzTest#mediaRangeParsingNeverThrows
+            corpus_path: com.soklet.MediaRangeFuzzTest/mediaRangeParsingNeverThrows
           - target_id: query-format
             test_selector: QueryFormatFuzzTest#extractQueryParametersOnlyRejectsWithIllegalRequestException
+            corpus_path: com.soklet.QueryFormatFuzzTest/extractQueryParametersOnlyRejectsWithIllegalRequestException
           - target_id: response-cookie
             test_selector: ResponseCookieFuzzTest#fromSetCookieHeaderRepresentationOnlyRejectsWithIllegalArgumentException
+            corpus_path: com.soklet.ResponseCookieFuzzTest/fromSetCookieHeaderRepresentationOnlyRejectsWithIllegalArgumentException
           - target_id: trace-context
             test_selector: TraceContextFuzzTest#fromHeaderValuesNeverThrows
+            corpus_path: com.soklet.TraceContextFuzzTest/fromHeaderValuesNeverThrows
           - target_id: mcp-json-parse
             test_selector: McpJsonCodecFuzzTest#strictJsonFuzzRejectsInvalidBytesOnlyWithIllegalArgumentException
+            corpus_path: com.soklet.internal.mcp.protocol.McpJsonCodecFuzzTest/strictJsonFuzzRejectsInvalidBytesOnlyWithIllegalArgumentException
           - target_id: mcp-json-round-trip
             test_selector: McpJsonCodecFuzzTest#strictJsonFuzzRoundTripsStructurally
+            corpus_path: com.soklet.internal.mcp.protocol.McpJsonCodecFuzzTest/strictJsonFuzzRoundTripsStructurally
           - target_id: mcp-json-rpc-envelope
             test_selector: McpJsonRpcEnvelopeCodecFuzzTest#decodeClassifiesOrRejectsOnlyWithTypedWireFailure
+            corpus_path: com.soklet.internal.mcp.protocol.McpJsonRpcEnvelopeCodecFuzzTest/decodeClassifiesOrRejectsOnlyWithTypedWireFailure
           - target_id: mcp-mirrored-header
             test_selector: McpMirroredHeaderCodecFuzzTest#decodeStringOnlyRejectsWithRedactedIllegalArgumentException
+            corpus_path: com.soklet.internal.mcp.protocol.McpMirroredHeaderCodecFuzzTest/decodeStringOnlyRejectsWithRedactedIllegalArgumentException
           - target_id: mcp-profile-1-schema
             test_selector: McpToolSchemaProfileFuzzTest#compileAndEvaluateRemainTypedAndBounded
+            corpus_path: com.soklet.internal.mcp.schema.McpToolSchemaProfileFuzzTest/compileAndEvaluateRemainTypedAndBounded
           - target_id: mcp-cursor-validator
             test_selector: McpCursorValidatorFuzzTest#cursorValidationIsUtf8ExactAndTotal
+            corpus_path: com.soklet.internal.mcp.protocol.McpCursorValidatorFuzzTest/cursorValidationIsUtf8ExactAndTotal
           - target_id: mcp-request-state-plaintext
             test_selector: McpRequestStatePlaintextCodecFuzzTest#decodeOnlyRejectsWithUniformRedactedIllegalArgumentException
+            corpus_path: com.soklet.internal.mcp.protocol.McpRequestStatePlaintextCodecFuzzTest/decodeOnlyRejectsWithUniformRedactedIllegalArgumentException
           - target_id: mcp-simulation-capture
             test_selector: McpSimulationCaptureFuzzTest#captureStateMachineRemainsBoundedTerminalAndIdempotent
+            corpus_path: com.soklet.internal.mcp.protocol.McpSimulationCaptureFuzzTest/captureStateMachineRemainsBoundedTerminalAndIdempotent
           - target_id: mcp-localization-byte-accounting
             test_selector: McpLocalizationFuzzTest#replacementByteAccountingMatchesTheProductionEncoder
+            corpus_path: com.soklet.McpLocalizationFuzzTest/replacementByteAccountingMatchesTheProductionEncoder
           - target_id: mcp-localization-preferences
             test_selector: McpLocalizationFuzzTest#boundedPreferenceDerivationIsTotalAndNeverTruncates
+            corpus_path: com.soklet.McpLocalizationFuzzTest/boundedPreferenceDerivationIsTotalAndNeverTruncates
           - target_id: mcp-localization-overlay
             test_selector: McpLocalizationFuzzTest#overlayPointerHandlingIsTotalAndNonMutating
+            corpus_path: com.soklet.McpLocalizationFuzzTest/overlayPointerHandlingIsTotalAndNonMutating
     steps:
       - name: Check out
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
-      - name: Set up JDK 25
-        uses: actions/setup-java@v5
+      - name: Install checksum-pinned Corretto 25
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-corretto-linux-x64.sh
+          toystoreJava "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/fuzz-java-distribution.txt"
+
+      - name: Select checksum-pinned Corretto 25
+        shell: bash
+        run: |
+          printf 'JAVA_HOME=%s\n' "$SOKLET_RELEASE_TOYSTORE_JAVA_HOME" >> "$GITHUB_ENV"
+          printf '%s/bin\n' "$SOKLET_RELEASE_TOYSTORE_JAVA_HOME" >> "$GITHUB_PATH"
+
+      - name: Restore Maven repository
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
-          distribution: corretto
-          java-version: '25'
-          cache: maven
+          path: ~/.m2/repository
+          key: fuzz-maven-${{ runner.os }}-${{ hashFiles('pom.xml', 'fuzz/pom.xml') }}
 
       - name: Restore Jazzer corpus
-        uses: actions/cache@v5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: fuzz/.cifuzz-corpus
           key: jazzer-${{ runner.os }}-${{ github.ref_name }}-${{ matrix.target_id }}-${{ github.run_id }}
@@ -392,19 +423,169 @@ jobs:
             jazzer-${{ runner.os }}-${{ github.ref_name }}-
             jazzer-${{ runner.os }}-
 
+      - name: Compile fuzz target and materialize Jazzer runtime
+        run: mvn -B -ntp -f fuzz/pom.xml -DskipTests test-compile
+
+      - name: Verify complete checksum-pinned Jazzer runtime
+        shell: bash
+        run: |
+          printf '%s  %s\n' \
+            1b1ae8658216031c50e989e6008193c04c2ad63c4c9b9876d4c66e23ecb75312 \
+            "${HOME}/.m2/repository/com/code-intelligence/jazzer-junit/0.30.0/jazzer-junit-0.30.0.jar" \
+            | sha256sum --check --strict
+          printf '%s  %s\n' \
+            8bdeac017bcd3d9473c9772fac62111c4df830188571def1d001a1b743a62b2f \
+            "${HOME}/.m2/repository/com/code-intelligence/jazzer/0.30.0/jazzer-0.30.0.jar" \
+            | sha256sum --check --strict
+          printf '%s  %s\n' \
+            d36a725cfedcb7f3590206866cc2836f84d12afccf7c98912f5c720e4d2208d7 \
+            "${HOME}/.m2/repository/com/code-intelligence/jazzer-api/0.30.0/jazzer-api-0.30.0.jar" \
+            | sha256sum --check --strict
+
       - name: Run fuzz targets
-        run: JAZZER_FUZZ=1 mvn -B -ntp -f fuzz/pom.xml -Dtest="${{ matrix.test_selector }}" -Djazzer.max_duration=5m clean test
+        shell: bash
+        run: |
+          JAZZER_FUZZ=1 mvn -B -ntp -f fuzz/pom.xml \
+            -Dtest="${{ matrix.test_selector }}" \
+            -Djazzer.max_duration=300s surefire:test
+
+      - name: Produce canonical fuzz target receipt
+        shell: bash
+        run: |
+          mkdir -p target/release-history/fuzz-target
+          node scripts/produce-release-history.mjs fuzz-target \
+            --target-id "${{ matrix.target_id }}" \
+            --corpus-root "${{ github.workspace }}/fuzz/.cifuzz-corpus/${{ matrix.corpus_path }}" \
+            --surefire-root "${{ github.workspace }}/fuzz/target/surefire-reports" \
+            --jazzer-jar "${HOME}/.m2/repository/com/code-intelligence/jazzer-junit/0.30.0/jazzer-junit-0.30.0.jar" \
+            --jazzer-engine-jar "${HOME}/.m2/repository/com/code-intelligence/jazzer/0.30.0/jazzer-0.30.0.jar" \
+            --jazzer-api-jar "${HOME}/.m2/repository/com/code-intelligence/jazzer-api/0.30.0/jazzer-api-0.30.0.jar" \
+            --toolchain-evidence "${RUNNER_TEMP}/fuzz-java-distribution.txt" \
+            --output "${{ github.workspace }}/target/release-history/fuzz-target/${{ matrix.target_id }}.json"
 
       - name: Upload fuzz artifacts
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: jazzer-${{ matrix.target_id }}-${{ github.run_id }}
+          name: jazzer-${{ matrix.target_id }}-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: ignore
+          retention-days: 90
           path: |
             fuzz/.cifuzz-corpus
             fuzz/src/test/resources
             fuzz/target/surefire-reports
+            ${{ runner.temp }}/fuzz-java-distribution.txt
+
+      - name: Upload canonical fuzz target receipt
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: fuzz-history-target-${{ matrix.target_id }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 90
+          path: target/release-history/fuzz-target/${{ matrix.target_id }}.json
+
+  fuzz-nightly-history:
+    name: Assemble Nightly Fuzz History (JDK 25)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: fuzz-nightly
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Install checksum-pinned Corretto 25
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-corretto-linux-x64.sh
+          toystoreJava "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/fuzz-history-java-distribution.txt"
+
+      - name: Select checksum-pinned Corretto 25
+        shell: bash
+        run: |
+          printf 'JAVA_HOME=%s\n' "$SOKLET_RELEASE_TOYSTORE_JAVA_HOME" >> "$GITHUB_ENV"
+          printf '%s/bin\n' "$SOKLET_RELEASE_TOYSTORE_JAVA_HOME" >> "$GITHUB_PATH"
+
+      - name: Restore Maven repository
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.m2/repository
+          key: fuzz-history-maven-${{ runner.os }}-${{ hashFiles('pom.xml') }}
+
+      - name: Download canonical fuzz target receipts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          pattern: fuzz-history-target-*-${{ github.run_id }}-${{ github.run_attempt }}
+          merge-multiple: true
+          path: target/release-history/fuzz-target-receipts
+
+      - name: Restore exact-candidate fuzz history state
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: target/release-history/fuzz-state
+          key: release-fuzz-history-${{ runner.os }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            release-fuzz-history-${{ runner.os }}-${{ github.sha }}-
+
+      - name: Package exact candidate main JAR
+        run: mvn -B -ntp -DskipTests package
+
+      - name: Accumulate exact-candidate fuzz history
+        id: history
+        shell: bash
+        run: |
+          mkdir -p target/release-history/fuzz-state
+          previous=()
+          if [[ -f target/release-history/fuzz-state/history-state.json ]]; then
+            previous=(--previous-state "${{ github.workspace }}/target/release-history/fuzz-state/history-state.json")
+          fi
+          node scripts/produce-release-history.mjs fuzz-nightly \
+            --candidate-root "${{ github.workspace }}" \
+            --completed-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --target-receipts-root "${{ github.workspace }}/target/release-history/fuzz-target-receipts" \
+            --toolchain-evidence "${RUNNER_TEMP}/fuzz-history-java-distribution.txt" \
+            "${previous[@]}" \
+            --state-output "${{ github.workspace }}/target/release-history/fuzz-state/history-state.json" \
+            --history-output "${{ github.workspace }}/fuzz-nightly-history.json"
+          if [[ -f fuzz-nightly-history.json ]]; then
+            printf 'complete=true\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'complete=false\n' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify and bundle complete fuzz history
+        if: steps.history.outputs.complete == 'true'
+        shell: bash
+        run: |
+          node scripts/verify-release-history.mjs fuzz-nightly
+          node scripts/create-release-harness-bundle.mjs \
+            --gate fuzz-nightly-history \
+            --candidate-root "${{ github.workspace }}" \
+            --evidence-root "${{ github.workspace }}" \
+            --output "${{ github.workspace }}/target/release-history/fuzz-nightly-history-bundle.json"
+
+      - name: Upload fuzz history accumulation state
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: fuzz-history-state-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 90
+          path: target/release-history/fuzz-state/history-state.json
+
+      - name: Upload immutable fuzz history bundle
+        if: steps.history.outputs.complete == 'true'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: fuzz-nightly-history-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 90
+          path: |
+            fuzz-nightly-history.json
+            target/release-history/fuzz-nightly-history-bundle.json
+            target/release-history/fuzz-state/history-state.json
+            ${{ runner.temp }}/fuzz-history-java-distribution.txt
 
   soak-nightly:
     name: Nightly Soak (JDK 25)
@@ -413,14 +594,26 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Check out
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
-      - name: Set up JDK 25
-        uses: actions/setup-java@v5
+      - name: Install checksum-pinned Corretto 25
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-corretto-linux-x64.sh
+          toystoreJava "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/soak-nightly-java-distribution.txt"
+
+      - name: Select checksum-pinned Corretto 25
+        shell: bash
+        run: |
+          printf 'JAVA_HOME=%s\n' "$SOKLET_RELEASE_TOYSTORE_JAVA_HOME" >> "$GITHUB_ENV"
+          printf '%s/bin\n' "$SOKLET_RELEASE_TOYSTORE_JAVA_HOME" >> "$GITHUB_PATH"
+
+      - name: Restore Maven repository
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
-          distribution: corretto
-          java-version: '25'
-          cache: maven
+          path: ~/.m2/repository
+          key: soak-nightly-maven-${{ runner.os }}-${{ hashFiles('pom.xml', 'soak/pom.xml') }}
 
       - name: Run nightly soak tests
         run: SOKLET_SOAK_PROFILE=nightly mvn -B -ntp -f soak/pom.xml clean test
@@ -431,10 +624,12 @@ jobs:
 
       - name: Upload nightly soak evidence
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: soak-nightly-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: error
+          retention-days: 90
           path: |
             soak/target/soak-report.md
             soak/target/surefire-reports
+            ${{ runner.temp }}/soak-nightly-java-distribution.txt

@@ -44,6 +44,7 @@ const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(scriptDirectory, '..');
 const trackedManifestPath = resolve(projectRoot, 'release/release-validation-manifest.json');
 const ciWorkflowPath = resolve(projectRoot, '.github/workflows/ci.yml');
+const codeqlWorkflowPath = resolve(projectRoot, '.github/workflows/codeql.yml');
 const releaseWorkflowPath = resolve(projectRoot, '.github/workflows/release-validation.yml');
 const releaseValidatorPath = resolve(projectRoot, 'scripts/validate-release-candidate.sh');
 const apiFreezeWrapperPath = resolve(projectRoot, 'scripts/verify-mcp-api-freezes.sh');
@@ -107,6 +108,10 @@ const releaseHarnessRegistryPath = resolve(
   projectRoot,
   'release/release-harness-contracts.json',
 );
+const releaseHarnessBundleBuilderPath = resolve(
+  projectRoot,
+  'scripts/create-release-harness-bundle.mjs',
+);
 const releaseHarnessImporterPath = resolve(
   projectRoot,
   'scripts/import-release-harness-evidence.mjs',
@@ -115,6 +120,21 @@ const releaseHarnessImporterSelfTestPath = resolve(
   projectRoot,
   'scripts/import-release-harness-evidence-self-test.mjs',
 );
+const releaseProducerSourcePaths = [
+  'release/scripts/produce-release-scans-linux-x64.sh',
+  'scripts/prepare-codeql-release-report.mjs',
+  'scripts/prepare-codeql-release-report-self-test.mjs',
+  'scripts/produce-release-benchmarks.mjs',
+  'scripts/produce-release-benchmarks-self-test.mjs',
+  'scripts/produce-release-history.mjs',
+  'scripts/produce-release-history-self-test.mjs',
+  'scripts/produce-release-scans.mjs',
+  'scripts/produce-release-scans-self-test.mjs',
+  'scripts/stage-codeql-release-provenance.mjs',
+  'scripts/stage-codeql-release-provenance-self-test.mjs',
+  'scripts/verify-runtime-dependency-surface.mjs',
+  'scripts/verify-runtime-dependency-surface-self-test.mjs',
+].map((path) => resolve(projectRoot, path));
 const releaseHistoryVerifierPath = resolve(projectRoot, 'scripts/verify-release-history.mjs');
 const releaseScansVerifierPath = resolve(projectRoot, 'scripts/verify-release-scans.mjs');
 const releaseBenchmarksVerifierPath = resolve(
@@ -191,8 +211,10 @@ try {
     ['D1p evidence verifier', d1pEvidenceVerifierPath],
     ['D1p evidence verifier self-test', d1pEvidenceSelfTestPath],
     ['release-harness registry', releaseHarnessRegistryPath],
+    ['release-harness bundle builder', releaseHarnessBundleBuilderPath],
     ['release-harness importer', releaseHarnessImporterPath],
     ['release-harness importer self-test', releaseHarnessImporterSelfTestPath],
+    ...releaseProducerSourcePaths.map((path) => ['release producer source', path]),
     ['release-history verifier', releaseHistoryVerifierPath],
     ['release-scans verifier', releaseScansVerifierPath],
     ['release-benchmarks verifier', releaseBenchmarksVerifierPath],
@@ -424,6 +446,44 @@ try {
     releaseWorkflow,
     /SOKLET_CANDIDATE_COMMIT: \$\{\{ inputs\.candidate_commit \}\}/,
   );
+  const releaseScansJob = releaseWorkflow.match(
+    /\n  release-scans:\n([\s\S]*?)\n  mcp-benchmarks:/,
+  );
+  const benchmarkJob = releaseWorkflow.match(
+    /\n  mcp-benchmarks:\n([\s\S]*?)\n  validate:/,
+  );
+  assert.notEqual(releaseScansJob, null);
+  assert.notEqual(benchmarkJob, null);
+  for (const [label, job] of [
+    ['release-scans', releaseScansJob[1]],
+    ['mcp-benchmarks', benchmarkJob[1]],
+  ]) {
+    assert.match(
+      job,
+      /\[\[ "\$GITHUB_SHA" == "\$SOKLET_CANDIDATE_COMMIT" \]\]/,
+      `${label} must bind the executing workflow revision to the candidate`,
+    );
+  }
+
+  const codeqlWorkflow = readFileSync(codeqlWorkflowPath, 'utf8');
+  assert.match(codeqlWorkflow, /runs-on: ubuntu-24\.04/);
+  assert.doesNotMatch(codeqlWorkflow, /ubuntu-latest/);
+  assert.match(
+    codeqlWorkflow,
+    /ref: \$\{\{ inputs\.candidate_commit \|\| github\.sha \}\}\n\n      - name: Verify exact release candidate/,
+  );
+  assert.match(
+    codeqlWorkflow,
+    /install-pinned-maven-linux-x64\.sh[\s\S]*?codeql-maven-distribution\.txt/,
+  );
+  const candidateCodeqlGuard = codeqlWorkflow.match(
+    /      - name: Verify exact release candidate\n([\s\S]*?)\n      - name: Install checksum-pinned Corretto 21/,
+  );
+  assert.notEqual(candidateCodeqlGuard, null);
+  assert.match(
+    candidateCodeqlGuard[1],
+    /\[\[ "\$GITHUB_SHA" == "\$SOKLET_CANDIDATE_COMMIT" \]\]/,
+  );
 
   const ciWorkflow = readFileSync(ciWorkflowPath, 'utf8');
   const apiDiffJob = ciWorkflow.match(
@@ -466,13 +526,15 @@ try {
     releaseWorkflow,
     /run:[^\n]*\$\{\{\s*inputs\.candidate_commit\s*\}\}/,
   );
-  const toyStoreJavaInstall = releaseWorkflow.indexOf(
+  const validateJob = releaseWorkflow.match(/\n  validate:\n([\s\S]*)$/);
+  assert.notEqual(validateJob, null);
+  const toyStoreJavaInstall = validateJob[1].indexOf(
     'install-pinned-corretto-linux-x64.sh\n          toystoreJava',
   );
-  const candidateJavaInstall = releaseWorkflow.indexOf(
+  const candidateJavaInstall = validateJob[1].indexOf(
     'install-pinned-corretto-linux-x64.sh\n          java',
   );
-  const coreJdk21Install = releaseWorkflow.indexOf(
+  const coreJdk21Install = validateJob[1].indexOf(
     'install-pinned-corretto-linux-x64.sh\n          coreJdk21',
   );
   assert.ok(toyStoreJavaInstall >= 0);
@@ -550,22 +612,42 @@ try {
   );
   assert.match(
     releaseValidator,
+    /release_harness_bundle_builder="\$project_root\/scripts\/create-release-harness-bundle\.mjs"/,
+  );
+  assert.match(
+    releaseValidator,
     /release_harness_importer="\$project_root\/scripts\/import-release-harness-evidence\.mjs"/,
   );
   assert.match(
     releaseValidator,
     /release_harness_importer_self_test="\$project_root\/scripts\/import-release-harness-evidence-self-test\.mjs"/,
   );
-  for (const verifier of [
+  for (const source of [
+    'prepare-codeql-release-report.mjs',
+    'prepare-codeql-release-report-self-test.mjs',
+    'produce-release-benchmarks.mjs',
+    'produce-release-benchmarks-self-test.mjs',
+    'produce-release-history.mjs',
+    'produce-release-history-self-test.mjs',
+    'produce-release-scans.mjs',
+    'produce-release-scans-self-test.mjs',
+    'stage-codeql-release-provenance.mjs',
+    'stage-codeql-release-provenance-self-test.mjs',
+    'verify-runtime-dependency-surface.mjs',
+    'verify-runtime-dependency-surface-self-test.mjs',
     'verify-release-history.mjs',
     'verify-release-scans.mjs',
     'verify-release-benchmarks.mjs',
   ]) {
     assert.match(
       releaseValidator,
-      new RegExp(`\\$project_root\\/scripts\\/${verifier.replaceAll('.', '\\.')}`),
+      new RegExp(`\\$project_root\\/scripts\\/${source.replaceAll('.', '\\.')}`),
     );
   }
+  assert.match(
+    releaseValidator,
+    /\$project_root\/release\/scripts\/produce-release-scans-linux-x64\.sh/,
+  );
   assert.match(
     releaseValidator,
     /for release_harness_source in[\s\S]*?\[\[ -f "\$release_harness_source" && ! -L "\$release_harness_source" \]\]/,
@@ -582,6 +664,16 @@ try {
   assert.ok(harnessConfigIndex >= 0);
   assert.ok(harnessConfigIndex < harnessSelfTestIndex);
   assert.ok(harnessSelfTestIndex < firstEvidenceRecordIndex);
+  for (const selfTestVariable of [
+    'release_history_producer_self_test',
+    'release_scans_codeql_preparer_self_test',
+    'release_scans_codeql_provenance_self_test',
+    'release_scans_runtime_surface_self_test',
+    'release_scans_producer_self_test',
+    'release_benchmarks_producer_self_test',
+  ]) {
+    assert.match(releaseValidator, new RegExp(`node "\\$${selfTestVariable}"`));
+  }
   const importedHarnessFunction = releaseValidator.match(
     /\nrun_imported_release_harness\(\) \{\n([\s\S]*?)\n\}\n\nrun_isolated_install\(\)/,
   );

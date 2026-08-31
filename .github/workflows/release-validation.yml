@@ -7,6 +7,10 @@ on:
         description: Full immutable Soklet candidate commit SHA
         required: true
         type: string
+      benchmark_approval_reference:
+        description: Durable approval reference for executing the registered MCP benchmark policy
+        required: true
+        type: string
 
 concurrency:
   group: release-validation-${{ inputs.candidate_commit }}
@@ -16,6 +20,197 @@ permissions:
   contents: read
 
 jobs:
+  release-scans-codeql:
+    name: Candidate-bound CodeQL producer
+    uses: ./.github/workflows/codeql.yml
+    with:
+      candidate_commit: ${{ inputs.candidate_commit }}
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+  release-scans:
+    name: Aggregate Release Scans (JDK 21)
+    needs: release-scans-codeql
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Check out exact candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          clean: true
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ inputs.candidate_commit }}
+
+      - name: Require exact candidate commit
+        shell: bash
+        env:
+          SOKLET_CANDIDATE_COMMIT: ${{ inputs.candidate_commit }}
+        run: |
+          set -euo pipefail
+          [[ "$SOKLET_CANDIDATE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
+            printf 'candidate_commit must be a full lowercase 40-hex commit SHA.\n' >&2
+            exit 64
+          }
+          [[ "$GITHUB_SHA" == "$SOKLET_CANDIDATE_COMMIT" ]] || {
+            printf 'Executing workflow revision does not match candidate_commit.\n' >&2
+            exit 1
+          }
+          [[ "$(git rev-parse --verify HEAD)" == "$SOKLET_CANDIDATE_COMMIT" ]] || {
+            printf 'Checked-out HEAD does not match candidate_commit.\n' >&2
+            exit 1
+          }
+
+      - name: Install checksum-pinned Node and npm
+        shell: bash
+        run: >-
+          bash conformance/official/scripts/install-pinned-node-linux-x64.sh
+          "${RUNNER_TEMP}" "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/release-scans-node-distribution.txt"
+
+      - name: Install checksum-pinned Corretto 21
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-corretto-linux-x64.sh
+          coreJdk21 "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/release-scans-java-distribution.txt"
+
+      - name: Install checksum-pinned Maven
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-maven-linux-x64.sh
+          "${RUNNER_TEMP}" "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/release-scans-maven-distribution.txt"
+
+      - name: Build exact candidate artifact
+        run: mvn -B -ntp -DskipTests package
+
+      - name: Self-test release-scan producer
+        run: |
+          node scripts/prepare-codeql-release-report-self-test.mjs
+          node scripts/stage-codeql-release-provenance-self-test.mjs
+          node scripts/verify-runtime-dependency-surface-self-test.mjs
+          node scripts/produce-release-scans-self-test.mjs
+
+      - name: Download candidate-bound CodeQL artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: release-scans-codeql-${{ inputs.candidate_commit }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-scans-codeql
+
+      - name: Produce immutable release-scan bundle
+        shell: bash
+        run: >-
+          bash release/scripts/produce-release-scans-linux-x64.sh
+          "${GITHUB_WORKSPACE}"
+          "${RUNNER_TEMP}/release-scans-codeql"
+          "${RUNNER_TEMP}/release-scans-work"
+          "${RUNNER_TEMP}/release-scans-evidence"
+          "${RUNNER_TEMP}/release-scans-bundle.json"
+
+      - name: Upload release-scan evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: release-scans-${{ inputs.candidate_commit }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 90
+          path: |
+            ${{ runner.temp }}/release-scans-work
+            ${{ runner.temp }}/release-scans-evidence
+            ${{ runner.temp }}/release-scans-bundle.json
+            ${{ runner.temp }}/release-scans-node-distribution.txt
+            ${{ runner.temp }}/release-scans-java-distribution.txt
+            ${{ runner.temp }}/release-scans-maven-distribution.txt
+
+  mcp-benchmarks:
+    name: MCP Release Benchmarks (JDK 17)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          clean: true
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ inputs.candidate_commit }}
+
+      - name: Require exact candidate commit
+        shell: bash
+        env:
+          SOKLET_CANDIDATE_COMMIT: ${{ inputs.candidate_commit }}
+        run: |
+          set -euo pipefail
+          [[ "$SOKLET_CANDIDATE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
+            printf 'candidate_commit must be a full lowercase 40-hex commit SHA.\n' >&2
+            exit 64
+          }
+          [[ "$GITHUB_SHA" == "$SOKLET_CANDIDATE_COMMIT" ]] || {
+            printf 'Executing workflow revision does not match candidate_commit.\n' >&2
+            exit 1
+          }
+          [[ "$(git rev-parse --verify HEAD)" == "$SOKLET_CANDIDATE_COMMIT" ]] || {
+            printf 'Checked-out HEAD does not match candidate_commit.\n' >&2
+            exit 1
+          }
+
+      - name: Install checksum-pinned Node and npm
+        shell: bash
+        run: >-
+          bash conformance/official/scripts/install-pinned-node-linux-x64.sh
+          "${RUNNER_TEMP}" "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/mcp-benchmark-node-distribution.txt"
+
+      - name: Install checksum-pinned Corretto 17
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-corretto-linux-x64.sh
+          java "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/mcp-benchmark-java-distribution.txt"
+
+      - name: Install checksum-pinned Maven
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-maven-linux-x64.sh
+          "${RUNNER_TEMP}" "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/mcp-benchmark-maven-distribution.txt"
+
+      - name: Build exact candidate artifact
+        run: mvn -B -ntp -DskipTests package
+
+      - name: Test and package isolated benchmark harness
+        run: |
+          node scripts/produce-release-benchmarks-self-test.mjs
+          mvn -B -ntp -f benchmarks/pom.xml clean verify
+
+      - name: Execute registered benchmark policy
+        env:
+          SOKLET_BENCHMARK_APPROVAL_REFERENCE: ${{ inputs.benchmark_approval_reference }}
+        run: >-
+          node scripts/produce-release-benchmarks.mjs run
+          --candidate-root "${GITHUB_WORKSPACE}"
+          --work-root "${RUNNER_TEMP}/mcp-benchmark-work"
+          --approval-reference "${SOKLET_BENCHMARK_APPROVAL_REFERENCE}"
+
+      - name: Upload raw benchmark draft for owner review
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: mcp-benchmark-draft-${{ inputs.candidate_commit }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 90
+          path: |
+            ${{ runner.temp }}/mcp-benchmark-work
+            ${{ runner.temp }}/mcp-benchmark-node-distribution.txt
+            ${{ runner.temp }}/mcp-benchmark-java-distribution.txt
+            ${{ runner.temp }}/mcp-benchmark-maven-distribution.txt
+
   validate:
     name: Validate immutable candidate
     runs-on: ubuntu-24.04

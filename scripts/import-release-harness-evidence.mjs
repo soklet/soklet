@@ -12,7 +12,7 @@ import {
   realpathSync,
   writeFileSync,
 } from 'node:fs';
-import { basename, dirname, isAbsolute, parse, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, parse, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { EXPECTED_GATE_EVIDENCE_CONTRACTS } from './release-validation-evidence.mjs';
 
@@ -44,6 +44,16 @@ const EXPECTED_CANDIDATE_BINDINGS = Object.freeze([
 const BUNDLE_CANDIDATE_KEYS = Object.freeze(
   EXPECTED_CANDIDATE_BINDINGS.filter((key) => key !== 'immutableBundleSha256'),
 );
+const BENCHMARK_BASELINE = '3.5.1';
+const BENCHMARK_CANDIDATE = '4.0.0';
+const BENCHMARK_JSON_NAMES = Object.freeze([
+  'com.soklet.McpReleaseJsonJmhBenchmark.jsonParse',
+  'com.soklet.McpReleaseJsonJmhBenchmark.jsonWrite',
+]);
+const BENCHMARK_PROFILE_NAMES = Object.freeze([
+  'com.soklet.McpReleaseJsonJmhBenchmark.profile1SchemaCompile',
+  'com.soklet.McpReleaseJsonJmhBenchmark.profile1SchemaEvaluate',
+]);
 const IMPORT_COMMAND = 'import-release-harness-evidence.mjs --import --gate <id> '
   + '--candidate-root <absolute-path> --bundle <absolute-path> --output <absolute-path>';
 const VERIFY_CONFIG_COMMAND = 'import-release-harness-evidence.mjs --verify-config';
@@ -749,7 +759,48 @@ function parseReportJson(bytes, label) {
   return parseJsonBytes(bytes, label);
 }
 
-function validateEmptySarif(bytes, expectedTool, label) {
+function validateSarifInvocation(invocation, label) {
+  requireObject(invocation, label);
+  if (invocation.executionSuccessful !== true)
+    fail(`${label} does not prove successful scanner execution.`);
+  if (invocation.exitCode !== undefined
+      && (!Number.isSafeInteger(invocation.exitCode) || invocation.exitCode !== 0)) {
+    fail(`${label} has a nonzero or malformed exit code.`);
+  }
+  if (invocation.processStartFailureMessage !== undefined)
+    fail(`${label} records a scanner process-start failure.`);
+  for (const field of [
+    'toolExecutionNotifications',
+    'toolConfigurationNotifications',
+  ]) {
+    if (invocation[field] === undefined)
+      continue;
+    const notifications = requireArray(invocation[field], `${label}.${field}`);
+    notifications.forEach((notification, index) => {
+      requireObject(notification, `${label}.${field}[${index}]`);
+      if (notification.level === 'error' || notification.exception !== undefined) {
+        fail(`${label}.${field}[${index}] records an incomplete scanner execution.`);
+      }
+    });
+  }
+}
+
+function validateSarifInvocations(run, label, required) {
+  if (run.invocations === undefined) {
+    if (required)
+      fail(`${label} has no scanner invocation evidence.`);
+    return;
+  }
+  const invocations = requireArray(run.invocations, `${label}.invocations`);
+  if (invocations.length === 0)
+    fail(`${label} has an empty scanner invocation set.`);
+  invocations.forEach((invocation, index) =>
+    validateSarifInvocation(invocation, `${label}.invocations[${index}]`));
+}
+
+function validateEmptySarif(bytes, expectedTool, label, {
+  requireInvocations = false,
+} = {}) {
   const value = requireObject(parseReportJson(bytes, label), label);
   if (value.version !== '2.1.0')
     fail(`${label} must be SARIF 2.1.0.`);
@@ -768,6 +819,11 @@ function validateEmptySarif(bytes, expectedTool, label) {
     }
     if (requireArray(run.results, `${label}.runs[${index}].results`).length !== 0)
       fail(`${label} contains an unapproved scanner result.`);
+    validateSarifInvocations(
+      run,
+      `${label}.runs[${index}]`,
+      requireInvocations,
+    );
   }
 }
 
@@ -974,8 +1030,12 @@ function validateReleaseScans(fileBytes, directoryRole, contract, candidate) {
     entryByPath.get('00-codeql-java.sarif').bytes,
     'CodeQL',
     'CodeQL SARIF report',
+    { requireInvocations: true },
   );
   validateEmptySpotBugs(entryByPath.get('01-spotbugs.xml').bytes);
+  // The pinned Gitleaks 8.30.1 SARIF writer does not emit invocations. Its
+  // paired empty JSON report and the trusted workflow's successful exit are
+  // the completion authority. If an invocation is present, validate it.
   validateEmptySarif(
     entryByPath.get('02-gitleaks.sarif').bytes,
     'gitleaks',
@@ -1042,6 +1102,142 @@ function validateReleaseScans(fileBytes, directoryRole, contract, candidate) {
   });
 }
 
+function benchmarkConfiguration(policy) {
+  return {
+    candidateJvm: policy.candidateJvm,
+    forks: policy.forks,
+    measurement: policy.measurement,
+    threads: policy.threads,
+    warmup: policy.warmup,
+  };
+}
+
+function benchmarkJdkVersion(contract) {
+  const toolchain = contract.toolchains.find(({ artifact }) =>
+    artifact.startsWith('corretto-'));
+  if (toolchain === undefined || !/^17\.0\.20\./u.test(toolchain.version))
+    fail('MCP benchmark contract has an unsupported JDK pin.');
+  return toolchain.version.split('.').slice(0, 3).join('.');
+}
+
+function requireBenchmarkReference(value, label) {
+  requireString(value, label);
+  if (value.trim() !== value || value.length > 512
+      || /[\u0000-\u001f\u007f]/u.test(value)) {
+    fail(`${label} must be a trimmed, single-line reference of at most 512 characters.`);
+  }
+  return value;
+}
+
+function validateBenchmarkSignoffReference(value, reviewedDraftSha256) {
+  requireBenchmarkReference(value, 'MCP benchmark review.signoffReference');
+  const match = value.match(
+    /^([A-Za-z][A-Za-z0-9+.-]*:[^\s#]+)#sha256=([0-9a-f]{64})$/u,
+  );
+  if (match === null || match[2] !== reviewedDraftSha256) {
+    fail(
+      'MCP benchmark sign-off reference must be a durable URI-like reference '
+        + 'bound to review.reviewedDraftSha256.',
+    );
+  }
+}
+
+function summarizeRetainedJmhResults(results, {
+  artifact,
+  benchmarks,
+  configuration,
+  expectedForks,
+  expectedJdkVersion,
+}) {
+  if (!Array.isArray(results) || results.length !== benchmarks.length)
+    fail('Retained MCP JMH JSON has a missing or extra benchmark result.');
+  results.forEach((entry, index) => requireObject(entry,
+    `Retained MCP JMH result ${index + 1}`));
+  const byBenchmark = new Map(results.map((entry) => [entry.benchmark, entry]));
+  if (byBenchmark.size !== results.length)
+    fail('Retained MCP JMH JSON contains a duplicate benchmark result.');
+  return benchmarks.map((benchmark) => {
+    const entry = byBenchmark.get(benchmark);
+    if (entry === undefined
+        || entry.jmhVersion !== '1.37'
+        || entry.jdkVersion !== expectedJdkVersion
+        || entry.mode !== 'thrpt'
+        || entry.threads !== configuration.threads
+        || entry.forks !== expectedForks
+        || entry.warmupIterations !== configuration.warmup.iterations
+        || entry.warmupTime !== `${configuration.warmup.secondsPerIteration} s`
+        || entry.measurementIterations !== configuration.measurement.iterations
+        || entry.measurementTime
+          !== `${configuration.measurement.secondsPerIteration} s`
+        || !sameJson(entry.params, { artifact })
+        || !sameJson(entry.jvmArgs, configuration.candidateJvm)) {
+      fail(`Retained MCP JMH result ${benchmark} drifted from registered policy.`);
+    }
+    requireObject(entry.primaryMetric, `${benchmark}.primaryMetric`);
+    if (entry.primaryMetric.scoreUnit !== 'ops/s')
+      fail(`Retained MCP JMH result ${benchmark} has the wrong score unit.`);
+    const declaredScore = requireNumber(entry.primaryMetric.score,
+      `${benchmark}.primaryMetric.score`);
+    const rawData = requireArray(entry.primaryMetric.rawData,
+      `${benchmark}.primaryMetric.rawData`);
+    if (declaredScore <= 0 || rawData.length !== expectedForks
+        || rawData.some((fork) => !Array.isArray(fork)
+          || fork.length !== configuration.measurement.iterations
+          || fork.some((sample) => typeof sample !== 'number'
+            || !Number.isFinite(sample) || sample <= 0))) {
+      fail(`Retained MCP JMH result ${benchmark} has incomplete raw samples.`);
+    }
+    const samples = rawData.flat();
+    const score = samples.reduce((sum, sample) => sum + sample, 0)
+      / samples.length;
+    const tolerance = Math.max(1e-12, Math.abs(score) * 1e-12);
+    if (Math.abs(declaredScore - score) > tolerance) {
+      fail(
+        `Retained MCP JMH result ${benchmark} score does not derive from raw samples.`,
+      );
+    }
+    return { benchmark, entry, score };
+  });
+}
+
+function normalizedRetainedJsonRun(artifact, summary, configuration) {
+  const scoreByBenchmark = new Map(summary.map((entry) =>
+    [entry.benchmark, entry.score]));
+  const rawResult = {
+    artifact,
+    configuration,
+    jsonParseScore: scoreByBenchmark.get(BENCHMARK_JSON_NAMES[0]),
+    jsonWriteScore: scoreByBenchmark.get(BENCHMARK_JSON_NAMES[1]),
+  };
+  return {
+    artifact,
+    outcome: 'PASS',
+    rawResult,
+    rawResultSha256: sha256(Buffer.from(canonicalJson(rawResult), 'utf8')),
+  };
+}
+
+function normalizedRetainedProfile(operation, result) {
+  const rawResult = {
+    complete: true,
+    errors: [],
+    operation,
+    result: {
+      benchmark: result.benchmark,
+      rawJmhResultSha256: sha256(Buffer.from(canonicalJson(result.entry), 'utf8')),
+      score: result.score,
+      scoreError: result.entry.primaryMetric.scoreError,
+      scoreUnit: result.entry.primaryMetric.scoreUnit,
+    },
+  };
+  return {
+    errors: 0,
+    operation,
+    rawResult,
+    rawResultSha256: sha256(Buffer.from(canonicalJson(rawResult), 'utf8')),
+  };
+}
+
 function validateBenchmarks(bytes, logBytes, contract, candidate) {
   const value = parseEvidenceJson(bytes, 'MCP benchmark results');
   validateCommonEvidence(value, contract, candidate, [
@@ -1050,20 +1246,16 @@ function validateBenchmarks(bytes, logBytes, contract, candidate) {
     'configuration',
     'environment',
     'profile1Baseline',
+    'rawJmhResults',
     'repetitions',
     'review',
+    'reviewedDraft',
   ], 'MCP benchmark results');
   const policy = contract.policy;
   validateSha256(value.benchmarkLogSha256, 'MCP benchmark benchmarkLogSha256');
   if (value.benchmarkLogSha256 !== sha256(logBytes))
     fail('MCP benchmark log bytes do not match benchmarkLogSha256.');
-  const expectedConfiguration = {
-    candidateJvm: policy.candidateJvm,
-    forks: policy.forks,
-    measurement: policy.measurement,
-    threads: policy.threads,
-    warmup: policy.warmup,
-  };
+  const expectedConfiguration = benchmarkConfiguration(policy);
   if (!sameJson(value.configuration, expectedConfiguration))
     fail('MCP benchmark execution configuration drifted from approved policy.');
   exactKeys(
@@ -1075,28 +1267,64 @@ function validateBenchmarks(bytes, logBytes, contract, candidate) {
     if (value.comparison[key] !== policy.comparison[key])
       fail(`MCP benchmark comparison ${key} drifted from policy.`);
   }
-  const parseRatio = requireNumber(value.comparison.jsonParseScoreRatio, 'jsonParseScoreRatio');
-  const writeRatio = requireNumber(value.comparison.jsonWriteScoreRatio, 'jsonWriteScoreRatio');
+  const parseRatio = requireNumber(value.comparison.jsonParseScoreRatio,
+    'jsonParseScoreRatio');
+  const writeRatio = requireNumber(value.comparison.jsonWriteScoreRatio,
+    'jsonWriteScoreRatio');
+
   exactKeys(
     value.review,
-    ['approvalReference', 'regressionApprovalReference', 'regressionApproved', 'releaseNoteSha256', 'signoffReference'],
+    [
+      'approvalReference',
+      'regressionApprovalReference',
+      'regressionApproved',
+      'releaseNoteSha256',
+      'reviewedDraftSha256',
+      'signoffReference',
+    ],
     'MCP benchmark review',
   );
-  requireString(value.review.approvalReference, 'MCP benchmark review.approvalReference');
-  requireString(value.review.signoffReference, 'MCP benchmark review.signoffReference');
-  const regression = parseRatio < policy.comparison.minimumJsonParseWriteScoreRatio
-    || writeRatio < policy.comparison.minimumJsonParseWriteScoreRatio;
-  if (regression) {
-    fail(
-      'MCP benchmark regression is not authorized by the exact MCP-0-12 '
-        + 'registry; a candidate-tracked release-note/owner-approval contract '
-        + 'amendment is required before import.',
-    );
-  } else if (value.review.regressionApproved !== false
-      || value.review.regressionApprovalReference !== null
-      || value.review.releaseNoteSha256 !== null) {
-    fail('MCP benchmark non-regression must not claim regression approval.');
+  requireBenchmarkReference(value.review.approvalReference,
+    'MCP benchmark review.approvalReference');
+  validateSha256(value.review.reviewedDraftSha256,
+    'MCP benchmark review.reviewedDraftSha256');
+  validateBenchmarkSignoffReference(value.review.signoffReference,
+    value.review.reviewedDraftSha256);
+
+  const draft = value.reviewedDraft;
+  exactKeys(draft, [
+    'approvalReference',
+    'benchmarkLogSha256',
+    'candidate',
+    'comparison',
+    'configuration',
+    'environment',
+    'formatVersion',
+    'gate',
+    'policySha256',
+    'producerStatus',
+    'profile1Baseline',
+    'repetitions',
+    'toolchainsSha256',
+  ], 'MCP benchmark reviewed draft');
+  const actualDraftSha256 = sha256(Buffer.from(canonicalJson(draft), 'utf8'));
+  if (actualDraftSha256 !== value.review.reviewedDraftSha256)
+    fail('MCP benchmark reviewed draft bytes do not match reviewedDraftSha256.');
+  requireBenchmarkReference(draft.approvalReference,
+    'MCP benchmark reviewed draft approvalReference');
+  if (draft.formatVersion !== 1 || draft.gate !== contract.id
+      || draft.producerStatus !== 'AWAITING_REVIEW'
+      || draft.approvalReference !== value.review.approvalReference
+      || draft.benchmarkLogSha256 !== value.benchmarkLogSha256
+      || !sameJson(draft.candidate, candidate)
+      || !sameJson(draft.comparison, value.comparison)
+      || !sameJson(draft.configuration, expectedConfiguration)
+      || !sameJson(draft.environment, value.environment)
+      || draft.policySha256 !== value.policySha256
+      || draft.toolchainsSha256 !== value.toolchainsSha256) {
+    fail('MCP benchmark reviewed draft is not bound to the accepted evidence.');
   }
+
   exactKeys(
     value.environment,
     ['architecture', 'cpuModel', 'governor', 'image', 'kernel', 'microcode', 'sameBoot', 'samePhysicalRunner', 'turboState'],
@@ -1110,76 +1338,174 @@ function validateBenchmarks(bytes, logBytes, contract, candidate) {
   }
   if (value.environment.sameBoot !== true || value.environment.samePhysicalRunner !== true)
     fail('MCP benchmarks were not run on the same physical runner and boot.');
-  const repetitions = requireArray(value.repetitions, 'MCP benchmark repetitions');
-  if (repetitions.length !== policy.forks)
-    fail('MCP benchmark repetition count does not match approved forks.');
-  const scores = {
-    '3.5.1': { jsonParse: [], jsonWrite: [] },
-    '4.0.0': { jsonParse: [], jsonWrite: [] },
-  };
+
+  const rawJmhResults = requireArray(value.rawJmhResults,
+    'MCP benchmark retained raw JMH results');
+  const rawByPath = new Map();
+  rawJmhResults.forEach((raw, index) => {
+    const label = `MCP benchmark retained raw JMH result ${index + 1}`;
+    exactKeys(raw, ['path', 'results', 'sha256'], label);
+    requireString(raw.path, `${label}.path`);
+    if (!/^raw\/[A-Za-z0-9._-]+\.json$/u.test(raw.path))
+      fail(`${label}.path is not a canonical raw JMH path.`);
+    if (rawByPath.has(raw.path))
+      fail(`MCP benchmark retained raw JMH path is duplicated: ${raw.path}`);
+    requireArray(raw.results, `${label}.results`);
+    validateSha256(raw.sha256, `${label}.sha256`);
+    const actualSha256 = sha256(Buffer.from(canonicalJson(raw.results), 'utf8'));
+    if (actualSha256 !== raw.sha256)
+      fail(`${label} digest does not match its canonical results.`);
+    rawByPath.set(raw.path, raw);
+  });
+
+  const expectedRawPaths = [];
   const expectedLogMarkers = [
     `SOKLET_BENCHMARK_CONFIGURATION_SHA256=${sha256(Buffer.from(canonicalJson(expectedConfiguration), 'utf8'))}`,
   ];
-  repetitions.forEach((repetition, index) => {
-    exactKeys(repetition, ['first', 'ordinal', 'runs'], `MCP benchmark repetition ${index + 1}`);
-    const expectedFirst = index % 2 === 0 ? '3.5.1' : '4.0.0';
-    if (repetition.ordinal !== index || repetition.first !== expectedFirst) {
-      fail(`MCP benchmark repetition ${index + 1} violates alternating complete-run policy.`);
-    }
-    const runs = requireArray(repetition.runs, `MCP benchmark repetition ${index + 1}.runs`);
-    const expectedArtifacts = expectedFirst === '3.5.1'
-      ? ['3.5.1', '4.0.0']
-      : ['4.0.0', '3.5.1'];
-    if (runs.length !== 2)
-      fail(`MCP benchmark repetition ${index + 1} must contain two complete runs.`);
-    runs.forEach((run, runIndex) => {
-      const label = `MCP benchmark repetition ${index + 1}.runs[${runIndex}]`;
-      exactKeys(run, ['artifact', 'outcome', 'rawResult', 'rawResultSha256'], label);
-      if (run.artifact !== expectedArtifacts[runIndex] || run.outcome !== 'PASS')
-        fail(`${label} violates the alternating artifact/outcome order.`);
-      validateSha256(run.rawResultSha256, `${label}.rawResultSha256`);
-      if (run.rawResultSha256
-          !== sha256(Buffer.from(canonicalJson(run.rawResult), 'utf8'))) {
-        fail(`${label} raw-result digest does not match its inline result.`);
-      }
-      exactKeys(
-        run.rawResult,
-        ['artifact', 'configuration', 'jsonParseScore', 'jsonWriteScore'],
-        `${label}.rawResult`,
-      );
-      if (run.rawResult.artifact !== run.artifact
-          || !sameJson(run.rawResult.configuration, expectedConfiguration)) {
-        fail(`${label} raw result has the wrong artifact or execution configuration.`);
-      }
-      const jsonParseScore = requireNumber(
-        run.rawResult.jsonParseScore,
-        `${label}.rawResult.jsonParseScore`,
-      );
-      const jsonWriteScore = requireNumber(
-        run.rawResult.jsonWriteScore,
-        `${label}.rawResult.jsonWriteScore`,
-      );
-      if (jsonParseScore <= 0 || jsonWriteScore <= 0)
-        fail(`${label} raw benchmark scores must be positive.`);
-      scores[run.artifact].jsonParse.push(jsonParseScore);
-      scores[run.artifact].jsonWrite.push(jsonWriteScore);
-      expectedLogMarkers.push(
-        `SOKLET_BENCHMARK_RUN=${index}:${runIndex}:${run.artifact}:PASS:${run.rawResultSha256}`,
-      );
-    });
+  const logRawSections = [];
+  const draftRepetitions = requireArray(draft.repetitions,
+    'MCP benchmark reviewed draft repetitions');
+  if (draftRepetitions.length !== policy.forks)
+    fail('MCP benchmark reviewed draft repetition count does not match policy.');
+  const repetitions = draftRepetitions.map((repetition, ordinal) => {
+    const label = `MCP benchmark reviewed draft repetition ${ordinal + 1}`;
+    exactKeys(repetition, ['first', 'ordinal', 'runs'], label);
+    const expectedFirst = ordinal % 2 === 0
+      ? BENCHMARK_BASELINE : BENCHMARK_CANDIDATE;
+    if (repetition.first !== expectedFirst || repetition.ordinal !== ordinal)
+      fail(`${label} violates alternating complete-run policy.`);
+    const expectedArtifacts = expectedFirst === BENCHMARK_BASELINE
+      ? [BENCHMARK_BASELINE, BENCHMARK_CANDIDATE]
+      : [BENCHMARK_CANDIDATE, BENCHMARK_BASELINE];
+    const runs = requireArray(repetition.runs, `${label}.runs`);
+    if (runs.length !== expectedArtifacts.length)
+      fail(`${label} does not contain both complete artifact runs.`);
+    return {
+      first: expectedFirst,
+      ordinal,
+      runs: runs.map((rawDraft, runIndex) => {
+        const runLabel = `${label}.runs[${runIndex}]`;
+        exactKeys(rawDraft, ['normalized', 'rawJmhPath', 'rawJmhSha256'], runLabel);
+        const artifact = expectedArtifacts[runIndex];
+        const expectedPath = `raw/repetition-${ordinal}-run-${runIndex}-${artifact}.json`;
+        if (rawDraft.rawJmhPath !== expectedPath)
+          fail(`${runLabel} has the wrong canonical raw JMH path.`);
+        validateSha256(rawDraft.rawJmhSha256, `${runLabel}.rawJmhSha256`);
+        const raw = rawByPath.get(expectedPath);
+        if (raw === undefined || raw.sha256 !== rawDraft.rawJmhSha256)
+          fail(`${runLabel} does not bind its retained raw JMH document.`);
+        expectedRawPaths.push(expectedPath);
+        const summary = summarizeRetainedJmhResults(raw.results, {
+          artifact,
+          benchmarks: BENCHMARK_JSON_NAMES,
+          configuration: expectedConfiguration,
+          expectedForks: 1,
+          expectedJdkVersion: benchmarkJdkVersion(contract),
+        });
+        const normalized = normalizedRetainedJsonRun(artifact, summary,
+          expectedConfiguration);
+        if (!sameJson(rawDraft.normalized, normalized))
+          fail(`${runLabel} normalized result does not derive from retained raw JMH.`);
+        expectedLogMarkers.push(
+          `SOKLET_BENCHMARK_RUN=${ordinal}:${runIndex}:${artifact}:PASS:${normalized.rawResultSha256}`,
+        );
+        const rawMarker = `SOKLET_BENCHMARK_RAW=${raw.path}:${raw.sha256}`;
+        expectedLogMarkers.push(rawMarker);
+        logRawSections.push({ marker: rawMarker, raw });
+        return normalized;
+      }),
+    };
   });
-  const mean = (values) => values.reduce((sum, score) => sum + score, 0) / values.length;
-  const derivedParseRatio = mean(scores['4.0.0'].jsonParse) / mean(scores['3.5.1'].jsonParse);
-  const derivedWriteRatio = mean(scores['4.0.0'].jsonWrite) / mean(scores['3.5.1'].jsonWrite);
+  if (!sameJson(value.repetitions, repetitions))
+    fail('MCP benchmark accepted repetitions do not derive from the reviewed raw JMH.');
+
+  const draftProfile = requireArray(draft.profile1Baseline,
+    'MCP benchmark reviewed draft Profile 1 baseline');
+  if (draftProfile.length !== policy.profile1Baseline.operations.length
+      || draftProfile.length !== BENCHMARK_PROFILE_NAMES.length) {
+    fail('MCP benchmark reviewed draft Profile 1 baseline is incomplete.');
+  }
+  const profilePath = 'raw/profile1.json';
+  const profileRaw = rawByPath.get(profilePath);
+  if (profileRaw === undefined)
+    fail('MCP benchmark retained Profile 1 raw JMH document is missing.');
+  expectedRawPaths.push(profilePath);
+  const profileSummary = summarizeRetainedJmhResults(profileRaw.results, {
+    artifact: BENCHMARK_CANDIDATE,
+    benchmarks: BENCHMARK_PROFILE_NAMES,
+    configuration: expectedConfiguration,
+    expectedForks: policy.forks,
+    expectedJdkVersion: benchmarkJdkVersion(contract),
+  });
+  const profile1Baseline = draftProfile.map((rawDraft, index) => {
+    const label = `MCP benchmark reviewed draft Profile 1 operation ${index + 1}`;
+    exactKeys(rawDraft, ['normalized', 'rawJmhPath', 'rawJmhSha256'], label);
+    if (rawDraft.rawJmhPath !== profilePath
+        || rawDraft.rawJmhSha256 !== profileRaw.sha256) {
+      fail(`${label} does not bind the retained Profile 1 raw JMH document.`);
+    }
+    const normalized = normalizedRetainedProfile(
+      policy.profile1Baseline.operations[index],
+      profileSummary[index],
+    );
+    if (!sameJson(rawDraft.normalized, normalized)) {
+      fail(
+        `${label} has the wrong compile/evaluate mapping or result fields.`,
+      );
+    }
+    return normalized;
+  });
+  if (!sameJson(value.profile1Baseline, profile1Baseline)) {
+    fail(
+      'MCP benchmark accepted Profile 1 baseline does not derive from reviewed raw JMH.',
+    );
+  }
+  const profileRawMarker = `SOKLET_BENCHMARK_RAW=${profileRaw.path}:${profileRaw.sha256}`;
+  expectedLogMarkers.push(profileRawMarker);
+  logRawSections.push({ marker: profileRawMarker, raw: profileRaw });
+
+  if (!sameArray(rawJmhResults.map(({ path }) => path), expectedRawPaths)) {
+    fail('MCP benchmark retained raw JMH documents are missing, extra, or reordered.');
+  }
+
+  const scores = {
+    [BENCHMARK_BASELINE]: { jsonParse: [], jsonWrite: [] },
+    [BENCHMARK_CANDIDATE]: { jsonParse: [], jsonWrite: [] },
+  };
+  repetitions.forEach((repetition) => repetition.runs.forEach((run) => {
+    scores[run.artifact].jsonParse.push(run.rawResult.jsonParseScore);
+    scores[run.artifact].jsonWrite.push(run.rawResult.jsonWriteScore);
+  }));
+  const mean = (numbers) =>
+    numbers.reduce((sum, number) => sum + number, 0) / numbers.length;
+  const derivedParseRatio = mean(scores[BENCHMARK_CANDIDATE].jsonParse)
+    / mean(scores[BENCHMARK_BASELINE].jsonParse);
+  const derivedWriteRatio = mean(scores[BENCHMARK_CANDIDATE].jsonWrite)
+    / mean(scores[BENCHMARK_BASELINE].jsonWrite);
   if (!Number.isFinite(derivedParseRatio) || !Number.isFinite(derivedWriteRatio)
       || Math.abs(parseRatio - derivedParseRatio) > 1e-12
       || Math.abs(writeRatio - derivedWriteRatio) > 1e-12) {
-    fail('MCP benchmark comparison ratios do not derive from the complete raw repetitions.');
+    fail('MCP benchmark comparison ratios do not derive from retained raw JMH.');
   }
+  const regression = parseRatio < policy.comparison.minimumJsonParseWriteScoreRatio
+    || writeRatio < policy.comparison.minimumJsonParseWriteScoreRatio;
+  if (regression) {
+    fail(
+      'MCP benchmark regression is not authorized by the exact MCP-0-12 '
+        + 'registry; a candidate-tracked release-note/owner-approval contract '
+        + 'amendment is required before import.',
+    );
+  } else if (value.review.regressionApproved !== false
+      || value.review.regressionApprovalReference !== null
+      || value.review.releaseNoteSha256 !== null) {
+    fail('MCP benchmark non-regression must not claim regression approval.');
+  }
+
   const log = logBytes.toString('utf8');
   if (!Buffer.from(log, 'utf8').equals(logBytes)
-      || log.includes('\r') || !log.endsWith('\n')) {
-    fail('MCP benchmark log must be nonempty UTF-8/LF text.');
+      || log.includes('\r') || !log.endsWith('\n')
+      || !log.startsWith('Soklet MCP release benchmark raw execution\n')) {
+    fail('MCP benchmark log must be complete UTF-8/LF producer output.');
   }
   let previousMarker = -1;
   for (const marker of expectedLogMarkers) {
@@ -1188,30 +1514,15 @@ function validateBenchmarks(bytes, logBytes, contract, candidate) {
       fail(`MCP benchmark log is missing, duplicates, or reorders marker: ${marker}`);
     previousMarker = index;
   }
-  const baseline = requireArray(value.profile1Baseline, 'MCP benchmark profile1Baseline');
-  if (baseline.length !== policy.profile1Baseline.operations.length)
-    fail('MCP benchmark Profile 1 baseline is incomplete.');
-  baseline.forEach((operation, index) => {
-    exactKeys(operation, ['errors', 'operation', 'rawResult', 'rawResultSha256'], `Profile 1 operation ${index + 1}`);
-    if (operation.operation !== policy.profile1Baseline.operations[index] || operation.errors !== 0)
-      fail(`Profile 1 operation ${index + 1} failed or is out of order.`);
-    validateSha256(operation.rawResultSha256, `Profile 1 operation ${index + 1}.rawResultSha256`);
-    if (operation.rawResultSha256
-        !== sha256(Buffer.from(canonicalJson(operation.rawResult), 'utf8'))) {
-      fail(`Profile 1 operation ${index + 1} raw-result digest does not match.`);
-    }
-    exactKeys(
-      operation.rawResult,
-      ['complete', 'errors', 'operation', 'result'],
-      `Profile 1 operation ${index + 1}.rawResult`,
-    );
-    if (operation.rawResult.complete !== true
-        || !sameArray(operation.rawResult.errors, [])
-        || operation.rawResult.operation !== operation.operation
-        || !isPlainObject(operation.rawResult.result)
-        || Object.keys(operation.rawResult.result).length === 0) {
-      fail(`Profile 1 operation ${index + 1} raw result is incomplete or contains errors.`);
-    }
+  logRawSections.forEach(({ marker, raw }, index) => {
+    const markerIndex = log.indexOf(`${marker}\n`);
+    const rawText = canonicalJson(raw.results);
+    const rawIndex = log.indexOf(rawText, markerIndex + marker.length + 1);
+    const nextMarker = logRawSections[index + 1]?.marker;
+    const nextMarkerIndex = nextMarker === undefined
+      ? log.length : log.indexOf(`${nextMarker}\n`);
+    if (rawIndex === -1 || rawIndex >= nextMarkerIndex)
+      fail(`MCP benchmark log does not retain raw JMH bytes for ${raw.path}.`);
   });
 }
 
@@ -1465,6 +1776,58 @@ function verifierSourcePaths(contract) {
   fail(`No verifier source path exists for ${contract.id}.`);
 }
 
+function producerSourcePaths(contract) {
+  if (contract.id === 'fuzz-nightly-history') {
+    return [
+      'fuzz/pom.xml',
+      'release/scripts/install-pinned-corretto-linux-x64.sh',
+      'scripts/produce-release-history.mjs',
+      'scripts/produce-release-history-self-test.mjs',
+    ];
+  }
+  if (contract.id === 'soak-nightly-history') {
+    return [
+      'release/scripts/install-pinned-corretto-linux-x64.sh',
+      'scripts/produce-release-history.mjs',
+      'scripts/produce-release-history-self-test.mjs',
+      'scripts/verify-soak-evidence.mjs',
+      'soak/pom.xml',
+      'soak/src/test/resources/com/soklet/soak-profiles/nightly.properties',
+    ];
+  }
+  if (contract.id === 'operational-history') {
+    return [
+      'release/scripts/install-pinned-corretto-linux-x64.sh',
+      'scripts/produce-release-history.mjs',
+      'scripts/produce-release-history-self-test.mjs',
+    ];
+  }
+  if (contract.id === 'release-scans') {
+    return [
+      'release/scripts/produce-release-scans-linux-x64.sh',
+      'scripts/prepare-codeql-release-report.mjs',
+      'scripts/prepare-codeql-release-report-self-test.mjs',
+      'scripts/produce-release-scans.mjs',
+      'scripts/produce-release-scans-self-test.mjs',
+      'scripts/stage-codeql-release-provenance.mjs',
+      'scripts/stage-codeql-release-provenance-self-test.mjs',
+      'scripts/verify-runtime-dependency-surface.mjs',
+      'scripts/verify-runtime-dependency-surface-self-test.mjs',
+    ];
+  }
+  if (contract.id === 'mcp-benchmarks') {
+    return [
+      'benchmarks/pom.xml',
+      'benchmarks/src/main/java/com/soklet/McpReleaseBenchmarkRuntime.java',
+      'benchmarks/src/main/java/com/soklet/McpReleaseJsonJmhBenchmark.java',
+      'benchmarks/src/test/java/com/soklet/McpReleaseBenchmarkRuntimeTests.java',
+      'scripts/produce-release-benchmarks.mjs',
+      'scripts/produce-release-benchmarks-self-test.mjs',
+    ];
+  }
+  fail(`No producer source paths exist for ${contract.id}.`);
+}
+
 function digestWorkflow(candidateRoot, contract) {
   const paths = workflowPaths(contract);
   if (paths.length === 1) {
@@ -1504,23 +1867,28 @@ function actualCandidateIdentity(candidateRoot, contract, registrySha256) {
     'pom.xml',
     'release/release-harness-contracts.json',
     'release/release-validation-manifest.json',
+    'scripts/create-release-harness-bundle.mjs',
     'scripts/import-release-harness-evidence.mjs',
     'scripts/import-release-harness-evidence-self-test.mjs',
     'scripts/release-validation-evidence.mjs',
     'scripts/validate-release-candidate.sh',
+    ...producerSourcePaths(contract),
     ...verifierSourcePaths(contract),
     ...workflowPaths(contract),
   ]);
   for (const path of trackedSources)
     requireTrackedCandidateFile(candidateRoot, path, `candidate source ${path}`);
-  const executingScriptDirectory = dirname(fileURLToPath(import.meta.url));
-  for (const path of [
+  const executingCandidateRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+  const executingSourcePaths = new Set([
+    'scripts/create-release-harness-bundle.mjs',
     'scripts/import-release-harness-evidence.mjs',
     'scripts/release-validation-evidence.mjs',
+    ...producerSourcePaths(contract).filter((path) => path.startsWith('scripts/')),
     ...verifierSourcePaths(contract),
-  ]) {
+  ]);
+  for (const path of executingSourcePaths) {
     const executingSource = readRegularFile(
-      resolve(executingScriptDirectory, basename(path)),
+      resolve(executingCandidateRoot, path),
       `executing ${path}`,
       16 * 1024 * 1024,
     );
@@ -1552,6 +1920,35 @@ function actualCandidateIdentity(candidateRoot, contract, registrySha256) {
     candidateTree,
     producerWorkflowSha256: digestWorkflow(candidateRoot, contract),
   };
+}
+
+export function releaseHarnessCandidateIdentity({
+  candidateRoot,
+  gate,
+  registryPath,
+} = {}) {
+  if (typeof candidateRoot !== 'string' || !isAbsolute(candidateRoot))
+    fail('candidate-root must be absolute.');
+  const selectedRegistryPath = registryPath
+    ?? resolve(candidateRoot, 'release/release-harness-contracts.json');
+  const configuration = verifyReleaseHarnessConfiguration(selectedRegistryPath);
+  verifyReleaseHarnessManifestParity(configuration);
+  if (configuration.registryPath
+      !== resolve(candidateRoot, 'release/release-harness-contracts.json')) {
+    fail('candidate identity must use the exact candidate-tracked registry path.');
+  }
+  const contract = configuration.contracts.get(gate);
+  if (contract === undefined)
+    fail(`Unknown release harness gate: ${gate}`);
+  const candidate = actualCandidateIdentity(
+    candidateRoot,
+    contract,
+    configuration.registrySha256,
+  );
+  validateCandidate(candidate, 'candidate identity');
+  if (candidate.candidateRegistrySha256 !== configuration.registrySha256)
+    fail('candidate identity registry SHA-256 does not match the selected registry bytes.');
+  return Object.freeze({ ...candidate });
 }
 
 function validateBundle(bundlePath, contract, candidate, now) {
@@ -1633,6 +2030,95 @@ function writeNewCanonicalJson(outputPath, value) {
   } finally {
     closeSync(descriptor);
   }
+}
+
+function bundleRoleFromEvidence(expected, role) {
+  const common = {
+    kind: expected.kind,
+    mediaType: expected.mediaType,
+    name: expected.name,
+    ordinal: expected.ordinal,
+    required: expected.required,
+    sha256: role.descriptor.sha256,
+  };
+  if (expected.kind === 'file') {
+    return {
+      bytesBase64: role.bytes.toString('base64'),
+      ...common,
+    };
+  }
+  return {
+    entries: role.descriptors.map(({ bytes, path, sha256: digest }) => ({
+      bytesBase64: bytes.toString('base64'),
+      path,
+      sha256: digest,
+    })),
+    ...common,
+  };
+}
+
+export function createReleaseHarnessBundle({
+  candidateIdentityProvider,
+  candidateRoot,
+  evidenceRoot,
+  gate,
+  now = Date.now(),
+  outputPath,
+  registryPath,
+} = {}) {
+  if (typeof candidateRoot !== 'string' || !isAbsolute(candidateRoot))
+    fail('candidate-root must be absolute.');
+  const selectedRegistryPath = registryPath
+    ?? resolve(candidateRoot, 'release/release-harness-contracts.json');
+  const configuration = verifyReleaseHarnessConfiguration(selectedRegistryPath);
+  verifyReleaseHarnessManifestParity(configuration);
+  if (candidateIdentityProvider === undefined
+      && configuration.registryPath
+        !== resolve(candidateRoot, 'release/release-harness-contracts.json')) {
+    fail('production bundle creation must use the exact candidate-tracked registry path.');
+  }
+  const contract = configuration.contracts.get(gate);
+  if (contract === undefined)
+    fail(`Unknown release harness gate: ${gate}`);
+  const candidate = candidateIdentityProvider === undefined
+    ? actualCandidateIdentity(candidateRoot, contract, configuration.registrySha256)
+    : candidateIdentityProvider({
+      candidateRoot,
+      contract,
+      registrySha256: configuration.registrySha256,
+    });
+  validateCandidate(candidate, 'candidate identity');
+  if (candidate.candidateRegistrySha256 !== configuration.registrySha256)
+    fail('candidate identity registry SHA-256 does not match the selected registry bytes.');
+  requireNumber(now, 'release-harness bundle creation time');
+  const absoluteEvidenceRoot = requireEvidenceRoot(evidenceRoot);
+  const roles = contract.roles.map((role, index) =>
+    readEvidenceRole(absoluteEvidenceRoot, role, index));
+  validateGateEvidence(contract, candidate, roles, now);
+  const content = {
+    candidate: { ...candidate },
+    contractVersion: contract.contractVersion,
+    evidenceContract: contract.evidenceContract,
+    gate: contract.id,
+    policy: contract.policy,
+    producer: contract.producer,
+    producerStatus: 'PASS',
+    roles: roles.map((role, index) =>
+      bundleRoleFromEvidence(contract.roles[index], role)),
+    toolchains: contract.toolchains,
+  };
+  const bundle = {
+    content,
+    contentSha256: sha256(Buffer.from(canonicalJson(content), 'utf8')),
+    formatVersion: 1,
+  };
+  writeNewCanonicalJson(outputPath, bundle);
+  const verified = validateBundle(outputPath, contract, candidate, now);
+  const expectedDescriptors = roles.map(({ descriptor }) => descriptor);
+  const verifiedDescriptors = verified.roles.map(({ descriptor }) => descriptor);
+  if (!sameJson(verifiedDescriptors, expectedDescriptors))
+    fail('created bundle role descriptors differ from the source evidence.');
+  return Object.freeze(bundle);
 }
 
 export function verifyImportedReceipt(path, registryPath) {

@@ -5,12 +5,24 @@ on:
     branches: [master, develop]
   pull_request:
     branches: [master, develop]
+  workflow_dispatch:
+    inputs:
+      candidate_commit:
+        description: Full immutable candidate commit SHA to retain as release-scan evidence
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      candidate_commit:
+        description: Full immutable candidate commit SHA to retain as release-scan evidence
+        required: true
+        type: string
   schedule:
     # Weekly sweep so analysis stays current even without pushes; offset from the nightly CI cron.
     - cron: '41 6 * * 1'
 
 concurrency:
-  group: codeql-${{ github.ref }}
+  group: codeql-${{ inputs.candidate_commit || github.ref }}
   cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 permissions:
@@ -19,33 +31,116 @@ permissions:
 jobs:
   analyze:
     name: Analyze (Java)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       security-events: write
       actions: read
     steps:
       - name: Check out
-        uses: actions/checkout@v6
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v5
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          distribution: corretto
-          java-version: '21'
-          cache: maven
+          clean: true
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ inputs.candidate_commit || github.sha }}
+
+      - name: Verify exact release candidate
+        if: ${{ inputs.candidate_commit != '' }}
+        shell: bash
+        env:
+          SOKLET_CANDIDATE_COMMIT: ${{ inputs.candidate_commit }}
+        run: |
+          set -euo pipefail
+          [[ "$SOKLET_CANDIDATE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
+            printf 'candidate_commit must be a full lowercase 40-hex commit SHA.\n' >&2
+            exit 64
+          }
+          [[ "$GITHUB_SHA" == "$SOKLET_CANDIDATE_COMMIT" ]] || {
+            printf 'Executing workflow revision does not match candidate_commit.\n' >&2
+            exit 1
+          }
+          [[ "$(git rev-parse --verify HEAD)" == "$SOKLET_CANDIDATE_COMMIT" ]] || {
+            printf 'Checked-out HEAD does not match candidate_commit.\n' >&2
+            exit 1
+          }
+
+      - name: Install checksum-pinned Corretto 21
+        shell: bash
+        run: |
+          mkdir -p "${RUNNER_TEMP}/release-scans-codeql"
+          bash release/scripts/install-pinned-corretto-linux-x64.sh \
+            coreJdk21 "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}" \
+            "${RUNNER_TEMP}/release-scans-codeql/codeql-java-distribution.txt"
+
+      - name: Install checksum-pinned Maven
+        shell: bash
+        run: |
+          mkdir -p "${RUNNER_TEMP}/release-scans-codeql"
+          bash release/scripts/install-pinned-maven-linux-x64.sh \
+            "${RUNNER_TEMP}" "${GITHUB_PATH}" \
+            "${RUNNER_TEMP}/release-scans-codeql/codeql-maven-distribution.txt"
+
+      - name: Self-test release-scan report preparation
+        run: |
+          node scripts/prepare-codeql-release-report-self-test.mjs
+          node scripts/stage-codeql-release-provenance-self-test.mjs
+
+      - name: Download checksum-pinned CodeQL 2.26.2 bundle
+        shell: bash
+        run: |
+          codeql_bundle="${RUNNER_TEMP}/codeql-bundle-linux64.tar.gz"
+          curl --fail --location --retry 3 --output "$codeql_bundle" \
+            https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.26.2/codeql-bundle-linux64.tar.gz
+          echo "cb361567fa1bdb9d322da4240f621b36f245e4d7bb97db3c3a2ad7f743c8e8e7  $codeql_bundle" \
+            | sha256sum --check --strict
+          echo "SOKLET_CODEQL_BUNDLE=$codeql_bundle" >> "$GITHUB_ENV"
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
+        id: init
+        uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3
         with:
           languages: java-kotlin
           build-mode: manual
+          queries: security-extended
+          tools: ${{ env.SOKLET_CODEQL_BUNDLE }}
+
+      - name: Stage exact CodeQL release provenance
+        if: ${{ inputs.candidate_commit != '' }}
+        run: >-
+          node scripts/stage-codeql-release-provenance.mjs
+          "${{ steps.init.outputs.codeql-path }}"
+          "${SOKLET_CODEQL_BUNDLE}"
+          "${{ runner.temp }}/release-scans-codeql/provenance"
 
       # Manual build keeps CodeQL on the exact Maven compilation the release uses.
       - name: Compile
-        run: mvn -B -ntp -DskipTests compile
+        shell: bash
+        run: >-
+          env JAVA_HOME="${SOKLET_RELEASE_CORE_JDK_21_HOME}"
+          PATH="${SOKLET_RELEASE_CORE_JDK_21_HOME}/bin:${PATH}"
+          mvn -B -ntp -DskipTests compile
 
       - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@v4
+        id: analyze
+        uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3
         with:
           category: "/language:java-kotlin"
+          output: ${{ runner.temp }}/codeql-sarif
+
+      - name: Prepare canonical release-scan report
+        if: ${{ inputs.candidate_commit != '' }}
+        run: >-
+          node scripts/prepare-codeql-release-report.mjs
+          "${{ steps.analyze.outputs.sarif-output }}"
+          "${{ runner.temp }}/release-scans-codeql/00-codeql-java.sarif"
+          "${{ inputs.candidate_commit }}"
+
+      - name: Upload candidate-bound CodeQL report
+        if: ${{ inputs.candidate_commit != '' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: release-scans-codeql-${{ inputs.candidate_commit }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 90
+          path: ${{ runner.temp }}/release-scans-codeql

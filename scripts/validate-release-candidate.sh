@@ -78,14 +78,37 @@ for d1p_evidence_source in \
 		|| fail "D1p evidence-tooling source is missing or is a symlink."
 done
 release_harness_registry="$project_root/release/release-harness-contracts.json"
+release_harness_bundle_builder="$project_root/scripts/create-release-harness-bundle.mjs"
 release_harness_importer="$project_root/scripts/import-release-harness-evidence.mjs"
 release_harness_importer_self_test="$project_root/scripts/import-release-harness-evidence-self-test.mjs"
+release_history_producer="$project_root/scripts/produce-release-history.mjs"
+release_history_producer_self_test="$project_root/scripts/produce-release-history-self-test.mjs"
+release_scans_producer="$project_root/scripts/produce-release-scans.mjs"
+release_scans_producer_self_test="$project_root/scripts/produce-release-scans-self-test.mjs"
+release_scans_codeql_preparer="$project_root/scripts/prepare-codeql-release-report.mjs"
+release_scans_codeql_preparer_self_test="$project_root/scripts/prepare-codeql-release-report-self-test.mjs"
+release_scans_codeql_provenance="$project_root/scripts/stage-codeql-release-provenance.mjs"
+release_scans_codeql_provenance_self_test="$project_root/scripts/stage-codeql-release-provenance-self-test.mjs"
+release_scans_runtime_surface="$project_root/scripts/verify-runtime-dependency-surface.mjs"
+release_scans_runtime_surface_self_test="$project_root/scripts/verify-runtime-dependency-surface-self-test.mjs"
+release_scans_linux_producer="$project_root/release/scripts/produce-release-scans-linux-x64.sh"
+release_benchmarks_producer="$project_root/scripts/produce-release-benchmarks.mjs"
+release_benchmarks_producer_self_test="$project_root/scripts/produce-release-benchmarks-self-test.mjs"
 release_history_verifier="$project_root/scripts/verify-release-history.mjs"
 release_scans_verifier="$project_root/scripts/verify-release-scans.mjs"
 release_benchmarks_verifier="$project_root/scripts/verify-release-benchmarks.mjs"
 for release_harness_source in \
-	"$release_harness_registry" "$release_harness_importer" \
-	"$release_harness_importer_self_test" "$release_history_verifier" \
+	"$release_harness_registry" "$release_harness_bundle_builder" \
+	"$release_harness_importer" \
+	"$release_harness_importer_self_test" \
+	"$release_history_producer" "$release_history_producer_self_test" \
+	"$release_scans_producer" "$release_scans_producer_self_test" \
+	"$release_scans_codeql_preparer" "$release_scans_codeql_preparer_self_test" \
+	"$release_scans_codeql_provenance" "$release_scans_codeql_provenance_self_test" \
+	"$release_scans_runtime_surface" "$release_scans_runtime_surface_self_test" \
+	"$release_scans_linux_producer" \
+	"$release_benchmarks_producer" "$release_benchmarks_producer_self_test" \
+	"$release_history_verifier" \
 	"$release_scans_verifier" "$release_benchmarks_verifier"; do
 	[[ -f "$release_harness_source" && ! -L "$release_harness_source" ]] \
 		|| fail "release-harness contract source is missing or is a symlink."
@@ -111,6 +134,12 @@ done
 # gate evidence can be recorded or imported.
 node "$release_harness_importer" --verify-config
 node "$release_harness_importer_self_test"
+node "$release_history_producer_self_test"
+node "$release_scans_codeql_preparer_self_test"
+node "$release_scans_codeql_provenance_self_test"
+node "$release_scans_runtime_surface_self_test"
+node "$release_scans_producer_self_test"
+node "$release_benchmarks_producer_self_test"
 node "$evidence_helper" validate-config "$manifest_path"
 
 assert_ready_gate_has_dispatch() {

@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import {
   ReleaseHarnessEvidenceImportError,
   canonicalJson,
+  createReleaseHarnessBundle,
   importReleaseHarnessEvidence,
   verifyImportedBundleReceipt,
   verifyImportedReceipt,
@@ -212,89 +213,200 @@ function benchmarkFixture(contract, candidate) {
     threads: contract.policy.threads,
     warmup: clone(contract.policy.warmup),
   };
-  const repetitions = Array.from({ length: contract.policy.forks }, (_, ordinal) => {
-    const first = ordinal % 2 === 0 ? '3.5.1' : '4.0.0';
-    const artifacts = first === '3.5.1'
-      ? ['3.5.1', '4.0.0']
-      : ['4.0.0', '3.5.1'];
-    return {
-      first,
-      ordinal,
-      runs: artifacts.map((artifact) => {
-        const rawResult = {
-          artifact,
-          configuration: clone(configuration),
-          jsonParseScore: 100,
-          jsonWriteScore: 100,
-        };
-        return {
-          artifact,
-          outcome: 'PASS',
-          rawResult,
-          rawResultSha256: sha256(Buffer.from(canonicalJson(rawResult), 'utf8')),
-        };
-      }),
-    };
-  });
-  const logMarkers = [
-    `SOKLET_BENCHMARK_CONFIGURATION_SHA256=${sha256(Buffer.from(canonicalJson(configuration), 'utf8'))}`,
-    ...repetitions.flatMap((repetition) => repetition.runs.map((run, runIndex) =>
-      `SOKLET_BENCHMARK_RUN=${repetition.ordinal}:${runIndex}:${run.artifact}:PASS:${run.rawResultSha256}`)),
+  const jsonBenchmarks = [
+    'com.soklet.McpReleaseJsonJmhBenchmark.jsonParse',
+    'com.soklet.McpReleaseJsonJmhBenchmark.jsonWrite',
   ];
-  const log = `self-test benchmark log PASS\n${logMarkers.join('\n')}\n`;
+  const profileBenchmarks = [
+    'com.soklet.McpReleaseJsonJmhBenchmark.profile1SchemaCompile',
+    'com.soklet.McpReleaseJsonJmhBenchmark.profile1SchemaEvaluate',
+  ];
+  const entry = (benchmark, artifact, forks, score) => ({
+    benchmark,
+    forks,
+    jdkVersion: '17.0.20',
+    jmhVersion: '1.37',
+    jvmArgs: clone(configuration.candidateJvm),
+    measurementIterations: configuration.measurement.iterations,
+    measurementTime: '1 s',
+    mode: 'thrpt',
+    params: { artifact },
+    primaryMetric: {
+      rawData: Array.from({ length: forks }, () =>
+        Array.from({ length: configuration.measurement.iterations }, () => score)),
+      score,
+      scoreError: 0,
+      scoreUnit: 'ops/s',
+    },
+    threads: configuration.threads,
+    warmupIterations: configuration.warmup.iterations,
+    warmupTime: '1 s',
+  });
+  const normalizedJsonRun = (artifact, results) => {
+    const rawResult = {
+      artifact,
+      configuration: clone(configuration),
+      jsonParseScore: results[0].primaryMetric.score,
+      jsonWriteScore: results[1].primaryMetric.score,
+    };
+    return {
+      artifact,
+      outcome: 'PASS',
+      rawResult,
+      rawResultSha256: sha256(Buffer.from(canonicalJson(rawResult), 'utf8')),
+    };
+  };
+  const normalizedProfile = (operation, result) => {
+    const rawResult = {
+      complete: true,
+      errors: [],
+      operation,
+      result: {
+        benchmark: result.benchmark,
+        rawJmhResultSha256: sha256(Buffer.from(canonicalJson(result), 'utf8')),
+        score: result.primaryMetric.score,
+        scoreError: result.primaryMetric.scoreError,
+        scoreUnit: result.primaryMetric.scoreUnit,
+      },
+    };
+    return {
+      errors: 0,
+      operation,
+      rawResult,
+      rawResultSha256: sha256(Buffer.from(canonicalJson(rawResult), 'utf8')),
+    };
+  };
+  const rawJmhResults = [];
+  const logParts = [
+    'Soklet MCP release benchmark raw execution',
+    `SOKLET_BENCHMARK_CONFIGURATION_SHA256=${sha256(Buffer.from(canonicalJson(configuration), 'utf8'))}`,
+  ];
+  const draftRepetitions = Array.from(
+    { length: contract.policy.forks },
+    (_, ordinal) => {
+      const first = ordinal % 2 === 0 ? '3.5.1' : '4.0.0';
+      const artifacts = first === '3.5.1'
+        ? ['3.5.1', '4.0.0']
+        : ['4.0.0', '3.5.1'];
+      return {
+        first,
+        ordinal,
+        runs: artifacts.map((artifact, runIndex) => {
+          const results = jsonBenchmarks.map((benchmark) =>
+            entry(benchmark, artifact, 1, 100));
+          const path = `raw/repetition-${ordinal}-run-${runIndex}-${artifact}.json`;
+          const rawSha256 = sha256(Buffer.from(canonicalJson(results), 'utf8'));
+          const normalized = normalizedJsonRun(artifact, results);
+          rawJmhResults.push({ path, results, sha256: rawSha256 });
+          logParts.push(
+            `SOKLET_BENCHMARK_RUN=${ordinal}:${runIndex}:${artifact}:PASS:${normalized.rawResultSha256}`,
+            `SOKLET_BENCHMARK_RAW=${path}:${rawSha256}`,
+            canonicalJson(results),
+          );
+          return {
+            normalized,
+            rawJmhPath: path,
+            rawJmhSha256: rawSha256,
+          };
+        }),
+      };
+    },
+  );
+  const repetitions = draftRepetitions.map((repetition) => ({
+    first: repetition.first,
+    ordinal: repetition.ordinal,
+    runs: repetition.runs.map(({ normalized }) => clone(normalized)),
+  }));
+  const profileResults = profileBenchmarks.map((benchmark) =>
+    entry(benchmark, '4.0.0', contract.policy.forks, 50));
+  const profilePath = 'raw/profile1.json';
+  const profileSha256 = sha256(Buffer.from(canonicalJson(profileResults), 'utf8'));
+  rawJmhResults.push({ path: profilePath, results: profileResults, sha256: profileSha256 });
+  logParts.push(
+    `SOKLET_BENCHMARK_RAW=${profilePath}:${profileSha256}`,
+    canonicalJson(profileResults),
+  );
+  const draftProfile = contract.policy.profile1Baseline.operations.map(
+    (operation, index) => ({
+      normalized: normalizedProfile(operation, profileResults[index]),
+      rawJmhPath: profilePath,
+      rawJmhSha256: profileSha256,
+    }),
+  );
+  const profile1Baseline = draftProfile.map(({ normalized }) => clone(normalized));
+  const log = `${logParts.join('\n').replace(/\n*$/u, '')}\n`;
+  const comparison = {
+    artifact: contract.policy.comparison.artifact,
+    jarSha256: contract.policy.comparison.jarSha256,
+    jsonParseScoreRatio: 1,
+    jsonWriteScoreRatio: 1,
+    pomSha256: contract.policy.comparison.pomSha256,
+  };
+  const environment = {
+    architecture: 'x86_64',
+    cpuModel: 'self-test-cpu',
+    governor: 'performance',
+    image: 'ubuntu-24.04@20260817.1.0',
+    kernel: 'self-test-kernel',
+    microcode: 'self-test-microcode',
+    sameBoot: true,
+    samePhysicalRunner: true,
+    turboState: 'disabled',
+  };
+  const reviewedDraft = {
+    approvalReference: 'self-test:benchmark-review',
+    benchmarkLogSha256: sha256(Buffer.from(log, 'utf8')),
+    candidate: clone(candidate),
+    comparison: clone(comparison),
+    configuration: clone(configuration),
+    environment: clone(environment),
+    formatVersion: 1,
+    gate: contract.id,
+    policySha256: sha256(Buffer.from(canonicalJson(contract.policy), 'utf8')),
+    producerStatus: 'AWAITING_REVIEW',
+    profile1Baseline: draftProfile,
+    repetitions: draftRepetitions,
+    toolchainsSha256: sha256(Buffer.from(canonicalJson(contract.toolchains), 'utf8')),
+  };
+  const reviewedDraftSha256 = sha256(
+    Buffer.from(canonicalJson(reviewedDraft), 'utf8'),
+  );
   const evidence = {
     ...commonEvidence(contract, candidate),
     benchmarkLogSha256: sha256(Buffer.from(log, 'utf8')),
-    comparison: {
-      artifact: contract.policy.comparison.artifact,
-      jarSha256: contract.policy.comparison.jarSha256,
-      jsonParseScoreRatio: 1,
-      jsonWriteScoreRatio: 1,
-      pomSha256: contract.policy.comparison.pomSha256,
-    },
+    comparison,
     configuration,
-    environment: {
-      architecture: 'x86_64',
-      cpuModel: 'self-test-cpu',
-      governor: 'performance',
-      image: 'ubuntu-24.04@20260817.1.0',
-      kernel: 'self-test-kernel',
-      microcode: 'self-test-microcode',
-      sameBoot: true,
-      samePhysicalRunner: true,
-      turboState: 'disabled',
-    },
-    profile1Baseline: contract.policy.profile1Baseline.operations.map((operation) => {
-      const rawResult = {
-        complete: true,
-        errors: [],
-        operation,
-        result: { status: 'COMPLETE_RAW_RESULT' },
-      };
-      return {
-        errors: 0,
-        operation,
-        rawResult,
-        rawResultSha256: sha256(Buffer.from(canonicalJson(rawResult), 'utf8')),
-      };
-    }),
+    environment,
+    profile1Baseline,
+    rawJmhResults,
     repetitions,
     review: {
       approvalReference: 'self-test:benchmark-review',
       regressionApprovalReference: null,
       regressionApproved: false,
       releaseNoteSha256: null,
-      signoffReference: 'self-test:benchmark-signoff',
+      reviewedDraftSha256,
+      signoffReference:
+        `self-test:benchmark-signoff#sha256=${reviewedDraftSha256}`,
     },
+    reviewedDraft,
   };
   return { evidence, log };
 }
 
 function scanRoles(contract, candidate) {
-  const emptySarif = (tool) => canonicalJson({
-    runs: [{ results: [], tool: { driver: { name: tool } } }],
-    version: '2.1.0',
-  });
+  const emptySarif = (tool) => {
+    const run = { results: [], tool: { driver: { name: tool } } };
+    if (tool === 'CodeQL') {
+      run.invocations = [{
+        executionSuccessful: true,
+        exitCode: 0,
+        toolConfigurationNotifications: [],
+        toolExecutionNotifications: [],
+      }];
+    }
+    return canonicalJson({ runs: [run], version: '2.1.0' });
+  };
   const reportFiles = {
     '00-codeql-java.sarif': emptySarif('CodeQL'),
     '01-spotbugs.xml': '<?xml version="1.0" encoding="UTF-8"?>\n<BugCollection></BugCollection>\n',
@@ -414,6 +526,29 @@ function replaceFileRole(bundle, roleName, value) {
   role.sha256 = sha256(bytes);
 }
 
+function mutateBenchmarkRoles(bundle, mutator) {
+  const evidenceRole = bundle.content.roles.find(({ name }) =>
+    name === 'benchmark-results');
+  const logRole = bundle.content.roles.find(({ name }) => name === 'benchmark-log');
+  assert.ok(evidenceRole && logRole, 'benchmark fixture roles exist');
+  const evidence = JSON.parse(
+    Buffer.from(evidenceRole.bytesBase64, 'base64').toString('utf8'),
+  );
+  const log = Buffer.from(logRole.bytesBase64, 'base64').toString('utf8');
+  const updatedLog = mutator(evidence, log) ?? log;
+  replaceFileRole(bundle, 'benchmark-results', evidence);
+  replaceFileRole(bundle, 'benchmark-log', updatedLog);
+}
+
+function refreshBenchmarkReview(evidence) {
+  const reviewedDraftSha256 = sha256(
+    Buffer.from(canonicalJson(evidence.reviewedDraft), 'utf8'),
+  );
+  evidence.review.reviewedDraftSha256 = reviewedDraftSha256;
+  evidence.review.signoffReference =
+    `self-test:benchmark-signoff#sha256=${reviewedDraftSha256}`;
+}
+
 function writeFixture(root, prefix, value, canonical = true) {
   const path = join(root, `${String(fixtureOrdinal++).padStart(3, '0')}-${prefix}.json`);
   writeFileSync(path, canonical ? canonicalJson(value) : JSON.stringify(value), 'utf8');
@@ -489,6 +624,40 @@ function expectImportFailure({
       gate,
       now: NOW,
       outputPath,
+      registryPath: configuration.registryPath,
+    }),
+    ReleaseHarnessEvidenceImportError,
+    label,
+  );
+  assertionCount++;
+}
+
+function expectBundleCreationFailure({
+  candidate,
+  configuration,
+  gate,
+  label,
+  mutate,
+  root,
+}) {
+  const contract = configuration.contracts.get(gate);
+  const bundle = validBundle(contract, candidate);
+  mutate(bundle);
+  Object.assign(bundle, wrapContent(bundle.content));
+  const evidenceRoot = materializeBundleRoles(
+    root,
+    `${label}-evidence`,
+    contract,
+    bundle,
+  );
+  assert.throws(
+    () => createReleaseHarnessBundle({
+      candidateIdentityProvider: () => clone(candidate),
+      candidateRoot: root,
+      evidenceRoot,
+      gate,
+      now: NOW,
+      outputPath: join(root, `${String(fixtureOrdinal++).padStart(3, '0')}-${label}.json`),
       registryPath: configuration.registryPath,
     }),
     ReleaseHarnessEvidenceImportError,
@@ -577,19 +746,43 @@ function run() {
       });
       assert.deepEqual(verified.roles, receipt.roles);
       assert.equal(verified.candidate.candidateCommit, candidate.candidateCommit);
+      const builtBundlePath = join(
+        root,
+        `${String(fixtureOrdinal++).padStart(3, '0')}-${gate}-built-bundle.json`,
+      );
+      const builtBundle = createReleaseHarnessBundle({
+        candidateIdentityProvider: () => clone(candidate),
+        candidateRoot: root,
+        evidenceRoot,
+        gate,
+        now: verificationNow,
+        outputPath: builtBundlePath,
+        registryPath: configuration.registryPath,
+      });
+      assert.deepEqual(builtBundle, bundle);
+      assert.deepEqual(JSON.parse(readFileSync(builtBundlePath, 'utf8')), bundle);
+      assert.deepEqual(verifyImportedBundleReceipt({
+        bundlePath: builtBundlePath,
+        candidateIdentityProvider: () => clone(candidate),
+        candidateRoot: root,
+        now: verificationNow,
+        receiptPath: outputPath,
+        registryPath: configuration.registryPath,
+      }), receipt);
       const cli = runVerifier(gate, evidenceRoot);
       assert.equal(cli.status, 0, cli.stderr || cli.stdout);
       assert.match(cli.stdout, /verification PASS/);
       validPathFixtures.set(gate, {
         bundle,
         bundlePath,
+        builtBundlePath,
         evidenceRoot,
         outputPath,
         receipt,
         verified,
       });
       validReceipt = receipt;
-      assertionCount += 8;
+      assertionCount += 11;
     }
 
     const fuzzContract = configuration.contracts.get('fuzz-nightly-history');
@@ -611,7 +804,35 @@ function run() {
       'missing unpacked history role',
     );
     assert.equal(runVerifier(fuzzContract.id, missingHistoryRoot).status, 1);
-    assertionCount += 2;
+    assert.throws(
+      () => createReleaseHarnessBundle({
+        candidateIdentityProvider: () => clone(candidate),
+        candidateRoot: root,
+        evidenceRoot: missingHistoryRoot,
+        gate: fuzzContract.id,
+        now: verificationNow,
+        outputPath: join(root, 'missing-role-bundle.json'),
+        registryPath: configuration.registryPath,
+      }),
+      ReleaseHarnessEvidenceImportError,
+      'bundle builder rejects a missing evidence role',
+    );
+    assertionCount += 3;
+
+    assert.throws(
+      () => createReleaseHarnessBundle({
+        candidateIdentityProvider: () => clone(candidate),
+        candidateRoot: root,
+        evidenceRoot: validPathFixtures.get(fuzzContract.id).evidenceRoot,
+        gate: fuzzContract.id,
+        now: verificationNow,
+        outputPath: validPathFixtures.get(fuzzContract.id).builtBundlePath,
+        registryPath: configuration.registryPath,
+      }),
+      /never overwrites evidence/,
+      'bundle builder never overwrites an existing output',
+    );
+    assertionCount++;
 
     const scanContract = configuration.contracts.get('release-scans');
     const tamperedScanRoot = materializeBundleRoles(
@@ -894,6 +1115,89 @@ function run() {
       ),
     });
     expectImportFailure({
+      candidate, configuration, gate: 'release-scans', label: 'missing-codeql-invocation', root,
+      mutate: (bundle) => replaceDirectoryEntry(
+        bundle,
+        'scan-reports',
+        '00-codeql-java.sarif',
+        {
+          runs: [{ results: [], tool: { driver: { name: 'CodeQL' } } }],
+          version: '2.1.0',
+        },
+      ),
+    });
+    expectImportFailure({
+      candidate, configuration, gate: 'release-scans', label: 'failed-codeql-invocation', root,
+      mutate: (bundle) => replaceDirectoryEntry(
+        bundle,
+        'scan-reports',
+        '00-codeql-java.sarif',
+        {
+          runs: [{
+            invocations: [{ executionSuccessful: false, exitCode: 1 }],
+            results: [],
+            tool: { driver: { name: 'CodeQL' } },
+          }],
+          version: '2.1.0',
+        },
+      ),
+    });
+    expectImportFailure({
+      candidate, configuration, gate: 'release-scans', label: 'nonzero-codeql-invocation', root,
+      mutate: (bundle) => replaceDirectoryEntry(
+        bundle,
+        'scan-reports',
+        '00-codeql-java.sarif',
+        {
+          runs: [{
+            invocations: [{ executionSuccessful: true, exitCode: 2 }],
+            results: [],
+            tool: { driver: { name: 'CodeQL' } },
+          }],
+          version: '2.1.0',
+        },
+      ),
+    });
+    expectImportFailure({
+      candidate, configuration, gate: 'release-scans', label: 'codeql-execution-error', root,
+      mutate: (bundle) => replaceDirectoryEntry(
+        bundle,
+        'scan-reports',
+        '00-codeql-java.sarif',
+        {
+          runs: [{
+            invocations: [{
+              executionSuccessful: true,
+              exitCode: 0,
+              toolExecutionNotifications: [{
+                level: 'error',
+                message: { text: 'analysis terminated early' },
+              }],
+            }],
+            results: [],
+            tool: { driver: { name: 'CodeQL' } },
+          }],
+          version: '2.1.0',
+        },
+      ),
+    });
+    expectImportFailure({
+      candidate, configuration, gate: 'release-scans', label: 'gitleaks-failed-invocation', root,
+      mutate: (bundle) => replaceDirectoryEntry(
+        bundle,
+        'scan-reports',
+        '02-gitleaks.sarif',
+        {
+          runs: [{
+            invocations: [{ executionSuccessful: false }],
+            results: [],
+            tool: { driver: { name: 'gitleaks' } },
+          }],
+          version: '2.1.0',
+        },
+      ),
+    });
+    expectImportFailure({
       candidate, configuration, gate: 'release-scans', label: 'wrong-scanner', root,
       mutate: (bundle) => replaceDirectoryEntry(
         bundle,
@@ -1010,6 +1314,169 @@ function run() {
     expectImportFailure({
       candidate, configuration, gate: 'mcp-benchmarks', label: 'benchmark-log-drift', root,
       mutate: (bundle) => replaceFileRole(bundle, 'benchmark-log', 'tampered benchmark log\n'),
+    });
+    expectBundleCreationFailure({
+      candidate,
+      configuration,
+      gate: 'mcp-benchmarks',
+      label: 'benchmark-direct-builder-inline-forgery',
+      root,
+      mutate: (bundle) => mutateJsonRole(bundle, 'benchmark-results', (evidence) => {
+        const run = evidence.repetitions[0].runs[0];
+        run.rawResult.jsonParseScore = 1_000_000;
+        run.rawResultSha256 = sha256(
+          Buffer.from(canonicalJson(run.rawResult), 'utf8'),
+        );
+      }),
+    });
+    expectImportFailure({
+      candidate,
+      configuration,
+      gate: 'mcp-benchmarks',
+      label: 'benchmark-forged-reviewed-draft-digest',
+      root,
+      mutate: (bundle) => mutateJsonRole(bundle, 'benchmark-results', (evidence) => {
+        evidence.review.reviewedDraftSha256 = digest('forged-reviewed-draft');
+        evidence.review.signoffReference =
+          `self-test:forged#sha256=${evidence.review.reviewedDraftSha256}`;
+      }),
+    });
+    expectImportFailure({
+      candidate,
+      configuration,
+      gate: 'mcp-benchmarks',
+      label: 'benchmark-unbound-signoff',
+      root,
+      mutate: (bundle) => mutateJsonRole(bundle, 'benchmark-results', (evidence) => {
+        evidence.review.signoffReference =
+          `self-test:benchmark-signoff#sha256=${'0'.repeat(64)}`;
+      }),
+    });
+    expectImportFailure({
+      candidate,
+      configuration,
+      gate: 'mcp-benchmarks',
+      label: 'benchmark-missing-retained-raw-jmh',
+      root,
+      mutate: (bundle) => mutateJsonRole(bundle, 'benchmark-results', (evidence) => {
+        evidence.rawJmhResults.pop();
+      }),
+    });
+    expectImportFailure({
+      candidate,
+      configuration,
+      gate: 'mcp-benchmarks',
+      label: 'benchmark-duplicate-retained-raw-path',
+      root,
+      mutate: (bundle) => mutateJsonRole(bundle, 'benchmark-results', (evidence) => {
+        evidence.rawJmhResults[1].path = evidence.rawJmhResults[0].path;
+      }),
+    });
+    expectImportFailure({
+      candidate,
+      configuration,
+      gate: 'mcp-benchmarks',
+      label: 'benchmark-changed-retained-raw-jmh',
+      root,
+      mutate: (bundle) => mutateJsonRole(bundle, 'benchmark-results', (evidence) => {
+        evidence.rawJmhResults[0].results[0].primaryMetric.rawData[0][0] = 99;
+      }),
+    });
+    expectImportFailure({
+      candidate,
+      configuration,
+      gate: 'mcp-benchmarks',
+      label: 'benchmark-changed-reviewed-draft',
+      root,
+      mutate: (bundle) => mutateJsonRole(bundle, 'benchmark-results', (evidence) => {
+        evidence.reviewedDraft.environment.cpuModel = 'changed-after-review';
+      }),
+    });
+    expectImportFailure({
+      candidate,
+      configuration,
+      gate: 'mcp-benchmarks',
+      label: 'benchmark-swapped-profile-mapping',
+      root,
+      mutate: (bundle) => mutateJsonRole(bundle, 'benchmark-results', (evidence) => {
+        const profile = evidence.reviewedDraft.profile1Baseline;
+        [profile[0].normalized, profile[1].normalized] =
+          [profile[1].normalized, profile[0].normalized];
+        evidence.profile1Baseline = profile.map(({ normalized }) => clone(normalized));
+        refreshBenchmarkReview(evidence);
+      }),
+    });
+    expectImportFailure({
+      candidate,
+      configuration,
+      gate: 'mcp-benchmarks',
+      label: 'benchmark-missing-profile-mapping',
+      root,
+      mutate: (bundle) => mutateJsonRole(bundle, 'benchmark-results', (evidence) => {
+        evidence.reviewedDraft.profile1Baseline.pop();
+        evidence.profile1Baseline.pop();
+        refreshBenchmarkReview(evidence);
+      }),
+    });
+    expectImportFailure({
+      candidate,
+      configuration,
+      gate: 'mcp-benchmarks',
+      label: 'benchmark-profile-result-extra-key',
+      root,
+      mutate: (bundle) => mutateJsonRole(bundle, 'benchmark-results', (evidence) => {
+        const normalized = evidence.reviewedDraft.profile1Baseline[0].normalized;
+        normalized.rawResult.result.unregistered = true;
+        normalized.rawResultSha256 = sha256(
+          Buffer.from(canonicalJson(normalized.rawResult), 'utf8'),
+        );
+        evidence.profile1Baseline[0] = clone(normalized);
+        refreshBenchmarkReview(evidence);
+      }),
+    });
+    expectImportFailure({
+      candidate,
+      configuration,
+      gate: 'mcp-benchmarks',
+      label: 'benchmark-score-sample-inconsistency',
+      root,
+      mutate: (bundle) => mutateBenchmarkRoles(bundle, (evidence, log) => {
+        const raw = evidence.rawJmhResults[0];
+        const oldRawText = canonicalJson(raw.results);
+        const oldMarker = `SOKLET_BENCHMARK_RAW=${raw.path}:${raw.sha256}`;
+        raw.results[0].primaryMetric.score = 1_000_000;
+        raw.sha256 = sha256(Buffer.from(canonicalJson(raw.results), 'utf8'));
+        evidence.reviewedDraft.repetitions[0].runs[0].rawJmhSha256 = raw.sha256;
+        const newMarker = `SOKLET_BENCHMARK_RAW=${raw.path}:${raw.sha256}`;
+        let updatedLog = log.replace(`${oldMarker}\n`, `${newMarker}\n`);
+        const markerIndex = updatedLog.indexOf(`${newMarker}\n`);
+        const rawIndex = updatedLog.indexOf(oldRawText, markerIndex + newMarker.length);
+        assert.notEqual(rawIndex, -1, 'self-test raw JMH log section exists');
+        updatedLog = `${updatedLog.slice(0, rawIndex)}${canonicalJson(raw.results)}`
+          + updatedLog.slice(rawIndex + oldRawText.length);
+        evidence.benchmarkLogSha256 = sha256(Buffer.from(updatedLog, 'utf8'));
+        evidence.reviewedDraft.benchmarkLogSha256 = evidence.benchmarkLogSha256;
+        refreshBenchmarkReview(evidence);
+        return updatedLog;
+      }),
+    });
+    expectImportFailure({
+      candidate,
+      configuration,
+      gate: 'mcp-benchmarks',
+      label: 'benchmark-log-missing-retained-raw-jmh',
+      root,
+      mutate: (bundle) => mutateBenchmarkRoles(bundle, (evidence, log) => {
+        const rawText = canonicalJson(evidence.rawJmhResults[0].results);
+        const rawIndex = log.indexOf(rawText);
+        assert.notEqual(rawIndex, -1, 'self-test raw JMH log bytes exist');
+        const updatedLog = log.slice(0, rawIndex)
+          + log.slice(rawIndex + rawText.length);
+        evidence.benchmarkLogSha256 = sha256(Buffer.from(updatedLog, 'utf8'));
+        evidence.reviewedDraft.benchmarkLogSha256 = evidence.benchmarkLogSha256;
+        refreshBenchmarkReview(evidence);
+        return updatedLog;
+      }),
     });
     expectImportFailure({
       candidate, configuration, gate: 'release-scans', label: 'directory-path-escape', root,

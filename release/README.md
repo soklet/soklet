@@ -15,16 +15,31 @@ never means that the gate has passed for a candidate; only a typed PASS receipt
 inside the format-v2 evidence envelope from the exact candidate workflow can
 establish that.
 
-Five gates remain `BLOCKED_HARNESS_MISSING`:
+Five gates remain `BLOCKED_HARNESS_MISSING`, although their shared consumer
+and bundle path now exists:
 
-- `fuzz-nightly-history` and `soak-nightly-history` require a canonical
-  importer for immutable scheduled-run history;
-- `operational-history` requires a bounded sustained cardinality, log-drain,
-  and resource-history receipt contract;
-- `release-scans` requires an exact scanner/toolchain pin, severity policy,
-  and retained report contract;
-- `mcp-benchmarks` requires the isolated 3.5.1-versus-4.0.0 JSON comparison
-  and 4.0.0 schema-baseline harness.
+- `fuzz-nightly-history` has a candidate-bound CI producer and rolling
+  accumulator. After U8 commits the candidate's literal reproducible-build
+  timestamp, that final candidate must still complete seven consecutive
+  scheduled UTC days before it can emit a bundle;
+- `soak-nightly-history` has fail-closed assembly code, but is not scheduled
+  for accumulation because the current nightly profile SHA-256
+  (`e405a0ad59c4f60feb06a99e3ea01568fc9379476819314e31fd1cd7cae914b3`)
+  does not equal the frozen registered SHA-256
+  (`cfd2b6efbac2257eff4615b22462939779bf06de7f23ed719d0faac03e6a022c`);
+- `operational-history` has a strict observation validator and packager, but
+  no load producer yet. The registered six-hour observation plus ten-minute
+  reserve cannot fit GitHub's six-hour hosted-job limit, so it needs an
+  approved longer-lived runner or a contract amendment;
+- `release-scans` has the exact-candidate CodeQL/SpotBugs/Gitleaks/runtime-
+  dependency producer wired into release validation. A full-ancestry run on
+  the current candidate finds 30 Gitleaks `generic-api-key` results while the
+  frozen contract records 26 pending review and contains no approved
+  exceptions, so the producer correctly rejects the candidate; and
+- `mcp-benchmarks` has the isolated 3.5.1-versus-candidate JSON comparison and
+  candidate Profile 1 schema baseline implementation. It still needs a final
+  non-SNAPSHOT 4.0.0 candidate run on the registered Ubuntu environment and a
+  durable owner review bound to the exact raw draft before finalization.
 
 Their candidate-side consumer path is now fail closed. The producer commands
 validate the exact registered role basenames in their artifact directory, and
@@ -45,6 +60,25 @@ wrong-candidate, or byte-changed bundle fails before PASS evidence is recorded.
 The five manifest rows remain blocked until their workflow producers can
 actually create those bundles; the existence of this consumer dispatch alone
 does not make a harness `READY`.
+
+The shared producer-side bundle command is:
+
+```text
+node scripts/create-release-harness-bundle.mjs --gate <id> \
+  --candidate-root <absolute-path> --evidence-root <absolute-path> \
+  --output <absolute-path>
+```
+
+It derives the candidate identity from the exact clean checkout and built main
+JAR, verifies every registered evidence role semantically, and creates a new
+canonical immutable bundle without overwriting an existing file. The command
+proves the bundle's byte consistency and registered semantics; it is not a
+signature or an independent authentication of who ran the producer. Release
+validation therefore accepts a bundle only from the named candidate-bound
+workflow artifact, or from the trusted release operator when a contract
+explicitly requires operator review/finalization. Merely possessing the
+candidate checkout and this builder is not evidence that a scanner, sustained
+run, or benchmark actually executed.
 
 The checked-in registry, verifier, and verifier self-test make
 `matrix-closure` `READY`. The registry deliberately produces a canonical
