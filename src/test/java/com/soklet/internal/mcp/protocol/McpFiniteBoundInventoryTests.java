@@ -74,6 +74,7 @@ public class McpFiniteBoundInventoryTests {
 		Set<String> boundIds = new HashSet<>();
 		List<String> orderedBoundIds = new ArrayList<>();
 		Set<String> categories = new HashSet<>();
+		Set<String> sourceOwnerKeys = new HashSet<>();
 		for (McpJsonValue value : array(inventory, "bounds").values()) {
 			McpJsonObject bound = object(value);
 			Assertions.assertEquals(Set.of("boundaryTests", "category",
@@ -84,10 +85,17 @@ public class McpFiniteBoundInventoryTests {
 			Assertions.assertTrue(boundIds.add(boundId));
 			orderedBoundIds.add(boundId);
 			categories.add(string(bound, "category"));
+			McpJsonObject failure = object(
+					bound.members().get("deterministicFailure"));
+			Assertions.assertEquals(Set.of("contract", "stage"),
+					failure.members().keySet());
+			Assertions.assertFalse(string(failure, "contract").isBlank());
+			Assertions.assertFalse(string(failure, "stage").isBlank());
 			assertEvidencePaths(array(bound, "positiveTests"));
 			assertEvidencePaths(array(bound, "boundaryTests"));
-			assertOwners(array(bound, "sourceOwners"), matcherIds, true);
-			assertOwners(array(bound, "enforcementOwners"), matcherIds, false);
+			assertOwners(array(bound, "sourceOwners"), matcherIds,
+					sourceOwnerKeys);
+			assertOwners(array(bound, "enforcementOwners"), matcherIds, null);
 			List<String> orderedValueKeys = new ArrayList<>();
 			for (McpJsonValue boundValue : array(bound, "values").values()) {
 				McpJsonObject row = object(boundValue);
@@ -107,6 +115,7 @@ public class McpFiniteBoundInventoryTests {
 				"JSON", "OUTPUT", "PROFILE_1_COMPILER", "PROFILE_1_EVALUATOR",
 				"QUEUE_STREAM", "SERIALIZED_RESULT", "TIME", "TYPED_BINDING",
 				"URI_TEMPLATE"), categories);
+		Assertions.assertFalse(sourceOwnerKeys.isEmpty());
 		Assertions.assertEquals(sourceValues(), inventoriedValues);
 	}
 
@@ -122,20 +131,28 @@ public class McpFiniteBoundInventoryTests {
 				"src/main/java/com/soklet/internal/mcp/**/*.java"),
 				strings(array(inventory, "scanRoots")));
 		Set<String> exclusionIds = new HashSet<>();
+		Set<String> exclusionKeys = new HashSet<>();
 		List<String> orderedExclusionIds = new ArrayList<>();
+		List<String> orderedExclusionKeys = new ArrayList<>();
 		for (McpJsonValue value : array(inventory, "reviewedExclusions").values()) {
 			McpJsonObject exclusion = object(value);
-			Assertions.assertEquals(Set.of("file", "id", "matcherRuleId", "owner",
-					"rationale"), exclusion.members().keySet());
+			Assertions.assertEquals(Set.of("file", "id", "key", "matcherRuleId",
+					"member", "owner", "rationale"), exclusion.members().keySet());
 			String exclusionId = string(exclusion, "id");
+			Assertions.assertTrue(exclusionId.matches("FINITE-EX-[0-9]{3}"),
+					exclusionId);
 			Assertions.assertTrue(exclusionIds.add(exclusionId));
 			orderedExclusionIds.add(exclusionId);
+			String key = ownerKey(exclusion);
+			Assertions.assertEquals(key, string(exclusion, "key"));
+			Assertions.assertTrue(exclusionKeys.add(key), key);
+			orderedExclusionKeys.add(key);
 			Assertions.assertTrue(Files.isRegularFile(Path.of(string(exclusion, "file"))));
 			Assertions.assertFalse(string(exclusion, "rationale").isBlank());
 		}
-		Assertions.assertEquals(Set.of("FINITE-EX-001", "FINITE-EX-002",
-				"FINITE-EX-003", "FINITE-EX-004"), exclusionIds);
+		Assertions.assertFalse(exclusionIds.isEmpty());
 		assertStrictlySorted(orderedExclusionIds, "exclusion IDs");
+		assertStrictlySorted(orderedExclusionKeys, "exclusion keys");
 	}
 
 	private static Map<String, String> sourceValues() throws Exception {
@@ -431,23 +448,38 @@ public class McpFiniteBoundInventoryTests {
 	}
 
 	private static void assertOwners(McpJsonArray owners, Set<String> matcherIds,
-			boolean source) {
+			Set<String> sourceOwnerKeys) {
 		Assertions.assertFalse(owners.values().isEmpty());
 		List<String> ownerKeys = new ArrayList<>();
 		for (McpJsonValue value : owners.values()) {
 			McpJsonObject owner = object(value);
-			Set<String> expectedKeys = source
-					? Set.of("file", "matcherRuleId", "member", "owner")
+			Set<String> expectedKeys = sourceOwnerKeys != null
+					? Set.of("file", "key", "matcherRuleId", "member", "owner")
 					: Set.of("file", "member", "owner");
 			Assertions.assertEquals(expectedKeys, owner.members().keySet());
 			Assertions.assertTrue(Files.isRegularFile(Path.of(string(owner, "file"))));
-			ownerKeys.add(string(owner, "file") + "#" + string(owner, "owner")
-					+ "#" + string(owner, "member"));
-			if (source)
+			String ownerKey = sourceOwnerKeys == null
+					? string(owner, "file") + "#" + string(owner, "owner")
+							+ "#" + string(owner, "member")
+					: ownerKey(owner);
+			ownerKeys.add(ownerKey);
+			if (sourceOwnerKeys != null) {
 				Assertions.assertTrue(matcherIds.contains(
 						string(owner, "matcherRuleId")));
+				Assertions.assertEquals(ownerKey, string(owner, "key"));
+				Assertions.assertTrue(sourceOwnerKeys.add(ownerKey), ownerKey);
+			}
 		}
 		assertStrictlySorted(ownerKeys, "owner keys");
+	}
+
+	private static String ownerKey(McpJsonObject owner) {
+		String member = string(owner, "member");
+		Assertions.assertTrue(member.matches(
+				"[A-Za-z_$][A-Za-z0-9_$]*(?:\\([^\\r\\n#]*\\))?"),
+				member);
+		return string(owner, "matcherRuleId") + ":" + string(owner, "file")
+				+ "#" + string(owner, "owner") + "#" + member;
 	}
 
 	private static Object invokeStatic(String className, String methodName)

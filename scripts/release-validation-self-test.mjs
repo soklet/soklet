@@ -1451,6 +1451,7 @@ try {
     'evidence/raw/matrix-closure/matrix-closure.json',
   );
   const resolvedMatrixClosure = verifyMatrixClosure({
+    finiteBoundProjectRoot: projectRoot,
     manifestPath: fixtureManifestPath,
     projectRoot: fixtureRoot,
     registryPath: fixtureMatrixClosureRegistryPath,

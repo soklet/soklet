@@ -25,8 +25,37 @@
       "sourceOwners": [
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java#com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration#DEFAULT_MAXIMUM_REQUEST_BODY_BYTES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "DEFAULT_MAXIMUM_REQUEST_BODY_BYTES",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java#com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration#maximumAggregateRequestBytes",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumAggregateRequestBytes",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java#com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration#maximumRequestBodyBytes",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumRequestBodyBytes",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
+          "key": "FINITE-MATCH-004:src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java#com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration#DEFAULT_MAXIMUM_AGGREGATE_REQUEST_BYTES",
           "matcherRuleId": "FINITE-MATCH-004",
-          "member": "DEFAULT_MAXIMUM_REQUEST_BODY_BYTES/DEFAULT_MAXIMUM_AGGREGATE_REQUEST_BYTES",
+          "member": "DEFAULT_MAXIMUM_AGGREGATE_REQUEST_BYTES",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
+          "key": "FINITE-MATCH-004:src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java#com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration#HTTP_FRAMING_ALLOWANCE_BYTES",
+          "matcherRuleId": "FINITE-MATCH-004",
+          "member": "HTTP_FRAMING_ALLOWANCE_BYTES",
           "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
         }
       ],
@@ -76,8 +105,30 @@
       "sourceOwners": [
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java#com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration#acceptBacklog",
           "matcherRuleId": "FINITE-MATCH-002",
-          "member": "productionDefaults",
+          "member": "acceptBacklog",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java#com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration#connectionWriterConcurrency",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "connectionWriterConcurrency",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java#com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration#maximumConnections",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumConnections",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java#com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration#readBufferSize",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "readBufferSize",
           "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
         }
       ],
@@ -132,15 +183,24 @@
       ],
       "sourceOwners": [
         {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpCursorLimit.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpCursorLimit.java#com.soklet.internal.mcp.protocol.McpCursorLimit#DEFAULT_MAXIMUM_SIZE_IN_BYTES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "DEFAULT_MAXIMUM_SIZE_IN_BYTES",
+          "owner": "com.soklet.internal.mcp.protocol.McpCursorLimit"
+        },
+        {
           "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#maximumCursorSizeInBytes(Integer)",
           "matcherRuleId": "FINITE-MATCH-003",
-          "member": "Builder.maximumCursorSizeInBytes",
+          "member": "maximumCursorSizeInBytes(Integer)",
           "owner": "com.soklet.McpServer.Builder"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpCursorLimit.java",
+          "key": "FINITE-MATCH-004:src/main/java/com/soklet/internal/mcp/protocol/McpCursorLimit.java#com.soklet.internal.mcp.protocol.McpCursorLimit#MAXIMUM_SUPPORTED_SIZE_IN_BYTES",
           "matcherRuleId": "FINITE-MATCH-004",
-          "member": "DEFAULT_MAXIMUM_SIZE_IN_BYTES/MAXIMUM_SUPPORTED_SIZE_IN_BYTES",
+          "member": "MAXIMUM_SUPPORTED_SIZE_IN_BYTES",
           "owner": "com.soklet.internal.mcp.protocol.McpCursorLimit"
         }
       ],
@@ -194,40 +254,81 @@
       ],
       "sourceOwners": [
         {
-          "file": "src/main/java/com/soklet/DefaultMcpLocalizationCatalogExtractor.java",
-          "matcherRuleId": "FINITE-MATCH-004",
-          "member": "MAXIMUM_SUPPORTED_CALLBACK_COUNT",
-          "owner": "com.soklet.DefaultMcpLocalizationCatalogExtractor"
+          "file": "src/main/java/com/soklet/McpLocaleSupport.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpLocaleSupport.java#com.soklet.McpLocaleSupport#MAXIMUM_ACCEPT_LANGUAGE_CODE_UNITS",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_ACCEPT_LANGUAGE_CODE_UNITS",
+          "owner": "com.soklet.McpLocaleSupport"
         },
         {
           "file": "src/main/java/com/soklet/McpLocaleSupport.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpLocaleSupport.java#com.soklet.McpLocaleSupport#MAXIMUM_LANGUAGE_RANGES",
           "matcherRuleId": "FINITE-MATCH-001",
-          "member": "MAXIMUM_*",
+          "member": "MAXIMUM_LANGUAGE_RANGES",
+          "owner": "com.soklet.McpLocaleSupport"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpLocaleSupport.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpLocaleSupport.java#com.soklet.McpLocaleSupport#MAXIMUM_LANGUAGE_TAG_BYTES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_LANGUAGE_TAG_BYTES",
           "owner": "com.soklet.McpLocaleSupport"
         },
         {
           "file": "src/main/java/com/soklet/McpRequestPropagation.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpRequestPropagation.java#com.soklet.McpRequestPropagation#MAXIMUM_BAGGAGE_BYTES",
           "matcherRuleId": "FINITE-MATCH-001",
-          "member": "MAXIMUM_BAGGAGE_*",
+          "member": "MAXIMUM_BAGGAGE_BYTES",
+          "owner": "com.soklet.McpRequestPropagation"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpRequestPropagation.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpRequestPropagation.java#com.soklet.McpRequestPropagation#MAXIMUM_BAGGAGE_ENTRIES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_BAGGAGE_ENTRIES",
           "owner": "com.soklet.McpRequestPropagation"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpCustomMirroredHeaderValidator.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpCustomMirroredHeaderValidator.java#com.soklet.internal.mcp.protocol.McpCustomMirroredHeaderValidator#MAXIMUM_SAFE_INTEGER",
           "matcherRuleId": "FINITE-MATCH-001",
-          "member": "MINIMUM_SAFE_INTEGER/MAXIMUM_SAFE_INTEGER",
+          "member": "MAXIMUM_SAFE_INTEGER",
           "owner": "com.soklet.internal.mcp.protocol.McpCustomMirroredHeaderValidator"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
-          "matcherRuleId": "FINITE-MATCH-002",
-          "member": "productionDefaults",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java#com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration#DEFAULT_MAXIMUM_HEADER_BYTES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "DEFAULT_MAXIMUM_HEADER_BYTES",
           "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpMirroredHeaderCodec.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpMirroredHeaderCodec.java#com.soklet.internal.mcp.protocol.McpMirroredHeaderCodec#DEFAULT_MAXIMUM_DECODED_BYTES",
           "matcherRuleId": "FINITE-MATCH-001",
           "member": "DEFAULT_MAXIMUM_DECODED_BYTES",
           "owner": "com.soklet.internal.mcp.protocol.McpMirroredHeaderCodec"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java#com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration#maximumHeaderBytes",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumHeaderBytes",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java#com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration#maximumHeaderCount",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumHeaderCount",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpCustomMirroredHeaderValidator.java",
+          "key": "FINITE-MATCH-004:src/main/java/com/soklet/internal/mcp/protocol/McpCustomMirroredHeaderValidator.java#com.soklet.internal.mcp.protocol.McpCustomMirroredHeaderValidator#MINIMUM_SAFE_INTEGER",
+          "matcherRuleId": "FINITE-MATCH-004",
+          "member": "MINIMUM_SAFE_INTEGER",
+          "owner": "com.soklet.internal.mcp.protocol.McpCustomMirroredHeaderValidator"
         }
       ],
       "values": [
@@ -326,8 +427,170 @@
       "sourceOwners": [
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java#com.soklet.internal.mcp.protocol.McpJsonLimits#DEFAULT_MAXIMUM_EXPONENT_MAGNITUDE",
           "matcherRuleId": "FINITE-MATCH-001",
-          "member": "productionDefaults/maximumSupported",
+          "member": "DEFAULT_MAXIMUM_EXPONENT_MAGNITUDE",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java#com.soklet.internal.mcp.protocol.McpJsonLimits#DEFAULT_MAXIMUM_INPUT_BYTES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "DEFAULT_MAXIMUM_INPUT_BYTES",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java#com.soklet.internal.mcp.protocol.McpJsonLimits#DEFAULT_MAXIMUM_NESTING_DEPTH",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "DEFAULT_MAXIMUM_NESTING_DEPTH",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java#com.soklet.internal.mcp.protocol.McpJsonLimits#DEFAULT_MAXIMUM_NODE_COUNT",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "DEFAULT_MAXIMUM_NODE_COUNT",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java#com.soklet.internal.mcp.protocol.McpJsonLimits#DEFAULT_MAXIMUM_NUMBER_LENGTH_IN_CHARACTERS",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "DEFAULT_MAXIMUM_NUMBER_LENGTH_IN_CHARACTERS",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java#com.soklet.internal.mcp.protocol.McpJsonLimits#DEFAULT_MAXIMUM_OUTPUT_BYTES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "DEFAULT_MAXIMUM_OUTPUT_BYTES",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java#com.soklet.internal.mcp.protocol.McpJsonLimits#DEFAULT_MAXIMUM_STRING_LENGTH_IN_CHARACTERS",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "DEFAULT_MAXIMUM_STRING_LENGTH_IN_CHARACTERS",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java#com.soklet.internal.mcp.protocol.McpJsonLimits#DEFAULT_MAXIMUM_TOKEN_LENGTH_IN_CHARACTERS",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "DEFAULT_MAXIMUM_TOKEN_LENGTH_IN_CHARACTERS",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java#com.soklet.internal.mcp.protocol.McpJsonLimits#MAXIMUM_SUPPORTED_EXPONENT_MAGNITUDE",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_EXPONENT_MAGNITUDE",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java#com.soklet.internal.mcp.protocol.McpJsonLimits#MAXIMUM_SUPPORTED_INPUT_BYTES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_INPUT_BYTES",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java#com.soklet.internal.mcp.protocol.McpJsonLimits#MAXIMUM_SUPPORTED_NESTING_DEPTH",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_NESTING_DEPTH",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java#com.soklet.internal.mcp.protocol.McpJsonLimits#MAXIMUM_SUPPORTED_NODE_COUNT",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_NODE_COUNT",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java#com.soklet.internal.mcp.protocol.McpJsonLimits#MAXIMUM_SUPPORTED_NUMBER_LENGTH_IN_CHARACTERS",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_NUMBER_LENGTH_IN_CHARACTERS",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java#com.soklet.internal.mcp.protocol.McpJsonLimits#MAXIMUM_SUPPORTED_OUTPUT_BYTES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_OUTPUT_BYTES",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java#com.soklet.internal.mcp.protocol.McpJsonLimits#MAXIMUM_SUPPORTED_STRING_LENGTH_IN_CHARACTERS",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_STRING_LENGTH_IN_CHARACTERS",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java#com.soklet.internal.mcp.protocol.McpJsonLimits#MAXIMUM_SUPPORTED_TOKEN_LENGTH_IN_CHARACTERS",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_TOKEN_LENGTH_IN_CHARACTERS",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java#com.soklet.internal.mcp.protocol.McpJsonLimits#maximumExponentMagnitude",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumExponentMagnitude",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java#com.soklet.internal.mcp.protocol.McpJsonLimits#maximumInputBytes",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumInputBytes",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java#com.soklet.internal.mcp.protocol.McpJsonLimits#maximumNestingDepth",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumNestingDepth",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java#com.soklet.internal.mcp.protocol.McpJsonLimits#maximumNodeCount",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumNodeCount",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java#com.soklet.internal.mcp.protocol.McpJsonLimits#maximumNumberLengthInCharacters",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumNumberLengthInCharacters",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java#com.soklet.internal.mcp.protocol.McpJsonLimits#maximumOutputBytes",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumOutputBytes",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java#com.soklet.internal.mcp.protocol.McpJsonLimits#maximumStringLengthInCharacters",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumStringLengthInCharacters",
+          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java#com.soklet.internal.mcp.protocol.McpJsonLimits#maximumTokenLengthInCharacters",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumTokenLengthInCharacters",
           "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
         }
       ],
@@ -456,15 +719,45 @@
       "sourceOwners": [
         {
           "file": "src/main/java/com/soklet/McpLocalizer.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpLocalizer.java#com.soklet.McpLocalizer#DEFAULT_MAXIMUM_LOCALIZABLE_TEXT_COUNT_PER_RESPONSE",
           "matcherRuleId": "FINITE-MATCH-001",
-          "member": "DEFAULT_MAXIMUM_LOCALIZABLE_TEXT_COUNT_PER_RESPONSE/MAXIMUM_SUPPORTED_LOCALIZABLE_TEXT_COUNT_PER_RESPONSE",
+          "member": "DEFAULT_MAXIMUM_LOCALIZABLE_TEXT_COUNT_PER_RESPONSE",
+          "owner": "com.soklet.McpLocalizer"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpLocalizer.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpLocalizer.java#com.soklet.McpLocalizer#MAXIMUM_SUPPORTED_LOCALIZABLE_TEXT_COUNT_PER_RESPONSE",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_LOCALIZABLE_TEXT_COUNT_PER_RESPONSE",
           "owner": "com.soklet.McpLocalizer"
         },
         {
           "file": "src/main/java/com/soklet/McpSimulationOptions.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpSimulationOptions.java#com.soklet.McpSimulationOptions.Builder#maximumCapturedBytes(Integer)",
           "matcherRuleId": "FINITE-MATCH-003",
-          "member": "Builder.maximumCapturedBytes",
+          "member": "maximumCapturedBytes(Integer)",
           "owner": "com.soklet.McpSimulationOptions.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMcpLocalizationCatalogExtractor.java",
+          "key": "FINITE-MATCH-004:src/main/java/com/soklet/DefaultMcpLocalizationCatalogExtractor.java#com.soklet.DefaultMcpLocalizationCatalogExtractor#MAXIMUM_SUPPORTED_CALLBACK_COUNT",
+          "matcherRuleId": "FINITE-MATCH-004",
+          "member": "MAXIMUM_SUPPORTED_CALLBACK_COUNT",
+          "owner": "com.soklet.DefaultMcpLocalizationCatalogExtractor"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpLocalizer.java",
+          "key": "FINITE-MATCH-004:src/main/java/com/soklet/McpLocalizer.java#com.soklet.McpLocalizer.Builder#maximumLocalizableTextCountPerResponse(Integer)",
+          "matcherRuleId": "FINITE-MATCH-004",
+          "member": "maximumLocalizableTextCountPerResponse(Integer)",
+          "owner": "com.soklet.McpLocalizer.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "FINITE-MATCH-004:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#maximumLocalizedReplacementCharacters()",
+          "matcherRuleId": "FINITE-MATCH-004",
+          "member": "maximumLocalizedReplacementCharacters()",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime"
         }
       ],
       "values": [
@@ -514,16 +807,172 @@
       ],
       "sourceOwners": [
         {
-          "file": "src/main/java/com/soklet/SokletProcessor.java",
-          "matcherRuleId": "FINITE-MATCH-004",
-          "member": "MCP_SCHEMA_PREFLIGHT_MAXIMUM_*",
-          "owner": "com.soklet.SokletProcessor"
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java#com.soklet.internal.mcp.schema.McpSchemaCompilationLimits#MAXIMUM_SUPPORTED_ANCHOR_COUNT",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_ANCHOR_COUNT",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaCompilationLimits"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java#com.soklet.internal.mcp.schema.McpSchemaCompilationLimits#MAXIMUM_SUPPORTED_ANCHOR_NAME_LENGTH",
           "matcherRuleId": "FINITE-MATCH-001",
-          "member": "productionDefaults/maximumSupported",
+          "member": "MAXIMUM_SUPPORTED_ANCHOR_NAME_LENGTH",
           "owner": "com.soklet.internal.mcp.schema.McpSchemaCompilationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java#com.soklet.internal.mcp.schema.McpSchemaCompilationLimits#MAXIMUM_SUPPORTED_COLLECTION_ENTRY_COUNT",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_COLLECTION_ENTRY_COUNT",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaCompilationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java#com.soklet.internal.mcp.schema.McpSchemaCompilationLimits#MAXIMUM_SUPPORTED_KEYWORD_COUNT",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_KEYWORD_COUNT",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaCompilationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java#com.soklet.internal.mcp.schema.McpSchemaCompilationLimits#MAXIMUM_SUPPORTED_NAME_LENGTH",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_NAME_LENGTH",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaCompilationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java#com.soklet.internal.mcp.schema.McpSchemaCompilationLimits#MAXIMUM_SUPPORTED_POINTER_SEGMENT_COUNT",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_POINTER_SEGMENT_COUNT",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaCompilationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java#com.soklet.internal.mcp.schema.McpSchemaCompilationLimits#MAXIMUM_SUPPORTED_POINTER_SEGMENT_LENGTH",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_POINTER_SEGMENT_LENGTH",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaCompilationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java#com.soklet.internal.mcp.schema.McpSchemaCompilationLimits#MAXIMUM_SUPPORTED_REFERENCE_COUNT",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_REFERENCE_COUNT",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaCompilationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java#com.soklet.internal.mcp.schema.McpSchemaCompilationLimits#MAXIMUM_SUPPORTED_REFERENCE_LENGTH",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_REFERENCE_LENGTH",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaCompilationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java#com.soklet.internal.mcp.schema.McpSchemaCompilationLimits#MAXIMUM_SUPPORTED_SCHEMA_DEPTH",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_SCHEMA_DEPTH",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaCompilationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java#com.soklet.internal.mcp.schema.McpSchemaCompilationLimits#MAXIMUM_SUPPORTED_SCHEMA_NODE_COUNT",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_SCHEMA_NODE_COUNT",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaCompilationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java#com.soklet.internal.mcp.schema.McpSchemaCompilationLimits#maximumAnchorCount",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumAnchorCount",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaCompilationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java#com.soklet.internal.mcp.schema.McpSchemaCompilationLimits#maximumAnchorNameLengthInCharacters",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumAnchorNameLengthInCharacters",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaCompilationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java#com.soklet.internal.mcp.schema.McpSchemaCompilationLimits#maximumCollectionEntryCount",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumCollectionEntryCount",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaCompilationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java#com.soklet.internal.mcp.schema.McpSchemaCompilationLimits#maximumKeywordCount",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumKeywordCount",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaCompilationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java#com.soklet.internal.mcp.schema.McpSchemaCompilationLimits#maximumNameLengthInCharacters",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumNameLengthInCharacters",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaCompilationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java#com.soklet.internal.mcp.schema.McpSchemaCompilationLimits#maximumPointerSegmentCount",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumPointerSegmentCount",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaCompilationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java#com.soklet.internal.mcp.schema.McpSchemaCompilationLimits#maximumPointerSegmentLengthInCharacters",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumPointerSegmentLengthInCharacters",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaCompilationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java#com.soklet.internal.mcp.schema.McpSchemaCompilationLimits#maximumReferenceCount",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumReferenceCount",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaCompilationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java#com.soklet.internal.mcp.schema.McpSchemaCompilationLimits#maximumReferenceLengthInCharacters",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumReferenceLengthInCharacters",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaCompilationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java#com.soklet.internal.mcp.schema.McpSchemaCompilationLimits#maximumSchemaDepth",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumSchemaDepth",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaCompilationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/schema/McpSchemaCompilationLimits.java#com.soklet.internal.mcp.schema.McpSchemaCompilationLimits#maximumSchemaNodeCount",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumSchemaNodeCount",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaCompilationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/SokletProcessor.java",
+          "key": "FINITE-MATCH-004:src/main/java/com/soklet/SokletProcessor.java#com.soklet.SokletProcessor#MCP_SCHEMA_PREFLIGHT_MAXIMUM_DEPTH",
+          "matcherRuleId": "FINITE-MATCH-004",
+          "member": "MCP_SCHEMA_PREFLIGHT_MAXIMUM_DEPTH",
+          "owner": "com.soklet.SokletProcessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/SokletProcessor.java",
+          "key": "FINITE-MATCH-004:src/main/java/com/soklet/SokletProcessor.java#com.soklet.SokletProcessor#MCP_SCHEMA_PREFLIGHT_MAXIMUM_NODE_COUNT",
+          "matcherRuleId": "FINITE-MATCH-004",
+          "member": "MCP_SCHEMA_PREFLIGHT_MAXIMUM_NODE_COUNT",
+          "owner": "com.soklet.SokletProcessor"
         }
       ],
       "values": [
@@ -688,8 +1137,72 @@
       "sourceOwners": [
         {
           "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java#com.soklet.internal.mcp.schema.McpSchemaEvaluationLimits#MAXIMUM_SUPPORTED_DIAGNOSTIC_COUNT",
           "matcherRuleId": "FINITE-MATCH-001",
-          "member": "productionDefaults/maximumSupported",
+          "member": "MAXIMUM_SUPPORTED_DIAGNOSTIC_COUNT",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaEvaluationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java#com.soklet.internal.mcp.schema.McpSchemaEvaluationLimits#MAXIMUM_SUPPORTED_DIAGNOSTIC_UTF8_BYTES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_DIAGNOSTIC_UTF8_BYTES",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaEvaluationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java#com.soklet.internal.mcp.schema.McpSchemaEvaluationLimits#MAXIMUM_SUPPORTED_EVALUATION_OPERATIONS",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_EVALUATION_OPERATIONS",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaEvaluationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java#com.soklet.internal.mcp.schema.McpSchemaEvaluationLimits#MAXIMUM_SUPPORTED_PENDING_TASK_COUNT",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_PENDING_TASK_COUNT",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaEvaluationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java#com.soklet.internal.mcp.schema.McpSchemaEvaluationLimits#MAXIMUM_SUPPORTED_REFERENCE_TRAVERSALS",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_REFERENCE_TRAVERSALS",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaEvaluationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java#com.soklet.internal.mcp.schema.McpSchemaEvaluationLimits#maximumDiagnosticCount",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumDiagnosticCount",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaEvaluationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java#com.soklet.internal.mcp.schema.McpSchemaEvaluationLimits#maximumDiagnosticUtf8Bytes",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumDiagnosticUtf8Bytes",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaEvaluationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java#com.soklet.internal.mcp.schema.McpSchemaEvaluationLimits#maximumEvaluationOperations",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumEvaluationOperations",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaEvaluationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java#com.soklet.internal.mcp.schema.McpSchemaEvaluationLimits#maximumPendingTaskCount",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumPendingTaskCount",
+          "owner": "com.soklet.internal.mcp.schema.McpSchemaEvaluationLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java#com.soklet.internal.mcp.schema.McpSchemaEvaluationLimits#maximumReferenceTraversals",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumReferenceTraversals",
           "owner": "com.soklet.internal.mcp.schema.McpSchemaEvaluationLimits"
         }
       ],
@@ -788,33 +1301,94 @@
       "sourceOwners": [
         {
           "file": "src/main/java/com/soklet/McpServer.java",
-          "matcherRuleId": "FINITE-MATCH-003",
-          "member": "Builder queue and concurrency defaults",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#DEFAULT_MAXIMUM_SUBSCRIPTIONS_PER_PRINCIPAL",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "DEFAULT_MAXIMUM_SUBSCRIPTIONS_PER_PRINCIPAL",
           "owner": "com.soklet.McpServer.Builder"
         },
         {
-          "file": "src/main/java/com/soklet/McpSimulationOptions.java",
-          "matcherRuleId": "FINITE-MATCH-003",
-          "member": "Builder.streamItemQueueCapacity",
-          "owner": "com.soklet.McpSimulationOptions.Builder"
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecutionConfiguration#handlerConcurrency",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "handlerConcurrency",
+          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecutionConfiguration"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecutionConfiguration#handlerQueueCapacity",
           "matcherRuleId": "FINITE-MATCH-002",
-          "member": "McpApplicationExecutionConfiguration.productionDefaults",
+          "member": "handlerQueueCapacity",
           "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecutionConfiguration"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java#com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration#requestProcessorConcurrency",
           "matcherRuleId": "FINITE-MATCH-002",
-          "member": "productionDefaults",
+          "member": "requestProcessorConcurrency",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java#com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration#requestProcessorQueueCapacity",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "requestProcessorQueueCapacity",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java#com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration#streamQueueCapacity",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "streamQueueCapacity",
           "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeConfiguration.java#com.soklet.internal.mcp.protocol.McpSubscriptionRuntimeConfiguration#maximumSubscriptionsPerPrincipal",
           "matcherRuleId": "FINITE-MATCH-002",
-          "member": "productionDefaults",
+          "member": "maximumSubscriptionsPerPrincipal",
           "owner": "com.soklet.internal.mcp.protocol.McpSubscriptionRuntimeConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeConfiguration.java#com.soklet.internal.mcp.protocol.McpSubscriptionRuntimeConfiguration#streamQueueCapacity",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "streamQueueCapacity",
+          "owner": "com.soklet.internal.mcp.protocol.McpSubscriptionRuntimeConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#maximumSubscriptionsPerPrincipal(Integer)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "maximumSubscriptionsPerPrincipal(Integer)",
+          "owner": "com.soklet.McpServer.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#requestHandlerConcurrency(Integer)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "requestHandlerConcurrency(Integer)",
+          "owner": "com.soklet.McpServer.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#requestHandlerQueueCapacity(Integer)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "requestHandlerQueueCapacity(Integer)",
+          "owner": "com.soklet.McpServer.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#streamQueueCapacity(Integer)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "streamQueueCapacity(Integer)",
+          "owner": "com.soklet.McpServer.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSimulationOptions.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpSimulationOptions.java#com.soklet.McpSimulationOptions.Builder#streamItemQueueCapacity(Integer)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "streamItemQueueCapacity(Integer)",
+          "owner": "com.soklet.McpSimulationOptions.Builder"
         }
       ],
       "values": [
@@ -887,8 +1461,9 @@
       "sourceOwners": [
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java",
+          "key": "FINITE-MATCH-004:src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java#com.soklet.internal.mcp.protocol.McpRequestSseStream#maximumFrameBytes(McpJsonLimits)",
           "matcherRuleId": "FINITE-MATCH-004",
-          "member": "McpRequestSseStream",
+          "member": "maximumFrameBytes(McpJsonLimits)",
           "owner": "com.soklet.internal.mcp.protocol.McpRequestSseStream"
         }
       ],
@@ -921,6 +1496,7 @@
         "src/test/java/com/soklet/internal/mcp/protocol/McpPublicJsonValueConverterTests.java#exactCodecValidationAcceptsOutputByteBoundaryAndRejectsOneOver",
         "src/test/java/com/soklet/internal/mcp/protocol/McpPublicJsonValueConverterTests.java#preflightAcceptsDepthBoundaryAndRejectsOneOver",
         "src/test/java/com/soklet/internal/mcp/protocol/McpPublicJsonValueConverterTests.java#preflightAcceptsNodeBoundaryAndRejectsOneOver",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSerializedResultFamilyBoundaryTests.java#everyProductionGoldenResultAcceptsItsExactEnvelopeAndRejectsOneByteLess",
         "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeBoundaryTests.java#actualSubscriptionIdMustFitTerminalBeforeAcknowledgementCommit"
       ],
       "category": "SERIALIZED_RESULT",
@@ -963,18 +1539,28 @@
       "sourceOwners": [
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "key": "FINITE-MATCH-004:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#MAXIMUM_AGGREGATE_BASE64_CHARACTERS",
           "matcherRuleId": "FINITE-MATCH-004",
-          "member": "MAXIMUM_BASE64_CHARACTERS/MAXIMUM_AGGREGATE_BASE64_CHARACTERS",
+          "member": "MAXIMUM_AGGREGATE_BASE64_CHARACTERS",
           "owner": "com.soklet.DefaultMcpServer"
         },
         {
-          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonLimits.java",
-          "matcherRuleId": "FINITE-MATCH-001",
-          "member": "productionDefaults",
-          "owner": "com.soklet.internal.mcp.protocol.McpJsonLimits"
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "key": "FINITE-MATCH-004:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#MAXIMUM_BASE64_CHARACTERS",
+          "matcherRuleId": "FINITE-MATCH-004",
+          "member": "MAXIMUM_BASE64_CHARACTERS",
+          "owner": "com.soklet.DefaultMcpServer"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "key": "FINITE-MATCH-004:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#maximumBase64Characters()",
+          "matcherRuleId": "FINITE-MATCH-004",
+          "member": "maximumBase64Characters()",
+          "owner": "com.soklet.DefaultMcpServer"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpPublicJsonValueConverter.java",
+          "key": "FINITE-MATCH-004:src/main/java/com/soklet/internal/mcp/protocol/McpPublicJsonValueConverter.java#com.soklet.internal.mcp.protocol.McpPublicJsonValueConverter#PRODUCTION_LIMITS",
           "matcherRuleId": "FINITE-MATCH-004",
           "member": "PRODUCTION_LIMITS",
           "owner": "com.soklet.internal.mcp.protocol.McpPublicJsonValueConverter"
@@ -1053,27 +1639,122 @@
       "sourceOwners": [
         {
           "file": "src/main/java/com/soklet/McpServer.java",
-          "matcherRuleId": "FINITE-MATCH-003",
-          "member": "Builder operational defaults",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#DEFAULT_MAXIMUM_SUBSCRIPTION_DURATION",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "DEFAULT_MAXIMUM_SUBSCRIPTION_DURATION",
           "owner": "com.soklet.McpServer.Builder"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecutionConfiguration#requestDeadline",
           "matcherRuleId": "FINITE-MATCH-002",
-          "member": "McpApplicationExecutionConfiguration.productionDefaults",
+          "member": "requestDeadline",
+          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecutionConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecutionConfiguration#timerResolution",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "timerResolution",
           "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecutionConfiguration"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java#com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration#keepAliveInterval",
           "matcherRuleId": "FINITE-MATCH-002",
-          "member": "productionDefaults",
+          "member": "keepAliveInterval",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java#com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration#requestBodyTimeout",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "requestBodyTimeout",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java#com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration#requestHeaderTimeout",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "requestHeaderTimeout",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java#com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration#responseWriteIdleTimeout",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "responseWriteIdleTimeout",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java#com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration#selectorResolution",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "selectorResolution",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java#com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration#shutdownTimeout",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "shutdownTimeout",
           "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeConfiguration.java#com.soklet.internal.mcp.protocol.McpSubscriptionRuntimeConfiguration#keepAliveInterval",
           "matcherRuleId": "FINITE-MATCH-002",
-          "member": "productionDefaults",
+          "member": "keepAliveInterval",
           "owner": "com.soklet.internal.mcp.protocol.McpSubscriptionRuntimeConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeConfiguration.java#com.soklet.internal.mcp.protocol.McpSubscriptionRuntimeConfiguration#maximumSubscriptionDuration",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumSubscriptionDuration",
+          "owner": "com.soklet.internal.mcp.protocol.McpSubscriptionRuntimeConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeConfiguration.java#com.soklet.internal.mcp.protocol.McpSubscriptionRuntimeConfiguration#shutdownTimeout",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "shutdownTimeout",
+          "owner": "com.soklet.internal.mcp.protocol.McpSubscriptionRuntimeConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeConfiguration.java#com.soklet.internal.mcp.protocol.McpSubscriptionRuntimeConfiguration#writeTimeout",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "writeTimeout",
+          "owner": "com.soklet.internal.mcp.protocol.McpSubscriptionRuntimeConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#keepAliveInterval(Duration)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "keepAliveInterval(Duration)",
+          "owner": "com.soklet.McpServer.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#maximumSubscriptionDuration(Duration)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "maximumSubscriptionDuration(Duration)",
+          "owner": "com.soklet.McpServer.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#requestTimeout(Duration)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "requestTimeout(Duration)",
+          "owner": "com.soklet.McpServer.Builder"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpServer.java",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpServer.java#com.soklet.McpServer.Builder#writeTimeout(Duration)",
+          "matcherRuleId": "FINITE-MATCH-003",
+          "member": "writeTimeout(Duration)",
+          "owner": "com.soklet.McpServer.Builder"
         }
       ],
       "values": [
@@ -1161,21 +1842,59 @@
       "sourceOwners": [
         {
           "file": "src/main/java/com/soklet/internal/mcp/schema/McpRuntimeEnumNameReader.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/schema/McpRuntimeEnumNameReader.java#com.soklet.internal.mcp.schema.McpRuntimeEnumNameReader#MAXIMUM_CLASS_FILE_SIZE_IN_BYTES",
           "matcherRuleId": "FINITE-MATCH-001",
           "member": "MAXIMUM_CLASS_FILE_SIZE_IN_BYTES",
           "owner": "com.soklet.internal.mcp.schema.McpRuntimeEnumNameReader"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java#com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits#MAXIMUM_SUPPORTED_CONTAINER_ENTRY_COUNT",
           "matcherRuleId": "FINITE-MATCH-001",
-          "member": "productionDefaults/MAXIMUM_SUPPORTED_*",
+          "member": "MAXIMUM_SUPPORTED_CONTAINER_ENTRY_COUNT",
+          "owner": "com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java#com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits#MAXIMUM_SUPPORTED_NESTING_DEPTH",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_NESTING_DEPTH",
+          "owner": "com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java#com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits#MAXIMUM_SUPPORTED_NODE_COUNT",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_SUPPORTED_NODE_COUNT",
           "owner": "com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/schema/McpTypedSchemaPath.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/schema/McpTypedSchemaPath.java#com.soklet.internal.mcp.schema.McpTypedSchemaPath#MAXIMUM_ESCAPED_SEGMENT_PREFIX_LENGTH",
           "matcherRuleId": "FINITE-MATCH-001",
           "member": "MAXIMUM_ESCAPED_SEGMENT_PREFIX_LENGTH",
           "owner": "com.soklet.internal.mcp.schema.McpTypedSchemaPath"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java#com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits#maximumContainerEntryCount",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumContainerEntryCount",
+          "owner": "com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java#com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits#maximumNestingDepth",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumNestingDepth",
+          "owner": "com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/schema/McpTypedJsonBindingLimits.java#com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits#maximumNodeCount",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumNodeCount",
+          "owner": "com.soklet.internal.mcp.schema.McpTypedJsonBindingLimits"
         }
       ],
       "values": [
@@ -1262,22 +1981,144 @@
       ],
       "sourceOwners": [
         {
-          "file": "src/main/java/com/soklet/SokletProcessor.java",
-          "matcherRuleId": "FINITE-MATCH-004",
-          "member": "MAXIMUM_MCP_*RESOURCE_URI*",
-          "owner": "com.soklet.SokletProcessor"
-        },
-        {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpEndpointPathLimit.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpEndpointPathLimit.java#com.soklet.internal.mcp.protocol.McpEndpointPathLimit#MAXIMUM_REQUEST_TARGET_BYTES",
           "matcherRuleId": "FINITE-MATCH-001",
           "member": "MAXIMUM_REQUEST_TARGET_BYTES",
           "owner": "com.soklet.internal.mcp.protocol.McpEndpointPathLimit"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpNormalizedResourceDescriptor.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpNormalizedResourceDescriptor.java#com.soklet.internal.mcp.protocol.McpLevelOneUriTemplate#MAXIMUM_ENDPOINT_OVERLAP_COMPARISON_STATES",
           "matcherRuleId": "FINITE-MATCH-001",
-          "member": "McpLevelOneUriTemplate.MAXIMUM_*",
+          "member": "MAXIMUM_ENDPOINT_OVERLAP_COMPARISON_STATES",
           "owner": "com.soklet.internal.mcp.protocol.McpLevelOneUriTemplate"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpNormalizedResourceDescriptor.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpNormalizedResourceDescriptor.java#com.soklet.internal.mcp.protocol.McpLevelOneUriTemplate#MAXIMUM_OVERLAP_COMPARISON_STATES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_OVERLAP_COMPARISON_STATES",
+          "owner": "com.soklet.internal.mcp.protocol.McpLevelOneUriTemplate"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpNormalizedResourceDescriptor.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpNormalizedResourceDescriptor.java#com.soklet.internal.mcp.protocol.McpLevelOneUriTemplate#MAXIMUM_RESOURCE_URI_UTF_8_BYTES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_RESOURCE_URI_UTF_8_BYTES",
+          "owner": "com.soklet.internal.mcp.protocol.McpLevelOneUriTemplate"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpNormalizedResourceDescriptor.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpNormalizedResourceDescriptor.java#com.soklet.internal.mcp.protocol.McpLevelOneUriTemplate#MAXIMUM_TEMPLATE_COUNT_PER_ENDPOINT",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_TEMPLATE_COUNT_PER_ENDPOINT",
+          "owner": "com.soklet.internal.mcp.protocol.McpLevelOneUriTemplate"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpNormalizedResourceDescriptor.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpNormalizedResourceDescriptor.java#com.soklet.internal.mcp.protocol.McpLevelOneUriTemplate#MAXIMUM_TEMPLATE_MATCH_DYNAMIC_PROGRAMMING_CELLS",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_TEMPLATE_MATCH_DYNAMIC_PROGRAMMING_CELLS",
+          "owner": "com.soklet.internal.mcp.protocol.McpLevelOneUriTemplate"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpNormalizedResourceDescriptor.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpNormalizedResourceDescriptor.java#com.soklet.internal.mcp.protocol.McpLevelOneUriTemplate#MAXIMUM_TEMPLATE_ROUTED_RESOURCE_URI_UTF_8_BYTES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_TEMPLATE_ROUTED_RESOURCE_URI_UTF_8_BYTES",
+          "owner": "com.soklet.internal.mcp.protocol.McpLevelOneUriTemplate"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpNormalizedResourceDescriptor.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpNormalizedResourceDescriptor.java#com.soklet.internal.mcp.protocol.McpLevelOneUriTemplate#MAXIMUM_TEMPLATE_UTF_8_BYTES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_TEMPLATE_UTF_8_BYTES",
+          "owner": "com.soklet.internal.mcp.protocol.McpLevelOneUriTemplate"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpNormalizedResourceDescriptor.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpNormalizedResourceDescriptor.java#com.soklet.internal.mcp.protocol.McpLevelOneUriTemplate#MAXIMUM_VARIABLE_COUNT",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_VARIABLE_COUNT",
+          "owner": "com.soklet.internal.mcp.protocol.McpLevelOneUriTemplate"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpNormalizedResourceDescriptor.java",
+          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpNormalizedResourceDescriptor.java#com.soklet.internal.mcp.protocol.McpLevelOneUriTemplate#MAXIMUM_VARIABLE_NAME_UTF_8_BYTES",
+          "matcherRuleId": "FINITE-MATCH-001",
+          "member": "MAXIMUM_VARIABLE_NAME_UTF_8_BYTES",
+          "owner": "com.soklet.internal.mcp.protocol.McpLevelOneUriTemplate"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
+          "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java#com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration#maximumRequestTargetBytes",
+          "matcherRuleId": "FINITE-MATCH-002",
+          "member": "maximumRequestTargetBytes",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
+        },
+        {
+          "file": "src/main/java/com/soklet/SokletProcessor.java",
+          "key": "FINITE-MATCH-004:src/main/java/com/soklet/SokletProcessor.java#com.soklet.SokletProcessor#MAXIMUM_MCP_ANNOTATED_RESOURCE_URI_UTF_8_BYTES",
+          "matcherRuleId": "FINITE-MATCH-004",
+          "member": "MAXIMUM_MCP_ANNOTATED_RESOURCE_URI_UTF_8_BYTES",
+          "owner": "com.soklet.SokletProcessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/SokletProcessor.java",
+          "key": "FINITE-MATCH-004:src/main/java/com/soklet/SokletProcessor.java#com.soklet.SokletProcessor#MAXIMUM_MCP_ENDPOINT_RESOURCE_URI_TEMPLATE_OVERLAP_STATES",
+          "matcherRuleId": "FINITE-MATCH-004",
+          "member": "MAXIMUM_MCP_ENDPOINT_RESOURCE_URI_TEMPLATE_OVERLAP_STATES",
+          "owner": "com.soklet.SokletProcessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/SokletProcessor.java",
+          "key": "FINITE-MATCH-004:src/main/java/com/soklet/SokletProcessor.java#com.soklet.SokletProcessor#MAXIMUM_MCP_RESOURCE_URI_TEMPLATES",
+          "matcherRuleId": "FINITE-MATCH-004",
+          "member": "MAXIMUM_MCP_RESOURCE_URI_TEMPLATES",
+          "owner": "com.soklet.SokletProcessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/SokletProcessor.java",
+          "key": "FINITE-MATCH-004:src/main/java/com/soklet/SokletProcessor.java#com.soklet.SokletProcessor#MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_OVERLAP_STATES",
+          "matcherRuleId": "FINITE-MATCH-004",
+          "member": "MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_OVERLAP_STATES",
+          "owner": "com.soklet.SokletProcessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/SokletProcessor.java",
+          "key": "FINITE-MATCH-004:src/main/java/com/soklet/SokletProcessor.java#com.soklet.SokletProcessor#MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_UTF_8_BYTES",
+          "matcherRuleId": "FINITE-MATCH-004",
+          "member": "MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_UTF_8_BYTES",
+          "owner": "com.soklet.SokletProcessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/SokletProcessor.java",
+          "key": "FINITE-MATCH-004:src/main/java/com/soklet/SokletProcessor.java#com.soklet.SokletProcessor#MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_VARIABLES",
+          "matcherRuleId": "FINITE-MATCH-004",
+          "member": "MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_VARIABLES",
+          "owner": "com.soklet.SokletProcessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/SokletProcessor.java",
+          "key": "FINITE-MATCH-004:src/main/java/com/soklet/SokletProcessor.java#com.soklet.SokletProcessor#MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_VARIABLE_NAME_UTF_8_BYTES",
+          "matcherRuleId": "FINITE-MATCH-004",
+          "member": "MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_VARIABLE_NAME_UTF_8_BYTES",
+          "owner": "com.soklet.SokletProcessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/SokletProcessor.java",
+          "key": "FINITE-MATCH-004:src/main/java/com/soklet/SokletProcessor.java#com.soklet.SokletProcessor#MAXIMUM_MCP_RESOURCE_URI_UTF_8_BYTES",
+          "matcherRuleId": "FINITE-MATCH-004",
+          "member": "MAXIMUM_MCP_RESOURCE_URI_UTF_8_BYTES",
+          "owner": "com.soklet.SokletProcessor"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java",
+          "key": "FINITE-MATCH-004:src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java#com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration#DEFAULT_MAXIMUM_REQUEST_TARGET_BYTES",
+          "matcherRuleId": "FINITE-MATCH-004",
+          "member": "DEFAULT_MAXIMUM_REQUEST_TARGET_BYTES",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpTransportConfiguration"
         }
       ],
       "values": [
@@ -1353,22 +2194,22 @@
   "formatVersion": 1,
   "matcherRules": [
     {
-      "description": "Named production limit constants whose identifier contains MAXIMUM or MINIMUM and whose value bounds retained input, work, or output.",
+      "description": "Byte, short, int, long, BigInteger, or Duration fields explicitly declared with static and final in either modifier order whose identifier contains MAXIMUM or MINIMUM, plus derived declarations classified by FINITE-MATCH-004.",
       "family": "NAMED_LIMIT_CONSTANT",
       "id": "FINITE-MATCH-001"
     },
     {
-      "description": "Components of MCP configuration or limits records named maximum*, *Capacity, *Concurrency, *Timeout, *Deadline, *Duration, *Interval, *Resolution, *Backlog, or *BufferSize.",
+      "description": "Components named maximum*, minimum*, *Capacity, *Concurrency, *Timeout, *Deadline, *Duration, *Interval, *Resolution, *Backlog, or *BufferSize on MCP records whose type name ends in Config, Configuration, or Limits.",
       "family": "BOUND_BEARING_CONFIGURATION_COMPONENT",
       "id": "FINITE-MATCH-002"
     },
     {
-      "description": "Public MCP builder and validator entry points that establish a retained input, work, queue, time, or output bound.",
+      "description": "Public methods on direct src/main/java/com/soklet/Mcp*.java Builder types whose method or parameter name matches the FINITE-MATCH-002 bound-name vocabulary; method members include declared parameter-type signatures.",
       "family": "PUBLIC_BOUND_CONFIGURATION",
       "id": "FINITE-MATCH-003"
     },
     {
-      "description": "Derived or mirrored production limits including aggregate HTTP bytes, cursor JSON escaping, Base64 expansion, SSE framing, processor copies, and result conversion limits.",
+      "description": "Derived or mirrored typed constants and computed methods, production JSON-limit projections, SokletProcessor copies, the HTTP framing allowance, and the localization callback-count mirror; this family takes priority over the other families.",
       "family": "DERIVED_OR_MIRRORED_LIMIT",
       "id": "FINITE-MATCH-004"
     }
@@ -1377,32 +2218,373 @@
   "releaseTarget": "4.0.0",
   "reviewedExclusions": [
     {
-      "file": "src/main/java/com/soklet/internal/mcp/transport/McpTransportRuntime.java",
+      "file": "src/main/java/com/soklet/DefaultMcpSecurityControls.java",
       "id": "FINITE-EX-001",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/DefaultMcpSecurityControls.java#com.soklet.DefaultMcpSecurityControls#MAXIMUM_INVOCATIONS_PER_EPOCH",
       "matcherRuleId": "FINITE-MATCH-001",
-      "owner": "com.soklet.internal.mcp.transport.McpTransportRuntime",
-      "rationale": "This is the retained containment-spike runtime used only by its characterization tests; McpHttpServerRuntime is the production transport owner."
+      "member": "MAXIMUM_INVOCATIONS_PER_EPOCH",
+      "owner": "com.soklet.DefaultMcpSecurityControls",
+      "rationale": "The declaration belongs to the independently reviewed protected request-state and key-material security profile, not SOK-VALID-002 resource accounting."
     },
     {
-      "file": "src/main/java/com/soklet/McpProtectionConfig.java",
+      "file": "src/main/java/com/soklet/DefaultMcpSecurityControls.java",
       "id": "FINITE-EX-002",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/DefaultMcpSecurityControls.java#com.soklet.DefaultMcpSecurityControls.OwnedSecretKey#MINIMUM_KEY_BYTES",
       "matcherRuleId": "FINITE-MATCH-001",
-      "owner": "com.soklet.McpProtectionConfig and request-state runtime",
-      "rationale": "Encoded/decoded request-state, rounds, lifetime, and key-shape bounds are independently owned by SOK-STATE-002 and its security profile."
+      "member": "MINIMUM_KEY_BYTES",
+      "owner": "com.soklet.DefaultMcpSecurityControls.OwnedSecretKey",
+      "rationale": "The declaration belongs to the independently reviewed protected request-state and key-material security profile, not SOK-VALID-002 resource accounting."
     },
     {
       "file": "src/main/java/com/soklet/McpAdmissionIdentity.java",
       "id": "FINITE-EX-003",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpAdmissionIdentity.java#com.soklet.McpAdmissionIdentity#MAXIMUM_PARTITION_KEY_UTF_8_BYTES",
       "matcherRuleId": "FINITE-MATCH-001",
-      "owner": "admission, rate-limit, trace, metric, and diagnostic helpers",
-      "rationale": "Identity length, retained rate-limit partition count, trace presentation, and diagnostic/metric cardinality are security or observability policy bounds rather than request/result resource-accounting owners in SOK-VALID-002."
+      "member": "MAXIMUM_PARTITION_KEY_UTF_8_BYTES",
+      "owner": "com.soklet.McpAdmissionIdentity",
+      "rationale": "The declaration belongs to admission or rate-policy identity/accounting, which is independently owned by the admission and rate-limit contracts."
+    },
+    {
+      "file": "src/main/java/com/soklet/McpKeyIdValidator.java",
+      "id": "FINITE-EX-004",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpKeyIdValidator.java#com.soklet.McpKeyIdValidator#MAXIMUM_ID_BYTES",
+      "matcherRuleId": "FINITE-MATCH-001",
+      "member": "MAXIMUM_ID_BYTES",
+      "owner": "com.soklet.McpKeyIdValidator",
+      "rationale": "The declaration belongs to the independently reviewed protected request-state and key-material security profile, not SOK-VALID-002 resource accounting."
+    },
+    {
+      "file": "src/main/java/com/soklet/McpLocalizationRevision.java",
+      "id": "FINITE-EX-005",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpLocalizationRevision.java#com.soklet.McpLocalizationRevision#MAXIMUM_VALUE_BYTES",
+      "matcherRuleId": "FINITE-MATCH-001",
+      "member": "MAXIMUM_VALUE_BYTES",
+      "owner": "com.soklet.McpLocalizationRevision",
+      "rationale": "The declaration bounds an application-supplied localization snapshot identity used for cache invalidation, not retained wire input, work, or output accounting."
+    },
+    {
+      "file": "src/main/java/com/soklet/McpProtectionConfig.java",
+      "id": "FINITE-EX-006",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpProtectionConfig.java#com.soklet.McpProtectionConfig#DEFAULT_MAXIMUM_DECODED_REQUEST_STATE_BYTES",
+      "matcherRuleId": "FINITE-MATCH-001",
+      "member": "DEFAULT_MAXIMUM_DECODED_REQUEST_STATE_BYTES",
+      "owner": "com.soklet.McpProtectionConfig",
+      "rationale": "The declaration belongs to the independently reviewed protected request-state and key-material security profile, not SOK-VALID-002 resource accounting."
+    },
+    {
+      "file": "src/main/java/com/soklet/McpProtectionConfig.java",
+      "id": "FINITE-EX-007",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpProtectionConfig.java#com.soklet.McpProtectionConfig#DEFAULT_MAXIMUM_ENCODED_REQUEST_STATE_BYTES",
+      "matcherRuleId": "FINITE-MATCH-001",
+      "member": "DEFAULT_MAXIMUM_ENCODED_REQUEST_STATE_BYTES",
+      "owner": "com.soklet.McpProtectionConfig",
+      "rationale": "The declaration belongs to the independently reviewed protected request-state and key-material security profile, not SOK-VALID-002 resource accounting."
+    },
+    {
+      "file": "src/main/java/com/soklet/McpProtectionConfig.java",
+      "id": "FINITE-EX-008",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpProtectionConfig.java#com.soklet.McpProtectionConfig#DEFAULT_MAXIMUM_REQUEST_STATE_LIFETIME",
+      "matcherRuleId": "FINITE-MATCH-001",
+      "member": "DEFAULT_MAXIMUM_REQUEST_STATE_LIFETIME",
+      "owner": "com.soklet.McpProtectionConfig",
+      "rationale": "The declaration belongs to the independently reviewed protected request-state and key-material security profile, not SOK-VALID-002 resource accounting."
+    },
+    {
+      "file": "src/main/java/com/soklet/McpProtectionConfig.java",
+      "id": "FINITE-EX-009",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpProtectionConfig.java#com.soklet.McpProtectionConfig#DEFAULT_MAXIMUM_REQUEST_STATE_ROUNDS",
+      "matcherRuleId": "FINITE-MATCH-001",
+      "member": "DEFAULT_MAXIMUM_REQUEST_STATE_ROUNDS",
+      "owner": "com.soklet.McpProtectionConfig",
+      "rationale": "The declaration belongs to the independently reviewed protected request-state and key-material security profile, not SOK-VALID-002 resource accounting."
+    },
+    {
+      "file": "src/main/java/com/soklet/McpProtectionKey.java",
+      "id": "FINITE-EX-010",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpProtectionKey.java#com.soklet.McpProtectionKey#MINIMUM_KEY_BYTES",
+      "matcherRuleId": "FINITE-MATCH-001",
+      "member": "MINIMUM_KEY_BYTES",
+      "owner": "com.soklet.McpProtectionKey",
+      "rationale": "The declaration belongs to the independently reviewed protected request-state and key-material security profile, not SOK-VALID-002 resource accounting."
+    },
+    {
+      "file": "src/main/java/com/soklet/McpRateLimiter.java",
+      "id": "FINITE-EX-011",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpRateLimiter.java#com.soklet.DefaultMcpRateLimiter#LONG_MAXIMUM",
+      "matcherRuleId": "FINITE-MATCH-001",
+      "member": "LONG_MAXIMUM",
+      "owner": "com.soklet.DefaultMcpRateLimiter",
+      "rationale": "The declaration belongs to admission or rate-policy identity/accounting, which is independently owned by the admission and rate-limit contracts."
+    },
+    {
+      "file": "src/main/java/com/soklet/McpRateLimiter.java",
+      "id": "FINITE-EX-012",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpRateLimiter.java#com.soklet.DefaultMcpRateLimiter#MAXIMUM_RETAINED_PARTITIONS",
+      "matcherRuleId": "FINITE-MATCH-001",
+      "member": "MAXIMUM_RETAINED_PARTITIONS",
+      "owner": "com.soklet.DefaultMcpRateLimiter",
+      "rationale": "The declaration belongs to admission or rate-policy identity/accounting, which is independently owned by the admission and rate-limit contracts."
     },
     {
       "file": "src/main/java/com/soklet/McpToolRegistration.java",
-      "id": "FINITE-EX-004",
+      "id": "FINITE-EX-013",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpToolRegistration.java#com.soklet.McpToolRegistration#MAXIMUM_NAME_LENGTH",
       "matcherRuleId": "FINITE-MATCH-001",
-      "owner": "public MCP identifier and semantic validators",
-      "rationale": "Closed protocol identifier lengths and vocabulary constraints are semantic validation contracts, not retained-work or output resource bounds."
+      "member": "MAXIMUM_NAME_LENGTH",
+      "owner": "com.soklet.McpToolRegistration",
+      "rationale": "The declaration is a closed protocol identifier constraint, not a retained-work or serialized-output resource bound."
+    },
+    {
+      "file": "src/main/java/com/soklet/McpTraceCorrelationKey.java",
+      "id": "FINITE-EX-014",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpTraceCorrelationKey.java#com.soklet.McpTraceCorrelationKey#MINIMUM_KEY_BYTES",
+      "matcherRuleId": "FINITE-MATCH-001",
+      "member": "MINIMUM_KEY_BYTES",
+      "owner": "com.soklet.McpTraceCorrelationKey",
+      "rationale": "The declaration belongs to the independently reviewed protected request-state and key-material security profile, not SOK-VALID-002 resource accounting."
+    },
+    {
+      "file": "src/main/java/com/soklet/McpTraceLogRecord.java",
+      "id": "FINITE-EX-015",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/McpTraceLogRecord.java#com.soklet.McpTraceLogRecord#MAXIMUM_LOG_MESSAGE_CHARACTERS",
+      "matcherRuleId": "FINITE-MATCH-001",
+      "member": "MAXIMUM_LOG_MESSAGE_CHARACTERS",
+      "owner": "com.soklet.McpTraceLogRecord",
+      "rationale": "The declaration bounds observability presentation or diagnostic emission and is independently owned by the privacy and observability contracts."
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpAdmissionDecision.java",
+      "id": "FINITE-EX-016",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpAdmissionDecision.java#com.soklet.internal.mcp.protocol.McpAdmissionIdentity#MAXIMUM_PARTITION_KEY_UTF_8_BYTES",
+      "matcherRuleId": "FINITE-MATCH-001",
+      "member": "MAXIMUM_PARTITION_KEY_UTF_8_BYTES",
+      "owner": "com.soklet.internal.mcp.protocol.McpAdmissionIdentity",
+      "rationale": "The declaration belongs to admission or rate-policy identity/accounting, which is independently owned by the admission and rate-limit contracts."
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "id": "FINITE-EX-017",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#APPLICATION_REQUEST_STATE_MAXIMUM_BYTES",
+      "matcherRuleId": "FINITE-MATCH-001",
+      "member": "APPLICATION_REQUEST_STATE_MAXIMUM_BYTES",
+      "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+      "rationale": "The declaration belongs to the independently reviewed protected request-state and key-material security profile, not SOK-VALID-002 resource accounting."
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpRequestStateBinding.java",
+      "id": "FINITE-EX-018",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpRequestStateBinding.java#com.soklet.internal.mcp.protocol.McpRequestStateBinding#MAXIMUM_AUTHORIZATION_PARTITION_BYTES",
+      "matcherRuleId": "FINITE-MATCH-001",
+      "member": "MAXIMUM_AUTHORIZATION_PARTITION_BYTES",
+      "owner": "com.soklet.internal.mcp.protocol.McpRequestStateBinding",
+      "rationale": "The declaration belongs to the independently reviewed protected request-state and key-material security profile, not SOK-VALID-002 resource accounting."
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpRequestStatePlaintextCodec.java",
+      "id": "FINITE-EX-019",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpRequestStatePlaintextCodec.java#com.soklet.internal.mcp.protocol.McpRequestStatePlaintextCodec#MAXIMUM_SELECTED_LOCALE_BYTES",
+      "matcherRuleId": "FINITE-MATCH-001",
+      "member": "MAXIMUM_SELECTED_LOCALE_BYTES",
+      "owner": "com.soklet.internal.mcp.protocol.McpRequestStatePlaintextCodec",
+      "rationale": "The declaration belongs to the independently reviewed protected request-state and key-material security profile, not SOK-VALID-002 resource accounting."
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpUnknownMirroredHeaderNameDiagnostics.java",
+      "id": "FINITE-EX-020",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpUnknownMirroredHeaderNameDiagnostics.java#com.soklet.internal.mcp.protocol.McpUnknownMirroredHeaderNameDiagnostics#MAXIMUM_DISPLAYED_NAME_BYTES",
+      "matcherRuleId": "FINITE-MATCH-001",
+      "member": "MAXIMUM_DISPLAYED_NAME_BYTES",
+      "owner": "com.soklet.internal.mcp.protocol.McpUnknownMirroredHeaderNameDiagnostics",
+      "rationale": "The declaration bounds observability presentation or diagnostic emission and is independently owned by the privacy and observability contracts."
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpUnknownMirroredHeaderNameDiagnostics.java",
+      "id": "FINITE-EX-021",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpUnknownMirroredHeaderNameDiagnostics.java#com.soklet.internal.mcp.protocol.McpUnknownMirroredHeaderNameDiagnostics#MAXIMUM_EVENTS_PER_WINDOW",
+      "matcherRuleId": "FINITE-MATCH-001",
+      "member": "MAXIMUM_EVENTS_PER_WINDOW",
+      "owner": "com.soklet.internal.mcp.protocol.McpUnknownMirroredHeaderNameDiagnostics",
+      "rationale": "The declaration bounds observability presentation or diagnostic emission and is independently owned by the privacy and observability contracts."
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpTransportConfiguration.java",
+      "id": "FINITE-EX-022",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/transport/McpTransportConfiguration.java#com.soklet.internal.mcp.transport.McpTransportConfiguration#MINIMUM_FRAMEWORK_TERMINAL_BYTE_CAPACITY",
+      "matcherRuleId": "FINITE-MATCH-001",
+      "member": "MINIMUM_FRAMEWORK_TERMINAL_BYTE_CAPACITY",
+      "owner": "com.soklet.internal.mcp.transport.McpTransportConfiguration",
+      "rationale": "The declaration belongs to the retained containment-spike transport used only by characterization tests; the production HTTP runtime has independent inventoried bounds."
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpTransportRuntime.java",
+      "id": "FINITE-EX-023",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/transport/McpTransportRuntime.java#com.soklet.internal.mcp.transport.McpTransportRuntime#MAXIMUM_HEADERS_SIZE",
+      "matcherRuleId": "FINITE-MATCH-001",
+      "member": "MAXIMUM_HEADERS_SIZE",
+      "owner": "com.soklet.internal.mcp.transport.McpTransportRuntime",
+      "rationale": "The declaration belongs to the retained containment-spike transport used only by characterization tests; the production HTTP runtime has independent inventoried bounds."
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpTransportRuntime.java",
+      "id": "FINITE-EX-024",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/transport/McpTransportRuntime.java#com.soklet.internal.mcp.transport.McpTransportRuntime#MAXIMUM_HEADER_COUNT",
+      "matcherRuleId": "FINITE-MATCH-001",
+      "member": "MAXIMUM_HEADER_COUNT",
+      "owner": "com.soklet.internal.mcp.transport.McpTransportRuntime",
+      "rationale": "The declaration belongs to the retained containment-spike transport used only by characterization tests; the production HTTP runtime has independent inventoried bounds."
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpTransportRuntime.java",
+      "id": "FINITE-EX-025",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/transport/McpTransportRuntime.java#com.soklet.internal.mcp.transport.McpTransportRuntime#MAXIMUM_REQUEST_SIZE",
+      "matcherRuleId": "FINITE-MATCH-001",
+      "member": "MAXIMUM_REQUEST_SIZE",
+      "owner": "com.soklet.internal.mcp.transport.McpTransportRuntime",
+      "rationale": "The declaration belongs to the retained containment-spike transport used only by characterization tests; the production HTTP runtime has independent inventoried bounds."
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpTransportRuntime.java",
+      "id": "FINITE-EX-026",
+      "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/transport/McpTransportRuntime.java#com.soklet.internal.mcp.transport.McpTransportRuntime#MAXIMUM_REQUEST_TARGET_LENGTH",
+      "matcherRuleId": "FINITE-MATCH-001",
+      "member": "MAXIMUM_REQUEST_TARGET_LENGTH",
+      "owner": "com.soklet.internal.mcp.transport.McpTransportRuntime",
+      "rationale": "The declaration belongs to the retained containment-spike transport used only by characterization tests; the production HTTP runtime has independent inventoried bounds."
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpTransportConfiguration.java",
+      "id": "FINITE-EX-027",
+      "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/transport/McpTransportConfiguration.java#com.soklet.internal.mcp.transport.McpTransportConfiguration#connectionWriterConcurrency",
+      "matcherRuleId": "FINITE-MATCH-002",
+      "member": "connectionWriterConcurrency",
+      "owner": "com.soklet.internal.mcp.transport.McpTransportConfiguration",
+      "rationale": "The declaration belongs to the retained containment-spike transport used only by characterization tests; the production HTTP runtime has independent inventoried bounds."
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpTransportConfiguration.java",
+      "id": "FINITE-EX-028",
+      "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/transport/McpTransportConfiguration.java#com.soklet.internal.mcp.transport.McpTransportConfiguration#handlerConcurrency",
+      "matcherRuleId": "FINITE-MATCH-002",
+      "member": "handlerConcurrency",
+      "owner": "com.soklet.internal.mcp.transport.McpTransportConfiguration",
+      "rationale": "The declaration belongs to the retained containment-spike transport used only by characterization tests; the production HTTP runtime has independent inventoried bounds."
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpTransportConfiguration.java",
+      "id": "FINITE-EX-029",
+      "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/transport/McpTransportConfiguration.java#com.soklet.internal.mcp.transport.McpTransportConfiguration#handlerQueueCapacity",
+      "matcherRuleId": "FINITE-MATCH-002",
+      "member": "handlerQueueCapacity",
+      "owner": "com.soklet.internal.mcp.transport.McpTransportConfiguration",
+      "rationale": "The declaration belongs to the retained containment-spike transport used only by characterization tests; the production HTTP runtime has independent inventoried bounds."
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpTransportConfiguration.java",
+      "id": "FINITE-EX-030",
+      "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/transport/McpTransportConfiguration.java#com.soklet.internal.mcp.transport.McpTransportConfiguration#keepAliveInterval",
+      "matcherRuleId": "FINITE-MATCH-002",
+      "member": "keepAliveInterval",
+      "owner": "com.soklet.internal.mcp.transport.McpTransportConfiguration",
+      "rationale": "The declaration belongs to the retained containment-spike transport used only by characterization tests; the production HTTP runtime has independent inventoried bounds."
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpTransportConfiguration.java",
+      "id": "FINITE-EX-031",
+      "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/transport/McpTransportConfiguration.java#com.soklet.internal.mcp.transport.McpTransportConfiguration#maximumConnections",
+      "matcherRuleId": "FINITE-MATCH-002",
+      "member": "maximumConnections",
+      "owner": "com.soklet.internal.mcp.transport.McpTransportConfiguration",
+      "rationale": "The declaration belongs to the retained containment-spike transport used only by characterization tests; the production HTTP runtime has independent inventoried bounds."
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpTransportConfiguration.java",
+      "id": "FINITE-EX-032",
+      "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/transport/McpTransportConfiguration.java#com.soklet.internal.mcp.transport.McpTransportConfiguration#outboundByteCapacity",
+      "matcherRuleId": "FINITE-MATCH-002",
+      "member": "outboundByteCapacity",
+      "owner": "com.soklet.internal.mcp.transport.McpTransportConfiguration",
+      "rationale": "The declaration belongs to the retained containment-spike transport used only by characterization tests; the production HTTP runtime has independent inventoried bounds."
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpTransportConfiguration.java",
+      "id": "FINITE-EX-033",
+      "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/transport/McpTransportConfiguration.java#com.soklet.internal.mcp.transport.McpTransportConfiguration#outboundFrameCapacity",
+      "matcherRuleId": "FINITE-MATCH-002",
+      "member": "outboundFrameCapacity",
+      "owner": "com.soklet.internal.mcp.transport.McpTransportConfiguration",
+      "rationale": "The declaration belongs to the retained containment-spike transport used only by characterization tests; the production HTTP runtime has independent inventoried bounds."
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpTransportConfiguration.java",
+      "id": "FINITE-EX-034",
+      "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/transport/McpTransportConfiguration.java#com.soklet.internal.mcp.transport.McpTransportConfiguration#requestDeadline",
+      "matcherRuleId": "FINITE-MATCH-002",
+      "member": "requestDeadline",
+      "owner": "com.soklet.internal.mcp.transport.McpTransportConfiguration",
+      "rationale": "The declaration belongs to the retained containment-spike transport used only by characterization tests; the production HTTP runtime has independent inventoried bounds."
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpTransportConfiguration.java",
+      "id": "FINITE-EX-035",
+      "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/transport/McpTransportConfiguration.java#com.soklet.internal.mcp.transport.McpTransportConfiguration#responseWriteIdleTimeout",
+      "matcherRuleId": "FINITE-MATCH-002",
+      "member": "responseWriteIdleTimeout",
+      "owner": "com.soklet.internal.mcp.transport.McpTransportConfiguration",
+      "rationale": "The declaration belongs to the retained containment-spike transport used only by characterization tests; the production HTTP runtime has independent inventoried bounds."
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpTransportConfiguration.java",
+      "id": "FINITE-EX-036",
+      "key": "FINITE-MATCH-002:src/main/java/com/soklet/internal/mcp/transport/McpTransportConfiguration.java#com.soklet.internal.mcp.transport.McpTransportConfiguration#terminalByteCapacity",
+      "matcherRuleId": "FINITE-MATCH-002",
+      "member": "terminalByteCapacity",
+      "owner": "com.soklet.internal.mcp.transport.McpTransportConfiguration",
+      "rationale": "The declaration belongs to the retained containment-spike transport used only by characterization tests; the production HTTP runtime has independent inventoried bounds."
+    },
+    {
+      "file": "src/main/java/com/soklet/McpProtectionConfig.java",
+      "id": "FINITE-EX-037",
+      "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpProtectionConfig.java#com.soklet.McpProtectionConfig.Builder#maximumDecodedRequestStateBytes(Integer)",
+      "matcherRuleId": "FINITE-MATCH-003",
+      "member": "maximumDecodedRequestStateBytes(Integer)",
+      "owner": "com.soklet.McpProtectionConfig.Builder",
+      "rationale": "The declaration belongs to the independently reviewed protected request-state and key-material security profile, not SOK-VALID-002 resource accounting."
+    },
+    {
+      "file": "src/main/java/com/soklet/McpProtectionConfig.java",
+      "id": "FINITE-EX-038",
+      "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpProtectionConfig.java#com.soklet.McpProtectionConfig.Builder#maximumEncodedRequestStateBytes(Integer)",
+      "matcherRuleId": "FINITE-MATCH-003",
+      "member": "maximumEncodedRequestStateBytes(Integer)",
+      "owner": "com.soklet.McpProtectionConfig.Builder",
+      "rationale": "The declaration belongs to the independently reviewed protected request-state and key-material security profile, not SOK-VALID-002 resource accounting."
+    },
+    {
+      "file": "src/main/java/com/soklet/McpProtectionConfig.java",
+      "id": "FINITE-EX-039",
+      "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpProtectionConfig.java#com.soklet.McpProtectionConfig.Builder#maximumRequestStateLifetime(Duration)",
+      "matcherRuleId": "FINITE-MATCH-003",
+      "member": "maximumRequestStateLifetime(Duration)",
+      "owner": "com.soklet.McpProtectionConfig.Builder",
+      "rationale": "The declaration belongs to the independently reviewed protected request-state and key-material security profile, not SOK-VALID-002 resource accounting."
+    },
+    {
+      "file": "src/main/java/com/soklet/McpProtectionConfig.java",
+      "id": "FINITE-EX-040",
+      "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpProtectionConfig.java#com.soklet.McpProtectionConfig.Builder#maximumRequestStateRounds(Integer)",
+      "matcherRuleId": "FINITE-MATCH-003",
+      "member": "maximumRequestStateRounds(Integer)",
+      "owner": "com.soklet.McpProtectionConfig.Builder",
+      "rationale": "The declaration belongs to the independently reviewed protected request-state and key-material security profile, not SOK-VALID-002 resource accounting."
+    },
+    {
+      "file": "src/main/java/com/soklet/McpRateLimiter.java",
+      "id": "FINITE-EX-041",
+      "key": "FINITE-MATCH-004:src/main/java/com/soklet/McpRateLimiter.java#com.soklet.DefaultMcpRateLimiter#minimumTimeUntilReclaimable(long)",
+      "matcherRuleId": "FINITE-MATCH-004",
+      "member": "minimumTimeUntilReclaimable(long)",
+      "owner": "com.soklet.DefaultMcpRateLimiter",
+      "rationale": "The declaration belongs to admission or rate-policy identity/accounting, which is independently owned by the admission and rate-limit contracts."
     }
   ],
   "scanRoots": [

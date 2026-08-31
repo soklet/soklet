@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
   mkdtempSync,
+  mkdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -14,7 +15,10 @@ import { delimiter, dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
+  FINITE_BOUND_MATCHER_RULES,
   canonicalJson,
+  deriveFiniteBoundCandidates,
+  verifyFiniteBoundInventory,
   verifyMatrixClosure,
 } from './verify-release-matrix-closure.mjs';
 
@@ -27,6 +31,15 @@ const untrackedEvidenceName = '.matrix-closure-untracked-self-test.tmp';
 const untrackedEvidencePath = join(projectRoot, untrackedEvidenceName);
 const symlinkEvidenceName = '.matrix-closure-symlink-self-test';
 const symlinkEvidencePath = join(projectRoot, symlinkEvidenceName);
+const finiteBoundProjectRoot = join(temporaryRoot, 'finite-bound-project');
+const finiteBoundInventoryPath = join(
+  finiteBoundProjectRoot,
+  'conformance/mcp-finite-bound-inventory.json',
+);
+const finiteBoundScanRoots = Object.freeze([
+  'src/main/java/com/soklet/**/*.java',
+  'src/main/java/com/soklet/Mcp*.java',
+]);
 
 const expectedUnresolvedIds = Object.freeze([
   'SOK-VALID-002',
@@ -73,6 +86,12 @@ function verifyFixture(path, options = {}) {
     projectRoot,
     manifestPath: options.manifestPath ?? manifestPath,
     registryPath: path,
+    ...(options.finiteBoundInventoryPath === undefined ? {}
+      : { finiteBoundInventoryPath: options.finiteBoundInventoryPath }),
+    ...(options.finiteBoundProjectRoot === undefined ? {}
+      : { finiteBoundProjectRoot: options.finiteBoundProjectRoot }),
+    ...(options.finiteBoundExpectedScanRoots === undefined ? {}
+      : { finiteBoundExpectedScanRoots: options.finiteBoundExpectedScanRoots }),
     ...(options.gitExecutable === undefined
       ? { gitExecutable: semanticGitExecutable() }
       : { gitExecutable: options.gitExecutable }),
@@ -97,7 +116,339 @@ function row(registry, id) {
   return value;
 }
 
+function finiteBoundClassification(candidate) {
+  return {
+    file: candidate.file,
+    key: candidate.key,
+    matcherRuleId: candidate.matcherRuleId,
+    member: candidate.member,
+    owner: candidate.owner,
+  };
+}
+
+function finiteBoundFixture(candidates) {
+  return {
+    bounds: [
+      {
+        boundaryTests: [],
+        category: 'SELF_TEST',
+        deterministicFailure: {
+          contract: 'Synthetic deterministic failure contract.',
+          stage: 'SELF_TEST',
+        },
+        enforcementOwners: [],
+        id: 'FINITE-SELF-001',
+        name: 'Synthetic finite-bound scanner coverage',
+        positiveTests: [],
+        sourceOwners: candidates
+          .map(finiteBoundClassification)
+          .sort((left, right) => left.key < right.key ? -1 : left.key > right.key ? 1 : 0),
+        values: {},
+      },
+    ],
+    formatVersion: 1,
+    matcherRules: clone(FINITE_BOUND_MATCHER_RULES),
+    productionProfile: '2026-07-28',
+    releaseTarget: '4.0.0',
+    reviewedExclusions: [],
+    scanRoots: [...finiteBoundScanRoots],
+  };
+}
+
+function writeFiniteBoundFixture(name, value) {
+  const path = join(
+    finiteBoundProjectRoot,
+    `conformance/mcp-finite-bound-inventory-${name}.json`,
+  );
+  writeFileSync(path, canonicalJson(value));
+  return path;
+}
+
+function verifyFiniteBoundFixture(path) {
+  return verifyFiniteBoundInventory({
+    expectedScanRoots: finiteBoundScanRoots,
+    inventoryPath: path,
+    projectRoot: finiteBoundProjectRoot,
+  });
+}
+
+function expectFiniteBoundInvalid(name, source, mutate, expected) {
+  const fixture = clone(source);
+  mutate(fixture);
+  const path = writeFiniteBoundFixture(name, fixture);
+  assert.throws(() => verifyFiniteBoundFixture(path), expected, name);
+}
+
+function reviewedExclusion(owner, id = 'FINITE-EX-001') {
+  return {
+    file: owner.file,
+    id,
+    key: owner.key,
+    matcherRuleId: owner.matcherRuleId,
+    member: owner.member,
+    owner: owner.owner,
+    rationale: 'Reviewed self-test exclusion with an exact declaration identity.',
+  };
+}
+
 try {
+  mkdirSync(dirname(finiteBoundInventoryPath), { recursive: true });
+  const finiteBoundSourceDirectory = join(
+    finiteBoundProjectRoot,
+    'src/main/java/com/soklet',
+  );
+  mkdirSync(finiteBoundSourceDirectory, { recursive: true });
+  writeFileSync(
+    join(finiteBoundSourceDirectory, 'McpFiniteBoundFixture.java'),
+    `/* package ignored.shadow; */
+package com.soklet;
+
+public final class McpFiniteBoundFixture {
+  static final String MASKED = "😃 static final int MAXIMUM_MASKED = 99;";
+  static final int MAXIMUM_ITEMS = 8;
+
+  record RequestLimits(int maximumNodes) {}
+
+  static int maximumFrameBytes(RequestLimits limits) {
+    return Math.addExact(limits.maximumNodes(), 8);
+  }
+
+  public static final class Builder {
+    public Builder maximumItems(int maximumItems) {
+      return this;
+    }
+  }
+}
+`,
+  );
+  const finiteBoundSyntaxRoot = join(temporaryRoot, 'finite-bound-syntax-project');
+  const finiteBoundSyntaxSourceDirectory = join(
+    finiteBoundSyntaxRoot,
+    'src/main/java/com/soklet',
+  );
+  mkdirSync(finiteBoundSyntaxSourceDirectory, { recursive: true });
+  writeFileSync(
+    join(finiteBoundSyntaxSourceDirectory, 'McpFiniteBoundSyntax.java'),
+    `package com.soklet;
+
+final class McpFiniteBoundSyntax {
+  final static int MAXIMUM_REORDERED = 8;
+  static final int MAXIMUM_FIRST = 8, MINIMUM_SECOND = 1;
+  static final int DERIVED_MARGIN = MAXIMUM_FIRST + 1;
+}
+`,
+  );
+  assert.deepEqual(
+    deriveFiniteBoundCandidates(finiteBoundSyntaxRoot, [
+      'src/main/java/com/soklet/Mcp*.java',
+    ]).map(({ matcherRuleId, member }) => ({ matcherRuleId, member })),
+    [
+      { matcherRuleId: 'FINITE-MATCH-001', member: 'MAXIMUM_FIRST' },
+      { matcherRuleId: 'FINITE-MATCH-001', member: 'MAXIMUM_REORDERED' },
+      { matcherRuleId: 'FINITE-MATCH-001', member: 'MINIMUM_SECOND' },
+      { matcherRuleId: 'FINITE-MATCH-004', member: 'DERIVED_MARGIN' },
+    ],
+  );
+  const finiteBoundCandidates = deriveFiniteBoundCandidates(
+    finiteBoundProjectRoot,
+    finiteBoundScanRoots,
+  );
+  assert.equal(finiteBoundCandidates.length, FINITE_BOUND_MATCHER_RULES.length);
+  assert.deepEqual(
+    Object.fromEntries(FINITE_BOUND_MATCHER_RULES.map(({ id }) => [
+      id,
+      finiteBoundCandidates.filter(({ matcherRuleId }) => matcherRuleId === id).length,
+    ])),
+    {
+      'FINITE-MATCH-001': 1,
+      'FINITE-MATCH-002': 1,
+      'FINITE-MATCH-003': 1,
+      'FINITE-MATCH-004': 1,
+    },
+  );
+  assert.deepEqual(
+    finiteBoundCandidates.map(({ matcherRuleId, member, owner }) => ({
+      matcherRuleId,
+      member,
+      owner,
+    })),
+    [
+      {
+        matcherRuleId: 'FINITE-MATCH-001',
+        member: 'MAXIMUM_ITEMS',
+        owner: 'com.soklet.McpFiniteBoundFixture',
+      },
+      {
+        matcherRuleId: 'FINITE-MATCH-002',
+        member: 'maximumNodes',
+        owner: 'com.soklet.McpFiniteBoundFixture.RequestLimits',
+      },
+      {
+        matcherRuleId: 'FINITE-MATCH-003',
+        member: 'maximumItems(int)',
+        owner: 'com.soklet.McpFiniteBoundFixture.Builder',
+      },
+      {
+        matcherRuleId: 'FINITE-MATCH-004',
+        member: 'maximumFrameBytes(RequestLimits)',
+        owner: 'com.soklet.McpFiniteBoundFixture',
+      },
+    ],
+  );
+  const finiteInventory = finiteBoundFixture(finiteBoundCandidates);
+  writeFileSync(finiteBoundInventoryPath, canonicalJson(finiteInventory));
+  const finiteBaseline = verifyFiniteBoundFixture(finiteBoundInventoryPath);
+  assert.deepEqual(finiteBaseline.candidates, finiteBoundCandidates);
+  assert.deepEqual(finiteBaseline.exclusions, []);
+
+  const finiteBoundSourceLinkRoot = join(
+    temporaryRoot,
+    'finite-bound-source-link-project',
+  );
+  mkdirSync(join(finiteBoundSourceLinkRoot, 'conformance'), { recursive: true });
+  writeFileSync(
+    join(finiteBoundSourceLinkRoot, 'conformance/mcp-finite-bound-inventory.json'),
+    canonicalJson(finiteInventory),
+  );
+  symlinkSync(
+    join(finiteBoundProjectRoot, 'src'),
+    join(finiteBoundSourceLinkRoot, 'src'),
+    'dir',
+  );
+  assert.throws(() => verifyFiniteBoundInventory({
+    expectedScanRoots: finiteBoundScanRoots,
+    projectRoot: finiteBoundSourceLinkRoot,
+  }), /Finite-bound source root src\/main\/java path must not contain symlinks/);
+
+  const finiteBoundInventoryLinkRoot = join(
+    temporaryRoot,
+    'finite-bound-inventory-link-project',
+  );
+  mkdirSync(finiteBoundInventoryLinkRoot, { recursive: true });
+  symlinkSync(
+    join(finiteBoundProjectRoot, 'conformance'),
+    join(finiteBoundInventoryLinkRoot, 'conformance'),
+    'dir',
+  );
+  assert.throws(() => verifyFiniteBoundInventory({
+    expectedScanRoots: finiteBoundScanRoots,
+    projectRoot: finiteBoundInventoryLinkRoot,
+  }), /Finite-bound inventory path must not contain symlinks/);
+
+  for (const { id } of FINITE_BOUND_MATCHER_RULES) {
+    expectFiniteBoundInvalid(
+      `omitted-${id.toLowerCase()}`,
+      finiteInventory,
+      (value) => {
+        const ownerIndex = value.bounds[0].sourceOwners.findIndex(
+          ({ matcherRuleId }) => matcherRuleId === id,
+        );
+        assert.notEqual(ownerIndex, -1);
+        value.bounds[0].sourceOwners.splice(ownerIndex, 1);
+      },
+      new RegExp(`omitted=\\[[^\\]]*${id}:`, 'u'),
+    );
+  }
+
+  expectFiniteBoundInvalid('extra-source-owner', finiteInventory, (value) => {
+    const extra = {
+      ...value.bounds[0].sourceOwners[0],
+      member: 'MAXIMUM_UNDECLARED',
+    };
+    extra.key = `${extra.matcherRuleId}:${extra.file}#${extra.owner}#${extra.member}`;
+    value.bounds[0].sourceOwners.push(extra);
+    value.bounds[0].sourceOwners.sort((left, right) =>
+      left.key < right.key ? -1 : left.key > right.key ? 1 : 0);
+  }, /extra=\[[^\]]*MAXIMUM_UNDECLARED/);
+  expectFiniteBoundInvalid('malformed-source-owner-key', finiteInventory, (value) => {
+    value.bounds[0].sourceOwners[0].key = 'FINITE-MATCH-001:wrong';
+  }, /\.key must be exactly/);
+  expectFiniteBoundInvalid('malformed-source-owner-member', finiteInventory, (value) => {
+    value.bounds[0].sourceOwners[0].member = 'not#atomic';
+  }, /\.member must be one exact Java declaration name/);
+  expectFiniteBoundInvalid('malformed-source-owner-owner', finiteInventory, (value) => {
+    value.bounds[0].sourceOwners[0].owner = 'UnqualifiedOwner';
+  }, /\.owner must be an exact qualified Java owner/);
+  expectFiniteBoundInvalid('unknown-source-owner-matcher', finiteInventory, (value) => {
+    value.bounds[0].sourceOwners[0].matcherRuleId = 'FINITE-MATCH-999';
+  }, /\.matcherRuleId is unknown/);
+  expectFiniteBoundInvalid('missing-source-owner-field', finiteInventory, (value) => {
+    delete value.bounds[0].sourceOwners[0].member;
+  }, /keys must be exactly/);
+  expectFiniteBoundInvalid('duplicate-source-owner', finiteInventory, (value) => {
+    value.bounds[0].sourceOwners.push(clone(value.bounds[0].sourceOwners[0]));
+    value.bounds[0].sourceOwners.sort((left, right) =>
+      left.key < right.key ? -1 : left.key > right.key ? 1 : 0);
+  }, /Finite-bound classification is duplicated/);
+
+  const finiteInventoryWithExclusion = clone(finiteInventory);
+  const [excludedOwner] = finiteInventoryWithExclusion.bounds[0].sourceOwners.splice(0, 1);
+  finiteInventoryWithExclusion.reviewedExclusions = [
+    reviewedExclusion(excludedOwner),
+  ];
+  const finiteExclusionPath = writeFiniteBoundFixture(
+    'exact-reviewed-exclusion',
+    finiteInventoryWithExclusion,
+  );
+  const finiteExclusionResult = verifyFiniteBoundFixture(finiteExclusionPath);
+  assert.equal(finiteExclusionResult.exclusions.length, 1);
+  assert.equal(finiteExclusionResult.exclusions[0].key, excludedOwner.key);
+  assert.equal(finiteExclusionResult.exclusions[0].owner, excludedOwner.owner);
+  assert.equal(finiteExclusionResult.exclusions[0].member, excludedOwner.member);
+  expectFiniteBoundInvalid(
+    'malformed-reviewed-exclusion-key',
+    finiteInventoryWithExclusion,
+    (value) => {
+      value.reviewedExclusions[0].member = 'DIFFERENT_MEMBER';
+    },
+    /\.key must be exactly/,
+  );
+  expectFiniteBoundInvalid(
+    'wildcard-reviewed-exclusion-member',
+    finiteInventoryWithExclusion,
+    (value) => {
+      value.reviewedExclusions[0].member = '*';
+    },
+    /\.member must be one exact Java declaration name/,
+  );
+  expectFiniteBoundInvalid(
+    'duplicate-reviewed-exclusion-id',
+    finiteInventory,
+    (value) => {
+      const excluded = value.bounds[0].sourceOwners.splice(0, 2);
+      value.reviewedExclusions = excluded
+        .map((owner) => reviewedExclusion(owner, 'FINITE-EX-001'))
+        .sort((left, right) => left.key < right.key ? -1 : left.key > right.key ? 1 : 0);
+    },
+    /reviewedExclusions\[1\]\.id is malformed or duplicated/,
+  );
+
+  expectFiniteBoundInvalid('finite-schema-extra-key', finiteInventory, (value) => {
+    value.extra = true;
+  }, /Finite-bound inventory keys must be exactly/);
+  expectFiniteBoundInvalid('finite-schema-version-drift', finiteInventory, (value) => {
+    value.formatVersion = 2;
+  }, /format, profile, or release target is invalid/);
+  expectFiniteBoundInvalid('finite-failure-contract-blank', finiteInventory, (value) => {
+    value.bounds[0].deterministicFailure.contract = '';
+  }, /deterministicFailure\.contract must be a nonblank/);
+  expectFiniteBoundInvalid('finite-matcher-description-drift', finiteInventory, (value) => {
+    value.matcherRules[0].description = 'Broadened prose matcher.';
+  }, /matcherRules do not match the executable matcher contract/);
+  expectFiniteBoundInvalid('finite-matcher-order-drift', finiteInventory, (value) => {
+    value.matcherRules.reverse();
+  }, /matcherRules do not match the executable matcher contract/);
+  expectFiniteBoundInvalid('finite-scan-roots-narrowed', finiteInventory, (value) => {
+    value.scanRoots = value.scanRoots.slice(1);
+  }, /Finite-bound scanRoots must match the frozen order exactly/);
+  expectFiniteBoundInvalid('finite-scan-roots-extra', finiteInventory, (value) => {
+    value.scanRoots.push('src/main/java/com/soklet/McpFiniteBound*.java');
+    value.scanRoots.sort();
+  }, /Finite-bound scanRoots must match the frozen order exactly/);
+  expectFiniteBoundInvalid('finite-scan-roots-reordered', finiteInventory, (value) => {
+    value.scanRoots.reverse();
+  }, /Finite-bound scanRoots must match the frozen order exactly/);
+
   const registryBytes = readFileSync(prepareSemanticGit(registryPath));
   const registryText = registryBytes.toString('utf8');
   const registry = JSON.parse(registryText);
@@ -450,6 +801,25 @@ try {
   assert.deepEqual(resolved.report.unresolvedRows, []);
   assert.deepEqual(resolved.report.rows, resolvedRegistry.rows);
   assert.equal(resolved.reportText, canonicalJson(resolved.report));
+
+  const resolvedWithFiniteBoundOverride = verifyFixture(resolvedPath, {
+    finiteBoundExpectedScanRoots: finiteBoundScanRoots,
+    finiteBoundInventoryPath,
+    finiteBoundProjectRoot,
+  });
+  assert.deepEqual(resolvedWithFiniteBoundOverride, resolved);
+
+  const matrixOmittedFiniteInventory = clone(finiteInventory);
+  matrixOmittedFiniteInventory.bounds[0].sourceOwners.shift();
+  const matrixOmittedFiniteInventoryPath = writeFiniteBoundFixture(
+    'matrix-integration-omitted-source-owner',
+    matrixOmittedFiniteInventory,
+  );
+  assert.throws(() => verifyFixture(resolvedPath, {
+    finiteBoundExpectedScanRoots: finiteBoundScanRoots,
+    finiteBoundInventoryPath: matrixOmittedFiniteInventoryPath,
+    finiteBoundProjectRoot,
+  }), /Finite-bound inventory differs from source derivation; omitted=/);
 
   const syntheticProgram = [
     `import { verifyMatrixClosure } from ${JSON.stringify(pathToFileURL(verifierPath).href)};`,

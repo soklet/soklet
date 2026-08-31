@@ -6,11 +6,13 @@ import {
   existsSync,
   lstatSync,
   readFileSync,
+  readdirSync,
   realpathSync,
 } from 'node:fs';
 import {
   dirname,
   isAbsolute,
+  join,
   posix,
   relative,
   resolve,
@@ -121,6 +123,80 @@ const ROW_KEYS = Object.freeze([
   'releaseGates',
   'reason',
 ]);
+const FINITE_BOUND_INVENTORY_PATH = 'conformance/mcp-finite-bound-inventory.json';
+const FINITE_BOUND_TOP_LEVEL_KEYS = Object.freeze([
+  'bounds',
+  'formatVersion',
+  'matcherRules',
+  'productionProfile',
+  'releaseTarget',
+  'reviewedExclusions',
+  'scanRoots',
+]);
+const FINITE_BOUND_KEYS = Object.freeze([
+  'boundaryTests',
+  'category',
+  'deterministicFailure',
+  'enforcementOwners',
+  'id',
+  'name',
+  'positiveTests',
+  'sourceOwners',
+  'values',
+]);
+const FINITE_BOUND_SOURCE_OWNER_KEYS = Object.freeze([
+  'file',
+  'key',
+  'matcherRuleId',
+  'member',
+  'owner',
+]);
+const FINITE_BOUND_EXCLUSION_KEYS = Object.freeze([
+  'file',
+  'id',
+  'key',
+  'matcherRuleId',
+  'member',
+  'owner',
+  'rationale',
+]);
+const FINITE_BOUND_FAILURE_KEYS = Object.freeze(['contract', 'stage']);
+export const FINITE_BOUND_SCAN_ROOTS = Object.freeze([
+  'src/main/java/com/soklet/DefaultMcp*.java',
+  'src/main/java/com/soklet/Mcp*.java',
+  'src/main/java/com/soklet/SokletProcessor.java',
+  'src/main/java/com/soklet/internal/mcp/**/*.java',
+]);
+export const FINITE_BOUND_MATCHER_RULES = Object.freeze([
+  Object.freeze({
+    description: 'Byte, short, int, long, BigInteger, or Duration fields explicitly declared with static and final in either modifier order whose identifier contains MAXIMUM or MINIMUM, plus derived declarations classified by FINITE-MATCH-004.',
+    family: 'NAMED_LIMIT_CONSTANT',
+    id: 'FINITE-MATCH-001',
+  }),
+  Object.freeze({
+    description: 'Components named maximum*, minimum*, *Capacity, *Concurrency, *Timeout, *Deadline, *Duration, *Interval, *Resolution, *Backlog, or *BufferSize on MCP records whose type name ends in Config, Configuration, or Limits.',
+    family: 'BOUND_BEARING_CONFIGURATION_COMPONENT',
+    id: 'FINITE-MATCH-002',
+  }),
+  Object.freeze({
+    description: 'Public methods on direct src/main/java/com/soklet/Mcp*.java Builder types whose method or parameter name matches the FINITE-MATCH-002 bound-name vocabulary; method members include declared parameter-type signatures.',
+    family: 'PUBLIC_BOUND_CONFIGURATION',
+    id: 'FINITE-MATCH-003',
+  }),
+  Object.freeze({
+    description: 'Derived or mirrored typed constants and computed methods, production JSON-limit projections, SokletProcessor copies, the HTTP framing allowance, and the localization callback-count mirror; this family takes priority over the other families.',
+    family: 'DERIVED_OR_MIRRORED_LIMIT',
+    id: 'FINITE-MATCH-004',
+  }),
+]);
+const FINITE_BOUND_MATCHER_IDS = new Set(
+  FINITE_BOUND_MATCHER_RULES.map(({ id }) => id),
+);
+const FINITE_BOUND_ID_PATTERN = /^FINITE-[A-Z0-9]+(?:-[A-Z0-9]+)*-\d{3}$/u;
+const FINITE_BOUND_EXCLUSION_ID_PATTERN = /^FINITE-EX-\d{3}$/u;
+const JAVA_OWNER_PATTERN = /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/u;
+const JAVA_MEMBER_PATTERN = /^[A-Za-z_$][\w$]*(?:\([^\r\n#]*\))?$/u;
+const BOUND_NAME_PATTERN = /^(?:maximum|minimum)[A-Z].*|^.*(?:Capacity|Concurrency|Timeout|Deadline|Duration|Interval|Resolution|Backlog|BufferSize)$/u;
 const TRACKED_REFERENCE_CACHE = new Map();
 
 export class MatrixClosureVerificationError extends Error {}
@@ -188,6 +264,705 @@ function readCanonicalJson(file, label) {
     fail(`${label} is not canonical two-space JSON.`);
   }
   return { bytes, value };
+}
+
+function nonblank(value, label) {
+  if (typeof value !== 'string' || value.trim().length === 0
+      || value.includes('\r') || value.includes('\n')) {
+    fail(`${label} must be a nonblank single-line string.`);
+  }
+}
+
+function normalizedCandidatePath(value, label) {
+  nonblank(value, label);
+  if (value.includes('\\') || isAbsolute(value)
+      || posix.normalize(value) !== value || value === '.'
+      || value.startsWith('../') || value.includes('/../')
+      || value === '.git' || value.startsWith('.git/')
+      || value === 'target' || value.startsWith('target/')) {
+    fail(`${label} must be a normalized candidate-relative path.`);
+  }
+}
+
+function requireContainedPath(root, path, label, expectedType) {
+  const normalizedRoot = resolve(root);
+  const normalizedPath = resolve(path);
+  const candidateRelative = relative(normalizedRoot, normalizedPath);
+  if (candidateRelative.length === 0 || isAbsolute(candidateRelative)
+      || candidateRelative === '..' || candidateRelative.startsWith(`..${sep}`)) {
+    fail(`${label} must be contained by the finite-bound project root.`);
+  }
+  if (!existsSync(normalizedRoot)) {
+    fail('Finite-bound project root does not exist.');
+  }
+  const rootStat = lstatSync(normalizedRoot);
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+    fail('Finite-bound project root must be a regular non-symlink directory.');
+  }
+  let current = normalizedRoot;
+  const segments = candidateRelative.split(sep);
+  for (const [index, segment] of segments.entries()) {
+    current = join(current, segment);
+    if (!existsSync(current)) fail(`${label} does not exist: ${current}`);
+    const stat = lstatSync(current);
+    if (stat.isSymbolicLink()) {
+      fail(`${label} path must not contain symlinks: ${current}`);
+    }
+    if (index < segments.length - 1 && !stat.isDirectory()) {
+      fail(`${label} parent must be a directory: ${current}`);
+    }
+    if (index === segments.length - 1
+        && ((expectedType === 'file' && !stat.isFile())
+          || (expectedType === 'directory' && !stat.isDirectory()))) {
+      fail(`${label} must be a regular ${expectedType}: ${current}`);
+    }
+  }
+}
+
+function finiteBoundKey(matcherRuleId, file, owner, member) {
+  return `${matcherRuleId}:${file}#${owner}#${member}`;
+}
+
+function maskJava(source) {
+  const characters = source.split('');
+  let state = 'code';
+  for (let index = 0; index < characters.length; index++) {
+    const current = characters[index];
+    const next = characters[index + 1];
+    if (state === 'code') {
+      if (current === '/' && next === '/') {
+        characters[index] = characters[index + 1] = ' ';
+        index++;
+        state = 'line-comment';
+      } else if (current === '/' && next === '*') {
+        characters[index] = characters[index + 1] = ' ';
+        index++;
+        state = 'block-comment';
+      } else if (source.slice(index, index + 3) === '\"\"\"') {
+        characters[index] = characters[index + 1] = characters[index + 2] = ' ';
+        index += 2;
+        state = 'text-block';
+      } else if (current === '"') {
+        characters[index] = ' ';
+        state = 'string';
+      } else if (current === '\'') {
+        characters[index] = ' ';
+        state = 'character';
+      }
+    } else if (state === 'line-comment') {
+      if (current === '\n' || current === '\r') state = 'code';
+      else characters[index] = ' ';
+    } else if (state === 'block-comment') {
+      if (current === '*' && next === '/') {
+        characters[index] = characters[index + 1] = ' ';
+        index++;
+        state = 'code';
+      } else if (current !== '\n' && current !== '\r') characters[index] = ' ';
+    } else if (state === 'text-block') {
+      if (current === '\\') {
+        characters[index] = ' ';
+        if (index + 1 < characters.length) characters[index + 1] = ' ';
+        index++;
+      } else if (source.slice(index, index + 3) === '\"\"\"') {
+        characters[index] = characters[index + 1] = characters[index + 2] = ' ';
+        index += 2;
+        state = 'code';
+      } else if (current !== '\n' && current !== '\r') {
+        characters[index] = ' ';
+      }
+    } else if (state === 'string' || state === 'character') {
+      if (current === '\\') {
+        characters[index] = ' ';
+        if (index + 1 < characters.length) characters[index + 1] = ' ';
+        index++;
+      } else if ((state === 'string' && current === '"')
+          || (state === 'character' && current === '\'')) {
+        characters[index] = ' ';
+        state = 'code';
+      } else if (current !== '\n' && current !== '\r') {
+        characters[index] = ' ';
+      }
+    }
+  }
+  return characters.join('');
+}
+
+function matchingDelimiter(source, opening, open, close) {
+  let depth = 0;
+  for (let index = opening; index < source.length; index++) {
+    if (source[index] === open) depth++;
+    else if (source[index] === close && --depth === 0) return index;
+  }
+  return -1;
+}
+
+function javaTypeScopes(structure) {
+  const scopes = [];
+  let delimiter = -1;
+  for (let opening = 0; opening < structure.length; opening++) {
+    const token = structure[opening];
+    if (token !== '{') {
+      if (token === ';' || token === '}') delimiter = opening;
+      continue;
+    }
+    const header = structure.slice(delimiter + 1, opening).trim();
+    const type = header.match(
+      /\b(?:class|record|interface|enum)\s+([A-Za-z_$][\w$]*)/u,
+    );
+    if (type) {
+      const closing = matchingDelimiter(structure, opening, '{', '}');
+      if (closing > opening) scopes.push({ closing, name: type[1], opening });
+    }
+    delimiter = opening;
+  }
+  return scopes;
+}
+
+function ownerAt(packageName, scopes, index, appendedType) {
+  const names = scopes
+    .filter(({ closing, opening }) => opening < index && closing > index)
+    .sort((left, right) => left.opening - right.opening)
+    .map(({ name }) => name);
+  if (appendedType !== undefined) names.push(appendedType);
+  if (packageName.length === 0 || names.length === 0) {
+    fail(`Finite-bound scanner cannot resolve Java owner at source offset ${index}.`);
+  }
+  return `${packageName}.${names.join('.')}`;
+}
+
+function splitTopLevel(value) {
+  const parts = [];
+  let start = 0;
+  const closingByOpening = new Map([
+    ['(', ')'],
+    ['[', ']'],
+    ['{', '}'],
+    ['<', '>'],
+  ]);
+  const stack = [];
+  for (let index = 0; index < value.length; index++) {
+    const token = value[index];
+    if (closingByOpening.has(token)) stack.push(closingByOpening.get(token));
+    else if (stack.at(-1) === token) stack.pop();
+    else if (token === ',' && stack.length === 0) {
+      parts.push(value.slice(start, index));
+      start = index + 1;
+    }
+  }
+  parts.push(value.slice(start));
+  return parts;
+}
+
+function parameterName(declaration) {
+  return declaration.trim().match(/([A-Za-z_$][\w$]*)\s*$/u)?.[1];
+}
+
+function methodMember(method, parameters, file, line) {
+  const parameterTypes = parameters.trim().length === 0 ? []
+    : splitTopLevel(parameters).map((parameter) => {
+      const declaration = parameter
+        .replace(/@[A-Za-z_$][\w$]*(?:\([^()]*(?:\([^()]*\)[^()]*)*\))?\s*/gu, '')
+        .replace(/\bfinal\s+/gu, '')
+        .trim();
+      const name = parameterName(declaration);
+      if (name === undefined) {
+        fail(`Finite-bound scanner cannot resolve a parameter at ${file}:${line}.`);
+      }
+      const type = declaration.slice(0, declaration.lastIndexOf(name))
+        .trim()
+        .replace(/\s+/gu, ' ');
+      if (type.length === 0 || /[\r\n#()]/u.test(type)) {
+        fail(`Finite-bound scanner cannot canonicalize a parameter type at ${file}:${line}.`);
+      }
+      return type;
+    });
+  return `${method}(${parameterTypes.join(',')})`;
+}
+
+function javaMethodScopes(source, structure, typeScopes) {
+  const packageName = structure.match(/\bpackage\s+([\w.]+)\s*;/u)?.[1] ?? '';
+  const typeNames = typeScopes.map(({ name }) => name);
+  const controls = new Set([
+    'catch', 'for', 'if', 'switch', 'synchronized', 'try', 'while',
+  ]);
+  const scopes = [];
+  let delimiter = -1;
+  for (let opening = 0; opening < structure.length; opening++) {
+    const token = structure[opening];
+    if (token !== '{') {
+      if (token === ';' || token === '}') delimiter = opening;
+      continue;
+    }
+    const header = structure.slice(delimiter + 1, opening).trim();
+    let method;
+    let parameters = '';
+    let publicMethod = false;
+    if (header.length > 0 && !header.includes('->')) {
+      const throwsRemoved = header.replace(/\bthrows\b[\s\S]*$/u, '').trim();
+      if (throwsRemoved.endsWith(')')) {
+        let depth = 0;
+        let parameterOpening = -1;
+        for (let index = throwsRemoved.length - 1; index >= 0; index--) {
+          if (throwsRemoved[index] === ')') depth++;
+          else if (throwsRemoved[index] === '(' && --depth === 0) {
+            parameterOpening = index;
+            break;
+          }
+        }
+        if (parameterOpening >= 0) {
+          const before = throwsRemoved.slice(0, parameterOpening);
+          const nameMatch = before.match(/([A-Za-z_$][\w$]*)\s*$/u);
+          if (nameMatch && !controls.has(nameMatch[1])) {
+            const nameOffset = before.lastIndexOf(nameMatch[1]);
+            const prior = before.slice(0, nameOffset).trimEnd();
+            if (!prior.endsWith('.') && !prior.endsWith('::')
+                && !/\b(?:class|record|interface|enum)\b/u.test(prior)
+                && !/\b(?:return|new|throw)\s*$/u.test(prior)) {
+              method = nameMatch[1];
+              parameters = throwsRemoved.slice(parameterOpening + 1, -1);
+              publicMethod = /\bpublic\b/u.test(prior);
+            }
+          }
+        }
+      } else {
+        const compact = header.match(/(?:^|\s)([A-Za-z_$][\w$]*)\s*$/u)?.[1];
+        if (compact && typeNames.includes(compact)
+            && !/\b(?:class|record|interface|enum)\b/u.test(header)
+            && !/[=().]/u.test(header)) method = compact;
+      }
+    }
+    const closing = matchingDelimiter(structure, opening, '{', '}');
+    if (method !== undefined && closing > opening) {
+      scopes.push({
+        body: structure.slice(opening + 1, closing),
+        line: source.slice(0, opening).split(/\r?\n/u).length,
+        method,
+        owner: ownerAt(packageName, typeScopes, opening),
+        parameters,
+        publicMethod,
+      });
+    }
+    delimiter = opening;
+  }
+  return scopes;
+}
+
+function globRegularExpression(pattern) {
+  let expression = '^';
+  for (let index = 0; index < pattern.length; index++) {
+    const token = pattern[index];
+    if (token === '*' && pattern[index + 1] === '*') {
+      if (pattern[index + 2] === '/') {
+        expression += '(?:[^/]+/)*';
+        index += 2;
+      } else {
+        expression += '.*';
+        index++;
+      }
+    } else if (token === '*') {
+      expression += '[^/]*';
+    } else if ('\\^$+?.()|{}[]'.includes(token)) {
+      expression += `\\${token}`;
+    } else {
+      expression += token;
+    }
+  }
+  return new RegExp(`${expression}$`, 'u');
+}
+
+function finiteBoundJavaFiles(root, scanRoots) {
+  if (!Array.isArray(scanRoots) || scanRoots.length === 0
+      || new Set(scanRoots).size !== scanRoots.length) {
+    fail('Finite-bound scanRoots must be a nonempty unique array.');
+  }
+  const sortedRoots = [...scanRoots].sort(compareAscii);
+  if (scanRoots.some((value, index) => value !== sortedRoots[index])) {
+    fail('Finite-bound scanRoots must be in ASCII order.');
+  }
+  for (const [index, pattern] of scanRoots.entries()) {
+    normalizedCandidatePath(pattern, `scanRoots[${index}]`);
+    if (!pattern.startsWith('src/main/java/') || !pattern.endsWith('.java')) {
+      fail(`Finite-bound scan root must select Java sources below src/main/java: ${pattern}`);
+    }
+  }
+  const sourceRoot = resolve(root, 'src/main/java');
+  requireContainedPath(
+    root,
+    sourceRoot,
+    'Finite-bound source root src/main/java',
+    'directory',
+  );
+  const files = [];
+  const visit = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })
+      .sort((left, right) => compareAscii(left.name, right.name))) {
+      const path = join(directory, entry.name);
+      const candidateRelative = relative(root, path).split(sep).join('/');
+      if (entry.isSymbolicLink()) {
+        fail(`Finite-bound source tree contains a symlink: ${candidateRelative}.`);
+      }
+      if (entry.isDirectory()) visit(path);
+      else if (entry.isFile() && entry.name.endsWith('.java')) files.push(path);
+    }
+  };
+  visit(sourceRoot);
+  const matchers = scanRoots.map(globRegularExpression);
+  const matched = new Set();
+  const selected = files.filter((path) => {
+    const candidateRelative = relative(root, path).split(sep).join('/');
+    let selectedFile = false;
+    for (const [index, matcher] of matchers.entries()) {
+      if (matcher.test(candidateRelative)) {
+        matched.add(index);
+        selectedFile = true;
+      }
+    }
+    return selectedFile;
+  });
+  for (const [index, pattern] of scanRoots.entries()) {
+    if (!matched.has(index)) fail(`Finite-bound scan root matches no source: ${pattern}.`);
+  }
+  return selected.sort(compareAscii);
+}
+
+function readJavaSource(root, path) {
+  const file = relative(root, path).split(sep).join('/');
+  const bytes = readFileSync(path);
+  const source = bytes.toString('utf8');
+  if (!Buffer.from(source, 'utf8').equals(bytes)) {
+    fail(`Finite-bound source is not valid UTF-8: ${file}.`);
+  }
+  return { file, source };
+}
+
+function derivedInitializer(file, name, initializer) {
+  if (file === 'src/main/java/com/soklet/DefaultMcpLocalizationCatalogExtractor.java'
+      && name === 'MAXIMUM_SUPPORTED_CALLBACK_COUNT') return true;
+  if (file === 'src/main/java/com/soklet/SokletProcessor.java'
+      && (/^MAXIMUM_MCP_/u.test(name)
+        || /^MCP_SCHEMA_PREFLIGHT_MAXIMUM_/u.test(name))) return true;
+  return /\b[A-Z0-9_]*(?:MAXIMUM|MINIMUM)[A-Z0-9_]*\b/u.test(initializer)
+    || /\.(?:maximum|minimum)[A-Z][\w$]*\s*\(/u.test(initializer)
+    || /\b(?:maximum|minimum)[A-Z][\w$]*\s*\(/u.test(initializer)
+    || /\.productionDefaults\s*\(/u.test(initializer);
+}
+
+function derivedMethod(scope) {
+  return /^(?:maximum|minimum)[A-Z]/u.test(scope.method)
+    && /(?:\bMath\.(?:addExact|max|min|multiplyExact|subtractExact)\s*\(|[-+*/])/u
+      .test(scope.body)
+    && /(?:\.(?:maximum|minimum)[A-Z][\w$]*\s*\(|\.productionDefaults\s*\(|\b[A-Z0-9_]*(?:MAXIMUM|MINIMUM)[A-Z0-9_]*\b)/u
+      .test(scope.body);
+}
+
+export function deriveFiniteBoundCandidates(root, scanRoots) {
+  const normalizedRoot = resolve(root);
+  const candidates = [];
+  const candidatesByKey = new Map();
+  const add = (candidate) => {
+    const key = finiteBoundKey(
+      candidate.matcherRuleId,
+      candidate.file,
+      candidate.owner,
+      candidate.member,
+    );
+    if (candidatesByKey.has(key)) {
+      fail(`Finite-bound scanner found a duplicate declaration key: ${key}.`);
+    }
+    const complete = { ...candidate, key };
+    candidatesByKey.set(key, complete);
+    candidates.push(complete);
+  };
+
+  for (const path of finiteBoundJavaFiles(normalizedRoot, scanRoots)) {
+    const { file, source } = readJavaSource(normalizedRoot, path);
+    const structure = maskJava(source);
+    const packageName = structure.match(/\bpackage\s+([\w.]+)\s*;/u)?.[1] ?? '';
+    const typeScopes = javaTypeScopes(structure);
+    const lineAt = (index) => source.slice(0, index).split(/\r?\n/u).length;
+
+    const finiteFieldPattern = /\b((?:(?:public|protected|private|static|final|transient|volatile)\s+|(?:@[A-Za-z_$][\w$]*(?:\([^)]*\))?)\s+)*)(?:(?:[A-Za-z_$][\w$]*\.)*(?:BigInteger|Duration)|byte|short|int|long)\s+([A-Za-z_$][\w$]*)\s*(?==|,|;)/gu;
+    for (const match of structure.matchAll(finiteFieldPattern)) {
+      const modifiers = match[1];
+      if (!/\bstatic\b/u.test(modifiers) || !/\bfinal\b/u.test(modifiers)) continue;
+      const firstName = match[2];
+      const firstNameOffset = match.index + match[0].lastIndexOf(firstName);
+      const declarationEnd = structure.indexOf(';', firstNameOffset);
+      if (declarationEnd < 0) {
+        fail(`Finite-bound scanner found an unterminated field ${firstName} in ${file}.`);
+      }
+      const declaration = structure.slice(firstNameOffset, declarationEnd);
+      let declarationOffset = 0;
+      for (const declarator of splitTopLevel(declaration)) {
+        const partOffset = declaration.indexOf(declarator, declarationOffset);
+        declarationOffset = partOffset + declarator.length + 1;
+        const parsed = declarator.trim().match(
+          /^([A-Za-z_$][\w$]*)\s*=\s*([\s\S]*)$/u,
+        );
+        const possibleName = declarator.trim().match(
+          /^([A-Za-z_$][\w$]*)/u,
+        )?.[1];
+        if (parsed === null) {
+          if (possibleName !== undefined
+              && /(?:MAXIMUM|MINIMUM)/u.test(possibleName)) {
+            fail(`Finite-bound field ${possibleName} in ${file} must have an initializer.`);
+          }
+          continue;
+        }
+        const [, name, initializer] = parsed;
+        const nameOffset = firstNameOffset + partOffset
+          + declarator.indexOf(name);
+        const framingAllowance = file
+          === 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpTransportConfiguration.java'
+          && name === 'HTTP_FRAMING_ALLOWANCE_BYTES';
+        const derived = derivedInitializer(file, name, initializer);
+        if (!/(?:MAXIMUM|MINIMUM)/u.test(name) && !framingAllowance && !derived) {
+          continue;
+        }
+        add({
+          file,
+          line: lineAt(nameOffset),
+          matcherRuleId: framingAllowance || derived
+            ? 'FINITE-MATCH-004' : 'FINITE-MATCH-001',
+          member: name,
+          owner: ownerAt(packageName, typeScopes, nameOffset),
+        });
+      }
+    }
+
+    const productionLimitsPattern = /\bstatic\s+final\s+(?:(?:@[A-Za-z_$][\w$]*(?:\([^)]*\))?)\s+)*(?:[A-Za-z_$][\w$]*\.)*McpJsonLimits\s+(PRODUCTION_LIMITS)\s*=/gu;
+    for (const match of structure.matchAll(productionLimitsPattern)) {
+      const initializerStart = match.index + match[0].length;
+      const initializerEnd = structure.indexOf(';', initializerStart);
+      if (initializerEnd < 0
+          || !/\bMcpJsonLimits\.productionDefaults\s*\(/u.test(
+            structure.slice(initializerStart, initializerEnd),
+          )) continue;
+      add({
+        file,
+        line: lineAt(match.index),
+        matcherRuleId: 'FINITE-MATCH-004',
+        member: match[1],
+        owner: ownerAt(packageName, typeScopes, match.index),
+      });
+    }
+
+    const recordPattern = /\brecord\s+([A-Za-z_$][\w$]*)\s*\(/gu;
+    for (const match of structure.matchAll(recordPattern)) {
+      const recordName = match[1];
+      if (!/(?:Config|Configuration|Limits)$/u.test(recordName)) continue;
+      const opening = structure.indexOf('(', match.index);
+      const closing = matchingDelimiter(structure, opening, '(', ')');
+      if (closing < 0) {
+        fail(`Finite-bound scanner found an unterminated record ${recordName} in ${file}.`);
+      }
+      const owner = ownerAt(packageName, typeScopes, match.index, recordName);
+      for (const component of splitTopLevel(
+        structure.slice(opening + 1, closing),
+      )) {
+        const member = parameterName(component);
+        if (member === undefined || !BOUND_NAME_PATTERN.test(member)) continue;
+        add({
+          file,
+          line: lineAt(match.index),
+          matcherRuleId: 'FINITE-MATCH-002',
+          member,
+          owner,
+        });
+      }
+    }
+
+    const methods = javaMethodScopes(source, structure, typeScopes);
+    for (const scope of methods) {
+      if (derivedMethod(scope)) {
+        const member = methodMember(scope.method, scope.parameters, file, scope.line);
+        add({
+          file,
+          line: scope.line,
+          matcherRuleId: 'FINITE-MATCH-004',
+          member,
+          owner: scope.owner,
+        });
+        continue;
+      }
+      const directPublicMcpSource = /^src\/main\/java\/com\/soklet\/Mcp[^/]*\.java$/u
+        .test(file);
+      const builderOwner = scope.owner.endsWith('.Builder');
+      const parameterNames = splitTopLevel(scope.parameters)
+        .map(parameterName)
+        .filter((value) => value !== undefined);
+      if (directPublicMcpSource && builderOwner && scope.publicMethod
+          && (BOUND_NAME_PATTERN.test(scope.method)
+            || parameterNames.some((name) => BOUND_NAME_PATTERN.test(name)))) {
+        const member = methodMember(scope.method, scope.parameters, file, scope.line);
+        add({
+          file,
+          line: scope.line,
+          matcherRuleId: 'FINITE-MATCH-003',
+          member,
+          owner: scope.owner,
+        });
+      }
+    }
+  }
+  return candidates.sort((left, right) => compareAscii(left.key, right.key));
+}
+
+function validateFiniteClassification(row, label) {
+  assertExactKeys(row, FINITE_BOUND_SOURCE_OWNER_KEYS, label);
+  normalizedCandidatePath(row.file, `${label}.file`);
+  nonblank(row.owner, `${label}.owner`);
+  nonblank(row.member, `${label}.member`);
+  if (!JAVA_OWNER_PATTERN.test(row.owner)) {
+    fail(`${label}.owner must be an exact qualified Java owner.`);
+  }
+  if (!JAVA_MEMBER_PATTERN.test(row.member)) {
+    fail(`${label}.member must be one exact Java declaration name.`);
+  }
+  if (!FINITE_BOUND_MATCHER_IDS.has(row.matcherRuleId)) {
+    fail(`${label}.matcherRuleId is unknown.`);
+  }
+  const expectedKey = finiteBoundKey(
+    row.matcherRuleId,
+    row.file,
+    row.owner,
+    row.member,
+  );
+  if (row.key !== expectedKey) {
+    fail(`${label}.key must be exactly ${expectedKey}.`);
+  }
+}
+
+export function verifyFiniteBoundInventory(options = {}) {
+  const defaultRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+  const projectRoot = resolve(options.projectRoot ?? defaultRoot);
+  const inventoryPath = resolve(
+    options.inventoryPath
+      ?? resolve(projectRoot, FINITE_BOUND_INVENTORY_PATH),
+  );
+  requireContainedPath(
+    projectRoot,
+    inventoryPath,
+    'Finite-bound inventory',
+    'file',
+  );
+  const { value: inventory } = readCanonicalJson(
+    inventoryPath,
+    'Finite-bound inventory',
+  );
+  assertExactKeys(
+    inventory,
+    FINITE_BOUND_TOP_LEVEL_KEYS,
+    'Finite-bound inventory',
+  );
+  if (inventory.formatVersion !== 1
+      || inventory.productionProfile !== EXPECTED_PROTOCOL_VERSION
+      || inventory.releaseTarget !== '4.0.0') {
+    fail('Finite-bound inventory format, profile, or release target is invalid.');
+  }
+  if (JSON.stringify(inventory.matcherRules)
+      !== JSON.stringify(FINITE_BOUND_MATCHER_RULES)) {
+    fail('Finite-bound matcherRules do not match the executable matcher contract.');
+  }
+  const expectedScanRoots = options.expectedScanRoots
+    ?? FINITE_BOUND_SCAN_ROOTS;
+  assertExactArray(
+    inventory.scanRoots,
+    expectedScanRoots,
+    'Finite-bound scanRoots',
+  );
+  const candidates = deriveFiniteBoundCandidates(
+    projectRoot,
+    expectedScanRoots,
+  );
+  if (!Array.isArray(inventory.bounds) || inventory.bounds.length === 0) {
+    fail('Finite-bound inventory bounds must be a nonempty array.');
+  }
+  const boundIds = new Set();
+  const classifications = [];
+  for (const [boundIndex, bound] of inventory.bounds.entries()) {
+    const label = `bounds[${boundIndex}]`;
+    assertExactKeys(bound, FINITE_BOUND_KEYS, label);
+    if (typeof bound.id !== 'string' || !FINITE_BOUND_ID_PATTERN.test(bound.id)
+        || FINITE_BOUND_EXCLUSION_ID_PATTERN.test(bound.id)
+        || boundIds.has(bound.id)) {
+      fail(`${label}.id is malformed or duplicated.`);
+    }
+    boundIds.add(bound.id);
+    for (const field of ['category', 'name']) nonblank(bound[field], `${label}.${field}`);
+    assertExactKeys(
+      bound.deterministicFailure,
+      FINITE_BOUND_FAILURE_KEYS,
+      `${label}.deterministicFailure`,
+    );
+    for (const field of FINITE_BOUND_FAILURE_KEYS) {
+      nonblank(
+        bound.deterministicFailure[field],
+        `${label}.deterministicFailure.${field}`,
+      );
+    }
+    if (!Array.isArray(bound.sourceOwners) || bound.sourceOwners.length === 0) {
+      fail(`${bound.id}.sourceOwners must be a nonempty array.`);
+    }
+    const sortedOwnerKeys = bound.sourceOwners.map(({ key }) => key)
+      .sort(compareAscii);
+    for (const [ownerIndex, owner] of bound.sourceOwners.entries()) {
+      const ownerLabel = `${bound.id}.sourceOwners[${ownerIndex}]`;
+      validateFiniteClassification(owner, ownerLabel);
+      if (owner.key !== sortedOwnerKeys[ownerIndex]) {
+        fail(`${bound.id}.sourceOwners must be in ASCII key order.`);
+      }
+      classifications.push({ ...owner, location: ownerLabel });
+    }
+  }
+  if (!Array.isArray(inventory.reviewedExclusions)) {
+    fail('Finite-bound reviewedExclusions must be an array.');
+  }
+  const exclusionIds = new Set();
+  const sortedExclusionKeys = inventory.reviewedExclusions.map(({ key }) => key)
+    .sort(compareAscii);
+  for (const [index, exclusion] of inventory.reviewedExclusions.entries()) {
+    const label = `reviewedExclusions[${index}]`;
+    assertExactKeys(exclusion, FINITE_BOUND_EXCLUSION_KEYS, label);
+    const classification = {
+      file: exclusion.file,
+      key: exclusion.key,
+      matcherRuleId: exclusion.matcherRuleId,
+      member: exclusion.member,
+      owner: exclusion.owner,
+    };
+    validateFiniteClassification(classification, label);
+    if (typeof exclusion.id !== 'string'
+        || !FINITE_BOUND_EXCLUSION_ID_PATTERN.test(exclusion.id)
+        || exclusionIds.has(exclusion.id)) {
+      fail(`${label}.id is malformed or duplicated.`);
+    }
+    exclusionIds.add(exclusion.id);
+    nonblank(exclusion.rationale, `${label}.rationale`);
+    if (exclusion.key !== sortedExclusionKeys[index]) {
+      fail('Finite-bound reviewedExclusions must be in ASCII key order.');
+    }
+    classifications.push({ ...classification, location: label });
+  }
+  const classificationsByKey = new Map();
+  for (const classification of classifications) {
+    if (classificationsByKey.has(classification.key)) {
+      fail(`Finite-bound classification is duplicated at ${classificationsByKey.get(classification.key).location} and ${classification.location}: ${classification.key}.`);
+    }
+    classificationsByKey.set(classification.key, classification);
+  }
+  const candidatesByKey = new Map(candidates.map((candidate) =>
+    [candidate.key, candidate]));
+  const omitted = candidates.filter(({ key }) => !classificationsByKey.has(key));
+  const extra = classifications.filter(({ key }) => !candidatesByKey.has(key));
+  if (omitted.length > 0 || extra.length > 0) {
+    fail(`Finite-bound inventory differs from source derivation; omitted=[${omitted.map(({ key, line }) => `${key}@${line}`).join(', ')}], extra=[${extra.map(({ key }) => key).join(', ')}].`);
+  }
+  return {
+    candidates,
+    exclusions: inventory.reviewedExclusions,
+    inventory,
+  };
 }
 
 function readManifest(file) {
@@ -435,6 +1210,15 @@ function validateRegistry(registry, projectRoot, manifest, gitExecutable) {
 export function verifyMatrixClosure(options = {}) {
   const defaultRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
   const projectRoot = resolve(options.projectRoot ?? defaultRoot);
+  const finiteBoundProjectRoot = resolve(
+    options.finiteBoundProjectRoot ?? projectRoot,
+  );
+  const finiteBoundInventoryPath = resolve(
+    options.finiteBoundInventoryPath
+      ?? resolve(finiteBoundProjectRoot, FINITE_BOUND_INVENTORY_PATH),
+  );
+  const finiteBoundExpectedScanRoots = options.finiteBoundExpectedScanRoots
+    ?? FINITE_BOUND_SCAN_ROOTS;
   const registryPath = resolve(
     options.registryPath ?? resolve(projectRoot, 'release/mcp-conformance-matrix-closure.json'),
   );
@@ -442,6 +1226,11 @@ export function verifyMatrixClosure(options = {}) {
     options.manifestPath ?? resolve(projectRoot, 'release/release-validation-manifest.json'),
   );
   const manifest = readManifest(manifestPath);
+  verifyFiniteBoundInventory({
+    expectedScanRoots: finiteBoundExpectedScanRoots,
+    inventoryPath: finiteBoundInventoryPath,
+    projectRoot: finiteBoundProjectRoot,
+  });
   const gitExecutable = options.gitExecutable ?? 'git';
   if (typeof gitExecutable !== 'string' || gitExecutable.length === 0) {
     fail('gitExecutable must be a nonempty string.');
