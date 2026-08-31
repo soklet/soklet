@@ -26,6 +26,14 @@ The API-diff gate regenerates the set and compares it in both directions, so an 
 The aggregate API-freeze wrapper also runs the MCP metadata-builder inventory and the independent protocol-profile evidence verifier/self-test. The latter binds the sole package-private production `2026-07-28` profile authority to its specification, schema, official-conformance, scenario, golden, and interoperability pins.
 It changes no public descriptor or freeze owner: a test-only registry seam is package-private and unreachable from public configuration or production defaults.
 
+The public protection API is reconciled with the exact runtime contract in the
+[request-state security profile](../../release/MCP_REQUEST_STATE_SECURITY_PROFILE.md)
+and [key-rotation runbook](../../release/MCP_REQUEST_STATE_KEY_ROTATION_RUNBOOK.md).
+Those documents bind `McpProtectionConfig`, `McpProtectionControl`, and
+`McpRequestStateProtectionContext` to the production crypto vectors,
+rejection tests, and node-local publication/race tests without adding an API
+owner or changing a frozen descriptor.
+
 `phase-0-incompatibilities.jsonl` is the immutable 566-record historical removal surface from deleting the legacy MCP implementation. It initially
 matched the then-current set, but it intentionally does not evolve as the
 greenfield implementation reuses legacy names or adds new API.

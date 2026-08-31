@@ -19,8 +19,14 @@ package com.soklet;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import javax.crypto.Cipher;
+import javax.crypto.Mac;
+import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+import java.io.ByteArrayOutputStream;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -455,6 +461,121 @@ public class McpSecurityControlsTests {
 	}
 
 	@Test
+	public void builtInProfilePinsKdfAeadHeaderCiphertextAndTag()
+			throws Exception {
+		DefaultMcpSecurityControls controls = deterministicControls(
+				protectionConfig("active", 0), bytesFromLength(64, 24),
+				bytesFromLength(96, 12));
+		McpRequestStateProtectionContext context = protectionContext(32);
+		byte[] plaintext = "{\"state\":\"ok\"}"
+				.getBytes(StandardCharsets.UTF_8);
+		byte[] envelope = envelope(controls.sealRequestState(context, plaintext));
+		int headerLength = 1 + 1 + "active".length() + 1
+				+ "soklet-mcp-protection-v1".length() + 32 + 12;
+		byte[] header = Arrays.copyOfRange(envelope, 0, headerLength);
+		byte[] sealerEpoch = Arrays.copyOfRange(header,
+				headerLength - 12 - 32, headerLength - 12);
+		byte[] nonce = Arrays.copyOfRange(header,
+				headerLength - 12, headerLength);
+		byte[] ciphertext = Arrays.copyOfRange(envelope, headerLength,
+				envelope.length - 16);
+		byte[] tag = Arrays.copyOfRange(envelope,
+				envelope.length - 16, envelope.length);
+
+		Assertions.assertEquals(
+				"010661637469766518736f6b6c65742d6d63702d70726f74656374696f6e2d7631"
+						+ "404142434445464748494a4b4c4d4e4f50515253545556570000000000000000"
+						+ "606162636465666768696a6b",
+				HexFormat.of().formatHex(header));
+		Assertions.assertEquals("3521814e7915bc5dbeb62f865723",
+				HexFormat.of().formatHex(ciphertext));
+		Assertions.assertEquals("d36248da9ccacdf2a4939ee49c87f564",
+				HexFormat.of().formatHex(tag));
+
+		byte[] salt = MessageDigest.getInstance("SHA-256").digest(
+				"soklet-mcp-protection-v1\0"
+						.getBytes(StandardCharsets.US_ASCII));
+		Assertions.assertEquals(
+				"e32752b853923d1dec2b9fd7f9c6768d7669006cf82dc8a4bc5ffd1fb167e99c",
+				HexFormat.of().formatHex(salt));
+		byte[] prk = hmacSha256(salt, bytesFrom(0));
+		Assertions.assertEquals(
+				"d475b6dd059c218b22c4fc1bd3277462abb8e25482a65edaa3066d1437dff53a",
+				HexFormat.of().formatHex(prk));
+		byte[] derivedKey = hmacSha256(prk, concatenate(
+				"soklet-mcp-request-state-aead-v1\0"
+						.getBytes(StandardCharsets.US_ASCII),
+				sealerEpoch, new byte[]{1}));
+		Assertions.assertEquals(
+				"6afbea4eb96db3a304ae39bde5e8e30faa29fb5babc2220f7cfec6a9aeb5afda",
+				HexFormat.of().formatHex(derivedKey));
+
+		byte[] associatedData = associatedData(header,
+				context.getAssociatedData());
+		Assertions.assertEquals(
+				"736f6b6c65742d6d63702d726571756573742d73746174652d67636d2d6161642d7631"
+						+ "000000004d"
+						+ "010661637469766518736f6b6c65742d6d63702d70726f74656374696f6e2d7631"
+						+ "404142434445464748494a4b4c4d4e4f50515253545556570000000000000000"
+						+ "606162636465666768696a6b"
+						+ "00000020202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+				HexFormat.of().formatHex(associatedData));
+		Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+		cipher.init(Cipher.DECRYPT_MODE,
+				new SecretKeySpec(derivedKey, "AES"),
+				new GCMParameterSpec(128, nonce));
+		cipher.updateAAD(associatedData);
+		Assertions.assertArrayEquals(plaintext,
+				cipher.doFinal(envelope, headerLength,
+						envelope.length - headerLength));
+	}
+
+	@Test
+	public void builtInStructureRejectsInvalidAndUnknownKeyIdsAndOtherProfiles()
+			throws Exception {
+		DefaultMcpSecurityControls controls = deterministicControls(
+				protectionConfig("active", 0), bytesFromLength(64, 24),
+				bytesFromLength(96, 12));
+		McpRequestStateProtectionContext context = protectionContext(32);
+		byte[] valid = envelope(controls.sealRequestState(context,
+				new byte[]{1}));
+
+		byte[] emptyKeyId = valid.clone();
+		emptyKeyId[1] = 0;
+		assertInvalidState(() -> controls.validateRequestStateStructure(
+				protectedState(emptyKeyId)));
+		byte[] oversizedKeyId = valid.clone();
+		oversizedKeyId[1] = 65;
+		assertInvalidState(() -> controls.validateRequestStateStructure(
+				protectedState(oversizedKeyId)));
+		byte[] invalidKeyId = valid.clone();
+		invalidKeyId[2] = ' ';
+		assertInvalidState(() -> controls.validateRequestStateStructure(
+				protectedState(invalidKeyId)));
+		byte[] nonAsciiKeyId = valid.clone();
+		nonAsciiKeyId[2] = (byte) 0x80;
+		assertInvalidState(() -> controls.validateRequestStateStructure(
+				protectedState(nonAsciiKeyId)));
+
+		byte[] unknownKeyId = valid.clone();
+		System.arraycopy("absent".getBytes(StandardCharsets.US_ASCII), 0,
+				unknownKeyId, 2, "active".length());
+		String unknownKeyState = protectedState(unknownKeyId);
+		controls.validateRequestStateStructure(unknownKeyState);
+		assertInvalidState(() -> controls.openRequestState(
+				context, unknownKeyState));
+
+		byte[] alternateProfile = valid.clone();
+		int profileOffset = 2 + "active".length() + 1;
+		System.arraycopy("soklet-mcp-protection-v2"
+				.getBytes(StandardCharsets.US_ASCII), 0,
+				alternateProfile, profileOffset,
+				"soklet-mcp-protection-v2".length());
+		assertInvalidState(() -> controls.validateRequestStateStructure(
+				protectedState(alternateProfile)));
+	}
+
+	@Test
 	public void builtInStructureRejectsNoncanonicalAndMalformedEnvelopes()
 			throws Exception {
 		DefaultMcpSecurityControls controls = deterministicControls(
@@ -632,6 +753,10 @@ public class McpSecurityControlsTests {
 			controls.rotateTo(protectionKey("second", 32));
 			assertWiped(retiredSealerSecrets);
 			assertLive(formerMasterKey);
+			String newState = controls.sealRequestState(context, new byte[]{2});
+			Assertions.assertEquals("second", keyId(newState));
+			Assertions.assertArrayEquals(new byte[]{2},
+					controls.openRequestState(context, newState));
 			Assertions.assertThrows(McpKeyInUseException.class,
 					() -> controls.removeVerificationKey("first"));
 			assertLive(formerMasterKey);
@@ -1334,15 +1459,63 @@ public class McpSecurityControlsTests {
 	}
 
 	private static long epochNumber(String protectedState) {
-		String suffix = protectedState.substring(
-				DefaultMcpSecurityControls.REQUEST_STATE_PREFIX.length());
-		byte[] envelope = Base64.getUrlDecoder().decode(suffix);
+		byte[] envelope = envelope(protectedState);
 		int keyIdLength = Byte.toUnsignedInt(envelope[1]);
 		int offset = 2 + keyIdLength + 1 + 24 + 24;
 		long value = 0L;
 		for (int index = 0; index < 8; ++index)
 			value = (value << 8) | Byte.toUnsignedLong(envelope[offset + index]);
 		return value;
+	}
+
+	private static String keyId(String protectedState) {
+		byte[] envelope = envelope(protectedState);
+		int keyIdLength = Byte.toUnsignedInt(envelope[1]);
+		return new String(envelope, 2, keyIdLength, StandardCharsets.US_ASCII);
+	}
+
+	private static byte[] envelope(String protectedState) {
+		String suffix = protectedState.substring(
+				DefaultMcpSecurityControls.REQUEST_STATE_PREFIX.length());
+		return Base64.getUrlDecoder().decode(suffix);
+	}
+
+	private static String protectedState(byte[] envelope) {
+		return DefaultMcpSecurityControls.REQUEST_STATE_PREFIX
+				+ Base64.getUrlEncoder().withoutPadding().encodeToString(envelope);
+	}
+
+	private static byte[] hmacSha256(byte[] key, byte[] value)
+			throws Exception {
+		Mac mac = Mac.getInstance("HmacSHA256");
+		mac.init(new SecretKeySpec(key, "HmacSHA256"));
+		return mac.doFinal(value);
+	}
+
+	private static byte[] concatenate(byte[]... values) {
+		ByteArrayOutputStream output = new ByteArrayOutputStream();
+		for (byte[] value : values)
+			output.writeBytes(value);
+		return output.toByteArray();
+	}
+
+	private static byte[] associatedData(byte[] header, byte[] binding) {
+		ByteArrayOutputStream output = new ByteArrayOutputStream();
+		output.writeBytes("soklet-mcp-request-state-gcm-aad-v1\0"
+				.getBytes(StandardCharsets.US_ASCII));
+		writeUnsignedInt(output, header.length);
+		output.writeBytes(header);
+		writeUnsignedInt(output, binding.length);
+		output.writeBytes(binding);
+		return output.toByteArray();
+	}
+
+	private static void writeUnsignedInt(ByteArrayOutputStream output,
+			int value) {
+		output.write((value >>> 24) & 0xFF);
+		output.write((value >>> 16) & 0xFF);
+		output.write((value >>> 8) & 0xFF);
+		output.write(value & 0xFF);
 	}
 
 	private static byte[] bytesFromLength(int firstByte, int length) {

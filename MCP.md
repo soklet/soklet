@@ -459,6 +459,13 @@ Choose framework protection explicitly:
   `McpRequestStateProtectionContext`; Soklet still owns canonical JSON,
   binding, size, lifetime, round, and prior-request-ID checks.
 
+The [built-in request-state security profile](release/MCP_REQUEST_STATE_SECURITY_PROFILE.md)
+is authoritative for the sole `soklet-mcp-protection-v1` spelling, frozen
+HKDF-SHA-256 labels, AES-256-GCM envelope and associated data, canonical
+plaintext, and rejection rules. Production operators should use the
+[key-rotation runbook](release/MCP_REQUEST_STATE_KEY_ROTATION_RUNBOOK.md) for
+the exact stage/compare/activate/drain/remove and rollback sequence.
+
 The defaults are 65,536 encoded bytes, 49,152 decoded bytes, a 15-minute
 lifetime, and 10 rounds; `McpProtectionConfig.Builder` can lower or raise them
 within its validated contract. Framework state is bound to the normalized

@@ -221,6 +221,13 @@ supports live stage/activate/remove rotation through `McpProtectionControl`.
 For a fleet, stage the identical new key everywhere, compare secret-free
 snapshots, activate it everywhere, wait at least the configured state lifetime
 and for outstanding sealing reservations, then remove the former key.
+The exact [built-in cryptographic profile](release/MCP_REQUEST_STATE_SECURITY_PROFILE.md)
+and [production rotation runbook](release/MCP_REQUEST_STATE_KEY_ROTATION_RUNBOOK.md)
+define the frozen labels, envelope, binding, vectors, publication boundary,
+drain check, rollback, and emergency-revocation procedure. In particular, a
+ring fingerprint proves complete configuration equality but does not prove
+that sealing reservations have drained; removal is the authoritative drain
+check and must be retried after `McpKeyInUseException`.
 
 `withDevelopmentEphemeralProtection()` is an explicit development convenience.
 Its state is process-local and becomes unreadable after restart or on another

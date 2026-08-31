@@ -94,6 +94,23 @@ The registry contains 263 rows. `MCP-CAP-005` is the nineteenth
 warning SHOULD across logging and developer-tooling channels; its N/A closure
 reason remains empty. The five unrelated `UNRESOLVED` rows remain unchanged.
 
+Two candidate-contained MCP-C artifacts now make the request-state rows
+reviewable without changing their matrix dispositions prematurely:
+
+- [MCP_REQUEST_STATE_SECURITY_PROFILE.md](MCP_REQUEST_STATE_SECURITY_PROFILE.md)
+  binds the sole built-in profile, exact cryptographic components, envelope,
+  associated data, canonical plaintext, and rejection behavior to executable
+  vectors; and
+- [MCP_REQUEST_STATE_KEY_ROTATION_RUNBOOK.md](MCP_REQUEST_STATE_KEY_ROTATION_RUNBOOK.md)
+  binds fleet sequencing, node-local atomic publication, old/new reservation
+  races, demotion, drain/removal, rollback, and emergency revocation to the
+  exact rotation tests.
+
+`SOK-STATE-002` and `SOK-STATE-007` remain `UNRESOLVED` in the current closure
+registry until the final atomic MCP-C regeneration lands every row's own
+evidence and matching verifier constants. These documents do not borrow a
+release-gate result or claim third-party security audit.
+
 Lifecycle-bound test and process-harness closure is tracked separately in
 `release/lifecycle-bound-harness-inventory.json`. Its verifier binds the
 accepted-D1 legacy shutdown-timeout baseline, a line-addressed current-source
