@@ -19,6 +19,7 @@ package com.soklet;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -621,20 +622,165 @@ public class McpSecurityControlsTests {
 			Future<String> oldSeal = executor.submit(() ->
 					controls.sealRequestState(context, new byte[]{1}));
 			Assertions.assertTrue(entropy.nonceEntered.await(5, TimeUnit.SECONDS));
+			byte[] formerMasterKey = activeProtectionKeyMaterialReference(
+					controls);
+			byte[][] retiredSealerSecrets = activeSealerSecretReferences(
+					controls);
+			assertLive(formerMasterKey);
+			assertLive(retiredSealerSecrets);
+
 			controls.rotateTo(protectionKey("second", 32));
+			assertWiped(retiredSealerSecrets);
+			assertLive(formerMasterKey);
 			Assertions.assertThrows(McpKeyInUseException.class,
 					() -> controls.removeVerificationKey("first"));
+			assertLive(formerMasterKey);
 			entropy.releaseNonce.countDown();
 			String oldState = oldSeal.get(5, TimeUnit.SECONDS);
 			Assertions.assertArrayEquals(new byte[]{1},
 					controls.openRequestState(context, oldState));
 			Assertions.assertTrue(controls.removeVerificationKey("first"));
+			assertWiped(formerMasterKey);
 			assertInvalidState(() -> controls.openRequestState(context,
 					oldState));
 		} finally {
 			entropy.releaseNonce.countDown();
 			executor.shutdownNow();
 		}
+	}
+
+	@Test
+	public void stagedActivationWipesRetiredSealerContextButKeepsOldKey()
+			throws Exception {
+		McpProtectionKey first = protectionKey("first", 0);
+		McpProtectionKey second = protectionKey("second", 32);
+		DefaultMcpSecurityControls controls = new DefaultMcpSecurityControls(
+				McpProtectionConfig.withKeyRing(McpProtectionKeyRing
+						.withActiveKey(first).verificationKey(second).build())
+						.build(), null, new SequenceEntropy(
+						bytesFromLength(64, 24), bytesFromLength(96, 12),
+						bytesFromLength(108, 24)), 10L, 0L);
+		McpRequestStateProtectionContext context = protectionContext(64);
+		String firstState = controls.sealRequestState(context, new byte[]{1});
+		byte[] firstMasterKey = activeProtectionKeyMaterialReference(controls);
+		byte[] secondMasterKey = verificationProtectionKeyMaterialReference(
+				controls, "second");
+		byte[][] retiredSealerSecrets = activeSealerSecretReferences(controls);
+
+		controls.activateStagedKey("second");
+
+		assertWiped(retiredSealerSecrets);
+		assertLive(firstMasterKey, secondMasterKey);
+		assertLive(activeSealerSecretReferences(controls));
+		McpProtectionKeyRingSnapshot snapshot = controls.getKeyRingSnapshot()
+				.orElseThrow();
+		Assertions.assertEquals("second", snapshot.getActiveKeyId());
+		Assertions.assertEquals(Set.of("first"),
+				snapshot.getVerificationKeyIds());
+		Assertions.assertArrayEquals(new byte[]{1},
+				controls.openRequestState(context, firstState));
+		Assertions.assertTrue(controls.removeVerificationKey("first"));
+		assertWiped(firstMasterKey);
+		assertLive(secondMasterKey);
+		Assertions.assertArrayEquals(bytesFrom(0), first.copyKeyMaterial());
+		Assertions.assertArrayEquals(bytesFrom(32), second.copyKeyMaterial());
+	}
+
+	@Test
+	public void epochRolloverWipesOnlyTheRetiredDerivedKey()
+			throws Exception {
+		DefaultMcpSecurityControls controls = new DefaultMcpSecurityControls(
+				protectionConfig("active", 0), null, new SequenceEntropy(
+						bytesFromLength(64, 24), bytesFromLength(96, 12),
+						bytesFromLength(108, 12)), 1L, 0L);
+		McpRequestStateProtectionContext context = protectionContext(64);
+		String firstState = controls.sealRequestState(context, new byte[]{1});
+		byte[][] retiredSecrets = activeSealerSecretReferences(controls);
+
+		String secondState = controls.sealRequestState(context, new byte[]{2});
+		byte[][] currentSecrets = activeSealerSecretReferences(controls);
+
+		Assertions.assertSame(retiredSecrets[0], currentSecrets[0]);
+		Assertions.assertSame(retiredSecrets[1], currentSecrets[1]);
+		Assertions.assertNotSame(retiredSecrets[2], currentSecrets[2]);
+		assertLive(retiredSecrets[0], retiredSecrets[1], currentSecrets[2]);
+		assertWiped(retiredSecrets[2]);
+		Assertions.assertArrayEquals(new byte[]{1},
+				controls.openRequestState(context, firstState));
+		Assertions.assertArrayEquals(new byte[]{2},
+				controls.openRequestState(context, secondState));
+	}
+
+	@Test
+	public void failedActivationPreservesTheExistingContextAndKeyRing()
+			throws Exception {
+		AtomicInteger entropyCalls = new AtomicInteger();
+		DefaultMcpSecurityControls controls = new DefaultMcpSecurityControls(
+				McpProtectionConfig.withKeyRing(McpProtectionKeyRing
+						.withActiveKey(protectionKey("first", 0))
+						.verificationKey(protectionKey("second", 32)).build())
+						.build(), null, destination -> {
+					int call = entropyCalls.getAndIncrement();
+					if (call == 2)
+						throw new IllegalStateException(
+								"simulated activation entropy failure");
+					Arrays.fill(destination, (byte) (64 + call));
+				}, 10L, 0L);
+		McpRequestStateProtectionContext context = protectionContext(64);
+		String beforeFailure = controls.sealRequestState(context, new byte[]{1});
+		Object sealerContext = activeSealerContextReference(controls);
+		byte[][] sealerSecrets = activeSealerSecretReferences(controls);
+
+		Assertions.assertThrows(IllegalStateException.class,
+				() -> controls.activateStagedKey("second"));
+
+		Assertions.assertSame(sealerContext,
+				activeSealerContextReference(controls));
+		assertLive(sealerSecrets);
+		McpProtectionKeyRingSnapshot snapshot = controls.getKeyRingSnapshot()
+				.orElseThrow();
+		Assertions.assertEquals("first", snapshot.getActiveKeyId());
+		Assertions.assertEquals(Set.of("second"),
+				snapshot.getVerificationKeyIds());
+		String afterFailure = controls.sealRequestState(context, new byte[]{2});
+		Assertions.assertArrayEquals(new byte[]{1},
+				controls.openRequestState(context, beforeFailure));
+		Assertions.assertArrayEquals(new byte[]{2},
+				controls.openRequestState(context, afterFailure));
+	}
+
+	@Test
+	public void retiredServerOwnedKeysAreWipedWithoutMutatingCallers()
+			throws Exception {
+		McpProtectionKey active = protectionKey("active", 0);
+		McpProtectionKey verification = protectionKey("verification", 32);
+		McpTraceCorrelationKey trace = traceKey("trace", 64);
+		DefaultMcpSecurityControls controls = controls(McpProtectionKeyRing
+				.withActiveKey(active).verificationKey(verification).build(), trace);
+		byte[] activeServerCopy = activeProtectionKeyMaterialReference(controls);
+		byte[] verificationServerCopy =
+				verificationProtectionKeyMaterialReference(controls, "verification");
+		byte[] traceServerCopy = activeTraceKeyMaterialReference(controls);
+
+		controls.stageVerificationKey(verification);
+		controls.rotateActiveKey(trace);
+		assertLive(activeServerCopy, verificationServerCopy, traceServerCopy);
+
+		Assertions.assertTrue(controls.removeVerificationKey("verification"));
+		assertWiped(verificationServerCopy);
+		controls.rotateActiveKey(traceKey("rotated-trace", 96));
+		assertWiped(traceServerCopy);
+		controls.rotateTo(protectionKey("rotated-protection", 128));
+		assertLive(activeServerCopy);
+		Assertions.assertTrue(controls.removeVerificationKey("active"));
+		assertWiped(activeServerCopy);
+
+		Assertions.assertArrayEquals(bytesFrom(0), active.copyKeyMaterial());
+		Assertions.assertArrayEquals(bytesFrom(32),
+				verification.copyKeyMaterial());
+		Assertions.assertArrayEquals(bytesFrom(64), trace.copyKeyMaterial());
+		assertLive(activeProtectionKeyMaterialReference(controls),
+				activeTraceKeyMaterialReference(controls));
 	}
 
 	@Test
@@ -1063,6 +1209,70 @@ public class McpSecurityControlsTests {
 						&& activeTraceId.equals("trace"))
 				|| (activeProtectionId.equals("protection")
 						&& activeTraceId.equals("shared-trace")));
+	}
+
+	private static byte[] activeProtectionKeyMaterialReference(
+			DefaultMcpSecurityControls controls) throws ReflectiveOperationException {
+		return ownedKeyMaterialReference(fieldValue(controls,
+				"activeProtectionKey"));
+	}
+
+	private static byte[] verificationProtectionKeyMaterialReference(
+			DefaultMcpSecurityControls controls, String keyId)
+			throws ReflectiveOperationException {
+		Map<?, ?> keys = (Map<?, ?>) fieldValue(controls,
+				"verificationProtectionKeys");
+		Object key = keys.get(keyId);
+		Assertions.assertNotNull(key);
+		return ownedKeyMaterialReference(key);
+	}
+
+	private static byte[] activeTraceKeyMaterialReference(
+			DefaultMcpSecurityControls controls) throws ReflectiveOperationException {
+		return ownedKeyMaterialReference(fieldValue(controls,
+				"activeTraceCorrelationKey"));
+	}
+
+	private static byte[] ownedKeyMaterialReference(Object ownedKey)
+			throws ReflectiveOperationException {
+		Assertions.assertNotNull(ownedKey);
+		return (byte[]) fieldValue(ownedKey, "keyMaterial");
+	}
+
+	private static Object activeSealerContextReference(
+			DefaultMcpSecurityControls controls) throws ReflectiveOperationException {
+		Object context = fieldValue(controls, "activeSealerContext");
+		Assertions.assertNotNull(context);
+		return context;
+	}
+
+	private static byte[][] activeSealerSecretReferences(
+			DefaultMcpSecurityControls controls) throws ReflectiveOperationException {
+		Object context = activeSealerContextReference(controls);
+		return new byte[][]{
+				(byte[]) fieldValue(context, "prk"),
+				(byte[]) fieldValue(context, "activationPrefix"),
+				(byte[]) fieldValue(context, "derivedKey")
+		};
+	}
+
+	private static Object fieldValue(Object owner, String fieldName)
+			throws ReflectiveOperationException {
+		Field field = owner.getClass().getDeclaredField(fieldName);
+		field.setAccessible(true);
+		return field.get(owner);
+	}
+
+	private static void assertLive(byte[]... values) {
+		for (byte[] value : values)
+			Assertions.assertFalse(Arrays.equals(new byte[value.length], value),
+					"Expected retained secret bytes to remain live.");
+	}
+
+	private static void assertWiped(byte[]... values) {
+		for (byte[] value : values)
+			Assertions.assertArrayEquals(new byte[value.length], value,
+					"Expected retained secret bytes to be wiped.");
 	}
 
 	private static void assertRejectedWithoutProtectionChange(

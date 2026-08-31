@@ -20,8 +20,8 @@ import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
-import java.util.Collection;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -65,18 +65,13 @@ public final class McpProtectionKeyRing {
 	}
 
 	@NonNull
-	McpProtectionKey copyInitialActiveKey() {
-		return copyOf(this.activeKey);
+	McpProtectionKey initialActiveKey() {
+		return this.activeKey;
 	}
 
 	@NonNull
-	Map<@NonNull String, @NonNull McpProtectionKey>
-			copyInitialVerificationKeys() {
-		LinkedHashMap<@NonNull String, @NonNull McpProtectionKey> copies =
-				new LinkedHashMap<>();
-		this.verificationKeys.forEach(
-				(keyId, key) -> copies.put(keyId, copyOf(key)));
-		return Map.copyOf(copies);
+	Collection<@NonNull McpProtectionKey> initialVerificationKeys() {
+		return this.verificationKeys.values();
 	}
 
 	@NonNull

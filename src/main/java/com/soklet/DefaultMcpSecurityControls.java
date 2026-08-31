@@ -161,9 +161,9 @@ final class DefaultMcpSecurityControls
 	private final int maximumEncodedRequestStateBytes;
 	private final int maximumDecodedRequestStateBytes;
 	@Nullable
-	private McpProtectionKey activeProtectionKey;
+	private OwnedSecretKey activeProtectionKey;
 	@NonNull
-	private final Map<@NonNull String, @NonNull McpProtectionKey>
+	private final Map<@NonNull String, @NonNull OwnedSecretKey>
 			verificationProtectionKeys;
 	@NonNull
 	private final Map<@NonNull String, @NonNull Long>
@@ -171,7 +171,7 @@ final class DefaultMcpSecurityControls
 	@Nullable
 	private SealerContext activeSealerContext;
 	@Nullable
-	private McpTraceCorrelationKey activeTraceCorrelationKey;
+	private OwnedSecretKey activeTraceCorrelationKey;
 
 	DefaultMcpSecurityControls(@Nullable McpProtectionConfig protectionConfig,
 			@Nullable McpTraceCorrelationKey traceCorrelationKey) {
@@ -204,33 +204,62 @@ final class DefaultMcpSecurityControls
 		this.verificationProtectionKeys = new LinkedHashMap<>();
 		this.outstandingSealingReservations = new LinkedHashMap<>();
 
-		if (this.protectionMode == McpProtectionMode.PRODUCTION_KEY_RING) {
-			McpProtectionKeyRing keyRing = requireNonNull(protectionConfig)
-					.getInitialKeyRing().orElseThrow(() ->
-							new IllegalArgumentException(
-									"Production protection requires an initial key ring."));
-			this.activeProtectionKey = keyRing.copyInitialActiveKey();
-			this.verificationProtectionKeys.putAll(
-					keyRing.copyInitialVerificationKeys());
-		} else if (this.protectionMode
-				== McpProtectionMode.DEVELOPMENT_EPHEMERAL) {
-			byte[] keyMaterial = new byte[DEVELOPMENT_KEY_BYTES];
-			try {
-				this.entropySource.nextBytes(keyMaterial);
-				this.activeProtectionKey = McpProtectionKey.fromIdAndBytes(
-						DEVELOPMENT_KEY_ID, keyMaterial);
-			} catch (RuntimeException exception) {
-				throw new IllegalStateException(
-						"Development request-state protection could not initialize.");
-			} finally {
-				Arrays.fill(keyMaterial, (byte) 0);
+		try {
+			if (this.protectionMode == McpProtectionMode.PRODUCTION_KEY_RING) {
+				McpProtectionKeyRing keyRing = requireNonNull(protectionConfig)
+						.getInitialKeyRing().orElseThrow(() ->
+								new IllegalArgumentException(
+										"Production protection requires an initial key ring."));
+				this.activeProtectionKey = OwnedSecretKey.fromProtectionKey(
+						keyRing.initialActiveKey());
+				for (McpProtectionKey verificationKey
+						: keyRing.initialVerificationKeys()) {
+					OwnedSecretKey ownedVerificationKey =
+							OwnedSecretKey.fromProtectionKey(verificationKey);
+					try {
+						this.verificationProtectionKeys.put(
+								ownedVerificationKey.keyId(), ownedVerificationKey);
+					} catch (RuntimeException | Error throwable) {
+						ownedVerificationKey.clear();
+						throw throwable;
+					}
+				}
+			} else if (this.protectionMode
+					== McpProtectionMode.DEVELOPMENT_EPHEMERAL) {
+				byte[] keyMaterial = new byte[DEVELOPMENT_KEY_BYTES];
+				try {
+					this.entropySource.nextBytes(keyMaterial);
+					this.activeProtectionKey = OwnedSecretKey.fromBytes(
+							DEVELOPMENT_KEY_ID, keyMaterial);
+				} catch (RuntimeException exception) {
+					throw new IllegalStateException(
+							"Development request-state protection could not initialize.");
+				} finally {
+					Arrays.fill(keyMaterial, (byte) 0);
+				}
 			}
-		}
 
-		this.activeTraceCorrelationKey = traceCorrelationKey == null ? null
-				: copyOf(traceCorrelationKey);
+			if (traceCorrelationKey != null) {
+				requireDistinctFromProtectionKeys(traceCorrelationKey);
+				this.activeTraceCorrelationKey =
+						OwnedSecretKey.fromTraceKey(traceCorrelationKey);
+			}
+		} catch (RuntimeException | Error throwable) {
+			clearOwnedKeyState();
+			throw throwable;
+		}
+	}
+
+	private void clearOwnedKeyState() {
+		if (this.activeProtectionKey != null)
+			this.activeProtectionKey.clear();
+		this.verificationProtectionKeys.values().forEach(
+				OwnedSecretKey::clear);
+		this.verificationProtectionKeys.clear();
 		if (this.activeTraceCorrelationKey != null)
-			requireDistinctFromProtectionKeys(this.activeTraceCorrelationKey);
+			this.activeTraceCorrelationKey.clear();
+		if (this.activeSealerContext != null)
+			this.activeSealerContext.clearAll();
 	}
 
 	@Override
@@ -274,7 +303,7 @@ final class DefaultMcpSecurityControls
 					!= McpProtectionMode.PRODUCTION_KEY_RING)
 				return Optional.empty();
 			return Optional.of(new McpProtectionKeyRingSnapshot(
-					requireNonNull(this.activeProtectionKey).getKeyId(),
+					requireNonNull(this.activeProtectionKey).keyId(),
 					Set.copyOf(this.verificationProtectionKeys.keySet()),
 					protectionFingerprint(this.activeProtectionKey,
 							this.verificationProtectionKeys.values())));
@@ -287,7 +316,7 @@ final class DefaultMcpSecurityControls
 		requireNonNull(verificationKey);
 		synchronized (this.lock) {
 			requireProductionRing();
-			McpProtectionKey existing = protectionKeyWithId(
+			OwnedSecretKey existing = protectionKeyWithId(
 					verificationKey.getKeyId());
 			if (existing != null) {
 				if (existing.hasSameMaterial(verificationKey))
@@ -297,12 +326,19 @@ final class DefaultMcpSecurityControls
 			}
 			requireUniqueProtectionMaterial(verificationKey);
 			if (this.activeTraceCorrelationKey != null
-					&& verificationKey.hasSameMaterial(
-							this.activeTraceCorrelationKey))
+					&& this.activeTraceCorrelationKey.hasSameMaterial(
+							verificationKey))
 				throw new IllegalArgumentException(
 						"Protection and trace-correlation keys must use distinct material.");
-			McpProtectionKey copy = copyOf(verificationKey);
-			this.verificationProtectionKeys.put(copy.getKeyId(), copy);
+			OwnedSecretKey copy =
+					OwnedSecretKey.fromProtectionKey(verificationKey);
+			try {
+				this.verificationProtectionKeys.put(copy.keyId(), copy);
+			} catch (RuntimeException | Error throwable) {
+				this.verificationProtectionKeys.remove(copy.keyId());
+				copy.clear();
+				throw throwable;
+			}
 		}
 	}
 
@@ -311,10 +347,10 @@ final class DefaultMcpSecurityControls
 		requireNonNull(keyId);
 		synchronized (this.lock) {
 			requireProductionRing();
-			if (requireNonNull(this.activeProtectionKey).getKeyId()
+			if (requireNonNull(this.activeProtectionKey).keyId()
 					.equals(keyId))
 				return;
-			McpProtectionKey staged = this.verificationProtectionKeys.remove(keyId);
+			OwnedSecretKey staged = this.verificationProtectionKeys.get(keyId);
 			if (staged == null)
 				throw new IllegalArgumentException(
 						"Unknown staged MCP protection key ID.");
@@ -322,15 +358,21 @@ final class DefaultMcpSecurityControls
 			try {
 				sealerContext = newSealerContext(staged, 0L);
 			} catch (RuntimeException exception) {
-				this.verificationProtectionKeys.put(keyId, staged);
 				throw new IllegalStateException(
 						"MCP protection key activation could not initialize.");
 			}
-			McpProtectionKey formerActive = this.activeProtectionKey;
-			this.activeProtectionKey = staged;
-			this.verificationProtectionKeys.put(formerActive.getKeyId(),
-					formerActive);
-			this.activeSealerContext = sealerContext;
+			OwnedSecretKey formerActive = this.activeProtectionKey;
+			try {
+				this.verificationProtectionKeys.put(formerActive.keyId(),
+						formerActive);
+				this.verificationProtectionKeys.remove(keyId);
+				this.activeProtectionKey = staged;
+				replaceActiveSealerContext(sealerContext);
+			} catch (RuntimeException | Error throwable) {
+				this.verificationProtectionKeys.remove(formerActive.keyId());
+				sealerContext.clearAll();
+				throw throwable;
+			}
 		}
 	}
 
@@ -339,14 +381,14 @@ final class DefaultMcpSecurityControls
 		requireNonNull(activeKey);
 		synchronized (this.lock) {
 			requireProductionRing();
-			McpProtectionKey current = requireNonNull(this.activeProtectionKey);
-			if (current.getKeyId().equals(activeKey.getKeyId())) {
+			OwnedSecretKey current = requireNonNull(this.activeProtectionKey);
+			if (current.keyId().equals(activeKey.getKeyId())) {
 				if (current.hasSameMaterial(activeKey))
 					return;
 				throw new IllegalArgumentException(
 						"Duplicate MCP protection key ID with different material.");
 			}
-			McpProtectionKey staged = this.verificationProtectionKeys.get(
+			OwnedSecretKey staged = this.verificationProtectionKeys.get(
 					activeKey.getKeyId());
 			if (staged != null) {
 				if (!staged.hasSameMaterial(activeKey))
@@ -357,20 +399,31 @@ final class DefaultMcpSecurityControls
 			}
 			requireUniqueProtectionMaterial(activeKey);
 			if (this.activeTraceCorrelationKey != null
-					&& activeKey.hasSameMaterial(this.activeTraceCorrelationKey))
+					&& this.activeTraceCorrelationKey.hasSameMaterial(activeKey))
 				throw new IllegalArgumentException(
 						"Protection and trace-correlation keys must use distinct material.");
-			McpProtectionKey copy = copyOf(activeKey);
+			OwnedSecretKey copy = OwnedSecretKey.fromProtectionKey(activeKey);
 			SealerContext sealerContext;
 			try {
 				sealerContext = newSealerContext(copy, 0L);
 			} catch (RuntimeException exception) {
+				copy.clear();
 				throw new IllegalStateException(
 						"MCP protection key rotation could not initialize.");
+			} catch (Error error) {
+				copy.clear();
+				throw error;
 			}
-			this.verificationProtectionKeys.put(current.getKeyId(), current);
-			this.activeProtectionKey = copy;
-			this.activeSealerContext = sealerContext;
+			try {
+				this.verificationProtectionKeys.put(current.keyId(), current);
+				this.activeProtectionKey = copy;
+				replaceActiveSealerContext(sealerContext);
+			} catch (RuntimeException | Error throwable) {
+				this.verificationProtectionKeys.remove(current.keyId());
+				copy.clear();
+				sealerContext.clearAll();
+				throw throwable;
+			}
 		}
 	}
 
@@ -380,14 +433,19 @@ final class DefaultMcpSecurityControls
 		requireNonNull(keyId);
 		synchronized (this.lock) {
 			requireProductionRing();
-			if (requireNonNull(this.activeProtectionKey).getKeyId()
+			if (requireNonNull(this.activeProtectionKey).keyId()
 					.equals(keyId))
 				throw new IllegalArgumentException(
 						"The active MCP protection key cannot be removed.");
 			if (this.outstandingSealingReservations.getOrDefault(keyId, 0L)
 					> 0L)
 				throw new McpKeyInUseException();
-			return this.verificationProtectionKeys.remove(keyId) != null;
+			OwnedSecretKey removed =
+					this.verificationProtectionKeys.remove(keyId);
+			if (removed == null)
+				return false;
+			removed.clear();
+			return true;
 		}
 	}
 
@@ -432,33 +490,33 @@ final class DefaultMcpSecurityControls
 		SealReservation reservation = reserveSeal(plaintext.length);
 		try {
 			byte[] nonce = new byte[NONCE_BYTES];
+			byte[] header = null;
+			byte[] binding = null;
+			byte[] associatedData = null;
+			byte[] ciphertext = null;
+			byte[] envelopeBytes = null;
 			try {
-				this.entropySource.nextBytes(nonce);
-			} catch (RuntimeException exception) {
-				throw McpRequestStateProtectionException
-						.fromProtectorUnavailable();
-			}
-			byte[] header = builtInHeader(reservation.keyId(),
-					reservation.sealerEpoch(), nonce);
-			byte[] associatedData = builtInAssociatedData(header,
-					context.getAssociatedData());
-			byte[] ciphertext;
-			try {
-				ciphertext = encrypt(reservation.derivedKey(), nonce,
-						associatedData, plaintext);
-			} catch (GeneralSecurityException exception) {
-				throw McpRequestStateProtectionException
-						.fromProtectorUnavailable();
-			} finally {
-				Arrays.fill(nonce, (byte) 0);
-				Arrays.fill(associatedData, (byte) 0);
-			}
-			ByteArrayOutputStream envelope = new ByteArrayOutputStream(
-					header.length + ciphertext.length);
-			envelope.writeBytes(header);
-			envelope.writeBytes(ciphertext);
-			byte[] envelopeBytes = envelope.toByteArray();
-			try {
+				try {
+					this.entropySource.nextBytes(nonce);
+				} catch (RuntimeException exception) {
+					throw McpRequestStateProtectionException
+							.fromProtectorUnavailable();
+				}
+				header = builtInHeader(reservation.keyId(),
+						reservation.sealerEpoch(), nonce);
+				binding = context.getAssociatedData();
+				associatedData = builtInAssociatedData(header, binding);
+				try {
+					ciphertext = encrypt(reservation.derivedKey(), nonce,
+							associatedData, plaintext);
+				} catch (GeneralSecurityException exception) {
+					throw McpRequestStateProtectionException
+							.fromProtectorUnavailable();
+				}
+				envelopeBytes = new byte[header.length + ciphertext.length];
+				System.arraycopy(header, 0, envelopeBytes, 0, header.length);
+				System.arraycopy(ciphertext, 0, envelopeBytes, header.length,
+						ciphertext.length);
 				if (envelopeBytes.length
 						> this.maximumDecodedRequestStateBytes)
 					throw new IllegalStateException(
@@ -471,9 +529,17 @@ final class DefaultMcpSecurityControls
 							"Protected MCP request state exceeds its configured encoded-size limit.");
 				return protectedState;
 			} finally {
-				Arrays.fill(ciphertext, (byte) 0);
-				Arrays.fill(envelopeBytes, (byte) 0);
-				Arrays.fill(header, (byte) 0);
+				Arrays.fill(nonce, (byte) 0);
+				if (header != null)
+					Arrays.fill(header, (byte) 0);
+				if (binding != null)
+					Arrays.fill(binding, (byte) 0);
+				if (associatedData != null)
+					Arrays.fill(associatedData, (byte) 0);
+				if (ciphertext != null)
+					Arrays.fill(ciphertext, (byte) 0);
+				if (envelopeBytes != null)
+					Arrays.fill(envelopeBytes, (byte) 0);
 			}
 		} finally {
 			releaseSeal(reservation);
@@ -500,18 +566,17 @@ final class DefaultMcpSecurityControls
 		}
 
 		ParsedEnvelope envelope = parseBuiltInEnvelope(protectedState);
-		McpProtectionKey key = protectionKeySnapshot(envelope.keyId());
-		if (key == null) {
-			envelope.clear();
-			throw McpRequestStateProtectionException.fromInvalidState();
-		}
-		byte[] masterKey = key.copyKeyMaterial();
+		byte[] masterKey = null;
 		byte[] derivedKey = null;
+		byte[] binding = null;
 		byte[] associatedData = null;
 		try {
+			masterKey = protectionKeyMaterialSnapshot(envelope.keyId());
+			if (masterKey == null)
+				throw McpRequestStateProtectionException.fromInvalidState();
 			derivedKey = deriveEpochKey(masterKey, envelope.sealerEpoch());
-			associatedData = builtInAssociatedData(envelope.header(),
-					context.getAssociatedData());
+			binding = context.getAssociatedData();
+			associatedData = builtInAssociatedData(envelope.header(), binding);
 			byte[] plaintext;
 			try {
 				plaintext = decrypt(derivedKey, envelope.nonce(), associatedData,
@@ -529,9 +594,12 @@ final class DefaultMcpSecurityControls
 			}
 			return plaintext;
 		} finally {
-			Arrays.fill(masterKey, (byte) 0);
+			if (masterKey != null)
+				Arrays.fill(masterKey, (byte) 0);
 			if (derivedKey != null)
 				Arrays.fill(derivedKey, (byte) 0);
+			if (binding != null)
+				Arrays.fill(binding, (byte) 0);
 			if (associatedData != null)
 				Arrays.fill(associatedData, (byte) 0);
 			envelope.clear();
@@ -551,7 +619,7 @@ final class DefaultMcpSecurityControls
 	public Optional<@NonNull String> getActiveKeyId() {
 		synchronized (this.lock) {
 			return Optional.ofNullable(this.activeTraceCorrelationKey)
-					.map(McpTraceCorrelationKey::getKeyId);
+					.map(OwnedSecretKey::keyId);
 		}
 	}
 
@@ -573,14 +641,18 @@ final class DefaultMcpSecurityControls
 				throw new IllegalStateException(
 						"MCP trace correlation was not enabled at server construction.");
 			requireDistinctFromProtectionKeys(activeKey);
-			if (this.activeTraceCorrelationKey.getKeyId().equals(
+			if (this.activeTraceCorrelationKey.keyId().equals(
 					activeKey.getKeyId())) {
 				if (this.activeTraceCorrelationKey.hasSameMaterial(activeKey))
 					return;
 				throw new IllegalArgumentException(
 						"Duplicate MCP trace-correlation key ID with different material.");
 			}
-			this.activeTraceCorrelationKey = copyOf(activeKey);
+			OwnedSecretKey replacement =
+					OwnedSecretKey.fromTraceKey(activeKey);
+			OwnedSecretKey retired = this.activeTraceCorrelationKey;
+			this.activeTraceCorrelationKey = replacement;
+			retired.clear();
 		}
 	}
 
@@ -603,10 +675,10 @@ final class DefaultMcpSecurityControls
 		byte[] keyMaterial;
 
 		synchronized (this.lock) {
-			McpTraceCorrelationKey activeKey = this.activeTraceCorrelationKey;
+			OwnedSecretKey activeKey = this.activeTraceCorrelationKey;
 			if (activeKey == null)
 				return Optional.empty();
-			keyId = activeKey.getKeyId();
+			keyId = activeKey.keyId();
 			keyMaterial = activeKey.copyKeyMaterial();
 		}
 
@@ -685,7 +757,7 @@ final class DefaultMcpSecurityControls
 			throws McpRequestStateProtectionException {
 		synchronized (this.lock) {
 			try {
-				McpProtectionKey activeKey = requireNonNull(
+				OwnedSecretKey activeKey = requireNonNull(
 						this.activeProtectionKey);
 				SealerContext context = this.activeSealerContext;
 				if (context == null) {
@@ -698,8 +770,10 @@ final class DefaultMcpSecurityControls
 					if (context.epochNumber() == -1L)
 						throw McpRequestStateProtectionException
 								.fromProtectorUnavailable();
-					context = nextSealerEpoch(context);
+					SealerContext retired = context;
+					context = nextSealerEpoch(retired);
 					this.activeSealerContext = context;
+					retired.clearDerivedKey();
 				}
 
 				int decodedBytes = builtInHeaderLength(context.keyId())
@@ -712,10 +786,21 @@ final class DefaultMcpSecurityControls
 
 				this.activeSealerContext = context.withInvocationCount(
 						context.invocationCount() + 1L);
-				this.outstandingSealingReservations.merge(context.keyId(),
-						1L, Long::sum);
-				return new SealReservation(context.keyId(),
-						context.sealerEpoch(), context.derivedKey());
+				byte[] sealerEpoch = context.sealerEpoch();
+				SealReservation reservation = null;
+				try {
+					reservation = new SealReservation(context.keyId(),
+							sealerEpoch, context.derivedKey());
+					this.outstandingSealingReservations.merge(context.keyId(),
+							1L, Long::sum);
+					SealReservation published = reservation;
+					reservation = null;
+					return published;
+				} finally {
+					if (reservation != null)
+						reservation.clear();
+					Arrays.fill(sealerEpoch, (byte) 0);
+				}
 			} catch (McpRequestStateProtectionException exception) {
 				throw exception;
 			} catch (IllegalStateException exception) {
@@ -728,53 +813,85 @@ final class DefaultMcpSecurityControls
 	}
 
 	private void releaseSeal(@NonNull SealReservation reservation) {
-		synchronized (this.lock) {
-			long remaining = this.outstandingSealingReservations.getOrDefault(
-					reservation.keyId(), 0L) - 1L;
-			if (remaining <= 0L)
-				this.outstandingSealingReservations.remove(reservation.keyId());
-			else
-				this.outstandingSealingReservations.put(reservation.keyId(),
-						remaining);
+		try {
+			synchronized (this.lock) {
+				long remaining = this.outstandingSealingReservations.getOrDefault(
+						reservation.keyId(), 0L) - 1L;
+				if (remaining <= 0L)
+					this.outstandingSealingReservations.remove(
+							reservation.keyId());
+				else
+					this.outstandingSealingReservations.put(reservation.keyId(),
+							remaining);
+			}
+		} finally {
+			reservation.clear();
 		}
-		reservation.clear();
+	}
+
+	private void replaceActiveSealerContext(
+			@NonNull SealerContext replacement) {
+		SealerContext retired = this.activeSealerContext;
+		this.activeSealerContext = requireNonNull(replacement);
+		if (retired != null)
+			retired.clearAll();
 	}
 
 	@NonNull
-	private SealerContext newSealerContext(@NonNull McpProtectionKey key,
+	private SealerContext newSealerContext(@NonNull OwnedSecretKey key,
 			long epochNumber) {
 		byte[] activationPrefix = new byte[ACTIVATION_PREFIX_BYTES];
 		byte[] masterKey = key.copyKeyMaterial();
 		byte[] prk = null;
+		byte[] sealerEpoch = null;
+		byte[] derivedKey = null;
 		try {
 			this.entropySource.nextBytes(activationPrefix);
 			prk = hkdfExtract(masterKey);
-			byte[] sealerEpoch = sealerEpoch(activationPrefix, epochNumber);
-			byte[] derivedKey = hkdfExpand(prk, sealerEpoch);
-			return new SealerContext(key.getKeyId(), prk.clone(),
-					activationPrefix.clone(), epochNumber, 0L, derivedKey);
+			sealerEpoch = sealerEpoch(activationPrefix, epochNumber);
+			derivedKey = hkdfExpand(prk, sealerEpoch);
+			SealerContext context = new SealerContext(key.keyId(), prk,
+					activationPrefix, epochNumber, 0L, derivedKey);
+			prk = null;
+			activationPrefix = null;
+			derivedKey = null;
+			return context;
 		} catch (RuntimeException exception) {
 			throw new SealerUnavailableException();
 		} finally {
 			Arrays.fill(masterKey, (byte) 0);
 			if (prk != null)
 				Arrays.fill(prk, (byte) 0);
-			Arrays.fill(activationPrefix, (byte) 0);
+			if (sealerEpoch != null)
+				Arrays.fill(sealerEpoch, (byte) 0);
+			if (derivedKey != null)
+				Arrays.fill(derivedKey, (byte) 0);
+			if (activationPrefix != null)
+				Arrays.fill(activationPrefix, (byte) 0);
 		}
 	}
 
 	@NonNull
 	private static SealerContext nextSealerEpoch(
 			@NonNull SealerContext context) {
+		byte[] sealerEpoch = null;
+		byte[] derivedKey = null;
 		try {
 			long nextEpochNumber = context.epochNumber() + 1L;
-			byte[] sealerEpoch = sealerEpoch(context.activationPrefix(),
+			sealerEpoch = sealerEpoch(context.activationPrefix(),
 					nextEpochNumber);
-			byte[] derivedKey = hkdfExpand(context.prk(), sealerEpoch);
-			return new SealerContext(context.keyId(), context.prk(),
+			derivedKey = hkdfExpand(context.prk(), sealerEpoch);
+			SealerContext next = new SealerContext(context.keyId(), context.prk(),
 					context.activationPrefix(), nextEpochNumber, 0L, derivedKey);
+			derivedKey = null;
+			return next;
 		} catch (RuntimeException exception) {
 			throw new SealerUnavailableException();
+		} finally {
+			if (sealerEpoch != null)
+				Arrays.fill(sealerEpoch, (byte) 0);
+			if (derivedKey != null)
+				Arrays.fill(derivedKey, (byte) 0);
 		}
 	}
 
@@ -802,11 +919,10 @@ final class DefaultMcpSecurityControls
 		} catch (IllegalArgumentException exception) {
 			throw McpRequestStateProtectionException.fromInvalidState();
 		}
-		if (!base64Url(decoded).equals(suffix)
-				|| decoded.length > this.maximumDecodedRequestStateBytes)
-			throw McpRequestStateProtectionException.fromInvalidState();
-
 		try {
+			if (!base64Url(decoded).equals(suffix)
+					|| decoded.length > this.maximumDecodedRequestStateBytes)
+				throw McpRequestStateProtectionException.fromInvalidState();
 			int offset = 0;
 			if (decoded.length < builtInHeaderLength("a") + 1
 					+ GCM_TAG_BYTES
@@ -854,13 +970,14 @@ final class DefaultMcpSecurityControls
 	}
 
 	@Nullable
-	private McpProtectionKey protectionKeySnapshot(@NonNull String keyId) {
+	private byte @Nullable [] protectionKeyMaterialSnapshot(
+			@NonNull String keyId) {
 		synchronized (this.lock) {
-			McpProtectionKey key = this.activeProtectionKey != null
-					&& this.activeProtectionKey.getKeyId().equals(keyId)
+			OwnedSecretKey key = this.activeProtectionKey != null
+					&& this.activeProtectionKey.keyId().equals(keyId)
 					? this.activeProtectionKey
 					: this.verificationProtectionKeys.get(keyId);
-			return key == null ? null : copyOf(key);
+			return key == null ? null : key.copyKeyMaterial();
 		}
 	}
 
@@ -946,11 +1063,18 @@ final class DefaultMcpSecurityControls
 		info.writeBytes(REQUEST_STATE_KEY_LABEL);
 		info.writeBytes(sealerEpoch);
 		info.write(1);
-		byte[] derived = hmacSha256(prk, info.toByteArray());
-		if (derived.length != DERIVED_KEY_BYTES)
-			throw new IllegalStateException(
-					"HKDF-SHA-256 returned an unexpected key length.");
-		return derived;
+		byte[] infoBytes = info.toByteArray();
+		try {
+			byte[] derived = hmacSha256(prk, infoBytes);
+			if (derived.length != DERIVED_KEY_BYTES) {
+				Arrays.fill(derived, (byte) 0);
+				throw new IllegalStateException(
+						"HKDF-SHA-256 returned an unexpected key length.");
+			}
+			return derived;
+		} finally {
+			Arrays.fill(infoBytes, (byte) 0);
+		}
 	}
 
 	private static byte @NonNull [] deriveEpochKey(byte @NonNull [] masterKey,
@@ -991,8 +1115,8 @@ final class DefaultMcpSecurityControls
 	}
 
 	@Nullable
-	private McpProtectionKey protectionKeyWithId(@NonNull String keyId) {
-		if (requireNonNull(this.activeProtectionKey).getKeyId().equals(keyId))
+	private OwnedSecretKey protectionKeyWithId(@NonNull String keyId) {
+		if (requireNonNull(this.activeProtectionKey).keyId().equals(keyId))
 			return this.activeProtectionKey;
 		return this.verificationProtectionKeys.get(keyId);
 	}
@@ -1017,36 +1141,15 @@ final class DefaultMcpSecurityControls
 	}
 
 	@NonNull
-	private static McpProtectionKey copyOf(@NonNull McpProtectionKey key) {
-		byte[] keyMaterial = key.copyKeyMaterial();
-		try {
-			return McpProtectionKey.fromIdAndBytes(key.getKeyId(), keyMaterial);
-		} finally {
-			Arrays.fill(keyMaterial, (byte) 0);
-		}
-	}
-
-	@NonNull
-	private static McpTraceCorrelationKey copyOf(
-			@NonNull McpTraceCorrelationKey key) {
-		byte[] keyMaterial = key.copyKeyMaterial();
-		try {
-		return McpTraceCorrelationKey.fromIdAndBytes(key.getKeyId(), keyMaterial);
-		} finally {
-			Arrays.fill(keyMaterial, (byte) 0);
-		}
-	}
-
-	@NonNull
 	private static McpProtectionKeyRingFingerprint protectionFingerprint(
-			@NonNull McpProtectionKey activeKey,
-			@NonNull Iterable<@NonNull McpProtectionKey> verificationKeys) {
+			@NonNull OwnedSecretKey activeKey,
+			@NonNull Iterable<@NonNull OwnedSecretKey> verificationKeys) {
 		List<FingerprintRecord> records = new ArrayList<>();
-		records.add(fingerprintRecord(activeKey.getKeyId(),
+		records.add(fingerprintRecord(activeKey.keyId(),
 				McpProtectionKeyRingFingerprint.PROFILE, ACTIVE_ROLE,
 				activeKey.copyKeyMaterial(), PROTECTION_ENTRY_DOMAIN));
-		for (McpProtectionKey verificationKey : verificationKeys)
-			records.add(fingerprintRecord(verificationKey.getKeyId(),
+		for (OwnedSecretKey verificationKey : verificationKeys)
+			records.add(fingerprintRecord(verificationKey.keyId(),
 					McpProtectionKeyRingFingerprint.PROFILE, VERIFICATION_ROLE,
 					verificationKey.copyKeyMaterial(), PROTECTION_ENTRY_DOMAIN));
 		records.sort(Comparator.comparing(FingerprintRecord::metadata,
@@ -1061,8 +1164,8 @@ final class DefaultMcpSecurityControls
 
 	@NonNull
 	private static McpTraceCorrelationConfigurationFingerprint traceFingerprint(
-			@NonNull McpTraceCorrelationKey key) {
-		FingerprintRecord record = fingerprintRecord(key.getKeyId(), TRACE_ALGORITHM,
+			@NonNull OwnedSecretKey key) {
+		FingerprintRecord record = fingerprintRecord(key.keyId(), TRACE_ALGORITHM,
 				ACTIVE_ROLE, key.copyKeyMaterial(), TRACE_ENTRY_DOMAIN);
 		ByteArrayOutputStream aggregate = new ByteArrayOutputStream();
 		aggregate.writeBytes(TRACE_CONFIGURATION_DOMAIN);
@@ -1173,6 +1276,84 @@ final class DefaultMcpSecurityControls
 		private static final long serialVersionUID = 1L;
 	}
 
+	private static final class OwnedSecretKey {
+		private static final int MINIMUM_KEY_BYTES = 32;
+		@NonNull
+		private final String keyId;
+		private final byte @NonNull [] keyMaterial;
+
+		@NonNull
+		private static OwnedSecretKey fromProtectionKey(
+				@NonNull McpProtectionKey key) {
+			requireNonNull(key);
+			return fromOwnedBytes(key.getKeyId(), key.copyKeyMaterial());
+		}
+
+		@NonNull
+		private static OwnedSecretKey fromTraceKey(
+				@NonNull McpTraceCorrelationKey key) {
+			requireNonNull(key);
+			return fromOwnedBytes(key.getKeyId(), key.copyKeyMaterial());
+		}
+
+		@NonNull
+		private static OwnedSecretKey fromBytes(@NonNull String keyId,
+				byte @NonNull [] keyMaterial) {
+			return fromOwnedBytes(keyId, requireNonNull(keyMaterial).clone());
+		}
+
+		@NonNull
+		private static OwnedSecretKey fromOwnedBytes(@NonNull String keyId,
+				byte @NonNull [] ownedKeyMaterial) {
+			try {
+				return new OwnedSecretKey(keyId, ownedKeyMaterial);
+			} catch (RuntimeException | Error throwable) {
+				Arrays.fill(ownedKeyMaterial, (byte) 0);
+				throw throwable;
+			}
+		}
+
+		private OwnedSecretKey(@NonNull String keyId,
+				byte @NonNull [] keyMaterial) {
+			this.keyId = McpKeyIdValidator.validate(keyId, "MCP secret key ID");
+			this.keyMaterial = requireNonNull(keyMaterial);
+			if (keyMaterial.length < MINIMUM_KEY_BYTES)
+				throw new IllegalArgumentException(
+						"MCP secret keys must contain at least 32 bytes.");
+		}
+
+		@NonNull
+		private String keyId() {
+			return this.keyId;
+		}
+
+		private byte @NonNull [] copyKeyMaterial() {
+			return this.keyMaterial.clone();
+		}
+
+		private boolean hasSameMaterial(@NonNull McpProtectionKey other) {
+			byte[] otherMaterial = requireNonNull(other).copyKeyMaterial();
+			try {
+				return MessageDigest.isEqual(this.keyMaterial, otherMaterial);
+			} finally {
+				Arrays.fill(otherMaterial, (byte) 0);
+			}
+		}
+
+		private boolean hasSameMaterial(@NonNull McpTraceCorrelationKey other) {
+			byte[] otherMaterial = requireNonNull(other).copyKeyMaterial();
+			try {
+				return MessageDigest.isEqual(this.keyMaterial, otherMaterial);
+			} finally {
+				Arrays.fill(otherMaterial, (byte) 0);
+			}
+		}
+
+		private void clear() {
+			Arrays.fill(this.keyMaterial, (byte) 0);
+		}
+	}
+
 	private record SealerContext(@NonNull String keyId,
 			byte @NonNull [] prk, byte @NonNull [] activationPrefix,
 			long epochNumber, long invocationCount,
@@ -1188,14 +1369,30 @@ final class DefaultMcpSecurityControls
 			return DefaultMcpSecurityControls.sealerEpoch(
 					this.activationPrefix, this.epochNumber);
 		}
+
+		private void clearDerivedKey() {
+			Arrays.fill(this.derivedKey, (byte) 0);
+		}
+
+		private void clearAll() {
+			Arrays.fill(this.prk, (byte) 0);
+			Arrays.fill(this.activationPrefix, (byte) 0);
+			clearDerivedKey();
+		}
 	}
 
 	private record SealReservation(@NonNull String keyId,
 			byte @NonNull [] sealerEpoch,
 			byte @NonNull [] derivedKey) {
 		private SealReservation {
-			sealerEpoch = sealerEpoch.clone();
-			derivedKey = derivedKey.clone();
+			byte[] sealerEpochCopy = sealerEpoch.clone();
+			try {
+				derivedKey = derivedKey.clone();
+			} catch (RuntimeException | Error throwable) {
+				Arrays.fill(sealerEpochCopy, (byte) 0);
+				throw throwable;
+			}
+			sealerEpoch = sealerEpochCopy;
 		}
 
 		private void clear() {
