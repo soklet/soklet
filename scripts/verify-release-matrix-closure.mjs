@@ -197,6 +197,188 @@ const FINITE_BOUND_EXCLUSION_ID_PATTERN = /^FINITE-EX-\d{3}$/u;
 const JAVA_OWNER_PATTERN = /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/u;
 const JAVA_MEMBER_PATTERN = /^[A-Za-z_$][\w$]*(?:\([^\r\n#]*\))?$/u;
 const BOUND_NAME_PATTERN = /^(?:maximum|minimum)[A-Z].*|^.*(?:Capacity|Concurrency|Timeout|Deadline|Duration|Interval|Resolution|Backlog|BufferSize)$/u;
+const PRIVACY_BOUNDARY_INVENTORY_PATH =
+  'conformance/mcp-privacy-boundary-inventory.json';
+const PRIVACY_TOP_LEVEL_KEYS = Object.freeze([
+  'artifactRoots',
+  'boundaries',
+  'delegations',
+  'formatVersion',
+  'matcherRules',
+  'productionProfile',
+  'releaseTarget',
+  'reviewedExclusions',
+  'scanRoots',
+]);
+const PRIVACY_BOUNDARY_KEYS = Object.freeze([
+  'canaryTests',
+  'category',
+  'classification',
+  'contract',
+  'id',
+  'name',
+  'sourcePaths',
+]);
+const PRIVACY_DELEGATION_KEYS = Object.freeze([
+  'canaryTests',
+  'contract',
+  'delegatedOwner',
+  'id',
+  'name',
+  'sourcePaths',
+]);
+const PRIVACY_SOURCE_PATH_KEYS = Object.freeze([
+  'file',
+  'key',
+  'matcherRuleId',
+  'member',
+  'occurrence',
+  'owner',
+  'sink',
+]);
+const PRIVACY_EXCLUSION_KEYS = Object.freeze([
+  'file',
+  'id',
+  'key',
+  'matcherRuleId',
+  'member',
+  'occurrence',
+  'owner',
+  'rationale',
+  'sink',
+]);
+const PRIVACY_BOUNDARY_ID_PATTERN = /^PRIV-BOUND-\d{3}$/u;
+const PRIVACY_DELEGATION_ID_PATTERN = /^PRIV-DELEGATION-\d{3}$/u;
+const PRIVACY_EXCLUSION_ID_PATTERN = /^PRIV-EX-\d{3}$/u;
+const PRIVACY_CATEGORIES = new Set([
+  'DIAGNOSTIC',
+  'EXCEPTION',
+  'FIXTURE',
+  'LOG',
+  'METRIC',
+  'REQUEST',
+  'THROWABLE',
+]);
+const PRIVACY_CLASSIFICATIONS = new Set([
+  'BOUNDED_METADATA',
+  'EXACT_APPLICATION_BOUNDARY',
+  'EXACT_FIXTURE_CAPTURE',
+  'EXPLICIT_OPT_IN',
+  'NO_EMISSION',
+  'REDACTED',
+]);
+export const PRIVACY_REQUIRED_DELEGATED_OWNERS = Object.freeze([
+  'APPLICATION_TELEMETRY_AND_MANUAL_VALUES',
+  'CUSTOM_COLLECTORS',
+  'OPERATOR_RETENTION',
+]);
+export const PRIVACY_SCAN_ROOTS = Object.freeze([
+  'src/main/java/com/soklet/**/*.java',
+]);
+export const PRIVACY_ARTIFACT_ROOTS = Object.freeze([
+  'conformance/golden-*/**/*',
+  'conformance/official/expected-checks.json',
+  'conformance/official/final-schema/**/*',
+  'conformance/official/golden-wire/**/*',
+  'conformance/official/protocol-profile-evidence.json',
+  'conformance/official/scenarios.json',
+  'fuzz/src/test/resources/com/soklet/**/*',
+  'src/test/resources/com/soklet/internal/mcp/schema/**/*',
+  'src/test/resources/multipart-request-body',
+]);
+export const PRIVACY_MATCHER_RULES = Object.freeze([
+  Object.freeze({
+    description: 'Every qualified or statically imported LogEvent.with(...) construction or LogEvent::with method reference in the full Soklet production source tree; the sink records the exact LogEventType token when statically named.',
+    family: 'SOKLET_LOG_EMISSION',
+    id: 'PRIV-MATCH-001',
+  }),
+  Object.freeze({
+    description: 'Every qualified or statically imported McpMetricsEvent factory invocation, every qualified factory method reference, plus every visible method, constructor, or field declaration owned by McpMetricsEvent, McpMetricsSnapshot, or their nested event/key/builder carriers; signatures, accessors, and fields make new metric dimensions fail closed.',
+    family: 'MCP_METRIC_EMISSION',
+    id: 'PRIV-MATCH-002',
+  }),
+  Object.freeze({
+    description: 'Every LogEvent builder request(...) attachment, including copy/builder forwarding inside LogEvent itself; unrelated reactive-stream request(...) calls are excluded structurally.',
+    family: 'LOG_REQUEST_ATTACHMENT',
+    id: 'PRIV-MATCH-003',
+  }),
+  Object.freeze({
+    description: 'Every fluent throwable(...) attachment in the declared production roots; current production uses this vocabulary exclusively for LogEvent throwable attachment and forwarding.',
+    family: 'LOG_THROWABLE_ATTACHMENT',
+    id: 'PRIV-MATCH-004',
+  }),
+  Object.freeze({
+    description: 'Exact Request/Throwable accessors and lifecycle callback invocations; every public/protected field, method, or constructor whose type/signature exposes Throwable or a frozen Request/context carrier seed; every non-rendering visible declared surface of those seeds, nested builders/copiers, and transitive implementations; and canonical constructors, carrier accessors, and implicit renderers for every record with such a component regardless of record visibility. Explicit toString overrides are represented only by the diagnostic-renderer family. Seeds include Request, trace/multipart carriers, all top-level Mcp*Context owners, localization/invocation/tool/request-id/propagation/admission/input-response carriers. Throws clauses alone are not exposure candidates.',
+    family: 'REQUEST_OR_THROWABLE_EXPOSURE',
+    id: 'PRIV-MATCH-005',
+  }),
+  Object.freeze({
+    description: 'Construction of the defined Soklet request exceptions whose payload can originate in a path, body, query parameter, form parameter, header, cookie, multipart field, or duplicate/missing value diagnostic.',
+    family: 'REQUEST_EXCEPTION_CONSTRUCTION',
+    id: 'PRIV-MATCH-006',
+  }),
+  Object.freeze({
+    description: 'Every public/protected generic HTTP/SSE and MCP simulator/result constructor or method surface, plus MCP implementation capture construction/access paths for response headers/body, stream bytes/messages, completion state, and terminal Throwables.',
+    family: 'SIMULATOR_FIXTURE_CAPTURE',
+    id: 'PRIV-MATCH-007',
+  }),
+  Object.freeze({
+    description: 'Every explicit production toString() declaration; canonical constructor and component accessor paths for records except the constructor and carrier-typed accessors already represented by PRIV-MATCH-005, plus an implicit renderer only when the record declares no toString override and is not already a Request/Throwable carrier rendered by PRIV-MATCH-005; and structural summary/render declarations in diagnostic, summary, and terminal-reporter owners. Signature-bearing candidates make newly added exact diagnostic values fail closed without double-classifying a concrete surface.',
+    family: 'PRIVACY_RELEVANT_DIAGNOSTIC_RENDERER',
+    id: 'PRIV-MATCH-008',
+  }),
+  Object.freeze({
+    description: 'Every declared public/internal McpJsonRpcError or public McpJsonRpcException method, constructor, visible field, record component, construction/factory, typed accessor publication, and catch path that can place exact application messages or data on the wire; qualified constructions are included.',
+    family: 'MCP_WIRE_ERROR_PUBLICATION',
+    id: 'PRIV-MATCH-009',
+  }),
+  Object.freeze({
+    description: 'Every tracked regular file named by the frozen exact artifacts or below the recursive Soklet golden, official final-schema/wire, generic fuzz, and MCP schema-resource roots; a newly added artifact is an unclassified candidate and an untracked artifact fails verification.',
+    family: 'TRACKED_MCP_FIXTURE_ARTIFACT',
+    id: 'PRIV-MATCH-010',
+  }),
+  Object.freeze({
+    description: 'Every explicit construction of a declared or conventional Throwable subtype, including non-suffix local subtypes discovered transitively from extends clauses, while excluding the non-Throwable DTO names JsonRpcError, McpJsonRpcError, ProtocolError, and RequestError; this general lens intentionally overlaps the request-exception and wire-error families.',
+    family: 'EXPLICIT_THROWABLE_CONSTRUCTION',
+    id: 'PRIV-MATCH-011',
+  }),
+  Object.freeze({
+    description: 'Every public or protected constructor or method declaration whose selected owner is a transitively discovered Throwable subtype, including non-suffix and Error carriers; current methods expose exact values or bounded reasons, future carrier/rendering methods fail closed, and overloads retain canonical parameter signatures.',
+    family: 'EXCEPTION_CARRIER_PUBLIC_SURFACE',
+    id: 'PRIV-MATCH-012',
+  }),
+  Object.freeze({
+    description: 'Every void emission method declared by the internal microhttp Logger abstraction, every same-vocabulary dot invocation in internal microhttp regardless of receiver expression, each no-Logger EventLoop constructor delegation keyed by its no-op/default semantics, plus every MCP-runtime EventLoop construction keyed by explicit-no-op/default-no-op/alternate semantics and every NoopLogger.instance() wiring; logger replacement therefore changes the inventory key.',
+    family: 'MICROHTTP_LOGGER_CHANNEL',
+    id: 'PRIV-MATCH-013',
+  }),
+  Object.freeze({
+    description: 'Every direct System.err/System.out print, printf, println, or write call or method reference, every typed PrintStream or System-stream var-alias output call or method reference, the terminal reporter OutputStream write, and every Throwable.printStackTrace(...) call in production source.',
+    family: 'DIRECT_OUTPUT_OR_STACKTRACE',
+    id: 'PRIV-MATCH-014',
+  }),
+  Object.freeze({
+    description: 'Every visible method, constructor, or field declaration owned by the top-level MetricsCollector interface or any nested metrics carrier/builder, every visible production override of the complete top-level method vocabulary, and every dot invocation of that vocabulary across production source.',
+    family: 'METRICS_COLLECTOR_SURFACE',
+    id: 'PRIV-MATCH-015',
+  }),
+  Object.freeze({
+    description: 'Every visible LogEvent/Builder/Copier declaration plus every invocation of the derived Builder/Copier vocabulary on qualified, statically imported, typed-receiver, or copy-chain LogEvent construction paths; new attachment names and variable-based attachments fail closed.',
+    family: 'LOG_VALUE_ATTACHMENT',
+    id: 'PRIV-MATCH-016',
+  }),
+]);
+const PRIVACY_MATCHER_IDS = new Set(
+  PRIVACY_MATCHER_RULES.map(({ id }) => id),
+);
+const PRIVACY_NON_THROWABLE_ERROR_TYPES = new Set([
+  'JsonRpcError',
+  'McpJsonRpcError',
+  'ProtocolError',
+  'RequestError',
+]);
+const PRIVACY_SINK_PATTERN =
+  /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*(?::[A-Z0-9_]+)?$/u;
 const TRACKED_REFERENCE_CACHE = new Map();
 
 export class MatrixClosureVerificationError extends Error {}
@@ -284,20 +466,21 @@ function normalizedCandidatePath(value, label) {
   }
 }
 
-function requireContainedPath(root, path, label, expectedType) {
+function requireContainedPath(root, path, label, expectedType,
+    projectLabel = 'Finite-bound') {
   const normalizedRoot = resolve(root);
   const normalizedPath = resolve(path);
   const candidateRelative = relative(normalizedRoot, normalizedPath);
   if (candidateRelative.length === 0 || isAbsolute(candidateRelative)
       || candidateRelative === '..' || candidateRelative.startsWith(`..${sep}`)) {
-    fail(`${label} must be contained by the finite-bound project root.`);
+    fail(`${label} must be contained by the ${projectLabel.toLowerCase()} project root.`);
   }
   if (!existsSync(normalizedRoot)) {
-    fail('Finite-bound project root does not exist.');
+    fail(`${projectLabel} project root does not exist.`);
   }
   const rootStat = lstatSync(normalizedRoot);
   if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
-    fail('Finite-bound project root must be a regular non-symlink directory.');
+    fail(`${projectLabel} project root must be a regular non-symlink directory.`);
   }
   let current = normalizedRoot;
   const segments = candidateRelative.split(sep);
@@ -407,11 +590,20 @@ function javaTypeScopes(structure) {
     }
     const header = structure.slice(delimiter + 1, opening).trim();
     const type = header.match(
-      /\b(?:class|record|interface|enum)\s+([A-Za-z_$][\w$]*)/u,
+      /\b(class|record|interface|enum)\s+([A-Za-z_$][\w$]*)/u,
     );
     if (type) {
       const closing = matchingDelimiter(structure, opening, '{', '}');
-      if (closing > opening) scopes.push({ closing, name: type[1], opening });
+      if (closing > opening) {
+        scopes.push({
+          closing,
+          header,
+          headerStart: delimiter + 1,
+          kind: type[1],
+          name: type[2],
+          opening,
+        });
+      }
     }
     delimiter = opening;
   }
@@ -457,7 +649,8 @@ function parameterName(declaration) {
   return declaration.trim().match(/([A-Za-z_$][\w$]*)\s*$/u)?.[1];
 }
 
-function methodMember(method, parameters, file, line) {
+function methodMember(method, parameters, file, line,
+    scannerLabel = 'Finite-bound') {
   const parameterTypes = parameters.trim().length === 0 ? []
     : splitTopLevel(parameters).map((parameter) => {
       const declaration = parameter
@@ -466,13 +659,13 @@ function methodMember(method, parameters, file, line) {
         .trim();
       const name = parameterName(declaration);
       if (name === undefined) {
-        fail(`Finite-bound scanner cannot resolve a parameter at ${file}:${line}.`);
+        fail(`${scannerLabel} scanner cannot resolve a parameter at ${file}:${line}.`);
       }
       const type = declaration.slice(0, declaration.lastIndexOf(name))
         .trim()
         .replace(/\s+/gu, ' ');
       if (type.length === 0 || /[\r\n#()]/u.test(type)) {
-        fail(`Finite-bound scanner cannot canonicalize a parameter type at ${file}:${line}.`);
+        fail(`${scannerLabel} scanner cannot canonicalize a parameter type at ${file}:${line}.`);
       }
       return type;
     });
@@ -535,8 +728,11 @@ function javaMethodScopes(source, structure, typeScopes) {
     if (method !== undefined && closing > opening) {
       scopes.push({
         body: structure.slice(opening + 1, closing),
+        closing,
+        headerStart: delimiter + 1,
         line: source.slice(0, opening).split(/\r?\n/u).length,
         method,
+        opening,
         owner: ownerAt(packageName, typeScopes, opening),
         parameters,
         publicMethod,
@@ -545,6 +741,132 @@ function javaMethodScopes(source, structure, typeScopes) {
     delimiter = opening;
   }
   return scopes;
+}
+
+function javaVisibleMemberDeclarations(source, structure, typeScopes,
+    methodScopes) {
+  const declarations = [];
+  const seen = new Set();
+  const controls = new Set([
+    'catch', 'for', 'if', 'switch', 'synchronized', 'try', 'while',
+  ]);
+  const add = ({ headerStart, method, opening, owner, parameters }) => {
+    const header = structure.slice(headerStart, opening);
+    const containingTypes = typeScopes
+      .filter(({ closing, opening: typeOpening }) =>
+        typeOpening < opening && closing > opening)
+      .sort((left, right) => right.opening - left.opening);
+    const implicitInterfaceMethod = containingTypes[0]?.kind === 'interface'
+      && !/\bprivate\b/u.test(header);
+    if (!/\b(?:public|protected)\b/u.test(header)
+        && !implicitInterfaceMethod) return;
+    const line = source.slice(0, opening).split(/\r?\n/u).length;
+    const member = methodMember(
+      method,
+      parameters,
+      '.privacy-source',
+      line,
+      'Privacy-boundary',
+    );
+    const key = `${owner}\0${member}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    declarations.push({
+      header,
+      headerStart,
+      line,
+      member,
+      method,
+      owner,
+      parameters,
+    });
+  };
+
+  for (const scope of methodScopes) add(scope);
+
+  for (const nameMatch of structure.matchAll(
+    /\b([A-Za-z_$][\w$]*)\s*\(/gu,
+  )) {
+    const method = nameMatch[1];
+    if (controls.has(method)) continue;
+    const nameIndex = nameMatch.index;
+    const opening = nameMatch.index + nameMatch[0].lastIndexOf('(');
+    const closing = matchingDelimiter(structure, opening, '(', ')');
+    if (closing < 0) continue;
+    const semicolon = structure.indexOf(';', closing + 1);
+    if (semicolon < 0) continue;
+    const nextOpeningBrace = structure.indexOf('{', closing + 1);
+    const nextClosingBrace = structure.indexOf('}', closing + 1);
+    if ((nextOpeningBrace >= 0 && nextOpeningBrace < semicolon)
+        || (nextClosingBrace >= 0 && nextClosingBrace < semicolon)) continue;
+    const tail = structure.slice(closing + 1, semicolon).trim();
+    if (tail.length > 0 && !/^throws\b[^;{}]*$/u.test(tail)) continue;
+    const headerStart = Math.max(
+      structure.lastIndexOf(';', nameIndex),
+      structure.lastIndexOf('{', nameIndex),
+      structure.lastIndexOf('}', nameIndex),
+    ) + 1;
+    const prior = structure.slice(headerStart, nameIndex).trim();
+    if (prior.length === 0 || prior.endsWith('.') || prior.endsWith('::')
+        || prior.includes('=')
+        || /\b(?:new|return|throw)\s*$/u.test(prior)) continue;
+    const containingTypes = typeScopes
+      .filter(({ closing: typeClosing, opening: typeOpening }) =>
+        typeOpening < opening && typeClosing > opening);
+    if (containingTypes.length === 0) continue;
+    add({
+      headerStart,
+      method,
+      opening: semicolon,
+      owner: ownerAt(
+        structure.match(/\bpackage\s+([\w.]+)\s*;/u)?.[1] ?? '',
+        typeScopes,
+        opening,
+      ),
+      parameters: structure.slice(opening + 1, closing),
+    });
+  }
+  return declarations.sort((left, right) => left.headerStart - right.headerStart);
+}
+
+function javaVisibleFieldDeclarations(source, structure, typeScopes,
+    methodScopes) {
+  const packageName = structure.match(/\bpackage\s+([\w.]+)\s*;/u)?.[1] ?? '';
+  const declarations = [];
+  const fieldPattern = /^[ \t]*((?:(?:public|protected|private|static|final|transient|volatile)\s+|@[A-Za-z_$][\w$]*(?:\([^()\r\n]*\))?\s+)*)([A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*(?:\s*<[^;={}()]*>)?(?:\s*\[\s*\])*)\s+([^;\r\n]+);/gmu;
+  for (const match of structure.matchAll(fieldPattern)) {
+    const declarationIndex = match.index + match[0].indexOf(match[3]);
+    if (methodScopes.some(({ closing, headerStart }) =>
+      headerStart <= declarationIndex && closing > declarationIndex)) continue;
+    const containingTypes = typeScopes
+      .filter(({ closing, opening }) =>
+        opening < declarationIndex && closing > declarationIndex)
+      .sort((left, right) => right.opening - left.opening);
+    if (containingTypes.length === 0) continue;
+    const modifiers = match[1];
+    const implicitInterfaceField = containingTypes[0].kind === 'interface'
+      && !/\bprivate\b/u.test(modifiers);
+    if (!/\b(?:public|protected)\b/u.test(modifiers)
+        && !implicitInterfaceField) continue;
+    let searchOffset = 0;
+    for (const declarator of splitTopLevel(match[3])) {
+      const parsed = declarator.trim().match(
+        /^([A-Za-z_$][\w$]*)(?:\s*\[\s*\])?\s*(?:=|$)/u,
+      );
+      if (parsed === null) continue;
+      const relativeIndex = match[3].indexOf(parsed[1], searchOffset);
+      searchOffset = relativeIndex + parsed[1].length;
+      const index = declarationIndex + relativeIndex;
+      declarations.push({
+        field: parsed[1],
+        index,
+        line: source.slice(0, index).split(/\r?\n/u).length,
+        owner: ownerAt(packageName, typeScopes, index),
+        type: match[2].replace(/\s+/gu, ' ').trim(),
+      });
+    }
+  }
+  return declarations;
 }
 
 function globRegularExpression(pattern) {
@@ -747,7 +1069,7 @@ export function deriveFiniteBoundCandidates(root, scanRoots) {
       });
     }
 
-    const recordPattern = /\brecord\s+([A-Za-z_$][\w$]*)\s*\(/gu;
+    const recordPattern = /\brecord\s+([A-Za-z_$][\w$]*)(?:\s*<[^{};()]*>)?\s*\(/gu;
     for (const match of structure.matchAll(recordPattern)) {
       const recordName = match[1];
       if (!/(?:Config|Configuration|Limits)$/u.test(recordName)) continue;
@@ -960,6 +1282,1697 @@ export function verifyFiniteBoundInventory(options = {}) {
   }
   return {
     candidates,
+    exclusions: inventory.reviewedExclusions,
+    inventory,
+  };
+}
+
+function privacyKey(matcherRuleId, file, owner, member, sink, occurrence) {
+  return `${matcherRuleId}:${file}#${owner}#${member}->${sink}@${occurrence}`;
+}
+
+function privacyJavaFiles(root, scanRoots) {
+  if (!Array.isArray(scanRoots) || scanRoots.length === 0
+      || new Set(scanRoots).size !== scanRoots.length) {
+    fail('Privacy-boundary scanRoots must be a nonempty unique array.');
+  }
+  const sortedRoots = [...scanRoots].sort(compareAscii);
+  if (scanRoots.some((value, index) => value !== sortedRoots[index])) {
+    fail('Privacy-boundary scanRoots must be in ASCII order.');
+  }
+  for (const [index, pattern] of scanRoots.entries()) {
+    normalizedCandidatePath(pattern, `scanRoots[${index}]`);
+    if (!pattern.startsWith('src/main/java/') || !pattern.endsWith('.java')) {
+      fail(`Privacy-boundary scan root must select Java sources below src/main/java: ${pattern}`);
+    }
+  }
+  const sourceRoot = resolve(root, 'src/main/java');
+  requireContainedPath(
+    root,
+    sourceRoot,
+    'Privacy-boundary source root src/main/java',
+    'directory',
+    'Privacy-boundary',
+  );
+  const files = [];
+  const visit = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })
+      .sort((left, right) => compareAscii(left.name, right.name))) {
+      const path = join(directory, entry.name);
+      const candidateRelative = relative(root, path).split(sep).join('/');
+      if (entry.isSymbolicLink()) {
+        fail(`Privacy-boundary source tree contains a symlink: ${candidateRelative}.`);
+      }
+      if (entry.isDirectory()) visit(path);
+      else if (entry.isFile() && entry.name.endsWith('.java')) files.push(path);
+    }
+  };
+  visit(sourceRoot);
+  const matchers = scanRoots.map(globRegularExpression);
+  const matched = new Set();
+  const selected = files.filter((path) => {
+    const candidateRelative = relative(root, path).split(sep).join('/');
+    let selectedFile = false;
+    for (const [index, matcher] of matchers.entries()) {
+      if (matcher.test(candidateRelative)) {
+        matched.add(index);
+        selectedFile = true;
+      }
+    }
+    return selectedFile;
+  });
+  for (const [index, pattern] of scanRoots.entries()) {
+    if (!matched.has(index)) {
+      fail(`Privacy-boundary scan root matches no source: ${pattern}.`);
+    }
+  }
+  return selected.sort(compareAscii);
+}
+
+function readPrivacyJavaSource(root, path) {
+  const file = relative(root, path).split(sep).join('/');
+  const bytes = readFileSync(path);
+  const source = bytes.toString('utf8');
+  if (!Buffer.from(source, 'utf8').equals(bytes)) {
+    fail(`Privacy-boundary source is not valid UTF-8: ${file}.`);
+  }
+  return { file, source };
+}
+
+function privacyLocation(source, structure, packageName, typeScopes,
+    methodScopes, index, explicitMethod) {
+  const scopes = methodScopes
+    .filter(({ closing, headerStart }) => headerStart <= index && closing > index)
+    .sort((left, right) => right.opening - left.opening);
+  const scope = scopes[0];
+  if (scope !== undefined) {
+    return {
+      member: methodMember(
+        scope.method,
+        scope.parameters,
+        relative('.', '.privacy-source'),
+        scope.line,
+        'Privacy-boundary',
+      ),
+      owner: scope.owner,
+    };
+  }
+  if (explicitMethod !== undefined) {
+    const opening = structure.indexOf('(', index + explicitMethod.length);
+    const closing = opening < 0 ? -1
+      : matchingDelimiter(structure, opening, '(', ')');
+    if (opening >= 0 && closing > opening) {
+      const parameters = structure.slice(opening + 1, closing);
+      return {
+        member: methodMember(
+          explicitMethod,
+          parameters,
+          relative('.', '.privacy-source'),
+          source.slice(0, index).split(/\r?\n/u).length,
+          'Privacy-boundary',
+        ),
+        owner: ownerAt(packageName, typeScopes, index),
+      };
+    }
+  }
+  return {
+    member: '$typeInitializer()',
+    owner: ownerAt(packageName, typeScopes, index),
+  };
+}
+
+function isLogRequestAttachment(structure, owner, index, context = {}) {
+  const statementStart = Math.max(
+    structure.lastIndexOf(';', index),
+    structure.lastIndexOf('{', index),
+    structure.lastIndexOf('}', index),
+  );
+  const prefix = structure.slice(statementStart + 1, index);
+  const receiver = structure.slice(0, index).match(
+    /([A-Za-z_$][\w$]*)\s*$/u,
+  )?.[1];
+  const copiedEvent = /\.\s*copy\s*\(/u.test(prefix);
+  return /\bLogEvent\s*\.\s*(?:builder|with)\s*\(/u.test(prefix)
+    || (context.staticWith === true && /(?<![\w$.])with\s*\(/u.test(prefix))
+    || (receiver !== undefined
+      && (context.builderReceivers ?? new Set()).has(receiver))
+    || copiedEvent
+    || owner.endsWith('.LogEvent') || owner.includes('.LogEvent.');
+}
+
+function privacyThrowableTypeNames(sourceModels) {
+  const declaredParents = [];
+  const throwableNames = new Set([
+    'Error',
+    'Exception',
+    'RuntimeException',
+    'Throwable',
+  ]);
+  for (const { typeScopes } of sourceModels) {
+    for (const { header, kind, name } of typeScopes) {
+      if (kind !== 'class') continue;
+      const parent = header.match(
+        /\bextends\s+(?:[A-Za-z_$][\w$]*\s*\.\s*)*([A-Za-z_$][\w$]*)/u,
+      )?.[1];
+      if (parent !== undefined) declaredParents.push({ name, parent });
+      if ((name.endsWith('Exception') || name.endsWith('Error'))
+          && !PRIVACY_NON_THROWABLE_ERROR_TYPES.has(name)) {
+        throwableNames.add(name);
+      }
+    }
+  }
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const { name, parent } of declaredParents) {
+      const throwableParent = throwableNames.has(parent)
+        || parent.endsWith('Exception') || parent.endsWith('Error');
+      if (throwableNames.has(name) || !throwableParent) continue;
+      throwableNames.add(name);
+      changed = true;
+    }
+  }
+  return throwableNames;
+}
+
+function containsPrivacyCarrierType(value, throwableTypeNames) {
+  for (const match of value.matchAll(/\b([A-Za-z_$][\w$]*)\b/gu)) {
+    const name = match[1];
+    if (name === 'Request' || name === 'Throwable') return true;
+    if (PRIVACY_NON_THROWABLE_ERROR_TYPES.has(name)) continue;
+    if (throwableTypeNames.has(name)
+        || name.endsWith('Exception') || name.endsWith('Error')) return true;
+  }
+  return false;
+}
+
+function privacyArtifactFiles(root, artifactRoots, gitExecutable) {
+  if (!Array.isArray(artifactRoots) || artifactRoots.length === 0
+      || new Set(artifactRoots).size !== artifactRoots.length) {
+    fail('Privacy-boundary artifactRoots must be a nonempty unique array.');
+  }
+  const sortedRoots = [...artifactRoots].sort(compareAscii);
+  if (artifactRoots.some((value, index) => value !== sortedRoots[index])) {
+    fail('Privacy-boundary artifactRoots must be in ASCII order.');
+  }
+  if (typeof gitExecutable !== 'string' || gitExecutable.length === 0) {
+    fail('Privacy-boundary gitExecutable must be a nonempty string.');
+  }
+  const allFiles = new Set();
+  for (const [index, pattern] of artifactRoots.entries()) {
+    normalizedCandidatePath(pattern, `artifactRoots[${index}]`);
+    if (!(pattern.startsWith('conformance/')
+        || pattern.startsWith('fuzz/src/test/resources/')
+        || pattern.startsWith('src/test/resources/'))) {
+      fail(`Privacy-boundary artifact root is outside the frozen fixture trees: ${pattern}.`);
+    }
+    const wildcardIndex = pattern.search(/[?*]/u);
+    if (wildcardIndex < 0) {
+      const exactPath = resolve(root, pattern);
+      requireContainedPath(
+        root,
+        exactPath,
+        `Privacy-boundary exact artifact ${pattern}`,
+        'file',
+        'Privacy-boundary',
+      );
+      allFiles.add(pattern);
+      continue;
+    }
+    const fixedPrefix = pattern.slice(0, wildcardIndex);
+    const baseRelative = fixedPrefix.endsWith('/')
+      ? fixedPrefix.slice(0, -1) : posix.dirname(fixedPrefix);
+    const base = resolve(root, baseRelative);
+    requireContainedPath(
+      root,
+      base,
+      `Privacy-boundary artifact base ${baseRelative}`,
+      'directory',
+      'Privacy-boundary',
+    );
+    const visit = (directory) => {
+      for (const entry of readdirSync(directory, { withFileTypes: true })
+        .sort((left, right) => compareAscii(left.name, right.name))) {
+        const path = join(directory, entry.name);
+        const candidateRelative = relative(root, path).split(sep).join('/');
+        if (entry.isSymbolicLink()) {
+          fail(`Privacy-boundary artifact tree contains a symlink: ${candidateRelative}.`);
+        }
+        if (entry.isDirectory()) visit(path);
+        else if (entry.isFile()) allFiles.add(candidateRelative);
+      }
+    };
+    visit(base);
+  }
+  const matchers = artifactRoots.map(globRegularExpression);
+  const matched = new Set();
+  const artifacts = [];
+  for (const file of [...allFiles].sort(compareAscii)) {
+    for (const [index, matcher] of matchers.entries()) {
+      if (!matcher.test(file)) continue;
+      matched.add(index);
+      const cacheKey = `${gitExecutable}\0${root}\0${file}`;
+      let tracked = TRACKED_REFERENCE_CACHE.get(cacheKey);
+      if (tracked === undefined) {
+        const result = spawnSync(
+          gitExecutable,
+          [
+            '-c',
+            `safe.directory=${root}`,
+            '-C',
+            root,
+            'ls-files',
+            '--error-unmatch',
+            '--',
+            file,
+          ],
+          { encoding: 'utf8' },
+        );
+        if (result.error !== undefined) {
+          fail(`Unable to inspect privacy artifact tracking: ${result.error.message}`);
+        }
+        tracked = result.status === 0;
+        TRACKED_REFERENCE_CACHE.set(cacheKey, tracked);
+      }
+      if (!tracked) {
+        fail(`Privacy-boundary fixture artifact is not tracked: ${file}.`);
+      }
+      artifacts.push({ file, rootIndex: index });
+      break;
+    }
+  }
+  for (const [index, pattern] of artifactRoots.entries()) {
+    if (!matched.has(index)) {
+      fail(`Privacy-boundary artifact root matches no tracked artifact: ${pattern}.`);
+    }
+  }
+  return artifacts;
+}
+
+export function derivePrivacyBoundaryCandidates(root, scanRoots,
+    artifactRoots = PRIVACY_ARTIFACT_ROOTS, gitExecutable = 'git') {
+  const normalizedRoot = resolve(root);
+  const candidates = [];
+  const occurrenceByIdentity = new Map();
+  const add = ({ file, index = 0, matcherRuleId, member, owner, sink, source }) => {
+    const identity = `${matcherRuleId}\0${file}\0${owner}\0${member}\0${sink}`;
+    const occurrence = (occurrenceByIdentity.get(identity) ?? 0) + 1;
+    occurrenceByIdentity.set(identity, occurrence);
+    const key = privacyKey(
+      matcherRuleId,
+      file,
+      owner,
+      member,
+      sink,
+      occurrence,
+    );
+    candidates.push({
+      file,
+      key,
+      line: source === undefined ? 1
+        : source.slice(0, index).split(/\r?\n/u).length,
+      matcherRuleId,
+      member,
+      occurrence,
+      owner,
+      sink,
+    });
+  };
+
+  const sourceModels = privacyJavaFiles(normalizedRoot, scanRoots).map((path) => {
+    const { file, source } = readPrivacyJavaSource(normalizedRoot, path);
+    const structure = maskJava(source);
+    const packageName = structure.match(/\bpackage\s+([\w.]+)\s*;/u)?.[1] ?? '';
+    const typeScopes = javaTypeScopes(structure);
+    const methodScopes = javaMethodScopes(source, structure, typeScopes);
+    const visibleMemberDeclarations = javaVisibleMemberDeclarations(
+      source,
+      structure,
+      typeScopes,
+      methodScopes,
+    );
+    const visibleFieldDeclarations = javaVisibleFieldDeclarations(
+      source,
+      structure,
+      typeScopes,
+      methodScopes,
+    );
+    return {
+      file,
+      methodScopes,
+      packageName,
+      source,
+      structure,
+      typeScopes,
+      visibleFieldDeclarations,
+      visibleMemberDeclarations,
+    };
+  });
+  const throwableTypeNames = privacyThrowableTypeNames(sourceModels);
+  const applicationRequestCarrierOwners = new Set([
+    'com.soklet.McpAdmissionIdentity',
+    'com.soklet.McpInputResponses',
+    'com.soklet.McpInvocationFeatures',
+    'com.soklet.McpLocalizationRequest',
+    'com.soklet.McpRequestId',
+    'com.soklet.McpRequestPropagation',
+    'com.soklet.McpToolArguments',
+    'com.soklet.MultipartField',
+    'com.soklet.Request',
+    'com.soklet.TraceContext',
+    'com.soklet.TraceStateEntry',
+  ]);
+  for (const { file } of sourceModels) {
+    const contextName = file.match(
+      /^src\/main\/java\/com\/soklet\/(Mcp[A-Za-z_$][\w$]*Context)\.java$/u,
+    )?.[1];
+    if (contextName !== undefined) {
+      applicationRequestCarrierOwners.add(`com.soklet.${contextName}`);
+    }
+  }
+  const applicationRequestCarrierSeedNames = new Set(
+    [...applicationRequestCarrierOwners].map((owner) =>
+      owner.slice(owner.lastIndexOf('.') + 1)),
+  );
+  let addedApplicationCarrierImplementation = true;
+  while (addedApplicationCarrierImplementation) {
+    addedApplicationCarrierImplementation = false;
+    const selectedTypeNames = new Set(
+      [...applicationRequestCarrierOwners].map((owner) =>
+        owner.slice(owner.lastIndexOf('.') + 1)),
+    );
+    for (const { packageName, typeScopes } of sourceModels) {
+      for (const scope of typeScopes) {
+        const inheritance = scope.header.match(
+          /\b(?:extends|implements)\b([\s\S]*)$/u,
+        )?.[1];
+        if (inheritance === undefined
+            || ![...selectedTypeNames].some((name) =>
+              new RegExp(`\\b${name}\\b`, 'u').test(inheritance))) continue;
+        const owner = ownerAt(
+          packageName,
+          typeScopes,
+          scope.opening,
+          scope.name,
+        );
+        if (applicationRequestCarrierOwners.has(owner)) continue;
+        applicationRequestCarrierOwners.add(owner);
+        addedApplicationCarrierImplementation = true;
+      }
+    }
+  }
+  const mcpMetricsEventModel = sourceModels.find(({ file }) =>
+    file === 'src/main/java/com/soklet/McpMetricsEvent.java');
+  if (mcpMetricsEventModel === undefined) {
+    fail('Privacy-boundary scan roots must include McpMetricsEvent.java.');
+  }
+  const mcpMetricsFactoryNames = new Set(mcpMetricsEventModel
+    .visibleMemberDeclarations
+    .filter(({ header, method, owner }) =>
+      owner === 'com.soklet.McpMetricsEvent'
+        && /\bstatic\b/u.test(header) && /^[a-z]/u.test(method))
+    .map(({ method }) => method));
+  if (mcpMetricsFactoryNames.size === 0) {
+    fail('Privacy-boundary scanner found no McpMetricsEvent factory vocabulary.');
+  }
+  const metricsCollectorModel = sourceModels.find(({ file }) =>
+    file === 'src/main/java/com/soklet/MetricsCollector.java');
+  if (metricsCollectorModel === undefined) {
+    fail('Privacy-boundary scan roots must include MetricsCollector.java.');
+  }
+  const metricsMethodNames = new Set(metricsCollectorModel
+    .visibleMemberDeclarations
+    .filter(({ owner }) => owner === 'com.soklet.MetricsCollector')
+    .map(({ method }) => method));
+  if (metricsMethodNames.size === 0) {
+    fail('Privacy-boundary scanner found no MetricsCollector callback vocabulary.');
+  }
+  const metricsInvocationPattern = new RegExp(
+    `\\.\\s*(${[...metricsMethodNames].sort(compareAscii).join('|')})\\s*\\(`,
+    'gu',
+  );
+  const logEventModel = sourceModels.find(({ file }) =>
+    file === 'src/main/java/com/soklet/LogEvent.java');
+  if (logEventModel === undefined) {
+    fail('Privacy-boundary scan roots must include LogEvent.java.');
+  }
+  const logEventAttachmentNames = new Set(logEventModel
+    .visibleMemberDeclarations
+    .filter(({ owner }) => owner === 'com.soklet.LogEvent.Builder'
+      || owner === 'com.soklet.LogEvent.Copier')
+    .map(({ method }) => method));
+  if (logEventAttachmentNames.size === 0) {
+    fail('Privacy-boundary scanner found no LogEvent attachment vocabulary.');
+  }
+  const logEventAttachmentPattern = new RegExp(
+    `\\.\\s*(${[...logEventAttachmentNames].sort(compareAscii).join('|')})\\s*\\(`,
+    'gu',
+  );
+  const loggerModel = sourceModels.find(({ file }) =>
+    file === 'src/main/java/com/soklet/internal/microhttp/Logger.java');
+  if (loggerModel === undefined) {
+    fail('Privacy-boundary scan roots must include internal microhttp Logger.java.');
+  }
+  const microhttpLoggerMethodNames = new Set(loggerModel
+    .visibleMemberDeclarations
+    .filter(({ header, method, owner }) => {
+      if (owner !== 'com.soklet.internal.microhttp.Logger') return false;
+      const methodOffset = header.lastIndexOf(method);
+      return methodOffset >= 0
+        && /\bvoid\s*$/u.test(header.slice(0, methodOffset));
+    })
+    .map(({ method }) => method));
+  if (microhttpLoggerMethodNames.size === 0) {
+    fail('Privacy-boundary scanner found no internal microhttp Logger emission vocabulary.');
+  }
+  const microhttpLoggerInvocationPattern = new RegExp(
+    `\\.\\s*(${[...microhttpLoggerMethodNames].sort(compareAscii).join('|')})\\s*\\(`,
+    'gu',
+  );
+
+  for (const {
+    file,
+    methodScopes,
+    packageName,
+    source,
+    structure,
+    typeScopes,
+    visibleFieldDeclarations,
+    visibleMemberDeclarations,
+  } of sourceModels) {
+    const addMatch = (match, matcherRuleId, sink, explicitMethod) => {
+      const location = privacyLocation(
+        source,
+        structure,
+        packageName,
+        typeScopes,
+        methodScopes,
+        match.index,
+        explicitMethod,
+      );
+      add({
+        file,
+        index: match.index,
+        matcherRuleId,
+        sink,
+        source,
+        ...location,
+      });
+    };
+    const staticLogEventWith = /\bimport\s+static\s+com\.soklet\.LogEvent\.(?:with|\*)\s*;/u
+      .test(structure);
+    const importedMcpMetricsFactories = new Set();
+    for (const match of structure.matchAll(
+      /\bimport\s+static\s+com\.soklet\.McpMetricsEvent\.([A-Za-z_$*][\w$]*)\s*;/gu,
+    )) {
+      if (match[1] === '*') {
+        for (const name of mcpMetricsFactoryNames) {
+          importedMcpMetricsFactories.add(name);
+        }
+      } else if (mcpMetricsFactoryNames.has(match[1])) {
+        importedMcpMetricsFactories.add(match[1]);
+      }
+    }
+    const logBuilderReceivers = new Set([...structure.matchAll(
+      /\bLogEvent\s*\.\s*(?:Builder|Copier)\s+([A-Za-z_$][\w$]*)/gu,
+    )].map((match) => match[1]));
+    if (/\bimport\s+com\.soklet\.LogEvent\.(?:Builder|Copier|\*)\s*;/u
+      .test(structure)) {
+      for (const match of structure.matchAll(
+        /\b(?:Builder|Copier)\s+([A-Za-z_$][\w$]*)/gu,
+      )) logBuilderReceivers.add(match[1]);
+    }
+    for (const match of structure.matchAll(
+      /\bvar\s+([A-Za-z_$][\w$]*)\s*=\s*(?:LogEvent\s*\.\s*)?(?:with|builder)\s*\(/gu,
+    )) logBuilderReceivers.add(match[1]);
+    for (const match of structure.matchAll(
+      /\bvar\s+([A-Za-z_$][\w$]*)\s*=\s*[^;\r\n]*\.\s*copy\s*\(/gu,
+    )) logBuilderReceivers.add(match[1]);
+    const logAttachmentContext = {
+      builderReceivers: logBuilderReceivers,
+      staticWith: staticLogEventWith,
+    };
+
+    for (const declaration of visibleMemberDeclarations) {
+      const simpleOwner = declaration.owner.slice(
+        declaration.owner.lastIndexOf('.') + 1,
+      );
+      if (!throwableTypeNames.has(simpleOwner)
+          || PRIVACY_NON_THROWABLE_ERROR_TYPES.has(simpleOwner)) continue;
+      const visibleConstructor = declaration.method === simpleOwner;
+      const sink = visibleConstructor ? 'ExceptionCarrier.constructor'
+        : declaration.method === 'toString'
+            && declaration.parameters.trim().length === 0
+          ? 'ExceptionCarrier.diagnosticRenderer'
+          : 'ExceptionCarrier.publicOrProtectedMethod';
+      add({
+        file,
+        index: declaration.headerStart,
+        matcherRuleId: 'PRIV-MATCH-012',
+        member: declaration.member,
+        owner: declaration.owner,
+        sink,
+        source,
+      });
+    }
+    for (const declaration of visibleFieldDeclarations) {
+      const metricsSurface = declaration.owner === 'com.soklet.McpMetricsEvent'
+        || declaration.owner.startsWith('com.soklet.McpMetricsEvent.')
+        || declaration.owner === 'com.soklet.McpMetricsSnapshot'
+        || declaration.owner.startsWith('com.soklet.McpMetricsSnapshot.');
+      if (!metricsSurface) continue;
+      add({
+        file,
+        index: declaration.index,
+        matcherRuleId: 'PRIV-MATCH-002',
+        member: declaration.field,
+        owner: declaration.owner,
+        sink: 'McpMetricsSurface.field',
+        source,
+      });
+    }
+
+    for (const declaration of visibleFieldDeclarations) {
+      if (!containsPrivacyCarrierType(declaration.type, throwableTypeNames)) {
+        continue;
+      }
+      add({
+        file,
+        index: declaration.index,
+        matcherRuleId: 'PRIV-MATCH-005',
+        member: declaration.field,
+        owner: declaration.owner,
+        sink: 'RequestOrThrowable.field',
+        source,
+      });
+    }
+    const applicationCarrierOwner = (owner) =>
+      [...applicationRequestCarrierOwners].some((baseOwner) =>
+        owner === baseOwner || owner.startsWith(`${baseOwner}.`));
+    const mentionsApplicationCarrier = (value) =>
+      [...value.matchAll(/\b([A-Za-z_$][\w$]*)\b/gu)]
+        .some((match) => applicationRequestCarrierSeedNames.has(match[1]));
+    for (const declaration of visibleMemberDeclarations) {
+      if (!applicationCarrierOwner(declaration.owner)) continue;
+      if (declaration.method === 'toString'
+          && declaration.parameters.trim().length === 0) continue;
+      add({
+        file,
+        index: declaration.headerStart,
+        matcherRuleId: 'PRIV-MATCH-005',
+        member: declaration.member,
+        owner: declaration.owner,
+        sink: `ApplicationRequestCarrier.surface.${declaration.method}`,
+        source,
+      });
+    }
+    for (const declaration of visibleFieldDeclarations) {
+      if (!applicationCarrierOwner(declaration.owner)) continue;
+      add({
+        file,
+        index: declaration.index,
+        matcherRuleId: 'PRIV-MATCH-005',
+        member: declaration.field,
+        owner: declaration.owner,
+        sink: 'ApplicationRequestCarrier.surface.field',
+        source,
+      });
+    }
+    for (const declaration of visibleMemberDeclarations) {
+      if (applicationCarrierOwner(declaration.owner)) continue;
+      const methodOffset = declaration.header.lastIndexOf(
+        declaration.method,
+      );
+      const returnPortion = methodOffset < 0 ? ''
+        : declaration.header.slice(0, methodOffset);
+      if (!mentionsApplicationCarrier(declaration.parameters)
+          && !mentionsApplicationCarrier(returnPortion)) continue;
+      add({
+        file,
+        index: declaration.headerStart,
+        matcherRuleId: 'PRIV-MATCH-005',
+        member: declaration.member,
+        owner: declaration.owner,
+        sink: 'ApplicationRequestCarrier.declaration',
+        source,
+      });
+    }
+    for (const declaration of visibleFieldDeclarations) {
+      if (applicationCarrierOwner(declaration.owner)
+          || !mentionsApplicationCarrier(declaration.type)) continue;
+      add({
+        file,
+        index: declaration.index,
+        matcherRuleId: 'PRIV-MATCH-005',
+        member: declaration.field,
+        owner: declaration.owner,
+        sink: 'ApplicationRequestCarrier.field',
+        source,
+      });
+    }
+
+    const addLogEventWith = (match) => {
+      const opening = structure.indexOf('(', match.index);
+      const closing = matchingDelimiter(structure, opening, '(', ')');
+      const argumentsText = closing > opening
+        ? structure.slice(opening + 1, closing) : '';
+      const eventType = argumentsText.match(
+        /\bLogEventType\s*\.\s*([A-Z][A-Z0-9_]*)/u,
+      )?.[1] ?? 'DYNAMIC';
+      addMatch(match, 'PRIV-MATCH-001', `LogEvent.with:${eventType}`);
+    };
+    for (const match of structure.matchAll(/\bLogEvent\s*\.\s*with\s*\(/gu)) {
+      addLogEventWith(match);
+    }
+    for (const match of structure.matchAll(/\bLogEvent\s*::\s*with\b/gu)) {
+      addMatch(match, 'PRIV-MATCH-001', 'LogEvent.with:DYNAMIC');
+    }
+    if (staticLogEventWith) {
+      for (const match of structure.matchAll(/(?<![\w$.])with\s*\(/gu)) {
+        addLogEventWith(match);
+      }
+    }
+
+    for (const match of structure.matchAll(
+      /\bMcpMetricsEvent\s*\.\s*([a-z][\w$]*)\s*\(/gu,
+    )) {
+      addMatch(match, 'PRIV-MATCH-002', `McpMetricsEvent.${match[1]}`);
+    }
+    for (const match of structure.matchAll(
+      /\bMcpMetricsEvent\s*::\s*([a-z][\w$]*)\b/gu,
+    )) {
+      if (!mcpMetricsFactoryNames.has(match[1])) continue;
+      addMatch(match, 'PRIV-MATCH-002', `McpMetricsEvent.${match[1]}`);
+    }
+    for (const factoryName of [...importedMcpMetricsFactories]
+      .sort(compareAscii)) {
+      const unqualifiedFactoryPattern = new RegExp(
+        `(?<![\\w$.])(${factoryName})\\s*\\(`,
+        'gu',
+      );
+      for (const match of structure.matchAll(unqualifiedFactoryPattern)) {
+        addMatch(match, 'PRIV-MATCH-002', `McpMetricsEvent.${factoryName}`);
+      }
+    }
+    for (const declaration of visibleMemberDeclarations) {
+      const metricsSurface = declaration.owner === 'com.soklet.McpMetricsEvent'
+        || declaration.owner.startsWith('com.soklet.McpMetricsEvent.')
+        || declaration.owner === 'com.soklet.McpMetricsSnapshot'
+        || declaration.owner.startsWith('com.soklet.McpMetricsSnapshot.');
+      if (!metricsSurface) continue;
+      add({
+        file,
+        index: declaration.headerStart,
+        matcherRuleId: 'PRIV-MATCH-002',
+        member: declaration.member,
+        owner: declaration.owner,
+        sink: `McpMetricsSurface.${declaration.method}`,
+        source,
+      });
+    }
+    for (const declaration of visibleFieldDeclarations) {
+      const metricsOwned = declaration.owner === 'com.soklet.MetricsCollector'
+        || declaration.owner.startsWith('com.soklet.MetricsCollector.');
+      if (!metricsOwned) continue;
+      add({
+        file,
+        index: declaration.index,
+        matcherRuleId: 'PRIV-MATCH-015',
+        member: declaration.field,
+        owner: declaration.owner,
+        sink: 'MetricsCollector.surface.field',
+        source,
+      });
+    }
+
+    for (const declaration of visibleMemberDeclarations) {
+      const metricsOwned = declaration.owner === 'com.soklet.MetricsCollector'
+        || declaration.owner.startsWith('com.soklet.MetricsCollector.');
+      if (!metricsOwned && !metricsMethodNames.has(declaration.method)) continue;
+      add({
+        file,
+        index: declaration.headerStart,
+        matcherRuleId: 'PRIV-MATCH-015',
+        member: declaration.member,
+        owner: declaration.owner,
+        sink: metricsOwned
+          ? `MetricsCollector.surface.${declaration.method}`
+          : `MetricsCollector.override.${declaration.method}`,
+        source,
+      });
+    }
+    for (const match of structure.matchAll(metricsInvocationPattern)) {
+      addMatch(
+        match,
+        'PRIV-MATCH-015',
+        `MetricsCollector.invocation.${match[1]}`,
+      );
+    }
+
+    for (const match of structure.matchAll(/\.\s*request\s*\(/gu)) {
+      const location = privacyLocation(
+        source,
+        structure,
+        packageName,
+        typeScopes,
+        methodScopes,
+        match.index,
+      );
+      if (!isLogRequestAttachment(
+        structure,
+        location.owner,
+        match.index,
+        logAttachmentContext,
+      )) continue;
+      add({
+        file,
+        index: match.index,
+        matcherRuleId: 'PRIV-MATCH-003',
+        sink: 'LogEvent.Builder.request',
+        source,
+        ...location,
+      });
+    }
+
+    for (const match of structure.matchAll(/\.\s*throwable\s*\(/gu)) {
+      addMatch(match, 'PRIV-MATCH-004', 'LogEvent.Builder.throwable');
+    }
+
+    for (const declaration of visibleMemberDeclarations) {
+      if (!(declaration.owner === 'com.soklet.LogEvent'
+          || declaration.owner.startsWith('com.soklet.LogEvent.'))) continue;
+      add({
+        file,
+        index: declaration.headerStart,
+        matcherRuleId: 'PRIV-MATCH-016',
+        member: declaration.member,
+        owner: declaration.owner,
+        sink: `LogEvent.surface.${declaration.method}`,
+        source,
+      });
+    }
+    for (const match of structure.matchAll(logEventAttachmentPattern)) {
+      const location = privacyLocation(
+        source,
+        structure,
+        packageName,
+        typeScopes,
+        methodScopes,
+        match.index,
+      );
+      if (!isLogRequestAttachment(
+        structure,
+        location.owner,
+        match.index,
+        logAttachmentContext,
+      )) {
+        continue;
+      }
+      add({
+        file,
+        index: match.index,
+        matcherRuleId: 'PRIV-MATCH-016',
+        sink: `LogEvent.attachment.${match[1]}`,
+        source,
+        ...location,
+      });
+    }
+
+    const exposurePattern = /\b(didStartRequestHandling|didFinishRequestHandling|didStartMcpRequestHandling|didFinishMcpRequestHandling|getRequest|getThrowables)\s*\(|\b(request|throwables)\s*\(\s*\)/gu;
+    for (const match of structure.matchAll(exposurePattern)) {
+      const method = match[1] ?? match[2];
+      addMatch(
+        match,
+        'PRIV-MATCH-005',
+        `RequestOrThrowable.${method}`,
+        method,
+      );
+    }
+
+    for (const declaration of visibleMemberDeclarations) {
+      const methodOffset = declaration.header.lastIndexOf(
+        declaration.method,
+      );
+      const returnPortion = methodOffset < 0 ? ''
+        : declaration.header.slice(0, methodOffset);
+      if (!containsPrivacyCarrierType(
+        declaration.parameters,
+        throwableTypeNames,
+      ) && !containsPrivacyCarrierType(returnPortion, throwableTypeNames)) {
+        continue;
+      }
+      add({
+        file,
+        index: declaration.headerStart,
+        matcherRuleId: 'PRIV-MATCH-005',
+        member: declaration.member,
+        owner: declaration.owner,
+        sink: 'RequestOrThrowable.declaration',
+        source,
+      });
+    }
+
+    for (const match of structure.matchAll(
+      /\brecord\s+([A-Za-z_$][\w$]*)(?:\s*<[^{};()]*>)?\s*\(/gu,
+    )) {
+      const recordName = match[1];
+      const opening = structure.indexOf('(', match.index);
+      const closing = matchingDelimiter(structure, opening, '(', ')');
+      if (closing < 0) {
+        fail(`Privacy-boundary scanner found an unterminated record ${recordName} in ${file}.`);
+      }
+      const componentsText = structure.slice(opening + 1, closing);
+      const componentDeclarations = componentsText.trim().length === 0
+        ? [] : splitTopLevel(componentsText);
+      const owner = ownerAt(
+        packageName,
+        typeScopes,
+        match.index,
+        recordName,
+      );
+      const allComponents = componentDeclarations.map((component) => {
+          const name = parameterName(component);
+          if (name === undefined) {
+            fail(`Privacy-boundary scanner cannot resolve a record component in ${file}.`);
+          }
+          const type = component.slice(0, component.lastIndexOf(name));
+          return { name, type };
+        });
+      const carrierComponents = applicationCarrierOwner(owner)
+        ? allComponents : allComponents.filter(({ type }) =>
+          containsPrivacyCarrierType(type, throwableTypeNames)
+            || mentionsApplicationCarrier(type));
+      if (carrierComponents.length === 0
+          && !applicationCarrierOwner(owner)) continue;
+      add({
+        file,
+        index: match.index,
+        matcherRuleId: 'PRIV-MATCH-005',
+        member: methodMember(
+          recordName,
+          componentsText,
+          file,
+          source.slice(0, match.index).split(/\r?\n/u).length,
+          'Privacy-boundary',
+        ),
+        owner,
+        sink: 'RequestOrThrowable.recordConstructor',
+        source,
+      });
+      for (const { name } of carrierComponents) {
+        add({
+          file,
+          index: match.index,
+          matcherRuleId: 'PRIV-MATCH-005',
+          member: `${name}()`,
+          owner,
+          sink: 'RequestOrThrowable.recordAccessor',
+          source,
+        });
+      }
+      const explicitRecordRenderer = methodScopes.some((scope) =>
+        scope.owner === owner && scope.method === 'toString'
+          && scope.parameters.trim().length === 0);
+      if (!explicitRecordRenderer) {
+        add({
+          file,
+          index: match.index,
+          matcherRuleId: 'PRIV-MATCH-005',
+          member: 'toString()',
+          owner,
+          sink: 'RequestOrThrowable.recordRenderer',
+          source,
+        });
+      }
+    }
+
+    const requestExceptionPattern = /\bnew\s+((?:Illegal(?:FormParameter|MultipartField|PathParameter|QueryParameter|RequestBody|RequestCookie|RequestHeader|Request)|Missing(?:FormParameter|MultipartField|QueryParameter|RequestBody|RequestCookie|RequestHeader)|MultipleValues)Exception)\s*\(/gu;
+    for (const match of structure.matchAll(requestExceptionPattern)) {
+      addMatch(
+        match,
+        'PRIV-MATCH-006',
+        `RequestException.${match[1]}`,
+      );
+    }
+
+    const genericFixtureOwner = /^com\.soklet\.(?:Simulator|SokletSimulator|HttpRequestResult|SseRequestResult|SseHandshakeResult)(?:\.|$)/u;
+    const mcpFixtureOwners = [
+      'com.soklet.McpSimulation',
+      'com.soklet.McpSimulationCompletion',
+      'com.soklet.McpSimulationResponse',
+      'com.soklet.McpSimulationStreamItem',
+      'com.soklet.internal.mcp.protocol.McpSimulationRuntime',
+    ];
+    for (const declaration of visibleMemberDeclarations) {
+      const genericFixture = genericFixtureOwner.test(declaration.owner);
+      const mcpFixture = mcpFixtureOwners.some((owner) =>
+        declaration.owner === owner
+          || declaration.owner.startsWith(`${owner}.`));
+      if (!genericFixture && !mcpFixture) continue;
+      add({
+        file,
+        index: declaration.headerStart,
+        matcherRuleId: 'PRIV-MATCH-007',
+        member: declaration.member,
+        owner: declaration.owner,
+        sink: mcpFixture ? 'McpSimulation.publicOrProtectedSurface'
+          : 'SimulationCapture.publicOrProtectedSurface',
+        source,
+      });
+    }
+    if (/^src\/main\/java\/com\/soklet\/(?:McpSimulation[^/]*|internal\/mcp\/(?:[^/]+\/)*McpSimulation[^/]*)\.java$/u
+      .test(file)) {
+      const simulationCapturePattern = /\bnew\s+(DefaultResponse|DefaultStreamItem|CapturedItem|DefaultCompletion)\s*\(|\b(awaitResponse|nextStreamItem|awaitCompletion|getHeaders|getBody|getEncodedBytes|getTerminalMessage|getThrowables)\s*\(/gu;
+      for (const match of structure.matchAll(simulationCapturePattern)) {
+        const operation = match[1] ?? match[2];
+        addMatch(
+          match,
+          'PRIV-MATCH-007',
+          `McpSimulation.${operation}`,
+          match[2],
+        );
+      }
+    }
+
+    for (const match of structure.matchAll(
+      /\bString\s+(toString)\s*\(\s*\)/gu,
+    )) {
+      addMatch(
+        match,
+        'PRIV-MATCH-008',
+        'Diagnostic.toString',
+        match[1],
+      );
+    }
+    for (const scope of methodScopes) {
+      const simpleOwner = scope.owner.slice(scope.owner.lastIndexOf('.') + 1);
+      const diagnosticOwner = /(?:Diagnostic|Diagnostics|Summary|TerminalReporter)$/u
+        .test(simpleOwner);
+      if (!diagnosticOwner
+          && !/^(?:diagnosticSummary|render|summary)$/u.test(scope.method)) {
+        continue;
+      }
+      add({
+        file,
+        index: scope.headerStart,
+        matcherRuleId: 'PRIV-MATCH-008',
+        member: methodMember(
+          scope.method,
+          scope.parameters,
+          file,
+          scope.line,
+          'Privacy-boundary',
+        ),
+        owner: scope.owner,
+        sink: `Diagnostic.structuredSurface.${scope.method}`,
+        source,
+      });
+    }
+    for (const match of structure.matchAll(
+      /\brecord\s+([A-Za-z_$][\w$]*)(?:\s*<[^{};()]*>)?\s*\(/gu,
+    )) {
+      const recordName = match[1];
+      const opening = structure.indexOf('(', match.index);
+      const closing = matchingDelimiter(structure, opening, '(', ')');
+      if (closing < 0) {
+        fail(`Privacy-boundary scanner found an unterminated record ${recordName} in ${file}.`);
+      }
+      const componentsText = structure.slice(opening + 1, closing);
+      const componentDeclarations = componentsText.trim().length === 0
+        ? [] : splitTopLevel(componentsText);
+      const components = componentDeclarations.map((component) => {
+        const name = parameterName(component);
+        if (name === undefined) {
+          fail(`Privacy-boundary scanner cannot resolve a record component in ${file}.`);
+        }
+        return { declaration: component, name };
+      });
+      const owner = ownerAt(
+        packageName,
+        typeScopes,
+        match.index,
+        recordName,
+      );
+      const requestOrThrowableRecord = applicationCarrierOwner(owner)
+        || containsPrivacyCarrierType(componentsText, throwableTypeNames)
+        || mentionsApplicationCarrier(componentsText);
+      if (!requestOrThrowableRecord) {
+        add({
+          file,
+          index: match.index,
+          matcherRuleId: 'PRIV-MATCH-008',
+          member: methodMember(
+            recordName,
+            componentsText,
+            file,
+            source.slice(0, match.index).split(/\r?\n/u).length,
+            'Privacy-boundary',
+          ),
+          owner,
+          sink: 'Diagnostic.recordConstructor',
+          source,
+        });
+      }
+      for (const { declaration, name } of components) {
+        const carrierComponent = applicationCarrierOwner(owner)
+          || containsPrivacyCarrierType(declaration, throwableTypeNames)
+          || mentionsApplicationCarrier(declaration);
+        if (carrierComponent) continue;
+        add({
+          file,
+          index: match.index,
+          matcherRuleId: 'PRIV-MATCH-008',
+          member: `${name}()`,
+          owner,
+          sink: 'Diagnostic.recordAccessor',
+          source,
+        });
+      }
+      const explicitRecordRenderer = methodScopes.some((scope) =>
+        scope.owner === owner && scope.method === 'toString'
+          && scope.parameters.trim().length === 0);
+      if (!explicitRecordRenderer && !requestOrThrowableRecord) {
+        add({
+          file,
+          index: match.index,
+          matcherRuleId: 'PRIV-MATCH-008',
+          member: 'toString()',
+          owner,
+          sink: 'Diagnostic.recordRenderer',
+          source,
+        });
+      }
+    }
+
+    const wireErrorOwners = new Set([
+      'com.soklet.McpJsonRpcError',
+      'com.soklet.McpJsonRpcException',
+      'com.soklet.internal.mcp.protocol.McpJsonRpcError',
+    ]);
+    for (const scope of methodScopes) {
+      if (!wireErrorOwners.has(scope.owner)) continue;
+      add({
+        file,
+        index: scope.headerStart,
+        matcherRuleId: 'PRIV-MATCH-009',
+        member: methodMember(
+          scope.method,
+          scope.parameters,
+          file,
+          scope.line,
+          'Privacy-boundary',
+        ),
+        owner: scope.owner,
+        sink: `McpWireError.surface.${scope.method}`,
+        source,
+      });
+    }
+    for (const declaration of visibleFieldDeclarations) {
+      if (!wireErrorOwners.has(declaration.owner)) continue;
+      add({
+        file,
+        index: declaration.index,
+        matcherRuleId: 'PRIV-MATCH-009',
+        member: declaration.field,
+        owner: declaration.owner,
+        sink: 'McpWireError.surface.field',
+        source,
+      });
+    }
+    for (const match of structure.matchAll(
+      /\brecord\s+(McpJsonRpcError)(?:\s*<[^{};()]*>)?\s*\(/gu,
+    )) {
+      const opening = structure.indexOf('(', match.index);
+      const closing = matchingDelimiter(structure, opening, '(', ')');
+      if (closing < 0) {
+        fail(`Privacy-boundary scanner found an unterminated record ${match[1]} in ${file}.`);
+      }
+      const componentsText = structure.slice(opening + 1, closing);
+      const componentNames = componentsText.trim().length === 0 ? []
+        : splitTopLevel(componentsText).map((component) => {
+          const name = parameterName(component);
+          if (name === undefined) {
+            fail(`Privacy-boundary scanner cannot resolve a wire-error record component in ${file}.`);
+          }
+          return name;
+        });
+      const owner = ownerAt(packageName, typeScopes, match.index, match[1]);
+      if (!wireErrorOwners.has(owner)) continue;
+      add({
+        file,
+        index: match.index,
+        matcherRuleId: 'PRIV-MATCH-009',
+        member: methodMember(
+          match[1],
+          componentsText,
+          file,
+          source.slice(0, match.index).split(/\r?\n/u).length,
+          'Privacy-boundary',
+        ),
+        owner,
+        sink: 'McpWireError.recordConstructor',
+        source,
+      });
+      for (const componentName of componentNames) {
+        add({
+          file,
+          index: match.index,
+          matcherRuleId: 'PRIV-MATCH-009',
+          member: `${componentName}()`,
+          owner,
+          sink: 'McpWireError.recordAccessor',
+          source,
+        });
+      }
+    }
+    const wireErrorReceivers = new Set([...structure.matchAll(
+      /\b(?:(?:[A-Za-z_$][\w$]*\s*\.\s*)*)(?:McpJsonRpcError|McpJsonRpcException)\s+([A-Za-z_$][\w$]*)/gu,
+    )].map((match) => match[1]));
+    for (const receiver of wireErrorReceivers) {
+      const accessorPattern = new RegExp(
+        `\\b${receiver}\\s*\\.\\s*(getError|getCode|getMessage|getData|code|message|data|toJsonObject)\\s*\\(`,
+        'gu',
+      );
+      for (const match of structure.matchAll(accessorPattern)) {
+        addMatch(
+          match,
+          'PRIV-MATCH-009',
+          `McpWireError.publication.${match[1]}`,
+        );
+      }
+    }
+    const wireErrorPattern = /\bnew\s+(?:(?:[A-Za-z_$][\w$]*\s*\.\s*)*)(McpJsonRpcError|McpJsonRpcException)\s*\(|\bMcpJsonRpcError\s*\.\s*(fromApplication|fromInvalidParameters|fromServer)\s*\(|\bcatch\s*\(\s*(?:(?:[A-Za-z_$][\w$]*\s*\.\s*)*)(McpJsonRpcException)\b/gu;
+    for (const match of structure.matchAll(wireErrorPattern)) {
+      const operation = match[1] === 'McpJsonRpcException'
+        || match[3] === 'McpJsonRpcException'
+        ? 'McpJsonRpcException'
+        : match[2] === undefined ? 'McpJsonRpcError.constructor'
+          : `McpJsonRpcError.${match[2]}`;
+      addMatch(match, 'PRIV-MATCH-009', operation);
+    }
+
+    if (file.startsWith('src/main/java/com/soklet/internal/microhttp/')) {
+      for (const declaration of visibleMemberDeclarations) {
+        if (declaration.owner !== 'com.soklet.internal.microhttp.Logger'
+            || !microhttpLoggerMethodNames.has(declaration.method)) continue;
+        add({
+          file,
+          index: declaration.headerStart,
+          matcherRuleId: 'PRIV-MATCH-013',
+          member: declaration.member,
+          owner: declaration.owner,
+          sink: `MicrohttpLogger.surface.${declaration.method}`,
+          source,
+        });
+      }
+      for (const match of structure.matchAll(
+        microhttpLoggerInvocationPattern,
+      )) {
+        addMatch(
+          match,
+          'PRIV-MATCH-013',
+          `MicrohttpLogger.invocation.${match[1]}`,
+        );
+      }
+      if (file === 'src/main/java/com/soklet/internal/microhttp/EventLoop.java') {
+        for (const scope of methodScopes) {
+          if (scope.owner !== 'com.soklet.internal.microhttp.EventLoop'
+              || scope.method !== 'EventLoop'
+              || /\bLogger\b/u.test(scope.parameters)) continue;
+          add({
+            file,
+            index: scope.headerStart,
+            matcherRuleId: 'PRIV-MATCH-013',
+            member: methodMember(
+              scope.method,
+              scope.parameters,
+              file,
+              scope.line,
+              'Privacy-boundary',
+            ),
+            owner: scope.owner,
+            sink: /\bNoopLogger\s*\.\s*instance\s*\(/u.test(scope.body)
+              ? 'MicrohttpLogger.EventLoopDefaultWiring:DEFAULT_NOOP'
+              : 'MicrohttpLogger.EventLoopDefaultWiring:ALTERNATE',
+            source,
+          });
+        }
+      }
+    }
+    if (file.startsWith('src/main/java/com/soklet/internal/mcp/')) {
+      for (const match of structure.matchAll(
+        /\bnew\s+EventLoop\s*\(/gu,
+      )) {
+        const opening = structure.indexOf('(', match.index);
+        const closing = matchingDelimiter(structure, opening, '(', ')');
+        if (closing < 0) {
+          fail(`Privacy-boundary scanner found unterminated MCP EventLoop wiring in ${file}.`);
+        }
+        const argumentsText = structure.slice(opening + 1, closing);
+        const argumentCount = argumentsText.trim().length === 0 ? 0
+          : splitTopLevel(argumentsText).length;
+        const wiring = /\bNoopLogger\s*\.\s*instance\s*\(/u.test(argumentsText)
+          ? 'EXPLICIT_NOOP' : argumentCount <= 2 ? 'DEFAULT_NOOP' : 'ALTERNATE';
+        addMatch(
+          match,
+          'PRIV-MATCH-013',
+          `MicrohttpLogger.McpEventLoopWiring:${wiring}`,
+        );
+      }
+      for (const match of structure.matchAll(
+        /\bNoopLogger\s*\.\s*(instance)\s*\(/gu,
+      )) {
+        addMatch(match, 'PRIV-MATCH-013', 'MicrohttpLogger.NoopLogger');
+      }
+    }
+
+    for (const match of structure.matchAll(
+      /\bSystem\s*\.\s*(err|out)\s*\.\s*(print|printf|println|write)\s*\(/gu,
+    )) {
+      addMatch(
+        match,
+        'PRIV-MATCH-014',
+        `DirectOutput.System.${match[1]}.${match[2]}`,
+      );
+    }
+    for (const match of structure.matchAll(
+      /\bSystem\s*\.\s*(err|out)\s*::\s*(print|printf|println|write)\b/gu,
+    )) {
+      addMatch(
+        match,
+        'PRIV-MATCH-014',
+        `DirectOutput.System.${match[1]}.${match[2]}`,
+      );
+    }
+    const directOutputReceivers = new Map();
+    for (const match of structure.matchAll(
+      /\b(PrintStream|OutputStream)\s+([A-Za-z_$][\w$]*)/gu,
+    )) {
+      if (match[1] === 'PrintStream'
+          || file === 'src/main/java/com/soklet/SokletApplicationTerminalReporter.java') {
+        directOutputReceivers.set(match[2], match[1]);
+      }
+    }
+    for (const match of structure.matchAll(
+      /\bvar\s+([A-Za-z_$][\w$]*)\s*=\s*System\s*\.\s*(err|out)\s*;/gu,
+    )) {
+      directOutputReceivers.set(
+        match[1],
+        match[2] === 'err' ? 'SystemErrAlias' : 'SystemOutAlias',
+      );
+    }
+    for (const [receiver, receiverType] of directOutputReceivers) {
+      const receiverPattern = new RegExp(
+        `\\b(?:this\\s*\\.\\s*)?${receiver}\\s*\\.\\s*(print|printf|println|write)\\s*\\(`,
+        'gu',
+      );
+      for (const match of structure.matchAll(receiverPattern)) {
+        addMatch(
+          match,
+          'PRIV-MATCH-014',
+          `DirectOutput.${receiverType}.${match[1]}`,
+        );
+      }
+      const receiverReferencePattern = new RegExp(
+        `\\b(?:this\\s*\\.\\s*)?${receiver}\\s*::\\s*(print|printf|println|write)\\b`,
+        'gu',
+      );
+      for (const match of structure.matchAll(receiverReferencePattern)) {
+        addMatch(
+          match,
+          'PRIV-MATCH-014',
+          `DirectOutput.${receiverType}.${match[1]}`,
+        );
+      }
+    }
+    for (const match of structure.matchAll(
+      /\b[A-Za-z_$][\w$]*\s*\.\s*(printStackTrace)\s*\(/gu,
+    )) {
+      addMatch(
+        match,
+        'PRIV-MATCH-014',
+        'DirectOutput.Throwable.printStackTrace',
+      );
+    }
+
+    const throwableConstructionPattern = /\bnew\s+([A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*)\s*\(/gu;
+    for (const match of structure.matchAll(throwableConstructionPattern)) {
+      const typeName = match[1].replace(/\s+/gu, '');
+      const simpleTypeName = typeName.slice(typeName.lastIndexOf('.') + 1);
+      if (PRIVACY_NON_THROWABLE_ERROR_TYPES.has(simpleTypeName)) continue;
+      if (!throwableTypeNames.has(simpleTypeName)
+          && !simpleTypeName.endsWith('Exception')
+          && !simpleTypeName.endsWith('Error')) continue;
+      addMatch(
+        match,
+        'PRIV-MATCH-011',
+        `Throwable.${typeName}`,
+      );
+    }
+  }
+
+  for (const { file, rootIndex } of privacyArtifactFiles(
+    normalizedRoot,
+    artifactRoots,
+    gitExecutable,
+  )) {
+    add({
+      file,
+      matcherRuleId: 'PRIV-MATCH-010',
+      member: '$trackedArtifact()',
+      owner: 'com.soklet.privacy.FixtureArtifact',
+      sink: `FixtureArtifact.ROOT_${String(rootIndex + 1).padStart(3, '0')}`,
+    });
+  }
+
+  return candidates.sort((left, right) => compareAscii(left.key, right.key));
+}
+
+function validatePrivacyClassification(row, label) {
+  assertExactKeys(row, PRIVACY_SOURCE_PATH_KEYS, label);
+  normalizedCandidatePath(row.file, `${label}.file`);
+  nonblank(row.owner, `${label}.owner`);
+  nonblank(row.member, `${label}.member`);
+  nonblank(row.sink, `${label}.sink`);
+  if (!JAVA_OWNER_PATTERN.test(row.owner)) {
+    fail(`${label}.owner must be an exact qualified Java owner.`);
+  }
+  if (!JAVA_MEMBER_PATTERN.test(row.member)) {
+    fail(`${label}.member must be one exact Java method or initializer identity.`);
+  }
+  if (!PRIVACY_SINK_PATTERN.test(row.sink)) {
+    fail(`${label}.sink must be one exact executable privacy sink.`);
+  }
+  if (!Number.isSafeInteger(row.occurrence) || row.occurrence < 1) {
+    fail(`${label}.occurrence must be a positive safe integer.`);
+  }
+  if (!PRIVACY_MATCHER_IDS.has(row.matcherRuleId)) {
+    fail(`${label}.matcherRuleId is unknown.`);
+  }
+  const expectedKey = privacyKey(
+    row.matcherRuleId,
+    row.file,
+    row.owner,
+    row.member,
+    row.sink,
+    row.occurrence,
+  );
+  if (row.key !== expectedKey) {
+    fail(`${label}.key must be exactly ${expectedKey}.`);
+  }
+}
+
+function validatePrivacyCanaryTests(tests, label, projectRoot, required) {
+  if (!Array.isArray(tests) || (required && tests.length === 0)) {
+    fail(`${label} must be ${required ? 'a nonempty' : 'an'} array.`);
+  }
+  if (new Set(tests).size !== tests.length) {
+    fail(`${label} must not contain duplicates.`);
+  }
+  const sorted = [...tests].sort(compareAscii);
+  for (const [index, reference] of tests.entries()) {
+    if (reference !== sorted[index]) fail(`${label} must be in ASCII order.`);
+    nonblank(reference, `${label}[${index}]`);
+    const parts = reference.split('#');
+    if (parts.length > 2 || (parts.length === 2
+        && !/^[A-Za-z_$][\w$]*$/u.test(parts[1]))) {
+      fail(`${label}[${index}] must be a test source with an optional exact method name.`);
+    }
+    const file = parts[0];
+    normalizedCandidatePath(file, `${label}[${index}]`);
+    if (!(file.startsWith('src/test/java/')
+        || file.startsWith('fuzz/src/test/java/'))
+        || !file.endsWith('.java')) {
+      fail(`${label}[${index}] must name a Java test source.`);
+    }
+    requireContainedPath(
+      projectRoot,
+      resolve(projectRoot, file),
+      `${label}[${index}]`,
+      'file',
+      'Privacy-boundary',
+    );
+    if (parts.length === 2) {
+      const path = resolve(projectRoot, file);
+      const bytes = readFileSync(path);
+      const source = bytes.toString('utf8');
+      if (!Buffer.from(source, 'utf8').equals(bytes)) {
+        fail(`${label}[${index}] test source is not valid UTF-8.`);
+      }
+      const structure = maskJava(source);
+      const typeScopes = javaTypeScopes(structure);
+      const methodExists = javaMethodScopes(
+        source,
+        structure,
+        typeScopes,
+      ).some(({ method }) => method === parts[1]);
+      if (!methodExists) {
+        fail(`${label}[${index}] names no declared test method: ${parts[1]}.`);
+      }
+    }
+  }
+}
+
+function validatePrivacySourcePaths(
+  sourcePaths,
+  label,
+  classifications,
+  semanticClassification,
+) {
+  if (!Array.isArray(sourcePaths)) fail(`${label} must be an array.`);
+  const sorted = sourcePaths.map(({ key }) => key).sort(compareAscii);
+  for (const [index, sourcePath] of sourcePaths.entries()) {
+    const sourceLabel = `${label}[${index}]`;
+    validatePrivacyClassification(sourcePath, sourceLabel);
+    if (sourcePath.key !== sorted[index]) fail(`${label} must be in ASCII key order.`);
+    classifications.push({
+      ...sourcePath,
+      location: sourceLabel,
+      semanticClassification,
+    });
+  }
+}
+
+export function verifyPrivacyBoundaryInventory(options = {}) {
+  const defaultRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+  const projectRoot = resolve(options.projectRoot ?? defaultRoot);
+  const inventoryPath = resolve(
+    options.inventoryPath
+      ?? resolve(projectRoot, PRIVACY_BOUNDARY_INVENTORY_PATH),
+  );
+  requireContainedPath(
+    projectRoot,
+    inventoryPath,
+    'Privacy-boundary inventory',
+    'file',
+    'Privacy-boundary',
+  );
+  const { value: inventory } = readCanonicalJson(
+    inventoryPath,
+    'Privacy-boundary inventory',
+  );
+  assertExactKeys(
+    inventory,
+    PRIVACY_TOP_LEVEL_KEYS,
+    'Privacy-boundary inventory',
+  );
+  if (inventory.formatVersion !== 1
+      || inventory.productionProfile !== EXPECTED_PROTOCOL_VERSION
+      || inventory.releaseTarget !== '4.0.0') {
+    fail('Privacy-boundary inventory format, profile, or release target is invalid.');
+  }
+  if (JSON.stringify(inventory.matcherRules)
+      !== JSON.stringify(PRIVACY_MATCHER_RULES)) {
+    fail('Privacy-boundary matcherRules do not match the executable matcher contract.');
+  }
+  const expectedArtifactRoots = options.expectedArtifactRoots
+    ?? PRIVACY_ARTIFACT_ROOTS;
+  assertExactArray(
+    inventory.artifactRoots,
+    expectedArtifactRoots,
+    'Privacy-boundary artifactRoots',
+  );
+  const expectedScanRoots = options.expectedScanRoots ?? PRIVACY_SCAN_ROOTS;
+  assertExactArray(
+    inventory.scanRoots,
+    expectedScanRoots,
+    'Privacy-boundary scanRoots',
+  );
+  const candidates = derivePrivacyBoundaryCandidates(
+    projectRoot,
+    expectedScanRoots,
+    expectedArtifactRoots,
+    options.gitExecutable ?? 'git',
+  );
+  for (const { id } of PRIVACY_MATCHER_RULES) {
+    if (!candidates.some(({ matcherRuleId }) => matcherRuleId === id)) {
+      fail(`Privacy-boundary matcher family derived no candidate: ${id}.`);
+    }
+  }
+
+  if (!Array.isArray(inventory.boundaries) || inventory.boundaries.length === 0) {
+    fail('Privacy-boundary boundaries must be a nonempty array.');
+  }
+  const classifications = [];
+  const boundaryIds = new Set();
+  const sortedBoundaryIds = inventory.boundaries.map(({ id }) => id)
+    .sort(compareAscii);
+  for (const [index, boundary] of inventory.boundaries.entries()) {
+    const label = `boundaries[${index}]`;
+    assertExactKeys(boundary, PRIVACY_BOUNDARY_KEYS, label);
+    if (typeof boundary.id !== 'string'
+        || !PRIVACY_BOUNDARY_ID_PATTERN.test(boundary.id)
+        || boundaryIds.has(boundary.id)) {
+      fail(`${label}.id is malformed or duplicated.`);
+    }
+    boundaryIds.add(boundary.id);
+    if (boundary.id !== sortedBoundaryIds[index]) {
+      fail('Privacy-boundary boundaries must be in ASCII ID order.');
+    }
+    for (const field of ['contract', 'name']) {
+      nonblank(boundary[field], `${label}.${field}`);
+    }
+    if (!PRIVACY_CATEGORIES.has(boundary.category)) {
+      fail(`${label}.category is unknown.`);
+    }
+    if (!PRIVACY_CLASSIFICATIONS.has(boundary.classification)) {
+      fail(`${label}.classification is unknown.`);
+    }
+    if (!Array.isArray(boundary.sourcePaths)
+        || boundary.sourcePaths.length === 0) {
+      fail(`${label}.sourcePaths must be a nonempty array.`);
+    }
+    validatePrivacyCanaryTests(
+      boundary.canaryTests,
+      `${label}.canaryTests`,
+      projectRoot,
+      true,
+    );
+    validatePrivacySourcePaths(
+      boundary.sourcePaths,
+      `${label}.sourcePaths`,
+      classifications,
+      boundary.classification,
+    );
+  }
+
+  if (!Array.isArray(inventory.delegations)
+      || inventory.delegations.length === 0) {
+    fail('Privacy-boundary delegations must be a nonempty array.');
+  }
+  const delegationIds = new Set();
+  const delegatedOwners = new Set();
+  const sortedDelegationIds = inventory.delegations.map(({ id }) => id)
+    .sort(compareAscii);
+  for (const [index, delegation] of inventory.delegations.entries()) {
+    const label = `delegations[${index}]`;
+    assertExactKeys(delegation, PRIVACY_DELEGATION_KEYS, label);
+    if (typeof delegation.id !== 'string'
+        || !PRIVACY_DELEGATION_ID_PATTERN.test(delegation.id)
+        || delegationIds.has(delegation.id)) {
+      fail(`${label}.id is malformed or duplicated.`);
+    }
+    delegationIds.add(delegation.id);
+    if (delegation.id !== sortedDelegationIds[index]) {
+      fail('Privacy-boundary delegations must be in ASCII ID order.');
+    }
+    for (const field of ['contract', 'name']) {
+      nonblank(delegation[field], `${label}.${field}`);
+    }
+    nonblank(delegation.delegatedOwner, `${label}.delegatedOwner`);
+    if (!/^[A-Z][A-Z0-9_]*$/u.test(delegation.delegatedOwner)) {
+      fail(`${label}.delegatedOwner must be an uppercase stable owner token.`);
+    }
+    delegatedOwners.add(delegation.delegatedOwner);
+    validatePrivacySourcePaths(
+      delegation.sourcePaths,
+      `${label}.sourcePaths`,
+      classifications,
+    );
+    validatePrivacyCanaryTests(
+      delegation.canaryTests,
+      `${label}.canaryTests`,
+      projectRoot,
+      delegation.sourcePaths.length > 0,
+    );
+  }
+  const missingDelegatedOwners = PRIVACY_REQUIRED_DELEGATED_OWNERS
+    .filter((owner) => !delegatedOwners.has(owner));
+  if (missingDelegatedOwners.length > 0) {
+    fail(`Privacy-boundary delegations omit required owners: ${missingDelegatedOwners.join(', ')}.`);
+  }
+
+  if (!Array.isArray(inventory.reviewedExclusions)) {
+    fail('Privacy-boundary reviewedExclusions must be an array.');
+  }
+  const exclusionIds = new Set();
+  const sortedExclusionKeys = inventory.reviewedExclusions.map(({ key }) => key)
+    .sort(compareAscii);
+  for (const [index, exclusion] of inventory.reviewedExclusions.entries()) {
+    const label = `reviewedExclusions[${index}]`;
+    assertExactKeys(exclusion, PRIVACY_EXCLUSION_KEYS, label);
+    const classification = {
+      file: exclusion.file,
+      key: exclusion.key,
+      matcherRuleId: exclusion.matcherRuleId,
+      member: exclusion.member,
+      occurrence: exclusion.occurrence,
+      owner: exclusion.owner,
+      sink: exclusion.sink,
+    };
+    validatePrivacyClassification(classification, label);
+    if (typeof exclusion.id !== 'string'
+        || !PRIVACY_EXCLUSION_ID_PATTERN.test(exclusion.id)
+        || exclusionIds.has(exclusion.id)) {
+      fail(`${label}.id is malformed or duplicated.`);
+    }
+    exclusionIds.add(exclusion.id);
+    nonblank(exclusion.rationale, `${label}.rationale`);
+    if (exclusion.key !== sortedExclusionKeys[index]) {
+      fail('Privacy-boundary reviewedExclusions must be in ASCII key order.');
+    }
+    classifications.push({ ...classification, location: label });
+  }
+
+  const classificationsByKey = new Map();
+  for (const classification of classifications) {
+    if (classificationsByKey.has(classification.key)) {
+      fail(`Privacy-boundary classification is duplicated at ${classificationsByKey.get(classification.key).location} and ${classification.location}: ${classification.key}.`);
+    }
+    classificationsByKey.set(classification.key, classification);
+  }
+  const concreteRenderers = new Map();
+  for (const classification of classifications) {
+    if (classification.semanticClassification === undefined
+        || classification.member !== 'toString()'
+        || !/(?:\.toString|recordRenderer|diagnosticRenderer)$/u
+          .test(classification.sink)) {
+      continue;
+    }
+    const concreteKey = [
+      classification.file,
+      classification.owner,
+      classification.member,
+    ].join('#');
+    const previous = concreteRenderers.get(concreteKey);
+    if (previous !== undefined
+        && previous.semanticClassification
+          !== classification.semanticClassification) {
+      fail(`Privacy-boundary concrete renderer has conflicting classifications at ${previous.location} and ${classification.location}: ${concreteKey}.`);
+    }
+    concreteRenderers.set(concreteKey, classification);
+  }
+  const candidatesByKey = new Map(candidates.map((candidate) =>
+    [candidate.key, candidate]));
+  const omitted = candidates.filter(({ key }) => !classificationsByKey.has(key));
+  const extra = classifications.filter(({ key }) => !candidatesByKey.has(key));
+  if (omitted.length > 0 || extra.length > 0) {
+    fail(`Privacy-boundary inventory differs from source derivation; omitted=[${omitted.map(({ key, line }) => `${key}@${line}`).join(', ')}], extra=[${extra.map(({ key }) => key).join(', ')}].`);
+  }
+  return {
+    boundaries: inventory.boundaries,
+    candidates,
+    delegations: inventory.delegations,
     exclusions: inventory.reviewedExclusions,
     inventory,
   };
@@ -1210,6 +3223,15 @@ function validateRegistry(registry, projectRoot, manifest, gitExecutable) {
 export function verifyMatrixClosure(options = {}) {
   const defaultRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
   const projectRoot = resolve(options.projectRoot ?? defaultRoot);
+  const gitExecutable = options.gitExecutable ?? 'git';
+  if (typeof gitExecutable !== 'string' || gitExecutable.length === 0) {
+    fail('gitExecutable must be a nonempty string.');
+  }
+  const privacyGitExecutable = options.privacyGitExecutable ?? gitExecutable;
+  if (typeof privacyGitExecutable !== 'string'
+      || privacyGitExecutable.length === 0) {
+    fail('privacyGitExecutable must be a nonempty string.');
+  }
   const finiteBoundProjectRoot = resolve(
     options.finiteBoundProjectRoot ?? projectRoot,
   );
@@ -1219,6 +3241,17 @@ export function verifyMatrixClosure(options = {}) {
   );
   const finiteBoundExpectedScanRoots = options.finiteBoundExpectedScanRoots
     ?? FINITE_BOUND_SCAN_ROOTS;
+  const privacyProjectRoot = resolve(
+    options.privacyProjectRoot ?? projectRoot,
+  );
+  const privacyInventoryPath = resolve(
+    options.privacyInventoryPath
+      ?? resolve(privacyProjectRoot, PRIVACY_BOUNDARY_INVENTORY_PATH),
+  );
+  const privacyExpectedArtifactRoots = options.privacyExpectedArtifactRoots
+    ?? PRIVACY_ARTIFACT_ROOTS;
+  const privacyExpectedScanRoots = options.privacyExpectedScanRoots
+    ?? PRIVACY_SCAN_ROOTS;
   const registryPath = resolve(
     options.registryPath ?? resolve(projectRoot, 'release/mcp-conformance-matrix-closure.json'),
   );
@@ -1231,10 +3264,13 @@ export function verifyMatrixClosure(options = {}) {
     inventoryPath: finiteBoundInventoryPath,
     projectRoot: finiteBoundProjectRoot,
   });
-  const gitExecutable = options.gitExecutable ?? 'git';
-  if (typeof gitExecutable !== 'string' || gitExecutable.length === 0) {
-    fail('gitExecutable must be a nonempty string.');
-  }
+  verifyPrivacyBoundaryInventory({
+    expectedArtifactRoots: privacyExpectedArtifactRoots,
+    expectedScanRoots: privacyExpectedScanRoots,
+    gitExecutable: privacyGitExecutable,
+    inventoryPath: privacyInventoryPath,
+    projectRoot: privacyProjectRoot,
+  });
   const { bytes, value: registry } = readCanonicalJson(
     registryPath,
     'Matrix-closure registry',

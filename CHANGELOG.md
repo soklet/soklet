@@ -10,6 +10,16 @@
   incompatible in this minor release. Applications that require the legacy MCP
   implementation must remain on Soklet 3.5.x; 4.0.0 provides no compatibility
   adapter.
+- `Request` diagnostics, single-value accessors, URL parsing, multipart-boundary
+  validation, and default annotation-driven parameter binding no longer embed
+  request-controlled IDs, paths, headers, cookies, query/form values,
+  multipart fields, bodies, or malformed raw URLs in their failure text. Exact
+  values remain available through `Request` and structured exception accessors
+  where those accessors are defined. Malformed-URL failures no longer retain
+  the input-bearing `URISyntaxException` as their cause, and default annotation-
+  driven binding no longer retains input-bearing conversion failures as causes.
+  Applications that parsed `Request.toString()`, affected exception messages,
+  or those framework-created cause chains must migrate to the typed accessors.
 - MCP HTTP is stateless: `GET` and `DELETE` return `405`, while
   `MCP-Session-Id` and `Last-Event-ID` are ignored, never stored, and never
   emitted. This includes application-authored policy output; attempts to add

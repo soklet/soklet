@@ -198,6 +198,19 @@ record McpRuntimeRequestInput(@NonNull Request request,
 		requireNonNull(admissionIdentity);
 	}
 
+	@Override
+	@NonNull
+	public String toString() {
+		return "McpRuntimeRequestInput[endpointPathParameterCount="
+				+ endpointPathParameters.size() + ", requestIdPresent="
+				+ requestId.isPresent() + ", operationNamePresent="
+				+ operationName.isPresent() + ", clientInformationPresent="
+				+ clientInformation.isPresent() + ", requestStatePresent="
+				+ requestState.isPresent() + ", acceptLanguageValueCount="
+				+ acceptLanguageValues.size() + ", authenticated="
+				+ admissionIdentity.authenticated() + "]";
+	}
+
 	@NonNull
 	private static List<@NonNull String> acceptLanguageValues(
 			@NonNull Request request) {

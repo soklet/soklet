@@ -70,8 +70,9 @@ final class DefaultRequestBodyMarshaler implements RequestBodyMarshaler {
 
 			Optional<Object> valueConverterResult = valueConverter.convert(requestBodyAsString);
 			return valueConverterResult == null ? Optional.empty() : valueConverterResult;
-		} catch (ValueConversionException e) {
-			throw new IllegalRequestBodyException(format("Unable to marshal request body to %s", requestBodyType), e);
+		} catch (ValueConversionException ignored) {
+			throw new IllegalRequestBodyException(
+					format("Unable to marshal the request body to %s.", requestBodyType));
 		}
 	}
 

@@ -1941,6 +1941,18 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(continuationLocale);
 			requireNonNull(selectedLocaleSlot);
 		}
+
+		@Override
+		@NonNull
+		public String toString() {
+			return "ResourceInvocation[endpointPathParameterCount="
+					+ endpointPathParameters.size()
+					+ ", clientInformationPresent=" + clientInformation.isPresent()
+					+ ", requestMetadataMemberCount="
+					+ requestMetadata.getMembers().size()
+					+ ", templateVariableCount=" + templateVariables.size()
+					+ ", authenticated=" + admissionIdentity.isAuthenticated() + "]";
+		}
 	}
 
 	/**
@@ -2017,6 +2029,20 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(pastDeadline);
 			requireNonNull(continuationLocale);
 			requireNonNull(selectedLocaleSlot);
+		}
+
+		@Override
+		@NonNull
+		public String toString() {
+			return "ResourceListInvocation[endpointPathParameterCount="
+					+ endpointPathParameters.size()
+					+ ", clientInformationPresent=" + clientInformation.isPresent()
+					+ ", requestMetadataMemberCount="
+					+ requestMetadata.getMembers().size()
+					+ ", cursorPresent=" + cursor.isPresent()
+					+ ", registeredResourceDescriptorCount="
+					+ registeredResourceDescriptors.size()
+					+ ", authenticated=" + admissionIdentity.isAuthenticated() + "]";
 		}
 	}
 
@@ -2995,6 +3021,21 @@ public final class McpServerRuntimeBridge {
 			requireNonNull(admissionIdentity);
 		}
 
+		@Override
+		@NonNull
+		public String toString() {
+			return "RequestObservationInput[endpointPathParameterCount="
+					+ endpointPathParameters.size() + ", requestIdPresent="
+					+ requestId.isPresent() + ", operationNamePresent="
+					+ operationName.isPresent() + ", clientInformationPresent="
+					+ clientInformation.isPresent() + ", frameworkRequestStatePresent="
+					+ frameworkRequestState.isPresent()
+					+ ", applicationRequestStatePresent="
+					+ applicationRequestState.isPresent()
+					+ ", acceptLanguageValueCount=" + acceptLanguageValues.size()
+					+ ", authenticated=" + admissionIdentity.isAuthenticated() + "]";
+		}
+
 		@NonNull
 		private static List<@NonNull String> acceptLanguageValues(
 				@NonNull Request request) {
@@ -3032,6 +3073,19 @@ public final class McpServerRuntimeBridge {
 			requestedResourceSubscriptionUris = List.copyOf(
 					requireNonNull(requestedResourceSubscriptionUris));
 			requireNonNull(requestMetadata);
+		}
+
+		@Override
+		@NonNull
+		public String toString() {
+			return "AdmissionInput[endpointPathParameterCount="
+					+ endpointPathParameters.size() + ", notification=" + notification
+					+ ", requestIdPresent=" + requestId.isPresent()
+					+ ", operationNamePresent=" + operationName.isPresent()
+					+ ", clientInformationPresent=" + clientInformation.isPresent()
+					+ ", requestedResourceSubscriptionUriCount="
+					+ requestedResourceSubscriptionUris.size()
+					+ ", requestMetadataPresent=" + requestMetadata.isPresent() + "]";
 		}
 	}
 
@@ -3119,8 +3173,7 @@ public final class McpServerRuntimeBridge {
 		if (progressToken instanceof McpProgressToken.IntegerToken integerToken)
 			return new com.soklet.internal.mcp.protocol.McpJsonNumber(
 					new java.math.BigDecimal(integerToken.value()));
-		throw new IllegalArgumentException(
-				"Unsupported MCP progress token: " + progressToken);
+		throw new IllegalArgumentException("Unsupported MCP progress token type.");
 	}
 
 	private static com.soklet.internal.mcp.protocol.@NonNull McpJsonNumber progressNumber(

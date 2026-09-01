@@ -112,22 +112,19 @@ public final class McpRequestId {
 	}
 
 	/**
-	 * Returns a bounded, control-character-sanitized diagnostic representation.
+	 * Returns a redacted diagnostic representation that preserves only the MCP
+	 * wire type. Request identifiers are client-supplied and may contain secrets
+	 * or high-cardinality values; use {@link #asString()} or
+	 * {@link #asInteger()} only when exact application processing requires
+	 * them.
 	 *
 	 * @return the safe diagnostic representation
 	 */
 	@Override
 	@NonNull
 	public String toString() {
-		String source = this.integerValue != null
-				? this.integerValue.toString() : requireNonNull(this.stringValue);
-		StringBuilder bounded = new StringBuilder();
-		source.codePoints().limit(128).forEach(codePoint -> bounded.appendCodePoint(
-				Character.isISOControl(codePoint) ? '\uFFFD' : codePoint));
-		if (source.codePointCount(0, source.length()) > 128)
-			bounded.append('\u2026');
 		return this.integerValue == null
-				? "McpRequestId{string='" + bounded + "'}"
-				: "McpRequestId{integer=" + bounded + "}";
+				? "McpRequestId{string=<redacted>}"
+				: "McpRequestId{integer=<redacted>}";
 	}
 }

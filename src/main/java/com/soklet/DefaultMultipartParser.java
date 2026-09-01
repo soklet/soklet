@@ -81,6 +81,9 @@ final class DefaultMultipartParser implements MultipartParser {
 	@NonNull
 	private Boolean isValidBoundary(@NonNull String boundary) {
 		requireNonNull(boundary);
+		if (boundary.length() == 0 || boundary.length() > 70
+				|| boundary.charAt(boundary.length() - 1) == ' ')
+			return false;
 
 		for (int i = 0; i < boundary.length(); i++) {
 			char c = boundary.charAt(i);
@@ -89,51 +92,13 @@ final class DefaultMultipartParser implements MultipartParser {
 			boolean isAlphanumeric = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
 			boolean isAllowedPunctuation = c == '\'' || c == '(' || c == ')' || c == '+' ||
 					c == '_' || c == ',' || c == '-' || c == '.' ||
-					c == '/' || c == ':' || c == '=' || c == '?';
+					c == '/' || c == ':' || c == '=' || c == '?' || c == ' ';
 
 			if (!isAlphanumeric && !isAllowedPunctuation)
 				return false;
 		}
 
-		if (boundary.length() > 70)
-			return false;
-
 		return true;
-	}
-
-	@NonNull
-	private String stripOptionalQuotes(@NonNull String value) {
-		requireNonNull(value);
-
-		value = value.trim();
-
-		if (value.length() >= 2 && value.charAt(0) == '"' && value.charAt(value.length() - 1) == '"') {
-			// RFC 7230 quoted-string: allow \" escapes
-			String inner = value.substring(1, value.length() - 1);
-			StringBuilder unescaped = new StringBuilder(inner.length());
-			boolean escape = false;
-
-			for (int i = 0; i < inner.length(); i++) {
-				char c = inner.charAt(i);
-
-				if (escape) {
-					unescaped.append(c);
-					escape = false;
-				} else if (c == '\\') {
-					escape = true;
-				} else {
-					unescaped.append(c);
-				}
-			}
-
-			// If trailing backslash, keep it
-			if (escape)
-				unescaped.append('\\');
-
-			return unescaped.toString();
-		}
-
-		return value;
 	}
 
 	@Override
@@ -170,11 +135,9 @@ final class DefaultMultipartParser implements MultipartParser {
 		Map<String, String> contentTypeHeaderFields = extractFields(contentTypeHeader);
 
 		// Validate boundary before using it
-		String boundary = trimAggressivelyToNull(contentTypeHeaderFields.get("boundary"));
+		String boundary = contentTypeHeaderFields.get("boundary");
 
-		boundary = boundary == null ? null : trimAggressivelyToNull(stripOptionalQuotes(boundary));
-
-		if (boundary == null)
+		if (boundary == null || boundary.length() == 0)
 			throw new IllegalRequestBodyException("Multipart request must include a non-empty 'boundary' parameter in Content-Type header");
 
 		if (boundary.length() > 70)
@@ -182,8 +145,9 @@ final class DefaultMultipartParser implements MultipartParser {
 
 		if (!isValidBoundary(boundary))
 			throw new IllegalRequestBodyException(
-					format("Multipart request boundary contains illegal characters (per RFC 2046). " +
-							"Allowed characters are: A-Z, a-z, 0-9, and '()+_,-./:=? - Boundary was: %s", boundary));
+					"Multipart request boundary contains illegal characters (per RFC 2046). "
+							+ "Allowed characters are: A-Z, a-z, 0-9, space, and '()+_,-./:=?; "
+							+ "the final character must not be a space.");
 
 		Map<String, Set<MultipartField>> multipartFieldsByName = new LinkedHashMap<>();
 

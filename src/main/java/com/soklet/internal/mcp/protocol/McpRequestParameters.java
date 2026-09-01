@@ -89,7 +89,7 @@ record McpRequestMetadata(@NonNull String protocolVersion,
 		if (token instanceof McpProgressToken.IntegerToken integerToken)
 			return new McpJsonNumber(new java.math.BigDecimal(integerToken.value()));
 
-		throw new IllegalArgumentException("Unsupported progress token: " + token);
+		throw new IllegalArgumentException("Unsupported progress token type.");
 	}
 }
 

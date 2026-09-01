@@ -36,7 +36,7 @@ sealed interface McpJsonRpcId permits McpJsonRpcId.StringId, McpJsonRpcId.Intege
 		if (this instanceof IntegerId integerId)
 			return new McpJsonNumber(new java.math.BigDecimal(integerId.value()));
 
-		throw new IllegalArgumentException("Unsupported JSON-RPC request ID: " + this);
+		throw new IllegalArgumentException("Unsupported JSON-RPC request ID type.");
 	}
 
 	record StringId(@NonNull String value) implements McpJsonRpcId {

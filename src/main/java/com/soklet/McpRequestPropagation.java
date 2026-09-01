@@ -53,6 +53,14 @@ record McpRequestPropagation(
 				new LinkedHashMap<>(requireNonNull(baggage)));
 	}
 
+	@Override
+	@NonNull
+	public String toString() {
+		return "McpRequestPropagation[traceContextPresent="
+				+ traceContext.isPresent() + ", baggageEntryCount="
+				+ baggage.size() + "]";
+	}
+
 	@NonNull
 	static McpRequestPropagation fromMetadata(@NonNull McpJsonObject metadata) {
 		requireNonNull(metadata);

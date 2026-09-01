@@ -16,6 +16,10 @@ documentation, not a release or final conformance claim.
 Compile-checked programmatic and annotation-driven applications live outside
 this source repository in the project-root `mcp/examples/phase-4` workspace.
 
+The [MCP privacy boundary](release/MCP_PRIVACY_BOUNDARY.md) explains which
+diagnostic, metric, callback, and simulator values core Soklet redacts or
+deliberately leaves application- and operator-owned.
+
 ## Current support
 
 | Area | Current behavior |

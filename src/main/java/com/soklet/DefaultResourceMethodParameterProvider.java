@@ -55,7 +55,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import static com.soklet.Utilities.trimAggressivelyToNull;
 import static java.lang.String.format;
@@ -177,14 +176,16 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 			try {
 				Optional<Object> valueConverterResult = valueConverter.convert(pathParameterValue);
 				result = valueConverterResult == null ? null : valueConverterResult.orElse(null);
-			} catch (Exception e) {
-				throw new IllegalPathParameterException(format("Illegal value '%s' was specified for path parameter '%s' (was expecting a value convertible to %s)",
-						pathParameterValue, pathParameterName, valueConverter.getToType()), e, pathParameterName, pathParameterValue);
+			} catch (Exception ignored) {
+				throw new IllegalPathParameterException(
+						"A path parameter could not be converted to the resource method parameter type.",
+						pathParameterName, pathParameterValue);
 			}
 
 			if (result == null)
-				throw new IllegalPathParameterException(format("No value was specified for path parameter '%s' (was expecting a value convertible to %s)",
-						pathParameterName, valueConverter.getToType()), pathParameterName, pathParameterValue);
+				throw new IllegalPathParameterException(
+						"A path parameter did not produce a value for the resource method parameter.",
+						pathParameterName, pathParameterValue);
 
 			return result;
 		}
@@ -269,8 +270,9 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 					requestBodyObject = marshaledRequestBody == null ? null : marshaledRequestBody.orElse(null);
 				} catch (IllegalRequestBodyException e) {
 					throw e;
-				} catch (Exception e) {
-					throw new IllegalRequestBodyException(format("Unable to marshal request body to %s", requestBodyType), e);
+				} catch (Exception ignored) {
+					throw new IllegalRequestBodyException(
+							format("Unable to marshal the request body to %s.", requestBodyType));
 				}
 
 				if (parameterType.isWrappedInOptional())
@@ -469,7 +471,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 				.optional(queryParameter.optional())
 				.values(new ArrayList<>(values))
 				.missingExceptionProvider((message, name) -> new MissingQueryParameterException(message, parameterName))
-				.illegalExceptionProvider((message, cause, name, value, valueMetadatum) -> new IllegalQueryParameterException(message, cause, parameterName, value))
+				.illegalExceptionProvider((message, ignored, name, value, valueMetadatum) -> new IllegalQueryParameterException(message, parameterName, value))
 				.build();
 
 		return extractRequestValue(requestValueExtractionConfig);
@@ -499,7 +501,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 				.optional(formParameter.optional())
 				.values(new ArrayList<>(values))
 				.missingExceptionProvider((message, name) -> new MissingFormParameterException(message, parameterName))
-				.illegalExceptionProvider((message, cause, name, value, valueMetadatum) -> new IllegalFormParameterException(message, cause, parameterName, value))
+				.illegalExceptionProvider((message, ignored, name, value, valueMetadatum) -> new IllegalFormParameterException(message, parameterName, value))
 				.build();
 
 		return extractRequestValue(requestValueExtractionConfig);
@@ -529,7 +531,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 				.optional(requestHeader.optional())
 				.values(new ArrayList<>(values))
 				.missingExceptionProvider((message, name) -> new MissingRequestHeaderException(message, parameterName))
-				.illegalExceptionProvider((message, cause, name, value, valueMetadatum) -> new IllegalRequestHeaderException(message, cause, parameterName, value))
+				.illegalExceptionProvider((message, ignored, name, value, valueMetadatum) -> new IllegalRequestHeaderException(message, parameterName, value))
 				.build();
 
 		return extractRequestValue(requestValueExtractionConfig);
@@ -559,7 +561,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 				.optional(requestCookie.optional())
 				.values(new ArrayList<>(values))
 				.missingExceptionProvider((message, name) -> new MissingRequestCookieException(message, parameterName))
-				.illegalExceptionProvider((message, cause, name, value, valueMetadatum) -> new IllegalRequestCookieException(message, cause, parameterName, value))
+				.illegalExceptionProvider((message, ignored, name, value, valueMetadatum) -> new IllegalRequestCookieException(message, parameterName, value))
 				.build();
 
 		return extractRequestValue(requestValueExtractionConfig);
@@ -617,7 +619,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 				.valuesMetadata(valuesMetadata)
 				.valueMetadatumConverter(valueMetadatumConverter)
 				.missingExceptionProvider((message, name) -> new MissingMultipartFieldException(message, parameterName))
-				.illegalExceptionProvider((message, cause, name, value, valueMetadatum) -> new IllegalMultipartFieldException(message, cause, requireNonNull(valueMetadatum)))
+				.illegalExceptionProvider((message, ignored, name, value, valueMetadatum) -> new IllegalMultipartFieldException(message, requireNonNull(valueMetadatum)))
 				.build();
 
 		return extractRequestValue(requestValueExtractionConfig);
@@ -660,8 +662,8 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 						results.add(activeValueMetadatumConverter.convert(valueMetadatum, toType, valueConverter));
 					} catch (ValueConversionException e) {
 						throw illegalExceptionProvider.provide(
-								format("Illegal value '%s' was specified for %s '%s' (was expecting a value convertible to %s)", valueMetadatum,
-										parameterDescription, parameterName, expectedTypeName(toType, valueConverter)), e, parameterName, null,
+								format("A %s could not be converted to the resource method parameter type.",
+										parameterDescription), e, parameterName, null,
 								valueMetadatum);
 					}
 				}
@@ -676,8 +678,8 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 							results.add(valueConverterResult == null ? null : valueConverterResult.orElse(null));
 						} catch (ValueConversionException e) {
 							throw illegalExceptionProvider.provide(
-									format("Illegal value '%s' was specified for %s '%s' (was expecting a value convertible to %s)", value,
-											parameterDescription, parameterName, activeValueConverter.getToType()), e, parameterName, value,
+									format("A %s could not be converted to the resource method parameter type.",
+											parameterDescription), e, parameterName, value,
 									valuesMetadata.size() > i ? valuesMetadata.get(i) : null);
 						}
 				}
@@ -686,7 +688,9 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 			boolean required = !parameterType.isWrappedInOptional() && !optional;
 
 			if (required && results.size() == 0)
-				throw missingExceptionProvider.provide(format("Required %s '%s' was not specified.", parameterDescription, parameterName), parameterName);
+				throw missingExceptionProvider.provide(
+						format("A required %s was not specified.", parameterDescription),
+						parameterName);
 
 			return parameterType.isWrappedInOptional() ? (results.size() == 0 ? Optional.empty() : Optional.of(results)) : results;
 		}
@@ -697,15 +701,11 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		if (returnMetadataInsteadOfValues) {
 			// Check for multiple values when parameter is not a List and fail-fast instead of just picking the first value
 			if (valuesMetadata.size() > 1) {
-				String valuesAsString = format("[%s]", valuesMetadata.stream()
-						.map(Objects::toString)
-						.collect(Collectors.joining(", ")));
-
 				throw illegalExceptionProvider.provide(
-						format("Multiple values specified for %s '%s' (but expected single value): %s",
-								parameterDescription, parameterName, valuesAsString),
+						format("Multiple values were specified for a %s that requires a single value.",
+								parameterDescription),
 						new IllegalArgumentException("Multiple values provided for single-value parameter"),
-						parameterName, valuesAsString, valuesMetadata.get(0));
+						parameterName, null, valuesMetadata.get(0));
 			}
 
 			result = valuesMetadata.size() > 0 ? valuesMetadata.get(0) : null;
@@ -716,8 +716,8 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 					result = activeValueMetadatumConverter.convert((T) result, toType, valueConverter);
 				} catch (ValueConversionException e) {
 					throw illegalExceptionProvider.provide(
-							format("Illegal value '%s' was specified for %s '%s' (was expecting a value convertible to %s)", result,
-									parameterDescription, parameterName, expectedTypeName(toType, valueConverter)), e, parameterName, null,
+							format("A %s could not be converted to the resource method parameter type.",
+									parameterDescription), e, parameterName, null,
 							valuesMetadata.size() > 0 ? valuesMetadata.get(0) : null);
 				}
 			}
@@ -725,15 +725,17 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 			boolean required = !parameterType.isWrappedInOptional() && !optional;
 
 			if (required && result == null)
-				throw missingExceptionProvider.provide(format("Required %s '%s' was not specified.", parameterDescription, parameterName), parameterName);
+				throw missingExceptionProvider.provide(
+						format("A required %s was not specified.", parameterDescription),
+						parameterName);
 		} else {
 			// Check for multiple values when parameter is not a List and fail-fast instead of just picking the first value
 			if (values.size() > 1) {
 				String valuesAsString = format("[%s]", String.join(", ", values));
 
 				throw illegalExceptionProvider.provide(
-						format("Multiple values specified for %s '%s' (but expected single value): %s",
-								parameterDescription, parameterName, valuesAsString),
+						format("Multiple values were specified for a %s that requires a single value.",
+								parameterDescription),
 						new IllegalArgumentException("Multiple values provided for single-value parameter"),
 						parameterName, valuesAsString, null);
 			}
@@ -745,7 +747,9 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 			boolean required = !parameterType.isWrappedInOptional() && !optional;
 
 			if (required && value == null)
-				throw missingExceptionProvider.provide(format("Required %s '%s' was not specified.", parameterDescription, parameterName), parameterName);
+				throw missingExceptionProvider.provide(
+						format("A required %s was not specified.", parameterDescription),
+						parameterName);
 
 			ValueConverter<Object, Object> activeValueConverter = requireNonNull(valueConverter);
 			try {
@@ -753,8 +757,8 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 				result = valueConverterResult == null ? null : valueConverterResult.orElse(null);
 			} catch (ValueConversionException e) {
 				throw illegalExceptionProvider.provide(
-						format("Illegal value '%s' was specified for %s '%s' (was expecting a value convertible to %s)", value,
-								parameterDescription, parameterName, activeValueConverter.getToType()), e, parameterName, value,
+						format("A %s could not be converted to the resource method parameter type.",
+								parameterDescription), e, parameterName, value,
 						valuesMetadata.size() > 0 ? valuesMetadata.get(0) : null);
 			}
 		}

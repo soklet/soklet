@@ -16,10 +16,15 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   FINITE_BOUND_MATCHER_RULES,
+  PRIVACY_MATCHER_RULES,
+  PRIVACY_REQUIRED_DELEGATED_OWNERS,
+  PRIVACY_SCAN_ROOTS,
   canonicalJson,
   deriveFiniteBoundCandidates,
+  derivePrivacyBoundaryCandidates,
   verifyFiniteBoundInventory,
   verifyMatrixClosure,
+  verifyPrivacyBoundaryInventory,
 } from './verify-release-matrix-closure.mjs';
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -39,6 +44,22 @@ const finiteBoundInventoryPath = join(
 const finiteBoundScanRoots = Object.freeze([
   'src/main/java/com/soklet/**/*.java',
   'src/main/java/com/soklet/Mcp*.java',
+]);
+const privacyProjectRoot = join(temporaryRoot, 'privacy-boundary-project');
+const privacyInventoryPath = join(
+  privacyProjectRoot,
+  'conformance/mcp-privacy-boundary-inventory.json',
+);
+const privacyScanRoots = Object.freeze([
+  'src/main/java/com/soklet/**/*.java',
+]);
+const privacyArtifactRoots = Object.freeze([
+  'conformance/official/final-schema/**/*',
+  'conformance/privacy-self-test-exact.golden',
+  'conformance/privacy-self-test-recursive/**/*',
+  'fuzz/src/test/resources/com/soklet/**/*',
+  'src/test/resources/com/soklet/internal/mcp/schema/**/*',
+  'src/test/resources/multipart-request-body',
 ]);
 
 const expectedUnresolvedIds = Object.freeze([
@@ -95,6 +116,16 @@ function verifyFixture(path, options = {}) {
     ...(options.gitExecutable === undefined
       ? { gitExecutable: semanticGitExecutable() }
       : { gitExecutable: options.gitExecutable }),
+    privacyExpectedArtifactRoots: options.privacyExpectedArtifactRoots
+      ?? privacyArtifactRoots,
+    privacyExpectedScanRoots: options.privacyExpectedScanRoots
+      ?? privacyScanRoots,
+    privacyInventoryPath: options.privacyInventoryPath
+      ?? privacyInventoryPath,
+    privacyGitExecutable: options.privacyGitExecutable
+      ?? semanticGitExecutable(),
+    privacyProjectRoot: options.privacyProjectRoot
+      ?? privacyProjectRoot,
   });
 }
 
@@ -189,6 +220,101 @@ function reviewedExclusion(owner, id = 'FINITE-EX-001') {
     owner: owner.owner,
     rationale: 'Reviewed self-test exclusion with an exact declaration identity.',
   };
+}
+
+function privacyClassification(candidate) {
+  return {
+    file: candidate.file,
+    key: candidate.key,
+    matcherRuleId: candidate.matcherRuleId,
+    member: candidate.member,
+    occurrence: candidate.occurrence,
+    owner: candidate.owner,
+    sink: candidate.sink,
+  };
+}
+
+function privacyFixture(candidates) {
+  const categoryByMatcher = {
+    'PRIV-MATCH-001': 'LOG',
+    'PRIV-MATCH-002': 'METRIC',
+    'PRIV-MATCH-003': 'REQUEST',
+    'PRIV-MATCH-004': 'THROWABLE',
+    'PRIV-MATCH-005': 'REQUEST',
+    'PRIV-MATCH-006': 'EXCEPTION',
+    'PRIV-MATCH-007': 'FIXTURE',
+    'PRIV-MATCH-008': 'DIAGNOSTIC',
+    'PRIV-MATCH-009': 'EXCEPTION',
+    'PRIV-MATCH-010': 'FIXTURE',
+    'PRIV-MATCH-011': 'EXCEPTION',
+    'PRIV-MATCH-012': 'EXCEPTION',
+    'PRIV-MATCH-013': 'LOG',
+    'PRIV-MATCH-014': 'LOG',
+    'PRIV-MATCH-015': 'METRIC',
+    'PRIV-MATCH-016': 'LOG',
+  };
+  return {
+    artifactRoots: [...privacyArtifactRoots],
+    boundaries: PRIVACY_MATCHER_RULES.map(({ id }, index) => ({
+      canaryTests: [
+        'src/test/java/com/soklet/McpPrivacyBoundaryFixtureTests.java#canary',
+      ],
+      category: categoryByMatcher[id],
+      classification: id === 'PRIV-MATCH-013' ? 'NO_EMISSION' : 'REDACTED',
+      contract: `Synthetic exact privacy contract for ${id}.`,
+      id: `PRIV-BOUND-${String(index + 1).padStart(3, '0')}`,
+      name: `Synthetic ${id} privacy boundary`,
+      sourcePaths: candidates
+        .filter(({ matcherRuleId }) => matcherRuleId === id)
+        .map(privacyClassification)
+        .sort((left, right) => left.key < right.key ? -1
+          : left.key > right.key ? 1 : 0),
+    })),
+    delegations: PRIVACY_REQUIRED_DELEGATED_OWNERS.map((owner, index) => ({
+      canaryTests: [],
+      contract: `Synthetic explicit delegation for ${owner}.`,
+      delegatedOwner: owner,
+      id: `PRIV-DELEGATION-${String(index + 1).padStart(3, '0')}`,
+      name: `Synthetic ${owner} delegation`,
+      sourcePaths: [],
+    })),
+    formatVersion: 1,
+    matcherRules: clone(PRIVACY_MATCHER_RULES),
+    productionProfile: '2026-07-28',
+    releaseTarget: '4.0.0',
+    reviewedExclusions: [],
+    scanRoots: [...privacyScanRoots],
+  };
+}
+
+function writePrivacyFixture(name, value) {
+  const path = join(
+    privacyProjectRoot,
+    `conformance/mcp-privacy-boundary-inventory-${name}.json`,
+  );
+  writeFileSync(path, canonicalJson(value));
+  return path;
+}
+
+function verifyPrivacyFixture(path, options = {}) {
+  return verifyPrivacyBoundaryInventory({
+    expectedArtifactRoots: privacyArtifactRoots,
+    expectedScanRoots: privacyScanRoots,
+    gitExecutable: options.gitExecutable ?? semanticGitExecutable(),
+    inventoryPath: path,
+    projectRoot: privacyProjectRoot,
+  });
+}
+
+function expectPrivacyInvalid(name, source, mutate, expected, options = {}) {
+  const fixture = clone(source);
+  mutate(fixture);
+  const path = writePrivacyFixture(name, fixture);
+  assert.throws(
+    () => verifyPrivacyFixture(path, options),
+    expected,
+    name,
+  );
 }
 
 try {
@@ -448,6 +574,1735 @@ final class McpFiniteBoundSyntax {
   expectFiniteBoundInvalid('finite-scan-roots-reordered', finiteInventory, (value) => {
     value.scanRoots.reverse();
   }, /Finite-bound scanRoots must match the frozen order exactly/);
+
+  prepareSemanticGit(privacyInventoryPath);
+  mkdirSync(dirname(privacyInventoryPath), { recursive: true });
+  const privacySourceDirectory = join(
+    privacyProjectRoot,
+    'src/main/java/com/soklet',
+  );
+  const privacyInternalSourceDirectory = join(
+    privacyProjectRoot,
+    'src/main/java/com/soklet/internal/mcp/protocol',
+  );
+  const privacyMicrohttpSourceDirectory = join(
+    privacyProjectRoot,
+    'src/main/java/com/soklet/internal/microhttp',
+  );
+  const privacyExceptionSourceDirectory = join(
+    privacyProjectRoot,
+    'src/main/java/com/soklet/exception',
+  );
+  const privacyTestDirectory = join(
+    privacyProjectRoot,
+    'src/test/java/com/soklet',
+  );
+  const privacyFuzzTestDirectory = join(
+    privacyProjectRoot,
+    'fuzz/src/test/java/com/soklet',
+  );
+  const privacyArtifactDirectory = join(
+    privacyProjectRoot,
+    'conformance/privacy-self-test-recursive',
+  );
+  const privacyFinalSchemaArtifactDirectory = join(
+    privacyProjectRoot,
+    'conformance/official/final-schema',
+  );
+  const privacyFuzzArtifactDirectory = join(
+    privacyProjectRoot,
+    'fuzz/src/test/resources/com/soklet/QueryFormatFuzzTestInputs',
+  );
+  const privacyMicrohttpFuzzArtifactDirectory = join(
+    privacyProjectRoot,
+    'fuzz/src/test/resources/com/soklet/internal/microhttp/RequestParserFuzzTestInputs',
+  );
+  const privacySchemaArtifactDirectory = join(
+    privacyProjectRoot,
+    'src/test/resources/com/soklet/internal/mcp/schema/profile',
+  );
+  const privacyExactArtifactPath = join(
+    privacyProjectRoot,
+    'conformance/privacy-self-test-exact.golden',
+  );
+  const privacyMultipartArtifactPath = join(
+    privacyProjectRoot,
+    'src/test/resources/multipart-request-body',
+  );
+  mkdirSync(privacySourceDirectory, { recursive: true });
+  mkdirSync(privacyInternalSourceDirectory, { recursive: true });
+  mkdirSync(privacyMicrohttpSourceDirectory, { recursive: true });
+  mkdirSync(privacyExceptionSourceDirectory, { recursive: true });
+  mkdirSync(privacyTestDirectory, { recursive: true });
+  mkdirSync(privacyFuzzTestDirectory, { recursive: true });
+  mkdirSync(privacyArtifactDirectory, { recursive: true });
+  mkdirSync(privacyFinalSchemaArtifactDirectory, { recursive: true });
+  mkdirSync(privacyFuzzArtifactDirectory, { recursive: true });
+  mkdirSync(privacyMicrohttpFuzzArtifactDirectory, { recursive: true });
+  mkdirSync(privacySchemaArtifactDirectory, { recursive: true });
+  mkdirSync(dirname(privacyMultipartArtifactPath), { recursive: true });
+  assert.deepEqual(PRIVACY_SCAN_ROOTS, [
+    'src/main/java/com/soklet/**/*.java',
+  ]);
+  writeFileSync(
+    join(privacySourceDirectory, 'Request.java'),
+    `package com.soklet;
+
+public class Request {
+  protected Request() {}
+  public String getUrl() { return "exact"; }
+  public Object getHeaders() { return null; }
+
+  public static final class Builder {
+    public Builder rawPath(String rawPath) { return this; }
+  }
+}
+`,
+  );
+  writeFileSync(
+    join(privacySourceDirectory, 'McpRequestContext.java'),
+    `package com.soklet;
+
+public interface McpRequestContext {
+  Request getRequest();
+  String getOperationName();
+}
+`,
+  );
+  writeFileSync(
+    join(privacySourceDirectory, 'McpRequestStateProtectionContext.java'),
+    `package com.soklet;
+
+public final class McpRequestStateProtectionContext {
+  public McpRequestStateProtectionContext(String associatedData) {}
+  public String getAssociatedData() { return "exact"; }
+}
+`,
+  );
+  writeFileSync(
+    join(privacySourceDirectory, 'McpPromptGetContext.java'),
+    `package com.soklet;
+
+public interface McpPromptGetContext {
+  String getPromptName();
+}
+`,
+  );
+  writeFileSync(
+    join(privacySourceDirectory, 'McpInvocationFeatures.java'),
+    `package com.soklet;
+
+public interface McpInvocationFeatures {
+  String getSelectedLocale();
+}
+`,
+  );
+  writeFileSync(
+    join(privacySourceDirectory, 'McpToolArguments.java'),
+    `package com.soklet;
+
+public interface McpToolArguments<T> {
+  T getArguments();
+}
+
+final class DefaultToolArguments implements McpToolArguments<String> {
+  public String getArguments() { return "exact"; }
+  public String getRawSecret() { return "exact"; }
+
+  @Override
+  public String toString() { return "DefaultToolArguments{<redacted>}"; }
+}
+
+interface SyntheticToolHandler {
+  Object handle(McpToolArguments<String> arguments);
+}
+`,
+  );
+  writeFileSync(
+    join(privacySourceDirectory, 'CancelationToken.java'),
+    `package com.soklet;
+
+import java.util.Optional;
+
+interface CancelationToken {
+  Optional<Throwable> getCancelationCause();
+
+  Optional<RuntimeException> terminalFailure();
+}
+`,
+  );
+  writeFileSync(
+    join(privacySourceDirectory, 'CorsAuthorizer.java'),
+    `package com.soklet;
+
+interface CorsAuthorizer {
+  Object authorize(Request request);
+}
+`,
+  );
+  writeFileSync(
+    join(privacySourceDirectory, 'MetricsCollector.java'),
+    `package com.soklet;
+
+interface MetricsCollector {
+  default void collectSecret(Request request, Throwable throwable) {}
+
+  default Object snapshot() {
+    return null;
+  }
+
+  final class Snapshot {
+    public final String exposedSecret = "exact";
+
+    public String getSecret() { return "exact"; }
+
+    public static final class Builder {
+      public Builder secret(String value) { return this; }
+    }
+  }
+}
+
+final class DefaultMetricsCollector implements MetricsCollector {
+  @Override
+  public void collectSecret(Request request, Throwable throwable) {}
+}
+
+final class GenericMetricsCaller {
+  void emit(MetricsCollector metricsCollector, Request request,
+      Throwable throwable) {
+    metricsCollector.collectSecret(request, throwable);
+  }
+}
+`,
+  );
+  writeFileSync(
+    join(privacySourceDirectory, 'McpMetricsEvent.java'),
+    `package com.soklet;
+
+abstract class McpMetricsEvent {
+  public static McpMetricsEvent requestAccepted() { return null; }
+
+  public static McpMetricsEvent sensitiveEvent(String secret) { return null; }
+
+  public static final class SensitiveEvent extends McpMetricsEvent {
+    public final String exposedSecret = "exact";
+
+    public String getSecret() { return "exact"; }
+  }
+}
+`,
+  );
+  writeFileSync(
+    join(privacySourceDirectory, 'McpMetricsSnapshot.java'),
+    `package com.soklet;
+
+final class McpMetricsSnapshot {
+  public String getSecret() { return "exact"; }
+
+  public static final class Builder {
+    public Builder secret(String value) { return this; }
+  }
+}
+`,
+  );
+  writeFileSync(
+    join(privacySourceDirectory, 'McpJsonRpcError.java'),
+    `package com.soklet;
+
+public final class McpJsonRpcError {
+  public static final int APPLICATION_CODE = 7;
+
+  private McpJsonRpcError(int code, String message, Object data) {}
+
+  public static McpJsonRpcError fromApplication(Integer code, String message) {
+    return new McpJsonRpcError(code, message, null);
+  }
+
+  public Integer getCode() { return 7; }
+  public String getMessage() { return "exact"; }
+  public Object getData() { return null; }
+}
+
+final class McpJsonRpcException extends RuntimeException {
+  public McpJsonRpcException(McpJsonRpcError error) {}
+  public McpJsonRpcError getError() { return null; }
+}
+`,
+  );
+  writeFileSync(
+    join(privacySourceDirectory, 'LogEvent.java'),
+    `package com.soklet;
+
+final class LogEvent {
+  public static Builder with(LogEventType type, String message) { return null; }
+
+  public String getMessage() { return null; }
+  public ResourceMethod getResourceMethod() { return null; }
+  public MarshaledResponse getMarshaledResponse() { return null; }
+  public String getResponse() { return null; }
+  public Copier copy() { return null; }
+
+  static final class Builder {
+    public Builder message(String message) { return this; }
+    public Builder resourceMethod(ResourceMethod method) { return this; }
+    public Builder marshaledResponse(MarshaledResponse response) { return this; }
+    public Builder request(Request request) { return this; }
+    public Builder response(String response) { return this; }
+    public Builder throwable(Throwable throwable) { return this; }
+    public LogEvent build() { return null; }
+  }
+
+  static final class Copier {
+    public Copier message(String message) { return this; }
+    public Copier resourceMethod(ResourceMethod method) { return this; }
+    public Copier marshaledResponse(MarshaledResponse response) { return this; }
+    public Copier request(Request request) { return this; }
+    public Copier response(String response) { return this; }
+    public Copier throwable(Throwable throwable) { return this; }
+    public LogEvent finish() { return null; }
+  }
+}
+`,
+  );
+  writeFileSync(
+    join(privacySourceDirectory, 'HttpRequestResult.java'),
+    `package com.soklet;
+
+public final class HttpRequestResult {
+  public HttpRequestResult(String body) {}
+
+  public String getBody() { return "exact"; }
+
+  @Override
+  public String toString() { return "HttpRequestResult{body=exact}"; }
+}
+`,
+  );
+  writeFileSync(
+    join(privacySourceDirectory, 'ResponseLike.java'),
+    `package com.soklet;
+
+final class ResponseLike {
+  @Override
+  public String toString() { return "ResponseLike{secret=exact}"; }
+}
+
+record SecretCarrier(String value) {}
+
+record GenericSecret<T>(T value) {}
+
+record Allowed() {}
+`,
+  );
+  writeFileSync(
+    join(privacySourceDirectory, 'SyntheticDiagnostic.java'),
+    `package com.soklet;
+
+final class SyntheticDiagnostic {
+  String summary() { return "exact"; }
+  private String render() { return "exact"; }
+}
+`,
+  );
+  writeFileSync(
+    join(privacySourceDirectory, 'DefaultMultipartParser.java'),
+    `package com.soklet;
+
+final class DefaultMultipartParser {
+  void rejectBody() {
+    throw new IllegalRequestBodyException("fixed");
+  }
+
+  void rejectRequest() {
+    throw new IllegalRequestException("fixed");
+  }
+}
+`,
+  );
+  writeFileSync(
+    join(privacySourceDirectory, 'McpPrivacyFixture.java'),
+    `package com.soklet;
+
+import com.soklet.exception.IllegalRequestException;
+import java.util.List;
+
+import static com.soklet.LogEvent.with;
+import static com.soklet.McpMetricsEvent.sensitiveEvent;
+
+final class McpPrivacyFixture {
+  public Request exposedRequest;
+  protected LimitSignal exposedFailure;
+  public Request firstRequest, secondRequest;
+  protected LimitSignal firstFailure, secondFailure;
+
+  Request getRequest() {
+    return null;
+  }
+
+  List<Throwable> getThrowables() {
+    return List.of();
+  }
+
+  void exercise(Request request, Throwable throwable,
+      LifecycleObserver observer, McpRequestContext context) {
+    observer.didReceiveLogEvent(LogEvent.with(
+        LogEventType.MCP_SERVER_CONFIGURATION, "fixed")
+        .request(request).throwable(throwable)
+        .marshaledResponse(null).response("secret").build());
+    observer.didReceiveLogEvent(LogEvent.with(
+        LogEventType.MCP_SERVER_CONFIGURATION, "fixed again").build());
+    McpMetricsEvent.requestAccepted();
+    sensitiveEvent("secret");
+    with(LogEventType.MCP_SERVER_CONFIGURATION, "static import").build();
+    Object logFactory = LogEvent::with;
+    Object metricFactory = McpMetricsEvent::sensitiveEvent;
+    observer.didStartMcpRequestHandling(context);
+    throw new IllegalRequestException("fixed");
+  }
+
+  LogEvent staticAttachments(Request request) {
+    return with(LogEventType.MCP_SERVER_CONFIGURATION, "static chain")
+        .request(request).response("secret").build();
+  }
+
+  void variableAttachments(Request request, LogEvent event) {
+    LogEvent.Builder builder = LogEvent.with(
+        LogEventType.MCP_SERVER_CONFIGURATION, "variable");
+    builder.request(request);
+    builder.response("secret");
+    LogEvent.Copier copier = event.copy();
+    copier.message("secret");
+    event.copy().resourceMethod(null).finish();
+    var inferredCopier = event.copy();
+    inferredCopier.response("secret");
+  }
+
+  Object wireError() {
+    return new McpJsonRpcError(-1, "fixed", null);
+  }
+
+  Object publishWireError(McpJsonRpcException exception,
+      McpJsonRpcError error) {
+    exception.getError();
+    error.getCode();
+    error.getMessage();
+    return error.getData();
+  }
+
+  Object[] errorDtos() {
+    return new Object[] {
+        new JsonRpcError(),
+        new ProtocolError(),
+        new RequestError(),
+        new com.soklet.internal.mcp.protocol.McpJsonRpcError()
+    };
+  }
+
+  public String toString() {
+    return "McpPrivacyFixture{}";
+  }
+
+  static final class NestedCarrierException extends RuntimeException {
+    public NestedCarrierException(String exactValue) {}
+
+    public String exactValue() {
+      return "exact";
+    }
+
+    private String privateValue() {
+      return "private";
+    }
+  }
+
+  public record PublicRequestCarrier(Request request, String label) {
+    @Override
+    public String toString() { return "PublicRequestCarrier{<redacted>}"; }
+  }
+
+  private record PrivateThrowableCarrier(Throwable throwable) {}
+}
+`,
+  );
+  writeFileSync(
+    join(privacySourceDirectory, 'McpSimulationResponse.java'),
+    `package com.soklet;
+
+final class McpSimulationResponse {
+  public String getBody() { return "exact"; }
+  public String getSecret() { return "exact"; }
+}
+`,
+  );
+  writeFileSync(
+    join(privacyInternalSourceDirectory, 'McpSimulationRuntime.java'),
+    `package com.soklet.internal.mcp.protocol;
+
+final class McpSimulationRuntime {
+  Object capture() {
+    return new DefaultResponse();
+  }
+
+  public byte[] getEncodedBytes() {
+    return new byte[0];
+  }
+
+  public String getSecret() { return "exact"; }
+
+  Object logger() {
+    return NoopLogger.instance();
+  }
+
+  Object eventLoop() {
+    return new EventLoop(options, NoopLogger.instance(), handler);
+  }
+}
+`,
+  );
+  writeFileSync(
+    join(privacyInternalSourceDirectory, 'McpJsonRpcError.java'),
+    `package com.soklet.internal.mcp.protocol;
+
+record McpJsonRpcError(int code, String message, Object data) {
+  Object toJsonObject() { return null; }
+}
+`,
+  );
+  writeFileSync(
+    join(privacyMicrohttpSourceDirectory, 'Logger.java'),
+    `package com.soklet.internal.microhttp;
+
+interface Logger {
+  void log(Object... entries);
+  void logFailure(Throwable throwable, Object... entries);
+  default void audit(Object... entries) {}
+}
+`,
+  );
+  writeFileSync(
+    join(privacyMicrohttpSourceDirectory, 'EventLoop.java'),
+    `package com.soklet.internal.microhttp;
+
+final class EventLoop {
+  EventLoop(Object options, Object handler) {
+    this(options, NoopLogger.instance(), handler);
+  }
+
+  EventLoop(Object options, Logger logger, Object handler) {}
+}
+`,
+  );
+  writeFileSync(
+    join(privacyMicrohttpSourceDirectory, 'ConnectionEventLoop.java'),
+    `package com.soklet.internal.microhttp;
+
+final class ConnectionEventLoop {
+  Logger logger;
+  Logger audit;
+
+  void emit(Exception exception) {
+    logger.log();
+    logger.logFailure(exception);
+    audit.log(exception);
+    obtainLogger().log(exception);
+    obtainLogger().audit(exception);
+  }
+}
+
+final class DebugLogger {
+  void emit(Exception exception) {
+    System.out.println("debug");
+    exception.printStackTrace();
+  }
+}
+`,
+  );
+  writeFileSync(
+    join(privacyExceptionSourceDirectory, 'SyntheticPrivacyException.java'),
+    `package com.soklet.exception;
+
+public final class SyntheticPrivacyException extends RuntimeException {
+  public SyntheticPrivacyException(String message) {}
+
+  protected SyntheticPrivacyException(String message, Throwable cause) {}
+
+  private SyntheticPrivacyException() {}
+
+  public String getExactValue() {
+    return "exact";
+  }
+
+  private String getPrivateValue() {
+    return "private";
+  }
+
+  public String helper() {
+    return "not a getter";
+  }
+
+  protected String renderExactValue() {
+    return "exact";
+  }
+
+  @Override
+  public String toString() {
+    return "SyntheticPrivacyException{<redacted>}";
+  }
+}
+`,
+  );
+  writeFileSync(
+    join(privacySourceDirectory, 'Utilities.java'),
+    `package com.soklet;
+
+final class Utilities {
+  void rejectMissingHeader() {
+    throw new MissingRequestHeaderException("fixed");
+  }
+
+  void rejectMultipleValues() {
+    throw new MultipleValuesException("fixed");
+  }
+
+  void rejectMissingFormParameter() {
+    throw new MissingFormParameterException("fixed");
+  }
+
+  void rejectMissingMultipartField() {
+    throw new MissingMultipartFieldException("fixed");
+  }
+
+  void rejectMissingQueryParameter() {
+    throw new MissingQueryParameterException("fixed");
+  }
+
+  void rejectMissingRequestBody() {
+    throw new MissingRequestBodyException("fixed");
+  }
+
+  void rejectMissingRequestCookie() {
+    throw new MissingRequestCookieException("fixed");
+  }
+
+  void failInvariant() {
+    throw new AssertionError("fixed");
+  }
+
+  void failInitialization() {
+    throw new ExceptionInInitializerError("fixed");
+  }
+
+  void failWithLocalSubtype(String exactValue) {
+    throw new LimitSignal(exactValue);
+  }
+
+  void writeDirectly(PrintStream stream) {
+    stream.write(1);
+    Object typedReference = stream::println;
+  }
+
+  void writeThroughAlias() {
+    var sink = System.err;
+    sink.println("secret");
+    Object directReference = System.err::println;
+    Object aliasReference = sink::println;
+  }
+}
+
+final class LimitSignal extends RuntimeException {
+  public LimitSignal(String message) {}
+
+  public String getSecret() { return "exact"; }
+}
+
+final class SyntheticPrivacyError extends Error {
+  public SyntheticPrivacyError(String message) {}
+
+  protected String getSecret() { return "exact"; }
+}
+
+record PrivateFailureCarrier(LimitSignal failure) {}
+`,
+  );
+  writeFileSync(
+    join(privacySourceDirectory, 'SokletApplicationTerminalReporter.java'),
+    `package com.soklet;
+
+final class SokletApplicationTerminalReporter {
+  OutputStream errorStream;
+
+  void report() {
+    this.errorStream.write(1);
+  }
+
+  void warn() {
+    System.err.printf("fixed%n");
+  }
+}
+`,
+  );
+  writeFileSync(
+    join(privacySourceDirectory, 'OutsidePrivacyFixture.java'),
+    `package com.soklet;
+
+final class OutsidePrivacyFixture {
+  void outOfScope() {
+    throw new MissingRequestHeaderException("must remain out of scope");
+  }
+}
+`,
+  );
+  writeFileSync(
+    join(privacyTestDirectory, 'McpPrivacyBoundaryFixtureTests.java'),
+    `package com.soklet;
+
+final class McpPrivacyBoundaryFixtureTests {
+  void canary() {}
+}
+`,
+  );
+  writeFileSync(
+    join(privacyFuzzTestDirectory, 'McpPrivacyBoundaryFuzzTests.java'),
+    `package com.soklet;
+
+final class McpPrivacyBoundaryFuzzTests {
+  void fuzzCanary() {}
+}
+`,
+  );
+  const privacyArtifactPath = join(
+    privacyArtifactDirectory,
+    'redacted.golden',
+  );
+  writeFileSync(privacyExactArtifactPath, 'exact tracked fixture\n');
+  writeFileSync(privacyMultipartArtifactPath, 'raw multipart request\n');
+  writeFileSync(
+    join(privacyFinalSchemaArtifactDirectory, 'LICENSE.upstream'),
+    'synthetic license\n',
+  );
+  writeFileSync(
+    join(privacyFinalSchemaArtifactDirectory, 'schema.json'),
+    '{"type":"object"}\n',
+  );
+  writeFileSync(privacyArtifactPath, 'redacted fixture\n');
+  writeFileSync(
+    join(privacyArtifactDirectory, 'retained.golden'),
+    'retained fixture\n',
+  );
+  writeFileSync(
+    join(privacyFuzzArtifactDirectory, 'raw.query'),
+    'raw query fixture\n',
+  );
+  writeFileSync(
+    join(privacyMicrohttpFuzzArtifactDirectory, 'raw.http'),
+    'raw request fixture\n',
+  );
+  writeFileSync(
+    join(privacySchemaArtifactDirectory, 'schema.json'),
+    '{"type":"object"}\n',
+  );
+  const privacyCandidates = derivePrivacyBoundaryCandidates(
+    privacyProjectRoot,
+    privacyScanRoots,
+    privacyArtifactRoots,
+    semanticGitExecutable(),
+  );
+  assert.deepEqual(
+    Object.fromEntries(PRIVACY_MATCHER_RULES.map(({ id }) => [
+      id,
+      privacyCandidates.filter(({ matcherRuleId }) => matcherRuleId === id).length,
+    ])),
+    {
+      'PRIV-MATCH-001': 6,
+      'PRIV-MATCH-002': 9,
+      'PRIV-MATCH-003': 3,
+      'PRIV-MATCH-004': 1,
+      'PRIV-MATCH-005': 52,
+      'PRIV-MATCH-006': 11,
+      'PRIV-MATCH-007': 10,
+      'PRIV-MATCH-008': 24,
+      'PRIV-MATCH-009': 20,
+      'PRIV-MATCH-010': 9,
+      'PRIV-MATCH-011': 14,
+      'PRIV-MATCH-012': 14,
+      'PRIV-MATCH-013': 12,
+      'PRIV-MATCH-014': 9,
+      'PRIV-MATCH-015': 7,
+      'PRIV-MATCH-016': 36,
+    },
+  );
+  assert.equal(
+    privacyCandidates.some(({ file }) =>
+      file.endsWith('/OutsidePrivacyFixture.java')),
+    true,
+  );
+  assert.deepEqual(
+    [...new Set(privacyCandidates
+      .filter(({ matcherRuleId }) => matcherRuleId === 'PRIV-MATCH-006')
+      .map(({ sink }) => sink))].sort(),
+    [
+      'RequestException.IllegalRequestBodyException',
+      'RequestException.IllegalRequestException',
+      'RequestException.MissingFormParameterException',
+      'RequestException.MissingMultipartFieldException',
+      'RequestException.MissingQueryParameterException',
+      'RequestException.MissingRequestBodyException',
+      'RequestException.MissingRequestCookieException',
+      'RequestException.MissingRequestHeaderException',
+      'RequestException.MultipleValuesException',
+    ],
+  );
+  assert.deepEqual(
+    privacyCandidates
+      .filter(({ matcherRuleId }) => matcherRuleId === 'PRIV-MATCH-012')
+      .map(({ member, sink }) => `${member}->${sink}`)
+      .sort(),
+    [
+      'LimitSignal(String)->ExceptionCarrier.constructor',
+      'McpJsonRpcException(McpJsonRpcError)->ExceptionCarrier.constructor',
+      'NestedCarrierException(String)->ExceptionCarrier.constructor',
+      'SyntheticPrivacyError(String)->ExceptionCarrier.constructor',
+      'SyntheticPrivacyException(String)->ExceptionCarrier.constructor',
+      'SyntheticPrivacyException(String,Throwable)->ExceptionCarrier.constructor',
+      'exactValue()->ExceptionCarrier.publicOrProtectedMethod',
+      'getError()->ExceptionCarrier.publicOrProtectedMethod',
+      'getExactValue()->ExceptionCarrier.publicOrProtectedMethod',
+      'getSecret()->ExceptionCarrier.publicOrProtectedMethod',
+      'getSecret()->ExceptionCarrier.publicOrProtectedMethod',
+      'helper()->ExceptionCarrier.publicOrProtectedMethod',
+      'renderExactValue()->ExceptionCarrier.publicOrProtectedMethod',
+      'toString()->ExceptionCarrier.diagnosticRenderer',
+    ],
+  );
+  assert.deepEqual(
+    privacyCandidates
+      .filter(({ matcherRuleId, sink }) =>
+        matcherRuleId === 'PRIV-MATCH-005'
+          && sink.startsWith('RequestOrThrowable.record'))
+      .map(({ member, owner, sink }) =>
+        `${owner.slice(owner.lastIndexOf('.') + 1)}#${member}->${sink}`)
+      .sort(),
+    [
+      'PrivateFailureCarrier#PrivateFailureCarrier(LimitSignal)->RequestOrThrowable.recordConstructor',
+      'PrivateFailureCarrier#failure()->RequestOrThrowable.recordAccessor',
+      'PrivateFailureCarrier#toString()->RequestOrThrowable.recordRenderer',
+      'PrivateThrowableCarrier#PrivateThrowableCarrier(Throwable)->RequestOrThrowable.recordConstructor',
+      'PrivateThrowableCarrier#throwable()->RequestOrThrowable.recordAccessor',
+      'PrivateThrowableCarrier#toString()->RequestOrThrowable.recordRenderer',
+      'PublicRequestCarrier#PublicRequestCarrier(Request,String)->RequestOrThrowable.recordConstructor',
+      'PublicRequestCarrier#request()->RequestOrThrowable.recordAccessor',
+    ],
+  );
+  assert.equal(
+    privacyCandidates.some(({ matcherRuleId, member }) =>
+      matcherRuleId === 'PRIV-MATCH-012'
+        && (member === 'SyntheticPrivacyException()'
+          || member === 'getPrivateValue()'
+          || member === 'privateValue()')),
+    false,
+  );
+  assert.deepEqual(
+    privacyCandidates
+      .filter(({ matcherRuleId, sink }) =>
+        matcherRuleId === 'PRIV-MATCH-005'
+          && sink === 'RequestOrThrowable.declaration')
+      .map(({ member }) => member)
+      .sort(),
+    [
+      'SyntheticPrivacyException(String,Throwable)',
+      'authorize(Request)',
+      'collectSecret(Request,Throwable)',
+      'collectSecret(Request,Throwable)',
+      'getCancelationCause()',
+      'getRequest()',
+      'logFailure(Throwable,Object...)',
+      'request(Request)',
+      'request(Request)',
+      'terminalFailure()',
+      'throwable(Throwable)',
+      'throwable(Throwable)',
+    ],
+  );
+  assert.deepEqual(
+    privacyCandidates
+      .filter(({ matcherRuleId }) => matcherRuleId === 'PRIV-MATCH-013')
+      .map(({ sink }) => sink)
+      .sort(),
+    [
+      'MicrohttpLogger.EventLoopDefaultWiring:DEFAULT_NOOP',
+      'MicrohttpLogger.McpEventLoopWiring:EXPLICIT_NOOP',
+      'MicrohttpLogger.NoopLogger',
+      'MicrohttpLogger.NoopLogger',
+      'MicrohttpLogger.invocation.audit',
+      'MicrohttpLogger.invocation.log',
+      'MicrohttpLogger.invocation.log',
+      'MicrohttpLogger.invocation.log',
+      'MicrohttpLogger.invocation.logFailure',
+      'MicrohttpLogger.surface.audit',
+      'MicrohttpLogger.surface.log',
+      'MicrohttpLogger.surface.logFailure',
+    ],
+  );
+  assert.deepEqual(
+    privacyCandidates
+      .filter(({ matcherRuleId }) => matcherRuleId === 'PRIV-MATCH-014')
+      .map(({ sink }) => sink)
+      .sort(),
+    [
+      'DirectOutput.OutputStream.write',
+      'DirectOutput.PrintStream.println',
+      'DirectOutput.PrintStream.write',
+      'DirectOutput.System.err.printf',
+      'DirectOutput.System.err.println',
+      'DirectOutput.System.out.println',
+      'DirectOutput.SystemErrAlias.println',
+      'DirectOutput.SystemErrAlias.println',
+      'DirectOutput.Throwable.printStackTrace',
+    ],
+  );
+  assert.equal(
+    privacyCandidates.some(({ matcherRuleId, member, owner, sink }) =>
+      matcherRuleId === 'PRIV-MATCH-007'
+        && owner === 'com.soklet.HttpRequestResult'
+        && member === 'getBody()'
+        && sink === 'SimulationCapture.publicOrProtectedSurface'),
+    true,
+  );
+  for (const [owner, member] of [
+    ['com.soklet.McpMetricsEvent', 'sensitiveEvent(String)'],
+    ['com.soklet.McpMetricsEvent.SensitiveEvent', 'getSecret()'],
+    ['com.soklet.McpMetricsSnapshot', 'getSecret()'],
+    ['com.soklet.McpMetricsSnapshot.Builder', 'secret(String)'],
+  ]) {
+    assert.equal(
+      privacyCandidates.some(({ matcherRuleId, member: candidateMember,
+        owner: candidateOwner }) =>
+        matcherRuleId === 'PRIV-MATCH-002'
+          && candidateOwner === owner && candidateMember === member),
+      true,
+      `${owner}#${member}`,
+    );
+  }
+  for (const [owner, member, sink] of [
+    ['com.soklet.Allowed', 'Allowed()', 'Diagnostic.recordConstructor'],
+    ['com.soklet.Allowed', 'toString()', 'Diagnostic.recordRenderer'],
+    ['com.soklet.GenericSecret', 'GenericSecret(T)', 'Diagnostic.recordConstructor'],
+    ['com.soklet.GenericSecret', 'value()', 'Diagnostic.recordAccessor'],
+    ['com.soklet.DefaultToolArguments', 'toString()', 'Diagnostic.toString'],
+    ['com.soklet.McpPrivacyFixture.PublicRequestCarrier', 'toString()', 'Diagnostic.toString'],
+    ['com.soklet.SecretCarrier', 'SecretCarrier(String)', 'Diagnostic.recordConstructor'],
+    ['com.soklet.SecretCarrier', 'value()', 'Diagnostic.recordAccessor'],
+    ['com.soklet.ResponseLike', 'toString()', 'Diagnostic.toString'],
+  ]) {
+    assert.equal(
+      privacyCandidates.some((candidate) =>
+        candidate.matcherRuleId === 'PRIV-MATCH-008'
+          && candidate.owner === owner
+          && candidate.member === member
+          && candidate.sink === sink),
+      true,
+      `${owner}#${member}->${sink}`,
+    );
+  }
+  for (const owner of [
+    'com.soklet.DefaultToolArguments',
+    'com.soklet.McpPrivacyFixture.PublicRequestCarrier',
+  ]) {
+    assert.deepEqual(
+      privacyCandidates
+        .filter(({ member, owner: candidateOwner }) =>
+          candidateOwner === owner && member === 'toString()')
+        .map(({ matcherRuleId, sink }) => `${matcherRuleId}:${sink}`),
+      ['PRIV-MATCH-008:Diagnostic.toString'],
+      `${owner} explicit renderer must have one diagnostic classification`,
+    );
+  }
+  assert.deepEqual(
+    privacyCandidates
+      .filter(({ member, owner }) =>
+        owner === 'com.soklet.McpPrivacyFixture.PrivateThrowableCarrier'
+          && member === 'toString()')
+      .map(({ matcherRuleId, sink }) => `${matcherRuleId}:${sink}`),
+    ['PRIV-MATCH-005:RequestOrThrowable.recordRenderer'],
+    'implicit Throwable record renderer must have one exact carrier classification',
+  );
+  for (const [owner, member, expectedSink] of [
+    [
+      'com.soklet.McpPrivacyFixture.PrivateThrowableCarrier',
+      'PrivateThrowableCarrier(Throwable)',
+      'RequestOrThrowable.recordConstructor',
+    ],
+    [
+      'com.soklet.McpPrivacyFixture.PrivateThrowableCarrier',
+      'throwable()',
+      'RequestOrThrowable.recordAccessor',
+    ],
+    [
+      'com.soklet.McpPrivacyFixture.PublicRequestCarrier',
+      'PublicRequestCarrier(Request,String)',
+      'RequestOrThrowable.recordConstructor',
+    ],
+    [
+      'com.soklet.McpPrivacyFixture.PublicRequestCarrier',
+      'request()',
+      'RequestOrThrowable.recordAccessor',
+    ],
+  ]) {
+    assert.deepEqual(
+      privacyCandidates
+        .filter(({ member: candidateMember, owner: candidateOwner }) =>
+          candidateOwner === owner && candidateMember === member)
+        .map(({ matcherRuleId, sink }) => `${matcherRuleId}:${sink}`),
+      [`PRIV-MATCH-005:${expectedSink}`],
+      `${owner}#${member} must have one exact carrier classification`,
+    );
+  }
+  assert.deepEqual(
+    privacyCandidates
+      .filter(({ member, owner }) =>
+        owner === 'com.soklet.McpPrivacyFixture.PublicRequestCarrier'
+          && member === 'label()')
+      .map(({ matcherRuleId, sink }) => `${matcherRuleId}:${sink}`),
+    ['PRIV-MATCH-008:Diagnostic.recordAccessor'],
+    'noncarrier components remain in the diagnostic record census',
+  );
+  for (const sink of [
+    'MetricsCollector.invocation.collectSecret',
+    'MetricsCollector.override.collectSecret',
+    'MetricsCollector.surface.collectSecret',
+    'MetricsCollector.surface.getSecret',
+    'MetricsCollector.surface.secret',
+    'MetricsCollector.surface.snapshot',
+  ]) {
+    assert.equal(
+      privacyCandidates.some(({ matcherRuleId, sink: candidateSink }) =>
+        matcherRuleId === 'PRIV-MATCH-015' && candidateSink === sink),
+      true,
+      sink,
+    );
+  }
+  assert.equal(
+    privacyCandidates.some(({ matcherRuleId, member, sink }) =>
+      matcherRuleId === 'PRIV-MATCH-016'
+        && member.startsWith('exercise(')
+        && sink === 'LogEvent.attachment.marshaledResponse'),
+    true,
+  );
+  assert.equal(
+    privacyCandidates.some(({ matcherRuleId, sink }) =>
+      matcherRuleId === 'PRIV-MATCH-011'
+        && /(?:JsonRpcError|ProtocolError|RequestError)$/u.test(sink)),
+    false,
+  );
+  assert.deepEqual(
+    [...new Set(privacyCandidates
+      .filter(({ matcherRuleId }) => matcherRuleId === 'PRIV-MATCH-011')
+      .map(({ sink }) => sink))].sort(),
+    [
+      'Throwable.AssertionError',
+      'Throwable.ExceptionInInitializerError',
+      'Throwable.IllegalRequestBodyException',
+      'Throwable.IllegalRequestException',
+      'Throwable.LimitSignal',
+      'Throwable.MissingFormParameterException',
+      'Throwable.MissingMultipartFieldException',
+      'Throwable.MissingQueryParameterException',
+      'Throwable.MissingRequestBodyException',
+      'Throwable.MissingRequestCookieException',
+      'Throwable.MissingRequestHeaderException',
+      'Throwable.MultipleValuesException',
+    ],
+  );
+  assert.deepEqual(
+    privacyCandidates
+      .filter(({ matcherRuleId, member, sink }) =>
+        matcherRuleId === 'PRIV-MATCH-001'
+          && member.startsWith('exercise(')
+          && sink === 'LogEvent.with:MCP_SERVER_CONFIGURATION')
+      .map(({ occurrence }) => occurrence),
+    [1, 2, 3],
+  );
+  for (const [label, predicate] of [
+    [
+      'qualified LogEvent method reference',
+      ({ matcherRuleId, member, sink }) =>
+        matcherRuleId === 'PRIV-MATCH-001'
+          && member.startsWith('exercise(')
+          && sink === 'LogEvent.with:DYNAMIC',
+    ],
+    [
+      'qualified MCP metric factory method reference',
+      ({ matcherRuleId, member, occurrence, sink }) =>
+        matcherRuleId === 'PRIV-MATCH-002'
+          && member.startsWith('exercise(')
+          && occurrence === 1
+          && sink === 'McpMetricsEvent.sensitiveEvent',
+    ],
+    [
+      'same-statement statically imported LogEvent chain',
+      ({ matcherRuleId, member, sink }) =>
+        matcherRuleId === 'PRIV-MATCH-003'
+          && member.startsWith('staticAttachments(')
+          && sink === 'LogEvent.Builder.request',
+    ],
+    [
+      'inferred LogEvent copier receiver',
+      ({ matcherRuleId, member, occurrence, sink }) =>
+        matcherRuleId === 'PRIV-MATCH-016'
+          && member.startsWith('variableAttachments(')
+          && occurrence === 2
+          && sink === 'LogEvent.attachment.response',
+    ],
+    [
+      'comma-declared Request carrier field',
+      ({ matcherRuleId, member, sink }) =>
+        matcherRuleId === 'PRIV-MATCH-005'
+          && member === 'secondRequest'
+          && sink === 'RequestOrThrowable.field',
+    ],
+    [
+      'comma-declared Throwable carrier field',
+      ({ matcherRuleId, member, sink }) =>
+        matcherRuleId === 'PRIV-MATCH-005'
+          && member === 'secondFailure'
+          && sink === 'RequestOrThrowable.field',
+    ],
+    [
+      'MCP EventLoop logger wiring',
+      ({ matcherRuleId, sink }) =>
+        matcherRuleId === 'PRIV-MATCH-013'
+          && sink === 'MicrohttpLogger.McpEventLoopWiring:EXPLICIT_NOOP',
+    ],
+    [
+      'Request exact visible surface',
+      ({ matcherRuleId, member, owner, sink }) =>
+        matcherRuleId === 'PRIV-MATCH-005'
+          && owner === 'com.soklet.Request'
+          && member === 'getHeaders()'
+          && sink === 'ApplicationRequestCarrier.surface.getHeaders',
+    ],
+    [
+      'MCP state-protection exact visible surface',
+      ({ matcherRuleId, member, owner, sink }) =>
+        matcherRuleId === 'PRIV-MATCH-005'
+          && owner === 'com.soklet.McpRequestStateProtectionContext'
+          && member === 'getAssociatedData()'
+          && sink === 'ApplicationRequestCarrier.surface.getAssociatedData',
+    ],
+    [
+      'transitive tool-argument implementation surface',
+      ({ matcherRuleId, member, owner, sink }) =>
+        matcherRuleId === 'PRIV-MATCH-005'
+          && owner === 'com.soklet.DefaultToolArguments'
+          && member === 'getRawSecret()'
+          && sink === 'ApplicationRequestCarrier.surface.getRawSecret',
+    ],
+    [
+      'application-carrier callback signature',
+      ({ matcherRuleId, member, owner, sink }) =>
+        matcherRuleId === 'PRIV-MATCH-005'
+          && owner === 'com.soklet.SyntheticToolHandler'
+          && member === 'handle(McpToolArguments<String>)'
+          && sink === 'ApplicationRequestCarrier.declaration',
+    ],
+  ]) {
+    assert.equal(privacyCandidates.some(predicate), true, label);
+  }
+  const privacyInventory = privacyFixture(privacyCandidates);
+  writeFileSync(privacyInventoryPath, canonicalJson(privacyInventory));
+  const privacyBaseline = verifyPrivacyFixture(privacyInventoryPath);
+  assert.deepEqual(privacyBaseline.candidates, privacyCandidates);
+  assert.deepEqual(privacyBaseline.exclusions, []);
+
+  expectPrivacyInvalid(
+    'privacy-conflicting-concrete-renderer-classification',
+    privacyInventory,
+    (value) => {
+      const boundary = value.boundaries.find(({ sourcePaths }) =>
+        sourcePaths.some(({ matcherRuleId, member, owner }) =>
+          matcherRuleId === 'PRIV-MATCH-012'
+            && owner.endsWith('.SyntheticPrivacyException')
+            && member === 'toString()'));
+      assert.ok(boundary);
+      boundary.classification = 'EXACT_APPLICATION_BOUNDARY';
+    },
+    /concrete renderer has conflicting classifications/,
+  );
+
+  for (const { id } of PRIVACY_MATCHER_RULES) {
+    expectPrivacyInvalid(
+      `omitted-${id.toLowerCase()}`,
+      privacyInventory,
+      (value) => {
+        const boundaryIndex = value.boundaries.findIndex(({ sourcePaths }) =>
+          sourcePaths.some(({ matcherRuleId }) => matcherRuleId === id));
+        assert.notEqual(boundaryIndex, -1);
+        const sourcePaths = value.boundaries[boundaryIndex].sourcePaths;
+        const sourceIndex = sourcePaths.findIndex(
+          ({ matcherRuleId }) => matcherRuleId === id,
+        );
+        sourcePaths.splice(sourceIndex, 1);
+        if (sourcePaths.length === 0) value.boundaries.splice(boundaryIndex, 1);
+      },
+      new RegExp(`omitted=\\[[^\\]]*${id}:`, 'u'),
+    );
+  }
+
+  for (const [name, matcherRuleId, predicate, expected] of [
+    [
+      'privacy-mcp-metric-factory-omitted',
+      'PRIV-MATCH-002',
+      ({ owner, member }) => owner === 'com.soklet.McpMetricsEvent'
+        && member === 'sensitiveEvent(String)',
+      /omitted=\[[^\]]*McpMetricsEvent#sensitiveEvent/,
+    ],
+    [
+      'privacy-mcp-metric-getter-omitted',
+      'PRIV-MATCH-002',
+      ({ owner, member }) => owner.endsWith('.SensitiveEvent')
+        && member === 'getSecret()',
+      /omitted=\[[^\]]*SensitiveEvent#getSecret/,
+    ],
+    [
+      'privacy-mcp-snapshot-builder-omitted',
+      'PRIV-MATCH-002',
+      ({ owner, member }) => owner.endsWith('.McpMetricsSnapshot.Builder')
+        && member === 'secret(String)',
+      /omitted=\[[^\]]*McpMetricsSnapshot\.Builder#secret/,
+    ],
+    [
+      'privacy-full-root-outside-source-omitted',
+      'PRIV-MATCH-006',
+      ({ file }) => file.endsWith('/OutsidePrivacyFixture.java'),
+      /omitted=\[[^\]]*OutsidePrivacyFixture/,
+    ],
+    [
+      'privacy-http-result-surface-omitted',
+      'PRIV-MATCH-007',
+      ({ owner, member }) => owner === 'com.soklet.HttpRequestResult'
+        && member === 'getBody()',
+      /omitted=\[[^\]]*HttpRequestResult#getBody/,
+    ],
+    [
+      'privacy-metrics-unconventional-callback-omitted',
+      'PRIV-MATCH-015',
+      ({ sink }) => sink === 'MetricsCollector.invocation.collectSecret',
+      /omitted=\[[^\]]*MetricsCollector\.invocation\.collectSecret/,
+    ],
+    [
+      'privacy-metrics-nested-getter-omitted',
+      'PRIV-MATCH-015',
+      ({ sink }) => sink === 'MetricsCollector.surface.getSecret',
+      /omitted=\[[^\]]*MetricsCollector\.surface\.getSecret/,
+    ],
+    [
+      'privacy-log-value-attachment-omitted',
+      'PRIV-MATCH-016',
+      ({ sink }) => sink === 'LogEvent.attachment.marshaledResponse',
+      /omitted=\[[^\]]*LogEvent\.attachment\.marshaledResponse/,
+    ],
+    [
+      'privacy-log-event-method-reference-omitted',
+      'PRIV-MATCH-001',
+      ({ member, sink }) => member.startsWith('exercise(')
+        && sink === 'LogEvent.with:DYNAMIC',
+      /omitted=\[[^\]]*LogEvent\.with:DYNAMIC/,
+    ],
+    [
+      'privacy-mcp-metric-method-reference-omitted',
+      'PRIV-MATCH-002',
+      ({ member, occurrence, sink }) => member.startsWith('exercise(')
+        && occurrence === 1
+        && sink === 'McpMetricsEvent.sensitiveEvent',
+      /omitted=\[[^\]]*McpMetricsEvent\.sensitiveEvent/,
+    ],
+    [
+      'privacy-static-log-chain-request-omitted',
+      'PRIV-MATCH-003',
+      ({ member }) => member.startsWith('staticAttachments('),
+      /omitted=\[[^\]]*staticAttachments/,
+    ],
+    [
+      'privacy-inferred-copier-attachment-omitted',
+      'PRIV-MATCH-016',
+      ({ member, occurrence, sink }) => member.startsWith('variableAttachments(')
+        && occurrence === 2
+        && sink === 'LogEvent.attachment.response',
+      /omitted=\[[^\]]*LogEvent\.attachment\.response@2/,
+    ],
+    [
+      'privacy-comma-request-field-omitted',
+      'PRIV-MATCH-005',
+      ({ member, sink }) => member === 'secondRequest'
+        && sink === 'RequestOrThrowable.field',
+      /omitted=\[[^\]]*secondRequest/,
+    ],
+    [
+      'privacy-comma-throwable-field-omitted',
+      'PRIV-MATCH-005',
+      ({ member, sink }) => member === 'secondFailure'
+        && sink === 'RequestOrThrowable.field',
+      /omitted=\[[^\]]*secondFailure/,
+    ],
+    [
+      'privacy-mcp-event-loop-wiring-omitted',
+      'PRIV-MATCH-013',
+      ({ sink }) => sink === 'MicrohttpLogger.McpEventLoopWiring:EXPLICIT_NOOP',
+      /omitted=\[[^\]]*MicrohttpLogger\.McpEventLoopWiring:EXPLICIT_NOOP/,
+    ],
+    [
+      'privacy-mcp-metric-field-omitted',
+      'PRIV-MATCH-002',
+      ({ member, owner, sink }) => owner.endsWith('.SensitiveEvent')
+        && member === 'exposedSecret'
+        && sink === 'McpMetricsSurface.field',
+      /omitted=\[[^\]]*SensitiveEvent#exposedSecret/,
+    ],
+    [
+      'privacy-generic-metric-field-omitted',
+      'PRIV-MATCH-015',
+      ({ member, owner, sink }) => owner.endsWith('.MetricsCollector.Snapshot')
+        && member === 'exposedSecret'
+        && sink === 'MetricsCollector.surface.field',
+      /omitted=\[[^\]]*MetricsCollector\.Snapshot#exposedSecret/,
+    ],
+    [
+      'privacy-system-output-method-reference-omitted',
+      'PRIV-MATCH-014',
+      ({ member, sink }) => member === 'writeThroughAlias()'
+        && sink === 'DirectOutput.System.err.println',
+      /omitted=\[[^\]]*DirectOutput\.System\.err\.println/,
+    ],
+    [
+      'privacy-typed-output-method-reference-omitted',
+      'PRIV-MATCH-014',
+      ({ member, sink }) => member === 'writeDirectly(PrintStream)'
+        && sink === 'DirectOutput.PrintStream.println',
+      /omitted=\[[^\]]*DirectOutput\.PrintStream\.println/,
+    ],
+    [
+      'privacy-aliased-output-method-reference-omitted',
+      'PRIV-MATCH-014',
+      ({ member, occurrence, sink }) => member === 'writeThroughAlias()'
+        && occurrence === 2
+        && sink === 'DirectOutput.SystemErrAlias.println',
+      /omitted=\[[^\]]*DirectOutput\.SystemErrAlias\.println@2/,
+    ],
+    [
+      'privacy-wire-error-surface-omitted',
+      'PRIV-MATCH-009',
+      ({ member, owner, sink }) => owner === 'com.soklet.McpJsonRpcError'
+        && member === 'getMessage()'
+        && sink === 'McpWireError.surface.getMessage',
+      /omitted=\[[^\]]*McpWireError\.surface\.getMessage/,
+    ],
+    [
+      'privacy-wire-record-accessor-omitted',
+      'PRIV-MATCH-009',
+      ({ member, owner, sink }) =>
+        owner === 'com.soklet.internal.mcp.protocol.McpJsonRpcError'
+          && member === 'data()'
+          && sink === 'McpWireError.recordAccessor',
+      /omitted=\[[^\]]*McpWireError\.recordAccessor/,
+    ],
+    [
+      'privacy-qualified-wire-construction-omitted',
+      'PRIV-MATCH-009',
+      ({ member, sink }) => member === 'errorDtos()'
+        && sink === 'McpJsonRpcError.constructor',
+      /omitted=\[[^\]]*errorDtos\(\).*McpJsonRpcError\.constructor/,
+    ],
+    [
+      'privacy-wire-accessor-publication-omitted',
+      'PRIV-MATCH-009',
+      ({ member, sink }) => member.startsWith('publishWireError(')
+        && sink === 'McpWireError.publication.getData',
+      /omitted=\[[^\]]*McpWireError\.publication\.getData/,
+    ],
+    [
+      'privacy-request-visible-surface-omitted',
+      'PRIV-MATCH-005',
+      ({ member, owner, sink }) => owner === 'com.soklet.Request'
+        && member === 'getHeaders()'
+        && sink === 'ApplicationRequestCarrier.surface.getHeaders',
+      /omitted=\[[^\]]*ApplicationRequestCarrier\.surface\.getHeaders/,
+    ],
+    [
+      'privacy-context-visible-surface-omitted',
+      'PRIV-MATCH-005',
+      ({ member, owner, sink }) =>
+        owner === 'com.soklet.McpRequestStateProtectionContext'
+          && member === 'getAssociatedData()'
+          && sink === 'ApplicationRequestCarrier.surface.getAssociatedData',
+      /omitted=\[[^\]]*ApplicationRequestCarrier\.surface\.getAssociatedData/,
+    ],
+    [
+      'privacy-carrier-implementation-surface-omitted',
+      'PRIV-MATCH-005',
+      ({ member, owner, sink }) => owner === 'com.soklet.DefaultToolArguments'
+        && member === 'getRawSecret()'
+        && sink === 'ApplicationRequestCarrier.surface.getRawSecret',
+      /omitted=\[[^\]]*ApplicationRequestCarrier\.surface\.getRawSecret/,
+    ],
+    [
+      'privacy-explicit-redacted-carrier-renderer-omitted',
+      'PRIV-MATCH-008',
+      ({ member, owner, sink }) =>
+        owner === 'com.soklet.McpPrivacyFixture.PublicRequestCarrier'
+          && member === 'toString()'
+          && sink === 'Diagnostic.toString',
+      /omitted=\[[^\]]*PublicRequestCarrier#toString\(\).*Diagnostic\.toString/,
+    ],
+    [
+      'privacy-implicit-throwable-renderer-omitted',
+      'PRIV-MATCH-005',
+      ({ member, owner, sink }) =>
+        owner === 'com.soklet.McpPrivacyFixture.PrivateThrowableCarrier'
+          && member === 'toString()'
+          && sink === 'RequestOrThrowable.recordRenderer',
+      /omitted=\[[^\]]*PrivateThrowableCarrier#toString\(\).*RequestOrThrowable\.recordRenderer/,
+    ],
+    [
+      'privacy-carrier-signature-omitted',
+      'PRIV-MATCH-005',
+      ({ member, owner, sink }) => owner === 'com.soklet.SyntheticToolHandler'
+        && member === 'handle(McpToolArguments<String>)'
+        && sink === 'ApplicationRequestCarrier.declaration',
+      /omitted=\[[^\]]*ApplicationRequestCarrier\.declaration/,
+    ],
+  ]) {
+    expectPrivacyInvalid(name, privacyInventory, (value) => {
+      const boundary = value.boundaries.find(({ sourcePaths }) =>
+        sourcePaths.some((sourcePath) =>
+          sourcePath.matcherRuleId === matcherRuleId && predicate(sourcePath)));
+      assert.ok(boundary);
+      const index = boundary.sourcePaths.findIndex((sourcePath) =>
+        sourcePath.matcherRuleId === matcherRuleId && predicate(sourcePath));
+      boundary.sourcePaths.splice(index, 1);
+    }, expected);
+  }
+
+  const recordComponentFixturePath = join(
+    privacySourceDirectory,
+    'ResponseLike.java',
+  );
+  const originalRecordComponentFixture = readFileSync(
+    recordComponentFixturePath,
+    'utf8',
+  );
+  writeFileSync(
+    recordComponentFixturePath,
+    originalRecordComponentFixture.replace(
+      'record SecretCarrier(String value) {}',
+      'record SecretCarrier(String value, String newSecret) {}',
+    ),
+  );
+  assert.throws(
+    () => verifyPrivacyFixture(privacyInventoryPath),
+    /omitted=\[[^\]]*(?:SecretCarrier\(String,String\)|newSecret\(\))/,
+  );
+  writeFileSync(recordComponentFixturePath, originalRecordComponentFixture);
+
+  const applicationCarrierFixturePath = join(
+    privacySourceDirectory,
+    'McpRequestStateProtectionContext.java',
+  );
+  const originalApplicationCarrierFixture = readFileSync(
+    applicationCarrierFixturePath,
+    'utf8',
+  );
+  writeFileSync(
+    applicationCarrierFixturePath,
+    originalApplicationCarrierFixture.replace(
+      'public String getAssociatedData() { return "exact"; }',
+      `public String getAssociatedData() { return "exact"; }
+  public String getNewSecret() { return "exact"; }`,
+    ),
+  );
+  assert.throws(
+    () => verifyPrivacyFixture(privacyInventoryPath),
+    /omitted=\[[^\]]*ApplicationRequestCarrier\.surface\.getNewSecret/,
+  );
+  writeFileSync(applicationCarrierFixturePath, originalApplicationCarrierFixture);
+
+  const eventLoopWiringFixturePath = join(
+    privacyInternalSourceDirectory,
+    'McpSimulationRuntime.java',
+  );
+  const originalEventLoopWiringFixture = readFileSync(
+    eventLoopWiringFixturePath,
+    'utf8',
+  );
+  writeFileSync(
+    eventLoopWiringFixturePath,
+    originalEventLoopWiringFixture.replace(
+      'return new EventLoop(options, NoopLogger.instance(), handler);',
+      'return new EventLoop(options, new DebugLogger(), handler);',
+    ),
+  );
+  assert.throws(
+    () => verifyPrivacyFixture(privacyInventoryPath),
+    /(?:omitted=\[[^\]]*MicrohttpLogger\.McpEventLoopWiring:ALTERNATE|extra=\[[^\]]*MicrohttpLogger\.McpEventLoopWiring:EXPLICIT_NOOP)/,
+  );
+  writeFileSync(eventLoopWiringFixturePath, originalEventLoopWiringFixture);
+
+  const defaultEventLoopWiringFixturePath = join(
+    privacyMicrohttpSourceDirectory,
+    'EventLoop.java',
+  );
+  const originalDefaultEventLoopWiringFixture = readFileSync(
+    defaultEventLoopWiringFixturePath,
+    'utf8',
+  );
+  writeFileSync(
+    defaultEventLoopWiringFixturePath,
+    originalDefaultEventLoopWiringFixture.replace(
+      'this(options, NoopLogger.instance(), handler);',
+      'this(options, new DebugLogger(), handler);',
+    ),
+  );
+  assert.throws(
+    () => verifyPrivacyFixture(privacyInventoryPath),
+    /(?:omitted=\[[^\]]*MicrohttpLogger\.EventLoopDefaultWiring:ALTERNATE|extra=\[[^\]]*MicrohttpLogger\.EventLoopDefaultWiring:DEFAULT_NOOP)/,
+  );
+  writeFileSync(
+    defaultEventLoopWiringFixturePath,
+    originalDefaultEventLoopWiringFixture,
+  );
+
+  expectPrivacyInvalid('privacy-exact-artifact-omitted', privacyInventory, (value) => {
+    const boundary = value.boundaries.find(({ sourcePaths }) =>
+      sourcePaths.some(({ file }) =>
+        file === 'conformance/privacy-self-test-exact.golden'));
+    assert.ok(boundary);
+    boundary.sourcePaths = boundary.sourcePaths.filter(({ file }) =>
+      file !== 'conformance/privacy-self-test-exact.golden');
+  }, /omitted=\[[^\]]*privacy-self-test-exact\.golden/);
+  expectPrivacyInvalid('privacy-multipart-artifact-omitted', privacyInventory, (value) => {
+    const boundary = value.boundaries.find(({ sourcePaths }) =>
+      sourcePaths.some(({ file }) =>
+        file === 'src/test/resources/multipart-request-body'));
+    assert.ok(boundary);
+    boundary.sourcePaths = boundary.sourcePaths.filter(({ file }) =>
+      file !== 'src/test/resources/multipart-request-body');
+  }, /omitted=\[[^\]]*multipart-request-body/);
+  expectPrivacyInvalid('privacy-record-renderer-omitted', privacyInventory, (value) => {
+    const boundary = value.boundaries.find(({ sourcePaths }) =>
+      sourcePaths.some(({ owner, sink }) =>
+        owner.endsWith('.PrivateThrowableCarrier')
+          && sink === 'RequestOrThrowable.recordRenderer'));
+    assert.ok(boundary);
+    boundary.sourcePaths = boundary.sourcePaths.filter(({ owner, sink }) =>
+      !owner.endsWith('.PrivateThrowableCarrier')
+        || sink !== 'RequestOrThrowable.recordRenderer');
+  }, /omitted=\[[^\]]*PrivateThrowableCarrier#toString/);
+  expectPrivacyInvalid('privacy-exception-renderer-omitted', privacyInventory, (value) => {
+    const boundary = value.boundaries.find(({ sourcePaths }) =>
+      sourcePaths.some(({ matcherRuleId, member }) =>
+        matcherRuleId === 'PRIV-MATCH-012' && member === 'toString()'));
+    assert.ok(boundary);
+    boundary.sourcePaths = boundary.sourcePaths.filter(
+      ({ matcherRuleId, member }) =>
+        matcherRuleId !== 'PRIV-MATCH-012' || member !== 'toString()',
+    );
+  }, /omitted=\[[^\]]*PRIV-MATCH-012:[^\]]*toString/);
+
+  expectPrivacyInvalid('privacy-extra-source-path', privacyInventory, (value) => {
+    const extra = {
+      ...value.boundaries[0].sourcePaths[0],
+      member: '$undeclared()',
+    };
+    extra.key = `${extra.matcherRuleId}:${extra.file}#${extra.owner}#${extra.member}->${extra.sink}@${extra.occurrence}`;
+    value.boundaries[0].sourcePaths.push(extra);
+    value.boundaries[0].sourcePaths.sort((left, right) =>
+      left.key < right.key ? -1 : left.key > right.key ? 1 : 0);
+  }, /extra=\[[^\]]*\$undeclared/);
+  expectPrivacyInvalid('privacy-malformed-key', privacyInventory, (value) => {
+    value.boundaries[0].sourcePaths[0].key = 'PRIV-MATCH-001:wrong';
+  }, /\.key must be exactly/);
+  expectPrivacyInvalid('privacy-malformed-occurrence', privacyInventory, (value) => {
+    value.boundaries[0].sourcePaths[0].occurrence = 0;
+  }, /\.occurrence must be a positive safe integer/);
+  expectPrivacyInvalid('privacy-unknown-matcher', privacyInventory, (value) => {
+    value.boundaries[0].sourcePaths[0].matcherRuleId = 'PRIV-MATCH-999';
+  }, /\.matcherRuleId is unknown/);
+  expectPrivacyInvalid('privacy-duplicate-classification', privacyInventory, (value) => {
+    value.boundaries[0].sourcePaths.push(
+      clone(value.boundaries[0].sourcePaths[0]),
+    );
+    value.boundaries[0].sourcePaths.sort((left, right) =>
+      left.key < right.key ? -1 : left.key > right.key ? 1 : 0);
+  }, /Privacy-boundary classification is duplicated/);
+  expectPrivacyInvalid('privacy-required-delegation-omitted', privacyInventory, (value) => {
+    value.delegations = value.delegations.filter(({ delegatedOwner }) =>
+      delegatedOwner !== 'OPERATOR_RETENTION');
+  }, /delegations omit required owners: OPERATOR_RETENTION/);
+  expectPrivacyInvalid('privacy-schema-extra-key', privacyInventory, (value) => {
+    value.extra = true;
+  }, /Privacy-boundary inventory keys must be exactly/);
+  expectPrivacyInvalid('privacy-matcher-drift', privacyInventory, (value) => {
+    value.matcherRules[0].description = 'Narrowed matcher.';
+  }, /matcherRules do not match the executable matcher contract/);
+  expectPrivacyInvalid('privacy-artifact-roots-drift', privacyInventory, (value) => {
+    value.artifactRoots = [];
+  }, /Privacy-boundary artifactRoots must match the frozen order exactly/);
+  expectPrivacyInvalid('privacy-exact-artifact-root-drift', privacyInventory, (value) => {
+    value.artifactRoots[1] = 'conformance/privacy-self-test-renamed.golden';
+  }, /Privacy-boundary artifactRoots must match the frozen order exactly/);
+  expectPrivacyInvalid('privacy-scan-roots-drift', privacyInventory, (value) => {
+    value.scanRoots = [];
+  }, /Privacy-boundary scanRoots must match the frozen order exactly/);
+  const privacyWithFuzzCanary = clone(privacyInventory);
+  privacyWithFuzzCanary.boundaries[0].canaryTests = [
+    'fuzz/src/test/java/com/soklet/McpPrivacyBoundaryFuzzTests.java#fuzzCanary',
+  ];
+  const privacyFuzzCanaryPath = writePrivacyFixture(
+    'fuzz-canary-root',
+    privacyWithFuzzCanary,
+  );
+  assert.equal(
+    verifyPrivacyFixture(privacyFuzzCanaryPath).boundaries[0]
+      .canaryTests[0],
+    privacyWithFuzzCanary.boundaries[0].canaryTests[0],
+  );
+  expectPrivacyInvalid('privacy-canary-arbitrary-root', privacyInventory, (value) => {
+    value.boundaries[0].canaryTests = [
+      'src/integration/java/com/soklet/McpPrivacyBoundaryFixtureTests.java#canary',
+    ];
+  }, /must name a Java test source/);
+  expectPrivacyInvalid('privacy-canary-missing', privacyInventory, (value) => {
+    value.boundaries[0].canaryTests = [
+      'src/test/java/com/soklet/MissingPrivacyCanaryTests.java#canary',
+    ];
+  }, /canaryTests\[0\] does not exist/);
+  expectPrivacyInvalid('privacy-canary-method-missing', privacyInventory, (value) => {
+    value.boundaries[0].canaryTests = [
+      'src/test/java/com/soklet/McpPrivacyBoundaryFixtureTests.java#missingCanary',
+    ];
+  }, /names no declared test method: missingCanary/);
+
+  const privacyWithExclusion = clone(privacyInventory);
+  const excludedPrivacyPath = privacyWithExclusion.boundaries[0].sourcePaths
+    .shift();
+  if (privacyWithExclusion.boundaries[0].sourcePaths.length === 0) {
+    privacyWithExclusion.boundaries.shift();
+  }
+  privacyWithExclusion.reviewedExclusions = [{
+    file: excludedPrivacyPath.file,
+    id: 'PRIV-EX-001',
+    key: excludedPrivacyPath.key,
+    matcherRuleId: excludedPrivacyPath.matcherRuleId,
+    member: excludedPrivacyPath.member,
+    occurrence: excludedPrivacyPath.occurrence,
+    owner: excludedPrivacyPath.owner,
+    rationale: 'Exact reviewed synthetic exclusion.',
+    sink: excludedPrivacyPath.sink,
+  }];
+  const privacyExclusionPath = writePrivacyFixture(
+    'exact-reviewed-exclusion',
+    privacyWithExclusion,
+  );
+  assert.equal(
+    verifyPrivacyFixture(privacyExclusionPath).exclusions[0].key,
+    excludedPrivacyPath.key,
+  );
+
+  const privacyWithDelegatedPath = clone(privacyInventory);
+  const delegatedPrivacyPath = privacyWithDelegatedPath.boundaries[0]
+    .sourcePaths.shift();
+  if (privacyWithDelegatedPath.boundaries[0].sourcePaths.length === 0) {
+    privacyWithDelegatedPath.boundaries.shift();
+  }
+  privacyWithDelegatedPath.delegations[0].canaryTests = [
+    'src/test/java/com/soklet/McpPrivacyBoundaryFixtureTests.java#canary',
+  ];
+  privacyWithDelegatedPath.delegations[0].sourcePaths = [delegatedPrivacyPath];
+  const privacyDelegatedPath = writePrivacyFixture(
+    'exact-delegated-path',
+    privacyWithDelegatedPath,
+  );
+  assert.equal(
+    verifyPrivacyFixture(privacyDelegatedPath).delegations[0]
+      .sourcePaths[0].key,
+    delegatedPrivacyPath.key,
+  );
+
+  const addedPrivacyArtifactDirectory = join(
+    privacyArtifactDirectory,
+    'nested/deeper',
+  );
+  mkdirSync(addedPrivacyArtifactDirectory, { recursive: true });
+  const addedPrivacyArtifactPath = join(
+    addedPrivacyArtifactDirectory,
+    'new-unclassified.golden',
+  );
+  writeFileSync(addedPrivacyArtifactPath, 'new fixture\n');
+  assert.throws(
+    () => verifyPrivacyFixture(privacyInventoryPath),
+    /omitted=\[[^\]]*new-unclassified\.golden/,
+  );
+  rmSync(join(privacyArtifactDirectory, 'nested'), {
+    recursive: true,
+  });
+
+  for (const [directory, relativeName, expected] of [
+    [
+      privacyFinalSchemaArtifactDirectory,
+      'nested/new-schema.json',
+      /omitted=\[[^\]]*new-schema\.json/,
+    ],
+    [
+      privacyFuzzArtifactDirectory,
+      'nested/new-query.query',
+      /omitted=\[[^\]]*new-query\.query/,
+    ],
+    [
+      privacyMicrohttpFuzzArtifactDirectory,
+      'nested/new-request.http',
+      /omitted=\[[^\]]*new-request\.http/,
+    ],
+    [
+      privacySchemaArtifactDirectory,
+      'nested/new-profile.json',
+      /omitted=\[[^\]]*new-profile\.json/,
+    ],
+  ]) {
+    const addedDirectory = join(directory, 'nested');
+    mkdirSync(addedDirectory, { recursive: true });
+    const addedPath = join(directory, relativeName);
+    writeFileSync(addedPath, 'new tracked fixture\n');
+    assert.throws(() => verifyPrivacyFixture(privacyInventoryPath), expected);
+    rmSync(addedDirectory, { recursive: true });
+  }
+
+  rmSync(privacyExactArtifactPath);
+  assert.throws(
+    () => verifyPrivacyFixture(privacyInventoryPath),
+    /Privacy-boundary exact artifact .* does not exist/,
+  );
+  writeFileSync(privacyExactArtifactPath, 'exact tracked fixture\n');
+
+  rmSync(privacyMultipartArtifactPath);
+  assert.throws(
+    () => verifyPrivacyFixture(privacyInventoryPath),
+    /Privacy-boundary exact artifact .*multipart-request-body.* does not exist/,
+  );
+  writeFileSync(privacyMultipartArtifactPath, 'raw multipart request\n');
+
+  rmSync(privacyArtifactPath);
+  assert.throws(
+    () => verifyPrivacyFixture(privacyInventoryPath),
+    /extra=\[[^\]]*redacted\.golden/,
+  );
+  writeFileSync(privacyArtifactPath, 'redacted fixture\n');
+
+  const untrackedPrivacyGit = join(temporaryRoot, 'privacy-untracked-git');
+  writeFileSync(untrackedPrivacyGit, '#!/bin/sh\nexit 1\n', { mode: 0o700 });
+  assert.throws(
+    () => verifyPrivacyFixture(privacyInventoryPath, {
+      gitExecutable: untrackedPrivacyGit,
+    }),
+    /Privacy-boundary fixture artifact is not tracked/,
+  );
 
   const registryBytes = readFileSync(prepareSemanticGit(registryPath));
   const registryText = registryBytes.toString('utf8');
@@ -809,6 +2664,14 @@ final class McpFiniteBoundSyntax {
   });
   assert.deepEqual(resolvedWithFiniteBoundOverride, resolved);
 
+  const resolvedWithPrivacyOverride = verifyFixture(resolvedPath, {
+    privacyExpectedArtifactRoots: privacyArtifactRoots,
+    privacyExpectedScanRoots: privacyScanRoots,
+    privacyInventoryPath,
+    privacyProjectRoot,
+  });
+  assert.deepEqual(resolvedWithPrivacyOverride, resolved);
+
   const matrixOmittedFiniteInventory = clone(finiteInventory);
   matrixOmittedFiniteInventory.bounds[0].sourceOwners.shift();
   const matrixOmittedFiniteInventoryPath = writeFiniteBoundFixture(
@@ -821,11 +2684,32 @@ final class McpFiniteBoundSyntax {
     finiteBoundProjectRoot,
   }), /Finite-bound inventory differs from source derivation; omitted=/);
 
+  const matrixOmittedPrivacyInventory = clone(privacyInventory);
+  const omittedPrivacyBoundaryIndex = matrixOmittedPrivacyInventory.boundaries
+    .findIndex(({ sourcePaths }) => sourcePaths.length > 1);
+  assert.notEqual(omittedPrivacyBoundaryIndex, -1);
+  matrixOmittedPrivacyInventory.boundaries[omittedPrivacyBoundaryIndex]
+    .sourcePaths.shift();
+  const matrixOmittedPrivacyInventoryPath = writePrivacyFixture(
+    'matrix-integration-omitted-source-path',
+    matrixOmittedPrivacyInventory,
+  );
+  assert.throws(() => verifyFixture(resolvedPath, {
+    privacyExpectedArtifactRoots: privacyArtifactRoots,
+    privacyExpectedScanRoots: privacyScanRoots,
+    privacyInventoryPath: matrixOmittedPrivacyInventoryPath,
+    privacyProjectRoot,
+  }), /Privacy-boundary inventory differs from source derivation; omitted=/);
+
   const syntheticProgram = [
     `import { verifyMatrixClosure } from ${JSON.stringify(pathToFileURL(verifierPath).href)};`,
     `const result = verifyMatrixClosure(${JSON.stringify({
       projectRoot, gitExecutable: semanticGitExecutable(),
       manifestPath,
+      privacyExpectedArtifactRoots: privacyArtifactRoots,
+      privacyExpectedScanRoots: privacyScanRoots,
+      privacyInventoryPath,
+      privacyProjectRoot,
       registryPath: resolvedPath,
     })});`,
     'process.stdout.write(result.reportText);',

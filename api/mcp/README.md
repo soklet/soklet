@@ -34,6 +34,10 @@ Those documents bind `McpProtectionConfig`, `McpProtectionControl`, and
 rejection tests, and node-local publication/race tests without adding an API
 owner or changing a frozen descriptor.
 
+The [MCP privacy boundary](../../release/MCP_PRIVACY_BOUNDARY.md) separately
+records which exact request, diagnostic, metric, exception, and simulator
+surfaces are core-redacted or deliberately application- and operator-owned.
+
 `phase-0-incompatibilities.jsonl` is the immutable 566-record historical removal surface from deleting the legacy MCP implementation. It initially
 matched the then-current set, but it intentionally does not evolve as the
 greenfield implementation reuses legacy names or adds new API.

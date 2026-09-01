@@ -94,6 +94,12 @@ The registry contains 263 rows. `MCP-CAP-005` is the nineteenth
 warning SHOULD across logging and developer-tooling channels; its N/A closure
 reason remains empty. The five unrelated `UNRESOLVED` rows remain unchanged.
 
+The candidate-contained [MCP privacy boundary](MCP_PRIVACY_BOUNDARY.md)
+separates core redaction and bounded built-in telemetry from application,
+fixture, downstream, and operator ownership. `SOK-PRIV-001` remains
+`UNRESOLVED` until the complete MCP-C residual evidence and closure registry
+are regenerated atomically.
+
 Two candidate-contained MCP-C artifacts now make the request-state rows
 reviewable without changing their matrix dispositions prematurely:
 

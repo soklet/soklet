@@ -181,6 +181,31 @@ public class MultipartEdgeCaseTests {
 	}
 
 	@Test
+	public void quoted_boundary_allows_interior_but_not_trailing_space() {
+		String interiorSpaceBoundary = "AaB 03x";
+		Request interiorSpaceRequest = Request.withPath(HttpMethod.POST, "/upload")
+				.headers(Map.of("Content-Type", Set.of(
+						"multipart/form-data; boundary=\"" + interiorSpaceBoundary + "\"")))
+				.body(multipartBody(interiorSpaceBoundary))
+				.build();
+
+		Assertions.assertEquals("1", interiorSpaceRequest.getMultipartField("a")
+				.orElseThrow().getDataAsString().orElseThrow());
+
+		String trailingSpaceBoundary = "AaB03x ";
+		Request trailingSpaceRequest = Request.withPath(HttpMethod.POST, "/upload")
+				.headers(Map.of("Content-Type", Set.of(
+						"multipart/form-data; boundary=\"" + trailingSpaceBoundary + "\"")))
+				.body(multipartBody(trailingSpaceBoundary))
+				.build();
+
+		IllegalRequestBodyException exception = Assertions.assertThrows(
+				IllegalRequestBodyException.class,
+				trailingSpaceRequest::getMultipartFields);
+		Assertions.assertFalse(exception.getMessage().contains(trailingSpaceBoundary));
+	}
+
+	@Test
 	public void multipart_field_limit_rejects_the_1001st_field() {
 		String boundary = "----AaB03x-limit";
 		DefaultMultipartParser parser = (DefaultMultipartParser) DefaultMultipartParser.defaultInstance();

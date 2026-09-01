@@ -18,6 +18,10 @@ Soklet has zero runtime dependencies, so vulnerabilities in the released artifac
 
 ## MCP Deployment Security
 
+See the [MCP privacy boundary](release/MCP_PRIVACY_BOUNDARY.md) for the exact
+division between Soklet-owned redacted diagnostics and built-in metrics,
+application callback values, simulator fixtures, and operator retention.
+
 Soklet's MCP 2026-07-28 support runs on a dedicated `McpServer` listener. It is
 not mounted on the ordinary HTTP or SSE listener. The MCP listener binds to
 `127.0.0.1` by default; a container or remote deployment must opt into a

@@ -418,7 +418,7 @@ public final class Utilities {
 		try {
 			uri = new URI(url);
 		} catch (URISyntaxException e) {
-			throw new IllegalRequestException(format("Invalid URL '%s'", url), e);
+			throw new IllegalRequestException("Invalid request URL.");
 		}
 
 		String query = trimAggressivelyToNull(uri.getRawQuery());
@@ -880,7 +880,7 @@ public final class Utilities {
 			URI uri = new URI(url);
 			return Optional.ofNullable(trimAggressivelyToNull(uri.getRawQuery()));
 		} catch (URISyntaxException e) {
-			throw new IllegalRequestException(format("Invalid URL '%s'", url), e);
+			throw new IllegalRequestException("Invalid request URL.");
 		}
 	}
 

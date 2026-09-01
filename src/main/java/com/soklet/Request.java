@@ -338,7 +338,7 @@ public final class Request {
 			throw new IllegalRequestException(format("Path '*' is only legal for HTTP %s", HttpMethod.OPTIONS.name()));
 
 		if (path.contains("\u0000") || path.contains("%00"))
-			throw new IllegalRequestException(format("Illegal null byte in path '%s'", path));
+			throw new IllegalRequestException("Illegal null byte in request path.");
 
 		this.path = path;
 
@@ -412,9 +412,10 @@ public final class Request {
 
 	@Override
 	public String toString() {
-		return format("%s{id=%s, httpMethod=%s, path=%s, cookies=%s, queryParameters=%s, headers=%s, body=%s}",
-				getClass().getSimpleName(), getId(), getHttpMethod(), getPath(), getCookies(), getQueryParameters(),
-				getHeaders(), format("%d bytes", getBody().isPresent() ? getBody().get().length : 0));
+		return format("%s{id=<redacted>, httpMethod=%s, path=<redacted>, cookies=<redacted>, "
+					+ "queryParameters=<redacted>, headers=<redacted>, body=%d bytes}",
+				getClass().getSimpleName(), getHttpMethod(),
+				getBody().map(body -> body.length).orElse(0));
 	}
 
 	@Override
@@ -1052,7 +1053,9 @@ public final class Request {
 		} catch (MultipleValuesException e) {
 			@SuppressWarnings("unchecked")
 			String valuesAsString = format("[%s]", ((Set<String>) e.getValues()).stream().collect(Collectors.joining(", ")));
-			throw new IllegalQueryParameterException(format("Multiple values specified for query parameter '%s' (but expected single value): %s", name, valuesAsString), name, valuesAsString);
+			throw new IllegalQueryParameterException(
+					"Multiple values specified for a query parameter (but expected a single value).",
+					name, valuesAsString);
 		}
 	}
 
@@ -1078,7 +1081,9 @@ public final class Request {
 		} catch (MultipleValuesException e) {
 			@SuppressWarnings("unchecked")
 			String valuesAsString = format("[%s]", ((Set<String>) e.getValues()).stream().collect(Collectors.joining(", ")));
-			throw new IllegalFormParameterException(format("Multiple values specified for form parameter '%s' (but expected single value): %s", name, valuesAsString), name, valuesAsString);
+			throw new IllegalFormParameterException(
+					"Multiple values specified for a form parameter (but expected a single value).",
+					name, valuesAsString);
 		}
 	}
 
@@ -1104,7 +1109,9 @@ public final class Request {
 		} catch (MultipleValuesException e) {
 			@SuppressWarnings("unchecked")
 			String valuesAsString = format("[%s]", ((Set<String>) e.getValues()).stream().collect(Collectors.joining(", ")));
-			throw new IllegalRequestHeaderException(format("Multiple values specified for request header '%s' (but expected single value): %s", name, valuesAsString), name, valuesAsString);
+			throw new IllegalRequestHeaderException(
+					"Multiple values specified for a request header (but expected a single value).",
+					name, valuesAsString);
 		}
 	}
 
@@ -1136,7 +1143,9 @@ public final class Request {
 		} catch (MultipleValuesException e) {
 			@SuppressWarnings("unchecked")
 			String valuesAsString = format("[%s]", ((Set<String>) e.getValues()).stream().collect(Collectors.joining(", ")));
-			throw new IllegalRequestCookieException(format("Multiple values specified for request cookie '%s' (but expected single value): %s", name, valuesAsString), name, valuesAsString);
+			throw new IllegalRequestCookieException(
+					"Multiple values specified for a request cookie (but expected a single value).",
+					name, valuesAsString);
 		}
 	}
 
@@ -1162,11 +1171,9 @@ public final class Request {
 		} catch (MultipleValuesException e) {
 			@SuppressWarnings("unchecked")
 			MultipartField firstMultipartField = requireNonNull(getMultipartFields().get(name)).stream().findFirst().get();
-			String valuesAsString = format("[%s]", e.getValues().stream()
-					.map(multipartField -> multipartField.toString())
-					.collect(Collectors.joining(", ")));
-
-			throw new IllegalMultipartFieldException(format("Multiple values specified for multipart field '%s' (but expected single value): %s", name, valuesAsString), firstMultipartField);
+			throw new IllegalMultipartFieldException(
+					"Multiple values specified for a multipart field (but expected a single value).",
+					firstMultipartField);
 		}
 	}
 
@@ -1421,8 +1428,8 @@ public final class Request {
 		private final Set<?> values;
 
 		private MultipleValuesException(@NonNull String name,
-																		@NonNull Set<?> values) {
-			super(format("Expected single value but found %d values for '%s': %s", values.size(), name, values));
+																@NonNull Set<?> values) {
+			super(format("Expected a single value but found %d values.", values.size()));
 
 			requireNonNull(name);
 			requireNonNull(values);
