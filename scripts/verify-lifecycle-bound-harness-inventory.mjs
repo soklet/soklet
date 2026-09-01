@@ -35,6 +35,9 @@ const CANDIDATE_PATH_PREFIXES = Object.freeze([
   'verification/',
 ]);
 const EXCLUDED_DISCOVERY_PATHS = new Set([
+  'conformance/mcp-finite-bound-inventory.json',
+  'conformance/mcp-limits-and-accounting.json',
+  'conformance/mcp-privacy-boundary-inventory.json',
   INVENTORY_PATH,
   'scripts/verify-lifecycle-bound-harness-inventory-self-test.mjs',
   'scripts/verify-lifecycle-bound-harness-inventory.mjs',
@@ -182,6 +185,25 @@ const REQUIRED_EXECUTING_SCOPES = Object.freeze({
   'src/test/java/com/soklet/McpPreAdmissionMetricsEventPublicRuntimeTests.java': [
     'unknownHeaderOccurrencesAreExactRedactedAndMethodBoundedAcrossPolicies',
   ],
+  'src/test/java/com/soklet/McpInputRequiredPublicRuntimeTests.java': [
+    'aggregateInputRequestTreesFailClosedWithoutCanaryAndServerRecovers',
+  ],
+  'src/test/java/com/soklet/McpResourcePublicRuntimeTests.java': [
+    'aggregateDynamicResourcePageFailsClosedWithoutCanaryAndRecovers',
+  ],
+  'src/test/java/com/soklet/McpToolOutputSanitizerPublicRuntimeTests.java': [
+    'applicationResultBoundsFailClosedWithoutLeaksAndServerRecovers',
+  ],
+  'src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java': [
+    'endpointPathBoundMatchesAndReachesTheProductionListener',
+    'headerCountAndEncodedByteLimitsHaveExactListenerBoundaries',
+  ],
+  'src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeBoundaryTests.java': [
+    'actualSubscriptionIdMustFitTerminalBeforeAcknowledgementCommit',
+  ],
+  'src/test/java/com/soklet/internal/mcp/protocol/McpTransportMetricsEventRuntimeTests.java': [
+    'partialRequestBodyTimeoutIsRecordedAtTheMcpBoundary',
+  ],
 });
 
 const REQUIRED_GENERATION_COUNTS = new Map([
@@ -207,6 +229,7 @@ const REQUIRED_REVIEWED_GENERATION_COUNTS = new Map([
   ['src/test/java/com/soklet/McpRateLimitPipelinePublicRuntimeTests.java#successfulChargesAreRetainedAfterEveryDownstreamFailure#TEST', 6],
   ['src/test/java/com/soklet/McpRequestStatePublicRuntimeTests.java#frameworkProtectedStateContinuesAcrossInstancesOnlyWithinItsKeyAndAuthorizationPartition#TEST', 4],
   ['src/test/java/com/soklet/McpServerPublicRuntimeTests.java#executionConfigurationValidatesAndOwnsOneExecutorPerGeneration#TEST', 3],
+  ['src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java#headerCountAndEncodedByteLimitsHaveExactListenerBoundaries#TEST', 2],
   ['src/test/java/examples/mcp/McpLocalizedCursorFleetApplicationPatternsTests.java#cursorFailuresPreserveOpaqueBytesAndCollapseToOneNeutralError#TEST', 10],
 ]);
 const REQUIRED_DISABLED_SCOPES = new Set([
@@ -340,7 +363,7 @@ const REVIEWED_SCOPE_TOPOLOGY_OVERRIDES = checkedReviewMap([
   ...reviewedScopeFile("src/test/java/com/soklet/McpLocalizationRenderingRuntimeTests.java", "523ff8f04ce11f2b0a297095e6f0106e8943c892cceda8645ef831b2c5bfed5f", [
     ["everyNonDiscoveryCatalogRendersItsPlannedSlotsLocalized","286b0a059965366cd6c5c09c8d7d349e2baffb572aa2f8ff0d6889a7b36411a6",{"generation":{"count":4,"mode":"SEQUENTIAL","complete":4,"prior":3,"incomplete":1}}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/McpMetricsEventDeliveryPublicRuntimeTests.java", "3e8390857a9d311861bc20d58e23a226c20b38911b94b3a6136a6e73c0374957", [
+  ...reviewedScopeFile("src/test/java/com/soklet/McpMetricsEventDeliveryPublicRuntimeTests.java", "c57307c6087c4d6279f17457baaf3e5bc162f5e5b8e4044a13a146036cece279", [
     ["adapterStopRequestQueuesStoppedBeforeFreshOwnerStart","31b4c60da8202956d1ae9b27c750b6a3e9cffa6dc27f1edd94b4814d66e93598",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
     ["failedListenerStartEmitsStoppedWithoutStagedStarted","c857b85a97846cba13de142607db4b8f94ceb000d3e94db068459964bc52e312",{"generation":{"count":3,"mode":"SEQUENTIAL","complete":3,"prior":2,"incomplete":1}}],
     ["freshOwnersEmitExactStartedStoppedGenerationsAndShutdownNoOps","74ccbd7085d038d0c5ac76252a8c19d40caff7b5cf2a2b7ad319c29354d2234c",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
@@ -481,7 +504,7 @@ const REVIEWED_SCOPE_TOPOLOGY_OVERRIDES = checkedReviewMap([
   ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java", "40f4f954a11b77b754d8d40a412cef13bebc0020fb740a4507a4260b5fcab454", [
     ["shutdown_closes_committed_stream_and_runtime_restarts_cleanly","1b56c480e7618c105d448e1c5f45e17d4967bac50ef9f70443d8ecdf442784b4",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java", "a89a6e0e051e99b8f241b7d9680303857ead0b7d3bcd455fc8553bce8422af2e", [
+  ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java", "ffd43636ae5a35764d76795a10cd067aef52b668de2f2b570f51fb23089acf50", [
     ["absent_origin_policy_and_cors_hook_failures_fail_closed","4fbe4b9238dad19fbb1816f4f535c22bade382e7cfd53105c72a06c9e8da31a1",{"generation":{"count":3,"mode":"SEQUENTIAL","complete":3,"prior":2,"incomplete":1}}],
     ["alternating_mcp_instances_keep_discovery_state_independent","389ee827fb7bf2d128b64b2a0175b4ed25353576870784c57a449630cc7149d4",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
     ["construction_does_not_bind_and_failed_start_is_restartable","9de0b2c9289c7f6e5e94e7ad1e86a6edd44fffedfd17919dc7ec76959a436fc5",{"generation":{"count":2,"mode":"MIXED_MAX_PLUS_SEQUENTIAL","complete":2,"prior":1,"incomplete":1},"controlJoinMillis":5000}],
@@ -490,6 +513,7 @@ const REVIEWED_SCOPE_TOPOLOGY_OVERRIDES = checkedReviewMap([
     ["diagnostic_sink_failure_does_not_fail_listener_start","f23f881b2cdd4e7bd7974db7e9d24e459c89b10acbaf1c575a32ffa81ec86b77",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
     ["disabledLifecycleUnexpectedEventLoopRetainsFailureUntilLegacyStopCleanup","93d51a00640b73a4d3c854181bdd4b74b7c2198b3c29bb8b26249c8a2a3469a5",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
     ["explicit_cors_authorizer_suppresses_omitted_authorizer_diagnostic","080c214278dfb9c43dea9c1d92aef97f0065ca3153f5b3a9208f23340701a050",{"generation":{"count":4,"mode":"SEQUENTIAL","complete":4,"prior":3,"incomplete":1}}],
+    ["headerCountAndEncodedByteLimitsHaveExactListenerBoundaries","5e9c2012c5123899c4f5e8c8029db1db5a098048def929a6e389a142b7a9edf5",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
     ["lifecycle_is_idempotent_and_restartable_with_a_fresh_listener","25a32bef444ad324baab818353fdfe04747d86935f5cd351d57e5ed6bacda838",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
     ["omitted_cors_authorizer_emits_fixed_diagnostic_once_per_successful_generation","01e503d71abc321735d18007f15f847bde458a271d4e53c737cf39b554cde7d3",{"generation":{"count":3,"mode":"MIXED_MAX_PLUS_SEQUENTIAL","complete":3,"prior":2,"incomplete":1},"controlJoinMillis":5000}],
     ["residual_admission_work_blocks_restart_until_it_really_exits","9ac3fa3e910140166d79b3f2f124407ba0a37eed81558bae8c0c90feb8834cbc",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1},"controlJoinMillis":5000,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],
@@ -525,7 +549,7 @@ const REVIEWED_SCOPE_TOPOLOGY_OVERRIDES = checkedReviewMap([
     ["publisherIdentityIsGroupedPerServerAndSharedAcrossServers","88d5a74bd6fe207fa20b977750c0d235fbc520284ace2560a8b39730e523e42c",{"generation":{"count":3,"mode":"SEQUENTIAL","complete":3,"prior":2,"incomplete":1}}],
     ["validListenUsesAdmissionAndRequestLimiterOnly","67c47e3a7e886bdb3510213238212bd95c1332361587f9dda29bdafe49c47317",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeBoundaryTests.java", "5d586d7c481da85cea944db74118c9b367579b2e7ed9ce9a442b6b3556d54696", [
+  ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeBoundaryTests.java", "23bcbf430114f45557bdb3bde1baa7350c8343808619c35358cc9cc37952f704", [
     ["gracefulShutdownReservationBeatsConcurrentPublisherExactlyOnce","975a4aa52ecee3afb3c905969b29d88ff12e1da27d04002ecdbe3634776a2662",{"controlJoinMillis":5000,"controlComposition":"REVIEWED_OVERLAP_OR_DUPLICATE"}],
     ["blockingRegistrationCloseIsBoundedAndNeverRetriedConcurrently","e3329ccdae4d8c4e5cb6743b0fa76199f1afa3662a9e44e35279144ce9d83f40",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
     ["deactivatedGenerationCannotPublishIntoRestartedServer","7d47ff10bbfd4624e0802078ca71b36eceec76b30496b1e967735c43fbadbdcb",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
@@ -705,7 +729,7 @@ const REVIEWED_CONTROL_OVERRIDES = checkedReviewMap([
   ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java", "40f4f954a11b77b754d8d40a412cef13bebc0020fb740a4507a4260b5fcab454", [
     ["shutdown_closes_committed_stream_and_runtime_restarts_cleanly","1b56c480e7618c105d448e1c5f45e17d4967bac50ef9f70443d8ecdf442784b4",{"controlComposition":"REVIEWED_LIFECYCLE_CORE_DEDUPLICATION","controlJoinMillis":15000}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeBoundaryTests.java", "5d586d7c481da85cea944db74118c9b367579b2e7ed9ce9a442b6b3556d54696", [
+  ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeBoundaryTests.java", "23bcbf430114f45557bdb3bde1baa7350c8343808619c35358cc9cc37952f704", [
     ["commonLifecycleAwaitRescansRegistrationAfterCloseAttemptCompletes","1b6c55192d0294ab2be799dc20bc6bada8002817bd219aa572ed0865dfde9c9a",{"controlledLifecycleCoreMillis":5000,"controlJoinMillis":15000,"controlComposition":"REVIEWED_LIFECYCLE_CORE_DEDUPLICATION"}],
     ["commonLifecycleForceRetriesAQuiesceRegistrationCloseFailure","ed74ab5cbf8185b3f1e3a30c80ead352af39ebb40dab22715b5489a8e9fffd61",{"controlJoinMillis":9000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
     ["commonLifecycleForceInterruptsAnOwnedBlockingRegistrationClose","c6d71cd9a87bfd649cbcdfc18d9b0f2a1fc9c210a8822784af0435f77fdb3dff",{"controlJoinMillis":7000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
@@ -757,7 +781,7 @@ const REVIEWED_CONTROL_OVERRIDES = checkedReviewMap([
     ["rejectedAndIrrelevantWorkNeverInvokesTheProvider","314ac4b16ec574dc021d47c15bf20ba61dc3e5d9a7285af060451a08a6d20977",{"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND","controlJoinMillis":50000}],
     ["aUniqueTagFloodRetainsNoStateOrMetricSeries","dc7f436f2cd65d7759d5e80bd1c7ca7d4bcdbb18285431169a2e5d34c1ce4625",{"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND","controlJoinMillis":30000}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/McpMetricsEventDeliveryPublicRuntimeTests.java", "3e8390857a9d311861bc20d58e23a226c20b38911b94b3a6136a6e73c0374957", [
+  ...reviewedScopeFile("src/test/java/com/soklet/McpMetricsEventDeliveryPublicRuntimeTests.java", "c57307c6087c4d6279f17457baaf3e5bc162f5e5b8e4044a13a146036cece279", [
     ["unexpectedTerminationOrdersNormalizedStopBeforeFreshOwnerStart","460442bc95883393fb9db323e764cceb7883f2feb2df70cff406eb08c54c275a",{"controlComposition":"REVIEWED_LIFECYCLE_CORE_DEDUPLICATION","controlJoinMillis":2000}],
   ]),
   ...reviewedScopeFile("src/test/java/com/soklet/McpShutdownObservabilityTests.java", "722a89ebc0977a63f10a16192565a8d473e163dc8e8438148b4f077a812a3b94", [
@@ -1099,12 +1123,19 @@ function baselineExclusionAllowed(record) {
       && /Duration shutdownTimeout\s*\(/u.test(record.sourceLine));
 }
 
+function zeroArgumentLegacyCall(record) {
+  const calls = [...record.sourceLine.matchAll(
+    /\bshutdownTimeout\s*\(([^)]*)\)/gu,
+  )];
+  return calls[record.occurrenceIndex]?.[1].trim() === '';
+}
+
 function currentLegacyExclusionAllowed(record) {
   return /api\/mcp\/(?:current|phase-0)-incompatibilities\.jsonl$/u
       .test(record.path)
-    || record.path.startsWith('src/main/java/com/soklet/internal/mcp/protocol/')
-    || (record.path.startsWith('src/test/java/com/soklet/internal/mcp/protocol/')
-      && /(?:defaults|configuration)\.shutdownTimeout\s*\(/u.test(record.sourceLine));
+    || ((record.path.startsWith('src/main/java/com/soklet/internal/mcp/protocol/')
+      || record.path.startsWith('src/test/java/com/soklet/internal/mcp/protocol/'))
+      && zeroArgumentLegacyCall(record));
 }
 
 function baselineIdentity(record) {

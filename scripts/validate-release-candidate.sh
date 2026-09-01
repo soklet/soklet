@@ -81,8 +81,14 @@ release_harness_registry="$project_root/release/release-harness-contracts.json"
 release_harness_bundle_builder="$project_root/scripts/create-release-harness-bundle.mjs"
 release_harness_importer="$project_root/scripts/import-release-harness-evidence.mjs"
 release_harness_importer_self_test="$project_root/scripts/import-release-harness-evidence-self-test.mjs"
+release_workflow_artifact_verifier="$project_root/scripts/verify-release-workflow-artifacts.mjs"
+release_workflow_artifact_verifier_self_test="$project_root/scripts/verify-release-workflow-artifacts-self-test.mjs"
 release_history_producer="$project_root/scripts/produce-release-history.mjs"
 release_history_producer_self_test="$project_root/scripts/produce-release-history-self-test.mjs"
+operational_history_producer="$project_root/scripts/produce-operational-history.mjs"
+operational_history_producer_self_test="$project_root/scripts/produce-operational-history-self-test.mjs"
+operational_history_harness="$project_root/verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
+operational_history_harness_self_test="$project_root/verification/operational/src/test/java/com/soklet/OperationalHistoryHarnessSelfTest.java"
 release_scans_producer="$project_root/scripts/produce-release-scans.mjs"
 release_scans_producer_self_test="$project_root/scripts/produce-release-scans-self-test.mjs"
 release_scans_codeql_preparer="$project_root/scripts/prepare-codeql-release-report.mjs"
@@ -91,9 +97,11 @@ release_scans_codeql_provenance="$project_root/scripts/stage-codeql-release-prov
 release_scans_codeql_provenance_self_test="$project_root/scripts/stage-codeql-release-provenance-self-test.mjs"
 release_scans_runtime_surface="$project_root/scripts/verify-runtime-dependency-surface.mjs"
 release_scans_runtime_surface_self_test="$project_root/scripts/verify-runtime-dependency-surface-self-test.mjs"
+release_scans_exceptions="$project_root/release/release-scan-exceptions.json"
 release_scans_linux_producer="$project_root/release/scripts/produce-release-scans-linux-x64.sh"
 release_benchmarks_producer="$project_root/scripts/produce-release-benchmarks.mjs"
 release_benchmarks_producer_self_test="$project_root/scripts/produce-release-benchmarks-self-test.mjs"
+release_benchmarks_release_note="$project_root/CHANGELOG.md"
 release_history_verifier="$project_root/scripts/verify-release-history.mjs"
 release_scans_verifier="$project_root/scripts/verify-release-scans.mjs"
 release_benchmarks_verifier="$project_root/scripts/verify-release-benchmarks.mjs"
@@ -101,13 +109,18 @@ for release_harness_source in \
 	"$release_harness_registry" "$release_harness_bundle_builder" \
 	"$release_harness_importer" \
 	"$release_harness_importer_self_test" \
+	"$release_workflow_artifact_verifier" \
+	"$release_workflow_artifact_verifier_self_test" \
 	"$release_history_producer" "$release_history_producer_self_test" \
+	"$operational_history_producer" "$operational_history_producer_self_test" \
+	"$operational_history_harness" "$operational_history_harness_self_test" \
 	"$release_scans_producer" "$release_scans_producer_self_test" \
 	"$release_scans_codeql_preparer" "$release_scans_codeql_preparer_self_test" \
-	"$release_scans_codeql_provenance" "$release_scans_codeql_provenance_self_test" \
-	"$release_scans_runtime_surface" "$release_scans_runtime_surface_self_test" \
-	"$release_scans_linux_producer" \
+		"$release_scans_codeql_provenance" "$release_scans_codeql_provenance_self_test" \
+		"$release_scans_runtime_surface" "$release_scans_runtime_surface_self_test" \
+	"$release_scans_exceptions" "$release_scans_linux_producer" \
 	"$release_benchmarks_producer" "$release_benchmarks_producer_self_test" \
+	"$release_benchmarks_release_note" \
 	"$release_history_verifier" \
 	"$release_scans_verifier" "$release_benchmarks_verifier"; do
 	[[ -f "$release_harness_source" && ! -L "$release_harness_source" ]] \
@@ -134,7 +147,9 @@ done
 # gate evidence can be recorded or imported.
 node "$release_harness_importer" --verify-config
 node "$release_harness_importer_self_test"
+node "$release_workflow_artifact_verifier_self_test"
 node "$release_history_producer_self_test"
+node "$operational_history_producer_self_test"
 node "$release_scans_codeql_preparer_self_test"
 node "$release_scans_codeql_provenance_self_test"
 node "$release_scans_runtime_surface_self_test"

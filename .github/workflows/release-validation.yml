@@ -3,13 +3,82 @@ name: Release Candidate Validation
 on:
   workflow_dispatch:
     inputs:
+      phase:
+        description: Produce evidence, finalize a reviewed benchmark, or validate a candidate
+        required: true
+        default: produce
+        type: choice
+        options:
+          - produce
+          - finalize-benchmark
+          - validate
       candidate_commit:
         description: Full immutable Soklet candidate commit SHA
         required: true
         type: string
       benchmark_approval_reference:
         description: Durable approval reference for executing the registered MCP benchmark policy
-        required: true
+        required: false
+        type: string
+      benchmark_draft_run_id:
+        description: Produce-phase workflow run ID containing the reviewed benchmark draft
+        required: false
+        type: string
+      benchmark_draft_artifact_name:
+        description: Exact benchmark draft artifact name from the produce phase
+        required: false
+        type: string
+      benchmark_reviewed_draft_sha256:
+        description: SHA-256 of the exact benchmark draft approved by the reviewer
+        required: false
+        type: string
+      benchmark_signoff_reference:
+        description: Durable signoff URI ending in the approved draft SHA-256
+        required: false
+        type: string
+      benchmark_regression_approval_reference:
+        description: Separate project-owner regression approval URI ending in the approved draft SHA-256
+        required: false
+        type: string
+      fuzz_bundle_run_id:
+        description: Workflow run ID containing the accepted fuzz-history bundle
+        required: false
+        type: string
+      fuzz_bundle_artifact_name:
+        description: Exact accepted fuzz-history artifact name
+        required: false
+        type: string
+      soak_bundle_run_id:
+        description: Workflow run ID containing the accepted soak-history bundle
+        required: false
+        type: string
+      soak_bundle_artifact_name:
+        description: Exact accepted soak-history artifact name
+        required: false
+        type: string
+      operational_bundle_run_id:
+        description: Workflow run ID containing the accepted operational-history bundle
+        required: false
+        type: string
+      operational_bundle_artifact_name:
+        description: Exact accepted operational-history artifact name
+        required: false
+        type: string
+      release_scans_bundle_run_id:
+        description: Workflow run ID containing the accepted release-scan bundle
+        required: false
+        type: string
+      release_scans_bundle_artifact_name:
+        description: Exact accepted release-scan artifact name
+        required: false
+        type: string
+      benchmark_bundle_run_id:
+        description: Workflow run ID containing the finalized benchmark bundle
+        required: false
+        type: string
+      benchmark_bundle_artifact_name:
+        description: Exact finalized benchmark artifact name
+        required: false
         type: string
 
 concurrency:
@@ -22,6 +91,7 @@ permissions:
 jobs:
   release-scans-codeql:
     name: Candidate-bound CodeQL producer
+    if: inputs.phase == 'produce'
     uses: ./.github/workflows/codeql.yml
     with:
       candidate_commit: ${{ inputs.candidate_commit }}
@@ -32,6 +102,7 @@ jobs:
 
   release-scans:
     name: Aggregate Release Scans (JDK 21)
+    if: inputs.phase == 'produce'
     needs: release-scans-codeql
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -113,23 +184,31 @@ jobs:
           "${RUNNER_TEMP}/release-scans-evidence"
           "${RUNNER_TEMP}/release-scans-bundle.json"
 
-      - name: Upload release-scan evidence
-        if: always()
+      - name: Upload immutable release-scan bundle
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: release-scans-${{ inputs.candidate_commit }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 90
+          path: ${{ runner.temp }}/release-scans-bundle.json
+
+      - name: Upload release-scan producer evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: release-scans-raw-${{ inputs.candidate_commit }}-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: warn
           retention-days: 90
           path: |
             ${{ runner.temp }}/release-scans-work
             ${{ runner.temp }}/release-scans-evidence
-            ${{ runner.temp }}/release-scans-bundle.json
             ${{ runner.temp }}/release-scans-node-distribution.txt
             ${{ runner.temp }}/release-scans-java-distribution.txt
             ${{ runner.temp }}/release-scans-maven-distribution.txt
 
   mcp-benchmarks:
     name: MCP Release Benchmarks (JDK 17)
+    if: inputs.phase == 'produce'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -184,6 +263,16 @@ jobs:
       - name: Build exact candidate artifact
         run: mvn -B -ntp -DskipTests package
 
+      - name: Require benchmark execution approval reference
+        shell: bash
+        env:
+          SOKLET_BENCHMARK_APPROVAL_REFERENCE: ${{ inputs.benchmark_approval_reference }}
+        run: |
+          set -euo pipefail
+          [[ -n "$SOKLET_BENCHMARK_APPROVAL_REFERENCE" \
+            && "$SOKLET_BENCHMARK_APPROVAL_REFERENCE" != *$'\n'* \
+            && "$SOKLET_BENCHMARK_APPROVAL_REFERENCE" != *$'\r'* ]] || exit 64
+
       - name: Test and package isolated benchmark harness
         run: |
           node scripts/produce-release-benchmarks-self-test.mjs
@@ -211,10 +300,142 @@ jobs:
             ${{ runner.temp }}/mcp-benchmark-java-distribution.txt
             ${{ runner.temp }}/mcp-benchmark-maven-distribution.txt
 
+  mcp-benchmarks-finalize:
+    name: Finalize Reviewed MCP Benchmarks (JDK 17)
+    if: inputs.phase == 'finalize-benchmark'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Check out exact candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          clean: true
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ inputs.candidate_commit }}
+
+      - name: Require exact candidate and reviewed draft identity
+        shell: bash
+        env:
+          SOKLET_BENCHMARK_DRAFT_ARTIFACT: ${{ inputs.benchmark_draft_artifact_name }}
+          SOKLET_BENCHMARK_DRAFT_RUN_ID: ${{ inputs.benchmark_draft_run_id }}
+          SOKLET_BENCHMARK_REGRESSION_APPROVAL_REFERENCE: ${{ inputs.benchmark_regression_approval_reference }}
+          SOKLET_BENCHMARK_REVIEWED_SHA256: ${{ inputs.benchmark_reviewed_draft_sha256 }}
+          SOKLET_BENCHMARK_SIGNOFF_REFERENCE: ${{ inputs.benchmark_signoff_reference }}
+          SOKLET_CANDIDATE_COMMIT: ${{ inputs.candidate_commit }}
+        run: |
+          set -euo pipefail
+          [[ "$SOKLET_CANDIDATE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || exit 64
+          [[ "$GITHUB_SHA" == "$SOKLET_CANDIDATE_COMMIT" ]] || exit 1
+          [[ "$(git rev-parse --verify HEAD)" == "$SOKLET_CANDIDATE_COMMIT" ]] || exit 1
+          [[ "$SOKLET_BENCHMARK_DRAFT_RUN_ID" =~ ^[1-9][0-9]*$ ]] || exit 64
+          [[ "$SOKLET_BENCHMARK_DRAFT_ARTIFACT" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$ ]] || exit 64
+          [[ "$SOKLET_BENCHMARK_REVIEWED_SHA256" =~ ^[0-9a-f]{64}$ ]] || exit 64
+          [[ "$SOKLET_BENCHMARK_SIGNOFF_REFERENCE" =~ ^[A-Za-z][A-Za-z0-9+.-]*:[^[:space:]#]+#sha256=$SOKLET_BENCHMARK_REVIEWED_SHA256$ ]] || exit 64
+          if [[ -n "$SOKLET_BENCHMARK_REGRESSION_APPROVAL_REFERENCE" ]]; then
+            [[ "$SOKLET_BENCHMARK_REGRESSION_APPROVAL_REFERENCE" =~ ^[A-Za-z][A-Za-z0-9+.-]*:[^[:space:]#]+#sha256=$SOKLET_BENCHMARK_REVIEWED_SHA256$ ]] || exit 64
+            [[ "$SOKLET_BENCHMARK_REGRESSION_APPROVAL_REFERENCE" != "$SOKLET_BENCHMARK_SIGNOFF_REFERENCE" ]] || exit 64
+          fi
+
+      - name: Install checksum-pinned Node and npm
+        shell: bash
+        run: >-
+          bash conformance/official/scripts/install-pinned-node-linux-x64.sh
+          "${RUNNER_TEMP}" "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/mcp-benchmark-finalize-node-distribution.txt"
+
+      - name: Verify successful exact-candidate benchmark draft
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          node scripts/verify-release-workflow-artifacts.mjs
+          --repository "$GITHUB_REPOSITORY"
+          --candidate "${{ inputs.candidate_commit }}"
+          --benchmark-draft-run-id "${{ inputs.benchmark_draft_run_id }}"
+          --benchmark-draft-artifact-name "${{ inputs.benchmark_draft_artifact_name }}"
+
+      - name: Install checksum-pinned Corretto 17
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-corretto-linux-x64.sh
+          java "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/mcp-benchmark-finalize-java-distribution.txt"
+
+      - name: Install checksum-pinned Maven
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-maven-linux-x64.sh
+          "${RUNNER_TEMP}" "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/mcp-benchmark-finalize-maven-distribution.txt"
+
+      - name: Build exact candidate artifact
+        run: mvn -B -ntp -DskipTests package
+
+      - name: Download exact reviewed benchmark draft
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ${{ inputs.benchmark_draft_artifact_name }}
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.benchmark_draft_run_id }}
+          path: ${{ runner.temp }}/mcp-benchmark-reviewed
+
+      - name: Reproduce and finalize reviewed benchmark evidence
+        shell: bash
+        env:
+          SOKLET_BENCHMARK_REGRESSION_APPROVAL_REFERENCE: ${{ inputs.benchmark_regression_approval_reference }}
+          SOKLET_BENCHMARK_REVIEWED_SHA256: ${{ inputs.benchmark_reviewed_draft_sha256 }}
+          SOKLET_BENCHMARK_SIGNOFF_REFERENCE: ${{ inputs.benchmark_signoff_reference }}
+        run: |
+          set -euo pipefail
+          regression_approval=()
+          if [[ -n "$SOKLET_BENCHMARK_REGRESSION_APPROVAL_REFERENCE" ]]; then
+            regression_approval=(
+              --regression-approval-reference
+              "$SOKLET_BENCHMARK_REGRESSION_APPROVAL_REFERENCE"
+            )
+          fi
+          node scripts/produce-release-benchmarks-self-test.mjs
+          node scripts/produce-release-benchmarks.mjs finalize \
+            --candidate-root "${GITHUB_WORKSPACE}" \
+            --work-root "${RUNNER_TEMP}/mcp-benchmark-reviewed/mcp-benchmark-work" \
+            --evidence-root "${RUNNER_TEMP}/mcp-benchmark-final-evidence" \
+            --bundle-output "${RUNNER_TEMP}/mcp-benchmarks-bundle.json" \
+            --reviewed-draft-sha256 "$SOKLET_BENCHMARK_REVIEWED_SHA256" \
+            --signoff-reference "$SOKLET_BENCHMARK_SIGNOFF_REFERENCE" \
+            "${regression_approval[@]}"
+
+      - name: Upload immutable benchmark bundle
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: mcp-benchmarks-${{ inputs.candidate_commit }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 90
+          path: ${{ runner.temp }}/mcp-benchmarks-bundle.json
+
+      - name: Upload finalized benchmark producer evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: mcp-benchmarks-raw-${{ inputs.candidate_commit }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 90
+          path: |
+            ${{ runner.temp }}/mcp-benchmark-final-evidence
+            ${{ runner.temp }}/mcp-benchmark-finalize-node-distribution.txt
+            ${{ runner.temp }}/mcp-benchmark-finalize-java-distribution.txt
+            ${{ runner.temp }}/mcp-benchmark-finalize-maven-distribution.txt
+
   validate:
     name: Validate immutable candidate
+    if: inputs.phase == 'validate'
     runs-on: ubuntu-24.04
     timeout-minutes: 240
+    permissions:
+      actions: read
+      contents: read
     steps:
       - name: Check out exact candidate
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -225,12 +446,111 @@ jobs:
           persist-credentials: false
           ref: ${{ inputs.candidate_commit }}
 
+      - name: Require exact candidate commit
+        shell: bash
+        env:
+          SOKLET_CANDIDATE_COMMIT: ${{ inputs.candidate_commit }}
+        run: |
+          set -euo pipefail
+          [[ "$SOKLET_CANDIDATE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || exit 64
+          [[ "$GITHUB_SHA" == "$SOKLET_CANDIDATE_COMMIT" ]] || exit 1
+          [[ "$(git rev-parse --verify HEAD)" == "$SOKLET_CANDIDATE_COMMIT" ]] || exit 1
+
       - name: Install checksum-pinned Node and npm
         shell: bash
         run: >-
           bash conformance/official/scripts/install-pinned-node-linux-x64.sh
           "${RUNNER_TEMP}" "${GITHUB_PATH}"
           "${RUNNER_TEMP}/release-validation-node-distribution.txt"
+
+      - name: Verify successful exact-candidate producer artifacts
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SOKLET_BENCHMARK_BUNDLE_ARTIFACT: ${{ inputs.benchmark_bundle_artifact_name }}
+          SOKLET_BENCHMARK_BUNDLE_RUN_ID: ${{ inputs.benchmark_bundle_run_id }}
+          SOKLET_CANDIDATE_COMMIT: ${{ inputs.candidate_commit }}
+          SOKLET_FUZZ_BUNDLE_ARTIFACT: ${{ inputs.fuzz_bundle_artifact_name }}
+          SOKLET_FUZZ_BUNDLE_RUN_ID: ${{ inputs.fuzz_bundle_run_id }}
+          SOKLET_OPERATIONAL_BUNDLE_ARTIFACT: ${{ inputs.operational_bundle_artifact_name }}
+          SOKLET_OPERATIONAL_BUNDLE_RUN_ID: ${{ inputs.operational_bundle_run_id }}
+          SOKLET_RELEASE_SCANS_BUNDLE_ARTIFACT: ${{ inputs.release_scans_bundle_artifact_name }}
+          SOKLET_RELEASE_SCANS_BUNDLE_RUN_ID: ${{ inputs.release_scans_bundle_run_id }}
+          SOKLET_SOAK_BUNDLE_ARTIFACT: ${{ inputs.soak_bundle_artifact_name }}
+          SOKLET_SOAK_BUNDLE_RUN_ID: ${{ inputs.soak_bundle_run_id }}
+        run: |
+          set -euo pipefail
+          node scripts/verify-release-workflow-artifacts.mjs \
+            --repository "$GITHUB_REPOSITORY" \
+            --candidate "$SOKLET_CANDIDATE_COMMIT" \
+            --fuzz-run-id "$SOKLET_FUZZ_BUNDLE_RUN_ID" \
+            --fuzz-artifact-name "$SOKLET_FUZZ_BUNDLE_ARTIFACT" \
+            --soak-run-id "$SOKLET_SOAK_BUNDLE_RUN_ID" \
+            --soak-artifact-name "$SOKLET_SOAK_BUNDLE_ARTIFACT" \
+            --operational-run-id "$SOKLET_OPERATIONAL_BUNDLE_RUN_ID" \
+            --operational-artifact-name "$SOKLET_OPERATIONAL_BUNDLE_ARTIFACT" \
+            --scans-run-id "$SOKLET_RELEASE_SCANS_BUNDLE_RUN_ID" \
+            --scans-artifact-name "$SOKLET_RELEASE_SCANS_BUNDLE_ARTIFACT" \
+            --benchmark-run-id "$SOKLET_BENCHMARK_BUNDLE_RUN_ID" \
+            --benchmark-artifact-name "$SOKLET_BENCHMARK_BUNDLE_ARTIFACT"
+
+      - name: Download exact fuzz-history bundle artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ${{ inputs.fuzz_bundle_artifact_name }}
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.fuzz_bundle_run_id }}
+          path: ${{ runner.temp }}/release-harness/fuzz
+
+      - name: Download exact soak-history bundle artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ${{ inputs.soak_bundle_artifact_name }}
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.soak_bundle_run_id }}
+          path: ${{ runner.temp }}/release-harness/soak
+
+      - name: Download exact operational-history bundle artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ${{ inputs.operational_bundle_artifact_name }}
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.operational_bundle_run_id }}
+          path: ${{ runner.temp }}/release-harness/operational
+
+      - name: Download exact release-scan bundle artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ${{ inputs.release_scans_bundle_artifact_name }}
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.release_scans_bundle_run_id }}
+          path: ${{ runner.temp }}/release-harness/scans
+
+      - name: Download exact benchmark bundle artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ${{ inputs.benchmark_bundle_artifact_name }}
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.benchmark_bundle_run_id }}
+          path: ${{ runner.temp }}/release-harness/benchmarks
+
+      - name: Bind exact pre-acquired bundle paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          fuzz="${RUNNER_TEMP}/release-harness/fuzz/fuzz-nightly-history-bundle.json"
+          soak="${RUNNER_TEMP}/release-harness/soak/soak-nightly-history-bundle.json"
+          operational="${RUNNER_TEMP}/release-harness/operational/operational-history-bundle.json"
+          scans="${RUNNER_TEMP}/release-harness/scans/release-scans-bundle.json"
+          benchmarks="${RUNNER_TEMP}/release-harness/benchmarks/mcp-benchmarks-bundle.json"
+          for bundle in "$fuzz" "$soak" "$operational" "$scans" "$benchmarks"; do
+            [[ -f "$bundle" && ! -L "$bundle" ]] || exit 1
+          done
+          printf 'SOKLET_RELEASE_FUZZ_NIGHTLY_HISTORY_BUNDLE=%s\n' "$fuzz" >> "$GITHUB_ENV"
+          printf 'SOKLET_RELEASE_SOAK_NIGHTLY_HISTORY_BUNDLE=%s\n' "$soak" >> "$GITHUB_ENV"
+          printf 'SOKLET_RELEASE_OPERATIONAL_HISTORY_BUNDLE=%s\n' "$operational" >> "$GITHUB_ENV"
+          printf 'SOKLET_RELEASE_SCANS_BUNDLE=%s\n' "$scans" >> "$GITHUB_ENV"
+          printf 'SOKLET_RELEASE_MCP_BENCHMARKS_BUNDLE=%s\n' "$benchmarks" >> "$GITHUB_ENV"
 
       - name: Install checksum-pinned Corretto 25 for core and ToyStore gates
         shell: bash

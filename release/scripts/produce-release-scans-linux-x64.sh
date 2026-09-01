@@ -32,6 +32,9 @@ candidate_commit=$(git -C "$candidate_root" rev-parse --verify HEAD)
 	|| { printf 'Candidate commit is malformed.\n' >&2; exit 1; }
 [[ -z $(git -C "$candidate_root" status --porcelain=v1 --untracked-files=no) ]] \
 	|| { printf 'Candidate has tracked working-tree changes.\n' >&2; exit 1; }
+approvals="$candidate_root/release/release-scan-exceptions.json"
+[[ -f "$approvals" && ! -L "$approvals" ]] \
+	|| { printf 'Candidate-tracked release-scan exception registry is missing.\n' >&2; exit 1; }
 
 raw_reports_root="$work_root/raw-reports"
 provenance_root="$work_root/provenance"
@@ -78,22 +81,34 @@ gitleaks="$tools_root/gitleaks"
 "$gitleaks" version | grep -Eq '(^|[^0-9])8\.30\.1([^0-9]|$)' \
 	|| { printf 'Gitleaks executable has the wrong version.\n' >&2; exit 1; }
 
-"$gitleaks" git "$candidate_root" \
-	--config "$gitleaks_config" \
-	--log-opts="$candidate_commit" \
-	--no-banner \
-	--redact=100 \
-	--report-format sarif \
-	--report-path "$raw_reports_root/02-gitleaks.sarif" \
-	--exit-code 1
-"$gitleaks" git "$candidate_root" \
-	--config "$gitleaks_config" \
-	--log-opts="$candidate_commit" \
-	--no-banner \
-	--redact=100 \
-	--report-format json \
-	--report-path "$raw_reports_root/03-gitleaks.json" \
-	--exit-code 1
+# Exit 1 means findings, not an incomplete scan. Capture that status so both
+# independent formats are always emitted; the Node producer below performs the
+# exact exception decision. Any other exit status remains a hard scanner error.
+run_gitleaks_report() {
+	local format=$1
+	local report_path=$2
+	local gitleaks_exit
+	set +e
+	"$gitleaks" git "$candidate_root" \
+		--config "$gitleaks_config" \
+		--log-opts="$candidate_commit" \
+		--no-banner \
+		--redact=100 \
+		--report-format "$format" \
+		--report-path "$report_path" \
+		--exit-code 1
+	gitleaks_exit=$?
+	set -e
+	if [[ $gitleaks_exit -ne 0 && $gitleaks_exit -ne 1 ]]; then
+		printf 'Gitleaks %s scan failed with exit status %s.\n' "$format" "$gitleaks_exit" >&2
+		exit "$gitleaks_exit"
+	fi
+	[[ -f "$report_path" && ! -L "$report_path" ]] \
+		|| { printf 'Gitleaks %s report is missing.\n' "$format" >&2; exit 1; }
+}
+
+run_gitleaks_report sarif "$raw_reports_root/02-gitleaks.sarif"
+run_gitleaks_report json "$raw_reports_root/03-gitleaks.json"
 
 spotbugs_filter="$provenance_root/spotbugs-exclude.xml"
 git -C "$candidate_root" cat-file blob \
@@ -154,6 +169,7 @@ node "$candidate_root/scripts/verify-runtime-dependency-surface.mjs" \
 	"$raw_reports_root/04-runtime-dependency-surface.json"
 node "$candidate_root/scripts/produce-release-scans.mjs" \
 	--candidate-root "$candidate_root" \
+	--approvals "$approvals" \
 	--raw-reports-root "$raw_reports_root" \
 	--provenance-root "$provenance_root" \
 	--evidence-root "$evidence_root" \

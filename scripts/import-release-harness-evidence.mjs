@@ -20,11 +20,15 @@ const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const SHA256_ID_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const ISO_UTC_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+const MAXIMUM_SCAN_EXCEPTION_LIFETIME_MILLISECONDS = 30 * 24 * 60 * 60 * 1000;
+const SCAN_WILDCARD_PATTERN = /[*?\[\]{}]/u;
+const RELEASE_SCAN_EXCEPTIONS_PATH = 'release/release-scan-exceptions.json';
+const BENCHMARK_RELEASE_NOTE_PATH = 'CHANGELOG.md';
 const MAXIMUM_REGISTRY_BYTES = 4 * 1024 * 1024;
 const MAXIMUM_BUNDLE_BYTES = 256 * 1024 * 1024;
 const MAXIMUM_ROLE_BYTES = 128 * 1024 * 1024;
 const APPROVED_REGISTRY_SHA256 =
-  '998a1146a4485d195e8811d566bb4d60ba93f5e0061de6520187043bf5e2f962';
+  '9276535363b871dcd73e1e20d0e65a5885e70b0b6d0e253b64b175af2db8a51a';
 const EXPECTED_GATE_IDS = Object.freeze([
   'fuzz-nightly-history',
   'mcp-benchmarks',
@@ -333,7 +337,7 @@ export function verifyReleaseHarnessConfiguration(
   const registrySha256 = sha256(bytes);
   if (registrySha256 !== APPROVED_REGISTRY_SHA256) {
     fail(
-      'Release-harness contract registry bytes differ from the exact MCP-0-12 '
+      'Release-harness contract registry bytes differ from the reviewed U7 '
         + `approval: expected ${APPROVED_REGISTRY_SHA256}, found ${registrySha256}.`,
     );
   }
@@ -759,12 +763,13 @@ function parseReportJson(bytes, label) {
   return parseJsonBytes(bytes, label);
 }
 
-function validateSarifInvocation(invocation, label) {
+function validateSarifInvocation(invocation, label, allowedExitCodes = [0]) {
   requireObject(invocation, label);
   if (invocation.executionSuccessful !== true)
     fail(`${label} does not prove successful scanner execution.`);
   if (invocation.exitCode !== undefined
-      && (!Number.isSafeInteger(invocation.exitCode) || invocation.exitCode !== 0)) {
+      && (!Number.isSafeInteger(invocation.exitCode)
+        || !allowedExitCodes.includes(invocation.exitCode))) {
     fail(`${label} has a nonzero or malformed exit code.`);
   }
   if (invocation.processStartFailureMessage !== undefined)
@@ -785,7 +790,7 @@ function validateSarifInvocation(invocation, label) {
   }
 }
 
-function validateSarifInvocations(run, label, required) {
+function validateSarifInvocations(run, label, required, allowedExitCodes = [0]) {
   if (run.invocations === undefined) {
     if (required)
       fail(`${label} has no scanner invocation evidence.`);
@@ -795,7 +800,7 @@ function validateSarifInvocations(run, label, required) {
   if (invocations.length === 0)
     fail(`${label} has an empty scanner invocation set.`);
   invocations.forEach((invocation, index) =>
-    validateSarifInvocation(invocation, `${label}.invocations[${index}]`));
+    validateSarifInvocation(invocation, `${label}.invocations[${index}]`, allowedExitCodes));
 }
 
 function validateEmptySarif(bytes, expectedTool, label, {
@@ -825,6 +830,337 @@ function validateEmptySarif(bytes, expectedTool, label, {
       requireInvocations,
     );
   }
+}
+
+function requireScanText(value, label, maximumLength = 512) {
+  requireString(value, label);
+  if (value.trim() !== value || value.length > maximumLength
+      || /[\u0000-\u001f\u007f]/u.test(value)) {
+    fail(`${label} must be trimmed single-line text of at most ${maximumLength} characters.`);
+  }
+  return value;
+}
+
+function validateScanPath(value, label) {
+  requireScanText(value, label, 4096);
+  validateRelativePath(value, label);
+}
+
+function releaseScanIdentity({ commit, endColumn, endLine, path, ruleId, startColumn, startLine }) {
+  return { commit, endColumn, endLine, path, ruleId, startColumn, startLine };
+}
+
+function releaseScanFingerprint(identity) {
+  return sha256(Buffer.from(canonicalJson(releaseScanIdentity(identity)), 'utf8'));
+}
+
+function releaseScanMatchKey(value) {
+  return [value.scanner, value.ruleId, value.commit, value.path, value.fingerprint].join('\0');
+}
+
+function validateScanSeverity(value, label) {
+  const severity = value === undefined || value === null || value === ''
+    ? 'UNSPECIFIED' : value;
+  if (typeof severity !== 'string'
+      || !['UNSPECIFIED', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].includes(severity.toUpperCase())) {
+    fail(`${label} has unsupported severity.`);
+  }
+  return severity.toUpperCase();
+}
+
+function codeqlSecuritySeverityForImport(value, label) {
+  if (value === undefined)
+    return 'UNSPECIFIED';
+  if (typeof value !== 'string' || !/^(?:\d|10)(?:\.\d+)?$/u.test(value))
+    fail(`${label} CodeQL security-severity must be a numeric string from 0 through 10.`);
+  const score = Number(value);
+  if (!Number.isFinite(score) || score < 0 || score > 10)
+    fail(`${label} CodeQL security-severity must be from 0 through 10.`);
+  if (score >= 9)
+    return 'CRITICAL';
+  if (score >= 7)
+    return 'HIGH';
+  if (score >= 4)
+    return 'MEDIUM';
+  return 'LOW';
+}
+
+function codeqlRuleSeveritiesForImport(run, label) {
+  const tool = requireObject(run.tool, `${label}.tool`);
+  const driver = requireObject(tool.driver, `${label}.tool.driver`);
+  const extensions = tool.extensions ?? [];
+  if (!Array.isArray(extensions))
+    fail(`${label}.tool.extensions must be an array when present.`);
+  const severityById = new Map();
+  [driver, ...extensions].forEach((componentValue, componentIndex) => {
+    const component = requireObject(
+      componentValue,
+      `${label}.tool component ${componentIndex + 1}`,
+    );
+    if (component.rules === undefined)
+      return;
+    requireArray(
+      component.rules,
+      `${label}.tool component ${componentIndex + 1}.rules`,
+    ).forEach((ruleValue, ruleIndex) => {
+      const ruleLabel = `${label} rule ${componentIndex + 1}.${ruleIndex + 1}`;
+      const rule = requireObject(ruleValue, ruleLabel);
+      const ruleId = requireScanText(rule.id, `${ruleLabel}.id`);
+      if (severityById.has(ruleId))
+        fail(`${label} contains duplicate CodeQL rule metadata for ${ruleId}.`);
+      severityById.set(
+        ruleId,
+        codeqlSecuritySeverityForImport(rule.properties?.['security-severity'], ruleLabel),
+      );
+    });
+  });
+  return severityById;
+}
+
+function normalizeCodeqlSarifForImport(bytes, candidateCommit) {
+  const value = requireObject(
+    parseReportJson(bytes, 'CodeQL SARIF report'),
+    'CodeQL SARIF report',
+  );
+  if (value.version !== '2.1.0')
+    fail('CodeQL SARIF report must be SARIF 2.1.0.');
+  const runs = requireArray(value.runs, 'CodeQL SARIF report.runs');
+  if (runs.length === 0)
+    fail('CodeQL SARIF report must contain at least one scanner run.');
+  const findings = [];
+  runs.forEach((runValue, runIndex) => {
+    const label = `CodeQL SARIF report.runs[${runIndex}]`;
+    const run = requireObject(runValue, label);
+    const driver = requireObject(
+      requireObject(run.tool, `${label}.tool`).driver,
+      `${label}.tool.driver`,
+    );
+    if (typeof driver.name !== 'string' || driver.name.toLowerCase() !== 'codeql')
+      fail(`${label} is not from the registered CodeQL scanner.`);
+    validateSarifInvocations(run, label, true);
+    const provenances = requireArray(
+      run.versionControlProvenance,
+      `${label}.versionControlProvenance`,
+    );
+    if (provenances.length === 0)
+      fail(`${label} has no candidate version-control provenance.`);
+    provenances.forEach((provenanceValue, provenanceIndex) => {
+      const provenanceLabel = `${label}.versionControlProvenance[${provenanceIndex}]`;
+      const provenance = requireObject(provenanceValue, provenanceLabel);
+      if (provenance.revisionId !== candidateCommit)
+        fail(`${provenanceLabel} does not bind the exact candidate commit.`);
+      requireScanText(provenance.repositoryUri, `${provenanceLabel}.repositoryUri`, 4096);
+    });
+    const severityByRuleId = codeqlRuleSeveritiesForImport(run, label);
+    requireArray(run.results, `${label}.results`).forEach((resultValue, resultIndex) => {
+      const resultLabel = `${label}.results[${resultIndex}]`;
+      const result = requireObject(resultValue, resultLabel);
+      const ruleId = requireScanText(result.ruleId, `${resultLabel}.ruleId`);
+      const locations = requireArray(result.locations, `${resultLabel}.locations`);
+      if (locations.length !== 1)
+        fail(`${resultLabel} must contain exactly one primary location.`);
+      const physical = requireObject(
+        requireObject(locations[0], `${resultLabel}.locations[0]`).physicalLocation,
+        `${resultLabel}.physicalLocation`,
+      );
+      const artifact = requireObject(physical.artifactLocation, `${resultLabel}.artifactLocation`);
+      if (artifact.uriBaseId !== undefined && artifact.uriBaseId !== '%SRCROOT%')
+        fail(`${resultLabel}.uriBaseId must be %SRCROOT% when present.`);
+      const region = requireObject(physical.region, `${resultLabel}.region`);
+      const startLine = requireInteger(region.startLine, `${resultLabel}.startLine`, 1);
+      const startColumn = region.startColumn === undefined
+        ? 1 : requireInteger(region.startColumn, `${resultLabel}.startColumn`, 1);
+      const endLine = region.endLine === undefined
+        ? startLine : requireInteger(region.endLine, `${resultLabel}.endLine`, 1);
+      const endColumn = region.endColumn === undefined
+        ? startColumn : requireInteger(region.endColumn, `${resultLabel}.endColumn`, 1);
+      const identity = releaseScanIdentity({
+        commit: candidateCommit,
+        endColumn,
+        endLine,
+        path: artifact.uri,
+        ruleId,
+        startColumn,
+        startLine,
+      });
+      validateScanPath(identity.path, `${resultLabel}.artifactLocation.uri`);
+      if (identity.endLine < identity.startLine
+          || (identity.endLine === identity.startLine
+            && identity.endColumn < identity.startColumn)) {
+        fail(`${resultLabel} has an inverted source region.`);
+      }
+      const severity = result.properties?.['security-severity'] === undefined
+        ? severityByRuleId.get(ruleId) ?? 'UNSPECIFIED'
+        : codeqlSecuritySeverityForImport(
+          result.properties['security-severity'],
+          `${resultLabel}.properties`,
+        );
+      findings.push({
+        accepted: true,
+        commit: candidateCommit,
+        fingerprint: releaseScanFingerprint(identity),
+        path: identity.path,
+        ruleId,
+        scanner: 'codeql',
+        severity,
+      });
+    });
+  });
+  findings.sort((left, right) => compareAscii(releaseScanMatchKey(left), releaseScanMatchKey(right)));
+  const keys = findings.map(releaseScanMatchKey);
+  if (new Set(keys).size !== keys.length)
+    fail('CodeQL SARIF report contains a duplicate exact finding identity.');
+  return findings;
+}
+
+function normalizeGitleaksJsonForImport(bytes) {
+  const report = parseReportJson(bytes, 'gitleaks JSON report');
+  if (!Array.isArray(report))
+    fail('gitleaks JSON report must contain an array.');
+  const findings = report.map((entry, index) => {
+    const label = `gitleaks JSON finding ${index + 1}`;
+    requireObject(entry, label);
+    const identity = releaseScanIdentity({
+      commit: entry.Commit,
+      endColumn: requireInteger(entry.EndColumn, `${label}.EndColumn`, 1),
+      endLine: requireInteger(entry.EndLine, `${label}.EndLine`, 1),
+      path: entry.File,
+      ruleId: entry.RuleID,
+      startColumn: requireInteger(entry.StartColumn, `${label}.StartColumn`, 1),
+      startLine: requireInteger(entry.StartLine, `${label}.StartLine`, 1),
+    });
+    validateCommit(identity.commit, `${label}.Commit`);
+    validateScanPath(identity.path, `${label}.File`);
+    requireScanText(identity.ruleId, `${label}.RuleID`);
+    if (identity.endLine < identity.startLine
+        || (identity.endLine === identity.startLine && identity.endColumn < identity.startColumn)) {
+      fail(`${label} has an inverted source region.`);
+    }
+    return {
+      accepted: true,
+      commit: identity.commit,
+      fingerprint: releaseScanFingerprint(identity),
+      path: identity.path,
+      ruleId: identity.ruleId,
+      scanner: 'gitleaks',
+      severity: validateScanSeverity(entry.Severity, label),
+    };
+  }).sort((left, right) => compareAscii(releaseScanMatchKey(left), releaseScanMatchKey(right)));
+  const keys = findings.map(releaseScanMatchKey);
+  if (new Set(keys).size !== keys.length)
+    fail('gitleaks JSON report contains a duplicate exact finding identity.');
+  return findings;
+}
+
+function normalizeGitleaksSarifForImport(bytes) {
+  const value = requireObject(parseReportJson(bytes, 'gitleaks SARIF report'), 'gitleaks SARIF report');
+  if (value.version !== '2.1.0')
+    fail('gitleaks SARIF report must be SARIF 2.1.0.');
+  const runs = requireArray(value.runs, 'gitleaks SARIF report.runs');
+  if (runs.length === 0)
+    fail('gitleaks SARIF report must contain at least one scanner run.');
+  const identities = [];
+  runs.forEach((runValue, runIndex) => {
+    const label = `gitleaks SARIF report.runs[${runIndex}]`;
+    const run = requireObject(runValue, label);
+    const driver = requireObject(
+      requireObject(run.tool, `${label}.tool`).driver,
+      `${label}.tool.driver`,
+    );
+    if (typeof driver.name !== 'string' || driver.name.toLowerCase() !== 'gitleaks')
+      fail(`${label} is not from the registered gitleaks scanner.`);
+    validateSarifInvocations(run, label, false, [0, 1]);
+    requireArray(run.results, `${label}.results`).forEach((resultValue, resultIndex) => {
+      const resultLabel = `${label}.results[${resultIndex}]`;
+      const result = requireObject(resultValue, resultLabel);
+      const locations = requireArray(result.locations, `${resultLabel}.locations`);
+      if (locations.length !== 1)
+        fail(`${resultLabel} must contain exactly one location.`);
+      const physical = requireObject(
+        requireObject(locations[0], `${resultLabel}.locations[0]`).physicalLocation,
+        `${resultLabel}.physicalLocation`,
+      );
+      const artifact = requireObject(physical.artifactLocation, `${resultLabel}.artifactLocation`);
+      const region = requireObject(physical.region, `${resultLabel}.region`);
+      const partialFingerprints = requireObject(
+        result.partialFingerprints,
+        `${resultLabel}.partialFingerprints`,
+      );
+      const identity = releaseScanIdentity({
+        commit: partialFingerprints.commitSha,
+        endColumn: requireInteger(region.endColumn, `${resultLabel}.endColumn`, 1),
+        endLine: requireInteger(region.endLine, `${resultLabel}.endLine`, 1),
+        path: artifact.uri,
+        ruleId: result.ruleId,
+        startColumn: requireInteger(region.startColumn, `${resultLabel}.startColumn`, 1),
+        startLine: requireInteger(region.startLine, `${resultLabel}.startLine`, 1),
+      });
+      validateCommit(identity.commit, `${resultLabel}.partialFingerprints.commitSha`);
+      validateScanPath(identity.path, `${resultLabel}.artifactLocation.uri`);
+      requireScanText(identity.ruleId, `${resultLabel}.ruleId`);
+      identities.push(identity);
+    });
+  });
+  const fingerprints = identities.map(releaseScanFingerprint).sort(compareAscii);
+  if (new Set(fingerprints).size !== fingerprints.length)
+    fail('gitleaks SARIF report contains a duplicate exact finding identity.');
+  return fingerprints;
+}
+
+function validateReleaseScanApprovals(allowlist, policy, now, label) {
+  const fields = policy.allowlist?.fields;
+  if (!Array.isArray(fields) || policy.allowlist.maximumLifetimeDays !== 30
+      || policy.allowlist.wildcardSuppression !== 'PROHIBITED') {
+    fail('release scan allowlist policy drifted from the exact 30-day contract.');
+  }
+  requireNumber(now, 'release scan exception evaluation time');
+  const approvals = requireArray(allowlist, label);
+  let previousKey = null;
+  const keys = new Set();
+  approvals.forEach((approval, index) => {
+    const entryLabel = `${label}[${index}]`;
+    exactKeys(approval, fields, entryLabel);
+    if (approval.scanner !== 'codeql' && approval.scanner !== 'gitleaks')
+      fail(`${entryLabel}.scanner must be codeql or gitleaks; SpotBugs remains fail-closed.`);
+    requireScanText(approval.ruleId, `${entryLabel}.ruleId`);
+    validateScanPath(approval.path, `${entryLabel}.path`);
+    validateCommit(approval.commit, `${entryLabel}.commit`);
+    validateSha256(approval.fingerprint, `${entryLabel}.fingerprint`);
+    for (const field of ['approvalReference', 'owner', 'rationale'])
+      requireScanText(approval[field], `${entryLabel}.${field}`);
+    for (const field of ['scanner', 'ruleId', 'commit', 'path', 'fingerprint']) {
+      if (SCAN_WILDCARD_PATTERN.test(approval[field]))
+        fail(`${entryLabel}.${field} contains a prohibited wildcard.`);
+    }
+    const approvedAt = parseUtc(approval.approvedAt, `${entryLabel}.approvedAt`);
+    const expiresAt = parseUtc(approval.expiresAt, `${entryLabel}.expiresAt`);
+    if (expiresAt <= approvedAt
+        || expiresAt - approvedAt > MAXIMUM_SCAN_EXCEPTION_LIFETIME_MILLISECONDS) {
+      fail(`${entryLabel} lifetime must be positive and no more than 30 days.`);
+    }
+    if (approvedAt > now || expiresAt <= now)
+      fail(`${entryLabel} is not currently effective and unexpired.`);
+    const key = releaseScanMatchKey(approval);
+    if (keys.has(key))
+      fail('release scan allowlist contains a duplicate exact exception.');
+    if (previousKey !== null && compareAscii(previousKey, key) >= 0)
+      fail('release scan allowlist must be in strict exact-match order.');
+    previousKey = key;
+    keys.add(key);
+  });
+  return keys;
+}
+
+function parseCandidateReleaseScanApprovals(bytes) {
+  const registry = parseCanonicalJsonBytes(bytes, 'candidate release-scan exception registry');
+  exactKeys(
+    registry,
+    ['exceptions', 'formatVersion'],
+    'candidate release-scan exception registry',
+  );
+  if (registry.formatVersion !== 1)
+    fail('candidate release-scan exception registry formatVersion must be 1.');
+  return requireArray(registry.exceptions, 'candidate release-scan exception registry.exceptions');
 }
 
 function validateEmptySpotBugs(bytes) {
@@ -1002,7 +1338,14 @@ function validateScanProvenance(bytes, contract, candidate) {
   }
 }
 
-function validateReleaseScans(fileBytes, directoryRole, contract, candidate) {
+function validateReleaseScans(
+  fileBytes,
+  directoryRole,
+  contract,
+  candidate,
+  now,
+  candidateApprovalRegistryBytes,
+) {
   const value = parseEvidenceJson(fileBytes, 'release scan summary');
   validateCommonEvidence(value, contract, candidate, [
     'allowlist',
@@ -1026,27 +1369,36 @@ function validateReleaseScans(fileBytes, directoryRole, contract, candidate) {
   });
   if (entryByPath.size !== reports.length)
     fail('scan-report directory contains an extra report.');
-  validateEmptySarif(
+  const codeqlFindings = normalizeCodeqlSarifForImport(
     entryByPath.get('00-codeql-java.sarif').bytes,
-    'CodeQL',
-    'CodeQL SARIF report',
-    { requireInvocations: true },
+    candidate.candidateCommit,
   );
   validateEmptySpotBugs(entryByPath.get('01-spotbugs.xml').bytes);
-  // The pinned Gitleaks 8.30.1 SARIF writer does not emit invocations. Its
-  // paired empty JSON report and the trusted workflow's successful exit are
-  // the completion authority. If an invocation is present, validate it.
-  validateEmptySarif(
+  // Gitleaks reports are retained in both formats. The importer independently
+  // derives nonsecret fingerprints and requires the two raw reports, summary,
+  // and exact time-bounded approval set to agree.
+  const sarifFingerprints = normalizeGitleaksSarifForImport(
     entryByPath.get('02-gitleaks.sarif').bytes,
-    'gitleaks',
-    'gitleaks SARIF report',
   );
-  const gitleaksJson = parseReportJson(
+  const gitleaksFindings = normalizeGitleaksJsonForImport(
     entryByPath.get('03-gitleaks.json').bytes,
-    'gitleaks JSON report',
   );
-  if (!Array.isArray(gitleaksJson) || gitleaksJson.length !== 0)
-    fail('gitleaks JSON report contains an unapproved finding.');
+  const jsonFingerprints = gitleaksFindings
+    .map(({ fingerprint }) => fingerprint)
+    .sort(compareAscii);
+  if (sarifFingerprints.length !== jsonFingerprints.length
+      || sarifFingerprints.some((fingerprint, index) => fingerprint !== jsonFingerprints[index])) {
+    fail('gitleaks SARIF and JSON reports do not describe the same exact findings.');
+  }
+  const rawFindings = [...codeqlFindings, ...gitleaksFindings]
+    .sort((left, right) => compareAscii(releaseScanMatchKey(left), releaseScanMatchKey(right)));
+  rawFindings.forEach((finding) => {
+    if (finding.severity === 'HIGH' || finding.severity === 'CRITICAL') {
+      fail(
+        `${finding.scanner} ${finding.severity} finding cannot be excepted: ${finding.path}`,
+      );
+    }
+  });
   const runtimeSurface = parseCanonicalJsonBytes(
     entryByPath.get('04-runtime-dependency-surface.json').bytes,
     'runtime dependency surface report',
@@ -1075,31 +1427,44 @@ function validateReleaseScans(fileBytes, directoryRole, contract, candidate) {
     fail('release scan runtime dependency surface is nonzero.');
   }
   const allowlist = requireArray(value.allowlist, 'release scan allowlist');
-  if (allowlist.length !== 0) {
-    fail(
-      'release scan allowlist is nonempty, but the exact MCP-0-12 registry '
-        + 'contains no individually approved candidate-tracked exceptions.',
-    );
+  const allowlistKeys = validateReleaseScanApprovals(
+    allowlist,
+    policy,
+    now,
+    'release scan allowlist',
+  );
+  if (candidateApprovalRegistryBytes !== undefined) {
+    const candidateApprovals = parseCandidateReleaseScanApprovals(candidateApprovalRegistryBytes);
+    if (!sameJson(candidateApprovals, allowlist)) {
+      fail('release scan allowlist does not equal the exact candidate-tracked exception registry.');
+    }
   }
-  const allowlistKeys = new Set(allowlist.map(
-    (entry) => `${entry.scanner}\0${entry.ruleId}\0${entry.path}\0${entry.fingerprint}`,
-  ));
-  if (allowlistKeys.size !== allowlist.length)
-    fail('release scan allowlist contains a duplicate exception.');
   const findings = requireArray(value.findings, 'release scan findings');
-  if (findings.length !== 0)
-    fail('release scan summary contains an unapproved finding.');
   findings.forEach((finding, index) => {
     const label = `release scan finding ${index + 1}`;
-    exactKeys(finding, ['accepted', 'fingerprint', 'path', 'ruleId', 'scanner', 'severity'], label);
-    for (const key of ['fingerprint', 'path', 'ruleId', 'scanner', 'severity'])
-      requireString(finding[key], `${label}.${key}`);
+    exactKeys(
+      finding,
+      ['accepted', 'commit', 'fingerprint', 'path', 'ruleId', 'scanner', 'severity'],
+      label,
+    );
+    validateCommit(finding.commit, `${label}.commit`);
+    validateSha256(finding.fingerprint, `${label}.fingerprint`);
+    validateScanPath(finding.path, `${label}.path`);
+    requireScanText(finding.ruleId, `${label}.ruleId`);
+    if (finding.scanner !== 'codeql' && finding.scanner !== 'gitleaks')
+      fail(`${label}.scanner must be codeql or gitleaks.`);
+    if (finding.severity !== validateScanSeverity(finding.severity, `${label}.severity`))
+      fail(`${label}.severity must be canonical uppercase.`);
     if (finding.severity === 'HIGH' || finding.severity === 'CRITICAL')
       fail(`${label} has prohibited ${finding.severity} severity.`);
-    const key = `${finding.scanner}\0${finding.ruleId}\0${finding.path}\0${finding.fingerprint}`;
+    const key = releaseScanMatchKey(finding);
     if (finding.accepted !== true || !allowlistKeys.has(key))
       fail(`${label} is not covered by an exact approved allowlist entry.`);
   });
+  if (!sameJson(findings, rawFindings))
+    fail('release scan summary findings do not exactly match the raw scanner reports.');
+  if (allowlistKeys.size !== findings.length)
+    fail('release scan allowlist contains an unmatched exception.');
 }
 
 function benchmarkConfiguration(policy) {
@@ -1140,6 +1505,49 @@ function validateBenchmarkSignoffReference(value, reviewedDraftSha256) {
         + 'bound to review.reviewedDraftSha256.',
     );
   }
+}
+
+function validateBenchmarkRegressionApprovalReference(
+  value,
+  reviewedDraftSha256,
+) {
+  requireBenchmarkReference(value, 'MCP benchmark review.regressionApprovalReference');
+  const match = value.match(
+    /^([A-Za-z][A-Za-z0-9+.-]*:[^\s#]+)#sha256=([0-9a-f]{64})$/u,
+  );
+  if (match === null || match[2] !== reviewedDraftSha256) {
+    fail(
+      'MCP benchmark regression approval reference must be a durable URI-like '
+        + 'reference bound to review.reviewedDraftSha256.',
+    );
+  }
+}
+
+function benchmarkReleaseNoteEntry(bytes) {
+  const text = bytes.toString('utf8');
+  if (!Buffer.from(text, 'utf8').equals(bytes)
+      || text.includes('\r') || !text.endsWith('\n')) {
+    fail('Candidate benchmark release note must be UTF-8/LF text ending in LF.');
+  }
+  const headings = [...text.matchAll(
+    /^## 4\.0\.0(?: \([^()\n]+\))?\n/gmu,
+  )];
+  if (headings.length !== 1) {
+    fail(
+      'Candidate CHANGELOG.md must have exactly one 4.0.0 release-note '
+        + 'heading, optionally followed by one parenthetical label.',
+    );
+  }
+  const start = headings[0].index;
+  const next = text.indexOf('\n## ', start + 1);
+  const entry = text.slice(start, next < 0 ? text.length : next + 1);
+  if (!/\bbenchmark(?:s|ing)?\b/iu.test(entry) || !/\bregression\b/iu.test(entry)) {
+    fail(
+      'A benchmark regression requires the 4.0.0 CHANGELOG entry to describe '
+        + 'the benchmark regression.',
+    );
+  }
+  return Buffer.from(entry, 'utf8');
 }
 
 function summarizeRetainedJmhResults(results, {
@@ -1238,7 +1646,13 @@ function normalizedRetainedProfile(operation, result) {
   };
 }
 
-function validateBenchmarks(bytes, logBytes, contract, candidate) {
+function validateBenchmarks(
+  bytes,
+  logBytes,
+  contract,
+  candidate,
+  candidateBenchmarkReleaseNoteBytes,
+) {
   const value = parseEvidenceJson(bytes, 'MCP benchmark results');
   validateCommonEvidence(value, contract, candidate, [
     'benchmarkLogSha256',
@@ -1490,11 +1904,29 @@ function validateBenchmarks(bytes, logBytes, contract, candidate) {
   const regression = parseRatio < policy.comparison.minimumJsonParseWriteScoreRatio
     || writeRatio < policy.comparison.minimumJsonParseWriteScoreRatio;
   if (regression) {
-    fail(
-      'MCP benchmark regression is not authorized by the exact MCP-0-12 '
-        + 'registry; a candidate-tracked release-note/owner-approval contract '
-        + 'amendment is required before import.',
+    if (value.review.regressionApproved !== true)
+      fail('MCP benchmark regression is missing explicit project-owner approval.');
+    validateBenchmarkRegressionApprovalReference(
+      value.review.regressionApprovalReference,
+      value.review.reviewedDraftSha256,
     );
+    if (value.review.regressionApprovalReference === value.review.signoffReference)
+      fail('MCP benchmark regression approval is not separate from review sign-off.');
+    validateSha256(
+      value.review.releaseNoteSha256,
+      'MCP benchmark review.releaseNoteSha256',
+    );
+    if (candidateBenchmarkReleaseNoteBytes !== undefined) {
+      const actualReleaseNoteSha256 = sha256(
+        benchmarkReleaseNoteEntry(candidateBenchmarkReleaseNoteBytes),
+      );
+      if (actualReleaseNoteSha256 !== value.review.releaseNoteSha256) {
+        fail(
+          'MCP benchmark release-note digest does not match the candidate '
+            + '4.0.0 CHANGELOG entry.',
+        );
+      }
+    }
   } else if (value.review.regressionApproved !== false
       || value.review.regressionApprovalReference !== null
       || value.review.releaseNoteSha256 !== null) {
@@ -1526,7 +1958,14 @@ function validateBenchmarks(bytes, logBytes, contract, candidate) {
   });
 }
 
-function validateGateEvidence(contract, candidate, roles, now) {
+function validateGateEvidence(
+  contract,
+  candidate,
+  roles,
+  now,
+  candidateApprovalRegistryBytes,
+  candidateBenchmarkReleaseNoteBytes,
+) {
   const byName = new Map(roles.map((role) => [role.descriptor.name, role]));
   if (contract.id === 'fuzz-nightly-history') {
     validateFuzzHistory(byName.get('history').bytes, contract, candidate, now);
@@ -1540,6 +1979,8 @@ function validateGateEvidence(contract, candidate, roles, now) {
       byName.get('scan-reports'),
       contract,
       candidate,
+      now,
+      candidateApprovalRegistryBytes,
     );
   } else if (contract.id === 'mcp-benchmarks') {
     validateBenchmarks(
@@ -1547,6 +1988,7 @@ function validateGateEvidence(contract, candidate, roles, now) {
       byName.get('benchmark-log').bytes,
       contract,
       candidate,
+      candidateBenchmarkReleaseNoteBytes,
     );
   } else {
     fail(`No harness evidence validator exists for ${contract.id}.`);
@@ -1663,6 +2105,7 @@ export function verifyReleaseHarnessRoleDescriptors(expectedImportedReceipt, rol
 }
 
 export function verifyReleaseHarnessEvidenceDirectory({
+  candidateRoot,
   evidenceRoot = process.cwd(),
   expectedImportedReceipt,
   gate,
@@ -1688,7 +2131,22 @@ export function verifyReleaseHarnessEvidenceDirectory({
   validateCandidate(candidate, `${gate} primary evidence.candidate`);
   if (candidate.candidateRegistrySha256 !== configuration.registrySha256)
     fail(`${gate} candidate registry binding does not match the registry bytes.`);
-  validateGateEvidence(contract, candidate, roles, now);
+  if (candidateRoot !== undefined
+      && (typeof candidateRoot !== 'string' || !isAbsolute(candidateRoot))) {
+    fail('candidate-root must be absolute when verifying unpacked evidence.');
+  }
+  const exactCandidateRoot = candidateRoot === undefined
+    ? undefined : resolve(candidateRoot);
+  validateGateEvidence(
+    contract,
+    candidate,
+    roles,
+    now,
+    exactCandidateRoot === undefined
+      ? undefined : candidateReleaseScanApprovalBytes(exactCandidateRoot, contract),
+    exactCandidateRoot === undefined
+      ? undefined : candidateBenchmarkReleaseNoteBytes(exactCandidateRoot, contract),
+  );
   const roleDescriptors = roles.map(({ descriptor }) => descriptor);
   if (expectedImportedReceipt !== undefined) {
     requireObject(expectedImportedReceipt, 'expected imported release-harness receipt');
@@ -1776,9 +2234,15 @@ function verifierSourcePaths(contract) {
   fail(`No verifier source path exists for ${contract.id}.`);
 }
 
+const RELEASE_WORKFLOW_ARTIFACT_SOURCE_PATHS = Object.freeze([
+  'scripts/verify-release-workflow-artifacts.mjs',
+  'scripts/verify-release-workflow-artifacts-self-test.mjs',
+]);
+
 function producerSourcePaths(contract) {
   if (contract.id === 'fuzz-nightly-history') {
     return [
+      ...RELEASE_WORKFLOW_ARTIFACT_SOURCE_PATHS,
       'fuzz/pom.xml',
       'release/scripts/install-pinned-corretto-linux-x64.sh',
       'scripts/produce-release-history.mjs',
@@ -1787,6 +2251,7 @@ function producerSourcePaths(contract) {
   }
   if (contract.id === 'soak-nightly-history') {
     return [
+      ...RELEASE_WORKFLOW_ARTIFACT_SOURCE_PATHS,
       'release/scripts/install-pinned-corretto-linux-x64.sh',
       'scripts/produce-release-history.mjs',
       'scripts/produce-release-history-self-test.mjs',
@@ -1797,13 +2262,20 @@ function producerSourcePaths(contract) {
   }
   if (contract.id === 'operational-history') {
     return [
+      ...RELEASE_WORKFLOW_ARTIFACT_SOURCE_PATHS,
       'release/scripts/install-pinned-corretto-linux-x64.sh',
+      'scripts/produce-operational-history.mjs',
+      'scripts/produce-operational-history-self-test.mjs',
       'scripts/produce-release-history.mjs',
       'scripts/produce-release-history-self-test.mjs',
+      'verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java',
+      'verification/operational/src/test/java/com/soklet/OperationalHistoryHarnessSelfTest.java',
     ];
   }
   if (contract.id === 'release-scans') {
     return [
+      ...RELEASE_WORKFLOW_ARTIFACT_SOURCE_PATHS,
+      'release/release-scan-exceptions.json',
       'release/scripts/produce-release-scans-linux-x64.sh',
       'scripts/prepare-codeql-release-report.mjs',
       'scripts/prepare-codeql-release-report-self-test.mjs',
@@ -1817,6 +2289,8 @@ function producerSourcePaths(contract) {
   }
   if (contract.id === 'mcp-benchmarks') {
     return [
+      ...RELEASE_WORKFLOW_ARTIFACT_SOURCE_PATHS,
+      'CHANGELOG.md',
       'benchmarks/pom.xml',
       'benchmarks/src/main/java/com/soklet/McpReleaseBenchmarkRuntime.java',
       'benchmarks/src/main/java/com/soklet/McpReleaseJsonJmhBenchmark.java',
@@ -1826,6 +2300,26 @@ function producerSourcePaths(contract) {
     ];
   }
   fail(`No producer source paths exist for ${contract.id}.`);
+}
+
+function candidateReleaseScanApprovalBytes(candidateRoot, contract) {
+  if (contract.id !== 'release-scans')
+    return undefined;
+  return readRegularFile(
+    resolve(candidateRoot, RELEASE_SCAN_EXCEPTIONS_PATH),
+    'candidate release-scan exception registry',
+    MAXIMUM_REGISTRY_BYTES,
+  );
+}
+
+function candidateBenchmarkReleaseNoteBytes(candidateRoot, contract) {
+  if (contract.id !== 'mcp-benchmarks')
+    return undefined;
+  return readRegularFile(
+    resolve(candidateRoot, BENCHMARK_RELEASE_NOTE_PATH),
+    'candidate benchmark release note',
+    4 * 1024 * 1024,
+  );
 }
 
 function digestWorkflow(candidateRoot, contract) {
@@ -1951,7 +2445,14 @@ export function releaseHarnessCandidateIdentity({
   return Object.freeze({ ...candidate });
 }
 
-function validateBundle(bundlePath, contract, candidate, now) {
+function validateBundle(
+  bundlePath,
+  contract,
+  candidate,
+  now,
+  candidateApprovalRegistryBytes,
+  candidateBenchmarkReleaseNoteBytes,
+) {
   if (!isAbsolute(bundlePath))
     fail('bundle must be an absolute path.');
   const { bytes, value } = readCanonicalJson(bundlePath, 'release harness bundle', MAXIMUM_BUNDLE_BYTES);
@@ -1991,7 +2492,14 @@ function validateBundle(bundlePath, contract, candidate, now) {
   if (roleValues.length !== contract.roles.length)
     fail('release harness bundle has missing or extra roles.');
   const roles = roleValues.map((role, index) => validateBundleRole(role, contract.roles[index], index));
-  validateGateEvidence(contract, candidate, roles, now);
+  validateGateEvidence(
+    contract,
+    candidate,
+    roles,
+    now,
+    candidateApprovalRegistryBytes,
+    candidateBenchmarkReleaseNoteBytes,
+  );
   return { bundleSha256: sha256(bytes), roles };
 }
 
@@ -2094,7 +2602,22 @@ export function createReleaseHarnessBundle({
   const absoluteEvidenceRoot = requireEvidenceRoot(evidenceRoot);
   const roles = contract.roles.map((role, index) =>
     readEvidenceRole(absoluteEvidenceRoot, role, index));
-  validateGateEvidence(contract, candidate, roles, now);
+  const candidateApprovalRegistryBytes = candidateReleaseScanApprovalBytes(
+    candidateRoot,
+    contract,
+  );
+  const benchmarkReleaseNoteBytes = candidateBenchmarkReleaseNoteBytes(
+    candidateRoot,
+    contract,
+  );
+  validateGateEvidence(
+    contract,
+    candidate,
+    roles,
+    now,
+    candidateApprovalRegistryBytes,
+    benchmarkReleaseNoteBytes,
+  );
   const content = {
     candidate: { ...candidate },
     contractVersion: contract.contractVersion,
@@ -2113,7 +2636,14 @@ export function createReleaseHarnessBundle({
     formatVersion: 1,
   };
   writeNewCanonicalJson(outputPath, bundle);
-  const verified = validateBundle(outputPath, contract, candidate, now);
+  const verified = validateBundle(
+    outputPath,
+    contract,
+    candidate,
+    now,
+    candidateApprovalRegistryBytes,
+    benchmarkReleaseNoteBytes,
+  );
   const expectedDescriptors = roles.map(({ descriptor }) => descriptor);
   const verifiedDescriptors = verified.roles.map(({ descriptor }) => descriptor);
   if (!sameJson(verifiedDescriptors, expectedDescriptors))
@@ -2210,17 +2740,29 @@ export function verifyImportedBundleReceipt({
   receiptPath,
   registryPath,
 }) {
+  if (candidateIdentityProvider !== undefined && candidateRoot === undefined)
+    fail('candidateIdentityProvider requires candidateRoot.');
+  if (candidateRoot !== undefined
+      && (typeof candidateRoot !== 'string' || !isAbsolute(candidateRoot))) {
+    fail('candidate-root must be absolute.');
+  }
   const receipt = verifyImportedReceipt(receiptPath, registryPath);
   const configuration = verifyReleaseHarnessConfiguration(registryPath);
   const contract = configuration.contracts.get(receipt.gate);
   const candidate = Object.fromEntries(
     BUNDLE_CANDIDATE_KEYS.map((key) => [key, receipt.candidateBindings[key]]),
   );
+  const candidateApprovalRegistryBytes = candidateRoot === undefined
+    ? undefined : candidateReleaseScanApprovalBytes(candidateRoot, contract);
+  const benchmarkReleaseNoteBytes = candidateRoot === undefined
+    ? undefined : candidateBenchmarkReleaseNoteBytes(candidateRoot, contract);
   const { bundleSha256, roles } = validateBundle(
     bundlePath,
     contract,
     candidate,
     now,
+    candidateApprovalRegistryBytes,
+    benchmarkReleaseNoteBytes,
   );
   if (bundleSha256 !== receipt.candidateBindings.immutableBundleSha256)
     fail('immutable bundle bytes do not match the imported receipt.');
@@ -2228,11 +2770,7 @@ export function verifyImportedBundleReceipt({
     receipt,
     roles.map(({ descriptor }) => descriptor),
   );
-  if (candidateIdentityProvider !== undefined && candidateRoot === undefined)
-    fail('candidateIdentityProvider requires candidateRoot.');
   if (candidateRoot !== undefined) {
-    if (typeof candidateRoot !== 'string' || !isAbsolute(candidateRoot))
-      fail('candidate-root must be absolute.');
     if (candidateIdentityProvider === undefined
         && configuration.registryPath
           !== resolve(candidateRoot, 'release/release-harness-contracts.json')) {
@@ -2287,7 +2825,14 @@ export function importReleaseHarnessEvidence({
   validateCandidate(candidate, 'candidate identity');
   if (candidate.candidateRegistrySha256 !== configuration.registrySha256)
     fail('candidate identity registry SHA-256 does not match the selected registry bytes.');
-  const { bundleSha256, roles } = validateBundle(bundlePath, contract, candidate, now);
+  const { bundleSha256, roles } = validateBundle(
+    bundlePath,
+    contract,
+    candidate,
+    now,
+    candidateReleaseScanApprovalBytes(candidateRoot, contract),
+    candidateBenchmarkReleaseNoteBytes(candidateRoot, contract),
+  );
   const receipt = importedReceipt(contract, candidate, bundleSha256, roles);
   writeNewCanonicalJson(outputPath, receipt);
   verifyImportedReceipt(outputPath, configuration.registryPath);

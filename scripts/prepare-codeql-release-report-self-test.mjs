@@ -65,6 +65,31 @@ try {
     { outputPath: validOutput, runCount: 1 },
   );
   assertions++;
+
+  const retainedFinding = {
+    locations: [{
+      physicalLocation: {
+        artifactLocation: { uri: 'src/main/java/com/soklet/Example.java', uriBaseId: '%SRCROOT%' },
+        region: { endColumn: 18, endLine: 7, startColumn: 5, startLine: 7 },
+      },
+    }],
+    ruleId: 'java/example-security-rule',
+  };
+  const findingInput = fixture('finding', sarif({ findings: [retainedFinding] }));
+  const findingOutput = join(root, 'finding-output.sarif');
+  assert.deepEqual(
+    prepareCodeqlReleaseReport({
+      candidateCommit,
+      inputRoot: findingInput,
+      outputPath: findingOutput,
+    }),
+    { outputPath: findingOutput, runCount: 1 },
+  );
+  assert.deepEqual(
+    JSON.parse(readFileSync(findingOutput, 'utf8')).runs[0].results,
+    [retainedFinding],
+  );
+  assertions += 2;
   assert.equal(
     readFileSync(validOutput, 'utf8'),
     `{\n  "runs": [\n    {\n      "invocations": [\n        {\n          "executionSuccessful": true,\n          "exitCode": 0,\n          "toolConfigurationNotifications": [],\n          "toolExecutionNotifications": []\n        }\n      ],\n      "results": [],\n      "tool": {\n        "driver": {\n          "name": "CodeQL"\n        }\n      },\n      "versionControlProvenance": [\n        {\n          "repositoryUri": "https://github.com/example/soklet",\n          "revisionId": "${candidateCommit}"\n        }\n      ]\n    }\n  ],\n  "version": "2.1.0"\n}\n`,
@@ -80,7 +105,6 @@ try {
   const missingInvocationSarif = sarif();
   delete missingInvocationSarif.runs[0].invocations;
   for (const [name, value, pattern] of [
-    ['finding', sarif({ findings: [{ ruleId: 'java/test' }] }), /unaccepted finding/],
     ['wrong-tool', sarif({ tool: 'not-codeql' }), /not from the CodeQL scanner/],
     ['missing-runs', { runs: [], version: '2.1.0' }, /at least one scanner run/],
     ['wrong-version', { runs: sarif().runs, version: '2.0.0' }, /SARIF 2\.1\.0/],

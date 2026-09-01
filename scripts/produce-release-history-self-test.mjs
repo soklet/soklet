@@ -30,9 +30,14 @@ import {
   requireApprovedSoakProfile,
   verifyCorrettoEvidence,
 } from './produce-release-history.mjs';
+import { verifySoakProfile } from './verify-soak-evidence.mjs';
 
 const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const SCRIPT_PATH = resolve(SCRIPT_DIRECTORY, 'produce-release-history.mjs');
+const OPERATIONAL_SELF_TEST_PATH = resolve(
+  SCRIPT_DIRECTORY,
+  'produce-operational-history-self-test.mjs',
+);
 const NOW = Date.parse('2026-08-30T12:00:00Z');
 let assertions = 0;
 
@@ -179,6 +184,13 @@ function run() {
     const fuzz = configuration.contracts.get('fuzz-nightly-history');
     const soak = configuration.contracts.get('soak-nightly-history');
     const operational = configuration.contracts.get('operational-history');
+
+    assert.equal(
+      soak.policy.profileSha256,
+      verifySoakProfile('nightly').profileSha256,
+      'Registered soak-history policy must bind the exact checked-in nightly profile.',
+    );
+    assertions++;
 
     const evidencePath = join(root, 'corretto.txt');
     writeFileSync(evidencePath, toolchainEvidence(fuzz));
@@ -450,7 +462,14 @@ function run() {
     const invocation = spawnSync(process.execPath, [SCRIPT_PATH], { encoding: 'utf8' });
     assert.equal(invocation.status, 1);
     assert.match(invocation.stderr, /Missing release-history producer mode/u);
-    assertions += 2;
+    const operationalSelfTest = spawnSync(
+      process.execPath,
+      [OPERATIONAL_SELF_TEST_PATH],
+      { encoding: 'utf8' },
+    );
+    assert.equal(operationalSelfTest.status, 0, operationalSelfTest.stderr);
+    assert.match(operationalSelfTest.stdout, /produce-operational-history self-test PASS/u);
+    assertions += 4;
 
     const workflow = readFileSync(resolve(SCRIPT_DIRECTORY, '../.github/workflows/ci.yml'), 'utf8');
     assert.match(workflow, /^  fuzz-nightly-history:$/m);
@@ -465,14 +484,114 @@ function run() {
     const fuzzProducerBlock = workflow.match(
       /^  fuzz-nightly:[\s\S]*?(?=^  soak-nightly:)/mu,
     )?.[0];
-    const soakProducerBlock = workflow.match(/^  soak-nightly:[\s\S]*$/mu)?.[0];
+    const soakProducerBlock = workflow.match(
+      /^  soak-nightly:[\s\S]*?(?=^  operational-history:)/mu,
+    )?.[0];
+    const operationalProducerBlock = workflow.match(
+      /^  operational-history:[\s\S]*$/mu,
+    )?.[0];
     assert.ok(fuzzProducerBlock !== undefined);
     assert.ok(soakProducerBlock !== undefined);
+    assert.ok(operationalProducerBlock !== undefined);
     assert.doesNotMatch(fuzzProducerBlock, /uses: actions\/[^@\s]+@v[0-9]+\b/u);
     assert.doesNotMatch(soakProducerBlock, /uses: actions\/[^@\s]+@v[0-9]+\b/u);
+    assert.doesNotMatch(operationalProducerBlock, /uses: actions\/[^@\s]+@v[0-9]+\b/u);
+    const fuzzBundleUpload = fuzzProducerBlock.match(
+      /      - name: Upload immutable fuzz history bundle\n([\s\S]*?)(?=\n      - name:)/u,
+    );
+    const soakBundleUpload = soakProducerBlock.match(
+      /      - name: Upload immutable soak history bundle\n([\s\S]*?)(?=\n      - name:)/u,
+    );
+    const operationalBundleUpload = operationalProducerBlock.match(
+      /      - name: Upload immutable operational history bundle\n([\s\S]*?)(?=\n      - name:)/u,
+    );
+    assert.notEqual(fuzzBundleUpload, null);
+    assert.notEqual(soakBundleUpload, null);
+    assert.notEqual(operationalBundleUpload, null);
+    assert.match(
+      fuzzBundleUpload[1],
+      /^          name: fuzz-nightly-history-\$\{\{ github\.sha \}\}-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}$/m,
+    );
+    assert.match(
+      soakBundleUpload[1],
+      /^          name: soak-nightly-history-\$\{\{ github\.sha \}\}-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}$/m,
+    );
+    assert.match(
+      operationalBundleUpload[1],
+      /^          name: operational-history-\$\{\{ inputs\.operational_candidate_commit \}\}-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}$/m,
+    );
+    assert.match(
+      fuzzBundleUpload[1],
+      /^          path: target\/release-history\/fuzz-nightly-history-bundle\.json$/m,
+    );
+    assert.match(
+      soakBundleUpload[1],
+      /^          path: target\/release-history\/soak-nightly-history-bundle\.json$/m,
+    );
+    assert.match(
+      operationalBundleUpload[1],
+      /^          path: target\/release-history\/operational-history-bundle\.json$/m,
+    );
+    assert.match(soakProducerBlock, /release-soak-history-\$\{\{ runner\.os \}\}-\$\{\{ github\.sha \}\}-/u);
+    assert.match(soakProducerBlock, /produce-release-history\.mjs soak-nightly/u);
+    assert.match(soakProducerBlock, /verify-release-history\.mjs soak-nightly/u);
+    assert.match(soakProducerBlock, /--gate soak-nightly-history/u);
+    assert.match(soakProducerBlock, /soak-nightly-history-bundle\.json/u);
+    assert.match(soakProducerBlock, /soak-history-state-\$\{\{ github\.sha \}\}/u);
+    assert.match(workflow, /operational_candidate_commit:\n[\s\S]*?type: string/u);
+    assert.match(
+      operationalProducerBlock,
+      /if: github\.event_name == 'workflow_dispatch' && inputs\.operational_candidate_commit != ''/u,
+    );
+    assert.match(operationalProducerBlock, /runs-on: \[self-hosted, linux, x64\]/u);
+    assert.match(operationalProducerBlock, /timeout-minutes: 420/u);
+    assert.match(operationalProducerBlock, /ref: \$\{\{ inputs\.operational_candidate_commit \}\}/u);
+    assert.match(operationalProducerBlock, /git rev-parse --verify HEAD/u);
+    assert.match(operationalProducerBlock, /install-pinned-node-linux-x64\.sh/u);
+    assert.match(operationalProducerBlock, /install-pinned-corretto-linux-x64\.sh\n          java/u);
+    assert.match(operationalProducerBlock, /install-pinned-maven-linux-x64\.sh/u);
+    assert.match(operationalProducerBlock, /\$\{RUNNER_TEMP\}\/operational-node-distribution\.txt/u);
+    assert.match(operationalProducerBlock, /\$\{RUNNER_TEMP\}\/operational-java-distribution\.txt/u);
+    assert.match(operationalProducerBlock, /\$\{RUNNER_TEMP\}\/operational-maven-distribution\.txt/u);
+    assert.match(
+      operationalProducerBlock,
+      /- name: Retain operational toolchain provenance after clean build/u,
+    );
+    const operationalBuildIndex = operationalProducerBlock.indexOf(
+      'mvn -B -ntp -DskipTests clean package',
+    );
+    const operationalRetainIndex = operationalProducerBlock.indexOf(
+      '- name: Retain operational toolchain provenance after clean build',
+    );
+    const operationalRunIndex = operationalProducerBlock.indexOf(
+      'node scripts/produce-operational-history.mjs run',
+    );
+    assert.ok(
+      operationalBuildIndex >= 0
+        && operationalBuildIndex < operationalRetainIndex
+        && operationalRetainIndex < operationalRunIndex,
+    );
+    assert.doesNotMatch(
+      operationalProducerBlock.slice(0, operationalRetainIndex),
+      /target\/release-history\/operational-raw\/(?:node|java|maven)-distribution\.txt/u,
+    );
+    assert.match(operationalProducerBlock, /produce-operational-history-self-test\.mjs/u);
+    assert.match(operationalProducerBlock, /produce-operational-history\.mjs run/u);
+    assert.match(
+      operationalProducerBlock,
+      /\[\[ "\$GITHUB_SHA" == "\$SOKLET_OPERATIONAL_CANDIDATE_COMMIT" \]\]/u,
+    );
+    assert.doesNotMatch(
+      operationalProducerBlock,
+      /--(?:duration|cadence|seconds-per-scenario)/u,
+    );
+    assert.match(operationalProducerBlock, /produce-release-history\.mjs operational/u);
+    assert.match(operationalProducerBlock, /verify-release-history\.mjs operational/u);
+    assert.match(operationalProducerBlock, /--gate operational-history/u);
+    assert.match(operationalProducerBlock, /operational-history-raw-/u);
     for (const target of fuzz.policy.targets)
       assert.match(workflow, new RegExp(`target_id: ${target.id}\\n`, 'u'));
-    assertions += 13 + fuzz.policy.targets.length;
+    assertions += 52 + fuzz.policy.targets.length;
   } finally {
     rmSync(root, { recursive: true });
   }

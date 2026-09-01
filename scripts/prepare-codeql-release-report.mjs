@@ -164,8 +164,6 @@ function readSarif(inputRoot) {
     }
     if (!Array.isArray(run.results))
       fail(`CodeQL SARIF run ${index + 1} has no results array.`);
-    if (run.results.length !== 0)
-      fail(`CodeQL SARIF run ${index + 1} contains an unaccepted finding.`);
     requireSuccessfulInvocations(run, `CodeQL SARIF run ${index + 1}`);
   });
   return value;

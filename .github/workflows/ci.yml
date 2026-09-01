@@ -8,6 +8,11 @@ on:
     # Nightly coverage-guided fuzzing and soak tests. PR/push jobs replay the corpus deterministically.
     - cron: '23 8 * * *'
   workflow_dispatch:
+    inputs:
+      operational_candidate_commit:
+        description: Full lowercase candidate commit for the six-hour operational history run
+        required: false
+        type: string
 
 # Cancel superseded push/PR runs on the same ref, but never cancel a scheduled
 # or manually dispatched nightly run before its resource-delta assertions complete.
@@ -581,9 +586,17 @@ jobs:
           name: fuzz-nightly-history-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: error
           retention-days: 90
+          path: target/release-history/fuzz-nightly-history-bundle.json
+
+      - name: Upload fuzz history producer evidence
+        if: steps.history.outputs.complete == 'true'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: fuzz-nightly-history-raw-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 90
           path: |
             fuzz-nightly-history.json
-            target/release-history/fuzz-nightly-history-bundle.json
             target/release-history/fuzz-state/history-state.json
             ${{ runner.temp }}/fuzz-history-java-distribution.txt
 
@@ -591,7 +604,7 @@ jobs:
     name: Nightly Soak (JDK 25)
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Check out
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -615,6 +628,14 @@ jobs:
           path: ~/.m2/repository
           key: soak-nightly-maven-${{ runner.os }}-${{ hashFiles('pom.xml', 'soak/pom.xml') }}
 
+      - name: Restore exact-candidate soak history state
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: target/release-history/soak-state
+          key: release-soak-history-${{ runner.os }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            release-soak-history-${{ runner.os }}-${{ github.sha }}-
+
       - name: Run nightly soak tests
         run: SOKLET_SOAK_PROFILE=nightly mvn -B -ntp -f soak/pom.xml clean test
 
@@ -633,3 +654,187 @@ jobs:
             soak/target/soak-report.md
             soak/target/surefire-reports
             ${{ runner.temp }}/soak-nightly-java-distribution.txt
+
+      - name: Package exact candidate main JAR
+        run: mvn -B -ntp -DskipTests package
+
+      - name: Accumulate exact-candidate soak history
+        id: soak-history
+        shell: bash
+        run: |
+          mkdir -p target/release-history/soak-state
+          previous=()
+          if [[ -f target/release-history/soak-state/history-state.json ]]; then
+            previous=(--previous-state "${{ github.workspace }}/target/release-history/soak-state/history-state.json")
+          fi
+          node scripts/produce-release-history.mjs soak-nightly \
+            --candidate-root "${{ github.workspace }}" \
+            --completed-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --toolchain-evidence "${RUNNER_TEMP}/soak-nightly-java-distribution.txt" \
+            "${previous[@]}" \
+            --state-output "${{ github.workspace }}/target/release-history/soak-state/history-state.json" \
+            --history-output "${{ github.workspace }}/soak-nightly-history.json"
+          if [[ -f soak-nightly-history.json ]]; then
+            printf 'complete=true\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'complete=false\n' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify and bundle complete soak history
+        if: steps.soak-history.outputs.complete == 'true'
+        shell: bash
+        run: |
+          node scripts/verify-release-history.mjs soak-nightly
+          node scripts/create-release-harness-bundle.mjs \
+            --gate soak-nightly-history \
+            --candidate-root "${{ github.workspace }}" \
+            --evidence-root "${{ github.workspace }}" \
+            --output "${{ github.workspace }}/target/release-history/soak-nightly-history-bundle.json"
+
+      - name: Upload soak history accumulation state
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: soak-history-state-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 90
+          path: target/release-history/soak-state/history-state.json
+
+      - name: Upload immutable soak history bundle
+        if: steps.soak-history.outputs.complete == 'true'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: soak-nightly-history-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 90
+          path: target/release-history/soak-nightly-history-bundle.json
+
+      - name: Upload soak history producer evidence
+        if: steps.soak-history.outputs.complete == 'true'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: soak-nightly-history-raw-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 90
+          path: |
+            soak-nightly-history.json
+            target/release-history/soak-state/history-state.json
+            ${{ runner.temp }}/soak-nightly-java-distribution.txt
+
+  operational-history:
+    name: Operational History (exact candidate, JDK 17)
+    if: github.event_name == 'workflow_dispatch' && inputs.operational_candidate_commit != ''
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 420
+    steps:
+      - name: Check out exact operational candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.operational_candidate_commit }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require exact immutable candidate checkout
+        shell: bash
+        env:
+          SOKLET_OPERATIONAL_CANDIDATE_COMMIT: ${{ inputs.operational_candidate_commit }}
+        run: |
+          set -euo pipefail
+          [[ "$SOKLET_OPERATIONAL_CANDIDATE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
+            printf 'operational_candidate_commit must be a full lowercase commit ID.\n' >&2
+            exit 1
+          }
+          [[ "$GITHUB_SHA" == "$SOKLET_OPERATIONAL_CANDIDATE_COMMIT" ]] || {
+            printf 'Executing workflow revision does not match operational_candidate_commit.\n' >&2
+            exit 1
+          }
+          [[ "$(git rev-parse --verify HEAD)" == "$SOKLET_OPERATIONAL_CANDIDATE_COMMIT" ]] || {
+            printf 'Checked-out HEAD does not match operational_candidate_commit.\n' >&2
+            exit 1
+          }
+          [[ -z "$(git status --porcelain=v1 --untracked-files=all)" ]] || {
+            printf 'Exact operational candidate checkout is not clean.\n' >&2
+            exit 1
+          }
+
+      - name: Install checksum-pinned Node and npm
+        shell: bash
+        run: >-
+          bash conformance/official/scripts/install-pinned-node-linux-x64.sh
+          "${RUNNER_TEMP}" "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/operational-node-distribution.txt"
+
+      - name: Install checksum-pinned Corretto 17
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-corretto-linux-x64.sh
+          java "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/operational-java-distribution.txt"
+
+      - name: Install checksum-pinned Maven
+        shell: bash
+        run: >-
+          bash release/scripts/install-pinned-maven-linux-x64.sh
+          "${RUNNER_TEMP}" "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/operational-maven-distribution.txt"
+
+      - name: Self-test operational producer
+        run: node scripts/produce-operational-history-self-test.mjs
+
+      - name: Build exact candidate main JAR
+        run: mvn -B -ntp -DskipTests clean package
+
+      - name: Retain operational toolchain provenance after clean build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/release-history/operational-raw
+          cp -- "${RUNNER_TEMP}/operational-node-distribution.txt" \
+            target/release-history/operational-raw/node-distribution.txt
+          cp -- "${RUNNER_TEMP}/operational-java-distribution.txt" \
+            target/release-history/operational-raw/java-distribution.txt
+          cp -- "${RUNNER_TEMP}/operational-maven-distribution.txt" \
+            target/release-history/operational-raw/maven-distribution.txt
+
+      - name: Run registered six-hour load and observation interval
+        shell: bash
+        run: |
+          node scripts/produce-operational-history.mjs run \
+            --candidate-root "${GITHUB_WORKSPACE}" \
+            --work-root "${GITHUB_WORKSPACE}/target/release-history/operational-raw/work" \
+            --observation-output "${GITHUB_WORKSPACE}/target/release-history/operational-raw/operational-observation.json" \
+            --toolchain-evidence "${GITHUB_WORKSPACE}/target/release-history/operational-raw/java-distribution.txt"
+
+      - name: Finalize, verify, and bundle operational history
+        shell: bash
+        run: |
+          node scripts/produce-release-history.mjs operational \
+            --candidate-root "${GITHUB_WORKSPACE}" \
+            --observation "${GITHUB_WORKSPACE}/target/release-history/operational-raw/operational-observation.json" \
+            --toolchain-evidence "${GITHUB_WORKSPACE}/target/release-history/operational-raw/java-distribution.txt" \
+            --history-output "${GITHUB_WORKSPACE}/operational-history.json"
+          node scripts/verify-release-history.mjs operational
+          node scripts/create-release-harness-bundle.mjs \
+            --gate operational-history \
+            --candidate-root "${GITHUB_WORKSPACE}" \
+            --evidence-root "${GITHUB_WORKSPACE}" \
+            --output "${GITHUB_WORKSPACE}/target/release-history/operational-history-bundle.json"
+
+      - name: Upload immutable operational history bundle
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: operational-history-${{ inputs.operational_candidate_commit }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 90
+          path: target/release-history/operational-history-bundle.json
+
+      - name: Upload operational producer diagnostics
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: operational-history-raw-${{ inputs.operational_candidate_commit }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 90
+          path: |
+            operational-history.json
+            target/release-history/operational-raw

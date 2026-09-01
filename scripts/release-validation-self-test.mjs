@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   copyFileSync,
+  existsSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -120,7 +121,17 @@ const releaseHarnessImporterSelfTestPath = resolve(
   projectRoot,
   'scripts/import-release-harness-evidence-self-test.mjs',
 );
+const releaseWorkflowArtifactVerifierPath = resolve(
+  projectRoot,
+  'scripts/verify-release-workflow-artifacts.mjs',
+);
+const releaseWorkflowArtifactVerifierSelfTestPath = resolve(
+  projectRoot,
+  'scripts/verify-release-workflow-artifacts-self-test.mjs',
+);
 const releaseProducerSourcePaths = [
+  'CHANGELOG.md',
+  'release/release-scan-exceptions.json',
   'release/scripts/produce-release-scans-linux-x64.sh',
   'scripts/prepare-codeql-release-report.mjs',
   'scripts/prepare-codeql-release-report-self-test.mjs',
@@ -128,12 +139,18 @@ const releaseProducerSourcePaths = [
   'scripts/produce-release-benchmarks-self-test.mjs',
   'scripts/produce-release-history.mjs',
   'scripts/produce-release-history-self-test.mjs',
+  'scripts/produce-operational-history.mjs',
+  'scripts/produce-operational-history-self-test.mjs',
   'scripts/produce-release-scans.mjs',
   'scripts/produce-release-scans-self-test.mjs',
   'scripts/stage-codeql-release-provenance.mjs',
   'scripts/stage-codeql-release-provenance-self-test.mjs',
   'scripts/verify-runtime-dependency-surface.mjs',
   'scripts/verify-runtime-dependency-surface-self-test.mjs',
+  'scripts/verify-release-workflow-artifacts.mjs',
+  'scripts/verify-release-workflow-artifacts-self-test.mjs',
+  'verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java',
+  'verification/operational/src/test/java/com/soklet/OperationalHistoryHarnessSelfTest.java',
 ].map((path) => resolve(projectRoot, path));
 const releaseHistoryVerifierPath = resolve(projectRoot, 'scripts/verify-release-history.mjs');
 const releaseScansVerifierPath = resolve(projectRoot, 'scripts/verify-release-scans.mjs');
@@ -189,6 +206,40 @@ function fixturePath(...parts) {
   return resolve(fixtureRoot, ...parts);
 }
 
+function copyInventoryClosure(relativeInventoryPath) {
+  const inventory = JSON.parse(readFileSync(
+    resolve(projectRoot, relativeInventoryPath),
+    'utf8',
+  ));
+  const references = new Set([relativeInventoryPath]);
+  const visit = (value) => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (value !== null && typeof value === 'object') {
+      Object.values(value).forEach(visit);
+      return;
+    }
+    if (typeof value !== 'string')
+      return;
+    const reference = value.split('#', 1)[0];
+    if (!/^(?:conformance|fuzz|src)\//u.test(reference)
+        || /[?*]/u.test(reference)) {
+      return;
+    }
+    const source = resolve(projectRoot, reference);
+    if (existsSync(source) && lstatSync(source).isFile())
+      references.add(reference);
+  };
+  visit(inventory);
+  for (const reference of [...references].sort()) {
+    const destination = fixturePath(reference);
+    mkdirSync(dirname(destination), { recursive: true });
+    copyFileSync(resolve(projectRoot, reference), destination);
+  }
+}
+
 function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
 }
@@ -214,6 +265,11 @@ try {
     ['release-harness bundle builder', releaseHarnessBundleBuilderPath],
     ['release-harness importer', releaseHarnessImporterPath],
     ['release-harness importer self-test', releaseHarnessImporterSelfTestPath],
+    ['release workflow artifact verifier', releaseWorkflowArtifactVerifierPath],
+    [
+      'release workflow artifact verifier self-test',
+      releaseWorkflowArtifactVerifierSelfTestPath,
+    ],
     ...releaseProducerSourcePaths.map((path) => ['release producer source', path]),
     ['release-history verifier', releaseHistoryVerifierPath],
     ['release-scans verifier', releaseScansVerifierPath],
@@ -280,6 +336,19 @@ try {
     `Release-harness importer self-test failed: ${releaseHarnessImporterSelfTest.error?.message
       ?? releaseHarnessImporterSelfTest.stderr ?? releaseHarnessImporterSelfTest.stdout}`,
   );
+  const releaseWorkflowArtifactVerifierSelfTest = spawnSync(
+    process.execPath,
+    [releaseWorkflowArtifactVerifierSelfTestPath],
+    { cwd: projectRoot, encoding: 'utf8' },
+  );
+  assert.equal(
+    releaseWorkflowArtifactVerifierSelfTest.status,
+    0,
+    `Release workflow artifact verifier self-test failed: ${
+      releaseWorkflowArtifactVerifierSelfTest.error?.message
+      ?? releaseWorkflowArtifactVerifierSelfTest.stderr
+      ?? releaseWorkflowArtifactVerifierSelfTest.stdout}`,
+  );
 
   await verifyLoopbackPortReservation(fixturePath('reserved-loopback-port.txt'));
 
@@ -313,10 +382,10 @@ try {
   assert.equal(tracked.toolchains.toystoreJava.vendorVersion, 'Corretto-25.0.4.7.1');
   assert.equal(tracked.promotion.helper.path, 'scripts/release-promotion.mjs');
   assert.equal(tracked.promotion.wrapper.path, 'scripts/promote-release-candidate.sh');
-  assert.equal(tracked.gates.filter(({ status }) => status === 'READY').length, 18);
+  assert.equal(tracked.gates.filter(({ status }) => status === 'READY').length, 23);
   assert.equal(
     tracked.gates.filter(({ status }) => status === 'BLOCKED_HARNESS_MISSING').length,
-    5,
+    0,
   );
   assert.equal(
     tracked.gates.filter(
@@ -343,7 +412,8 @@ try {
     'mcp-benchmarks',
   ]) {
     const gate = tracked.gates.find(({ id }) => id === gateId);
-    assert.equal(gate.status, 'BLOCKED_HARNESS_MISSING');
+    assert.equal(gate.status, 'READY');
+    assert.equal(gate.reason, '');
   }
   for (const gateId of [
     'core-jdk-21',
@@ -446,22 +516,193 @@ try {
     releaseWorkflow,
     /SOKLET_CANDIDATE_COMMIT: \$\{\{ inputs\.candidate_commit \}\}/,
   );
+  assert.match(
+    releaseWorkflow,
+    /      phase:\n[\s\S]*?          - produce\n          - finalize-benchmark\n          - validate/,
+  );
+  assert.match(
+    releaseWorkflow,
+    /      benchmark_regression_approval_reference:\n[\s\S]*?required: false\n        type: string/,
+  );
   const releaseScansJob = releaseWorkflow.match(
     /\n  release-scans:\n([\s\S]*?)\n  mcp-benchmarks:/,
   );
   const benchmarkJob = releaseWorkflow.match(
-    /\n  mcp-benchmarks:\n([\s\S]*?)\n  validate:/,
+    /\n  mcp-benchmarks:\n([\s\S]*?)\n  mcp-benchmarks-finalize:/,
+  );
+  const benchmarkFinalizerJob = releaseWorkflow.match(
+    /\n  mcp-benchmarks-finalize:\n([\s\S]*?)\n  validate:/,
+  );
+  const validateWorkflowJob = releaseWorkflow.match(
+    /\n  validate:\n([\s\S]*)$/,
   );
   assert.notEqual(releaseScansJob, null);
   assert.notEqual(benchmarkJob, null);
+  assert.notEqual(benchmarkFinalizerJob, null);
+  assert.notEqual(validateWorkflowJob, null);
   for (const [label, job] of [
     ['release-scans', releaseScansJob[1]],
     ['mcp-benchmarks', benchmarkJob[1]],
+    ['mcp-benchmarks-finalize', benchmarkFinalizerJob[1]],
+    ['validate', validateWorkflowJob[1]],
   ]) {
     assert.match(
       job,
       /\[\[ "\$GITHUB_SHA" == "\$SOKLET_CANDIDATE_COMMIT" \]\]/,
       `${label} must bind the executing workflow revision to the candidate`,
+    );
+  }
+  for (const job of [releaseScansJob[1], benchmarkJob[1]]) {
+    assert.match(job, /^    if: inputs\.phase == 'produce'$/m);
+  }
+  assert.match(
+    benchmarkFinalizerJob[1],
+    /^    if: inputs\.phase == 'finalize-benchmark'$/m,
+  );
+  assert.match(validateWorkflowJob[1], /^    if: inputs\.phase == 'validate'$/m);
+  assert.match(
+    benchmarkJob[1],
+    /SOKLET_BENCHMARK_APPROVAL_REFERENCE: \$\{\{ inputs\.benchmark_approval_reference \}\}/,
+  );
+  const benchmarkDraftUpload = benchmarkJob[1].match(
+    /      - name: Upload raw benchmark draft for owner review\n([\s\S]*)$/,
+  );
+  assert.notEqual(benchmarkDraftUpload, null);
+  assert.match(
+    benchmarkDraftUpload[1],
+    /^          name: mcp-benchmark-draft-\$\{\{ inputs\.candidate_commit \}\}-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}$/m,
+  );
+  assert.match(
+    benchmarkFinalizerJob[1],
+    /run-id: \$\{\{ inputs\.benchmark_draft_run_id \}\}/,
+  );
+  assert.match(
+    benchmarkFinalizerJob[1],
+    /github-token: \$\{\{ github\.token \}\}/,
+  );
+  const benchmarkDraftProvenanceStep = benchmarkFinalizerJob[1].match(
+    /      - name: Verify successful exact-candidate benchmark draft\n([\s\S]*?)\n\n      - name: Install checksum-pinned Corretto 17/,
+  );
+  assert.notEqual(benchmarkDraftProvenanceStep, null);
+  assert.match(
+    benchmarkDraftProvenanceStep[1],
+    /GITHUB_TOKEN: \$\{\{ github\.token \}\}/,
+  );
+  for (const argument of [
+    '--repository "$GITHUB_REPOSITORY"',
+    '--candidate "${{ inputs.candidate_commit }}"',
+    '--benchmark-draft-run-id "${{ inputs.benchmark_draft_run_id }}"',
+    '--benchmark-draft-artifact-name "${{ inputs.benchmark_draft_artifact_name }}"',
+  ]) {
+    assert.ok(benchmarkDraftProvenanceStep[1].includes(argument));
+  }
+  assert.ok(
+    benchmarkFinalizerJob[1]
+      .indexOf('Verify successful exact-candidate benchmark draft')
+      < benchmarkFinalizerJob[1]
+        .indexOf('Download exact reviewed benchmark draft'),
+  );
+  assert.match(
+    benchmarkFinalizerJob[1],
+    /--reviewed-draft-sha256 "\$SOKLET_BENCHMARK_REVIEWED_SHA256"/,
+  );
+  assert.match(
+    benchmarkFinalizerJob[1],
+    /--signoff-reference "\$SOKLET_BENCHMARK_SIGNOFF_REFERENCE"/,
+  );
+  assert.match(
+    benchmarkFinalizerJob[1],
+    /SOKLET_BENCHMARK_REGRESSION_APPROVAL_REFERENCE: \$\{\{ inputs\.benchmark_regression_approval_reference \}\}/,
+  );
+  assert.match(
+    benchmarkFinalizerJob[1],
+    /--regression-approval-reference[\s\S]*?"\$SOKLET_BENCHMARK_REGRESSION_APPROVAL_REFERENCE"/,
+  );
+  assert.match(
+    benchmarkFinalizerJob[1],
+    /\[\[ "\$SOKLET_BENCHMARK_REGRESSION_APPROVAL_REFERENCE" != "\$SOKLET_BENCHMARK_SIGNOFF_REFERENCE" \]\]/,
+  );
+  assert.match(
+    benchmarkFinalizerJob[1],
+    /name: mcp-benchmarks-\$\{\{ inputs\.candidate_commit \}\}-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/,
+  );
+  const benchmarkBundleUpload = benchmarkFinalizerJob[1].match(
+    /      - name: Upload immutable benchmark bundle\n([\s\S]*?)\n\n      - name: Upload finalized benchmark producer evidence/,
+  );
+  assert.notEqual(benchmarkBundleUpload, null);
+  assert.match(
+    benchmarkBundleUpload[1],
+    /^          path: \$\{\{ runner\.temp \}\}\/mcp-benchmarks-bundle\.json$/m,
+  );
+  assert.doesNotMatch(benchmarkBundleUpload[1], /^          path: \|$/m);
+  assert.match(
+    benchmarkFinalizerJob[1],
+    /name: mcp-benchmarks-raw-\$\{\{ inputs\.candidate_commit \}\}-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/,
+  );
+  assert.equal(
+    validateWorkflowJob[1].match(
+      /uses: actions\/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131/g,
+    )?.length,
+    5,
+  );
+  const provenanceStep = validateWorkflowJob[1].match(
+    /      - name: Verify successful exact-candidate producer artifacts\n([\s\S]*?)\n\n      - name: Download exact fuzz-history bundle artifact/,
+  );
+  assert.notEqual(provenanceStep, null);
+  assert.match(provenanceStep[1], /GITHUB_TOKEN: \$\{\{ github\.token \}\}/);
+  assert.match(
+    provenanceStep[1],
+    /node scripts\/verify-release-workflow-artifacts\.mjs \\/,
+  );
+  for (const argument of [
+    '--repository "$GITHUB_REPOSITORY"',
+    '--candidate "$SOKLET_CANDIDATE_COMMIT"',
+    '--fuzz-run-id "$SOKLET_FUZZ_BUNDLE_RUN_ID"',
+    '--fuzz-artifact-name "$SOKLET_FUZZ_BUNDLE_ARTIFACT"',
+    '--soak-run-id "$SOKLET_SOAK_BUNDLE_RUN_ID"',
+    '--soak-artifact-name "$SOKLET_SOAK_BUNDLE_ARTIFACT"',
+    '--operational-run-id "$SOKLET_OPERATIONAL_BUNDLE_RUN_ID"',
+    '--operational-artifact-name "$SOKLET_OPERATIONAL_BUNDLE_ARTIFACT"',
+    '--scans-run-id "$SOKLET_RELEASE_SCANS_BUNDLE_RUN_ID"',
+    '--scans-artifact-name "$SOKLET_RELEASE_SCANS_BUNDLE_ARTIFACT"',
+    '--benchmark-run-id "$SOKLET_BENCHMARK_BUNDLE_RUN_ID"',
+    '--benchmark-artifact-name "$SOKLET_BENCHMARK_BUNDLE_ARTIFACT"',
+  ]) {
+    assert.match(provenanceStep[1], new RegExp(argument.replaceAll('$', '\\$')));
+  }
+  const provenanceIndex = validateWorkflowJob[1]
+    .indexOf('Verify successful exact-candidate producer artifacts');
+  const firstDownloadIndex = validateWorkflowJob[1]
+    .indexOf('Download exact fuzz-history bundle artifact');
+  assert.ok(provenanceIndex >= 0 && provenanceIndex < firstDownloadIndex);
+  assert.equal(
+    validateWorkflowJob[1].match(/github-token: \$\{\{ github\.token \}\}/g)?.length,
+    5,
+  );
+  assert.equal(
+    validateWorkflowJob[1].match(/run-id: \$\{\{ inputs\.[a-z_]+_run_id \}\}/g)?.length,
+    5,
+  );
+  for (const [bundle, environment] of [
+    [
+      'fuzz/fuzz-nightly-history-bundle.json',
+      'SOKLET_RELEASE_FUZZ_NIGHTLY_HISTORY_BUNDLE',
+    ],
+    [
+      'soak/soak-nightly-history-bundle.json',
+      'SOKLET_RELEASE_SOAK_NIGHTLY_HISTORY_BUNDLE',
+    ],
+    [
+      'operational/operational-history-bundle.json',
+      'SOKLET_RELEASE_OPERATIONAL_HISTORY_BUNDLE',
+    ],
+    ['scans/release-scans-bundle.json', 'SOKLET_RELEASE_SCANS_BUNDLE'],
+    ['benchmarks/mcp-benchmarks-bundle.json', 'SOKLET_RELEASE_MCP_BENCHMARKS_BUNDLE'],
+  ]) {
+    assert.match(validateWorkflowJob[1], new RegExp(bundle.replaceAll('.', '\\.')));
+    assert.match(
+      validateWorkflowJob[1],
+      new RegExp(`printf '${environment}=%s\\\\n'`),
     );
   }
 
@@ -629,6 +870,8 @@ try {
     'produce-release-benchmarks-self-test.mjs',
     'produce-release-history.mjs',
     'produce-release-history-self-test.mjs',
+    'produce-operational-history.mjs',
+    'produce-operational-history-self-test.mjs',
     'produce-release-scans.mjs',
     'produce-release-scans-self-test.mjs',
     'stage-codeql-release-provenance.mjs',
@@ -650,6 +893,22 @@ try {
   );
   assert.match(
     releaseValidator,
+    /\$project_root\/release\/release-scan-exceptions\.json/,
+  );
+  assert.match(
+    releaseValidator,
+    /release_benchmarks_release_note="\$project_root\/CHANGELOG\.md"/,
+  );
+  assert.match(
+    releaseValidator,
+    /\$project_root\/verification\/operational\/src\/main\/java\/com\/soklet\/OperationalHistoryHarness\.java/,
+  );
+  assert.match(
+    releaseValidator,
+    /\$project_root\/verification\/operational\/src\/test\/java\/com\/soklet\/OperationalHistoryHarnessSelfTest\.java/,
+  );
+  assert.match(
+    releaseValidator,
     /for release_harness_source in[\s\S]*?\[\[ -f "\$release_harness_source" && ! -L "\$release_harness_source" \]\]/,
   );
   const harnessConfigIndex = releaseValidator.indexOf(
@@ -666,6 +925,7 @@ try {
   assert.ok(harnessSelfTestIndex < firstEvidenceRecordIndex);
   for (const selfTestVariable of [
     'release_history_producer_self_test',
+    'operational_history_producer_self_test',
     'release_scans_codeql_preparer_self_test',
     'release_scans_codeql_provenance_self_test',
     'release_scans_runtime_surface_self_test',
@@ -1416,6 +1676,8 @@ try {
     mkdirSync(dirname(destination), { recursive: true });
     copyFileSync(resolve(projectRoot, reference), destination);
   }
+  copyInventoryClosure('conformance/mcp-finite-bound-inventory.json');
+  copyInventoryClosure('conformance/mcp-privacy-boundary-inventory.json');
   const fixtureMatrixClosureRegistryPath = fixturePath(
     'release/mcp-conformance-matrix-closure.json',
   );
@@ -1451,7 +1713,6 @@ try {
     'evidence/raw/matrix-closure/matrix-closure.json',
   );
   const resolvedMatrixClosure = verifyMatrixClosure({
-    finiteBoundProjectRoot: projectRoot,
     manifestPath: fixtureManifestPath,
     projectRoot: fixtureRoot,
     registryPath: fixtureMatrixClosureRegistryPath,

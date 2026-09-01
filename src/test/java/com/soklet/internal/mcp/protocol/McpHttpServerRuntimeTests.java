@@ -1399,6 +1399,7 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void headerCountAndEncodedByteLimitsHaveExactListenerBoundaries()
 			throws Exception {
 		byte[] body = discoverBody("1", DISCOVER_METHOD, PROTOCOL_VERSION);

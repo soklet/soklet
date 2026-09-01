@@ -19,12 +19,14 @@ import {
 } from './import-release-harness-evidence.mjs';
 import {
   prepareReleaseScanEvidence,
+  releaseScanFindingFingerprint,
   ReleaseScanProducerError,
 } from './produce-release-scans.mjs';
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'soklet-release-scans-producer-')));
 const projectRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 let assertions = 0;
+const NOW = new Date('2026-08-31T12:00:00Z');
 
 function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
@@ -40,6 +42,171 @@ function emptySarif(tool) {
     runs: [{ results: [], tool: { driver: { name: tool } } }],
     version: '2.1.0',
   });
+}
+
+function codeqlFinding() {
+  return {
+    locations: [{
+      physicalLocation: {
+        artifactLocation: {
+          uri: 'src/main/java/com/soklet/Example.java',
+          uriBaseId: '%SRCROOT%',
+        },
+        region: { endColumn: 18, endLine: 7, startColumn: 5, startLine: 7 },
+      },
+    }],
+    ruleId: 'java/example-security-rule',
+  };
+}
+
+function codeqlSarif({
+  commit = 'a'.repeat(40),
+  findings = [],
+  securitySeverity = '6.5',
+} = {}) {
+  return canonicalJson({
+    runs: [{
+      invocations: [{
+        executionSuccessful: true,
+        exitCode: 0,
+        toolConfigurationNotifications: [],
+        toolExecutionNotifications: [],
+      }],
+      results: findings,
+      tool: {
+        driver: {
+          name: 'CodeQL',
+          rules: findings.length === 0 ? [] : [{
+            id: findings[0].ruleId,
+            properties: { 'security-severity': securitySeverity },
+          }],
+        },
+      },
+      versionControlProvenance: [{
+        repositoryUri: 'https://github.com/example/soklet',
+        revisionId: commit,
+      }],
+    }],
+    version: '2.1.0',
+  });
+}
+
+function codeqlApprovalFor(finding, commit = 'a'.repeat(40)) {
+  const region = finding.locations[0].physicalLocation.region;
+  const path = finding.locations[0].physicalLocation.artifactLocation.uri;
+  return {
+    approvedAt: '2026-08-30T00:00:00Z',
+    approvalReference: 'SEC-5678',
+    commit,
+    expiresAt: '2026-09-15T00:00:00Z',
+    fingerprint: releaseScanFindingFingerprint({
+      commit,
+      endColumn: region.endColumn,
+      endLine: region.endLine,
+      path,
+      ruleId: finding.ruleId,
+      startColumn: region.startColumn,
+      startLine: region.startLine,
+    }),
+    owner: 'security@example.test',
+    path,
+    rationale: 'Synthetic CodeQL false positive used to test exact exception plumbing.',
+    ruleId: finding.ruleId,
+    scanner: 'codeql',
+  };
+}
+
+function gitleaksFinding({ severity } = {}) {
+  return {
+    Commit: '1'.repeat(40),
+    EndColumn: 30,
+    EndLine: 12,
+    File: 'src/test/resources/example.properties',
+    RuleID: 'generic-api-key',
+    ...(severity === undefined ? {} : { Severity: severity }),
+    StartColumn: 7,
+    StartLine: 12,
+  };
+}
+
+function findingIdentity(finding) {
+  return {
+    commit: finding.Commit,
+    endColumn: finding.EndColumn,
+    endLine: finding.EndLine,
+    path: finding.File,
+    ruleId: finding.RuleID,
+    startColumn: finding.StartColumn,
+    startLine: finding.StartLine,
+  };
+}
+
+function gitleaksSarif(finding) {
+  return canonicalJson({
+    runs: [{
+      results: [{
+        locations: [{
+          physicalLocation: {
+            artifactLocation: { uri: finding.File },
+            region: {
+              endColumn: finding.EndColumn,
+              endLine: finding.EndLine,
+              startColumn: finding.StartColumn,
+              startLine: finding.StartLine,
+            },
+          },
+        }],
+        partialFingerprints: { commitSha: finding.Commit },
+        ruleId: finding.RuleID,
+      }],
+      tool: { driver: { name: 'gitleaks' } },
+    }],
+    version: '2.1.0',
+  });
+}
+
+function approvalFor(finding) {
+  return {
+    approvedAt: '2026-08-30T00:00:00Z',
+    approvalReference: 'SEC-1234',
+    commit: finding.Commit,
+    expiresAt: '2026-09-15T00:00:00Z',
+    fingerprint: releaseScanFindingFingerprint(findingIdentity(finding)),
+    owner: 'security@example.test',
+    path: finding.File,
+    rationale: 'Synthetic false positive used to test exact exception plumbing.',
+    ruleId: finding.RuleID,
+    scanner: 'gitleaks',
+  };
+}
+
+function configureFinding(value, { approvals, finding = gitleaksFinding() } = {}) {
+  writeFileSync(join(value.rawReportsRoot, '02-gitleaks.sarif'), gitleaksSarif(finding));
+  writeFileSync(join(value.rawReportsRoot, '03-gitleaks.json'), canonicalJson([finding]));
+  writeFileSync(value.approvalsPath, canonicalJson({
+    exceptions: approvals ?? [approvalFor(finding)],
+    formatVersion: 1,
+  }));
+  value.now = NOW;
+  return { approval: approvalFor(finding), finding };
+}
+
+function configureCodeqlFinding(value, {
+  approval,
+  finding = codeqlFinding(),
+  securitySeverity = '6.5',
+} = {}) {
+  const selectedApproval = approval ?? codeqlApprovalFor(finding);
+  writeFileSync(
+    join(value.rawReportsRoot, '00-codeql-java.sarif'),
+    codeqlSarif({ findings: [finding], securitySeverity }),
+  );
+  writeFileSync(value.approvalsPath, canonicalJson({
+    exceptions: [selectedApproval],
+    formatVersion: 1,
+  }));
+  value.now = NOW;
+  return { approval: selectedApproval, finding };
 }
 
 function workflowJob(source, jobId, nextJobId) {
@@ -66,9 +233,11 @@ function fixture(label) {
   const fixtureRoot = join(root, label);
   const candidateRoot = join(fixtureRoot, 'candidate');
   const configRoot = join(candidateRoot, 'config');
+  const releaseRoot = join(candidateRoot, 'release');
   const provenanceRoot = join(fixtureRoot, 'provenance');
   const rawReportsRoot = join(fixtureRoot, 'raw');
   mkdirSync(configRoot, { recursive: true });
+  mkdirSync(releaseRoot);
   mkdirSync(provenanceRoot);
   mkdirSync(rawReportsRoot);
 
@@ -90,7 +259,7 @@ function fixture(label) {
   for (const [name, bytes] of Object.entries(provenanceBytes))
     provenanceDigests[name] = write(provenanceRoot, name, bytes);
 
-  write(rawReportsRoot, '00-codeql-java.sarif', emptySarif('CodeQL'));
+  write(rawReportsRoot, '00-codeql-java.sarif', codeqlSarif());
   write(
     rawReportsRoot,
     '01-spotbugs.xml',
@@ -102,6 +271,8 @@ function fixture(label) {
     externalRuntimeDependencyCount: 0,
     formatVersion: 1,
   }));
+  const approvalsPath = join(releaseRoot, 'release-scan-exceptions.json');
+  writeFileSync(approvalsPath, canonicalJson({ exceptions: [], formatVersion: 1 }));
 
   const reports = [
     '00-codeql-java.sarif',
@@ -116,6 +287,22 @@ function fixture(label) {
     evidenceContract: 'soklet.release.release-scans.v1',
     id: 'release-scans',
     policy: {
+      allowlist: {
+        fields: [
+          'approvedAt',
+          'approvalReference',
+          'commit',
+          'expiresAt',
+          'fingerprint',
+          'owner',
+          'path',
+          'rationale',
+          'ruleId',
+          'scanner',
+        ],
+        maximumLifetimeDays: 30,
+        wildcardSuppression: 'PROHIBITED',
+      },
       codeql: {
         bundle: { linuxTarGzSha256: provenanceDigests['codeql-bundle-linux64.tar.gz'] },
         javaQueries: {
@@ -149,6 +336,7 @@ function fixture(label) {
     producerWorkflowSha256: 'f'.repeat(64),
   };
   return {
+    approvalsPath,
     candidate,
     candidateRoot,
     contract,
@@ -231,6 +419,13 @@ try {
   assert.match(runner, /-Dsoklet\.spotbugs\.excludeFilterFile="\$spotbugs_filter"/u);
   assert.match(runner, /verify-runtime-dependency-surface\.mjs/u);
   assert.match(runner, /produce-release-scans\.mjs/u);
+  assert.match(runner, /set \+e[\s\S]*?gitleaks_exit=\$\?[\s\S]*?set -e/u);
+  assert.match(runner, /run_gitleaks_report sarif[\s\S]*?run_gitleaks_report json/u);
+  assert.match(runner, /--approvals "\$approvals"/u);
+  assert.ok(
+    runner.indexOf('run_gitleaks_report json') < runner.indexOf('produce-release-scans.mjs'),
+    'both Gitleaks reports must be attempted before the producer decision',
+  );
   const pom = readFileSync(join(projectRoot, 'pom.xml'), 'utf8');
   assert.match(
     pom,
@@ -240,7 +435,7 @@ try {
     pom,
     /<excludeFilterFile>\$\{soklet\.spotbugs\.excludeFilterFile\}<\/excludeFilterFile>/u,
   );
-  assertions += 18;
+  assertions += 22;
 
   const releaseWorkflow = readFileSync(
     join(projectRoot, '.github/workflows/release-validation.yml'),
@@ -287,11 +482,148 @@ try {
   assert.match(releaseScanJob, /produce-release-scans-linux-x64\.sh/u);
   assert.match(releaseScanJob, /release-scans-bundle\.json/u);
   assert.match(releaseScanJob, /retention-days: 90/u);
-  assertions += 14;
+  const immutableBundleUpload = releaseScanJob.match(
+    /      - name: Upload immutable release-scan bundle\n([\s\S]*?)(?=\n      - name:)/u,
+  );
+  assert.notEqual(immutableBundleUpload, null);
+  assert.match(
+    immutableBundleUpload[1],
+    /^          name: release-scans-\$\{\{ inputs\.candidate_commit \}\}-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}$/m,
+  );
+  assert.match(
+    immutableBundleUpload[1],
+    /^          path: \$\{\{ runner\.temp \}\}\/release-scans-bundle\.json$/m,
+  );
+  assertions += 17;
 
   const valid = fixture('valid');
   const result = prepareReleaseScanEvidence(valid);
   assert.equal(result.reports.length, 6);
+  assertions++;
+
+  const accepted = fixture('accepted-finding');
+  const acceptedInput = configureFinding(accepted);
+  prepareReleaseScanEvidence(accepted);
+  const acceptedSummary = JSON.parse(
+    readFileSync(join(accepted.evidenceRoot, 'release-scans.json'), 'utf8'),
+  );
+  assert.deepEqual(acceptedSummary.allowlist, [acceptedInput.approval]);
+  assert.deepEqual(acceptedSummary.findings, [{
+    accepted: true,
+    commit: acceptedInput.finding.Commit,
+    fingerprint: acceptedInput.approval.fingerprint,
+    path: acceptedInput.finding.File,
+    ruleId: acceptedInput.finding.RuleID,
+    scanner: 'gitleaks',
+    severity: 'UNSPECIFIED',
+  }]);
+  assertions += 2;
+
+  const acceptedCodeql = fixture('accepted-codeql-finding');
+  const acceptedCodeqlInput = configureCodeqlFinding(acceptedCodeql);
+  prepareReleaseScanEvidence(acceptedCodeql);
+  const acceptedCodeqlSummary = JSON.parse(
+    readFileSync(join(acceptedCodeql.evidenceRoot, 'release-scans.json'), 'utf8'),
+  );
+  assert.deepEqual(acceptedCodeqlSummary.allowlist, [acceptedCodeqlInput.approval]);
+  assert.deepEqual(acceptedCodeqlSummary.findings, [{
+    accepted: true,
+    commit: acceptedCodeqlInput.approval.commit,
+    fingerprint: acceptedCodeqlInput.approval.fingerprint,
+    path: acceptedCodeqlInput.approval.path,
+    ruleId: acceptedCodeqlInput.approval.ruleId,
+    scanner: 'codeql',
+    severity: 'MEDIUM',
+  }]);
+  assertions += 2;
+
+  const highCodeql = fixture('high-codeql-finding');
+  configureCodeqlFinding(highCodeql, { securitySeverity: '8.1' });
+  assert.throws(
+    () => prepareReleaseScanEvidence(highCodeql),
+    /codeql HIGH finding cannot be excepted/,
+  );
+  assertions++;
+
+  const criticalCodeql = fixture('critical-codeql-finding');
+  configureCodeqlFinding(criticalCodeql, { securitySeverity: '9.1' });
+  assert.throws(
+    () => prepareReleaseScanEvidence(criticalCodeql),
+    /codeql CRITICAL finding cannot be excepted/,
+  );
+  assertions++;
+
+  const wrongCodeqlRevision = fixture('wrong-codeql-revision');
+  const wrongRevisionFinding = codeqlFinding();
+  writeFileSync(
+    join(wrongCodeqlRevision.rawReportsRoot, '00-codeql-java.sarif'),
+    codeqlSarif({ commit: 'b'.repeat(40), findings: [wrongRevisionFinding] }),
+  );
+  writeFileSync(wrongCodeqlRevision.approvalsPath, canonicalJson({
+    exceptions: [codeqlApprovalFor(wrongRevisionFinding)],
+    formatVersion: 1,
+  }));
+  wrongCodeqlRevision.now = NOW;
+  assert.throws(
+    () => prepareReleaseScanEvidence(wrongCodeqlRevision),
+    /does not bind the exact candidate commit/,
+  );
+  assertions++;
+
+  const unmatched = fixture('unmatched-finding');
+  configureFinding(unmatched, { approvals: [] });
+  assert.throws(
+    () => prepareReleaseScanEvidence(unmatched),
+    /no exact unexpired exception/,
+  );
+  assertions++;
+
+  const expired = fixture('expired-exception');
+  const { approval: expiredApproval, finding: expiredFinding } = configureFinding(expired);
+  writeFileSync(expired.approvalsPath, canonicalJson({
+    exceptions: [{
+      ...expiredApproval,
+      approvedAt: '2026-07-01T00:00:00Z',
+      expiresAt: '2026-07-30T00:00:00Z',
+    }],
+    formatVersion: 1,
+  }));
+  assert.equal(expiredFinding.File, expiredApproval.path);
+  assert.throws(() => prepareReleaseScanEvidence(expired), /not currently effective and unexpired/);
+  assertions += 2;
+
+  const duplicate = fixture('duplicate-exception');
+  const { approval: duplicateApproval } = configureFinding(duplicate);
+  writeFileSync(duplicate.approvalsPath, canonicalJson({
+    exceptions: [duplicateApproval, duplicateApproval],
+    formatVersion: 1,
+  }));
+  assert.throws(() => prepareReleaseScanEvidence(duplicate), /duplicate exact exception/);
+  assertions++;
+
+  const wildcard = fixture('wildcard-exception');
+  const { approval: wildcardApproval } = configureFinding(wildcard);
+  writeFileSync(wildcard.approvalsPath, canonicalJson({
+    exceptions: [{ ...wildcardApproval, path: 'src/**/example.properties' }],
+    formatVersion: 1,
+  }));
+  assert.throws(() => prepareReleaseScanEvidence(wildcard), /must not contain a wildcard/);
+  assertions++;
+
+  const high = fixture('high-finding');
+  configureFinding(high, { finding: gitleaksFinding({ severity: 'HIGH' }) });
+  assert.throws(() => prepareReleaseScanEvidence(high), /HIGH finding cannot be excepted/);
+  assertions++;
+
+  const mismatchedReports = fixture('mismatched-reports');
+  configureFinding(mismatchedReports);
+  const mismatched = gitleaksFinding();
+  mismatched.EndColumn++;
+  writeFileSync(
+    join(mismatchedReports.rawReportsRoot, '02-gitleaks.sarif'),
+    gitleaksSarif(mismatched),
+  );
+  assert.throws(() => prepareReleaseScanEvidence(mismatchedReports), /do not describe the same/);
   assertions++;
   const summary = JSON.parse(readFileSync(join(valid.evidenceRoot, 'release-scans.json'), 'utf8'));
   assert.deepEqual(summary.candidate, valid.candidate);

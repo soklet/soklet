@@ -6,45 +6,55 @@ is a full candidate commit SHA, the workflow checks out that exact commit, and
 any repository change requires a new commit and a complete new run.
 
 The format-v2 manifest defines an exact ordered universe of 29 release gates.
-It is intentionally **not release-runnable end to end yet**: 18 gates have
-complete checked-in dispatch configuration, five remain
-`BLOCKED_HARNESS_MISSING`, and six downstream gates remain
-`BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, for 11 fail-closed blockers total.
-`READY` means only that a gate has an executable, pinned validation path. It
-never means that the gate has passed for a candidate; only a typed PASS receipt
-inside the format-v2 evidence envelope from the exact candidate workflow can
-establish that.
+Twenty-three gates now have complete checked-in, executable validation paths;
+none remain `BLOCKED_HARNESS_MISSING`. Six downstream gates remain
+`BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, so the candidate is still not
+release-runnable end to end. `READY` means only that a gate has an executable,
+pinned validation path. It never means that the gate passed for a candidate;
+only a typed PASS receipt from the exact candidate workflow can establish
+that.
 
-Five gates remain `BLOCKED_HARNESS_MISSING`, although their shared consumer
-and bundle path now exists:
+The five sustained or externally reviewed harnesses are now `READY`:
 
-- `fuzz-nightly-history` has a candidate-bound CI producer and rolling
-  accumulator. After U8 commits the candidate's literal reproducible-build
-  timestamp, that final candidate must still complete seven consecutive
-  scheduled UTC days before it can emit a bundle;
-- `soak-nightly-history` has fail-closed assembly code, but is not scheduled
-  for accumulation because the current nightly profile SHA-256
-  (`e405a0ad59c4f60feb06a99e3ea01568fc9379476819314e31fd1cd7cae914b3`)
-  does not equal the frozen registered SHA-256
-  (`cfd2b6efbac2257eff4615b22462939779bf06de7f23ed719d0faac03e6a022c`);
-- `operational-history` has a strict observation validator and packager, but
-  no load producer yet. The registered six-hour observation plus ten-minute
-  reserve cannot fit GitHub's six-hour hosted-job limit, so it needs an
-  approved longer-lived runner or a contract amendment;
-- `release-scans` has the exact-candidate CodeQL/SpotBugs/Gitleaks/runtime-
-  dependency producer wired into release validation. A full-ancestry run on
-  the current candidate finds 30 Gitleaks `generic-api-key` results while the
-  frozen contract records 26 pending review and contains no approved
-  exceptions, so the producer correctly rejects the candidate; and
-- `mcp-benchmarks` has the isolated 3.5.1-versus-candidate JSON comparison and
-  candidate Profile 1 schema baseline implementation. It still needs a final
-  non-SNAPSHOT 4.0.0 candidate run on the registered Ubuntu environment and a
-  durable owner review bound to the exact raw draft before finalization.
+- `fuzz-nightly-history` and `soak-nightly-history` run candidate-bound
+  scheduled producers, retain exact-candidate daily state, require seven
+  consecutive UTC days, and publish dedicated bundle-only artifacts once the
+  registered histories are complete;
+- `operational-history` runs a real HTTP, MCP, and SSE load producer for the
+  registered 22,200-second window on a self-hosted Linux x64 runner. It samples
+  actual process resources and framework metrics, audits semantic delivery,
+  cardinality, trace logs, and canary containment, and has no shortened
+  production duration switch;
+- `release-scans` combines candidate-bound CodeQL, SpotBugs, Gitleaks, and
+  runtime-dependency reports. CodeQL and Gitleaks findings require exact,
+  candidate-tracked, project-owner exceptions lasting no more than 30 days;
+  HIGH and CRITICAL findings cannot be excepted. The checked-in exception
+  registry is empty, so real findings still fail until fixed or individually
+  reviewed and approved; and
+- `mcp-benchmarks` executes the registered 3.5.1-versus-4.0.0 JMH comparison,
+  retains the raw draft for review, and finalizes only the exact reviewed
+  bytes. A score ratio below 0.90 additionally requires a hashed 4.0.0
+  changelog entry describing the regression and a separate project-owner
+  approval bound to that same reviewed draft.
 
-Their candidate-side consumer path is now fail closed. The producer commands
-validate the exact registered role basenames in their artifact directory, and
-the release validator accepts each result only as a pre-acquired canonical
-bundle named by its dedicated environment variable:
+The release workflow has separate `produce`, `finalize-benchmark`, and
+`validate` phases. The finalizer and validator download exact artifacts from
+named prior workflow runs; successful consumer artifacts contain only the
+canonical bundle, while raw producer diagnostics are retained separately.
+Before downloading evidence, the benchmark finalizer and validator ask the
+GitHub Actions API for the named run and artifact and require the exact
+repository, successful completed run, candidate commit, producer workflow,
+allowed trigger, run attempt, and unexpired candidate/run/attempt-bound
+artifact name. A run ID and artifact name alone cannot substitute a locally
+manufactured benchmark draft or bundle.
+The final candidate must still accumulate the histories, complete the
+operational run, satisfy the scans, and receive benchmark review before these
+gates can produce PASS receipts.
+
+The candidate-side consumer path is fail closed. The producer commands
+validate the exact registered role basenames, and the release validator accepts
+each result only as a pre-acquired canonical bundle named by its dedicated
+environment variable:
 
 - `SOKLET_RELEASE_FUZZ_NIGHTLY_HISTORY_BUNDLE`;
 - `SOKLET_RELEASE_SOAK_NIGHTLY_HISTORY_BUNDLE`;
@@ -57,9 +67,9 @@ canonical importer against the clean candidate root, retains the imported
 receipt, and converts only the receipt's verified ordered role descriptors
 into the ordinary format-v2 gate evidence. A missing, symlinked, substituted,
 wrong-candidate, or byte-changed bundle fails before PASS evidence is recorded.
-The five manifest rows remain blocked until their workflow producers can
-actually create those bundles; the existence of this consumer dispatch alone
-does not make a harness `READY`.
+The bundle, candidate commit, candidate tree, main JAR, POM, registry,
+producer-workflow bytes, and gate-specific tracked inputs must all agree before
+the importer can emit a receipt.
 
 The shared producer-side bundle command is:
 
@@ -187,9 +197,9 @@ snapshot, and observation containment waits for actual typed failure-log
 publication before exact inspection. The original exact counts and timeout
 assertions remain; production behavior, public API, and frozen inventories
 are unchanged. This local clean-test result does not replace the candidate's
-pinned JDK 17 `clean verify` gate. `release-scans` remains
-blocked until its exact scanner/toolchain pin, severity policy, and retained
-report contract are implemented.
+pinned JDK 17 `clean verify` gate. `release-scans` is now `READY`, but no scan
+PASS receipt exists until the exact candidate reports contain no unapproved
+findings.
 
 A subsequent containment revalidation on the pinned Amazon Corretto
 21.0.12.9.1 toolchain (`java 21.0.12.1`) passes the exact

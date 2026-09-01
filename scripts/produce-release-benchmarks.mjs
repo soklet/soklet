@@ -25,6 +25,7 @@ import {
 const GATE = 'mcp-benchmarks';
 const BASELINE = '3.5.1';
 const CANDIDATE = '4.0.0';
+const BENCHMARK_RELEASE_NOTE_PATH = 'CHANGELOG.md';
 const MAXIMUM_FILE_BYTES = 64 * 1024 * 1024;
 const JSON_BENCHMARKS = Object.freeze([
   'com.soklet.McpReleaseJsonJmhBenchmark.jsonParse',
@@ -75,6 +76,23 @@ function requireDigestBoundSignoffReference(value, reviewedDraftSha256) {
   return value;
 }
 
+function requireDigestBoundRegressionApprovalReference(
+  value,
+  reviewedDraftSha256,
+) {
+  requireString(value, 'benchmark regression approval reference');
+  const match = value.match(
+    /^([A-Za-z][A-Za-z0-9+.-]*:[^\s#]+)#sha256=([0-9a-f]{64})$/u,
+  );
+  if (match === null || match[2] !== reviewedDraftSha256) {
+    fail(
+      'Benchmark regression approval reference must be a durable URI-like reference '
+        + 'ending in #sha256=<reviewed-draft-sha256>.',
+    );
+  }
+  return value;
+}
+
 function requireAbsoluteDirectory(path, label) {
   if (typeof path !== 'string' || !isAbsolute(path))
     fail(`${label} must be an absolute path.`);
@@ -106,6 +124,38 @@ function readRegularFile(path, label, maximumBytes = MAXIMUM_FILE_BYTES) {
   if (!stats.isFile() || stats.isSymbolicLink() || stats.size > maximumBytes)
     fail(`${label} must be a bounded regular nonsymlink file.`);
   return readFileSync(path);
+}
+
+function benchmarkReleaseNoteEntry(candidateRoot) {
+  const bytes = readRegularFile(
+    join(candidateRoot, BENCHMARK_RELEASE_NOTE_PATH),
+    'candidate benchmark release note',
+    4 * 1024 * 1024,
+  );
+  const text = bytes.toString('utf8');
+  if (!Buffer.from(text, 'utf8').equals(bytes)
+      || text.includes('\r') || !text.endsWith('\n')) {
+    fail('Candidate benchmark release note must be UTF-8/LF text ending in LF.');
+  }
+  const headings = [...text.matchAll(
+    /^## 4\.0\.0(?: \([^()\n]+\))?\n/gmu,
+  )];
+  if (headings.length !== 1) {
+    fail(
+      'Candidate CHANGELOG.md must have exactly one 4.0.0 release-note '
+        + 'heading, optionally followed by one parenthetical label.',
+    );
+  }
+  const start = headings[0].index;
+  const next = text.indexOf('\n## ', start + 1);
+  const entry = text.slice(start, next < 0 ? text.length : next + 1);
+  if (!/\bbenchmark(?:s|ing)?\b/iu.test(entry) || !/\bregression\b/iu.test(entry)) {
+    fail(
+      'A benchmark regression requires the 4.0.0 CHANGELOG entry to describe '
+        + 'the benchmark regression.',
+    );
+  }
+  return Buffer.from(entry, 'utf8');
 }
 
 function writeNewFile(path, bytes, mode = 0o600) {
@@ -431,8 +481,9 @@ function draftRun(workRoot, rawPath, runResult, rawBytes) {
 
 function benchmarkMean(repetitions, artifact, key) {
   const scores = repetitions.flatMap((repetition) => repetition.runs)
-    .filter((run) => run.normalized.artifact === artifact)
-    .map((run) => run.normalized.rawResult[key]);
+    .map((run) => run.normalized ?? run)
+    .filter((run) => run.artifact === artifact)
+    .map((run) => run.rawResult[key]);
   return scores.reduce((sum, score) => sum + score, 0) / scores.length;
 }
 
@@ -550,10 +601,6 @@ export function runMcpReleaseBenchmarks({
     / benchmarkMean(repetitions, BASELINE, 'jsonParseScore');
   const writeRatio = benchmarkMean(repetitions, CANDIDATE, 'jsonWriteScore')
     / benchmarkMean(repetitions, BASELINE, 'jsonWriteScore');
-  if (parseRatio < contract.policy.comparison.minimumJsonParseWriteScoreRatio
-      || writeRatio < contract.policy.comparison.minimumJsonParseWriteScoreRatio) {
-    fail('MCP JSON benchmark regression requires a registry amendment and owner approval.');
-  }
   const logBytes = Buffer.from(`${log.join('\n').replace(/\n*$/u, '')}\n`,
     'utf8');
   writeNewFile(join(exactWorkRoot, 'mcp-benchmarks.log'), logBytes);
@@ -625,6 +672,7 @@ export function finalizeMcpReleaseBenchmarks({
   candidateRoot,
   contractConfigurationProvider = contractConfiguration,
   evidenceRoot,
+  regressionApprovalReference,
   reviewedDraftSha256,
   signoffReference,
   workRoot,
@@ -690,6 +738,41 @@ export function finalizeMcpReleaseBenchmarks({
     retainRawJmhResult(retainedByPath, verified.retainedRaw);
     return verified.normalized;
   });
+  const derivedParseRatio = benchmarkMean(
+    repetitions,
+    CANDIDATE,
+    'jsonParseScore',
+  ) / benchmarkMean(repetitions, BASELINE, 'jsonParseScore');
+  const derivedWriteRatio = benchmarkMean(
+    repetitions,
+    CANDIDATE,
+    'jsonWriteScore',
+  ) / benchmarkMean(repetitions, BASELINE, 'jsonWriteScore');
+  if (!Number.isFinite(derivedParseRatio) || !Number.isFinite(derivedWriteRatio)
+      || Math.abs(derivedParseRatio - draft.comparison.jsonParseScoreRatio) > 1e-12
+      || Math.abs(derivedWriteRatio - draft.comparison.jsonWriteScoreRatio) > 1e-12) {
+    fail('Benchmark draft comparison ratios do not derive from retained raw JMH.');
+  }
+  const regression = derivedParseRatio
+      < contract.policy.comparison.minimumJsonParseWriteScoreRatio
+    || derivedWriteRatio < contract.policy.comparison.minimumJsonParseWriteScoreRatio;
+  let acceptedRegressionApprovalReference = null;
+  let releaseNoteSha256 = null;
+  if (regression) {
+    acceptedRegressionApprovalReference =
+      requireDigestBoundRegressionApprovalReference(
+        regressionApprovalReference,
+        reviewedDraftSha256,
+      );
+    if (acceptedRegressionApprovalReference === signoffReference) {
+      fail('Benchmark regression approval must be separate from benchmark review sign-off.');
+    }
+    releaseNoteSha256 = sha256(benchmarkReleaseNoteEntry(exactCandidateRoot));
+  } else if (regressionApprovalReference !== undefined
+      && regressionApprovalReference !== null
+      && regressionApprovalReference !== '') {
+    fail('A non-regressing benchmark must not claim regression approval.');
+  }
   const logBytes = readRegularFile(join(exactWorkRoot, 'mcp-benchmarks.log'),
     'benchmark log');
   if (sha256(logBytes) !== draft.benchmarkLogSha256)
@@ -711,9 +794,9 @@ export function finalizeMcpReleaseBenchmarks({
     repetitions,
     review: {
       approvalReference: draft.approvalReference,
-      regressionApprovalReference: null,
-      regressionApproved: false,
-      releaseNoteSha256: null,
+      regressionApprovalReference: acceptedRegressionApprovalReference,
+      regressionApproved: regression,
+      releaseNoteSha256,
       reviewedDraftSha256,
       signoffReference,
     },
@@ -740,18 +823,26 @@ function usage() {
     + '--candidate-root <absolute-path> --work-root <absolute-path> '
     + '--evidence-root <new-absolute-path> --bundle-output <new-absolute-path> '
     + '--reviewed-draft-sha256 <lowercase-sha256> '
-    + '--signoff-reference <uri#sha256=reviewed-draft-sha256>';
+    + '--signoff-reference <uri#sha256=reviewed-draft-sha256> '
+    + '[--regression-approval-reference '
+    + '<separate-owner-uri#sha256=reviewed-draft-sha256>]';
 }
 
 function parseArguments(args) {
   const mode = args.shift();
-  const allowed = mode === 'run'
+  const required = mode === 'run'
     ? new Set(['--candidate-root', '--work-root', '--approval-reference'])
     : mode === 'finalize'
       ? new Set(['--candidate-root', '--work-root', '--evidence-root',
         '--bundle-output', '--reviewed-draft-sha256', '--signoff-reference'])
       : null;
-  if (allowed === null || args.length !== allowed.size * 2)
+  const allowed = required === null
+    ? null
+    : new Set([
+      ...required,
+      ...(mode === 'finalize' ? ['--regression-approval-reference'] : []),
+    ]);
+  if (allowed === null || args.length % 2 !== 0)
     fail(usage());
   const values = new Map();
   for (let index = 0; index < args.length; index += 2) {
@@ -760,7 +851,7 @@ function parseArguments(args) {
       fail(usage());
     values.set(args[index], args[index + 1]);
   }
-  if (values.size !== allowed.size)
+  if ([...required].some((flag) => !values.has(flag)))
     fail(usage());
   if (mode === 'run') {
     return { mode, options: {
@@ -773,6 +864,7 @@ function parseArguments(args) {
     bundleOutput: values.get('--bundle-output'),
     candidateRoot: values.get('--candidate-root'),
     evidenceRoot: values.get('--evidence-root'),
+    regressionApprovalReference: values.get('--regression-approval-reference'),
     reviewedDraftSha256: values.get('--reviewed-draft-sha256'),
     signoffReference: values.get('--signoff-reference'),
     workRoot: values.get('--work-root'),

@@ -420,10 +420,6 @@
           "mavenPluginVersion": "4.9.8.3",
           "rejection": "EVERY_UNFILTERED_MEDIUM_OR_HIGH_FINDING",
           "threshold": "Medium"
-        },
-        "unapprovedBaselineFindings": {
-          "gitleaksGenericApiKeyCount": 26,
-          "status": "FAIL_CLOSED_PENDING_INDIVIDUAL_SECURITY_REVIEW"
         }
       },
       "producer": ".github/workflows/codeql.yml plus release-validation scan aggregation",
@@ -495,7 +491,7 @@
           "minimum": 144
         },
         "profile": "nightly",
-        "profileSha256": "cfd2b6efbac2257eff4615b22462939779bf06de7f23ed719d0faac03e6a022c",
+        "profileSha256": "e405a0ad59c4f60feb06a99e3ea01568fc9379476819314e31fd1cd7cae914b3",
         "scenarios": [
           {
             "id": "HTTP abort churn",

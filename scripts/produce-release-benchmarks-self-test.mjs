@@ -16,6 +16,7 @@ import {
   canonicalJson,
   createReleaseHarnessBundle,
   ReleaseHarnessEvidenceImportError,
+  verifyReleaseHarnessEvidenceDirectory,
   verifyReleaseHarnessConfiguration,
 } from './import-release-harness-evidence.mjs';
 import {
@@ -173,13 +174,22 @@ function normalizedProfile(operation, result) {
   };
 }
 
-function finalizationFixture(label) {
+const defaultChangelog = '# Changelog\n\n## 4.0.0\n\n- Release fixture.\n\n## 3.5.1\n\n- Baseline fixture.\n';
+const regressionChangelog = '# Changelog\n\n## 4.0.0\n\n- Document the accepted JSON benchmark regression.\n\n## 3.5.1\n\n- Baseline fixture.\n';
+const regressionReleaseNote = '## 4.0.0\n\n- Document the accepted JSON benchmark regression.\n\n';
+
+function finalizationFixture(label, {
+  baselineScore = 100,
+  candidateScore = 100,
+  changelog = defaultChangelog,
+} = {}) {
   const root = join(selfTestRoot, label);
   const candidateRoot = join(root, 'candidate');
   const workRoot = join(root, 'work');
   const rawRoot = join(workRoot, 'raw');
   mkdirSync(candidateRoot, { recursive: true });
   mkdirSync(rawRoot, { recursive: true });
+  writeFileSync(join(candidateRoot, 'CHANGELOG.md'), changelog, 'utf8');
   const log = [
     'Soklet MCP release benchmark raw execution',
     `SOKLET_BENCHMARK_CONFIGURATION_SHA256=${digestJson(configuration)}`,
@@ -191,13 +201,14 @@ function finalizationFixture(label) {
     const artifacts = first === '3.5.1'
       ? ['3.5.1', '4.0.0'] : ['4.0.0', '3.5.1'];
     const runs = artifacts.map((artifact, runIndex) => {
+      const score = artifact === '4.0.0' ? candidateScore : baselineScore;
       const results = JSON_BENCHMARKS.map((benchmark) =>
-        entry(benchmark, 100, artifact));
+        entry(benchmark, score, artifact));
       const relativePath = `raw/repetition-${ordinal}-run-${runIndex}-${artifact}.json`;
       const path = join(workRoot, relativePath);
       const rawBytes = writeCanonical(path, results);
       rawPaths.push(path);
-      const normalized = normalizedJsonRun(artifact, 100, 100);
+      const normalized = normalizedJsonRun(artifact, score, score);
       log.push(
         `SOKLET_BENCHMARK_RUN=${ordinal}:${runIndex}:${artifact}:PASS:${normalized.rawResultSha256}`,
         `SOKLET_BENCHMARK_RAW=${relativePath}:${sha256(rawBytes)}`,
@@ -237,8 +248,8 @@ function finalizationFixture(label) {
     comparison: {
       artifact: contract.policy.comparison.artifact,
       jarSha256: contract.policy.comparison.jarSha256,
-      jsonParseScoreRatio: 1,
-      jsonWriteScoreRatio: 1,
+      jsonParseScoreRatio: candidateScore / baselineScore,
+      jsonWriteScoreRatio: candidateScore / baselineScore,
       pomSha256: contract.policy.comparison.pomSha256,
     },
     configuration,
@@ -306,7 +317,154 @@ try {
   );
   assert.equal(evidence.rawJmhResults.length, configuration.forks * 2 + 1);
   assert.deepEqual(evidence.reviewedDraft, accepted.draft);
-  assertionCount += 4;
+  assert.equal(evidence.review.regressionApproved, false);
+  assert.equal(evidence.review.regressionApprovalReference, null);
+  assert.equal(evidence.review.releaseNoteSha256, null);
+  assertionCount += 7;
+
+  const regression = finalizationFixture('accepted-regression', {
+    candidateScore: 80,
+    changelog: regressionChangelog,
+  });
+  const regressionApprovalReference =
+    `owner-system:benchmark-regression/789#sha256=${regression.reviewedDraftSha256}`;
+  finalizeFixture(regression, { regressionApprovalReference });
+  const regressionEvidence = JSON.parse(readFileSync(
+    join(regression.evidenceRoot, 'mcp-benchmarks.json'),
+    'utf8',
+  ));
+  assert.equal(regressionEvidence.comparison.jsonParseScoreRatio, 0.8);
+  assert.equal(regressionEvidence.comparison.jsonWriteScoreRatio, 0.8);
+  assert.equal(regressionEvidence.review.regressionApproved, true);
+  assert.equal(
+    regressionEvidence.review.regressionApprovalReference,
+    regressionApprovalReference,
+  );
+  assert.equal(
+    regressionEvidence.review.releaseNoteSha256,
+    sha256(Buffer.from(regressionReleaseNote, 'utf8')),
+  );
+  assert.equal(verifyReleaseHarnessEvidenceDirectory({
+    candidateRoot: regression.candidateRoot,
+    evidenceRoot: regression.evidenceRoot,
+    gate: 'mcp-benchmarks',
+    registryPath: registry.registryPath,
+  }).candidate.candidateCommit, candidate.candidateCommit);
+  assertionCount += 6;
+
+  writeFileSync(
+    join(regression.candidateRoot, 'CHANGELOG.md'),
+    regressionChangelog.replace(
+      'Document the accepted JSON benchmark regression.',
+      'Document a different accepted JSON benchmark regression.',
+    ),
+    'utf8',
+  );
+  assert.throws(
+    () => verifyReleaseHarnessEvidenceDirectory({
+      candidateRoot: regression.candidateRoot,
+      evidenceRoot: regression.evidenceRoot,
+      gate: 'mcp-benchmarks',
+      registryPath: registry.registryPath,
+    }),
+    /release-note digest does not match the candidate/u,
+  );
+  assertionCount++;
+
+  const missingRegressionApproval = finalizationFixture(
+    'missing-regression-approval',
+    { candidateScore: 80, changelog: regressionChangelog },
+  );
+  assert.throws(
+    () => finalizeFixture(missingRegressionApproval),
+    /benchmark regression approval reference must be/u,
+  );
+  assertionCount++;
+
+  const unboundRegressionApproval = finalizationFixture(
+    'unbound-regression-approval',
+    { candidateScore: 80, changelog: regressionChangelog },
+  );
+  assert.throws(
+    () => finalizeFixture(unboundRegressionApproval, {
+      regressionApprovalReference:
+        `owner-system:benchmark-regression/789#sha256=${'0'.repeat(64)}`,
+    }),
+    /regression approval reference must be .*reviewed-draft-sha256/u,
+  );
+  assertionCount++;
+
+  const sharedRegressionApproval = finalizationFixture(
+    'shared-regression-approval',
+    { candidateScore: 80, changelog: regressionChangelog },
+  );
+  const sharedReference =
+    `review-system:signoff/456#sha256=${sharedRegressionApproval.reviewedDraftSha256}`;
+  assert.throws(
+    () => finalizeFixture(sharedRegressionApproval, {
+      regressionApprovalReference: sharedReference,
+      signoffReference: sharedReference,
+    }),
+    /must be separate from benchmark review sign-off/u,
+  );
+  assertionCount++;
+
+  const undocumentedRegression = finalizationFixture(
+    'undocumented-regression',
+    { candidateScore: 80 },
+  );
+  assert.throws(
+    () => finalizeFixture(undocumentedRegression, {
+      regressionApprovalReference:
+        `owner-system:benchmark-regression/789#sha256=${undocumentedRegression.reviewedDraftSha256}`,
+    }),
+    /CHANGELOG entry to describe the benchmark regression/u,
+  );
+  assertionCount++;
+
+  const prefixCollisionRegression = finalizationFixture(
+    'prefix-collision-regression',
+    {
+      candidateScore: 80,
+      changelog: '# Changelog\n\n## 4.0.01\n\n- Document the accepted JSON benchmark regression.\n',
+    },
+  );
+  assert.throws(
+    () => finalizeFixture(prefixCollisionRegression, {
+      regressionApprovalReference:
+        `owner-system:benchmark-regression/789#sha256=${prefixCollisionRegression.reviewedDraftSha256}`,
+    }),
+    /exactly one 4\.0\.0 release-note heading/u,
+  );
+  assertionCount++;
+
+  const duplicateReleaseNoteRegression = finalizationFixture(
+    'duplicate-release-note-regression',
+    {
+      candidateScore: 80,
+      changelog: `${regressionChangelog}\n## 4.0.0 (Duplicate)\n\n- Duplicate benchmark regression.\n`,
+    },
+  );
+  assert.throws(
+    () => finalizeFixture(duplicateReleaseNoteRegression, {
+      regressionApprovalReference:
+        `owner-system:benchmark-regression/789#sha256=${duplicateReleaseNoteRegression.reviewedDraftSha256}`,
+    }),
+    /exactly one 4\.0\.0 release-note heading/u,
+  );
+  assertionCount++;
+
+  const spuriousRegressionApproval = finalizationFixture(
+    'spurious-regression-approval',
+  );
+  assert.throws(
+    () => finalizeFixture(spuriousRegressionApproval, {
+      regressionApprovalReference:
+        `owner-system:benchmark-regression/789#sha256=${spuriousRegressionApproval.reviewedDraftSha256}`,
+    }),
+    /non-regressing benchmark must not claim regression approval/u,
+  );
+  assertionCount++;
 
   const alteredDraft = finalizationFixture('altered-draft');
   alteredDraft.draft.environment.cpuModel = 'changed-after-review';

@@ -404,6 +404,10 @@ function scanRoles(contract, candidate) {
         toolConfigurationNotifications: [],
         toolExecutionNotifications: [],
       }];
+      run.versionControlProvenance = [{
+        repositoryUri: 'https://github.com/example/soklet',
+        revisionId: candidate.candidateCommit,
+      }];
     }
     return canonicalJson({ runs: [run], version: '2.1.0' });
   };
@@ -441,6 +445,178 @@ function scanRoles(contract, candidate) {
     runtimeDependencySurface: { externalRuntimeDependencyCount: 0 },
   };
   return [fileRole(contract.roles[0], summary), reportsRole];
+}
+
+function approvedScanFixture({ severity } = {}) {
+  const rawFinding = {
+    Commit: '1'.repeat(40),
+    EndColumn: 30,
+    EndLine: 12,
+    File: 'src/test/resources/example.properties',
+    Match: 'REDACTED',
+    RuleID: 'generic-api-key',
+    Secret: 'REDACTED',
+    ...(severity === undefined ? {} : { Severity: severity }),
+    StartColumn: 7,
+    StartLine: 12,
+  };
+  const identity = {
+    commit: rawFinding.Commit,
+    endColumn: rawFinding.EndColumn,
+    endLine: rawFinding.EndLine,
+    path: rawFinding.File,
+    ruleId: rawFinding.RuleID,
+    startColumn: rawFinding.StartColumn,
+    startLine: rawFinding.StartLine,
+  };
+  const fingerprint = sha256(Buffer.from(canonicalJson(identity), 'utf8'));
+  const approval = {
+    approvedAt: '2026-08-23T00:00:00Z',
+    approvalReference: 'SEC-1234',
+    commit: rawFinding.Commit,
+    expiresAt: '2026-09-15T00:00:00Z',
+    fingerprint,
+    owner: 'security@example.test',
+    path: rawFinding.File,
+    rationale: 'Synthetic false positive used to test exact exception validation.',
+    ruleId: rawFinding.RuleID,
+    scanner: 'gitleaks',
+  };
+  const finding = {
+    accepted: true,
+    commit: rawFinding.Commit,
+    fingerprint,
+    path: rawFinding.File,
+    ruleId: rawFinding.RuleID,
+    scanner: 'gitleaks',
+    severity: severity ?? 'UNSPECIFIED',
+  };
+  const sarif = {
+    runs: [{
+      results: [{
+        locations: [{
+          physicalLocation: {
+            artifactLocation: { uri: rawFinding.File },
+            region: {
+              endColumn: rawFinding.EndColumn,
+              endLine: rawFinding.EndLine,
+              startColumn: rawFinding.StartColumn,
+              startLine: rawFinding.StartLine,
+            },
+          },
+        }],
+        partialFingerprints: { commitSha: rawFinding.Commit },
+        ruleId: rawFinding.RuleID,
+      }],
+      tool: { driver: { name: 'gitleaks' } },
+    }],
+    version: '2.1.0',
+  };
+  return { approval, finding, rawFinding, sarif };
+}
+
+function approvedCodeqlScanFixture({
+  candidateCommit = 'a'.repeat(40),
+  securitySeverity = '6.5',
+} = {}) {
+  const ruleId = 'java/example-security-rule';
+  const path = 'src/main/java/com/soklet/Example.java';
+  const identity = {
+    commit: candidateCommit,
+    endColumn: 18,
+    endLine: 7,
+    path,
+    ruleId,
+    startColumn: 5,
+    startLine: 7,
+  };
+  const fingerprint = sha256(Buffer.from(canonicalJson(identity), 'utf8'));
+  const severityScore = Number(securitySeverity);
+  const severity = severityScore >= 9 ? 'CRITICAL'
+    : severityScore >= 7 ? 'HIGH' : severityScore >= 4 ? 'MEDIUM' : 'LOW';
+  const approval = {
+    approvedAt: '2026-08-23T00:00:00Z',
+    approvalReference: 'SEC-5678',
+    commit: candidateCommit,
+    expiresAt: '2026-09-15T00:00:00Z',
+    fingerprint,
+    owner: 'security@example.test',
+    path,
+    rationale: 'Synthetic CodeQL false positive used to test exact exception validation.',
+    ruleId,
+    scanner: 'codeql',
+  };
+  const finding = {
+    accepted: true,
+    commit: candidateCommit,
+    fingerprint,
+    path,
+    ruleId,
+    scanner: 'codeql',
+    severity,
+  };
+  const sarif = {
+    runs: [{
+      invocations: [{
+        executionSuccessful: true,
+        exitCode: 0,
+        toolConfigurationNotifications: [],
+        toolExecutionNotifications: [],
+      }],
+      results: [{
+        locations: [{
+          physicalLocation: {
+            artifactLocation: { uri: path, uriBaseId: '%SRCROOT%' },
+            region: {
+              endColumn: identity.endColumn,
+              endLine: identity.endLine,
+              startColumn: identity.startColumn,
+              startLine: identity.startLine,
+            },
+          },
+        }],
+        ruleId,
+      }],
+      tool: {
+        driver: {
+          name: 'CodeQL',
+          rules: [{ id: ruleId, properties: { 'security-severity': securitySeverity } }],
+        },
+      },
+      versionControlProvenance: [{
+        repositoryUri: 'https://github.com/example/soklet',
+        revisionId: candidateCommit,
+      }],
+    }],
+    version: '2.1.0',
+  };
+  return { approval, finding, sarif };
+}
+
+function applyApprovedScanFixture(bundle, fixture) {
+  replaceDirectoryEntry(bundle, 'scan-reports', '02-gitleaks.sarif', fixture.sarif);
+  replaceDirectoryEntry(bundle, 'scan-reports', '03-gitleaks.json', [fixture.rawFinding]);
+  mutateJsonRole(bundle, 'scan-summary', (evidence) => {
+    evidence.allowlist = [fixture.approval];
+    evidence.findings = [fixture.finding];
+  });
+}
+
+function applyApprovedCodeqlScanFixture(bundle, fixture) {
+  replaceDirectoryEntry(bundle, 'scan-reports', '00-codeql-java.sarif', fixture.sarif);
+  mutateJsonRole(bundle, 'scan-summary', (evidence) => {
+    evidence.allowlist = [fixture.approval];
+    evidence.findings = [fixture.finding];
+  });
+}
+
+function writeScanApprovalRegistry(root, exceptions) {
+  const releaseRoot = join(root, 'release');
+  mkdirSync(releaseRoot, { recursive: true });
+  writeFileSync(
+    join(releaseRoot, 'release-scan-exceptions.json'),
+    canonicalJson({ exceptions, formatVersion: 1 }),
+  );
 }
 
 function rolesFor(contract, candidate, now = NOW) {
@@ -687,6 +863,12 @@ function run() {
   };
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'soklet-release-harness-self-test-')));
   try {
+    writeScanApprovalRegistry(root, []);
+    writeFileSync(
+      join(root, 'CHANGELOG.md'),
+      '# Changelog\n\n## 4.0.0\n\n- Document the accepted JSON benchmark regression.\n\n## 3.5.1\n\n- Baseline fixture.\n',
+      'utf8',
+    );
     for (const [label, mutateRegistry] of [
       ['registry-policy-drift', (registry) => {
         registry.contracts[0].policy.perTargetDurationSeconds = 1;
@@ -703,7 +885,7 @@ function run() {
       const path = writeFixture(root, label, registry);
       assert.throws(
         () => verifyReleaseHarnessConfiguration(path),
-        /exact MCP-0-12 approval/,
+        /reviewed U7 approval/,
         label,
       );
       assertionCount++;
@@ -784,6 +966,97 @@ function run() {
       validReceipt = receipt;
       assertionCount += 11;
     }
+
+    const approvedScanContract = configuration.contracts.get('release-scans');
+    const approvedScan = approvedScanFixture();
+    const approvedScanBundle = validBundle(approvedScanContract, candidate, NOW);
+    applyApprovedScanFixture(approvedScanBundle, approvedScan);
+    Object.assign(approvedScanBundle, wrapContent(approvedScanBundle.content));
+    writeScanApprovalRegistry(root, [approvedScan.approval]);
+    const approvedScanBundlePath = writeFixture(
+      root,
+      'approved-release-scan',
+      approvedScanBundle,
+    );
+    const approvedScanReceiptPath = join(
+      root,
+      `${String(fixtureOrdinal++).padStart(3, '0')}-approved-release-scan-receipt.json`,
+    );
+    const approvedScanReceipt = importReleaseHarnessEvidence({
+      bundlePath: approvedScanBundlePath,
+      candidateIdentityProvider: () => clone(candidate),
+      candidateRoot: root,
+      gate: 'release-scans',
+      now: NOW,
+      outputPath: approvedScanReceiptPath,
+      registryPath: configuration.registryPath,
+    });
+    assert.equal(approvedScanReceipt.gate, 'release-scans');
+    assert.deepEqual(
+      verifyImportedBundleReceipt({
+        bundlePath: approvedScanBundlePath,
+        candidateIdentityProvider: () => clone(candidate),
+        candidateRoot: root,
+        now: NOW,
+        receiptPath: approvedScanReceiptPath,
+        registryPath: configuration.registryPath,
+      }),
+      approvedScanReceipt,
+    );
+    const approvedScanEvidenceRoot = materializeBundleRoles(
+      root,
+      'approved-release-scan-roles',
+      approvedScanContract,
+      approvedScanBundle,
+    );
+    assert.equal(verifyReleaseHarnessEvidenceDirectory({
+      evidenceRoot: approvedScanEvidenceRoot,
+      gate: 'release-scans',
+      now: NOW,
+      registryPath: configuration.registryPath,
+    }).candidate.candidateCommit, candidate.candidateCommit);
+    writeScanApprovalRegistry(root, []);
+    assertionCount += 3;
+
+    const approvedCodeqlScan = approvedCodeqlScanFixture({
+      candidateCommit: candidate.candidateCommit,
+    });
+    const approvedCodeqlBundle = validBundle(approvedScanContract, candidate, NOW);
+    applyApprovedCodeqlScanFixture(approvedCodeqlBundle, approvedCodeqlScan);
+    Object.assign(approvedCodeqlBundle, wrapContent(approvedCodeqlBundle.content));
+    writeScanApprovalRegistry(root, [approvedCodeqlScan.approval]);
+    const approvedCodeqlBundlePath = writeFixture(
+      root,
+      'approved-codeql-release-scan',
+      approvedCodeqlBundle,
+    );
+    const approvedCodeqlReceiptPath = join(
+      root,
+      `${String(fixtureOrdinal++).padStart(3, '0')}-approved-codeql-release-scan-receipt.json`,
+    );
+    const approvedCodeqlReceipt = importReleaseHarnessEvidence({
+      bundlePath: approvedCodeqlBundlePath,
+      candidateIdentityProvider: () => clone(candidate),
+      candidateRoot: root,
+      gate: 'release-scans',
+      now: NOW,
+      outputPath: approvedCodeqlReceiptPath,
+      registryPath: configuration.registryPath,
+    });
+    assert.equal(approvedCodeqlReceipt.gate, 'release-scans');
+    assert.deepEqual(
+      verifyImportedBundleReceipt({
+        bundlePath: approvedCodeqlBundlePath,
+        candidateIdentityProvider: () => clone(candidate),
+        candidateRoot: root,
+        now: NOW,
+        receiptPath: approvedCodeqlReceiptPath,
+        registryPath: configuration.registryPath,
+      }),
+      approvedCodeqlReceipt,
+    );
+    writeScanApprovalRegistry(root, []);
+    assertionCount += 2;
 
     const fuzzContract = configuration.contracts.get('fuzz-nightly-history');
     const missingHistoryRoot = materializeBundleRoles(
@@ -1099,6 +1372,147 @@ function run() {
         });
       }),
     });
+
+    const expiredScan = approvedScanFixture();
+    expiredScan.approval.approvedAt = '2026-07-01T00:00:00Z';
+    expiredScan.approval.expiresAt = '2026-07-30T00:00:00Z';
+    writeScanApprovalRegistry(root, [expiredScan.approval]);
+    expectImportFailure({
+      candidate, configuration, gate: 'release-scans', label: 'expired-exact-scan-exception', root,
+      mutate: (bundle) => applyApprovedScanFixture(bundle, expiredScan),
+    });
+    writeScanApprovalRegistry(root, []);
+
+    const wildcardScan = approvedScanFixture();
+    wildcardScan.approval.path = 'src/**/example.properties';
+    writeScanApprovalRegistry(root, [wildcardScan.approval]);
+    expectImportFailure({
+      candidate, configuration, gate: 'release-scans', label: 'wildcard-scan-exception', root,
+      mutate: (bundle) => applyApprovedScanFixture(bundle, wildcardScan),
+    });
+    writeScanApprovalRegistry(root, []);
+
+    const duplicateScan = approvedScanFixture();
+    writeScanApprovalRegistry(root, [duplicateScan.approval, duplicateScan.approval]);
+    expectImportFailure({
+      candidate, configuration, gate: 'release-scans', label: 'duplicate-exact-scan-exception', root,
+      mutate: (bundle) => {
+        applyApprovedScanFixture(bundle, duplicateScan);
+        mutateJsonRole(bundle, 'scan-summary', (evidence) => {
+          evidence.allowlist.push(clone(duplicateScan.approval));
+        });
+      },
+    });
+    writeScanApprovalRegistry(root, []);
+
+    const commitMismatchScan = approvedScanFixture();
+    commitMismatchScan.approval.commit = '2'.repeat(40);
+    writeScanApprovalRegistry(root, [commitMismatchScan.approval]);
+    expectImportFailure({
+      candidate, configuration, gate: 'release-scans', label: 'scan-exception-commit-mismatch', root,
+      mutate: (bundle) => applyApprovedScanFixture(bundle, commitMismatchScan),
+    });
+    writeScanApprovalRegistry(root, []);
+
+    const highScan = approvedScanFixture({ severity: 'HIGH' });
+    writeScanApprovalRegistry(root, [highScan.approval]);
+    expectImportFailure({
+      candidate, configuration, gate: 'release-scans', label: 'high-scan-exception', root,
+      mutate: (bundle) => applyApprovedScanFixture(bundle, highScan),
+    });
+    writeScanApprovalRegistry(root, []);
+
+    const unmatchedScan = approvedScanFixture();
+    writeScanApprovalRegistry(root, [unmatchedScan.approval]);
+    expectImportFailure({
+      candidate, configuration, gate: 'release-scans', label: 'unmatched-scan-exception', root,
+      mutate: (bundle) => mutateJsonRole(bundle, 'scan-summary', (evidence) => {
+        evidence.allowlist = [unmatchedScan.approval];
+      }),
+    });
+    writeScanApprovalRegistry(root, []);
+
+    const mismatchedRawScan = approvedScanFixture();
+    writeScanApprovalRegistry(root, [mismatchedRawScan.approval]);
+    expectImportFailure({
+      candidate, configuration, gate: 'release-scans', label: 'gitleaks-format-mismatch', root,
+      mutate: (bundle) => {
+        applyApprovedScanFixture(bundle, mismatchedRawScan);
+        const changedSarif = clone(mismatchedRawScan.sarif);
+        changedSarif.runs[0].results[0].locations[0]
+          .physicalLocation.region.endColumn++;
+        replaceDirectoryEntry(
+          bundle,
+          'scan-reports',
+          '02-gitleaks.sarif',
+          changedSarif,
+        );
+      },
+    });
+    writeScanApprovalRegistry(root, []);
+
+    const registryMismatchScan = approvedScanFixture();
+    writeScanApprovalRegistry(root, []);
+    expectImportFailure({
+      candidate, configuration, gate: 'release-scans', label: 'candidate-scan-registry-mismatch', root,
+      mutate: (bundle) => applyApprovedScanFixture(bundle, registryMismatchScan),
+    });
+
+    const highCodeqlScan = approvedCodeqlScanFixture({
+      candidateCommit: candidate.candidateCommit,
+      securitySeverity: '8.1',
+    });
+    writeScanApprovalRegistry(root, [highCodeqlScan.approval]);
+    expectImportFailure({
+      candidate, configuration, gate: 'release-scans', label: 'high-codeql-exception', root,
+      mutate: (bundle) => applyApprovedCodeqlScanFixture(bundle, highCodeqlScan),
+    });
+    writeScanApprovalRegistry(root, []);
+
+    const criticalCodeqlScan = approvedCodeqlScanFixture({
+      candidateCommit: candidate.candidateCommit,
+      securitySeverity: '9.1',
+    });
+    writeScanApprovalRegistry(root, [criticalCodeqlScan.approval]);
+    expectImportFailure({
+      candidate, configuration, gate: 'release-scans', label: 'critical-codeql-exception', root,
+      mutate: (bundle) => applyApprovedCodeqlScanFixture(bundle, criticalCodeqlScan),
+    });
+    writeScanApprovalRegistry(root, []);
+
+    const wrongRevisionCodeqlScan = approvedCodeqlScanFixture({
+      candidateCommit: 'c'.repeat(40),
+    });
+    writeScanApprovalRegistry(root, [wrongRevisionCodeqlScan.approval]);
+    expectImportFailure({
+      candidate, configuration, gate: 'release-scans', label: 'codeql-provenance-mismatch', root,
+      mutate: (bundle) => applyApprovedCodeqlScanFixture(bundle, wrongRevisionCodeqlScan),
+    });
+    writeScanApprovalRegistry(root, []);
+
+    const malformedSeverityCodeqlScan = approvedCodeqlScanFixture({
+      candidateCommit: candidate.candidateCommit,
+    });
+    malformedSeverityCodeqlScan.sarif.runs[0].tool.driver.rules[0]
+      .properties['security-severity'] = 'not-a-score';
+    writeScanApprovalRegistry(root, [malformedSeverityCodeqlScan.approval]);
+    expectImportFailure({
+      candidate, configuration, gate: 'release-scans', label: 'malformed-codeql-severity', root,
+      mutate: (bundle) => applyApprovedCodeqlScanFixture(bundle, malformedSeverityCodeqlScan),
+    });
+    writeScanApprovalRegistry(root, []);
+
+    const wrongFingerprintCodeqlScan = approvedCodeqlScanFixture({
+      candidateCommit: candidate.candidateCommit,
+    });
+    wrongFingerprintCodeqlScan.approval.fingerprint = '0'.repeat(64);
+    writeScanApprovalRegistry(root, [wrongFingerprintCodeqlScan.approval]);
+    expectImportFailure({
+      candidate, configuration, gate: 'release-scans', label: 'codeql-fingerprint-mismatch', root,
+      mutate: (bundle) => applyApprovedCodeqlScanFixture(bundle, wrongFingerprintCodeqlScan),
+    });
+    writeScanApprovalRegistry(root, []);
+
     expectImportFailure({
       candidate, configuration, gate: 'release-scans', label: 'hidden-codeql-result', root,
       mutate: (bundle) => replaceDirectoryEntry(

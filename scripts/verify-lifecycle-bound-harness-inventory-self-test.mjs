@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  buildDiscoveryCensus,
   buildLifecycleScopeObservations,
   buildReviewedLifecycleScopeRows,
   collectLifecycleBoundHarnessEvidence,
@@ -119,6 +120,7 @@ for (const [name, reduced] of [
   ['successfulChargesAreRetainedAfterEveryDownstreamFailure', 2],
   ['rejectedAndIrrelevantWorkNeverInvokesTheProvider', 1],
   ['testLargeRequestBodyMemoryHandling', 1],
+  ['headerCountAndEncodedByteLimitsHaveExactListenerBoundaries', 1],
 ]) {
   run(`source-bound generation count ${name}`, () => {
     const document = clone(INVENTORY);
@@ -126,6 +128,23 @@ for (const [name, reduced] of [
     expectFailure(() => verifyDocument(document), /semantic closure rows/u);
   });
 }
+
+run('new listener-bound execution scopes remain required', () => {
+  for (const name of [
+    'aggregateInputRequestTreesFailClosedWithoutCanaryAndServerRecovers',
+    'aggregateDynamicResourcePageFailsClosedWithoutCanaryAndRecovers',
+    'applicationResultBoundsFailClosedWithoutLeaksAndServerRecovers',
+    'endpointPathBoundMatchesAndReachesTheProductionListener',
+    'headerCountAndEncodedByteLimitsHaveExactListenerBoundaries',
+    'actualSubscriptionIdMustFitTerminalBeforeAcknowledgementCommit',
+    'partialRequestBodyTimeoutIsRecordedAtTheMcpBoundary',
+  ]) {
+    const rows = clone(INVENTORY.lifecycleScopes)
+      .filter((row) => row.source.scopeName !== name);
+    expectFailure(() => verifyRequiredExecutingRows(rows),
+      /Required lifecycle execution scope is not bounded and closed/u);
+  }
+});
 
 run('independent reviewed generation registry rejects lowered authority', () => {
   const rows = clone(INVENTORY.lifecycleScopes);
@@ -1625,13 +1644,30 @@ run('surviving legacy lifecycle setter hard-fails', () => {
   ])), /Surviving non-excluded/u);
 });
 
+run('internal protocol getter evidence cannot exempt a legacy setter', () => {
+  for (const path of [
+    'src/main/java/com/soklet/internal/mcp/protocol/Inventory.java',
+    'src/test/java/com/soklet/internal/mcp/protocol/InventoryTests.java',
+  ]) {
+    assert.equal(verifyNoSurvivingLegacySites(new Map([
+      [path, 'Duration first = subscription.shutdownTimeout(); Duration second = transport.shutdownTimeout();'],
+    ])).length, 2);
+    expectFailure(() => verifyNoSurvivingLegacySites(new Map([
+      [path, 'server.shutdownTimeout(Duration.ZERO);'],
+    ])), /Surviving non-excluded/u);
+    expectFailure(() => verifyNoSurvivingLegacySites(new Map([
+      [path, 'Duration value = subscription.shutdownTimeout(); server.shutdownTimeout(Duration.ZERO);'],
+    ])), /Surviving non-excluded/u);
+  }
+});
+
 run('generated D1p semantic evidence is not live lifecycle source', () => {
   const path = 'release/d1p-canonical-semantic-digests.json';
   const source = readFileSync(join(ROOT, path), 'utf8');
   assert.match(source, /\bshutdownTimeout\s*\(/u);
   assert.deepEqual(verifyNoSurvivingLegacySites(new Map([[path, source]])), []);
-  assert.equal(EVIDENCE.currentLegacyExclusions.length, 15);
-  assert.equal(INVENTORY.currentLegacyExclusions.length, 15);
+  assert.equal(EVIDENCE.currentLegacyExclusions.length, 21);
+  assert.equal(INVENTORY.currentLegacyExclusions.length, 21);
 });
 
 run('only exact generated D1p evidence paths bypass source scanning', () => {
@@ -1662,6 +1698,37 @@ run('generated D1p evidence cannot hide a live lifecycle setter', () => {
       'historical.shutdownTimeout(Duration.ZERO);'],
     ['src/test/java/com/soklet/LegacyTests.java',
       'class LegacyTests { void test() { server.shutdownTimeout(Duration.ZERO); } }'],
+  ])), /src\/test\/java\/com\/soklet\/LegacyTests\.java/u);
+});
+
+run('generated MCP-C inventories are evidence rather than live lifecycle source', () => {
+  for (const path of [
+    'conformance/mcp-finite-bound-inventory.json',
+    'conformance/mcp-limits-and-accounting.json',
+    'conformance/mcp-privacy-boundary-inventory.json',
+  ]) {
+    const source = readFileSync(join(ROOT, path), 'utf8');
+    assert.deepEqual(verifyNoSurvivingLegacySites(new Map([[path, source]])), []);
+    assert.equal(buildDiscoveryCensus(new Map([[path, source]])).candidateCount, 0);
+  }
+});
+
+run('generated MCP-C inventory lookalikes remain fail closed', () => {
+  const path = 'conformance/mcp-privacy-boundary-inventory.json.copy';
+  const source = 'historical.shutdownTimeout(Duration.ZERO);';
+  expectFailure(() => verifyNoSurvivingLegacySites(new Map([[path, source]])),
+    /mcp-privacy-boundary-inventory\.json\.copy/u);
+  assert.ok(buildDiscoveryCensus(new Map([[path,
+    '"member":"shutdownTimeout()"\n',
+  ]])).candidateCount > 0);
+});
+
+run('generated MCP-C evidence cannot hide a live lifecycle setter', () => {
+  const generatedPath = 'conformance/mcp-finite-bound-inventory.json';
+  expectFailure(() => verifyNoSurvivingLegacySites(new Map([
+    [generatedPath, readFileSync(join(ROOT, generatedPath), 'utf8')],
+    ['src/test/java/com/soklet/LegacyTests.java',
+      'server.shutdownTimeout(Duration.ZERO);'],
   ])), /src\/test\/java\/com\/soklet\/LegacyTests\.java/u);
 });
 
