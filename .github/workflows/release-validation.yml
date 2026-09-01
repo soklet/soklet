@@ -40,30 +40,6 @@ on:
         description: Separate project-owner regression approval URI ending in the approved draft SHA-256
         required: false
         type: string
-      fuzz_bundle_run_id:
-        description: Workflow run ID containing the accepted fuzz-history bundle
-        required: false
-        type: string
-      fuzz_bundle_artifact_name:
-        description: Exact accepted fuzz-history artifact name
-        required: false
-        type: string
-      soak_bundle_run_id:
-        description: Workflow run ID containing the accepted soak-history bundle
-        required: false
-        type: string
-      soak_bundle_artifact_name:
-        description: Exact accepted soak-history artifact name
-        required: false
-        type: string
-      operational_bundle_run_id:
-        description: Workflow run ID containing the accepted operational-history bundle
-        required: false
-        type: string
-      operational_bundle_artifact_name:
-        description: Exact accepted operational-history artifact name
-        required: false
-        type: string
       release_scans_bundle_run_id:
         description: Workflow run ID containing the accepted release-scan bundle
         required: false
@@ -470,53 +446,17 @@ jobs:
           SOKLET_BENCHMARK_BUNDLE_ARTIFACT: ${{ inputs.benchmark_bundle_artifact_name }}
           SOKLET_BENCHMARK_BUNDLE_RUN_ID: ${{ inputs.benchmark_bundle_run_id }}
           SOKLET_CANDIDATE_COMMIT: ${{ inputs.candidate_commit }}
-          SOKLET_FUZZ_BUNDLE_ARTIFACT: ${{ inputs.fuzz_bundle_artifact_name }}
-          SOKLET_FUZZ_BUNDLE_RUN_ID: ${{ inputs.fuzz_bundle_run_id }}
-          SOKLET_OPERATIONAL_BUNDLE_ARTIFACT: ${{ inputs.operational_bundle_artifact_name }}
-          SOKLET_OPERATIONAL_BUNDLE_RUN_ID: ${{ inputs.operational_bundle_run_id }}
           SOKLET_RELEASE_SCANS_BUNDLE_ARTIFACT: ${{ inputs.release_scans_bundle_artifact_name }}
           SOKLET_RELEASE_SCANS_BUNDLE_RUN_ID: ${{ inputs.release_scans_bundle_run_id }}
-          SOKLET_SOAK_BUNDLE_ARTIFACT: ${{ inputs.soak_bundle_artifact_name }}
-          SOKLET_SOAK_BUNDLE_RUN_ID: ${{ inputs.soak_bundle_run_id }}
         run: |
           set -euo pipefail
           node scripts/verify-release-workflow-artifacts.mjs \
             --repository "$GITHUB_REPOSITORY" \
             --candidate "$SOKLET_CANDIDATE_COMMIT" \
-            --fuzz-run-id "$SOKLET_FUZZ_BUNDLE_RUN_ID" \
-            --fuzz-artifact-name "$SOKLET_FUZZ_BUNDLE_ARTIFACT" \
-            --soak-run-id "$SOKLET_SOAK_BUNDLE_RUN_ID" \
-            --soak-artifact-name "$SOKLET_SOAK_BUNDLE_ARTIFACT" \
-            --operational-run-id "$SOKLET_OPERATIONAL_BUNDLE_RUN_ID" \
-            --operational-artifact-name "$SOKLET_OPERATIONAL_BUNDLE_ARTIFACT" \
             --scans-run-id "$SOKLET_RELEASE_SCANS_BUNDLE_RUN_ID" \
             --scans-artifact-name "$SOKLET_RELEASE_SCANS_BUNDLE_ARTIFACT" \
             --benchmark-run-id "$SOKLET_BENCHMARK_BUNDLE_RUN_ID" \
             --benchmark-artifact-name "$SOKLET_BENCHMARK_BUNDLE_ARTIFACT"
-
-      - name: Download exact fuzz-history bundle artifact
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
-        with:
-          name: ${{ inputs.fuzz_bundle_artifact_name }}
-          github-token: ${{ github.token }}
-          run-id: ${{ inputs.fuzz_bundle_run_id }}
-          path: ${{ runner.temp }}/release-harness/fuzz
-
-      - name: Download exact soak-history bundle artifact
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
-        with:
-          name: ${{ inputs.soak_bundle_artifact_name }}
-          github-token: ${{ github.token }}
-          run-id: ${{ inputs.soak_bundle_run_id }}
-          path: ${{ runner.temp }}/release-harness/soak
-
-      - name: Download exact operational-history bundle artifact
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
-        with:
-          name: ${{ inputs.operational_bundle_artifact_name }}
-          github-token: ${{ github.token }}
-          run-id: ${{ inputs.operational_bundle_run_id }}
-          path: ${{ runner.temp }}/release-harness/operational
 
       - name: Download exact release-scan bundle artifact
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
@@ -538,17 +478,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          fuzz="${RUNNER_TEMP}/release-harness/fuzz/fuzz-nightly-history-bundle.json"
-          soak="${RUNNER_TEMP}/release-harness/soak/soak-nightly-history-bundle.json"
-          operational="${RUNNER_TEMP}/release-harness/operational/operational-history-bundle.json"
           scans="${RUNNER_TEMP}/release-harness/scans/release-scans-bundle.json"
           benchmarks="${RUNNER_TEMP}/release-harness/benchmarks/mcp-benchmarks-bundle.json"
-          for bundle in "$fuzz" "$soak" "$operational" "$scans" "$benchmarks"; do
+          for bundle in "$scans" "$benchmarks"; do
             [[ -f "$bundle" && ! -L "$bundle" ]] || exit 1
           done
-          printf 'SOKLET_RELEASE_FUZZ_NIGHTLY_HISTORY_BUNDLE=%s\n' "$fuzz" >> "$GITHUB_ENV"
-          printf 'SOKLET_RELEASE_SOAK_NIGHTLY_HISTORY_BUNDLE=%s\n' "$soak" >> "$GITHUB_ENV"
-          printf 'SOKLET_RELEASE_OPERATIONAL_HISTORY_BUNDLE=%s\n' "$operational" >> "$GITHUB_ENV"
           printf 'SOKLET_RELEASE_SCANS_BUNDLE=%s\n' "$scans" >> "$GITHUB_ENV"
           printf 'SOKLET_RELEASE_MCP_BENCHMARKS_BUNDLE=%s\n' "$benchmarks" >> "$GITHUB_ENV"
 

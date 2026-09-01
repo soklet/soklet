@@ -258,7 +258,7 @@ public class McpProgressAndCancelationRuntimeTests {
 				McpJsonObject.empty());
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint
 				.withServerInformation(McpImplementationMetadata.withNameAndVersion(
-						"progress-test", "4.0.0-SNAPSHOT"))
+						"progress-test", "4.0.0"))
 				.build();
 		McpEffectiveAdmissionIdentity identity =
 				McpEffectiveAdmissionIdentity.resolve(endpoint, "/mcp",

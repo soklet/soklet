@@ -621,7 +621,7 @@ public class McpCrossFeatureSoakTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"soklet-mcp-soak", "4.0.0-SNAPSHOT").build())
+						"soklet-mcp-soak", "4.0.0").build())
 				.tool(progressTool)
 				.tool(protectedTool)
 				.tool(blockingTool)

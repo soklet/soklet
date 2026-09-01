@@ -469,7 +469,7 @@ public class McpLocalizationPublicApiTests {
 	private static McpEndpointRegistry endpointRegistry() {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"localization-api-test", "4.0.0-SNAPSHOT").build())
+						"localization-api-test", "4.0.0").build())
 				.build();
 		return McpEndpointRegistry.fromEndpoints(List.of(endpoint));
 	}

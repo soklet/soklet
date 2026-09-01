@@ -576,7 +576,7 @@ public class McpMultiRoundTripTerminationRaceTests {
 				McpJsonObject.empty());
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint
 				.withServerInformation(McpImplementationMetadata.withNameAndVersion(
-						"mrtr-termination-race-test", "4.0.0-SNAPSHOT"))
+						"mrtr-termination-race-test", "4.0.0"))
 				.tool(McpNormalizedOperation.tool(descriptor, inputPlan,
 						McpMirroredHeaderPlan.empty()))
 				.build();

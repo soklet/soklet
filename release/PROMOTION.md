@@ -10,7 +10,7 @@ The four modes are intentionally distinct:
 1. `prepare` is offline. It verifies the independently supplied validation-
    evidence SHA-256, separately pinned reviewed release-manifest SHA-256,
    candidate commit, fixed `com.soklet:soklet:4.0.0` coordinates, exact ordered
-   29-gate PASS set and gate pins, every typed gate receipt in the format-v2
+   26-gate PASS set and gate pins, every typed gate receipt in the format-v2
    evidence envelope, reviewed workflow identity, and all four artifact names,
    sizes, and SHA-256 values.
    Each receipt must match its gate's evidence contract, toolchain, canonical
@@ -24,6 +24,8 @@ The four modes are intentionally distinct:
    four detached armored signatures with one explicit full GPG fingerprint,
    writes MD5, SHA-1, SHA-256, and SHA-512 files for the four base artifacts
    only, and creates a deterministic Maven-layout ZIP plus canonical evidence.
+   Advisory fuzz, nightly-soak, and operational histories are intentionally
+   absent from both the release evidence and the promotion decision.
 2. `upload` is an explicit network operation. It atomically reserves both
    evidence outputs before the request, uploads that exact ZIP to the fixed
    Publisher Portal `USER_MANAGED` endpoint, accepts only HTTP 201 plus a

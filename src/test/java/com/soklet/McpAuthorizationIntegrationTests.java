@@ -231,7 +231,7 @@ public class McpAuthorizationIntegrationTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"authorization-integration-test", "4.0.0-SNAPSHOT").build())
+						"authorization-integration-test", "4.0.0").build())
 				.tool(tool)
 				.build();
 		return McpServer.withPort(0)

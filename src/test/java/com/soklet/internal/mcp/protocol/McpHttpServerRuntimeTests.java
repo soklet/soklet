@@ -44,6 +44,7 @@ import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketException;
 import java.nio.channels.ClosedSelectorException;
 import java.nio.channels.Selector;
 import java.nio.charset.StandardCharsets;
@@ -1131,7 +1132,7 @@ public class McpHttpServerRuntimeTests {
 						McpMirroredHeaderValueType.STRING)));
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"cors-header-test", "4.0.0-SNAPSHOT"))
+						"cors-header-test", "4.0.0"))
 				.tool(new McpNormalizedOperation("lookup", McpInputRequestPlan.empty(),
 						mirroredHeaders))
 				.build();
@@ -1413,8 +1414,9 @@ public class McpHttpServerRuntimeTests {
 			List<HeaderLine> headers = standardHeaders(port, DISCOVER_METHOD);
 			Assertions.assertEquals(200,
 					send(port, "POST", "/mcp", headers, body).status());
-			Assertions.assertEquals(431, send(port, "POST", "/mcp",
-					append(headers, new HeaderLine("X", "y")), body).status());
+			Assertions.assertEquals(431,
+					sendEarlyLimitResponse(port, "POST", "/mcp",
+							append(headers, new HeaderLine("X", "y")), body).status());
 		} finally {
 			countRuntime.close();
 		}
@@ -1441,8 +1443,9 @@ public class McpHttpServerRuntimeTests {
 					encodedHeaderSectionSize(oneOverByteHeaders, body.length));
 			Assertions.assertEquals(200,
 					send(port, "POST", "/mcp", byteHeaders, body).status());
-			Assertions.assertEquals(431, send(port, "POST", "/mcp",
-					oneOverByteHeaders, body).status());
+			Assertions.assertEquals(431,
+					sendEarlyLimitResponse(port, "POST", "/mcp",
+							oneOverByteHeaders, body).status());
 		} finally {
 			byteRuntime.close();
 		}
@@ -1460,7 +1463,7 @@ public class McpHttpServerRuntimeTests {
 
 	private static McpNormalizedEndpoint endpoint(String serverName) {
 		return McpNormalizedEndpoint.withServerInformation(
-				McpImplementationMetadata.withNameAndVersion(serverName, "4.0.0-SNAPSHOT"))
+				McpImplementationMetadata.withNameAndVersion(serverName, "4.0.0"))
 				.build();
 	}
 
@@ -1468,7 +1471,7 @@ public class McpHttpServerRuntimeTests {
 			McpHttpEndpointPolicy policy, Consumer<String> startupDiagnosticConsumer) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"test-server", "4.0.0-SNAPSHOT"))
+						"test-server", "4.0.0"))
 				.build();
 		return new McpHttpServerRuntime(
 				configuration, policy, endpoint, startupDiagnosticConsumer);
@@ -1485,7 +1488,7 @@ public class McpHttpServerRuntimeTests {
 			McpApplicationRequestHandler handler) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						serverName, "4.0.0-SNAPSHOT"))
+						serverName, "4.0.0"))
 				.build();
 		McpHttpEndpointPolicy policy = new McpHttpEndpointPolicy(
 				path, Set.of(), McpAbsentOriginPolicy.ALLOW,
@@ -1735,6 +1738,15 @@ public class McpHttpServerRuntimeTests {
 		return send(LOOPBACK, port, method, path, "HTTP/1.1", headers, body);
 	}
 
+	private static RawResponse sendEarlyLimitResponse(int port, String method,
+			String path, List<HeaderLine> headers, byte[] body) throws Exception {
+		RawResponse response = send(LOOPBACK, port, method, path, "HTTP/1.1",
+				headers, body, true);
+		Assertions.assertEquals("0", response.singleHeader("Content-Length"));
+		Assertions.assertEquals(0, response.body().length);
+		return response;
+	}
+
 	private static RawResponse sendVersion(int port, String method, String path,
 			String version, List<HeaderLine> headers, byte[] body) throws Exception {
 		return send(LOOPBACK, port, method, path, version, headers, body);
@@ -1747,6 +1759,12 @@ public class McpHttpServerRuntimeTests {
 
 	private static RawResponse send(String host, int port, String method, String path,
 			String version, List<HeaderLine> headers, byte[] body) throws Exception {
+		return send(host, port, method, path, version, headers, body, false);
+	}
+
+	private static RawResponse send(String host, int port, String method, String path,
+			String version, List<HeaderLine> headers, byte[] body,
+			boolean allowResetAfterResponse) throws Exception {
 		try (Socket socket = new Socket()) {
 			socket.connect(new InetSocketAddress(host, port), 3_000);
 			socket.setSoTimeout(5_000);
@@ -1767,8 +1785,18 @@ public class McpHttpServerRuntimeTests {
 			InputStream input = socket.getInputStream();
 			byte[] buffer = new byte[4_096];
 			int read;
-			while ((read = input.read(buffer)) >= 0)
-				response.write(buffer, 0, read);
+			try {
+				while ((read = input.read(buffer)) >= 0)
+					response.write(buffer, 0, read);
+			} catch (SocketException exception) {
+				// A peer that rejects headers before consuming the already-sent body
+				// may close with TCP RST on some kernels. Only the two early-limit
+				// probes accept that close, and only after response bytes arrived;
+				// parsing plus the caller's zero-length assertion still require a
+				// complete 431 response.
+				if (!allowResetAfterResponse || response.size() == 0)
+					throw exception;
+			}
 
 			return RawResponse.parse(response.toByteArray());
 		}

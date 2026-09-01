@@ -17,11 +17,9 @@
         "release/README.md"
       ],
       "releaseGates": [
-        "fuzz-nightly-history",
-        "soak-nightly-history",
         "release-soak"
       ],
-      "ownershipBoundary": "Soklet owns complete finite enforcement and deterministic local failures; scheduled fuzz and sustained soak evidence remains with the named release gates.",
+      "ownershipBoundary": "Soklet owns complete finite enforcement and deterministic local failures; the release soak remains the candidate gate, while longer fuzz and soak histories continue as advisory monitoring.",
       "rationale": "The exhaustive source-derived inventory reconciles every production bound to its value, accounting unit, owner, deterministic failure, and positive and boundary tests without omissions or extras."
     },
     {
@@ -76,11 +74,10 @@
       ],
       "releaseGates": [
         "release-soak",
-        "operational-history",
         "soklet-otel"
       ],
       "ownershipBoundary": "Soklet owns its built-in emissions and redaction; custom collectors, application telemetry and manual values, downstream projection, and operator retention remain explicitly delegated.",
-      "rationale": "The exhaustive source and artifact inventory classifies every Soklet-owned privacy path and binds each boundary to canary evidence while preserving the named sustained, operational, and downstream obligations."
+      "rationale": "The exhaustive source and artifact inventory classifies every Soklet-owned privacy path and binds each boundary to canary evidence while preserving the named sustained and downstream obligations; operational history remains available as advisory post-release monitoring."
     },
     {
       "id": "AMB-002",

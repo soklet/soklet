@@ -74,7 +74,7 @@ class McpHttpServerInlineExecutorLockTests {
 						}));
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"inline-executor-lock-test", "4.0.0-SNAPSHOT"))
+						"inline-executor-lock-test", "4.0.0"))
 				.build();
 		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
 				McpHttpTransportConfiguration.productionDefaults(0),

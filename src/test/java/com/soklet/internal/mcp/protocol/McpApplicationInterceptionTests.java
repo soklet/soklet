@@ -418,7 +418,7 @@ public class McpApplicationInterceptionTests {
 	private static McpEffectiveAdmissionIdentity admissionIdentity(String suffix) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"interception-" + suffix, "4.0.0-SNAPSHOT"))
+						"interception-" + suffix, "4.0.0"))
 				.build();
 		return McpEffectiveAdmissionIdentity.resolve(endpoint, "/mcp",
 				McpAdmissionIdentity.anonymousInstance());

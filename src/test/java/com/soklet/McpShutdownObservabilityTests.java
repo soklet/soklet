@@ -883,7 +883,7 @@ public class McpShutdownObservabilityTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(path)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"shutdown-observability-test", "4.0.0-SNAPSHOT").build())
+						"shutdown-observability-test", "4.0.0").build())
 				.tool(tool)
 				.build();
 		McpServer server = McpServer.withPort(0)
@@ -1146,7 +1146,7 @@ public class McpShutdownObservabilityTests {
 	private static McpServer newServer(@NonNull String path) {
 		McpEndpoint endpoint = McpEndpoint.withPath(requireNonNull(path))
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"shutdown-observability-test", "4.0.0-SNAPSHOT").build())
+						"shutdown-observability-test", "4.0.0").build())
 				.build();
 		return serverFor(endpoint);
 	}
@@ -1189,7 +1189,7 @@ public class McpShutdownObservabilityTests {
 				.build();
 		return McpEndpoint.withPath(requireNonNull(path))
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"shutdown-observability-test", "4.0.0-SNAPSHOT").build())
+						"shutdown-observability-test", "4.0.0").build())
 				.resourceListHandler((request, list, features) ->
 						McpResourcePage.builder().build())
 				.subscriptions(subscriptions)

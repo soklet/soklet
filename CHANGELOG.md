@@ -1,41 +1,88 @@
 # Changelog
 
-## 4.0.0 (Unreleased)
+## 4.0.0 (2026-09-01)
 
 ### Breaking Changes
 
-- Replaced the MCP 2025-11-25 implementation and public API with a greenfield
-  MCP 2026-07-28 design. The new transport has no session or initialization
-  lifecycle, and the new Java API is intentionally source- and binary-
-  incompatible in this minor release. Applications that require the legacy MCP
-  implementation must remain on Soklet 3.5.x; 4.0.0 provides no compatibility
-  adapter.
-- `Request` diagnostics, single-value accessors, URL parsing, multipart-boundary
-  validation, and default annotation-driven parameter binding no longer embed
-  request-controlled IDs, paths, headers, cookies, query/form values,
-  multipart fields, bodies, or malformed raw URLs in their failure text. Exact
-  values remain available through `Request` and structured exception accessors
-  where those accessors are defined. Malformed-URL failures no longer retain
-  the input-bearing `URISyntaxException` as their cause, and default annotation-
-  driven binding no longer retains input-bearing conversion failures as causes.
-  Applications that parsed `Request.toString()`, affected exception messages,
-  or those framework-created cause chains must migrate to the typed accessors.
-- MCP HTTP is stateless: `GET` and `DELETE` return `405`, while
-  `MCP-Session-Id` and `Last-Event-ID` are ignored, never stored, and never
-  emitted. This includes application-authored policy output; attempts to add
-  either legacy header fail closed instead of being echoed.
-- The 4.0 modern-only migration diagnostic is intentionally narrower than the
-  3.5.x initialization protocol. Once strict JSON exposes the exact readable
-  method `initialize`, subsequent envelope/ID, mirrored-header, metadata,
-  version, and removed-method rejections carry a supported-version diagnostic
-  whose supported-version list names only `2026-07-28`;
-  `UnsupportedProtocolVersionError` retains its defined `requested` field.
-  Pre-JSON transport failures, unparseable JSON, unreadable methods, and other
-  method names do not acquire that diagnostic. This is a fall-forward aid, not
-  an initialization handshake or session. Applications that require those
-  3.5.x semantics must remain on Soklet 3.5.x.
+- **Aggregate lifecycle:** `Soklet` is now a one-shot owner of every configured
+  transport. `HttpServer`, `SseServer`, and `McpServer` no longer expose direct
+  start/stop/status/close ownership. `Soklet.shutdown()` returns the one cached
+  completion stage, `awaitShutdown()` returns immutable terminal evidence, and
+  lifecycle observers receive aggregate or participant shutdown results. The
+  old failure-only stop callbacks and config copier are removed. See
+  [Lifecycle and process ownership](MIGRATING_TO_4_0.md#lifecycle-and-process-ownership).
+- **Shared deadlines:** transport-specific shutdown-deadline setters are
+  replaced by one `LifecyclePolicy`. The defaults are 30 seconds for normal
+  startup, 2 seconds for cancellation of live startup, 15 seconds graceful,
+  and 3 seconds forced. This lengthens the old HTTP, SSE, and MCP defaults;
+  deployments must recalculate their termination grace. See
+  [changed defaults](MIGRATING_TO_4_0.md#shared-lifecycle-policy-and-changed-defaults).
+- **Standalone runner:** process shutdown hooks, the `ENTER_KEY` trigger, the
+  terminal report, and optional bounded application cleanup now belong to
+  `SokletApplication`. Embedders continue to own direct `Soklet` lifecycle and
+  must not mix the two ownership models. See
+  [standalone applications](MIGRATING_TO_4_0.md#standalone-applications-use-the-runner).
+- **Transport SPI and injection:** custom HTTP/SSE/MCP implementations migrate
+  to stable transport identity, attachment/runtime, lifecycle context, and
+  termination-proof contracts. `HttpServer` is no longer injectable into
+  resource methods; `SseServer` broadcaster access remains supported. See
+  [HTTP, SSE, and custom transports](MIGRATING_TO_4_0.md#http-sse-and-custom-transports).
+- **Simulator:** the static `Soklet.runSimulator` entry points are removed.
+  `SokletSimulator.run` now supplies fresh scope-owned transports to a config
+  factory and returns the simulation's shutdown result. See
+  [Simulator migration](MIGRATING_TO_4_0.md#simulator-migration).
+- **MCP wire/profile:** the 2025-11-25 initialize/session/GET-SSE design is
+  replaced by the exact modern `2026-07-28` profile. The first request may be
+  `server/discover`; every request supplies its version/capabilities; POST owns
+  the response stream; GET/DELETE return 405; legacy session/event headers are
+  never stored or emitted. Soklet 4.0.0 provides no profile fallback or
+  compatibility adapter. The 4.0 migration is intentionally fall-forward
+  only. See [MCP wire migration](MIGRATING_TO_4_0.md#mcp-wire-migration).
+- **MCP Java API:** the old sessions, initialization contexts, handlers,
+  schemas, request results, and value carriers are removed. Applications use
+  immutable `McpJson*` values, operation-specific contexts and registrations,
+  Java-derived Tool Schema Profile 1 schemas, per-request admission identity,
+  explicit invocation features/interceptor continuation, and aggregate
+  lifecycle results. See
+  [MCP Java API migration](MIGRATING_TO_4_0.md#mcp-java-api-migration).
+- **Annotation processing:** MCP endpoints and operations are generated at
+  compile time; runtime handler-method scanning is not a fallback. Builds must
+  enable `SokletProcessor`, retain `-parameters`, and preserve generated
+  resources. `@McpArgument`/`@McpListResources` and the old URI parameter
+  annotations are replaced by the current tool/property/resource-list/resource-
+  URI annotations. See
+  [Annotation-processing migration](MIGRATING_TO_4_0.md#annotation-processing-migration).
+- **Request diagnostics:** framework-created failures no longer embed request-
+  controlled values or retain input-bearing URL/conversion causes. Code that
+  parsed messages, `Request.toString()`, or cause chains must use typed
+  accessors and application-owned redaction. See
+  [Request diagnostics and privacy](MIGRATING_TO_4_0.md#request-diagnostics-and-privacy).
 
-### Features
+Soklet 3.x reaches end of life when 4.0.0 is published; it receives no promised
+maintenance or security fixes afterward. See the explicit
+[supported-release policy](MIGRATING_TO_4_0.md#supported-release-lines).
+
+### Release Highlights
+
+- Added a dedicated, zero-runtime-dependency MCP `2026-07-28` server with
+  annotated and programmatic tools, prompts, exact/template resources,
+  Java-derived typed schemas, multi-round-trip input, progress, cooperative
+  cancellation, resource subscriptions, localization, simulation, admission,
+  limiting, interception, sanitization, and bounded diagnostics.
+- Added one lifecycle coordinator and immutable result model across HTTP, SSE,
+  MCP, direct embedders, the standalone runner, and the off-network simulator.
+- Added a copy/paste [MCP quickstart](MCP_QUICKSTART.md), prose
+  [3.5.1 migration guide](MIGRATING_TO_4_0.md), dated
+  [client compatibility matrix](release/MCP_CLIENT_COMPATIBILITY.md), and
+  worked [application-owned OAuth resource-server pattern](release/MCP_OAUTH_RESOURCE_SERVER.md).
+- Added production/listener goldens, pinned official conformance integration,
+  finite resource bounds, privacy/incompatibility inventories, API freeze, and
+  release tooling. Development evidence remains distinct from immutable-
+  candidate and published-release claims.
+- Added explicit license/NOTICE packaging and a tracked
+  [third-party audit](release/THIRD_PARTY_AUDIT.md).
+
+### Detailed Implementation Record
 
 - Bounded application-owned MCP cursors with one shared wire contract: the
   existing 4,096-byte default is retained, while configuration is capped at
@@ -818,7 +865,7 @@
   `SOK-SHUT-002` remain COMPLETE.
 - Added the nineteenth bounded Phase 6 production vertical in the sibling
   `soklet-otel` artifact. Unreleased `1.4.0-SNAPSHOT`, built against Soklet
-  `4.0.0-SNAPSHOT`, maps all 23 `McpMetricsEvent` variants to exactly 22
+  `4.0.0`, maps all 23 `McpMetricsEvent` variants to exactly 22
   OpenTelemetry instruments: 21 MCP-specific instruments plus the shared
   transport-failure counter. The core event, snapshot, text, sketch, canary,
   and owner inventories are unchanged.

@@ -303,7 +303,7 @@ public class McpHttpServerCustomHeaderTests {
 		String otherTool = "other";
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"custom-header-scope-test", "4.0.0-SNAPSHOT"))
+						"custom-header-scope-test", "4.0.0"))
 				.tool(new McpNormalizedOperation(TOOL,
 						McpInputRequestPlan.empty(), MIRRORED_HEADERS))
 				.tool(new McpNormalizedOperation(otherTool,
@@ -369,7 +369,7 @@ public class McpHttpServerCustomHeaderTests {
 				McpInputRequestPlan.empty(), MIRRORED_HEADERS);
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"custom-header-test", "4.0.0-SNAPSHOT"))
+						"custom-header-test", "4.0.0"))
 				.tool(tool)
 				.build();
 		return runtime(policy, handlers, endpoint);

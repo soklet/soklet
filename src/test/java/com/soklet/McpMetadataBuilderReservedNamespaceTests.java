@@ -165,7 +165,7 @@ public class McpMetadataBuilderReservedNamespaceTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
 						"metadata-reserved-namespace-test",
-						"4.0.0-SNAPSHOT").build())
+						"4.0.0").build())
 				.tool(invalidNestedTextTool())
 				.tool(invalidNestedBlobTool())
 				.prompt(invalidPrompt())

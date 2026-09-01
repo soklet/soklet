@@ -133,7 +133,7 @@ public class McpSelectedProfileBindingTests {
 				List.of(Mcp20260728ProtocolProfile.INSTANCE, fake));
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint
 				.withServerInformation(McpImplementationMetadata.withNameAndVersion(
-						"selected-profile-preflight-test", "4.0.0-SNAPSHOT"))
+						"selected-profile-preflight-test", "4.0.0"))
 				.tool(McpNormalizedOperation.named("lookup"))
 				.build();
 		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
@@ -404,7 +404,7 @@ public class McpSelectedProfileBindingTests {
 				List.of(Mcp20260728ProtocolProfile.INSTANCE, fake));
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint
 				.withServerInformation(McpImplementationMetadata.withNameAndVersion(
-						"profile-localization-test", "4.0.0-SNAPSHOT"))
+						"profile-localization-test", "4.0.0"))
 				.build();
 		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
 				CorsAuthorizer.rejectAllInstance(),
@@ -470,7 +470,7 @@ public class McpSelectedProfileBindingTests {
 	private static McpNormalizedEndpoint fullEndpoint() {
 		return McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"selected-profile-binding-test", "4.0.0-SNAPSHOT"))
+						"selected-profile-binding-test", "4.0.0"))
 				.tool(McpNormalizedOperation.named("lookup"))
 				.prompt(McpNormalizedOperation.named("summarize"))
 				.exactResource("test://profile/resource")
@@ -546,7 +546,7 @@ public class McpSelectedProfileBindingTests {
 				McpJsonObject.empty());
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint
 				.withServerInformation(McpImplementationMetadata.withNameAndVersion(
-						"profile-progress-test", "4.0.0-SNAPSHOT"))
+						"profile-progress-test", "4.0.0"))
 				.build();
 		McpEffectiveAdmissionIdentity identity = McpEffectiveAdmissionIdentity
 				.resolve(endpoint, "/mcp", McpAdmissionIdentity.anonymousInstance());

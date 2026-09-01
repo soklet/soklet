@@ -471,7 +471,7 @@ export function verifyPublicFixtureClasspath(classpath, projectRoot, expectedCan
   const root = resolve(projectRoot);
   const fixtureClasses = resolve(root, 'target/conformance/public-fixture/classes');
   const candidateJar = expectedCandidateJar === undefined
-    ? resolve(root, 'target/soklet-4.0.0-SNAPSHOT.jar')
+    ? resolve(root, 'target/soklet-4.0.0.jar')
     : resolve(expectedCandidateJar);
   const fixtureMainClass = resolve(
     fixtureClasses, 'com/soklet/conformance/McpConformanceFixture.class',
@@ -493,7 +493,7 @@ export function verifyPublicFixtureClasspath(classpath, projectRoot, expectedCan
       expectedCandidateJar === undefined
         ? 'Public MCP fixture classpath must be exactly '
           + 'target/conformance/public-fixture/classes followed by '
-          + 'target/soklet-4.0.0-SNAPSHOT.jar'
+          + 'target/soklet-4.0.0.jar'
         : 'Public MCP fixture classpath must be exactly '
           + 'target/conformance/public-fixture/classes followed by the validated '
           + `release-candidate JAR ${candidateJar}`,

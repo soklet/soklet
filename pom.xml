@@ -4,10 +4,10 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.soklet</groupId>
     <artifactId>soklet</artifactId>
-    <version>4.0.0-SNAPSHOT</version>
+    <version>4.0.0</version>
     <packaging>jar</packaging>
     <name>Soklet</name>
-    <description>A zero-dependency HTTP/1.1 server and routing library for Java, well-suited for building RESTful APIs and broadcasting Server-Sent Events.</description>
+    <description>A zero-dependency HTTP/1.1 server and routing library for Java, well-suited for building RESTful APIs, broadcasting Server-Sent Events, and serving Model Context Protocol endpoints.</description>
     <url>https://www.soklet.com</url>
 
     <licenses>
@@ -49,6 +49,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <project.build.outputTimestamp>2026-09-01T00:00:00Z</project.build.outputTimestamp>
         <!-- The release-scan producer overrides this with the exact historical filter bytes whose
              digest is approved in the release-harness registry. Normal developer/CI runs retain
              the current candidate-tracked filter. -->

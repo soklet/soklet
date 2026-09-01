@@ -650,7 +650,7 @@ final class SokletDirectMcpLifecycleTests {
 
 	@NonNull
 	private static McpImplementation implementation(@NonNull String name) {
-		return McpImplementation.withNameAndVersion(name, "4.0.0-SNAPSHOT").build();
+		return McpImplementation.withNameAndVersion(name, "4.0.0").build();
 	}
 
 	@NonNull

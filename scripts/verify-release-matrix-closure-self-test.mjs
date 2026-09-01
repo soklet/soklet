@@ -2764,14 +2764,12 @@ final class McpPrivacyBoundaryFuzzTests {
     'candidate-build',
     'core-jdk-21',
     'core-jdk-25',
-    'fuzz-nightly-history',
-    'soak-nightly-history',
     'release-soak',
     'candidate-conformance',
   ]);
   assert.equal(
     simulationBoundaryRow.reason,
-    'Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25, fuzz-nightly-history, soak-nightly-history, release-soak, candidate-conformance.',
+    'Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25, release-soak, candidate-conformance.',
   );
   for (const evidence of [
     'release/release-validation-manifest.json',
@@ -2943,19 +2941,15 @@ final class McpPrivacyBoundaryFuzzTests {
   }
   assert.deepEqual(row(registry, 'SOK-METRIC-001').releaseGates, [
     'release-soak',
-    'operational-history',
     'soklet-otel',
   ]);
   assert.equal(row(registry, 'SOK-VALID-002').disposition, 'RELEASE_GATED');
   assert.deepEqual(row(registry, 'SOK-VALID-002').releaseGates, [
-    'fuzz-nightly-history',
-    'soak-nightly-history',
     'release-soak',
   ]);
   assert.equal(row(registry, 'SOK-PRIV-001').disposition, 'RELEASE_GATED');
   assert.deepEqual(row(registry, 'SOK-PRIV-001').releaseGates, [
     'release-soak',
-    'operational-history',
     'soklet-otel',
   ]);
   for (const id of ['SOK-STATE-002', 'SOK-STATE-007', 'AMB-002']) {
@@ -3141,7 +3135,7 @@ final class McpPrivacyBoundaryFuzzTests {
     const target = row(value, 'SOK-VALID-002');
     target.releaseGates.push('candidate-conformance');
     target.reason =
-      'Remaining immutable or scheduled evidence is owned by: fuzz-nightly-history, soak-nightly-history, release-soak, candidate-conformance.';
+      'Remaining immutable or scheduled evidence is owned by: release-soak, candidate-conformance.';
   }, /SOK-VALID-002 residual\/registry releaseGates must match the frozen order exactly/);
   expectInvalid('residual-registry-reason-drift', resolvedRegistry, (value) => {
     row(value, 'SOK-VALID-002').reason = 'Invented release-gated reason.';

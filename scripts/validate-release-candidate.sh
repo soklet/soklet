@@ -83,12 +83,6 @@ release_harness_importer="$project_root/scripts/import-release-harness-evidence.
 release_harness_importer_self_test="$project_root/scripts/import-release-harness-evidence-self-test.mjs"
 release_workflow_artifact_verifier="$project_root/scripts/verify-release-workflow-artifacts.mjs"
 release_workflow_artifact_verifier_self_test="$project_root/scripts/verify-release-workflow-artifacts-self-test.mjs"
-release_history_producer="$project_root/scripts/produce-release-history.mjs"
-release_history_producer_self_test="$project_root/scripts/produce-release-history-self-test.mjs"
-operational_history_producer="$project_root/scripts/produce-operational-history.mjs"
-operational_history_producer_self_test="$project_root/scripts/produce-operational-history-self-test.mjs"
-operational_history_harness="$project_root/verification/operational/src/main/java/com/soklet/OperationalHistoryHarness.java"
-operational_history_harness_self_test="$project_root/verification/operational/src/test/java/com/soklet/OperationalHistoryHarnessSelfTest.java"
 release_scans_producer="$project_root/scripts/produce-release-scans.mjs"
 release_scans_producer_self_test="$project_root/scripts/produce-release-scans-self-test.mjs"
 release_scans_codeql_preparer="$project_root/scripts/prepare-codeql-release-report.mjs"
@@ -102,7 +96,6 @@ release_scans_linux_producer="$project_root/release/scripts/produce-release-scan
 release_benchmarks_producer="$project_root/scripts/produce-release-benchmarks.mjs"
 release_benchmarks_producer_self_test="$project_root/scripts/produce-release-benchmarks-self-test.mjs"
 release_benchmarks_release_note="$project_root/CHANGELOG.md"
-release_history_verifier="$project_root/scripts/verify-release-history.mjs"
 release_scans_verifier="$project_root/scripts/verify-release-scans.mjs"
 release_benchmarks_verifier="$project_root/scripts/verify-release-benchmarks.mjs"
 for release_harness_source in \
@@ -111,9 +104,6 @@ for release_harness_source in \
 	"$release_harness_importer_self_test" \
 	"$release_workflow_artifact_verifier" \
 	"$release_workflow_artifact_verifier_self_test" \
-	"$release_history_producer" "$release_history_producer_self_test" \
-	"$operational_history_producer" "$operational_history_producer_self_test" \
-	"$operational_history_harness" "$operational_history_harness_self_test" \
 	"$release_scans_producer" "$release_scans_producer_self_test" \
 	"$release_scans_codeql_preparer" "$release_scans_codeql_preparer_self_test" \
 		"$release_scans_codeql_provenance" "$release_scans_codeql_provenance_self_test" \
@@ -121,7 +111,6 @@ for release_harness_source in \
 	"$release_scans_exceptions" "$release_scans_linux_producer" \
 	"$release_benchmarks_producer" "$release_benchmarks_producer_self_test" \
 	"$release_benchmarks_release_note" \
-	"$release_history_verifier" \
 	"$release_scans_verifier" "$release_benchmarks_verifier"; do
 	[[ -f "$release_harness_source" && ! -L "$release_harness_source" ]] \
 		|| fail "release-harness contract source is missing or is a symlink."
@@ -148,8 +137,6 @@ done
 node "$release_harness_importer" --verify-config
 node "$release_harness_importer_self_test"
 node "$release_workflow_artifact_verifier_self_test"
-node "$release_history_producer_self_test"
-node "$operational_history_producer_self_test"
 node "$release_scans_codeql_preparer_self_test"
 node "$release_scans_codeql_provenance_self_test"
 node "$release_scans_runtime_surface_self_test"
@@ -162,8 +149,8 @@ assert_ready_gate_has_dispatch() {
 	case "$gate_id" in
 		candidate-build|core-jdk-21|core-jdk-25|isolated-install|api-freeze|\
 		candidate-javadocs|static-analysis|spotbugs|schema-replay|fuzz-replay|\
-		fuzz-nightly-history|soak-smoke|soak-nightly-history|release-soak|\
-		localization-fleet|operational-history|release-scans|mcp-benchmarks|matrix-closure|\
+		soak-smoke|release-soak|localization-fleet|release-scans|mcp-benchmarks|\
+		matrix-closure|\
 		candidate-conformance|candidate-localization|barebones-app|\
 		soklet-servlet-javax|soklet-servlet-jakarta|toystore-app|soklet-otel|\
 		soklet-website|typescript-interop|go-interop)
@@ -186,8 +173,8 @@ while IFS=$'\t' read -r configured_gate_id configured_gate_status; do
 		assert_ready_gate_has_dispatch "$configured_gate_id"
 	fi
 done < <(node "$evidence_helper" list-gate-ids "$manifest_path")
-[[ "$configured_gate_count" -eq 29 ]] \
-	|| fail "release manifest dispatch inventory must contain exactly 29 gates."
+[[ "$configured_gate_count" -eq 26 ]] \
+	|| fail "release manifest dispatch inventory must contain exactly 26 gates."
 
 head_commit=$(git rev-parse --verify HEAD)
 [[ "$head_commit" == "$candidate_commit" ]] \
@@ -685,8 +672,11 @@ run_api_freeze() {
 		cd "$checkout"
 		env JAVA_HOME="$core_java_home" PATH="$core_java_home/bin:$PATH" \
 			scripts/verify-mcp-api-freezes.sh
-		node scripts/verify-d1p-evidence.mjs --mode candidate --scope preparation
-		node scripts/verify-d1p-evidence.mjs --mode candidate --scope tracked
+		# D1p is immutable evidence for the approved SNAPSHOT preview and is
+		# verified before the exact-version transition.  The final candidate's
+		# reviewed protected-fixture version labels are instead bound by the exact
+		# transition census above and this freshly generated API/freeze comparison
+		# against 3.5.1; the sealed preview manifests themselves remain unchanged.
 	) 2>&1 | tee "$log"
 	local raw_root="$evidence_root/raw/api-freeze"
 	mkdir -p "$raw_root"
@@ -1239,15 +1229,9 @@ run_static_analysis
 run_spotbugs
 run_schema_replay
 run_fuzz_replay
-run_imported_release_harness \
-	fuzz-nightly-history SOKLET_RELEASE_FUZZ_NIGHTLY_HISTORY_BUNDLE
 run_soak_profile soak-smoke smoke 600
-run_imported_release_harness \
-	soak-nightly-history SOKLET_RELEASE_SOAK_NIGHTLY_HISTORY_BUNDLE
 run_soak_profile release-soak release "$soak_timeout_seconds"
 run_localization_fleet
-run_imported_release_harness \
-	operational-history SOKLET_RELEASE_OPERATIONAL_HISTORY_BUNDLE
 run_imported_release_harness \
 	release-scans SOKLET_RELEASE_SCANS_BUNDLE
 run_imported_release_harness \

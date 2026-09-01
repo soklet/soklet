@@ -84,7 +84,7 @@ public class McpToolContentPublicRuntimeTests {
 						.build());
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"tool-content-public-runtime-test", "4.0.0-SNAPSHOT").build())
+						"tool-content-public-runtime-test", "4.0.0").build())
 				.tool(imageTool)
 				.tool(audioTool)
 				.tool(embeddedResourceTool)

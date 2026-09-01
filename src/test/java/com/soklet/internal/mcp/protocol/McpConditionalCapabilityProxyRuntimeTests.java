@@ -303,7 +303,7 @@ public class McpConditionalCapabilityProxyRuntimeTests {
 				McpJsonObject.empty());
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint
 				.withServerInformation(McpImplementationMetadata.withNameAndVersion(
-						"conditional-proxy-runtime-test", "4.0.0-SNAPSHOT"))
+						"conditional-proxy-runtime-test", "4.0.0"))
 				.tool(McpNormalizedOperation.tool(descriptor, inputPlan,
 						McpMirroredHeaderPlan.empty()))
 				.build();

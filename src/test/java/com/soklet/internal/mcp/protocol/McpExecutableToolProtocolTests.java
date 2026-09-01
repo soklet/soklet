@@ -57,7 +57,7 @@ public class McpExecutableToolProtocolTests {
 						"com.example/revision", new McpJsonString("7"))));
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"tool-list-test", "4.0.0-SNAPSHOT"))
+						"tool-list-test", "4.0.0"))
 				.tool(McpNormalizedOperation.tool(
 						descriptor, McpMirroredHeaderPlan.empty()))
 				.build();
@@ -277,7 +277,7 @@ public class McpExecutableToolProtocolTests {
 	private static McpEndpoint publicEndpoint() {
 		return McpEndpoint.withPath("/mcp")
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"executable-tool-test", "4.0.0-SNAPSHOT").build())
+						"executable-tool-test", "4.0.0").build())
 				.build();
 	}
 

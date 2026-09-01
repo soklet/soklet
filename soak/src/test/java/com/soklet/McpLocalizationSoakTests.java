@@ -273,7 +273,7 @@ class McpLocalizationSoakTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"soklet-mcp-localization-soak", "4.0.0-SNAPSHOT")
+						"soklet-mcp-localization-soak", "4.0.0")
 						.title(SERVER_TITLE)
 						.build())
 				.tool(tool)

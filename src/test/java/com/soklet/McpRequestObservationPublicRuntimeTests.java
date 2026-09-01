@@ -1126,7 +1126,7 @@ public class McpRequestObservationPublicRuntimeTests {
 			@NonNull String implementationName) {
 		return McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						implementationName, "4.0.0-SNAPSHOT").build());
+						implementationName, "4.0.0").build());
 	}
 
 	private static McpServer.@NonNull Builder serverBuilder(

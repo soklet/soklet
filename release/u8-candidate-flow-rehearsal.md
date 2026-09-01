@@ -15,7 +15,10 @@ owners are MCP-7 and lifecycle F1 for reconciliation and exact-version core
 preparation, lifecycle F2 for the six clean downstream migrations, and U8 for
 the pin, parity, and freeze integration. G4 is the decision owner for the
 proposed immutable candidate. U9, not U8, owns immutable-candidate execution
-and the ordered 29-gate `PASS` bundle.
+and the ordered 26-gate `PASS` bundle. The project owner's 2026-09-01 policy
+override supersedes the completion plan's earlier gate-count language:
+`fuzz-nightly-history`, `soak-nightly-history`, and `operational-history`
+remain executable advisory/post-release monitors but do not block 4.0.
 
 The project owner is the sole creator of every core or downstream commit in
 this route, including pre-downstream, post-pin, and recovery commits. MCP-7,
@@ -109,7 +112,7 @@ reconciled tracked core inputs
   -> clean build A + clean build B + identical three-JAR hashes
   -> byte-identical isolated rehearsal install
   -> six clean, tested, owner-approved downstream commits
-  -> one core pin/READY commit with all 29 configurations READY
+  -> one core pin/READY commit with all 26 configurations READY
   -> clean post-pin build with the same timestamp/toolchain/recipe
   -> equality with both earlier three-JAR hash sets
   -> exact G4-frozen core commit/tree
@@ -206,6 +209,15 @@ node scripts/verify-version-transition-inventory.mjs --stage final
 
 Then rerun the API/freeze, matrix, release-tooling, harness, and documentation
 checks from step 1 that consume version-bearing bytes.
+
+The clean post-U7 tree's D1p preparation and sibling-blind tracked checks run
+before this rewrite and remain evidence for the approved snapshot preview.
+They are not rerun as though their raw protected-fixture bytes were unchanged:
+the final census proves the reviewed label-only transition, and the freshly
+generated exact-version API/freeze comparison validates the release surface.
+The sealed D1p configuration/library preview-artifact paths retain the
+historical development-version artifact name and are explicitly preserved by
+the census.
 
 **Tracked inputs.** Step 1's reviewed tree; all root/module POMs; the complete
 `release/version-transition-inventory.json`; active fixtures, goldens,
@@ -358,7 +370,7 @@ and evidence-contract identity. Future values are intentionally unresolved
 until U8. These are U8 readiness receipts, not the six U9 downstream `PASS`
 receipts.
 
-## Step 5 — pin downstreams and make all 29 configurations READY
+## Step 5 — pin downstreams and make all 26 configurations READY
 
 **Owner.** U8 prepares one reviewed core change. Lifecycle F2 supplies the six
 downstream records; MCP-7/U7 supplies and revalidates the five harness
@@ -366,9 +378,10 @@ contracts; the project owner reviews the complete pin/readiness change and
 alone creates the post-pin core commit.
 
 **Command family.** Update `release/release-validation-manifest.json` to pin
-the six step 4 commits and required checksums, change their six rows to
-`READY`, and preserve all five U7 harness rows as `READY`. Keep the ordered
-29-gate universe unchanged. Run:
+the six step 4 commits and required checksums and change their six rows to
+`READY`. Preserve `release-scans` and `mcp-benchmarks` as the two imported
+release-harness gates. Keep the three advisory histories in the harness
+registry and CI monitoring, outside the ordered 26-gate universe. Run:
 
 ```text
 node scripts/import-release-harness-evidence.mjs --verify-config
@@ -377,40 +390,42 @@ node scripts/release-validation-self-test.mjs
 node scripts/release-validation-evidence.mjs validate-config release/release-validation-manifest.json --require-ready
 ```
 
-The self-tests must still reject 28- or 30-row manifests, blocked status,
+The self-tests must still reject 25- or 27-row manifests, blocked status,
 nonblank reasons, missing pins/checksums, and registry/dispatch mismatch. The
-five harnesses remain the existing `fuzz-nightly-history`,
-`soak-nightly-history`, `operational-history`, `release-scans`, and
-`mcp-benchmarks` rows; no new gate ID is introduced.
+five harness contracts remain registered, but only `release-scans` and
+`mcp-benchmarks` are manifest rows; no new gate ID is introduced.
 
 **Tracked inputs.** Step 4's six exact commit/tree and validation records;
 `release/release-validation-manifest.json`;
 `release/release-harness-contracts.json`; the importer, evidence helper,
 candidate validator, promotion consumer, workflow dispatches, and their self-
-tests; the ordered 29 evidence-contract identities; and the exact step 3
+tests; the ordered 26 release evidence-contract identities; and the exact step 3
 main-JAR checksum used by downstream artifact consumers.
 
 **Outputs and identities.** One reviewed post-pin core commit/tree; one
-candidate-tracked manifest with exactly 29 `READY`, zero blocked rows, and an
+candidate-tracked manifest with exactly 26 `READY`, zero blocked rows, and an
 empty reason wherever the schema requires it; six immutable downstream pins
-and checksums; five executable harness dispatches; and a raw manifest SHA-256.
+and checksums; two executable imported release-harness dispatches; and a raw
+manifest SHA-256. The three advisory monitor dispatches remain outside this
+release receipt.
 The post-pin core commit/tree and manifest/checksum values are intentionally
 unresolved until U8.
 
 **Consumer.** Step 6 checks out this post-pin commit/tree and rebuilds it. Step
-7 and G4 consume the exact manifest bytes, readiness report, harness dispatch
-proofs, and all six pins.
+7 and G4 consume the exact manifest bytes, readiness report, two blocking
+imported-harness dispatch proofs, and all six pins.
 
 **Invalidation edge.** Any missing/changed pin or checksum, non-READY row,
-nonblank reason, gate count/order drift, absent harness dispatch, registry/
+nonblank reason, gate count/order drift, absent blocking harness dispatch, registry/
 manifest/evidence mismatch, self-test weakening, manifest edit, or downstream
 commit change invalidates this step and all later receipts. A manifest-only pin
 change still requires the post-pin build; parity is proved, never assumed.
 
 **Receipt.** Retain the exact post-pin commit/tree, manifest path/raw SHA-256,
 canonical ordered readiness report, `--require-ready` log, all negative self-
-test results, five harness registry/dispatch identities, and six downstream
-pin/checksum bindings. Future values are intentionally unresolved until U8.
+test results, five harness registry identities, two blocking release-dispatch
+identities, and six downstream pin/checksum bindings. Future values are
+intentionally unresolved until U8.
 `READY` means configured and dispatchable; this receipt contains no `PASS`.
 
 ## Step 6 — prove same-recipe post-pin three-JAR parity
@@ -476,7 +491,7 @@ Re-run the fail-closed final readiness checks whose tracked inputs could have
 changed, including final version inventory, API/freeze aggregate, matrix,
 harness/importer, release-tooling, downstream-dispatch, and
 `release-validation-evidence.mjs validate-config ... --require-ready`. Do not
-invoke `scripts/validate-release-candidate.sh` as a 29-gate candidate run in
+invoke `scripts/validate-release-candidate.sh` as a 26-gate candidate run in
 U8; that belongs to U9 after G4.
 
 **Tracked inputs.** The exact post-pin core commit/tree; step 1's planning
@@ -490,14 +505,15 @@ downstream approvals; step 5's manifest/readiness/harness receipt; and step
 core commit/tree, manifest SHA-256, six downstream commits/checksums, planning
 snapshot, literal timestamp, exact build recipe/toolchains, two-clean-build
 and post-pin main/sources/Javadoc parity receipts, release-readiness artifacts,
-five harness dispatches, and exact 29-row readiness report. Every future
+two blocking imported-harness dispatches, and exact 26-row readiness report.
+The three advisory histories are not G4 inputs. Every future
 identity and the approval time are intentionally unresolved until U8/G4.
 
 **Consumer.** U9 consumes only this frozen decision. Its first candidate build
 must use the approved tree/timestamp/toolchain/recipe and reproduce the
-approved three-JAR tuple before it runs/imports the ordered 29 candidate-bound
+approved three-JAR tuple before it runs/imports the ordered 26 candidate-bound
 gates. The separately authorized G5 runbook may consume only the later U9-
-accepted candidate and 29 `PASS` receipts.
+accepted candidate and 26 `PASS` receipts.
 
 **Invalidation edge.** A dirty checkout; changed commit/tree, source,
 generated artifact, timestamp, planning snapshot, manifest, harness,
@@ -526,16 +542,16 @@ regeneration of its D1p tracked-blob binding, or if review discovers an
 unowned producer, missing consumer, untracked live gate input, impossible
 build/install/downstream command, or circular parity requirement. G4 remains
 blocked until the future values intentionally left unresolved here are
-produced by actual clean U8 execution and all 29 manifest rows are `READY`.
+produced by actual clean U8 execution and all 26 manifest rows are `READY`.
 
 U8 readiness is deliberately weaker than U9 acceptance:
 
 - U8 may retain clean-build, install, downstream-preparation, readiness, and
   parity receipts, but none has release-gate `PASS` status.
-- `READY` means all 29 configurations are pinned and dispatchable with blank
+- `READY` means all 26 configurations are pinned and dispatchable with blank
   blocking reasons; it does not mean they ran against the immutable candidate.
 - U9 alone rebuilds from the G4-frozen source, verifies the approved artifact
-  tuple, and collects 29 typed candidate-bound `PASS` receipts.
+  tuple, and collects 26 typed candidate-bound `PASS` receipts.
 - G5 remains a separate explicit owner authorization even after U9 succeeds.
 
 Therefore this rehearsal establishes that U8 can be executed without

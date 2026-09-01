@@ -1606,13 +1606,13 @@ documentation examples rather than a Soklet verification surface. The later
 revision drift without within-response mixing, node loss, fresh-context
 subscription reconnect, node-local delivery, and cleanup through two
 simultaneous real loopback listeners. The format-v2 release contract now
-enumerates exactly 29 ordered gates. At the initial JDK 21 gate checkpoint, a
+enumerates exactly 26 ordered gates. At the initial JDK 21 gate checkpoint, a
 same-version macOS arm64 Corretto 21.0.12.9.1 run passed the full core
 `clean test` at 1,681/0/0/4; static analysis reports `BUILD SUCCESS` with the
 existing advisory inventory after the `SelfAssignment` fix, and SpotBugs
 reports zero bugs and errors. The exact
 checksum-pinned Corretto 21.0.12.9.1 toolchain now drives `core-jdk-21`,
-`static-analysis`, and `spotbugs`. Twenty-three gates are dispatch-configured
+`static-analysis`, and `spotbugs`. Twenty gates are dispatch-configured
 with executable `READY` paths, and none remain `BLOCKED_HARNESS_MISSING`; the
 six downstreams remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving six
 fail-closed blockers. `READY` means configured, never passed. The matrix-closure
@@ -1620,10 +1620,10 @@ hook is `READY`, and the candidate-contained registry and residual evidence
 produce a canonical `PASSED` report at 113 `CORE_COMPLETE`, 119
 `RELEASE_GATED`, 12 `APPLICATION_OWNED`, 19 `NOT_APPLICABLE`, and zero
 `UNRESOLVED`. Only the exact candidate workflow can record its typed PASS
-receipt. Actual scheduled/nightly and sustained fuzz/soak and operational
-evidence, release scans, benchmarks, published downstream pins, and immutable
-release-candidate provenance and conformance remain open even though their
-executable harnesses are checked in. Candidate Javadoc
+receipt. Release-soak evidence, release scans, benchmarks, published
+downstream pins, and immutable release-candidate provenance and conformance
+remain open. Scheduled fuzz, nightly soak, and operational histories remain
+advisory post-release monitoring rather than release prerequisites. Candidate Javadoc
 generation/completeness is configured; public deployment is post-validation
 publication work. The bounded two-listener fixture is the Soklet-owned fleet
 gate, while production multi-host coordination remains application/deployment-

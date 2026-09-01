@@ -666,7 +666,7 @@ public class SokletSimulatorIsolationTests {
 		AtomicReference<ExecutorService> handlerExecutor = new AtomicReference<>();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"rejected-session-proof-test", "4.0.0-SNAPSHOT").build())
+						"rejected-session-proof-test", "4.0.0").build())
 				.build();
 		DefaultMcpServer server = (DefaultMcpServer) McpServer.withPort(0)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
@@ -1171,7 +1171,7 @@ public class SokletSimulatorIsolationTests {
 			@NonNull List<@NonNull McpToolRegistration<?>> tools) {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"isolated-simulator-test", "4.0.0-SNAPSHOT").build())
+						"isolated-simulator-test", "4.0.0").build())
 				.tools(tools)
 				.build();
 		return transports.newMcpServerBuilder(port)
@@ -1190,7 +1190,7 @@ public class SokletSimulatorIsolationTests {
 		return McpEndpoint.withPath(path)
 				.serverInformation(McpImplementation.withNameAndVersion(
 						"isolated-simulator-subscription-test",
-						"4.0.0-SNAPSHOT").build())
+						"4.0.0").build())
 				.resourceListHandler((request, resourceList, features) ->
 						McpResourcePage.builder().build())
 				.subscriptions(McpSubscriptionConfig.withEventPublisher(publisher)

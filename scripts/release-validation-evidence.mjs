@@ -26,11 +26,8 @@ const MATRIX_CLOSURE_RESIDUAL_EVIDENCE_PATH =
   'release/mcp-residual-closure-evidence.json';
 const MATRIX_CLOSURE_VERIFIER_PATH = 'scripts/verify-release-matrix-closure.mjs';
 const IMPORTED_RELEASE_HARNESS_GATE_IDS = new Set([
-  'fuzz-nightly-history',
   'mcp-benchmarks',
-  'operational-history',
   'release-scans',
-  'soak-nightly-history',
 ]);
 const SERVLET_DEFAULT_ARTIFACT_IDENTITY = 'com.soklet:soklet:3.1.1';
 const SERVLET_DEFAULT_ARTIFACT_SHA256 =
@@ -46,12 +43,9 @@ const EXPECTED_GATE_IDS = [
   'spotbugs',
   'schema-replay',
   'fuzz-replay',
-  'fuzz-nightly-history',
   'soak-smoke',
-  'soak-nightly-history',
   'release-soak',
   'localization-fleet',
-  'operational-history',
   'release-scans',
   'mcp-benchmarks',
   'matrix-closure',
@@ -160,28 +154,12 @@ const EXPECTED_GATE_CONTRACTS = Object.freeze({
     toolchain: 'toystoreJava',
     versionProperty: null,
   }),
-  'fuzz-nightly-history': Object.freeze({
-    access: 'LOCAL_CHECKOUT',
-    artifactIdentity: 'ci:fuzz-nightly-history',
-    kind: 'SOURCE',
-    repository: null,
-    toolchain: 'nodePin',
-    versionProperty: null,
-  }),
   'soak-smoke': Object.freeze({
     access: 'LOCAL_CHECKOUT',
     artifactIdentity: 'SOKLET_SOAK_PROFILE=smoke',
     kind: 'SOURCE',
     repository: null,
     toolchain: 'toystoreJava',
-    versionProperty: null,
-  }),
-  'soak-nightly-history': Object.freeze({
-    access: 'LOCAL_CHECKOUT',
-    artifactIdentity: 'SOKLET_SOAK_PROFILE=nightly-history',
-    kind: 'SOURCE',
-    repository: null,
-    toolchain: 'nodePin',
     versionProperty: null,
   }),
   'release-soak': Object.freeze({
@@ -198,14 +176,6 @@ const EXPECTED_GATE_CONTRACTS = Object.freeze({
     kind: 'SOURCE',
     repository: null,
     toolchain: 'java',
-    versionProperty: null,
-  }),
-  'operational-history': Object.freeze({
-    access: 'LOCAL_CHECKOUT',
-    artifactIdentity: 'ci:operational-history',
-    kind: 'SOURCE',
-    repository: null,
-    toolchain: 'nodePin',
     versionProperty: null,
   }),
   'release-scans': Object.freeze({
@@ -519,14 +489,6 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
     'ALL_CHECKED_IN_FUZZ_CORPORA_PASS',
     [logRole('replay-log', 'fuzz-replay.log'), surefireRole()],
   ),
-  'fuzz-nightly-history': gateEvidenceContract(
-    'fuzz-nightly-history',
-    'nodePin',
-    'node scripts/verify-release-history.mjs fuzz-nightly',
-    'nightly-history',
-    'REQUIRED_NIGHTLY_FUZZ_WINDOW_PASSES',
-    [fileRole('history', 'application/json', 'fuzz-nightly-history.json')],
-  ),
   'soak-smoke': gateEvidenceContract(
     'soak-smoke',
     'toystoreJava',
@@ -538,14 +500,6 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
       fileRole('soak-report', 'text/markdown', 'soak-report.md'),
       surefireRole(),
     ],
-  ),
-  'soak-nightly-history': gateEvidenceContract(
-    'soak-nightly-history',
-    'nodePin',
-    'node scripts/verify-release-history.mjs soak-nightly',
-    'nightly-history',
-    'REQUIRED_NIGHTLY_SOAK_WINDOW_PASSES',
-    [fileRole('history', 'application/json', 'soak-nightly-history.json')],
   ),
   'release-soak': gateEvidenceContract(
     'release-soak',
@@ -566,14 +520,6 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
     'two-listener-fleet',
     'FAILED_RELOAD_ROLLING_DRIFT_NODE_LOSS_RECONNECT_AND_CLEANUP_PASS',
     [logRole('fleet-log', 'localization-fleet.log'), surefireRole()],
-  ),
-  'operational-history': gateEvidenceContract(
-    'operational-history',
-    'nodePin',
-    'node scripts/verify-release-history.mjs operational',
-    'scheduled-history',
-    'REQUIRED_OPERATIONAL_HISTORY_WINDOW_PASSES',
-    [fileRole('history', 'application/json', 'operational-history.json')],
   ),
   'release-scans': gateEvidenceContract(
     'release-scans',
@@ -1963,7 +1909,7 @@ function importedRoleArtifact(role, specification, gateId) {
 }
 
 /**
- * Records one of the five externally produced release-harness gates after the
+ * Records one of the two externally produced release-harness gates after the
  * fail-closed importer has bound its immutable bundle to this candidate. The
  * imported receipt is intentionally an input to the ordinary format-v2 gate
  * envelope; it does not create a second release gate or change any evidence

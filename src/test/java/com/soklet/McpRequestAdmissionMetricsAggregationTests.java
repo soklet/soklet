@@ -325,7 +325,7 @@ public class McpRequestAdmissionMetricsAggregationTests {
 		McpEndpoint endpoint = McpEndpoint
 				.withPath("/mcp/request-admission-metrics")
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"request-admission-metrics-test", "4.0.0-SNAPSHOT")
+						"request-admission-metrics-test", "4.0.0")
 						.build())
 				.build();
 		McpServer server = McpServer.withPort(0)

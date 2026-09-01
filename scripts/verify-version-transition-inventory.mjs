@@ -15,6 +15,13 @@ export const INVENTORY_EXCLUSIONS = Object.freeze([
   'scripts/verify-version-transition-inventory.mjs',
 ]);
 export const PENDING_CURRENT_STAGE_PATHS = Object.freeze([
+  'MCP_QUICKSTART.md',
+  'MIGRATING_TO_4_0.md',
+  'release/G5_RELEASE_RUNBOOK.md',
+  'release/MCP_CLIENT_COMPATIBILITY.md',
+  'release/MCP_OAUTH_RESOURCE_SERVER.md',
+  'release/SECURITY_CLAIMS_AUDIT.md',
+  'release/THIRD_PARTY_AUDIT.md',
   'release/mcp-residual-closure-evidence.json',
 ]);
 
@@ -110,7 +117,7 @@ const CURRENT_STAGE_FIELDS = Object.freeze([
 ]);
 const CURRENT_STAGE_NAME = 'post-u7';
 export const EXPECTED_CURRENT_STAGE_CENSUS_SHA256 =
-  'f3df1beda1039285bcff8b88f84cdfecdb73713bd36d552db7a1a69335310388';
+  '9ff5fdaabb5fa51018217d49fb6f9b45bf00e7c00196b2875c890fe6842d0ac4';
 export const EXPECTED_BASELINE_GOVERNANCE_SHA256 =
   '862417a75ee2b8aa4c04eff14713b47eedc22060319ef4f369e4ad6beff10afb';
 const CURRENT_STAGE_OCCURRENCE_CLASSES = new Set([

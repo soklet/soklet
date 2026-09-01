@@ -720,7 +720,7 @@ public class McpHttpServerRequestScopedSseTests {
 			McpApplicationExecutionConfiguration executionConfiguration) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"request-scoped-sse-test", "4.0.0-SNAPSHOT"))
+						"request-scoped-sse-test", "4.0.0"))
 				.build();
 		McpApplicationRequestRouter router = McpApplicationRequestRouter.fromHandlers(
 				Map.of(APPLICATION_METHOD, handler));
@@ -738,7 +738,7 @@ public class McpHttpServerRequestScopedSseTests {
 			McpRuntimeObservationSink observationSink) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"request-scoped-sse-test", "4.0.0-SNAPSHOT"))
+						"request-scoped-sse-test", "4.0.0"))
 				.build();
 		McpApplicationRequestRouter router = McpApplicationRequestRouter.fromHandlers(
 				Map.of(APPLICATION_METHOD, handler));
@@ -762,7 +762,7 @@ public class McpHttpServerRequestScopedSseTests {
 			McpApplicationExecutionObserver executionObserver) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"request-scoped-sse-test", "4.0.0-SNAPSHOT"))
+						"request-scoped-sse-test", "4.0.0"))
 				.build();
 		McpApplicationRequestRouter router = McpApplicationRequestRouter.fromHandlers(
 				Map.of(APPLICATION_METHOD, handler));

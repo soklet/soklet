@@ -53,7 +53,7 @@ Each scenario receives a fresh deterministic JVM; the fixture never changes
 its advertised capabilities to suit the selected scenario.
 
 The fixture is a candidate-artifact-only black box. Development verification
-compiles and runs against packaged `target/soklet-4.0.0-SNAPSHOT.jar`; release
+compiles and runs against packaged `target/soklet-4.0.0.jar`; release
 verification instead uses the explicit checksum-locked main JAR. Its runtime
 classpath contains only fixture classes plus the selected JAR, never
 `target/classes` or `target/test-classes`. Normal configuration and handlers
@@ -207,7 +207,7 @@ owned by candidate conformance.
 The subsequent 2026-08-21 core-result/error closure does not alter either
 official-suite corpus. A separate checksum-bound core result-envelope corpus
 contains 25 JSON/SSE fixtures and four production tests; its manifest SHA-256
-is `8ad233e91c4898fecaead0f779b13aebbaf3e2211fe3356f376c507736638d9c`.
+is `00e38b4c5345b6c786d278919d7df2ade8d7d10ad9625455812bf172b203dce6`.
 A second separate corpus contains twelve canonical complete HTTP fixtures across
 the eight frozen ordinary error families and two production-listener tests;
 its manifest SHA-256 is
@@ -411,7 +411,7 @@ compile and execute the local checkpoint as follows:
 mvn -B -ntp -Dtest=McpFinalTagGoldenWireProductionTests clean package
 mkdir -p target/conformance/official
 sh conformance/official/build-public-fixture.sh \
-  /absolute/project/target/soklet-4.0.0-SNAPSHOT.jar \
+  /absolute/project/target/soklet-4.0.0.jar \
   /absolute/project/target/conformance/public-fixture \
   > target/conformance/official/public-fixture-classpath.txt
 node conformance/official/local-simulator-self-test.mjs

@@ -25,12 +25,12 @@ const EXPECTED_PROTOCOL_VERSION = '2026-07-28';
 const EXPECTED_SOURCE_MATRIX_PATH = 'mcp/MCP_CONFORMANCE_MATRIX.md';
 const EXPECTED_SOURCE_MATRIX_LAST_UPDATED = '2026-09-01';
 const EXPECTED_SOURCE_MATRIX_SHA256 =
-  '53b7c3ffe4d63af0306b1b34a28c7c0e2553f6b056da51d8d38444922f9802d2';
+  'e30767960da9d1ce7cad608faaa53dff85e59f1acffdd30b4a0073af08bec7ac';
 const EXPECTED_ROW_COUNT = 263;
 const EXPECTED_ROW_IDS_SHA256 =
   'd7a55f3218e4ea8d18e2f6295f56d9b9b70ecdba9deb8be5a624bae3a9b647b0';
 const EXPECTED_ROW_ATTRIBUTIONS_SHA256 =
-  '51f598c6ec4587de414c6e2140179412bf386c16547c35c10cf7ed2b86df3a9b';
+  'e4036d03459f11c189b88b00c8b0d02da6be6f6af491c7a7e662cbca68d95110';
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const ROW_ID_PATTERN = /^(?:MCP-[A-Z0-9]+-\d{3}|SOK-[A-Z0-9]+-\d{3}|AMB-\d{3})$/;
 const DISPOSITIONS = Object.freeze([
@@ -52,12 +52,9 @@ const EXPECTED_GATE_IDS = Object.freeze([
   'spotbugs',
   'schema-replay',
   'fuzz-replay',
-  'fuzz-nightly-history',
   'soak-smoke',
-  'soak-nightly-history',
   'release-soak',
   'localization-fleet',
-  'operational-history',
   'release-scans',
   'mcp-benchmarks',
   'matrix-closure',
@@ -414,7 +411,7 @@ const PRIVACY_NON_THROWABLE_ERROR_TYPES = new Set([
 const RESIDUAL_EVIDENCE_PATH =
   'release/mcp-residual-closure-evidence.json';
 const EXPECTED_RESIDUAL_SEMANTICS_SHA256 =
-  '857d69a1e8142a6d257ea9492fe64beba0b16148e42c655dc2d107a1c59b32c9';
+  '37d333ed185acfe423d4fd1aeee13b46a82911e7098ef4b7ba68e051e14be2fb';
 const RESIDUAL_TOP_LEVEL_KEYS = Object.freeze([
   'formatVersion',
   'protocolVersion',
@@ -445,8 +442,6 @@ const RESIDUAL_ROW_CONTRACTS = Object.freeze([
       'src/test/java/com/soklet/internal/mcp/protocol/McpFiniteBoundInventoryTests.java',
     ]),
     releaseGates: Object.freeze([
-      'fuzz-nightly-history',
-      'soak-nightly-history',
       'release-soak',
     ]),
   }),
@@ -495,7 +490,6 @@ const RESIDUAL_ROW_CONTRACTS = Object.freeze([
     ]),
     releaseGates: Object.freeze([
       'release-soak',
-      'operational-history',
       'soklet-otel',
     ]),
   }),

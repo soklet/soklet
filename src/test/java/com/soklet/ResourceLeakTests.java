@@ -166,7 +166,7 @@ public class ResourceLeakTests {
 		ResourceSnapshot stoppedBaseline = ResourceSnapshot.captureAfterGc();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp-resource-leak")
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"resource-leak", "4.0.0-SNAPSHOT").build())
+						"resource-leak", "4.0.0").build())
 				.build();
 		McpServer server = McpServer.withPort(0)
 				.host("127.0.0.1")

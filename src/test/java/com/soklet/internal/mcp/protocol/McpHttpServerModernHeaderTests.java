@@ -334,7 +334,7 @@ public class McpHttpServerModernHeaderTests {
 			AtomicInteger handlerInvocations) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"modern-header-test", "4.0.0-SNAPSHOT"))
+						"modern-header-test", "4.0.0"))
 				.build();
 		McpApplicationRequestHandler handler = ignored -> {
 			handlerInvocations.incrementAndGet();

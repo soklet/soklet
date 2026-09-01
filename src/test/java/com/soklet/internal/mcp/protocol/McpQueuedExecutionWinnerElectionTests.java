@@ -249,7 +249,7 @@ public class McpQueuedExecutionWinnerElectionTests {
 			McpApplicationRequestHandler handler) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"queued-winner-election-test", "4.0.0-SNAPSHOT"))
+						"queued-winner-election-test", "4.0.0"))
 				.build();
 		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
 				CorsAuthorizer.rejectAllInstance(),
@@ -313,7 +313,7 @@ public class McpQueuedExecutionWinnerElectionTests {
 	private static McpEffectiveAdmissionIdentity admissionIdentity() {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"queued-winner-election-test", "4.0.0-SNAPSHOT"))
+						"queued-winner-election-test", "4.0.0"))
 				.build();
 		return McpEffectiveAdmissionIdentity.resolve(endpoint, "/mcp",
 				McpAdmissionIdentity.anonymousInstance());

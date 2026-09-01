@@ -156,7 +156,7 @@ public class McpMultiEndpointCapacityPublicRuntimeTests {
 			@NonNull McpToolRegistration<McpJsonObject> tool) {
 		return McpEndpoint.withPath(path)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						implementationName, "4.0.0-SNAPSHOT").build())
+						implementationName, "4.0.0").build())
 				.tool(tool)
 				.build();
 	}

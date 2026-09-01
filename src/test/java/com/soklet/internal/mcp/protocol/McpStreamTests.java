@@ -120,7 +120,7 @@ public class McpStreamTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"stream-test", "4.0.0-SNAPSHOT").build())
+						"stream-test", "4.0.0").build())
 				.tool(tool)
 				.resource(resource)
 				.subscriptions(subscriptions)

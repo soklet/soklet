@@ -397,7 +397,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 		return McpEndpoint.withPath(path)
 				.serverInformation(McpImplementation.withNameAndVersion(
 						"mirrored-header-public-runtime-test",
-						"4.0.0-SNAPSHOT").build())
+						"4.0.0").build())
 				.tool(tool)
 				.build();
 	}

@@ -91,7 +91,7 @@ public class SokletMcpLifecycleTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(path)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"residual-lifecycle-test", "4.0.0-SNAPSHOT").build())
+						"residual-lifecycle-test", "4.0.0").build())
 				.tool(tool)
 				.build();
 		McpServer mcpServer = McpServer.withPort(0)

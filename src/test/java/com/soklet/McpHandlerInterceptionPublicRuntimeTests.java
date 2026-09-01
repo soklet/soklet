@@ -103,7 +103,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"handler-interception-runtime-test", "4.0.0-SNAPSHOT")
+						"handler-interception-runtime-test", "4.0.0")
 						.build())
 				.tool(tool)
 				.prompt(prompt)
@@ -229,7 +229,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 		AtomicInteger shortCircuitHandlerInvocations = new AtomicInteger();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"handler-interception-failure-test", "4.0.0-SNAPSHOT")
+						"handler-interception-failure-test", "4.0.0")
 						.build())
 				.tool(McpToolRegistration.withName("short-circuit")
 						.argumentType(RequiredArguments.class)
@@ -289,7 +289,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
 						"static-resource-list-interception-test",
-						"4.0.0-SNAPSHOT").build())
+						"4.0.0").build())
 				.resource(McpResourceRegistration
 						.withUriAndName(RESOURCE_URI, "Static resource")
 						.handler((request, read, features) ->
@@ -327,7 +327,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
 						"resource-interceptor-error-test",
-						"4.0.0-SNAPSHOT").build())
+						"4.0.0").build())
 				.resource(McpResourceRegistration
 						.withUriAndName(RESOURCE_URI, "Resource")
 						.handler((request, read, features) ->
@@ -379,7 +379,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 
 		McpEndpoint.Builder endpointBuilder = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"handler-continuation-runtime-test", "4.0.0-SNAPSHOT")
+						"handler-continuation-runtime-test", "4.0.0")
 						.build());
 		for (String toolName : handlerInvocations.keySet()) {
 			endpointBuilder.tool(McpToolRegistration.withName(toolName)
@@ -457,7 +457,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 		CountDownLatch lateContinuationCompleted = new CountDownLatch(1);
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"handler-interception-deadline-test", "4.0.0-SNAPSHOT")
+						"handler-interception-deadline-test", "4.0.0")
 						.build())
 				.tool(McpToolRegistration.withName("late")
 						.jsonArguments()

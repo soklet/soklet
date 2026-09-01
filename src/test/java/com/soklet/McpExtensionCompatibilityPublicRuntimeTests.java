@@ -183,7 +183,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"extension-compatibility-test", "4.0.0-SNAPSHOT").build())
+						"extension-compatibility-test", "4.0.0").build())
 				.tool(tool)
 				.build();
 		McpHandlerInterceptor interceptor = (context, features, continuation) -> {
@@ -277,7 +277,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"tasks-compatibility-test", "4.0.0-SNAPSHOT").build())
+						"tasks-compatibility-test", "4.0.0").build())
 				.tool(tool)
 				.build();
 		McpServer server = server(endpoint, context -> {
@@ -338,7 +338,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 	private static McpServer server(McpAdmissionController admissionController) {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"extension-compatibility-test", "4.0.0-SNAPSHOT").build())
+						"extension-compatibility-test", "4.0.0").build())
 				.build();
 		return server(endpoint, admissionController,
 				McpHandlerInterceptor.passThroughInstance());

@@ -619,7 +619,7 @@ public class McpApplicationExecutionTests {
 	private static McpEffectiveAdmissionIdentity admissionIdentity() {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"application-execution-test", "4.0.0-SNAPSHOT"))
+						"application-execution-test", "4.0.0"))
 				.build();
 		return McpEffectiveAdmissionIdentity.resolve(endpoint, "/mcp",
 				McpAdmissionIdentity.anonymousInstance());

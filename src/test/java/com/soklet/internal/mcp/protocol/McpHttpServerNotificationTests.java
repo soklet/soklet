@@ -112,7 +112,7 @@ public class McpHttpServerNotificationTests {
 		AtomicReference<McpApplicationInvocation> invocation = new AtomicReference<>();
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"notification-cancellation-test", "4.0.0-SNAPSHOT"))
+						"notification-cancellation-test", "4.0.0"))
 				.tool(new McpNormalizedOperation("slow-tool",
 						McpInputRequestPlan.empty(), McpMirroredHeaderPlan.empty()))
 				.build();
@@ -659,7 +659,7 @@ public class McpHttpServerNotificationTests {
 	private static McpHttpServerRuntime runtime(McpHttpEndpointPolicy policy) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"notification-test", "4.0.0-SNAPSHOT"))
+						"notification-test", "4.0.0"))
 				.build();
 		return new McpHttpServerRuntime(
 				McpHttpTransportConfiguration.productionDefaults(0), policy, endpoint);

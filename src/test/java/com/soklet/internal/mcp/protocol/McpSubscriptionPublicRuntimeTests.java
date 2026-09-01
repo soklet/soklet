@@ -1272,7 +1272,7 @@ public class McpSubscriptionPublicRuntimeTests {
 				+ subscriptionIdJson + ","
 				+ "\"io.modelcontextprotocol/serverInfo\":{"
 				+ "\"name\":\"subscription-public-runtime-test\","
-				+ "\"version\":\"4.0.0-SNAPSHOT\"}}}}");
+				+ "\"version\":\"4.0.0\"}}}}");
 	}
 
 	private static String sse(String json) {
@@ -1338,7 +1338,7 @@ public class McpSubscriptionPublicRuntimeTests {
 		McpEndpoint.Builder builder = McpEndpoint.withPath(path)
 				.serverInformation(McpImplementation.withNameAndVersion(
 						"subscription-public-runtime-test",
-						"4.0.0-SNAPSHOT").build())
+						"4.0.0").build())
 				.subscriptions(subscriptions);
 		for (URI resourceUri : resourceUris) {
 			builder.resource(McpResourceRegistration

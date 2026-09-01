@@ -290,7 +290,7 @@ public class McpSimulatorEveryOperationTests {
 					+ "\"cacheScope\":\"private\",\"resultType\":\"complete\","
 					+ "\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{"
 					+ "\"name\":\"simulator-every-operation-test\","
-					+ "\"version\":\"4.0.0-SNAPSHOT\"}}}";
+					+ "\"version\":\"4.0.0\"}}}";
 			case "tools/list" -> "{\"tools\":[{\"name\":\"" + TOOL_NAME
 					+ "\",\"inputSchema\":{\"type\":\"object\"}}],\"ttlMs\":0,"
 					+ "\"cacheScope\":\"private\",\"resultType\":\"complete\"}";
@@ -601,7 +601,7 @@ public class McpSimulatorEveryOperationTests {
 				McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 					.serverInformation(McpImplementation.withNameAndVersion(
 							"simulator-every-operation-test",
-							"4.0.0-SNAPSHOT").build())
+							"4.0.0").build())
 					.tool(tool)
 					.prompt(prompt)
 					.resource(exact)

@@ -9,7 +9,7 @@
   "promotion": {
     "helper": {
       "path": "scripts/release-promotion.mjs",
-      "sha256": "04351205d0b5593f2dcf737c2aa43ad110bc03d6add09dd1616b38f3956e60ab"
+      "sha256": "715fb1cc3dd136b608425f5066329603d7790cebc0c1fa9c0fc3f1c27e8a126f"
     },
     "wrapper": {
       "path": "scripts/promote-release-candidate.sh",
@@ -227,22 +227,6 @@
     {
       "access": "LOCAL_CHECKOUT",
       "artifactChecksum": null,
-      "artifactIdentity": "ci:fuzz-nightly-history",
-      "commit": null,
-      "defaultArtifactIdentity": null,
-      "defaultArtifactSha256": null,
-      "evidenceContract": "soklet.release.fuzz-nightly-history.v1",
-      "id": "fuzz-nightly-history",
-      "kind": "SOURCE",
-      "reason": "",
-      "repository": null,
-      "status": "READY",
-      "toolchain": "nodePin",
-      "versionProperty": null
-    },
-    {
-      "access": "LOCAL_CHECKOUT",
-      "artifactChecksum": null,
       "artifactIdentity": "SOKLET_SOAK_PROFILE=smoke",
       "commit": null,
       "defaultArtifactIdentity": null,
@@ -254,22 +238,6 @@
       "repository": null,
       "status": "READY",
       "toolchain": "toystoreJava",
-      "versionProperty": null
-    },
-    {
-      "access": "LOCAL_CHECKOUT",
-      "artifactChecksum": null,
-      "artifactIdentity": "SOKLET_SOAK_PROFILE=nightly-history",
-      "commit": null,
-      "defaultArtifactIdentity": null,
-      "defaultArtifactSha256": null,
-      "evidenceContract": "soklet.release.soak-nightly-history.v1",
-      "id": "soak-nightly-history",
-      "kind": "SOURCE",
-      "reason": "",
-      "repository": null,
-      "status": "READY",
-      "toolchain": "nodePin",
       "versionProperty": null
     },
     {
@@ -302,22 +270,6 @@
       "repository": null,
       "status": "READY",
       "toolchain": "java",
-      "versionProperty": null
-    },
-    {
-      "access": "LOCAL_CHECKOUT",
-      "artifactChecksum": null,
-      "artifactIdentity": "ci:operational-history",
-      "commit": null,
-      "defaultArtifactIdentity": null,
-      "defaultArtifactSha256": null,
-      "evidenceContract": "soklet.release.operational-history.v1",
-      "id": "operational-history",
-      "kind": "SOURCE",
-      "reason": "",
-      "repository": null,
-      "status": "READY",
-      "toolchain": "nodePin",
       "versionProperty": null
     },
     {

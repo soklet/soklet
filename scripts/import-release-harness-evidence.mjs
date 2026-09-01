@@ -36,6 +36,54 @@ const EXPECTED_GATE_IDS = Object.freeze([
   'release-scans',
   'soak-nightly-history',
 ]);
+const ADVISORY_HARNESS_GATE_IDS = new Set([
+  'fuzz-nightly-history',
+  'operational-history',
+  'soak-nightly-history',
+]);
+const ADVISORY_HARNESS_EVIDENCE_CONTRACTS = Object.freeze({
+  'fuzz-nightly-history': Object.freeze({
+    command: 'node scripts/verify-release-history.mjs fuzz-nightly',
+    contractId: 'soklet.release.fuzz-nightly-history.v1',
+    expectation: 'REQUIRED_NIGHTLY_FUZZ_WINDOW_PASSES',
+    profile: 'nightly-history',
+    roles: Object.freeze([Object.freeze({
+      fileName: 'fuzz-nightly-history.json',
+      mediaType: 'application/json',
+      role: 'history',
+      type: 'FILE',
+    })]),
+  }),
+  'operational-history': Object.freeze({
+    command: 'node scripts/verify-release-history.mjs operational',
+    contractId: 'soklet.release.operational-history.v1',
+    expectation: 'REQUIRED_OPERATIONAL_HISTORY_WINDOW_PASSES',
+    profile: 'scheduled-history',
+    roles: Object.freeze([Object.freeze({
+      fileName: 'operational-history.json',
+      mediaType: 'application/json',
+      role: 'history',
+      type: 'FILE',
+    })]),
+  }),
+  'soak-nightly-history': Object.freeze({
+    command: 'node scripts/verify-release-history.mjs soak-nightly',
+    contractId: 'soklet.release.soak-nightly-history.v1',
+    expectation: 'REQUIRED_NIGHTLY_SOAK_WINDOW_PASSES',
+    profile: 'nightly-history',
+    roles: Object.freeze([Object.freeze({
+      fileName: 'soak-nightly-history.json',
+      mediaType: 'application/json',
+      role: 'history',
+      type: 'FILE',
+    })]),
+  }),
+});
+
+function expectedHarnessEvidenceContract(gateId) {
+  return EXPECTED_GATE_EVIDENCE_CONTRACTS[gateId]
+    ?? ADVISORY_HARNESS_EVIDENCE_CONTRACTS[gateId];
+}
 const EXPECTED_CANDIDATE_BINDINGS = Object.freeze([
   'candidateCommit',
   'candidateMainJarSha256',
@@ -283,9 +331,9 @@ function validateContract(contract, index) {
     fail(`${label}.candidateBindings drifted from the approved ordered binding set.`);
   if (contract.contractVersion !== 1)
     fail(`${label}.contractVersion must be 1.`);
-  const evidence = EXPECTED_GATE_EVIDENCE_CONTRACTS[contract.id];
+  const evidence = expectedHarnessEvidenceContract(contract.id);
   if (evidence === undefined)
-    fail(`${label} has no validator-owned evidence contract.`);
+    fail(`${label} has no reviewed release or advisory evidence contract.`);
   if (contract.evidenceContract !== evidence.contractId)
     fail(`${label}.evidenceContract does not match release validation policy.`);
   exactKeys(contract.importerMode, ['import', 'verifierCommand', 'verifyConfig'], `${label}.importerMode`);
@@ -315,7 +363,7 @@ function validateContract(contract, index) {
   ));
   const expectedRoles = evidence.roles.map(expectedRegistryRole);
   if (!sameJson(roles, expectedRoles))
-    fail(`${label}.roles do not match the validator-owned ordered receipt roles.`);
+    fail(`${label}.roles do not match the reviewed ordered receipt roles.`);
   const toolchains = requireArray(contract.toolchains, `${label}.toolchains`);
   if (toolchains.length === 0)
     fail(`${label}.toolchains must not be empty.`);
@@ -371,6 +419,11 @@ export function verifyReleaseHarnessManifestParity(
   const gateById = new Map(gates.map((gate) => [gate.id, gate]));
   for (const [id, contract] of configuration.contracts) {
     const gate = gateById.get(id);
+    if (ADVISORY_HARNESS_GATE_IDS.has(id)) {
+      if (gate !== undefined)
+        fail(`release-validation manifest must keep advisory harness ${id} outside the release gate set.`);
+      continue;
+    }
     if (gate === undefined)
       fail(`release-validation manifest is missing harness gate ${id}.`);
     if (gate.evidenceContract !== contract.evidenceContract)
@@ -2504,6 +2557,7 @@ function validateBundle(
 }
 
 function importedReceipt(contract, candidate, bundleSha256, roles) {
+  const evidenceContract = expectedHarnessEvidenceContract(contract.id);
   return {
     candidateBindings: {
       ...candidate,
@@ -2515,8 +2569,8 @@ function importedReceipt(contract, candidate, bundleSha256, roles) {
     gate: contract.id,
     policySha256: policySha256(contract),
     producer: contract.producer,
-    receiptExpectation: EXPECTED_GATE_EVIDENCE_CONTRACTS[contract.id].expectation,
-    receiptProfile: EXPECTED_GATE_EVIDENCE_CONTRACTS[contract.id].profile,
+    receiptExpectation: evidenceContract.expectation,
+    receiptProfile: evidenceContract.profile,
     roles: roles.map(({ descriptor }) => descriptor),
     toolchainsSha256: toolchainsSha256(contract),
     verifierCommand: contract.importerMode.verifierCommand,
@@ -2679,7 +2733,7 @@ export function verifyImportedReceipt(path, registryPath) {
       || value.verifierCommand !== contract.importerMode.verifierCommand) {
     fail('imported receipt contract identity drifted from the release-harness registry.');
   }
-  const evidenceContract = EXPECTED_GATE_EVIDENCE_CONTRACTS[value.gate];
+  const evidenceContract = expectedHarnessEvidenceContract(value.gate);
   if (value.receiptExpectation !== evidenceContract.expectation
       || value.receiptProfile !== evidenceContract.profile) {
     fail('imported receipt expectation/profile drifted from release validation policy.');

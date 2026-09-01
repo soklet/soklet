@@ -50,7 +50,7 @@ public class McpSimulationLifecyclePhaseTests {
 			throws Exception {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"simulation-phase-test", "4.0.0-SNAPSHOT").build())
+						"simulation-phase-test", "4.0.0").build())
 				.build();
 		McpServerRuntimeBridge bridge = new McpServerRuntimeBridge(
 				LOOPBACK, 0, endpoint, Set.of(LOOPBACK), false,
@@ -168,7 +168,7 @@ public class McpSimulationLifecyclePhaseTests {
 				McpJsonObject.empty());
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint
 				.withServerInformation(McpImplementationMetadata.withNameAndVersion(
-						"simulation-phase-test", "4.0.0-SNAPSHOT"))
+						"simulation-phase-test", "4.0.0"))
 				.tool(McpNormalizedOperation.tool(descriptor,
 						McpMirroredHeaderPlan.empty()))
 				.build();

@@ -18,7 +18,7 @@
       "phase": 3,
       "source": "production",
       "path": "phase-3/discover-response.json",
-      "sha256": "3442aaf3ae7a97e42b4e69405fe94286a950c64230c59fe411f64c28c5861e53",
+      "sha256": "9c3fd58a35adc3f7853edb784a5f65c3db949f3f21d69b1bb5843a65aba1d1ba",
       "schemaRef": "#/$defs/DiscoverResultResponse",
       "transportForm": "http-json-body",
       "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_3_messages_match_the_production_listener"
@@ -458,7 +458,7 @@
       "phase": 5,
       "source": "production",
       "path": "phase-5/subscription-listen-response.json",
-      "sha256": "5c225a1d2806f665ccbaba30865b682067fc2446a8cd74b893b4b471935de2f9",
+      "sha256": "f2ffe585f67d92927c11d0e0162f690a5c0ead093cee871b4cd77dbc563da024",
       "schemaRef": "#/$defs/SubscriptionsListenResultResponse",
       "transportForm": "sse-data-json",
       "owningTest": "McpFinalTagGoldenWireProductionTests#checked_in_phase_5_subscription_messages_match_the_production_listener"

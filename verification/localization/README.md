@@ -19,7 +19,7 @@ Build the jar first, then run:
 
 ```sh
 verification/localization/verify.sh \
-  target/soklet-4.0.0-SNAPSHOT.jar
+  target/soklet-4.0.0.jar
 ```
 
 `SOKLET_CANDIDATE_ARTIFACT` may replace the argument. The verifier downloads

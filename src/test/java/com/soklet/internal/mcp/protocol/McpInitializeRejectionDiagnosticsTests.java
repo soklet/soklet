@@ -367,7 +367,7 @@ public class McpInitializeRejectionDiagnosticsTests {
 						McpUnknownMirroredHeaderPolicy.REJECT_REQUESTS);
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"initialize-diagnostics-test", "4.0.0-SNAPSHOT"))
+						"initialize-diagnostics-test", "4.0.0"))
 				.build();
 		McpApplicationRequestRouter router = McpApplicationRequestRouter.fromHandlers(
 				Map.of("example/handler", ignored -> {

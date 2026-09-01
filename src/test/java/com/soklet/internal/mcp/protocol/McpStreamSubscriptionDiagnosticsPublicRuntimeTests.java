@@ -390,7 +390,7 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 	@NonNull
 	private static McpImplementation serverInformation() {
 		return McpImplementation.withNameAndVersion(
-				"stream-diagnostics-test", "4.0.0-SNAPSHOT").build();
+				"stream-diagnostics-test", "4.0.0").build();
 	}
 
 	@NonNull

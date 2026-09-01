@@ -160,7 +160,7 @@ public class McpSimulatorPublicRuntimeTests {
 			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 					.serverInformation(McpImplementation.withNameAndVersion(
 							"simulator-default-host-test",
-							"4.0.0-SNAPSHOT").build())
+							"4.0.0").build())
 					.tool(tool)
 					.build();
 			return transports.newMcpServerBuilder(0)
@@ -526,7 +526,7 @@ public class McpSimulatorPublicRuntimeTests {
 			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 					.serverInformation(McpImplementation.withNameAndVersion(
 							"simulator-subscription-test",
-							"4.0.0-SNAPSHOT").build())
+							"4.0.0").build())
 					.resource(McpResourceRegistration.withUriAndName(
 							URI.create("https://example.com/simulator-resource"),
 							"Simulator resource")
@@ -785,7 +785,7 @@ public class McpSimulatorPublicRuntimeTests {
 			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
 						"simulator-capture-isolation-test",
-						"4.0.0-SNAPSHOT").build())
+						"4.0.0").build())
 				.tools(List.of(slow, fast))
 				.build();
 			return baseServerBuilder(transports, List.of(endpoint),
@@ -1225,7 +1225,7 @@ public class McpSimulatorPublicRuntimeTests {
 			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 					.serverInformation(McpImplementation.withNameAndVersion(
 							"simulator-public-runtime-test",
-							"4.0.0-SNAPSHOT").build())
+							"4.0.0").build())
 					.tools(tools)
 					.build();
 			return baseServerBuilder(transports, List.of(endpoint),

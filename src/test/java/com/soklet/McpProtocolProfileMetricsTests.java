@@ -43,7 +43,7 @@ public class McpProtocolProfileMetricsTests {
 		DefaultMetricsCollector metrics = DefaultMetricsCollector.defaultInstance();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"profile-metrics-test", "4.0.0-SNAPSHOT").build())
+						"profile-metrics-test", "4.0.0").build())
 				.build();
 		McpServer server = McpServer.withPort(0)
 				.host(HOST)

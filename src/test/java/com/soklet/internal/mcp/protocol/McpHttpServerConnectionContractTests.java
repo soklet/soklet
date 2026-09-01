@@ -44,7 +44,7 @@ public class McpHttpServerConnectionContractTests {
 		AtomicInteger admissions = new AtomicInteger();
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"connection-test", "4.0.0-SNAPSHOT"))
+						"connection-test", "4.0.0"))
 				.build();
 		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
 				McpHttpTransportConfiguration.productionDefaults(0),
@@ -115,7 +115,7 @@ public class McpHttpServerConnectionContractTests {
 								McpMirroredHeaderValueType.STRING))));
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"connection-tool-test", "4.0.0-SNAPSHOT"))
+						"connection-tool-test", "4.0.0"))
 				.tool(tool)
 				.build();
 		McpProtocolAdmissionController protocolAdmissionController = context -> {

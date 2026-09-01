@@ -152,14 +152,14 @@ function publicFixtureClasspathRequiresExactCandidateBoundary() {
   const fixtureMainClass = resolve(
     fixtureClasses, 'com/soklet/conformance/McpConformanceFixture.class',
   );
-  const candidateJar = resolve(scratch, 'target/soklet-4.0.0-SNAPSHOT.jar');
+  const candidateJar = resolve(scratch, 'target/soklet-4.0.0.jar');
   try {
     mkdirSync(resolve(fixtureMainClass, '..'), { recursive: true });
     writeFileSync(fixtureMainClass, 'fixture');
     writeFileSync(candidateJar, 'candidate');
     const classpath = [
       'target/conformance/public-fixture/classes',
-      'target/soklet-4.0.0-SNAPSHOT.jar',
+      'target/soklet-4.0.0.jar',
     ].join(delimiter);
 
     assert.deepEqual(verifyPublicFixtureClasspath(classpath, scratch), {
@@ -179,7 +179,7 @@ function publicFixtureClasspathRequiresExactCandidateBoundary() {
 			/validated release-candidate JAR/,
 		);
     assert.throws(() => verifyPublicFixtureClasspath(
-      ['target/soklet-4.0.0-SNAPSHOT.jar',
+      ['target/soklet-4.0.0.jar',
         'target/conformance/public-fixture/classes'].join(delimiter),
       scratch,
     ), /classpath must be exactly/);

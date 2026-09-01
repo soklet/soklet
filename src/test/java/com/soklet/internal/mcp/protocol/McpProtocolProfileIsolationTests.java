@@ -392,14 +392,14 @@ public class McpProtocolProfileIsolationTests {
 	private static McpNormalizedEndpoint minimalEndpoint() {
 		return McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"profile-isolation-test", "4.0.0-SNAPSHOT"))
+						"profile-isolation-test", "4.0.0"))
 				.build();
 	}
 
 	private static McpNormalizedEndpoint fullEndpoint() {
 		return McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"profile-isolation-test", "4.0.0-SNAPSHOT"))
+						"profile-isolation-test", "4.0.0"))
 				.tool(McpNormalizedOperation.named(TOOL))
 				.exactResource("test://profile/resource")
 				.subscriptions(McpNormalizedSubscriptionConfiguration.supporting(

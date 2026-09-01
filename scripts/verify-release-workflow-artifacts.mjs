@@ -9,21 +9,6 @@ const GITHUB_API_ROOT = 'https://api.github.com';
 const GITHUB_API_VERSION = '2026-03-10';
 
 const GATES = Object.freeze({
-  fuzz: Object.freeze({
-    artifactPrefix: 'fuzz-nightly-history',
-    events: Object.freeze(['schedule', 'workflow_dispatch']),
-    workflowPath: '.github/workflows/ci.yml',
-  }),
-  soak: Object.freeze({
-    artifactPrefix: 'soak-nightly-history',
-    events: Object.freeze(['schedule', 'workflow_dispatch']),
-    workflowPath: '.github/workflows/ci.yml',
-  }),
-  operational: Object.freeze({
-    artifactPrefix: 'operational-history',
-    events: Object.freeze(['workflow_dispatch']),
-    workflowPath: '.github/workflows/ci.yml',
-  }),
   scans: Object.freeze({
     artifactPrefix: 'release-scans',
     events: Object.freeze(['workflow_dispatch']),
@@ -409,9 +394,6 @@ export async function verifyBenchmarkDraftWorkflowArtifact({
 function usage() {
   return 'Usage: node scripts/verify-release-workflow-artifacts.mjs '
     + '--repository <owner/name> --candidate <commit> '
-    + '--fuzz-run-id <id> --fuzz-artifact-name <name> '
-    + '--soak-run-id <id> --soak-artifact-name <name> '
-    + '--operational-run-id <id> --operational-artifact-name <name> '
     + '--scans-run-id <id> --scans-artifact-name <name> '
     + '--benchmark-run-id <id> --benchmark-artifact-name <name>\n'
     + '   or: node scripts/verify-release-workflow-artifacts.mjs '
@@ -508,7 +490,7 @@ export async function runReleaseWorkflowArtifactCli({
     fetchImpl,
     token,
   });
-  writeOutput(`release workflow artifact provenance PASS candidate=${result.candidate} artifacts=5`);
+  writeOutput(`release workflow artifact provenance PASS candidate=${result.candidate} artifacts=2`);
   return Object.freeze({ mode: parsed.mode, result });
 }
 

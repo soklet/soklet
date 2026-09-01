@@ -4,7 +4,7 @@
   "releaseVersion": "4.0.0",
   "sourceMatrixPath": "mcp/MCP_CONFORMANCE_MATRIX.md",
   "sourceMatrixLastUpdated": "2026-09-01",
-  "sourceMatrixSha256": "53b7c3ffe4d63af0306b1b34a28c7c0e2553f6b056da51d8d38444922f9802d2",
+  "sourceMatrixSha256": "e30767960da9d1ce7cad608faaa53dff85e59f1acffdd30b4a0073af08bec7ac",
   "releaseGateUniverse": [
     "candidate-build",
     "core-jdk-21",
@@ -16,12 +16,9 @@
     "spotbugs",
     "schema-replay",
     "fuzz-replay",
-    "fuzz-nightly-history",
     "soak-smoke",
-    "soak-nightly-history",
     "release-soak",
     "localization-fleet",
-    "operational-history",
     "release-scans",
     "mcp-benchmarks",
     "matrix-closure",
@@ -842,10 +839,9 @@
         "src/test/java/com/soklet/internal/mcp/protocol/McpProgressPublicRuntimeTests.java"
       ],
       "releaseGates": [
-        "soak-nightly-history",
         "release-soak"
       ],
-      "reason": "Remaining immutable or scheduled evidence is owned by: soak-nightly-history, release-soak."
+      "reason": "Remaining immutable or scheduled evidence is owned by: release-soak."
     },
     {
       "id": "MCP-PROG-005",
@@ -904,10 +900,9 @@
         "src/test/java/com/soklet/internal/mcp/protocol/McpProgressPublicRuntimeTests.java"
       ],
       "releaseGates": [
-        "soak-nightly-history",
         "release-soak"
       ],
-      "reason": "Remaining immutable or scheduled evidence is owned by: soak-nightly-history, release-soak."
+      "reason": "Remaining immutable or scheduled evidence is owned by: release-soak."
     },
     {
       "id": "MCP-CANCEL-005",
@@ -1012,11 +1007,10 @@
         "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeBoundaryTests.java"
       ],
       "releaseGates": [
-        "soak-nightly-history",
         "release-soak",
         "candidate-conformance"
       ],
-      "reason": "Remaining immutable or scheduled evidence is owned by: soak-nightly-history, release-soak, candidate-conformance."
+      "reason": "Remaining immutable or scheduled evidence is owned by: release-soak, candidate-conformance."
     },
     {
       "id": "MCP-SUB-008",
@@ -2124,10 +2118,9 @@
         "candidate-build",
         "core-jdk-21",
         "core-jdk-25",
-        "soak-nightly-history",
         "release-soak"
       ],
-      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25, soak-nightly-history, release-soak."
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25, release-soak."
     },
     {
       "id": "SOK-EXEC-008",
@@ -2184,11 +2177,9 @@
         "src/test/java/com/soklet/internal/mcp/protocol/McpFiniteBoundInventoryTests.java"
       ],
       "releaseGates": [
-        "fuzz-nightly-history",
-        "soak-nightly-history",
         "release-soak"
       ],
-      "reason": "Remaining immutable or scheduled evidence is owned by: fuzz-nightly-history, soak-nightly-history, release-soak."
+      "reason": "Remaining immutable or scheduled evidence is owned by: release-soak."
     },
     {
       "id": "SOK-VALID-003",
@@ -2687,10 +2678,9 @@
       ],
       "releaseGates": [
         "release-soak",
-        "operational-history",
         "soklet-otel"
       ],
-      "reason": "Remaining immutable or scheduled evidence is owned by: release-soak, operational-history, soklet-otel."
+      "reason": "Remaining immutable or scheduled evidence is owned by: release-soak, soklet-otel."
     },
     {
       "id": "SOK-TRACE-001",
@@ -2739,10 +2729,9 @@
         "src/test/java/com/soklet/McpTraceLogRecordTests.java"
       ],
       "releaseGates": [
-        "release-soak",
-        "operational-history"
+        "release-soak"
       ],
-      "reason": "Remaining immutable or scheduled evidence is owned by: release-soak, operational-history."
+      "reason": "Remaining immutable or scheduled evidence is owned by: release-soak."
     },
     {
       "id": "SOK-TRACE-005",
@@ -2763,10 +2752,9 @@
         "src/test/java/com/soklet/McpTransportMetricsAggregationTests.java"
       ],
       "releaseGates": [
-        "release-soak",
-        "operational-history"
+        "release-soak"
       ],
-      "reason": "Remaining immutable or scheduled evidence is owned by: release-soak, operational-history."
+      "reason": "Remaining immutable or scheduled evidence is owned by: release-soak."
     },
     {
       "id": "SOK-METRIC-001",
@@ -2794,10 +2782,9 @@
       ],
       "releaseGates": [
         "release-soak",
-        "operational-history",
         "soklet-otel"
       ],
-      "reason": "Remaining immutable or scheduled evidence is owned by: release-soak, operational-history, soklet-otel."
+      "reason": "Remaining immutable or scheduled evidence is owned by: release-soak, soklet-otel."
     },
     {
       "id": "SOK-METRIC-002",
@@ -2868,12 +2855,10 @@
         "candidate-build",
         "core-jdk-21",
         "core-jdk-25",
-        "fuzz-nightly-history",
-        "soak-nightly-history",
         "release-soak",
         "candidate-conformance"
       ],
-      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25, fuzz-nightly-history, soak-nightly-history, release-soak, candidate-conformance."
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25, release-soak, candidate-conformance."
     },
     {
       "id": "SOK-SHUT-001",
@@ -2888,10 +2873,9 @@
         "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeBoundaryTests.java"
       ],
       "releaseGates": [
-        "soak-nightly-history",
         "release-soak"
       ],
-      "reason": "Remaining immutable or scheduled evidence is owned by: soak-nightly-history, release-soak."
+      "reason": "Remaining immutable or scheduled evidence is owned by: release-soak."
     },
     {
       "id": "SOK-SHUT-002",
@@ -2994,12 +2978,10 @@
         "src/test/java/com/soklet/McpLocalizationRenderingRuntimeTests.java"
       ],
       "releaseGates": [
-        "fuzz-nightly-history",
-        "soak-nightly-history",
         "release-soak",
         "candidate-localization"
       ],
-      "reason": "Remaining immutable or scheduled evidence is owned by: fuzz-nightly-history, soak-nightly-history, release-soak, candidate-localization."
+      "reason": "Remaining immutable or scheduled evidence is owned by: release-soak, candidate-localization."
     },
     {
       "id": "SOK-L10N-004",
@@ -3047,10 +3029,9 @@
         "candidate-build",
         "core-jdk-21",
         "core-jdk-25",
-        "fuzz-nightly-history",
         "candidate-localization"
       ],
-      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25, fuzz-nightly-history, candidate-localization."
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25, candidate-localization."
     },
     {
       "id": "SOK-L10N-007",
@@ -3078,11 +3059,10 @@
         "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeBoundaryTests.java"
       ],
       "releaseGates": [
-        "soak-nightly-history",
         "release-soak",
         "localization-fleet"
       ],
-      "reason": "Remaining immutable or scheduled evidence is owned by: soak-nightly-history, release-soak, localization-fleet."
+      "reason": "Remaining immutable or scheduled evidence is owned by: release-soak, localization-fleet."
     },
     {
       "id": "SOK-L10N-009",
@@ -3128,18 +3108,15 @@
         "core-jdk-21",
         "core-jdk-25",
         "candidate-javadocs",
-        "fuzz-nightly-history",
-        "soak-nightly-history",
         "release-soak",
         "localization-fleet",
-        "operational-history",
         "release-scans",
         "mcp-benchmarks",
         "candidate-conformance",
         "candidate-localization",
         "toystore-app"
       ],
-      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25, candidate-javadocs, fuzz-nightly-history, soak-nightly-history, release-soak, localization-fleet, operational-history, release-scans, mcp-benchmarks, candidate-conformance, candidate-localization, toystore-app."
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25, candidate-javadocs, release-soak, localization-fleet, release-scans, mcp-benchmarks, candidate-conformance, candidate-localization, toystore-app."
     },
     {
       "id": "SOK-CONF-001",
@@ -3226,11 +3203,9 @@
         "candidate-build",
         "core-jdk-21",
         "core-jdk-25",
-        "fuzz-nightly-history",
-        "soak-nightly-history",
         "release-soak"
       ],
-      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25, fuzz-nightly-history, soak-nightly-history, release-soak."
+      "reason": "Remaining immutable or scheduled evidence is owned by: candidate-build, core-jdk-21, core-jdk-25, release-soak."
     },
     {
       "id": "SOK-NA-001",

@@ -1,1 +1,1 @@
-{"jsonrpc":"2.0","id":"phase-3-golden","result":{"supportedVersions":["2026-07-28"],"capabilities":{},"ttlMs":0,"cacheScope":"private","resultType":"complete","_meta":{"io.modelcontextprotocol/serverInfo":{"name":"soklet-final-schema-golden","version":"4.0.0-SNAPSHOT"}}}}
+{"jsonrpc":"2.0","id":"phase-3-golden","result":{"supportedVersions":["2026-07-28"],"capabilities":{},"ttlMs":0,"cacheScope":"private","resultType":"complete","_meta":{"io.modelcontextprotocol/serverInfo":{"name":"soklet-final-schema-golden","version":"4.0.0"}}}}

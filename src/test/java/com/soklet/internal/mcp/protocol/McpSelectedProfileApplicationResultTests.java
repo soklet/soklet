@@ -288,7 +288,7 @@ public class McpSelectedProfileApplicationResultTests {
 	private static McpEffectiveAdmissionIdentity admissionIdentity() {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"selected-application-result-test", "4.0.0-SNAPSHOT"))
+						"selected-application-result-test", "4.0.0"))
 				.build();
 		return McpEffectiveAdmissionIdentity.resolve(endpoint, "/mcp",
 				McpAdmissionIdentity.anonymousInstance());

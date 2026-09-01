@@ -5,8 +5,20 @@ Soklet 4.0.0 candidate. It is deliberately separate from ordinary CI: its input
 is a full candidate commit SHA, the workflow checks out that exact commit, and
 any repository change requires a new commit and a complete new run.
 
-The format-v2 manifest defines an exact ordered universe of 29 release gates.
-Twenty-three gates now have complete checked-in, executable validation paths;
+Release-facing material is kept separate from the internal evidence ledger:
+
+- [MCP quickstart](../MCP_QUICKSTART.md)
+- [3.5.1 to 4.0.0 migration](../MIGRATING_TO_4_0.md)
+- [dated MCP client/host compatibility](MCP_CLIENT_COMPATIBILITY.md)
+- [application-owned OAuth resource-server pattern](MCP_OAUTH_RESOURCE_SERVER.md)
+- [third-party attribution and redistribution audit](THIRD_PARTY_AUDIT.md)
+- [security-claims audit](SECURITY_CLAIMS_AUDIT.md)
+- [G5 promotion runbook](G5_RELEASE_RUNBOOK.md)—checked in but never executed
+  without explicit G5 approval
+- [no-rebuild Central promotion mechanics](PROMOTION.md)
+
+The format-v2 manifest defines an exact ordered universe of 26 release gates.
+Twenty gates now have complete checked-in, executable validation paths;
 none remain `BLOCKED_HARNESS_MISSING`. Six downstream gates remain
 `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, so the candidate is still not
 release-runnable end to end. `READY` means only that a gate has an executable,
@@ -14,17 +26,9 @@ pinned validation path. It never means that the gate passed for a candidate;
 only a typed PASS receipt from the exact candidate workflow can establish
 that.
 
-The five sustained or externally reviewed harnesses are now `READY`:
+The release-harness registry retains five executable evidence producers. Two
+are blocking imported release gates:
 
-- `fuzz-nightly-history` and `soak-nightly-history` run candidate-bound
-  scheduled producers, retain exact-candidate daily state, require seven
-  consecutive UTC days, and publish dedicated bundle-only artifacts once the
-  registered histories are complete;
-- `operational-history` runs a real HTTP, MCP, and SSE load producer for the
-  registered 22,200-second window on a self-hosted Linux x64 runner. It samples
-  actual process resources and framework metrics, audits semantic delivery,
-  cardinality, trace logs, and canary containment, and has no shortened
-  production duration switch;
 - `release-scans` combines candidate-bound CodeQL, SpotBugs, Gitleaks, and
   runtime-dependency reports. CodeQL and Gitleaks findings require exact,
   candidate-tracked, project-owner exceptions lasting no more than 30 days;
@@ -37,6 +41,20 @@ The five sustained or externally reviewed harnesses are now `READY`:
   changelog entry describing the regression and a separate project-owner
   approval bound to that same reviewed draft.
 
+Three longer-running producers remain available as advisory post-release
+monitoring and are deliberately outside the manifest, candidate validator,
+evidence bundle, and promotion decision:
+
+- `fuzz-nightly-history` and `soak-nightly-history` run candidate-bound
+  scheduled producers, retain exact-candidate daily state, require seven
+  consecutive UTC days, and publish dedicated bundle-only artifacts once the
+  registered histories are complete;
+- `operational-history` runs a real HTTP, MCP, and SSE load producer for the
+  registered 22,200-second window on a self-hosted Linux x64 runner. It samples
+  actual process resources and framework metrics, audits semantic delivery,
+  cardinality, trace logs, and canary containment, and has no shortened
+  production duration switch.
+
 The release workflow has separate `produce`, `finalize-benchmark`, and
 `validate` phases. The finalizer and validator download exact artifacts from
 named prior workflow runs; successful consumer artifacts contain only the
@@ -46,19 +64,15 @@ GitHub Actions API for the named run and artifact and require the exact
 repository, successful completed run, candidate commit, producer workflow,
 allowed trigger, run attempt, and unexpired candidate/run/attempt-bound
 artifact name. A run ID and artifact name alone cannot substitute a locally
-manufactured benchmark draft or bundle.
-The final candidate must still accumulate the histories, complete the
-operational run, satisfy the scans, and receive benchmark review before these
-gates can produce PASS receipts.
+manufactured benchmark draft or bundle. The final candidate must satisfy the
+scans and receive benchmark review; it does not wait for or consume the three
+advisory history artifacts.
 
 The candidate-side consumer path is fail closed. The producer commands
 validate the exact registered role basenames, and the release validator accepts
 each result only as a pre-acquired canonical bundle named by its dedicated
 environment variable:
 
-- `SOKLET_RELEASE_FUZZ_NIGHTLY_HISTORY_BUNDLE`;
-- `SOKLET_RELEASE_SOAK_NIGHTLY_HISTORY_BUNDLE`;
-- `SOKLET_RELEASE_OPERATIONAL_HISTORY_BUNDLE`;
 - `SOKLET_RELEASE_SCANS_BUNDLE`; and
 - `SOKLET_RELEASE_MCP_BENCHMARKS_BUNDLE`.
 
@@ -97,7 +111,7 @@ canonical `PASSED` report at 113 `CORE_COMPLETE`, 119 `RELEASE_GATED`, 12
 the local matrix; only the exact candidate workflow may record the typed PASS
 receipt. `RELEASE_GATED` means that a row has
 candidate-contained implementation or evidence anchors and that its remaining
-immutable-candidate, scheduled-history, sustained-run, or pinned-downstream
+immutable-candidate, sustained-run, or pinned-downstream
 proof is owned by the exact named release gate or gates. It must not be used to
 hide a local implementation, test, documentation, golden, or fixture gap.
 
@@ -110,8 +124,9 @@ candidate-contained evidence and no row remains unresolved.
 The candidate-contained [MCP privacy boundary](MCP_PRIVACY_BOUNDARY.md)
 separates core redaction and bounded built-in telemetry from application,
 fixture, downstream, and operator ownership. `SOK-PRIV-001` is now
-`RELEASE_GATED`, with exactly `release-soak`, `operational-history`, and
-`soklet-otel` retaining its sustained, operational, and downstream proof.
+`RELEASE_GATED`, with exactly `release-soak` and `soklet-otel` retaining its
+sustained and downstream proof. Operational history remains advisory
+post-release monitoring.
 
 Two candidate-contained MCP-C artifacts close the request-state rows:
 
@@ -143,11 +158,15 @@ request CI does not run this release-governance census.
 D1p public-cutover evidence has a separate deterministic contract in
 `release/d1p-evidence-contract.md` and frozen inputs in
 `release/d1p-evidence-config.json`. The release validator runs the adversarial
-self-test during its candidate build. Its `api-freeze` gate then produces the
-compiler-backed reports and explicitly runs both preparation and sibling-blind
-tracked verification against the exact clean cumulative `HEAD`. The ordinary
-push and pull request API-freeze wrapper remains API-only. Ordinary pre-G3
-remediation commits are supported;
+self-test during its candidate build. Preparation and sibling-blind tracked
+verification bind the clean approved preview before the exact-version
+transition. The final candidate's `api-freeze` gate regenerates the
+compiler-backed current reports against exact `4.0.0`; it does not pretend that
+the historical raw-byte preview seal can be rerun after reviewed fixture and
+artifact labels change from snapshot to exact release identity. The exact
+version-transition census permits those label-only changes and rejects other
+context drift. The ordinary push and pull request API-freeze wrapper remains
+API-only. Ordinary pre-G3 remediation commits are supported;
 their evidence must be regenerated from accepted D1 through the new tip before
 that tip can pass candidate verification. After D2, a one-time dedicated
 `release/d1p-approved-preview.json` seal authenticates approved `P` from Git
@@ -317,7 +336,7 @@ The subsequent 2026-08-21 core-result/error closure binds two more independent
 corpora without changing the official 48-message/11-test or authorization/
 CORS three-head/two-test corpora. The 25-fixture core result-envelope manifest
 at `conformance/golden-result-envelope/live/manifest.sha256` has SHA-256
-`8ad233e91c4898fecaead0f779b13aebbaf3e2211fe3356f376c507736638d9c`.
+`00e38b4c5345b6c786d278919d7df2ade8d7d10ad9625455812bf172b203dce6`.
 Four production-listener tests and the checksum/source-authority inventory
 exhaust Soklet 4.0's core `complete` and `input_required` envelope authorities;
 extension result types remain separately bounded by `MCP-BASE-006`. The twelve-
@@ -430,8 +449,8 @@ local Corretto 21. Full clean test passes 1,717/0/0/72 and 1,732/0/0/4 over
 462 main and 209 test sources. No production behavior, public API, freeze
 inventory, manifest, or version changes. `SOK-SIM-001` is now
 `RELEASE_GATED` by `candidate-build`, `core-jdk-21`, `core-jdk-25`,
-`fuzz-nightly-history`, `soak-nightly-history`, `release-soak`, and
-`candidate-conformance`. The current report remains `FAILED` at 108
+`release-soak`, and `candidate-conformance`; longer fuzz and soak histories
+remain advisory. The current report remains `FAILED` at 108
 `CORE_COMPLETE`, 117 `RELEASE_GATED`, 10 `APPLICATION_OWNED`, 18
 `NOT_APPLICABLE`, and 9 `UNRESOLVED`; the synthetic all-resolved report is
 117/117/10/18/0. This is deliberate simulator/live separation, not kernel,
@@ -570,10 +589,9 @@ Once every gate is ready, the validator:
    each gate's exact machine-readable and human-readable reports; matrix
    closure records a PASS only when its canonical report has zero unresolved
    rows;
-6. imports the separately defined scheduled fuzz, nightly soak, operational,
-   scan, and benchmark evidence only through their canonical gate contracts;
-   absent or malformed history cannot be replaced by a local path or prose
-   note;
+6. imports scan and benchmark evidence only through their canonical gate
+   contracts; the advisory fuzz, nightly-soak, and operational histories are
+   neither requested nor recorded by candidate validation;
 7. runs official conformance in release mode against the exact candidate bytes,
    requires `IMMUTABLE_RELEASE_CANDIDATE`, `releaseCandidateEvidence: true`, and
    terminal `PASSED` evidence, then compiles and runs a library-neutral
@@ -585,7 +603,7 @@ Once every gate is ready, the validator:
    points; ToyStore alone runs under the separately pinned Corretto 25
    compiler/runtime because its POM requires release 25; and
 9. rehashes the candidate and assembles a canonical evidence manifest only
-   after the exact ordered 29-gate set has typed PASS evidence.
+   after the exact ordered 26-gate set has typed PASS evidence.
 
 Each gate has one immutable evidence-contract ID and one manifest-selected
 toolchain. `record-gate` requires the artifact descriptor plus an exact ordered

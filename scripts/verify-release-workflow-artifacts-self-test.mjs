@@ -16,24 +16,6 @@ const REPOSITORY = 'soklet-project/soklet';
 const TOKEN = 'github-test-token-never-print';
 const MAXIMUM_RESPONSE_BYTES = 1024 * 1024;
 const GATES = Object.freeze({
-  fuzz: Object.freeze({
-    artifactPrefix: 'fuzz-nightly-history',
-    event: 'schedule',
-    runId: '101',
-    workflowPath: '.github/workflows/ci.yml',
-  }),
-  soak: Object.freeze({
-    artifactPrefix: 'soak-nightly-history',
-    event: 'schedule',
-    runId: '102',
-    workflowPath: '.github/workflows/ci.yml',
-  }),
-  operational: Object.freeze({
-    artifactPrefix: 'operational-history',
-    event: 'workflow_dispatch',
-    runId: '103',
-    workflowPath: '.github/workflows/ci.yml',
-  }),
   scans: Object.freeze({
     artifactPrefix: 'release-scans',
     event: 'workflow_dispatch',
@@ -205,8 +187,8 @@ const verified = await verifyReleaseWorkflowArtifacts(valid.options);
 assert.deepEqual(Object.keys(verified.artifacts), Object.keys(GATES));
 assert.equal(verified.candidate, CANDIDATE);
 assert.equal(verified.repository, REPOSITORY);
-assert.equal(verified.artifacts.benchmark.runAttempt, 5);
-assert.equal(valid.calls.length, 10);
+assert.equal(verified.artifacts.benchmark.runAttempt, 2);
+assert.equal(valid.calls.length, 4);
 assert.ok(valid.calls.every(({ options }) =>
   options.method === 'GET'
     && options.redirect === 'error'
@@ -215,22 +197,9 @@ assert.ok(valid.calls.every(({ options }) =>
     && options.headers['X-GitHub-Api-Version'] === '2026-03-10'));
 assert.ok(valid.calls.every(({ url }) => !url.includes(TOKEN)));
 assert.ok(valid.calls.some(({ url }) =>
-  url.endsWith('/actions/runs/101/artifacts?per_page=100&page=1')));
+  url.endsWith('/actions/runs/104/artifacts?per_page=100&page=1')));
 assert.ok(!JSON.stringify(verified).includes(TOKEN));
 assertions += 9;
-
-const manuallyDispatchedNightly = fixture();
-manuallyDispatchedNightly.runs.fuzz.event = 'workflow_dispatch';
-manuallyDispatchedNightly.runs.soak.event = 'workflow_dispatch';
-manuallyDispatchedNightly.runs.fuzz.path = '.github/workflows/ci.yml@refs/heads/release-candidate';
-manuallyDispatchedNightly.runs.soak.path = '.github/workflows/ci.yml@main';
-const manualResult = await verifyReleaseWorkflowArtifacts(
-  manuallyDispatchedNightly.options,
-);
-assert.equal(manualResult.artifacts.fuzz.runId, GATES.fuzz.runId);
-assert.equal(manualResult.artifacts.soak.runId, GATES.soak.runId);
-assert.equal(manuallyDispatchedNightly.calls.length, 10);
-assertions += 3;
 
 const benchmarkDraft = benchmarkDraftFixture();
 const verifiedDraft = await verifyBenchmarkDraftWorkflowArtifact(
@@ -308,72 +277,72 @@ await assert.rejects(
 assertions++;
 
 await rejectsAfterMutation(
-  ({ runs }) => { runs.fuzz.id = 999; },
+  ({ runs }) => { runs.scans.id = 999; },
   /workflow run ID does not match/u,
 );
 await rejectsAfterMutation(
-  ({ runs }) => { runs.fuzz.repository.full_name = 'other/soklet'; },
+  ({ runs }) => { runs.scans.repository.full_name = 'other/soklet'; },
   /repository does not match/u,
 );
 await rejectsAfterMutation(
-  ({ runs }) => { runs.fuzz.status = 'in_progress'; },
+  ({ runs }) => { runs.scans.status = 'in_progress'; },
   /not completed successfully/u,
 );
 await rejectsAfterMutation(
-  ({ runs }) => { runs.fuzz.conclusion = 'failure'; },
+  ({ runs }) => { runs.scans.conclusion = 'failure'; },
   /not completed successfully/u,
 );
 await rejectsAfterMutation(
-  ({ runs }) => { runs.fuzz.head_sha = OTHER_COMMIT; },
+  ({ runs }) => { runs.scans.head_sha = OTHER_COMMIT; },
   /head_sha does not match/u,
 );
 await rejectsAfterMutation(
-  ({ runs }) => { runs.fuzz.path = '.github/workflows/release-validation.yml'; },
+  ({ runs }) => { runs.scans.path = '.github/workflows/ci.yml'; },
   /workflow run path/u,
 );
 await rejectsAfterMutation(
-  ({ runs }) => { runs.fuzz.event = 'push'; },
+  ({ runs }) => { runs.scans.event = 'push'; },
   /workflow run event/u,
 );
 await rejectsAfterMutation(
-  ({ runs }) => { runs.fuzz.path = '.github/workflows/ci.yml@'; },
+  ({ runs }) => { runs.scans.path = '.github/workflows/ci.yml@'; },
   /workflow run path/u,
 );
 await rejectsAfterMutation(
-  ({ runs }) => { runs.fuzz.run_attempt = 0; },
+  ({ runs }) => { runs.scans.run_attempt = 0; },
   /run_attempt must be a positive/u,
 );
 await rejectsAfterMutation(
-  ({ requests }) => { requests.fuzz.artifactName += '-wrong'; },
+  ({ requests }) => { requests.scans.artifactName += '-wrong'; },
   /not the exact candidate\/run\/attempt-bound name/u,
 );
 await rejectsAfterMutation(
-  ({ listings }) => { listings.fuzz.artifacts[0].expired = true; },
+  ({ listings }) => { listings.scans.artifacts[0].expired = true; },
   /artifact is expired/u,
 );
 await rejectsAfterMutation(
-  ({ listings }) => { listings.fuzz.artifacts[0].workflow_run.id = 999; },
+  ({ listings }) => { listings.scans.artifacts[0].workflow_run.id = 999; },
   /artifact workflow_run ID does not match/u,
 );
 await rejectsAfterMutation(
-  ({ listings }) => { listings.fuzz.artifacts[0].workflow_run.head_sha = OTHER_COMMIT; },
+  ({ listings }) => { listings.scans.artifacts[0].workflow_run.head_sha = OTHER_COMMIT; },
   /artifact workflow_run head_sha does not match/u,
 );
 await rejectsAfterMutation(({ listings }) => {
-  const duplicate = structuredClone(listings.fuzz.artifacts[0]);
+  const duplicate = structuredClone(listings.scans.artifacts[0]);
   duplicate.id = 9999;
-  listings.fuzz.artifacts.push(duplicate);
-  listings.fuzz.total_count += 1;
+  listings.scans.artifacts.push(duplicate);
+  listings.scans.total_count += 1;
 }, /must contain exactly one artifact named/u);
 await rejectsAfterMutation(({ listings }) => {
-  listings.fuzz.artifacts[0].name = 'unrelated';
+  listings.scans.artifacts[0].name = 'unrelated';
 }, /must contain exactly one artifact named/u);
 await rejectsAfterMutation(
-  ({ listings }) => { listings.fuzz.total_count = 101; },
+  ({ listings }) => { listings.scans.total_count = 101; },
   /total_count is invalid or exceeds/u,
 );
 await rejectsAfterMutation(
-  ({ listings }) => { listings.fuzz.total_count = 1; },
+  ({ listings }) => { listings.scans.total_count = 1; },
   /listing is incomplete or malformed/u,
 );
 
@@ -390,13 +359,13 @@ await rejectsAfterMutation(({ requests }) => {
   requests.extra = { artifactName: 'extra', runId: '999' };
 }, /requests must contain exactly/u);
 await rejectsAfterMutation(({ requests }) => {
-  requests.fuzz.extra = true;
-}, /fuzz request must contain exactly/u);
+  requests.scans.extra = true;
+}, /scans request must contain exactly/u);
 await rejectsAfterMutation(({ requests }) => {
-  requests.fuzz.runId = '01';
+  requests.scans.runId = '01';
 }, /positive decimal workflow run ID/u);
 await rejectsAfterMutation(({ requests }) => {
-  requests.fuzz.runId = String(Number.MAX_SAFE_INTEGER + 1);
+  requests.scans.runId = String(Number.MAX_SAFE_INTEGER + 1);
 }, /supported exact integer range/u);
 
 const httpFailure = fixture();
@@ -462,7 +431,7 @@ try {
   assert.fail('transport failure should reject');
 } catch (error) {
   assert.ok(error instanceof ReleaseWorkflowArtifactVerificationError);
-  assert.equal(error.message, 'GitHub API request failed for fuzz workflow run.');
+  assert.equal(error.message, 'GitHub API request failed for scans workflow run.');
   assert.ok(!error.message.includes(TOKEN));
   assertions += 3;
 }
@@ -488,11 +457,11 @@ const successfulReleaseCli = await runReleaseWorkflowArtifactCli({
   writeOutput: (message) => successfulReleaseCliOutput.push(message),
 });
 assert.equal(successfulReleaseCli.mode, 'release');
-assert.equal(successfulReleaseCli.result.artifacts.fuzz.artifactId, 1000);
+assert.equal(successfulReleaseCli.result.artifacts.scans.artifactId, 1000);
 assert.deepEqual(successfulReleaseCliOutput, [
-  `release workflow artifact provenance PASS candidate=${CANDIDATE} artifacts=5`,
+  `release workflow artifact provenance PASS candidate=${CANDIDATE} artifacts=2`,
 ]);
-assert.equal(successfulReleaseCliFixture.calls.length, 10);
+assert.equal(successfulReleaseCliFixture.calls.length, 4);
 assertions += 4;
 
 const successfulDraftCliFixture = benchmarkDraftFixture();
@@ -520,7 +489,7 @@ const releaseCliArguments = [
   '--repository', REPOSITORY,
   '--candidate', CANDIDATE,
   ...Object.entries(GATES).flatMap(([gate, config]) => [
-    `--${gate}-run-id`, gate === 'fuzz' ? '0' : config.runId,
+    `--${gate}-run-id`, gate === 'scans' ? '0' : config.runId,
     `--${gate}-artifact-name`, `${config.artifactPrefix}-${CANDIDATE}-${config.runId}-1`,
   ]),
 ];
@@ -532,7 +501,7 @@ const recognizedReleaseCli = spawnSync(process.execPath, [
   env: { ...process.env, GITHUB_TOKEN: TOKEN },
 });
 assert.equal(recognizedReleaseCli.status, 1);
-assert.match(recognizedReleaseCli.stderr, /fuzz runId must be a positive decimal/u);
+assert.match(recognizedReleaseCli.stderr, /scans runId must be a positive decimal/u);
 assert.ok(!recognizedReleaseCli.stderr.includes(TOKEN));
 assertions += 3;
 
@@ -560,7 +529,7 @@ assertions += 3;
 const mixedCli = spawnSync(process.execPath, [
   scriptPath,
   ...draftCliArguments,
-  '--fuzz-run-id', '1',
+  '--scans-run-id', '1',
 ], {
   encoding: 'utf8',
   env: { ...process.env, GITHUB_TOKEN: TOKEN },

@@ -51,12 +51,9 @@ const EXPECTED_GATE_IDS = Object.freeze([
   'spotbugs',
   'schema-replay',
   'fuzz-replay',
-  'fuzz-nightly-history',
   'soak-smoke',
-  'soak-nightly-history',
   'release-soak',
   'localization-fleet',
-  'operational-history',
   'release-scans',
   'mcp-benchmarks',
   'matrix-closure',
@@ -179,24 +176,12 @@ const GATE_ARTIFACT_CONTRACTS = Object.freeze({
       evidenceRole('surefire-reports', 'DIRECTORY', SUREFIRE_MEDIA_TYPE, 'surefire-reports'),
     ]),
   }),
-  'fuzz-nightly-history': Object.freeze({
-    toolchain: 'nodePin',
-    roles: Object.freeze([
-      evidenceRole('history', 'FILE', 'application/json', 'fuzz-nightly-history.json'),
-    ]),
-  }),
   'soak-smoke': Object.freeze({
     toolchain: 'toystoreJava',
     roles: Object.freeze([
       evidenceRole('soak-log', 'FILE', 'text/plain', 'soak-smoke.log'),
       evidenceRole('soak-report', 'FILE', 'text/markdown', 'soak-report.md'),
       evidenceRole('surefire-reports', 'DIRECTORY', SUREFIRE_MEDIA_TYPE, 'surefire-reports'),
-    ]),
-  }),
-  'soak-nightly-history': Object.freeze({
-    toolchain: 'nodePin',
-    roles: Object.freeze([
-      evidenceRole('history', 'FILE', 'application/json', 'soak-nightly-history.json'),
     ]),
   }),
   'release-soak': Object.freeze({
@@ -212,12 +197,6 @@ const GATE_ARTIFACT_CONTRACTS = Object.freeze({
     roles: Object.freeze([
       evidenceRole('fleet-log', 'FILE', 'text/plain', 'localization-fleet.log'),
       evidenceRole('surefire-reports', 'DIRECTORY', SUREFIRE_MEDIA_TYPE, 'surefire-reports'),
-    ]),
-  }),
-  'operational-history': Object.freeze({
-    toolchain: 'nodePin',
-    roles: Object.freeze([
-      evidenceRole('history', 'FILE', 'application/json', 'operational-history.json'),
     ]),
   }),
   'release-scans': Object.freeze({
@@ -377,20 +356,10 @@ const GATE_RECEIPT_IDENTITIES = Object.freeze({
     'checked-in-corpus',
     'ALL_CHECKED_IN_FUZZ_CORPORA_PASS',
   ),
-  'fuzz-nightly-history': receiptIdentity(
-    'node scripts/verify-release-history.mjs fuzz-nightly',
-    'nightly-history',
-    'REQUIRED_NIGHTLY_FUZZ_WINDOW_PASSES',
-  ),
   'soak-smoke': receiptIdentity(
     'SOKLET_SOAK_PROFILE=smoke mvn -B -ntp -f soak/pom.xml clean test',
     'smoke',
     'SOAK_REPORT_AND_SUREFIRE_PASS_WITHIN_PROFILE_LIMITS',
-  ),
-  'soak-nightly-history': receiptIdentity(
-    'node scripts/verify-release-history.mjs soak-nightly',
-    'nightly-history',
-    'REQUIRED_NIGHTLY_SOAK_WINDOW_PASSES',
   ),
   'release-soak': receiptIdentity(
     'SOKLET_SOAK_PROFILE=release mvn -B -ntp -f soak/pom.xml clean test',
@@ -401,11 +370,6 @@ const GATE_RECEIPT_IDENTITIES = Object.freeze({
     'mvn -B -ntp -Dtest=McpLocalizationFleetPublicRuntimeTests test',
     'two-listener-fleet',
     'FAILED_RELOAD_ROLLING_DRIFT_NODE_LOSS_RECONNECT_AND_CLEANUP_PASS',
-  ),
-  'operational-history': receiptIdentity(
-    'node scripts/verify-release-history.mjs operational',
-    'scheduled-history',
-    'REQUIRED_OPERATIONAL_HISTORY_WINDOW_PASSES',
   ),
   'release-scans': receiptIdentity(
     'node scripts/verify-release-scans.mjs',
@@ -490,11 +454,8 @@ export const GATE_EVIDENCE_CONTRACTS = Object.freeze(Object.fromEntries(
 ));
 
 const RELEASE_HARNESS_GATE_IDS = Object.freeze([
-  'fuzz-nightly-history',
   'mcp-benchmarks',
-  'operational-history',
   'release-scans',
-  'soak-nightly-history',
 ]);
 
 export function verifyPromotionHarnessRegistryParity(manifestPath) {

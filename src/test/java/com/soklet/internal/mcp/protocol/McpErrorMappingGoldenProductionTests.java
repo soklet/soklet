@@ -384,7 +384,7 @@ public class McpErrorMappingGoldenProductionTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"error-mapping-golden", "4.0.0-SNAPSHOT").build())
+						"error-mapping-golden", "4.0.0").build())
 				.tools(List.of(regular, required, conditional, hold))
 				.build();
 		return McpServer.withPort(0)

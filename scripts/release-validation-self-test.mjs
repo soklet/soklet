@@ -174,11 +174,8 @@ const fixtureRoot = realpathSync(
 );
 const candidateCommit = 'a'.repeat(40);
 const importedReleaseHarnessGateIds = new Set([
-  'fuzz-nightly-history',
   'mcp-benchmarks',
-  'operational-history',
   'release-scans',
-  'soak-nightly-history',
 ]);
 
 function canBindLoopback(port) {
@@ -246,6 +243,103 @@ function copyInventoryClosure(relativeInventoryPath) {
 
 function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
+}
+
+function importedFileRole(expected, value) {
+  const bytes = Buffer.isBuffer(value)
+    ? value
+    : Buffer.from(typeof value === 'string' ? value : canonicalJson(value), 'utf8');
+  return {
+    bytesBase64: bytes.toString('base64'),
+    kind: expected.kind,
+    mediaType: expected.mediaType,
+    name: expected.name,
+    ordinal: expected.ordinal,
+    required: expected.required,
+    sha256: sha256(bytes),
+  };
+}
+
+function importedDirectoryRole(expected, files) {
+  const entries = Object.entries(files)
+    .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+    .map(([path, value]) => {
+      const bytes = Buffer.isBuffer(value)
+        ? value
+        : Buffer.from(typeof value === 'string' ? value : canonicalJson(value), 'utf8');
+      return {
+        bytesBase64: bytes.toString('base64'),
+        path,
+        sha256: sha256(bytes),
+      };
+    });
+  return {
+    entries,
+    kind: expected.kind,
+    mediaType: expected.mediaType,
+    name: expected.name,
+    ordinal: expected.ordinal,
+    required: expected.required,
+    sha256: sha256(Buffer.from(canonicalJson(entries), 'utf8')),
+  };
+}
+
+function releaseScanRoles(contract, candidate) {
+  const emptySarif = (tool) => {
+    const run = { results: [], tool: { driver: { name: tool } } };
+    if (tool === 'CodeQL') {
+      run.invocations = [{
+        executionSuccessful: true,
+        exitCode: 0,
+        toolConfigurationNotifications: [],
+        toolExecutionNotifications: [],
+      }];
+      run.versionControlProvenance = [{
+        repositoryUri: 'https://github.com/example/soklet',
+        revisionId: candidate.candidateCommit,
+      }];
+    }
+    return canonicalJson({ runs: [run], version: '2.1.0' });
+  };
+  const reportFiles = {
+    '00-codeql-java.sarif': emptySarif('CodeQL'),
+    '01-spotbugs.xml': '<?xml version="1.0" encoding="UTF-8"?>\n<BugCollection></BugCollection>\n',
+    '02-gitleaks.sarif': emptySarif('gitleaks'),
+    '03-gitleaks.json': canonicalJson([]),
+    '04-runtime-dependency-surface.json': canonicalJson({
+      externalRuntimeDependencyCount: 0,
+      formatVersion: 1,
+    }),
+    '05-toolchain-provenance.json': canonicalJson({
+      candidate: structuredClone(candidate),
+      codeql: structuredClone(contract.policy.codeql),
+      formatVersion: 1,
+      gitleaks: structuredClone(contract.policy.gitleaks),
+      producerWorkflowSha256: candidate.producerWorkflowSha256,
+      spotbugs: structuredClone(contract.policy.spotbugs),
+      toolchains: structuredClone(contract.toolchains),
+    }),
+  };
+  const reports = importedDirectoryRole(contract.roles[1], reportFiles);
+  const digestByPath = new Map(reports.entries.map((entry) => [entry.path, entry.sha256]));
+  const summary = {
+    candidate: structuredClone(candidate),
+    formatVersion: 1,
+    gate: contract.id,
+    policySha256: sha256(Buffer.from(canonicalJson(contract.policy), 'utf8')),
+    producerStatus: 'PASS',
+    toolchainsSha256: sha256(Buffer.from(canonicalJson(contract.toolchains), 'utf8')),
+    allowlist: [],
+    findings: [],
+    reports: contract.policy.reports.map((report) => ({
+      name: report.name,
+      ordinal: report.ordinal,
+      outcome: 'PASS',
+      sha256: digestByPath.get(report.name),
+    })),
+    runtimeDependencySurface: { externalRuntimeDependencyCount: 0 },
+  };
+  return [importedFileRole(contract.roles[0], summary), reports];
 }
 
 try {
@@ -372,7 +466,7 @@ try {
   ]);
   assert.equal(tracked.candidate.version, '4.0.0');
   assert.equal(tracked.value.formatVersion, 2);
-  assert.equal(tracked.gates.length, 29);
+  assert.equal(tracked.gates.length, 26);
   assert.equal(tracked.toolchains.java.vendorVersion, 'Corretto-17.0.20.8.1');
   assert.deepEqual(tracked.toolchains.coreJdk21, {
     archive: 'amazon-corretto-21.0.12.9.1-linux-x64.tar.gz',
@@ -387,7 +481,7 @@ try {
   assert.equal(tracked.toolchains.toystoreJava.vendorVersion, 'Corretto-25.0.4.7.1');
   assert.equal(tracked.promotion.helper.path, 'scripts/release-promotion.mjs');
   assert.equal(tracked.promotion.wrapper.path, 'scripts/promote-release-candidate.sh');
-  assert.equal(tracked.gates.filter(({ status }) => status === 'READY').length, 23);
+  assert.equal(tracked.gates.filter(({ status }) => status === 'READY').length, 20);
   assert.equal(
     tracked.gates.filter(({ status }) => status === 'BLOCKED_HARNESS_MISSING').length,
     0,
@@ -410,15 +504,20 @@ try {
     assert.equal(gate.status, 'BLOCKED_UNCOMMITTED_LOCAL_MIGRATION');
   }
   for (const gateId of [
-    'fuzz-nightly-history',
-    'soak-nightly-history',
-    'operational-history',
     'release-scans',
     'mcp-benchmarks',
   ]) {
     const gate = tracked.gates.find(({ id }) => id === gateId);
     assert.equal(gate.status, 'READY');
     assert.equal(gate.reason, '');
+  }
+  for (const advisoryId of [
+    'fuzz-nightly-history',
+    'soak-nightly-history',
+    'operational-history',
+  ]) {
+    assert.equal(tracked.gates.some(({ id }) => id === advisoryId), false);
+    assert.equal(releaseHarnessConfiguration.contracts.has(advisoryId), true);
   }
   for (const gateId of [
     'core-jdk-21',
@@ -648,10 +747,10 @@ try {
     validateWorkflowJob[1].match(
       /uses: actions\/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131/g,
     )?.length,
-    5,
+    2,
   );
   const provenanceStep = validateWorkflowJob[1].match(
-    /      - name: Verify successful exact-candidate producer artifacts\n([\s\S]*?)\n\n      - name: Download exact fuzz-history bundle artifact/,
+    /      - name: Verify successful exact-candidate producer artifacts\n([\s\S]*?)\n\n      - name: Download exact release-scan bundle artifact/,
   );
   assert.notEqual(provenanceStep, null);
   assert.match(provenanceStep[1], /GITHUB_TOKEN: \$\{\{ github\.token \}\}/);
@@ -662,12 +761,6 @@ try {
   for (const argument of [
     '--repository "$GITHUB_REPOSITORY"',
     '--candidate "$SOKLET_CANDIDATE_COMMIT"',
-    '--fuzz-run-id "$SOKLET_FUZZ_BUNDLE_RUN_ID"',
-    '--fuzz-artifact-name "$SOKLET_FUZZ_BUNDLE_ARTIFACT"',
-    '--soak-run-id "$SOKLET_SOAK_BUNDLE_RUN_ID"',
-    '--soak-artifact-name "$SOKLET_SOAK_BUNDLE_ARTIFACT"',
-    '--operational-run-id "$SOKLET_OPERATIONAL_BUNDLE_RUN_ID"',
-    '--operational-artifact-name "$SOKLET_OPERATIONAL_BUNDLE_ARTIFACT"',
     '--scans-run-id "$SOKLET_RELEASE_SCANS_BUNDLE_RUN_ID"',
     '--scans-artifact-name "$SOKLET_RELEASE_SCANS_BUNDLE_ARTIFACT"',
     '--benchmark-run-id "$SOKLET_BENCHMARK_BUNDLE_RUN_ID"',
@@ -678,29 +771,17 @@ try {
   const provenanceIndex = validateWorkflowJob[1]
     .indexOf('Verify successful exact-candidate producer artifacts');
   const firstDownloadIndex = validateWorkflowJob[1]
-    .indexOf('Download exact fuzz-history bundle artifact');
+    .indexOf('Download exact release-scan bundle artifact');
   assert.ok(provenanceIndex >= 0 && provenanceIndex < firstDownloadIndex);
   assert.equal(
     validateWorkflowJob[1].match(/github-token: \$\{\{ github\.token \}\}/g)?.length,
-    5,
+    2,
   );
   assert.equal(
     validateWorkflowJob[1].match(/run-id: \$\{\{ inputs\.[a-z_]+_run_id \}\}/g)?.length,
-    5,
+    2,
   );
   for (const [bundle, environment] of [
-    [
-      'fuzz/fuzz-nightly-history-bundle.json',
-      'SOKLET_RELEASE_FUZZ_NIGHTLY_HISTORY_BUNDLE',
-    ],
-    [
-      'soak/soak-nightly-history-bundle.json',
-      'SOKLET_RELEASE_SOAK_NIGHTLY_HISTORY_BUNDLE',
-    ],
-    [
-      'operational/operational-history-bundle.json',
-      'SOKLET_RELEASE_OPERATIONAL_HISTORY_BUNDLE',
-    ],
     ['scans/release-scans-bundle.json', 'SOKLET_RELEASE_SCANS_BUNDLE'],
     ['benchmarks/mcp-benchmarks-bundle.json', 'SOKLET_RELEASE_MCP_BENCHMARKS_BUNDLE'],
   ]) {
@@ -815,10 +896,10 @@ try {
     releaseValidator,
     /for d1p_evidence_source in[\s\S]*?\[\[ -f "\$d1p_evidence_source" && ! -L "\$d1p_evidence_source" \]\]/,
   );
-  assert.match(releaseValidator, /configured_gate_count" -eq 29/);
+  assert.match(releaseValidator, /configured_gate_count" -eq 26/);
   assert.match(
     releaseValidator,
-    /fuzz-nightly-history\|soak-smoke\|soak-nightly-history\|release-soak\|[\s\\]*localization-fleet\|operational-history\|release-scans\|mcp-benchmarks\|matrix-closure\|/,
+    /soak-smoke\|release-soak\|localization-fleet\|release-scans\|mcp-benchmarks\|[\s\\]*matrix-closure\|/,
   );
   assert.match(
     releaseValidator,
@@ -873,17 +954,12 @@ try {
     'prepare-codeql-release-report-self-test.mjs',
     'produce-release-benchmarks.mjs',
     'produce-release-benchmarks-self-test.mjs',
-    'produce-release-history.mjs',
-    'produce-release-history-self-test.mjs',
-    'produce-operational-history.mjs',
-    'produce-operational-history-self-test.mjs',
     'produce-release-scans.mjs',
     'produce-release-scans-self-test.mjs',
     'stage-codeql-release-provenance.mjs',
     'stage-codeql-release-provenance-self-test.mjs',
     'verify-runtime-dependency-surface.mjs',
     'verify-runtime-dependency-surface-self-test.mjs',
-    'verify-release-history.mjs',
     'verify-release-scans.mjs',
     'verify-release-benchmarks.mjs',
   ]) {
@@ -906,14 +982,6 @@ try {
   );
   assert.match(
     releaseValidator,
-    /\$project_root\/verification\/operational\/src\/main\/java\/com\/soklet\/OperationalHistoryHarness\.java/,
-  );
-  assert.match(
-    releaseValidator,
-    /\$project_root\/verification\/operational\/src\/test\/java\/com\/soklet\/OperationalHistoryHarnessSelfTest\.java/,
-  );
-  assert.match(
-    releaseValidator,
     /for release_harness_source in[\s\S]*?\[\[ -f "\$release_harness_source" && ! -L "\$release_harness_source" \]\]/,
   );
   const harnessConfigIndex = releaseValidator.indexOf(
@@ -929,8 +997,6 @@ try {
   assert.ok(harnessConfigIndex < harnessSelfTestIndex);
   assert.ok(harnessSelfTestIndex < firstEvidenceRecordIndex);
   for (const selfTestVariable of [
-    'release_history_producer_self_test',
-    'operational_history_producer_self_test',
     'release_scans_codeql_preparer_self_test',
     'release_scans_codeql_provenance_self_test',
     'release_scans_runtime_surface_self_test',
@@ -949,9 +1015,6 @@ try {
   assert.match(importedHarnessFunction[1], /--output "\$imported_receipt"/);
   assert.match(importedHarnessFunction[1], /record-imported-gate/);
   for (const [gateId, environment] of [
-    ['fuzz-nightly-history', 'SOKLET_RELEASE_FUZZ_NIGHTLY_HISTORY_BUNDLE'],
-    ['soak-nightly-history', 'SOKLET_RELEASE_SOAK_NIGHTLY_HISTORY_BUNDLE'],
-    ['operational-history', 'SOKLET_RELEASE_OPERATIONAL_HISTORY_BUNDLE'],
     ['release-scans', 'SOKLET_RELEASE_SCANS_BUNDLE'],
     ['mcp-benchmarks', 'SOKLET_RELEASE_MCP_BENCHMARKS_BUNDLE'],
   ]) {
@@ -1043,37 +1106,23 @@ try {
     /\nrun_api_freeze\(\) \{\n([\s\S]*?)\n\}\n\nrun_candidate_javadocs\(\)/,
   );
   assert.notEqual(apiFreezeFunction, null);
-  const releaseD1pBlock = [
+  const releaseApiFreezeBlock = [
     '\t\tenv JAVA_HOME="$core_java_home" PATH="$core_java_home/bin:$PATH" \\',
     '\t\t\tscripts/verify-mcp-api-freezes.sh',
-    '\t\tnode scripts/verify-d1p-evidence.mjs --mode candidate --scope preparation',
-    '\t\tnode scripts/verify-d1p-evidence.mjs --mode candidate --scope tracked',
   ];
-  assertExactHostBlock(apiFreezeFunction[1], releaseD1pBlock, 'release API-freeze D1p host');
-  assert.throws(
-    () => assertExactHostBlock(
-      apiFreezeFunction[1].replace(releaseD1pBlock[2], `\t\techo ${releaseD1pBlock[2].trim()}`),
-      releaseD1pBlock,
-      'mutated release API-freeze D1p host',
-    ),
-    /exact executable block once/,
-  );
-  assert.throws(
-    () => assertExactHostBlock(
-      apiFreezeFunction[1].replace(releaseD1pBlock[3], `${releaseD1pBlock[3]} || true`),
-      releaseD1pBlock,
-      'suffix-neutralized release API-freeze D1p host',
-    ),
-    /exact executable block once/,
+  assertExactHostBlock(
+    apiFreezeFunction[1],
+    releaseApiFreezeBlock,
+    'release exact-version API-freeze host',
   );
   assert.throws(
     () => assertExactHostBlock(
       apiFreezeFunction[1].replace(
-        `${releaseD1pBlock[2]}\n${releaseD1pBlock[3]}`,
-        `${releaseD1pBlock[3]}\n${releaseD1pBlock[2]}`,
+        releaseApiFreezeBlock[1],
+        `\t\techo ${releaseApiFreezeBlock[1].trim()}`,
       ),
-      releaseD1pBlock,
-      'reordered release API-freeze D1p host',
+      releaseApiFreezeBlock,
+      'mutated release exact-version API-freeze host',
     ),
     /exact executable block once/,
   );
@@ -1081,32 +1130,7 @@ try {
     apiFreezeFunction[1].match(/scripts\/verify-mcp-api-freezes\.sh/g)?.length,
     1,
   );
-  assert.equal(
-    apiFreezeFunction[1].match(
-      /node scripts\/verify-d1p-evidence\.mjs --mode candidate --scope preparation/g,
-    )?.length,
-    1,
-  );
-  assert.equal(
-    apiFreezeFunction[1].match(
-      /node scripts\/verify-d1p-evidence\.mjs --mode candidate --scope tracked/g,
-    )?.length,
-    1,
-  );
-  assert.ok(
-    apiFreezeFunction[1].indexOf('scripts/verify-mcp-api-freezes.sh')
-      < apiFreezeFunction[1].indexOf(
-        'node scripts/verify-d1p-evidence.mjs --mode candidate --scope preparation',
-      ),
-  );
-  assert.ok(
-    apiFreezeFunction[1].indexOf(
-      'node scripts/verify-d1p-evidence.mjs --mode candidate --scope preparation',
-    )
-      < apiFreezeFunction[1].indexOf(
-        'node scripts/verify-d1p-evidence.mjs --mode candidate --scope tracked',
-      ),
-  );
+  assert.doesNotMatch(apiFreezeFunction[1], /verify-d1p-evidence/u);
   const isolatedInstallFunction = releaseValidator.match(
     /\nrun_isolated_install\(\) \{\n([\s\S]*?)\n\}\n\nrun_core_jdk_21\(\)/,
   );
@@ -1423,6 +1447,10 @@ try {
     releaseHarnessRegistryPath,
     fixturePath('release/release-harness-contracts.json'),
   );
+  copyFileSync(
+    resolve(projectRoot, 'release/release-scan-exceptions.json'),
+    fixturePath('release/release-scan-exceptions.json'),
+  );
   copyFileSync(promotionHelperPath, fixturePath('scripts/release-promotion.mjs'));
   copyFileSync(promotionWrapperPath, fixturePath('scripts/promote-release-candidate.sh'));
   copyFileSync(
@@ -1541,7 +1569,7 @@ try {
   writeFileSync(downstreamPomPath, downstreamPom);
 
   const ready = validateReleaseConfiguration(fixtureManifestPath, { requireReady: true });
-  assert.equal(ready.gates.length, 29);
+  assert.equal(ready.gates.length, 26);
 
   function assertRejectsGateContractMutation(mutate) {
     const substituted = JSON.parse(JSON.stringify(readyManifest));
@@ -1845,12 +1873,13 @@ try {
   );
 
   const descriptor = JSON.parse(readFileSync(artifactDescriptorPath, 'utf8'));
-  const importedContract = releaseHarnessConfiguration.contracts.get(
+  const advisoryContract = releaseHarnessConfiguration.contracts.get(
     'fuzz-nightly-history',
   );
-  const importedBundlePath = fixturePath('evidence/imported-fuzz-history-bundle.json');
-  const importedReceiptPath = fixturePath('evidence/imported-fuzz-history-receipt.json');
-  const importedGatePath = fixturePath('evidence/imported-fuzz-history-gate.json');
+  const importedContract = releaseHarnessConfiguration.contracts.get('release-scans');
+  const importedBundlePath = fixturePath('evidence/imported-release-scans-bundle.json');
+  const importedReceiptPath = fixturePath('evidence/imported-release-scans-receipt.json');
+  const importedGatePath = fixturePath('evidence/imported-release-scans-gate.json');
   const importedCandidate = {
     candidateCommit,
     candidateMainJarSha256: descriptor.artifacts.mainJar.sha256,
@@ -1860,55 +1889,20 @@ try {
     producerWorkflowSha256: 'd'.repeat(64),
   };
   const importedNow = Math.floor(Date.now() / 1_000) * 1_000;
-  const importedHistory = {
-    candidate: importedCandidate,
-    formatVersion: 1,
-    gate: importedContract.id,
-    policySha256: sha256(Buffer.from(canonicalJson(importedContract.policy), 'utf8')),
-    producerStatus: 'PASS',
-    runs: Array.from({ length: 7 }, (_, runIndex) => {
-      const completedAt = new Date(
-        importedNow - (7 - runIndex) * 86_400_000,
-      ).toISOString().replace('.000Z', 'Z');
-      return {
-        completedAt,
-        corpusHashes: importedContract.policy.targets.map((target) =>
-          sha256(Buffer.from(`${completedAt}:${target.id}:corpus`, 'utf8'))),
-        id: completedAt.slice(0, 10),
-        outcome: 'PASS',
-        targets: importedContract.policy.targets.map((target) => ({
-          durationSeconds: importedContract.policy.perTargetDurationSeconds,
-          id: target.id,
-          ordinal: target.ordinal,
-          outcome: 'PASS',
-        })),
-      };
-    }),
-    toolchainsSha256: sha256(Buffer.from(canonicalJson(importedContract.toolchains), 'utf8')),
-  };
-  const importedRoleBytes = Buffer.from(canonicalJson(importedHistory), 'utf8');
-  const importedHistoryPath = fixturePath('evidence/fuzz-nightly-history.json');
-  writeFileSync(importedHistoryPath, importedRoleBytes);
+  const advisoryHistoryPath = fixturePath('evidence/advisory-fuzz-history.json');
+  writeFileSync(advisoryHistoryPath, canonicalJson({ gate: advisoryContract.id }));
   assert.throws(
     () => recordGateEvidence(
       fixtureManifestPath,
       candidateCommit,
       artifactDescriptorPath,
-      importedContract.id,
-      fixturePath('evidence/generic-fuzz-history-gate.json'),
-      [`history=${importedHistoryPath}`],
+      advisoryContract.id,
+      fixturePath('evidence/advisory-fuzz-history-gate.json'),
+      [`history=${advisoryHistoryPath}`],
     ),
-    /requires fail-closed imported evidence; use record-imported-gate/,
+    /Unknown release gate/,
   );
-  const importedBundleRole = {
-    bytesBase64: importedRoleBytes.toString('base64'),
-    kind: importedContract.roles[0].kind,
-    mediaType: importedContract.roles[0].mediaType,
-    name: importedContract.roles[0].name,
-    ordinal: importedContract.roles[0].ordinal,
-    required: importedContract.roles[0].required,
-    sha256: sha256(importedRoleBytes),
-  };
+  const importedBundleRoles = releaseScanRoles(importedContract, importedCandidate);
   const importedBundleContent = {
     candidate: importedCandidate,
     contractVersion: importedContract.contractVersion,
@@ -1917,7 +1911,7 @@ try {
     policy: importedContract.policy,
     producer: importedContract.producer,
     producerStatus: 'PASS',
-    roles: [importedBundleRole],
+    roles: importedBundleRoles,
     toolchains: importedContract.toolchains,
   };
   const importedBundleBytes = Buffer.from(canonicalJson({
@@ -1945,14 +1939,44 @@ try {
     importedBundlePath,
     () => importedCandidate,
   );
-  assert.deepEqual(importedGate.evidence.map(({ role }) => role), ['history']);
+  assert.deepEqual(
+    importedGate.evidence.map(({ role }) => role),
+    ['scan-summary', 'scan-reports'],
+  );
+  const importedSummaryBytes = Buffer.from(
+    importedBundleRoles[0].bytesBase64,
+    'base64',
+  );
   assert.deepEqual(importedGate.evidence[0].artifact, {
-    bytes: importedRoleBytes.length,
-    fileName: 'fuzz-nightly-history.json',
-    sha256: sha256(importedRoleBytes),
+    bytes: importedSummaryBytes.length,
+    fileName: 'release-scans.json',
+    sha256: sha256(importedSummaryBytes),
     type: 'FILE',
   });
-  const substitutedBundlePath = fixturePath('evidence/substituted-fuzz-history-bundle.json');
+  assert.deepEqual(importedGate.evidence[1].artifact, {
+    algorithm: "SHA-256 of bytewise-path-sorted '<file-sha256>  <relative-path>\\n' rows",
+    fileCount: importedBundleRoles[1].entries.length,
+    fileName: 'release-scans',
+    sha256: sha256(Buffer.from(importedBundleRoles[1].entries.map((entry) =>
+      `${entry.sha256}  ${entry.path}\n`).join(''), 'utf8')),
+    type: 'DIRECTORY',
+  });
+  await assert.rejects(
+    recordImportedGateEvidence(
+      fixtureManifestPath,
+      candidateCommit,
+      artifactDescriptorPath,
+      advisoryContract.id,
+      fixturePath('evidence/advisory-fuzz-imported-gate.json'),
+      importedReceiptPath,
+      importedBundlePath,
+      () => importedCandidate,
+    ),
+    /Unknown release gate/,
+  );
+  const substitutedBundlePath = fixturePath(
+    'evidence/substituted-release-scans-bundle.json',
+  );
   writeFileSync(substitutedBundlePath, Buffer.from('{"immutable":"substituted"}\n', 'utf8'));
   await assert.rejects(
     recordImportedGateEvidence(
@@ -1960,7 +1984,7 @@ try {
       candidateCommit,
       artifactDescriptorPath,
       importedContract.id,
-      fixturePath('evidence/substituted-fuzz-history-gate.json'),
+      fixturePath('evidence/substituted-release-scans-gate.json'),
       importedReceiptPath,
       substitutedBundlePath,
       () => importedCandidate,
@@ -1968,7 +1992,7 @@ try {
     /release harness bundle|immutable bundle/,
   );
   const wrongCandidateReceiptPath = fixturePath(
-    'evidence/wrong-candidate-fuzz-history-receipt.json',
+    'evidence/wrong-candidate-release-scans-receipt.json',
   );
   const wrongCandidateReceipt = JSON.parse(readFileSync(importedReceiptPath, 'utf8'));
   wrongCandidateReceipt.candidateBindings.candidateMainJarSha256 = '9'.repeat(64);
@@ -1979,7 +2003,7 @@ try {
       candidateCommit,
       artifactDescriptorPath,
       importedContract.id,
-      fixturePath('evidence/wrong-candidate-fuzz-history-gate.json'),
+      fixturePath('evidence/wrong-candidate-release-scans-gate.json'),
       wrongCandidateReceiptPath,
       importedBundlePath,
       () => importedCandidate,
@@ -1991,24 +2015,16 @@ try {
     candidateTree: 'c'.repeat(40),
     producerWorkflowSha256: 'e'.repeat(64),
   };
-  const coherentWrongHistory = structuredClone(importedHistory);
-  coherentWrongHistory.candidate = coherentWrongCandidate;
-  const coherentWrongRoleBytes = Buffer.from(canonicalJson(coherentWrongHistory), 'utf8');
-  const coherentWrongBundleRole = {
-    ...importedBundleRole,
-    bytesBase64: coherentWrongRoleBytes.toString('base64'),
-    sha256: sha256(coherentWrongRoleBytes),
-  };
   const coherentWrongBundleContent = {
     ...importedBundleContent,
     candidate: coherentWrongCandidate,
-    roles: [coherentWrongBundleRole],
+    roles: releaseScanRoles(importedContract, coherentWrongCandidate),
   };
   const coherentWrongBundlePath = fixturePath(
-    'evidence/coherent-wrong-candidate-fuzz-history-bundle.json',
+    'evidence/coherent-wrong-candidate-release-scans-bundle.json',
   );
   const coherentWrongReceiptPath = fixturePath(
-    'evidence/coherent-wrong-candidate-fuzz-history-receipt.json',
+    'evidence/coherent-wrong-candidate-release-scans-receipt.json',
   );
   writeFileSync(coherentWrongBundlePath, canonicalJson({
     content: coherentWrongBundleContent,
@@ -2030,7 +2046,7 @@ try {
       candidateCommit,
       artifactDescriptorPath,
       importedContract.id,
-      fixturePath('evidence/coherent-wrong-candidate-fuzz-history-gate.json'),
+      fixturePath('evidence/coherent-wrong-candidate-release-scans-gate.json'),
       coherentWrongReceiptPath,
       coherentWrongBundlePath,
       () => importedCandidate,
@@ -2556,7 +2572,7 @@ try {
   const evidence = JSON.parse(readFileSync(finalEvidencePath, 'utf8'));
   assert.equal(evidence.candidateCommit, candidateCommit);
   assert.equal(evidence.formatVersion, 2);
-  assert.equal(evidence.gates.length, 29);
+  assert.equal(evidence.gates.length, 26);
   assert.ok(evidence.gates.every(({ status }) => status === 'PASS'));
   assert.ok(evidence.gates
     .filter(({ gate }) => gate.id.endsWith('-interop'))

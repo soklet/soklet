@@ -37,11 +37,11 @@
         },
         {
           "path": "conformance/golden-result-envelope/live/manifest.sha256",
-          "sha256": "8ad233e91c4898fecaead0f779b13aebbaf3e2211fe3356f376c507736638d9c"
+          "sha256": "00e38b4c5345b6c786d278919d7df2ade8d7d10ad9625455812bf172b203dce6"
         },
         {
           "path": "conformance/official/golden-wire/manifest.json",
-          "sha256": "33d945e88ae66fce2440ec7b872d004da2c5702c5b55be4d120e16d53be12e82"
+          "sha256": "db8146af3a51e73036ae2ed5b2751b9b6dd578069440222745b45a117c61ab93"
         }
       ],
       "interoperability": [

@@ -10,11 +10,64 @@ You should receive an acknowledgment within 3 business days. We will work with y
 
 ## Supported Versions
 
-Security fixes are prioritized for the latest released version of `com.soklet:soklet`. Snapshot builds are development artifacts and may change without notice.
+Until 4.0.0 is published, 3.5.1 remains the latest supported release. On the
+date 4.0.0 is published, the entire 3.x line reaches end of life and receives
+no promised maintenance or security fixes. After publication, only the latest
+4.x patch release is supported. Older 4.x patches, snapshots, and unreleased
+source builds are unsupported.
+
+| Release line | Status |
+| --- | --- |
+| Latest published 4.x patch | Supported after 4.0.0 publication |
+| 3.5.1 / all 3.x | Supported only until 4.0.0 publication; EOL immediately afterward |
+| Snapshots and unreleased source | Unsupported development artifacts |
+
+See the [migration guide](MIGRATING_TO_4_0.md#supported-release-lines) for the
+same user-facing policy.
 
 ## Scope
 
-Soklet has zero runtime dependencies, so vulnerabilities in the released artifact are limited to first-party code. Reports against the embedded HTTP, SSE, and MCP transports — including request parsing, connection lifecycle, and resource-limit enforcement — are especially appreciated.
+Soklet resolves no external runtime dependencies, but the released artifact
+includes credited, repackaged third-party source. Security reports may concern
+either Soklet-authored behavior or that embedded code. Reports against the HTTP,
+SSE, and MCP transports—including request parsing, connection lifecycle, and
+resource-limit enforcement—are especially appreciated. See the tracked
+[third-party audit](release/THIRD_PARTY_AUDIT.md) and [`NOTICE`](NOTICE).
+
+## Security Boundary and Non-Claims
+
+Soklet supplies bounded parsing, validation, lifecycle, transport, and selected
+cryptographic mechanisms inside the documented framework boundary. It does not
+claim to secure an application or deployment end to end. In particular:
+
+- Soklet does not implement an OAuth authorization server, access-token/JWT
+  verifier, introspection client, dynamic client registration, protected
+  resource metadata hosting, consent flow, identity-provider policy, or
+  business authorization. See the worked
+  [application-owned OAuth pattern](release/MCP_OAUTH_RESOURCE_SERVER.md).
+- Lifecycle and transport attestation can validate evidence supplied through
+  an honest custom implementation; Soklet cannot detect a custom transport or
+  decorator that lies about its identity, delegation, termination, or resource
+  ownership.
+- MCP Tool Schema Profile 1 is a closed, bounded Java-first subset. It is not
+  universal JSON Schema safety, semantic sensitive-data classification,
+  protection against prompt injection, or validation of application business
+  rules.
+- The built-in request-state and trace-correlation cryptography has frozen
+  profiles, vectors, and implementation tests. It has not received an
+  independent cryptographic audit, formal verification, or certification.
+- Host, Origin, header, request, state, cursor, URI, filesystem, and proxy
+  protections end at their documented boundary. Network topology, TLS,
+  identity systems, key custody, logs, databases, downstream services,
+  application handlers, custom code, and data retention remain deployment or
+  application responsibilities.
+- Conformance suites, simulators, goldens, fuzzing, soak runs, static analysis,
+  and compatibility smoke are evidence for their stated cases. They are not a
+  penetration test, a proof of absence of vulnerabilities, or protection
+  against every scheduler, network, proxy, or hostile-input behavior.
+
+The dated [security-claims audit](release/SECURITY_CLAIMS_AUDIT.md) records the
+release wording that was deliberately accepted, rejected, or narrowed.
 
 ## MCP Deployment Security
 
@@ -75,7 +128,9 @@ key.
 Resource-subscription publishers emit coarse identity-free broadcasts.
 Soklet matches those events against each accepted URI filter, but the stored
 authorization partition only scopes registration, quota accounting, and stream isolation; it is not an event target or semantic URI-authorization check.
-Admission may inspect the original bounded request body, while Soklet exposes no parsed subscription-filter accessor.
+Admission receives the validated, deduplicated resource-subscription URIs via
+`McpAdmissionContext.getRequestedResourceSubscriptionUris()`; it need not
+reparse the bounded request body.
 Authorize confidential or capability-bearing subscription URIs during admission, and do not treat an unguessable URI as a secrecy boundary.
 A rejected admission activates no subscription even though the generation's shared publisher listener may already exist.
 Accept-all anonymous callers on one endpoint share one empty authorization/quota partition,
@@ -1375,7 +1430,7 @@ TypeScript and Go harnesses are `READY` and green against the local snapshot.
 The six reviewed downstream change sets remain uncommitted local work. They are
 therefore unpublished and unpinned, so the manifest continues to carry its old
 public commits. All four servlet legs pass 158/158 locally: the default 3.1.1 and
-4.0.0-SNAPSHOT legs for both javax and Jakarta. ToyStore's completed local
+4.0.0 legs for both javax and Jakarta. ToyStore's completed local
 migration passes 14/14, including six MCP tests. Its per-request credential
 proof accepts a valid request, then returns 401 for malformed, missing, expired, and wrong-audience
 credentials and 403 for an insufficient-scope credential; no prior request
@@ -1396,18 +1451,19 @@ toolchain now drives `core-jdk-21`, `static-analysis`, and `spotbugs`.
 The bounded two-listener localization fixture now covers failed reload,
 rolling revision drift without within-response mixing, node loss,
 subscription reconnect, node-local delivery, and final runtime cleanup.
-The format-v2 release contract now enumerates exactly 29 ordered gates.
-Twenty-three are dispatch-configured with executable `READY` paths, and none
+The format-v2 release contract now enumerates exactly 26 ordered gates.
+Twenty are dispatch-configured with executable `READY` paths, and none
 remain `BLOCKED_HARNESS_MISSING`; the six downstreams remain
 `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving six fail-closed blockers.
 `READY` means configured, never passed. The matrix-closure hook is `READY`, and
 the candidate-contained registry and residual evidence produce a canonical
 `PASSED` report at 113 `CORE_COMPLETE`, 119 `RELEASE_GATED`, 12
 `APPLICATION_OWNED`, 19 `NOT_APPLICABLE`, and zero `UNRESOLVED`. Only the exact
-candidate workflow can record its typed PASS receipt. Scheduled/nightly and
-sustained fuzz/soak and operational history, release scans, benchmarks,
-published downstream pins, and immutable candidate conformance/provenance
-remain open even though their executable harnesses are checked in.
+candidate workflow can record its typed PASS receipt. Release scans,
+benchmarks, published downstream pins, and immutable candidate
+conformance/provenance remain open. Scheduled fuzz, nightly soak, and
+operational histories remain advisory post-release monitoring and do not
+block 4.0.
 Candidate Javadoc
 generation/completeness is configured; public deployment remains
 post-validation publication work. The bounded two-listener localization

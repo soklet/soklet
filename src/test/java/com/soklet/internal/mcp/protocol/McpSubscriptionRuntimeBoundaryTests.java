@@ -158,7 +158,7 @@ public class McpSubscriptionRuntimeBoundaryTests {
 		// it twice and cannot fit. SSE framing contributes eight additional bytes.
 		Assertions.assertEquals(780, acknowledgment(escapedSubscriptionId)
 				.getBytes(StandardCharsets.UTF_8).length - 8);
-		Assertions.assertEquals(1_416, terminal(escapedSubscriptionId)
+		Assertions.assertEquals(1_407, terminal(escapedSubscriptionId)
 				.getBytes(StandardCharsets.UTF_8).length - 8);
 
 		try {
@@ -1232,7 +1232,7 @@ public class McpSubscriptionRuntimeBoundaryTests {
 			@NonNull McpRuntimeObservationSink observations) {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint
 				.withServerInformation(McpImplementationMetadata.withNameAndVersion(
-						"subscription-boundary-test", "4.0.0-SNAPSHOT"))
+						"subscription-boundary-test", "4.0.0"))
 				.exactResource(RESOURCE_URI.toString())
 				.subscriptions(McpNormalizedSubscriptionConfiguration.supporting(
 						McpResourceNotificationType.RESOURCES_LIST_CHANGED,
@@ -1605,7 +1605,7 @@ public class McpSubscriptionRuntimeBoundaryTests {
 				+ "\"io.modelcontextprotocol/subscriptionId\":\"" + id
 				+ "\",\"io.modelcontextprotocol/serverInfo\":{"
 				+ "\"name\":\"subscription-boundary-test\","
-				+ "\"version\":\"4.0.0-SNAPSHOT\"}}}}");
+				+ "\"version\":\"4.0.0\"}}}}");
 	}
 
 	@NonNull

@@ -442,7 +442,7 @@ public class McpHttpContractGoldenProductionTests {
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"http-contract-golden", "4.0.0-SNAPSHOT").build())
+						"http-contract-golden", "4.0.0").build())
 				.tool(tool)
 				.tool(typedTool)
 				.build();

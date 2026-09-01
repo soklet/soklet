@@ -326,7 +326,7 @@ public class McpProtocolProfileRegistryTests {
 	private static McpNormalizedEndpoint endpoint() {
 		return McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"profile-registry-test", "4.0.0-SNAPSHOT"))
+						"profile-registry-test", "4.0.0"))
 				.build();
 	}
 

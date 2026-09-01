@@ -123,9 +123,10 @@ Core Soklet makes no privacy claim for:
   response, captured byte sequence, or `Throwable`.
 
 The downstream OpenTelemetry projection remains owned by the `soklet-otel`
-release gate. Sustained default-collector/cardinality and operational retention
-proof remain owned by `release-soak` and `operational-history`, respectively.
-This document does not substitute for any of those candidate-bound results.
+release gate. Sustained default-collector/cardinality proof remains owned by
+`release-soak`. Operational retention history continues as advisory
+post-release monitoring, not a release prerequisite. This document does not
+substitute for either candidate-bound gate result.
 
 ## Checked boundary and release status
 
@@ -140,6 +141,6 @@ per-boundary evidence named in the machine-checked inventory.
 
 `SOK-PRIV-001` is `RELEASE_GATED` in the final MCP-C conformance-matrix
 closure. The complete residual evidence and matrix were regenerated as one
-atomic unit. Exactly `release-soak`, `operational-history`, and `soklet-otel`
-remain required, in release-manifest order; this local closure does not claim
-their future candidate-bound PASS evidence.
+atomic unit. Exactly `release-soak` and `soklet-otel` remain required, in
+release-manifest order; this local closure does not claim their future
+candidate-bound PASS evidence.

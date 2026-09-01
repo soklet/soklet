@@ -388,7 +388,7 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 	private static McpServer.Builder serverBuilder(String implementationName) {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
 				.serverInformation(McpImplementation.withNameAndVersion(
-						implementationName, "4.0.0-SNAPSHOT").build())
+						implementationName, "4.0.0").build())
 				.build();
 		return McpServer.withPort(0)
 				.host(HOST)

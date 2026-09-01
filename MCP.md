@@ -6,19 +6,28 @@ the ordinary `HttpServer` or `SseServer`. The API and implementation ship in
 the zero-runtime-dependency `com.soklet:soklet` artifact; there is no separate
 `soklet-mcp` component.
 
-This guide describes the implemented and frozen Phase 4, Phase 5, and Phase 6
-surfaces in the current `4.0.0-SNAPSHOT`: multi-round-trip request state,
-progress/cancelation, subscriptions, localization, lifecycle and aggregate
-metrics, bounded off-network simulation, downstream OpenTelemetry integration,
-and bounded structured trace-correlation logging. All 64 Phase 6 owners are
-frozen and the provisional inventory is empty. This is development
-documentation, not a release or final conformance claim.
-Compile-checked programmatic and annotation-driven applications live outside
-this source repository in the project-root `mcp/examples/phase-4` workspace.
+The current source version is `4.0.0`.
+
+Start with the copy/paste [MCP quickstart](MCP_QUICKSTART.md): it includes the
+dependency and annotation-processor setup, `-parameters`, one annotated tool,
+endpoint/server construction, application lifecycle, raw localhost discovery,
+and an exact Inspector command. Existing 3.5.1 integrations should first read
+the [MCP migration guide](MIGRATING_TO_4_0.md#mcp-wire-migration).
+
+This reference covers multi-round-trip request state, progress/cancelation,
+subscriptions, localization, lifecycle and aggregate metrics, bounded off-
+network simulation, downstream OpenTelemetry integration, and bounded
+structured trace-correlation logging. Internal evidence remains under
+`release/` and `conformance/`; local development results are not presented as
+published-release or immutable-candidate claims.
 
 The [MCP privacy boundary](release/MCP_PRIVACY_BOUNDARY.md) explains which
 diagnostic, metric, callback, and simulator values core Soklet redacts or
 deliberately leaves application- and operator-owned.
+The worked [OAuth resource-server pattern](release/MCP_OAUTH_RESOURCE_SERVER.md)
+shows the application-owned authentication boundary, and the dated
+[client compatibility matrix](release/MCP_CLIENT_COMPATIBILITY.md) records
+exactly which host/tool versions were manually exercised.
 
 ## Current support
 
@@ -2333,7 +2342,7 @@ TypeScript and Go are checksum-pinned, `READY`, and green against the local
 snapshot. The six reviewed downstream change sets remain uncommitted local
 work. They are therefore unpublished and unpinned, so the manifest continues
 to carry its old public commits. All four servlet legs pass 158/158 locally:
-the default 3.1.1 and 4.0.0-SNAPSHOT legs for both javax and Jakarta. ToyStore's completed local
+the default 3.1.1 and 4.0.0 legs for both javax and Jakarta. ToyStore's completed local
 migration passes 14/14, including six MCP tests. Its per-request credential
 proof accepts a valid request, then returns 401 for malformed, missing, expired, and
 wrong-audience credentials and 403 for an insufficient-scope credential; no
@@ -2355,8 +2364,8 @@ toolchain now drives `core-jdk-21`, `static-analysis`, and `spotbugs`.
 The bounded two-listener localization fixture now covers failed reload,
 rolling revision drift without within-response mixing, node loss,
 subscription reconnect, node-local delivery, and final runtime cleanup.
-The format-v2 release contract now enumerates exactly 29 ordered gates.
-Twenty-three are dispatch-configured, none remain
+The format-v2 release contract now enumerates exactly 26 ordered gates.
+Twenty are dispatch-configured, none remain
 `BLOCKED_HARNESS_MISSING`, and the six downstreams remain
 `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving six fail-closed blockers;
 `READY` means configured, never passed. The matrix-closure hook is `READY`, and
@@ -2365,10 +2374,11 @@ the candidate-contained registry and residual evidence produce a canonical
 `APPLICATION_OWNED`, 19 `NOT_APPLICABLE`, and zero `UNRESOLVED`. Only the exact
 candidate workflow can record its typed PASS receipt. A `RELEASE_GATED` row has
 candidate-contained implementation or evidence anchors and names the exact
-immutable, scheduled, sustained, or downstream gate that still owes proof; it
+immutable-candidate, sustained-run, or downstream gate that still owes proof; it
 does not excuse a local implementation, test, documentation, golden, or
-fixture gap. Scheduled/nightly and sustained fuzz/soak and operational
-history, release scans, benchmarks, published downstream pins, and an
+fixture gap. Scheduled fuzz, nightly soak, and operational history are
+advisory post-release monitoring rather than release gates. Release-soak
+results, release scans, benchmarks, published downstream pins, and an
 immutable checksum-matched candidate conformance/provenance run remain open
 candidate evidence even though their executable harnesses are checked in.
 Candidate Javadoc generation/completeness is configured; public deployment is

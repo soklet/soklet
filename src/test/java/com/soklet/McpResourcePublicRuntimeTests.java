@@ -959,7 +959,7 @@ public class McpResourcePublicRuntimeTests {
 	private static McpEndpoint.Builder endpointBuilder() {
 		return McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"resource-public-runtime-test", "4.0.0-SNAPSHOT").build());
+						"resource-public-runtime-test", "4.0.0").build());
 	}
 
 	private static McpEndpoint endpointWithTemplateRegistrations(int count) {

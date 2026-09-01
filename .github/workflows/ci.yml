@@ -239,7 +239,7 @@ jobs:
           set -euo pipefail
           mvn -B -ntp -DskipTests package
           sh conformance/official/build-public-fixture.sh \
-            "${GITHUB_WORKSPACE}/target/soklet-4.0.0-SNAPSHOT.jar" \
+            "${GITHUB_WORKSPACE}/target/soklet-4.0.0.jar" \
             "${GITHUB_WORKSPACE}/target/conformance/public-fixture" \
             > target/conformance/official/public-fixture-classpath.txt
 
@@ -247,7 +247,7 @@ jobs:
         shell: bash
         run: >-
           verification/localization/verify.sh
-          "${GITHUB_WORKSPACE}/target/soklet-4.0.0-SNAPSHOT.jar"
+          "${GITHUB_WORKSPACE}/target/soklet-4.0.0.jar"
 
       - name: Run strict local off-network MCP simulator scenarios
         shell: bash
@@ -499,6 +499,9 @@ jobs:
       - name: Check out
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
+      - name: Self-test advisory history producer
+        run: node scripts/produce-release-history-self-test.mjs
+
       - name: Install checksum-pinned Corretto 25
         shell: bash
         run: >-
@@ -608,6 +611,9 @@ jobs:
     steps:
       - name: Check out
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Self-test advisory history producer
+        run: node scripts/produce-release-history-self-test.mjs
 
       - name: Install checksum-pinned Corretto 25
         shell: bash
@@ -779,7 +785,9 @@ jobs:
           "${RUNNER_TEMP}/operational-maven-distribution.txt"
 
       - name: Self-test operational producer
-        run: node scripts/produce-operational-history-self-test.mjs
+        run: |
+          node scripts/produce-release-history-self-test.mjs
+          node scripts/produce-operational-history-self-test.mjs
 
       - name: Build exact candidate main JAR
         run: mvn -B -ntp -DskipTests clean package

@@ -1,0 +1,72 @@
+Soklet
+Copyright 2015-2022 Transmogrify LLC
+Copyright 2022-2026 Revetware LLC
+
+This product includes software from Microhttp
+(https://github.com/ebarlas/microhttp).
+Copyright (c) 2022 Elliot Barlas.
+Licensed under the MIT License:
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+This product includes portions of the Spring Framework.
+Copyright 2002-2023 the original author or authors.
+Licensed under the Apache License, Version 2.0.
+
+This product includes portions of Selenium.
+Copyright 2012 Selenium committers.
+Copyright 2012 Software Freedom Conservancy.
+Licensed under the Apache License, Version 2.0.
+
+This product includes portions derived from the Apache Tomcat fork of Apache
+Commons FileUpload. This product includes software developed by The Apache
+Software Foundation (https://www.apache.org/).
+Licensed under the Apache License, Version 2.0.
+
+The generic TypeReference implementation carries:
+Copyright 2015 Transmogrify LLC.
+Licensed under the Apache License, Version 2.0.
+
+The source and development-test distribution also contains a checksum-pinned
+Model Context Protocol schema. Its exact upstream licensing-transition notice
+and Apache License text are retained at
+conformance/official/final-schema/LICENSE.upstream.
+
+The source and development-test distribution also contains selected files from
+the JSON Schema Test Suite.
+Copyright (c) 2012 Julian Berman.
+Those files are licensed under the MIT License reproduced below:
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

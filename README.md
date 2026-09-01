@@ -64,11 +64,17 @@ Similarly-flavored commercially-friendly OSS libraries are available.
 
 [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0)
 
+Redistributed-source attributions are retained in [`NOTICE`](NOTICE); the
+4.0.0 review is recorded in the [third-party audit](release/THIRD_PARTY_AUDIT.md).
+
 ### Installation
 
 Soklet is a single JAR, available on Maven Central.
 
 JDK 17+ is required (or JDK 21+ for [Server-Sent Events](https://www.soklet.com/docs/server-sent-events)).
+
+Upgrading from 3.5.1? Read the [4.0 migration guide](MIGRATING_TO_4_0.md).
+Building an MCP server? Start with the copy/paste [MCP quickstart](MCP_QUICKSTART.md).
 
 #### Maven
 
@@ -76,7 +82,7 @@ JDK 17+ is required (or JDK 21+ for [Server-Sent Events](https://www.soklet.com/
 <dependency>
   <groupId>com.soklet</groupId>
   <artifactId>soklet</artifactId>
-  <version>3.5.1</version>
+  <version>4.0.0</version>
 </dependency>
 ```
 
@@ -88,17 +94,17 @@ repositories {
 }
 
 dependencies {
-  implementation 'com.soklet:soklet:3.5.1'
+  implementation 'com.soklet:soklet:4.0.0'
 }
 ```
 
 #### Direct Download
 
-If you don't use Maven or Gradle, you can drop [soklet-3.5.1.jar](https://repo1.maven.org/maven2/com/soklet/soklet/3.5.1/soklet-3.5.1.jar) directly into your project. No other dependencies are required.
+If you don't use Maven or Gradle, you can drop [soklet-4.0.0.jar](https://repo1.maven.org/maven2/com/soklet/soklet/4.0.0/soklet-4.0.0.jar) directly into your project. No other dependencies are required.
 
 ### Code Sample
 
-Here we demonstrate building and running a single-file Soklet application with nothing but the [soklet-3.5.1.jar](https://repo1.maven.org/maven2/com/soklet/soklet/3.5.1/soklet-3.5.1.jar) and the JDK. There are no other libraries or frameworks, no Servlet container, no Maven or Gradle build process - no special setup is required.
+Here we demonstrate building and running a single-file Soklet application with nothing but the [soklet-4.0.0.jar](https://repo1.maven.org/maven2/com/soklet/soklet/4.0.0/soklet-4.0.0.jar) and the JDK. There are no other libraries or frameworks, no Servlet container, no Maven or Gradle build process - no special setup is required.
 
 Soklet systems can be structurally as simple as a "hello world" app.
 
@@ -106,6 +112,12 @@ While a real production system will have more moving parts, this demonstrates th
 
 ```java
 package com.soklet.example;
+
+import com.soklet.*;
+import com.soklet.annotation.*;
+
+import java.time.*;
+import java.util.*;
 
 public class App {
   // Canonical example
@@ -136,7 +148,7 @@ public class App {
           .httpOnly(true)
           .secure(true)
           .maxAge(Duration.ofMinutes(5))
-          .sameSite(SameSite.LAX)
+          .sameSite(ResponseCookie.SameSite.LAX)
           .build()
       ))
       .build();
@@ -149,11 +161,8 @@ public class App {
       HttpServer.fromPort(8080)
     ).build();
 
-    try (Soklet soklet = Soklet.fromConfig(config)) {
-      soklet.start();
-      System.out.println("Soklet started, press [enter] to exit");
-      soklet.awaitShutdown(ShutdownTrigger.ENTER_KEY);
-    }
+    System.out.println("Starting Soklet; press [enter] to stop once ready");
+    SokletApplication.run(config, ShutdownTrigger.ENTER_KEY);
   }
 }
 ```
@@ -165,13 +174,13 @@ This example requires JDK 17+ to be installed on your machine ([or see this exam
 #### Build
 
 ```shell
-javac -parameters -cp soklet-3.5.1.jar -processor com.soklet.SokletProcessor -d build src/com/soklet/example/App.java
+javac -parameters -cp soklet-4.0.0.jar -processor com.soklet.SokletProcessor -d build src/com/soklet/example/App.java
 ```
 
 #### Run
 
 ```shell
-java -cp soklet-3.5.1.jar:build com/soklet/example/App
+java -cp soklet-4.0.0.jar:build com/soklet/example/App
 ```
 
 #### Test
@@ -283,27 +292,32 @@ public void example(Request request /* param name is arbitrary */) {
   Optional<String> bodyAsString = request.getBodyAsString();
   // Query parameter values by name
   Map<String, Set<String>> queryParameters = request.getQueryParameters();
-  // Shorthand for plucking the first query param value by name
+  // Convenience for a query parameter when at most one value is expected;
+  // throws IllegalQueryParameterException if multiple values are present
   Optional<String> queryParameter = request.getQueryParameter("test");
   // Header values by name (names are case-insensitive)
   Map<String, Set<String>> headers = request.getHeaders();
-  // Shorthand for plucking the first header value by name (case-insensitive)
+  // Convenience for a header when at most one value is expected
+  // (case-insensitive name); throws if multiple values are present
   Optional<String> header = request.getHeader("Accept-Language");
   // Parsed W3C trace context from traceparent/tracestate, if present
   Optional<TraceContext> traceContext = request.getTraceContext();
-  // Request cookies by name (names are case-insensitive)
+  // Request cookies by case-sensitive cookie name
   Map<String, Set<String>> cookies = request.getCookies();
-  // Shorthand for plucking the first cookie value by name (case-insensitive)
+  // Convenience for a cookie when at most one value is expected;
+  // throws IllegalRequestCookieException if multiple values are present
   Optional<String> cookie = request.getCookie("cookie-name");
   // Form parameters by name (application/x-www-form-urlencoded)
   Map<String, Set<String>> fps = request.getFormParameters();
-  // Shorthand for plucking the first form parameter value by name
+  // Convenience for a form parameter when at most one value is expected;
+  // throws IllegalFormParameterException if multiple values are present
   Optional<String> fp = request.getFormParameter("fp-name");
   // Is this a multipart request?
   boolean multipart = request.isMultipart();
   // Multipart fields by name
   Map<String, Set<MultipartField>> mpfs = request.getMultipartFields();
-  // Shorthand for plucking the first multipart field by name
+  // Convenience for a multipart name when at most one field is expected;
+  // throws IllegalMultipartFieldException if multiple fields are present
   Optional<MultipartField> mpf = request.getMultipartField("file-input");
   // CORS information, if available
   Optional<Cors> cors = request.getCors();
@@ -385,8 +399,8 @@ public void createEmployee(@RequestBody Employee employee) {
 #### Response Writing
 
 To control how response data is surfaced to clients (e.g. JSON), provide handler functions
-([`ResourceMethodHandler`](https://javadoc.soklet.com/com/soklet/ResponseMarshaler.ResourceMethodHandler.html) and
-[`ThrowableHandler`](https://javadoc.soklet.com/com/soklet/ResponseMarshaler.ThrowableHandler.html)) to Soklet as shown below.
+([`ResourceMethodHandler`](https://javadoc.soklet.com/com/soklet/ResponseMarshaler.Builder.ResourceMethodHandler.html) and
+[`ThrowableHandler`](https://javadoc.soklet.com/com/soklet/ResponseMarshaler.Builder.ThrowableHandler.html)) to Soklet as shown below.
 
 Alternatively, you can provide your own implementation of [`ResponseMarshaler`](https://javadoc.soklet.com/com/soklet/ResponseMarshaler.html) for full control.
 
@@ -431,26 +445,20 @@ ThrowableHandler throwableHandler = (
   // Examine the exception that bubbled out and determine what
   // the HTTP status and a user-facing message should be.
   // Note: real systems should localize these messages
-  switch (throwable) {
-    // Soklet throws this exception, a specific subclass of BadRequestException
-    case IllegalQueryParameterException e -> {
-      message = String.format("Illegal value '%s' for parameter '%s'",
-        e.getQueryParameterValue().orElse("[not provided]"),
-        e.getQueryParameterName());
-      statusCode = 400;
-    }
-
-    // Generically handle other BadRequestExceptions
-    case BadRequestException ignored -> {
-      message = "Your request was improperly formatted.";
-      statusCode = 400;
-    }
-
-    // Something else?  Fall back to a 500
-    default -> {
-      message = "An unexpected error occurred.";
-      statusCode = 500;
-    }
+  // Soklet throws this exception, a specific subclass of BadRequestException.
+  if (throwable instanceof IllegalQueryParameterException e) {
+    message = String.format("Illegal value '%s' for parameter '%s'",
+      e.getQueryParameterValue().orElse("[not provided]"),
+      e.getQueryParameterName());
+    statusCode = 400;
+  } else if (throwable instanceof BadRequestException) {
+    // Generically handle other BadRequestExceptions.
+    message = "Your request was improperly formatted.";
+    statusCode = 400;
+  } else {
+    // Something else? Fall back to a 500.
+    message = "An unexpected error occurred.";
+    statusCode = 500;
   }
 
   // Turn response body into JSON bytes with Gson.
@@ -473,8 +481,8 @@ ThrowableHandler throwableHandler = (
 SokletConfig config = SokletConfig.withHttpServer(
   HttpServer.fromPort(8080)
 ).responseMarshaler(ResponseMarshaler.builder()
-  .resourceMethod(resourceMethodHandler)
-  .throwable(throwableHandler)
+  .resourceMethodHandler(resourceMethodHandler)
+  .throwableHandler(throwableHandler)
   .build()
 ).build();
 ```
@@ -616,21 +624,24 @@ import org.junit.Test;
 
 @Test
 public void sseTest() {
-  SokletConfig config = SokletConfig.withHttpServer(HttpServer.fromPort(0).build())
-    .sseServer(SseServer.fromPort(0))
-    .resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ChatResource.class)))
-    .build();
-
   List<SseEvent> events = new ArrayList<>();
+  AtomicReference<SseServer> simulatedSseServer = new AtomicReference<>();
 
-  Soklet.runSimulator(config, simulator -> {
+  SokletSimulator.run(transports -> {
+    simulatedSseServer.set(transports.getSseServer());
+    return SokletConfig.withHttpServer(transports.getHttpServer())
+      .sseServer(transports.getSseServer())
+      .resourceMethodResolver(
+          ResourceMethodResolver.fromClasses(Set.of(ChatResource.class)))
+      .build();
+  }, simulator -> {
     Request request = Request.fromPath(HttpMethod.GET, "/chat");
     SseRequestResult result = simulator.performSseRequest(request);
 
     if (result instanceof SseRequestResult.HandshakeAccepted accepted) {
       accepted.registerEventConsumer(events::add);
 
-      SseBroadcaster broadcaster = config.getSseServer().orElseThrow()
+      SseBroadcaster broadcaster = simulatedSseServer.get()
         .acquireBroadcaster(ResourcePath.fromPath("/chat")).orElseThrow();
       broadcaster.broadcastEvent(SseEvent.withEvent("message")
         .data("hello")
@@ -640,14 +651,22 @@ public void sseTest() {
     }
   });
 
-  Assert.assertEquals("hello", events.get(0).getData().orElse(null));
+  Assert.assertEquals(List.of("welcome", "hello"), events.stream()
+    .map(event -> event.getData().orElse(null))
+    .toList());
 }
 ```
 
 #### Model Context Protocol (MCP)
 
-> **Unreleased API:** This section describes `4.0.0-SNAPSHOT`. The `3.5.1`
-> artifact shown above contains the older, incompatible MCP API.
+Soklet 4.0.0's MCP API is intentionally incompatible with the older 3.5.1
+implementation. For a complete buildable endpoint, compiler configuration,
+application start, and localhost/Inspector recipe, use the
+[MCP quickstart](MCP_QUICKSTART.md). See the
+[migration guide](MIGRATING_TO_4_0.md#mcp-wire-migration) before upgrading an
+existing MCP server.
+
+The development coordinate for this section is `4.0.0`.
 
 ##### Recommended MCP setup
 
@@ -933,7 +952,7 @@ public Response multipart(
   // like filename and content type (if available).
   // The @Multipart annotation is optional
   // when your parameter is of type MultipartField...
-  MultipartField document,
+  @Multipart(name="doc") MultipartField document,
   // ...but is useful if you need to massage the name.
   @Multipart(name="extra") List<MultipartField> supplements,
   // If you specify type byte[] for a @Multipart field,
@@ -942,7 +961,7 @@ public Response multipart(
 ) {
   // Let's demonstrate the functionality MultipartField provides.
 
-  // Form field name, always available, e.g. "document"
+  // Form field name, always available, e.g. "doc"
   String name = document.getName();
   // Browser may provide this for files, e.g. "test.pdf"
   Optional<String> filename = document.getFilename();
@@ -1008,34 +1027,27 @@ Implement [`LifecycleObserver`](https://javadoc.soklet.com/com/soklet/LifecycleO
 [`RequestInterceptor`](https://javadoc.soklet.com/com/soklet/RequestInterceptor.html) to hook into server and request lifecycles.
 Use [`SokletConfig.Builder::lifecycleObservers`](<https://javadoc.soklet.com/com/soklet/SokletConfig.Builder.html#lifecycleObservers(java.util.Collection)>) when you want multiple observers, for example an audit observer plus an OpenTelemetry tracing observer.
 
-HTTP Server Start/Stop: execute code immediately before and after [`HttpServer`](https://javadoc.soklet.com/com/soklet/HttpServer.html) startup and shutdown.
+HTTP Server Start/Stop: observe [`HttpServer`](https://javadoc.soklet.com/com/soklet/HttpServer.html)
+startup and shutdown. Transition callbacks are asynchronous, best-effort
+observations: they cannot veto, delay, or change lifecycle. Do not put required
+readiness work or required resource cleanup in them; keep that work in
+application startup/ownership and the standalone runner's cleanup hook.
 
 ```java
 SokletConfig config = SokletConfig.withHttpServer(
   HttpServer.fromPort(8080)
 ).lifecycleObserver(new LifecycleObserver() {
   @Override
-  public void willStartHttpServer(@NonNull HttpServer httpServer) {
-    // Perform startup tasks required prior to server launch
-    MyPayrollSystem.INSTANCE.startLengthyWarmupProcess();
-  }
-
-  @Override
   public void didStartHttpServer(@NonNull HttpServer httpServer) {
-    // HTTP server has fully started up and is listening
+    // Observe that the HTTP server has started and is listening
     System.out.println("HTTP server started.");
   }
 
   @Override
-  public void willStopHttpServer(@NonNull HttpServer httpServer) {
-    // Perform shutdown tasks required prior to server teardown
-    MyPayrollSystem.INSTANCE.destroy();
-  }
-
-  @Override
-  public void didStopHttpServer(@NonNull HttpServer httpServer) {
-    // HTTP server has fully shut down
-    System.out.println("HTTP server stopped.");
+  public void didStopHttpServer(@NonNull HttpServer httpServer,
+      @NonNull ParticipantShutdownResult result) {
+    // Observe the HTTP server's immutable terminal evidence
+    System.out.println("HTTP server stopped: " + result.getDisposition());
   }
 }).build();
 ```
@@ -1088,14 +1100,8 @@ Request Wrapping: wraps around the whole "outside" of an entire [`Request`](http
 Request wrapping runs before Soklet resolves which [`ResourceMethod`](https://javadoc.soklet.com/com/soklet/ResourceMethod.html) should handle the request. If you want to rewrite the HTTP method or path, return a modified [`Request`](https://javadoc.soklet.com/com/soklet/Request.html) via the consumer and Soklet will route using the wrapped request. You must call `requestProcessor.accept(...)` exactly once before returning; otherwise Soklet logs an error and returns a 500 response.
 
 ```java
-// Special scoped value so anyone can access the current Locale.
-// For Java < 21, use ThreadLocal instead
-public static final ScopedValue<Locale> CURRENT_LOCALE;
-
-// Spin up the ScopedValue (or ThreadLocal)
-static {
-  CURRENT_LOCALE = ScopedValue.newInstance();
-}
+// Java 17-compatible request-local storage.
+public static final ThreadLocal<Locale> CURRENT_LOCALE = new ThreadLocal<>();
 
 SokletConfig config = SokletConfig.withHttpServer(
   HttpServer.fromPort(8080)
@@ -1107,13 +1113,18 @@ SokletConfig config = SokletConfig.withHttpServer(
     @NonNull Consumer<Request> requestProcessor
   ) {
     // Make the locale accessible by other code during this request...
-    Locale locale = request.getLocales().get(0);
+    Locale locale = request.getLocales().stream()
+      .findFirst()
+      .orElse(Locale.getDefault());
 
-    // ...by binding it to a ScopedValue (or ThreadLocal).
-    ScopedValue.where(CURRENT_LOCALE, locale).run(() -> {
+    // Bind it for downstream code and always clear the pooled worker thread.
+    CURRENT_LOCALE.set(locale);
+    try {
       // You must call this so downstream processing can proceed
       requestProcessor.accept(request);
-    });
+    } finally {
+      CURRENT_LOCALE.remove();
+    }
   }
 }).build();
 
@@ -1121,9 +1132,9 @@ SokletConfig config = SokletConfig.withHttpServer(
 
 class ExampleService {
   void accessCurrentLocale() {
-    // You now have access to the Locale bound to the logical scope
-    // (or Thread) without having to pass it down the call stack
-    Locale locale = CURRENT_LOCALE.orElse(Locale.getDefault());
+    // You now have access to the Locale bound to this request thread.
+    Locale locale = Optional.ofNullable(CURRENT_LOCALE.get())
+      .orElse(Locale.getDefault());
   }
 }
 ```
@@ -1176,7 +1187,8 @@ SokletConfig config = SokletConfig.withHttpServer(
   HttpServer.fromPort(8080)
 ).lifecycleObserver(new LifecycleObserver() {
   @Override
-  public void willStartResponseWriting(
+  public void willWriteResponse(
+    @NonNull ServerType serverType,
     @NonNull Request request,
     @Nullable ResourceMethod resourceMethod,
     @NonNull MarshaledResponse marshaledResponse
@@ -1189,23 +1201,29 @@ SokletConfig config = SokletConfig.withHttpServer(
   }
 
   @Override
-  public void didFinishResponseWriting(
+  public void didWriteResponse(
+    @NonNull ServerType serverType,
+    @NonNull Request request,
+    @Nullable ResourceMethod resourceMethod,
+    @NonNull MarshaledResponse marshaledResponse,
+    @NonNull Duration responseWriteDuration
+  ) {
+    long millis = responseWriteDuration.toMillis();
+    System.out.printf("Took %dms to write response\n", millis);
+  }
+
+  @Override
+  public void didFailToWriteResponse(
+    @NonNull ServerType serverType,
     @NonNull Request request,
     @Nullable ResourceMethod resourceMethod,
     @NonNull MarshaledResponse marshaledResponse,
     @NonNull Duration responseWriteDuration,
-    @Nullable Throwable throwable
+    @NonNull Throwable throwable
   ) {
-    long millis = responseWriteDuration.toMillis();
-    System.out.printf("Took %dms to write response\n", millis);
-
-    // You have access to the throwable that might have occurred
-    // while writing the response.  This is useful to, for example,
-    // determine trends in unexpected client disconnect rates
-    if(throwable != null) {
-      System.err.println("Exception occurred while writing response");
-      throwable.printStackTrace();
-    }
+    System.err.printf("Response write failed after %dms\n",
+      responseWriteDuration.toMillis());
+    throwable.printStackTrace();
   }
 }).build();
 ```
@@ -1232,7 +1250,7 @@ Authorize Whitelisted Origins:
 Set<String> allowedOrigins = Set.of("https://www.revetware.com");
 
 SokletConfig config = SokletConfig.withHttpServer(server)
-  .corsAuthorizer(WhitelistedOriginsCorsAuthorizer.fromOrigins(allowedOrigins))
+  .corsAuthorizer(CorsAuthorizer.fromWhitelistedOrigins(allowedOrigins))
   .build();
 ```
 
@@ -1240,7 +1258,7 @@ SokletConfig config = SokletConfig.withHttpServer(server)
 
 ```java
 SokletConfig config = SokletConfig.withHttpServer(server)
-  .corsAuthorizer(WhitelistedOriginsCorsAuthorizer.fromAuthorizer(
+  .corsAuthorizer(CorsAuthorizer.fromWhitelistAuthorizer(
     (origin) -> origin.equals("https://www.revetware.com")
   ))
   .build();
@@ -1252,23 +1270,22 @@ Custom CORS logic:
 SokletConfig config = SokletConfig.withHttpServer(server)
   .corsAuthorizer(new CorsAuthorizer() {
     // Any subdomain under soklet.com is permitted
-    boolean originMatchesValidSubdomain(@NonNull Cors cors) {
-      return cors.getOrigin().matches("https://(.+)\\.soklet\\.com");
+    boolean originMatchesValidSubdomain(@NonNull String origin) {
+      return origin.matches("https://(.+)\\.soklet\\.com");
     }
 
     @NonNull
     @Override
     public Optional<CorsPreflightResponse> authorizePreflight(
       @NonNull Request request,
+      @NonNull CorsPreflight corsPreflight,
       @NonNull Map<HttpMethod, ResourceMethod> availableResourceMethodsByHttpMethod
     ) {
-      // Requests here are guaranteed to have the Cors value set
-      Cors cors = request.getCors().orElseThrow();
-
       // Only greenlight our soklet.com subdomains
-      if (originMatchesValidSubdomain(cors))
+      if (originMatchesValidSubdomain(corsPreflight.getOrigin()))
         return Optional.of(
-          CorsPreflightResponse.withAccessControlAllowOrigin(cors.getOrigin())
+          CorsPreflightResponse.withAccessControlAllowOrigin(
+              corsPreflight.getOrigin())
             .accessControlAllowMethods(availableResourceMethodsByHttpMethod.keySet())
             .accessControlAllowHeaders(Set.of("*"))
             .accessControlAllowCredentials(true)
@@ -1281,12 +1298,12 @@ SokletConfig config = SokletConfig.withHttpServer(server)
 
     @NonNull
     @Override
-    public Optional<CorsResponse> authorize(@NonNull Request request) {
-      // Requests here are guaranteed to have the Cors value set
-      Cors cors = request.getCors().orElseThrow();
-
+    public Optional<CorsResponse> authorize(
+      @NonNull Request request,
+      @NonNull Cors cors
+    ) {
       // Only greenlight our soklet.com subdomains
-      if (originMatchesValidSubdomain(cors))
+      if (originMatchesValidSubdomain(cors.getOrigin()))
         return Optional.of(
           CorsResponse.withAccessControlAllowOrigin(cors.getOrigin())
             .accessControlExposeHeaders(Set.of("*"))
@@ -1308,7 +1325,9 @@ public class ReverseResource {
   // Reverse the input
   @POST("/reverse")
   public List<Integer> reverse(@RequestBody List<Integer> numbers) {
-    return numbers.reversed();
+    List<Integer> reversed = new ArrayList<>(numbers);
+    Collections.reverse(reversed);
+    return reversed;
   }
 
   // Reverse the input and set custom headers/cookies
@@ -1322,7 +1341,7 @@ public class ReverseResource {
       .cookies(Set.of(
         ResponseCookie.with("lastRequest", lastRequest.toString()).build()
       ))
-      .body(numbers.reversed())
+      .body(reverse(numbers))
       .build();
   }
 }
@@ -1405,18 +1424,30 @@ public class HelloResource {
 
 Perform tests:
 
-Soklet's [`Simulator`](https://javadoc.soklet.com/com/soklet/Simulator.html) is available via [`Soklet`](https://javadoc.soklet.com/com/soklet/Soklet.html) to exercise full request/response flows without binding a port. Its modern `startMcpRequest(...)` methods run an asynchronous MCP POST through the real processor and lifecycle while retaining bounded JSON or exact SSE capture off-network; they do not start the configured MCP listener or change public server diagnostics.
+[`SokletSimulator`](https://javadoc.soklet.com/com/soklet/SokletSimulator.html)
+creates one fresh off-network transport graph and supplies a
+[`Simulator`](https://javadoc.soklet.com/com/soklet/Simulator.html) to exercise
+full request/response flows without binding a port. Its
+`startMcpRequest(...)` methods run an asynchronous MCP POST through the real
+processor and lifecycle while retaining bounded JSON or exact SSE capture
+off-network; they do not start a configured network listener or change public
+server diagnostics.
 
 ```java
 @Test
 public void basicIntegrationTest() {
-  // Just use your app's existing configuration
-  SokletConfig config = obtainMySokletConfig();
+  SokletConfig applicationConfig = obtainMySokletConfig();
+  ResourceMethodResolver resourceMethods =
+      applicationConfig.getResourceMethodResolver();
+  InstanceProvider instances = applicationConfig.getInstanceProvider();
 
-  // Instead of running in a real HTTP server that listens on a port,
-  // a simulator is provided against which you can issue requests
-  // and receive responses.
-  Soklet.runSimulator(config, (simulator -> {
+  // Rebuild the application configuration with this scope's fresh simulated
+  // transport instead of reusing a live configuration or transport.
+  SokletSimulator.run(transports ->
+      SokletConfig.withHttpServer(transports.getHttpServer())
+          .resourceMethodResolver(resourceMethods)
+          .instanceProvider(instances)
+          .build(), simulator -> {
     // Construct a request
     Request request = Request.withPath(HttpMethod.GET, "/hello")
       .queryParameters(Map.of("name", Set.of("Mark")))
@@ -1440,7 +1471,7 @@ public void basicIntegrationTest() {
     } else {
       Assert.fail("No byte-array-backed response body");
     }
-  }));
+  });
 }
 ```
 
@@ -1475,8 +1506,8 @@ implemented diagnostic getters. Six are boxed `@NonNull Integer` values:
 `getTraceCorrelationConfigurationFingerprint()`; both fingerprint accessors
 return non-null `Optional` values with non-null payloads.
 
-The configured numeric values are positive and stable before start and across
-stop/restart. Lifecycle status, bound address, configured bounds, handler
+The configured numeric values are positive and stable before start and through
+the one-shot owner's lifecycle, including after stop. Lifecycle status, bound address, configured bounds, handler
 counts, and the paired stream/subscription counts form one runtime-owned atomic
 tuple. The four security fields form a separate atomic tuple owned by the
 security controls. The resulting public diagnostics view is immutable, but the two
@@ -1511,8 +1542,9 @@ one even when configured. The protection fingerprint is present exactly for a
 live `PRODUCTION_KEY_RING`; development-ephemeral, custom, and unconfigured
 modes return empty. The trace fingerprint is independent of protection mode
 and is present exactly when trace correlation was enabled at construction.
-Successful live rotations update only fresh snapshots, survive listener
-stop/restart, and never mutate retained snapshots.
+Successful live rotations update only fresh snapshots, remain visible through
+that one-shot generation's stop, and never mutate retained snapshots. A new
+generation must be constructed and configured explicitly.
 
 The fingerprints are deterministic operational comparison metadata, not
 authentication or token-derivation inputs. Diagnostics expose no raw key
@@ -2416,7 +2448,7 @@ and OpenTelemetry 36/36. TypeScript and Go are checksum-pinned, `READY`, and
 green against the local snapshot. The six reviewed downstream change sets
 remain uncommitted local work. They are therefore unpublished and unpinned, so
 the manifest continues to carry its old public commits. All four servlet legs
-pass 158/158 locally: the default 3.1.1 and 4.0.0-SNAPSHOT legs for both javax
+pass 158/158 locally: the default 3.1.1 and 4.0.0 legs for both javax
 and Jakarta. ToyStore's local 4.0 MCP migration passes 14/14, including six MCP
 tests. Its per-request credential proof accepts a valid request, then returns 401 for malformed,
 missing, expired, and wrong-audience credentials and 403 for an
@@ -2435,18 +2467,18 @@ analysis reports `BUILD SUCCESS` with
 the existing advisory inventory after the `SelfAssignment` fix, and SpotBugs
 reports zero bugs and errors. The checksum-pinned Corretto 21.0.12.9.1
 toolchain now drives the `core-jdk-21`, `static-analysis`, and `spotbugs`
-release gates. The format-v2 release contract now enumerates exactly 29
-ordered gates. Twenty-three are dispatch-configured with executable `READY`
+release gates. The format-v2 release contract now enumerates exactly 26
+ordered gates. Twenty are dispatch-configured with executable `READY`
 paths, and none remain `BLOCKED_HARNESS_MISSING`; the six downstreams remain
 `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving six fail-closed blockers.
 `READY` means configured, never passed. The matrix-closure hook is `READY`, and
 the candidate-contained registry and residual evidence produce a canonical
 `PASSED` report at 113 `CORE_COMPLETE`, 119 `RELEASE_GATED`, 12
 `APPLICATION_OWNED`, 19 `NOT_APPLICABLE`, and zero `UNRESOLVED`. Only the exact
-candidate workflow can record its typed PASS receipt. Scheduled/nightly and
-sustained history, release scans, benchmarks, published downstream pins, and
-immutable-candidate provenance remain open even though their executable
-harnesses are checked in.
+candidate workflow can record its typed PASS receipt. Release scans,
+benchmarks, published downstream pins, and immutable-candidate provenance
+remain open. Scheduled fuzz, nightly soak, and operational histories remain
+available as advisory post-release monitoring and do not block 4.0.
 Candidate Javadoc generation/completeness is a configured gate;
 deployment of those Javadocs remains post-validation publication work. The
 bounded two-listener localization fixture is the Soklet-owned fleet gate;

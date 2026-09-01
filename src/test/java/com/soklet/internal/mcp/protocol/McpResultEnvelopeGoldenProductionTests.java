@@ -990,13 +990,13 @@ public class McpResultEnvelopeGoldenProductionTests {
 	private static McpEndpoint.Builder endpointBuilder(String name) {
 		return McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						name, "4.0.0-SNAPSHOT").build());
+						name, "4.0.0").build());
 	}
 
 	private static McpEndpoint.Builder localizedEndpointBuilder(String name) {
 		return McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
-						name, "4.0.0-SNAPSHOT")
+						name, "4.0.0")
 						.title("Canonical result title")
 						.description("Canonical result description")
 						.build());

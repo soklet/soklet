@@ -335,7 +335,7 @@ final class SokletApplicationObservationTests {
 		};
 		McpEndpoint mcpEndpoint = McpEndpoint.withPath("/mcp")
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"mixed-observation-test", "4.0.0-SNAPSHOT").build())
+						"mixed-observation-test", "4.0.0").build())
 				.build();
 		SokletConfig config = SokletConfig.withHttpServer(http)
 				.sseServer(SseServer.withPort(0).build())
@@ -1011,7 +1011,7 @@ final class SokletApplicationObservationTests {
 			@NonNull LifecycleObserver observer) {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"observation-test", "4.0.0-SNAPSHOT").build())
+						"observation-test", "4.0.0").build())
 				.build();
 		McpServer mcpServer = McpServer.withPort(0)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))

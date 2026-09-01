@@ -259,7 +259,7 @@ public class McpServerStartMetricsAggregationTests {
 				DefaultMetricsCollector.defaultInstance();
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp/server-start-metrics")
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"server-start-metrics-test", "4.0.0-SNAPSHOT").build())
+						"server-start-metrics-test", "4.0.0").build())
 				.build();
 		McpServer server = McpServer.withPort(0)
 				.host("127.0.0.1")

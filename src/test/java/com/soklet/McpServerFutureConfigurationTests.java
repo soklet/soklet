@@ -189,7 +189,7 @@ class McpServerFutureConfigurationTests {
 	private static McpServer.Builder serverBuilder() {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp")
 				.serverInformation(McpImplementation.withNameAndVersion(
-						"future-configuration-tests", "4.0.0-SNAPSHOT").build())
+						"future-configuration-tests", "4.0.0").build())
 				.build();
 		return McpServer.withPort(0)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))

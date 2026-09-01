@@ -543,7 +543,7 @@ public class McpServerPublicRuntimeTests {
 	public void discoveryAdvertisesConfiguredServerInformationWithoutOperationCapabilities()
 			throws Exception {
 		McpImplementation implementation = McpImplementation
-				.withNameAndVersion("public-runtime", "4.0.0-SNAPSHOT")
+				.withNameAndVersion("public-runtime", "4.0.0")
 				.title("Public Runtime")
 				.description("Operation-free public projection")
 				.websiteUrl(URI.create("https://example.test/soklet-mcp"))
@@ -571,7 +571,7 @@ public class McpServerPublicRuntimeTests {
 					"\"io.modelcontextprotocol/serverInfo\""), body);
 			Assertions.assertTrue(body.contains("\"name\":\"public-runtime\""), body);
 			Assertions.assertTrue(body.contains(
-					"\"version\":\"4.0.0-SNAPSHOT\""), body);
+					"\"version\":\"4.0.0\""), body);
 			Assertions.assertTrue(body.contains("\"title\":\"Public Runtime\""), body);
 			Assertions.assertTrue(body.contains(
 					"\"description\":\"Operation-free public projection\""), body);
@@ -672,7 +672,7 @@ public class McpServerPublicRuntimeTests {
 			throws Exception {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation
-						.withNameAndVersion("omitted-server-info", "4.0.0-SNAPSHOT")
+						.withNameAndVersion("omitted-server-info", "4.0.0")
 						.build())
 				.includeServerInformation(false)
 				.build();
