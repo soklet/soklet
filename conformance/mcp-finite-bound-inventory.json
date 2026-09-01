@@ -1283,7 +1283,7 @@
       },
       "enforcementOwners": [
         {
-          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationHandlerDispatcher.java",
           "member": "McpApplicationHandlerDispatcher",
           "owner": "com.soklet.internal.mcp.protocol.McpApplicationHandlerDispatcher"
         },

@@ -23,12 +23,14 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const EXPECTED_FORMAT_VERSION = 1;
 const EXPECTED_PROTOCOL_VERSION = '2026-07-28';
 const EXPECTED_SOURCE_MATRIX_PATH = 'mcp/MCP_CONFORMANCE_MATRIX.md';
-const EXPECTED_SOURCE_MATRIX_LAST_UPDATED = '2026-08-28';
+const EXPECTED_SOURCE_MATRIX_LAST_UPDATED = '2026-09-01';
 const EXPECTED_SOURCE_MATRIX_SHA256 =
-  '509bf61c509b37549f82d2989aadb44126e9ed6a1dd7456f0790e6c4ad323be7';
+  '53b7c3ffe4d63af0306b1b34a28c7c0e2553f6b056da51d8d38444922f9802d2';
 const EXPECTED_ROW_COUNT = 263;
 const EXPECTED_ROW_IDS_SHA256 =
   'd7a55f3218e4ea8d18e2f6295f56d9b9b70ecdba9deb8be5a624bae3a9b647b0';
+const EXPECTED_ROW_ATTRIBUTIONS_SHA256 =
+  '51f598c6ec4587de414c6e2140179412bf386c16547c35c10cf7ed2b86df3a9b';
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const ROW_ID_PATTERN = /^(?:MCP-[A-Z0-9]+-\d{3}|SOK-[A-Z0-9]+-\d{3}|AMB-\d{3})$/;
 const DISPOSITIONS = Object.freeze([
@@ -124,6 +126,10 @@ const ROW_KEYS = Object.freeze([
   'reason',
 ]);
 const FINITE_BOUND_INVENTORY_PATH = 'conformance/mcp-finite-bound-inventory.json';
+const EXPECTED_FINITE_BOUND_SEMANTICS_SHA256 =
+  'ca1d3c4147ff28ec2e25021329d913ee284b734402647741b8a2a9d8164418db';
+const EXPECTED_FINITE_BOUND_EXCLUSIONS_SHA256 =
+  '821bd1913c4a3d05afaf774f2cd1975abcb0530fbff3eea379392c44eea8ce8d';
 const FINITE_BOUND_TOP_LEVEL_KEYS = Object.freeze([
   'bounds',
   'formatVersion',
@@ -161,6 +167,32 @@ const FINITE_BOUND_EXCLUSION_KEYS = Object.freeze([
   'rationale',
 ]);
 const FINITE_BOUND_FAILURE_KEYS = Object.freeze(['contract', 'stage']);
+const FINITE_BOUND_ENFORCEMENT_OWNER_KEYS = Object.freeze([
+  'file',
+  'member',
+  'owner',
+]);
+const FINITE_BOUND_VALUE_KEYS = Object.freeze([
+  'accounting',
+  'key',
+  'unit',
+  'value',
+]);
+export const FINITE_BOUND_REQUIRED_CATEGORIES = Object.freeze([
+  'BODY',
+  'CONNECTION',
+  'CURSOR',
+  'HEADER',
+  'JSON',
+  'OUTPUT',
+  'PROFILE_1_COMPILER',
+  'PROFILE_1_EVALUATOR',
+  'QUEUE_STREAM',
+  'SERIALIZED_RESULT',
+  'TIME',
+  'TYPED_BINDING',
+  'URI_TEMPLATE',
+]);
 export const FINITE_BOUND_SCAN_ROOTS = Object.freeze([
   'src/main/java/com/soklet/DefaultMcp*.java',
   'src/main/java/com/soklet/Mcp*.java',
@@ -199,6 +231,8 @@ const JAVA_MEMBER_PATTERN = /^[A-Za-z_$][\w$]*(?:\([^\r\n#]*\))?$/u;
 const BOUND_NAME_PATTERN = /^(?:maximum|minimum)[A-Z].*|^.*(?:Capacity|Concurrency|Timeout|Deadline|Duration|Interval|Resolution|Backlog|BufferSize)$/u;
 const PRIVACY_BOUNDARY_INVENTORY_PATH =
   'conformance/mcp-privacy-boundary-inventory.json';
+const EXPECTED_PRIVACY_SEMANTICS_SHA256 =
+  'f7adf2d9f944dc2191b1c17507c2e830347128412783ce472b343b013125bcb3';
 const PRIVACY_TOP_LEVEL_KEYS = Object.freeze([
   'artifactRoots',
   'boundaries',
@@ -377,6 +411,120 @@ const PRIVACY_NON_THROWABLE_ERROR_TYPES = new Set([
   'ProtocolError',
   'RequestError',
 ]);
+const RESIDUAL_EVIDENCE_PATH =
+  'release/mcp-residual-closure-evidence.json';
+const EXPECTED_RESIDUAL_SEMANTICS_SHA256 =
+  '857d69a1e8142a6d257ea9492fe64beba0b16148e42c655dc2d107a1c59b32c9';
+const RESIDUAL_TOP_LEVEL_KEYS = Object.freeze([
+  'formatVersion',
+  'protocolVersion',
+  'releaseVersion',
+  'rows',
+]);
+const RESIDUAL_ROW_KEYS = Object.freeze([
+  'id',
+  'targetDisposition',
+  'owningPackage',
+  'evidencePaths',
+  'documentationPaths',
+  'releaseGates',
+  'ownershipBoundary',
+  'rationale',
+]);
+const RESIDUAL_ROW_CONTRACTS = Object.freeze([
+  Object.freeze({
+    id: 'SOK-VALID-002',
+    targetDisposition: 'RELEASE_GATED',
+    documentationPaths: Object.freeze([
+      'MCP.md',
+      'release/README.md',
+    ]),
+    evidencePaths: Object.freeze([
+      'conformance/mcp-finite-bound-inventory.json',
+      'release/release-validation-manifest.json',
+      'src/test/java/com/soklet/internal/mcp/protocol/McpFiniteBoundInventoryTests.java',
+    ]),
+    releaseGates: Object.freeze([
+      'fuzz-nightly-history',
+      'soak-nightly-history',
+      'release-soak',
+    ]),
+  }),
+  Object.freeze({
+    id: 'SOK-STATE-002',
+    targetDisposition: 'CORE_COMPLETE',
+    documentationPaths: Object.freeze([
+      'MCP.md',
+      'SECURITY.md',
+      'api/mcp/README.md',
+      'release/MCP_REQUEST_STATE_SECURITY_PROFILE.md',
+      'release/README.md',
+    ]),
+    evidencePaths: Object.freeze([
+      'src/main/java/com/soklet/DefaultMcpSecurityControls.java',
+      'src/test/java/com/soklet/McpSecurityControlsTests.java',
+    ]),
+    releaseGates: Object.freeze([]),
+  }),
+  Object.freeze({
+    id: 'SOK-STATE-007',
+    targetDisposition: 'CORE_COMPLETE',
+    documentationPaths: Object.freeze([
+      'release/MCP_REQUEST_STATE_KEY_ROTATION_RUNBOOK.md',
+    ]),
+    evidencePaths: Object.freeze([
+      'src/main/java/com/soklet/DefaultMcpSecurityControls.java',
+      'src/test/java/com/soklet/McpSecurityControlsTests.java',
+    ]),
+    releaseGates: Object.freeze([]),
+  }),
+  Object.freeze({
+    id: 'SOK-PRIV-001',
+    targetDisposition: 'RELEASE_GATED',
+    documentationPaths: Object.freeze([
+      'MCP.md',
+      'SECURITY.md',
+      'release/MCP_PRIVACY_BOUNDARY.md',
+      'release/README.md',
+    ]),
+    evidencePaths: Object.freeze([
+      'conformance/mcp-privacy-boundary-inventory.json',
+      'release/release-validation-manifest.json',
+      'src/test/java/com/soklet/McpPrivacyBoundaryTests.java',
+      'src/test/java/com/soklet/internal/mcp/protocol/McpPrivacyBoundaryInternalTests.java',
+    ]),
+    releaseGates: Object.freeze([
+      'release-soak',
+      'operational-history',
+      'soklet-otel',
+    ]),
+  }),
+  Object.freeze({
+    id: 'AMB-002',
+    targetDisposition: 'CORE_COMPLETE',
+    documentationPaths: Object.freeze([
+      'MCP.md',
+    ]),
+    evidencePaths: Object.freeze([
+      'conformance/mcp-limits-and-accounting.json',
+      'src/test/java/com/soklet/internal/mcp/protocol/McpLimitsAndAccountingTests.java',
+    ]),
+    releaseGates: Object.freeze([]),
+  }),
+]);
+const LIMITS_AND_ACCOUNTING_PATH =
+  'conformance/mcp-limits-and-accounting.json';
+const EXPECTED_NUMERIC_BOUNDS_AUTHORITY = Object.freeze({
+  path: '../mcp/PROFILE_1_NUMERIC_BOUNDS.md',
+  sha256: '9477f26dd0d2bbc2f790b8428dd5ad5de7f9d672ba152cfd33fbbf0ae6a78b70',
+});
+const EXPECTED_FINAL_DISPOSITION_COUNTS = Object.freeze({
+  APPLICATION_OWNED: 12,
+  CORE_COMPLETE: 113,
+  NOT_APPLICABLE: 19,
+  RELEASE_GATED: 119,
+  UNRESOLVED: 0,
+});
 const PRIVACY_SINK_PATTERN =
   /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*(?::[A-Z0-9_]+)?$/u;
 const TRACKED_REFERENCE_CACHE = new Map();
@@ -415,6 +563,46 @@ function assertExactArray(actual, expected, label) {
 
 export function canonicalJson(value) {
   return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+export function finiteBoundSemanticsSha256(bounds) {
+  const semanticsById = Object.fromEntries(bounds.map((bound) => [
+    bound.id,
+    {
+      boundaryTests: bound.boundaryTests,
+      category: bound.category,
+      deterministicFailure: bound.deterministicFailure,
+      enforcementOwners: bound.enforcementOwners,
+      name: bound.name,
+      positiveTests: bound.positiveTests,
+      sourceOwners: bound.sourceOwners,
+      values: bound.values,
+    },
+  ]));
+  return sha256(canonicalJson(semanticsById));
+}
+
+export function finiteBoundExclusionsSha256(reviewedExclusions) {
+  return sha256(canonicalJson(reviewedExclusions));
+}
+
+export function privacySemanticsSha256(inventory) {
+  return sha256(canonicalJson({
+    boundaries: inventory.boundaries,
+    delegations: inventory.delegations,
+    reviewedExclusions: inventory.reviewedExclusions,
+  }));
+}
+
+function matrixRowAttributionsSha256(rows) {
+  const attributions = rows.map((row) => ({
+    id: row.id,
+    disposition: row.disposition,
+    evidence: row.evidence,
+    releaseGates: row.releaseGates,
+    reason: row.reason,
+  }));
+  return sha256(canonicalJson(attributions));
 }
 
 function readCanonicalJson(file, label) {
@@ -1155,6 +1343,138 @@ function validateFiniteClassification(row, label) {
   }
 }
 
+function validateFiniteSourceFile(projectRoot, file, label) {
+  normalizedCandidatePath(file, label);
+  if (!file.startsWith('src/main/java/') || !file.endsWith('.java')) {
+    fail(`${label} must name a production Java source.`);
+  }
+  requireContainedPath(
+    projectRoot,
+    resolve(projectRoot, file),
+    label,
+    'file',
+  );
+}
+
+function validateFiniteTestReferences(tests, label, projectRoot) {
+  if (!Array.isArray(tests) || tests.length === 0) {
+    fail(`${label} must be a nonempty array.`);
+  }
+  if (new Set(tests).size !== tests.length) {
+    fail(`${label} must not contain duplicates.`);
+  }
+  const sorted = [...tests].sort(compareAscii);
+  for (const [index, reference] of tests.entries()) {
+    const referenceLabel = `${label}[${index}]`;
+    if (reference !== sorted[index]) {
+      fail(`${label} must be in ASCII order.`);
+    }
+    nonblank(reference, referenceLabel);
+    const parts = reference.split('#');
+    if (parts.length !== 2
+        || !/^[A-Za-z_$][\w$]*$/u.test(parts[1])) {
+      fail(`${referenceLabel} must name one exact Java test method.`);
+    }
+    const file = parts[0];
+    normalizedCandidatePath(file, referenceLabel);
+    if (!file.startsWith('src/test/java/') || !file.endsWith('.java')) {
+      fail(`${referenceLabel} must name a core Java test source.`);
+    }
+    const path = resolve(projectRoot, file);
+    requireContainedPath(projectRoot, path, referenceLabel, 'file');
+    const bytes = readFileSync(path);
+    const source = bytes.toString('utf8');
+    if (!Buffer.from(source, 'utf8').equals(bytes)) {
+      fail(`${referenceLabel} test source is not valid UTF-8.`);
+    }
+    const structure = maskJava(source);
+    const methodExists = javaMethodScopes(
+      source,
+      structure,
+      javaTypeScopes(structure),
+    ).some(({ method }) => method === parts[1]);
+    if (!methodExists) {
+      fail(`${referenceLabel} names no declared test method: ${parts[1]}.`);
+    }
+  }
+}
+
+function validateFiniteEnforcementOwners(owners, label, projectRoot) {
+  if (!Array.isArray(owners) || owners.length === 0) {
+    fail(`${label} must be a nonempty array.`);
+  }
+  const keys = [];
+  for (const [index, owner] of owners.entries()) {
+    const ownerLabel = `${label}[${index}]`;
+    assertExactKeys(owner, FINITE_BOUND_ENFORCEMENT_OWNER_KEYS, ownerLabel);
+    validateFiniteSourceFile(projectRoot, owner.file, `${ownerLabel}.file`);
+    nonblank(owner.member, `${ownerLabel}.member`);
+    nonblank(owner.owner, `${ownerLabel}.owner`);
+    if (!JAVA_OWNER_PATTERN.test(owner.owner)) {
+      fail(`${ownerLabel}.owner must be an exact qualified Java owner.`);
+    }
+    const sourceBytes = readFileSync(resolve(projectRoot, owner.file));
+    const source = sourceBytes.toString('utf8');
+    if (!Buffer.from(source, 'utf8').equals(sourceBytes)) {
+      fail(`${ownerLabel}.file is not valid UTF-8.`);
+    }
+    const structure = maskJava(source);
+    const packageName = structure.match(
+      /\bpackage\s+([\w.]+)\s*;/u,
+    )?.[1] ?? '';
+    const typeScopes = javaTypeScopes(structure);
+    const declaredOwners = typeScopes.map((type) => ownerAt(
+      packageName,
+      typeScopes,
+      type.opening,
+      type.name,
+    ));
+    if (!declaredOwners.includes(owner.owner)) {
+      fail(`${ownerLabel}.owner is not declared by its production source file.`);
+    }
+    keys.push(`${owner.file}#${owner.owner}#${owner.member}`);
+  }
+  if (new Set(keys).size !== keys.length) {
+    fail(`${label} must not contain duplicates.`);
+  }
+  const sorted = [...keys].sort(compareAscii);
+  if (keys.some((key, index) => key !== sorted[index])) {
+    fail(`${label} must be in ASCII identity order.`);
+  }
+}
+
+function validateFiniteValues(values, label, seenKeys) {
+  if (!Array.isArray(values) || values.length === 0) {
+    fail(`${label} must be a nonempty array.`);
+  }
+  const keys = [];
+  for (const [index, value] of values.entries()) {
+    const valueLabel = `${label}[${index}]`;
+    assertExactKeys(value, FINITE_BOUND_VALUE_KEYS, valueLabel);
+    for (const field of FINITE_BOUND_VALUE_KEYS) {
+      nonblank(value[field], `${valueLabel}.${field}`);
+    }
+    if (!/^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/u.test(value.key)) {
+      fail(`${valueLabel}.key must be a stable lowercase accounting key.`);
+    }
+    if (!/^[A-Z][A-Z0-9_]*$/u.test(value.unit)) {
+      fail(`${valueLabel}.unit must be an uppercase stable unit token.`);
+    }
+    if (!/^-?(?:0|[1-9][0-9]*)$/u.test(value.value)) {
+      fail(`${valueLabel}.value must be a canonical finite integer string.`);
+    }
+    if (seenKeys.has(value.key)) {
+      fail(`Finite-bound value key is duplicated: ${value.key}.`);
+    }
+    seenKeys.add(value.key);
+    keys.push(value.key);
+  }
+  const sorted = [...keys].sort(compareAscii);
+  if (keys.some((key, index) => key !== sorted[index])) {
+    fail(`${label} must be in ASCII key order.`);
+  }
+}
+
 export function verifyFiniteBoundInventory(options = {}) {
   const defaultRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
   const projectRoot = resolve(options.projectRoot ?? defaultRoot);
@@ -1201,7 +1521,11 @@ export function verifyFiniteBoundInventory(options = {}) {
     fail('Finite-bound inventory bounds must be a nonempty array.');
   }
   const boundIds = new Set();
+  const boundCategories = new Set();
+  const valueKeys = new Set();
   const classifications = [];
+  const sortedBoundIds = inventory.bounds.map(({ id }) => id)
+    .sort(compareAscii);
   for (const [boundIndex, bound] of inventory.bounds.entries()) {
     const label = `bounds[${boundIndex}]`;
     assertExactKeys(bound, FINITE_BOUND_KEYS, label);
@@ -1211,7 +1535,11 @@ export function verifyFiniteBoundInventory(options = {}) {
       fail(`${label}.id is malformed or duplicated.`);
     }
     boundIds.add(bound.id);
+    if (bound.id !== sortedBoundIds[boundIndex]) {
+      fail('Finite-bound inventory bounds must be in ASCII ID order.');
+    }
     for (const field of ['category', 'name']) nonblank(bound[field], `${label}.${field}`);
+    boundCategories.add(bound.category);
     assertExactKeys(
       bound.deterministicFailure,
       FINITE_BOUND_FAILURE_KEYS,
@@ -1226,17 +1554,47 @@ export function verifyFiniteBoundInventory(options = {}) {
     if (!Array.isArray(bound.sourceOwners) || bound.sourceOwners.length === 0) {
       fail(`${bound.id}.sourceOwners must be a nonempty array.`);
     }
+    validateFiniteEnforcementOwners(
+      bound.enforcementOwners,
+      `${bound.id}.enforcementOwners`,
+      projectRoot,
+    );
+    validateFiniteTestReferences(
+      bound.positiveTests,
+      `${bound.id}.positiveTests`,
+      projectRoot,
+    );
+    validateFiniteTestReferences(
+      bound.boundaryTests,
+      `${bound.id}.boundaryTests`,
+      projectRoot,
+    );
+    const overlappingTests = bound.positiveTests.filter((test) =>
+      bound.boundaryTests.includes(test));
+    if (overlappingTests.length > 0) {
+      fail(`${bound.id} positiveTests and boundaryTests must be disjoint.`);
+    }
+    validateFiniteValues(bound.values, `${bound.id}.values`, valueKeys);
     const sortedOwnerKeys = bound.sourceOwners.map(({ key }) => key)
       .sort(compareAscii);
     for (const [ownerIndex, owner] of bound.sourceOwners.entries()) {
       const ownerLabel = `${bound.id}.sourceOwners[${ownerIndex}]`;
       validateFiniteClassification(owner, ownerLabel);
+      validateFiniteSourceFile(projectRoot, owner.file, `${ownerLabel}.file`);
       if (owner.key !== sortedOwnerKeys[ownerIndex]) {
         fail(`${bound.id}.sourceOwners must be in ASCII key order.`);
       }
       classifications.push({ ...owner, location: ownerLabel });
     }
   }
+  const expectedCategories = options.expectedCategories
+    ?? FINITE_BOUND_REQUIRED_CATEGORIES;
+  const actualCategories = [...boundCategories].sort(compareAscii);
+  assertExactArray(
+    actualCategories,
+    [...expectedCategories].sort(compareAscii),
+    'Finite-bound categories',
+  );
   if (!Array.isArray(inventory.reviewedExclusions)) {
     fail('Finite-bound reviewedExclusions must be an array.');
   }
@@ -1254,6 +1612,7 @@ export function verifyFiniteBoundInventory(options = {}) {
       owner: exclusion.owner,
     };
     validateFiniteClassification(classification, label);
+    validateFiniteSourceFile(projectRoot, exclusion.file, `${label}.file`);
     if (typeof exclusion.id !== 'string'
         || !FINITE_BOUND_EXCLUSION_ID_PATTERN.test(exclusion.id)
         || exclusionIds.has(exclusion.id)) {
@@ -1279,6 +1638,26 @@ export function verifyFiniteBoundInventory(options = {}) {
   const extra = classifications.filter(({ key }) => !candidatesByKey.has(key));
   if (omitted.length > 0 || extra.length > 0) {
     fail(`Finite-bound inventory differs from source derivation; omitted=[${omitted.map(({ key, line }) => `${key}@${line}`).join(', ')}], extra=[${extra.map(({ key }) => key).join(', ')}].`);
+  }
+  const expectedExclusionsSha256 = options.expectedExclusionsSha256
+    ?? EXPECTED_FINITE_BOUND_EXCLUSIONS_SHA256;
+  if (!SHA256_PATTERN.test(expectedExclusionsSha256)) {
+    fail('Expected finite-bound exclusions SHA-256 must be 64 lowercase hexadecimal characters.');
+  }
+  const exclusionsSha256 = finiteBoundExclusionsSha256(
+    inventory.reviewedExclusions,
+  );
+  if (exclusionsSha256 !== expectedExclusionsSha256) {
+    fail(`Finite-bound exclusion attribution SHA-256 differs from the reviewed contract: expected ${expectedExclusionsSha256}, found ${exclusionsSha256}.`);
+  }
+  const expectedSemanticsSha256 = options.expectedSemanticsSha256
+    ?? EXPECTED_FINITE_BOUND_SEMANTICS_SHA256;
+  if (!SHA256_PATTERN.test(expectedSemanticsSha256)) {
+    fail('Expected finite-bound semantics SHA-256 must be 64 lowercase hexadecimal characters.');
+  }
+  const semanticsSha256 = finiteBoundSemanticsSha256(inventory.bounds);
+  if (semanticsSha256 !== expectedSemanticsSha256) {
+    fail(`Finite-bound semantic attribution SHA-256 differs from the reviewed contract: expected ${expectedSemanticsSha256}, found ${semanticsSha256}.`);
   }
   return {
     candidates,
@@ -2861,7 +3240,6 @@ export function verifyPrivacyBoundaryInventory(options = {}) {
     fail('Privacy-boundary delegations must be a nonempty array.');
   }
   const delegationIds = new Set();
-  const delegatedOwners = new Set();
   const sortedDelegationIds = inventory.delegations.map(({ id }) => id)
     .sort(compareAscii);
   for (const [index, delegation] of inventory.delegations.entries()) {
@@ -2883,7 +3261,6 @@ export function verifyPrivacyBoundaryInventory(options = {}) {
     if (!/^[A-Z][A-Z0-9_]*$/u.test(delegation.delegatedOwner)) {
       fail(`${label}.delegatedOwner must be an uppercase stable owner token.`);
     }
-    delegatedOwners.add(delegation.delegatedOwner);
     validatePrivacySourcePaths(
       delegation.sourcePaths,
       `${label}.sourcePaths`,
@@ -2896,11 +3273,11 @@ export function verifyPrivacyBoundaryInventory(options = {}) {
       delegation.sourcePaths.length > 0,
     );
   }
-  const missingDelegatedOwners = PRIVACY_REQUIRED_DELEGATED_OWNERS
-    .filter((owner) => !delegatedOwners.has(owner));
-  if (missingDelegatedOwners.length > 0) {
-    fail(`Privacy-boundary delegations omit required owners: ${missingDelegatedOwners.join(', ')}.`);
-  }
+  assertExactArray(
+    inventory.delegations.map(({ delegatedOwner }) => delegatedOwner),
+    PRIVACY_REQUIRED_DELEGATED_OWNERS,
+    'Privacy-boundary delegated owners',
+  );
 
   if (!Array.isArray(inventory.reviewedExclusions)) {
     fail('Privacy-boundary reviewedExclusions must be an array.');
@@ -2968,6 +3345,15 @@ export function verifyPrivacyBoundaryInventory(options = {}) {
   const extra = classifications.filter(({ key }) => !candidatesByKey.has(key));
   if (omitted.length > 0 || extra.length > 0) {
     fail(`Privacy-boundary inventory differs from source derivation; omitted=[${omitted.map(({ key, line }) => `${key}@${line}`).join(', ')}], extra=[${extra.map(({ key }) => key).join(', ')}].`);
+  }
+  const expectedSemanticsSha256 = options.expectedSemanticsSha256
+    ?? EXPECTED_PRIVACY_SEMANTICS_SHA256;
+  if (!SHA256_PATTERN.test(expectedSemanticsSha256)) {
+    fail('Expected privacy-boundary semantics SHA-256 must be 64 lowercase hexadecimal characters.');
+  }
+  const semanticsSha256 = privacySemanticsSha256(inventory);
+  if (semanticsSha256 !== expectedSemanticsSha256) {
+    fail(`Privacy-boundary semantic attribution SHA-256 differs from the reviewed contract: expected ${expectedSemanticsSha256}, found ${semanticsSha256}.`);
   }
   return {
     boundaries: inventory.boundaries,
@@ -3096,6 +3482,10 @@ function validateReason(row) {
   }
 }
 
+function canonicalReleaseGatedReason(releaseGates) {
+  return `Remaining immutable or scheduled evidence is owned by: ${releaseGates.join(', ')}.`;
+}
+
 function validateRegistry(registry, projectRoot, manifest, gitExecutable) {
   assertExactKeys(registry, TOP_LEVEL_KEYS, 'Matrix-closure registry');
   if (registry.formatVersion !== EXPECTED_FORMAT_VERSION) {
@@ -3211,6 +3601,16 @@ function validateRegistry(registry, projectRoot, manifest, gitExecutable) {
   if (rowIdsSha256 !== EXPECTED_ROW_IDS_SHA256) {
     fail('Matrix-closure row IDs are missing, extra, renamed, or out of frozen order.');
   }
+  for (const [disposition, expected] of Object.entries(
+    EXPECTED_FINAL_DISPOSITION_COUNTS,
+  )) {
+    if (dispositionCounts[disposition] !== expected) {
+      fail(`Matrix-closure final disposition ${disposition} must equal ${expected}.`);
+    }
+  }
+  if (unresolvedRows.length !== 0) {
+    fail('Matrix-closure final registry must contain zero unresolved rows.');
+  }
   const orderedDependencies = manifest.gateIds.filter((id) => releaseGateDependencies.has(id));
   return {
     dispositionCounts,
@@ -3218,6 +3618,178 @@ function validateRegistry(registry, projectRoot, manifest, gitExecutable) {
     rowIdsSha256,
     unresolvedRows,
   };
+}
+
+export function verifyLimitsAccountingAuthority(options = {}) {
+  const defaultRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+  const projectRoot = resolve(options.projectRoot ?? defaultRoot);
+  const limitsPath = resolve(
+    options.limitsPath ?? resolve(projectRoot, LIMITS_AND_ACCOUNTING_PATH),
+  );
+  requireContainedPath(
+    projectRoot,
+    limitsPath,
+    'Limits-and-accounting inventory',
+    'file',
+    'Matrix-closure',
+  );
+  const { value } = readCanonicalJson(
+    limitsPath,
+    'Limits-and-accounting inventory',
+  );
+  assertExactKeys(
+    value.numericBoundsAuthority,
+    ['path', 'sha256'],
+    'Limits-and-accounting numericBoundsAuthority',
+  );
+  if (value.numericBoundsAuthority.path !== EXPECTED_NUMERIC_BOUNDS_AUTHORITY.path
+      || value.numericBoundsAuthority.sha256
+        !== EXPECTED_NUMERIC_BOUNDS_AUTHORITY.sha256) {
+    fail('Limits-and-accounting numericBoundsAuthority does not match the reviewed external authority.');
+  }
+  return value.numericBoundsAuthority;
+}
+
+function validateResidualPaths(paths, label, rowId, projectRoot,
+    gitExecutable, documentation) {
+  if (!Array.isArray(paths)) {
+    fail(`${label} must be an array.`);
+  }
+  if (new Set(paths).size !== paths.length) {
+    fail(`${label} must not contain duplicates.`);
+  }
+  const sorted = [...paths].sort(compareAscii);
+  for (const [index, path] of paths.entries()) {
+    if (path !== sorted[index]) fail(`${label} must be in ASCII order.`);
+    if (documentation && !path.endsWith('.md')) {
+      fail(`${label}[${index}] must name a Markdown document.`);
+    }
+    assertContainedEvidence(projectRoot, path, rowId, gitExecutable);
+  }
+}
+
+function validateResidualClosure(options) {
+  const {
+    gitExecutable,
+    manifest,
+    path,
+    projectRoot,
+    registry,
+  } = options;
+  const { bytes, value } = readCanonicalJson(
+    path,
+    'MCP-C residual closure evidence',
+  );
+  assertExactKeys(
+    value,
+    RESIDUAL_TOP_LEVEL_KEYS,
+    'MCP-C residual closure evidence',
+  );
+  if (value.formatVersion !== EXPECTED_FORMAT_VERSION
+      || value.protocolVersion !== registry.protocolVersion
+      || value.releaseVersion !== registry.releaseVersion
+      || value.releaseVersion !== manifest.releaseVersion) {
+    fail('MCP-C residual closure format, protocol, or release version is invalid.');
+  }
+  if (!Array.isArray(value.rows)
+      || value.rows.length !== RESIDUAL_ROW_CONTRACTS.length) {
+    fail(`MCP-C residual closure must contain exactly ${RESIDUAL_ROW_CONTRACTS.length} rows.`);
+  }
+  const registryRows = new Map(registry.rows.map((row) => [row.id, row]));
+  const boundaries = new Set();
+  const rationales = new Set();
+  for (const [index, contract] of RESIDUAL_ROW_CONTRACTS.entries()) {
+    const residualRow = value.rows[index];
+    const label = `MCP-C residual row ${index}`;
+    assertExactKeys(residualRow, RESIDUAL_ROW_KEYS, label);
+    if (residualRow.id !== contract.id) {
+      fail('MCP-C residual row IDs must match the frozen order exactly.');
+    }
+    if (residualRow.targetDisposition !== contract.targetDisposition) {
+      fail(`${contract.id} residual targetDisposition must be ${contract.targetDisposition}.`);
+    }
+    if (residualRow.owningPackage !== 'MCP-C') {
+      fail(`${contract.id} residual owningPackage must be MCP-C.`);
+    }
+    nonblank(residualRow.ownershipBoundary, `${contract.id}.ownershipBoundary`);
+    nonblank(residualRow.rationale, `${contract.id}.rationale`);
+    if (boundaries.has(residualRow.ownershipBoundary)) {
+      fail(`${contract.id} residual ownershipBoundary must be row-specific.`);
+    }
+    if (rationales.has(residualRow.rationale)) {
+      fail(`${contract.id} residual rationale must be row-specific.`);
+    }
+    boundaries.add(residualRow.ownershipBoundary);
+    rationales.add(residualRow.rationale);
+
+    validateResidualPaths(
+      residualRow.evidencePaths,
+      `${contract.id}.evidencePaths`,
+      contract.id,
+      projectRoot,
+      gitExecutable,
+      false,
+    );
+    validateResidualPaths(
+      residualRow.documentationPaths,
+      `${contract.id}.documentationPaths`,
+      contract.id,
+      projectRoot,
+      gitExecutable,
+      true,
+    );
+    assertExactArray(
+      residualRow.evidencePaths,
+      contract.evidencePaths,
+      `${contract.id} residual evidencePaths`,
+    );
+    assertExactArray(
+      residualRow.documentationPaths,
+      contract.documentationPaths,
+      `${contract.id} residual documentationPaths`,
+    );
+    const combined = [
+      ...residualRow.evidencePaths,
+      ...residualRow.documentationPaths,
+    ];
+    if (new Set(combined).size !== combined.length) {
+      fail(`${contract.id} residual evidence and documentation paths must be disjoint.`);
+    }
+    const registryRow = registryRows.get(contract.id);
+    if (registryRow === undefined) {
+      fail(`Matrix-closure registry omits MCP-C residual row ${contract.id}.`);
+    }
+    assertExactArray(
+      [...combined].sort(compareAscii),
+      registryRow.evidence,
+      `${contract.id} residual evidence/documentation union`,
+    );
+    assertExactArray(
+      residualRow.releaseGates,
+      contract.releaseGates,
+      `${contract.id} residual releaseGates`,
+    );
+    assertExactArray(
+      residualRow.releaseGates,
+      registryRow.releaseGates,
+      `${contract.id} residual/registry releaseGates`,
+    );
+    if (registryRow.disposition !== residualRow.targetDisposition) {
+      fail(`${contract.id} residual targetDisposition does not match the closure registry.`);
+    }
+    const expectedReason = contract.targetDisposition === 'RELEASE_GATED'
+      ? canonicalReleaseGatedReason(contract.releaseGates)
+      : '';
+    if (registryRow.reason !== expectedReason) {
+      fail(`${contract.id} closure-registry reason does not match its target disposition and gates.`);
+    }
+  }
+  const semanticsSha256 = sha256(canonicalJson(value.rows));
+  if (semanticsSha256 !== EXPECTED_RESIDUAL_SEMANTICS_SHA256) {
+    fail(`MCP-C residual semantic attribution SHA-256 differs from the reviewed contract: expected ${EXPECTED_RESIDUAL_SEMANTICS_SHA256}, found ${semanticsSha256}.`);
+  }
+  verifyLimitsAccountingAuthority({ projectRoot });
+  return { bytes, value };
 }
 
 export function verifyMatrixClosure(options = {}) {
@@ -3241,6 +3813,8 @@ export function verifyMatrixClosure(options = {}) {
   );
   const finiteBoundExpectedScanRoots = options.finiteBoundExpectedScanRoots
     ?? FINITE_BOUND_SCAN_ROOTS;
+  const finiteBoundExpectedCategories = options.finiteBoundExpectedCategories
+    ?? FINITE_BOUND_REQUIRED_CATEGORIES;
   const privacyProjectRoot = resolve(
     options.privacyProjectRoot ?? projectRoot,
   );
@@ -3260,6 +3834,9 @@ export function verifyMatrixClosure(options = {}) {
   );
   const manifest = readManifest(manifestPath);
   verifyFiniteBoundInventory({
+    expectedCategories: finiteBoundExpectedCategories,
+    expectedExclusionsSha256: options.finiteBoundExpectedExclusionsSha256,
+    expectedSemanticsSha256: options.finiteBoundExpectedSemanticsSha256,
     expectedScanRoots: finiteBoundExpectedScanRoots,
     inventoryPath: finiteBoundInventoryPath,
     projectRoot: finiteBoundProjectRoot,
@@ -3267,6 +3844,7 @@ export function verifyMatrixClosure(options = {}) {
   verifyPrivacyBoundaryInventory({
     expectedArtifactRoots: privacyExpectedArtifactRoots,
     expectedScanRoots: privacyExpectedScanRoots,
+    expectedSemanticsSha256: options.privacyExpectedSemanticsSha256,
     gitExecutable: privacyGitExecutable,
     inventoryPath: privacyInventoryPath,
     projectRoot: privacyProjectRoot,
@@ -3276,7 +3854,22 @@ export function verifyMatrixClosure(options = {}) {
     'Matrix-closure registry',
   );
   const validated = validateRegistry(registry, projectRoot, manifest, gitExecutable);
-  const status = validated.unresolvedRows.length === 0 ? 'PASSED' : 'FAILED';
+  const residualEvidencePath = resolve(
+    options.residualEvidencePath
+      ?? resolve(projectRoot, RESIDUAL_EVIDENCE_PATH),
+  );
+  const residual = validateResidualClosure({
+    gitExecutable,
+    manifest,
+    path: residualEvidencePath,
+    projectRoot,
+    registry,
+  });
+  const rowAttributionsSha256 = matrixRowAttributionsSha256(registry.rows);
+  if (rowAttributionsSha256 !== EXPECTED_ROW_ATTRIBUTIONS_SHA256) {
+    fail(`Matrix-closure row attribution SHA-256 differs from the reviewed contract: expected ${EXPECTED_ROW_ATTRIBUTIONS_SHA256}, found ${rowAttributionsSha256}.`);
+  }
+  const status = 'PASSED';
   const report = {
     formatVersion: EXPECTED_FORMAT_VERSION,
     protocolVersion: registry.protocolVersion,
@@ -3288,13 +3881,14 @@ export function verifyMatrixClosure(options = {}) {
     rowCount: registry.rows.length,
     rowIdsSha256: validated.rowIdsSha256,
     registrySha256: sha256(bytes),
+    residualSha256: sha256(residual.bytes),
     dispositionCounts: validated.dispositionCounts,
     releaseGateDependencies: validated.orderedDependencies,
     unresolvedRows: validated.unresolvedRows,
     rows: registry.rows,
   };
   return {
-    exitCode: status === 'PASSED' ? 0 : 1,
+    exitCode: 0,
     report,
     reportText: canonicalJson(report),
   };

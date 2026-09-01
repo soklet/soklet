@@ -64,6 +64,10 @@ const matrixClosureRegistryPath = resolve(
   projectRoot,
   'release/mcp-conformance-matrix-closure.json',
 );
+const matrixClosureResidualEvidencePath = resolve(
+  projectRoot,
+  'release/mcp-residual-closure-evidence.json',
+);
 const matrixClosureVerifierPath = resolve(
   projectRoot,
   'scripts/verify-release-matrix-closure.mjs',
@@ -247,6 +251,7 @@ function sha256(bytes) {
 try {
   for (const [label, path] of [
     ['matrix-closure registry', matrixClosureRegistryPath],
+    ['matrix-closure residual evidence', matrixClosureResidualEvidencePath],
     ['matrix-closure verifier', matrixClosureVerifierPath],
     ['matrix-closure verifier self-test', matrixClosureSelfTestPath],
     ['version-transition inventory', versionTransitionInventoryPath],
@@ -446,7 +451,7 @@ try {
   assert.equal(trackedMatrixClosureGate.reason, '');
   assert.deepEqual(EXPECTED_GATE_EVIDENCE_CONTRACTS['matrix-closure'], {
     command: 'node scripts/verify-release-matrix-closure.mjs',
-    contractId: 'soklet.release.matrix-closure.v1',
+    contractId: 'soklet.release.matrix-closure.v2',
     expectation: 'ZERO_UNRESOLVED_IN_SCOPE_MATRIX_ROWS',
     profile: 'release',
     roles: [{
@@ -1138,6 +1143,10 @@ try {
   );
   assert.match(
     matrixClosureFunction[1],
+    /release\/mcp-residual-closure-evidence\.json/,
+  );
+  assert.match(
+    matrixClosureFunction[1],
     /scripts\/verify-release-matrix-closure\.mjs/,
   );
   assert.match(
@@ -1146,7 +1155,7 @@ try {
   );
   assert.match(
     matrixClosureFunction[1],
-    /for source in "\$registry" "\$verifier" "\$verifier_self_test"/,
+    /for source in "\$registry" "\$residual_evidence" "\$verifier" "\$verifier_self_test"/,
   );
   assert.match(
     matrixClosureFunction[1],
@@ -1162,7 +1171,23 @@ try {
   );
   assert.match(
     matrixClosureFunction[1],
-    /node scripts\/verify-release-matrix-closure\.mjs > "\$report"/,
+    /node "\$verifier_self_test"/,
+  );
+  assert.match(
+    matrixClosureFunction[1],
+    /assert_candidate_checkout_unchanged matrix-closure-self-test "\$project_root"/,
+  );
+  assert.match(
+    matrixClosureFunction[1],
+    /node "\$verifier" > "\$report"/,
+  );
+  assert.match(
+    matrixClosureFunction[1],
+    /\[\[ -s "\$report" && -f "\$report" && ! -L "\$report" \]\]/,
+  );
+  assert.match(
+    matrixClosureFunction[1],
+    /assert_candidate_checkout_unchanged matrix-closure "\$project_root"/,
   );
   assert.match(
     matrixClosureFunction[1],
@@ -1170,7 +1195,51 @@ try {
   );
   assert.ok(
     matrixClosureFunction[1].indexOf(
-      'node scripts/verify-release-matrix-closure.mjs > "$report"',
+      'node "$verifier_self_test"',
+    )
+      < matrixClosureFunction[1].indexOf(
+        'assert_candidate_checkout_unchanged matrix-closure-self-test "$project_root"',
+      ),
+  );
+  assert.ok(
+    matrixClosureFunction[1].indexOf(
+      'assert_candidate_checkout_unchanged matrix-closure-self-test "$project_root"',
+    )
+      < matrixClosureFunction[1].indexOf(
+        'node "$verifier" > "$report"',
+      ),
+  );
+  assert.ok(
+    matrixClosureFunction[1].indexOf(
+      'node "$verifier" > "$report"',
+    )
+      < matrixClosureFunction[1].indexOf(
+        '[[ -s "$report" && -f "$report" && ! -L "$report" ]]',
+      ),
+  );
+  assert.ok(
+    matrixClosureFunction[1].indexOf(
+      '[[ -s "$report" && -f "$report" && ! -L "$report" ]]',
+    )
+      < matrixClosureFunction[1].indexOf(
+        'assert_candidate_checkout_unchanged matrix-closure "$project_root"',
+      ),
+  );
+  const matrixPostVerifierIntegrity = matrixClosureFunction[1].slice(
+    matrixClosureFunction[1].indexOf(
+      'assert_candidate_checkout_unchanged matrix-closure "$project_root"',
+    ),
+    matrixClosureFunction[1].indexOf(
+      'record_gate matrix-closure "matrix-report=$report"',
+    ),
+  );
+  assert.match(
+    matrixPostVerifierIntegrity,
+    /assert_installed_candidate_unchanged/,
+  );
+  assert.ok(
+    matrixClosureFunction[1].indexOf(
+      'assert_candidate_checkout_unchanged matrix-closure "$project_root"',
     )
       < matrixClosureFunction[1].indexOf(
         'record_gate matrix-closure "matrix-report=$report"',
@@ -1526,6 +1595,10 @@ try {
       'soklet.release.substituted.v1';
   });
   assertRejectsGateContractMutation((gates) => {
+    gates.find(({ id }) => id === 'matrix-closure').evidenceContract =
+      'soklet.release.matrix-closure.v1';
+  });
+  assertRejectsGateContractMutation((gates) => {
     gates.find(({ id }) => id === 'candidate-build').toolchain = 'nodePin';
   });
   writeFileSync(fixtureManifestPath, `${JSON.stringify(readyManifest, null, 2)}\n`);
@@ -1681,10 +1754,17 @@ try {
   const fixtureMatrixClosureRegistryPath = fixturePath(
     'release/mcp-conformance-matrix-closure.json',
   );
+  const fixtureMatrixClosureResidualEvidencePath = fixturePath(
+    'release/mcp-residual-closure-evidence.json',
+  );
   const fixtureMatrixClosureVerifierPath = fixturePath(
     'scripts/verify-release-matrix-closure.mjs',
   );
   copyFileSync(matrixClosureVerifierPath, fixtureMatrixClosureVerifierPath);
+  copyFileSync(
+    matrixClosureResidualEvidencePath,
+    fixtureMatrixClosureResidualEvidencePath,
+  );
   writeFileSync(
     fixtureMatrixClosureRegistryPath,
     `${JSON.stringify(resolvedMatrixClosureRegistry, null, 2)}\n`,
@@ -1720,6 +1800,10 @@ try {
   assert.equal(resolvedMatrixClosure.exitCode, 0);
   assert.equal(resolvedMatrixClosure.report.status, 'PASSED');
   assert.equal(resolvedMatrixClosure.report.rowCount, 263);
+  assert.equal(
+    resolvedMatrixClosure.report.residualSha256,
+    sha256(readFileSync(fixtureMatrixClosureResidualEvidencePath)),
+  );
   assert.deepEqual(resolvedMatrixClosure.report.unresolvedRows, []);
   mkdirSync(dirname(matrixReportPath), { recursive: true });
   writeFileSync(matrixReportPath, resolvedMatrixClosure.reportText);
@@ -2413,6 +2497,13 @@ try {
     `${JSON.stringify(resolvedMatrixClosure.report)}\n`,
     /must exactly match the canonical PASSED report/,
   );
+  const wrongResidualDigestReport = structuredClone(resolvedMatrixClosure.report);
+  wrongResidualDigestReport.residualSha256 = '0'.repeat(64);
+  assertRejectsMatrixReport(
+    'wrong-residual-digest',
+    `${JSON.stringify(wrongResidualDigestReport, null, 2)}\n`,
+    /must exactly match the canonical PASSED report/,
+  );
 
   for (const gate of ready.gates) {
     const rolePaths = rolePathsForGate(gate);
@@ -2474,6 +2565,30 @@ try {
   assert.equal(evidence.toolchains.coreJdk21, '21.0.12.1');
   assert.equal(evidence.toolchains.java, '17.0.20');
   assert.equal(evidence.toolchains.toystoreJava, '25.0.4');
+
+  const savedMatrixResidualEvidence = readFileSync(
+    fixtureMatrixClosureResidualEvidencePath,
+  );
+  const changedMatrixResidualEvidence = JSON.parse(savedMatrixResidualEvidence);
+  changedMatrixResidualEvidence.rows[0].rationale += ' Synthetic digest drift.';
+  writeFileSync(
+    fixtureMatrixClosureResidualEvidencePath,
+    `${JSON.stringify(changedMatrixResidualEvidence, null, 2)}\n`,
+  );
+  assert.throws(
+    () => assembleReleaseEvidence(
+      fixtureManifestPath,
+      candidateCommit,
+      artifactDescriptorPath,
+      gateDirectory,
+      fixturePath('evidence/rejected-residual-digest-drift.json'),
+    ),
+    /(?:residual semantic attribution SHA-256 differs from the reviewed contract|must exactly match the canonical PASSED report)/,
+  );
+  writeFileSync(
+    fixtureMatrixClosureResidualEvidencePath,
+    savedMatrixResidualEvidence,
+  );
 
   const savedMatrixReport = readFileSync(matrixReportPath);
   writeFileSync(matrixReportPath, Buffer.concat([savedMatrixReport, Buffer.from('\n')]));

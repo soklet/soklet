@@ -22,6 +22,8 @@ const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const MATRIX_CLOSURE_GATE_ID = 'matrix-closure';
 const MATRIX_CLOSURE_REGISTRY_PATH = 'release/mcp-conformance-matrix-closure.json';
+const MATRIX_CLOSURE_RESIDUAL_EVIDENCE_PATH =
+  'release/mcp-residual-closure-evidence.json';
 const MATRIX_CLOSURE_VERIFIER_PATH = 'scripts/verify-release-matrix-closure.mjs';
 const IMPORTED_RELEASE_HARNESS_GATE_IDS = new Set([
   'fuzz-nightly-history',
@@ -340,10 +342,18 @@ const logRole = (role, fileName) => fileRole(role, 'text/plain', fileName);
 const surefireRole = (role = 'surefire-reports', fileName = 'surefire-reports') =>
   directoryRole(role, 'application/vnd.soklet.surefire-reports', fileName);
 
-function gateEvidenceContract(gateId, toolchain, command, profile, expectation, roles) {
+function gateEvidenceContract(
+  gateId,
+  toolchain,
+  command,
+  profile,
+  expectation,
+  roles,
+  contractVersion = 1,
+) {
   return Object.freeze({
     command,
-    contractId: `soklet.release.${gateId}.v1`,
+    contractId: `soklet.release.${gateId}.v${contractVersion}`,
     expectation,
     profile,
     roles: Object.freeze(roles),
@@ -594,6 +604,7 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
     'release',
     'ZERO_UNRESOLVED_IN_SCOPE_MATRIX_ROWS',
     [fileRole('matrix-report', 'application/json', 'matrix-closure.json')],
+    2,
   ),
   'candidate-conformance': gateEvidenceContract(
     'candidate-conformance',
@@ -1354,6 +1365,11 @@ function expectedMatrixClosureReport(config) {
     MATRIX_CLOSURE_REGISTRY_PATH,
     'matrix-closure registry',
   );
+  const residualEvidence = requireTrackedCandidateFile(
+    config.projectRoot,
+    MATRIX_CLOSURE_RESIDUAL_EVIDENCE_PATH,
+    'matrix-closure residual evidence',
+  );
   const verifier = requireTrackedCandidateFile(
     config.projectRoot,
     MATRIX_CLOSURE_VERIFIER_PATH,
@@ -1373,6 +1389,7 @@ function expectedMatrixClosureReport(config) {
       manifestPath: config.absolutePath,
       projectRoot: config.projectRoot,
       registryPath: registry.absolutePath,
+      residualEvidencePath: residualEvidence.absolutePath,
     });
   } catch (error) {
     fail(
@@ -1388,6 +1405,9 @@ function expectedMatrixClosureReport(config) {
   }
   if (result.report.registrySha256 !== sha256(registry.bytes)) {
     fail('Matrix-closure registry changed while its canonical report was derived');
+  }
+  if (result.report.residualSha256 !== sha256(residualEvidence.bytes)) {
+    fail('Matrix-closure residual evidence changed while its canonical report was derived');
   }
   return Buffer.from(result.reportText, 'utf8');
 }

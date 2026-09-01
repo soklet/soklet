@@ -9,7 +9,7 @@
   "promotion": {
     "helper": {
       "path": "scripts/release-promotion.mjs",
-      "sha256": "5b85bdd0101ad8f51e24efb05a7d7795e6df6ccce92ba64f7da0474fab7a394a"
+      "sha256": "04351205d0b5593f2dcf737c2aa43ad110bc03d6add09dd1616b38f3956e60ab"
     },
     "wrapper": {
       "path": "scripts/promote-release-candidate.sh",
@@ -359,7 +359,7 @@
       "commit": null,
       "defaultArtifactIdentity": null,
       "defaultArtifactSha256": null,
-      "evidenceContract": "soklet.release.matrix-closure.v1",
+      "evidenceContract": "soklet.release.matrix-closure.v2",
       "id": "matrix-closure",
       "kind": "SOURCE",
       "reason": "",

@@ -1,0 +1,101 @@
+{
+  "formatVersion": 1,
+  "protocolVersion": "2026-07-28",
+  "releaseVersion": "4.0.0",
+  "rows": [
+    {
+      "id": "SOK-VALID-002",
+      "targetDisposition": "RELEASE_GATED",
+      "owningPackage": "MCP-C",
+      "evidencePaths": [
+        "conformance/mcp-finite-bound-inventory.json",
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFiniteBoundInventoryTests.java"
+      ],
+      "documentationPaths": [
+        "MCP.md",
+        "release/README.md"
+      ],
+      "releaseGates": [
+        "fuzz-nightly-history",
+        "soak-nightly-history",
+        "release-soak"
+      ],
+      "ownershipBoundary": "Soklet owns complete finite enforcement and deterministic local failures; scheduled fuzz and sustained soak evidence remains with the named release gates.",
+      "rationale": "The exhaustive source-derived inventory reconciles every production bound to its value, accounting unit, owner, deterministic failure, and positive and boundary tests without omissions or extras."
+    },
+    {
+      "id": "SOK-STATE-002",
+      "targetDisposition": "CORE_COMPLETE",
+      "owningPackage": "MCP-C",
+      "evidencePaths": [
+        "src/main/java/com/soklet/DefaultMcpSecurityControls.java",
+        "src/test/java/com/soklet/McpSecurityControlsTests.java"
+      ],
+      "documentationPaths": [
+        "MCP.md",
+        "SECURITY.md",
+        "api/mcp/README.md",
+        "release/MCP_REQUEST_STATE_SECURITY_PROFILE.md",
+        "release/README.md"
+      ],
+      "releaseGates": [],
+      "ownershipBoundary": "Soklet owns the sole built-in framework profile; custom protectors and operator key entropy, custody, and distribution remain outside core.",
+      "rationale": "The reviewed profile and independent vectors freeze the exact identifier, HKDF-SHA-256 labels, AES-256-GCM envelope and associated data, and fail-closed rejection of alternate or malformed forms."
+    },
+    {
+      "id": "SOK-STATE-007",
+      "targetDisposition": "CORE_COMPLETE",
+      "owningPackage": "MCP-C",
+      "evidencePaths": [
+        "src/main/java/com/soklet/DefaultMcpSecurityControls.java",
+        "src/test/java/com/soklet/McpSecurityControlsTests.java"
+      ],
+      "documentationPaths": [
+        "release/MCP_REQUEST_STATE_KEY_ROTATION_RUNBOOK.md"
+      ],
+      "releaseGates": [],
+      "ownershipBoundary": "Soklet owns atomic node-local ring mutation and reservation safety; fleet orchestration, durable configuration, key custody, and operator records remain deployment-owned.",
+      "rationale": "The reviewed runbook and exact concurrency tests cover publication, post-linearization reservation selection, old-seal completion, demotion, drain-safe removal, rollback, emergency revocation, and fleet comparison."
+    },
+    {
+      "id": "SOK-PRIV-001",
+      "targetDisposition": "RELEASE_GATED",
+      "owningPackage": "MCP-C",
+      "evidencePaths": [
+        "conformance/mcp-privacy-boundary-inventory.json",
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpPrivacyBoundaryTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpPrivacyBoundaryInternalTests.java"
+      ],
+      "documentationPaths": [
+        "MCP.md",
+        "SECURITY.md",
+        "release/MCP_PRIVACY_BOUNDARY.md",
+        "release/README.md"
+      ],
+      "releaseGates": [
+        "release-soak",
+        "operational-history",
+        "soklet-otel"
+      ],
+      "ownershipBoundary": "Soklet owns its built-in emissions and redaction; custom collectors, application telemetry and manual values, downstream projection, and operator retention remain explicitly delegated.",
+      "rationale": "The exhaustive source and artifact inventory classifies every Soklet-owned privacy path and binds each boundary to canary evidence while preserving the named sustained, operational, and downstream obligations."
+    },
+    {
+      "id": "AMB-002",
+      "targetDisposition": "CORE_COMPLETE",
+      "owningPackage": "MCP-C",
+      "evidencePaths": [
+        "conformance/mcp-limits-and-accounting.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLimitsAndAccountingTests.java"
+      ],
+      "documentationPaths": [
+        "MCP.md"
+      ],
+      "releaseGates": [],
+      "ownershipBoundary": "Soklet owns the frozen values and accounting units for its parsers, schemas, URI templates, transport, cursor-adjacent output, and serialized results.",
+      "rationale": "The candidate-contained limits artifact and boundary tests settle every formerly ambiguous value and unit and reconcile the reviewed sibling numeric-bounds reference."
+    }
+  ]
+}

@@ -90,10 +90,12 @@ explicitly requires operator review/finalization. Merely possessing the
 candidate checkout and this builder is not evidence that a scanner, sustained
 run, or benchmark actually executed.
 
-The checked-in registry, verifier, and verifier self-test make
-`matrix-closure` `READY`. The registry deliberately produces a canonical
-`FAILED` report while five rows remain `UNRESOLVED`, so the validator cannot
-record a typed PASS receipt yet. `RELEASE_GATED` means that a row has
+The checked-in registry, residual evidence, verifier, and verifier self-test
+make `matrix-closure` `READY`. The candidate-contained registry now produces a
+canonical `PASSED` report at 113 `CORE_COMPLETE`, 119 `RELEASE_GATED`, 12
+`APPLICATION_OWNED`, 19 `NOT_APPLICABLE`, and zero `UNRESOLVED`. This closes
+the local matrix; only the exact candidate workflow may record the typed PASS
+receipt. `RELEASE_GATED` means that a row has
 candidate-contained implementation or evidence anchors and that its remaining
 immutable-candidate, scheduled-history, sustained-run, or pinned-downstream
 proof is owned by the exact named release gate or gates. It must not be used to
@@ -102,16 +104,16 @@ hide a local implementation, test, documentation, golden, or fixture gap.
 The registry contains 263 rows. `MCP-CAP-005` is the nineteenth
 `NOT_APPLICABLE` disposition and records the one jointly declined SEP-2577
 warning SHOULD across logging and developer-tooling channels; its N/A closure
-reason remains empty. The five unrelated `UNRESOLVED` rows remain unchanged.
+reason remains empty. All five former MCP-C residual rows now have their own
+candidate-contained evidence and no row remains unresolved.
 
 The candidate-contained [MCP privacy boundary](MCP_PRIVACY_BOUNDARY.md)
 separates core redaction and bounded built-in telemetry from application,
-fixture, downstream, and operator ownership. `SOK-PRIV-001` remains
-`UNRESOLVED` until the complete MCP-C residual evidence and closure registry
-are regenerated atomically.
+fixture, downstream, and operator ownership. `SOK-PRIV-001` is now
+`RELEASE_GATED`, with exactly `release-soak`, `operational-history`, and
+`soklet-otel` retaining its sustained, operational, and downstream proof.
 
-Two candidate-contained MCP-C artifacts now make the request-state rows
-reviewable without changing their matrix dispositions prematurely:
+Two candidate-contained MCP-C artifacts close the request-state rows:
 
 - [MCP_REQUEST_STATE_SECURITY_PROFILE.md](MCP_REQUEST_STATE_SECURITY_PROFILE.md)
   binds the sole built-in profile, exact cryptographic components, envelope,
@@ -122,9 +124,8 @@ reviewable without changing their matrix dispositions prematurely:
   races, demotion, drain/removal, rollback, and emergency revocation to the
   exact rotation tests.
 
-`SOK-STATE-002` and `SOK-STATE-007` remain `UNRESOLVED` in the current closure
-registry until the final atomic MCP-C regeneration lands every row's own
-evidence and matching verifier constants. These documents do not borrow a
+`SOK-STATE-002` and `SOK-STATE-007` are now `CORE_COMPLETE` with no release
+gates. Their row-specific documents and executable evidence do not borrow a
 release-gate result or claim third-party security audit.
 
 Lifecycle-bound test and process-harness closure is tracked separately in
@@ -674,7 +675,8 @@ bash -n release/scripts/install-pinned-corretto-linux-x64.sh
 
 The first command validates the currently recorded pins, exact gate order,
 evidence contracts, toolchain references, and statuses. Adding
-`--require-ready` is expected to fail until all 11 blockers above are resolved.
+`--require-ready` is expected to fail until the six downstream blockers above
+are resolved.
 
 After the final candidate commit exists, dispatch
 `.github/workflows/release-validation.yml` from that commit and supply the same

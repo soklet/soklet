@@ -1612,16 +1612,18 @@ same-version macOS arm64 Corretto 21.0.12.9.1 run passed the full core
 existing advisory inventory after the `SelfAssignment` fix, and SpotBugs
 reports zero bugs and errors. The exact
 checksum-pinned Corretto 21.0.12.9.1 toolchain now drives `core-jdk-21`,
-`static-analysis`, and `spotbugs`. Eighteen gates are dispatch-configured,
-while five remain `BLOCKED_HARNESS_MISSING` and the six downstreams remain
-`BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving 11 fail-closed blockers;
-`READY` means configured, never passed. The matrix-closure hook is `READY`, but
-its checked-in registry deliberately reports `FAILED` while five rows remain
-`UNRESOLVED`. Actual scheduled/nightly and sustained fuzz/soak and operational
+`static-analysis`, and `spotbugs`. Twenty-three gates are dispatch-configured
+with executable `READY` paths, and none remain `BLOCKED_HARNESS_MISSING`; the
+six downstreams remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving six
+fail-closed blockers. `READY` means configured, never passed. The matrix-closure
+hook is `READY`, and the candidate-contained registry and residual evidence
+produce a canonical `PASSED` report at 113 `CORE_COMPLETE`, 119
+`RELEASE_GATED`, 12 `APPLICATION_OWNED`, 19 `NOT_APPLICABLE`, and zero
+`UNRESOLVED`. Only the exact candidate workflow can record its typed PASS
+receipt. Actual scheduled/nightly and sustained fuzz/soak and operational
 evidence, release scans, benchmarks, published downstream pins, and immutable
-release-candidate provenance and conformance remain open. `release-scans`
-remains blocked on its exact scanner/toolchain, severity-policy, and
-retained-report contract. Candidate Javadoc
+release-candidate provenance and conformance remain open even though their
+executable harnesses are checked in. Candidate Javadoc
 generation/completeness is configured; public deployment is post-validation
 publication work. The bounded two-listener fixture is the Soklet-owned fleet
 gate, while production multi-host coordination remains application/deployment-

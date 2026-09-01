@@ -3,8 +3,8 @@
   "protocolVersion": "2026-07-28",
   "releaseVersion": "4.0.0",
   "sourceMatrixPath": "mcp/MCP_CONFORMANCE_MATRIX.md",
-  "sourceMatrixLastUpdated": "2026-08-28",
-  "sourceMatrixSha256": "509bf61c509b37549f82d2989aadb44126e9ed6a1dd7456f0790e6c4ad323be7",
+  "sourceMatrixLastUpdated": "2026-09-01",
+  "sourceMatrixSha256": "53b7c3ffe4d63af0306b1b34a28c7c0e2553f6b056da51d8d38444922f9802d2",
   "releaseGateUniverse": [
     "candidate-build",
     "core-jdk-21",
@@ -2175,20 +2175,20 @@
     },
     {
       "id": "SOK-VALID-002",
-      "disposition": "UNRESOLVED",
+      "disposition": "RELEASE_GATED",
       "evidence": [
-        "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpCursorValidatorFuzzTest.java",
-        "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpJsonRpcEnvelopeCodecFuzzTest.java",
-        "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpMirroredHeaderCodecFuzzTest.java",
-        "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpRequestStatePlaintextCodecFuzzTest.java",
-        "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpSimulationCaptureFuzzTest.java",
-        "fuzz/src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileFuzzTest.java",
-        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileLimitTests.java",
-        "src/test/java/com/soklet/internal/mcp/schema/McpTypedJsonBinderTests.java",
-        "src/test/java/com/soklet/internal/mcp/schema/McpTypedSchemaCompilerTests.java"
+        "MCP.md",
+        "conformance/mcp-finite-bound-inventory.json",
+        "release/README.md",
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpFiniteBoundInventoryTests.java"
       ],
-      "releaseGates": [],
-      "reason": "Scheduled coverage, corpus saturation, and complete transport/result coverage remain open."
+      "releaseGates": [
+        "fuzz-nightly-history",
+        "soak-nightly-history",
+        "release-soak"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: fuzz-nightly-history, soak-nightly-history, release-soak."
     },
     {
       "id": "SOK-VALID-003",
@@ -2575,12 +2575,18 @@
     },
     {
       "id": "SOK-STATE-002",
-      "disposition": "UNRESOLVED",
+      "disposition": "CORE_COMPLETE",
       "evidence": [
+        "MCP.md",
+        "SECURITY.md",
+        "api/mcp/README.md",
+        "release/MCP_REQUEST_STATE_SECURITY_PROFILE.md",
+        "release/README.md",
+        "src/main/java/com/soklet/DefaultMcpSecurityControls.java",
         "src/test/java/com/soklet/McpSecurityControlsTests.java"
       ],
       "releaseGates": [],
-      "reason": "Release-document review of the protected-state cryptographic profile remains open."
+      "reason": ""
     },
     {
       "id": "SOK-STATE-003",
@@ -2620,12 +2626,14 @@
     },
     {
       "id": "SOK-STATE-007",
-      "disposition": "UNRESOLVED",
+      "disposition": "CORE_COMPLETE",
       "evidence": [
+        "release/MCP_REQUEST_STATE_KEY_ROTATION_RUNBOOK.md",
+        "src/main/java/com/soklet/DefaultMcpSecurityControls.java",
         "src/test/java/com/soklet/McpSecurityControlsTests.java"
       ],
       "releaseGates": [],
-      "reason": "The final protected-state operational runbook review remains open."
+      "reason": ""
     },
     {
       "id": "SOK-STATE-008",
@@ -2666,33 +2674,23 @@
     },
     {
       "id": "SOK-PRIV-001",
-      "disposition": "UNRESOLVED",
+      "disposition": "RELEASE_GATED",
       "evidence": [
-        "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpMirroredHeaderCodecFuzzTest.java",
-        "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpRequestStatePlaintextCodecFuzzTest.java",
-        "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpSimulationCaptureFuzzTest.java",
-        "src/test/java/com/soklet/McpHandlerMetricsObservabilityTests.java",
-        "src/test/java/com/soklet/McpKeepAliveMetricsAggregationTests.java",
-        "src/test/java/com/soklet/McpObservabilityPublicApiTests.java",
-        "src/test/java/com/soklet/McpPreAdmissionMetricsEventPublicRuntimeTests.java",
-        "src/test/java/com/soklet/McpProgressAndCancelationMetricsAggregationTests.java",
-        "src/test/java/com/soklet/McpProtectionTraceDiagnosticsPublicRuntimeTests.java",
-        "src/test/java/com/soklet/McpProtocolAndUnknownHeaderMetricsAggregationTests.java",
-        "src/test/java/com/soklet/McpRequestAdmissionMetricsAggregationTests.java",
-        "src/test/java/com/soklet/McpRequestLifecycleMetricsAggregationTests.java",
-        "src/test/java/com/soklet/McpRequestObservationPublicRuntimeTests.java",
-        "src/test/java/com/soklet/McpRequestStreamLifecycleMetricsAggregationTests.java",
-        "src/test/java/com/soklet/McpSecurityControlsTests.java",
-        "src/test/java/com/soklet/McpServerStartMetricsAggregationTests.java",
-        "src/test/java/com/soklet/McpShutdownObservabilityTests.java",
-        "src/test/java/com/soklet/McpSubscriptionLifecycleMetricsAggregationTests.java",
-        "src/test/java/com/soklet/McpTraceLogRecordTests.java",
-        "src/test/java/com/soklet/McpTransportMetricsAggregationTests.java",
-        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java",
-        "src/test/java/com/soklet/internal/mcp/protocol/McpTransportMetricsEventRuntimeTests.java"
+        "MCP.md",
+        "SECURITY.md",
+        "conformance/mcp-privacy-boundary-inventory.json",
+        "release/MCP_PRIVACY_BOUNDARY.md",
+        "release/README.md",
+        "release/release-validation-manifest.json",
+        "src/test/java/com/soklet/McpPrivacyBoundaryTests.java",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpPrivacyBoundaryInternalTests.java"
       ],
-      "releaseGates": [],
-      "reason": "Broader core privacy coverage is still open beyond application and operational ownership."
+      "releaseGates": [
+        "release-soak",
+        "operational-history",
+        "soklet-otel"
+      ],
+      "reason": "Remaining immutable or scheduled evidence is owned by: release-soak, operational-history, soklet-otel."
     },
     {
       "id": "SOK-TRACE-001",
@@ -3327,12 +3325,14 @@
     },
     {
       "id": "AMB-002",
-      "disposition": "UNRESOLVED",
+      "disposition": "CORE_COMPLETE",
       "evidence": [
-        "MCP.md"
+        "MCP.md",
+        "conformance/mcp-limits-and-accounting.json",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLimitsAndAccountingTests.java"
       ],
       "releaseGates": [],
-      "reason": "URI-template and cursor-adjacent numeric/accounting decisions remain only partially resolved."
+      "reason": ""
     },
     {
       "id": "AMB-003",

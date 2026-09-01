@@ -138,8 +138,8 @@ provides the corresponding protocol-runtime canary. Existing log, metric,
 lifecycle, simulation, wire-error, and fallback tests supply the remaining
 per-boundary evidence named in the machine-checked inventory.
 
-`SOK-PRIV-001` remains `UNRESOLVED` in the current conformance-matrix closure.
-Its disposition changes only when the complete MCP-C residual evidence and
-matrix are regenerated atomically. The intended final state is
-`RELEASE_GATED`, with exactly `release-soak`, `operational-history`, and
-`soklet-otel` still required, in release-manifest order.
+`SOK-PRIV-001` is `RELEASE_GATED` in the final MCP-C conformance-matrix
+closure. The complete residual evidence and matrix were regenerated as one
+atomic unit. Exactly `release-soak`, `operational-history`, and `soklet-otel`
+remain required, in release-manifest order; this local closure does not claim
+their future candidate-bound PASS evidence.

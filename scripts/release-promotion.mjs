@@ -37,7 +37,8 @@ const DIRECTORY_EVIDENCE_ALGORITHM =
 export const VERSION_TRANSITION_FINAL_PASS_LINE =
   'version-transition inventory PASS stage=final occurrences=365 files=132 '
   + 'FIXTURE_PRESERVE=6 HISTORICAL_PRESERVE=32 REMOVE_BY_MCP_R4=3 '
-  + 'RETARGET_NOW=308 UNRELATED_VERSION_PRESERVE=16';
+  + 'RETARGET_NOW=306 RETARGET_THEN_REMOVE_BY_U7=2 '
+  + 'UNRELATED_VERSION_PRESERVE=16';
 
 const EXPECTED_GATE_IDS = Object.freeze([
   'candidate-build',
@@ -473,13 +474,17 @@ const GATE_RECEIPT_IDENTITIES = Object.freeze({
   ),
 });
 
+function gateEvidenceContractVersion(gateId) {
+  return gateId === 'matrix-closure' ? 2 : 1;
+}
+
 export const GATE_EVIDENCE_CONTRACTS = Object.freeze(Object.fromEntries(
   EXPECTED_GATE_IDS.map((gateId) => [
     gateId,
     Object.freeze({
       ...GATE_ARTIFACT_CONTRACTS[gateId],
       ...GATE_RECEIPT_IDENTITIES[gateId],
-      contractId: `soklet.release.${gateId}.v1`,
+      contractId: `soklet.release.${gateId}.v${gateEvidenceContractVersion(gateId)}`,
     }),
   ]),
 ));
@@ -840,7 +845,7 @@ function requireGateReceipt(receipt, gate, mainJar, gateId, candidateCommit, wor
     ],
     `${gateId} typed receipt`,
   );
-  const expectedContractId = `soklet.release.${gateId}.v1`;
+  const expectedContractId = contract.contractId;
   if (receipt.formatVersion !== 1
       || receipt.candidateCommit !== candidateCommit
       || receipt.candidateSha256 !== mainJar.sha256
@@ -959,7 +964,7 @@ function requireGateEvidenceContract(gateEvidence, gateId, artifacts) {
   const contract = GATE_EVIDENCE_CONTRACTS[gateId];
   if (contract === undefined)
     fail(`Promotion has no typed-evidence contract for gate ${gateId}`);
-  if (gateEvidence.gate.evidenceContract !== `soklet.release.${gateId}.v1`
+  if (gateEvidence.gate.evidenceContract !== contract.contractId
       || gateEvidence.gate.toolchain !== contract.toolchain) {
     fail(`Gate ${gateId} does not identify its exact typed-evidence contract and toolchain`);
   }

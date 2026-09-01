@@ -2356,21 +2356,21 @@ The bounded two-listener localization fixture now covers failed reload,
 rolling revision drift without within-response mixing, node loss,
 subscription reconnect, node-local delivery, and final runtime cleanup.
 The format-v2 release contract now enumerates exactly 29 ordered gates.
-Eighteen are dispatch-configured, while five remain
-`BLOCKED_HARNESS_MISSING` and the six downstreams remain
-`BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving 11 fail-closed blockers;
-`READY` means configured, never passed. The matrix-closure hook is `READY`, but
-the canonical report generated from its checked-in registry remains
-deliberately `FAILED` while five rows are `UNRESOLVED`, so no PASS receipt can be
-recorded. A `RELEASE_GATED` row has
+Twenty-three are dispatch-configured, none remain
+`BLOCKED_HARNESS_MISSING`, and the six downstreams remain
+`BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving six fail-closed blockers;
+`READY` means configured, never passed. The matrix-closure hook is `READY`, and
+the candidate-contained registry and residual evidence produce a canonical
+`PASSED` report at 113 `CORE_COMPLETE`, 119 `RELEASE_GATED`, 12
+`APPLICATION_OWNED`, 19 `NOT_APPLICABLE`, and zero `UNRESOLVED`. Only the exact
+candidate workflow can record its typed PASS receipt. A `RELEASE_GATED` row has
 candidate-contained implementation or evidence anchors and names the exact
 immutable, scheduled, sustained, or downstream gate that still owes proof; it
 does not excuse a local implementation, test, documentation, golden, or
 fixture gap. Scheduled/nightly and sustained fuzz/soak and operational
 history, release scans, benchmarks, published downstream pins, and an
-immutable checksum-matched candidate conformance/provenance run remain open.
-`release-scans` remains blocked on its exact scanner/toolchain,
-severity-policy, and retained-report contract.
+immutable checksum-matched candidate conformance/provenance run remain open
+candidate evidence even though their executable harnesses are checked in.
 Candidate Javadoc generation/completeness is configured; public deployment is
 post-validation publication work. Production multi-host
 localization coordination remains application/deployment-owned, while the

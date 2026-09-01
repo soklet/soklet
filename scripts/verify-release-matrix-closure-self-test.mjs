@@ -22,7 +22,11 @@ import {
   canonicalJson,
   deriveFiniteBoundCandidates,
   derivePrivacyBoundaryCandidates,
+  finiteBoundExclusionsSha256,
+  finiteBoundSemanticsSha256,
+  privacySemanticsSha256,
   verifyFiniteBoundInventory,
+  verifyLimitsAccountingAuthority,
   verifyMatrixClosure,
   verifyPrivacyBoundaryInventory,
 } from './verify-release-matrix-closure.mjs';
@@ -30,6 +34,10 @@ import {
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const registryPath = join(projectRoot, 'release/mcp-conformance-matrix-closure.json');
 const manifestPath = join(projectRoot, 'release/release-validation-manifest.json');
+const residualEvidencePath = join(
+  projectRoot,
+  'release/mcp-residual-closure-evidence.json',
+);
 const verifierPath = join(projectRoot, 'scripts/verify-release-matrix-closure.mjs');
 const temporaryRoot = mkdtempSync(join(tmpdir(), 'soklet-matrix-closure-'));
 const untrackedEvidenceName = '.matrix-closure-untracked-self-test.tmp';
@@ -45,6 +53,9 @@ const finiteBoundScanRoots = Object.freeze([
   'src/main/java/com/soklet/**/*.java',
   'src/main/java/com/soklet/Mcp*.java',
 ]);
+let finiteBoundFixtureSemanticsSha256;
+let finiteBoundFixtureExclusionsSha256;
+let privacyFixtureSemanticsSha256;
 const privacyProjectRoot = join(temporaryRoot, 'privacy-boundary-project');
 const privacyInventoryPath = join(
   privacyProjectRoot,
@@ -62,7 +73,7 @@ const privacyArtifactRoots = Object.freeze([
   'src/test/resources/multipart-request-body',
 ]);
 
-const expectedUnresolvedIds = Object.freeze([
+const expectedResidualIds = Object.freeze([
   'SOK-VALID-002',
   'SOK-STATE-002',
   'SOK-STATE-007',
@@ -80,6 +91,7 @@ const expectedReportKeys = Object.freeze([
   'rowCount',
   'rowIdsSha256',
   'registrySha256',
+  'residualSha256',
   'dispositionCounts',
   'releaseGateDependencies',
   'unresolvedRows',
@@ -113,6 +125,18 @@ function verifyFixture(path, options = {}) {
       : { finiteBoundProjectRoot: options.finiteBoundProjectRoot }),
     ...(options.finiteBoundExpectedScanRoots === undefined ? {}
       : { finiteBoundExpectedScanRoots: options.finiteBoundExpectedScanRoots }),
+    ...(options.finiteBoundExpectedCategories === undefined ? {}
+      : { finiteBoundExpectedCategories: options.finiteBoundExpectedCategories }),
+    ...(options.finiteBoundExpectedExclusionsSha256 === undefined ? {}
+      : {
+        finiteBoundExpectedExclusionsSha256:
+          options.finiteBoundExpectedExclusionsSha256,
+      }),
+    ...(options.finiteBoundExpectedSemanticsSha256 === undefined ? {}
+      : {
+        finiteBoundExpectedSemanticsSha256:
+          options.finiteBoundExpectedSemanticsSha256,
+      }),
     ...(options.gitExecutable === undefined
       ? { gitExecutable: semanticGitExecutable() }
       : { gitExecutable: options.gitExecutable }),
@@ -120,12 +144,17 @@ function verifyFixture(path, options = {}) {
       ?? privacyArtifactRoots,
     privacyExpectedScanRoots: options.privacyExpectedScanRoots
       ?? privacyScanRoots,
+    privacyExpectedSemanticsSha256:
+      options.privacyExpectedSemanticsSha256
+        ?? privacyFixtureSemanticsSha256,
     privacyInventoryPath: options.privacyInventoryPath
       ?? privacyInventoryPath,
     privacyGitExecutable: options.privacyGitExecutable
       ?? semanticGitExecutable(),
     privacyProjectRoot: options.privacyProjectRoot
       ?? privacyProjectRoot,
+    residualEvidencePath: options.residualEvidencePath
+      ?? residualEvidencePath,
   });
 }
 
@@ -139,6 +168,41 @@ function expectInvalid(name, source, mutate, expected, options = {}) {
 function expectRawInvalid(name, text, expected) {
   const path = writeRawFixture(name, text);
   assert.throws(() => verifyFixture(path), expected, name);
+}
+
+function writeResidualFixture(name, value) {
+  const path = join(temporaryRoot, `residual-${name}.json`);
+  writeFileSync(path, canonicalJson(value));
+  return path;
+}
+
+function writeRawResidualFixture(name, text) {
+  const path = join(temporaryRoot, `residual-${name}.json`);
+  writeFileSync(path, text);
+  return path;
+}
+
+function expectResidualInvalid(name, source, mutate, expected, options = {}) {
+  const fixture = clone(source);
+  mutate(fixture);
+  const path = writeResidualFixture(name, fixture);
+  assert.throws(
+    () => verifyFixture(options.registryPath ?? registryPath, {
+      ...options,
+      residualEvidencePath: path,
+    }),
+    expected,
+    name,
+  );
+}
+
+function expectRawResidualInvalid(name, text, expected) {
+  const path = writeRawResidualFixture(name, text);
+  assert.throws(
+    () => verifyFixture(registryPath, { residualEvidencePath: path }),
+    expected,
+    name,
+  );
 }
 
 function row(registry, id) {
@@ -161,20 +225,37 @@ function finiteBoundFixture(candidates) {
   return {
     bounds: [
       {
-        boundaryTests: [],
+        boundaryTests: [
+          'src/test/java/com/soklet/McpFiniteBoundFixtureTests.java#rejectsOneOver',
+        ],
         category: 'SELF_TEST',
         deterministicFailure: {
           contract: 'Synthetic deterministic failure contract.',
           stage: 'SELF_TEST',
         },
-        enforcementOwners: [],
+        enforcementOwners: [
+          {
+            file: 'src/main/java/com/soklet/McpFiniteBoundFixture.java',
+            member: 'maximumFrameBytes',
+            owner: 'com.soklet.McpFiniteBoundFixture',
+          },
+        ],
         id: 'FINITE-SELF-001',
         name: 'Synthetic finite-bound scanner coverage',
-        positiveTests: [],
+        positiveTests: [
+          'src/test/java/com/soklet/McpFiniteBoundFixtureTests.java#acceptsBoundary',
+        ],
         sourceOwners: candidates
           .map(finiteBoundClassification)
           .sort((left, right) => left.key < right.key ? -1 : left.key > right.key ? 1 : 0),
-        values: {},
+        values: [
+          {
+            accounting: 'synthetic items retained by the self-test fixture',
+            key: 'self-test.maximum-items',
+            unit: 'ITEMS',
+            value: '8',
+          },
+        ],
       },
     ],
     formatVersion: 1,
@@ -195,8 +276,14 @@ function writeFiniteBoundFixture(name, value) {
   return path;
 }
 
-function verifyFiniteBoundFixture(path) {
+function verifyFiniteBoundFixture(
+    path,
+    expectedSemanticsSha256 = finiteBoundFixtureSemanticsSha256,
+    expectedExclusionsSha256 = finiteBoundFixtureExclusionsSha256) {
   return verifyFiniteBoundInventory({
+    expectedCategories: ['SELF_TEST'],
+    expectedExclusionsSha256,
+    expectedSemanticsSha256,
     expectedScanRoots: finiteBoundScanRoots,
     inventoryPath: path,
     projectRoot: finiteBoundProjectRoot,
@@ -300,6 +387,8 @@ function verifyPrivacyFixture(path, options = {}) {
   return verifyPrivacyBoundaryInventory({
     expectedArtifactRoots: privacyArtifactRoots,
     expectedScanRoots: privacyScanRoots,
+    expectedSemanticsSha256: options.expectedSemanticsSha256
+      ?? privacyFixtureSemanticsSha256,
     gitExecutable: options.gitExecutable ?? semanticGitExecutable(),
     inventoryPath: path,
     projectRoot: privacyProjectRoot,
@@ -344,6 +433,21 @@ public final class McpFiniteBoundFixture {
       return this;
     }
   }
+}
+`,
+  );
+  const finiteBoundTestDirectory = join(
+    finiteBoundProjectRoot,
+    'src/test/java/com/soklet',
+  );
+  mkdirSync(finiteBoundTestDirectory, { recursive: true });
+  writeFileSync(
+    join(finiteBoundTestDirectory, 'McpFiniteBoundFixtureTests.java'),
+    `package com.soklet;
+
+final class McpFiniteBoundFixtureTests {
+  void acceptsBoundary() {}
+  void rejectsOneOver() {}
 }
 `,
   );
@@ -422,10 +526,60 @@ final class McpFiniteBoundSyntax {
     ],
   );
   const finiteInventory = finiteBoundFixture(finiteBoundCandidates);
+  finiteBoundFixtureSemanticsSha256 = finiteBoundSemanticsSha256(
+    finiteInventory.bounds,
+  );
+  finiteBoundFixtureExclusionsSha256 = finiteBoundExclusionsSha256(
+    finiteInventory.reviewedExclusions,
+  );
   writeFileSync(finiteBoundInventoryPath, canonicalJson(finiteInventory));
   const finiteBaseline = verifyFiniteBoundFixture(finiteBoundInventoryPath);
   assert.deepEqual(finiteBaseline.candidates, finiteBoundCandidates);
   assert.deepEqual(finiteBaseline.exclusions, []);
+
+  const finiteTwoBoundInventory = clone(finiteInventory);
+  const secondFiniteBound = clone(finiteTwoBoundInventory.bounds[0]);
+  secondFiniteBound.id = 'FINITE-SELF-002';
+  secondFiniteBound.name = 'Synthetic cross-bound semantic attribution';
+  secondFiniteBound.sourceOwners = finiteTwoBoundInventory.bounds[0]
+    .sourceOwners.splice(-1, 1);
+  secondFiniteBound.values = [
+    {
+      accounting: 'synthetic nodes retained by the self-test fixture',
+      key: 'self-test.maximum-nodes',
+      unit: 'NODES',
+      value: '16',
+    },
+  ];
+  finiteTwoBoundInventory.bounds.push(secondFiniteBound);
+  const finiteTwoBoundSemanticsSha256 = finiteBoundSemanticsSha256(
+    finiteTwoBoundInventory.bounds,
+  );
+  const finiteTwoBoundPath = writeFiniteBoundFixture(
+    'two-bound-semantic-baseline',
+    finiteTwoBoundInventory,
+  );
+  verifyFiniteBoundFixture(
+    finiteTwoBoundPath,
+    finiteTwoBoundSemanticsSha256,
+  );
+  const finiteValuesSwap = clone(finiteTwoBoundInventory);
+  [finiteValuesSwap.bounds[0].values, finiteValuesSwap.bounds[1].values] = [
+    finiteValuesSwap.bounds[1].values,
+    finiteValuesSwap.bounds[0].values,
+  ];
+  const finiteValuesSwapPath = writeFiniteBoundFixture(
+    'cross-bound-values-swap',
+    finiteValuesSwap,
+  );
+  assert.throws(
+    () => verifyFiniteBoundFixture(
+      finiteValuesSwapPath,
+      finiteTwoBoundSemanticsSha256,
+    ),
+    /Finite-bound semantic attribution SHA-256 differs from the reviewed contract/,
+    'cross-bound-values-swap',
+  );
 
   const finiteBoundSourceLinkRoot = join(
     temporaryRoot,
@@ -506,6 +660,91 @@ final class McpFiniteBoundSyntax {
     value.bounds[0].sourceOwners.sort((left, right) =>
       left.key < right.key ? -1 : left.key > right.key ? 1 : 0);
   }, /Finite-bound classification is duplicated/);
+  expectFiniteBoundInvalid('finite-empty-enforcement-owners', finiteInventory, (value) => {
+    value.bounds[0].enforcementOwners = [];
+  }, /enforcementOwners must be a nonempty array/);
+  expectFiniteBoundInvalid('finite-enforcement-owner-extra-key', finiteInventory, (value) => {
+    value.bounds[0].enforcementOwners[0].extra = true;
+  }, /enforcementOwners\[0\] keys must be exactly/);
+  expectFiniteBoundInvalid('finite-enforcement-owner-missing-file', finiteInventory, (value) => {
+    value.bounds[0].enforcementOwners[0].file =
+      'src/main/java/com/soklet/McpMissingFixture.java';
+  }, /enforcementOwners\[0\]\.file does not exist/);
+  expectFiniteBoundInvalid('finite-enforcement-owner-missing-key', finiteInventory, (value) => {
+    delete value.bounds[0].enforcementOwners[0].member;
+  }, /enforcementOwners\[0\] keys must be exactly/);
+  expectFiniteBoundInvalid('finite-enforcement-owner-not-declared', finiteInventory, (value) => {
+    value.bounds[0].enforcementOwners[0].owner = 'com.soklet.McpInventedOwner';
+  }, /owner is not declared by its production source file/);
+  expectFiniteBoundInvalid('finite-duplicate-enforcement-owner', finiteInventory, (value) => {
+    value.bounds[0].enforcementOwners.push(
+      clone(value.bounds[0].enforcementOwners[0]),
+    );
+  }, /enforcementOwners must not contain duplicates/);
+  expectFiniteBoundInvalid('finite-enforcement-owners-reordered', finiteInventory, (value) => {
+    value.bounds[0].enforcementOwners.push({
+      ...clone(value.bounds[0].enforcementOwners[0]),
+      member: 'aaaEnforcer',
+    });
+  }, /enforcementOwners must be in ASCII identity order/);
+  expectFiniteBoundInvalid('finite-empty-positive-tests', finiteInventory, (value) => {
+    value.bounds[0].positiveTests = [];
+  }, /positiveTests must be a nonempty array/);
+  expectFiniteBoundInvalid('finite-empty-boundary-tests', finiteInventory, (value) => {
+    value.bounds[0].boundaryTests = [];
+  }, /boundaryTests must be a nonempty array/);
+  expectFiniteBoundInvalid('finite-duplicate-positive-test', finiteInventory, (value) => {
+    value.bounds[0].positiveTests.push(value.bounds[0].positiveTests[0]);
+  }, /positiveTests must not contain duplicates/);
+  expectFiniteBoundInvalid('finite-positive-tests-reordered', finiteInventory, (value) => {
+    value.bounds[0].positiveTests = [
+      'src/test/java/com/soklet/McpFiniteBoundFixtureTests.java#rejectsOneOver',
+      'src/test/java/com/soklet/McpFiniteBoundFixtureTests.java#acceptsBoundary',
+    ];
+  }, /positiveTests must be in ASCII order/);
+  expectFiniteBoundInvalid('finite-positive-boundary-test-overlap', finiteInventory, (value) => {
+    value.bounds[0].boundaryTests = [...value.bounds[0].positiveTests];
+  }, /positiveTests and boundaryTests must be disjoint/);
+  expectFiniteBoundInvalid('finite-test-method-missing', finiteInventory, (value) => {
+    value.bounds[0].boundaryTests = [
+      'src/test/java/com/soklet/McpFiniteBoundFixtureTests.java#missingMethod',
+    ];
+  }, /names no declared test method: missingMethod/);
+  expectFiniteBoundInvalid('finite-test-reference-not-exact', finiteInventory, (value) => {
+    value.bounds[0].boundaryTests = [
+      'src/test/java/com/soklet/McpFiniteBoundFixtureTests.java',
+    ];
+  }, /must name one exact Java test method/);
+  expectFiniteBoundInvalid('finite-values-not-array', finiteInventory, (value) => {
+    value.bounds[0].values = {};
+  }, /values must be a nonempty array/);
+  expectFiniteBoundInvalid('finite-values-empty', finiteInventory, (value) => {
+    value.bounds[0].values = [];
+  }, /values must be a nonempty array/);
+  expectFiniteBoundInvalid('finite-value-extra-key', finiteInventory, (value) => {
+    value.bounds[0].values[0].extra = true;
+  }, /values\[0\] keys must be exactly/);
+  expectFiniteBoundInvalid('finite-value-key-malformed', finiteInventory, (value) => {
+    value.bounds[0].values[0].key = 'SELF_TEST';
+  }, /stable lowercase accounting key/);
+  expectFiniteBoundInvalid('finite-value-unit-malformed', finiteInventory, (value) => {
+    value.bounds[0].values[0].unit = 'items';
+  }, /uppercase stable unit token/);
+  expectFiniteBoundInvalid('finite-value-not-canonical-integer', finiteInventory, (value) => {
+    value.bounds[0].values[0].value = '08';
+  }, /canonical finite integer string/);
+  expectFiniteBoundInvalid('finite-value-key-duplicate', finiteInventory, (value) => {
+    value.bounds[0].values.push(clone(value.bounds[0].values[0]));
+  }, /Finite-bound value key is duplicated/);
+  expectFiniteBoundInvalid('finite-values-reordered', finiteInventory, (value) => {
+    value.bounds[0].values.push({
+      ...clone(value.bounds[0].values[0]),
+      key: 'self-test.aaa-items',
+    });
+  }, /values must be in ASCII key order/);
+  expectFiniteBoundInvalid('finite-required-category-missing', finiteInventory, (value) => {
+    value.bounds[0].category = 'DIFFERENT';
+  }, /Finite-bound categories must match the frozen order exactly/);
 
   const finiteInventoryWithExclusion = clone(finiteInventory);
   const [excludedOwner] = finiteInventoryWithExclusion.bounds[0].sourceOwners.splice(0, 1);
@@ -516,7 +755,58 @@ final class McpFiniteBoundSyntax {
     'exact-reviewed-exclusion',
     finiteInventoryWithExclusion,
   );
-  const finiteExclusionResult = verifyFiniteBoundFixture(finiteExclusionPath);
+  const finiteExclusionResult = verifyFiniteBoundFixture(
+    finiteExclusionPath,
+    finiteBoundSemanticsSha256(finiteInventoryWithExclusion.bounds),
+    finiteBoundExclusionsSha256(
+      finiteInventoryWithExclusion.reviewedExclusions,
+    ),
+  );
+  const finiteTwoExclusionInventory = clone(finiteInventory);
+  const excludedOwners = finiteTwoExclusionInventory.bounds[0]
+    .sourceOwners.splice(0, 2);
+  finiteTwoExclusionInventory.reviewedExclusions = excludedOwners
+    .map((owner, index) => ({
+      ...reviewedExclusion(owner, `FINITE-EX-${String(index + 1).padStart(3, '0')}`),
+      rationale: `Reviewed self-test exclusion rationale ${index + 1}.`,
+    }))
+    .sort((left, right) => left.key < right.key ? -1 : left.key > right.key ? 1 : 0);
+  const finiteTwoExclusionPath = writeFiniteBoundFixture(
+    'two-exclusion-attribution-baseline',
+    finiteTwoExclusionInventory,
+  );
+  const finiteTwoExclusionSha256 = finiteBoundExclusionsSha256(
+    finiteTwoExclusionInventory.reviewedExclusions,
+  );
+  verifyFiniteBoundFixture(
+    finiteTwoExclusionPath,
+    finiteBoundSemanticsSha256(finiteTwoExclusionInventory.bounds),
+    finiteTwoExclusionSha256,
+  );
+  const finiteExclusionSwap = clone(finiteTwoExclusionInventory);
+  [finiteExclusionSwap.reviewedExclusions[0].id,
+    finiteExclusionSwap.reviewedExclusions[1].id] = [
+    finiteExclusionSwap.reviewedExclusions[1].id,
+    finiteExclusionSwap.reviewedExclusions[0].id,
+  ];
+  [finiteExclusionSwap.reviewedExclusions[0].rationale,
+    finiteExclusionSwap.reviewedExclusions[1].rationale] = [
+    finiteExclusionSwap.reviewedExclusions[1].rationale,
+    finiteExclusionSwap.reviewedExclusions[0].rationale,
+  ];
+  const finiteExclusionSwapPath = writeFiniteBoundFixture(
+    'balanced-cross-exclusion-attribution-swap',
+    finiteExclusionSwap,
+  );
+  assert.throws(
+    () => verifyFiniteBoundFixture(
+      finiteExclusionSwapPath,
+      finiteBoundSemanticsSha256(finiteTwoExclusionInventory.bounds),
+      finiteTwoExclusionSha256,
+    ),
+    /Finite-bound exclusion attribution SHA-256 differs from the reviewed contract/,
+    'balanced-cross-exclusion-attribution-swap',
+  );
   assert.equal(finiteExclusionResult.exclusions.length, 1);
   assert.equal(finiteExclusionResult.exclusions[0].key, excludedOwner.key);
   assert.equal(finiteExclusionResult.exclusions[0].owner, excludedOwner.owner);
@@ -558,6 +848,9 @@ final class McpFiniteBoundSyntax {
   expectFiniteBoundInvalid('finite-failure-contract-blank', finiteInventory, (value) => {
     value.bounds[0].deterministicFailure.contract = '';
   }, /deterministicFailure\.contract must be a nonblank/);
+  expectFiniteBoundInvalid('finite-failure-stage-blank', finiteInventory, (value) => {
+    value.bounds[0].deterministicFailure.stage = '';
+  }, /deterministicFailure\.stage must be a nonblank/);
   expectFiniteBoundInvalid('finite-matcher-description-drift', finiteInventory, (value) => {
     value.matcherRules[0].description = 'Broadened prose matcher.';
   }, /matcherRules do not match the executable matcher contract/);
@@ -1708,10 +2001,24 @@ final class McpPrivacyBoundaryFuzzTests {
     assert.equal(privacyCandidates.some(predicate), true, label);
   }
   const privacyInventory = privacyFixture(privacyCandidates);
+  privacyFixtureSemanticsSha256 = privacySemanticsSha256(privacyInventory);
   writeFileSync(privacyInventoryPath, canonicalJson(privacyInventory));
   const privacyBaseline = verifyPrivacyFixture(privacyInventoryPath);
   assert.deepEqual(privacyBaseline.candidates, privacyCandidates);
   assert.deepEqual(privacyBaseline.exclusions, []);
+
+  expectPrivacyInvalid(
+    'balanced-boundary-prose-attribution-swap',
+    privacyInventory,
+    (value) => {
+      const first = value.boundaries[0];
+      const second = value.boundaries[1];
+      for (const field of ['contract', 'name']) {
+        [first[field], second[field]] = [second[field], first[field]];
+      }
+    },
+    /Privacy-boundary semantic attribution SHA-256 differs from the reviewed contract/,
+  );
 
   expectPrivacyInvalid(
     'privacy-conflicting-concrete-renderer-classification',
@@ -2135,7 +2442,26 @@ final class McpPrivacyBoundaryFuzzTests {
   expectPrivacyInvalid('privacy-required-delegation-omitted', privacyInventory, (value) => {
     value.delegations = value.delegations.filter(({ delegatedOwner }) =>
       delegatedOwner !== 'OPERATOR_RETENTION');
-  }, /delegations omit required owners: OPERATOR_RETENTION/);
+  }, /delegated owners must match the frozen order exactly/);
+  expectPrivacyInvalid('privacy-delegated-owner-duplicate', privacyInventory, (value) => {
+    value.delegations[1].delegatedOwner = value.delegations[0].delegatedOwner;
+  }, /delegated owners must match the frozen order exactly/);
+  expectPrivacyInvalid('privacy-delegated-owner-extra', privacyInventory, (value) => {
+    value.delegations.push({
+      canaryTests: [],
+      contract: 'Invented delegated owner.',
+      delegatedOwner: 'INVENTED_OWNER',
+      id: 'PRIV-DELEGATION-004',
+      name: 'Invented owner',
+      sourcePaths: [],
+    });
+  }, /delegated owners must match the frozen order exactly/);
+  expectPrivacyInvalid('privacy-delegated-owner-reordered', privacyInventory, (value) => {
+    [value.delegations[0].delegatedOwner, value.delegations[1].delegatedOwner] = [
+      value.delegations[1].delegatedOwner,
+      value.delegations[0].delegatedOwner,
+    ];
+  }, /delegated owners must match the frozen order exactly/);
   expectPrivacyInvalid('privacy-schema-extra-key', privacyInventory, (value) => {
     value.extra = true;
   }, /Privacy-boundary inventory keys must be exactly/);
@@ -2160,7 +2486,9 @@ final class McpPrivacyBoundaryFuzzTests {
     privacyWithFuzzCanary,
   );
   assert.equal(
-    verifyPrivacyFixture(privacyFuzzCanaryPath).boundaries[0]
+    verifyPrivacyFixture(privacyFuzzCanaryPath, {
+      expectedSemanticsSha256: privacySemanticsSha256(privacyWithFuzzCanary),
+    }).boundaries[0]
       .canaryTests[0],
     privacyWithFuzzCanary.boundaries[0].canaryTests[0],
   );
@@ -2202,7 +2530,9 @@ final class McpPrivacyBoundaryFuzzTests {
     privacyWithExclusion,
   );
   assert.equal(
-    verifyPrivacyFixture(privacyExclusionPath).exclusions[0].key,
+    verifyPrivacyFixture(privacyExclusionPath, {
+      expectedSemanticsSha256: privacySemanticsSha256(privacyWithExclusion),
+    }).exclusions[0].key,
     excludedPrivacyPath.key,
   );
 
@@ -2221,7 +2551,11 @@ final class McpPrivacyBoundaryFuzzTests {
     privacyWithDelegatedPath,
   );
   assert.equal(
-    verifyPrivacyFixture(privacyDelegatedPath).delegations[0]
+    verifyPrivacyFixture(privacyDelegatedPath, {
+      expectedSemanticsSha256: privacySemanticsSha256(
+        privacyWithDelegatedPath,
+      ),
+    }).delegations[0]
       .sourcePaths[0].key,
     delegatedPrivacyPath.key,
   );
@@ -2309,9 +2643,18 @@ final class McpPrivacyBoundaryFuzzTests {
   const registry = JSON.parse(registryText);
   assert.equal(registryText, canonicalJson(registry));
 
+  const residualBytes = readFileSync(residualEvidencePath);
+  const residualText = residualBytes.toString('utf8');
+  const residualEvidence = JSON.parse(residualText);
+  assert.equal(residualText, canonicalJson(residualEvidence));
+  assert.deepEqual(
+    residualEvidence.rows.map(({ id }) => id),
+    expectedResidualIds,
+  );
+
   const current = verifyFixture(registryPath);
-  assert.equal(current.exitCode, 1);
-  assert.equal(current.report.status, 'FAILED');
+  assert.equal(current.exitCode, 0);
+  assert.equal(current.report.status, 'PASSED');
   assert.deepEqual(Object.keys(current.report), expectedReportKeys);
   assert.equal(current.report.rowCount, 263);
   assert.equal(
@@ -2322,17 +2665,18 @@ final class McpPrivacyBoundaryFuzzTests {
     current.report.registrySha256,
     createHash('sha256').update(registryBytes).digest('hex'),
   );
+  assert.equal(
+    current.report.residualSha256,
+    createHash('sha256').update(residualBytes).digest('hex'),
+  );
   assert.deepEqual(current.report.dispositionCounts, {
     APPLICATION_OWNED: 12,
-    CORE_COMPLETE: 110,
+    CORE_COMPLETE: 113,
     NOT_APPLICABLE: 19,
-    RELEASE_GATED: 117,
-    UNRESOLVED: 5,
+    RELEASE_GATED: 119,
+    UNRESOLVED: 0,
   });
-  assert.deepEqual(
-    current.report.unresolvedRows.map(({ id }) => id),
-    expectedUnresolvedIds,
-  );
+  assert.deepEqual(current.report.unresolvedRows, []);
   assert.deepEqual(current.report.rows, registry.rows);
   assert.equal(current.reportText, canonicalJson(current.report));
   assert.ok(current.reportText.endsWith('\n'));
@@ -2602,19 +2946,32 @@ final class McpPrivacyBoundaryFuzzTests {
     'operational-history',
     'soklet-otel',
   ]);
-  assert.equal(row(registry, 'SOK-VALID-002').disposition, 'UNRESOLVED');
+  assert.equal(row(registry, 'SOK-VALID-002').disposition, 'RELEASE_GATED');
+  assert.deepEqual(row(registry, 'SOK-VALID-002').releaseGates, [
+    'fuzz-nightly-history',
+    'soak-nightly-history',
+    'release-soak',
+  ]);
+  assert.equal(row(registry, 'SOK-PRIV-001').disposition, 'RELEASE_GATED');
+  assert.deepEqual(row(registry, 'SOK-PRIV-001').releaseGates, [
+    'release-soak',
+    'operational-history',
+    'soklet-otel',
+  ]);
+  for (const id of ['SOK-STATE-002', 'SOK-STATE-007', 'AMB-002']) {
+    assert.equal(row(registry, id).disposition, 'CORE_COMPLETE');
+    assert.deepEqual(row(registry, id).releaseGates, []);
+    assert.equal(row(registry, id).reason, '');
+  }
   assert.ok(new Set(registry.rows.flatMap(({ evidence }) => evidence)).size >= 160);
 
   const checkedInCli = spawnSync(process.execPath, [verifierPath], {
     cwd: projectRoot,
     encoding: 'utf8', env: semanticGitEnvironment(),
   });
-  assert.equal(checkedInCli.status, 1);
+  assert.equal(checkedInCli.status, 0);
   assert.equal(checkedInCli.stdout, current.reportText);
-  assert.equal(
-    checkedInCli.stderr,
-    'Matrix closure failed: 5 unresolved row(s).\n',
-  );
+  assert.equal(checkedInCli.stderr, '');
 
   const usage = spawnSync(process.execPath, [verifierPath, 'unexpected'], {
     cwd: projectRoot,
@@ -2627,37 +2984,218 @@ final class McpPrivacyBoundaryFuzzTests {
     'Usage: node scripts/verify-release-matrix-closure.mjs\n',
   );
 
-  const resolvedRegistry = clone(registry);
-  for (const unresolvedRow of resolvedRegistry.rows) {
-    if (unresolvedRow.disposition !== 'UNRESOLVED') {
-      continue;
-    }
-    unresolvedRow.disposition = 'CORE_COMPLETE';
-    unresolvedRow.reason = '';
-    if (unresolvedRow.evidence.every((path) => path.endsWith('.md'))) {
-      unresolvedRow.evidence = ['conformance/official/verify.mjs'];
-    }
-  }
-  const resolvedPath = writeCanonicalFixture('resolved', resolvedRegistry);
-  const resolved = verifyFixture(resolvedPath);
-  assert.equal(resolved.exitCode, 0);
-  assert.equal(resolved.report.status, 'PASSED');
-  assert.deepEqual(resolved.report.dispositionCounts, {
-    APPLICATION_OWNED: 12,
-    CORE_COMPLETE: 115,
-    NOT_APPLICABLE: 19,
-    RELEASE_GATED: 117,
-    UNRESOLVED: 0,
-  });
-  assert.equal(
-    resolved.report.dispositionCounts.CORE_COMPLETE,
-    current.report.dispositionCounts.CORE_COMPLETE + expectedUnresolvedIds.length,
+  // The checked-in MCP-C closure is now the only positive integration fixture.
+  // Keeping the aliases makes the mutation suite below read as resolved-state
+  // verification without synthesizing an invalid all-core shortcut.
+  const resolvedRegistry = registry;
+  const resolvedPath = registryPath;
+  const resolved = current;
+
+  expectRawResidualInvalid(
+    'malformed',
+    '{\n',
+    /MCP-C residual closure evidence is malformed JSON/,
   );
-  assert.deepEqual(resolved.report.unresolvedRows, []);
-  assert.deepEqual(resolved.report.rows, resolvedRegistry.rows);
-  assert.equal(resolved.reportText, canonicalJson(resolved.report));
+  expectRawResidualInvalid(
+    'crlf',
+    canonicalJson(residualEvidence).replaceAll('\n', '\r\n'),
+    /MCP-C residual closure evidence must use LF line endings/,
+  );
+  expectRawResidualInvalid(
+    'missing-lf',
+    canonicalJson(residualEvidence).slice(0, -1),
+    /MCP-C residual closure evidence must end with one LF/,
+  );
+  expectRawResidualInvalid(
+    'noncanonical',
+    `${JSON.stringify(residualEvidence)}\n`,
+    /MCP-C residual closure evidence is not canonical two-space JSON/,
+  );
+  expectResidualInvalid('missing-top-level-key', residualEvidence, (value) => {
+    delete value.protocolVersion;
+  }, /MCP-C residual closure evidence keys must be exactly/);
+  expectResidualInvalid('extra-top-level-key', residualEvidence, (value) => {
+    value.extra = true;
+  }, /MCP-C residual closure evidence keys must be exactly/);
+  expectResidualInvalid('reordered-top-level-key', residualEvidence, (value) => {
+    const formatVersion = value.formatVersion;
+    delete value.formatVersion;
+    value.formatVersion = formatVersion;
+  }, /MCP-C residual closure evidence keys must be exactly/);
+  expectResidualInvalid('format-version-drift', residualEvidence, (value) => {
+    value.formatVersion = 2;
+  }, /format, protocol, or release version is invalid/);
+  expectResidualInvalid('protocol-version-drift', residualEvidence, (value) => {
+    value.protocolVersion = '2025-11-25';
+  }, /format, protocol, or release version is invalid/);
+  expectResidualInvalid('release-version-drift', residualEvidence, (value) => {
+    value.releaseVersion = '4.0.1';
+  }, /format, protocol, or release version is invalid/);
+  expectResidualInvalid('missing-id', residualEvidence, (value) => {
+    value.rows.pop();
+  }, /must contain exactly 5 rows/);
+  expectResidualInvalid('extra-id', residualEvidence, (value) => {
+    value.rows.push({
+      ...clone(value.rows.at(-1)),
+      id: 'AMB-003',
+    });
+  }, /must contain exactly 5 rows/);
+  expectResidualInvalid('duplicate-id', residualEvidence, (value) => {
+    value.rows[1].id = value.rows[0].id;
+  }, /row IDs must match the frozen order exactly/);
+  expectResidualInvalid('reordered-ids', residualEvidence, (value) => {
+    [value.rows[0], value.rows[1]] = [value.rows[1], value.rows[0]];
+  }, /row IDs must match the frozen order exactly/);
+  expectResidualInvalid('missing-row-key', residualEvidence, (value) => {
+    delete value.rows[0].rationale;
+  }, /MCP-C residual row 0 keys must be exactly/);
+  expectResidualInvalid('extra-row-key', residualEvidence, (value) => {
+    value.rows[0].extra = true;
+  }, /MCP-C residual row 0 keys must be exactly/);
+  expectResidualInvalid('reordered-row-key', residualEvidence, (value) => {
+    const id = value.rows[0].id;
+    delete value.rows[0].id;
+    value.rows[0].id = id;
+  }, /MCP-C residual row 0 keys must be exactly/);
+  expectResidualInvalid('incorrect-owner', residualEvidence, (value) => {
+    value.rows[0].owningPackage = 'MCP-7';
+  }, /residual owningPackage must be MCP-C/);
+  expectResidualInvalid('disposition-drift', residualEvidence, (value) => {
+    value.rows[0].targetDisposition = 'CORE_COMPLETE';
+  }, /residual targetDisposition must be RELEASE_GATED/);
+  expectResidualInvalid('evidence-drift', residualEvidence, (value) => {
+    value.rows[0].evidencePaths.push('pom.xml');
+    value.rows[0].evidencePaths.sort();
+  }, /residual evidencePaths must match the frozen order exactly/);
+  expectResidualInvalid('documentation-drift', residualEvidence, (value) => {
+    value.rows[0].documentationPaths.push('SECURITY.md');
+    value.rows[0].documentationPaths.sort();
+  }, /residual documentationPaths must match the frozen order exactly/);
+  expectResidualInvalid('gate-drift', residualEvidence, (value) => {
+    value.rows[0].releaseGates.pop();
+  }, /residual releaseGates must match the frozen order exactly/);
+  expectResidualInvalid('nonexistent-candidate-path', residualEvidence, (value) => {
+    value.rows[0].evidencePaths = ['does-not-exist.residual-evidence'];
+  }, /evidence reference does not exist/);
+  expectResidualInvalid('absolute-candidate-path', residualEvidence, (value) => {
+    value.rows[0].evidencePaths = ['/tmp/external-residual-evidence'];
+  }, /not a normalized candidate-relative path/);
+  expectResidualInvalid('parent-candidate-path', residualEvidence, (value) => {
+    value.rows[0].evidencePaths = ['../mcp/PROFILE_1_NUMERIC_BOUNDS.md'];
+  }, /not a normalized candidate-relative path/);
+  expectResidualInvalid('directory-candidate-path', residualEvidence, (value) => {
+    value.rows[0].evidencePaths = ['src'];
+  }, /must name a regular file/);
+  expectResidualInvalid('duplicate-evidence-path', residualEvidence, (value) => {
+    value.rows[0].evidencePaths.push(value.rows[0].evidencePaths[0]);
+  }, /evidencePaths must not contain duplicates/);
+  expectResidualInvalid('unsorted-evidence-paths', residualEvidence, (value) => {
+    value.rows[0].evidencePaths.reverse();
+  }, /evidencePaths must be in ASCII order/);
+  expectResidualInvalid('non-markdown-documentation', residualEvidence, (value) => {
+    value.rows[0].documentationPaths = ['pom.xml'];
+  }, /must name a Markdown document/);
+  expectResidualInvalid('evidence-documentation-overlap', residualEvidence, (value) => {
+    value.rows[0].evidencePaths.push('MCP.md');
+    value.rows[0].evidencePaths.sort();
+  }, /evidencePaths must match the frozen order exactly/);
+  expectResidualInvalid('blank-ownership-boundary', residualEvidence, (value) => {
+    value.rows[0].ownershipBoundary = ' ';
+  }, /ownershipBoundary must be a nonblank single-line string/);
+  expectResidualInvalid('multiline-ownership-boundary', residualEvidence, (value) => {
+    value.rows[0].ownershipBoundary = 'first\nsecond';
+  }, /ownershipBoundary must be a nonblank single-line string/);
+  expectResidualInvalid('blank-rationale', residualEvidence, (value) => {
+    value.rows[0].rationale = '';
+  }, /rationale must be a nonblank single-line string/);
+  expectResidualInvalid('duplicate-ownership-boundary', residualEvidence, (value) => {
+    value.rows[1].ownershipBoundary = value.rows[0].ownershipBoundary;
+  }, /ownershipBoundary must be row-specific/);
+  expectResidualInvalid('duplicate-rationale', residualEvidence, (value) => {
+    value.rows[1].rationale = value.rows[0].rationale;
+  }, /rationale must be row-specific/);
+  expectResidualInvalid('balanced-residual-prose-swap', residualEvidence, (value) => {
+    const first = value.rows[0];
+    const second = value.rows[1];
+    for (const field of ['ownershipBoundary', 'rationale']) {
+      [first[field], second[field]] = [second[field], first[field]];
+    }
+  }, /MCP-C residual semantic attribution SHA-256 differs from the reviewed contract/);
+  expectResidualInvalid('cross-row-evidence-substitution', residualEvidence, (value) => {
+    [value.rows[0].evidencePaths, value.rows[3].evidencePaths] = [
+      value.rows[3].evidencePaths,
+      value.rows[0].evidencePaths,
+    ];
+  }, /SOK-VALID-002 residual evidencePaths must match the frozen order exactly/);
+  expectResidualInvalid('cross-row-documentation-substitution', residualEvidence, (value) => {
+    [value.rows[1].documentationPaths, value.rows[2].documentationPaths] = [
+      value.rows[2].documentationPaths,
+      value.rows[1].documentationPaths,
+    ];
+  }, /SOK-STATE-002 residual documentationPaths must match the frozen order exactly/);
+  expectInvalid('residual-registry-union-drift', resolvedRegistry, (value) => {
+    row(value, 'SOK-STATE-002').evidence.push('pom.xml');
+    row(value, 'SOK-STATE-002').evidence.sort();
+  }, /SOK-STATE-002 residual evidence\/documentation union must match the frozen order exactly/);
+  expectInvalid('residual-registry-gate-drift', resolvedRegistry, (value) => {
+    const target = row(value, 'SOK-VALID-002');
+    target.releaseGates.push('candidate-conformance');
+    target.reason =
+      'Remaining immutable or scheduled evidence is owned by: fuzz-nightly-history, soak-nightly-history, release-soak, candidate-conformance.';
+  }, /SOK-VALID-002 residual\/registry releaseGates must match the frozen order exactly/);
+  expectInvalid('residual-registry-reason-drift', resolvedRegistry, (value) => {
+    row(value, 'SOK-VALID-002').reason = 'Invented release-gated reason.';
+  }, /closure-registry reason does not match its target disposition and gates/);
+
+  const limitsAuthorityRoot = join(temporaryRoot, 'limits-authority-project');
+  const limitsAuthorityPath = join(
+    limitsAuthorityRoot,
+    'conformance/mcp-limits-and-accounting.json',
+  );
+  mkdirSync(dirname(limitsAuthorityPath), { recursive: true });
+  const limitsArtifact = JSON.parse(readFileSync(
+    join(projectRoot, 'conformance/mcp-limits-and-accounting.json'),
+    'utf8',
+  ));
+  const writeLimitsAuthority = (value) => {
+    writeFileSync(limitsAuthorityPath, canonicalJson(value));
+  };
+  const expectLimitsAuthorityInvalid = (name, mutate, expected) => {
+    const value = clone(limitsArtifact);
+    mutate(value);
+    writeLimitsAuthority(value);
+    assert.throws(
+      () => verifyLimitsAccountingAuthority({ projectRoot: limitsAuthorityRoot }),
+      expected,
+      name,
+    );
+  };
+  writeLimitsAuthority(limitsArtifact);
+  assert.deepEqual(
+    verifyLimitsAccountingAuthority({ projectRoot: limitsAuthorityRoot }),
+    {
+      path: '../mcp/PROFILE_1_NUMERIC_BOUNDS.md',
+      sha256: '9477f26dd0d2bbc2f790b8428dd5ad5de7f9d672ba152cfd33fbbf0ae6a78b70',
+    },
+  );
+  expectLimitsAuthorityInvalid('limits-authority-path-drift', (value) => {
+    value.numericBoundsAuthority.path = '../mcp/OTHER.md';
+  }, /does not match the reviewed external authority/);
+  expectLimitsAuthorityInvalid('limits-authority-sha-drift', (value) => {
+    value.numericBoundsAuthority.sha256 = '0'.repeat(64);
+  }, /does not match the reviewed external authority/);
+  expectLimitsAuthorityInvalid('limits-authority-missing-key', (value) => {
+    delete value.numericBoundsAuthority.sha256;
+  }, /numericBoundsAuthority keys must be exactly/);
+  expectLimitsAuthorityInvalid('limits-authority-extra-key', (value) => {
+    value.numericBoundsAuthority.external = true;
+  }, /numericBoundsAuthority keys must be exactly/);
+  writeLimitsAuthority(limitsArtifact);
 
   const resolvedWithFiniteBoundOverride = verifyFixture(resolvedPath, {
+    finiteBoundExpectedCategories: ['SELF_TEST'],
+    finiteBoundExpectedExclusionsSha256: finiteBoundFixtureExclusionsSha256,
+    finiteBoundExpectedSemanticsSha256: finiteBoundFixtureSemanticsSha256,
     finiteBoundExpectedScanRoots: finiteBoundScanRoots,
     finiteBoundInventoryPath,
     finiteBoundProjectRoot,
@@ -2667,6 +3205,7 @@ final class McpPrivacyBoundaryFuzzTests {
   const resolvedWithPrivacyOverride = verifyFixture(resolvedPath, {
     privacyExpectedArtifactRoots: privacyArtifactRoots,
     privacyExpectedScanRoots: privacyScanRoots,
+    privacyExpectedSemanticsSha256: privacyFixtureSemanticsSha256,
     privacyInventoryPath,
     privacyProjectRoot,
   });
@@ -2679,6 +3218,9 @@ final class McpPrivacyBoundaryFuzzTests {
     matrixOmittedFiniteInventory,
   );
   assert.throws(() => verifyFixture(resolvedPath, {
+    finiteBoundExpectedCategories: ['SELF_TEST'],
+    finiteBoundExpectedExclusionsSha256: finiteBoundFixtureExclusionsSha256,
+    finiteBoundExpectedSemanticsSha256: finiteBoundFixtureSemanticsSha256,
     finiteBoundExpectedScanRoots: finiteBoundScanRoots,
     finiteBoundInventoryPath: matrixOmittedFiniteInventoryPath,
     finiteBoundProjectRoot,
@@ -2708,6 +3250,7 @@ final class McpPrivacyBoundaryFuzzTests {
       manifestPath,
       privacyExpectedArtifactRoots: privacyArtifactRoots,
       privacyExpectedScanRoots: privacyScanRoots,
+      privacyExpectedSemanticsSha256: privacyFixtureSemanticsSha256,
       privacyInventoryPath,
       privacyProjectRoot,
       registryPath: resolvedPath,
@@ -2767,6 +3310,27 @@ final class McpPrivacyBoundaryFuzzTests {
       value.rows[0].disposition = disposition;
     }, /unknown disposition/);
   }
+  expectInvalid('final-disposition-count-drift', resolvedRegistry, (value) => {
+    value.rows[0].disposition = 'RELEASE_GATED';
+    value.rows[0].releaseGates = ['candidate-build'];
+    value.rows[0].reason =
+      'Remaining immutable or scheduled evidence is owned by: candidate-build.';
+  }, /final disposition CORE_COMPLETE must equal 113/);
+  expectInvalid('balanced-row-attribution-swap', resolvedRegistry, (value) => {
+    const coreComplete = row(value, 'MCP-BASE-001');
+    const releaseGated = row(value, 'MCP-BASE-012');
+    for (const field of ['disposition', 'releaseGates', 'reason']) {
+      [coreComplete[field], releaseGated[field]] = [
+        releaseGated[field],
+        coreComplete[field],
+      ];
+    }
+  }, /Matrix-closure row attribution SHA-256 differs from the reviewed contract/);
+  expectInvalid('balanced-non-residual-evidence-swap', resolvedRegistry, (value) => {
+    const first = row(value, 'MCP-BASE-001');
+    const second = row(value, 'MCP-BASE-003');
+    [first.evidence, second.evidence] = [second.evidence, first.evidence];
+  }, /Matrix-closure row attribution SHA-256 differs from the reviewed contract/);
   expectInvalid('not-applicable-mismatch', resolvedRegistry, (value) => {
     const target = row(value, 'MCP-BASE-027');
     target.disposition = 'CORE_COMPLETE';
@@ -2806,10 +3370,16 @@ final class McpPrivacyBoundaryFuzzTests {
     value.rows[0].evidence = ['/tmp/matrix-closure-evidence'];
   }, /not a normalized candidate-relative path/);
   writeFileSync(untrackedEvidencePath, 'untracked\n', { flag: 'wx' });
+  expectResidualInvalid('untracked-candidate-path', residualEvidence, (value) => {
+    value.rows[0].evidencePaths = [untrackedEvidenceName];
+  }, /not tracked by the candidate/, { gitExecutable: 'git' });
   expectInvalid('untracked-evidence', resolvedRegistry, (value) => {
     value.rows[0].evidence = [untrackedEvidenceName];
   }, /not tracked by the candidate/, { gitExecutable: 'git' });
   symlinkSync('MCP.md', symlinkEvidencePath);
+  expectResidualInvalid('symlink-candidate-path', residualEvidence, (value) => {
+    value.rows[0].evidencePaths = [symlinkEvidenceName];
+  }, /contains a symlink/, { gitExecutable: 'git' });
   expectInvalid('symlink-evidence', resolvedRegistry, (value) => {
     value.rows[0].evidence = [symlinkEvidenceName];
   }, /contains a symlink/, { gitExecutable: 'git' });

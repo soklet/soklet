@@ -1074,7 +1074,7 @@
   ],
   "discoveryCensus": {
     "candidateCount": 5823,
-    "candidateSha256": "7a515cfb4bac3277f25fe9ad7a7901abe1ace79431a8a422e59f6bc3ac6338a0",
+    "candidateSha256": "af45f5370d45cec01f6e2b4d3a2bde8ec597b781ecb4182df714d3b1df74dc0e",
     "candidates": [
       {
         "kinds": [
@@ -3606,7 +3606,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 876,
+        "line": 881,
         "lineSha256": "01ffd5810bde74527b9193ab2b79c6373e8cb3e3542ef5a54331eb0ae3b550e1",
         "path": "scripts/release-promotion.mjs"
       },
@@ -3614,7 +3614,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 2196,
+        "line": 2201,
         "lineSha256": "806d3cee7ac16e29fb0421f0b6056ff342518348b000e816de942299fb35af26",
         "path": "scripts/release-promotion.mjs"
       },
@@ -3622,7 +3622,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 2361,
+        "line": 2366,
         "lineSha256": "806d3cee7ac16e29fb0421f0b6056ff342518348b000e816de942299fb35af26",
         "path": "scripts/release-promotion.mjs"
       },
@@ -3630,7 +3630,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 2510,
+        "line": 2515,
         "lineSha256": "806d3cee7ac16e29fb0421f0b6056ff342518348b000e816de942299fb35af26",
         "path": "scripts/release-promotion.mjs"
       },
@@ -3638,7 +3638,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1048,
+        "line": 1059,
         "lineSha256": "c449d4d0cf9267047d1f04b2c9559afb012bbd83a3126c0c2ce7e70b9408a1f9",
         "path": "scripts/release-validation-evidence.mjs"
       },
@@ -3670,7 +3670,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 962,
+        "line": 966,
         "lineSha256": "ace0c2891126ba2bee893ae1d7e1064a042adb5c5263efc49bddb603039361c8",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3678,7 +3678,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 974,
+        "line": 978,
         "lineSha256": "2d9db548080610e260aa8d966675ce791f9b39663bc2b7d8eb3d4894d5b924a2",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3686,7 +3686,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 977,
+        "line": 981,
         "lineSha256": "cc623440c5e3fa3815f0890de2fbca989333f9adacb115d6c746bbaf176bde9e",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3694,7 +3694,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 981,
+        "line": 985,
         "lineSha256": "983fad083441a43cc36bb2aebc9f779c5e2210676e65c5e50aeee53455fa15be",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3702,7 +3702,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1052,
+        "line": 1056,
         "lineSha256": "8c2793bfcf67b0a5d80932cb6bfdbc13bb24056e671b0bd739335e9eb8b9c987",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3710,7 +3710,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1062,
+        "line": 1066,
         "lineSha256": "608f831db236667ec0e14192eb7f2cb973fe7f115a6c6006ed58d6f854272823",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3718,7 +3718,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1069,
+        "line": 1073,
         "lineSha256": "37ff3384dca19aafa0a0fb1ad38dddf416f0aee0d47547fc478cc7771ec03bbe",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3726,7 +3726,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1080,
+        "line": 1084,
         "lineSha256": "afc878aeeddd2bbd06bcb3a2b123c3b5fd862c713054e83af349da02c91f4ae2",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3734,7 +3734,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1132,
+        "line": 1136,
         "lineSha256": "4ee7ada100214d53e6eecc23b8dacfe84de2ef8a889395212f2743f90a79b26f",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3742,7 +3742,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1172,
+        "line": 1176,
         "lineSha256": "a32b4fb2ebe31aca13f08b9f56e8034b055584a54fddb45c7d62d610ddd1a447",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3750,7 +3750,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1269,
+        "line": 1273,
         "lineSha256": "bf9c71e7ac6c14f372849ba329f236ae864dc567b9d9eeca4cecb0e267e27779",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3758,7 +3758,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1286,
+        "line": 1290,
         "lineSha256": "032acdfc0968c05d29039606c4effdd66b12ecdca4662f3da5c610153774f3cb",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -3766,7 +3766,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1303,
+        "line": 1307,
         "lineSha256": "2b915abdec28b8a6f36e8176d0effb99de5caf318de08b4a7e419a084dcb84ef",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -4182,7 +4182,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 2511,
+        "line": 2855,
         "lineSha256": "9116c01bc7c5dbfb7c7418a6760b41edd345d6d17b1a696da445b72904f2cc00",
         "path": "scripts/verify-release-matrix-closure-self-test.mjs"
       },
@@ -4190,7 +4190,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 2561,
+        "line": 2905,
         "lineSha256": "6e75dc52891233fa68b2bc4e5ad3777f65bb08a13050eee223ce185ef131058d",
         "path": "scripts/verify-release-matrix-closure-self-test.mjs"
       },
@@ -4198,7 +4198,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 291,
+        "line": 325,
         "lineSha256": "d50a16722faa75396a2155a418bbbb0ad7cc3d35fd103a9b99bf7ba53f937553",
         "path": "scripts/verify-release-matrix-closure.mjs"
       },
@@ -4206,7 +4206,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 316,
+        "line": 350,
         "lineSha256": "f68d3be62931191912e290fa631f5e5faa7253fb47a820b2f689455ec1f5215f",
         "path": "scripts/verify-release-matrix-closure.mjs"
       },
@@ -4214,7 +4214,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 336,
+        "line": 370,
         "lineSha256": "b9fb3d5912f095c7100db7ff62832d822a09b29d9b9b225123fa23a1cb79d3a7",
         "path": "scripts/verify-release-matrix-closure.mjs"
       },
@@ -4222,7 +4222,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 2218,
+        "line": 2597,
         "lineSha256": "b2cff82197c10261bdf45f22ba0c2f9c21a435226d9aa126cf7c2227aa9820f6",
         "path": "scripts/verify-release-matrix-closure.mjs"
       },
@@ -4566,7 +4566,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 102,
+        "line": 170,
         "lineSha256": "f006f3d0efb2ec3012a8148cfc71790969393eaf2636c6336ece0cfaadb3e590",
         "path": "scripts/verify-version-transition-inventory-self-test.mjs"
       },

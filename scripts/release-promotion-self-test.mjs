@@ -80,6 +80,10 @@ function verifyGateContractParity() {
   assert.match(verifyPromotionHarnessRegistryParity(), /^[0-9a-f]{64}$/);
   assert.deepEqual(Object.keys(GATE_EVIDENCE_CONTRACTS), GATE_IDS);
   assert.deepEqual(Object.keys(EXPECTED_GATE_EVIDENCE_CONTRACTS), GATE_IDS);
+  assert.equal(
+    GATE_EVIDENCE_CONTRACTS['matrix-closure'].contractId,
+    'soklet.release.matrix-closure.v2',
+  );
   for (const gateId of GATE_IDS) {
     const promotion = GATE_EVIDENCE_CONTRACTS[gateId];
     const evidence = EXPECTED_GATE_EVIDENCE_CONTRACTS[gateId];
@@ -197,7 +201,7 @@ function syntheticGate(id, artifacts, workflow, toolchains) {
     commit,
     defaultArtifactIdentity: isServlet ? 'com.soklet:soklet:3.1.1' : null,
     defaultArtifactSha256: isServlet ? '4'.repeat(64) : null,
-    evidenceContract: `soklet.release.${id}.v1`,
+    evidenceContract: contract.contractId,
     id,
     repository: null,
     toolchain: contract.toolchain,

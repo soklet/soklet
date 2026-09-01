@@ -866,10 +866,11 @@ run_localization_fleet() {
 
 run_matrix_closure() {
 	local registry="$project_root/release/mcp-conformance-matrix-closure.json"
+	local residual_evidence="$project_root/release/mcp-residual-closure-evidence.json"
 	local verifier="$project_root/scripts/verify-release-matrix-closure.mjs"
 	local verifier_self_test="$project_root/scripts/verify-release-matrix-closure-self-test.mjs"
 	local source relative
-	for source in "$registry" "$verifier" "$verifier_self_test"; do
+	for source in "$registry" "$residual_evidence" "$verifier" "$verifier_self_test"; do
 		[[ -f "$source" && ! -L "$source" ]] \
 			|| fail "matrix-closure source is missing or is a symlink: $source"
 		relative=${source#"$project_root"/}
@@ -885,7 +886,10 @@ run_matrix_closure() {
 		|| fail "matrix-closure report destination already exists."
 	mkdir -p "$raw_root"
 	assert_installed_candidate_unchanged
-	node scripts/verify-release-matrix-closure.mjs > "$report"
+	node "$verifier_self_test"
+	assert_candidate_checkout_unchanged matrix-closure-self-test "$project_root"
+	assert_installed_candidate_unchanged
+	node "$verifier" > "$report"
 	[[ -s "$report" && -f "$report" && ! -L "$report" ]] \
 		|| fail "matrix-closure report is missing, empty, or is a symlink."
 	assert_candidate_checkout_unchanged matrix-closure "$project_root"
