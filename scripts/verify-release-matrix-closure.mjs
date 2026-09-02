@@ -229,7 +229,7 @@ const BOUND_NAME_PATTERN = /^(?:maximum|minimum)[A-Z].*|^.*(?:Capacity|Concurren
 const PRIVACY_BOUNDARY_INVENTORY_PATH =
   'conformance/mcp-privacy-boundary-inventory.json';
 const EXPECTED_PRIVACY_SEMANTICS_SHA256 =
-  '12c3f603b25d31eab8e04c5b0a2c03010010d8220537f6e8e6cfb625f006eecc';
+  'b0a6c3a05be2a953fe83453913e4da346f9065e01d2ea02c4a4b6173fbac4b67';
 const PRIVACY_TOP_LEVEL_KEYS = Object.freeze([
   'artifactRoots',
   'boundaries',

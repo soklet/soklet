@@ -61,7 +61,7 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 				.resourceMethodResolver(resolver)
 				.internalLifecyclePolicy(immediateShutdownPolicy())
 				.build();
-		RunnerCall call = startRunner(config, options(cleanupCalls),
+		RunnerCall call = startRunner(application(config, cleanupCalls),
 				environment(workers, triggers, reporter));
 
 		try {
@@ -133,7 +133,7 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 						Set.of(DiagnosticsResource.class)))
 				.internalLifecyclePolicy(immediateShutdownPolicy())
 				.build();
-		RunnerCall call = startRunner(config, options(cleanupCalls),
+		RunnerCall call = startRunner(application(config, cleanupCalls),
 				environment(workers, triggers, reporter));
 
 		try {
@@ -204,10 +204,10 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 	}
 
 	@NonNull
-	private static SokletApplicationOptions options(
+	private static SokletApplication application(@NonNull SokletConfig config,
 			@NonNull AtomicInteger cleanupCalls) {
-		return SokletApplicationOptions.builder()
-				.additionalTrigger(ShutdownTrigger.ENTER_KEY)
+		return SokletApplication.withConfig(config)
+				.addShutdownTrigger(ShutdownTrigger.ENTER_KEY)
 				.afterCompleteShutdown(CLEANUP_TIMEOUT,
 						result -> requireNonNull(cleanupCalls).incrementAndGet())
 				.build();
@@ -233,13 +233,12 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 	}
 
 	@NonNull
-	private static RunnerCall startRunner(@NonNull SokletConfig config,
-			@NonNull SokletApplicationOptions options,
+	private static RunnerCall startRunner(@NonNull SokletApplication application,
 			@NonNull SokletApplicationEnvironment environment) {
 		RunnerCall call = new RunnerCall();
 		Thread thread = new Thread(() -> {
 			try {
-				call.result.set(SokletApplication.run(config, options, environment));
+				call.result.set(application.run(environment));
 			} catch (Throwable failure) {
 				call.failure.set(failure);
 			} finally {

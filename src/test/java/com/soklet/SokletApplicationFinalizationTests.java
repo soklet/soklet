@@ -108,7 +108,7 @@ class SokletApplicationFinalizationTests {
 					publishingLock.unlock();
 			};
 			Fixture fixture = fixture(clock, new LifecycleWorkers(launcher),
-					options(Duration.ofSeconds(5), cleanup), reported::set);
+					cleanupConfiguration(Duration.ofSeconds(5), cleanup), reported::set);
 
 			publishingLock.lock();
 			try {
@@ -175,7 +175,7 @@ class SokletApplicationFinalizationTests {
 				new AtomicReference<>();
 		Fixture notConfigured = fixture(notConfiguredClock,
 				new LifecycleWorkers(notConfiguredLauncher),
-				SokletApplicationOptions.fromDefaults(), notConfiguredReport::set);
+				null, notConfiguredReport::set);
 		InternalShutdownResult complete = new InternalShutdownResult(
 				InternalShutdownDisposition.NOT_STARTED,
 				InternalStartupDisposition.NOT_ATTEMPTED, List.of());
@@ -212,7 +212,8 @@ class SokletApplicationFinalizationTests {
 		Duration configuredTimeout = Duration.ofSeconds(17);
 		Fixture incomplete = fixture(incompleteClock,
 				new LifecycleWorkers(incompleteLauncher),
-				options(configuredTimeout, result -> cleanupCalls.incrementAndGet()),
+				cleanupConfiguration(configuredTimeout,
+						result -> cleanupCalls.incrementAndGet()),
 				incompleteReport::set);
 		InternalShutdownResult incompleteResult = aggregate(
 				InternalStartupDisposition.READY,
@@ -260,7 +261,7 @@ class SokletApplicationFinalizationTests {
 				new AtomicReference<>();
 		Fixture delayed = fixture(delayedClock,
 				new LifecycleWorkers(delayedLauncher),
-				options(Duration.ofNanos(10L),
+				cleanupConfiguration(Duration.ofNanos(10L),
 						result -> delayedCalls.incrementAndGet()),
 				delayedReport::set);
 		delayed.finalization().publishCoreSnapshot(
@@ -304,7 +305,7 @@ class SokletApplicationFinalizationTests {
 			delegate.launch(name, task);
 		});
 		Fixture takeover = fixture(takeoverClock, takeoverWorkers,
-				options(Duration.ofNanos(10L), result -> {
+				cleanupConfiguration(Duration.ofNanos(10L), result -> {
 					takeoverCalls.incrementAndGet();
 					takeoverResult.set(result);
 					if (Thread.interrupted())
@@ -364,7 +365,7 @@ class SokletApplicationFinalizationTests {
 				new AtomicReference<>();
 		SokletApplicationFinalization finalization =
 				new SokletApplicationFinalization(
-						SokletApplicationOptions.fromDefaults(),
+						null,
 						new LifecycleRuntimeServices(clock, workers), report::set);
 		finalization.diagnosticsSupplier(() -> new SokletApplicationCoreDiagnostics(
 				new LifecycleTransitionSnapshot(0, 0, false, true, false,
@@ -402,7 +403,7 @@ class SokletApplicationFinalizationTests {
 		AtomicInteger cleanupCalls = new AtomicInteger();
 		AtomicInteger reporterCalls = new AtomicInteger();
 		Fixture fixture = fixture(clock, new LifecycleWorkers(launcher),
-				options(Duration.ofSeconds(30), result -> {
+				cleanupConfiguration(Duration.ofSeconds(30), result -> {
 					cleanupCalls.incrementAndGet();
 					cleanupEntered.countDown();
 					awaitUninterruptibly(releaseCleanup);
@@ -461,7 +462,7 @@ class SokletApplicationFinalizationTests {
 		AtomicInteger interrupts = new AtomicInteger();
 		Exception lateFailure = new Exception("late cleanup failure");
 		Fixture fixture = fixture(clock, new LifecycleWorkers(launcher),
-				options(Duration.ofNanos(20L), result -> {
+				cleanupConfiguration(Duration.ofNanos(20L), result -> {
 					cleanupEntered.countDown();
 					for (;;) {
 						try {
@@ -540,7 +541,7 @@ class SokletApplicationFinalizationTests {
 			worker.start();
 		});
 		Fixture fixture = fixture(clock, workers,
-				options(Duration.ofNanos(20L), result -> {
+				cleanupConfiguration(Duration.ofNanos(20L), result -> {
 					cleanupEntered.countDown();
 					awaitUninterruptibly(releaseCleanup);
 				}), snapshot -> reporterCalls.incrementAndGet());
@@ -578,7 +579,8 @@ class SokletApplicationFinalizationTests {
 				new AtomicReference<>();
 		LifecycleWorkers workers = new LifecycleWorkers((name, task) -> task.run());
 		Fixture fixture = fixture(clock, workers,
-				options(Duration.ofNanos(20L), result -> clock.set(820L)),
+				cleanupConfiguration(Duration.ofNanos(20L),
+						result -> clock.set(820L)),
 				report::set);
 		fixture.finalization().publishCoreSnapshot(
 				new InternalLifecycleCoreSnapshot(notStarted(), 800L));
@@ -600,7 +602,7 @@ class SokletApplicationFinalizationTests {
 		AtomicInteger cleanupCalls = new AtomicInteger();
 		LifecycleWorkers workers = new LifecycleWorkers((name, task) -> task.run());
 		Fixture fixture = fixture(clock, workers,
-				options(Duration.ofNanos(20L), result -> {
+				cleanupConfiguration(Duration.ofNanos(20L), result -> {
 					cleanupCalls.incrementAndGet();
 					clock.set(871L);
 				}), snapshot -> { });
@@ -637,7 +639,7 @@ class SokletApplicationFinalizationTests {
 			task.run();
 		});
 		Fixture launchFixture = fixture(new FakeClock(900L), launchFailureWorkers,
-				options(Duration.ofSeconds(1),
+				cleanupConfiguration(Duration.ofSeconds(1),
 						result -> unlaunchedActionCalls.incrementAndGet()),
 				launchFailureReport::set);
 		launchFixture.finalization().publishCoreSnapshot(
@@ -663,7 +665,7 @@ class SokletApplicationFinalizationTests {
 				(name, task) -> task.run());
 		Fixture actionFixture = fixture(new FakeClock(1_000L),
 				actionFailureWorkers,
-				options(Duration.ofSeconds(1), result -> {
+				cleanupConfiguration(Duration.ofSeconds(1), result -> {
 					actionCalls.incrementAndGet();
 					throw actionFailure;
 				}), actionFailureReport::set);
@@ -695,7 +697,8 @@ class SokletApplicationFinalizationTests {
 				new AtomicReference<>();
 		Fixture stalled = fixture(stalledClock,
 				new LifecycleWorkers(stalledLauncher),
-				options(Duration.ofNanos(100L), result -> stalledClock.set(1_150L)),
+				cleanupConfiguration(Duration.ofNanos(100L),
+						result -> stalledClock.set(1_150L)),
 				snapshot -> {
 					stalledSnapshot.set(snapshot);
 					reporterEntered.countDown();
@@ -748,7 +751,7 @@ class SokletApplicationFinalizationTests {
 		LifecycleWorkers throwingWorkers = new LifecycleWorkers(
 				(name, task) -> task.run());
 		Fixture throwing = fixture(new FakeClock(1_200L), throwingWorkers,
-				SokletApplicationOptions.fromDefaults(), snapshot -> {
+				null, snapshot -> {
 					throwingReporterCalls.incrementAndGet();
 					throw reporterFailure;
 				});
@@ -771,7 +774,7 @@ class SokletApplicationFinalizationTests {
 			task.run();
 		});
 		Fixture failedLaunch = fixture(new FakeClock(1_300L),
-				reporterLaunchWorkers, SokletApplicationOptions.fromDefaults(),
+				reporterLaunchWorkers, null,
 				snapshot -> unlaunchedReporterCalls.incrementAndGet());
 		failedLaunch.finalization().publishCoreSnapshot(
 				new InternalLifecycleCoreSnapshot(notStarted(), 1_300L));
@@ -796,7 +799,7 @@ class SokletApplicationFinalizationTests {
 		AtomicInteger reporterCalls = new AtomicInteger();
 		LifecycleWorkers workers = new LifecycleWorkers(launcher);
 		Fixture fixture = fixture(clock, workers,
-				options(Duration.ofSeconds(5),
+				cleanupConfiguration(Duration.ofSeconds(5),
 						result -> cleanupCalls.incrementAndGet()),
 				snapshot -> reporterCalls.incrementAndGet());
 		Assertions.assertEquals(0, workers.created(
@@ -857,7 +860,7 @@ class SokletApplicationFinalizationTests {
 		FakeClock clock = new FakeClock(1_500L);
 		QueuedLauncher launcher = new QueuedLauncher();
 		Fixture fixture = fixture(clock, new LifecycleWorkers(launcher),
-				SokletApplicationOptions.fromDefaults(), snapshot -> { });
+				null, snapshot -> { });
 		fixture.finalization().publishCoreSnapshot(
 				new InternalLifecycleCoreSnapshot(notStarted(), 1_500L));
 		StartedTask<InterruptionObservation> interruptedWaiter = start(
@@ -889,7 +892,7 @@ class SokletApplicationFinalizationTests {
 				new AtomicReference<>();
 		SokletApplicationFinalization finalization =
 				new SokletApplicationFinalization(
-						SokletApplicationOptions.fromDefaults(),
+						null,
 						new LifecycleRuntimeServices(clock, workers), reported::set);
 		Error diagnosticFailure = new AssertionError("diagnostics unavailable");
 		finalization.diagnosticsSupplier(() -> { throw diagnosticFailure; });
@@ -922,7 +925,7 @@ class SokletApplicationFinalizationTests {
 		AtomicInteger reporterCalls = new AtomicInteger();
 		SokletApplicationFinalization finalization =
 				new SokletApplicationFinalization(
-						SokletApplicationOptions.fromDefaults(), services,
+						null, services,
 						snapshot -> reporterCalls.incrementAndGet());
 		CountDownLatch diagnosticsEntered = new CountDownLatch(1);
 		CountDownLatch releaseDiagnostics = new CountDownLatch(1);
@@ -959,11 +962,13 @@ class SokletApplicationFinalizationTests {
 	}
 
 	private static Fixture fixture(FakeClock clock, LifecycleWorkers workers,
-			SokletApplicationOptions options, LifecycleTerminalReporter reporter) {
+			SokletApplicationCleanupConfiguration cleanupConfiguration,
+			LifecycleTerminalReporter reporter) {
 		LifecycleRuntimeServices services = new LifecycleRuntimeServices(clock,
 				workers);
 		SokletApplicationFinalization finalization =
-				new SokletApplicationFinalization(options, services, reporter);
+				new SokletApplicationFinalization(cleanupConfiguration, services,
+						reporter);
 		finalization.diagnosticsSupplier(() -> new SokletApplicationCoreDiagnostics(
 				new LifecycleTransitionSnapshot(0, 0, false, true, false,
 						0, Optional.empty()),
@@ -971,11 +976,10 @@ class SokletApplicationFinalizationTests {
 		return new Fixture(workers, services, finalization);
 	}
 
-	private static SokletApplicationOptions options(Duration timeout,
+	private static SokletApplicationCleanupConfiguration cleanupConfiguration(
+			Duration timeout,
 			ShutdownCleanup cleanup) {
-		return SokletApplicationOptions.builder()
-				.afterCompleteShutdown(timeout, cleanup)
-				.build();
+		return new SokletApplicationCleanupConfiguration(timeout, cleanup);
 	}
 
 	private static InternalShutdownResult notStarted() {

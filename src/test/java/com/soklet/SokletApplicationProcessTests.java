@@ -49,7 +49,7 @@ public final class SokletApplicationProcessTests {
 		RecordingProcessAccess process = new RecordingProcessAccess(events);
 		RecordingTriggerRegistry triggers = new RecordingTriggerRegistry(events);
 		RecordingReporter reporter = new RecordingReporter(events);
-		RunnerCall call = startRunner(optionsWithTrigger(), environment(
+		RunnerCall call = startRunner(applicationWithTrigger(), environment(
 				runtimeFactory, process, triggers, reporter));
 
 		Assertions.assertTrue(runtimeFactory.runtime.startEntered.await(5,
@@ -79,12 +79,12 @@ public final class SokletApplicationProcessTests {
 		RecordingTriggerRegistry triggers = new RecordingTriggerRegistry(events);
 		RecordingReporter reporter = new RecordingReporter(events);
 		AtomicInteger cleanupCalls = new AtomicInteger();
-		SokletApplicationOptions options = SokletApplicationOptions.builder()
+		SokletApplication application = SokletApplication.withConfig(config())
 				.afterCompleteShutdown(Duration.ofSeconds(1),
 						result -> cleanupCalls.incrementAndGet()).build();
 
 		RuntimeException thrown = Assertions.assertThrows(RuntimeException.class,
-				() -> SokletApplication.run(config(), options,
+				() -> application.run(
 						environment(factory, process, triggers, reporter)));
 
 		Assertions.assertSame(failure, thrown);
@@ -104,11 +104,11 @@ public final class SokletApplicationProcessTests {
 		RecordingReporter reporter = new RecordingReporter(events);
 		AtomicReference<ShutdownResult> cleanupResult =
 				new AtomicReference<>();
-		SokletApplicationOptions options = SokletApplicationOptions.builder()
+		SokletApplication application = SokletApplication.withConfig(config())
 				.afterCompleteShutdown(Duration.ofSeconds(1), cleanupResult::set)
 				.build();
 
-		InternalShutdownResult result = SokletApplication.run(config(), options,
+		InternalShutdownResult result = application.run(
 				environment(runtimeFactory, process,
 						new RecordingTriggerRegistry(events), reporter));
 
@@ -132,14 +132,14 @@ public final class SokletApplicationProcessTests {
 				new SecurityException("hooks forbidden");
 		process.addFailure = registrationFailure;
 		RuntimeException cleanupFailure = new RuntimeException("cleanup failed");
-		SokletApplicationOptions options = SokletApplicationOptions.builder()
+		SokletApplication application = SokletApplication.withConfig(config())
 				.afterCompleteShutdown(Duration.ofSeconds(1), result -> {
 					throw cleanupFailure;
 				}).build();
 
 		SokletStartupException thrown = Assertions.assertThrows(
-				SokletStartupException.class, () -> SokletApplication.run(config(),
-						options, environment(runtimeFactory, process,
+				SokletStartupException.class, () -> application.run(
+						environment(runtimeFactory, process,
 								new RecordingTriggerRegistry(events),
 								new RecordingReporter(events))));
 
@@ -169,13 +169,13 @@ public final class SokletApplicationProcessTests {
 				"hook construction failed");
 		AtomicReference<ShutdownResult> cleanupResult =
 				new AtomicReference<>();
-		SokletApplicationOptions options = SokletApplicationOptions.builder()
+		SokletApplication application = SokletApplication.withConfig(config())
 				.afterCompleteShutdown(Duration.ofSeconds(1), cleanupResult::set)
 				.build();
 
 		SokletStartupException thrown = Assertions.assertThrows(
-				SokletStartupException.class, () -> SokletApplication.run(config(),
-						options, environment(runtimeFactory, process,
+				SokletStartupException.class, () -> application.run(
+						environment(runtimeFactory, process,
 								new RecordingTriggerRegistry(events), reporter,
 								(name, task) -> { throw hookFailure; })));
 
@@ -202,7 +202,7 @@ public final class SokletApplicationProcessTests {
 				StartMode.WAIT_IN_START);
 		RecordingProcessAccess process = new RecordingProcessAccess(events);
 		process.blockAdd = true;
-		RunnerCall call = startRunner(SokletApplicationOptions.fromDefaults(),
+		RunnerCall call = startRunner(defaultApplication(),
 				environment(runtimeFactory, process,
 						new RecordingTriggerRegistry(events),
 						new RecordingReporter(events)));
@@ -228,7 +228,7 @@ public final class SokletApplicationProcessTests {
 		FakeRuntimeFactory runtimeFactory = new FakeRuntimeFactory(events,
 				StartMode.WAIT_IN_START);
 		RecordingProcessAccess process = new RecordingProcessAccess(events);
-		RunnerCall call = startRunner(SokletApplicationOptions.fromDefaults(),
+		RunnerCall call = startRunner(defaultApplication(),
 				environment(runtimeFactory, process,
 						new RecordingTriggerRegistry(events),
 						new RecordingReporter(events)));
@@ -251,7 +251,7 @@ public final class SokletApplicationProcessTests {
 		List<String> events = new CopyOnWriteArrayList<>();
 		FakeRuntimeFactory runtimeFactory = new FakeRuntimeFactory(events,
 				StartMode.WAIT_IN_START);
-		RunnerCall call = startRunner(SokletApplicationOptions.fromDefaults(),
+		RunnerCall call = startRunner(defaultApplication(),
 				environment(runtimeFactory, new RecordingProcessAccess(events),
 						new RecordingTriggerRegistry(events),
 						new RecordingReporter(events)));
@@ -278,7 +278,7 @@ public final class SokletApplicationProcessTests {
 				InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN);
 		runtimeFactory.runtime.shutdownResultOverride = incompleteCancellation;
 		RecordingTriggerRegistry triggers = new RecordingTriggerRegistry(events);
-		RunnerCall call = startRunner(optionsWithTrigger(), environment(
+		RunnerCall call = startRunner(applicationWithTrigger(), environment(
 				runtimeFactory, new RecordingProcessAccess(events), triggers,
 				new RecordingReporter(events)));
 		Assertions.assertTrue(runtimeFactory.runtime.startEntered.await(5,
@@ -304,12 +304,12 @@ public final class SokletApplicationProcessTests {
 		AtomicInteger cleanupCalls = new AtomicInteger();
 		AtomicReference<ShutdownResult> cleanupResult =
 				new AtomicReference<>();
-		SokletApplicationOptions options = SokletApplicationOptions.builder()
+		SokletApplication application = SokletApplication.withConfig(config())
 				.afterCompleteShutdown(Duration.ofSeconds(2), result -> {
 					cleanupResult.set(result);
 					cleanupCalls.incrementAndGet();
 				}).build();
-		RunnerCall call = startRunner(options, environment(runtimeFactory,
+		RunnerCall call = startRunner(application, environment(runtimeFactory,
 				process, new RecordingTriggerRegistry(events), reporter));
 		Assertions.assertTrue(runtimeFactory.runtime.startEntered.await(5,
 				TimeUnit.SECONDS));
@@ -337,7 +337,7 @@ public final class SokletApplicationProcessTests {
 		RecordingReporter reporter = new RecordingReporter(events);
 		reporter.block = true;
 		RecordingTriggerRegistry triggers = new RecordingTriggerRegistry(events);
-		RunnerCall call = startRunner(optionsWithTrigger(), environment(
+		RunnerCall call = startRunner(applicationWithTrigger(), environment(
 				runtimeFactory, process, triggers, reporter));
 		Assertions.assertTrue(runtimeFactory.runtime.startEntered.await(5,
 				TimeUnit.SECONDS));
@@ -358,7 +358,7 @@ public final class SokletApplicationProcessTests {
 		FakeRuntimeFactory runtimeFactory = new FakeRuntimeFactory(events,
 				StartMode.RETURN_READY);
 		RecordingProcessAccess process = new RecordingProcessAccess(events);
-		RunnerCall call = startRunner(SokletApplicationOptions.fromDefaults(),
+		RunnerCall call = startRunner(defaultApplication(),
 				environment(runtimeFactory, process,
 						new RecordingTriggerRegistry(events),
 						new RecordingReporter(events)));
@@ -382,14 +382,14 @@ public final class SokletApplicationProcessTests {
 				StartMode.FAIL_STARTUP);
 		RecordingProcessAccess process = new RecordingProcessAccess(events);
 		RuntimeException cleanupFailure = new RuntimeException("cleanup");
-		SokletApplicationOptions options = SokletApplicationOptions.builder()
+		SokletApplication application = SokletApplication.withConfig(config())
 				.afterCompleteShutdown(Duration.ofSeconds(1), result -> {
 					throw cleanupFailure;
 				}).build();
 
 		SokletStartupException thrown = Assertions.assertThrows(
-				SokletStartupException.class, () -> SokletApplication.run(config(),
-						options, environment(runtimeFactory, process,
+				SokletStartupException.class, () -> application.run(
+						environment(runtimeFactory, process,
 								new RecordingTriggerRegistry(events),
 								new RecordingReporter(events))));
 
@@ -411,8 +411,7 @@ public final class SokletApplicationProcessTests {
 		RecordingReporter reporter = new RecordingReporter(events);
 
 		SokletStartupException thrown = Assertions.assertThrows(
-				SokletStartupException.class, () -> SokletApplication.run(config(),
-						SokletApplicationOptions.fromDefaults(), environment(
+				SokletStartupException.class, () -> defaultApplication().run(environment(
 								runtimeFactory, new RecordingProcessAccess(events),
 								new RecordingTriggerRegistry(events), reporter)));
 
@@ -435,7 +434,7 @@ public final class SokletApplicationProcessTests {
 				runtimeFactory.runtime.incompleteResult;
 		AtomicInteger cleanupCalls = new AtomicInteger();
 		RecordingTriggerRegistry triggers = new RecordingTriggerRegistry(events);
-		RunnerCall call = startRunner(SokletApplicationOptions.builder()
+		RunnerCall call = startRunner(SokletApplication.withConfig(config())
 				.afterCompleteShutdown(Duration.ofSeconds(1),
 						result -> cleanupCalls.incrementAndGet()).build(),
 				environment(runtimeFactory, new RecordingProcessAccess(events),
@@ -476,8 +475,8 @@ public final class SokletApplicationProcessTests {
 		AtomicInteger cleanupCalls = new AtomicInteger();
 		RecordingTriggerRegistry triggers = new RecordingTriggerRegistry(events);
 		RecordingReporter reporter = new RecordingReporter(events);
-		RunnerCall call = startRunner(SokletApplicationOptions.builder()
-				.additionalTrigger(ShutdownTrigger.ENTER_KEY)
+		RunnerCall call = startRunner(SokletApplication.withConfig(config())
+				.addShutdownTrigger(ShutdownTrigger.ENTER_KEY)
 				.afterCompleteShutdown(Duration.ofSeconds(1),
 						result -> cleanupCalls.incrementAndGet()).build(),
 				environment(runtimeFactory, new RecordingProcessAccess(events),
@@ -525,13 +524,13 @@ public final class SokletApplicationProcessTests {
 			LifecycleRuntimeServices services = new LifecycleRuntimeServices(
 					NanoClock.system(), workers);
 			RecordingReporter reporter = new RecordingReporter(events);
-			SokletApplicationOptions options = SokletApplicationOptions.builder()
+			SokletApplication application = SokletApplication.withConfig(config())
 					.afterCompleteShutdown(Duration.ofSeconds(1),
 							result -> cleanupCalls.incrementAndGet()).build();
 
 			SokletStartupException thrown = Assertions.assertThrows(
-					SokletStartupException.class, () -> SokletApplication.run(config(),
-							options, environment(services, runtimeFactory,
+					SokletStartupException.class, () -> application.run(
+							environment(services, runtimeFactory,
 									new RecordingProcessAccess(events),
 									new RecordingTriggerRegistry(events), reporter,
 									(name, task) -> new Thread(task, name))));
@@ -563,8 +562,8 @@ public final class SokletApplicationProcessTests {
 		RuntimeException cleanupCause = new RuntimeException("cleanup failed");
 		RecordingTriggerRegistry triggers = new RecordingTriggerRegistry(events);
 		RecordingReporter reporter = new RecordingReporter(events);
-		RunnerCall call = startRunner(SokletApplicationOptions.builder()
-				.additionalTrigger(ShutdownTrigger.ENTER_KEY)
+		RunnerCall call = startRunner(SokletApplication.withConfig(config())
+				.addShutdownTrigger(ShutdownTrigger.ENTER_KEY)
 				.afterCompleteShutdown(Duration.ofSeconds(1), result -> {
 					throw cleanupCause;
 				}).build(), environment(runtimeFactory,
@@ -613,8 +612,8 @@ public final class SokletApplicationProcessTests {
 		RuntimeException cleanupCause = new RuntimeException("cleanup failed");
 		RecordingTriggerRegistry triggers = new RecordingTriggerRegistry(events);
 		RecordingReporter reporter = new RecordingReporter(events);
-		RunnerCall call = startRunner(SokletApplicationOptions.builder()
-				.additionalTrigger(ShutdownTrigger.ENTER_KEY)
+		RunnerCall call = startRunner(SokletApplication.withConfig(config())
+				.addShutdownTrigger(ShutdownTrigger.ENTER_KEY)
 				.afterCompleteShutdown(Duration.ofSeconds(1), result -> {
 					throw cleanupCause;
 				}).build(), environment(runtimeFactory,
@@ -646,7 +645,7 @@ public final class SokletApplicationProcessTests {
 		FakeRuntimeFactory runtimeFactory = new FakeRuntimeFactory(events,
 				StartMode.RETURN_READY);
 		RuntimeException cleanupCause = new RuntimeException("cleanup failed");
-		RunnerCall call = startRunner(SokletApplicationOptions.builder()
+		RunnerCall call = startRunner(SokletApplication.withConfig(config())
 				.afterCompleteShutdown(Duration.ofSeconds(1), result -> {
 					throw cleanupCause;
 				}).build(), environment(runtimeFactory,
@@ -679,14 +678,14 @@ public final class SokletApplicationProcessTests {
 		RecordingReporter reporter = new RecordingReporter(events);
 		AtomicReference<ShutdownResult> cleanupResult =
 				new AtomicReference<>();
-		SokletApplicationOptions options = SokletApplicationOptions.builder()
-				.additionalTrigger(ShutdownTrigger.ENTER_KEY)
+		SokletApplication application = SokletApplication.withConfig(config())
+				.addShutdownTrigger(ShutdownTrigger.ENTER_KEY)
 				.afterCompleteShutdown(Duration.ofSeconds(1), cleanupResult::set)
 				.build();
 
 		SokletStartupException thrown = Assertions.assertThrows(
-				SokletStartupException.class, () -> SokletApplication.run(config(),
-						options, environment(runtimeFactory,
+				SokletStartupException.class, () -> application.run(
+						environment(runtimeFactory,
 								new RecordingProcessAccess(events), triggers, reporter)));
 
 		Assertions.assertSame(registrationFailure, thrown.getCause());
@@ -719,8 +718,8 @@ public final class SokletApplicationProcessTests {
 		LifecycleWorkers workers = new LifecycleWorkers();
 		LifecycleRuntimeServices services = new LifecycleRuntimeServices(
 				NanoClock.system(), workers);
-		SokletApplicationOptions options = SokletApplicationOptions.builder()
-				.additionalTrigger(ShutdownTrigger.ENTER_KEY)
+		SokletApplication application = SokletApplication.withConfig(config())
+				.addShutdownTrigger(ShutdownTrigger.ENTER_KEY)
 				.afterCompleteShutdown(Duration.ofSeconds(5), result -> {
 					cleanupCalls.incrementAndGet();
 					cleanupEntered.countDown();
@@ -730,7 +729,7 @@ public final class SokletApplicationProcessTests {
 			awaitUninterruptibly(race);
 			task.run();
 		}, name);
-		RunnerCall call = startRunner(options, environment(services, runtimeFactory,
+		RunnerCall call = startRunner(application, environment(services, runtimeFactory,
 				process, triggers, reporter, hookFactory));
 		Assertions.assertTrue(runtimeFactory.runtime.startEntered.await(5,
 				TimeUnit.SECONDS));
@@ -777,13 +776,12 @@ public final class SokletApplicationProcessTests {
 	}
 
 	@NonNull
-	private static RunnerCall startRunner(@NonNull SokletApplicationOptions options,
+	private static RunnerCall startRunner(@NonNull SokletApplication application,
 			@NonNull SokletApplicationEnvironment environment) {
 		RunnerCall call = new RunnerCall();
 		call.thread = new Thread(() -> {
 			try {
-				call.result.set(SokletApplication.run(config(), options,
-						environment));
+				call.result.set(application.run(environment));
 			} catch (Throwable failure) {
 				call.failure.set(failure);
 			} finally {
@@ -796,9 +794,14 @@ public final class SokletApplicationProcessTests {
 	}
 
 	@NonNull
-	private static SokletApplicationOptions optionsWithTrigger() {
-		return SokletApplicationOptions.builder()
-				.additionalTrigger(ShutdownTrigger.ENTER_KEY).build();
+	private static SokletApplication defaultApplication() {
+		return SokletApplication.withConfig(config()).build();
+	}
+
+	@NonNull
+	private static SokletApplication applicationWithTrigger() {
+		return SokletApplication.withConfig(config())
+				.addShutdownTrigger(ShutdownTrigger.ENTER_KEY).build();
 	}
 
 	@NonNull

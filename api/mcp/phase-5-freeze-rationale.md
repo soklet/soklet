@@ -42,7 +42,7 @@ The matching full japicmp report establishes an exact owner universe of:
 
 That list is the original Phase 5 checkpoint. The current exact owner
 partition is 133 Phase 4, 36 Phase 5, 64 Phase 6, zero provisional, and 233
-MCP owners; the 39-owner non-MCP allowlist brings current-side coverage to 272.
+MCP owners; the 38-owner non-MCP allowlist brings current-side coverage to 271.
 
 The 36 current Phase 5 owners are the exact sorted entries in
 `phase-5.includes`. At the original Phase 5 checkpoint, the Phase 4 snapshot
@@ -259,6 +259,18 @@ failures, zero errors, and four intentional skips over 462 main and 193 test
 sources, and builds the main, sources, and Javadoc artifacts; the maintained
 179-source Java 17 API sketch passes compilation, Javadoc doclint, and its
 localization smoke test.
+
+## 2026-09-01 non-MCP application-builder amendment
+
+The application-runner refinement removes `SokletApplicationOptions` and its
+nested builder and vends the one-shot `SokletApplication.Builder` from the
+already-owned `SokletApplication` type. Phase 5 remains byte-identical at 36
+owners and 179 records. The exact non-MCP allowlist contains 38 owners with
+SHA-256
+`077e568a38d3b63d187fdd4c1989f386145028c5e662c876ea7642e6c9c8aba2`;
+the 233-owner MCP union therefore has 271 current-side owners. The
+released-3.5.1 compatibility ledger remains 618 records with SHA-256
+`3d9d68bbbdeabae63a78d40a50c9896d3f11f6d0d2305beff0c94bd86476928c`.
 
 ## Reviewed contract
 

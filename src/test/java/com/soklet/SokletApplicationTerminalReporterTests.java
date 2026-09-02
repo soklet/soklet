@@ -311,7 +311,7 @@ class SokletApplicationTerminalReporterTests {
 		AtomicLong now = new AtomicLong(CORE_PUBLICATION_NANOS);
 		LifecycleWorkers workers = new LifecycleWorkers((name, task) -> task.run());
 		SokletApplicationFinalization finalization = new SokletApplicationFinalization(
-				SokletApplicationOptions.fromDefaults(),
+				null,
 				new LifecycleRuntimeServices(now::get, workers),
 				new DefaultLifecycleTerminalReporter(failingOutput(writeFailure)));
 		finalization.diagnosticsSupplier(() -> diagnostics(forced));

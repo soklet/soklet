@@ -44,7 +44,7 @@ The matching full japicmp report establishes an exact owner universe of:
 - 36 Phase 5 owners;
 - 64 Phase 6 owners;
 - zero provisional owners; and
-- 233 MCP owners, plus 39 reviewed non-MCP owners for 272 current-side owners.
+- 233 MCP owners, plus 38 reviewed non-MCP owners for 271 current-side owners.
 
 The 64 Phase 6 owners are the exact sorted entries in `phase-6.includes`.
 The Phase 4 owner inventory remains 133, while its signature snapshot includes
@@ -496,3 +496,11 @@ and the include-inventory SHA-256 is
 The released-3.5.1 compatibility ledger remains 618 records with SHA-256
 `3d9d68bbbdeabae63a78d40a50c9896d3f11f6d0d2305beff0c94bd86476928c`.
 Phase 5 remains byte-identical at 179 records.
+
+The same-day non-MCP application-runner refinement removes
+`SokletApplicationOptions` and its nested builder and vends the one-shot
+`SokletApplication.Builder` from the already-owned `SokletApplication` type.
+It changes no Phase 6 descriptor. The exact non-MCP allowlist now contains 38
+owners with SHA-256
+`077e568a38d3b63d187fdd4c1989f386145028c5e662c876ea7642e6c9c8aba2`,
+so the complete current-side owner inventory contains 271 types.

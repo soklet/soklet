@@ -65,7 +65,7 @@ simulation descriptors landed.
 
 After the telemetry, greenfield, lifecycle, and pre-G3 API amendments, the
 current exact MCP owner partition is 133 Phase 4, 36 Phase 5, 64 Phase 6, zero
-provisional, and 233 total; the exact non-MCP allowlist adds 39 owners for 272
+provisional, and 233 total; the exact non-MCP allowlist adds 38 owners for 271
 current-side owners. The cohesion naming amendment was one-for-one; result and
 context changes adjusted Phase 6; record conversion did not alter ownership.
 The typed-state amendment removed three Phase 5 carrier owners. The lifecycle
@@ -614,6 +614,14 @@ and the include-inventory SHA-256 remains
 Phase 5 remains byte-identical. The released-3.5.1 compatibility ledger remains
 618 records with SHA-256
 `3d9d68bbbdeabae63a78d40a50c9896d3f11f6d0d2305beff0c94bd86476928c`.
+
+The same-day non-MCP application-runner refinement removes
+`SokletApplicationOptions` and its nested builder and vends the one-shot
+`SokletApplication.Builder` from the already-owned `SokletApplication` type.
+No Phase 4 owner or descriptor changes. The non-MCP allowlist now contains 38
+owners with SHA-256
+`077e568a38d3b63d187fdd4c1989f386145028c5e662c876ea7642e6c9c8aba2`,
+so the complete current-side owner inventory contains 271 types.
 
 ## Historical local verification
 

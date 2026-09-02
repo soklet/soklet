@@ -253,10 +253,8 @@ final class SokletApplicationFinalization {
 	private final DeadlineWaiter waiter;
 	@NonNull
 	private final LifecycleWorkers workers;
-	@NonNull
-	private final Optional<ShutdownCleanup> cleanup;
-	@NonNull
-	private final Optional<Duration> cleanupTimeout;
+	@Nullable
+	private final SokletApplicationCleanupConfiguration cleanupConfiguration;
 	@NonNull
 	private final LifecycleTerminalReporter reporter;
 	private final long runnerBeganNanos;
@@ -291,16 +289,15 @@ final class SokletApplicationFinalization {
 	@NonNull
 	private final AtomicReference<PrimaryEvidence> primaryEvidence;
 
-	SokletApplicationFinalization(@NonNull SokletApplicationOptions options,
+	SokletApplicationFinalization(
+			@Nullable SokletApplicationCleanupConfiguration cleanupConfiguration,
 			@NonNull LifecycleRuntimeServices services,
 			@NonNull LifecycleTerminalReporter reporter) {
-		SokletApplicationOptions exactOptions = requireNonNull(options);
 		LifecycleRuntimeServices exactServices = requireNonNull(services);
 		this.clock = exactServices.clock();
 		this.waiter = exactServices.waiter();
 		this.workers = exactServices.workers();
-		this.cleanup = exactOptions.getShutdownCleanup();
-		this.cleanupTimeout = exactOptions.getShutdownCleanupTimeout();
+		this.cleanupConfiguration = cleanupConfiguration;
 		this.reporter = requireNonNull(reporter);
 		this.runnerBeganNanos = this.clock.nanoTime();
 		this.corePlan = new AtomicReference<>();
@@ -611,14 +608,16 @@ final class SokletApplicationFinalization {
 	private CorePlan createCorePlan(
 			@NonNull InternalLifecycleCoreSnapshot snapshot) {
 		InternalLifecycleCoreSnapshot exactSnapshot = requireNonNull(snapshot);
-		if (this.cleanup.isEmpty()) {
+		SokletApplicationCleanupConfiguration cleanupConfiguration =
+				this.cleanupConfiguration;
+		if (cleanupConfiguration == null) {
 			return new CorePlan(exactSnapshot, null,
 					new InternalShutdownCleanupOutcome(
 							InternalShutdownCleanupDisposition.NOT_CONFIGURED,
 							Optional.empty(), Optional.empty(), false,
 							exactSnapshot.publicationNanos()));
 		}
-		Duration timeout = this.cleanupTimeout.orElseThrow();
+		Duration timeout = cleanupConfiguration.timeout();
 		if (!exactSnapshot.result().isComplete()) {
 			return new CorePlan(exactSnapshot, null,
 					new InternalShutdownCleanupOutcome(
@@ -630,7 +629,7 @@ final class SokletApplicationFinalization {
 		long deadline = LifecycleDeadlines.after(
 				exactSnapshot.publicationNanos(), timeout);
 		CleanupPlan plan = new CleanupPlan(timeout, deadline,
-				() -> runCleanup(exactSnapshot, this.cleanup.orElseThrow(),
+				() -> runCleanup(exactSnapshot, cleanupConfiguration.cleanup(),
 						timeout, deadline));
 		return new CorePlan(exactSnapshot, plan, null);
 	}

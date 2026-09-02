@@ -80,12 +80,27 @@ ShutdownResult result =
 
 `SokletApplication` owns the JVM shutdown hook and optional runner-scoped
 `ENTER_KEY` trigger. The core lifecycle itself does not read standard input or
-own process hooks. Configure application cleanup through
-`SokletApplicationOptions` only for a resource that is application-owned,
-ingress-exclusive, safe to clean after a complete core shutdown, and bounded
-by an explicit timeout. Stateful observers are not automatically safe cleanup
-targets: they need an application-defined delivery barrier first. Cleanup is
-skipped when core shutdown is incomplete.
+own process hooks. Configure runner-specific behavior directly on a one-shot
+application:
+
+```java
+ShutdownResult result = SokletApplication.withConfig(config)
+    .addShutdownTrigger(ShutdownTrigger.ENTER_KEY)
+    .afterCompleteShutdown(
+        Duration.ofSeconds(5),
+        shutdownResult -> applicationResources.close())
+    .build()
+    .run();
+```
+
+The built application cannot be run a second time or concurrently. Use cleanup
+only for a resource that is application-owned, ingress-exclusive, safe to clean
+after a complete core shutdown, and bounded by an explicit timeout. Stateful
+observers are not automatically safe cleanup targets: they need an
+application-defined delivery barrier first. Cleanup is skipped when core
+shutdown is incomplete. If you tested an earlier 4.0 snapshot, remove
+`SokletApplicationOptions`; its trigger and cleanup settings now live on
+`SokletApplication.Builder` so they cannot be misleadingly reused across runs.
 
 Embedders that already own process signals should continue to use
 `Soklet.fromConfig(config)`, `start()`, `shutdown()`, and `awaitShutdown()` and

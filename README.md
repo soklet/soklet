@@ -167,6 +167,24 @@ public class App {
 }
 ```
 
+The static `run(...)` methods cover the usual standalone-process lifecycle. If
+the runner also owns bounded application-resource cleanup, configure one
+one-shot application attempt directly:
+
+```java
+ShutdownResult result = SokletApplication.withConfig(config)
+    .addShutdownTrigger(ShutdownTrigger.ENTER_KEY)
+    .afterCompleteShutdown(
+        Duration.ofSeconds(5),
+        shutdownResult -> applicationResources.close())
+    .build()
+    .run();
+```
+
+The built `SokletApplication` binds its configuration, triggers, and cleanup to
+that single lifecycle attempt. It cannot be run a second time or concurrently.
+Cleanup is eligible only after Soklet has proven core shutdown complete.
+
 Here we use raw `javac` to build and `java` to run.
 
 This example requires JDK 17+ to be installed on your machine ([or see this example of using Docker for Soklet apps](https://github.com/soklet/barebones-app?tab=readme-ov-file#building-and-running-with-docker)). If you need a JDK, Amazon provides [Corretto](https://aws.amazon.com/corretto/) - a free-to-use-commercially, production-ready distribution of [OpenJDK](https://openjdk.org/) that includes long-term support.

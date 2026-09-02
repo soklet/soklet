@@ -221,9 +221,9 @@ final class SokletApplicationObservationTests {
 		SokletApplicationEnvironment environment = new SokletApplicationEnvironment(
 				services, process, triggers, ignored -> { }, factory,
 				(name, task) -> new Thread(task, name));
-		SokletApplicationOptions options = SokletApplicationOptions.builder()
-				.additionalTrigger(ShutdownTrigger.ENTER_KEY).build();
-		RunnerCall runner = startRunner(config, options, environment);
+		SokletApplication application = SokletApplication.withConfig(config)
+				.addShutdownTrigger(ShutdownTrigger.ENTER_KEY).build();
+		RunnerCall runner = startRunner(application, environment);
 
 		Assertions.assertTrue(startReturned.await(5, TimeUnit.SECONDS));
 		triggers.trigger();
@@ -379,8 +379,8 @@ final class SokletApplicationObservationTests {
 		SokletApplicationEnvironment environment = new SokletApplicationEnvironment(
 				services, new RecordingProcessAccess(), triggers, ignored -> { },
 				factory, (name, task) -> new Thread(task, name));
-		RunnerCall runner = startRunner(config, SokletApplicationOptions.builder()
-				.additionalTrigger(ShutdownTrigger.ENTER_KEY).build(), environment);
+		RunnerCall runner = startRunner(SokletApplication.withConfig(config)
+				.addShutdownTrigger(ShutdownTrigger.ENTER_KEY).build(), environment);
 
 		try {
 			Assertions.assertTrue(attachEntered.await(5, TimeUnit.SECONDS));
@@ -707,8 +707,8 @@ final class SokletApplicationObservationTests {
 						Set.of(ObservationResource.class)))
 				.lifecycleObserver(observer)
 				.build();
-		SokletApplicationOptions options = SokletApplicationOptions.builder()
-				.additionalTrigger(ShutdownTrigger.ENTER_KEY)
+		SokletApplication application = SokletApplication.withConfig(config)
+				.addShutdownTrigger(ShutdownTrigger.ENTER_KEY)
 				.afterCompleteShutdown(Duration.ofSeconds(2), result -> {
 					if (observer.closeCalls.get() != 0)
 						throw new AssertionError("Observer was closed before cleanup");
@@ -721,7 +721,7 @@ final class SokletApplicationObservationTests {
 		SokletApplicationEnvironment environment = new SokletApplicationEnvironment(
 				services, new RecordingProcessAccess(), triggers, ignored -> { },
 				factory, (name, task) -> new Thread(task, name));
-		RunnerCall runner = startRunner(config, options, environment);
+		RunnerCall runner = startRunner(application, environment);
 
 		Assertions.assertTrue(startReturned.await(5, TimeUnit.SECONDS));
 		triggers.trigger();
@@ -866,8 +866,8 @@ final class SokletApplicationObservationTests {
 				new AtomicReference<>();
 		AtomicReference<SokletApplicationTerminalSnapshot> report =
 				new AtomicReference<>();
-		SokletApplicationOptions options = SokletApplicationOptions.builder()
-				.additionalTrigger(ShutdownTrigger.ENTER_KEY)
+		SokletApplication application = SokletApplication.withConfig(config)
+				.addShutdownTrigger(ShutdownTrigger.ENTER_KEY)
 				.afterCompleteShutdown(Duration.ofSeconds(2), result -> {
 					cleanupResult.set(result);
 					cleanupCalls.incrementAndGet();
@@ -881,7 +881,7 @@ final class SokletApplicationObservationTests {
 				report.set(snapshot);
 				reportReceived.countDown();
 			}, factory, (name, task) -> new Thread(task, name));
-		RunnerCall runner = startRunner(config, options, environment);
+		RunnerCall runner = startRunner(application, environment);
 
 		try {
 			Assertions.assertTrue(observerEntered.await(5, TimeUnit.SECONDS));
@@ -1029,13 +1029,12 @@ final class SokletApplicationObservationTests {
 	}
 
 	@NonNull
-	private static RunnerCall startRunner(@NonNull SokletConfig config,
-			@NonNull SokletApplicationOptions options,
+	private static RunnerCall startRunner(@NonNull SokletApplication application,
 			@NonNull SokletApplicationEnvironment environment) {
 		RunnerCall call = new RunnerCall();
 		Thread thread = new Thread(() -> {
 			try {
-				call.result.set(SokletApplication.run(config, options, environment));
+				call.result.set(application.run(environment));
 			} catch (Throwable failure) {
 				call.failure.set(failure);
 			} finally {

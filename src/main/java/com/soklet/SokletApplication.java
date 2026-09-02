@@ -20,6 +20,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.Immutable;
+import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.BufferedReader;
 import java.io.FilterInputStream;
@@ -27,6 +28,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -36,7 +40,8 @@ import java.util.function.Consumer;
 
 import static java.util.Objects.requireNonNull;
 
-/** Standalone-process adapter for one Soklet lifecycle attempt. */
+/** Configured, one-shot standalone-process adapter for one Soklet lifecycle. */
+@ThreadSafe
 public final class SokletApplication {
 	@NonNull
 	static final SystemLifecycleProcessAccess SYSTEM_PROCESS =
@@ -45,12 +50,30 @@ public final class SokletApplication {
 	static final SokletApplicationInputManager SYSTEM_INPUT =
 			new SokletApplicationInputManager(SYSTEM_PROCESS,
 					SokletApplicationInputManager::launchDaemon);
+	@NonNull
+	private final SokletConfig config;
+	@NonNull
+	private final Set<@NonNull ShutdownTrigger> additionalShutdownTriggers;
+	@Nullable
+	private final SokletApplicationCleanupConfiguration cleanupConfiguration;
+	@NonNull
+	private final AtomicBoolean runClaimed;
 
-	private SokletApplication() {
+	private SokletApplication(@NonNull Builder builder) {
+		Builder exactBuilder = requireNonNull(builder);
+		this.config = exactBuilder.config;
+		this.additionalShutdownTriggers = Collections.unmodifiableSet(
+				exactBuilder.additionalShutdownTriggers.isEmpty()
+						? EnumSet.noneOf(ShutdownTrigger.class)
+						: EnumSet.copyOf(exactBuilder.additionalShutdownTriggers));
+		this.cleanupConfiguration = cleanupConfiguration(
+				exactBuilder.shutdownCleanupTimeout,
+				exactBuilder.shutdownCleanup);
+		this.runClaimed = new AtomicBoolean();
 	}
 
 	/**
-	 * Runs one standalone Soklet lifecycle with the default runner options.
+	 * Runs one standalone Soklet lifecycle with the default runner settings.
 	 *
 	 * @param config the one-shot Soklet configuration
 	 * @return the exact immutable lifecycle result
@@ -61,16 +84,16 @@ public final class SokletApplication {
 	 */
 	@NonNull
 	public static ShutdownResult run(@NonNull SokletConfig config) {
-		return run(config, SokletApplicationOptions.fromDefaults());
+		return withConfig(config).build().run();
 	}
 
 	/**
-	 * Runs one standalone Soklet lifecycle with the default options plus the
+	 * Runs one standalone Soklet lifecycle with the default settings plus the
 	 * supplied runner-scoped shutdown triggers.
 	 *
 	 * @param config the one-shot Soklet configuration
-	 * @param additionalTriggers non-null additional triggers; each element must
-	 * be non-null
+	 * @param additionalShutdownTriggers non-null additional shutdown triggers;
+	 * each element must be non-null
 	 * @return the exact immutable lifecycle result
 	 * @throws SokletStartupException if startup does not reach readiness
 	 * @throws SokletTerminatedUnexpectedlyException if a transport terminates
@@ -79,22 +102,32 @@ public final class SokletApplication {
 	 */
 	@NonNull
 	public static ShutdownResult run(@NonNull SokletConfig config,
-			@NonNull ShutdownTrigger @NonNull... additionalTriggers) {
-		requireNonNull(additionalTriggers);
-		SokletApplicationOptions.Builder builder =
-				SokletApplicationOptions.builder();
-		for (ShutdownTrigger trigger : additionalTriggers)
-			builder.additionalTrigger(requireNonNull(trigger));
-		return run(config, builder.build());
+			@NonNull ShutdownTrigger @NonNull... additionalShutdownTriggers) {
+		requireNonNull(additionalShutdownTriggers);
+		Builder builder = withConfig(config);
+		for (ShutdownTrigger shutdownTrigger : additionalShutdownTriggers)
+			builder.addShutdownTrigger(requireNonNull(shutdownTrigger));
+		return builder.build().run();
 	}
 
 	/**
-	 * Runs one standalone Soklet lifecycle and its shared, bounded application
-	 * finalization sequence. A configured cleanup action is eligible only after
-	 * the core shutdown result is complete.
+	 * Vends an application builder primed with the required one-shot Soklet
+	 * configuration.
 	 *
 	 * @param config the one-shot Soklet configuration
-	 * @param options runner triggers and optional bounded cleanup
+	 * @return a builder for one standalone application lifecycle
+	 */
+	@NonNull
+	public static Builder withConfig(@NonNull SokletConfig config) {
+		return new Builder(config);
+	}
+
+	/**
+	 * Runs this configured application lifecycle and its shared, bounded
+	 * finalization sequence. A configured cleanup action is eligible only after
+	 * the core shutdown result is complete. This method may be invoked exactly
+	 * once on each application instance.
+	 *
 	 * @return the exact immutable lifecycle result
 	 * @throws SokletStartupException if startup does not reach readiness
 	 * @throws SokletTerminatedUnexpectedlyException if a transport terminates
@@ -102,42 +135,44 @@ public final class SokletApplication {
 	 * @throws ShutdownIncompleteException if shutdown cannot be proven complete
 	 * @throws SokletApplicationCleanupException if an eligible cleanup fails or
 	 * exceeds its configured deadline
+	 * @throws IllegalStateException if a run was already claimed for this
+	 * application instance
 	 */
 	@NonNull
-	public static ShutdownResult run(@NonNull SokletConfig config,
-			@NonNull SokletApplicationOptions options) {
-		return runCore(config, options, SokletApplicationEnvironment.system())
-				.publicResult();
+	public ShutdownResult run() {
+		claimRun();
+		return runCore(SokletApplicationEnvironment.system()).publicResult();
 	}
 
 	@NonNull
-	static InternalShutdownResult run(@NonNull SokletConfig config,
-			@NonNull SokletApplicationOptions options,
+	InternalShutdownResult run(
 			@NonNull SokletApplicationEnvironment environment) {
-		return runCore(config, options, environment).result();
+		claimRun();
+		return runCore(environment).result();
+	}
+
+	private void claimRun() {
+		if (!this.runClaimed.compareAndSet(false, true))
+			throw new IllegalStateException(
+					"This SokletApplication lifecycle was already claimed");
 	}
 
 	@NonNull
-	private static InternalLifecycleCoreSnapshot runCore(
-			@NonNull SokletConfig config,
-			@NonNull SokletApplicationOptions options,
+	private InternalLifecycleCoreSnapshot runCore(
 			@NonNull SokletApplicationEnvironment environment) {
 		// Every validation in this block precedes the transport-identity commit
 		// performed by the runtime factory.
-		SokletConfig exactConfig = requireNonNull(config);
-		SokletApplicationOptions exactOptions = requireNonNull(options);
 		SokletApplicationEnvironment exactEnvironment =
 				requireNonNull(environment);
-		Set<ShutdownTrigger> triggers = exactOptions.getAdditionalTriggers();
 		LifecycleRuntimeServices services = exactEnvironment.services();
 		SokletApplicationFinalization finalization =
-				new SokletApplicationFinalization(exactOptions, services,
+				new SokletApplicationFinalization(this.cleanupConfiguration, services,
 						exactEnvironment.reporter());
 
 		// Successful factory return is the one ownership commit.  A failure here
 		// remains precommit and therefore creates no hook, cleanup, or report.
 		SokletApplicationRuntime runtime = exactEnvironment.runtimeFactory()
-				.create(exactConfig, services, finalization::publishCoreSnapshot);
+				.create(this.config, services, finalization::publishCoreSnapshot);
 		finalization.diagnosticsSupplier(runtime::diagnostics);
 		finalization.terminalFailureClassifier(runtime::terminalFailure);
 		Attempt attempt = new Attempt(runtime, finalization);
@@ -180,7 +215,8 @@ public final class SokletApplication {
 			}
 		}
 
-		if (!skipStart && triggers.contains(ShutdownTrigger.ENTER_KEY)) {
+		if (!skipStart && this.additionalShutdownTriggers.contains(
+				ShutdownTrigger.ENTER_KEY)) {
 			try {
 				inputRegistration = exactEnvironment.triggerRegistry()
 						.register(() -> attempt.requestShutdown(
@@ -330,6 +366,92 @@ public final class SokletApplication {
 		exactPrimary.addSuppressed(exactSecondary);
 	}
 
+	@Nullable
+	private static SokletApplicationCleanupConfiguration cleanupConfiguration(
+			@Nullable Duration timeout, @Nullable ShutdownCleanup cleanup) {
+		if (timeout == null && cleanup == null)
+			return null;
+		if (timeout == null || cleanup == null)
+			throw new IllegalArgumentException(
+					"Shutdown cleanup and its timeout must be configured together");
+		final long timeoutNanos;
+		try {
+			timeoutNanos = timeout.toNanos();
+		} catch (ArithmeticException exception) {
+			throw new IllegalArgumentException(
+					"Shutdown cleanup timeout exceeds signed nanoseconds",
+					exception);
+		}
+		if (timeoutNanos <= 0L)
+			throw new IllegalArgumentException(
+					"Shutdown cleanup timeout must be greater than zero");
+		return new SokletApplicationCleanupConfiguration(timeout, cleanup);
+	}
+
+	/** Builds one configured, one-shot {@link SokletApplication}. */
+	@NotThreadSafe
+	public static final class Builder {
+		@NonNull
+		private final SokletConfig config;
+		@NonNull
+		private final EnumSet<ShutdownTrigger> additionalShutdownTriggers;
+		@Nullable
+		private ShutdownCleanup shutdownCleanup;
+		@Nullable
+		private Duration shutdownCleanupTimeout;
+
+		private Builder(@NonNull SokletConfig config) {
+			this.config = requireNonNull(config);
+			this.additionalShutdownTriggers =
+					EnumSet.noneOf(ShutdownTrigger.class);
+		}
+
+		/**
+		 * Adds a runner-scoped shutdown trigger.
+		 *
+		 * @param shutdownTrigger the shutdown trigger to add
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder addShutdownTrigger(
+				@NonNull ShutdownTrigger shutdownTrigger) {
+			this.additionalShutdownTriggers.add(
+					requireNonNull(shutdownTrigger));
+			return this;
+		}
+
+		/**
+		 * Configures the built application's cleanup action. The action is invoked
+		 * at most once, only after a complete core result, and must finish
+		 * synchronously within the supplied positive duration. Zero, negative, or
+		 * durations that cannot be represented as signed nanoseconds are rejected
+		 * by {@link #build()}.
+		 *
+		 * @param timeout explicit cleanup deadline budget
+		 * @param cleanup cleanup action for ingress-exclusive application resources
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder afterCompleteShutdown(@NonNull Duration timeout,
+				@NonNull ShutdownCleanup cleanup) {
+			this.shutdownCleanupTimeout = requireNonNull(timeout);
+			this.shutdownCleanup = requireNonNull(cleanup);
+			return this;
+		}
+
+		/**
+		 * Builds one configured application lifecycle.
+		 *
+		 * @return a new one-shot application
+		 * @throws IllegalArgumentException if the cleanup timeout is non-positive
+		 * or exceeds signed-nanosecond range
+		 */
+		@NonNull
+		public SokletApplication build() {
+			return new SokletApplication(this);
+		}
+	}
+
 	private enum TriggerSource {
 		HOOK,
 		ENTER_KEY,
@@ -373,6 +495,30 @@ public final class SokletApplication {
 		private CoreJoin {
 			requireNonNull(snapshot);
 		}
+	}
+}
+
+@Immutable
+final class SokletApplicationCleanupConfiguration {
+	@NonNull
+	private final Duration timeout;
+	@NonNull
+	private final ShutdownCleanup cleanup;
+
+	SokletApplicationCleanupConfiguration(@NonNull Duration timeout,
+			@NonNull ShutdownCleanup cleanup) {
+		this.timeout = requireNonNull(timeout);
+		this.cleanup = requireNonNull(cleanup);
+	}
+
+	@NonNull
+	Duration timeout() {
+		return this.timeout;
+	}
+
+	@NonNull
+	ShutdownCleanup cleanup() {
+		return this.cleanup;
 	}
 }
 

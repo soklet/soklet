@@ -18,9 +18,8 @@ com.soklet.SimulatorConfig
 com.soklet.SimulatorConfig$Builder
 com.soklet.Soklet
 com.soklet.SokletApplication
+com.soklet.SokletApplication$Builder
 com.soklet.SokletApplicationCleanupException
-com.soklet.SokletApplicationOptions
-com.soklet.SokletApplicationOptions$Builder
 com.soklet.SokletLifecycleException
 com.soklet.SokletSimulator
 com.soklet.SokletSimulator$Body
