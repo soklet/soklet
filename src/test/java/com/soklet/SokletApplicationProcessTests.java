@@ -153,7 +153,7 @@ public final class SokletApplicationProcessTests {
 						thrown.getSuppressed()[0]);
 		Assertions.assertSame(cleanupFailure, suppressed.getCause());
 		Assertions.assertEquals(ShutdownCleanupFailure.FAILED,
-				suppressed.getCleanupFailure());
+				suppressed.getShutdownCleanupFailure());
 		Assertions.assertEquals(0, runtimeFactory.runtime.startCalls.get());
 	}
 
@@ -274,8 +274,8 @@ public final class SokletApplicationProcessTests {
 		FakeRuntimeFactory runtimeFactory = new FakeRuntimeFactory(events,
 				StartMode.WAIT_IN_START);
 		InternalShutdownResult incompleteCancellation = result(
-				InternalStartupDisposition.CANCELLED,
-				InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN);
+				InternalStartupDisposition.CANCELED,
+				InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN);
 		runtimeFactory.runtime.shutdownResultOverride = incompleteCancellation;
 		RecordingTriggerRegistry triggers = new RecordingTriggerRegistry(events);
 		RunnerCall call = startRunner(optionsWithTrigger(), environment(
@@ -461,7 +461,7 @@ public final class SokletApplicationProcessTests {
 		FakeRuntimeFactory runtimeFactory = new FakeRuntimeFactory(events,
 				StartMode.RETURN_READY);
 		InternalShutdownResult incomplete = result(InternalStartupDisposition.READY,
-				InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN);
+				InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN);
 		IllegalStateException transportFailure = new IllegalStateException(
 				"transport terminated");
 		InternalTerminationGroup group = new InternalTerminationGroup(
@@ -514,7 +514,7 @@ public final class SokletApplicationProcessTests {
 			IllegalStateException startupCause = new IllegalStateException(
 					"startup " + startupDisposition.name().toLowerCase());
 			InternalShutdownResult incomplete = result(startupDisposition,
-					InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+					InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
 					startupCause);
 			SokletStartupException exactFailure = new SokletStartupException(
 					startupDisposition, incomplete, startupCause);
@@ -582,7 +582,7 @@ public final class SokletApplicationProcessTests {
 				thrown.getInternalShutdownResult());
 		Assertions.assertEquals(0, thrown.getSuppressed().length);
 		Assertions.assertEquals(ShutdownCleanupFailure.FAILED,
-				thrown.getCleanupFailure());
+				thrown.getShutdownCleanupFailure());
 		Assertions.assertEquals(SokletApplicationPrimaryOutcome.EXPECTED,
 				reporter.snapshot.get().primaryOutcome());
 		Assertions.assertEquals(InternalShutdownCleanupDisposition.FAILED,
@@ -599,7 +599,7 @@ public final class SokletApplicationProcessTests {
 				"transport terminated");
 		InternalShutdownResult completeUnexpected = result(
 				InternalStartupDisposition.READY,
-				InternalParticipantShutdownDisposition.UNEXPECTED_TERMINATION,
+				InternalLifecycleComponentShutdownDisposition.UNEXPECTED_TERMINATION,
 				transportFailure);
 		InternalTerminationGroup group = new InternalTerminationGroup(
 				new AdmissionFence(), () -> { }, new LifecycleWorkers());
@@ -957,17 +957,17 @@ public final class SokletApplicationProcessTests {
 			this.corePublished = new CountDownLatch(1);
 			this.startReturned = new AtomicBoolean();
 			this.notStartedResult = result(InternalStartupDisposition.NOT_ATTEMPTED,
-					InternalParticipantShutdownDisposition.NOT_STARTED);
-			this.cancelledResult = result(InternalStartupDisposition.CANCELLED,
-					InternalParticipantShutdownDisposition.NOT_STARTED);
+					InternalLifecycleComponentShutdownDisposition.NOT_STARTED);
+			this.cancelledResult = result(InternalStartupDisposition.CANCELED,
+					InternalLifecycleComponentShutdownDisposition.NOT_STARTED);
 			this.gracefulResult = result(InternalStartupDisposition.READY,
-					InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION);
+					InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION);
 			IllegalStateException startupCause = new IllegalStateException(
 					"startup failed");
 			this.startupFailedResult = result(InternalStartupDisposition.FAILED,
-					InternalParticipantShutdownDisposition.NOT_STARTED, startupCause);
+					InternalLifecycleComponentShutdownDisposition.NOT_STARTED, startupCause);
 			this.incompleteResult = result(InternalStartupDisposition.READY,
-					InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN);
+					InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN);
 			this.startupFailure = new SokletStartupException(
 					InternalStartupDisposition.FAILED, this.startupFailedResult,
 					startupCause);
@@ -1070,7 +1070,7 @@ public final class SokletApplicationProcessTests {
 			return new SokletApplicationCoreDiagnostics(
 					new LifecycleTransitionSnapshot(0, 0, false, true, false,
 							0, Optional.empty()),
-					Map.of(InternalParticipantKind.HTTP,
+					Map.of(InternalLifecycleComponentType.HTTP,
 							new SokletApplicationParticipantDiagnostics(
 									InternalTerminationAuthority.FRAMEWORK_PROVEN,
 									1, 0, 1, false)),
@@ -1262,18 +1262,18 @@ public final class SokletApplicationProcessTests {
 	@NonNull
 	private static InternalShutdownResult result(
 			@NonNull InternalStartupDisposition startup,
-			@NonNull InternalParticipantShutdownDisposition participant) {
+			@NonNull InternalLifecycleComponentShutdownDisposition participant) {
 		return result(startup, participant, new Throwable[0]);
 	}
 
 	@NonNull
 	private static InternalShutdownResult result(
 			@NonNull InternalStartupDisposition startup,
-			@NonNull InternalParticipantShutdownDisposition participant,
+			@NonNull InternalLifecycleComponentShutdownDisposition participant,
 			@NonNull Throwable... failures) {
 		return new InternalShutdownResultAggregator().aggregate(startup,
-				List.of(new InternalParticipantShutdownResult(
-						InternalParticipantKind.HTTP, participant, List.of(failures),
+				List.of(new InternalLifecycleComponentShutdownResult(
+						InternalLifecycleComponentType.HTTP, participant, List.of(failures),
 						Set.of())));
 	}
 }

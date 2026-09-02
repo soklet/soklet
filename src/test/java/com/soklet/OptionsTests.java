@@ -33,7 +33,7 @@ import java.util.Set;
 public class OptionsTests {
 	@Test
 	public void options_includes_allow_header() {
-		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
+		SokletSimulator.run(config -> config.httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EchoResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
@@ -53,7 +53,7 @@ public class OptionsTests {
 
 	@Test
 	public void options_excludes_head_when_no_get_or_head() {
-		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
+		SokletSimulator.run(config -> config.httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(PostOnlyResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override

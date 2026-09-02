@@ -22,8 +22,8 @@ public enum StartupDisposition {
 	NOT_ATTEMPTED,
 	/** Readiness was published. */
 	READY,
-	/** Startup was cancelled before readiness. */
-	CANCELLED,
+	/** Startup was canceled before readiness. */
+	CANCELED,
 	/** The startup deadline was reached before readiness. */
 	TIMED_OUT,
 	/** Startup failed before readiness. */

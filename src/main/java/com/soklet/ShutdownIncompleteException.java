@@ -35,7 +35,7 @@ public final class ShutdownIncompleteException extends SokletLifecycleException 
 		super("Soklet shutdown could not prove complete termination",
 				requireNonNull(shutdownResult), cause);
 		this.retainedScopeEvidence = retainedScopeEvidence;
-		if (shutdownResult.getDisposition() != ShutdownDisposition.INCOMPLETE)
+		if (shutdownResult.getShutdownDisposition() != ShutdownDisposition.INCOMPLETE)
 			throw new IllegalArgumentException(
 					"ShutdownIncompleteException requires an incomplete result");
 	}
@@ -53,6 +53,12 @@ public final class ShutdownIncompleteException extends SokletLifecycleException 
 	}
 
 	boolean retainsScopeEvidence(@NonNull Object candidate) {
-		return this.retainedScopeEvidence == requireNonNull(candidate);
+		Object exactCandidate = requireNonNull(candidate);
+		return this.retainedScopeEvidence == exactCandidate
+				|| this.retainedScopeEvidence
+						instanceof SimulatorConfigurationScopeIdentity scopeIdentity
+				&& exactCandidate instanceof SimulatorConfig simulatorConfig
+				&& simulatorConfig.belongsTo(
+						scopeIdentity.simulatorConfigurationIdentity());
 	}
 }

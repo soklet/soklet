@@ -68,7 +68,7 @@ final class SokletFrameworkSetupValidationTests {
 				.build();
 
 		SokletStartupException startup = assertCompleteSetupFailure(config,
-				Set.of(InternalParticipantKind.HTTP));
+				Set.of(InternalLifecycleComponentType.HTTP));
 
 		Assertions.assertSame(exactFailure, startup.getCause());
 		Assertions.assertEquals(0, http.initializeCalls());
@@ -87,7 +87,7 @@ final class SokletFrameworkSetupValidationTests {
 				.build();
 
 		SokletStartupException startup = assertCompleteSetupFailure(config,
-				Set.of(InternalParticipantKind.HTTP));
+				Set.of(InternalLifecycleComponentType.HTTP));
 
 		Assertions.assertInstanceOf(IllegalStateException.class,
 				startup.getCause());
@@ -110,7 +110,7 @@ final class SokletFrameworkSetupValidationTests {
 				.build();
 
 		SokletStartupException startup = assertCompleteSetupFailure(config,
-				Set.of(InternalParticipantKind.MCP));
+				Set.of(InternalLifecycleComponentType.MCP));
 
 		Assertions.assertInstanceOf(IllegalStateException.class,
 				startup.getCause());
@@ -132,7 +132,7 @@ final class SokletFrameworkSetupValidationTests {
 				.build();
 
 		SokletStartupException startup = assertCompleteSetupFailure(config,
-				Set.of(InternalParticipantKind.HTTP));
+				Set.of(InternalLifecycleComponentType.HTTP));
 
 		Assertions.assertInstanceOf(IllegalStateException.class,
 				startup.getCause());
@@ -163,8 +163,8 @@ final class SokletFrameworkSetupValidationTests {
 				.build();
 
 		SokletStartupException startup = assertCompleteSetupFailure(config,
-				Set.of(InternalParticipantKind.HTTP,
-						InternalParticipantKind.SSE));
+				Set.of(InternalLifecycleComponentType.HTTP,
+						InternalLifecycleComponentType.SSE));
 
 		Assertions.assertInstanceOf(IllegalStateException.class,
 				startup.getCause());
@@ -414,7 +414,7 @@ final class SokletFrameworkSetupValidationTests {
 
 		Assertions.assertEquals(0, instanceProvider.provisionCalls());
 		SokletStartupException failure = assertCompleteSetupFailure(config,
-				Set.of(InternalParticipantKind.HTTP));
+				Set.of(InternalLifecycleComponentType.HTTP));
 
 		Assertions.assertInstanceOf(IllegalStateException.class,
 				failure.getCause());
@@ -424,9 +424,9 @@ final class SokletFrameworkSetupValidationTests {
 				invalidMethod.getName()));
 		Assertions.assertEquals(0, instanceProvider.provisionCalls(),
 				"Startup validation must run before any InstanceProvider call");
-		Assertions.assertEquals(ParticipantShutdownDisposition.NOT_STARTED,
-				failure.getShutdownResult().getParticipantResult(ParticipantKind.HTTP)
-						.orElseThrow().getDisposition(),
+		Assertions.assertEquals(ShutdownComponentDisposition.NOT_STARTED,
+				failure.getShutdownResult().getShutdownComponentResult(ShutdownComponentType.HTTP)
+						.orElseThrow().getShutdownComponentDisposition(),
 				"Rejected injection must not reach transport startup");
 	}
 
@@ -471,7 +471,7 @@ final class SokletFrameworkSetupValidationTests {
 	@NonNull
 	private static SokletStartupException assertCompleteSetupFailure(
 			@NonNull SokletConfig config,
-			@NonNull Set<InternalParticipantKind> expectedKinds) {
+			@NonNull Set<InternalLifecycleComponentType> expectedKinds) {
 		Soklet soklet = Soklet.fromConfig(config);
 		SokletStartupException startup = Assertions.assertThrows(
 				SokletStartupException.class, soklet::start);
@@ -488,14 +488,14 @@ final class SokletFrameworkSetupValidationTests {
 				soklet.getDirectLifecycle().result().orElseThrow());
 		Assertions.assertEquals(expectedKinds,
 				result.participantResults().stream()
-						.map(InternalParticipantShutdownResult::kind)
+						.map(InternalLifecycleComponentShutdownResult::kind)
 						.collect(java.util.stream.Collectors.toSet()));
 		Assertions.assertTrue(result.participantResult(
-				InternalParticipantKind.FRAMEWORK_STARTUP).isEmpty());
-		for (InternalParticipantShutdownResult participant :
+				InternalLifecycleComponentType.FRAMEWORK).isEmpty());
+		for (InternalLifecycleComponentShutdownResult participant :
 				result.participantResults()) {
 			Assertions.assertEquals(
-					InternalParticipantShutdownDisposition.NOT_STARTED,
+					InternalLifecycleComponentShutdownDisposition.NOT_STARTED,
 					participant.disposition());
 			Assertions.assertEquals(List.of(startup.getCause()),
 					participant.failures());

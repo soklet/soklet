@@ -364,7 +364,7 @@ public final class TransportCompositionFixture {
 			TransportDelegateAttachment attachment =
 					context.attachLifecycleOwningDelegate(this.delegate, wrapped);
 			OwningRuntime runtime = new OwningRuntime(this.name,
-					attachment.getRuntime(), context.getTerminationSignal(), this.probe);
+					attachment.getTransportRuntime(), context.getTerminationSignal(), this.probe);
 			attachment.whenTerminated().thenRun(runtime::submitCleanup);
 			return runtime;
 		}
@@ -399,7 +399,7 @@ public final class TransportCompositionFixture {
 			TransportDelegateAttachment attachment =
 					context.attachLifecycleOwningDelegate(this.delegate, wrapped);
 			OwningRuntime runtime = new OwningRuntime(this.name,
-					attachment.getRuntime(), context.getTerminationSignal(), this.probe);
+					attachment.getTransportRuntime(), context.getTerminationSignal(), this.probe);
 			attachment.whenTerminated().thenRun(runtime::submitCleanup);
 			return runtime;
 		}

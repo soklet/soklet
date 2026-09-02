@@ -75,35 +75,64 @@ class LifecycleFoundationTests {
 						Duration.ZERO, Duration.ZERO, Duration.ZERO));
 
 		AtomicLong now = new AtomicLong(5L);
-		AtomicBoolean cancelled = new AtomicBoolean();
-		InternalStartupContext startup = new InternalStartupContext(now::get,
-				Optional.of(10L), 30L, cancelled::get);
-		Assertions.assertEquals(Duration.ofNanos(5L), startup.remainingTime().orElseThrow());
-		cancelled.set(true);
-		Assertions.assertEquals(Duration.ofNanos(25L), startup.remainingTime().orElseThrow());
+		AtomicBoolean cancelationRequested = new AtomicBoolean();
+		StartupContext startup = new StartupContext(now::get,
+				Optional.of(10L), 30L, cancelationRequested::get);
+		Assertions.assertSame(Boolean.FALSE, startup.isCancelationRequested());
+		Assertions.assertEquals(Duration.ofNanos(5L),
+				startup.getRemainingTime().orElseThrow());
+		cancelationRequested.set(true);
+		Assertions.assertSame(Boolean.TRUE, startup.isCancelationRequested());
+		Assertions.assertEquals(Duration.ofNanos(25L),
+				startup.getRemainingTime().orElseThrow());
 		now.set(40L);
-		Assertions.assertEquals(Duration.ZERO, startup.remainingTime().orElseThrow());
+		Assertions.assertEquals(Duration.ZERO,
+				startup.getRemainingTime().orElseThrow());
+
+		ShutdownContext shutdown = new ShutdownContext(ShutdownPhase.GRACEFUL,
+				now::get, 50L);
+		Assertions.assertEquals(ShutdownPhase.GRACEFUL,
+				shutdown.getShutdownPhase());
+		Assertions.assertEquals(Duration.ofNanos(10L),
+				shutdown.getRemainingTime());
 	}
 
 	@Test
 	void aggregationIsDeterministicAndRejectsDuplicateKinds() {
-		InternalParticipantShutdownResult graceful = participant(InternalParticipantKind.HTTP,
-				InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION);
-		InternalParticipantShutdownResult forced = participant(InternalParticipantKind.SSE,
-				InternalParticipantShutdownDisposition.FORCED_TERMINATION);
-		InternalParticipantShutdownResult unknown = participant(InternalParticipantKind.MCP,
-				InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN);
+		InternalLifecycleComponentShutdownResult graceful = participant(InternalLifecycleComponentType.HTTP,
+				InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION);
+		InternalLifecycleComponentShutdownResult forced = participant(InternalLifecycleComponentType.SSE,
+				InternalLifecycleComponentShutdownDisposition.FORCED_TERMINATION);
+		InternalLifecycleComponentShutdownResult unknown = participant(InternalLifecycleComponentType.MCP,
+				InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN);
 
 		InternalShutdownResult result = new InternalShutdownResultAggregator().aggregate(
 				InternalStartupDisposition.READY, List.of(unknown, forced, graceful));
 		Assertions.assertEquals(InternalShutdownDisposition.INCOMPLETE, result.disposition());
-		Assertions.assertEquals(List.of(InternalParticipantKind.HTTP,
-				InternalParticipantKind.SSE, InternalParticipantKind.MCP),
+		Assertions.assertEquals(List.of(InternalLifecycleComponentType.HTTP,
+				InternalLifecycleComponentType.SSE, InternalLifecycleComponentType.MCP),
 				result.participantResults().stream()
-						.map(InternalParticipantShutdownResult::kind).toList());
+						.map(InternalLifecycleComponentShutdownResult::kind).toList());
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				new InternalShutdownResult(InternalShutdownDisposition.GRACEFUL,
 						InternalStartupDisposition.READY, List.of(graceful, graceful)));
+	}
+
+	@Test
+	void publicShutdownResultRetainsTheExactStartupFailureCause() {
+		IllegalStateException startupFailure = new IllegalStateException(
+				"simulated startup failure");
+		InternalShutdownResult internalResult = new InternalShutdownResult(
+				InternalShutdownDisposition.NOT_STARTED,
+				InternalStartupDisposition.FAILED, List.of());
+
+		ShutdownResult result = ShutdownResult.fromInternal(internalResult,
+				startupFailure, null, null);
+
+		Assertions.assertSame(startupFailure,
+				result.getStartupFailureCause().orElseThrow());
+		Assertions.assertTrue(ShutdownResult.fromInternal(internalResult)
+				.getStartupFailureCause().isEmpty());
 	}
 
 	@Test
@@ -351,7 +380,7 @@ class LifecycleFoundationTests {
 		InternalTransportIdentity identity = InternalTransportIdentity.create();
 		QueuedLauncher launcher = new QueuedLauncher();
 		LifecycleWorkers workers = new LifecycleWorkers(launcher);
-		InternalStartupContext startup = unboundedStartup();
+		StartupContext startup = unboundedStartup();
 		AdmissionFence fence = new AdmissionFence();
 		AtomicReference<InternalTransportAttachmentContext<String>> captured =
 				new AtomicReference<>();
@@ -442,7 +471,7 @@ class LifecycleFoundationTests {
 			@NonNull
 			public InternalTransportRuntime attach(
 					@NonNull InternalTransportAttachmentContext<String> context,
-					@NonNull InternalStartupContext startupContext) {
+					@NonNull StartupContext startupContext) {
 				throw new AssertionError("Preflight must not invoke attach");
 			}
 		};
@@ -458,7 +487,7 @@ class LifecycleFoundationTests {
 			@NonNull
 			public InternalTransportRuntime attach(
 					@NonNull InternalTransportAttachmentContext<String> context,
-					@NonNull InternalStartupContext startupContext) {
+					@NonNull StartupContext startupContext) {
 				throw new AssertionError("Preflight must not invoke attach");
 			}
 		};
@@ -479,7 +508,7 @@ class LifecycleFoundationTests {
 			@NonNull
 			public InternalTransportRuntime attach(
 					@NonNull InternalTransportAttachmentContext<String> context,
-					@NonNull InternalStartupContext startupContext) {
+					@NonNull StartupContext startupContext) {
 				throw new AssertionError("Consumed slot must not invoke attach");
 			}
 		};
@@ -543,7 +572,7 @@ class LifecycleFoundationTests {
 			@NonNull
 			public InternalTransportRuntime attach(
 					@NonNull InternalTransportAttachmentContext<String> context,
-					@NonNull InternalStartupContext startupContext) {
+					@NonNull StartupContext startupContext) {
 				throw new AssertionError("Rejected mediation must not invoke attach");
 			}
 		};
@@ -568,7 +597,7 @@ class LifecycleFoundationTests {
 			@NonNull
 			public InternalTransportRuntime attach(
 					@NonNull InternalTransportAttachmentContext<String> context,
-					@NonNull InternalStartupContext startupContext) {
+					@NonNull StartupContext startupContext) {
 				return noopRuntime();
 			}
 		};
@@ -623,7 +652,7 @@ class LifecycleFoundationTests {
 			@NonNull
 			public InternalTransportRuntime attach(
 					@NonNull InternalTransportAttachmentContext<String> context,
-					@NonNull InternalStartupContext startupContext) {
+					@NonNull StartupContext startupContext) {
 				childAttachCalls.incrementAndGet();
 				return noopRuntime();
 			}
@@ -742,14 +771,14 @@ class LifecycleFoundationTests {
 		};
 		String frameworkSummary = "line\n" + "x".repeat(2_000);
 		LifecycleRetentionAnchor anchor = new LifecycleRetentionAnchor(graph,
-				Map.of(InternalResidualActivityKind.EVENT_LOOP, 1), frameworkSummary);
+				Map.of(InternalResidualActivityType.EVENT_LOOP, 1), frameworkSummary);
 		LifecycleRetentionSummary summary = LifecycleRetentionDiagnostics.read(anchor);
 		Assertions.assertTrue(anchor.retains(graph));
 		Assertions.assertTrue(summary.summary().startsWith("line\\n"));
 		Assertions.assertTrue(summary.summary().codePointCount(0,
 				summary.summary().length()) <= 1_024);
 		Assertions.assertEquals(1,
-				summary.counts().get(InternalResidualActivityKind.EVENT_LOOP));
+				summary.counts().get(InternalResidualActivityType.EVENT_LOOP));
 	}
 
 	@Test
@@ -828,12 +857,12 @@ class LifecycleFoundationTests {
 		CountDownLatch firstEntered = new CountDownLatch(1);
 		CountDownLatch releaseFirst = new CountDownLatch(1);
 		CountDownLatch secondEntered = new CountDownLatch(1);
-		TestParticipant first = new TestParticipant(InternalParticipantKind.HTTP,
+		TestParticipant first = new TestParticipant(InternalLifecycleComponentType.HTTP,
 				workers, waiter, () -> {
 					firstEntered.countDown();
 					awaitUninterruptibly(releaseFirst);
 				});
-		TestParticipant second = new TestParticipant(InternalParticipantKind.SSE,
+		TestParticipant second = new TestParticipant(InternalLifecycleComponentType.SSE,
 				workers, waiter, secondEntered::countDown);
 		long grace = LifecycleDeadlines.after(System.nanoTime(), Duration.ofSeconds(2));
 		long forced = LifecycleDeadlines.after(grace, Duration.ofSeconds(1));
@@ -910,11 +939,11 @@ class LifecycleFoundationTests {
 		group.commit();
 		InternalTransportRuntime runtime = new InternalTransportRuntime() {
 			@Override
-			public void start(@NonNull InternalStartupContext context) {
+			public void start(@NonNull StartupContext context) {
 			}
 
 			@Override
-			public void quiesce(@NonNull InternalShutdownContext context) {
+			public void quiesce(@NonNull ShutdownContext context) {
 				events.add("quiesce-enter");
 				quiesceEntered.countDown();
 				try {
@@ -926,7 +955,7 @@ class LifecycleFoundationTests {
 			}
 
 			@Override
-			public void force(@NonNull InternalShutdownContext context) {
+			public void force(@NonNull ShutdownContext context) {
 				events.add("force-enter");
 				forceObservedInterruption.set(
 						quiesceInterrupted.getCount() == 0L
@@ -937,8 +966,8 @@ class LifecycleFoundationTests {
 		InternalLifecycleCoordinator.Participant participant =
 				new InternalLifecycleCoordinator.Participant() {
 					@Override
-					public @NonNull InternalParticipantKind kind() {
-						return InternalParticipantKind.HTTP;
+					public @NonNull InternalLifecycleComponentType kind() {
+						return InternalLifecycleComponentType.HTTP;
 					}
 
 					@Override
@@ -957,7 +986,7 @@ class LifecycleFoundationTests {
 					}
 
 					@Override
-					public @NonNull Set<InternalResidualActivityKind> residualActivity() {
+					public @NonNull Set<InternalResidualActivityType> residualActivity() {
 						return Set.of();
 					}
 				};
@@ -983,10 +1012,10 @@ class LifecycleFoundationTests {
 				workers.active(LifecycleWorkers.Role.LIFECYCLE_CALL),
 				"Iteration " + iteration);
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.FORCED_TERMINATION,
-				result.participantResult(InternalParticipantKind.HTTP).orElseThrow()
+				InternalLifecycleComponentShutdownDisposition.FORCED_TERMINATION,
+				result.participantResult(InternalLifecycleComponentType.HTTP).orElseThrow()
 						.disposition(), "Iteration " + iteration);
-		Assertions.assertTrue(result.participantResult(InternalParticipantKind.HTTP)
+		Assertions.assertTrue(result.participantResult(InternalLifecycleComponentType.HTTP)
 				.orElseThrow().residualActivity().isEmpty(), "Iteration " + iteration);
 	}
 
@@ -1011,15 +1040,15 @@ class LifecycleFoundationTests {
 		AtomicBoolean forceObservedCancellation = new AtomicBoolean();
 		InternalTransportRuntime runtime = new InternalTransportRuntime() {
 			@Override
-			public void start(@NonNull InternalStartupContext context) {
+			public void start(@NonNull StartupContext context) {
 			}
 
 			@Override
-			public void quiesce(@NonNull InternalShutdownContext context) {
+			public void quiesce(@NonNull ShutdownContext context) {
 			}
 
 			@Override
-			public void force(@NonNull InternalShutdownContext context) {
+			public void force(@NonNull ShutdownContext context) {
 				forceObservedCancellation.set(Thread.interrupted());
 				group.signalTerminated(group.root());
 			}
@@ -1027,8 +1056,8 @@ class LifecycleFoundationTests {
 		InternalLifecycleCoordinator.Participant participant =
 				new InternalLifecycleCoordinator.Participant() {
 					@Override
-					public @NonNull InternalParticipantKind kind() {
-						return InternalParticipantKind.HTTP;
+					public @NonNull InternalLifecycleComponentType kind() {
+						return InternalLifecycleComponentType.HTTP;
 					}
 
 					@Override
@@ -1047,7 +1076,7 @@ class LifecycleFoundationTests {
 					}
 
 					@Override
-					public @NonNull Set<InternalResidualActivityKind> residualActivity() {
+					public @NonNull Set<InternalResidualActivityType> residualActivity() {
 						Runnable forceTask = deferredForce.getAndSet(null);
 						Assertions.assertNotNull(forceTask,
 								"Force must be submitted before evidence freezes");
@@ -1064,23 +1093,23 @@ class LifecycleFoundationTests {
 		Assertions.assertTrue(forceObservedCancellation.get(),
 				"The unfinished force call must observe cancellation before freeze");
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.FORCED_TERMINATION,
-				result.participantResult(InternalParticipantKind.HTTP).orElseThrow()
+				InternalLifecycleComponentShutdownDisposition.FORCED_TERMINATION,
+				result.participantResult(InternalLifecycleComponentType.HTTP).orElseThrow()
 						.disposition());
-		Assertions.assertTrue(result.participantResult(InternalParticipantKind.HTTP)
+		Assertions.assertTrue(result.participantResult(InternalLifecycleComponentType.HTTP)
 				.orElseThrow().residualActivity().isEmpty());
 	}
 
 	@NonNull
-	private static InternalParticipantShutdownResult participant(
-			@NonNull InternalParticipantKind kind,
-			@NonNull InternalParticipantShutdownDisposition disposition) {
-		return new InternalParticipantShutdownResult(kind, disposition, List.of(), Set.of());
+	private static InternalLifecycleComponentShutdownResult participant(
+			@NonNull InternalLifecycleComponentType kind,
+			@NonNull InternalLifecycleComponentShutdownDisposition disposition) {
+		return new InternalLifecycleComponentShutdownResult(kind, disposition, List.of(), Set.of());
 	}
 
 	@NonNull
-	private static InternalStartupContext unboundedStartup() {
-		return new InternalStartupContext(NanoClock.system(), Optional.empty(),
+	private static StartupContext unboundedStartup() {
+		return new StartupContext(NanoClock.system(), Optional.empty(),
 				Long.MAX_VALUE, () -> false);
 	}
 
@@ -1088,15 +1117,15 @@ class LifecycleFoundationTests {
 	private static InternalTransportRuntime noopRuntime() {
 		return new InternalTransportRuntime() {
 			@Override
-			public void start(@NonNull InternalStartupContext context) {
+			public void start(@NonNull StartupContext context) {
 			}
 
 			@Override
-			public void quiesce(@NonNull InternalShutdownContext context) {
+			public void quiesce(@NonNull ShutdownContext context) {
 			}
 
 			@Override
-			public void force(@NonNull InternalShutdownContext context) {
+			public void force(@NonNull ShutdownContext context) {
 			}
 		};
 	}
@@ -1116,7 +1145,7 @@ class LifecycleFoundationTests {
 			@NonNull
 			public InternalTransportRuntime attach(
 					@NonNull InternalTransportAttachmentContext<String> context,
-					@NonNull InternalStartupContext startupContext) {
+					@NonNull StartupContext startupContext) {
 				return attachFunction.attach(context, startupContext);
 			}
 		};
@@ -1127,7 +1156,7 @@ class LifecycleFoundationTests {
 		@NonNull
 		InternalTransportRuntime attach(
 				@NonNull InternalTransportAttachmentContext<String> context,
-				@NonNull InternalStartupContext startupContext);
+				@NonNull StartupContext startupContext);
 	}
 
 	private static void awaitUninterruptibly(@NonNull CountDownLatch latch) {
@@ -1164,13 +1193,13 @@ class LifecycleFoundationTests {
 
 	private static final class TestParticipant
 			implements InternalLifecycleCoordinator.Participant {
-		private final InternalParticipantKind kind;
+		private final InternalLifecycleComponentType kind;
 		private final AdmissionFence fence;
 		private final InternalTerminationGroup group;
 		private final Runnable quiesce;
 		private final InternalTransportRuntime runtime;
 
-		private TestParticipant(InternalParticipantKind kind, LifecycleWorkers workers,
+		private TestParticipant(InternalLifecycleComponentType kind, LifecycleWorkers workers,
 				DeadlineWaiter waiter, Runnable quiesce) {
 			this.kind = kind;
 			this.fence = new AdmissionFence(waiter::signal);
@@ -1179,16 +1208,16 @@ class LifecycleFoundationTests {
 			this.quiesce = quiesce;
 			this.runtime = new InternalTransportRuntime() {
 				@Override
-				public void start(@NonNull InternalStartupContext context) {
+				public void start(@NonNull StartupContext context) {
 				}
 
 				@Override
-				public void quiesce(@NonNull InternalShutdownContext context) {
+				public void quiesce(@NonNull ShutdownContext context) {
 					TestParticipant.this.quiesce.run();
 				}
 
 				@Override
-				public void force(@NonNull InternalShutdownContext context) {
+				public void force(@NonNull ShutdownContext context) {
 					TestParticipant.this.quiesce.run();
 				}
 			};
@@ -1199,7 +1228,7 @@ class LifecycleFoundationTests {
 		}
 
 		@Override
-		public InternalParticipantKind kind() {
+		public InternalLifecycleComponentType kind() {
 			return this.kind;
 		}
 
@@ -1219,7 +1248,7 @@ class LifecycleFoundationTests {
 		}
 
 		@Override
-		public Set<InternalResidualActivityKind> residualActivity() {
+		public Set<InternalResidualActivityType> residualActivity() {
 			return Set.of();
 		}
 	}

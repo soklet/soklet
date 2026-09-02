@@ -44,14 +44,14 @@ import java.util.function.Supplier;
 
 import static java.util.Objects.requireNonNull;
 
-enum InternalParticipantKind {
+enum InternalLifecycleComponentType {
 	HTTP,
 	SSE,
 	MCP,
-	FRAMEWORK_STARTUP
+	FRAMEWORK
 }
 
-enum InternalParticipantShutdownDisposition {
+enum InternalLifecycleComponentShutdownDisposition {
 	NOT_STARTED,
 	GRACEFUL_TERMINATION,
 	FORCED_TERMINATION,
@@ -70,12 +70,12 @@ enum InternalShutdownDisposition {
 enum InternalStartupDisposition {
 	NOT_ATTEMPTED,
 	READY,
-	CANCELLED,
+	CANCELED,
 	TIMED_OUT,
 	FAILED
 }
 
-enum InternalResidualActivityKind {
+enum InternalResidualActivityType {
 	CALLBACK,
 	STREAM,
 	CONNECTION,
@@ -85,36 +85,36 @@ enum InternalResidualActivityKind {
 }
 
 @Immutable
-final class InternalParticipantShutdownResult {
+final class InternalLifecycleComponentShutdownResult {
 	@NonNull
-	private final InternalParticipantKind kind;
+	private final InternalLifecycleComponentType kind;
 	@NonNull
-	private final InternalParticipantShutdownDisposition disposition;
+	private final InternalLifecycleComponentShutdownDisposition disposition;
 	@NonNull
 	private final List<Throwable> failures;
 	@NonNull
-	private final Set<InternalResidualActivityKind> residualActivity;
+	private final Set<InternalResidualActivityType> residualActivity;
 
-	InternalParticipantShutdownResult(@NonNull InternalParticipantKind kind,
-			@NonNull InternalParticipantShutdownDisposition disposition,
+	InternalLifecycleComponentShutdownResult(@NonNull InternalLifecycleComponentType kind,
+			@NonNull InternalLifecycleComponentShutdownDisposition disposition,
 			@NonNull List<? extends Throwable> failures,
-			@NonNull Set<InternalResidualActivityKind> residualActivity) {
+			@NonNull Set<InternalResidualActivityType> residualActivity) {
 		this.kind = requireNonNull(kind);
 		this.disposition = requireNonNull(disposition);
 		this.failures = List.copyOf(requireNonNull(failures));
 		this.residualActivity = Collections.unmodifiableSet(
 				EnumSet.copyOf(requireNonNull(residualActivity).isEmpty()
-						? EnumSet.noneOf(InternalResidualActivityKind.class)
+						? EnumSet.noneOf(InternalResidualActivityType.class)
 						: residualActivity));
 	}
 
 	@NonNull
-	InternalParticipantKind kind() {
+	InternalLifecycleComponentType kind() {
 		return this.kind;
 	}
 
 	@NonNull
-	InternalParticipantShutdownDisposition disposition() {
+	InternalLifecycleComponentShutdownDisposition disposition() {
 		return this.disposition;
 	}
 
@@ -124,7 +124,7 @@ final class InternalParticipantShutdownResult {
 	}
 
 	@NonNull
-	Set<InternalResidualActivityKind> residualActivity() {
+	Set<InternalResidualActivityType> residualActivity() {
 		return this.residualActivity;
 	}
 }
@@ -136,30 +136,30 @@ final class InternalShutdownResult {
 	@NonNull
 	private final InternalStartupDisposition startupDisposition;
 	@NonNull
-	private final List<InternalParticipantShutdownResult> participantResults;
+	private final List<InternalLifecycleComponentShutdownResult> participantResults;
 	@NonNull
-	private final Map<InternalParticipantKind, InternalParticipantShutdownResult> participantResultsByKind;
+	private final Map<InternalLifecycleComponentType, InternalLifecycleComponentShutdownResult> participantResultsByKind;
 	@Nullable
 	private final LifecycleRetentionAnchor retentionAnchor;
 
 	InternalShutdownResult(@NonNull InternalShutdownDisposition disposition,
 			@NonNull InternalStartupDisposition startupDisposition,
-			@NonNull List<InternalParticipantShutdownResult> participantResults) {
+			@NonNull List<InternalLifecycleComponentShutdownResult> participantResults) {
 		this(disposition, startupDisposition, participantResults, null);
 	}
 
 	private InternalShutdownResult(@NonNull InternalShutdownDisposition disposition,
 			@NonNull InternalStartupDisposition startupDisposition,
-			@NonNull List<InternalParticipantShutdownResult> participantResults,
+			@NonNull List<InternalLifecycleComponentShutdownResult> participantResults,
 			@Nullable LifecycleRetentionAnchor retentionAnchor) {
 		this.disposition = requireNonNull(disposition);
 		this.startupDisposition = requireNonNull(startupDisposition);
-		List<InternalParticipantShutdownResult> sorted = new ArrayList<>(
+		List<InternalLifecycleComponentShutdownResult> sorted = new ArrayList<>(
 				requireNonNull(participantResults));
-		sorted.sort(Comparator.comparing(InternalParticipantShutdownResult::kind));
-		EnumMap<InternalParticipantKind, InternalParticipantShutdownResult> indexed =
-				new EnumMap<>(InternalParticipantKind.class);
-		for (InternalParticipantShutdownResult result : sorted) {
+		sorted.sort(Comparator.comparing(InternalLifecycleComponentShutdownResult::kind));
+		EnumMap<InternalLifecycleComponentType, InternalLifecycleComponentShutdownResult> indexed =
+				new EnumMap<>(InternalLifecycleComponentType.class);
+		for (InternalLifecycleComponentShutdownResult result : sorted) {
 			if (indexed.put(result.kind(), result) != null)
 				throw new IllegalArgumentException("Duplicate lifecycle participant kind: " + result.kind());
 		}
@@ -179,13 +179,13 @@ final class InternalShutdownResult {
 	}
 
 	@NonNull
-	List<InternalParticipantShutdownResult> participantResults() {
+	List<InternalLifecycleComponentShutdownResult> participantResults() {
 		return this.participantResults;
 	}
 
 	@NonNull
-	Optional<InternalParticipantShutdownResult> participantResult(
-			@NonNull InternalParticipantKind kind) {
+	Optional<InternalLifecycleComponentShutdownResult> participantResult(
+			@NonNull InternalLifecycleComponentType kind) {
 		return Optional.ofNullable(this.participantResultsByKind.get(requireNonNull(kind)));
 	}
 
@@ -220,11 +220,11 @@ final class InternalShutdownResult {
 final class InternalShutdownResultAggregator {
 	@NonNull
 	InternalShutdownResult aggregate(@NonNull InternalStartupDisposition startupDisposition,
-			@NonNull List<InternalParticipantShutdownResult> participantResults) {
+			@NonNull List<InternalLifecycleComponentShutdownResult> participantResults) {
 		requireNonNull(startupDisposition);
 		requireNonNull(participantResults);
 		InternalShutdownDisposition disposition = InternalShutdownDisposition.NOT_STARTED;
-		for (InternalParticipantShutdownResult participantResult : participantResults) {
+		for (InternalLifecycleComponentShutdownResult participantResult : participantResults) {
 			switch (participantResult.disposition()) {
 				case RESIDUAL_ACTIVITY, TERMINATION_UNKNOWN ->
 						disposition = InternalShutdownDisposition.INCOMPLETE;
@@ -439,7 +439,7 @@ final class TransportIdentityClaimRegistry {
 	}
 
 	record ClaimDescriptor(@NonNull InternalTransportIdentity identity,
-			@NonNull InternalParticipantKind participantKind,
+			@NonNull InternalLifecycleComponentType participantKind,
 			@NonNull Class<?> transportClass) {
 		ClaimDescriptor {
 			requireNonNull(identity);
@@ -448,7 +448,7 @@ final class TransportIdentityClaimRegistry {
 		}
 	}
 
-	private record StoredClaim(@Nullable InternalParticipantKind participantKind,
+	private record StoredClaim(@Nullable InternalLifecycleComponentType participantKind,
 			@Nullable Class<?> transportClass, @NonNull Object marker) {
 		private StoredClaim {
 			requireNonNull(marker);
@@ -458,11 +458,11 @@ final class TransportIdentityClaimRegistry {
 
 /** Descriptor-neutral runtime shape used until the combined public cutover. */
 interface InternalTransportRuntime {
-	void start(@NonNull InternalStartupContext context);
+	void start(@NonNull StartupContext context);
 
-	void quiesce(@NonNull InternalShutdownContext context);
+	void quiesce(@NonNull ShutdownContext context);
 
-	void force(@NonNull InternalShutdownContext context);
+	void force(@NonNull ShutdownContext context);
 }
 
 /** Bridges a public custom runtime into the coordinator's private runtime shape. */
@@ -481,17 +481,17 @@ final class InternalPublicTransportRuntime implements InternalTransportRuntime {
 	}
 
 	@Override
-	public void start(@NonNull InternalStartupContext context) {
+	public void start(@NonNull StartupContext context) {
 		this.runtime.start(requireNonNull(context));
 	}
 
 	@Override
-	public void quiesce(@NonNull InternalShutdownContext context) {
+	public void quiesce(@NonNull ShutdownContext context) {
 		this.runtime.quiesce(requireNonNull(context));
 	}
 
 	@Override
-	public void force(@NonNull InternalShutdownContext context) {
+	public void force(@NonNull ShutdownContext context) {
 		this.runtime.force(requireNonNull(context));
 	}
 }
@@ -502,7 +502,7 @@ interface InternalTransportEndpoint<H> {
 
 	@NonNull
 	InternalTransportRuntime attach(@NonNull InternalTransportAttachmentContext<H> context,
-			@NonNull InternalStartupContext startupContext);
+			@NonNull StartupContext startupContext);
 }
 
 /** Framework-owned, orthogonal first-failure and affirmative-proof capability. */
@@ -1293,7 +1293,7 @@ final class InternalTransportAttachmentContext<H> {
 	@NonNull
 	private final InternalTransportTerminationSignal terminationSignal;
 	@NonNull
-	private final InternalStartupContext startupContext;
+	private final StartupContext startupContext;
 	@NonNull
 	private final AtomicBoolean mediationGuard;
 	@Nullable
@@ -1306,7 +1306,7 @@ final class InternalTransportAttachmentContext<H> {
 			@NonNull InternalTransportIdentity configuredIdentity,
 			@NonNull InternalTerminationGroup group,
 			InternalTerminationGroup.@NonNull Member member,
-			@NonNull InternalStartupContext startupContext) {
+			@NonNull StartupContext startupContext) {
 		this(configuration, requestHandler, configuredIdentity, group, member,
 				new InternalTransportTerminationSignal(group, member), startupContext);
 	}
@@ -1317,7 +1317,7 @@ final class InternalTransportAttachmentContext<H> {
 			@NonNull InternalTerminationGroup group,
 			InternalTerminationGroup.@NonNull Member member,
 			@NonNull InternalTransportTerminationSignal terminationSignal,
-			@NonNull InternalStartupContext startupContext) {
+			@NonNull StartupContext startupContext) {
 		this.configuration = requireNonNull(configuration);
 		this.requestHandler = requireNonNull(requestHandler);
 		this.configuredIdentity = requireNonNull(configuredIdentity);
@@ -1359,7 +1359,7 @@ final class InternalTransportAttachmentContext<H> {
 					public InternalTransportRuntime attach(
 							@NonNull InternalTransportEndpoint<H> exactDelegate,
 							@NonNull InternalTransportAttachmentContext<H> context,
-							@NonNull InternalStartupContext startupContext) {
+							@NonNull StartupContext startupContext) {
 						return exactDelegate.attach(context, startupContext);
 					}
 				}).runtime();
@@ -1381,7 +1381,7 @@ final class InternalTransportAttachmentContext<H> {
 					public InternalTransportRuntime attach(
 							@NonNull InternalTransportEndpoint<H> exactDelegate,
 							@NonNull InternalTransportAttachmentContext<H> context,
-							@NonNull InternalStartupContext startupContext) {
+							@NonNull StartupContext startupContext) {
 						return exactDelegate.attach(context, startupContext);
 					}
 				});
@@ -1403,7 +1403,7 @@ final class InternalTransportAttachmentContext<H> {
 					@Override
 					public InternalTransportRuntime attach(@NonNull HttpServer exactDelegate,
 							@NonNull InternalTransportAttachmentContext<H> context,
-							@NonNull InternalStartupContext startupContext) {
+							@NonNull StartupContext startupContext) {
 						TransportRuntime runtime = exactDelegate.attach(
 								new HttpTransportAttachmentContext(
 										(InternalTransportAttachmentContext<HttpServer.RequestHandler>)
@@ -1432,7 +1432,7 @@ final class InternalTransportAttachmentContext<H> {
 					@Override
 					public InternalTransportRuntime attach(@NonNull HttpServer exactDelegate,
 							@NonNull InternalTransportAttachmentContext<H> context,
-							@NonNull InternalStartupContext startupContext) {
+							@NonNull StartupContext startupContext) {
 						TransportRuntime runtime = exactDelegate.attach(
 								new HttpTransportAttachmentContext(
 										(InternalTransportAttachmentContext<HttpServer.RequestHandler>)
@@ -1462,7 +1462,7 @@ final class InternalTransportAttachmentContext<H> {
 					@Override
 					public InternalTransportRuntime attach(@NonNull SseServer exactDelegate,
 							@NonNull InternalTransportAttachmentContext<H> context,
-							@NonNull InternalStartupContext startupContext) {
+							@NonNull StartupContext startupContext) {
 						TransportRuntime runtime = exactDelegate.attach(
 								new SseTransportAttachmentContext(
 										(InternalTransportAttachmentContext<SseServer.RequestHandler>)
@@ -1491,7 +1491,7 @@ final class InternalTransportAttachmentContext<H> {
 					@Override
 					public InternalTransportRuntime attach(@NonNull SseServer exactDelegate,
 							@NonNull InternalTransportAttachmentContext<H> context,
-							@NonNull InternalStartupContext startupContext) {
+							@NonNull StartupContext startupContext) {
 						TransportRuntime runtime = exactDelegate.attach(
 								new SseTransportAttachmentContext(
 										(InternalTransportAttachmentContext<SseServer.RequestHandler>)
@@ -1598,7 +1598,7 @@ final class InternalTransportAttachmentContext<H> {
 		@Nullable
 		InternalTransportRuntime attach(@NonNull D delegate,
 				@NonNull InternalTransportAttachmentContext<H> context,
-				@NonNull InternalStartupContext startupContext);
+				@NonNull StartupContext startupContext);
 	}
 
 	private void requireActiveAttachThread() {
@@ -1620,11 +1620,11 @@ final class InternalTransportAttachmentSession<H> {
 	@NonNull
 	private final InternalTransportAttachmentContext<H> rootContext;
 	@NonNull
-	private final InternalStartupContext startupContext;
+	private final StartupContext startupContext;
 
 	InternalTransportAttachmentSession(@NonNull Object configuration,
 			@NonNull H requestHandler, @NonNull InternalTransportIdentity identity,
-			@NonNull InternalStartupContext startupContext,
+			@NonNull StartupContext startupContext,
 			@NonNull AdmissionFence admissionFence, @NonNull Runnable stateChanged,
 			@NonNull LifecycleWorkers workers) {
 		this(configuration, requestHandler, identity, startupContext, admissionFence,
@@ -1633,7 +1633,7 @@ final class InternalTransportAttachmentSession<H> {
 
 	InternalTransportAttachmentSession(@NonNull Object configuration,
 			@NonNull H requestHandler, @NonNull InternalTransportIdentity identity,
-			@NonNull InternalStartupContext startupContext,
+			@NonNull StartupContext startupContext,
 			@NonNull AdmissionFence admissionFence, @NonNull Runnable stateChanged,
 			@NonNull LifecycleWorkers workers, @NonNull Object executionOwnerToken) {
 		this.group = new InternalTerminationGroup(admissionFence, stateChanged, workers,

@@ -967,7 +967,7 @@ public class StaticFilesTests {
 		Files.writeString(appJs, "console.log('hi');", StandardCharsets.UTF_8);
 		String appJsLength = String.valueOf(Files.size(appJs));
 
-		SokletSimulator.run(transports -> {
+		SokletSimulator.run(config -> {
 			StaticFiles staticFiles = StaticFiles.withRoot(tempDir)
 					.cacheControlResolver((path, attributes) -> Optional.of(path.getFileName().toString().endsWith(".js")
 							? "public, max-age=31536000, immutable"
@@ -976,7 +976,7 @@ public class StaticFilesTests {
 			StaticAssetResource resource = new StaticAssetResource(staticFiles);
 			InstanceProvider defaultProvider = InstanceProvider.defaultInstance();
 
-			return SokletConfig.forSimulatorTesting(transports)
+			return config.httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StaticAssetResource.class)))
 				.instanceProvider(new InstanceProvider() {
 					@Override
@@ -1011,7 +1011,7 @@ public class StaticFilesTests {
 
 	@Test
 	public void simulatorStillEmitsDateHeaderAfterHttpDateMigration() {
-		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
+		SokletSimulator.run(config -> config.httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(DateResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override

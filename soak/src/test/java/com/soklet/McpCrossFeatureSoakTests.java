@@ -53,6 +53,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 
 import static java.util.Objects.requireNonNull;
 
@@ -272,8 +273,9 @@ public class McpCrossFeatureSoakTests {
 				new CountingMcpMetricsCollector();
 		CountingLifecycle lifecycle = new CountingLifecycle(0);
 		AtomicReference<McpServer> mcpServer = new AtomicReference<>();
-		SimulatorConfigFactory configFactory = simulatorConfigFactory(state,
-				publisher, metricsCollector, lifecycle, mcpServer);
+		Function<SimulatorConfig.Builder, SimulatorConfig> configFactory =
+				simulatorConfigFactory(state,
+						publisher, metricsCollector, lifecycle, mcpServer);
 		AtomicIntegerArray caseCounts =
 				new AtomicIntegerArray(SIMULATOR_CASE_COUNT);
 		int workloadCycles = PROFILE.concurrentClients()
@@ -424,7 +426,7 @@ public class McpCrossFeatureSoakTests {
 	private static LifecyclePolicy lifecyclePolicy() {
 		return LifecyclePolicy.builder()
 				.startupTimeout(Duration.ofSeconds(30))
-				.startupCancellationTimeout(Duration.ofSeconds(2))
+				.startupCancelationTimeout(Duration.ofSeconds(2))
 				.gracefulShutdownDuration(
 						PROFILE.gracefulShutdownDuration())
 				.forcedShutdownDuration(PROFILE.forcedShutdownDuration())
@@ -435,13 +437,6 @@ public class McpCrossFeatureSoakTests {
 	private static McpServer mcpServer(@NonNull SoakState state,
 			@NonNull CountingSubscriptionPublisher publisher) {
 		return mcpServer(McpServer.withPort(0), state, publisher);
-	}
-
-	@NonNull
-	private static McpServer mcpServer(@NonNull SimulatorTransports transports,
-			@NonNull SoakState state,
-			@NonNull CountingSubscriptionPublisher publisher) {
-		return mcpServer(transports.newMcpServerBuilder(0), state, publisher);
 	}
 
 	@NonNull
@@ -662,23 +657,24 @@ public class McpCrossFeatureSoakTests {
 	}
 
 	@NonNull
-	private static SimulatorConfigFactory simulatorConfigFactory(
+	private static Function<SimulatorConfig.Builder, SimulatorConfig>
+			simulatorConfigFactory(
 			@NonNull SoakState state,
 			@NonNull CountingSubscriptionPublisher publisher,
 			@NonNull CountingMcpMetricsCollector metricsCollector,
 			@NonNull CountingLifecycle lifecycle,
 			@NonNull AtomicReference<McpServer> serverReference) {
-		return transports -> {
-			McpServer server = mcpServer(transports, state, publisher);
+		return config -> config.mcpServer(0, mcpServerBuilder -> {
+			McpServer server = mcpServer(mcpServerBuilder, state, publisher);
 			serverReference.set(server);
-			return SokletConfig.withMcpServer(server)
+			return server;
+		})
 					.resourceMethodResolver(
 							ResourceMethodResolver.fromMethods(Set.of()))
 					.metricsCollector(metricsCollector)
 					.lifecycleObserver(lifecycle)
 					.lifecyclePolicy(lifecyclePolicy())
 					.build();
-		};
 	}
 
 	private static void performSimulatorCase(@NonNull Simulator simulator,
@@ -933,7 +929,8 @@ public class McpCrossFeatureSoakTests {
 	}
 
 	private static void performSimulatorResidualWave(
-			@NonNull SimulatorConfigFactory configFactory,
+			@NonNull Function<SimulatorConfig.Builder, SimulatorConfig>
+					configFactory,
 			@NonNull AtomicReference<McpServer> mcpServer,
 			@NonNull SoakState state,
 			@NonNull CountingMcpMetricsCollector metricsCollector,
@@ -1501,19 +1498,20 @@ public class McpCrossFeatureSoakTests {
 		Assertions.assertEquals(generations, lifecycle.serversStarted());
 		Assertions.assertEquals(generations, lifecycle.serversStopped());
 		Assertions.assertEquals(generations, shutdownResults.size());
-		List<ParticipantShutdownDisposition> expectedShutdownDispositions =
+		List<ShutdownComponentDisposition> expectedShutdownDispositions =
 				new ArrayList<>(generations);
 		expectedShutdownDispositions.add(
-				ParticipantShutdownDisposition.GRACEFUL_TERMINATION);
+				ShutdownComponentDisposition.GRACEFUL_TERMINATION);
 		expectedShutdownDispositions.addAll(Collections.nCopies(
 				PROFILE.shutdownCycles(),
-				ParticipantShutdownDisposition.FORCED_TERMINATION));
-		List<ParticipantShutdownDisposition> actualShutdownDispositions =
+				ShutdownComponentDisposition.FORCED_TERMINATION));
+		List<ShutdownComponentDisposition> actualShutdownDispositions =
 				requireNonNull(shutdownResults).stream()
-						.map(result -> result.getParticipantResult(
-								ParticipantKind.MCP).orElseThrow(() ->
+						.map(result -> result.getShutdownComponentResult(
+								ShutdownComponentType.MCP).orElseThrow(() ->
 								new AssertionError("MCP shutdown result was missing.")))
-						.map(ParticipantShutdownResult::getDisposition)
+						.map(ShutdownComponentResult::
+								getShutdownComponentDisposition)
 						.toList();
 		Assertions.assertEquals(expectedShutdownDispositions,
 				actualShutdownDispositions);
@@ -2327,7 +2325,7 @@ public class McpCrossFeatureSoakTests {
 
 		@Override
 		public void didStopMcpServer(@NonNull McpServer mcpServer,
-				@NonNull ParticipantShutdownResult result) {
+				@NonNull ShutdownComponentResult result) {
 			this.serversStopped.incrementAndGet();
 			this.expectedServerCallbacks.countDown();
 		}

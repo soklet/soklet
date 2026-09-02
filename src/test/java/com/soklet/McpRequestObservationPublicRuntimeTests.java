@@ -639,7 +639,7 @@ public class McpRequestObservationPublicRuntimeTests {
 			Assertions.assertEquals(0L, mcpMetrics.getHandlerQueueDepth());
 			Assertions.assertEquals(0L,
 					mcpMetrics.getHandlerCapacityRejections());
-			Assertions.assertEquals(Map.of(ParticipantShutdownDisposition.GRACEFUL_TERMINATION, 1L),
+			Assertions.assertEquals(Map.of(ShutdownComponentDisposition.GRACEFUL_TERMINATION, 1L),
 					mcpMetrics.getShutdowns());
 			Assertions.assertTrue(mcpMetrics.getConnectionsAccepted() > 0L);
 			Assertions.assertEquals(0L,
@@ -1151,7 +1151,7 @@ public class McpRequestObservationPublicRuntimeTests {
 				.metricsCollector(collector)
 				.lifecyclePolicy(LifecyclePolicy.builder()
 						.startupTimeout(Duration.ofSeconds(5))
-						.startupCancellationTimeout(Duration.ofSeconds(2))
+						.startupCancelationTimeout(Duration.ofSeconds(2))
 						.gracefulShutdownDuration(Duration.ofSeconds(2))
 						.forcedShutdownDuration(Duration.ofSeconds(1))
 						.build())
@@ -1456,7 +1456,7 @@ public class McpRequestObservationPublicRuntimeTests {
 						Assertions.assertEquals("tools/call", value);
 				case "outcome" -> Assertions.assertTrue(
 						value instanceof McpRequestOutcome
-								|| value instanceof ParticipantShutdownDisposition,
+								|| value instanceof ShutdownComponentDisposition,
 						value.toString());
 				case "reason" -> Assertions.assertTrue(
 						value instanceof McpStreamTerminationReason

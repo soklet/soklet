@@ -17,9 +17,9 @@
 package com.soklet.conformance.transport;
 
 import com.soklet.LifecyclePolicy;
-import com.soklet.ParticipantKind;
-import com.soklet.ParticipantShutdownDisposition;
-import com.soklet.ParticipantShutdownResult;
+import com.soklet.ShutdownComponentType;
+import com.soklet.ShutdownComponentDisposition;
+import com.soklet.ShutdownComponentResult;
 import com.soklet.ResourceMethodResolver;
 import com.soklet.ShutdownDisposition;
 import com.soklet.ShutdownResult;
@@ -65,7 +65,7 @@ public final class TransportCompositionFixtureContractTest {
 
 		LifecyclePolicy policy = LifecyclePolicy.builder()
 				.startupTimeout(Duration.ofSeconds(5))
-				.startupCancellationTimeout(Duration.ofSeconds(2))
+				.startupCancelationTimeout(Duration.ofSeconds(2))
 				.gracefulShutdownDuration(Duration.ofSeconds(5))
 				.forcedShutdownDuration(Duration.ofSeconds(2))
 				.build();
@@ -89,25 +89,25 @@ public final class TransportCompositionFixtureContractTest {
 
 		assertEquals(StartupDisposition.READY, result.getStartupDisposition(),
 				"Startup disposition for " + composition);
-		assertEquals(ShutdownDisposition.GRACEFUL, result.getDisposition(),
+		assertEquals(ShutdownDisposition.GRACEFUL, result.getShutdownDisposition(),
 				"Shutdown disposition for " + composition);
 		assertTrue(result.isComplete(),
 				"Shutdown must be complete for " + composition);
-		assertParticipant(result, ParticipantKind.HTTP);
-		assertParticipant(result, ParticipantKind.SSE);
-		assertEquals(2, result.getParticipantResults().size(),
+		assertParticipant(result, ShutdownComponentType.HTTP);
+		assertParticipant(result, ShutdownComponentType.SSE);
+		assertEquals(2, result.getShutdownComponentResults().size(),
 				"Configured participant count for " + composition);
 		assertGraphEvents(composition, "http", http.probe().events());
 		assertGraphEvents(composition, "sse", sse.probe().events());
 	}
 
 	private static void assertParticipant(ShutdownResult result,
-			ParticipantKind kind) {
-		ParticipantShutdownResult participant = result.getParticipantResult(kind)
+			ShutdownComponentType kind) {
+		ShutdownComponentResult participant = result.getShutdownComponentResult(kind)
 				.orElseThrow(() -> new AssertionError(
 						"Missing participant result for " + kind));
-		assertEquals(ParticipantShutdownDisposition.GRACEFUL_TERMINATION,
-				participant.getDisposition(), "Participant disposition for " + kind);
+		assertEquals(ShutdownComponentDisposition.GRACEFUL_TERMINATION,
+				participant.getShutdownComponentDisposition(), "Participant disposition for " + kind);
 		assertEquals(List.of(), participant.getFailures(),
 				"Participant failures for " + kind);
 	}

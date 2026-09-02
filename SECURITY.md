@@ -359,7 +359,7 @@ request-stream, subscription lifecycle, progress/cancelation, keep-alive, and
 protocol-error/unknown-header aggregate families, followed by the downstream
 OpenTelemetry metric mapping, modern admitted-request spans, and bounded
 off-network MCP simulation. Shutdown
-metrics have only the fixed `ParticipantShutdownDisposition`-derived labels
+metrics have only the fixed `ShutdownComponentDisposition`-derived labels
 `not_started`/`graceful_termination`/`forced_termination`/`unexpected_termination`/
 `residual_activity`/`termination_unknown`. The exact handler-capacity families—
 `soklet_mcp_handler_executions_active`, `soklet_mcp_handler_queue_depth`, and

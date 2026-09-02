@@ -570,7 +570,7 @@ final class LifecycleRetentionAnchor {
 	private final LifecycleRetentionSummary summary;
 
 	LifecycleRetentionAnchor(@NonNull Object retainedGraph,
-			@NonNull Map<InternalResidualActivityKind, Integer> counts,
+			@NonNull Map<InternalResidualActivityType, Integer> counts,
 			@NonNull String frameworkSummary) {
 		this.retainedGraph = requireNonNull(retainedGraph);
 		this.summary = new LifecycleRetentionSummary(counts, frameworkSummary);
@@ -590,17 +590,17 @@ final class LifecycleRetentionAnchor {
 final class LifecycleRetentionSummary {
 	private static final int MAXIMUM_SUMMARY_CODE_POINTS = 1_024;
 	@NonNull
-	private final Map<InternalResidualActivityKind, Integer> counts;
+	private final Map<InternalResidualActivityType, Integer> counts;
 	@NonNull
 	private final String summary;
 
-	LifecycleRetentionSummary(@NonNull Map<InternalResidualActivityKind, Integer> counts,
+	LifecycleRetentionSummary(@NonNull Map<InternalResidualActivityType, Integer> counts,
 			@NonNull String frameworkSummary) {
 		requireNonNull(counts);
-		EnumMap<InternalResidualActivityKind, Integer> copy =
-				new EnumMap<>(InternalResidualActivityKind.class);
-		for (Map.Entry<InternalResidualActivityKind, Integer> entry : counts.entrySet()) {
-			InternalResidualActivityKind kind = requireNonNull(entry.getKey());
+		EnumMap<InternalResidualActivityType, Integer> copy =
+				new EnumMap<>(InternalResidualActivityType.class);
+		for (Map.Entry<InternalResidualActivityType, Integer> entry : counts.entrySet()) {
+			InternalResidualActivityType kind = requireNonNull(entry.getKey());
 			Integer count = requireNonNull(entry.getValue());
 			if (count < 0)
 				throw new IllegalArgumentException("Residual activity count must be >= 0");
@@ -612,7 +612,7 @@ final class LifecycleRetentionSummary {
 	}
 
 	@NonNull
-	Map<InternalResidualActivityKind, Integer> counts() {
+	Map<InternalResidualActivityType, Integer> counts() {
 		return this.counts;
 	}
 
@@ -920,7 +920,7 @@ final class TrackedLifecycleCallRunner {
 final class InternalLifecycleCoordinator {
 	interface Participant {
 		@NonNull
-		InternalParticipantKind kind();
+		InternalLifecycleComponentType kind();
 
 		@NonNull
 		AdmissionFence admissionFence();
@@ -932,7 +932,7 @@ final class InternalLifecycleCoordinator {
 		InternalTransportRuntime runtime();
 
 		@NonNull
-		Set<InternalResidualActivityKind> residualActivity();
+		Set<InternalResidualActivityType> residualActivity();
 
 		default boolean startupCallActive() {
 			return false;
@@ -967,8 +967,8 @@ final class InternalLifecycleCoordinator {
 		for (Participant participant : ordered)
 			participant.terminationGroup().recordShutdownIntent();
 
-		InternalShutdownContext gracefulContext = new InternalShutdownContext(
-				InternalShutdownPhase.GRACEFUL, this.clock, gracefulDeadlineNanos);
+		ShutdownContext gracefulContext = new ShutdownContext(
+				ShutdownPhase.GRACEFUL, this.clock, gracefulDeadlineNanos);
 		Map<Participant, TrackedLifecycleCallRunner.Call<Void>> quiesceCalls =
 				new java.util.IdentityHashMap<>();
 		for (Participant participant : ordered) {
@@ -997,8 +997,8 @@ final class InternalLifecycleCoordinator {
 				new java.util.IdentityHashMap<>());
 		Map<Participant, TrackedLifecycleCallRunner.Call<Void>> forceCalls =
 				new java.util.IdentityHashMap<>();
-		InternalShutdownContext forcedContext = new InternalShutdownContext(
-				InternalShutdownPhase.FORCED, this.clock, forcedDeadlineNanos);
+		ShutdownContext forcedContext = new ShutdownContext(
+				ShutdownPhase.FORCED, this.clock, forcedDeadlineNanos);
 		for (Participant participant : ordered) {
 			InternalTerminationGroup group = participant.terminationGroup();
 			if (!group.tryClaimForceSubmission())
@@ -1039,39 +1039,39 @@ final class InternalLifecycleCoordinator {
 		for (Participant participant : ordered)
 			participant.freezeForClassification();
 
-		List<InternalParticipantShutdownResult> results = new ArrayList<>();
+		List<InternalLifecycleComponentShutdownResult> results = new ArrayList<>();
 		for (Participant participant : ordered) {
 			InternalTerminationGroup group = participant.terminationGroup();
-			InternalParticipantShutdownDisposition disposition;
-			Set<InternalResidualActivityKind> reportedResidual =
+			InternalLifecycleComponentShutdownDisposition disposition;
+			Set<InternalResidualActivityType> reportedResidual =
 					participant.residualActivity();
 			InternalTerminationGroup.EvidenceSnapshot evidence =
 					group.freezeEvidence();
-			EnumSet<InternalResidualActivityKind> residual =
-					EnumSet.noneOf(InternalResidualActivityKind.class);
+			EnumSet<InternalResidualActivityType> residual =
+					EnumSet.noneOf(InternalResidualActivityType.class);
 			residual.addAll(reportedResidual);
 			if (evidence.trackedLifecycleCalls() > 0)
-				residual.add(InternalResidualActivityKind.LIFECYCLE_CALL);
+				residual.add(InternalResidualActivityType.LIFECYCLE_CALL);
 			if (evidence.admittedWork() > 0)
-				residual.add(InternalResidualActivityKind.CALLBACK);
+				residual.add(InternalResidualActivityType.CALLBACK);
 			if (participant.startupCallActive()) {
-				disposition = InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN;
+				disposition = InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN;
 			} else if (!residual.isEmpty()) {
-				disposition = InternalParticipantShutdownDisposition.RESIDUAL_ACTIVITY;
+				disposition = InternalLifecycleComponentShutdownDisposition.RESIDUAL_ACTIVITY;
 			} else if (evidence.barrierComplete()) {
 				if (forceSubmitted.contains(participant))
-					disposition = InternalParticipantShutdownDisposition.FORCED_TERMINATION;
+					disposition = InternalLifecycleComponentShutdownDisposition.FORCED_TERMINATION;
 				else if (evidence.controllingEvent().isPresent())
-					disposition = InternalParticipantShutdownDisposition.UNEXPECTED_TERMINATION;
+					disposition = InternalLifecycleComponentShutdownDisposition.UNEXPECTED_TERMINATION;
 				else
-					disposition = InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION;
+					disposition = InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION;
 			} else {
-				disposition = InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN;
+				disposition = InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN;
 			}
 			List<Throwable> failures = evidence.primaryEvents().stream()
 					.flatMap(event -> event.cause().stream())
 					.toList();
-			results.add(new InternalParticipantShutdownResult(participant.kind(), disposition,
+			results.add(new InternalLifecycleComponentShutdownResult(participant.kind(), disposition,
 					failures, residual));
 		}
 		return new InternalShutdownResultAggregator().aggregate(

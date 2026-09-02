@@ -45,7 +45,7 @@ public class RequestHandlingRegressionTests {
 
 	@Test
 	public void wrappedRequestIsUsedForInterceptAndResponseLogic() {
-		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
+		SokletSimulator.run(config -> config.httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(WrappedRequestResource.class)))
 				.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
 				.requestInterceptor(new RequestInterceptor() {
@@ -91,7 +91,7 @@ public class RequestHandlingRegressionTests {
 
 	@Test
 	public void responseMarshalerRespectsCaseInsensitiveContentType() {
-		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
+		SokletSimulator.run(config -> config.httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ContentTypeResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
@@ -111,7 +111,7 @@ public class RequestHandlingRegressionTests {
 	public void wrapRequestMustAdvanceRequestFlow() {
 		List<LogEvent> logEvents = new ArrayList<>();
 
-		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
+		SokletSimulator.run(config -> config.httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(WrappedRequestResource.class)))
 				.requestInterceptor(new RequestInterceptor() {
 					@Override
@@ -142,7 +142,7 @@ public class RequestHandlingRegressionTests {
 	public void interceptRequestMustWriteResponse() {
 		List<LogEvent> logEvents = new ArrayList<>();
 
-		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
+		SokletSimulator.run(config -> config.httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(WrappedRequestResource.class)))
 				.requestInterceptor(new RequestInterceptor() {
 					@Override
@@ -173,7 +173,7 @@ public class RequestHandlingRegressionTests {
 
 	@Test
 	public void wrappedRequestRewritesPathAndMethod() {
-		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
+		SokletSimulator.run(config -> config.httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(WrappedRequestRewriteResource.class)))
 				.requestInterceptor(new RequestInterceptor() {
 					@Override
@@ -203,7 +203,7 @@ public class RequestHandlingRegressionTests {
 
 	@Test
 	public void explicitRouteBeatsPlaceholder() {
-		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
+		SokletSimulator.run(config -> config.httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(RouteSpecificityResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
@@ -226,7 +226,7 @@ public class RequestHandlingRegressionTests {
 
 	@Test
 	public void conditionalRequestsWorkFromResourceMethods() {
-		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
+		SokletSimulator.run(config -> config.httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ConditionalResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override

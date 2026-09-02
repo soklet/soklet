@@ -814,6 +814,10 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 */
 		@NonNull
 		public McpServer build() {
+			SimulatorMcpBuildRegistrar exactSimulatorBuildRegistrar =
+					this.simulatorBuildRegistrar;
+			if (exactSimulatorBuildRegistrar != null)
+				exactSimulatorBuildRegistrar.verifyBuildAllowed();
 			if (this.keepAliveInterval.compareTo(this.writeTimeout) >= 0)
 				throw new IllegalStateException(
 						"The MCP keep-alive interval must be shorter than the write timeout.");
@@ -855,8 +859,8 @@ public sealed interface McpServer permits DefaultMcpServer {
 					this.requestRateLimiter, this.toolRateLimiter,
 					this.rateLimiterRegistry, this.protectionConfig,
 					this.traceCorrelationKey, this.localizer);
-			if (this.simulatorBuildRegistrar != null)
-				this.simulatorBuildRegistrar.register(server);
+			if (exactSimulatorBuildRegistrar != null)
+				exactSimulatorBuildRegistrar.register(server);
 			return server;
 		}
 

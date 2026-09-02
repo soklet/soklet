@@ -95,7 +95,7 @@ final class SokletDirectLifecycleRaceTests {
 		Assertions.assertNotEquals(InternalStartupDisposition.NOT_ATTEMPTED,
 				result.startupDisposition(),
 				"A shutdown after the start claim is cancellation, never close-before-start");
-		Assertions.assertEquals(InternalStartupDisposition.CANCELLED,
+		Assertions.assertEquals(InternalStartupDisposition.CANCELED,
 				result.startupDisposition());
 		Assertions.assertEquals(0, http.attachCalls());
 		Assertions.assertTrue(setupReturned.await(2, TimeUnit.SECONDS));
@@ -132,12 +132,12 @@ final class SokletDirectLifecycleRaceTests {
 		}
 
 		Assertions.assertInstanceOf(SokletStartupException.class, startFailure);
-		Assertions.assertEquals(InternalStartupDisposition.CANCELLED,
+		Assertions.assertEquals(InternalStartupDisposition.CANCELED,
 				terminal.startupDisposition());
-		InternalParticipantShutdownResult httpResult = terminal
-				.participantResult(InternalParticipantKind.HTTP).orElseThrow();
+		InternalLifecycleComponentShutdownResult httpResult = terminal
+				.participantResult(InternalLifecycleComponentType.HTTP).orElseThrow();
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+				InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
 				httpResult.disposition(),
 				"A still-running attachment call has exact unknown termination");
 		Assertions.assertFalse(terminal.isComplete());
@@ -188,24 +188,24 @@ final class SokletDirectLifecycleRaceTests {
 
 			Assertions.assertSame(result, incomplete.getInternalShutdownResult());
 			Assertions.assertSame(result, owner.result().orElseThrow());
-			Assertions.assertEquals(InternalStartupDisposition.CANCELLED,
+			Assertions.assertEquals(InternalStartupDisposition.CANCELED,
 					result.startupDisposition());
 			Assertions.assertEquals(result.participantResults().size(),
 					result.participantResults().stream()
-							.map(InternalParticipantShutdownResult::kind)
+							.map(InternalLifecycleComponentShutdownResult::kind)
 							.distinct().count(),
 					"Synthetic attachment evidence cannot duplicate a configured kind");
 
-			InternalParticipantShutdownResult httpResult = result
-					.participantResult(InternalParticipantKind.HTTP).orElseThrow();
+			InternalLifecycleComponentShutdownResult httpResult = result
+					.participantResult(InternalLifecycleComponentType.HTTP).orElseThrow();
 			Assertions.assertEquals(
-					InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+					InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
 					httpResult.disposition(),
 					"The configured transport owns its still-active attach wrapper");
 			Assertions.assertTrue(httpResult.residualActivity().contains(
-					InternalResidualActivityKind.LIFECYCLE_CALL));
+					InternalResidualActivityType.LIFECYCLE_CALL));
 			Assertions.assertTrue(result.participantResult(
-					InternalParticipantKind.FRAMEWORK_STARTUP).isEmpty(),
+					InternalLifecycleComponentType.FRAMEWORK).isEmpty(),
 					"Attachment wrapper evidence must project onto its transport row");
 			Assertions.assertFalse(result.isComplete());
 		} finally {
@@ -264,16 +264,16 @@ final class SokletDirectLifecycleRaceTests {
 		Assertions.assertNull(resolverOwnerFailure.get());
 		Assertions.assertInstanceOf(SokletStartupException.class, startFailure);
 		Assertions.assertFalse(throwableGraphContains(startFailure,
-				DefaultResourceMethodResolver.StartupWaitCancelledException.class),
+				DefaultResourceMethodResolver.StartupWaitCanceledException.class),
 				"The resolver's private wait sentinel must be normalized at the owner boundary");
 		InternalShutdownResult result = soklet.getDirectLifecycle().result()
 				.orElseThrow();
-		Assertions.assertEquals(InternalStartupDisposition.CANCELLED,
+		Assertions.assertEquals(InternalStartupDisposition.CANCELED,
 				result.startupDisposition());
 		Assertions.assertTrue(result.participantResults().stream()
 				.flatMap(participant -> participant.failures().stream())
 				.noneMatch(failure -> throwableGraphContains(failure,
-						DefaultResourceMethodResolver.StartupWaitCancelledException.class)),
+						DefaultResourceMethodResolver.StartupWaitCanceledException.class)),
 				"Private resolver cancellation cannot leak into retained shutdown evidence");
 		Assertions.assertEquals(0, http.attachCalls());
 	}
@@ -355,7 +355,7 @@ final class SokletDirectLifecycleRaceTests {
 			Assertions.assertEquals(InternalStartupDisposition.TIMED_OUT,
 					result.startupDisposition());
 			Assertions.assertFalse(throwableGraphContains(startup,
-					DefaultResourceMethodResolver.StartupWaitCancelledException.class),
+					DefaultResourceMethodResolver.StartupWaitCanceledException.class),
 					"The private resolver sentinel must remain outcome-neutral");
 			Assertions.assertEquals(0, http.attachCalls());
 		} finally {
@@ -500,8 +500,8 @@ final class SokletDirectLifecycleRaceTests {
 		Assertions.assertEquals(InternalStartupDisposition.TIMED_OUT,
 				result.startupDisposition());
 		Assertions.assertNotEquals(
-				InternalParticipantShutdownDisposition.UNEXPECTED_TERMINATION,
-				result.participantResult(InternalParticipantKind.HTTP)
+				InternalLifecycleComponentShutdownDisposition.UNEXPECTED_TERMINATION,
+				result.participantResult(InternalLifecycleComponentType.HTTP)
 						.orElseThrow().disposition());
 		Assertions.assertDoesNotThrow(soklet::close,
 				"Deadline cancellation must not publish unexpected termination");
@@ -540,7 +540,7 @@ final class SokletDirectLifecycleRaceTests {
 		Assertions.assertInstanceOf(SokletStartupException.class, startFailure);
 		SokletStartupException startupException =
 				(SokletStartupException) startFailure;
-		Assertions.assertEquals(InternalStartupDisposition.CANCELLED,
+		Assertions.assertEquals(InternalStartupDisposition.CANCELED,
 				startupException.getInternalStartupDisposition());
 		Throwable exactCancellation = startupException.getCause();
 		Assertions.assertEquals(IllegalStateException.class,
@@ -558,11 +558,11 @@ final class SokletDirectLifecycleRaceTests {
 				.getInternalShutdownResult();
 		Assertions.assertSame(result,
 				soklet.getDirectLifecycle().result().orElseThrow());
-		Assertions.assertEquals(InternalStartupDisposition.CANCELLED,
+		Assertions.assertEquals(InternalStartupDisposition.CANCELED,
 				result.startupDisposition());
 		Assertions.assertNotEquals(
-				InternalParticipantShutdownDisposition.UNEXPECTED_TERMINATION,
-				result.participantResult(InternalParticipantKind.HTTP)
+				InternalLifecycleComponentShutdownDisposition.UNEXPECTED_TERMINATION,
+				result.participantResult(InternalLifecycleComponentType.HTTP)
 						.orElseThrow().disposition());
 		Assertions.assertDoesNotThrow(soklet::close,
 				"External cancellation must not publish unexpected termination");
@@ -619,7 +619,7 @@ final class SokletDirectLifecycleRaceTests {
 			InternalShutdownResult result = startup.getInternalShutdownResult();
 			Assertions.assertSame(result, shutdown.toCompletableFuture().get(
 					3, TimeUnit.SECONDS).internalResult());
-			Assertions.assertEquals(InternalStartupDisposition.CANCELLED,
+			Assertions.assertEquals(InternalStartupDisposition.CANCELED,
 					result.startupDisposition());
 			IllegalStateException exactCancellation = Assertions.assertInstanceOf(
 					IllegalStateException.class, startup.getCause());
@@ -631,7 +631,7 @@ final class SokletDirectLifecycleRaceTests {
 					"A post-cancellation transport failure cannot replace the owner winner");
 			Assertions.assertSame(result, owner.result().orElseThrow());
 			Assertions.assertTrue(result.participantResult(
-					InternalParticipantKind.HTTP).orElseThrow().failures().stream()
+					InternalLifecycleComponentType.HTTP).orElseThrow().failures().stream()
 					.anyMatch(failure -> failure == inducedFailure),
 					"The losing induced failure must remain participant evidence");
 		} finally {
@@ -696,7 +696,7 @@ final class SokletDirectLifecycleRaceTests {
 			Assertions.assertTrue(observer.awaitFailure());
 			Assertions.assertSame(exactFailure, observer.failure());
 			Assertions.assertTrue(result.participantResult(
-					InternalParticipantKind.HTTP).orElseThrow().failures().stream()
+					InternalLifecycleComponentType.HTTP).orElseThrow().failures().stream()
 					.anyMatch(failure -> failure == exactFailure));
 		} finally {
 			releaseStart.countDown();
@@ -756,10 +756,10 @@ final class SokletDirectLifecycleRaceTests {
 			Assertions.assertTrue(observer.awaitFailure());
 			Assertions.assertSame(exactFailure, observer.failure());
 			Assertions.assertTrue(result.participantResult(
-					InternalParticipantKind.SSE).orElseThrow().failures().stream()
+					InternalLifecycleComponentType.SSE).orElseThrow().failures().stream()
 					.anyMatch(failure -> failure == exactFailure));
 			Assertions.assertTrue(result.participantResult(
-					InternalParticipantKind.HTTP).orElseThrow().failures().stream()
+					InternalLifecycleComponentType.HTTP).orElseThrow().failures().stream()
 					.anyMatch(failure -> failure == laterPeerFailure),
 					"The losing peer failure must remain participant evidence");
 		} finally {
@@ -819,7 +819,7 @@ final class SokletDirectLifecycleRaceTests {
 				"The first participant failure must remain the exact startup cause");
 		InternalShutdownResult result = startupException
 				.getInternalShutdownResult();
-		Assertions.assertTrue(result.participantResult(InternalParticipantKind.HTTP)
+		Assertions.assertTrue(result.participantResult(InternalLifecycleComponentType.HTTP)
 				.orElseThrow().failures().stream()
 				.anyMatch(failure -> failure == exactFailure));
 		Assertions.assertTrue(laterStartReturned.await(2, TimeUnit.SECONDS));
@@ -839,8 +839,8 @@ final class SokletDirectLifecycleRaceTests {
 		TransportOwnershipException conflict = Assertions.assertThrows(
 				TransportOwnershipException.class, () -> Soklet.fromConfig(
 						config(reachableTransport, completeResolver()).build()));
-		Assertions.assertEquals(ParticipantKind.HTTP,
-				conflict.getParticipantKind());
+		Assertions.assertEquals(ShutdownComponentType.HTTP,
+				conflict.getShutdownComponentType());
 		Assertions.assertSame(RaceHttpEndpoint.class, conflict.getTransportClass());
 		Assertions.assertTrue(conflict.getMessage().contains("already owned"));
 	}

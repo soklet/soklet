@@ -79,19 +79,19 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 			assertSkippedCleanup(snapshot, cleanupCalls, workers);
 			Assertions.assertEquals(InternalShutdownDisposition.INCOMPLETE,
 					result.disposition());
-			InternalParticipantShutdownResult setup = result.participantResult(
-					InternalParticipantKind.FRAMEWORK_STARTUP).orElseThrow();
+			InternalLifecycleComponentShutdownResult setup = result.participantResult(
+					InternalLifecycleComponentType.FRAMEWORK).orElseThrow();
 			Assertions.assertTrue(setup.residualActivity().contains(
-					InternalResidualActivityKind.LIFECYCLE_CALL));
+					InternalResidualActivityType.LIFECYCLE_CALL));
 			Integer retainedCalls = result.retentionSummary().orElseThrow()
-					.counts().get(InternalResidualActivityKind.LIFECYCLE_CALL);
+					.counts().get(InternalResidualActivityType.LIFECYCLE_CALL);
 			Assertions.assertNotNull(retainedCalls);
 			Assertions.assertTrue(retainedCalls >= 1,
 					"The frozen framework setup call must remain retained");
 
 			SokletApplicationParticipantDiagnostics diagnostics = snapshot
 					.coreDiagnostics().participantDiagnostics()
-					.get(InternalParticipantKind.FRAMEWORK_STARTUP);
+					.get(InternalLifecycleComponentType.FRAMEWORK);
 			Assertions.assertNotNull(diagnostics);
 			Assertions.assertEquals(InternalTerminationAuthority.FRAMEWORK_PROVEN,
 					diagnostics.authority());
@@ -154,14 +154,14 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 			Assertions.assertEquals(1L, outerAttachReturned.getCount(),
 					"Terminal freeze must precede the configured attachment return "
 							+ "and commit");
-			InternalParticipantShutdownResult http = result.participantResult(
-					InternalParticipantKind.HTTP).orElseThrow();
+			InternalLifecycleComponentShutdownResult http = result.participantResult(
+					InternalLifecycleComponentType.HTTP).orElseThrow();
 			Assertions.assertTrue(http.residualActivity().contains(
-					InternalResidualActivityKind.LIFECYCLE_CALL));
+					InternalResidualActivityType.LIFECYCLE_CALL));
 
 			SokletApplicationParticipantDiagnostics diagnostics = snapshot
 					.coreDiagnostics().participantDiagnostics()
-					.get(InternalParticipantKind.HTTP);
+					.get(InternalLifecycleComponentType.HTTP);
 			Assertions.assertNotNull(diagnostics);
 			Assertions.assertEquals(InternalTerminationAuthority.TRANSPORT_ATTESTED,
 					diagnostics.authority());
@@ -319,13 +319,13 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 		private static final InternalTransportRuntime INERT_RUNTIME =
 				new InternalTransportRuntime() {
 					@Override
-					public void start(@NonNull InternalStartupContext context) { }
+					public void start(@NonNull StartupContext context) { }
 
 					@Override
-					public void quiesce(@NonNull InternalShutdownContext context) { }
+					public void quiesce(@NonNull ShutdownContext context) { }
 
 					@Override
-					public void force(@NonNull InternalShutdownContext context) { }
+					public void force(@NonNull ShutdownContext context) { }
 				};
 
 		@NonNull
@@ -379,7 +379,7 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 		@NonNull
 		public InternalTransportRuntime attach(
 				@NonNull InternalTransportAttachmentContext<RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
+				@NonNull StartupContext startupContext) {
 			try {
 				if (this.delegate != null)
 					return context.attachLifecycleOwningDelegate(this.delegate,

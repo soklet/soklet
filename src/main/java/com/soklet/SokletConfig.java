@@ -114,13 +114,6 @@ public final class SokletConfig {
 		return SokletConfig.withHttpServer(HttpServer.withPort(0).build()).sseServer(SseServer.withPort(0).build());
 	}
 
-	@NonNull
-	static Builder forSimulatorTesting(@NonNull SimulatorTransports transports) {
-		requireNonNull(transports);
-		return SokletConfig.withHttpServer(transports.getHttpServer())
-				.sseServer(transports.getSseServer());
-	}
-
 	SokletConfig(@NonNull Builder builder) {
 		requireNonNull(builder);
 
@@ -279,7 +272,7 @@ public final class SokletConfig {
 
 	/**
 	 * The startup and shutdown deadline policy shared by every configured
-	 * lifecycle participant.
+	 * lifecycle component.
 	 *
 	 * @return the configured lifecycle policy
 	 */
@@ -375,7 +368,7 @@ public final class SokletConfig {
 
 		/**
 		 * Sets the startup and shutdown deadline policy shared by every
-		 * configured lifecycle participant.
+		 * configured lifecycle component.
 		 *
 		 * @param lifecyclePolicy the lifecycle policy
 		 * @return this builder

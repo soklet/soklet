@@ -86,7 +86,7 @@ public class McpServerStartMetricsAggregationTests {
 		DefaultMetricsCollector stopDriven =
 				DefaultMetricsCollector.defaultInstance();
 		stopDriven.didRecordMcpMetricsEvent(McpMetricsEvent.serverStopped(
-				ParticipantShutdownDisposition.GRACEFUL_TERMINATION));
+				ShutdownComponentDisposition.GRACEFUL_TERMINATION));
 		String stopDrivenText = prometheus(stopDriven);
 		assertMetricType(stopDrivenText);
 		assertSample(stopDrivenText, 0L);

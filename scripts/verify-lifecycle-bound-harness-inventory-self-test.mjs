@@ -277,7 +277,7 @@ run('local strict-fit equality rejected', () => {
     class SyntheticLifecycleTests {
       @Test @Timeout(60) void exactEquality() {
         LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(30))
-          .startupCancellationTimeout(Duration.ofSeconds(12))
+          .startupCancelationTimeout(Duration.ofSeconds(12))
           .gracefulShutdownDuration(Duration.ofSeconds(15))
           .forcedShutdownDuration(Duration.ofSeconds(3)).build();
         Soklet soklet = Soklet.fromConfig(null); soklet.start(); soklet.close();
@@ -1059,7 +1059,7 @@ run('duplicate lifecycle setters use the effective last value', () => {
         LifecyclePolicy policy = LifecyclePolicy.builder()
           .startupTimeout(Duration.ofSeconds(1))
           .startupTimeout(Duration.ofSeconds(120))
-          .startupCancellationTimeout(Duration.ZERO)
+          .startupCancelationTimeout(Duration.ZERO)
           .gracefulShutdownDuration(Duration.ZERO)
           .forcedShutdownDuration(Duration.ZERO).build();
         Soklet s = Soklet.fromConfig(null); s.start(); s.close();

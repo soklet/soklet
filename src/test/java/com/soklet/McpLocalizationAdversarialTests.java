@@ -57,7 +57,7 @@ class McpLocalizationAdversarialTests {
 	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
 			LifecyclePolicy.builder()
 					.startupTimeout(Duration.ofSeconds(5))
-					.startupCancellationTimeout(Duration.ofSeconds(2))
+					.startupCancelationTimeout(Duration.ofSeconds(2))
 					.gracefulShutdownDuration(Duration.ofSeconds(2))
 					.forcedShutdownDuration(Duration.ofSeconds(1))
 					.build();
@@ -126,8 +126,8 @@ class McpLocalizationAdversarialTests {
 		List<String> observedTags = new CopyOnWriteArrayList<>();
 		RecordingMetrics metrics = new RecordingMetrics();
 		int floodSize = 250;
-		SokletSimulator.run(transports -> SokletConfig.withMcpServer(
-				serverBuilder(transports, contexts, request -> {
+		SokletSimulator.run(config -> config.mcpServer(0, builder ->
+				serverBuilder(builder, contexts, request -> {
 					request.getLanguageRanges().stream().findFirst()
 							.ifPresent(range -> observedTags.add(range.getRange()));
 					return Locale.CANADA_FRENCH;
@@ -167,8 +167,8 @@ class McpLocalizationAdversarialTests {
 		AtomicReference<McpServer> serverReference = new AtomicReference<>();
 		List<String> bodies = new CopyOnWriteArrayList<>();
 
-		SokletSimulator.run(transports -> {
-			McpServer server = serverBuilder(transports, contexts, request -> {
+		SokletSimulator.run(config -> config.mcpServer(0, builder -> {
+			McpServer server = serverBuilder(builder, contexts, request -> {
 				// Every request parks inside the provider so its locale selection
 				// overlaps every peer's, and overlaps the invalidation below.
 				allInside.countDown();
@@ -182,11 +182,10 @@ class McpLocalizationAdversarialTests {
 				return Locale.forLanguageTag(tag);
 			}).build();
 			serverReference.set(server);
-			return SokletConfig.withMcpServer(server)
-					.resourceMethodResolver(
-							ResourceMethodResolver.fromMethods(Set.of()))
-					.build();
-		}, simulator -> {
+			return server;
+		}).resourceMethodResolver(
+				ResourceMethodResolver.fromMethods(Set.of()))
+				.build(), simulator -> {
 			List<McpSimulation> simulations = new ArrayList<>();
 
 			for (int index = 0; index < concurrency; ++index)
@@ -218,7 +217,7 @@ class McpLocalizationAdversarialTests {
 		Locale select(McpLocalizationRequest request);
 	}
 
-	private static McpServer.Builder serverBuilder(SimulatorTransports transports,
+	private static McpServer.Builder serverBuilder(McpServer.Builder builder,
 			AtomicInteger contexts,
 			LocaleSelector selector) {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
@@ -246,7 +245,7 @@ class McpLocalizationAdversarialTests {
 												.build()))
 						.build())
 				.build();
-		return transports.newMcpServerBuilder(0)
+		return builder
 				.host(LOOPBACK)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.admissionController(McpAdmissionController.acceptAllInstance())
@@ -284,15 +283,15 @@ class McpLocalizationAdversarialTests {
 			Request request) {
 		AtomicReference<Capture> captured = new AtomicReference<>();
 
-		SokletSimulator.run(transports -> {
-			McpServer.Builder builder = serverBuilder(transports, contexts, selector);
-			customizer.customize(builder);
-			return SokletConfig.withMcpServer(builder.build())
-					.resourceMethodResolver(
-							ResourceMethodResolver.fromMethods(Set.of()))
-					.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
-					.build();
-		}, simulator -> {
+		SokletSimulator.run(config -> config.mcpServer(0, builder -> {
+			McpServer.Builder configuredBuilder = serverBuilder(builder, contexts,
+					selector);
+			customizer.customize(configuredBuilder);
+			return configuredBuilder.build();
+		}).resourceMethodResolver(
+				ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
+				.build(), simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(request);
 
 			try {

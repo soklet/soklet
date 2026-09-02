@@ -98,11 +98,11 @@ final class InternalLifecycleCoordinatorForceAttributionTests {
 		group.commit();
 		InternalTransportRuntime runtime = new InternalTransportRuntime() {
 			@Override
-			public void start(@NonNull InternalStartupContext context) {
+			public void start(@NonNull StartupContext context) {
 			}
 
 			@Override
-			public void quiesce(@NonNull InternalShutdownContext context) {
+			public void quiesce(@NonNull ShutdownContext context) {
 				quiesceCalls.incrementAndGet();
 				quiesceEntered.countDown();
 				try {
@@ -116,7 +116,7 @@ final class InternalLifecycleCoordinatorForceAttributionTests {
 			}
 
 			@Override
-			public void force(@NonNull InternalShutdownContext context) {
+			public void force(@NonNull ShutdownContext context) {
 				forceCalls.incrementAndGet();
 				group.signalTerminated(group.root());
 			}
@@ -125,8 +125,8 @@ final class InternalLifecycleCoordinatorForceAttributionTests {
 				new InternalLifecycleCoordinator.Participant() {
 			@Override
 			@NonNull
-			public InternalParticipantKind kind() {
-				return InternalParticipantKind.HTTP;
+			public InternalLifecycleComponentType kind() {
+				return InternalLifecycleComponentType.HTTP;
 			}
 
 			@Override
@@ -149,7 +149,7 @@ final class InternalLifecycleCoordinatorForceAttributionTests {
 
 			@Override
 			@NonNull
-			public Set<InternalResidualActivityKind> residualActivity() {
+			public Set<InternalResidualActivityType> residualActivity() {
 				return Set.of();
 			}
 		};
@@ -215,10 +215,10 @@ final class InternalLifecycleCoordinatorForceAttributionTests {
 		Assertions.assertEquals(InternalShutdownDisposition.GRACEFUL,
 				result.disposition());
 		Assertions.assertTrue(result.isComplete());
-		InternalParticipantShutdownResult http = result
-				.participantResult(InternalParticipantKind.HTTP).orElseThrow();
+		InternalLifecycleComponentShutdownResult http = result
+				.participantResult(InternalLifecycleComponentType.HTTP).orElseThrow();
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION,
+				InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION,
 				http.disposition(),
 				"Only a successfully submitted force call may force attribution");
 		Assertions.assertEquals(List.of(launchFailure), http.failures());

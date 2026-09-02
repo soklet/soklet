@@ -22,7 +22,7 @@ import com.soklet.McpMetricsEvent;
 import com.soklet.McpServer;
 import com.soklet.McpServerDiagnostics;
 import com.soklet.McpServerStatus;
-import com.soklet.ParticipantShutdownResult;
+import com.soklet.ShutdownComponentResult;
 import com.soklet.McpSimulation;
 import com.soklet.McpSimulationBodyMode;
 import com.soklet.McpSimulationCompletion;
@@ -192,18 +192,17 @@ public final class McpLocalSimulatorScenarioDriver {
 				expectedSemanticTerminals(row.name()));
 		RecordingLifecycle lifecycle = new RecordingLifecycle();
 		AtomicReference<McpServer> serverReference = new AtomicReference<>();
-		SokletSimulator.run(transports -> {
-			var config = McpConformanceFixture.simulationConfigForScenario(
-					row.name(), transports, metrics, lifecycle);
-			McpServer server = config.getMcpServer().orElseThrow();
-			assertNotStarted(server);
-			serverReference.set(server);
-			return config;
+		SokletSimulator.run(builder -> {
+			return McpConformanceFixture.simulationConfigForScenario(
+					row.name(), builder, metrics, lifecycle, server -> {
+						assertNotStarted(server);
+						serverReference.set(server);
+					});
 		}, simulator -> {
 			McpServer server = serverReference.get();
 			if (server == null)
 				throw new IllegalStateException(
-						"The simulator config factory did not publish its MCP server.");
+						"The simulator configurer did not publish its MCP server.");
 			assertRunningOffNetwork(server);
 			executeScenario(row, simulator, server);
 			assertRunningOffNetwork(server);
@@ -211,7 +210,7 @@ public final class McpLocalSimulatorScenarioDriver {
 		McpServer server = serverReference.get();
 		if (server == null)
 			throw new IllegalStateException(
-					"The simulator config factory did not publish its MCP server.");
+					"The simulator configurer did not publish its MCP server.");
 		metrics.awaitSemanticTerminal();
 		metrics.assertNoListenerOrTransportEvents();
 		lifecycle.assertNoServerLifecycle();
@@ -1086,7 +1085,7 @@ public final class McpLocalSimulatorScenarioDriver {
 
 		@Override
 		public void didStopMcpServer(McpServer server,
-				ParticipantShutdownResult result) {
+				ShutdownComponentResult result) {
 			this.serverCallbacks.incrementAndGet();
 		}
 

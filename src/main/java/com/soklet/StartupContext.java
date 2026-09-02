@@ -18,27 +18,83 @@ package com.soklet;
 
 import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.function.BooleanSupplier;
+import java.util.function.LongSupplier;
+
+import static java.util.Objects.requireNonNull;
 
 /**
- * Advisory timing and cancellation information for transport startup.
+ * Framework-created advisory timing and cancelation information for transport
+ * startup.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-public interface StartupContext {
+@ThreadSafe
+public final class StartupContext {
+	@NonNull
+	private final NanoClock clock;
+	private final long normalDeadlineNanos;
+	private final boolean normalDeadlinePresent;
+	@NonNull
+	private final LongSupplier cancelationDeadlineNanos;
+	@NonNull
+	private final BooleanSupplier cancelationRequested;
+
+	StartupContext(@NonNull NanoClock clock,
+			@NonNull Optional<Long> normalDeadlineNanos,
+			long cancelationDeadlineNanos,
+			@NonNull BooleanSupplier cancelationRequested) {
+		this(clock, normalDeadlineNanos, () -> cancelationDeadlineNanos,
+				cancelationRequested);
+	}
+
+	StartupContext(@NonNull NanoClock clock,
+			@NonNull Optional<Long> normalDeadlineNanos,
+			@NonNull LongSupplier cancelationDeadlineNanos,
+			@NonNull BooleanSupplier cancelationRequested) {
+		this.clock = requireNonNull(clock);
+		requireNonNull(normalDeadlineNanos);
+		this.normalDeadlinePresent = normalDeadlineNanos.isPresent();
+		this.normalDeadlineNanos = normalDeadlineNanos.orElse(0L);
+		this.cancelationDeadlineNanos = requireNonNull(cancelationDeadlineNanos);
+		this.cancelationRequested = requireNonNull(cancelationRequested);
+	}
+
 	/**
 	 * Acquires the time remaining before the active startup boundary.
 	 *
 	 * @return the remaining time, or empty when ordinary startup is unbounded
 	 */
 	@NonNull
-	Optional<@NonNull Duration> getRemainingTime();
+	public Optional<@NonNull Duration> getRemainingTime() {
+		if (isCancelationRequested())
+			return Optional.of(LifecycleDeadlines.remaining(
+					this.cancelationDeadlineNanos.getAsLong(), this.clock.nanoTime()));
+		if (!this.normalDeadlinePresent)
+			return Optional.empty();
+		return Optional.of(LifecycleDeadlines.remaining(
+				this.normalDeadlineNanos, this.clock.nanoTime()));
+	}
 
 	/**
-	 * Is shutdown cancellation currently requested?
+	 * Is startup cancelation currently requested?
 	 *
-	 * @return {@code true} if cancellation is requested, {@code false} otherwise
+	 * @return {@code true} if cancelation is requested, {@code false} otherwise
 	 */
-	boolean isCancellationRequested();
+	@NonNull
+	public Boolean isCancelationRequested() {
+		return this.cancelationRequested.getAsBoolean();
+	}
+
+	@NonNull
+	Optional<Long> activeDeadlineNanos() {
+		if (isCancelationRequested())
+			return Optional.of(this.cancelationDeadlineNanos.getAsLong());
+		if (!this.normalDeadlinePresent)
+			return Optional.empty();
+		return Optional.of(this.normalDeadlineNanos);
+	}
 }

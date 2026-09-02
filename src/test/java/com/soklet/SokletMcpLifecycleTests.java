@@ -66,7 +66,7 @@ public class SokletMcpLifecycleTests {
 		CountDownLatch releaseHandler = new CountDownLatch(1);
 		CountDownLatch handlerExited = new CountDownLatch(1);
 		AtomicInteger willStopMcpCallbacks = new AtomicInteger();
-		List<ParticipantShutdownResult> stopResults = new CopyOnWriteArrayList<>();
+		List<ShutdownComponentResult> stopResults = new CopyOnWriteArrayList<>();
 		AtomicReference<ShutdownResult> globalResult = new AtomicReference<>();
 		CountDownLatch terminalObserved = new CountDownLatch(1);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
@@ -113,7 +113,7 @@ public class SokletMcpLifecycleTests {
 
 			@Override
 			public void didStopMcpServer(@NonNull McpServer server,
-					@NonNull ParticipantShutdownResult result) {
+					@NonNull ShutdownComponentResult result) {
 				stopResults.add(result);
 			}
 
@@ -134,7 +134,7 @@ public class SokletMcpLifecycleTests {
 				.lifecycleObserver(lifecycleObserver)
 				.lifecyclePolicy(LifecyclePolicy.builder()
 						.startupTimeout(Duration.ofSeconds(5))
-						.startupCancellationTimeout(Duration.ofSeconds(2))
+						.startupCancelationTimeout(Duration.ofSeconds(2))
 						.gracefulShutdownDuration(shutdownTimeout)
 						.forcedShutdownDuration(Duration.ofSeconds(3))
 						.build())
@@ -155,8 +155,8 @@ public class SokletMcpLifecycleTests {
 			Duration stopDuration = Duration.ofNanos(
 					System.nanoTime() - stopStartedAt);
 			InternalShutdownResult result = stopFailure.getInternalShutdownResult();
-			InternalParticipantShutdownResult mcpResult = result.participantResult(
-					InternalParticipantKind.MCP).orElseThrow();
+			InternalLifecycleComponentShutdownResult mcpResult = result.participantResult(
+					InternalLifecycleComponentType.MCP).orElseThrow();
 
 			Assertions.assertTrue(stopDuration.compareTo(
 					shutdownTimeout.plusSeconds(4)) < 0,
@@ -175,20 +175,20 @@ public class SokletMcpLifecycleTests {
 			Assertions.assertEquals(InternalShutdownDisposition.INCOMPLETE,
 					result.disposition());
 			Assertions.assertEquals(
-					InternalParticipantShutdownDisposition.RESIDUAL_ACTIVITY,
+					InternalLifecycleComponentShutdownDisposition.RESIDUAL_ACTIVITY,
 					mcpResult.disposition());
 			Assertions.assertFalse(mcpResult.residualActivity().isEmpty());
 			Assertions.assertTrue(terminalObserved.await(5, TimeUnit.SECONDS),
 					"The asynchronous terminal transition was not observed.");
 			ShutdownResult observedAggregate = globalResult.get();
 			Assertions.assertNotNull(observedAggregate);
-			ParticipantShutdownResult observedMcp = observedAggregate
-					.getParticipantResult(ParticipantKind.MCP).orElseThrow();
+			ShutdownComponentResult observedMcp = observedAggregate
+					.getShutdownComponentResult(ShutdownComponentType.MCP).orElseThrow();
 			Assertions.assertEquals(List.of(observedMcp), stopResults,
 					"An incomplete MCP participant must publish one exact terminal callback.");
 			Assertions.assertEquals(
-					ParticipantShutdownDisposition.RESIDUAL_ACTIVITY,
-					observedMcp.getDisposition());
+					ShutdownComponentDisposition.RESIDUAL_ACTIVITY,
+					observedMcp.getShutdownComponentDisposition());
 			Assertions.assertEquals(1, willStopMcpCallbacks.get());
 			Assertions.assertSame(result,
 					observedAggregate.internalResult());
@@ -326,8 +326,8 @@ public class SokletMcpLifecycleTests {
 			TransportOwnershipException runningConflict = Assertions.assertThrows(
 					TransportOwnershipException.class,
 					() -> Soklet.fromConfig(mixedConfig));
-			Assertions.assertEquals(ParticipantKind.MCP,
-					runningConflict.getParticipantKind());
+			Assertions.assertEquals(ShutdownComponentType.MCP,
+					runningConflict.getShutdownComponentType());
 			Assertions.assertSame(mcpServer.getClass(),
 					runningConflict.getTransportClass());
 
@@ -335,8 +335,8 @@ public class SokletMcpLifecycleTests {
 			TransportOwnershipException terminalConflict = Assertions.assertThrows(
 					TransportOwnershipException.class,
 					() -> Soklet.fromConfig(mixedConfig));
-			Assertions.assertEquals(ParticipantKind.MCP,
-					terminalConflict.getParticipantKind());
+			Assertions.assertEquals(ShutdownComponentType.MCP,
+					terminalConflict.getShutdownComponentType());
 			Assertions.assertSame(mcpServer.getClass(),
 					terminalConflict.getTransportClass(),
 					"A terminal first owner must not make its transport claim retryable.");
@@ -463,7 +463,7 @@ public class SokletMcpLifecycleTests {
 
 			@Override
 			public void didStopHttpServer(@NonNull HttpServer httpServer,
-					@NonNull ParticipantShutdownResult result) {
+					@NonNull ShutdownComponentResult result) {
 				events.add("did-stop-http");
 			}
 
@@ -474,7 +474,7 @@ public class SokletMcpLifecycleTests {
 
 			@Override
 			public void didStopSseServer(@NonNull SseServer sseServer,
-					@NonNull ParticipantShutdownResult result) {
+					@NonNull ShutdownComponentResult result) {
 				events.add("did-stop-sse");
 			}
 
@@ -485,8 +485,8 @@ public class SokletMcpLifecycleTests {
 
 			@Override
 			public void didStopMcpServer(@NonNull McpServer mcpServer,
-					@NonNull ParticipantShutdownResult result) {
-				events.add("did-stop-mcp-" + result.getDisposition().name());
+					@NonNull ShutdownComponentResult result) {
+				events.add("did-stop-mcp-" + result.getShutdownComponentDisposition().name());
 			}
 
 			@Override
@@ -550,10 +550,10 @@ public class SokletMcpLifecycleTests {
 				result.disposition());
 		Assertions.assertSame(result,
 				soklet.getDirectLifecycle().result().orElseThrow());
-		for (InternalParticipantShutdownResult participant :
+		for (InternalLifecycleComponentShutdownResult participant :
 				result.participantResults()) {
 			Assertions.assertEquals(
-					InternalParticipantShutdownDisposition.NOT_STARTED,
+					InternalLifecycleComponentShutdownDisposition.NOT_STARTED,
 					participant.disposition());
 			Assertions.assertEquals(List.of(startupFailure.getCause()),
 					participant.failures());
@@ -830,7 +830,7 @@ public class SokletMcpLifecycleTests {
 
 		@Override
 		public void didStopHttpServer(@NonNull HttpServer httpServer,
-				@NonNull ParticipantShutdownResult result) {
+				@NonNull ShutdownComponentResult result) {
 			this.events.add("did-stop-http");
 		}
 
@@ -857,7 +857,7 @@ public class SokletMcpLifecycleTests {
 
 		@Override
 		public void didStopSseServer(@NonNull SseServer sseServer,
-				@NonNull ParticipantShutdownResult result) {
+				@NonNull ShutdownComponentResult result) {
 			this.events.add("did-stop-sse");
 		}
 
@@ -887,8 +887,8 @@ public class SokletMcpLifecycleTests {
 
 		@Override
 		public void didStopMcpServer(@NonNull McpServer mcpServer,
-				@NonNull ParticipantShutdownResult result) {
-			this.events.add("did-stop-mcp-" + result.getDisposition().name());
+				@NonNull ShutdownComponentResult result) {
+			this.events.add("did-stop-mcp-" + result.getShutdownComponentDisposition().name());
 		}
 
 		@Override

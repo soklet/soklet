@@ -275,13 +275,13 @@ final class SokletApplicationObservationTests {
 		List<String> transitions = new CopyOnWriteArrayList<>();
 		List<ShutdownResult> terminalResults =
 				new CopyOnWriteArrayList<>();
-		List<ParticipantShutdownResult> participantResults =
+		List<ShutdownComponentResult> participantResults =
 				new CopyOnWriteArrayList<>();
 		AtomicReference<ShutdownResult> terminalSokletResult =
 				new AtomicReference<>();
 		LifecycleObserver observer = new LifecycleObserver() {
 			private void participant(@NonNull String transition,
-					@NonNull ParticipantShutdownResult result) {
+					@NonNull ShutdownComponentResult result) {
 				transitions.add(transition);
 				participantResults.add(result);
 			}
@@ -312,17 +312,17 @@ final class SokletApplicationObservationTests {
 			}
 
 			@Override public void didStopHttpServer(@NonNull HttpServer server,
-					@NonNull ParticipantShutdownResult result) {
+					@NonNull ShutdownComponentResult result) {
 				participant("did-stop-http", result);
 			}
 
 			@Override public void didStopSseServer(@NonNull SseServer server,
-					@NonNull ParticipantShutdownResult result) {
+					@NonNull ShutdownComponentResult result) {
 				participant("did-stop-sse", result);
 			}
 
 			@Override public void didStopMcpServer(@NonNull McpServer server,
-					@NonNull ParticipantShutdownResult result) {
+					@NonNull ShutdownComponentResult result) {
 				participant("did-stop-mcp", result);
 			}
 
@@ -394,18 +394,18 @@ final class SokletApplicationObservationTests {
 			Assertions.assertNull(runner.result.get());
 			Assertions.assertTrue(transitionWorkerDone.await(5, TimeUnit.SECONDS));
 
-			Assertions.assertEquals(InternalParticipantShutdownDisposition
+			Assertions.assertEquals(InternalLifecycleComponentShutdownDisposition
 						.TERMINATION_UNKNOWN,
-					result.participantResult(InternalParticipantKind.HTTP)
+					result.participantResult(InternalLifecycleComponentType.HTTP)
 							.orElseThrow().disposition());
 			Assertions.assertTrue(result.participantResult(
-					InternalParticipantKind.HTTP).orElseThrow().residualActivity()
-					.contains(InternalResidualActivityKind.LIFECYCLE_CALL));
-			Assertions.assertEquals(InternalParticipantShutdownDisposition.NOT_STARTED,
-					result.participantResult(InternalParticipantKind.SSE)
+					InternalLifecycleComponentType.HTTP).orElseThrow().residualActivity()
+					.contains(InternalResidualActivityType.LIFECYCLE_CALL));
+			Assertions.assertEquals(InternalLifecycleComponentShutdownDisposition.NOT_STARTED,
+					result.participantResult(InternalLifecycleComponentType.SSE)
 							.orElseThrow().disposition());
-			Assertions.assertEquals(InternalParticipantShutdownDisposition.NOT_STARTED,
-					result.participantResult(InternalParticipantKind.MCP)
+			Assertions.assertEquals(InternalLifecycleComponentShutdownDisposition.NOT_STARTED,
+					result.participantResult(InternalLifecycleComponentType.MCP)
 							.orElseThrow().disposition());
 			Assertions.assertEquals(List.of(
 					"will-start-soklet",
@@ -421,23 +421,23 @@ final class SokletApplicationObservationTests {
 			Assertions.assertEquals(List.of(publicResult), terminalResults);
 			Assertions.assertSame(publicResult, terminalSokletResult.get());
 			Assertions.assertEquals(3, participantResults.size());
-			for (ParticipantShutdownResult participant : participantResults)
-				Assertions.assertSame(participant, publicResult.getParticipantResult(
-						participant.getParticipantKind()).orElseThrow());
-			ParticipantShutdownResult publicHttp = publicResult
-					.getParticipantResult(ParticipantKind.HTTP).orElseThrow();
+			for (ShutdownComponentResult participant : participantResults)
+				Assertions.assertSame(participant, publicResult.getShutdownComponentResult(
+						participant.getShutdownComponentType()).orElseThrow());
+			ShutdownComponentResult publicHttp = publicResult
+					.getShutdownComponentResult(ShutdownComponentType.HTTP).orElseThrow();
 			Assertions.assertEquals(
-					ParticipantShutdownDisposition.TERMINATION_UNKNOWN,
-					publicHttp.getDisposition());
+					ShutdownComponentDisposition.TERMINATION_UNKNOWN,
+					publicHttp.getShutdownComponentDisposition());
 			Assertions.assertTrue(publicHttp.getResidualActivityEvidence()
-					.orElseThrow().getActivityKinds()
-					.contains(ResidualActivityKind.LIFECYCLE_CALL));
-			Assertions.assertEquals(ParticipantShutdownDisposition.NOT_STARTED,
-					publicResult.getParticipantResult(ParticipantKind.SSE).orElseThrow()
-							.getDisposition());
-			Assertions.assertEquals(ParticipantShutdownDisposition.NOT_STARTED,
-					publicResult.getParticipantResult(ParticipantKind.MCP).orElseThrow()
-							.getDisposition());
+					.orElseThrow().getResidualActivityTypes()
+					.contains(ResidualActivityType.LIFECYCLE_CALL));
+			Assertions.assertEquals(ShutdownComponentDisposition.NOT_STARTED,
+					publicResult.getShutdownComponentResult(ShutdownComponentType.SSE).orElseThrow()
+							.getShutdownComponentDisposition());
+			Assertions.assertEquals(ShutdownComponentDisposition.NOT_STARTED,
+					publicResult.getShutdownComponentResult(ShutdownComponentType.MCP).orElseThrow()
+							.getShutdownComponentDisposition());
 			LifecycleTransitionSnapshot snapshot = requireNonNull(runtime.get())
 					.diagnostics().transitionSnapshot();
 			Assertions.assertEquals(10, snapshot.acceptedRecords());
@@ -810,7 +810,7 @@ final class SokletApplicationObservationTests {
 
 			@Override
 			public void didStopHttpServer(@NonNull HttpServer httpServer,
-					@NonNull ParticipantShutdownResult result) {
+					@NonNull ShutdownComponentResult result) {
 				transitions.add("did-stop-http");
 			}
 
@@ -842,7 +842,7 @@ final class SokletApplicationObservationTests {
 				peerCallbacks.incrementAndGet();
 			}
 			@Override public void didStopHttpServer(@NonNull HttpServer server,
-					@NonNull ParticipantShutdownResult result) {
+					@NonNull ShutdownComponentResult result) {
 				peerCallbacks.incrementAndGet();
 			}
 			@Override public void didStopSoklet(@NonNull Soklet soklet,
@@ -1175,20 +1175,20 @@ final class SokletApplicationObservationTests {
 
 		@Override
 		public void didStopHttpServer(@NonNull HttpServer httpServer,
-				@NonNull ParticipantShutdownResult result) {
+				@NonNull ShutdownComponentResult result) {
 			this.transitions.add("did-stop-http");
 		}
 
 		@Override
 		public void didStopSseServer(@NonNull SseServer sseServer,
-				@NonNull ParticipantShutdownResult result) {
+				@NonNull ShutdownComponentResult result) {
 			this.transitions.add("did-stop-sse");
 		}
 
 		@Override
 		public void didStopMcpServer(@NonNull McpServer mcpServer,
-				@NonNull ParticipantShutdownResult result) {
-			this.transitions.add("did-stop-mcp-" + result.getDisposition().name());
+				@NonNull ShutdownComponentResult result) {
+			this.transitions.add("did-stop-mcp-" + result.getShutdownComponentDisposition().name());
 		}
 
 		@Override

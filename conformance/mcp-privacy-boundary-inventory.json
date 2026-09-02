@@ -207,9 +207,9 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-002:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#recordExternallyCoordinatedTerminalResultWhileMetricsDeferred(InternalParticipantShutdownResult,SokletConfig)->McpMetricsEvent.serverStopped@1",
+          "key": "PRIV-MATCH-002:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#recordExternallyCoordinatedTerminalResultWhileMetricsDeferred(InternalLifecycleComponentShutdownResult,SokletConfig)->McpMetricsEvent.serverStopped@1",
           "matcherRuleId": "PRIV-MATCH-002",
-          "member": "recordExternallyCoordinatedTerminalResultWhileMetricsDeferred(InternalParticipantShutdownResult,SokletConfig)",
+          "member": "recordExternallyCoordinatedTerminalResultWhileMetricsDeferred(InternalLifecycleComponentShutdownResult,SokletConfig)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "McpMetricsEvent.serverStopped"
@@ -5396,15 +5396,6 @@
           "sink": "RequestOrThrowable.declaration"
         },
         {
-          "file": "src/main/java/com/soklet/ParticipantShutdownResult.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/ParticipantShutdownResult.java#com.soklet.ParticipantShutdownResult#getFailures()->RequestOrThrowable.declaration@1",
-          "matcherRuleId": "PRIV-MATCH-005",
-          "member": "getFailures()",
-          "occurrence": 1,
-          "owner": "com.soklet.ParticipantShutdownResult",
-          "sink": "RequestOrThrowable.declaration"
-        },
-        {
           "file": "src/main/java/com/soklet/Request.java",
           "key": "PRIV-MATCH-005:src/main/java/com/soklet/Request.java#com.soklet.Request#copy()->ApplicationRequestCarrier.surface.copy@1",
           "matcherRuleId": "PRIV-MATCH-005",
@@ -6737,10 +6728,19 @@
           "sink": "RequestOrThrowable.declaration"
         },
         {
-          "file": "src/main/java/com/soklet/ShutdownResult.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/ShutdownResult.java#com.soklet.ShutdownResult#getStartupCause()->RequestOrThrowable.declaration@1",
+          "file": "src/main/java/com/soklet/ShutdownComponentResult.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/ShutdownComponentResult.java#com.soklet.ShutdownComponentResult#getFailures()->RequestOrThrowable.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
-          "member": "getStartupCause()",
+          "member": "getFailures()",
+          "occurrence": 1,
+          "owner": "com.soklet.ShutdownComponentResult",
+          "sink": "RequestOrThrowable.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/ShutdownResult.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/ShutdownResult.java#com.soklet.ShutdownResult#getStartupFailureCause()->RequestOrThrowable.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "getStartupFailureCause()",
           "occurrence": 1,
           "owner": "com.soklet.ShutdownResult",
           "sink": "RequestOrThrowable.declaration"
@@ -7296,9 +7296,9 @@
         },
         {
           "file": "src/main/java/com/soklet/SokletDirectLifecycle.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/SokletDirectLifecycle.java#com.soklet.SokletDirectLifecycle.AbstractControl#finalizeEvidence(InternalParticipantShutdownResult)->RequestOrThrowable.declaration@1",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/SokletDirectLifecycle.java#com.soklet.SokletDirectLifecycle.AbstractControl#finalizeEvidence(InternalLifecycleComponentShutdownResult)->RequestOrThrowable.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
-          "member": "finalizeEvidence(InternalParticipantShutdownResult)",
+          "member": "finalizeEvidence(InternalLifecycleComponentShutdownResult)",
           "occurrence": 1,
           "owner": "com.soklet.SokletDirectLifecycle.AbstractControl",
           "sink": "RequestOrThrowable.declaration"
@@ -7332,36 +7332,36 @@
         },
         {
           "file": "src/main/java/com/soklet/SokletDirectLifecycle.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/SokletDirectLifecycle.java#com.soklet.SokletDirectLifecycle.HttpControl#finalizeEvidence(InternalParticipantShutdownResult)->RequestOrThrowable.declaration@1",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/SokletDirectLifecycle.java#com.soklet.SokletDirectLifecycle.HttpControl#finalizeEvidence(InternalLifecycleComponentShutdownResult)->RequestOrThrowable.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
-          "member": "finalizeEvidence(InternalParticipantShutdownResult)",
+          "member": "finalizeEvidence(InternalLifecycleComponentShutdownResult)",
           "occurrence": 1,
           "owner": "com.soklet.SokletDirectLifecycle.HttpControl",
           "sink": "RequestOrThrowable.declaration"
         },
         {
           "file": "src/main/java/com/soklet/SokletDirectLifecycle.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/SokletDirectLifecycle.java#com.soklet.SokletDirectLifecycle.McpControl#finalizeEvidence(InternalParticipantShutdownResult)->RequestOrThrowable.declaration@1",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/SokletDirectLifecycle.java#com.soklet.SokletDirectLifecycle.McpControl#finalizeEvidence(InternalLifecycleComponentShutdownResult)->RequestOrThrowable.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
-          "member": "finalizeEvidence(InternalParticipantShutdownResult)",
+          "member": "finalizeEvidence(InternalLifecycleComponentShutdownResult)",
           "occurrence": 1,
           "owner": "com.soklet.SokletDirectLifecycle.McpControl",
           "sink": "RequestOrThrowable.declaration"
         },
         {
           "file": "src/main/java/com/soklet/SokletDirectLifecycle.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/SokletDirectLifecycle.java#com.soklet.SokletDirectLifecycle.ParticipantControl#finalizeEvidence(InternalParticipantShutdownResult)->RequestOrThrowable.declaration@1",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/SokletDirectLifecycle.java#com.soklet.SokletDirectLifecycle.ParticipantControl#finalizeEvidence(InternalLifecycleComponentShutdownResult)->RequestOrThrowable.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
-          "member": "finalizeEvidence(InternalParticipantShutdownResult)",
+          "member": "finalizeEvidence(InternalLifecycleComponentShutdownResult)",
           "occurrence": 1,
           "owner": "com.soklet.SokletDirectLifecycle.ParticipantControl",
           "sink": "RequestOrThrowable.declaration"
         },
         {
           "file": "src/main/java/com/soklet/SokletDirectLifecycle.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/SokletDirectLifecycle.java#com.soklet.SokletDirectLifecycle.SseControl#finalizeEvidence(InternalParticipantShutdownResult)->RequestOrThrowable.declaration@1",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/SokletDirectLifecycle.java#com.soklet.SokletDirectLifecycle.SseControl#finalizeEvidence(InternalLifecycleComponentShutdownResult)->RequestOrThrowable.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
-          "member": "finalizeEvidence(InternalParticipantShutdownResult)",
+          "member": "finalizeEvidence(InternalLifecycleComponentShutdownResult)",
           "occurrence": 1,
           "owner": "com.soklet.SokletDirectLifecycle.SseControl",
           "sink": "RequestOrThrowable.declaration"
@@ -7422,18 +7422,9 @@
         },
         {
           "file": "src/main/java/com/soklet/SokletSimulator.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator#run(SimulatorConfigFactory,Body<E>)->RequestOrThrowable.declaration@1",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator#run(Function<SimulatorConfig.Builder, SimulatorConfig>,Body<E>)->RequestOrThrowable.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
-          "member": "run(SimulatorConfigFactory,Body<E>)",
-          "occurrence": 1,
-          "owner": "com.soklet.SokletSimulator",
-          "sink": "RequestOrThrowable.declaration"
-        },
-        {
-          "file": "src/main/java/com/soklet/SokletSimulator.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator#run(SimulatorConfigFactory,SimulatorOptions,Body<E>)->RequestOrThrowable.declaration@1",
-          "matcherRuleId": "PRIV-MATCH-005",
-          "member": "run(SimulatorConfigFactory,SimulatorOptions,Body<E>)",
+          "member": "run(Function<SimulatorConfig.Builder, SimulatorConfig>,Body<E>)",
           "occurrence": 1,
           "owner": "com.soklet.SokletSimulator",
           "sink": "RequestOrThrowable.declaration"
@@ -7844,12 +7835,12 @@
           "sink": "RequestOrThrowable.declaration"
         },
         {
-          "file": "src/main/java/com/soklet/UnexpectedParticipantTermination.java",
-          "key": "PRIV-MATCH-005:src/main/java/com/soklet/UnexpectedParticipantTermination.java#com.soklet.UnexpectedParticipantTermination#getCause()->RequestOrThrowable.declaration@1",
+          "file": "src/main/java/com/soklet/UnexpectedShutdownComponentTermination.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/UnexpectedShutdownComponentTermination.java#com.soklet.UnexpectedShutdownComponentTermination#getCause()->RequestOrThrowable.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
           "member": "getCause()",
           "occurrence": 1,
-          "owner": "com.soklet.UnexpectedParticipantTermination",
+          "owner": "com.soklet.UnexpectedShutdownComponentTermination",
           "sink": "RequestOrThrowable.declaration"
         },
         {
@@ -26601,9 +26592,9 @@
         },
         {
           "file": "src/main/java/com/soklet/LifecycleInfrastructure.java",
-          "key": "PRIV-MATCH-008:src/main/java/com/soklet/LifecycleInfrastructure.java#com.soklet.LifecycleRetentionSummary#LifecycleRetentionSummary(Map<InternalResidualActivityKind, Integer>,String)->Diagnostic.structuredSurface.LifecycleRetentionSummary@1",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/LifecycleInfrastructure.java#com.soklet.LifecycleRetentionSummary#LifecycleRetentionSummary(Map<InternalResidualActivityType, Integer>,String)->Diagnostic.structuredSurface.LifecycleRetentionSummary@1",
           "matcherRuleId": "PRIV-MATCH-008",
-          "member": "LifecycleRetentionSummary(Map<InternalResidualActivityKind, Integer>,String)",
+          "member": "LifecycleRetentionSummary(Map<InternalResidualActivityType, Integer>,String)",
           "occurrence": 1,
           "owner": "com.soklet.LifecycleRetentionSummary",
           "sink": "Diagnostic.structuredSurface.LifecycleRetentionSummary"
@@ -26790,9 +26781,9 @@
         },
         {
           "file": "src/main/java/com/soklet/LifecycleTermination.java",
-          "key": "PRIV-MATCH-008:src/main/java/com/soklet/LifecycleTermination.java#com.soklet.TransportIdentityClaimRegistry.ClaimDescriptor#ClaimDescriptor(InternalTransportIdentity,InternalParticipantKind,Class<?>)->Diagnostic.recordConstructor@1",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/LifecycleTermination.java#com.soklet.TransportIdentityClaimRegistry.ClaimDescriptor#ClaimDescriptor(InternalTransportIdentity,InternalLifecycleComponentType,Class<?>)->Diagnostic.recordConstructor@1",
           "matcherRuleId": "PRIV-MATCH-008",
-          "member": "ClaimDescriptor(InternalTransportIdentity,InternalParticipantKind,Class<?>)",
+          "member": "ClaimDescriptor(InternalTransportIdentity,InternalLifecycleComponentType,Class<?>)",
           "occurrence": 1,
           "owner": "com.soklet.TransportIdentityClaimRegistry.ClaimDescriptor",
           "sink": "Diagnostic.recordConstructor"
@@ -26835,9 +26826,9 @@
         },
         {
           "file": "src/main/java/com/soklet/LifecycleTermination.java",
-          "key": "PRIV-MATCH-008:src/main/java/com/soklet/LifecycleTermination.java#com.soklet.TransportIdentityClaimRegistry.StoredClaim#StoredClaim(InternalParticipantKind,Class<?>,Object)->Diagnostic.recordConstructor@1",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/LifecycleTermination.java#com.soklet.TransportIdentityClaimRegistry.StoredClaim#StoredClaim(InternalLifecycleComponentType,Class<?>,Object)->Diagnostic.recordConstructor@1",
           "matcherRuleId": "PRIV-MATCH-008",
-          "member": "StoredClaim(InternalParticipantKind,Class<?>,Object)",
+          "member": "StoredClaim(InternalLifecycleComponentType,Class<?>,Object)",
           "occurrence": 1,
           "owner": "com.soklet.TransportIdentityClaimRegistry.StoredClaim",
           "sink": "Diagnostic.recordConstructor"
@@ -26880,9 +26871,9 @@
         },
         {
           "file": "src/main/java/com/soklet/SokletApplicationFinalization.java",
-          "key": "PRIV-MATCH-008:src/main/java/com/soklet/SokletApplicationFinalization.java#com.soklet.SokletApplicationCoreDiagnostics#SokletApplicationCoreDiagnostics(LifecycleTransitionSnapshot,Map<InternalParticipantKind, SokletApplicationParticipantDiagnostics>,InternalLifecyclePolicy,long)->Diagnostic.structuredSurface.SokletApplicationCoreDiagnostics@1",
+          "key": "PRIV-MATCH-008:src/main/java/com/soklet/SokletApplicationFinalization.java#com.soklet.SokletApplicationCoreDiagnostics#SokletApplicationCoreDiagnostics(LifecycleTransitionSnapshot,Map<InternalLifecycleComponentType, SokletApplicationParticipantDiagnostics>,InternalLifecyclePolicy,long)->Diagnostic.structuredSurface.SokletApplicationCoreDiagnostics@1",
           "matcherRuleId": "PRIV-MATCH-008",
-          "member": "SokletApplicationCoreDiagnostics(LifecycleTransitionSnapshot,Map<InternalParticipantKind, SokletApplicationParticipantDiagnostics>,InternalLifecyclePolicy,long)",
+          "member": "SokletApplicationCoreDiagnostics(LifecycleTransitionSnapshot,Map<InternalLifecycleComponentType, SokletApplicationParticipantDiagnostics>,InternalLifecyclePolicy,long)",
           "occurrence": 1,
           "owner": "com.soklet.SokletApplicationCoreDiagnostics",
           "sink": "Diagnostic.structuredSurface.SokletApplicationCoreDiagnostics"
@@ -29554,9 +29545,9 @@
       "sourcePaths": [
         {
           "file": "src/main/java/com/soklet/BuiltInTransportLifecycleAdapter.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/BuiltInTransportLifecycleAdapter.java#com.soklet.BuiltInTransportLifecycleAdapter#BuiltInTransportLifecycleAdapter(InternalParticipantKind,Operations,Supplier<Duration>,Duration,NanoClock,LifecycleWorkers)->Throwable.IllegalArgumentException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/BuiltInTransportLifecycleAdapter.java#com.soklet.BuiltInTransportLifecycleAdapter#BuiltInTransportLifecycleAdapter(InternalLifecycleComponentType,Operations,Supplier<Duration>,Duration,NanoClock,LifecycleWorkers)->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "BuiltInTransportLifecycleAdapter(InternalParticipantKind,Operations,Supplier<Duration>,Duration,NanoClock,LifecycleWorkers)",
+          "member": "BuiltInTransportLifecycleAdapter(InternalLifecycleComponentType,Operations,Supplier<Duration>,Duration,NanoClock,LifecycleWorkers)",
           "occurrence": 1,
           "owner": "com.soklet.BuiltInTransportLifecycleAdapter",
           "sink": "Throwable.IllegalArgumentException"
@@ -29626,18 +29617,18 @@
         },
         {
           "file": "src/main/java/com/soklet/BuiltInTransportLifecycleAdapter.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/BuiltInTransportLifecycleAdapter.java#com.soklet.BuiltInTransportLifecycleAdapter#finalizeExternallyCoordinatedEvidence(Generation,InternalParticipantShutdownResult)->Throwable.IllegalArgumentException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/BuiltInTransportLifecycleAdapter.java#com.soklet.BuiltInTransportLifecycleAdapter#finalizeExternallyCoordinatedEvidence(Generation,InternalLifecycleComponentShutdownResult)->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "finalizeExternallyCoordinatedEvidence(Generation,InternalParticipantShutdownResult)",
+          "member": "finalizeExternallyCoordinatedEvidence(Generation,InternalLifecycleComponentShutdownResult)",
           "occurrence": 1,
           "owner": "com.soklet.BuiltInTransportLifecycleAdapter",
           "sink": "Throwable.IllegalArgumentException"
         },
         {
           "file": "src/main/java/com/soklet/BuiltInTransportLifecycleAdapter.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/BuiltInTransportLifecycleAdapter.java#com.soklet.BuiltInTransportLifecycleAdapter#finalizeExternallyCoordinatedEvidence(Generation,InternalParticipantShutdownResult)->Throwable.IllegalStateException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/BuiltInTransportLifecycleAdapter.java#com.soklet.BuiltInTransportLifecycleAdapter#finalizeExternallyCoordinatedEvidence(Generation,InternalLifecycleComponentShutdownResult)->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "finalizeExternallyCoordinatedEvidence(Generation,InternalParticipantShutdownResult)",
+          "member": "finalizeExternallyCoordinatedEvidence(Generation,InternalLifecycleComponentShutdownResult)",
           "occurrence": 1,
           "owner": "com.soklet.BuiltInTransportLifecycleAdapter",
           "sink": "Throwable.IllegalStateException"
@@ -30877,9 +30868,9 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpServer.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#recordExternallyCoordinatedTerminalResultWhileMetricsDeferred(InternalParticipantShutdownResult,SokletConfig)->Throwable.IllegalArgumentException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#recordExternallyCoordinatedTerminalResultWhileMetricsDeferred(InternalLifecycleComponentShutdownResult,SokletConfig)->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "recordExternallyCoordinatedTerminalResultWhileMetricsDeferred(InternalParticipantShutdownResult,SokletConfig)",
+          "member": "recordExternallyCoordinatedTerminalResultWhileMetricsDeferred(InternalLifecycleComponentShutdownResult,SokletConfig)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "Throwable.IllegalArgumentException"
@@ -31786,21 +31777,21 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultResourceMethodResolver.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultResourceMethodResolver.java#com.soklet.DefaultResourceMethodResolver.LazyClasspathResolution#resolveForStartup(InternalStartupContext,DeadlineWaiter)->Throwable.StartupWaitCancelledException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultResourceMethodResolver.java#com.soklet.DefaultResourceMethodResolver.LazyClasspathResolution#resolveForStartup(StartupContext,DeadlineWaiter)->Throwable.StartupWaitCanceledException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "resolveForStartup(InternalStartupContext,DeadlineWaiter)",
+          "member": "resolveForStartup(StartupContext,DeadlineWaiter)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultResourceMethodResolver.LazyClasspathResolution",
-          "sink": "Throwable.StartupWaitCancelledException"
+          "sink": "Throwable.StartupWaitCanceledException"
         },
         {
           "file": "src/main/java/com/soklet/DefaultResourceMethodResolver.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultResourceMethodResolver.java#com.soklet.DefaultResourceMethodResolver.LazyClasspathResolution#resolveForStartup(InternalStartupContext,DeadlineWaiter)->Throwable.StartupWaitCancelledException@2",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultResourceMethodResolver.java#com.soklet.DefaultResourceMethodResolver.LazyClasspathResolution#resolveForStartup(StartupContext,DeadlineWaiter)->Throwable.StartupWaitCanceledException@2",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "resolveForStartup(InternalStartupContext,DeadlineWaiter)",
+          "member": "resolveForStartup(StartupContext,DeadlineWaiter)",
           "occurrence": 2,
           "owner": "com.soklet.DefaultResourceMethodResolver.LazyClasspathResolution",
-          "sink": "Throwable.StartupWaitCancelledException"
+          "sink": "Throwable.StartupWaitCanceledException"
         },
         {
           "file": "src/main/java/com/soklet/DefaultResourceMethodResolver.java",
@@ -32677,9 +32668,9 @@
         },
         {
           "file": "src/main/java/com/soklet/LifecycleInfrastructure.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/LifecycleInfrastructure.java#com.soklet.LifecycleRetentionSummary#LifecycleRetentionSummary(Map<InternalResidualActivityKind, Integer>,String)->Throwable.IllegalArgumentException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/LifecycleInfrastructure.java#com.soklet.LifecycleRetentionSummary#LifecycleRetentionSummary(Map<InternalResidualActivityType, Integer>,String)->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "LifecycleRetentionSummary(Map<InternalResidualActivityKind, Integer>,String)",
+          "member": "LifecycleRetentionSummary(Map<InternalResidualActivityType, Integer>,String)",
           "occurrence": 1,
           "owner": "com.soklet.LifecycleRetentionSummary",
           "sink": "Throwable.IllegalArgumentException"
@@ -32812,9 +32803,9 @@
         },
         {
           "file": "src/main/java/com/soklet/LifecycleTermination.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/LifecycleTermination.java#com.soklet.InternalShutdownResult#InternalShutdownResult(InternalShutdownDisposition,InternalStartupDisposition,List<InternalParticipantShutdownResult>,LifecycleRetentionAnchor)->Throwable.IllegalArgumentException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/LifecycleTermination.java#com.soklet.InternalShutdownResult#InternalShutdownResult(InternalShutdownDisposition,InternalStartupDisposition,List<InternalLifecycleComponentShutdownResult>,LifecycleRetentionAnchor)->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "InternalShutdownResult(InternalShutdownDisposition,InternalStartupDisposition,List<InternalParticipantShutdownResult>,LifecycleRetentionAnchor)",
+          "member": "InternalShutdownResult(InternalShutdownDisposition,InternalStartupDisposition,List<InternalLifecycleComponentShutdownResult>,LifecycleRetentionAnchor)",
           "occurrence": 1,
           "owner": "com.soklet.InternalShutdownResult",
           "sink": "Throwable.IllegalArgumentException"
@@ -33847,9 +33838,9 @@
         },
         {
           "file": "src/main/java/com/soklet/McpMetricsSnapshot.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpMetricsSnapshot.java#com.soklet.McpMetricsSnapshot#copyShutdowns(Map<ParticipantShutdownDisposition, Long>)->Throwable.IllegalArgumentException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/McpMetricsSnapshot.java#com.soklet.McpMetricsSnapshot#copyShutdowns(Map<ShutdownComponentDisposition, Long>)->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "copyShutdowns(Map<ParticipantShutdownDisposition, Long>)",
+          "member": "copyShutdowns(Map<ShutdownComponentDisposition, Long>)",
           "occurrence": 1,
           "owner": "com.soklet.McpMetricsSnapshot",
           "sink": "Throwable.IllegalArgumentException"
@@ -35358,6 +35349,15 @@
           "sink": "Throwable.IllegalArgumentException"
         },
         {
+          "file": "src/main/java/com/soklet/SimulatorConfig.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SimulatorConfig.java#com.soklet.SimulatorConfig.Builder#requireMutable()->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "requireMutable()",
+          "occurrence": 1,
+          "owner": "com.soklet.SimulatorConfig.Builder",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
           "file": "src/main/java/com/soklet/SimulatorOptions.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/SimulatorOptions.java#com.soklet.SimulatorOptions#SimulatorOptions(Builder)->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
@@ -35827,12 +35827,12 @@
         },
         {
           "file": "src/main/java/com/soklet/SokletDirectLifecycle.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletDirectLifecycle.java#com.soklet.SokletDirectLifecycle#cancellationFailure()->Throwable.StartupCancellationException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletDirectLifecycle.java#com.soklet.SokletDirectLifecycle#cancellationFailure()->Throwable.StartupCancelationException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "cancellationFailure()",
           "occurrence": 1,
           "owner": "com.soklet.SokletDirectLifecycle",
-          "sink": "Throwable.StartupCancellationException"
+          "sink": "Throwable.StartupCancelationException"
         },
         {
           "file": "src/main/java/com/soklet/SokletDirectLifecycle.java",
@@ -35908,9 +35908,9 @@
         },
         {
           "file": "src/main/java/com/soklet/SokletDirectLifecycle.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletDirectLifecycle.java#com.soklet.SokletDirectLifecycle#startupWaitCancellationFailure(Optional<Long>)->Throwable.TimeoutException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletDirectLifecycle.java#com.soklet.SokletDirectLifecycle#startupWaitCancelationFailure(Optional<Long>)->Throwable.TimeoutException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "startupWaitCancellationFailure(Optional<Long>)",
+          "member": "startupWaitCancelationFailure(Optional<Long>)",
           "occurrence": 1,
           "owner": "com.soklet.SokletDirectLifecycle",
           "sink": "Throwable.TimeoutException"
@@ -35971,9 +35971,9 @@
         },
         {
           "file": "src/main/java/com/soklet/SokletFrameworkSetup.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletFrameworkSetup.java#com.soklet.SokletFrameworkSetup#run(InternalStartupContext,DeadlineWaiter)->Throwable.IllegalStateException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletFrameworkSetup.java#com.soklet.SokletFrameworkSetup#run(StartupContext,DeadlineWaiter)->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "run(InternalStartupContext,DeadlineWaiter)",
+          "member": "run(StartupContext,DeadlineWaiter)",
           "occurrence": 1,
           "owner": "com.soklet.SokletFrameworkSetup",
           "sink": "Throwable.IllegalStateException"
@@ -36088,18 +36088,18 @@
         },
         {
           "file": "src/main/java/com/soklet/SokletSimulator.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletSimulator.java#com.soklet.ScopeDispatchGate#enter(InternalParticipantKind)->Throwable.IllegalStateException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletSimulator.java#com.soklet.ScopeDispatchGate#enter(InternalLifecycleComponentType)->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "enter(InternalParticipantKind)",
+          "member": "enter(InternalLifecycleComponentType)",
           "occurrence": 1,
           "owner": "com.soklet.ScopeDispatchGate",
           "sink": "Throwable.IllegalStateException"
         },
         {
           "file": "src/main/java/com/soklet/SokletSimulator.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletSimulator.java#com.soklet.ScopeDispatchGate#enter(InternalParticipantKind)->Throwable.IllegalStateException@2",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletSimulator.java#com.soklet.ScopeDispatchGate#enter(InternalLifecycleComponentType)->Throwable.IllegalStateException@2",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "enter(InternalParticipantKind)",
+          "member": "enter(InternalLifecycleComponentType)",
           "occurrence": 2,
           "owner": "com.soklet.ScopeDispatchGate",
           "sink": "Throwable.IllegalStateException"
@@ -36115,36 +36115,36 @@
         },
         {
           "file": "src/main/java/com/soklet/SokletSimulator.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.Scope#register(DefaultMcpServer)->Throwable.IllegalStateException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.Scope#requireConfigurationOpen()->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "register(DefaultMcpServer)",
+          "member": "requireConfigurationOpen()",
           "occurrence": 1,
           "owner": "com.soklet.SokletSimulator.Scope",
           "sink": "Throwable.IllegalStateException"
         },
         {
           "file": "src/main/java/com/soklet/SokletSimulator.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.Scope#requireFactoryOpen()->Throwable.IllegalStateException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.Scope#run(Function<SimulatorConfig.Builder, SimulatorConfig>,Body<E>)->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "requireFactoryOpen()",
+          "member": "run(Function<SimulatorConfig.Builder, SimulatorConfig>,Body<E>)",
           "occurrence": 1,
           "owner": "com.soklet.SokletSimulator.Scope",
           "sink": "Throwable.IllegalStateException"
         },
         {
           "file": "src/main/java/com/soklet/SokletSimulator.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.Scope#run(SimulatorConfigFactory,Body<E>)->Throwable.IllegalStateException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.Scope#run(Function<SimulatorConfig.Builder, SimulatorConfig>,Body<E>)->Throwable.IllegalStateException@2",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "run(SimulatorConfigFactory,Body<E>)",
-          "occurrence": 1,
+          "member": "run(Function<SimulatorConfig.Builder, SimulatorConfig>,Body<E>)",
+          "occurrence": 2,
           "owner": "com.soklet.SokletSimulator.Scope",
           "sink": "Throwable.IllegalStateException"
         },
         {
           "file": "src/main/java/com/soklet/SokletSimulator.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.Scope#run(SimulatorConfigFactory,Body<E>)->Throwable.SokletStartupException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.Scope#run(Function<SimulatorConfig.Builder, SimulatorConfig>,Body<E>)->Throwable.SokletStartupException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "run(SimulatorConfigFactory,Body<E>)",
+          "member": "run(Function<SimulatorConfig.Builder, SimulatorConfig>,Body<E>)",
           "occurrence": 1,
           "owner": "com.soklet.SokletSimulator.Scope",
           "sink": "Throwable.SokletStartupException"
@@ -36241,9 +36241,18 @@
         },
         {
           "file": "src/main/java/com/soklet/SokletSimulator.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.ScopeParticipant#ScopeParticipant(InternalParticipantKind,Scope,DefaultMcpServer,Object)->Throwable.IllegalArgumentException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.Scope#verifyBuildAllowed()->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "ScopeParticipant(InternalParticipantKind,Scope,DefaultMcpServer,Object)",
+          "member": "verifyBuildAllowed()",
+          "occurrence": 1,
+          "owner": "com.soklet.SokletSimulator.Scope",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/SokletSimulator.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.ScopeParticipant#ScopeParticipant(InternalLifecycleComponentType,Scope,DefaultMcpServer,Object)->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "ScopeParticipant(InternalLifecycleComponentType,Scope,DefaultMcpServer,Object)",
           "occurrence": 1,
           "owner": "com.soklet.SokletSimulator.ScopeParticipant",
           "sink": "Throwable.IllegalArgumentException"
@@ -42770,18 +42779,18 @@
         },
         {
           "file": "src/main/java/com/soklet/SokletApplicationCleanupException.java",
-          "key": "PRIV-MATCH-012:src/main/java/com/soklet/SokletApplicationCleanupException.java#com.soklet.SokletApplicationCleanupException#getCleanupFailure()->ExceptionCarrier.publicOrProtectedMethod@1",
+          "key": "PRIV-MATCH-012:src/main/java/com/soklet/SokletApplicationCleanupException.java#com.soklet.SokletApplicationCleanupException#getShutdownCleanupFailure()->ExceptionCarrier.publicOrProtectedMethod@1",
           "matcherRuleId": "PRIV-MATCH-012",
-          "member": "getCleanupFailure()",
+          "member": "getShutdownCleanupFailure()",
           "occurrence": 1,
           "owner": "com.soklet.SokletApplicationCleanupException",
           "sink": "ExceptionCarrier.publicOrProtectedMethod"
         },
         {
           "file": "src/main/java/com/soklet/SokletApplicationCleanupException.java",
-          "key": "PRIV-MATCH-012:src/main/java/com/soklet/SokletApplicationCleanupException.java#com.soklet.SokletApplicationCleanupException#getCleanupTimeout()->ExceptionCarrier.publicOrProtectedMethod@1",
+          "key": "PRIV-MATCH-012:src/main/java/com/soklet/SokletApplicationCleanupException.java#com.soklet.SokletApplicationCleanupException#getShutdownCleanupTimeout()->ExceptionCarrier.publicOrProtectedMethod@1",
           "matcherRuleId": "PRIV-MATCH-012",
-          "member": "getCleanupTimeout()",
+          "member": "getShutdownCleanupTimeout()",
           "occurrence": 1,
           "owner": "com.soklet.SokletApplicationCleanupException",
           "sink": "ExceptionCarrier.publicOrProtectedMethod"
@@ -42806,9 +42815,9 @@
         },
         {
           "file": "src/main/java/com/soklet/SokletTerminatedUnexpectedlyException.java",
-          "key": "PRIV-MATCH-012:src/main/java/com/soklet/SokletTerminatedUnexpectedlyException.java#com.soklet.SokletTerminatedUnexpectedlyException#getUnexpectedTermination()->ExceptionCarrier.publicOrProtectedMethod@1",
+          "key": "PRIV-MATCH-012:src/main/java/com/soklet/SokletTerminatedUnexpectedlyException.java#com.soklet.SokletTerminatedUnexpectedlyException#getUnexpectedShutdownComponentTermination()->ExceptionCarrier.publicOrProtectedMethod@1",
           "matcherRuleId": "PRIV-MATCH-012",
-          "member": "getUnexpectedTermination()",
+          "member": "getUnexpectedShutdownComponentTermination()",
           "occurrence": 1,
           "owner": "com.soklet.SokletTerminatedUnexpectedlyException",
           "sink": "ExceptionCarrier.publicOrProtectedMethod"
@@ -42851,9 +42860,9 @@
         },
         {
           "file": "src/main/java/com/soklet/TransportOwnershipException.java",
-          "key": "PRIV-MATCH-012:src/main/java/com/soklet/TransportOwnershipException.java#com.soklet.TransportOwnershipException#getParticipantKind()->ExceptionCarrier.publicOrProtectedMethod@1",
+          "key": "PRIV-MATCH-012:src/main/java/com/soklet/TransportOwnershipException.java#com.soklet.TransportOwnershipException#getShutdownComponentType()->ExceptionCarrier.publicOrProtectedMethod@1",
           "matcherRuleId": "PRIV-MATCH-012",
-          "member": "getParticipantKind()",
+          "member": "getShutdownComponentType()",
           "occurrence": 1,
           "owner": "com.soklet.TransportOwnershipException",
           "sink": "ExceptionCarrier.publicOrProtectedMethod"
@@ -44605,9 +44614,9 @@
         },
         {
           "file": "src/main/java/com/soklet/McpMetricsEvent.java",
-          "key": "PRIV-MATCH-002:src/main/java/com/soklet/McpMetricsEvent.java#com.soklet.McpMetricsEvent#serverStopped(ParticipantShutdownDisposition)->McpMetricsSurface.serverStopped@1",
+          "key": "PRIV-MATCH-002:src/main/java/com/soklet/McpMetricsEvent.java#com.soklet.McpMetricsEvent#serverStopped(ShutdownComponentDisposition)->McpMetricsSurface.serverStopped@1",
           "matcherRuleId": "PRIV-MATCH-002",
-          "member": "serverStopped(ParticipantShutdownDisposition)",
+          "member": "serverStopped(ShutdownComponentDisposition)",
           "occurrence": 1,
           "owner": "com.soklet.McpMetricsEvent",
           "sink": "McpMetricsSurface.serverStopped"
@@ -45883,9 +45892,9 @@
         },
         {
           "file": "src/main/java/com/soklet/McpMetricsSnapshot.java",
-          "key": "PRIV-MATCH-002:src/main/java/com/soklet/McpMetricsSnapshot.java#com.soklet.McpMetricsSnapshot.Builder#shutdowns(Map<ParticipantShutdownDisposition, Long>)->McpMetricsSurface.shutdowns@1",
+          "key": "PRIV-MATCH-002:src/main/java/com/soklet/McpMetricsSnapshot.java#com.soklet.McpMetricsSnapshot.Builder#shutdowns(Map<ShutdownComponentDisposition, Long>)->McpMetricsSurface.shutdowns@1",
           "matcherRuleId": "PRIV-MATCH-002",
-          "member": "shutdowns(Map<ParticipantShutdownDisposition, Long>)",
+          "member": "shutdowns(Map<ShutdownComponentDisposition, Long>)",
           "occurrence": 1,
           "owner": "com.soklet.McpMetricsSnapshot.Builder",
           "sink": "McpMetricsSurface.shutdowns"
@@ -46418,18 +46427,9 @@
         },
         {
           "file": "src/main/java/com/soklet/SokletSimulator.java",
-          "key": "PRIV-MATCH-007:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator#run(SimulatorConfigFactory,Body<E>)->SimulationCapture.publicOrProtectedSurface@1",
+          "key": "PRIV-MATCH-007:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator#run(Function<SimulatorConfig.Builder, SimulatorConfig>,Body<E>)->SimulationCapture.publicOrProtectedSurface@1",
           "matcherRuleId": "PRIV-MATCH-007",
-          "member": "run(SimulatorConfigFactory,Body<E>)",
-          "occurrence": 1,
-          "owner": "com.soklet.SokletSimulator",
-          "sink": "SimulationCapture.publicOrProtectedSurface"
-        },
-        {
-          "file": "src/main/java/com/soklet/SokletSimulator.java",
-          "key": "PRIV-MATCH-007:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator#run(SimulatorConfigFactory,SimulatorOptions,Body<E>)->SimulationCapture.publicOrProtectedSurface@1",
-          "matcherRuleId": "PRIV-MATCH-007",
-          "member": "run(SimulatorConfigFactory,SimulatorOptions,Body<E>)",
+          "member": "run(Function<SimulatorConfig.Builder, SimulatorConfig>,Body<E>)",
           "occurrence": 1,
           "owner": "com.soklet.SokletSimulator",
           "sink": "SimulationCapture.publicOrProtectedSurface"
@@ -46445,36 +46445,27 @@
         },
         {
           "file": "src/main/java/com/soklet/SokletSimulator.java",
-          "key": "PRIV-MATCH-007:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.Scope#getHttpServer()->SimulationCapture.publicOrProtectedSurface@1",
-          "matcherRuleId": "PRIV-MATCH-007",
-          "member": "getHttpServer()",
-          "occurrence": 1,
-          "owner": "com.soklet.SokletSimulator.Scope",
-          "sink": "SimulationCapture.publicOrProtectedSurface"
-        },
-        {
-          "file": "src/main/java/com/soklet/SokletSimulator.java",
-          "key": "PRIV-MATCH-007:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.Scope#getSseServer()->SimulationCapture.publicOrProtectedSurface@1",
-          "matcherRuleId": "PRIV-MATCH-007",
-          "member": "getSseServer()",
-          "occurrence": 1,
-          "owner": "com.soklet.SokletSimulator.Scope",
-          "sink": "SimulationCapture.publicOrProtectedSurface"
-        },
-        {
-          "file": "src/main/java/com/soklet/SokletSimulator.java",
-          "key": "PRIV-MATCH-007:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.Scope#newMcpServerBuilder(Integer)->SimulationCapture.publicOrProtectedSurface@1",
-          "matcherRuleId": "PRIV-MATCH-007",
-          "member": "newMcpServerBuilder(Integer)",
-          "occurrence": 1,
-          "owner": "com.soklet.SokletSimulator.Scope",
-          "sink": "SimulationCapture.publicOrProtectedSurface"
-        },
-        {
-          "file": "src/main/java/com/soklet/SokletSimulator.java",
           "key": "PRIV-MATCH-007:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.Scope#register(DefaultMcpServer)->SimulationCapture.publicOrProtectedSurface@1",
           "matcherRuleId": "PRIV-MATCH-007",
           "member": "register(DefaultMcpServer)",
+          "occurrence": 1,
+          "owner": "com.soklet.SokletSimulator.Scope",
+          "sink": "SimulationCapture.publicOrProtectedSurface"
+        },
+        {
+          "file": "src/main/java/com/soklet/SokletSimulator.java",
+          "key": "PRIV-MATCH-007:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.Scope#simulatorConfigurationIdentity()->SimulationCapture.publicOrProtectedSurface@1",
+          "matcherRuleId": "PRIV-MATCH-007",
+          "member": "simulatorConfigurationIdentity()",
+          "occurrence": 1,
+          "owner": "com.soklet.SokletSimulator.Scope",
+          "sink": "SimulationCapture.publicOrProtectedSurface"
+        },
+        {
+          "file": "src/main/java/com/soklet/SokletSimulator.java",
+          "key": "PRIV-MATCH-007:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.Scope#verifyBuildAllowed()->SimulationCapture.publicOrProtectedSurface@1",
+          "matcherRuleId": "PRIV-MATCH-007",
+          "member": "verifyBuildAllowed()",
           "occurrence": 1,
           "owner": "com.soklet.SokletSimulator.Scope",
           "sink": "SimulationCapture.publicOrProtectedSurface"
@@ -46580,27 +46571,27 @@
         },
         {
           "file": "src/main/java/com/soklet/SokletSimulator.java",
-          "key": "PRIV-MATCH-007:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.ScopeParticipant.ScopeRuntime#force(InternalShutdownContext)->SimulationCapture.publicOrProtectedSurface@1",
+          "key": "PRIV-MATCH-007:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.ScopeParticipant.ScopeRuntime#force(ShutdownContext)->SimulationCapture.publicOrProtectedSurface@1",
           "matcherRuleId": "PRIV-MATCH-007",
-          "member": "force(InternalShutdownContext)",
+          "member": "force(ShutdownContext)",
           "occurrence": 1,
           "owner": "com.soklet.SokletSimulator.ScopeParticipant.ScopeRuntime",
           "sink": "SimulationCapture.publicOrProtectedSurface"
         },
         {
           "file": "src/main/java/com/soklet/SokletSimulator.java",
-          "key": "PRIV-MATCH-007:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.ScopeParticipant.ScopeRuntime#quiesce(InternalShutdownContext)->SimulationCapture.publicOrProtectedSurface@1",
+          "key": "PRIV-MATCH-007:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.ScopeParticipant.ScopeRuntime#quiesce(ShutdownContext)->SimulationCapture.publicOrProtectedSurface@1",
           "matcherRuleId": "PRIV-MATCH-007",
-          "member": "quiesce(InternalShutdownContext)",
+          "member": "quiesce(ShutdownContext)",
           "occurrence": 1,
           "owner": "com.soklet.SokletSimulator.ScopeParticipant.ScopeRuntime",
           "sink": "SimulationCapture.publicOrProtectedSurface"
         },
         {
           "file": "src/main/java/com/soklet/SokletSimulator.java",
-          "key": "PRIV-MATCH-007:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.ScopeParticipant.ScopeRuntime#start(InternalStartupContext)->SimulationCapture.publicOrProtectedSurface@1",
+          "key": "PRIV-MATCH-007:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.ScopeParticipant.ScopeRuntime#start(StartupContext)->SimulationCapture.publicOrProtectedSurface@1",
           "matcherRuleId": "PRIV-MATCH-007",
-          "member": "start(InternalStartupContext)",
+          "member": "start(StartupContext)",
           "occurrence": 1,
           "owner": "com.soklet.SokletSimulator.ScopeParticipant.ScopeRuntime",
           "sink": "SimulationCapture.publicOrProtectedSurface"
@@ -46643,9 +46634,9 @@
         },
         {
           "file": "src/main/java/com/soklet/SokletSimulator.java",
-          "key": "PRIV-MATCH-007:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.StartupAttempt#force(InternalShutdownContext)->SimulationCapture.publicOrProtectedSurface@1",
+          "key": "PRIV-MATCH-007:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.StartupAttempt#force(ShutdownContext)->SimulationCapture.publicOrProtectedSurface@1",
           "matcherRuleId": "PRIV-MATCH-007",
-          "member": "force(InternalShutdownContext)",
+          "member": "force(ShutdownContext)",
           "occurrence": 1,
           "owner": "com.soklet.SokletSimulator.StartupAttempt",
           "sink": "SimulationCapture.publicOrProtectedSurface"
@@ -46679,9 +46670,9 @@
         },
         {
           "file": "src/main/java/com/soklet/SokletSimulator.java",
-          "key": "PRIV-MATCH-007:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.StartupAttempt#quiesce(InternalShutdownContext)->SimulationCapture.publicOrProtectedSurface@1",
+          "key": "PRIV-MATCH-007:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.StartupAttempt#quiesce(ShutdownContext)->SimulationCapture.publicOrProtectedSurface@1",
           "matcherRuleId": "PRIV-MATCH-007",
-          "member": "quiesce(InternalShutdownContext)",
+          "member": "quiesce(ShutdownContext)",
           "occurrence": 1,
           "owner": "com.soklet.SokletSimulator.StartupAttempt",
           "sink": "SimulationCapture.publicOrProtectedSurface"
@@ -46706,9 +46697,9 @@
         },
         {
           "file": "src/main/java/com/soklet/SokletSimulator.java",
-          "key": "PRIV-MATCH-007:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.StartupAttempt#start(InternalStartupContext)->SimulationCapture.publicOrProtectedSurface@1",
+          "key": "PRIV-MATCH-007:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator.StartupAttempt#start(StartupContext)->SimulationCapture.publicOrProtectedSurface@1",
           "matcherRuleId": "PRIV-MATCH-007",
-          "member": "start(InternalStartupContext)",
+          "member": "start(StartupContext)",
           "occurrence": 1,
           "owner": "com.soklet.SokletSimulator.StartupAttempt",
           "sink": "SimulationCapture.publicOrProtectedSurface"
@@ -50667,6 +50658,15 @@
           "sink": "MetricsCollector.override.defaultInstance"
         },
         {
+          "file": "src/main/java/com/soklet/SimulatorConfig.java",
+          "key": "PRIV-MATCH-015:src/main/java/com/soklet/SimulatorConfig.java#com.soklet.SimulatorConfig#SimulatorConfig(Builder)->MetricsCollector.invocation.defaultInstance@1",
+          "matcherRuleId": "PRIV-MATCH-015",
+          "member": "SimulatorConfig(Builder)",
+          "occurrence": 1,
+          "owner": "com.soklet.SimulatorConfig",
+          "sink": "MetricsCollector.invocation.defaultInstance"
+        },
+        {
           "file": "src/main/java/com/soklet/SimulatorOptions.java",
           "key": "PRIV-MATCH-015:src/main/java/com/soklet/SimulatorOptions.java#com.soklet.SimulatorOptions#defaultInstance()->MetricsCollector.override.defaultInstance@1",
           "matcherRuleId": "PRIV-MATCH-015",
@@ -50989,15 +50989,6 @@
           "occurrence": 1,
           "owner": "com.soklet.SokletDirectLifecycle",
           "sink": "MetricsCollector.invocation.snapshot"
-        },
-        {
-          "file": "src/main/java/com/soklet/SokletSimulator.java",
-          "key": "PRIV-MATCH-015:src/main/java/com/soklet/SokletSimulator.java#com.soklet.SokletSimulator#run(SimulatorConfigFactory,Body<E>)->MetricsCollector.invocation.defaultInstance@1",
-          "matcherRuleId": "PRIV-MATCH-015",
-          "member": "run(SimulatorConfigFactory,Body<E>)",
-          "occurrence": 1,
-          "owner": "com.soklet.SokletSimulator",
-          "sink": "MetricsCollector.invocation.defaultInstance"
         },
         {
           "file": "src/main/java/com/soklet/StaticFiles.java",

@@ -17,13 +17,25 @@
 package com.soklet;
 
 /**
- * Shutdown phase supplied to a transport runtime.
+ * Owner type of a localizable MCP presentation field.
+ * <p>
+ * The owner-type vocabulary follows the selected MCP revision and may gain
+ * reviewed values in a future supported profile. Applications should retain a
+ * forward-compatible default when switching on these values.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-public enum ShutdownPhase {
-	/** Graceful wind-up is in progress. */
-	GRACEFUL,
-	/** Runtime-owned execution may now be interrupted or canceled. */
-	FORCED
+public enum McpTextOwnerType {
+	/** Endpoint server-information title or description. */
+	SERVER_INFORMATION,
+	/** Endpoint instructions. */
+	ENDPOINT,
+	/** Tool descriptor, annotations, or generated schema presentation text. */
+	TOOL,
+	/** Prompt or prompt-argument presentation text. */
+	PROMPT,
+	/** Exact-resource presentation text. */
+	RESOURCE,
+	/** Resource-template presentation text. */
+	RESOURCE_TEMPLATE
 }

@@ -405,7 +405,7 @@ public class McpProtectionTraceDiagnosticsPublicRuntimeTests {
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecyclePolicy(LifecyclePolicy.builder()
 						.startupTimeout(Duration.ofSeconds(5))
-						.startupCancellationTimeout(Duration.ofSeconds(2))
+						.startupCancelationTimeout(Duration.ofSeconds(2))
 						.gracefulShutdownDuration(Duration.ofSeconds(2))
 						.forcedShutdownDuration(Duration.ofSeconds(1))
 						.build())

@@ -161,8 +161,8 @@ final class SokletDirectHttpCompositionTests {
 			TransportOwnershipException conflict = Assertions.assertThrows(
 					TransportOwnershipException.class,
 					() -> Soklet.fromConfig(config(engine)));
-			Assertions.assertEquals(ParticipantKind.HTTP,
-					conflict.getParticipantKind());
+			Assertions.assertEquals(ShutdownComponentType.HTTP,
+					conflict.getShutdownComponentType());
 			Assertions.assertSame(AlternativeHttpEngine.class,
 					conflict.getTransportClass());
 
@@ -306,10 +306,10 @@ final class SokletDirectHttpCompositionTests {
 				result.disposition());
 		Assertions.assertEquals(1, result.participantResults().size(),
 				"A composed graph remains one configured participant");
-		InternalParticipantShutdownResult http = result
-				.participantResult(InternalParticipantKind.HTTP).orElseThrow();
+		InternalLifecycleComponentShutdownResult http = result
+				.participantResult(InternalLifecycleComponentType.HTTP).orElseThrow();
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION,
+				InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION,
 				http.disposition());
 		Assertions.assertTrue(http.failures().isEmpty());
 		Assertions.assertTrue(http.residualActivity().isEmpty());
@@ -323,10 +323,10 @@ final class SokletDirectHttpCompositionTests {
 		Assertions.assertEquals(InternalShutdownDisposition.FORCED,
 				result.disposition());
 		Assertions.assertEquals(1, result.participantResults().size());
-		InternalParticipantShutdownResult http = result
-				.participantResult(InternalParticipantKind.HTTP).orElseThrow();
+		InternalLifecycleComponentShutdownResult http = result
+				.participantResult(InternalLifecycleComponentType.HTTP).orElseThrow();
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.FORCED_TERMINATION,
+				InternalLifecycleComponentShutdownDisposition.FORCED_TERMINATION,
 				http.disposition());
 		Assertions.assertTrue(http.failures().isEmpty());
 		Assertions.assertTrue(http.residualActivity().isEmpty());
@@ -717,7 +717,7 @@ final class SokletDirectHttpCompositionTests {
 
 		@NonNull
 		TransportRuntime delegateRuntime() {
-			return requireNonNull(this.delegateAttachment.get()).getRuntime();
+			return requireNonNull(this.delegateAttachment.get()).getTransportRuntime();
 		}
 
 		boolean awaitDelegateProof(long timeout, @NonNull TimeUnit unit)
@@ -864,7 +864,7 @@ final class SokletDirectHttpCompositionTests {
 								"Decorator cleanup executor did not prestart");
 					}
 					try {
-						attachment.getRuntime().start(context);
+						attachment.getTransportRuntime().start(context);
 					} catch (RuntimeException | Error failure) {
 						executor.shutdownNow();
 						throw failure;
@@ -875,7 +875,7 @@ final class SokletDirectHttpCompositionTests {
 				public void quiesce(@NonNull ShutdownContext context) {
 					quiesceCalls.incrementAndGet();
 					try {
-						attachment.getRuntime().quiesce(context);
+						attachment.getTransportRuntime().quiesce(context);
 					} finally {
 						quiesceReturned.countDown();
 					}
@@ -886,7 +886,7 @@ final class SokletDirectHttpCompositionTests {
 					forceCalls.incrementAndGet();
 					requestCleanupForce();
 					try {
-						attachment.getRuntime().force(context);
+						attachment.getTransportRuntime().force(context);
 					} finally {
 						requestCleanupForce();
 						forceReturned.countDown();

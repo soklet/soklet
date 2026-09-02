@@ -76,7 +76,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
 			LifecyclePolicy.builder()
 					.startupTimeout(Duration.ofSeconds(5))
-					.startupCancellationTimeout(Duration.ofSeconds(2))
+					.startupCancelationTimeout(Duration.ofSeconds(2))
 					.gracefulShutdownDuration(Duration.ofSeconds(2))
 					.forcedShutdownDuration(Duration.ofSeconds(1))
 					.build();

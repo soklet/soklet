@@ -117,7 +117,7 @@ class McpLocalizationSubscriptionRuntimeTests {
 		List<Integer> statusCodes = new ArrayList<>();
 		List<String> bodies = new ArrayList<>();
 
-		SokletSimulator.run(transports -> config(transports, localizer, 2),
+		SokletSimulator.run(config -> simulatorConfig(config, localizer, 2),
 				simulator -> {
 			// With a per-authorization-partition cap of 2, any reservation leak
 			// would turn the third and later attempts into capacity rejections
@@ -159,7 +159,7 @@ class McpLocalizationSubscriptionRuntimeTests {
 			int maximumSubscriptionsPerPrincipal, ResponseProbe probe) {
 		AtomicReference<McpSimulation> escaped = new AtomicReference<>();
 
-		SokletSimulator.run(transports -> config(transports, localizer,
+		SokletSimulator.run(config -> simulatorConfig(config, localizer,
 				maximumSubscriptionsPerPrincipal), simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(
 					subscriptionRequest("terminal-render"));
@@ -208,7 +208,8 @@ class McpLocalizationSubscriptionRuntimeTests {
 		return frames;
 	}
 
-	private static SokletConfig config(SimulatorTransports transports,
+	private static SimulatorConfig simulatorConfig(
+			SimulatorConfig.Builder config,
 			McpLocalizer localizer,
 			int maximumSubscriptionsPerPrincipal) {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
@@ -237,17 +238,18 @@ class McpLocalizationSubscriptionRuntimeTests {
 										.RESOURCES_LIST_CHANGED))
 						.build())
 				.build();
-		McpServer server = transports.newMcpServerBuilder(0)
-				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
-				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
-				.allowedHosts(Set.of(LOOPBACK))
-				.maximumSubscriptionsPerPrincipal(maximumSubscriptionsPerPrincipal)
-				.maximumSubscriptionDuration(Duration.ofMillis(300))
-				.localizer(localizer)
-				.build();
-		return SokletConfig.withMcpServer(server)
+		return config.mcpServer(0, builder -> builder
+					.host(LOOPBACK)
+					.endpointRegistry(McpEndpointRegistry.fromEndpoints(
+							List.of(endpoint)))
+					.admissionController(McpAdmissionController.acceptAllInstance())
+					.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+					.allowedHosts(Set.of(LOOPBACK))
+					.maximumSubscriptionsPerPrincipal(
+							maximumSubscriptionsPerPrincipal)
+					.maximumSubscriptionDuration(Duration.ofMillis(300))
+					.localizer(localizer)
+					.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.build();
 	}

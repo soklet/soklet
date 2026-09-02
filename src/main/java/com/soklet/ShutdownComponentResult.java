@@ -19,42 +19,49 @@ package com.soklet;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.List;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
-/** Immutable terminal evidence for one configured lifecycle participant. */
-public final class ParticipantShutdownResult {
+/** Immutable terminal evidence for one framework-managed shutdown component. */
+@ThreadSafe
+public final class ShutdownComponentResult {
 	@NonNull
-	private final ParticipantKind participantKind;
+	private final ShutdownComponentType shutdownComponentType;
 	@NonNull
-	private final ParticipantShutdownDisposition disposition;
+	private final ShutdownComponentDisposition
+			shutdownComponentDisposition;
 	@NonNull
 	private final List<@NonNull Throwable> failures;
 	@Nullable
 	private final ResidualActivityEvidence residualActivityEvidence;
 
-	ParticipantShutdownResult(@NonNull ParticipantKind participantKind,
-			@NonNull ParticipantShutdownDisposition disposition,
+	ShutdownComponentResult(
+			@NonNull ShutdownComponentType shutdownComponentType,
+			@NonNull ShutdownComponentDisposition
+					shutdownComponentDisposition,
 			@NonNull List<? extends @NonNull Throwable> failures,
 			@Nullable ResidualActivityEvidence residualActivityEvidence) {
-		this.participantKind = requireNonNull(participantKind);
-		this.disposition = requireNonNull(disposition);
+		this.shutdownComponentType = requireNonNull(shutdownComponentType);
+		this.shutdownComponentDisposition = requireNonNull(
+				shutdownComponentDisposition);
 		this.failures = List.copyOf(requireNonNull(failures));
 		this.residualActivityEvidence = residualActivityEvidence;
 	}
 
-	/** @return participant kind */
+	/** @return shutdown component type */
 	@NonNull
-	public ParticipantKind getParticipantKind() {
-		return this.participantKind;
+	public ShutdownComponentType getShutdownComponentType() {
+		return this.shutdownComponentType;
 	}
 
-	/** @return participant shutdown disposition */
+	/** @return shutdown component disposition */
 	@NonNull
-	public ParticipantShutdownDisposition getDisposition() {
-		return this.disposition;
+	public ShutdownComponentDisposition
+	getShutdownComponentDisposition() {
+		return this.shutdownComponentDisposition;
 	}
 
 	/**

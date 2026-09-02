@@ -363,7 +363,7 @@ separate evidence is recorded below.
 currently contains Phase 4, Phase 5, and Phase 6. `phase-4.signatures.jsonl` freezes
 1,029 canonical records across all 133 selected owners: 133 classes, one
 constructor, 79 fields, and 816 methods. Its SHA-256 is
-`ba976dbbe4d72d2b38a7f167bb88164e321064fea5847cc45f6992220b735e2f`.
+`2b50fb6e08d2b9eccf3a45d4020cbf4738a79517102602e69067f8a198158516`.
 `phase-5.signatures.jsonl` freezes 179 canonical records across all 36
 selected owners: 36 classes, zero constructors, 15 fields, and 128 methods.
 Its SHA-256 is
@@ -371,12 +371,12 @@ Its SHA-256 is
 `phase-6.signatures.jsonl` freezes 421 canonical records across all 64
 selected owners: 64 classes, zero constructors, 42 fields, and 315 methods.
 Its SHA-256 is
-`5e8a4aac651374205e126ca8128ec5ca644b1c7f84ad6426d4462cd9712ff12b`.
+`69b008b685dead8e1ae66691f0e9955688b9e43740281ea0f82497df22a4dda0`.
 Their current reflection/nullability digests are respectively
-`9cfe146213f1c96cfdd1de6fe05caa58d8055f7abdb491b6141491f2dc8de646`,
+`dc83138dd80f93c003ec527fec24a9fd7e09633417f0f5a6430ac254421797b1`,
 `6569e3b106ae11e1d30da66c045d1a9bc23aa65016f36052df6b19fc320c06d9`,
 and
-`15f883e66b3194974887899a090e53d33aa27a08db793f4cfd7ff78212b67aaf`.
+`d829563b135bae5a0e97559ecf5d1a8dd280c4b7792a74a2f10fcf8d8017d18b`.
 The reviewed 2026-08-15 telemetry amendment moved all 32 former provisional
 owners into Phase 6 without changing their descriptors;
 `provisional.includes` is now empty.
@@ -547,8 +547,8 @@ the shared `Simulator`, seven top-level simulation types, and
 `McpSimulationOptions.Builder` to Phase 6.
 
 The [Phase 6 freeze rationale](phase-6-freeze-rationale.md) records the
-localization API review and freeze. Eleven top-level localization types and
-seven nested owners now provide immutable configuration, a framework-owned
+localization API review and freeze. Twelve top-level localization types and
+six nested owners now provide immutable configuration, a framework-owned
 request-context value and application callback, closed
 results, revisions, stable text coordinates, catalog extraction, and local
 control-plane shapes. Construction-time extraction operates on the final
@@ -780,7 +780,7 @@ endpoints, recognized methods or `<unrecognized>`, ten fixed codes, and fixed
 enums. At that checkpoint, the public record constructors accepted arbitrary
 application-created nonempty routed strings and non-null codes. The snapshot
 was three boxed `Long` values plus immutable
-`Map<ParticipantShutdownDisposition, Long>`; the default collector aggregated only five
+`Map<ShutdownComponentDisposition, Long>`; the default collector aggregated only five
 handler variants and `ServerStopped`, ignoring and retaining none of the other
 17 variants.
 
@@ -1551,9 +1551,9 @@ The provisional inventory is empty; `EndpointMethodKey`, `RequestOutcomeKey`,
 Phase 6 owners. The amended frozen inventories contain 1,029 Phase 4, 179
 Phase 5, and 421 Phase 6 signatures. Phase 4 contains 133 classes, one
 constructor, 79 fields, and 816 methods, with SHA-256
-`ba976dbbe4d72d2b38a7f167bb88164e321064fea5847cc45f6992220b735e2f`
+`2b50fb6e08d2b9eccf3a45d4020cbf4738a79517102602e69067f8a198158516`
 and exact nullability digest
-`9cfe146213f1c96cfdd1de6fe05caa58d8055f7abdb491b6141491f2dc8de646`.
+`dc83138dd80f93c003ec527fec24a9fd7e09633417f0f5a6430ac254421797b1`.
 Phase 5 contains 36 classes, zero constructors, 15 fields, and 128 methods,
 with SHA-256
 `96f56fc34f81a9302d1387d437bee4caa36e465a07a40a8577eed4bd4313e5e4`
@@ -1561,9 +1561,9 @@ and exact nullability digest
 `6569e3b106ae11e1d30da66c045d1a9bc23aa65016f36052df6b19fc320c06d9`.
 Phase 6 contains 64 classes, zero constructors, 42 fields, and 315 methods,
 with SHA-256
-`5e8a4aac651374205e126ca8128ec5ca644b1c7f84ad6426d4462cd9712ff12b`
+`69b008b685dead8e1ae66691f0e9955688b9e43740281ea0f82497df22a4dda0`
 and exact nullability digest
-`15f883e66b3194974887899a090e53d33aa27a08db793f4cfd7ff78212b67aaf`.
+`d829563b135bae5a0e97559ecf5d1a8dd280c4b7792a74a2f10fcf8d8017d18b`.
 The sole public constructor in the frozen surface is the throwable
 `McpJsonRpcException(McpJsonRpcError)` constructor; all non-throwable values
 are constructed through factories or builders.
@@ -2024,6 +2024,30 @@ SHA-256
 `3d9d68bbbdeabae63a78d40a50c9896d3f11f6d0d2305beff0c94bd86476928c`.
 The aggregate gate regenerates and verifies these exact values; their local
 success does not approve G3 or create immutable release-candidate evidence.
+
+### 2026-09-01 shutdown-component naming amendment
+
+The unreleased terminal-evidence API now uses the `ShutdownComponent*` family
+instead of `LifecycleComponent*`. The enum is
+`ShutdownComponentType { HTTP, SSE, MCP, FRAMEWORK }`; `FRAMEWORK` is the
+closed framework-owned setup/attachment bucket, not a generic `OTHER` value.
+`LifecycleObserver` and `LifecyclePolicy` retain their names because they span
+the complete lifecycle. No compatibility aliases were added.
+
+The owner and record counts remain 133/36/64/0 and 1,029/179/421. The Phase 4
+signature and reflection/nullability SHA-256 values are respectively
+`2b50fb6e08d2b9eccf3a45d4020cbf4738a79517102602e69067f8a198158516`
+and
+`dc83138dd80f93c003ec527fec24a9fd7e09633417f0f5a6430ac254421797b1`.
+The corresponding Phase 6 values are
+`69b008b685dead8e1ae66691f0e9955688b9e43740281ea0f82497df22a4dda0`
+and
+`d829563b135bae5a0e97559ecf5d1a8dd280c4b7792a74a2f10fcf8d8017d18b`.
+Phase 5 remains byte-identical. The exact 39-entry non-MCP allowlist has
+SHA-256
+`deabb21c6684d7799c5a1e32fab0ae4f89de279edc4f590d82445df49b688057`,
+and the released-3.5.1 compatibility ledger remains 618 records with SHA-256
+`3d9d68bbbdeabae63a78d40a50c9896d3f11f6d0d2305beff0c94bd86476928c`.
 
 A compatible addition to a frozen owner requires deliberate review, a
 snapshot update, and an update to the freeze rationale. An incompatible change

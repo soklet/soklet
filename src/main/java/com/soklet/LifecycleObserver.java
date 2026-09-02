@@ -124,10 +124,10 @@ public interface LifecycleObserver {
 	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 *
 	 * @param httpServer stopped HTTP server
-	 * @param result participant lifecycle result
+	 * @param result lifecycle component shutdown result
 	 */
 	default void didStopHttpServer(@NonNull HttpServer httpServer,
-			@NonNull ParticipantShutdownResult result) {
+			@NonNull ShutdownComponentResult result) {
 		// No-op by default
 	}
 
@@ -379,10 +379,10 @@ public interface LifecycleObserver {
 	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 *
 	 * @param sseServer stopped SSE server
-	 * @param result participant lifecycle result
+	 * @param result lifecycle component shutdown result
 	 */
 	default void didStopSseServer(@NonNull SseServer sseServer,
-			@NonNull ParticipantShutdownResult result) {
+			@NonNull ShutdownComponentResult result) {
 		// No-op by default
 	}
 
@@ -433,10 +433,10 @@ public interface LifecycleObserver {
 	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 *
 	 * @param mcpServer       the MCP server that stopped
-	 * @param result participant lifecycle result
+	 * @param result lifecycle component shutdown result
 	 */
 	default void didStopMcpServer(@NonNull McpServer mcpServer,
-			@NonNull ParticipantShutdownResult result) {
+			@NonNull ShutdownComponentResult result) {
 		// No-op by default
 	}
 
@@ -465,7 +465,7 @@ public interface LifecycleObserver {
 	 * reaches its client-visible terminal outcome.
 	 * <p>
 	 * This is a request-finish callback, not a handler-exit callback: application
-	 * code that does not cooperate with cancellation may continue after this
+	 * code that does not cooperate with cancelation may continue after this
 	 * method runs. The supplied context is the same instance passed to
 	 * {@link #didStartMcpRequestHandling(McpRequestContext)}. Soklet may invoke
 	 * this callback concurrently for independent MCP requests, and it is not

@@ -33,7 +33,7 @@ import static java.util.Objects.requireNonNull;
  * Soklet invokes the configured request limiter once for every admitted
  * request or notification. It additionally invokes the resolved tool limiter
  * for a tool call. A {@code null} result or exception fails closed. Successful
- * acquisitions are never refunded after later denial, failure, cancellation,
+ * acquisitions are never refunded after later denial, failure, cancelation,
  * timeout, or response-write failure.
  * <p>
  * Implementations may keep state in-process or delegate to a distributed

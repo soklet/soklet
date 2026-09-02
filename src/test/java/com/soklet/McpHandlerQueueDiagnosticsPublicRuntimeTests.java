@@ -64,7 +64,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 	private static final String JSON_MEDIA_TYPE = "application/json";
 	private static final LifecyclePolicy LIFECYCLE_POLICY = LifecyclePolicy.builder()
 			.startupTimeout(Duration.ofSeconds(5))
-			.startupCancellationTimeout(Duration.ofSeconds(2))
+			.startupCancelationTimeout(Duration.ofSeconds(2))
 			.gracefulShutdownDuration(Duration.ofSeconds(2))
 			.forcedShutdownDuration(Duration.ofSeconds(1))
 			.build();
@@ -590,7 +590,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 	private static LifecyclePolicy shortShutdownPolicy() {
 		return LifecyclePolicy.builder()
 				.startupTimeout(Duration.ofSeconds(5))
-				.startupCancellationTimeout(Duration.ofMillis(100))
+				.startupCancelationTimeout(Duration.ofMillis(100))
 				.gracefulShutdownDuration(Duration.ofMillis(100))
 				.forcedShutdownDuration(Duration.ofMillis(100))
 				.build();

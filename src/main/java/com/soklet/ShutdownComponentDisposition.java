@@ -16,18 +16,18 @@
 
 package com.soklet;
 
-/** Categorizes framework-observed work that remains after shutdown. */
-public enum ResidualActivityKind {
-	/** An admitted callback remains active. */
-	CALLBACK,
-	/** A response or event stream remains active. */
-	STREAM,
-	/** A transport connection remains active. */
-	CONNECTION,
-	/** An event loop remains active. */
-	EVENT_LOOP,
-	/** An executor task remains active. */
-	EXECUTOR_TASK,
-	/** A tracked lifecycle call remains active. */
-	LIFECYCLE_CALL
+/** Describes the terminal evidence for one shutdown component. */
+public enum ShutdownComponentDisposition {
+	/** The component did not start and no tracked setup call remains. */
+	NOT_STARTED,
+	/** Graceful termination was proven. */
+	GRACEFUL_TERMINATION,
+	/** Termination was proven after the forced boundary. */
+	FORCED_TERMINATION,
+	/** Premature termination was proven. */
+	UNEXPECTED_TERMINATION,
+	/** Positive evidence of component activity remains. */
+	RESIDUAL_ACTIVITY,
+	/** Termination could not be proven. */
+	TERMINATION_UNKNOWN
 }

@@ -23,7 +23,6 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.function.BooleanSupplier;
-import java.util.function.LongSupplier;
 
 import static java.util.Objects.requireNonNull;
 
@@ -167,19 +166,19 @@ final class InternalLifecyclePolicy {
 	@NonNull
 	private final Optional<Duration> startupTimeout;
 	@NonNull
-	private final Duration startupCancellationTimeout;
+	private final Duration startupCancelationTimeout;
 	@NonNull
 	private final Duration gracefulShutdownTimeout;
 	@NonNull
 	private final Duration forcedShutdownTimeout;
 
 	InternalLifecyclePolicy(@NonNull Optional<Duration> startupTimeout,
-														@NonNull Duration startupCancellationTimeout,
+														@NonNull Duration startupCancelationTimeout,
 														@NonNull Duration gracefulShutdownTimeout,
 														@NonNull Duration forcedShutdownTimeout) {
 		this.startupTimeout = validateOptional(startupTimeout, "startupTimeout");
-		this.startupCancellationTimeout = validate(startupCancellationTimeout,
-				"startupCancellationTimeout");
+		this.startupCancelationTimeout = validate(startupCancelationTimeout,
+				"startupCancelationTimeout");
 		this.gracefulShutdownTimeout = validate(gracefulShutdownTimeout,
 				"gracefulShutdownTimeout");
 		this.forcedShutdownTimeout = validate(forcedShutdownTimeout,
@@ -198,8 +197,8 @@ final class InternalLifecyclePolicy {
 	}
 
 	@NonNull
-	Duration startupCancellationTimeout() {
-		return this.startupCancellationTimeout;
+	Duration startupCancelationTimeout() {
+		return this.startupCancelationTimeout;
 	}
 
 	@NonNull
@@ -233,116 +232,5 @@ final class InternalLifecyclePolicy {
 			throw new IllegalArgumentException(name + " exceeds signed nanoseconds", exception);
 		}
 		return duration;
-	}
-}
-
-enum InternalShutdownPhase {
-	GRACEFUL,
-	FORCED
-}
-
-@Immutable
-final class InternalStartupContext implements StartupContext {
-	@NonNull
-	private final NanoClock clock;
-	private final long normalDeadlineNanos;
-	private final boolean normalDeadlinePresent;
-	private final LongSupplier cancellationDeadlineNanos;
-	private final BooleanSupplier cancellationRequested;
-
-	InternalStartupContext(@NonNull NanoClock clock,
-											 @NonNull Optional<Long> normalDeadlineNanos,
-											 long cancellationDeadlineNanos,
-											 @NonNull BooleanSupplier cancellationRequested) {
-		this(clock, normalDeadlineNanos, () -> cancellationDeadlineNanos,
-				cancellationRequested);
-	}
-
-	InternalStartupContext(@NonNull NanoClock clock,
-			@NonNull Optional<Long> normalDeadlineNanos,
-			@NonNull LongSupplier cancellationDeadlineNanos,
-			@NonNull BooleanSupplier cancellationRequested) {
-		this.clock = requireNonNull(clock);
-		requireNonNull(normalDeadlineNanos);
-		this.normalDeadlinePresent = normalDeadlineNanos.isPresent();
-		this.normalDeadlineNanos = normalDeadlineNanos.orElse(0L);
-		this.cancellationDeadlineNanos = requireNonNull(cancellationDeadlineNanos);
-		this.cancellationRequested = requireNonNull(cancellationRequested);
-	}
-
-	@NonNull
-	Optional<Duration> remainingTime() {
-		return getRemainingTime();
-	}
-
-	@Override
-	@NonNull
-	public Optional<Duration> getRemainingTime() {
-		if (isCancellationRequested())
-			return Optional.of(LifecycleDeadlines.remaining(
-					this.cancellationDeadlineNanos.getAsLong(), this.clock.nanoTime()));
-		if (!this.normalDeadlinePresent)
-			return Optional.empty();
-		return Optional.of(LifecycleDeadlines.remaining(
-				this.normalDeadlineNanos, this.clock.nanoTime()));
-	}
-
-	@Override
-	public boolean isCancellationRequested() {
-		return this.cancellationRequested.getAsBoolean();
-	}
-
-	@NonNull
-	Optional<Long> activeDeadlineNanos() {
-		if (isCancellationRequested())
-			return Optional.of(this.cancellationDeadlineNanos.getAsLong());
-		if (!this.normalDeadlinePresent)
-			return Optional.empty();
-		return Optional.of(this.normalDeadlineNanos);
-	}
-}
-
-@Immutable
-final class InternalShutdownContext implements ShutdownContext {
-	@NonNull
-	private final InternalShutdownPhase phase;
-	@NonNull
-	private final NanoClock clock;
-	private final long absoluteDeadlineNanos;
-
-	InternalShutdownContext(@NonNull InternalShutdownPhase phase,
-													@NonNull NanoClock clock,
-													long absoluteDeadlineNanos) {
-		this.phase = requireNonNull(phase);
-		this.clock = requireNonNull(clock);
-		this.absoluteDeadlineNanos = absoluteDeadlineNanos;
-	}
-
-	@NonNull
-	InternalShutdownPhase phase() {
-		return this.phase;
-	}
-
-	@Override
-	@NonNull
-	public ShutdownPhase getPhase() {
-		return this.phase == InternalShutdownPhase.GRACEFUL
-				? ShutdownPhase.GRACEFUL : ShutdownPhase.FORCED;
-	}
-
-	@NonNull
-	Duration remainingTime() {
-		return getRemainingTime();
-	}
-
-	@Override
-	@NonNull
-	public Duration getRemainingTime() {
-		return LifecycleDeadlines.remaining(this.absoluteDeadlineNanos,
-				this.clock.nanoTime());
-	}
-
-	long absoluteDeadlineNanos() {
-		return this.absoluteDeadlineNanos;
 	}
 }

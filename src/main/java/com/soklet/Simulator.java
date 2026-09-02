@@ -21,6 +21,7 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Simulates server behavior of accepting a request and returning a response without touching the network, useful for writing integration tests.
@@ -28,15 +29,14 @@ import java.util.function.Consumer;
  * <a href="https://www.soklet.com/docs/server-sent-events">Server-Sent Event</a> simulation is also supported.
  * <p>
  * Instances of {@link Simulator} are made available through
- * {@link SokletSimulator#run(SimulatorConfigFactory, SokletSimulator.Body)}.
+ * {@link SokletSimulator#run(Function, SokletSimulator.Body)}.
  * <p>
  * Usage example:
  * <pre>{@code @Test
  * public void basicIntegrationTest () {
  *   // With the Simulator, you can issue requests
  *   // and receive responses just like you would with real servers.
- *   SokletSimulator.run(transports -> SokletConfig.withHttpServer(
- *     transports.getHttpServer()).sseServer(transports.getSseServer()).build(),
+ *   SokletSimulator.run(config -> config.httpServer().sseServer().build(),
  *     simulator -> {
  *     // Construct a request
  *     Request request = Request.withPath(HttpMethod.GET, "/hello")

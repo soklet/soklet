@@ -28,8 +28,9 @@
   resource methods; `SseServer` broadcaster access remains supported. See
   [HTTP, SSE, and custom transports](MIGRATING_TO_4_0.md#http-sse-and-custom-transports).
 - **Simulator:** the static `Soklet.runSimulator` entry points are removed.
-  `SokletSimulator.run` now supplies fresh scope-owned transports to a config
-  factory and returns the simulation's shutdown result. See
+  `SokletSimulator.run` now supplies a scope-bound `SimulatorConfig.Builder`
+  for fresh off-network HTTP, SSE, and MCP transports and returns the
+  simulation's shutdown result. See
   [Simulator migration](MIGRATING_TO_4_0.md#simulator-migration).
 - **MCP wire/profile:** the 2025-11-25 initialize/session/GET-SSE design is
   replaced by the exact modern `2026-07-28` profile. The first request may be

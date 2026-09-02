@@ -26,9 +26,9 @@ import static java.util.Objects.requireNonNull;
 public final class SokletApplicationCleanupException
 		extends SokletLifecycleException {
 	@NonNull
-	private final ShutdownCleanupFailure cleanupFailure;
+	private final ShutdownCleanupFailure shutdownCleanupFailure;
 	@NonNull
-	private final Duration cleanupTimeout;
+	private final Duration shutdownCleanupTimeout;
 
 	SokletApplicationCleanupException(
 			@NonNull ShutdownCleanupFailure cleanupFailure,
@@ -37,8 +37,8 @@ public final class SokletApplicationCleanupException
 			@NonNull Throwable cause) {
 		super(cleanupFailureMessage(requireNonNull(cleanupFailure)),
 				requireNonNull(shutdownResult), requireNonNull(cause));
-		this.cleanupFailure = cleanupFailure;
-		this.cleanupTimeout = requireNonNull(cleanupTimeout);
+		this.shutdownCleanupFailure = cleanupFailure;
+		this.shutdownCleanupTimeout = requireNonNull(cleanupTimeout);
 		if (!shutdownResult.isComplete())
 			throw new IllegalArgumentException(
 					"Cleanup failure requires a complete core result");
@@ -55,14 +55,14 @@ public final class SokletApplicationCleanupException
 
 	/** @return cleanup failure classification */
 	@NonNull
-	public ShutdownCleanupFailure getCleanupFailure() {
-		return this.cleanupFailure;
+	public ShutdownCleanupFailure getShutdownCleanupFailure() {
+		return this.shutdownCleanupFailure;
 	}
 
 	/** @return configured cleanup timeout */
 	@NonNull
-	public Duration getCleanupTimeout() {
-		return this.cleanupTimeout;
+	public Duration getShutdownCleanupTimeout() {
+		return this.shutdownCleanupTimeout;
 	}
 
 	@NonNull

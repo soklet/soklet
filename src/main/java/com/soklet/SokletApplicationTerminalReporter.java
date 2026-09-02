@@ -76,7 +76,7 @@ final class DefaultLifecycleTerminalReporter implements LifecycleTerminalReporte
 				|| !result.isComplete()
 				|| result.participantResults().stream().anyMatch(participant ->
 						participant.disposition()
-								== InternalParticipantShutdownDisposition
+								== InternalLifecycleComponentShutdownDisposition
 										.UNEXPECTED_TERMINATION)
 				|| snapshot.cleanupOutcome().failed();
 	}
@@ -95,9 +95,9 @@ final class DefaultLifecycleTerminalReporter implements LifecycleTerminalReporte
 				.append("primaryFailure=").append(safeThrowable(failure))
 				.append('\n'));
 
-		Map<InternalParticipantKind, SokletApplicationParticipantDiagnostics>
+		Map<InternalLifecycleComponentType, SokletApplicationParticipantDiagnostics>
 				diagnostics = snapshot.coreDiagnostics().participantDiagnostics();
-		for (InternalParticipantShutdownResult participant
+		for (InternalLifecycleComponentShutdownResult participant
 				: result.participantResults()) {
 			SokletApplicationParticipantDiagnostics participantDiagnostics =
 					diagnostics.get(participant.kind());
@@ -161,8 +161,8 @@ final class DefaultLifecycleTerminalReporter implements LifecycleTerminalReporte
 				.append(policy.startupTimeout().map(Duration::toNanos)
 						.map(String::valueOf).orElse("unbounded"))
 				.append('\n')
-				.append("startupCancellationBudgetNanos=")
-				.append(policy.startupCancellationTimeout().toNanos()).append('\n')
+				.append("startupCancelationBudgetNanos=")
+				.append(policy.startupCancelationTimeout().toNanos()).append('\n')
 				.append("gracefulBudgetNanos=")
 				.append(policy.gracefulShutdownTimeout().toNanos()).append('\n')
 				.append("forcedBudgetNanos=")

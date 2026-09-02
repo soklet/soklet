@@ -32,7 +32,7 @@ import java.util.Set;
 public class ResponseErrorMappingTests {
 	@Test
 	public void runtime_exception_maps_to_500() {
-		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
+		SokletSimulator.run(config -> config.httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ExplodeResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
@@ -46,7 +46,7 @@ public class ResponseErrorMappingTests {
 
 	@Test
 	public void bad_request_exception_maps_to_400() {
-		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
+		SokletSimulator.run(config -> config.httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ExplodeResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
@@ -60,7 +60,7 @@ public class ResponseErrorMappingTests {
 
 	@Test
 	public void bodyless_response_with_body_maps_to_500() {
-		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
+		SokletSimulator.run(config -> config.httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ExplodeResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override

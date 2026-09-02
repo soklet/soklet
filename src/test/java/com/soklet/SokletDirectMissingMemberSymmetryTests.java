@@ -164,10 +164,10 @@ final class SokletDirectMissingMemberSymmetryTests {
 		Assertions.assertFalse(result.isComplete());
 		Assertions.assertEquals(1, result.participantResults().size(),
 				"Both graph members belong to one configured participant");
-		InternalParticipantShutdownResult http = result
-				.participantResult(InternalParticipantKind.HTTP).orElseThrow();
+		InternalLifecycleComponentShutdownResult http = result
+				.participantResult(InternalLifecycleComponentType.HTTP).orElseThrow();
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+				InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
 				http.disposition());
 		Assertions.assertTrue(http.failures().isEmpty());
 		Assertions.assertTrue(http.residualActivity().isEmpty(),
@@ -302,14 +302,14 @@ final class SokletDirectMissingMemberSymmetryTests {
 			return new TransportRuntime() {
 				@Override
 				public void start(@NonNull StartupContext context) {
-					attachment.getRuntime().start(context);
+					attachment.getTransportRuntime().start(context);
 				}
 
 				@Override
 				public void quiesce(@NonNull ShutdownContext context) {
 					quiesceCalls.incrementAndGet();
 					try {
-						attachment.getRuntime().quiesce(context);
+						attachment.getTransportRuntime().quiesce(context);
 						publishSelectedRootProof();
 					} finally {
 						quiesceReturned.countDown();
@@ -320,7 +320,7 @@ final class SokletDirectMissingMemberSymmetryTests {
 				public void force(@NonNull ShutdownContext context) {
 					forceCalls.incrementAndGet();
 					try {
-						attachment.getRuntime().force(context);
+						attachment.getTransportRuntime().force(context);
 						publishSelectedRootProof();
 					} finally {
 						forceReturned.countDown();

@@ -154,7 +154,7 @@ final class DefaultMcpLocalizationCatalogExtractor {
 		List<McpCanonicalLocalizationPlan.Slot> slots =
 				new ArrayList<>(serverInformationSlots(endpoint, catalog));
 		endpoint.getInstructions().ifPresent(text -> addIfNonblank(slots,
-				catalog, endpoint.getPath(), McpTextCoordinate.Kind.ENDPOINT,
+				catalog, endpoint.getPath(), McpTextOwnerType.ENDPOINT,
 				endpoint.getPath(), "/instructions", "/instructions", text));
 		return List.copyOf(slots);
 	}
@@ -168,12 +168,12 @@ final class DefaultMcpLocalizationCatalogExtractor {
 		McpImplementation information = endpoint.getServerInformation();
 		List<McpCanonicalLocalizationPlan.Slot> slots = new ArrayList<>();
 		information.getTitle().ifPresent(text -> addIfNonblank(slots, catalog,
-				endpoint.getPath(), McpTextCoordinate.Kind.SERVER_INFORMATION,
+				endpoint.getPath(), McpTextOwnerType.SERVER_INFORMATION,
 				information.getName(), "/title",
 				SERVER_INFORMATION_METADATA_POINTER + "/title", text));
 		information.getDescription().ifPresent(text -> addIfNonblank(slots,
 				catalog, endpoint.getPath(),
-				McpTextCoordinate.Kind.SERVER_INFORMATION,
+				McpTextOwnerType.SERVER_INFORMATION,
 				information.getName(), "/description",
 				SERVER_INFORMATION_METADATA_POINTER + "/description", text));
 		return List.copyOf(slots);
@@ -189,14 +189,14 @@ final class DefaultMcpLocalizationCatalogExtractor {
 			String target = McpLocalizationSchemaWalker.childPointer(
 					"", "tools", Integer.toString(index));
 			tool.getTitle().ifPresent(text -> addIfNonblank(slots, catalog,
-					endpoint.getPath(), McpTextCoordinate.Kind.TOOL,
+					endpoint.getPath(), McpTextOwnerType.TOOL,
 					tool.getName(), "/title", target + "/title", text));
 			tool.getDescription().ifPresent(text -> addIfNonblank(slots, catalog,
-					endpoint.getPath(), McpTextCoordinate.Kind.TOOL,
+					endpoint.getPath(), McpTextOwnerType.TOOL,
 					tool.getName(), "/description", target + "/description", text));
 			tool.getAnnotations().flatMap(McpToolAnnotations::getTitle)
 					.ifPresent(text -> addIfNonblank(slots, catalog,
-							endpoint.getPath(), McpTextCoordinate.Kind.TOOL,
+							endpoint.getPath(), McpTextOwnerType.TOOL,
 							tool.getName(), "/annotations/title",
 							target + "/annotations/title", text));
 			addSchemaSlots(slots, catalog, endpoint.getPath(), tool.getName(),
@@ -217,7 +217,7 @@ final class DefaultMcpLocalizationCatalogExtractor {
 		for (McpLocalizationSchemaWalker.SchemaText schemaText
 				: McpLocalizationSchemaWalker.walk(document)) {
 			addIfNonblank(slots, catalog, endpointPath,
-					McpTextCoordinate.Kind.TOOL, toolName,
+					McpTextOwnerType.TOOL, toolName,
 					coordinatePrefix + schemaText.pointer(),
 					targetPrefix + schemaText.pointer(), schemaText.text());
 		}
@@ -234,10 +234,10 @@ final class DefaultMcpLocalizationCatalogExtractor {
 			String target = McpLocalizationSchemaWalker.childPointer(
 					"", "prompts", Integer.toString(promptIndex));
 			prompt.getTitle().ifPresent(text -> addIfNonblank(slots, catalog,
-					endpoint.getPath(), McpTextCoordinate.Kind.PROMPT,
+					endpoint.getPath(), McpTextOwnerType.PROMPT,
 					prompt.getName(), "/title", target + "/title", text));
 			prompt.getDescription().ifPresent(text -> addIfNonblank(slots, catalog,
-					endpoint.getPath(), McpTextCoordinate.Kind.PROMPT,
+					endpoint.getPath(), McpTextOwnerType.PROMPT,
 					prompt.getName(), "/description", target + "/description", text));
 			for (int argumentIndex = 0;
 					argumentIndex < prompt.getArguments().size(); ++argumentIndex) {
@@ -248,11 +248,11 @@ final class DefaultMcpLocalizationCatalogExtractor {
 				String argumentTarget = McpLocalizationSchemaWalker.childPointer(
 						target, "arguments", Integer.toString(argumentIndex));
 				argument.getTitle().ifPresent(text -> addIfNonblank(slots,
-						catalog, endpoint.getPath(), McpTextCoordinate.Kind.PROMPT,
+						catalog, endpoint.getPath(), McpTextOwnerType.PROMPT,
 						prompt.getName(), member + "/title",
 						argumentTarget + "/title", text));
 				argument.getDescription().ifPresent(text -> addIfNonblank(slots,
-						catalog, endpoint.getPath(), McpTextCoordinate.Kind.PROMPT,
+						catalog, endpoint.getPath(), McpTextOwnerType.PROMPT,
 						prompt.getName(), member + "/description",
 						argumentTarget + "/description", text));
 			}
@@ -277,10 +277,10 @@ final class DefaultMcpLocalizationCatalogExtractor {
 			String target = McpLocalizationSchemaWalker.childPointer(
 					"", "resources", Integer.toString(exactIndex++));
 			resource.getTitle().ifPresent(text -> addIfNonblank(slots, catalog,
-					endpoint.getPath(), McpTextCoordinate.Kind.RESOURCE, subject,
+					endpoint.getPath(), McpTextOwnerType.RESOURCE, subject,
 					"/title", target + "/title", text));
 			resource.getDescription().ifPresent(text -> addIfNonblank(slots,
-					catalog, endpoint.getPath(), McpTextCoordinate.Kind.RESOURCE,
+					catalog, endpoint.getPath(), McpTextOwnerType.RESOURCE,
 					subject, "/description", target + "/description", text));
 		}
 		return List.copyOf(slots);
@@ -300,11 +300,11 @@ final class DefaultMcpLocalizationCatalogExtractor {
 			String target = McpLocalizationSchemaWalker.childPointer(
 					"", "resourceTemplates", Integer.toString(templateIndex++));
 			resource.getTitle().ifPresent(text -> addIfNonblank(slots, catalog,
-					endpoint.getPath(), McpTextCoordinate.Kind.RESOURCE_TEMPLATE,
+					endpoint.getPath(), McpTextOwnerType.RESOURCE_TEMPLATE,
 					subject, "/title", target + "/title", text));
 			resource.getDescription().ifPresent(text -> addIfNonblank(slots,
 					catalog, endpoint.getPath(),
-					McpTextCoordinate.Kind.RESOURCE_TEMPLATE, subject,
+					McpTextOwnerType.RESOURCE_TEMPLATE, subject,
 					"/description", target + "/description", text));
 		}
 		return List.copyOf(slots);
@@ -313,12 +313,13 @@ final class DefaultMcpLocalizationCatalogExtractor {
 	private static void addIfNonblank(
 			@NonNull List<McpCanonicalLocalizationPlan.Slot> slots,
 			@NonNull CatalogAccumulator catalog, @NonNull String endpointPath,
-			McpTextCoordinate.Kind kind,
+			@NonNull McpTextOwnerType mcpTextOwnerType,
 			@NonNull String subjectIdentifier, @NonNull String memberPath,
 			@NonNull String targetPointer, @NonNull String defaultText) {
 		if (defaultText.isBlank())
 			return;
-		McpTextCoordinate coordinate = new McpTextCoordinate(endpointPath, kind,
+		McpTextCoordinate coordinate = new McpTextCoordinate(endpointPath,
+				mcpTextOwnerType,
 				subjectIdentifier, memberPath);
 		McpLocalizableText text = catalog.register(coordinate, defaultText);
 		slots.add(new McpCanonicalLocalizationPlan.Slot(text, targetPointer));

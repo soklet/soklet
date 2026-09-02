@@ -110,7 +110,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private final AtomicLong mcpActiveHandlerExecutions;
 	private final AtomicLong mcpHandlerQueueDepth;
 	private final LongAdder mcpHandlerCapacityRejections;
-	private final Map<ParticipantShutdownDisposition, LongAdder>
+	private final Map<ShutdownComponentDisposition, LongAdder>
 			mcpShutdownsByOutcome;
 	private final LongAdder mcpConnectionsAccepted;
 	private final LongAdder mcpConnectionsRejected;
@@ -192,10 +192,10 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.mcpActiveHandlerExecutions = new AtomicLong();
 		this.mcpHandlerQueueDepth = new AtomicLong();
 		this.mcpHandlerCapacityRejections = new LongAdder();
-		EnumMap<ParticipantShutdownDisposition, LongAdder> mcpShutdowns =
-				new EnumMap<>(ParticipantShutdownDisposition.class);
-		for (ParticipantShutdownDisposition outcome
-				: ParticipantShutdownDisposition.values())
+		EnumMap<ShutdownComponentDisposition, LongAdder> mcpShutdowns =
+				new EnumMap<>(ShutdownComponentDisposition.class);
+		for (ShutdownComponentDisposition outcome
+				: ShutdownComponentDisposition.values())
 			mcpShutdowns.put(outcome, new LongAdder());
 		this.mcpShutdownsByOutcome = Collections.unmodifiableMap(mcpShutdowns);
 		this.mcpConnectionsAccepted = new LongAdder();
@@ -1267,8 +1267,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	@NonNull
 	McpMetricsSnapshot snapshotMcpMetrics() {
-		EnumMap<ParticipantShutdownDisposition, Long> shutdowns =
-				new EnumMap<>(ParticipantShutdownDisposition.class);
+		EnumMap<ShutdownComponentDisposition, Long> shutdowns =
+				new EnumMap<>(ShutdownComponentDisposition.class);
 		this.mcpShutdownsByOutcome.forEach((outcome, counter) -> {
 			long count = counter.sum();
 			if (count != 0L)
@@ -1828,7 +1828,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	@NonNull
 	private static LabelSet labelsForMcpShutdownDisposition(
-			@NonNull ParticipantShutdownDisposition outcome) {
+			@NonNull ShutdownComponentDisposition outcome) {
 		requireNonNull(outcome);
 
 		String outcomeLabel = switch (outcome) {

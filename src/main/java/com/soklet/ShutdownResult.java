@@ -19,6 +19,7 @@ package com.soklet;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.EnumSet;
@@ -32,49 +33,57 @@ import static java.util.Objects.requireNonNull;
 /**
  * Immutable result of one Soklet lifecycle attempt.
  * <p>
- * A result is complete when every configured participant has affirmative
+ * A result is complete when every configured lifecycle component has affirmative
  * termination proof and no framework-tracked activity remains. Throwable
  * instances retain their exact identities and may contain application-sensitive
  * data; callers own any logging or disclosure decision.
  */
+@ThreadSafe
 public final class ShutdownResult {
 	@NonNull
-	private final ShutdownDisposition disposition;
+	private final ShutdownDisposition shutdownDisposition;
 	@NonNull
 	private final StartupDisposition startupDisposition;
 	@NonNull
-	private final List<@NonNull ParticipantShutdownResult> participantResults;
+	private final List<@NonNull ShutdownComponentResult>
+			shutdownComponentResults;
 	@NonNull
-	private final Map<@NonNull ParticipantKind,
-			@NonNull ParticipantShutdownResult> participantResultsByKind;
+	private final Map<@NonNull ShutdownComponentType,
+			@NonNull ShutdownComponentResult>
+			shutdownComponentResultsByType;
 	@Nullable
-	private final Throwable startupCause;
+	private final Throwable startupFailureCause;
 	@Nullable
-	private final UnexpectedParticipantTermination unexpectedTermination;
+	private final UnexpectedShutdownComponentTermination
+			unexpectedShutdownComponentTermination;
 	@NonNull
 	private final InternalShutdownResult internalResult;
 
 	private ShutdownResult(@NonNull InternalShutdownResult internalResult,
-			@Nullable Throwable startupCause,
-			@Nullable ParticipantKind unexpectedParticipantKind,
+			@Nullable Throwable startupFailureCause,
+			@Nullable ShutdownComponentType unexpectedShutdownComponentType,
 			@Nullable Throwable unexpectedCause) {
 		this.internalResult = requireNonNull(internalResult);
-		this.disposition = ShutdownDisposition.valueOf(
+		this.shutdownDisposition = ShutdownDisposition.valueOf(
 				internalResult.disposition().name());
 		this.startupDisposition = StartupDisposition.valueOf(
 				internalResult.startupDisposition().name());
 		String residualSummary = internalResult.retentionSummary()
 				.map(LifecycleRetentionSummary::summary).orElse("");
-		this.participantResults = internalResult.participantResults().stream()
+		this.shutdownComponentResults = internalResult.participantResults()
+				.stream()
 				.map(result -> fromInternal(result, residualSummary)).toList();
-		EnumMap<ParticipantKind, ParticipantShutdownResult> indexed =
-				new EnumMap<>(ParticipantKind.class);
-		for (ParticipantShutdownResult result : this.participantResults)
-			indexed.put(result.getParticipantKind(), result);
-		this.participantResultsByKind = Collections.unmodifiableMap(indexed);
-		this.startupCause = startupCause;
-		this.unexpectedTermination = unexpectedParticipantKind == null ? null
-				: new UnexpectedParticipantTermination(unexpectedParticipantKind,
+		EnumMap<ShutdownComponentType, ShutdownComponentResult> indexed =
+				new EnumMap<>(ShutdownComponentType.class);
+		for (ShutdownComponentResult result
+				: this.shutdownComponentResults)
+			indexed.put(result.getShutdownComponentType(), result);
+		this.shutdownComponentResultsByType = Collections.unmodifiableMap(
+				indexed);
+		this.startupFailureCause = startupFailureCause;
+		this.unexpectedShutdownComponentTermination =
+				unexpectedShutdownComponentType == null ? null
+				: new UnexpectedShutdownComponentTermination(unexpectedShutdownComponentType,
 						unexpectedCause);
 	}
 
@@ -87,38 +96,39 @@ public final class ShutdownResult {
 	@NonNull
 	static ShutdownResult fromInternal(
 			@NonNull InternalShutdownResult internalResult,
-			@Nullable Throwable startupCause,
-			@Nullable ParticipantKind unexpectedParticipantKind,
+			@Nullable Throwable startupFailureCause,
+			@Nullable ShutdownComponentType unexpectedShutdownComponentType,
 			@Nullable Throwable unexpectedCause) {
-		return new ShutdownResult(internalResult, startupCause,
-				unexpectedParticipantKind, unexpectedCause);
+		return new ShutdownResult(internalResult, startupFailureCause,
+				unexpectedShutdownComponentType, unexpectedCause);
 	}
 
 	@NonNull
-	private static ParticipantShutdownResult fromInternal(
-			@NonNull InternalParticipantShutdownResult internalResult,
+	private static ShutdownComponentResult fromInternal(
+			@NonNull InternalLifecycleComponentShutdownResult internalResult,
 			@NonNull String residualSummary) {
-		Set<ResidualActivityKind> activityKinds = internalResult
+		Set<ResidualActivityType> residualActivityTypes = internalResult
 				.residualActivity().stream()
-				.map(kind -> ResidualActivityKind.valueOf(kind.name()))
-				.collect(() -> EnumSet.noneOf(ResidualActivityKind.class),
+				.map(kind -> ResidualActivityType.valueOf(kind.name()))
+				.collect(() -> EnumSet.noneOf(ResidualActivityType.class),
 						EnumSet::add, EnumSet::addAll);
-		ResidualActivityEvidence evidence = activityKinds.isEmpty() ? null
-				: new ResidualActivityEvidence(activityKinds,
+		ResidualActivityEvidence evidence = residualActivityTypes.isEmpty() ? null
+				: new ResidualActivityEvidence(residualActivityTypes,
 						residualSummary.isEmpty()
-								? "Residual activity remains: " + activityKinds
+								? "Residual activity remains: "
+										+ residualActivityTypes
 								: residualSummary);
-		return new ParticipantShutdownResult(
-				ParticipantKind.valueOf(internalResult.kind().name()),
-				ParticipantShutdownDisposition.valueOf(
+		return new ShutdownComponentResult(
+				ShutdownComponentType.valueOf(internalResult.kind().name()),
+				ShutdownComponentDisposition.valueOf(
 						internalResult.disposition().name()),
 				internalResult.failures(), evidence);
 	}
 
 	/** @return aggregate shutdown disposition */
 	@NonNull
-	public ShutdownDisposition getDisposition() {
-		return this.disposition;
+	public ShutdownDisposition getShutdownDisposition() {
+		return this.shutdownDisposition;
 	}
 
 	/** @return startup disposition for the same lifecycle attempt */
@@ -128,46 +138,52 @@ public final class ShutdownResult {
 	}
 
 	/**
-	 * @return immutable participant results in {@link ParticipantKind} enum order
+	 * @return immutable shutdown component results in
+	 * {@link ShutdownComponentType} enum order
 	 */
 	@NonNull
-	public List<@NonNull ParticipantShutdownResult> getParticipantResults() {
-		return this.participantResults;
+	public List<@NonNull ShutdownComponentResult> getShutdownComponentResults() {
+		return this.shutdownComponentResults;
 	}
 
 	/**
-	 * Looks up terminal evidence for one configured participant kind.
+	 * Looks up terminal evidence for one configured shutdown component type.
 	 *
-	 * @param kind participant kind
-	 * @return participant result, otherwise empty when that kind was not configured
-	 * @throws NullPointerException if {@code kind} is null
+	 * @param shutdownComponentType shutdown component type
+	 * @return shutdown component result, otherwise empty when that type
+	 * was not configured
+	 * @throws NullPointerException if {@code shutdownComponentType} is null
 	 */
 	@NonNull
-	public Optional<@NonNull ParticipantShutdownResult> getParticipantResult(
-			@NonNull ParticipantKind kind) {
-		return Optional.ofNullable(this.participantResultsByKind.get(
-				requireNonNull(kind)));
+	public Optional<@NonNull ShutdownComponentResult> getShutdownComponentResult(
+			@NonNull ShutdownComponentType shutdownComponentType) {
+		return Optional.ofNullable(this.shutdownComponentResultsByType.get(
+				requireNonNull(shutdownComponentType)));
 	}
 
-	/** @return startup failure or cancellation cause, otherwise empty */
+	/**
+	 * @return the cause associated with a failed, timed-out, or canceled startup
+	 * attempt, otherwise empty
+	 */
 	@NonNull
-	public Optional<@NonNull Throwable> getStartupCause() {
-		return Optional.ofNullable(this.startupCause);
+	public Optional<@NonNull Throwable> getStartupFailureCause() {
+		return Optional.ofNullable(this.startupFailureCause);
 	}
 
-	/** @return the first premature participant termination, otherwise empty */
+	/** @return the first premature shutdown component termination, otherwise empty */
 	@NonNull
-	public Optional<@NonNull UnexpectedParticipantTermination>
-	getUnexpectedTermination() {
-		return Optional.ofNullable(this.unexpectedTermination);
+	public Optional<@NonNull UnexpectedShutdownComponentTermination>
+	getUnexpectedShutdownComponentTermination() {
+		return Optional.ofNullable(this.unexpectedShutdownComponentTermination);
 	}
 
 	/**
 	 * @return {@code true} exactly when the disposition is not
 	 * {@link ShutdownDisposition#INCOMPLETE}
 	 */
-	public boolean isComplete() {
-		return getDisposition() != ShutdownDisposition.INCOMPLETE;
+	@NonNull
+	public Boolean isComplete() {
+		return getShutdownDisposition() != ShutdownDisposition.INCOMPLETE;
 	}
 
 	@NonNull

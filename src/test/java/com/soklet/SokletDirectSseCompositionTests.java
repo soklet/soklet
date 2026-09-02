@@ -75,7 +75,7 @@ final class SokletDirectSseCompositionTests {
 			Assertions.assertEquals(List.of("engine"), probe.quiesces);
 			Assertions.assertTrue(probe.forces.isEmpty());
 			assertSingleSseParticipant(result,
-					InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION);
+					InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION);
 		}
 	}
 
@@ -107,7 +107,7 @@ final class SokletDirectSseCompositionTests {
 			Assertions.assertEquals(Set.of("owner"),
 					Set.copyOf(probe.proofCallbacks));
 			assertSingleSseParticipant(result,
-					InternalParticipantShutdownDisposition.FORCED_TERMINATION);
+					InternalLifecycleComponentShutdownDisposition.FORCED_TERMINATION);
 		}
 	}
 
@@ -172,7 +172,7 @@ final class SokletDirectSseCompositionTests {
 			Assertions.assertEquals(Set.of("outer", "inner"),
 					Set.copyOf(probe.proofCallbacks));
 			assertSingleSseParticipant(result,
-					InternalParticipantShutdownDisposition.FORCED_TERMINATION);
+					InternalLifecycleComponentShutdownDisposition.FORCED_TERMINATION);
 		} finally {
 			engine.releaseProof.countDown();
 			soklet.close();
@@ -304,12 +304,12 @@ final class SokletDirectSseCompositionTests {
 
 	private static void assertSingleSseParticipant(
 			@NonNull InternalShutdownResult result,
-			@NonNull InternalParticipantShutdownDisposition disposition) {
+			@NonNull InternalLifecycleComponentShutdownDisposition disposition) {
 		Assertions.assertEquals(1, result.participantResults().size(),
 				"The coordinator must see one configured outer graph");
-		InternalParticipantShutdownResult participant = result.participantResults()
+		InternalLifecycleComponentShutdownResult participant = result.participantResults()
 				.get(0);
-		Assertions.assertEquals(InternalParticipantKind.SSE, participant.kind());
+		Assertions.assertEquals(InternalLifecycleComponentType.SSE, participant.kind());
 		Assertions.assertEquals(disposition, participant.disposition());
 		Assertions.assertTrue(participant.failures().isEmpty());
 		Assertions.assertTrue(participant.residualActivity().isEmpty());
@@ -682,7 +682,7 @@ final class SokletDirectSseCompositionTests {
 					context.attachLifecycleOwningDelegate(this.delegate,
 							wrappedHandler(context.getAdmissionFencedRequestHandler()));
 			attachment.whenTerminated().thenRun(this::submitOwnedCleanup);
-			TransportRuntime child = attachment.getRuntime();
+			TransportRuntime child = attachment.getTransportRuntime();
 			return new TransportRuntime() {
 				@Override
 				public void start(@NonNull StartupContext phaseContext) {

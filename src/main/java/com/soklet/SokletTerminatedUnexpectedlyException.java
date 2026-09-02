@@ -20,11 +20,12 @@ import org.jspecify.annotations.NonNull;
 
 import static java.util.Objects.requireNonNull;
 
-/** Indicates that a participant terminated unexpectedly after readiness. */
+/** Indicates that a shutdown component terminated unexpectedly after readiness. */
 public final class SokletTerminatedUnexpectedlyException
 		extends SokletLifecycleException {
 	@NonNull
-	private final UnexpectedParticipantTermination unexpectedTermination;
+	private final UnexpectedShutdownComponentTermination
+			unexpectedShutdownComponentTermination;
 	private final InternalTerminationEvent internalUnexpectedTermination;
 
 	SokletTerminatedUnexpectedlyException(
@@ -39,7 +40,8 @@ public final class SokletTerminatedUnexpectedlyException
 			@NonNull Throwable cause) {
 		super("A Soklet transport terminated unexpectedly",
 				requireNonNull(shutdownResult), requireNonNull(cause));
-		this.unexpectedTermination = shutdownResult.getUnexpectedTermination()
+		this.unexpectedShutdownComponentTermination = shutdownResult
+				.getUnexpectedShutdownComponentTermination()
 				.orElseThrow(() -> new IllegalArgumentException(
 						"Unexpected termination exception requires event evidence"));
 		this.internalUnexpectedTermination = internalUnexpectedTermination;
@@ -60,15 +62,15 @@ public final class SokletTerminatedUnexpectedlyException
 			@NonNull Throwable cause) {
 		this(unexpectedTermination,
 				ShutdownResult.fromInternal(requireNonNull(shutdownResult), null,
-						inferParticipantKind(shutdownResult),
+						inferShutdownComponentType(shutdownResult),
 						requireNonNull(unexpectedTermination).cause().orElse(null)),
 				cause);
 	}
 
-	/** @return the first premature participant termination */
+	/** @return the first premature shutdown component termination */
 	@NonNull
-	public UnexpectedParticipantTermination getUnexpectedTermination() {
-		return this.unexpectedTermination;
+	public UnexpectedShutdownComponentTermination getUnexpectedShutdownComponentTermination() {
+		return this.unexpectedShutdownComponentTermination;
 	}
 
 	@NonNull
@@ -78,17 +80,17 @@ public final class SokletTerminatedUnexpectedlyException
 	}
 
 	@NonNull
-	private static ParticipantKind inferParticipantKind(
+	private static ShutdownComponentType inferShutdownComponentType(
 			@NonNull InternalShutdownResult result) {
 		return requireNonNull(result).participantResults().stream()
 				.filter(participant -> participant.disposition()
-						== InternalParticipantShutdownDisposition
+						== InternalLifecycleComponentShutdownDisposition
 								.UNEXPECTED_TERMINATION)
-				.map(participant -> ParticipantKind.valueOf(
+				.map(participant -> ShutdownComponentType.valueOf(
 						participant.kind().name())).findFirst()
 				.orElseGet(() -> result.participantResults().stream()
-						.map(participant -> ParticipantKind.valueOf(
+						.map(participant -> ShutdownComponentType.valueOf(
 								participant.kind().name())).findFirst()
-						.orElse(ParticipantKind.FRAMEWORK_STARTUP));
+						.orElse(ShutdownComponentType.FRAMEWORK));
 	}
 }

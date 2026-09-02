@@ -47,7 +47,7 @@ import java.util.Set;
 public class ParameterBindingTests {
 	@Test
 	public void required_and_optional_query_parameters() {
-		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
+		SokletSimulator.run(config -> config.httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ParamResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
@@ -76,7 +76,7 @@ public class ParameterBindingTests {
 
 	@Test
 	public void headers_cookies_path_and_body_conversions() {
-		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
+		SokletSimulator.run(config -> config.httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ParamResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
@@ -125,7 +125,7 @@ public class ParameterBindingTests {
 
 	@Test
 	public void object_parameters_are_not_hijacked_by_request_injection() {
-		SokletSimulator.run(transports -> specialInjectionConfiguration(transports,
+		SokletSimulator.run(config -> specialInjectionConfiguration(config,
 				new SpecialLifecycleObserver("configured-observer")), simulator -> {
 			HttpRequestResult objectResult = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/param/object-instance").build());
 			Assertions.assertEquals(200, objectResult.getMarshaledResponse().getStatusCode());
@@ -147,7 +147,7 @@ public class ParameterBindingTests {
 
 	@Test
 	public void configured_component_concrete_subtypes_are_injected_when_assignable() {
-		SokletSimulator.run(transports -> specialInjectionConfiguration(transports,
+		SokletSimulator.run(config -> specialInjectionConfiguration(config,
 				new SpecialLifecycleObserver("configured-observer")), simulator -> {
 			HttpRequestResult lifecycleResult = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/param/lifecycle-special").build());
 			Assertions.assertEquals(200, lifecycleResult.getMarshaledResponse().getStatusCode());
@@ -179,10 +179,10 @@ public class ParameterBindingTests {
 				.build();
 	}
 
-	private static SokletConfig specialInjectionConfiguration(
-			@NonNull SimulatorTransports transports,
+	private static SimulatorConfig specialInjectionConfiguration(
+			SimulatorConfig.@NonNull Builder config,
 			@NonNull LifecycleObserver lifecycleObserver) {
-		return SokletConfig.forSimulatorTesting(transports)
+		return config.httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ParamResource.class, SpecialInjectionResource.class)))
 				.valueConverterRegistry(ValueConverterRegistry.fromDefaultsSupplementedBy(Set.of(new StringToObjectValueConverter())))
 				.lifecycleObserver(lifecycleObserver)

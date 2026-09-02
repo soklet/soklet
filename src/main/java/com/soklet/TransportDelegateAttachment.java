@@ -32,13 +32,13 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public final class TransportDelegateAttachment {
 	@NonNull
-	private final TransportRuntime runtime;
+	private final TransportRuntime transportRuntime;
 	@NonNull
 	private final InternalTransportDelegateAttachment internalAttachment;
 
-	TransportDelegateAttachment(@NonNull TransportRuntime runtime,
+	TransportDelegateAttachment(@NonNull TransportRuntime transportRuntime,
 			@NonNull InternalTransportDelegateAttachment internalAttachment) {
-		this.runtime = requireNonNull(runtime);
+		this.transportRuntime = requireNonNull(transportRuntime);
 		this.internalAttachment = requireNonNull(internalAttachment);
 	}
 
@@ -48,8 +48,8 @@ public final class TransportDelegateAttachment {
 	 * @return the delegate runtime
 	 */
 	@NonNull
-	public TransportRuntime getRuntime() {
-		return this.runtime;
+	public TransportRuntime getTransportRuntime() {
+		return this.transportRuntime;
 	}
 
 	/**

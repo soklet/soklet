@@ -74,7 +74,7 @@ class McpLifecycleB3Tests {
 	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
 			LifecyclePolicy.builder()
 					.startupTimeout(Duration.ofSeconds(5))
-					.startupCancellationTimeout(Duration.ofSeconds(2))
+					.startupCancelationTimeout(Duration.ofSeconds(2))
 					.gracefulShutdownDuration(Duration.ofSeconds(2))
 					.forcedShutdownDuration(Duration.ofSeconds(1))
 					.build();
@@ -113,8 +113,8 @@ class McpLifecycleB3Tests {
 			InetSocketAddress address = boundAddress(server);
 			fixture.soklet().close();
 			assertParticipant(server,
-					InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION);
-			assertLegacyParity(fixture, ParticipantShutdownDisposition.GRACEFUL_TERMINATION);
+					InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION);
+			assertLegacyParity(fixture, ShutdownComponentDisposition.GRACEFUL_TERMINATION);
 			Assertions.assertEquals(address, boundAddress(server));
 			assertRuntimeEvidenceReleased(fixture.bridge());
 			assertListenerReturned(address);
@@ -185,8 +185,8 @@ class McpLifecycleB3Tests {
 			stop.get(WAIT.toNanos(), TimeUnit.NANOSECONDS);
 			Assertions.assertEquals(0, admittedWork(generation));
 			assertParticipant(server,
-					InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION);
-			assertLegacyParity(fixture, ParticipantShutdownDisposition.GRACEFUL_TERMINATION);
+					InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION);
+			assertLegacyParity(fixture, ShutdownComponentDisposition.GRACEFUL_TERMINATION);
 			Assertions.assertEquals(List.of(McpStreamTerminationReason.SERVER_STOPPED),
 					fixture.metrics().streamCloseReasons);
 		} finally {
@@ -238,9 +238,9 @@ class McpLifecycleB3Tests {
 			Assertions.assertTrue(interruptedAt.get() - gracefulDeadline(generation) >= 0L,
 					"Owned handler cancellation occurred before the shared grace deadline.");
 			assertParticipant(server,
-					InternalParticipantShutdownDisposition.FORCED_TERMINATION);
+					InternalLifecycleComponentShutdownDisposition.FORCED_TERMINATION);
 			assertLegacyParity(fixture,
-					ParticipantShutdownDisposition.FORCED_TERMINATION);
+					ShutdownComponentDisposition.FORCED_TERMINATION);
 			Assertions.assertEquals(List.of(McpStreamTerminationReason.SERVER_STOPPED),
 					fixture.metrics().streamCloseReasons);
 			Assertions.assertEquals(address, boundAddress(server));
@@ -297,13 +297,13 @@ class McpLifecycleB3Tests {
 			Assertions.assertEquals(1, interruptions.get(),
 					"Idempotent force must not repeatedly interrupt one handler.");
 			assertParticipant(server,
-					InternalParticipantShutdownDisposition.RESIDUAL_ACTIVITY);
+					InternalLifecycleComponentShutdownDisposition.RESIDUAL_ACTIVITY);
 			Assertions.assertEquals(McpServerStatus.RESIDUAL_ACTIVITY,
 					server.getDiagnostics().getStatus());
 			Assertions.assertEquals(address, boundAddress(server));
 			assertIncompleteLegacyParity(fixture, result);
 			Assertions.assertTrue(adapter(server).retentionSummary().orElseThrow()
-					.counts().containsKey(InternalResidualActivityKind.CALLBACK));
+					.counts().containsKey(InternalResidualActivityType.CALLBACK));
 			Assertions.assertTrue(fixture.bridge().getLifecycleEvidence().callback());
 
 			releaseHandler.countDown();
@@ -325,7 +325,7 @@ class McpLifecycleB3Tests {
 			Assertions.assertEquals(IllegalStateException.class,
 					restartRejection.getClass());
 			assertParticipant(server,
-					InternalParticipantShutdownDisposition.RESIDUAL_ACTIVITY);
+					InternalLifecycleComponentShutdownDisposition.RESIDUAL_ACTIVITY);
 		} finally {
 			releaseHandler.countDown();
 			if (request != null)
@@ -347,8 +347,8 @@ class McpLifecycleB3Tests {
 			terminateUnexpectedly(eventLoop(fixture.bridge()));
 			adapter(server).awaitStop(generation);
 
-			InternalParticipantShutdownResult participant = assertParticipant(server,
-					InternalParticipantShutdownDisposition.UNEXPECTED_TERMINATION);
+			InternalLifecycleComponentShutdownResult participant = assertParticipant(server,
+					InternalLifecycleComponentShutdownDisposition.UNEXPECTED_TERMINATION);
 			Assertions.assertInstanceOf(ClosedSelectorException.class,
 					participant.failures().get(0));
 			Assertions.assertEquals(List.of(InternalTerminationEvent.Type.FAILURE,
@@ -368,7 +368,7 @@ class McpLifecycleB3Tests {
 			Assertions.assertSame(participant.failures().get(0),
 					stopFailure.getCause());
 			assertLegacyParity(fixture,
-					ParticipantShutdownDisposition.UNEXPECTED_TERMINATION);
+					ShutdownComponentDisposition.UNEXPECTED_TERMINATION);
 			SokletTerminatedUnexpectedlyException repeatedStop =
 					Assertions.assertThrows(
 							SokletTerminatedUnexpectedlyException.class,
@@ -428,10 +428,10 @@ class McpLifecycleB3Tests {
 			Assertions.assertFalse(stopper.isAlive());
 			Assertions.assertNull(stopFailure.get());
 
-			InternalParticipantShutdownResult participant = mcpParticipant(
+			InternalLifecycleComponentShutdownResult participant = mcpParticipant(
 					adapter(server).result(generation).orElseThrow());
 			Assertions.assertEquals(
-					InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION,
+					InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION,
 					participant.disposition());
 			Assertions.assertEquals(1, participant.failures().size());
 			Assertions.assertSame(exactFailure, participant.failures().get(0));
@@ -440,7 +440,7 @@ class McpLifecycleB3Tests {
 					terminationEvents(server, generation).stream()
 							.map(InternalTerminationEvent::type).toList());
 			assertLegacyParity(fixture,
-					ParticipantShutdownDisposition.GRACEFUL_TERMINATION);
+					ShutdownComponentDisposition.GRACEFUL_TERMINATION);
 		} finally {
 			releaseHandler.countDown();
 			if (request != null)
@@ -520,7 +520,7 @@ class McpLifecycleB3Tests {
 					generation(freshServer);
 			Assertions.assertNotSame(firstGeneration, freshGeneration);
 			freshFixture.soklet().close();
-			assertLegacyParity(freshFixture, ParticipantShutdownDisposition.GRACEFUL_TERMINATION);
+			assertLegacyParity(freshFixture, ShutdownComponentDisposition.GRACEFUL_TERMINATION);
 			freshFixture.soklet().close();
 			Assertions.assertTrue(adapter(freshServer).result(freshGeneration)
 					.orElseThrow().isComplete());
@@ -569,7 +569,7 @@ class McpLifecycleB3Tests {
 					.orElseThrow();
 			Assertions.assertTrue(result.isComplete());
 			Assertions.assertEquals(
-					InternalParticipantShutdownDisposition.UNEXPECTED_TERMINATION,
+					InternalLifecycleComponentShutdownDisposition.UNEXPECTED_TERMINATION,
 					mcpParticipant(result).disposition());
 			CompletionStage<ShutdownResult> stage = requireNonNull(
 					nestedShutdown.get());
@@ -898,7 +898,7 @@ class McpLifecycleB3Tests {
 					owner.getDirectLifecycle().result().orElseThrow());
 			Assertions.assertTrue(result.isComplete());
 			Assertions.assertEquals(
-					InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION,
+					InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION,
 					mcpParticipant(result).disposition());
 			Assertions.assertDoesNotThrow(owner::close);
 		} finally {
@@ -1046,8 +1046,8 @@ class McpLifecycleB3Tests {
 			Assertions.assertTrue(handlerExited.await(WAIT.toNanos(),
 					TimeUnit.NANOSECONDS));
 			Assertions.assertEquals(0, admittedWork(generation));
-			InternalParticipantShutdownResult participant = assertParticipant(server,
-					InternalParticipantShutdownDisposition.UNEXPECTED_TERMINATION);
+			InternalLifecycleComponentShutdownResult participant = assertParticipant(server,
+					InternalLifecycleComponentShutdownDisposition.UNEXPECTED_TERMINATION);
 			Assertions.assertEquals(List.of(InternalTerminationEvent.Type.FAILURE,
 					InternalTerminationEvent.Type.PROOF),
 					terminationEvents(server, generation).stream()
@@ -1055,7 +1055,7 @@ class McpLifecycleB3Tests {
 			Assertions.assertSame(participant.failures().get(0),
 					stopFailure.getCause());
 			assertLegacyParity(fixture,
-					ParticipantShutdownDisposition.UNEXPECTED_TERMINATION);
+					ShutdownComponentDisposition.UNEXPECTED_TERMINATION);
 		} finally {
 			releaseHandler.countDown();
 			if (request != null)
@@ -1137,7 +1137,7 @@ class McpLifecycleB3Tests {
 			Assertions.assertSame(result,
 					adapter(server).result(generation).orElseThrow(),
 					"A rejected restart must not redeliver the normalized generation.");
-			Assertions.assertEquals(List.of(ParticipantShutdownDisposition.RESIDUAL_ACTIVITY),
+			Assertions.assertEquals(List.of(ShutdownComponentDisposition.RESIDUAL_ACTIVITY),
 					fixture.metrics().shutdownOutcomes,
 					"The retained generation metric must be delivered exactly once.");
 			Assertions.assertSame(generation, generation(server));
@@ -1166,11 +1166,11 @@ class McpLifecycleB3Tests {
 		adapter.awaitStop(adapter.requestStop());
 
 		InternalShutdownResult result = adapter.result(generation).orElseThrow();
-		InternalParticipantShutdownResult participant = mcpParticipant(result);
+		InternalLifecycleComponentShutdownResult participant = mcpParticipant(result);
 		Assertions.assertEquals(InternalStartupDisposition.READY,
 				result.startupDisposition());
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+				InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
 				participant.disposition());
 		Assertions.assertFalse(result.isComplete());
 		Assertions.assertEquals(List.of("quiesce", "await-105", "force",
@@ -1244,7 +1244,7 @@ class McpLifecycleB3Tests {
 
 			InternalShutdownResult result = adapter.result(generation).orElseThrow();
 			Assertions.assertEquals(
-					InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+					InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
 					mcpParticipant(result).disposition());
 			Assertions.assertFalse(result.isComplete());
 			Assertions.assertEquals(address, bridge.getBoundAddress().orElseThrow());
@@ -1317,7 +1317,7 @@ class McpLifecycleB3Tests {
 				"force-launch", "force", "await-0", "residual", "release"),
 				operations.events);
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.FORCED_TERMINATION,
+				InternalLifecycleComponentShutdownDisposition.FORCED_TERMINATION,
 				mcpParticipant(adapter.result(generation).orElseThrow()).disposition());
 		Assertions.assertEquals(1, operations.forceCount.get());
 		Assertions.assertEquals(1, operations.releaseCount.get());
@@ -1355,7 +1355,7 @@ class McpLifecycleB3Tests {
 		deferredCoordinator.get().run();
 		adapter.awaitStop(requested);
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION,
+				InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION,
 				mcpParticipant(adapter.result(generation).orElseThrow()).disposition());
 		Assertions.assertEquals(1, operations.releaseCount.get());
 	}
@@ -1390,10 +1390,10 @@ class McpLifecycleB3Tests {
 
 		failureGeneration.signalTerminationFailure(earlyFailure);
 
-		InternalParticipantShutdownResult failedParticipant = mcpParticipant(
+		InternalLifecycleComponentShutdownResult failedParticipant = mcpParticipant(
 				failureAdapter.result(failureGeneration).orElseThrow());
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.UNEXPECTED_TERMINATION,
+				InternalLifecycleComponentShutdownDisposition.UNEXPECTED_TERMINATION,
 				failedParticipant.disposition());
 		Assertions.assertEquals(List.of(earlyFailure), failedParticipant.failures());
 		Assertions.assertEquals(List.of(InternalTerminationEvent.Type.FAILURE,
@@ -1443,10 +1443,10 @@ class McpLifecycleB3Tests {
 		Assertions.assertNotNull(coordinator);
 		coordinator.join();
 
-		InternalParticipantShutdownResult lateParticipant = mcpParticipant(
+		InternalLifecycleComponentShutdownResult lateParticipant = mcpParticipant(
 				lateFailureAdapter.result(lateFailureGeneration).orElseThrow());
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION,
+				InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION,
 				lateParticipant.disposition());
 		Assertions.assertEquals(List.of(lateFailure), lateParticipant.failures());
 		Assertions.assertEquals(List.of(InternalTerminationEvent.Type.PROOF,
@@ -1538,7 +1538,7 @@ class McpLifecycleB3Tests {
 			Assertions.assertEquals(InternalStartupDisposition.FAILED,
 					failed.startupDisposition());
 			Assertions.assertSame(expected, failed.participantResult(
-					InternalParticipantKind.MCP).orElseThrow().failures().get(0));
+					InternalLifecycleComponentType.MCP).orElseThrow().failures().get(0));
 			failedFixture.soklet().close();
 			failedFixture.soklet().close();
 
@@ -1717,7 +1717,7 @@ class McpLifecycleB3Tests {
 			SokletStartupException startupFailure = Assertions.assertInstanceOf(
 					SokletStartupException.class, failure,
 					"Stop-before-ready must prevent the outer start from succeeding.");
-			Assertions.assertEquals(InternalStartupDisposition.CANCELLED,
+			Assertions.assertEquals(InternalStartupDisposition.CANCELED,
 					startupFailure.getInternalStartupDisposition());
 			IllegalStateException exactCancellation = Assertions.assertInstanceOf(
 					IllegalStateException.class, startupFailure.getCause());
@@ -1893,7 +1893,7 @@ class McpLifecycleB3Tests {
 					WAIT.toNanos(), TimeUnit.NANOSECONDS);
 			SokletStartupException cancelled = Assertions.assertInstanceOf(
 					SokletStartupException.class, firstFailure);
-			Assertions.assertEquals(InternalStartupDisposition.CANCELLED,
+			Assertions.assertEquals(InternalStartupDisposition.CANCELED,
 					cancelled.getInternalStartupDisposition());
 			IllegalStateException exactCancellation = Assertions.assertInstanceOf(
 					IllegalStateException.class, cancelled.getCause());
@@ -2076,8 +2076,8 @@ class McpLifecycleB3Tests {
 							+ stopDuration + " of " + gracefulTimeout);
 			Assertions.assertEquals(0, admittedWork(generation));
 			assertParticipant(server,
-					InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION);
-			assertLegacyParity(fixture, ParticipantShutdownDisposition.GRACEFUL_TERMINATION);
+					InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION);
+			assertLegacyParity(fixture, ShutdownComponentDisposition.GRACEFUL_TERMINATION);
 			Assertions.assertEquals(java.util.Collections.nCopies(subscriptionCount,
 					McpStreamTerminationReason.SERVER_STOPPED),
 					fixture.metrics().subscriptionCloseReasons);
@@ -2182,8 +2182,8 @@ class McpLifecycleB3Tests {
 			@NonNull LifecyclePolicy policy,
 			@NonNull Duration gracefulShutdownDuration) {
 		LifecyclePolicy.Builder builder = LifecyclePolicy.builder()
-				.startupCancellationTimeout(
-						policy.getStartupCancellationTimeout())
+				.startupCancelationTimeout(
+						policy.getStartupCancelationTimeout())
 				.gracefulShutdownDuration(gracefulShutdownDuration)
 				.forcedShutdownDuration(policy.getForcedShutdownDuration());
 		policy.getStartupTimeout().ifPresentOrElse(
@@ -2197,7 +2197,7 @@ class McpLifecycleB3Tests {
 			@NonNull Duration forcedTimeout) {
 		return LifecyclePolicy.builder()
 				.startupTimeout(WAIT)
-				.startupCancellationTimeout(Duration.ofMillis(100))
+				.startupCancelationTimeout(Duration.ofMillis(100))
 				.gracefulShutdownDuration(gracefulTimeout)
 				.forcedShutdownDuration(forcedTimeout)
 				.build();
@@ -2543,35 +2543,35 @@ class McpLifecycleB3Tests {
 	}
 
 	@NonNull
-	private static InternalParticipantShutdownResult mcpParticipant(
+	private static InternalLifecycleComponentShutdownResult mcpParticipant(
 			@NonNull InternalShutdownResult result) {
-		return result.participantResult(InternalParticipantKind.MCP).orElseThrow();
+		return result.participantResult(InternalLifecycleComponentType.MCP).orElseThrow();
 	}
 
 	@NonNull
-	private static InternalParticipantShutdownResult assertParticipant(
+	private static InternalLifecycleComponentShutdownResult assertParticipant(
 			@NonNull McpServer server,
-			@NonNull InternalParticipantShutdownDisposition disposition) {
+			@NonNull InternalLifecycleComponentShutdownDisposition disposition) {
 		InternalShutdownResult result = adapter(server).result().orElseThrow();
-		InternalParticipantShutdownResult participant = result.participantResult(
-				InternalParticipantKind.MCP).orElseThrow();
+		InternalLifecycleComponentShutdownResult participant = result.participantResult(
+				InternalLifecycleComponentType.MCP).orElseThrow();
 		Assertions.assertEquals(disposition, participant.disposition());
 		return participant;
 	}
 
 	private static void assertLegacyParity(@NonNull Fixture fixture,
-			@NonNull ParticipantShutdownDisposition expected) throws InterruptedException {
+			@NonNull ShutdownComponentDisposition expected) throws InterruptedException {
 		fixture.lifecycle().awaitTerminal();
 		awaitCondition(() -> fixture.metrics().shutdownOutcomes.size() == 1,
 				"The terminal MCP metric was not published.");
 		ShutdownResult aggregate = fixture.soklet().getShutdownResult()
 				.orElseThrow();
-		ParticipantShutdownResult participant = aggregate.getParticipantResult(
-				ParticipantKind.MCP).orElseThrow();
+		ShutdownComponentResult participant = aggregate.getShutdownComponentResult(
+				ShutdownComponentType.MCP).orElseThrow();
 		Assertions.assertSame(aggregate, fixture.lifecycle().globalResult.get());
 		Assertions.assertEquals(List.of(participant),
 				fixture.lifecycle().results);
-		Assertions.assertEquals(expected, participant.getDisposition());
+		Assertions.assertEquals(expected, participant.getShutdownComponentDisposition());
 		Assertions.assertEquals(List.of(expected),
 				List.copyOf(fixture.metrics().shutdownOutcomes));
 	}
@@ -2585,14 +2585,14 @@ class McpLifecycleB3Tests {
 				.orElseThrow();
 		Assertions.assertSame(result, aggregate.internalResult());
 		Assertions.assertSame(aggregate, fixture.lifecycle().globalResult.get());
-		ParticipantShutdownResult participant = aggregate.getParticipantResult(
-				ParticipantKind.MCP).orElseThrow();
+		ShutdownComponentResult participant = aggregate.getShutdownComponentResult(
+				ShutdownComponentType.MCP).orElseThrow();
 		Assertions.assertEquals(List.of(participant),
 				fixture.lifecycle().results,
 				"An incomplete MCP participant still publishes one exact terminal callback.");
-		Assertions.assertEquals(ParticipantShutdownDisposition.RESIDUAL_ACTIVITY,
-				participant.getDisposition());
-		Assertions.assertEquals(List.of(ParticipantShutdownDisposition.RESIDUAL_ACTIVITY),
+		Assertions.assertEquals(ShutdownComponentDisposition.RESIDUAL_ACTIVITY,
+				participant.getShutdownComponentDisposition());
+		Assertions.assertEquals(List.of(ShutdownComponentDisposition.RESIDUAL_ACTIVITY),
 				List.copyOf(fixture.metrics().shutdownOutcomes));
 	}
 
@@ -2727,7 +2727,7 @@ class McpLifecycleB3Tests {
 		@NonNull
 		private final IntPredicate proofOnAttempt;
 		@NonNull
-		private final Set<InternalResidualActivityKind> residualActivity;
+		private final Set<InternalResidualActivityType> residualActivity;
 		private final AtomicInteger awaitCount = new AtomicInteger();
 		private final AtomicInteger quiesceCount = new AtomicInteger();
 		private final AtomicInteger forceCount = new AtomicInteger();
@@ -2738,7 +2738,7 @@ class McpLifecycleB3Tests {
 		private volatile LongConsumer onAwait = deadline -> {};
 
 		private RecordingAdapterOperations(@NonNull IntPredicate proofOnAttempt,
-				@NonNull Set<InternalResidualActivityKind> residualActivity) {
+				@NonNull Set<InternalResidualActivityType> residualActivity) {
 			this.proofOnAttempt = proofOnAttempt;
 			this.residualActivity = residualActivity;
 		}
@@ -2766,7 +2766,7 @@ class McpLifecycleB3Tests {
 
 		@Override
 		@NonNull
-		public Set<InternalResidualActivityKind> residualActivity() {
+		public Set<InternalResidualActivityType> residualActivity() {
 			this.events.add("residual");
 			return this.residualActivity;
 		}
@@ -2780,7 +2780,7 @@ class McpLifecycleB3Tests {
 
 	@ThreadSafe
 	private static final class RecordingLifecycle implements LifecycleObserver {
-		private final List<ParticipantShutdownResult> results =
+		private final List<ShutdownComponentResult> results =
 				new CopyOnWriteArrayList<>();
 		private final AtomicReference<ShutdownResult> globalResult =
 				new AtomicReference<>();
@@ -2794,8 +2794,8 @@ class McpLifecycleB3Tests {
 
 		@Override
 		public void didStopMcpServer(@NonNull McpServer server,
-				@NonNull ParticipantShutdownResult result) {
-			ParticipantShutdownResult exactResult = requireNonNull(result);
+				@NonNull ShutdownComponentResult result) {
+			ShutdownComponentResult exactResult = requireNonNull(result);
 			this.results.add(exactResult);
 		}
 
@@ -2820,7 +2820,7 @@ class McpLifecycleB3Tests {
 				new CopyOnWriteArrayList<>();
 		private final List<McpStreamTerminationReason> subscriptionCloseReasons =
 				new CopyOnWriteArrayList<>();
-		private final List<ParticipantShutdownDisposition> shutdownOutcomes =
+		private final List<ShutdownComponentDisposition> shutdownOutcomes =
 				new CopyOnWriteArrayList<>();
 
 		@Override

@@ -55,8 +55,7 @@ import com.soklet.McpRequestOutcome;
 import com.soklet.Request;
 import com.soklet.ResourceMethodResolver;
 import com.soklet.Simulator;
-import com.soklet.SimulatorConfigFactory;
-import com.soklet.SokletConfig;
+import com.soklet.SimulatorConfig;
 import com.soklet.SokletSimulator;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -89,6 +88,7 @@ import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -655,8 +655,8 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 			this.now = requireNonNull(now);
 		}
 
-		private SimulatorConfigFactory configFactory() {
-			return transports -> {
+		private Function<SimulatorConfig.Builder, SimulatorConfig> configFactory() {
+			return config -> {
 				McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 						.serverInformation(McpImplementation.withNameAndVersion(
 								"localized-cursor-fixture", "1.0").build())
@@ -677,38 +677,41 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 						.withFallbackLocale(Locale.ENGLISH)
 						.contextProvider(this::localizationContext)
 						.build();
-				McpServer server = transports.newMcpServerBuilder(0)
-						.host(LOOPBACK)
-						.endpointRegistry(McpEndpointRegistry.fromEndpoints(
-								List.of(endpoint)))
-						.admissionController(context -> {
-							String authorization = context.getRequest()
-									.getHeader("Authorization").orElseThrow();
-							if (!authorization.startsWith("Bearer "))
-								throw new IllegalArgumentException(
-										"A bearer principal is required.");
-							String principal = requireClaimText(
-									authorization.substring("Bearer ".length()));
-							return McpAdmissionDecision.accepted(McpAdmissionIdentity
-									.withRateLimitPartitionKey("rate:" + principal)
-									.authorizationPartitionKey("auth:" + principal)
-									.principal(principal)
-									.build());
-						})
-						.requestRateLimiter(context -> McpRateLimitDecision.allowed())
-						.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
-						.allowedHosts(Set.of(LOOPBACK))
-						.localizer(localizer)
-						.build();
-				if (!this.server.compareAndSet(null, server))
-					throw new IllegalStateException(
-							"An application node may create only one simulator scope.");
-				return SokletConfig.withMcpServer(server)
+				return config.mcpServer(0, mcpServerBuilder -> {
+					McpServer server = mcpServerBuilder
+							.host(LOOPBACK)
+							.endpointRegistry(McpEndpointRegistry.fromEndpoints(
+									List.of(endpoint)))
+							.admissionController(context -> {
+								String authorization = context.getRequest()
+										.getHeader("Authorization").orElseThrow();
+								if (!authorization.startsWith("Bearer "))
+									throw new IllegalArgumentException(
+											"A bearer principal is required.");
+								String principal = requireClaimText(
+										authorization.substring("Bearer ".length()));
+								return McpAdmissionDecision.accepted(McpAdmissionIdentity
+										.withRateLimitPartitionKey("rate:" + principal)
+										.authorizationPartitionKey("auth:" + principal)
+										.principal(principal)
+										.build());
+							})
+							.requestRateLimiter(context ->
+									McpRateLimitDecision.allowed())
+							.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+							.allowedHosts(Set.of(LOOPBACK))
+							.localizer(localizer)
+							.build();
+					if (!this.server.compareAndSet(null, server))
+						throw new IllegalStateException(
+								"An application node may create only one simulator scope.");
+					return server;
+				})
 						.resourceMethodResolver(
 								ResourceMethodResolver.fromMethods(Set.of()))
 						.lifecyclePolicy(LifecyclePolicy.builder()
 								.startupTimeout(Duration.ofSeconds(5))
-								.startupCancellationTimeout(Duration.ofSeconds(2))
+								.startupCancelationTimeout(Duration.ofSeconds(2))
 								.gracefulShutdownDuration(Duration.ofSeconds(2))
 								.forcedShutdownDuration(Duration.ofSeconds(1))
 								.build())

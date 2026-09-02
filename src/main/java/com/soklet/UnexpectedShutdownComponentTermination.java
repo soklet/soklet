@@ -19,31 +19,34 @@ package com.soklet;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
-/** Immutable description of the first participant to terminate prematurely. */
-public final class UnexpectedParticipantTermination {
+/** Immutable description of the first shutdown component to terminate prematurely. */
+@ThreadSafe
+public final class UnexpectedShutdownComponentTermination {
 	@NonNull
-	private final ParticipantKind participantKind;
+	private final ShutdownComponentType shutdownComponentType;
 	@Nullable
 	private final Throwable cause;
 
-	UnexpectedParticipantTermination(@NonNull ParticipantKind participantKind,
+	UnexpectedShutdownComponentTermination(
+			@NonNull ShutdownComponentType shutdownComponentType,
 			@Nullable Throwable cause) {
-		this.participantKind = requireNonNull(participantKind);
+		this.shutdownComponentType = requireNonNull(shutdownComponentType);
 		this.cause = cause;
 	}
 
-	/** @return kind of the first participant to terminate prematurely */
+	/** @return type of the first shutdown component to terminate prematurely */
 	@NonNull
-	public ParticipantKind getParticipantKind() {
-		return this.participantKind;
+	public ShutdownComponentType getShutdownComponentType() {
+		return this.shutdownComponentType;
 	}
 
 	/**
-	 * Returns the participant-supplied failure cause when one was signalled.
+	 * Returns the component-supplied failure cause when one was signaled.
 	 *
 	 * @return original termination cause, otherwise empty
 	 */

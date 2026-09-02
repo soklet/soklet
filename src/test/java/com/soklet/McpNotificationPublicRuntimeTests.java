@@ -101,8 +101,8 @@ public class McpNotificationPublicRuntimeTests {
 						Map.of("Cache-Control", Set.of("no-store"),
 								"Retry-After", Set.of("1"))));
 
-		SokletSimulator.run(transports -> {
-			McpServer server = baseServerBuilder(transports, endpoint)
+		SokletSimulator.run(config -> config.mcpServer(0, builder -> {
+			McpServer server = baseServerBuilder(builder, endpoint)
 					.admissionController(context -> {
 						admissionContexts.add(context);
 						String caseName = caseName(context.getRequest());
@@ -125,8 +125,9 @@ public class McpNotificationPublicRuntimeTests {
 					})
 					.build();
 			serverReference.set(server);
-			return config(server);
-		}, simulator -> {
+			return server;
+		}).resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.build(), simulator -> {
 			for (InboundCase testCase : cases) {
 				try (McpSimulation simulation = simulator.startMcpRequest(
 						notification(testCase))) {
@@ -221,8 +222,8 @@ public class McpNotificationPublicRuntimeTests {
 				.build();
 		AtomicReference<McpServer> serverReference = new AtomicReference<>();
 
-		SokletSimulator.run(transports -> {
-			McpServer server = baseServerBuilder(transports, endpoint)
+		SokletSimulator.run(config -> config.mcpServer(0, builder -> {
+			McpServer server = baseServerBuilder(builder, endpoint)
 					.admissionController(McpAdmissionController.acceptAllInstance())
 					.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 					.handlerInterceptor((context, features, continuation) -> {
@@ -231,8 +232,9 @@ public class McpNotificationPublicRuntimeTests {
 					})
 					.build();
 			serverReference.set(server);
-			return config(server);
-		}, simulator -> {
+			return server;
+		}).resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.build(), simulator -> {
 			try (McpSimulation progress = simulator.startMcpRequest(
 					progressRequest(requestId))) {
 				assertSseResponse(awaitResponse(progress));
@@ -326,21 +328,13 @@ public class McpNotificationPublicRuntimeTests {
 	}
 
 	private static McpServer.Builder baseServerBuilder(
-			@NonNull SimulatorTransports transports,
+			McpServer.@NonNull Builder builder,
 			@NonNull McpEndpoint endpoint) {
-		return transports.newMcpServerBuilder(0)
-				.host(LOOPBACK)
+		return builder.host(LOOPBACK)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
-	}
-
-	@NonNull
-	private static SokletConfig config(@NonNull McpServer server) {
-		return SokletConfig.withMcpServer(server)
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.build();
 	}
 
 	@NonNull

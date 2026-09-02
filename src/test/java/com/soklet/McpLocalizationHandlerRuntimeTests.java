@@ -55,7 +55,7 @@ class McpLocalizationHandlerRuntimeTests {
 	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
 			LifecyclePolicy.builder()
 					.startupTimeout(Duration.ofSeconds(5))
-					.startupCancellationTimeout(Duration.ofSeconds(2))
+					.startupCancelationTimeout(Duration.ofSeconds(2))
 					.gracefulShutdownDuration(Duration.ofSeconds(2))
 					.forcedShutdownDuration(Duration.ofSeconds(1))
 					.build();
@@ -276,8 +276,8 @@ class McpLocalizationHandlerRuntimeTests {
 			List<Throwable> observedThrowables) {
 		AtomicReference<Capture> captured = new AtomicReference<>();
 
-		SokletSimulator.run(transports -> {
-			McpServer.Builder builder = transports.newMcpServerBuilder(0)
+		SokletSimulator.run(config -> config.mcpServer(0, builder -> {
+			builder
 					.host(LOOPBACK)
 					.endpointRegistry(McpEndpointRegistry.fromEndpoints(
 							List.of(endpoint)))
@@ -292,10 +292,10 @@ class McpLocalizationHandlerRuntimeTests {
 			if (interceptor != null)
 				builder.handlerInterceptor(interceptor);
 
-			return SokletConfig.withMcpServer(builder.build())
-					.resourceMethodResolver(
-							ResourceMethodResolver.fromMethods(Set.of()))
-					.lifecycleObservers(List.of(new LifecycleObserver() {
+			return builder.build();
+		}).resourceMethodResolver(
+				ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObservers(List.of(new LifecycleObserver() {
 						@Override
 						public void didFinishMcpRequestHandling(
 								@NonNull McpRequestContext context,
@@ -305,10 +305,9 @@ class McpLocalizationHandlerRuntimeTests {
 								@NonNull List<@NonNull Throwable> throwables) {
 							observedThrowables.addAll(throwables);
 						}
-					}))
-					.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
-					.build();
-		}, simulator -> {
+				}))
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
+				.build(), simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(request);
 
 			try {

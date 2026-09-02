@@ -50,7 +50,7 @@ class McpLocalizationHttpBoundaryTests {
 	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
 			LifecyclePolicy.builder()
 					.startupTimeout(Duration.ofSeconds(5))
-					.startupCancellationTimeout(Duration.ofSeconds(2))
+					.startupCancelationTimeout(Duration.ofSeconds(2))
 					.gracefulShutdownDuration(Duration.ofSeconds(2))
 					.forcedShutdownDuration(Duration.ofSeconds(1))
 					.build();
@@ -296,9 +296,8 @@ class McpLocalizationHttpBoundaryTests {
 				.build();
 		AtomicReference<Capture> captured = new AtomicReference<>();
 
-		SokletSimulator.run(transports -> {
-			McpServer.Builder builder = transports.newMcpServerBuilder(0)
-					.host(LOOPBACK)
+		SokletSimulator.run(config -> config.mcpServer(0, builder -> {
+			builder.host(LOOPBACK)
 					.endpointRegistry(McpEndpointRegistry.fromEndpoints(
 							List.of(endpoint)))
 					.admissionController(admissionController)
@@ -310,12 +309,11 @@ class McpLocalizationHttpBoundaryTests {
 			if (localizer != null)
 				builder.localizer(localizer);
 
-			return SokletConfig.withMcpServer(builder.build())
-					.resourceMethodResolver(
-							ResourceMethodResolver.fromMethods(Set.of()))
-					.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
-					.build();
-		}, simulator -> {
+			return builder.build();
+		}).resourceMethodResolver(
+				ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
+				.build(), simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(request);
 
 			try {

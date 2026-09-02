@@ -108,22 +108,22 @@ final class SokletDirectCompositionIsolationTests {
 					frozenResult.disposition());
 			Assertions.assertFalse(frozenResult.isComplete());
 			Assertions.assertEquals(2, frozenResult.participantResults().size());
-			Assertions.assertEquals(List.of(InternalParticipantKind.HTTP,
-					InternalParticipantKind.SSE), frozenResult.participantResults()
-					.stream().map(InternalParticipantShutdownResult::kind).toList(),
+			Assertions.assertEquals(List.of(InternalLifecycleComponentType.HTTP,
+					InternalLifecycleComponentType.SSE), frozenResult.participantResults()
+					.stream().map(InternalLifecycleComponentShutdownResult::kind).toList(),
 					"The configured outer graphs must remain exactly two participants");
 
-			InternalParticipantShutdownResult httpResult = frozenResult
-					.participantResult(InternalParticipantKind.HTTP).orElseThrow();
+			InternalLifecycleComponentShutdownResult httpResult = frozenResult
+					.participantResult(InternalLifecycleComponentType.HTTP).orElseThrow();
 			Assertions.assertEquals(
-					InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+					InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
 					httpResult.disposition());
 			Assertions.assertTrue(httpResult.failures().isEmpty());
 			Assertions.assertTrue(httpResult.residualActivity().isEmpty());
-			InternalParticipantShutdownResult sseResult = frozenResult
-					.participantResult(InternalParticipantKind.SSE).orElseThrow();
+			InternalLifecycleComponentShutdownResult sseResult = frozenResult
+					.participantResult(InternalLifecycleComponentType.SSE).orElseThrow();
 			Assertions.assertEquals(
-					InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION,
+					InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION,
 					sseResult.disposition());
 			Assertions.assertTrue(sseResult.failures().isEmpty());
 			Assertions.assertTrue(sseResult.residualActivity().isEmpty());
@@ -470,7 +470,7 @@ final class SokletDirectCompositionIsolationTests {
 					this.callbackExit.countDown();
 				}
 			});
-			TransportRuntime delegateRuntime = attachment.getRuntime();
+			TransportRuntime delegateRuntime = attachment.getTransportRuntime();
 			return new TransportRuntime() {
 				@Override
 				public void start(@NonNull StartupContext context) {

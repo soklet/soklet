@@ -43,6 +43,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 /**
@@ -556,8 +557,8 @@ public class McpSimulatorEveryOperationTests {
 		}
 
 		@NonNull
-		private SimulatorConfigFactory configFactory() {
-			return transports -> {
+		private Function<SimulatorConfig.Builder, SimulatorConfig> configFactory() {
+			return config -> {
 				McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 					.withName(TOOL_NAME).jsonArguments()
 					.handler((request, arguments, features) -> {
@@ -608,37 +609,42 @@ public class McpSimulatorEveryOperationTests {
 					.resource(template)
 					.subscriptions(subscriptions)
 					.build();
-				McpServer server = transports.newMcpServerBuilder(0)
-					.host(LOOPBACK)
-					.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-					.admissionController(context -> {
-						if (this.concurrentAdmissions != null) {
-							this.concurrentAdmissions.countDown();
-							if (this.concurrentAdmissions.getCount() == 0)
-								this.releaseConcurrentAdmissions.countDown();
-							Assertions.assertTrue(awaitLatch(
-									this.releaseConcurrentAdmissions));
-						}
-						return McpAdmissionDecision.accepted();
-					})
-					.requestRateLimiter(context -> McpRateLimitDecision.allowed())
-					.toolRateLimiter(context -> McpRateLimitDecision.allowed())
-					.handlerInterceptor((context, features, continuation) -> {
-						this.interceptorCalls.incrementAndGet();
-						return continuation.proceed();
-					})
-					.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
-					.allowedHosts(Set.of(LOOPBACK))
-					.requestHandlerConcurrency(16)
-					.build();
-				this.server.set(server);
-				return SokletConfig.withMcpServer(server)
+				return config.mcpServer(0, mcpServerBuilder -> {
+					McpServer server = mcpServerBuilder
+							.host(LOOPBACK)
+							.endpointRegistry(McpEndpointRegistry.fromEndpoints(
+									List.of(endpoint)))
+							.admissionController(context -> {
+								if (this.concurrentAdmissions != null) {
+									this.concurrentAdmissions.countDown();
+									if (this.concurrentAdmissions.getCount() == 0)
+										this.releaseConcurrentAdmissions.countDown();
+									Assertions.assertTrue(awaitLatch(
+											this.releaseConcurrentAdmissions));
+								}
+								return McpAdmissionDecision.accepted();
+							})
+							.requestRateLimiter(context ->
+									McpRateLimitDecision.allowed())
+							.toolRateLimiter(context ->
+									McpRateLimitDecision.allowed())
+							.handlerInterceptor((context, features, continuation) -> {
+								this.interceptorCalls.incrementAndGet();
+								return continuation.proceed();
+							})
+							.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
+							.allowedHosts(Set.of(LOOPBACK))
+							.requestHandlerConcurrency(16)
+							.build();
+					this.server.set(server);
+					return server;
+				})
 					.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 					.metricsCollector(this.metrics)
 					.lifecycleObservers(List.of(this.lifecycle))
 					.lifecyclePolicy(LifecyclePolicy.builder()
 							.startupTimeout(Duration.ofSeconds(30))
-							.startupCancellationTimeout(Duration.ofSeconds(2))
+							.startupCancelationTimeout(Duration.ofSeconds(2))
 							.gracefulShutdownDuration(Duration.ZERO)
 							.forcedShutdownDuration(Duration.ofMillis(250))
 							.build())
@@ -892,7 +898,7 @@ public class McpSimulatorEveryOperationTests {
 
 		@Override
 		public void didStopMcpServer(@NonNull McpServer server,
-				@NonNull ParticipantShutdownResult result) {
+				@NonNull ShutdownComponentResult result) {
 			this.serverCallbacks.incrementAndGet();
 		}
 

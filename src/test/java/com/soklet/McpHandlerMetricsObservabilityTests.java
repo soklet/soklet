@@ -93,12 +93,12 @@ public class McpHandlerMetricsObservabilityTests {
 				.activeHandlerExecutions(2L)
 				.handlerQueueDepth(3L)
 				.handlerCapacityRejections(5L)
-				.shutdowns(Map.of(ParticipantShutdownDisposition.GRACEFUL_TERMINATION, 7L))
+				.shutdowns(Map.of(ShutdownComponentDisposition.GRACEFUL_TERMINATION, 7L))
 				.build();
 		Assertions.assertEquals(2L, snapshot.getActiveHandlerExecutions());
 		Assertions.assertEquals(3L, snapshot.getHandlerQueueDepth());
 		Assertions.assertEquals(5L, snapshot.getHandlerCapacityRejections());
-		Assertions.assertEquals(Map.of(ParticipantShutdownDisposition.GRACEFUL_TERMINATION, 7L),
+		Assertions.assertEquals(Map.of(ShutdownComponentDisposition.GRACEFUL_TERMINATION, 7L),
 				snapshot.getShutdowns());
 
 		Assertions.assertThrows(NullPointerException.class,
@@ -585,15 +585,15 @@ public class McpHandlerMetricsObservabilityTests {
 					residualDiagnostics.getStatus());
 			assertHandlerDiagnostics(residualDiagnostics, 1, 0);
 			awaitMetrics(collector, metrics -> metrics.getShutdowns().equals(Map.of(
-					ParticipantShutdownDisposition.RESIDUAL_ACTIVITY, 1L)));
+					ShutdownComponentDisposition.RESIDUAL_ACTIVITY, 1L)));
 			McpMetricsSnapshot retained = collector.snapshot().orElseThrow()
 					.getMcpMetrics();
 			assertHandlerSnapshot(retained, 1L, 0L, 0L);
 			Assertions.assertEquals(Map.of(
-					ParticipantShutdownDisposition.RESIDUAL_ACTIVITY, 1L),
+					ShutdownComponentDisposition.RESIDUAL_ACTIVITY, 1L),
 					retained.getShutdowns());
 			Assertions.assertEquals(List.of(
-					ParticipantShutdownDisposition.RESIDUAL_ACTIVITY),
+					ShutdownComponentDisposition.RESIDUAL_ACTIVITY),
 					observer.stopOutcomes());
 			Assertions.assertEquals(0, observer.mcpStopFailures());
 			Assertions.assertNull(observer.globalStopFailure());
@@ -616,11 +616,11 @@ public class McpHandlerMetricsObservabilityTests {
 					ShutdownIncompleteException.class, soklet::close);
 			Assertions.assertSame(shutdownResult,
 					secondRepeatedStop.getInternalShutdownResult());
-			Assertions.assertEquals(List.of(ParticipantShutdownDisposition.RESIDUAL_ACTIVITY),
+			Assertions.assertEquals(List.of(ShutdownComponentDisposition.RESIDUAL_ACTIVITY),
 					collector.serverStopOutcomes());
 			Assertions.assertEquals(0, observer.mcpStopFailures());
 			Assertions.assertEquals(List.of(
-					ParticipantShutdownDisposition.RESIDUAL_ACTIVITY),
+					ShutdownComponentDisposition.RESIDUAL_ACTIVITY),
 					observer.stopOutcomes());
 			Assertions.assertNull(observer.globalStopFailure());
 
@@ -640,7 +640,7 @@ public class McpHandlerMetricsObservabilityTests {
 					.getMcpMetrics();
 			assertHandlerSnapshot(afterPhysicalCleanup, 0L, 0L, 0L);
 			Assertions.assertEquals(Map.of(
-					ParticipantShutdownDisposition.RESIDUAL_ACTIVITY, 1L),
+					ShutdownComponentDisposition.RESIDUAL_ACTIVITY, 1L),
 					afterPhysicalCleanup.getShutdowns());
 			assertHandlerSnapshot(retained, 1L, 0L, 0L);
 			Assertions.assertSame(shutdownResult,
@@ -653,11 +653,11 @@ public class McpHandlerMetricsObservabilityTests {
 					lateRepeatedStop.getInternalShutdownResult());
 			Assertions.assertEquals(1,
 					collector.count(McpMetricsEvent.HandlerExecutionFinished.class));
-			Assertions.assertEquals(List.of(ParticipantShutdownDisposition.RESIDUAL_ACTIVITY),
+			Assertions.assertEquals(List.of(ShutdownComponentDisposition.RESIDUAL_ACTIVITY),
 					collector.serverStopOutcomes());
 			Assertions.assertEquals(0, observer.mcpStopFailures());
 			Assertions.assertEquals(List.of(
-					ParticipantShutdownDisposition.RESIDUAL_ACTIVITY),
+					ShutdownComponentDisposition.RESIDUAL_ACTIVITY),
 					observer.stopOutcomes());
 			Assertions.assertNull(observer.globalStopFailure());
 		} finally {
@@ -724,7 +724,7 @@ public class McpHandlerMetricsObservabilityTests {
 			Assertions.assertTrue(activeExited.await(5, TimeUnit.SECONDS),
 					"The cooperative managed-stop handler did not exit.");
 			awaitMetrics(collector, metrics -> metrics.getShutdowns().equals(Map.of(
-					ParticipantShutdownDisposition.FORCED_TERMINATION, 1L)));
+					ShutdownComponentDisposition.FORCED_TERMINATION, 1L)));
 			collector.awaitProbeCount(2);
 			Assertions.assertNull(collector.probeFailure(),
 					"A handler metric callback ran while a lifecycle lock was held.");
@@ -739,7 +739,7 @@ public class McpHandlerMetricsObservabilityTests {
 			assertHandlerSnapshot(collector.snapshot().orElseThrow()
 					.getMcpMetrics(), 0L, 0L, 0L);
 			observer.awaitTerminal();
-			Assertions.assertEquals(List.of(ParticipantShutdownDisposition.FORCED_TERMINATION),
+			Assertions.assertEquals(List.of(ShutdownComponentDisposition.FORCED_TERMINATION),
 					observer.stopOutcomes());
 		} finally {
 			try {
@@ -857,12 +857,12 @@ public class McpHandlerMetricsObservabilityTests {
 			Assertions.assertSame(shutdownResult,
 					soklet.getDirectLifecycle().result().orElseThrow());
 			awaitMetrics(collector, metrics -> metrics.getShutdowns().equals(Map.of(
-					ParticipantShutdownDisposition.RESIDUAL_ACTIVITY, 1L)));
+					ShutdownComponentDisposition.RESIDUAL_ACTIVITY, 1L)));
 			McpMetricsSnapshot terminalMetrics = collector.snapshot().orElseThrow()
 					.getMcpMetrics();
 			assertHandlerSnapshot(terminalMetrics, 1L, 0L, 0L);
 			Assertions.assertEquals(Map.of(
-					ParticipantShutdownDisposition.RESIDUAL_ACTIVITY, 1L),
+					ShutdownComponentDisposition.RESIDUAL_ACTIVITY, 1L),
 					terminalMetrics.getShutdowns());
 
 			emergencyRelease.countDown();
@@ -889,7 +889,7 @@ public class McpHandlerMetricsObservabilityTests {
 					.getMcpMetrics();
 			assertHandlerSnapshot(afterPhysicalCleanup, 0L, 0L, 0L);
 			Assertions.assertEquals(Map.of(
-					ParticipantShutdownDisposition.RESIDUAL_ACTIVITY, 1L),
+					ShutdownComponentDisposition.RESIDUAL_ACTIVITY, 1L),
 					afterPhysicalCleanup.getShutdowns());
 			assertHandlerSnapshot(terminalMetrics, 1L, 0L, 0L);
 			Assertions.assertEquals(1,
@@ -1242,7 +1242,7 @@ public class McpHandlerMetricsObservabilityTests {
 	private static LifecyclePolicy shortShutdownPolicy() {
 		return LifecyclePolicy.builder()
 				.startupTimeout(Duration.ofSeconds(5))
-				.startupCancellationTimeout(Duration.ofMillis(100))
+				.startupCancelationTimeout(Duration.ofMillis(100))
 				.gracefulShutdownDuration(Duration.ofMillis(100))
 				.forcedShutdownDuration(Duration.ofMillis(100))
 				.build();
@@ -1252,7 +1252,7 @@ public class McpHandlerMetricsObservabilityTests {
 	private static LifecyclePolicy managedLockProbeShutdownPolicy() {
 		return LifecyclePolicy.builder()
 				.startupTimeout(Duration.ofSeconds(5))
-				.startupCancellationTimeout(Duration.ofMillis(100))
+				.startupCancelationTimeout(Duration.ofMillis(100))
 				.gracefulShutdownDuration(Duration.ofMillis(100))
 				.forcedShutdownDuration(Duration.ofSeconds(3))
 				.build();
@@ -1449,7 +1449,7 @@ public class McpHandlerMetricsObservabilityTests {
 		}
 
 		@NonNull
-		private List<@NonNull ParticipantShutdownDisposition> serverStopOutcomes() {
+		private List<@NonNull ShutdownComponentDisposition> serverStopOutcomes() {
 			return this.events.stream()
 					.filter(McpMetricsEvent.ServerStopped.class::isInstance)
 					.map(McpMetricsEvent.ServerStopped.class::cast)
@@ -1618,7 +1618,7 @@ public class McpHandlerMetricsObservabilityTests {
 	private static final class RecordingLifecycleObserver
 			extends SilentLifecycleObserver {
 		@NonNull
-		private final List<@NonNull ParticipantShutdownDisposition> stopOutcomes;
+		private final List<@NonNull ShutdownComponentDisposition> stopOutcomes;
 		@NonNull
 		private final List<@NonNull LogEvent> logEvents;
 		@NonNull
@@ -1643,10 +1643,10 @@ public class McpHandlerMetricsObservabilityTests {
 
 		@Override
 		public void didStopMcpServer(@NonNull McpServer server,
-				@NonNull ParticipantShutdownResult result) {
+				@NonNull ShutdownComponentResult result) {
 			requireNonNull(server);
-			ParticipantShutdownResult exactResult = requireNonNull(result);
-			this.stopOutcomes.add(exactResult.getDisposition());
+			ShutdownComponentResult exactResult = requireNonNull(result);
+			this.stopOutcomes.add(exactResult.getShutdownComponentDisposition());
 			if (!exactResult.getFailures().isEmpty()) {
 				this.mcpStopFailures.incrementAndGet();
 				this.globalStopFailure.compareAndSet(null,
@@ -1668,7 +1668,7 @@ public class McpHandlerMetricsObservabilityTests {
 		}
 
 		@NonNull
-		private List<@NonNull ParticipantShutdownDisposition> stopOutcomes() {
+		private List<@NonNull ShutdownComponentDisposition> stopOutcomes() {
 			return List.copyOf(this.stopOutcomes);
 		}
 

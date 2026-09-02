@@ -64,7 +64,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 public class SokletTests {
 	@Test
 	public void requestHandlingBasics() {
-		SokletSimulator.run(transports -> configurationForResourceClasses(transports,
+		SokletSimulator.run(config -> configurationForResourceClasses(config,
 				Set.of(RequestHandlingBasicsResource.class)), simulator -> {
 			// Response body should be "hello world" as bytes
 			HttpRequestResult requestResult = simulator.performHttpRequest(
@@ -184,7 +184,7 @@ public class SokletTests {
 
 	@Test
 	public void requestResults() {
-		SokletSimulator.run(transports -> configurationForResourceClasses(transports,
+		SokletSimulator.run(config -> configurationForResourceClasses(config,
 				Set.of(RequestHandlingBasicsResource.class)), simulator -> {
 			// Response body should be "hello world" as bytes
 			HttpRequestResult requestResult = simulator.performHttpRequest(
@@ -210,7 +210,7 @@ public class SokletTests {
 
 	@Test
 	public void testMultipart() {
-		SokletSimulator.run(transports -> configurationForResourceClasses(transports,
+		SokletSimulator.run(config -> configurationForResourceClasses(config,
 				Set.of(MultipartResource.class)), simulator -> {
 			byte[] requestBody;
 
@@ -325,7 +325,7 @@ public class SokletTests {
 
 	@Test
 	public void testVarargs() {
-		SokletSimulator.run(transports -> configurationForResourceClasses(transports,
+		SokletSimulator.run(config -> configurationForResourceClasses(config,
 				Set.of(VarargsResource.class)), simulator -> {
 			HttpRequestResult requestResult = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/static/js/some/file/example.js")
@@ -374,7 +374,7 @@ public class SokletTests {
 
 	@Test
 	public void httpHead() {
-		SokletSimulator.run(transports -> configurationForResourceClasses(transports,
+		SokletSimulator.run(config -> configurationForResourceClasses(config,
 				Set.of(HttpHeadResource.class)), simulator -> {
 			// Response headers should be the same as the GET equivalent, but HTTP 204 and no response body
 			HttpRequestResult getMethodResult = simulator.performHttpRequest(
@@ -416,9 +416,10 @@ public class SokletTests {
 	}
 
 	@NonNull
-	protected SokletConfig configurationForResourceClasses(@NonNull SimulatorTransports transports,
+	protected SimulatorConfig configurationForResourceClasses(
+			SimulatorConfig.@NonNull Builder config,
 			@NonNull Set<Class<?>> resourceClasses) {
-		return SokletConfig.forSimulatorTesting(transports)
+		return config.httpServer().sseServer()
 				// Use a resource method resolver that explicitly specifies resource classes
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(resourceClasses))
 				// Quiet logging to keep the console clean
@@ -443,7 +444,7 @@ public class SokletTests {
 
 	@Test
 	public void simulatorPerformRequestFailsFastWhenNoHttpServerConfigured() {
-		SokletSimulator.run(transports -> SokletConfig.withSseServer(transports.getSseServer())
+		SokletSimulator.run(config -> config.sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseOnlyResource.class)))
 				.build(), simulator -> assertThrows(IllegalStateException.class,
 				() -> simulator.performHttpRequest(Request.fromPath(HttpMethod.GET, "/sse-only"))));
@@ -604,7 +605,7 @@ public class SokletTests {
 
 	@Test
 	public void encodedSpaceInPath_isDecodedInSimulatorToo() {
-		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
+		SokletSimulator.run(config -> config.httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SimulatorDecodingResource.class)))
 				.build(), sim -> {
 			var res = sim.performHttpRequest(Request.withRawUrl(HttpMethod.GET, "/widgets/ab%20c").build());
@@ -702,7 +703,7 @@ public class SokletTests {
 
 		// Act & Assert: Valid boundary should work correctly
 		assertDoesNotThrow(() -> {
-			SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
+			SokletSimulator.run(config -> config.httpServer().sseServer()
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(MultipartResource2.class)))
 					.build(), simulator -> {
 				HttpRequestResult requestResult = simulator.performHttpRequest(request);
@@ -728,7 +729,7 @@ public class SokletTests {
 
 		// Act & Assert: Quoted boundary should be handled correctly
 		assertDoesNotThrow(() -> {
-			SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
+			SokletSimulator.run(config -> config.httpServer().sseServer()
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(MultipartResource2.class)))
 					.build(), simulator -> {
 				HttpRequestResult requestResult = simulator.performHttpRequest(request);
@@ -874,7 +875,7 @@ public class SokletTests {
 
 	@Test
 	public void duplicateValueTests() {
-		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
+		SokletSimulator.run(config -> config.httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(DuplicateValueResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override

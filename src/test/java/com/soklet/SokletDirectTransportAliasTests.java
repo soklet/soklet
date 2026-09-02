@@ -41,11 +41,11 @@ final class SokletDirectTransportAliasTests {
 		ProbeHttpDecorator nested = new ProbeHttpDecorator(configured);
 
 		try (Soklet owner = Soklet.fromConfig(httpConfig(configured))) {
-			assertOwnershipConflict(base, ParticipantKind.HTTP,
+			assertOwnershipConflict(base, ShutdownComponentType.HTTP,
 					ProbeHttpEngine.class);
-			assertOwnershipConflict(sibling, ParticipantKind.HTTP,
+			assertOwnershipConflict(sibling, ShutdownComponentType.HTTP,
 					ProbeHttpDecorator.class);
-			assertOwnershipConflict(nested, ParticipantKind.HTTP,
+			assertOwnershipConflict(nested, ShutdownComponentType.HTTP,
 					ProbeHttpDecorator.class);
 
 			Assertions.assertSame(identity, base.identity());
@@ -77,8 +77,8 @@ final class SokletDirectTransportAliasTests {
 			TransportOwnershipException conflict = Assertions.assertThrows(
 					TransportOwnershipException.class,
 					() -> Soklet.fromConfig(sseConfig(sse)));
-			Assertions.assertEquals(ParticipantKind.SSE,
-					conflict.getParticipantKind());
+			Assertions.assertEquals(ShutdownComponentType.SSE,
+					conflict.getShutdownComponentType());
 			Assertions.assertSame(ProbeSseEngine.class,
 					conflict.getTransportClass());
 			Assertions.assertEquals(
@@ -129,8 +129,8 @@ final class SokletDirectTransportAliasTests {
 					TransportOwnershipException.class,
 					() -> Soklet.fromConfig(httpAndSseConfig(freeHttp,
 							conflictingSse)));
-			Assertions.assertEquals(ParticipantKind.SSE,
-					conflict.getParticipantKind());
+			Assertions.assertEquals(ShutdownComponentType.SSE,
+					conflict.getShutdownComponentType());
 			Assertions.assertSame(ProbeSseEngine.class,
 					conflict.getTransportClass());
 			Assertions.assertEquals(
@@ -152,13 +152,13 @@ final class SokletDirectTransportAliasTests {
 	}
 
 	private static void assertOwnershipConflict(@NonNull HttpServer candidate,
-			@NonNull ParticipantKind expectedKind,
+			@NonNull ShutdownComponentType expectedKind,
 			@NonNull Class<?> expectedClass) {
 		TransportOwnershipException conflict = Assertions.assertThrows(
 				TransportOwnershipException.class,
 				() -> Soklet.fromConfig(httpConfig(candidate)));
 		Assertions.assertEquals(expectedKind,
-				conflict.getParticipantKind());
+				conflict.getShutdownComponentType());
 		Assertions.assertSame(expectedClass, conflict.getTransportClass());
 		Assertions.assertEquals(
 				"The " + expectedKind + " transport identity for "
@@ -265,7 +265,7 @@ final class SokletDirectTransportAliasTests {
 		@NonNull
 		public InternalTransportRuntime attach(
 				@NonNull InternalTransportAttachmentContext<HttpServer.RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
+				@NonNull StartupContext startupContext) {
 			probe().attachments.incrementAndGet();
 			return newRuntime();
 		}
@@ -284,7 +284,7 @@ final class SokletDirectTransportAliasTests {
 		@NonNull
 		public InternalTransportRuntime attach(
 				@NonNull InternalTransportAttachmentContext<HttpServer.RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
+				@NonNull StartupContext startupContext) {
 			probe().attachments.incrementAndGet();
 			return context.attachTransparentDelegate(this.delegate,
 					context.requestHandler());
@@ -317,7 +317,7 @@ final class SokletDirectTransportAliasTests {
 		@NonNull
 		public InternalTransportRuntime attach(
 				@NonNull InternalTransportAttachmentContext<SseServer.RequestHandler> context,
-				@NonNull InternalStartupContext startupContext) {
+				@NonNull StartupContext startupContext) {
 			this.probe.attachments.incrementAndGet();
 			return this.probe.newRuntime();
 		}
@@ -365,17 +365,17 @@ final class SokletDirectTransportAliasTests {
 		private InternalTransportRuntime newRuntime() {
 			return new InternalTransportRuntime() {
 				@Override
-				public void start(@NonNull InternalStartupContext context) {
+				public void start(@NonNull StartupContext context) {
 					runtimeStarts.incrementAndGet();
 				}
 
 				@Override
-				public void quiesce(@NonNull InternalShutdownContext context) {
+				public void quiesce(@NonNull ShutdownContext context) {
 					quiesces.incrementAndGet();
 				}
 
 				@Override
-				public void force(@NonNull InternalShutdownContext context) {
+				public void force(@NonNull ShutdownContext context) {
 					forces.incrementAndGet();
 				}
 			};

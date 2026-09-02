@@ -160,7 +160,7 @@ final class DefaultMcpServer implements McpServer {
 	private McpTransportLifecycleAdapter.@Nullable Generation
 			pendingListenerGeneration;
 	@Nullable
-	private InternalParticipantShutdownResult ownerTerminalResult;
+	private InternalLifecycleComponentShutdownResult ownerTerminalResult;
 	private boolean attachmentStarted;
 	private boolean terminalMetricEmitted;
 	private boolean simulatorOwned;
@@ -705,11 +705,11 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	void recordExternallyCoordinatedTerminalResultWhileMetricsDeferred(
-			@NonNull InternalParticipantShutdownResult participantResult,
+			@NonNull InternalLifecycleComponentShutdownResult participantResult,
 			@NonNull SokletConfig sokletConfig) {
-		InternalParticipantShutdownResult exactResult =
+		InternalLifecycleComponentShutdownResult exactResult =
 				requireNonNull(participantResult);
-		if (exactResult.kind() != InternalParticipantKind.MCP)
+		if (exactResult.kind() != InternalLifecycleComponentType.MCP)
 			throw new IllegalArgumentException(
 					"The terminal metric result must belong to the MCP participant");
 		SokletConfig configuration = requireNonNull(sokletConfig);
@@ -725,7 +725,7 @@ final class DefaultMcpServer implements McpServer {
 			this.ownerTerminalResult = exactResult;
 			this.terminalMetricEmitted = true;
 			this.mcpMetricEventDelivery.record(McpMetricsEvent.serverStopped(
-					ParticipantShutdownDisposition.valueOf(
+					ShutdownComponentDisposition.valueOf(
 							exactResult.disposition().name())));
 		}
 	}
@@ -988,10 +988,10 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	private McpServerStatus mcpServerStatus(
 			@NonNull DiagnosticsState runtimeState) {
-		InternalParticipantShutdownResult terminalResult = this.lifecycleAdapter
+		InternalLifecycleComponentShutdownResult terminalResult = this.lifecycleAdapter
 				.result()
 				.flatMap(result -> result.participantResult(
-						InternalParticipantKind.MCP))
+						InternalLifecycleComponentType.MCP))
 				.orElse(this.ownerTerminalResult);
 		if (terminalResult != null)
 			return switch (terminalResult.disposition()) {

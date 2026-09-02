@@ -37,6 +37,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 
 import static java.util.Objects.requireNonNull;
 
@@ -64,7 +65,7 @@ class McpLocalizationSoakTests {
 		long startedAt = System.nanoTime();
 		LocalizationState state = new LocalizationState();
 		AtomicReference<McpServer> server = new AtomicReference<>();
-		SimulatorConfigFactory configFactory =
+		Function<SimulatorConfig.Builder, SimulatorConfig> configFactory =
 				simulatorConfigFactory(state, server);
 		SoakResourceSnapshot baseline;
 		SoakResourceSnapshot finalSnapshot;
@@ -136,7 +137,8 @@ class McpLocalizationSoakTests {
 	}
 
 	private static void runSimulatorWorkload(
-			@NonNull SimulatorConfigFactory configFactory,
+			@NonNull Function<SimulatorConfig.Builder, SimulatorConfig>
+					configFactory,
 			@NonNull AtomicReference<McpServer> server,
 			@NonNull LocalizationState state,
 			int concurrentClients, int revisionWaves, @NonNull String runId) {
@@ -253,7 +255,7 @@ class McpLocalizationSoakTests {
 	}
 
 	@NonNull
-	private static McpServer server(@NonNull SimulatorTransports transports,
+	private static McpServer server(McpServer.@NonNull Builder mcpServerBuilder,
 			@NonNull LocalizationState state) {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
@@ -286,7 +288,7 @@ class McpLocalizationSoakTests {
 						.build())
 				.build();
 
-		return transports.newMcpServerBuilder(0)
+		return mcpServerBuilder
 				.host(LOOPBACK)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.admissionController(
@@ -310,25 +312,26 @@ class McpLocalizationSoakTests {
 	}
 
 	@NonNull
-	private static SimulatorConfigFactory simulatorConfigFactory(
+	private static Function<SimulatorConfig.Builder, SimulatorConfig>
+			simulatorConfigFactory(
 			@NonNull LocalizationState state,
 			@NonNull AtomicReference<McpServer> serverReference) {
-		return transports -> {
-			McpServer server = server(transports, state);
+		return config -> config.mcpServer(0, mcpServerBuilder -> {
+			McpServer server = server(mcpServerBuilder, state);
 			serverReference.set(server);
-			return SokletConfig.withMcpServer(server)
+			return server;
+		})
 					.resourceMethodResolver(
 							ResourceMethodResolver.fromMethods(Set.of()))
 					.lifecyclePolicy(LifecyclePolicy.builder()
 							.startupTimeout(Duration.ofSeconds(30))
-							.startupCancellationTimeout(Duration.ofSeconds(2))
+							.startupCancelationTimeout(Duration.ofSeconds(2))
 							.gracefulShutdownDuration(
 									PROFILE.gracefulShutdownDuration())
 							.forcedShutdownDuration(
 									PROFILE.forcedShutdownDuration())
 							.build())
 					.build();
-		};
 	}
 
 	@NonNull

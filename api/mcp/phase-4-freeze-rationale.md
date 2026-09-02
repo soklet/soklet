@@ -84,10 +84,10 @@ compatibility alias retained.
 - 816 methods.
 
 The reviewed file's SHA-256 is
-`ba976dbbe4d72d2b38a7f167bb88164e321064fea5847cc45f6992220b735e2f`.
+`2b50fb6e08d2b9eccf3a45d4020cbf4738a79517102602e69067f8a198158516`.
 The independent reflection contract freezes the Phase 4 JSpecify type-use
 layout with SHA-256
-`9cfe146213f1c96cfdd1de6fe05caa58d8055f7abdb491b6141491f2dc8de646`.
+`dc83138dd80f93c003ec527fec24a9fd7e09633417f0f5a6430ac254421797b1`.
 The 133-entry `phase-4.includes` inventory has SHA-256
 `fd3293a1089845a3c90c22cda8bd59986b8a975c3cb10211ab3ea8831a7e5021`.
 
@@ -594,6 +594,26 @@ Compiler extraction, bidirectional inventory/signature checks, focused
 processor/runtime/schema/interceptor/subscription tests, public reflection and
 Javadoc checks, and the executable Java-17 sketch validate the correction.
 These are local D1p development facts, not G3 or release-candidate evidence.
+
+### 2026-09-01 shutdown-component naming amendment
+
+The unreleased lifecycle-cutover vocabulary now identifies terminal evidence
+with the `ShutdownComponent*` family instead of the broader
+`LifecycleComponent*` family. `LifecycleObserver` and `LifecyclePolicy` retain
+their names because they span startup, running, and shutdown behavior. The
+synthetic framework-owned type is `ShutdownComponentType.FRAMEWORK`; no
+`OTHER` bucket or compatibility alias exists.
+
+The amendment changes names one-for-one and leaves the Phase 4 owner and
+record counts unchanged. The Phase 4 signature SHA-256 is
+`2b50fb6e08d2b9eccf3a45d4020cbf4738a79517102602e69067f8a198158516`;
+the reflection/nullability SHA-256 is
+`dc83138dd80f93c003ec527fec24a9fd7e09633417f0f5a6430ac254421797b1`;
+and the include-inventory SHA-256 remains
+`fd3293a1089845a3c90c22cda8bd59986b8a975c3cb10211ab3ea8831a7e5021`.
+Phase 5 remains byte-identical. The released-3.5.1 compatibility ledger remains
+618 records with SHA-256
+`3d9d68bbbdeabae63a78d40a50c9896d3f11f6d0d2305beff0c94bd86476928c`.
 
 ## Historical local verification
 

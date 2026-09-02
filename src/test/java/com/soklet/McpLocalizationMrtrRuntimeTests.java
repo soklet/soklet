@@ -57,7 +57,7 @@ class McpLocalizationMrtrRuntimeTests {
 	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
 			LifecyclePolicy.builder()
 					.startupTimeout(Duration.ofSeconds(5))
-					.startupCancellationTimeout(Duration.ofSeconds(2))
+					.startupCancelationTimeout(Duration.ofSeconds(2))
 					.gracefulShutdownDuration(Duration.ofSeconds(2))
 					.forcedShutdownDuration(Duration.ofSeconds(1))
 					.build();
@@ -171,7 +171,7 @@ class McpLocalizationMrtrRuntimeTests {
 				.build();
 	}
 
-	private static McpServer server(SimulatorTransports transports,
+	private static McpServer server(McpServer.Builder builder,
 			McpLocalizer localizer,
 			AtomicInteger handlerInvocations) {
 		McpInputRequestDeclaration roots = McpInputRequestDeclaration
@@ -205,8 +205,7 @@ class McpLocalizationMrtrRuntimeTests {
 						.withNameAndVersion("localization-mrtr", "1.0").build())
 				.tool(tool)
 				.build();
-		McpServer.Builder builder = transports.newMcpServerBuilder(0)
-				.host(LOOPBACK)
+		builder.host(LOOPBACK)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.admissionController(McpAdmissionController.acceptAllInstance())
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
@@ -233,8 +232,9 @@ class McpLocalizationMrtrRuntimeTests {
 			AtomicInteger handlerInvocations, Request request) {
 		AtomicReference<Capture> captured = new AtomicReference<>();
 
-		SokletSimulator.run(transports -> SokletConfig
-				.withMcpServer(server(transports, localizer, handlerInvocations))
+		SokletSimulator.run(config -> config
+				.mcpServer(0, builder -> server(builder, localizer,
+						handlerInvocations))
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build(), simulator -> {

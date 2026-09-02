@@ -28,14 +28,14 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Immutable startup and shutdown deadline policy shared by every configured
- * lifecycle participant.
+ * lifecycle component.
  */
 @ThreadSafe
 public final class LifecyclePolicy {
 	@Nullable
 	private final Duration startupTimeout;
 	@NonNull
-	private final Duration startupCancellationTimeout;
+	private final Duration startupCancelationTimeout;
 	@NonNull
 	private final Duration gracefulShutdownDuration;
 	@NonNull
@@ -46,9 +46,9 @@ public final class LifecyclePolicy {
 		this.startupTimeout = exactBuilder.startupTimeout;
 		if (this.startupTimeout != null)
 			validate(this.startupTimeout, "startupTimeout");
-		this.startupCancellationTimeout = validate(
-				exactBuilder.startupCancellationTimeout,
-				"startupCancellationTimeout");
+		this.startupCancelationTimeout = validate(
+				exactBuilder.startupCancelationTimeout,
+				"startupCancelationTimeout");
 		this.gracefulShutdownDuration = validate(
 				exactBuilder.gracefulShutdownDuration,
 				"gracefulShutdownDuration");
@@ -75,10 +75,10 @@ public final class LifecyclePolicy {
 		return Optional.ofNullable(this.startupTimeout);
 	}
 
-	/** @return budget for cancelling an in-flight startup call */
+	/** @return budget for canceling an in-flight startup call */
 	@NonNull
-	public Duration getStartupCancellationTimeout() {
-		return this.startupCancellationTimeout;
+	public Duration getStartupCancelationTimeout() {
+		return this.startupCancelationTimeout;
 	}
 
 	/** @return graceful shutdown phase duration */
@@ -96,7 +96,7 @@ public final class LifecyclePolicy {
 	@NonNull
 	InternalLifecyclePolicy toInternal() {
 		return new InternalLifecyclePolicy(getStartupTimeout(),
-				getStartupCancellationTimeout(), getGracefulShutdownDuration(),
+				getStartupCancelationTimeout(), getGracefulShutdownDuration(),
 				getForcedShutdownDuration());
 	}
 
@@ -105,8 +105,8 @@ public final class LifecyclePolicy {
 			@NonNull InternalLifecyclePolicy lifecyclePolicy) {
 		requireNonNull(lifecyclePolicy);
 		Builder builder = builder()
-				.startupCancellationTimeout(
-						lifecyclePolicy.startupCancellationTimeout())
+				.startupCancelationTimeout(
+						lifecyclePolicy.startupCancelationTimeout())
 				.gracefulShutdownDuration(
 						lifecyclePolicy.gracefulShutdownTimeout())
 				.forcedShutdownDuration(
@@ -139,7 +139,7 @@ public final class LifecyclePolicy {
 		@Nullable
 		private Duration startupTimeout;
 		@NonNull
-		private Duration startupCancellationTimeout;
+		private Duration startupCancelationTimeout;
 		@NonNull
 		private Duration gracefulShutdownDuration;
 		@NonNull
@@ -147,7 +147,7 @@ public final class LifecyclePolicy {
 
 		private Builder() {
 			this.startupTimeout = Duration.ofSeconds(30);
-			this.startupCancellationTimeout = Duration.ofSeconds(2);
+			this.startupCancelationTimeout = Duration.ofSeconds(2);
 			this.gracefulShutdownDuration = Duration.ofSeconds(15);
 			this.forcedShutdownDuration = Duration.ofSeconds(3);
 		}
@@ -180,18 +180,18 @@ public final class LifecyclePolicy {
 		}
 
 		/**
-		 * Sets the startup-cancellation budget.
+		 * Sets the startup-cancelation budget.
 		 *
-		 * @param duration cancellation budget
+		 * @param duration cancelation budget
 		 * @return this builder
 		 * @throws NullPointerException if {@code duration} is null
 		 * @throws IllegalArgumentException if negative or not representable as
 		 * signed nanoseconds
 		 */
 		@NonNull
-		public Builder startupCancellationTimeout(@NonNull Duration duration) {
-			this.startupCancellationTimeout = validate(requireNonNull(duration),
-					"startupCancellationTimeout");
+		public Builder startupCancelationTimeout(@NonNull Duration duration) {
+			this.startupCancelationTimeout = validate(requireNonNull(duration),
+					"startupCancelationTimeout");
 			return this;
 		}
 

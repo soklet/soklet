@@ -16,17 +16,18 @@
 
 package com.soklet;
 
-import org.jspecify.annotations.NonNull;
-
-/** Creates a configuration against one fresh set of simulator transports. */
-@FunctionalInterface
-public interface SimulatorConfigFactory {
-	/**
-	 * Creates the configuration for one isolated simulation scope.
-	 *
-	 * @param transports fresh off-network transports owned by that scope
-	 * @return simulation configuration
-	 */
-	@NonNull
-	SokletConfig create(@NonNull SimulatorTransports transports);
+/** Categorizes framework-observed work that remains after shutdown. */
+public enum ResidualActivityType {
+	/** An admitted callback remains active. */
+	CALLBACK,
+	/** A response or event stream remains active. */
+	STREAM,
+	/** A transport connection remains active. */
+	CONNECTION,
+	/** An event loop remains active. */
+	EVENT_LOOP,
+	/** An executor task remains active. */
+	EXECUTOR_TASK,
+	/** A tracked lifecycle call remains active. */
+	LIFECYCLE_CALL
 }

@@ -141,13 +141,13 @@ public class HttpServerLifecycleTests {
 		((Selector) selectorField.get(eventLoop)).close();
 		ShutdownResult result = soklet.awaitShutdown();
 		Assertions.assertEquals(SokletStatus.CLOSED, soklet.getStatus());
-		Assertions.assertEquals(ParticipantKind.HTTP,
-				result.getUnexpectedTermination().orElseThrow()
-						.getParticipantKind());
+		Assertions.assertEquals(ShutdownComponentType.HTTP,
+				result.getUnexpectedShutdownComponentTermination().orElseThrow()
+						.getShutdownComponentType());
 		Assertions.assertEquals(
-				ParticipantShutdownDisposition.UNEXPECTED_TERMINATION,
-				result.getParticipantResult(ParticipantKind.HTTP).orElseThrow()
-						.getDisposition());
+				ShutdownComponentDisposition.UNEXPECTED_TERMINATION,
+				result.getShutdownComponentResult(ShutdownComponentType.HTTP).orElseThrow()
+						.getShutdownComponentDisposition());
 		SokletTerminatedUnexpectedlyException replay = Assertions.assertThrows(
 				SokletTerminatedUnexpectedlyException.class, soklet::close);
 		Assertions.assertSame(result, replay.getShutdownResult());
@@ -364,13 +364,13 @@ public class HttpServerLifecycleTests {
 		Assertions.assertEquals(StartupDisposition.READY,
 				result.getStartupDisposition());
 		Assertions.assertEquals(ShutdownDisposition.GRACEFUL,
-				result.getDisposition());
+				result.getShutdownDisposition());
 		Assertions.assertTrue(result.isComplete());
-		ParticipantShutdownResult http = result
-				.getParticipantResult(ParticipantKind.HTTP).orElseThrow();
+		ShutdownComponentResult http = result
+				.getShutdownComponentResult(ShutdownComponentType.HTTP).orElseThrow();
 		Assertions.assertEquals(
-				ParticipantShutdownDisposition.GRACEFUL_TERMINATION,
-				http.getDisposition());
+				ShutdownComponentDisposition.GRACEFUL_TERMINATION,
+				http.getShutdownComponentDisposition());
 		Assertions.assertTrue(http.getFailures().isEmpty());
 		Assertions.assertTrue(http.getResidualActivityEvidence().isEmpty());
 	}

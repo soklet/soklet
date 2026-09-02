@@ -321,7 +321,7 @@ class McpLocalizationRendererTests {
 
 	private static McpLocalizableText text(String defaultText, String memberPath) {
 		return new McpLocalizableText(new McpTextCoordinate("/mcp",
-				McpTextCoordinate.Kind.ENDPOINT, "endpoint", memberPath),
+				McpTextOwnerType.ENDPOINT, "endpoint", memberPath),
 				defaultText);
 	}
 

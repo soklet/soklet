@@ -84,7 +84,7 @@ public class AdvancedTests {
 	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
 			LifecyclePolicy.builder()
 					.startupTimeout(Duration.ofSeconds(5))
-					.startupCancellationTimeout(Duration.ofSeconds(2))
+					.startupCancelationTimeout(Duration.ofSeconds(2))
 					.gracefulShutdownDuration(Duration.ofSeconds(2))
 					.forcedShutdownDuration(Duration.ofSeconds(1))
 					.build();
@@ -473,12 +473,12 @@ public class AdvancedTests {
 				final int scopeId = scopeIndex;
 				scopeExecutor.submit(() -> {
 					try {
-						SokletSimulator.run(transports -> {
+						SokletSimulator.run(config -> {
 							String runtimeCanary = "scope-" + scopeId;
 							RuntimeRequestMetrics metrics = new RuntimeRequestMetrics(runtimeCanary + "-");
-							simulatorHttpServers.add(transports.getHttpServer());
+							config.httpServer(simulatorHttpServers::add);
 							simulatorMetrics.put(scopeId, metrics);
-							return SokletConfig.withHttpServer(transports.getHttpServer())
+							return config
 									.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ConcurrentTestResource.class)))
 									.instanceProvider(new ConcurrentInstanceProvider(runtimeCanary))
 									.metricsCollector(metrics)
@@ -1064,7 +1064,7 @@ public class AdvancedTests {
 						.body(largeBody)
 						.build();
 
-				SokletSimulator.run(transports -> SokletConfig.withHttpServer(transports.getHttpServer())
+				SokletSimulator.run(simulatorConfig -> simulatorConfig.httpServer()
 						.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(LargeBodyTestResource.class)))
 						.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 						.build(), simulator -> {

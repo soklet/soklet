@@ -115,9 +115,9 @@ final class SokletDirectLateStartupIntegrationTests {
 
 			Assertions.assertEquals(InternalShutdownDisposition.NOT_STARTED,
 					result.disposition());
-			InternalParticipantShutdownResult participant = assertParticipant(result,
-					InternalParticipantKind.HTTP,
-					InternalParticipantShutdownDisposition.NOT_STARTED);
+			InternalLifecycleComponentShutdownResult participant = assertParticipant(result,
+					InternalLifecycleComponentType.HTTP,
+					InternalLifecycleComponentShutdownDisposition.NOT_STARTED);
 			Assertions.assertEquals(List.of(exactCancellation),
 					participant.failures());
 			Assertions.assertTrue(participant.failures().stream()
@@ -164,13 +164,13 @@ final class SokletDirectLateStartupIntegrationTests {
 
 			Assertions.assertEquals(InternalShutdownDisposition.INCOMPLETE,
 					result.disposition());
-			InternalParticipantShutdownResult participant = assertParticipant(result,
-					InternalParticipantKind.HTTP,
-					InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN);
+			InternalLifecycleComponentShutdownResult participant = assertParticipant(result,
+					InternalLifecycleComponentType.HTTP,
+					InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN);
 			Assertions.assertEquals(List.of(exactCancellation),
 					participant.failures());
 			Assertions.assertEquals(Set.of(
-					InternalResidualActivityKind.LIFECYCLE_CALL),
+					InternalResidualActivityType.LIFECYCLE_CALL),
 					participant.residualActivity(),
 					"Precommit proof cannot hide a still-live attachment call");
 			Assertions.assertEquals(0, http.runtime().startCalls());
@@ -187,9 +187,9 @@ final class SokletDirectLateStartupIntegrationTests {
 			Assertions.assertEquals(0, http.runtime().forceCalls());
 			Assertions.assertSame(result, harness.owner().result().orElseThrow());
 			Assertions.assertEquals(
-					InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+					InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
 					harness.owner().result().orElseThrow().participantResult(
-							InternalParticipantKind.HTTP).orElseThrow().disposition(),
+							InternalLifecycleComponentType.HTTP).orElseThrow().disposition(),
 					"A late losing return cannot replay its discarded proof");
 		} finally {
 			http.releaseAttach();
@@ -203,21 +203,21 @@ final class SokletDirectLateStartupIntegrationTests {
 			throws Exception {
 		assertAttachedNeverStarted(ProofMode.GRACEFUL,
 				InternalShutdownDisposition.NOT_STARTED,
-				InternalParticipantShutdownDisposition.NOT_STARTED);
+				InternalLifecycleComponentShutdownDisposition.NOT_STARTED);
 	}
 
 	@Test
 	void installedAttachmentProvenOnlyAfterForceIsForced() throws Exception {
 		assertAttachedNeverStarted(ProofMode.FORCED,
 				InternalShutdownDisposition.FORCED,
-				InternalParticipantShutdownDisposition.FORCED_TERMINATION);
+				InternalLifecycleComponentShutdownDisposition.FORCED_TERMINATION);
 	}
 
 	@Test
 	void installedAttachmentMissingProofIsExactUnknown() throws Exception {
 		assertAttachedNeverStarted(ProofMode.NEVER,
 				InternalShutdownDisposition.INCOMPLETE,
-				InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN);
+				InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN);
 	}
 
 	@Test
@@ -299,9 +299,9 @@ final class SokletDirectLateStartupIntegrationTests {
 			assertExactCancellation(startupFailure, result);
 			Assertions.assertEquals(InternalShutdownDisposition.GRACEFUL,
 					result.disposition());
-			InternalParticipantShutdownResult sseResult = assertParticipant(result,
-					InternalParticipantKind.SSE,
-					InternalParticipantShutdownDisposition.NOT_STARTED);
+			InternalLifecycleComponentShutdownResult sseResult = assertParticipant(result,
+					InternalLifecycleComponentType.SSE,
+					InternalLifecycleComponentShutdownDisposition.NOT_STARTED);
 			Assertions.assertTrue(sseResult.residualActivity().isEmpty());
 			Assertions.assertEquals(0, sse.runtime().startCalls(),
 					"Cancellation before worker entry must skip transport start");
@@ -338,9 +338,9 @@ final class SokletDirectLateStartupIntegrationTests {
 			Assertions.assertSame(launchFailure, startupFailure.getCause());
 			Assertions.assertEquals(InternalShutdownDisposition.GRACEFUL,
 					result.disposition());
-			InternalParticipantShutdownResult sseResult = assertParticipant(result,
-					InternalParticipantKind.SSE,
-					InternalParticipantShutdownDisposition.NOT_STARTED);
+			InternalLifecycleComponentShutdownResult sseResult = assertParticipant(result,
+					InternalLifecycleComponentType.SSE,
+					InternalLifecycleComponentShutdownDisposition.NOT_STARTED);
 			Assertions.assertTrue(sseResult.failures().isEmpty());
 			Assertions.assertTrue(sseResult.residualActivity().isEmpty());
 			Assertions.assertEquals(0, sse.runtime().startCalls());
@@ -388,9 +388,9 @@ final class SokletDirectLateStartupIntegrationTests {
 					SokletStartupException.class,
 					start.get(5, TimeUnit.SECONDS));
 			assertExactCancellation(startupFailure, result);
-			InternalParticipantShutdownResult sseResult = assertParticipant(result,
-					InternalParticipantKind.SSE,
-					InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION);
+			InternalLifecycleComponentShutdownResult sseResult = assertParticipant(result,
+					InternalLifecycleComponentType.SSE,
+					InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION);
 			Assertions.assertEquals(List.of(startFailure), sseResult.failures());
 			Throwable[] suppressed = startFailure.getSuppressed();
 			Assertions.assertEquals(1, suppressed.length);
@@ -411,7 +411,7 @@ final class SokletDirectLateStartupIntegrationTests {
 
 	private void assertAttachedNeverStarted(@NonNull ProofMode proofMode,
 			@NonNull InternalShutdownDisposition expectedAggregate,
-			@NonNull InternalParticipantShutdownDisposition expectedParticipant)
+			@NonNull InternalLifecycleComponentShutdownDisposition expectedParticipant)
 			throws Exception {
 		CountDownLatch attachmentSettled = new CountDownLatch(1);
 		CountDownLatch releaseAttachmentWrapper = new CountDownLatch(1);
@@ -450,8 +450,8 @@ final class SokletDirectLateStartupIntegrationTests {
 					.get(5, TimeUnit.SECONDS).internalResult();
 			assertExactCancellation(startupFailure, result);
 			Assertions.assertEquals(expectedAggregate, result.disposition());
-			InternalParticipantShutdownResult participant = assertParticipant(result,
-					InternalParticipantKind.HTTP, expectedParticipant);
+			InternalLifecycleComponentShutdownResult participant = assertParticipant(result,
+					InternalLifecycleComponentType.HTTP, expectedParticipant);
 			Assertions.assertTrue(participant.failures().isEmpty());
 			Assertions.assertTrue(participant.residualActivity().isEmpty(),
 					"The released wrapper cannot survive in terminal residual evidence");
@@ -467,9 +467,9 @@ final class SokletDirectLateStartupIntegrationTests {
 				http.runtime().signalProof();
 				Assertions.assertSame(result, harness.owner().result().orElseThrow());
 				Assertions.assertEquals(
-						InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+						InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
 						harness.owner().result().orElseThrow().participantResult(
-								InternalParticipantKind.HTTP).orElseThrow()
+								InternalLifecycleComponentType.HTTP).orElseThrow()
 								.disposition(),
 						"Late physical proof cannot rewrite missing-proof evidence");
 			}
@@ -531,9 +531,9 @@ final class SokletDirectLateStartupIntegrationTests {
 			}
 			Assertions.assertEquals(InternalShutdownDisposition.GRACEFUL,
 					result.disposition());
-			InternalParticipantShutdownResult participant = assertParticipant(result,
-					InternalParticipantKind.HTTP,
-					InternalParticipantShutdownDisposition.UNEXPECTED_TERMINATION);
+			InternalLifecycleComponentShutdownResult participant = assertParticipant(result,
+					InternalLifecycleComponentType.HTTP,
+					InternalLifecycleComponentShutdownDisposition.UNEXPECTED_TERMINATION);
 			Assertions.assertEquals(pendingEvent == PendingEvent.FAILURE
 					? List.of(exactFailure) : List.of(), participant.failures());
 			Assertions.assertTrue(participant.residualActivity().isEmpty());
@@ -583,9 +583,9 @@ final class SokletDirectLateStartupIntegrationTests {
 					"A discarded pending event cannot escape as a suppressed cause");
 			Assertions.assertEquals(InternalShutdownDisposition.NOT_STARTED,
 					result.disposition());
-			InternalParticipantShutdownResult participant = assertParticipant(result,
-					InternalParticipantKind.HTTP,
-					InternalParticipantShutdownDisposition.NOT_STARTED);
+			InternalLifecycleComponentShutdownResult participant = assertParticipant(result,
+					InternalLifecycleComponentType.HTTP,
+					InternalLifecycleComponentShutdownDisposition.NOT_STARTED);
 			Assertions.assertEquals(List.of(exactFailure), participant.failures());
 			Assertions.assertTrue(participant.failures().stream()
 					.noneMatch(failure -> failure == pendingFailure));
@@ -664,28 +664,28 @@ final class SokletDirectLateStartupIntegrationTests {
 					SokletStartupException.class,
 					start.get(5, TimeUnit.SECONDS));
 			assertExactCancellation(startupFailure, result);
-			InternalParticipantShutdownResult httpResult = assertParticipant(result,
-					InternalParticipantKind.HTTP,
-					InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION);
+			InternalLifecycleComponentShutdownResult httpResult = assertParticipant(result,
+					InternalLifecycleComponentType.HTTP,
+					InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION);
 			Assertions.assertTrue(httpResult.failures().isEmpty());
 			Assertions.assertTrue(httpResult.residualActivity().isEmpty());
 
-			InternalParticipantShutdownDisposition expectedSse = switch (release) {
+			InternalLifecycleComponentShutdownDisposition expectedSse = switch (release) {
 				case GRACEFUL ->
-						InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION;
+						InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION;
 				case FORCED ->
-						InternalParticipantShutdownDisposition.FORCED_TERMINATION;
+						InternalLifecycleComponentShutdownDisposition.FORCED_TERMINATION;
 				case AFTER_FREEZE ->
-						InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN;
+						InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN;
 			};
-			InternalParticipantShutdownResult sseResult = assertParticipant(result,
-					InternalParticipantKind.SSE, expectedSse);
+			InternalLifecycleComponentShutdownResult sseResult = assertParticipant(result,
+					InternalLifecycleComponentType.SSE, expectedSse);
 			Assertions.assertTrue(sseResult.failures().isEmpty());
 			if (release == StartRelease.AFTER_FREEZE) {
 				Assertions.assertEquals(InternalShutdownDisposition.INCOMPLETE,
 						result.disposition());
 				Assertions.assertEquals(Set.of(
-						InternalResidualActivityKind.LIFECYCLE_CALL),
+						InternalResidualActivityType.LIFECYCLE_CALL),
 						sseResult.residualActivity());
 				sse.releaseStart();
 				Assertions.assertTrue(sse.awaitStartReturned());
@@ -696,9 +696,9 @@ final class SokletDirectLateStartupIntegrationTests {
 						"A return after terminal freeze cannot invoke a late phase");
 				Assertions.assertSame(result, harness.owner().result().orElseThrow());
 				Assertions.assertEquals(
-						InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+						InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
 						harness.owner().result().orElseThrow().participantResult(
-								InternalParticipantKind.SSE).orElseThrow().disposition());
+								InternalLifecycleComponentType.SSE).orElseThrow().disposition());
 			} else {
 				Assertions.assertTrue(sseResult.residualActivity().isEmpty());
 				Assertions.assertEquals(release == StartRelease.GRACEFUL
@@ -732,7 +732,7 @@ final class SokletDirectLateStartupIntegrationTests {
 	private static Throwable assertExactCancellation(
 			@NonNull SokletStartupException startupFailure,
 			@NonNull InternalShutdownResult result) {
-		Assertions.assertEquals(InternalStartupDisposition.CANCELLED,
+		Assertions.assertEquals(InternalStartupDisposition.CANCELED,
 				startupFailure.getInternalStartupDisposition());
 		Assertions.assertSame(result, startupFailure.getInternalShutdownResult());
 		Throwable exactCancellation = startupFailure.getCause();
@@ -745,11 +745,11 @@ final class SokletDirectLateStartupIntegrationTests {
 	}
 
 	@NonNull
-	private static InternalParticipantShutdownResult assertParticipant(
+	private static InternalLifecycleComponentShutdownResult assertParticipant(
 			@NonNull InternalShutdownResult result,
-			@NonNull InternalParticipantKind kind,
-			@NonNull InternalParticipantShutdownDisposition disposition) {
-		InternalParticipantShutdownResult participant = result
+			@NonNull InternalLifecycleComponentType kind,
+			@NonNull InternalLifecycleComponentShutdownDisposition disposition) {
+		InternalLifecycleComponentShutdownResult participant = result
 				.participantResult(kind).orElseThrow();
 		Assertions.assertEquals(disposition, participant.disposition());
 		return participant;
@@ -1028,7 +1028,8 @@ final class SokletDirectLateStartupIntegrationTests {
 
 		@Override
 		public void quiesce(@NonNull ShutdownContext context) {
-			this.firstUnderlyingPhase.compareAndSet(null, context.getPhase());
+			this.firstUnderlyingPhase.compareAndSet(null,
+					context.getShutdownPhase());
 			this.quiesceCalls.incrementAndGet();
 			this.quiesceEntered.countDown();
 			if (this.proofMode == ProofMode.GRACEFUL)
@@ -1037,7 +1038,8 @@ final class SokletDirectLateStartupIntegrationTests {
 
 		@Override
 		public void force(@NonNull ShutdownContext context) {
-			if (this.firstUnderlyingPhase.compareAndSet(null, context.getPhase()))
+			if (this.firstUnderlyingPhase.compareAndSet(null,
+					context.getShutdownPhase()))
 				this.forceSubsumedQuiesce.set(true);
 			this.forceCalls.incrementAndGet();
 			this.forceEntered.countDown();

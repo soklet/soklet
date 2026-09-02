@@ -106,7 +106,7 @@
         {"path":"SECURITY.md","scope":{"kind":"headingSubtree","headingPath":["Security Policy","MCP Deployment Security"],"role":"security"}},
         {"path":"api/mcp/README.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
         {"path":"CHANGELOG.md","scope":{"kind":"wholeFile","role":"migration"}},
-        {"path":"CHANGELOG.md","scope":{"kind":"headingSubtree","headingPath":["Changelog","4.0.0 (Unreleased)","Features"],"role":"migration"}},
+        {"path":"CHANGELOG.md","scope":{"kind":"headingSubtree","headingPath":["Changelog","4.0.0 (2026-09-01)","Detailed Implementation Record"],"role":"migration"}},
         {"path":"release/README.md","scope":{"kind":"wholeFile","role":"factualSupport"}}
       ],
       "matcher": {"kind":"regex","pattern":"(?:exactly\\s+(?:22|23)[\\s\\S]{0,80}(?:OpenTelemetry\\s+instruments?|public\\s+final\\s+(?:event\\s+)?variants?|event\\s+variants?|event-record\\s+schemas?)|(?:event\\s+variants?|event\\s+hierarchy)[\\s\\S]{0,80}exactly\\s+(?:22|23)[\\s\\S]{0,40}(?:downstream|OpenTelemetry\\s+instruments?))","caseSensitive":false},
@@ -118,8 +118,8 @@
         {"path":"README.md","matchedText":"exactly 22 OpenTelemetry instruments","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Metrics Collection"],"role":"factualSupport"}},
         {"path":"README.md","matchedText":"exactly 23 public final event variants","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Metrics Collection"],"role":"factualSupport"}},
         {"path":"SECURITY.md","matchedText":"event variants map to exactly 22 downstream","scope":{"kind":"headingSubtree","headingPath":["Security Policy","MCP Deployment Security"],"role":"security"}},
-        {"path":"CHANGELOG.md","matchedText":"exactly 23 event-record schemas","scope":{"kind":"headingSubtree","headingPath":["Changelog","4.0.0 (Unreleased)","Features"],"role":"migration"}},
-        {"path":"CHANGELOG.md","matchedText":"exactly 22\n  OpenTelemetry instruments","scope":{"kind":"headingSubtree","headingPath":["Changelog","4.0.0 (Unreleased)","Features"],"role":"migration"}}
+        {"path":"CHANGELOG.md","matchedText":"exactly 23 event-record schemas","scope":{"kind":"headingSubtree","headingPath":["Changelog","4.0.0 (2026-09-01)","Detailed Implementation Record"],"role":"migration"}},
+        {"path":"CHANGELOG.md","matchedText":"exactly 22\n  OpenTelemetry instruments","scope":{"kind":"headingSubtree","headingPath":["Changelog","4.0.0 (2026-09-01)","Detailed Implementation Record"],"role":"migration"}}
       ]
     },
     {

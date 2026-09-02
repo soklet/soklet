@@ -109,8 +109,8 @@ public class McpLocalizationPublicApiTests {
 				Map.entry(McpTextCoordinate.class, Set.of(
 						"equals(java.lang.Object)",
 						"getEndpointPath()",
-						"getKind()",
 						"getMemberPath()",
+						"getMcpTextOwnerType()",
 						"getSubjectIdentifier()",
 						"hashCode()",
 						"toExternalKey()",
@@ -139,14 +139,14 @@ public class McpLocalizationPublicApiTests {
 				McpLocalizationFailurePolicy.USE_DEFAULT_TEXT,
 				McpLocalizationFailurePolicy.FAIL_REQUEST
 		}, McpLocalizationFailurePolicy.values());
-		Assertions.assertArrayEquals(new McpTextCoordinate.Kind[]{
-				McpTextCoordinate.Kind.SERVER_INFORMATION,
-				McpTextCoordinate.Kind.ENDPOINT,
-				McpTextCoordinate.Kind.TOOL,
-				McpTextCoordinate.Kind.PROMPT,
-				McpTextCoordinate.Kind.RESOURCE,
-				McpTextCoordinate.Kind.RESOURCE_TEMPLATE
-		}, McpTextCoordinate.Kind.values());
+		Assertions.assertArrayEquals(new McpTextOwnerType[]{
+				McpTextOwnerType.SERVER_INFORMATION,
+				McpTextOwnerType.ENDPOINT,
+				McpTextOwnerType.TOOL,
+				McpTextOwnerType.PROMPT,
+				McpTextOwnerType.RESOURCE,
+				McpTextOwnerType.RESOURCE_TEMPLATE
+		}, McpTextOwnerType.values());
 	}
 
 	@Test
@@ -239,7 +239,7 @@ public class McpLocalizationPublicApiTests {
 		McpLocalizationRevision revision =
 				McpLocalizationRevision.fromValue("catalog-secret-17");
 		McpLocalizableText text = new McpLocalizableText(
-				new McpTextCoordinate("/mcp", McpTextCoordinate.Kind.ENDPOINT,
+				new McpTextCoordinate("/mcp", McpTextOwnerType.ENDPOINT,
 						"endpoint", "/instructions"),
 				"Canonical instructions");
 		McpLocalizationContext context = McpLocalizationContext
@@ -389,16 +389,35 @@ public class McpLocalizationPublicApiTests {
 
 	@Test
 	public void coordinateExternalKeysUseTheFrozenDomainSeparatedEncoding() {
-		McpTextCoordinate coordinate = new McpTextCoordinate("/catalog/mcp",
-				McpTextCoordinate.Kind.TOOL, "catalog.search", "/description");
-		McpTextCoordinate equal = new McpTextCoordinate("/catalog/mcp",
-				McpTextCoordinate.Kind.TOOL, "catalog.search", "/description");
-		McpTextCoordinate unequal = new McpTextCoordinate("/catalog/mcp",
-				McpTextCoordinate.Kind.TOOL, "catalog.search", "/title");
-
-		Assertions.assertEquals(
+		Map<McpTextOwnerType, String> expectedExternalKeys = Map.of(
+				McpTextOwnerType.SERVER_INFORMATION,
+				"soklet-mcp-text-v1.server-information.rp0U94b6OfYxXqHaCBQJwCqO-7GFqGG8Lsyc4D7cLZA",
+				McpTextOwnerType.ENDPOINT,
+				"soklet-mcp-text-v1.endpoint.vRF898d_sVtdemmRdtIx_1xm00jjB0gTZ8Iq9bvWAAY",
+				McpTextOwnerType.TOOL,
 				"soklet-mcp-text-v1.tool.bwpmb6shUs9Ii2yE2ivLnb-RJfIRQGrj82_uS3QmxJw",
-				coordinate.toExternalKey());
+				McpTextOwnerType.PROMPT,
+				"soklet-mcp-text-v1.prompt.oNGotJUrQ_JwZsAJdmnWLq6iM5Ya17aMK4e__1nM6fY",
+				McpTextOwnerType.RESOURCE,
+				"soklet-mcp-text-v1.resource.XfrVFlLQmncvy_Mo-x6ja7mUzhNJkZy_BWR4ZmuTJ80",
+				McpTextOwnerType.RESOURCE_TEMPLATE,
+				"soklet-mcp-text-v1.resource-template.53OUiPBZEoVAvTyjImyIb3F_KEXAlQSbp_7C-x7QC8M");
+		for (Map.Entry<McpTextOwnerType, String> entry
+				: expectedExternalKeys.entrySet()) {
+			McpTextCoordinate keyedCoordinate = new McpTextCoordinate(
+					"/catalog/mcp", entry.getKey(), "catalog.search",
+					"/description");
+			Assertions.assertEquals(entry.getValue(),
+					keyedCoordinate.toExternalKey(), entry.getKey().name());
+		}
+
+		McpTextCoordinate coordinate = new McpTextCoordinate("/catalog/mcp",
+				McpTextOwnerType.TOOL, "catalog.search", "/description");
+		McpTextCoordinate equal = new McpTextCoordinate("/catalog/mcp",
+				McpTextOwnerType.TOOL, "catalog.search", "/description");
+		McpTextCoordinate unequal = new McpTextCoordinate("/catalog/mcp",
+				McpTextOwnerType.TOOL, "catalog.search", "/title");
+
 		Assertions.assertEquals(coordinate, equal);
 		Assertions.assertEquals(coordinate.hashCode(), equal.hashCode());
 		Assertions.assertEquals(coordinate.toExternalKey(), equal.toExternalKey());
@@ -409,7 +428,7 @@ public class McpLocalizationPublicApiTests {
 		Assertions.assertFalse(coordinate.toString().contains("catalog.search"));
 		Assertions.assertThrows(IllegalArgumentException.class,
 				() -> new McpTextCoordinate("/catalog/mcp",
-						McpTextCoordinate.Kind.TOOL, "bad\uD800", "/title"));
+						McpTextOwnerType.TOOL, "bad\uD800", "/title"));
 	}
 
 	@Test

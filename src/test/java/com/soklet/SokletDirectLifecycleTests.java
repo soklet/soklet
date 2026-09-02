@@ -83,8 +83,8 @@ final class SokletDirectLifecycleTests {
 				result.disposition());
 		Assertions.assertEquals(InternalStartupDisposition.NOT_ATTEMPTED,
 				result.startupDisposition());
-		Assertions.assertEquals(InternalParticipantShutdownDisposition.NOT_STARTED,
-				result.participantResult(InternalParticipantKind.HTTP).orElseThrow()
+		Assertions.assertEquals(InternalLifecycleComponentShutdownDisposition.NOT_STARTED,
+				result.participantResult(InternalLifecycleComponentType.HTTP).orElseThrow()
 						.disposition());
 		Assertions.assertEquals(0, resolver.snapshotCalls());
 		Assertions.assertEquals(0, http.attachCalls());
@@ -277,8 +277,8 @@ final class SokletDirectLifecycleTests {
 				.orElseThrow();
 		Assertions.assertEquals(InternalShutdownDisposition.GRACEFUL,
 				result.disposition());
-		Assertions.assertEquals(InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION,
-				result.participantResult(InternalParticipantKind.HTTP).orElseThrow()
+		Assertions.assertEquals(InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION,
+				result.participantResult(InternalLifecycleComponentType.HTTP).orElseThrow()
 						.disposition());
 	}
 
@@ -299,10 +299,10 @@ final class SokletDirectLifecycleTests {
 				exception.getInternalStartupDisposition());
 		Assertions.assertSame(exception.getInternalShutdownResult(),
 				soklet.getDirectLifecycle().result().orElseThrow());
-		InternalParticipantShutdownResult httpResult = exception
+		InternalLifecycleComponentShutdownResult httpResult = exception
 				.getInternalShutdownResult()
-				.participantResult(InternalParticipantKind.HTTP).orElseThrow();
-		Assertions.assertEquals(InternalParticipantShutdownDisposition.NOT_STARTED,
+				.participantResult(InternalLifecycleComponentType.HTTP).orElseThrow();
+		Assertions.assertEquals(InternalLifecycleComponentShutdownDisposition.NOT_STARTED,
 				httpResult.disposition());
 		Assertions.assertSame(exception.getCause(),
 				httpResult.failures().get(0),
@@ -328,11 +328,11 @@ final class SokletDirectLifecycleTests {
 		Assertions.assertSame(exactFailure, startupFailure.getCause());
 		Assertions.assertEquals(InternalStartupDisposition.FAILED,
 				startupFailure.getInternalStartupDisposition());
-		InternalParticipantShutdownResult sseResult = startupFailure
+		InternalLifecycleComponentShutdownResult sseResult = startupFailure
 				.getInternalShutdownResult()
-				.participantResult(InternalParticipantKind.SSE).orElseThrow();
+				.participantResult(InternalLifecycleComponentType.SSE).orElseThrow();
 		Assertions.assertNotEquals(
-				InternalParticipantShutdownDisposition.UNEXPECTED_TERMINATION,
+				InternalLifecycleComponentShutdownDisposition.UNEXPECTED_TERMINATION,
 				sseResult.disposition());
 		Assertions.assertTrue(sseResult.failures().stream()
 				.anyMatch(failure -> failure == exactFailure));
@@ -354,8 +354,8 @@ final class SokletDirectLifecycleTests {
 							CountingResolver.forClasses(OkResource.class)).build()));
 
 		Assertions.assertTrue(conflict.getMessage().contains("already owned"));
-		Assertions.assertEquals(ParticipantKind.HTTP,
-				conflict.getParticipantKind());
+		Assertions.assertEquals(ShutdownComponentType.HTTP,
+				conflict.getShutdownComponentType());
 		Assertions.assertSame(ReferenceHttpEndpoint.class,
 				conflict.getTransportClass());
 		Assertions.assertSame(identity, firstEndpoint.getTransportIdentity());
@@ -481,7 +481,7 @@ final class SokletDirectLifecycleTests {
 		}
 
 		@Override public void didStopHttpServer(@NonNull HttpServer httpServer,
-				@NonNull ParticipantShutdownResult result) {
+				@NonNull ShutdownComponentResult result) {
 			this.transitions.add("did-stop-http");
 		}
 

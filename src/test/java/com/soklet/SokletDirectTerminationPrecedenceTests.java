@@ -99,23 +99,23 @@ final class SokletDirectTerminationPrecedenceTests {
 		AtomicInteger forceCalls = new AtomicInteger();
 		InternalTransportRuntime runtime = new InternalTransportRuntime() {
 			@Override
-			public void start(@NonNull InternalStartupContext context) { }
+			public void start(@NonNull StartupContext context) { }
 
 			@Override
-			public void quiesce(@NonNull InternalShutdownContext context) {
+			public void quiesce(@NonNull ShutdownContext context) {
 				group.signalTerminated(group.root());
 			}
 
 			@Override
-			public void force(@NonNull InternalShutdownContext context) {
+			public void force(@NonNull ShutdownContext context) {
 				forceCalls.incrementAndGet();
 				throw new AssertionError("Complete proof must not receive force");
 			}
 		};
 		InternalLifecycleCoordinator.Participant participant =
 				new InternalLifecycleCoordinator.Participant() {
-					@Override @NonNull public InternalParticipantKind kind() {
-						return InternalParticipantKind.HTTP;
+					@Override @NonNull public InternalLifecycleComponentType kind() {
+						return InternalLifecycleComponentType.HTTP;
 					}
 					@Override @NonNull public AdmissionFence admissionFence() {
 						return admission;
@@ -126,9 +126,9 @@ final class SokletDirectTerminationPrecedenceTests {
 					@Override @NonNull public InternalTransportRuntime runtime() {
 						return runtime;
 					}
-					@Override @NonNull public Set<InternalResidualActivityKind>
+					@Override @NonNull public Set<InternalResidualActivityType>
 					residualActivity() {
-						return Set.of(InternalResidualActivityKind.STREAM);
+						return Set.of(InternalResidualActivityType.STREAM);
 					}
 				};
 		InternalLifecycleCoordinator coordinator =
@@ -137,17 +137,17 @@ final class SokletDirectTerminationPrecedenceTests {
 
 		InternalShutdownResult result = coordinator.shutdown(
 				List.of(participant), 10L, 20L);
-		InternalParticipantShutdownResult http = result.participantResult(
-				InternalParticipantKind.HTTP).orElseThrow();
+		InternalLifecycleComponentShutdownResult http = result.participantResult(
+				InternalLifecycleComponentType.HTTP).orElseThrow();
 
 		Assertions.assertEquals(0, forceCalls.get());
 		Assertions.assertEquals(InternalShutdownDisposition.INCOMPLETE,
 				result.disposition());
 		Assertions.assertFalse(result.isComplete());
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.RESIDUAL_ACTIVITY,
+				InternalLifecycleComponentShutdownDisposition.RESIDUAL_ACTIVITY,
 				http.disposition());
-		Assertions.assertEquals(Set.of(InternalResidualActivityKind.STREAM),
+		Assertions.assertEquals(Set.of(InternalResidualActivityType.STREAM),
 				http.residualActivity());
 		Assertions.assertTrue(http.failures().isEmpty());
 	}
@@ -218,8 +218,8 @@ final class SokletDirectTerminationPrecedenceTests {
 			InternalShutdownResult result = owner.result().orElseThrow();
 			Assertions.assertEquals(InternalShutdownDisposition.GRACEFUL,
 					result.disposition());
-			assertParticipant(result, InternalParticipantKind.HTTP,
-					InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION,
+			assertParticipant(result, InternalLifecycleComponentType.HTTP,
+					InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION,
 					List.of());
 		} finally {
 			releaseIntent.countDown();
@@ -271,11 +271,11 @@ final class SokletDirectTerminationPrecedenceTests {
 					result.startupDisposition());
 			Assertions.assertEquals(InternalShutdownDisposition.GRACEFUL,
 					result.disposition());
-			assertParticipant(result, InternalParticipantKind.HTTP,
-					InternalParticipantShutdownDisposition.UNEXPECTED_TERMINATION,
+			assertParticipant(result, InternalLifecycleComponentType.HTTP,
+					InternalLifecycleComponentShutdownDisposition.UNEXPECTED_TERMINATION,
 					List.of(failure));
-			assertParticipant(result, InternalParticipantKind.SSE,
-					InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION,
+			assertParticipant(result, InternalLifecycleComponentType.SSE,
+					InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION,
 					List.of());
 			Assertions.assertTrue(http.awaitQuiesce());
 			Assertions.assertTrue(sse.awaitQuiesce());
@@ -315,8 +315,8 @@ final class SokletDirectTerminationPrecedenceTests {
 					first.getCause());
 			Assertions.assertEquals(InternalShutdownDisposition.GRACEFUL,
 					result.disposition());
-			assertParticipant(result, InternalParticipantKind.HTTP,
-					InternalParticipantShutdownDisposition.UNEXPECTED_TERMINATION,
+			assertParticipant(result, InternalLifecycleComponentType.HTTP,
+					InternalLifecycleComponentShutdownDisposition.UNEXPECTED_TERMINATION,
 					List.of());
 		}
 	}
@@ -345,8 +345,8 @@ final class SokletDirectTerminationPrecedenceTests {
 			Assertions.assertEquals(1, http.forceCalls());
 			Assertions.assertEquals(InternalShutdownDisposition.FORCED,
 					result.disposition());
-			assertParticipant(result, InternalParticipantKind.HTTP,
-					InternalParticipantShutdownDisposition.FORCED_TERMINATION,
+			assertParticipant(result, InternalLifecycleComponentType.HTTP,
+					InternalLifecycleComponentShutdownDisposition.FORCED_TERMINATION,
 					List.of(failure));
 			Assertions.assertSame(result, unexpected.getInternalShutdownResult());
 			Assertions.assertSame(failure, unexpected.getCause());
@@ -376,8 +376,8 @@ final class SokletDirectTerminationPrecedenceTests {
 			Assertions.assertEquals(InternalShutdownDisposition.INCOMPLETE,
 					result.disposition());
 			Assertions.assertFalse(result.isComplete());
-			assertParticipant(result, InternalParticipantKind.HTTP,
-					InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+			assertParticipant(result, InternalLifecycleComponentType.HTTP,
+					InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
 					List.of(failure));
 			Assertions.assertSame(result, unexpected.getInternalShutdownResult());
 			Assertions.assertSame(failure, unexpected.getCause());
@@ -417,8 +417,8 @@ final class SokletDirectTerminationPrecedenceTests {
 				Assertions.assertNull(stopFailure);
 				Assertions.assertEquals(InternalShutdownDisposition.GRACEFUL,
 						result.disposition());
-				assertParticipant(result, InternalParticipantKind.HTTP,
-						InternalParticipantShutdownDisposition.UNEXPECTED_TERMINATION,
+				assertParticipant(result, InternalLifecycleComponentType.HTTP,
+						InternalLifecycleComponentShutdownDisposition.UNEXPECTED_TERMINATION,
 						List.of(failure));
 			} else {
 				ShutdownIncompleteException incomplete = Assertions.assertInstanceOf(
@@ -427,18 +427,18 @@ final class SokletDirectTerminationPrecedenceTests {
 						incomplete.getInternalShutdownResult());
 				Assertions.assertEquals(InternalShutdownDisposition.INCOMPLETE,
 						result.disposition());
-				assertParticipant(result, InternalParticipantKind.HTTP,
-						InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+				assertParticipant(result, InternalLifecycleComponentType.HTTP,
+						InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
 						List.of(failure));
 			}
 		}
 	}
 
 	private static void assertParticipant(@NonNull InternalShutdownResult result,
-			@NonNull InternalParticipantKind kind,
-			@NonNull InternalParticipantShutdownDisposition disposition,
+			@NonNull InternalLifecycleComponentType kind,
+			@NonNull InternalLifecycleComponentShutdownDisposition disposition,
 			@NonNull List<? extends Throwable> failures) {
-		InternalParticipantShutdownResult participant = result
+		InternalLifecycleComponentShutdownResult participant = result
 				.participantResult(kind).orElseThrow();
 		Assertions.assertEquals(disposition, participant.disposition());
 		Assertions.assertEquals(failures, participant.failures());

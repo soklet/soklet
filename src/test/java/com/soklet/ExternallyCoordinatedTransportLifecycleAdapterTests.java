@@ -80,10 +80,10 @@ class ExternallyCoordinatedTransportLifecycleAdapterTests {
 				adapter.recordExternallyCoordinatedShutdownIntent(generation));
 		InternalShutdownResult exactResult = coordinator(clock, waiter, workers)
 				.shutdown(List.of(generation), 0L, 0L);
-		InternalParticipantShutdownResult participant = exactResult
-				.participantResult(InternalParticipantKind.HTTP).orElseThrow();
+		InternalLifecycleComponentShutdownResult participant = exactResult
+				.participantResult(InternalLifecycleComponentType.HTTP).orElseThrow();
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION,
+				InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION,
 				participant.disposition());
 		Assertions.assertEquals(Optional.empty(),
 				adapter.finalizeExternallyCoordinatedEvidence(generation, participant));
@@ -115,8 +115,8 @@ class ExternallyCoordinatedTransportLifecycleAdapterTests {
 		adapter.recordExternallyCoordinatedShutdownIntent(generation);
 		InternalShutdownResult exactResult = coordinator(clock, waiter, workers)
 				.shutdown(List.of(generation), 0L, 0L);
-		InternalParticipantShutdownResult participant = exactResult
-				.participantResult(InternalParticipantKind.HTTP).orElseThrow();
+		InternalLifecycleComponentShutdownResult participant = exactResult
+				.participantResult(InternalLifecycleComponentType.HTTP).orElseThrow();
 		Assertions.assertTrue(adapter.finalizeExternallyCoordinatedEvidence(
 				generation, participant).isEmpty());
 		adapter.publishExternallyCoordinatedResult(generation, exactResult);
@@ -216,10 +216,10 @@ class ExternallyCoordinatedTransportLifecycleAdapterTests {
 		Assertions.assertArrayEquals(frozenSuppressed,
 				firstFailure.getSuppressed(),
 				"A post-freeze failure cannot mutate the elected Throwable");
-		InternalParticipantShutdownResult participant = exactResult
-				.participantResult(InternalParticipantKind.HTTP).orElseThrow();
+		InternalLifecycleComponentShutdownResult participant = exactResult
+				.participantResult(InternalLifecycleComponentType.HTTP).orElseThrow();
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.UNEXPECTED_TERMINATION,
+				InternalLifecycleComponentShutdownDisposition.UNEXPECTED_TERMINATION,
 				participant.disposition());
 		Assertions.assertEquals(List.of(firstFailure), participant.failures());
 		Assertions.assertTrue(adapter.finalizeExternallyCoordinatedEvidence(
@@ -271,8 +271,8 @@ class ExternallyCoordinatedTransportLifecycleAdapterTests {
 		InternalShutdownResult exactResult = new InternalShutdownResult(
 				coordinated.disposition(), InternalStartupDisposition.FAILED,
 				coordinated.participantResults());
-		InternalParticipantShutdownResult participant = exactResult
-				.participantResult(InternalParticipantKind.HTTP).orElseThrow();
+		InternalLifecycleComponentShutdownResult participant = exactResult
+				.participantResult(InternalLifecycleComponentType.HTTP).orElseThrow();
 		Assertions.assertEquals(List.of(startupFailure), participant.failures());
 		Assertions.assertTrue(adapter.finalizeExternallyCoordinatedEvidence(
 				generation, participant).isEmpty());
@@ -317,8 +317,8 @@ class ExternallyCoordinatedTransportLifecycleAdapterTests {
 
 		InternalShutdownResult exactResult = coordinator(clock, waiter, workers)
 				.shutdown(List.of(generation), 0L, 0L);
-		InternalParticipantShutdownResult participant = exactResult
-				.participantResult(InternalParticipantKind.HTTP).orElseThrow();
+		InternalLifecycleComponentShutdownResult participant = exactResult
+				.participantResult(InternalLifecycleComponentType.HTTP).orElseThrow();
 		Assertions.assertTrue(adapter.finalizeExternallyCoordinatedEvidence(
 				generation, participant).isEmpty());
 		adapter.publishExternallyCoordinatedResult(generation, exactResult);
@@ -344,9 +344,9 @@ class ExternallyCoordinatedTransportLifecycleAdapterTests {
 			adapter.markReady(generation);
 		});
 		adapter.recordExternallyCoordinatedShutdownIntent(generation);
-		InternalParticipantShutdownResult proven = participant(
-				InternalParticipantKind.HTTP,
-				InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION,
+		InternalLifecycleComponentShutdownResult proven = participant(
+				InternalLifecycleComponentType.HTTP,
+				InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION,
 				List.of(), Set.of());
 		InternalShutdownResult obsoleteResult = new InternalShutdownResult(
 				InternalShutdownDisposition.GRACEFUL, InternalStartupDisposition.READY,
@@ -359,9 +359,9 @@ class ExternallyCoordinatedTransportLifecycleAdapterTests {
 				() -> adapter.publishExternallyCoordinatedResult(generation,
 						obsoleteResult));
 
-		InternalParticipantShutdownResult downgraded = participant(
-				InternalParticipantKind.HTTP,
-				InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+		InternalLifecycleComponentShutdownResult downgraded = participant(
+				InternalLifecycleComponentType.HTTP,
+				InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
 				List.of(releaseFailure), Set.of());
 		InternalShutdownResult exactResult = new InternalShutdownResultAggregator()
 				.aggregate(InternalStartupDisposition.READY, List.of(downgraded));
@@ -385,9 +385,9 @@ class ExternallyCoordinatedTransportLifecycleAdapterTests {
 				adapter.newExternallyCoordinatedGeneration(waiter, workers,
 						new Object(), () -> {}, () -> {});
 		adapter.commitExternallyCoordinatedGeneration(generation);
-		InternalParticipantShutdownResult participant = participant(
-				InternalParticipantKind.HTTP,
-				InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+		InternalLifecycleComponentShutdownResult participant = participant(
+				InternalLifecycleComponentType.HTTP,
+				InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
 				List.of(), Set.of());
 		InternalShutdownResult exactResult = new InternalShutdownResultAggregator()
 				.aggregate(InternalStartupDisposition.FAILED, List.of(participant));
@@ -438,9 +438,9 @@ class ExternallyCoordinatedTransportLifecycleAdapterTests {
 
 		InternalShutdownResult exactResult = coordinator(clock, waiter, workers)
 				.shutdown(List.of(generation), 0L, 0L);
-		InternalParticipantShutdownResult participant = exactResult
-				.participantResult(InternalParticipantKind.MCP).orElseThrow();
-		Assertions.assertEquals(InternalParticipantKind.MCP, generation.kind());
+		InternalLifecycleComponentShutdownResult participant = exactResult
+				.participantResult(InternalLifecycleComponentType.MCP).orElseThrow();
+		Assertions.assertEquals(InternalLifecycleComponentType.MCP, generation.kind());
 		Assertions.assertTrue(adapter.finalizeExternallyCoordinatedEvidence(
 				generation, participant).isEmpty());
 		adapter.publishExternallyCoordinatedResult(generation, exactResult);
@@ -454,7 +454,7 @@ class ExternallyCoordinatedTransportLifecycleAdapterTests {
 	private static BuiltInTransportLifecycleAdapter adapter(
 			@NonNull RecordingOperations operations, @NonNull NanoClock clock,
 			@NonNull LifecycleWorkers workers) {
-		return new BuiltInTransportLifecycleAdapter(InternalParticipantKind.HTTP,
+		return new BuiltInTransportLifecycleAdapter(InternalLifecycleComponentType.HTTP,
 				operations, () -> Duration.ZERO, Duration.ZERO, clock, workers);
 	}
 
@@ -471,12 +471,12 @@ class ExternallyCoordinatedTransportLifecycleAdapterTests {
 	}
 
 	@NonNull
-	private static InternalParticipantShutdownResult participant(
-			@NonNull InternalParticipantKind kind,
-			@NonNull InternalParticipantShutdownDisposition disposition,
+	private static InternalLifecycleComponentShutdownResult participant(
+			@NonNull InternalLifecycleComponentType kind,
+			@NonNull InternalLifecycleComponentShutdownDisposition disposition,
 			@NonNull List<? extends Throwable> failures,
-			@NonNull Set<InternalResidualActivityKind> residual) {
-		return new InternalParticipantShutdownResult(kind, disposition, failures,
+			@NonNull Set<InternalResidualActivityType> residual) {
+		return new InternalLifecycleComponentShutdownResult(kind, disposition, failures,
 				residual);
 	}
 
@@ -484,14 +484,14 @@ class ExternallyCoordinatedTransportLifecycleAdapterTests {
 			implements BuiltInTransportLifecycleAdapter.Operations {
 		private final boolean terminationProven;
 		@NonNull
-		private final Set<InternalResidualActivityKind> residual;
+		private final Set<InternalResidualActivityType> residual;
 		private final AtomicInteger quiesceCount = new AtomicInteger();
 		private final AtomicInteger releaseCount = new AtomicInteger();
 		private volatile Runnable onAwait = () -> {};
 		private volatile RuntimeException releaseFailure;
 
 		private RecordingOperations(boolean terminationProven,
-				@NonNull Set<InternalResidualActivityKind> residual) {
+				@NonNull Set<InternalResidualActivityType> residual) {
 			this.terminationProven = terminationProven;
 			this.residual = residual;
 		}
@@ -513,7 +513,7 @@ class ExternallyCoordinatedTransportLifecycleAdapterTests {
 
 		@Override
 		@NonNull
-		public Set<InternalResidualActivityKind> residualActivity() {
+		public Set<InternalResidualActivityType> residualActivity() {
 			return this.residual;
 		}
 

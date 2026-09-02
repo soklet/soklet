@@ -399,7 +399,7 @@ final class DefaultHttpServer implements HttpServer {
 			throw new IllegalArgumentException("Concurrent connection limit must be >= 0");
 
 		this.lifecycleAdapter = new BuiltInTransportLifecycleAdapter(
-				InternalParticipantKind.HTTP, new HttpLifecycleOperations(),
+				InternalLifecycleComponentType.HTTP, new HttpLifecycleOperations(),
 				this::getGracefulShutdownDuration,
 				this::getForcedShutdownDuration);
 	}
@@ -2311,20 +2311,20 @@ final class DefaultHttpServer implements HttpServer {
 
 		@Override
 		@NonNull
-		public Set<InternalResidualActivityKind> residualActivity() {
+		public Set<InternalResidualActivityType> residualActivity() {
 			HttpRuntimeSnapshot snapshot = retained();
-			Set<InternalResidualActivityKind> kinds =
-					EnumSet.noneOf(InternalResidualActivityKind.class);
+			Set<InternalResidualActivityType> kinds =
+					EnumSet.noneOf(InternalResidualActivityType.class);
 			if (snapshot.eventLoop() != null && !snapshot.eventLoop().isTerminated())
-				kinds.add(InternalResidualActivityKind.EVENT_LOOP);
+				kinds.add(InternalResidualActivityType.EVENT_LOOP);
 			if (snapshot.eventLoop() != null
 					&& snapshot.eventLoop().numAdmittedConnections() > 0)
-				kinds.add(InternalResidualActivityKind.CONNECTION);
+				kinds.add(InternalResidualActivityType.CONNECTION);
 			if (!terminated(snapshot.requestHandlerExecutor())
 					|| !terminated(snapshot.streamingExecutor())
 					|| !terminated(snapshot.streamingTimeoutExecutor())
 					|| !terminated(snapshot.requestTimeoutScheduler()))
-				kinds.add(InternalResidualActivityKind.EXECUTOR_TASK);
+				kinds.add(InternalResidualActivityType.EXECUTOR_TASK);
 			return Collections.unmodifiableSet(kinds);
 		}
 

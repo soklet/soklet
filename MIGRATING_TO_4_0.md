@@ -100,18 +100,18 @@ graceful cap.
 | Boundary | 3.5.1 default/guidance | 4.0.0 default | Migration effect |
 | --- | ---: | ---: | --- |
 | Normal startup | Unbounded transport-specific behavior | 30 s | Startup now has a shared deadline; use `noStartupTimeout()` only deliberately. |
-| Cancellation of live startup after shutdown intent | Not a shared phase | 2 s | A non-cooperative startup can produce an incomplete result after this boundary. |
+| Cancelation of live startup after shutdown intent | Not a shared phase | 2 s | A non-cooperative startup can produce an incomplete result after this boundary. |
 | HTTP graceful shutdown | 5 s default; 30 s production guidance | 15 s | More time than the old default, less than the old guidance. |
 | SSE graceful shutdown | 1 s | 15 s | Idle streams close promptly; outstanding writes, loops, and executors share the 15 s boundary. |
 | MCP graceful shutdown | 5 s | 15 s | MCP receives three times the old graceful interval; recalculate any explicit deployment budget. |
-| Forced shutdown | Not a shared phase | 3 s | Owned work is interrupted/cancelled and observed within this separate phase. |
+| Forced shutdown | Not a shared phase | 3 s | Owned work is interrupted/canceled and observed within this separate phase. |
 
 For example:
 
 ```java
 LifecyclePolicy policy = LifecyclePolicy.builder()
     .startupTimeout(Duration.ofSeconds(30))
-    .startupCancellationTimeout(Duration.ofSeconds(2))
+    .startupCancelationTimeout(Duration.ofSeconds(2))
     .gracefulShutdownDuration(Duration.ofSeconds(20))
     .forcedShutdownDuration(Duration.ofSeconds(3))
     .build();
@@ -152,7 +152,7 @@ component.
 
 `LifecycleObserver.didFailToStopSoklet(...)` and the three transport-specific
 `didFailToStop...` callbacks are removed. The corresponding `didStop...`
-callback now receives `ShutdownResult` or `ParticipantShutdownResult`, which
+callback now receives `ShutdownResult` or `ShutdownComponentResult`, which
 is the terminal evidence for successful, forced, unexpected, residual, and
 unknown termination. Observer callbacks are observational: exceptions are
 contained and do not rewrite lifecycle results.
@@ -194,13 +194,14 @@ fresh one-shot transports.
 
 ## Simulator migration
 
-`Soklet.runSimulator(...)` is removed. A simulation now owns fresh, off-network
-transports and asks a factory to build the configuration from them:
+`Soklet.runSimulator(...)` is removed. Each simulation now supplies a
+scope-bound `SimulatorConfig.Builder` that installs its fresh, off-network
+transports and builds the application configuration:
 
 ```java
-ShutdownResult result = SokletSimulator.run(transports ->
-    SokletConfig.withHttpServer(transports.getHttpServer())
-        .sseServer(transports.getSseServer())
+ShutdownResult result = SokletSimulator.run(config -> config
+        .httpServer()
+        .sseServer()
         .resourceMethodResolver(resourceMethods)
         .build(), simulator -> {
           HttpRequestResult response = simulator.performHttpRequest(request);
@@ -208,10 +209,21 @@ ShutdownResult result = SokletSimulator.run(transports ->
         });
 ```
 
-Use `transports.newMcpServerBuilder(port)` for simulated MCP. Do not capture a
-live server in the factory or reuse simulated transports between scopes.
-`SimulatorOptions` controls materialization/capture behavior; lifecycle
-deadlines come from the factory-returned config's `LifecyclePolicy`.
+For simulated MCP, configure and build the server through the scope-bound MCP
+builder:
+
+```java
+config.mcpServer(port, mcpServerBuilder -> mcpServerBuilder
+    .endpointRegistry(endpointRegistry)
+    .build())
+```
+
+The supplied MCP builder belongs to that simulation scope. Do not capture a
+live server or reuse a `SimulatorConfig`, its builder, or a simulated transport
+between scopes.
+`SimulatorOptions` controls materialization and capture behavior and is supplied
+with `config.simulatorOptions(options)`. Set lifecycle deadlines with
+`config.lifecyclePolicy(policy)`.
 Simulation is deterministic and off-network, so it does not prove kernel TCP,
 proxy, TLS, or live write-idle behavior.
 
@@ -263,8 +275,8 @@ are:
   Authentication, token verification, authorization rules, protected resource
   metadata, and identity-provider behavior remain application-owned.
 - Replace `McpShutdownOutcome`-style reporting with aggregate
-  `ShutdownResult`, `ParticipantShutdownResult`, and
-  `ParticipantShutdownDisposition` evidence.
+  `ShutdownResult`, `ShutdownComponentResult`, and
+  `ShutdownComponentDisposition` evidence.
 
 The [MCP quickstart](MCP_QUICKSTART.md) is a copy/paste starting point and
 [MCP.md](MCP.md) is the full current API and wire reference.

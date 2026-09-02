@@ -902,7 +902,7 @@ final class DefaultSseServer implements SseServer {
 		this.activeHandshakes = new ConcurrentHashMap<>();
 		this.activeConnectionCount = new AtomicInteger(0);
 		this.lifecycleAdapter = new BuiltInTransportLifecycleAdapter(
-				InternalParticipantKind.SSE, new SseLifecycleOperations(),
+				InternalLifecycleComponentType.SSE, new SseLifecycleOperations(),
 				this::getGracefulShutdownDuration,
 				this::getForcedShutdownDuration);
 	}
@@ -3907,21 +3907,21 @@ final class DefaultSseServer implements SseServer {
 
 		@Override
 		@NonNull
-		public Set<InternalResidualActivityKind> residualActivity() {
+		public Set<InternalResidualActivityType> residualActivity() {
 			SseRuntimeSnapshot snapshot = retained();
-			Set<InternalResidualActivityKind> kinds =
-					EnumSet.noneOf(InternalResidualActivityKind.class);
+			Set<InternalResidualActivityType> kinds =
+					EnumSet.noneOf(InternalResidualActivityType.class);
 			if (snapshot.eventLoopThread() != null && snapshot.eventLoopThread().isAlive())
-				kinds.add(InternalResidualActivityKind.EVENT_LOOP);
+				kinds.add(InternalResidualActivityType.EVENT_LOOP);
 			if (!DefaultSseServer.this.activeHandshakes.isEmpty()
 					|| !getGlobalConnections().isEmpty()
 					|| DefaultSseServer.this.activeConnectionCount.get() > 0)
-				kinds.add(InternalResidualActivityKind.CONNECTION);
+				kinds.add(InternalResidualActivityType.CONNECTION);
 			if (!terminated(snapshot.requestHandlerExecutor())
 					|| !terminated(snapshot.requestTimeoutScheduler())
 					|| !terminated(snapshot.requestReaderExecutor())
 					|| !terminated(snapshot.connectionExecutor()))
-				kinds.add(InternalResidualActivityKind.EXECUTOR_TASK);
+				kinds.add(InternalResidualActivityType.EXECUTOR_TASK);
 			return Collections.unmodifiableSet(kinds);
 		}
 

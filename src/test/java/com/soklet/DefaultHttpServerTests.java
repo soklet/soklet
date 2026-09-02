@@ -36,7 +36,7 @@ public class DefaultHttpServerTests {
 	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
 			LifecyclePolicy.builder()
 					.startupTimeout(Duration.ofSeconds(5))
-					.startupCancellationTimeout(Duration.ofSeconds(2))
+					.startupCancelationTimeout(Duration.ofSeconds(2))
 					.gracefulShutdownDuration(Duration.ofSeconds(2))
 					.forcedShutdownDuration(Duration.ofSeconds(1))
 					.build();
@@ -363,7 +363,7 @@ public class DefaultHttpServerTests {
 				result.startupDisposition());
 		Assertions.assertTrue(result.isComplete());
 		Assertions.assertEquals(List.of(startupError), result
-				.participantResult(InternalParticipantKind.HTTP).orElseThrow().failures());
+				.participantResult(InternalLifecycleComponentType.HTTP).orElseThrow().failures());
 	}
 
 	@Test
@@ -392,7 +392,7 @@ public class DefaultHttpServerTests {
 				failedResult.startupDisposition());
 		Assertions.assertTrue(failedResult.isComplete());
 		Assertions.assertEquals(List.of(startupError), failedResult
-				.participantResult(InternalParticipantKind.HTTP).orElseThrow().failures());
+				.participantResult(InternalLifecycleComponentType.HTTP).orElseThrow().failures());
 		Assertions.assertTrue(server.getEventLoop().isEmpty());
 		Assertions.assertTrue(server.getRequestHandlerExecutorService().isEmpty());
 		Assertions.assertTrue(server.getRequestHandlerTimeoutScheduler().isEmpty());
@@ -421,7 +421,7 @@ public class DefaultHttpServerTests {
 			Assertions.assertFalse(scheduler.isTerminated());
 			Assertions.assertTrue(lifecycleOperations(server.getLifecycleAdapter())
 					.residualActivity().contains(
-							InternalResidualActivityKind.EXECUTOR_TASK));
+							InternalResidualActivityType.EXECUTOR_TASK));
 		} finally {
 			scheduler.shutdownNow();
 			Assertions.assertTrue(scheduler.awaitTermination(1, TimeUnit.SECONDS));

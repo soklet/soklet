@@ -62,7 +62,7 @@ final class BuiltInTransportLifecycleAdapter {
 		 * overrides this form so its internal subscription barrier consumes the
 		 * same absolute deadline instead of deriving a transport-local timeout.
 		 */
-		default void quiesce(@NonNull InternalShutdownContext context) {
+		default void quiesce(@NonNull ShutdownContext context) {
 			requireNonNull(context);
 			quiesce();
 		}
@@ -71,7 +71,7 @@ final class BuiltInTransportLifecycleAdapter {
 		void force();
 
 		/** Prompt force against the coordinator's already-fixed phase boundary. */
-		default void force(@NonNull InternalShutdownContext context) {
+		default void force(@NonNull ShutdownContext context) {
 			requireNonNull(context);
 			force();
 		}
@@ -81,7 +81,7 @@ final class BuiltInTransportLifecycleAdapter {
 
 		/** Positive residual evidence at result freeze. */
 		@NonNull
-		Set<InternalResidualActivityKind> residualActivity();
+		Set<InternalResidualActivityType> residualActivity();
 
 		/** Release proof-bearing references only after affirmative termination. */
 		void releaseTerminatedEvidence();
@@ -127,7 +127,7 @@ final class BuiltInTransportLifecycleAdapter {
 		@Nullable
 		private volatile LifecycleRetentionAnchor retentionAnchor;
 		@Nullable
-		private volatile InternalParticipantShutdownResult finalizedParticipantResult;
+		private volatile InternalLifecycleComponentShutdownResult finalizedParticipantResult;
 		private volatile boolean externallyCommitted;
 		private volatile boolean externallyDiscarded;
 		private volatile long gracefulDeadlineNanos;
@@ -199,7 +199,7 @@ final class BuiltInTransportLifecycleAdapter {
 
 		@Override
 		@NonNull
-		public InternalParticipantKind kind() {
+		public InternalLifecycleComponentType kind() {
 			return this.owner.kind;
 		}
 
@@ -223,7 +223,7 @@ final class BuiltInTransportLifecycleAdapter {
 
 		@Override
 		@NonNull
-		public Set<InternalResidualActivityKind> residualActivity() {
+		public Set<InternalResidualActivityType> residualActivity() {
 			return this.owner.operations.residualActivity();
 		}
 
@@ -265,13 +265,13 @@ final class BuiltInTransportLifecycleAdapter {
 		}
 
 		@Override
-		public void start(@NonNull InternalStartupContext context) {
+		public void start(@NonNull StartupContext context) {
 			requireNonNull(context);
 			// Binding remains in the descriptor-preserving server start() adapter.
 		}
 
 		@Override
-		public void quiesce(@NonNull InternalShutdownContext context) {
+		public void quiesce(@NonNull ShutdownContext context) {
 			requireNonNull(context);
 			if (this.quiesced.compareAndSet(false, true))
 				this.owner.operations.quiesce(context);
@@ -280,7 +280,7 @@ final class BuiltInTransportLifecycleAdapter {
 		}
 
 		@Override
-		public void force(@NonNull InternalShutdownContext context) {
+		public void force(@NonNull ShutdownContext context) {
 			requireNonNull(context);
 			if (this.quiesced.compareAndSet(false, true))
 				this.owner.operations.quiesce(context);
@@ -308,7 +308,7 @@ final class BuiltInTransportLifecycleAdapter {
 	}
 
 	@NonNull
-	private final InternalParticipantKind kind;
+	private final InternalLifecycleComponentType kind;
 	@NonNull
 	private final InternalTransportIdentity identity;
 	@NonNull
@@ -332,14 +332,14 @@ final class BuiltInTransportLifecycleAdapter {
 	@NonNull
 	private final ThreadLocal<Generation> externalStartInvocation;
 
-	BuiltInTransportLifecycleAdapter(@NonNull InternalParticipantKind kind,
+	BuiltInTransportLifecycleAdapter(@NonNull InternalLifecycleComponentType kind,
 			@NonNull Operations operations, @NonNull Supplier<Duration> gracefulTimeout) {
 		this(kind, operations, gracefulTimeout,
 				() -> Duration.ofSeconds(3),
 				NanoClock.system(), new LifecycleWorkers());
 	}
 
-	BuiltInTransportLifecycleAdapter(@NonNull InternalParticipantKind kind,
+	BuiltInTransportLifecycleAdapter(@NonNull InternalLifecycleComponentType kind,
 			@NonNull Operations operations,
 			@NonNull Supplier<Duration> gracefulTimeout,
 			@NonNull Supplier<Duration> forcedTimeout) {
@@ -347,7 +347,7 @@ final class BuiltInTransportLifecycleAdapter {
 				NanoClock.system(), new LifecycleWorkers());
 	}
 
-	BuiltInTransportLifecycleAdapter(@NonNull InternalParticipantKind kind,
+	BuiltInTransportLifecycleAdapter(@NonNull InternalLifecycleComponentType kind,
 			@NonNull Operations operations, @NonNull Supplier<Duration> gracefulTimeout,
 			@NonNull Duration forcedTimeout, @NonNull NanoClock clock,
 			@NonNull LifecycleWorkers workers) {
@@ -357,7 +357,7 @@ final class BuiltInTransportLifecycleAdapter {
 			throw new IllegalArgumentException("forcedTimeout must be >= 0");
 	}
 
-	BuiltInTransportLifecycleAdapter(@NonNull InternalParticipantKind kind,
+	BuiltInTransportLifecycleAdapter(@NonNull InternalLifecycleComponentType kind,
 			@NonNull Operations operations,
 			@NonNull Supplier<Duration> gracefulTimeout,
 			@NonNull Supplier<Duration> forcedTimeout, @NonNull NanoClock clock,
@@ -630,10 +630,10 @@ final class BuiltInTransportLifecycleAdapter {
 	@NonNull
 	Optional<Throwable> finalizeExternallyCoordinatedEvidence(
 			@NonNull Generation generation,
-			@NonNull InternalParticipantShutdownResult participantResult) {
+			@NonNull InternalLifecycleComponentShutdownResult participantResult) {
 		requireExternallyCoordinated(generation);
 		requireCurrent(generation);
-		InternalParticipantShutdownResult exactParticipant =
+		InternalLifecycleComponentShutdownResult exactParticipant =
 				requireNonNull(participantResult);
 		if (exactParticipant.kind() != this.kind)
 			throw new IllegalArgumentException(
@@ -670,7 +670,7 @@ final class BuiltInTransportLifecycleAdapter {
 		requireExternallyCoordinated(generation);
 		requireCurrent(generation);
 		InternalShutdownResult result = requireNonNull(exactResult);
-		InternalParticipantShutdownResult participant = result
+		InternalLifecycleComponentShutdownResult participant = result
 				.participantResult(this.kind)
 				.orElseThrow(() -> new IllegalArgumentException(
 						"Externally coordinated result is missing adapter participant"));
@@ -856,7 +856,7 @@ final class BuiltInTransportLifecycleAdapter {
 	@NonNull
 	private InternalShutdownResult coordinationFailureResult(
 			@NonNull Generation generation, @NonNull Throwable failure) {
-		Set<InternalResidualActivityKind> residual;
+		Set<InternalResidualActivityType> residual;
 		try {
 			residual = requireNonNull(this.operations.residualActivity(),
 					"operations.residualActivity()");
@@ -865,9 +865,9 @@ final class BuiltInTransportLifecycleAdapter {
 				failure.addSuppressed(diagnosticFailure);
 			residual = Set.of();
 		}
-		InternalParticipantShutdownResult participant =
-				new InternalParticipantShutdownResult(this.kind,
-						InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+		InternalLifecycleComponentShutdownResult participant =
+				new InternalLifecycleComponentShutdownResult(this.kind,
+						InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
 						coordinationFailures(generation, failure), residual);
 		InternalStartupDisposition startupDisposition =
 				generation.startupState.get() == GenerationStartupState.READY
@@ -912,22 +912,22 @@ final class BuiltInTransportLifecycleAdapter {
 
 	private void retainIncompleteResult(@NonNull Generation generation,
 			@NonNull InternalShutdownResult result) {
-		InternalParticipantShutdownResult participant = requireNonNull(result)
+		InternalLifecycleComponentShutdownResult participant = requireNonNull(result)
 				.participantResult(this.kind).orElse(null);
 		if (participant == null)
-			participant = new InternalParticipantShutdownResult(this.kind,
-					InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+			participant = new InternalLifecycleComponentShutdownResult(this.kind,
+					InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
 					List.of(), Set.of());
 		retainIncompleteParticipant(generation, participant);
 	}
 
 	private void retainIncompleteParticipant(@NonNull Generation generation,
-			@NonNull InternalParticipantShutdownResult participant) {
-		Set<InternalResidualActivityKind> residual = requireNonNull(participant)
+			@NonNull InternalLifecycleComponentShutdownResult participant) {
+		Set<InternalResidualActivityType> residual = requireNonNull(participant)
 				.residualActivity();
-		EnumMap<InternalResidualActivityKind, Integer> counts =
-				new EnumMap<>(InternalResidualActivityKind.class);
-		for (InternalResidualActivityKind kind : residual)
+		EnumMap<InternalResidualActivityType, Integer> counts =
+				new EnumMap<>(InternalResidualActivityType.class);
+		for (InternalResidualActivityType kind : residual)
 			counts.put(kind, 1);
 		generation.retentionAnchor = new LifecycleRetentionAnchor(generation,
 				counts, "Built-in " + this.kind
@@ -943,7 +943,7 @@ final class BuiltInTransportLifecycleAdapter {
 	}
 
 	private static boolean participantTerminationIsProven(
-			@NonNull InternalParticipantShutdownResult result) {
+			@NonNull InternalLifecycleComponentShutdownResult result) {
 		return switch (requireNonNull(result).disposition()) {
 			case NOT_STARTED, GRACEFUL_TERMINATION, FORCED_TERMINATION,
 					UNEXPECTED_TERMINATION -> true;
@@ -999,8 +999,8 @@ final class BuiltInTransportLifecycleAdapter {
 		}
 
 		@NonNull
-		static List<InternalParticipantShutdownResult> participants(
-				@NonNull InternalParticipantShutdownResult result) {
+		static List<InternalLifecycleComponentShutdownResult> participants(
+				@NonNull InternalLifecycleComponentShutdownResult result) {
 			return java.util.List.of(result);
 		}
 

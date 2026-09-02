@@ -18,11 +18,11 @@ package com.soklet;
 
 /** Describes the aggregate shutdown boundary reached by a Soklet. */
 public enum ShutdownDisposition {
-	/** No configured participant was started. */
+	/** No configured lifecycle component was started. */
 	NOT_STARTED,
-	/** Every configured participant terminated without a forced boundary. */
+	/** Every configured lifecycle component terminated without a forced boundary. */
 	GRACEFUL,
-	/** Every configured participant terminated, with at least one forced boundary. */
+	/** Every configured lifecycle component terminated, with at least one forced boundary. */
 	FORCED,
 	/** Residual activity or missing termination proof remains. */
 	INCOMPLETE

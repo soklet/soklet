@@ -61,25 +61,25 @@ class SokletApplicationFinalizationTests {
 						InternalStartupDisposition.NOT_ATTEMPTED, List.of()),
 						SokletApplicationPrimaryOutcome.EXPECTED, null),
 				new EligibleCase(aggregate(InternalStartupDisposition.READY,
-						participant(InternalParticipantKind.HTTP,
-								InternalParticipantShutdownDisposition
+						participant(InternalLifecycleComponentType.HTTP,
+								InternalLifecycleComponentShutdownDisposition
 										.GRACEFUL_TERMINATION)),
 						SokletApplicationPrimaryOutcome.EXPECTED, null),
 				new EligibleCase(aggregate(InternalStartupDisposition.READY,
-						participant(InternalParticipantKind.HTTP,
-								InternalParticipantShutdownDisposition
+						participant(InternalLifecycleComponentType.HTTP,
+								InternalLifecycleComponentShutdownDisposition
 										.FORCED_TERMINATION)),
 						SokletApplicationPrimaryOutcome.EXPECTED, null),
 				new EligibleCase(aggregate(InternalStartupDisposition.FAILED,
-						participant(InternalParticipantKind.FRAMEWORK_STARTUP,
-								InternalParticipantShutdownDisposition
+						participant(InternalLifecycleComponentType.FRAMEWORK,
+								InternalLifecycleComponentShutdownDisposition
 										.GRACEFUL_TERMINATION,
 								startupFailure)),
 						SokletApplicationPrimaryOutcome.STARTUP_FAILURE,
 						startupFailure),
 				new EligibleCase(aggregate(InternalStartupDisposition.READY,
-						participant(InternalParticipantKind.HTTP,
-								InternalParticipantShutdownDisposition
+						participant(InternalLifecycleComponentType.HTTP,
+								InternalLifecycleComponentShutdownDisposition
 										.UNEXPECTED_TERMINATION,
 								unexpectedFailure)),
 						SokletApplicationPrimaryOutcome.UNEXPECTED_TERMINATION,
@@ -216,9 +216,9 @@ class SokletApplicationFinalizationTests {
 				incompleteReport::set);
 		InternalShutdownResult incompleteResult = aggregate(
 				InternalStartupDisposition.READY,
-				new InternalParticipantShutdownResult(InternalParticipantKind.HTTP,
-						InternalParticipantShutdownDisposition.RESIDUAL_ACTIVITY,
-						List.of(), Set.of(InternalResidualActivityKind.CALLBACK)));
+				new InternalLifecycleComponentShutdownResult(InternalLifecycleComponentType.HTTP,
+						InternalLifecycleComponentShutdownDisposition.RESIDUAL_ACTIVITY,
+						List.of(), Set.of(InternalResidualActivityType.CALLBACK)));
 		incompleteClock.set(340L);
 		incomplete.finalization().publishCoreSnapshot(
 				new InternalLifecycleCoreSnapshot(incompleteResult, 300L));
@@ -985,16 +985,16 @@ class SokletApplicationFinalizationTests {
 
 	private static InternalShutdownResult aggregate(
 			InternalStartupDisposition startupDisposition,
-			InternalParticipantShutdownResult... participants) {
+			InternalLifecycleComponentShutdownResult... participants) {
 		return new InternalShutdownResultAggregator().aggregate(startupDisposition,
 				List.of(participants));
 	}
 
-	private static InternalParticipantShutdownResult participant(
-			InternalParticipantKind kind,
-			InternalParticipantShutdownDisposition disposition,
+	private static InternalLifecycleComponentShutdownResult participant(
+			InternalLifecycleComponentType kind,
+			InternalLifecycleComponentShutdownDisposition disposition,
 			Throwable... failures) {
-		return new InternalParticipantShutdownResult(kind, disposition,
+		return new InternalLifecycleComponentShutdownResult(kind, disposition,
 				List.of(failures), Set.of());
 	}
 

@@ -48,11 +48,11 @@ class SokletApplicationTerminalReporterTests {
 		assertSilent(result(InternalShutdownDisposition.NOT_STARTED,
 				InternalStartupDisposition.NOT_ATTEMPTED, List.of()), notConfigured());
 		assertSilent(result(InternalShutdownDisposition.NOT_STARTED,
-				InternalStartupDisposition.CANCELLED, List.of()), notConfigured());
+				InternalStartupDisposition.CANCELED, List.of()), notConfigured());
 		assertSilent(result(InternalShutdownDisposition.GRACEFUL,
 				InternalStartupDisposition.READY,
-				List.of(participant(InternalParticipantKind.HTTP,
-						InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION))),
+				List.of(participant(InternalLifecycleComponentType.HTTP,
+						InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION))),
 				succeededCleanup());
 
 		assertEmits(result(InternalShutdownDisposition.NOT_STARTED,
@@ -61,18 +61,18 @@ class SokletApplicationTerminalReporterTests {
 				InternalStartupDisposition.TIMED_OUT, List.of()), notConfigured());
 		assertEmits(result(InternalShutdownDisposition.FORCED,
 				InternalStartupDisposition.READY,
-				List.of(participant(InternalParticipantKind.HTTP,
-						InternalParticipantShutdownDisposition.FORCED_TERMINATION))),
+				List.of(participant(InternalLifecycleComponentType.HTTP,
+						InternalLifecycleComponentShutdownDisposition.FORCED_TERMINATION))),
 				notConfigured());
 		assertEmits(result(InternalShutdownDisposition.INCOMPLETE,
 				InternalStartupDisposition.READY,
-				List.of(participant(InternalParticipantKind.HTTP,
-						InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN))),
+				List.of(participant(InternalLifecycleComponentType.HTTP,
+						InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN))),
 				notConfigured());
 		assertEmits(result(InternalShutdownDisposition.GRACEFUL,
 				InternalStartupDisposition.READY,
-				List.of(participant(InternalParticipantKind.HTTP,
-						InternalParticipantShutdownDisposition.UNEXPECTED_TERMINATION))),
+				List.of(participant(InternalLifecycleComponentType.HTTP,
+						InternalLifecycleComponentShutdownDisposition.UNEXPECTED_TERMINATION))),
 				notConfigured());
 		assertEmits(result(InternalShutdownDisposition.GRACEFUL,
 				InternalStartupDisposition.READY, List.of()), failedCleanup());
@@ -95,18 +95,18 @@ class SokletApplicationTerminalReporterTests {
 	void reportContainsEveryStructuredTerminalField() {
 		IllegalStateException participantFailure =
 				new IllegalStateException("participant-failure");
-		InternalParticipantShutdownResult participant = new InternalParticipantShutdownResult(
-				InternalParticipantKind.HTTP,
-				InternalParticipantShutdownDisposition.RESIDUAL_ACTIVITY,
+		InternalLifecycleComponentShutdownResult participant = new InternalLifecycleComponentShutdownResult(
+				InternalLifecycleComponentType.HTTP,
+				InternalLifecycleComponentShutdownDisposition.RESIDUAL_ACTIVITY,
 				List.of(participantFailure),
-				EnumSet.of(InternalResidualActivityKind.CALLBACK,
-						InternalResidualActivityKind.LIFECYCLE_CALL));
+				EnumSet.of(InternalResidualActivityType.CALLBACK,
+						InternalResidualActivityType.LIFECYCLE_CALL));
 		Object retainedGraph = new Object();
 		InternalShutdownResult result = result(InternalShutdownDisposition.INCOMPLETE,
 				InternalStartupDisposition.FAILED, List.of(participant))
 				.withRetentionAnchor(new LifecycleRetentionAnchor(retainedGraph,
-						Map.of(InternalResidualActivityKind.CALLBACK, 2,
-								InternalResidualActivityKind.LIFECYCLE_CALL, 1),
+						Map.of(InternalResidualActivityType.CALLBACK, 2,
+								InternalResidualActivityType.LIFECYCLE_CALL, 1),
 						"retained\nsummary"));
 		TimeoutExceptionForTest cleanupFailure =
 				new TimeoutExceptionForTest("cleanup-timeout");
@@ -114,9 +114,9 @@ class SokletApplicationTerminalReporterTests {
 				InternalShutdownCleanupDisposition.TIMED_OUT,
 				Optional.of(Duration.ofSeconds(3)), Optional.of(cleanupFailure), true,
 				CORE_PUBLICATION_NANOS);
-		EnumMap<InternalParticipantKind, SokletApplicationParticipantDiagnostics>
-				diagnostics = new EnumMap<>(InternalParticipantKind.class);
-		diagnostics.put(InternalParticipantKind.HTTP,
+		EnumMap<InternalLifecycleComponentType, SokletApplicationParticipantDiagnostics>
+				diagnostics = new EnumMap<>(InternalLifecycleComponentType.class);
+		diagnostics.put(InternalLifecycleComponentType.HTTP,
 				new SokletApplicationParticipantDiagnostics(
 						InternalTerminationAuthority.TRANSPORT_ATTESTED,
 						4, 1, 2, true));
@@ -167,7 +167,7 @@ class SokletApplicationTerminalReporterTests {
 			Assertions.assertFalse(report.contains(messageCanary), report);
 		Assertions.assertTrue(report.contains("startupBudgetNanos=30000000000\n"));
 		Assertions.assertTrue(report.contains(
-				"startupCancellationBudgetNanos=2000000000\n"));
+				"startupCancelationBudgetNanos=2000000000\n"));
 		Assertions.assertTrue(report.contains("gracefulBudgetNanos=15000000000\n"));
 		Assertions.assertTrue(report.contains("forcedBudgetNanos=3000000000\n"));
 		Assertions.assertTrue(report.contains("lifecycleElapsedNanos=100\n"));
@@ -227,13 +227,13 @@ class SokletApplicationTerminalReporterTests {
 				throw new AssertionError("retained graph must not be rendered");
 			}
 		};
-		InternalParticipantShutdownResult unknown = participant(
-				InternalParticipantKind.MCP,
-				InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN);
+		InternalLifecycleComponentShutdownResult unknown = participant(
+				InternalLifecycleComponentType.MCP,
+				InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN);
 		InternalShutdownResult result = result(InternalShutdownDisposition.INCOMPLETE,
 				InternalStartupDisposition.READY, List.of(unknown))
 				.withRetentionAnchor(new LifecycleRetentionAnchor(retainedGraph,
-						Map.of(InternalResidualActivityKind.LIFECYCLE_CALL, 3),
+						Map.of(InternalResidualActivityType.LIFECYCLE_CALL, 3),
 						"only-this-bounded-summary"));
 
 		String report = Assertions.assertDoesNotThrow(() -> render(snapshot(result,
@@ -250,15 +250,15 @@ class SokletApplicationTerminalReporterTests {
 	void oversizedReportIsBoundedAndRemainsValidUtf8() throws Exception {
 		String emoji = "\uD83D\uDE00";
 		RuntimeException largeFailure = new RuntimeException(emoji.repeat(600));
-		List<InternalParticipantShutdownResult> participants = new ArrayList<>();
-		for (InternalParticipantKind kind : InternalParticipantKind.values())
-			participants.add(new InternalParticipantShutdownResult(kind,
-					InternalParticipantShutdownDisposition.RESIDUAL_ACTIVITY,
-					List.of(largeFailure), Set.of(InternalResidualActivityKind.CALLBACK)));
+		List<InternalLifecycleComponentShutdownResult> participants = new ArrayList<>();
+		for (InternalLifecycleComponentType kind : InternalLifecycleComponentType.values())
+			participants.add(new InternalLifecycleComponentShutdownResult(kind,
+					InternalLifecycleComponentShutdownDisposition.RESIDUAL_ACTIVITY,
+					List.of(largeFailure), Set.of(InternalResidualActivityType.CALLBACK)));
 		InternalShutdownResult result = result(InternalShutdownDisposition.INCOMPLETE,
 				InternalStartupDisposition.FAILED, participants)
 				.withRetentionAnchor(new LifecycleRetentionAnchor(new Object(),
-						Map.of(InternalResidualActivityKind.CALLBACK, 4),
+						Map.of(InternalResidualActivityType.CALLBACK, 4),
 						emoji.repeat(2_000)));
 		InternalShutdownCleanupOutcome cleanup = new InternalShutdownCleanupOutcome(
 				InternalShutdownCleanupDisposition.FAILED,
@@ -298,8 +298,8 @@ class SokletApplicationTerminalReporterTests {
 				new DefaultLifecycleTerminalReporter(failingOutput(writeFailure));
 		InternalShutdownResult forced = result(InternalShutdownDisposition.FORCED,
 				InternalStartupDisposition.READY,
-				List.of(participant(InternalParticipantKind.HTTP,
-						InternalParticipantShutdownDisposition.FORCED_TERMINATION)));
+				List.of(participant(InternalLifecycleComponentType.HTTP,
+						InternalLifecycleComponentShutdownDisposition.FORCED_TERMINATION)));
 		SokletApplicationTerminalSnapshot directSnapshot = snapshot(forced,
 				SokletApplicationPrimaryOutcome.EXPECTED, Optional.empty(),
 				notConfigured(), diagnostics(forced), 50L);
@@ -370,9 +370,9 @@ class SokletApplicationTerminalReporterTests {
 	@NonNull
 	private static SokletApplicationCoreDiagnostics diagnostics(
 			@NonNull InternalShutdownResult result) {
-		EnumMap<InternalParticipantKind, SokletApplicationParticipantDiagnostics>
-				participantDiagnostics = new EnumMap<>(InternalParticipantKind.class);
-		for (InternalParticipantShutdownResult participant : result.participantResults())
+		EnumMap<InternalLifecycleComponentType, SokletApplicationParticipantDiagnostics>
+				participantDiagnostics = new EnumMap<>(InternalLifecycleComponentType.class);
+		for (InternalLifecycleComponentShutdownResult participant : result.participantResults())
 			participantDiagnostics.put(participant.kind(),
 					new SokletApplicationParticipantDiagnostics(
 							InternalTerminationAuthority.FRAMEWORK_PROVEN,
@@ -387,15 +387,15 @@ class SokletApplicationTerminalReporterTests {
 	private static InternalShutdownResult result(
 			@NonNull InternalShutdownDisposition disposition,
 			@NonNull InternalStartupDisposition startupDisposition,
-			@NonNull List<InternalParticipantShutdownResult> participants) {
+			@NonNull List<InternalLifecycleComponentShutdownResult> participants) {
 		return new InternalShutdownResult(disposition, startupDisposition, participants);
 	}
 
 	@NonNull
-	private static InternalParticipantShutdownResult participant(
-			@NonNull InternalParticipantKind kind,
-			@NonNull InternalParticipantShutdownDisposition disposition) {
-		return new InternalParticipantShutdownResult(kind, disposition,
+	private static InternalLifecycleComponentShutdownResult participant(
+			@NonNull InternalLifecycleComponentType kind,
+			@NonNull InternalLifecycleComponentShutdownDisposition disposition) {
+		return new InternalLifecycleComponentShutdownResult(kind, disposition,
 				List.of(), Set.of());
 	}
 

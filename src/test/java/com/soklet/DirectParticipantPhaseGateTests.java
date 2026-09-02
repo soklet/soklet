@@ -33,7 +33,7 @@ final class DirectParticipantPhaseGateTests {
 	@Test
 	void phaseRequestedDuringStartIsClaimedExactlyOnceOnReturn() {
 		DirectParticipantPhaseGate gate = new DirectParticipantPhaseGate();
-		InternalShutdownContext graceful = context(InternalShutdownPhase.GRACEFUL);
+		ShutdownContext graceful = context(ShutdownPhase.GRACEFUL);
 
 		Assertions.assertTrue(gate.claimStart());
 		Assertions.assertTrue(gate.startupCallActive());
@@ -47,8 +47,8 @@ final class DirectParticipantPhaseGateTests {
 	@Test
 	void forcedRequestSupersedesDeferredGracefulRequest() {
 		DirectParticipantPhaseGate gate = new DirectParticipantPhaseGate();
-		InternalShutdownContext graceful = context(InternalShutdownPhase.GRACEFUL);
-		InternalShutdownContext forced = context(InternalShutdownPhase.FORCED);
+		ShutdownContext graceful = context(ShutdownPhase.GRACEFUL);
+		ShutdownContext forced = context(ShutdownPhase.FORCED);
 
 		Assertions.assertTrue(gate.claimStart());
 		Assertions.assertNull(gate.requestPhase(graceful));
@@ -61,8 +61,8 @@ final class DirectParticipantPhaseGateTests {
 	@Test
 	void phaseAfterStartReturnAndUpgradeEachHaveOneClaim() {
 		DirectParticipantPhaseGate gate = new DirectParticipantPhaseGate();
-		InternalShutdownContext graceful = context(InternalShutdownPhase.GRACEFUL);
-		InternalShutdownContext forced = context(InternalShutdownPhase.FORCED);
+		ShutdownContext graceful = context(ShutdownPhase.GRACEFUL);
+		ShutdownContext forced = context(ShutdownPhase.FORCED);
 
 		Assertions.assertTrue(gate.claimStart());
 		Assertions.assertNull(gate.completeStartCall());
@@ -75,7 +75,7 @@ final class DirectParticipantPhaseGateTests {
 	@Test
 	void classificationFreezeRetainsActiveStartAndRejectsLateCatchUp() {
 		DirectParticipantPhaseGate gate = new DirectParticipantPhaseGate();
-		InternalShutdownContext forced = context(InternalShutdownPhase.FORCED);
+		ShutdownContext forced = context(ShutdownPhase.FORCED);
 
 		Assertions.assertTrue(gate.claimStart());
 		Assertions.assertNull(gate.requestPhase(forced));
@@ -98,7 +98,7 @@ final class DirectParticipantPhaseGateTests {
 		group.commit();
 		InternalTerminationGroup.TrackedLifecycleCall liveStart =
 				group.trackLifecycleCall();
-		AtomicReference<InternalShutdownContext> lateDelivery =
+		AtomicReference<ShutdownContext> lateDelivery =
 				new AtomicReference<>();
 		AtomicBoolean secondFrozen = new AtomicBoolean();
 		AtomicBoolean everyGateFrozenBeforeResidual = new AtomicBoolean();
@@ -108,8 +108,8 @@ final class DirectParticipantPhaseGateTests {
 				new InternalLifecycleCoordinator.Participant() {
 					@Override
 					@NonNull
-					public InternalParticipantKind kind() {
-						return InternalParticipantKind.HTTP;
+					public InternalLifecycleComponentType kind() {
+						return InternalLifecycleComponentType.HTTP;
 					}
 
 					@Override
@@ -129,18 +129,18 @@ final class DirectParticipantPhaseGateTests {
 					public InternalTransportRuntime runtime() {
 						return new InternalTransportRuntime() {
 							@Override
-							public void start(@NonNull InternalStartupContext context) {
+							public void start(@NonNull StartupContext context) {
 							}
 
 							@Override
 							public void quiesce(
-									@NonNull InternalShutdownContext context) {
+									@NonNull ShutdownContext context) {
 								gate.requestPhase(context);
 							}
 
 							@Override
 							public void force(
-									@NonNull InternalShutdownContext context) {
+									@NonNull ShutdownContext context) {
 								gate.requestPhase(context);
 							}
 						};
@@ -148,7 +148,7 @@ final class DirectParticipantPhaseGateTests {
 
 					@Override
 					@NonNull
-					public Set<InternalResidualActivityKind> residualActivity() {
+					public Set<InternalResidualActivityType> residualActivity() {
 						everyGateFrozenBeforeResidual.set(secondFrozen.get());
 						return Set.of();
 					}
@@ -172,8 +172,8 @@ final class DirectParticipantPhaseGateTests {
 				new InternalLifecycleCoordinator.Participant() {
 					@Override
 					@NonNull
-					public InternalParticipantKind kind() {
-						return InternalParticipantKind.SSE;
+					public InternalLifecycleComponentType kind() {
+						return InternalLifecycleComponentType.SSE;
 					}
 
 					@Override
@@ -194,24 +194,24 @@ final class DirectParticipantPhaseGateTests {
 						return new InternalTransportRuntime() {
 							@Override
 							public void start(
-									@NonNull InternalStartupContext context) {
+									@NonNull StartupContext context) {
 							}
 
 							@Override
 							public void quiesce(
-									@NonNull InternalShutdownContext context) {
+									@NonNull ShutdownContext context) {
 							}
 
 							@Override
 							public void force(
-									@NonNull InternalShutdownContext context) {
+									@NonNull ShutdownContext context) {
 							}
 						};
 					}
 
 					@Override
 					@NonNull
-					public Set<InternalResidualActivityKind> residualActivity() {
+					public Set<InternalResidualActivityType> residualActivity() {
 						return Set.of();
 					}
 
@@ -225,17 +225,17 @@ final class DirectParticipantPhaseGateTests {
 			InternalShutdownResult result = new InternalLifecycleCoordinator(CLOCK,
 					waiter, new TrackedLifecycleCallRunner(workers)).shutdown(
 					List.of(participant, secondParticipant), 0L, 0L);
-			InternalParticipantShutdownResult http = result.participantResult(
-					InternalParticipantKind.HTTP).orElseThrow();
+			InternalLifecycleComponentShutdownResult http = result.participantResult(
+					InternalLifecycleComponentType.HTTP).orElseThrow();
 
 			Assertions.assertNull(lateDelivery.get());
 			Assertions.assertTrue(everyGateFrozenBeforeResidual.get(),
 					"All participant gates must freeze before any evidence read");
 			Assertions.assertEquals(
-					InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+					InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
 					http.disposition());
 			Assertions.assertEquals(Set.of(
-					InternalResidualActivityKind.LIFECYCLE_CALL),
+					InternalResidualActivityType.LIFECYCLE_CALL),
 					http.residualActivity());
 		} finally {
 			liveStart.close();
@@ -243,8 +243,8 @@ final class DirectParticipantPhaseGateTests {
 	}
 
 	@NonNull
-	private static InternalShutdownContext context(
-			@NonNull InternalShutdownPhase phase) {
-		return new InternalShutdownContext(phase, CLOCK, 1L);
+	private static ShutdownContext context(
+			@NonNull ShutdownPhase phase) {
+		return new ShutdownContext(phase, CLOCK, 1L);
 	}
 }

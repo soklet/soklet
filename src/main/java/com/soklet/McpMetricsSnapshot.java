@@ -52,7 +52,7 @@ public final class McpMetricsSnapshot {
 	@NonNull
 	private final Long handlerCapacityRejections;
 	@NonNull
-	private final Map<@NonNull ParticipantShutdownDisposition, @NonNull Long>
+	private final Map<@NonNull ShutdownComponentDisposition, @NonNull Long>
 			shutdowns;
 	@NonNull
 	private final Long connectionsAccepted;
@@ -140,11 +140,11 @@ public final class McpMetricsSnapshot {
 	}
 
 	@NonNull
-	private static Map<@NonNull ParticipantShutdownDisposition, @NonNull Long>
-			copyShutdowns(@NonNull Map<@NonNull ParticipantShutdownDisposition,
+	private static Map<@NonNull ShutdownComponentDisposition, @NonNull Long>
+			copyShutdowns(@NonNull Map<@NonNull ShutdownComponentDisposition,
 					@NonNull Long> shutdowns) {
-		EnumMap<ParticipantShutdownDisposition, Long> copied =
-				new EnumMap<>(ParticipantShutdownDisposition.class);
+		EnumMap<ShutdownComponentDisposition, Long> copied =
+				new EnumMap<>(ShutdownComponentDisposition.class);
 		requireNonNull(shutdowns).forEach((outcome, count) -> {
 			requireNonNull(outcome);
 			requireNonNull(count);
@@ -318,7 +318,7 @@ public final class McpMetricsSnapshot {
 	 * @return immutable, enum-ordered shutdown counts
 	 */
 	@NonNull
-	public Map<@NonNull ParticipantShutdownDisposition, @NonNull Long>
+	public Map<@NonNull ShutdownComponentDisposition, @NonNull Long>
 			getShutdowns() {
 		return this.shutdowns;
 	}
@@ -864,7 +864,7 @@ public final class McpMetricsSnapshot {
 		@NonNull
 		private Long handlerCapacityRejections;
 		@NonNull
-		private Map<@NonNull ParticipantShutdownDisposition, @NonNull Long>
+		private Map<@NonNull ShutdownComponentDisposition, @NonNull Long>
 				shutdowns;
 		@NonNull
 		private Long connectionsAccepted;
@@ -990,7 +990,7 @@ public final class McpMetricsSnapshot {
 		 */
 		@NonNull
 		public Builder shutdowns(
-				@NonNull Map<@NonNull ParticipantShutdownDisposition,
+				@NonNull Map<@NonNull ShutdownComponentDisposition,
 						@NonNull Long> shutdowns) {
 			this.shutdowns = copyShutdowns(shutdowns);
 			return this;

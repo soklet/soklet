@@ -191,7 +191,7 @@ class DefaultResourceMethodResolverLazyTests {
 					lifecycleWaitEntered.countDown();
 					monitor.wait();
 				});
-		InternalStartupContext startupContext = new InternalStartupContext(
+		StartupContext startupContext = new StartupContext(
 				NanoClock.system(), Optional.empty(), Long.MAX_VALUE,
 				cancellationRequested::get);
 		Thread owner = publicOwner(lazy, ownerFailure);
@@ -215,7 +215,7 @@ class DefaultResourceMethodResolverLazyTests {
 			deadlineWaiter.signal();
 			join(lifecycleWaiter);
 			Assertions.assertInstanceOf(
-					DefaultResourceMethodResolver.StartupWaitCancelledException.class,
+					DefaultResourceMethodResolver.StartupWaitCanceledException.class,
 					lifecycleOutcome.get());
 			Assertions.assertEquals(1L, releaseLoader.getCount(),
 					"Cancellation must not release or replace the global owner");
@@ -248,7 +248,7 @@ class DefaultResourceMethodResolverLazyTests {
 					lifecycleWaitEntered.countDown();
 					monitor.wait();
 				});
-		InternalStartupContext startupContext = new InternalStartupContext(
+		StartupContext startupContext = new StartupContext(
 				NanoClock.system(), Optional.empty(), Long.MAX_VALUE, () -> false);
 		Thread owner = publicOwner(lazy, ownerFailure);
 		Thread lifecycleWaiter = new Thread(() ->
@@ -293,7 +293,7 @@ class DefaultResourceMethodResolverLazyTests {
 					lifecycleWaitEntered.countDown();
 					monitor.wait();
 				});
-		InternalStartupContext startupContext = new InternalStartupContext(
+		StartupContext startupContext = new StartupContext(
 				NanoClock.system(), Optional.empty(), Long.MAX_VALUE, () -> false);
 		Thread owner = publicOwner(lazy, ownerFailure);
 		Thread lifecycleWaiter = new Thread(() -> {
@@ -316,7 +316,7 @@ class DefaultResourceMethodResolverLazyTests {
 			lifecycleWaiter.interrupt();
 			join(lifecycleWaiter);
 			Assertions.assertInstanceOf(
-					DefaultResourceMethodResolver.StartupWaitCancelledException.class,
+					DefaultResourceMethodResolver.StartupWaitCanceledException.class,
 					lifecycleOutcome.get());
 			Assertions.assertTrue(interruptRestored.get());
 		} finally {
@@ -344,7 +344,7 @@ class DefaultResourceMethodResolverLazyTests {
 					observedRemaining.set(remainingNanos);
 					now.addAndGet(remainingNanos);
 				});
-		InternalStartupContext startupContext = new InternalStartupContext(now::get,
+		StartupContext startupContext = new StartupContext(now::get,
 				Optional.of(37L), 90L, () -> false);
 		Thread owner = publicOwner(lazy, ownerFailure);
 
@@ -352,7 +352,7 @@ class DefaultResourceMethodResolverLazyTests {
 		try {
 			await(loaderEntered);
 			Assertions.assertThrows(
-					DefaultResourceMethodResolver.StartupWaitCancelledException.class,
+					DefaultResourceMethodResolver.StartupWaitCanceledException.class,
 					() -> lazy.getResourceMethodsForLifecycle(startupContext,
 							deadlineWaiter));
 			Assertions.assertEquals(32L, observedRemaining.get());

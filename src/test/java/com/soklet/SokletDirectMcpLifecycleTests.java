@@ -177,7 +177,7 @@ final class SokletDirectMcpLifecycleTests {
 			Throwable failure = start.get(5, TimeUnit.SECONDS);
 			SokletStartupException startupFailure = Assertions.assertInstanceOf(
 					SokletStartupException.class, failure);
-			Assertions.assertEquals(InternalStartupDisposition.CANCELLED,
+			Assertions.assertEquals(InternalStartupDisposition.CANCELED,
 					startupFailure.getInternalStartupDisposition());
 			Throwable exactCancellation = startupFailure.getCause();
 			Assertions.assertEquals(IllegalStateException.class,
@@ -274,9 +274,9 @@ final class SokletDirectMcpLifecycleTests {
 			Throwable[] suppressed = startupFailure.getSuppressed();
 			Assertions.assertEquals(1, suppressed.length);
 			Assertions.assertSame(cleanupFailure, suppressed[0]);
-			InternalParticipantShutdownResult mcp = thrown
+			InternalLifecycleComponentShutdownResult mcp = thrown
 					.getInternalShutdownResult()
-					.participantResult(InternalParticipantKind.MCP).orElseThrow();
+					.participantResult(InternalLifecycleComponentType.MCP).orElseThrow();
 			Assertions.assertSame(startupFailure, mcp.failures().get(0));
 			Assertions.assertSame(thrown.getInternalShutdownResult(),
 					soklet.getDirectLifecycle().result().orElseThrow());
@@ -354,8 +354,8 @@ final class SokletDirectMcpLifecycleTests {
 			Throwable exactPrimary = requireNonNull(startupFailure.getCause());
 			InternalShutdownResult frozenResult = startupFailure
 					.getInternalShutdownResult();
-			InternalParticipantShutdownResult mcp = frozenResult
-					.participantResult(InternalParticipantKind.MCP).orElseThrow();
+			InternalLifecycleComponentShutdownResult mcp = frozenResult
+					.participantResult(InternalLifecycleComponentType.MCP).orElseThrow();
 			Assertions.assertSame(exactPrimary, mcp.failures().get(0));
 			Throwable[] frozenSuppressed = exactPrimary.getSuppressed();
 
@@ -411,7 +411,7 @@ final class SokletDirectMcpLifecycleTests {
 		AtomicBoolean repeatedHandlerStageIdentity = new AtomicBoolean();
 		AtomicInteger willStopMcp = new AtomicInteger();
 		AtomicInteger didStopMcp = new AtomicInteger();
-		AtomicReference<ParticipantShutdownDisposition> stopOutcome = new AtomicReference<>();
+		AtomicReference<ShutdownComponentDisposition> stopOutcome = new AtomicReference<>();
 		String toolName = "direct.self-stop";
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(toolName).jsonArguments()
@@ -442,9 +442,9 @@ final class SokletDirectMcpLifecycleTests {
 
 			@Override
 			public void didStopMcpServer(@NonNull McpServer ignored,
-					@NonNull ParticipantShutdownResult result) {
+					@NonNull ShutdownComponentResult result) {
 				didStopMcp.incrementAndGet();
-				stopOutcome.set(result.getDisposition());
+				stopOutcome.set(result.getShutdownComponentDisposition());
 			}
 		};
 		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
@@ -507,10 +507,10 @@ final class SokletDirectMcpLifecycleTests {
 			Assertions.assertEquals(InternalShutdownDisposition.GRACEFUL,
 					result.disposition());
 			Assertions.assertEquals(1, result.participantResults().size());
-			InternalParticipantShutdownResult mcp = result.participantResult(
-					InternalParticipantKind.MCP).orElseThrow();
+			InternalLifecycleComponentShutdownResult mcp = result.participantResult(
+					InternalLifecycleComponentType.MCP).orElseThrow();
 			Assertions.assertEquals(
-					InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION,
+					InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION,
 					mcp.disposition());
 			Assertions.assertTrue(mcp.failures().isEmpty());
 			Assertions.assertTrue(mcp.residualActivity().isEmpty());
@@ -528,7 +528,7 @@ final class SokletDirectMcpLifecycleTests {
 			awaitCondition(() -> willStopMcp.get() == 1
 					&& didStopMcp.get() == 1,
 					"MCP stop callbacks did not publish exactly once");
-			Assertions.assertEquals(ParticipantShutdownDisposition.GRACEFUL_TERMINATION,
+			Assertions.assertEquals(ShutdownComponentDisposition.GRACEFUL_TERMINATION,
 					stopOutcome.get());
 			Assertions.assertDoesNotThrow(soklet::close);
 		} finally {
@@ -559,16 +559,16 @@ final class SokletDirectMcpLifecycleTests {
 				result.disposition());
 		Assertions.assertFalse(result.isComplete());
 		Assertions.assertEquals(1, result.participantResults().size());
-		InternalParticipantShutdownResult mcp = result.participantResult(
-				InternalParticipantKind.MCP).orElseThrow();
+		InternalLifecycleComponentShutdownResult mcp = result.participantResult(
+				InternalLifecycleComponentType.MCP).orElseThrow();
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+				InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
 				mcp.disposition());
 		Assertions.assertTrue(mcp.failures().isEmpty());
-		Assertions.assertEquals(Set.of(InternalResidualActivityKind.EVENT_LOOP,
-				InternalResidualActivityKind.EXECUTOR_TASK,
-				InternalResidualActivityKind.CALLBACK,
-				InternalResidualActivityKind.LIFECYCLE_CALL),
+		Assertions.assertEquals(Set.of(InternalResidualActivityType.EVENT_LOOP,
+				InternalResidualActivityType.EXECUTOR_TASK,
+				InternalResidualActivityType.CALLBACK,
+				InternalResidualActivityType.LIFECYCLE_CALL),
 				mcp.residualActivity());
 		Assertions.assertEquals(McpServerStatus.TERMINATION_UNKNOWN,
 				fixture.server().getDiagnostics().getStatus());
@@ -657,7 +657,7 @@ final class SokletDirectMcpLifecycleTests {
 	private static LifecyclePolicy timeoutPolicy() {
 		return LifecyclePolicy.builder()
 				.startupTimeout(Duration.ofSeconds(1))
-				.startupCancellationTimeout(Duration.ofMillis(150))
+				.startupCancelationTimeout(Duration.ofMillis(150))
 				.gracefulShutdownDuration(Duration.ofMillis(150))
 				.forcedShutdownDuration(Duration.ofMillis(250))
 				.build();
@@ -667,7 +667,7 @@ final class SokletDirectMcpLifecycleTests {
 	private static LifecyclePolicy cancellationPolicy() {
 		return LifecyclePolicy.builder()
 				.startupTimeout(Duration.ofSeconds(10))
-				.startupCancellationTimeout(Duration.ofMillis(150))
+				.startupCancelationTimeout(Duration.ofMillis(150))
 				.gracefulShutdownDuration(Duration.ofMillis(150))
 				.forcedShutdownDuration(Duration.ofMillis(250))
 				.build();
@@ -677,7 +677,7 @@ final class SokletDirectMcpLifecycleTests {
 	private static LifecyclePolicy handlerPolicy() {
 		return LifecyclePolicy.builder()
 				.startupTimeout(Duration.ofSeconds(5))
-				.startupCancellationTimeout(Duration.ofMillis(250))
+				.startupCancelationTimeout(Duration.ofMillis(250))
 				.gracefulShutdownDuration(Duration.ofSeconds(5))
 				.forcedShutdownDuration(Duration.ofSeconds(1))
 				.build();

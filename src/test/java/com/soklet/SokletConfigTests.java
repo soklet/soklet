@@ -127,7 +127,7 @@ public class SokletConfigTests {
 	public void lifecyclePolicyIsStoredExactlyAndBridgedForInternalCallers() {
 		LifecyclePolicy lifecyclePolicy = LifecyclePolicy.builder()
 				.noStartupTimeout()
-				.startupCancellationTimeout(Duration.ofSeconds(1))
+				.startupCancelationTimeout(Duration.ofSeconds(1))
 				.gracefulShutdownDuration(Duration.ofSeconds(2))
 				.forcedShutdownDuration(Duration.ofSeconds(3))
 				.build();
@@ -140,7 +140,7 @@ public class SokletConfigTests {
 				config.getInternalLifecyclePolicy();
 		Assertions.assertTrue(internalPolicy.startupTimeout().isEmpty());
 		Assertions.assertEquals(Duration.ofSeconds(1),
-				internalPolicy.startupCancellationTimeout());
+				internalPolicy.startupCancelationTimeout());
 		Assertions.assertEquals(Duration.ofSeconds(2),
 				internalPolicy.gracefulShutdownTimeout());
 		Assertions.assertEquals(Duration.ofSeconds(3),

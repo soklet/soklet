@@ -74,7 +74,7 @@ final class SokletApplicationCoreDiagnostics {
 	@NonNull
 	private final LifecycleTransitionSnapshot transitionSnapshot;
 	@NonNull
-	private final Map<InternalParticipantKind,
+	private final Map<InternalLifecycleComponentType,
 			SokletApplicationParticipantDiagnostics> participantDiagnostics;
 	@NonNull
 	private final InternalLifecyclePolicy lifecyclePolicy;
@@ -82,14 +82,14 @@ final class SokletApplicationCoreDiagnostics {
 
 	SokletApplicationCoreDiagnostics(
 			@NonNull LifecycleTransitionSnapshot transitionSnapshot,
-			@NonNull Map<InternalParticipantKind,
+			@NonNull Map<InternalLifecycleComponentType,
 					SokletApplicationParticipantDiagnostics> participantDiagnostics,
 			@NonNull InternalLifecyclePolicy lifecyclePolicy,
 			long lifecycleBeganNanos) {
 		this.transitionSnapshot = requireNonNull(transitionSnapshot);
-		EnumMap<InternalParticipantKind,
+		EnumMap<InternalLifecycleComponentType,
 				SokletApplicationParticipantDiagnostics> copy =
-				new EnumMap<>(InternalParticipantKind.class);
+				new EnumMap<>(InternalLifecycleComponentType.class);
 		copy.putAll(requireNonNull(participantDiagnostics));
 		this.participantDiagnostics = Collections.unmodifiableMap(copy);
 		this.lifecyclePolicy = requireNonNull(lifecyclePolicy);
@@ -102,7 +102,7 @@ final class SokletApplicationCoreDiagnostics {
 	}
 
 	@NonNull
-	Map<InternalParticipantKind, SokletApplicationParticipantDiagnostics>
+	Map<InternalLifecycleComponentType, SokletApplicationParticipantDiagnostics>
 	participantDiagnostics() {
 		return this.participantDiagnostics;
 	}
@@ -727,7 +727,7 @@ final class SokletApplicationFinalization {
 			return SokletApplicationPrimaryOutcome.STARTUP_FAILURE;
 		if (exactResult.participantResults().stream().anyMatch(participant ->
 				participant.disposition()
-						== InternalParticipantShutdownDisposition
+						== InternalLifecycleComponentShutdownDisposition
 								.UNEXPECTED_TERMINATION))
 			return SokletApplicationPrimaryOutcome.UNEXPECTED_TERMINATION;
 		if (!exactResult.isComplete())

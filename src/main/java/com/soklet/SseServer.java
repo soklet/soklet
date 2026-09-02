@@ -67,7 +67,7 @@ public interface SseServer {
 	 * binding and termination.
 	 *
 	 * @param attachmentContext framework-owned composition and termination context
-	 * @param startupContext startup timing and cancellation information
+	 * @param startupContext startup timing and cancelation information
 	 * @return this server's one-shot runtime
 	 */
 	@NonNull

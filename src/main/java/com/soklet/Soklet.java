@@ -103,8 +103,7 @@ import static java.util.Objects.requireNonNull;
  *   // Instead of running on a real HTTP server that listens on a port,
  *   // a non-network Simulator is provided against which you can
  *   // issue requests and receive responses.
- *   SokletSimulator.run(transports -> SokletConfig.withHttpServer(
- *     transports.getHttpServer()).build(), simulator -> {
+ *   SokletSimulator.run(config -> config.httpServer().build(), simulator -> {
  *     // Construct a request
  *     Request request = Request.withPath(HttpMethod.GET, "/hello")
  *       .queryParameters(Map.of("name", Set.of("Mark")))
@@ -1127,7 +1126,7 @@ public final class Soklet implements AutoCloseable {
 	 * the caller's interrupt status, and applies the terminal result.
 	 *
 	 * @throws ShutdownIncompleteException if complete termination cannot be proven
-	 * @throws SokletTerminatedUnexpectedlyException if a participant terminated
+	 * @throws SokletTerminatedUnexpectedlyException if a lifecycle component terminated
 	 * unexpectedly after readiness
 	 * @throws IllegalStateException as a best-effort diagnostic when the current
 	 * thread is contributing to the unpublished shutdown barrier
@@ -1175,7 +1174,7 @@ public final class Soklet implements AutoCloseable {
 		return this.directLifecycle.publicResult();
 	}
 
-	void initializeForSimulator(@NonNull InternalStartupContext startupContext,
+	void initializeForSimulator(@NonNull StartupContext startupContext,
 			@NonNull DeadlineWaiter waiter) {
 		this.directLifecycle.initializeForSimulator(startupContext, waiter);
 	}
@@ -1284,7 +1283,7 @@ public final class Soklet implements AutoCloseable {
 		@NonNull
 		public McpSimulation startMcpRequest(@NonNull Request request,
 				@NonNull McpSimulationOptions options) {
-			Runnable releaseScope = enterScope(InternalParticipantKind.MCP);
+			Runnable releaseScope = enterScope(InternalLifecycleComponentType.MCP);
 			try {
 				synchronized (this.mcpSimulationLock) {
 					if (this.mcpServer == null)
@@ -1373,20 +1372,20 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@NonNull
-		Set<InternalResidualActivityKind> mcpScopeResidualActivity() {
+		Set<InternalResidualActivityType> mcpScopeResidualActivity() {
 			SimulationSession session = mcpEvidenceSession();
 			if (session == null)
 				return Set.of();
 			com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.LifecycleEvidence
 					evidence = session.lifecycleEvidence();
-			EnumSet<InternalResidualActivityKind> residual =
-					EnumSet.noneOf(InternalResidualActivityKind.class);
+			EnumSet<InternalResidualActivityType> residual =
+					EnumSet.noneOf(InternalResidualActivityType.class);
 			if (evidence.executorTask() || evidence.subscriptionRegistration())
-				residual.add(InternalResidualActivityKind.EXECUTOR_TASK);
+				residual.add(InternalResidualActivityType.EXECUTOR_TASK);
 			if (evidence.stream())
-				residual.add(InternalResidualActivityKind.STREAM);
+				residual.add(InternalResidualActivityType.STREAM);
 			if (evidence.callback())
-				residual.add(InternalResidualActivityKind.CALLBACK);
+				residual.add(InternalResidualActivityType.CALLBACK);
 			return Collections.unmodifiableSet(residual);
 		}
 
@@ -1436,7 +1435,7 @@ public final class Soklet implements AutoCloseable {
 		@NonNull
 		@Override
 		public HttpRequestResult performHttpRequest(@NonNull Request request) {
-			Runnable releaseScope = enterScope(InternalParticipantKind.HTTP);
+			Runnable releaseScope = enterScope(InternalLifecycleComponentType.HTTP);
 			try {
 				return performHttpRequestWhileAdmitted(requireNonNull(request));
 			} finally {
@@ -1833,7 +1832,7 @@ public final class Soklet implements AutoCloseable {
 		@NonNull
 		@Override
 		public SseRequestResult performSseRequest(@NonNull Request request) {
-			Runnable releaseScope = enterScope(InternalParticipantKind.SSE);
+			Runnable releaseScope = enterScope(InternalLifecycleComponentType.SSE);
 			try {
 				return performSseRequestWhileAdmitted(requireNonNull(request));
 			} finally {
@@ -1894,7 +1893,7 @@ public final class Soklet implements AutoCloseable {
 		@NonNull
 		@Override
 		public Simulator onBroadcastError(@Nullable Consumer<Throwable> onBroadcastError) {
-			Runnable releaseScope = enterScope(InternalParticipantKind.SSE);
+			Runnable releaseScope = enterScope(InternalLifecycleComponentType.SSE);
 			try {
 				MockSseServer sseServer = this.sseServer;
 				if (sseServer != null)
@@ -1908,7 +1907,7 @@ public final class Soklet implements AutoCloseable {
 		@NonNull
 		@Override
 		public Simulator onUnicastError(@Nullable Consumer<Throwable> onUnicastError) {
-			Runnable releaseScope = enterScope(InternalParticipantKind.SSE);
+			Runnable releaseScope = enterScope(InternalLifecycleComponentType.SSE);
 			try {
 				MockSseServer sseServer = this.sseServer;
 				if (sseServer != null)
@@ -1933,7 +1932,7 @@ public final class Soklet implements AutoCloseable {
 
 		@NonNull
 		private Runnable enterScope(
-				@NonNull InternalParticipantKind kind) {
+				@NonNull InternalLifecycleComponentType kind) {
 			requireScopeOpen();
 			return this.scopeDispatchGate == null
 					? () -> {

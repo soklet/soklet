@@ -1919,7 +1919,7 @@ vocabulary, or the protocol-code allowlist for arbitrary application-created
 events. The nested variants remain public so collectors can use typed pattern
 matching and their conventional getters. At that checkpoint,
 `McpMetricsSnapshot` was exactly three boxed `Long` values plus the immutable
-`Map<ParticipantShutdownDisposition, Long>`. `DefaultMetricsCollector` aggregated only the
+`Map<ShutdownComponentDisposition, Long>`. `DefaultMetricsCollector` aggregated only the
 five handler variants and `ServerStopped`; a fresh collector ignored and
 retained none of the other 17 variants.
 
@@ -1993,7 +1993,7 @@ every-operation simulation, sustained, release-readiness, review, or Phase 6
 freeze evidence.
 
 The default collector separately exposes shutdown counts as an immutable,
-enum-ordered `Map<ParticipantShutdownDisposition, Long>`. It omits zero outcomes
+enum-ordered `Map<ShutdownComponentDisposition, Long>`. It omits zero outcomes
 and resets to an empty map. Prometheus/OpenMetrics renders only the fixed labels
 `not_started`, `graceful_termination`, `forced_termination`, `unexpected_termination`,
 `residual_activity`, or `termination_unknown`. Default aggregation now covers all 23 declared
@@ -2147,8 +2147,8 @@ MCP lifecycle is owned by the one `Soklet` configured with the server;
 `McpServer` has no independent start, stop, close, or timeout surface. The
 owner's `LifecyclePolicy` supplies the graceful and forced phase boundaries.
 `LifecycleObserver.didStopMcpServer(...)` receives the exact immutable
-`ParticipantShutdownResult` once, including its
-`ParticipantShutdownDisposition`, failures, and residual evidence. Diagnostics
+`ShutdownComponentResult` once, including its
+`ShutdownComponentDisposition`, failures, and residual evidence. Diagnostics
 use their separate state vocabulary: `RESIDUAL_ACTIVITY` reports positive work
 at the final boundary and `TERMINATION_UNKNOWN` reports missing proof. A bound
 address remains available as historical evidence in all later snapshots.

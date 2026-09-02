@@ -80,12 +80,12 @@ Phase 5 carrier owners and changes no Phase 6 descriptor.
 - 315 methods.
 
 The reviewed file's SHA-256 is
-`5e8a4aac651374205e126ca8128ec5ca644b1c7f84ad6426d4462cd9712ff12b`.
+`69b008b685dead8e1ae66691f0e9955688b9e43740281ea0f82497df22a4dda0`.
 The independent reflection contract freezes the Phase 6 JSpecify type-use
 layout with SHA-256
-`15f883e66b3194974887899a090e53d33aa27a08db793f4cfd7ff78212b67aaf`.
+`d829563b135bae5a0e97559ecf5d1a8dd280c4b7792a74a2f10fcf8d8017d18b`.
 The 64-entry `phase-6.includes` inventory has SHA-256
-`c14695a4bfea85e88fea713211320b4192db4ca421786ed716dd543d79ded4c5`.
+`640eda42f3dd1cf1c5d8bf50e461281bc3083992de5dc83bf77a0478617606bc`.
 
 Immediately before the snapshot was checked in, a fresh extraction from the
 current full japicmp report produced the same 421 records and was byte-for-
@@ -456,7 +456,7 @@ favor of the general Soklet lifecycle/result vocabulary:
   particular, an off-network running simulator has no bound address;
 - `McpMetricsEvent.serverStopped(...)` and
   `McpMetricsEvent.ServerStopped` now carry
-  `ParticipantShutdownDisposition`;
+  `ShutdownComponentDisposition`;
 - the shutdown maps on `McpMetricsSnapshot` and its builder use that same
   general disposition type; and
 - the shared `Simulator` host retains its exact descriptors. The new
@@ -478,4 +478,21 @@ inventory therefore contains 271 owners.
 The regenerated released-3.5.1 compatibility ledger contains 617 records
 with SHA-256
 `302f68448fe14b1cc5ad179c076c5b84b16e81b0b21dca55e0cc5edcbaadea41`.
+
+## 2026-09-01 shutdown-component naming amendment
+
+The unreleased general terminal-evidence vocabulary now uses
+`ShutdownComponentDisposition` in the Phase 6 metrics descriptors. This is the
+same one-for-one naming amendment recorded in the Phase 4 rationale; it adds no
+owner, method, or compatibility alias. The framework-owned synthetic type is
+`ShutdownComponentType.FRAMEWORK` rather than a generic `OTHER` value.
+
+The Phase 6 snapshot remains 421 records across 64 owners. Its SHA-256 is
+`69b008b685dead8e1ae66691f0e9955688b9e43740281ea0f82497df22a4dda0`;
+the reflection/nullability SHA-256 is
+`d829563b135bae5a0e97559ecf5d1a8dd280c4b7792a74a2f10fcf8d8017d18b`;
+and the include-inventory SHA-256 is
+`640eda42f3dd1cf1c5d8bf50e461281bc3083992de5dc83bf77a0478617606bc`.
+The released-3.5.1 compatibility ledger remains 618 records with SHA-256
+`3d9d68bbbdeabae63a78d40a50c9896d3f11f6d0d2305beff0c94bd86476928c`.
 Phase 5 remains byte-identical at 179 records.

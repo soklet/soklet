@@ -136,13 +136,11 @@ public class SseTests {
 		List<SseComment> comments = new ArrayList<>();
 		AtomicReference<SseServer> sseServer = new AtomicReference<>();
 
-		SokletSimulator.run(transports -> {
-			sseServer.set(transports.getSseServer());
-			return SokletConfig.forSimulatorTesting(transports)
+		SokletSimulator.run(config -> config.httpServer()
+				.sseServer(sseServer::set)
 					.corsAuthorizer(CorsAuthorizer.fromWhitelistedOrigins(Set.of("https://www.revetkn.com")))
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseEventSimulatorResource.class)))
-					.build();
-		}, simulator -> {
+					.build(), simulator -> {
 			// Perform initial handshake with /examples/abc and verify 200 response
 			Request request = Request.withPath(HttpMethod.GET, "/examples/abc")
 					.headers(Map.of("Origin", Set.of("https://www.revetkn.com")))
@@ -217,7 +215,7 @@ public class SseTests {
 	public void sseHandshakeRequestExposesTraceContext() {
 		SseTraceContextResource.capturedTraceContext.set(null);
 
-		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
+		SokletSimulator.run(config -> config.httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseTraceContextResource.class)))
 				.build(), simulator -> {
 			Request request = Request.withPath(HttpMethod.GET, "/trace")
@@ -239,7 +237,7 @@ public class SseTests {
 	public void sseServerSimulator_unicastErrorHandler() {
 		AtomicInteger errorCount = new AtomicInteger();
 
-		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
+		SokletSimulator.run(config -> config.httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseEventSimulatorResource.class)))
 				.build(), simulator -> {
 			simulator.onUnicastError((throwable) -> errorCount.incrementAndGet());
@@ -275,9 +273,8 @@ public class SseTests {
 		List<LogEvent> logEvents = new ArrayList<>();
 		AtomicReference<SseServer> sseServer = new AtomicReference<>();
 
-		SokletSimulator.run(transports -> {
-			sseServer.set(transports.getSseServer());
-			return SokletConfig.forSimulatorTesting(transports)
+		SokletSimulator.run(config -> config.httpServer()
+				.sseServer(sseServer::set)
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseEventSimulatorResource.class)))
 					.lifecycleObserver(new LifecycleObserver() {
 						@Override
@@ -285,8 +282,7 @@ public class SseTests {
 							logEvents.add(logEvent);
 						}
 					})
-					.build();
-		}, simulator -> {
+					.build(), simulator -> {
 			Request request = Request.withPath(HttpMethod.GET, "/examples/abc")
 					.build();
 
@@ -2744,9 +2740,9 @@ public class SseTests {
 					lifecycleEvents.toString());
 			Assertions.assertEquals(1L, transportFailureCount(metricsCollector, ServerType.SSE,
 					MetricsCollector.TransportFailureReason.EVENT_LOOP_TERMINATED));
-			Assertions.assertEquals(InternalParticipantShutdownDisposition.UNEXPECTED_TERMINATION,
+			Assertions.assertEquals(InternalLifecycleComponentShutdownDisposition.UNEXPECTED_TERMINATION,
 					server.getLifecycleAdapter().result().orElseThrow()
-							.participantResult(InternalParticipantKind.SSE).orElseThrow()
+							.participantResult(InternalLifecycleComponentType.SSE).orElseThrow()
 							.disposition());
 		} finally {
 			server.stop();
@@ -2954,7 +2950,7 @@ public class SseTests {
 				result.startupDisposition());
 		Assertions.assertTrue(result.isComplete());
 		Assertions.assertEquals(List.of(startupError), result
-				.participantResult(InternalParticipantKind.SSE).orElseThrow().failures());
+				.participantResult(InternalLifecycleComponentType.SSE).orElseThrow().failures());
 	}
 
 	@Test
@@ -2971,7 +2967,7 @@ public class SseTests {
 			Assertions.assertFalse(scheduler.isTerminated());
 			Assertions.assertTrue(lifecycleOperations(server.getLifecycleAdapter())
 					.residualActivity().contains(
-							InternalResidualActivityKind.EXECUTOR_TASK));
+							InternalResidualActivityType.EXECUTOR_TASK));
 		} finally {
 			scheduler.shutdownNow();
 			Assertions.assertTrue(scheduler.awaitTermination(1, TimeUnit.SECONDS));
@@ -3531,7 +3527,7 @@ public class SseTests {
 	private static LifecyclePolicy shutdownPolicy(@NonNull Duration duration) {
 		return LifecyclePolicy.builder()
 				.startupTimeout(Duration.ofSeconds(3))
-				.startupCancellationTimeout(Duration.ofSeconds(1))
+				.startupCancelationTimeout(Duration.ofSeconds(1))
 				.gracefulShutdownDuration(duration)
 				.forcedShutdownDuration(Duration.ZERO)
 				.build();
@@ -3570,7 +3566,7 @@ public class SseTests {
 
 		@Override
 		public void didStopHttpServer(@NonNull HttpServer httpServer,
-				@NonNull ParticipantShutdownResult result) {
+				@NonNull ShutdownComponentResult result) {
 			this.didStopHttpServer.incrementAndGet();
 		}
 

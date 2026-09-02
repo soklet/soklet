@@ -70,9 +70,9 @@ class BuiltInTransportLifecycleAdapterTests {
 
 		adapter.stop();
 
-		InternalParticipantShutdownResult participant = participant(adapter);
+		InternalLifecycleComponentShutdownResult participant = participant(adapter);
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION,
+				InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION,
 				participant.disposition());
 		Assertions.assertEquals(1, operations.quiesceCount.get());
 		Assertions.assertEquals(0, operations.forceCount.get());
@@ -92,7 +92,7 @@ class BuiltInTransportLifecycleAdapterTests {
 		adapter.stop();
 
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.FORCED_TERMINATION,
+				InternalLifecycleComponentShutdownDisposition.FORCED_TERMINATION,
 				participant(adapter).disposition());
 		Assertions.assertEquals(List.of(0L, 0L), operations.observedDeadlines);
 		Assertions.assertEquals(1, operations.quiesceCount.get());
@@ -103,7 +103,7 @@ class BuiltInTransportLifecycleAdapterTests {
 	@Test
 	void positiveResidualAndUnknownBothRetainEvidenceWithoutRelease() {
 		RecordingOperations residualOperations = new RecordingOperations(
-				attempt -> false, Set.of(InternalResidualActivityKind.EVENT_LOOP));
+				attempt -> false, Set.of(InternalResidualActivityType.EVENT_LOOP));
 		BuiltInTransportLifecycleAdapter residualAdapter = adapter(residualOperations);
 		BuiltInTransportLifecycleAdapter.Generation residualGeneration =
 				residualAdapter.beginStart();
@@ -111,13 +111,13 @@ class BuiltInTransportLifecycleAdapterTests {
 		residualAdapter.stop();
 
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.RESIDUAL_ACTIVITY,
+				InternalLifecycleComponentShutdownDisposition.RESIDUAL_ACTIVITY,
 				participant(residualAdapter).disposition());
-		Assertions.assertEquals(Set.of(InternalResidualActivityKind.EVENT_LOOP),
+		Assertions.assertEquals(Set.of(InternalResidualActivityType.EVENT_LOOP),
 				participant(residualAdapter).residualActivity());
 		Assertions.assertEquals(0, residualOperations.releaseCount.get());
 		Assertions.assertEquals(1, residualAdapter.retentionSummary().orElseThrow()
-				.counts().get(InternalResidualActivityKind.EVENT_LOOP));
+				.counts().get(InternalResidualActivityType.EVENT_LOOP));
 		Assertions.assertThrows(IllegalStateException.class,
 				residualAdapter::beginStart);
 
@@ -130,7 +130,7 @@ class BuiltInTransportLifecycleAdapterTests {
 		unknownAdapter.stop();
 
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+				InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
 				participant(unknownAdapter).disposition());
 		Assertions.assertTrue(unknownAdapter.retentionSummary().orElseThrow()
 				.counts().isEmpty());
@@ -147,13 +147,13 @@ class BuiltInTransportLifecycleAdapterTests {
 
 		adapter.stop();
 
-		InternalParticipantShutdownResult participant = participant(adapter);
-		Assertions.assertEquals(InternalParticipantShutdownDisposition.RESIDUAL_ACTIVITY,
+		InternalLifecycleComponentShutdownResult participant = participant(adapter);
+		Assertions.assertEquals(InternalLifecycleComponentShutdownDisposition.RESIDUAL_ACTIVITY,
 				participant.disposition());
-		Assertions.assertEquals(Set.of(InternalResidualActivityKind.CALLBACK),
+		Assertions.assertEquals(Set.of(InternalResidualActivityType.CALLBACK),
 				participant.residualActivity());
 		Assertions.assertEquals(1, adapter.retentionSummary().orElseThrow()
-				.counts().get(InternalResidualActivityKind.CALLBACK));
+				.counts().get(InternalResidualActivityType.CALLBACK));
 		admission.close();
 		Assertions.assertEquals(0, operations.releaseCount.get(),
 				"Late work completion cannot rewrite a frozen incomplete result");
@@ -182,9 +182,9 @@ class BuiltInTransportLifecycleAdapterTests {
 		adapter.signalUnexpectedFailure(generation, failure);
 		adapter.signalUnexpectedFailure(generation, new AssertionError("duplicate"));
 
-		InternalParticipantShutdownResult participant = participant(adapter);
+		InternalLifecycleComponentShutdownResult participant = participant(adapter);
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.UNEXPECTED_TERMINATION,
+				InternalLifecycleComponentShutdownDisposition.UNEXPECTED_TERMINATION,
 				participant.disposition());
 		Assertions.assertEquals(List.of(failure), participant.failures());
 		Assertions.assertEquals(1, operations.quiesceCount.get());
@@ -222,7 +222,7 @@ class BuiltInTransportLifecycleAdapterTests {
 						.map(InternalTerminationEvent::type).toList());
 		Assertions.assertEquals(List.of(failure), participant(adapter).failures());
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION,
+				InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION,
 				participant(adapter).disposition());
 	}
 
@@ -254,7 +254,7 @@ class BuiltInTransportLifecycleAdapterTests {
 						.map(InternalTerminationEvent::type).toList());
 		Assertions.assertEquals(List.of(lateFailure), participant(adapter).failures());
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.GRACEFUL_TERMINATION,
+				InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION,
 				participant(adapter).disposition());
 		Assertions.assertEquals(0, operations.forceCount.get());
 	}
@@ -272,7 +272,7 @@ class BuiltInTransportLifecycleAdapterTests {
 		Assertions.assertEquals(InternalStartupDisposition.FAILED,
 				result.startupDisposition());
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.UNEXPECTED_TERMINATION,
+				InternalLifecycleComponentShutdownDisposition.UNEXPECTED_TERMINATION,
 				participant(adapter).disposition());
 		Assertions.assertThrows(IllegalStateException.class,
 				() -> adapter.markReady(generation));
@@ -306,9 +306,9 @@ class BuiltInTransportLifecycleAdapterTests {
 
 		adapter.stop();
 
-		InternalParticipantShutdownResult participant = participant(adapter);
+		InternalLifecycleComponentShutdownResult participant = participant(adapter);
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+				InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
 				participant.disposition());
 		Assertions.assertEquals(List.of(failure), participant.failures());
 		Assertions.assertTrue(adapter.retentionSummary().isPresent());
@@ -324,7 +324,7 @@ class BuiltInTransportLifecycleAdapterTests {
 				workers.active(LifecycleWorkers.Role.COORDINATOR),
 				"Restart eligibility cannot precede coordinator role release.");
 		BuiltInTransportLifecycleAdapter adapter =
-				new BuiltInTransportLifecycleAdapter(InternalParticipantKind.HTTP,
+				new BuiltInTransportLifecycleAdapter(InternalLifecycleComponentType.HTTP,
 						operations, () -> Duration.ZERO, Duration.ZERO,
 						() -> 0L, workers);
 
@@ -383,9 +383,9 @@ class BuiltInTransportLifecycleAdapterTests {
 			throw launchFailure;
 		});
 		RecordingOperations operations = new RecordingOperations(
-				attempt -> false, Set.of(InternalResidualActivityKind.EVENT_LOOP));
+				attempt -> false, Set.of(InternalResidualActivityType.EVENT_LOOP));
 		BuiltInTransportLifecycleAdapter adapter =
-				new BuiltInTransportLifecycleAdapter(InternalParticipantKind.HTTP,
+				new BuiltInTransportLifecycleAdapter(InternalLifecycleComponentType.HTTP,
 						operations, () -> Duration.ZERO, Duration.ZERO,
 						() -> 0L, workers);
 		BuiltInTransportLifecycleAdapter.Generation generation = adapter.beginStart();
@@ -393,12 +393,12 @@ class BuiltInTransportLifecycleAdapterTests {
 
 		adapter.stop();
 
-		InternalParticipantShutdownResult participant = participant(adapter);
+		InternalLifecycleComponentShutdownResult participant = participant(adapter);
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+				InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
 				participant.disposition());
 		Assertions.assertEquals(List.of(launchFailure), participant.failures());
-		Assertions.assertEquals(Set.of(InternalResidualActivityKind.EVENT_LOOP),
+		Assertions.assertEquals(Set.of(InternalResidualActivityType.EVENT_LOOP),
 				participant.residualActivity());
 		Assertions.assertFalse(adapter.result(generation).orElseThrow().isComplete());
 		Assertions.assertEquals(0,
@@ -427,9 +427,9 @@ class BuiltInTransportLifecycleAdapterTests {
 			throw launchFailure;
 		});
 		RecordingOperations operations = new RecordingOperations(
-				attempt -> true, Set.of(InternalResidualActivityKind.EVENT_LOOP));
+				attempt -> true, Set.of(InternalResidualActivityType.EVENT_LOOP));
 		BuiltInTransportLifecycleAdapter adapter =
-				new BuiltInTransportLifecycleAdapter(InternalParticipantKind.HTTP,
+				new BuiltInTransportLifecycleAdapter(InternalLifecycleComponentType.HTTP,
 						operations, () -> Duration.ZERO, Duration.ZERO,
 						() -> 0L, workers);
 		BuiltInTransportLifecycleAdapter.Generation generation = adapter.beginStart();
@@ -461,7 +461,7 @@ class BuiltInTransportLifecycleAdapterTests {
 		RecordingOperations operations = new RecordingOperations(
 				attempt -> true, Set.of());
 		operations.onRelease = () -> operations.residual =
-				Set.of(InternalResidualActivityKind.EVENT_LOOP);
+				Set.of(InternalResidualActivityType.EVENT_LOOP);
 		operations.releaseFailure = releaseFailure;
 		BuiltInTransportLifecycleAdapter adapter = adapter(operations);
 		BuiltInTransportLifecycleAdapter.Generation generation = adapter.beginStart();
@@ -469,13 +469,13 @@ class BuiltInTransportLifecycleAdapterTests {
 
 		adapter.signalUnexpectedFailure(generation, transportFailure);
 
-		InternalParticipantShutdownResult participant = participant(adapter);
+		InternalLifecycleComponentShutdownResult participant = participant(adapter);
 		Assertions.assertEquals(
-				InternalParticipantShutdownDisposition.TERMINATION_UNKNOWN,
+				InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
 				participant.disposition());
 		Assertions.assertEquals(List.of(transportFailure, releaseFailure),
 				participant.failures());
-		Assertions.assertEquals(Set.of(InternalResidualActivityKind.EVENT_LOOP),
+		Assertions.assertEquals(Set.of(InternalResidualActivityType.EVENT_LOOP),
 				participant.residualActivity());
 		Assertions.assertEquals(1, operations.releaseCount.get());
 		Assertions.assertFalse(adapter.result(generation).orElseThrow().isComplete());
@@ -486,7 +486,7 @@ class BuiltInTransportLifecycleAdapterTests {
 	private static BuiltInTransportLifecycleAdapter adapter(
 			@NonNull RecordingOperations operations) {
 		LifecycleWorkers workers = new LifecycleWorkers((name, runnable) -> runnable.run());
-		return new BuiltInTransportLifecycleAdapter(InternalParticipantKind.HTTP,
+		return new BuiltInTransportLifecycleAdapter(InternalLifecycleComponentType.HTTP,
 				operations, () -> Duration.ZERO, Duration.ZERO, () -> 0L, workers);
 	}
 
@@ -495,7 +495,7 @@ class BuiltInTransportLifecycleAdapterTests {
 			@NonNull RecordingOperations operations, @NonNull Duration gracefulTimeout,
 			@NonNull Duration forcedTimeout) {
 		LifecycleWorkers workers = new LifecycleWorkers((name, runnable) -> runnable.run());
-		return new BuiltInTransportLifecycleAdapter(InternalParticipantKind.HTTP,
+		return new BuiltInTransportLifecycleAdapter(InternalLifecycleComponentType.HTTP,
 				operations, () -> gracefulTimeout, forcedTimeout, NanoClock.system(), workers);
 	}
 
@@ -525,16 +525,16 @@ class BuiltInTransportLifecycleAdapterTests {
 	}
 
 	@NonNull
-	private static InternalParticipantShutdownResult participant(
+	private static InternalLifecycleComponentShutdownResult participant(
 			@NonNull BuiltInTransportLifecycleAdapter adapter) {
 		return adapter.result().orElseThrow()
-				.participantResult(InternalParticipantKind.HTTP).orElseThrow();
+				.participantResult(InternalLifecycleComponentType.HTTP).orElseThrow();
 	}
 
 	private static final class RecordingOperations
 			implements BuiltInTransportLifecycleAdapter.Operations {
 		private final IntPredicate proofOnAttempt;
-		private volatile Set<InternalResidualActivityKind> residual;
+		private volatile Set<InternalResidualActivityType> residual;
 		private final AtomicInteger awaitCount = new AtomicInteger();
 		private final AtomicInteger quiesceCount = new AtomicInteger();
 		private final AtomicInteger forceCount = new AtomicInteger();
@@ -547,7 +547,7 @@ class BuiltInTransportLifecycleAdapterTests {
 		private volatile RuntimeException releaseFailure;
 
 		private RecordingOperations(@NonNull IntPredicate proofOnAttempt,
-				@NonNull Set<InternalResidualActivityKind> residual) {
+				@NonNull Set<InternalResidualActivityType> residual) {
 			this.proofOnAttempt = proofOnAttempt;
 			this.residual = residual;
 		}
@@ -574,7 +574,7 @@ class BuiltInTransportLifecycleAdapterTests {
 
 		@Override
 		@NonNull
-		public Set<InternalResidualActivityKind> residualActivity() {
+		public Set<InternalResidualActivityType> residualActivity() {
 			return this.residual;
 		}
 

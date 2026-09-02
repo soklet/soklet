@@ -41,7 +41,7 @@ public class ValueConversionTests {
 
 	@Test
 	public void converts_common_types_from_query_params() {
-		SokletSimulator.run(transports -> SokletConfig.forSimulatorTesting(transports)
+		SokletSimulator.run(config -> config.httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ConversionResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override

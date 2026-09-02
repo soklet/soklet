@@ -307,7 +307,7 @@ public final class SokletApplication {
 					&& (startupFailure.getInternalStartupDisposition()
 							== InternalStartupDisposition.NOT_ATTEMPTED
 							|| startupFailure.getInternalStartupDisposition()
-							== InternalStartupDisposition.CANCELLED))
+							== InternalStartupDisposition.CANCELED))
 				return requireNonNull(runtime).terminalFailure(exactResult)
 						.orElse(null);
 			if (startFailure instanceof RuntimeException runtimeFailure)

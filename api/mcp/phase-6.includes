@@ -57,7 +57,7 @@ com.soklet.McpSimulationStreamItem
 com.soklet.McpSimulationStreamItemType
 com.soklet.McpStreamTerminationReason
 com.soklet.McpTextCoordinate
-com.soklet.McpTextCoordinate$Kind
+com.soklet.McpTextOwnerType
 com.soklet.McpTraceCorrelationConfigurationFingerprint
 com.soklet.McpTraceCorrelationControl
 com.soklet.McpTraceCorrelationKey

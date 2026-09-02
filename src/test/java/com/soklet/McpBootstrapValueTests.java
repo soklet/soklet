@@ -279,14 +279,14 @@ public class McpBootstrapValueTests {
 				McpServerStatus.RESIDUAL_ACTIVITY,
 				McpServerStatus.TERMINATION_UNKNOWN
 		}, McpServerStatus.values());
-		Assertions.assertArrayEquals(new ParticipantShutdownDisposition[]{
-				ParticipantShutdownDisposition.NOT_STARTED,
-				ParticipantShutdownDisposition.GRACEFUL_TERMINATION,
-				ParticipantShutdownDisposition.FORCED_TERMINATION,
-				ParticipantShutdownDisposition.UNEXPECTED_TERMINATION,
-				ParticipantShutdownDisposition.RESIDUAL_ACTIVITY,
-				ParticipantShutdownDisposition.TERMINATION_UNKNOWN
-		}, ParticipantShutdownDisposition.values());
+		Assertions.assertArrayEquals(new ShutdownComponentDisposition[]{
+				ShutdownComponentDisposition.NOT_STARTED,
+				ShutdownComponentDisposition.GRACEFUL_TERMINATION,
+				ShutdownComponentDisposition.FORCED_TERMINATION,
+				ShutdownComponentDisposition.UNEXPECTED_TERMINATION,
+				ShutdownComponentDisposition.RESIDUAL_ACTIVITY,
+				ShutdownComponentDisposition.TERMINATION_UNKNOWN
+		}, ShutdownComponentDisposition.values());
 	}
 
 	@Test

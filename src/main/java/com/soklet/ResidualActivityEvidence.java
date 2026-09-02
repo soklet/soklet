@@ -18,6 +18,7 @@ package com.soklet;
 
 import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.Set;
@@ -28,26 +29,29 @@ import static java.util.Objects.requireNonNull;
  * Immutable, bounded evidence describing activity that remained at the final
  * shutdown boundary.
  */
+@ThreadSafe
 public final class ResidualActivityEvidence {
 	@NonNull
-	private final Set<@NonNull ResidualActivityKind> activityKinds;
+	private final Set<@NonNull ResidualActivityType> residualActivityTypes;
 	@NonNull
 	private final String summary;
 
 	ResidualActivityEvidence(
-			@NonNull Set<@NonNull ResidualActivityKind> activityKinds,
+			@NonNull Set<@NonNull ResidualActivityType> residualActivityTypes,
 			@NonNull String summary) {
-		Set<ResidualActivityKind> exactKinds = requireNonNull(activityKinds);
-		this.activityKinds = Collections.unmodifiableSet(exactKinds.isEmpty()
-				? EnumSet.noneOf(ResidualActivityKind.class)
-				: EnumSet.copyOf(exactKinds));
+		Set<ResidualActivityType> exactTypes = requireNonNull(
+				residualActivityTypes);
+		this.residualActivityTypes = Collections.unmodifiableSet(
+				exactTypes.isEmpty()
+						? EnumSet.noneOf(ResidualActivityType.class)
+						: EnumSet.copyOf(exactTypes));
 		this.summary = requireNonNull(summary);
 	}
 
 	/** @return immutable residual-activity categories in enum order */
 	@NonNull
-	public Set<@NonNull ResidualActivityKind> getActivityKinds() {
-		return this.activityKinds;
+	public Set<@NonNull ResidualActivityType> getResidualActivityTypes() {
+		return this.residualActivityTypes;
 	}
 
 	/**

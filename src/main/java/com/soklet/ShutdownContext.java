@@ -18,21 +18,41 @@ package com.soklet;
 
 import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
 
+import static java.util.Objects.requireNonNull;
+
 /**
- * Advisory phase and deadline information for transport shutdown.
+ * Framework-created advisory phase and deadline information for transport
+ * shutdown.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-public interface ShutdownContext {
+@ThreadSafe
+public final class ShutdownContext {
+	@NonNull
+	private final ShutdownPhase shutdownPhase;
+	@NonNull
+	private final NanoClock clock;
+	private final long absoluteDeadlineNanos;
+
+	ShutdownContext(@NonNull ShutdownPhase shutdownPhase,
+			@NonNull NanoClock clock, long absoluteDeadlineNanos) {
+		this.shutdownPhase = requireNonNull(shutdownPhase);
+		this.clock = requireNonNull(clock);
+		this.absoluteDeadlineNanos = absoluteDeadlineNanos;
+	}
+
 	/**
 	 * Acquires the current shutdown phase.
 	 *
 	 * @return the current shutdown phase
 	 */
 	@NonNull
-	ShutdownPhase getPhase();
+	public ShutdownPhase getShutdownPhase() {
+		return this.shutdownPhase;
+	}
 
 	/**
 	 * Acquires the time remaining before the current phase boundary.
@@ -40,5 +60,12 @@ public interface ShutdownContext {
 	 * @return the remaining time, clamped to zero
 	 */
 	@NonNull
-	Duration getRemainingTime();
+	public Duration getRemainingTime() {
+		return LifecycleDeadlines.remaining(this.absoluteDeadlineNanos,
+				this.clock.nanoTime());
+	}
+
+	long absoluteDeadlineNanos() {
+		return this.absoluteDeadlineNanos;
+	}
 }

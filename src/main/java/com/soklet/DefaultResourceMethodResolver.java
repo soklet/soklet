@@ -257,7 +257,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 	@NonNull
 	Set<@NonNull ResourceMethod> getResourceMethodsForLifecycle(
-			@NonNull InternalStartupContext startupContext,
+			@NonNull StartupContext startupContext,
 			@NonNull DeadlineWaiter deadlineWaiter) {
 		requireNonNull(startupContext);
 		requireNonNull(deadlineWaiter);
@@ -270,11 +270,11 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 				.resourceMethods;
 	}
 
-	static final class StartupWaitCancelledException extends RuntimeException {
+	static final class StartupWaitCanceledException extends RuntimeException {
 		private static final long serialVersionUID = 1L;
 
-		StartupWaitCancelledException() {
-			super("Default Resource Method Resolver startup wait was cancelled",
+		StartupWaitCanceledException() {
+			super("Default Resource Method Resolver startup wait was canceled",
 					null, false, false);
 		}
 	}
@@ -358,7 +358,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 		@NonNull
 		private DefaultResourceMethodResolver resolveForStartup(
-				@NonNull InternalStartupContext startupContext,
+				@NonNull StartupContext startupContext,
 				@NonNull DeadlineWaiter deadlineWaiter) {
 			requireNonNull(startupContext);
 			requireNonNull(deadlineWaiter);
@@ -390,7 +390,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 						.orElse(Long.MAX_VALUE);
 				deadlineWaiter.await(deadlineNanos,
 						() -> terminalStatePublished()
-								|| startupContext.isCancellationRequested());
+								|| startupContext.isCancelationRequested());
 
 				synchronized (this.monitor) {
 					if (this.state == State.SUCCEEDED)
@@ -399,10 +399,10 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 						throwTerminalFailure();
 				}
 
-				throw new StartupWaitCancelledException();
+				throw new StartupWaitCanceledException();
 			} catch (InterruptedException exception) {
 				Thread.currentThread().interrupt();
-				throw new StartupWaitCancelledException();
+				throw new StartupWaitCanceledException();
 			} finally {
 				synchronized (this.monitor) {
 					unregisterLifecycleWaiter(deadlineWaiter);

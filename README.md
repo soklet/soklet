@@ -627,14 +627,12 @@ public void sseTest() {
   List<SseEvent> events = new ArrayList<>();
   AtomicReference<SseServer> simulatedSseServer = new AtomicReference<>();
 
-  SokletSimulator.run(transports -> {
-    simulatedSseServer.set(transports.getSseServer());
-    return SokletConfig.withHttpServer(transports.getHttpServer())
-      .sseServer(transports.getSseServer())
+  SokletSimulator.run(config -> config
+      .httpServer()
+      .sseServer(simulatedSseServer::set)
       .resourceMethodResolver(
           ResourceMethodResolver.fromClasses(Set.of(ChatResource.class)))
-      .build();
-  }, simulator -> {
+      .build(), simulator -> {
     Request request = Request.fromPath(HttpMethod.GET, "/chat");
     SseRequestResult result = simulator.performSseRequest(request);
 
@@ -1045,9 +1043,9 @@ SokletConfig config = SokletConfig.withHttpServer(
 
   @Override
   public void didStopHttpServer(@NonNull HttpServer httpServer,
-      @NonNull ParticipantShutdownResult result) {
+      @NonNull ShutdownComponentResult result) {
     // Observe the HTTP server's immutable terminal evidence
-    System.out.println("HTTP server stopped: " + result.getDisposition());
+    System.out.println("HTTP server stopped: " + result.getShutdownComponentDisposition());
   }
 }).build();
 ```
@@ -1441,10 +1439,10 @@ public void basicIntegrationTest() {
       applicationConfig.getResourceMethodResolver();
   InstanceProvider instances = applicationConfig.getInstanceProvider();
 
-  // Rebuild the application configuration with this scope's fresh simulated
-  // transport instead of reusing a live configuration or transport.
-  SokletSimulator.run(transports ->
-      SokletConfig.withHttpServer(transports.getHttpServer())
+  // Configure this scope with its fresh simulated HTTP server instead of
+  // reusing a live configuration or transport.
+  SokletSimulator.run(config -> config
+          .httpServer()
           .resourceMethodResolver(resourceMethods)
           .instanceProvider(instances)
           .build(), simulator -> {
@@ -2378,7 +2376,7 @@ privacy/cardinality work, or prove every-operation simulation, sustained,
 release-readiness, review, or the later Phase 6 freeze.
 
 For MCP shutdowns, `snapshot().getMcpMetrics().getShutdowns()` is an immutable,
-enum-ordered `Map<ParticipantShutdownDisposition, Long>`. The default collector omits
+enum-ordered `Map<ShutdownComponentDisposition, Long>`. The default collector omits
 unobserved outcomes, resets the map to empty, and emits `soklet_mcp_shutdowns_total`
 only for `not_started`, `graceful_termination`, `forced_termination`,
 `unexpected_termination`, `residual_activity`, or `termination_unknown`. Default aggregation

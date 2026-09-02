@@ -32,7 +32,7 @@ interface InternalHttpTransportEndpoint
 			@NonNull HttpTransportAttachmentContext attachmentContext,
 			@NonNull StartupContext startupContext) {
 		InternalTransportRuntime runtime = attach(attachmentContext.internalContext(),
-				(InternalStartupContext) startupContext);
+				(StartupContext) startupContext);
 		return publicRuntime(runtime);
 	}
 
@@ -48,17 +48,17 @@ interface InternalHttpTransportEndpoint
 		return new TransportRuntime() {
 			@Override
 			public void start(@NonNull StartupContext context) {
-				exactRuntime.start((InternalStartupContext) context);
+				exactRuntime.start((StartupContext) context);
 			}
 
 			@Override
 			public void quiesce(@NonNull ShutdownContext context) {
-				exactRuntime.quiesce((InternalShutdownContext) context);
+				exactRuntime.quiesce((ShutdownContext) context);
 			}
 
 			@Override
 			public void force(@NonNull ShutdownContext context) {
-				exactRuntime.force((InternalShutdownContext) context);
+				exactRuntime.force((ShutdownContext) context);
 			}
 		};
 	}
@@ -78,7 +78,7 @@ interface InternalSseTransportEndpoint
 			@NonNull SseTransportAttachmentContext attachmentContext,
 			@NonNull StartupContext startupContext) {
 		InternalTransportRuntime runtime = attach(attachmentContext.internalContext(),
-				(InternalStartupContext) startupContext);
+				(StartupContext) startupContext);
 		return publicRuntime(runtime);
 	}
 
@@ -94,17 +94,17 @@ interface InternalSseTransportEndpoint
 		return new TransportRuntime() {
 			@Override
 			public void start(@NonNull StartupContext context) {
-				exactRuntime.start((InternalStartupContext) context);
+				exactRuntime.start((StartupContext) context);
 			}
 
 			@Override
 			public void quiesce(@NonNull ShutdownContext context) {
-				exactRuntime.quiesce((InternalShutdownContext) context);
+				exactRuntime.quiesce((ShutdownContext) context);
 			}
 
 			@Override
 			public void force(@NonNull ShutdownContext context) {
-				exactRuntime.force((InternalShutdownContext) context);
+				exactRuntime.force((ShutdownContext) context);
 			}
 		};
 	}

@@ -88,11 +88,11 @@ public class McpPublicApiReflectionContractTests {
 	private static final int PROVISIONAL_TYPE_COUNT = 0;
 	private static final int CURRENT_MCP_TYPE_COUNT = 233;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"9cfe146213f1c96cfdd1de6fe05caa58d8055f7abdb491b6141491f2dc8de646";
+			"dc83138dd80f93c003ec527fec24a9fd7e09633417f0f5a6430ac254421797b1";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
 			"6569e3b106ae11e1d30da66c045d1a9bc23aa65016f36052df6b19fc320c06d9";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
-			"15f883e66b3194974887899a090e53d33aa27a08db793f4cfd7ff78212b67aaf";
+			"d829563b135bae5a0e97559ecf5d1a8dd280c4b7792a74a2f10fcf8d8017d18b";
 	private static final Map<String, Object> PHASE_FOUR_PRIMITIVE_CONSTANTS =
 			Map.of(
 					"com.soklet.McpAdmissionIdentity#MAXIMUM_PARTITION_KEY_UTF_8_BYTES",
@@ -332,7 +332,7 @@ public class McpPublicApiReflectionContractTests {
 				"com.soklet.McpSimulationStreamItemType",
 				"com.soklet.McpStreamTerminationReason",
 				"com.soklet.McpTextCoordinate",
-				"com.soklet.McpTextCoordinate$Kind",
+				"com.soklet.McpTextOwnerType",
 				"com.soklet.McpTraceCorrelationConfigurationFingerprint",
 				"com.soklet.McpTraceCorrelationControl",
 				"com.soklet.McpTraceCorrelationKey",
@@ -568,7 +568,7 @@ public class McpPublicApiReflectionContractTests {
 		assertParameterNames(LifecycleObserver.class.getMethod(
 				"willStopMcpServer", McpServer.class), "mcpServer");
 		assertParameterNames(LifecycleObserver.class.getMethod(
-				"didStopMcpServer", McpServer.class, ParticipantShutdownResult.class),
+				"didStopMcpServer", McpServer.class, ShutdownComponentResult.class),
 				"mcpServer", "result");
 		assertParameterNames(LifecycleObserver.class.getMethod(
 				"didStartMcpRequestHandling", McpRequestContext.class), "context");
@@ -1049,7 +1049,7 @@ public class McpPublicApiReflectionContractTests {
 				MetricsCollector.TransportFailureReason.class);
 		assertFactory(McpMetricsEvent.class, "serverStopped",
 				McpMetricsEvent.ServerStopped.class, List.of("outcome"),
-				ParticipantShutdownDisposition.class);
+				ShutdownComponentDisposition.class);
 
 		assertRoutedMetricsGetters(McpMetricsEvent.RequestStarted.class);
 		assertRoutedMetricsGetters(McpMetricsEvent.RequestFinished.class);
@@ -1079,7 +1079,7 @@ public class McpPublicApiReflectionContractTests {
 		assertGetter(McpMetricsEvent.TransportFailure.class, "getReason",
 				MetricsCollector.TransportFailureReason.class);
 		assertGetter(McpMetricsEvent.ServerStopped.class, "getOutcome",
-				ParticipantShutdownDisposition.class);
+				ShutdownComponentDisposition.class);
 	}
 
 	private static void assertMetricsKeyFactoriesAndGetters()

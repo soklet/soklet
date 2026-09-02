@@ -79,7 +79,7 @@ final class McpTransportLifecycleAdapter
 
 		@Override
 		@NonNull
-		public InternalParticipantKind kind() {
+		public InternalLifecycleComponentType kind() {
 			return this.delegate.kind();
 		}
 
@@ -103,7 +103,7 @@ final class McpTransportLifecycleAdapter
 
 		@Override
 		@NonNull
-		public Set<InternalResidualActivityKind> residualActivity() {
+		public Set<InternalResidualActivityType> residualActivity() {
 			return this.delegate.residualActivity();
 		}
 
@@ -128,7 +128,7 @@ final class McpTransportLifecycleAdapter
 		this.generation = new AtomicReference<>();
 		this.externalStartInvocation = new ThreadLocal<>();
 		this.delegate = new BuiltInTransportLifecycleAdapter(
-				InternalParticipantKind.MCP, new Operations(),
+				InternalLifecycleComponentType.MCP, new Operations(),
 				requireNonNull(gracefulTimeout), requireNonNull(forcedTimeout));
 	}
 
@@ -141,7 +141,7 @@ final class McpTransportLifecycleAdapter
 		this.generation = new AtomicReference<>();
 		this.externalStartInvocation = new ThreadLocal<>();
 		this.delegate = new BuiltInTransportLifecycleAdapter(
-				InternalParticipantKind.MCP, requireNonNull(operations),
+				InternalLifecycleComponentType.MCP, requireNonNull(operations),
 				() -> requireNonNull(gracefulTimeout), requireNonNull(forcedTimeout),
 				requireNonNull(clock), requireNonNull(workers));
 	}
@@ -245,7 +245,7 @@ final class McpTransportLifecycleAdapter
 	@NonNull
 	Optional<Throwable> finalizeExternallyCoordinatedEvidence(
 			@NonNull Generation exactGeneration,
-			@NonNull InternalParticipantShutdownResult participantResult) {
+			@NonNull InternalLifecycleComponentShutdownResult participantResult) {
 		requireCurrent(exactGeneration);
 		return this.delegate.finalizeExternallyCoordinatedEvidence(
 				exactGeneration.delegate, requireNonNull(participantResult));
@@ -366,7 +366,7 @@ final class McpTransportLifecycleAdapter
 		}
 
 		@Override
-		public void quiesce(@NonNull InternalShutdownContext context) {
+		public void quiesce(@NonNull ShutdownContext context) {
 			runtime().quiesceLifecycle(
 					requireNonNull(context).absoluteDeadlineNanos());
 		}
@@ -377,7 +377,7 @@ final class McpTransportLifecycleAdapter
 		}
 
 		@Override
-		public void force(@NonNull InternalShutdownContext context) {
+		public void force(@NonNull ShutdownContext context) {
 			runtime().forceLifecycle(
 					requireNonNull(context).absoluteDeadlineNanos());
 		}
@@ -390,21 +390,21 @@ final class McpTransportLifecycleAdapter
 
 		@Override
 		@NonNull
-		public Set<InternalResidualActivityKind> residualActivity() {
+		public Set<InternalResidualActivityType> residualActivity() {
 			McpServerRuntimeBridge.LifecycleEvidence evidence =
 					runtime().getLifecycleEvidence();
-			EnumSet<InternalResidualActivityKind> residual =
-					EnumSet.noneOf(InternalResidualActivityKind.class);
+			EnumSet<InternalResidualActivityType> residual =
+					EnumSet.noneOf(InternalResidualActivityType.class);
 			if (evidence.eventLoop())
-				residual.add(InternalResidualActivityKind.EVENT_LOOP);
+				residual.add(InternalResidualActivityType.EVENT_LOOP);
 			if (evidence.connection())
-				residual.add(InternalResidualActivityKind.CONNECTION);
+				residual.add(InternalResidualActivityType.CONNECTION);
 			if (evidence.executorTask() || evidence.subscriptionRegistration())
-				residual.add(InternalResidualActivityKind.EXECUTOR_TASK);
+				residual.add(InternalResidualActivityType.EXECUTOR_TASK);
 			if (evidence.stream())
-				residual.add(InternalResidualActivityKind.STREAM);
+				residual.add(InternalResidualActivityType.STREAM);
 			if (evidence.callback())
-				residual.add(InternalResidualActivityKind.CALLBACK);
+				residual.add(InternalResidualActivityType.CALLBACK);
 			return Collections.unmodifiableSet(residual);
 		}
 

@@ -16,14 +16,14 @@
 
 package com.soklet;
 
-/** Identifies one configured lifecycle participant. */
-public enum ParticipantKind {
+/** Identifies one component represented in shutdown evidence. */
+public enum ShutdownComponentType {
 	/** HTTP request transport. */
 	HTTP,
 	/** Server-Sent Events transport. */
 	SSE,
 	/** Model Context Protocol transport. */
 	MCP,
-	/** Synthetic participant for framework startup work. */
-	FRAMEWORK_STARTUP
+	/** Framework-owned setup, attachment, and lifecycle work. */
+	FRAMEWORK
 }

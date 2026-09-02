@@ -66,7 +66,7 @@ final class SokletFrameworkSetup {
 
 	/** Runs the one setup attempt on the caller's tracked lifecycle worker. */
 	@NonNull
-	Set<ResourceMethod> run(@NonNull InternalStartupContext startupContext,
+	Set<ResourceMethod> run(@NonNull StartupContext startupContext,
 			@NonNull DeadlineWaiter waiter) {
 		requireNonNull(startupContext);
 		requireNonNull(waiter);
@@ -87,7 +87,7 @@ final class SokletFrameworkSetup {
 			this.resourceMethods.set(snapshot);
 			this.state.set(State.SUCCEEDED);
 			return snapshot;
-		} catch (DefaultResourceMethodResolver.StartupWaitCancelledException sentinel) {
+		} catch (DefaultResourceMethodResolver.StartupWaitCanceledException sentinel) {
 			// A non-owning Soklet may abandon only its wait while the JVM-wide
 			// resolver attempt continues.  Do not turn that lifecycle sentinel into
 			// the resolver's or this setup object's immutable terminal failure.
@@ -102,7 +102,7 @@ final class SokletFrameworkSetup {
 
 	@NonNull
 	private Set<ResourceMethod> resolveResourceMethods(
-			@NonNull InternalStartupContext startupContext,
+			@NonNull StartupContext startupContext,
 			@NonNull DeadlineWaiter waiter) {
 		ResourceMethodResolver resolver = this.config.getResourceMethodResolver();
 		if (resolver instanceof DefaultResourceMethodResolver defaultResolver)

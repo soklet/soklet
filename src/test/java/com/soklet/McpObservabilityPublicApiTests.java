@@ -51,7 +51,7 @@ public class McpObservabilityPublicApiTests {
 				List.class);
 		Method didStop = LifecycleObserver.class.getMethod(
 				"didStopMcpServer", McpServer.class,
-				ParticipantShutdownResult.class);
+				ShutdownComponentResult.class);
 		Method getDiagnostics = McpServer.class.getMethod("getDiagnostics");
 		Method getOperationName = McpRequestContext.class.getMethod(
 				"getOperationName");
@@ -143,7 +143,7 @@ public class McpObservabilityPublicApiTests {
 				.serverStarts(3L)
 				.requestsAccepted(5L)
 				.requestsRejected(1L)
-				.shutdowns(Map.of(ParticipantShutdownDisposition.GRACEFUL_TERMINATION, 2L))
+				.shutdowns(Map.of(ShutdownComponentDisposition.GRACEFUL_TERMINATION, 2L))
 				.build();
 		MetricsCollector.Snapshot snapshot = MetricsCollector.Snapshot.builder()
 				.mcpMetrics(aggregate)
@@ -154,10 +154,10 @@ public class McpObservabilityPublicApiTests {
 		Assertions.assertEquals(5L, aggregate.getRequestsAccepted());
 		Assertions.assertEquals(1L, aggregate.getRequestsRejected());
 		Assertions.assertEquals(2L, aggregate.getShutdowns()
-				.get(ParticipantShutdownDisposition.GRACEFUL_TERMINATION));
+				.get(ShutdownComponentDisposition.GRACEFUL_TERMINATION));
 		Assertions.assertThrows(UnsupportedOperationException.class,
 				() -> aggregate.getShutdowns().put(
-						ParticipantShutdownDisposition.RESIDUAL_ACTIVITY, 1L));
+						ShutdownComponentDisposition.RESIDUAL_ACTIVITY, 1L));
 		Assertions.assertThrows(NullPointerException.class,
 				() -> MetricsCollector.Snapshot.builder().mcpMetrics(null));
 	}
@@ -263,7 +263,7 @@ public class McpObservabilityPublicApiTests {
 								component("reason",
 										MetricsCollector.TransportFailureReason.class))),
 						Map.entry(McpMetricsEvent.ServerStopped.class, List.of(
-								component("outcome", ParticipantShutdownDisposition.class))));
+								component("outcome", ShutdownComponentDisposition.class))));
 
 		Set<Class<?>> permittedTypes = Set.copyOf(Arrays.asList(
 				McpMetricsEvent.class.getPermittedSubclasses()));
@@ -495,7 +495,7 @@ public class McpObservabilityPublicApiTests {
 				McpMetricsEvent.handlerCapacityRejected(),
 				McpMetricsEvent.transportFailure(
 						MetricsCollector.TransportFailureReason.WRITE_ERROR),
-				McpMetricsEvent.serverStopped(ParticipantShutdownDisposition.GRACEFUL_TERMINATION));
+				McpMetricsEvent.serverStopped(ShutdownComponentDisposition.GRACEFUL_TERMINATION));
 
 		Set<Class<?>> constructedTypes = events.stream()
 				.map(Object::getClass)
@@ -549,7 +549,7 @@ public class McpObservabilityPublicApiTests {
 		ParameterizedType parameterizedType = Assertions.assertInstanceOf(
 				ParameterizedType.class, genericType);
 		Assertions.assertEquals(Map.class, parameterizedType.getRawType());
-		Assertions.assertArrayEquals(new Object[]{ParticipantShutdownDisposition.class,
+		Assertions.assertArrayEquals(new Object[]{ShutdownComponentDisposition.class,
 				Long.class}, parameterizedType.getActualTypeArguments());
 	}
 

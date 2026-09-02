@@ -17,8 +17,6 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
-
-
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -29,30 +27,33 @@ import static java.util.Objects.requireNonNull;
  */
 public final class TransportOwnershipException extends IllegalStateException {
 	@NonNull
-	private final ParticipantKind participantKind;
+	private final ShutdownComponentType shutdownComponentType;
 	@NonNull
 	private final Class<?> transportClass;
 
-	TransportOwnershipException(@NonNull InternalParticipantKind participantKind,
+	TransportOwnershipException(
+			@NonNull InternalLifecycleComponentType shutdownComponentType,
 			@NonNull Class<?> transportClass) {
-		this(ParticipantKind.valueOf(requireNonNull(participantKind).name()),
+		this(ShutdownComponentType.valueOf(
+				requireNonNull(shutdownComponentType).name()),
 				transportClass);
 	}
 
-	TransportOwnershipException(@NonNull ParticipantKind participantKind,
+	TransportOwnershipException(
+			@NonNull ShutdownComponentType shutdownComponentType,
 			@NonNull Class<?> transportClass) {
-		super("The " + requireNonNull(participantKind)
+		super("The " + requireNonNull(shutdownComponentType)
 				+ " transport identity for "
 				+ requireNonNull(transportClass).getName()
 				+ " is already owned by another lifecycle");
-		this.participantKind = participantKind;
+		this.shutdownComponentType = shutdownComponentType;
 		this.transportClass = transportClass;
 	}
 
-	/** @return the kind of transport whose identity is already owned */
+	/** @return the type of shutdown component whose identity is already owned */
 	@NonNull
-	public ParticipantKind getParticipantKind() {
-		return this.participantKind;
+	public ShutdownComponentType getShutdownComponentType() {
+		return this.shutdownComponentType;
 	}
 
 	/** @return the configured transport implementation class */

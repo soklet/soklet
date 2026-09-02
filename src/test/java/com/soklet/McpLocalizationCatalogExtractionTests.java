@@ -61,7 +61,7 @@ class McpLocalizationCatalogExtractionTests {
 	private static final LifecyclePolicy TEST_LIFECYCLE_POLICY =
 			LifecyclePolicy.builder()
 					.startupTimeout(Duration.ofSeconds(5))
-					.startupCancellationTimeout(Duration.ofSeconds(2))
+					.startupCancelationTimeout(Duration.ofSeconds(2))
 					.gracefulShutdownDuration(Duration.ofSeconds(2))
 					.forcedShutdownDuration(Duration.ofSeconds(1))
 					.build();
@@ -141,11 +141,11 @@ class McpLocalizationCatalogExtractionTests {
 		assertTrue(plan.endpoints().get(0)
 				.response(McpCanonicalLocalizationPlan.ResponseKind
 						.RESOURCE_TEMPLATES_LIST).isPresent());
-		Set<McpTextCoordinate.Kind> kinds = plan.texts().stream()
-				.map(text -> text.getCoordinate().getKind())
+		Set<McpTextOwnerType> ownerTypes = plan.texts().stream()
+				.map(text -> text.getCoordinate().getMcpTextOwnerType())
 				.collect(java.util.stream.Collectors.toSet());
-		assertFalse(kinds.contains(McpTextCoordinate.Kind.RESOURCE));
-		assertTrue(kinds.contains(McpTextCoordinate.Kind.RESOURCE_TEMPLATE));
+		assertFalse(ownerTypes.contains(McpTextOwnerType.RESOURCE));
+		assertTrue(ownerTypes.contains(McpTextOwnerType.RESOURCE_TEMPLATE));
 	}
 
 	@Test
@@ -405,8 +405,8 @@ class McpLocalizationCatalogExtractionTests {
 	}
 
 	private static McpServer.Builder wireServerBuilder(
-			SimulatorTransports transports, McpEndpointRegistry registry) {
-		return transports.newMcpServerBuilder(0)
+			McpServer.Builder builder, McpEndpointRegistry registry) {
+		return builder
 				.host(LOOPBACK)
 				.endpointRegistry(registry)
 				.admissionController(
@@ -426,19 +426,18 @@ class McpLocalizationCatalogExtractionTests {
 		AtomicReference<McpServer> serverReference = new AtomicReference<>();
 		AtomicReference<WireResponse> captured = new AtomicReference<>();
 
-		SokletSimulator.run(transports -> {
-			McpServer.Builder builder = wireServerBuilder(transports, registry);
+		SokletSimulator.run(config -> config.mcpServer(0, builder -> {
+			McpServer.Builder configuredBuilder = wireServerBuilder(builder, registry);
 			if (localizer != null)
-				builder.localizer(localizer);
-			McpServer server = builder.build();
+				configuredBuilder.localizer(localizer);
+			McpServer server = configuredBuilder.build();
 			serverReference.set(server);
-			return SokletConfig.withMcpServer(server)
-					.resourceMethodResolver(
-							ResourceMethodResolver.fromMethods(Set.of()))
-					.metricsCollector(metrics)
-					.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
-					.build();
-		}, simulator -> {
+			return server;
+		}).resourceMethodResolver(
+				ResourceMethodResolver.fromMethods(Set.of()))
+				.metricsCollector(metrics)
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
+				.build(), simulator -> {
 			McpServer server = serverReference.get();
 			assertRunningOffNetwork(server);
 			McpSimulation simulation = simulator.startMcpRequest(discoveryRequest());

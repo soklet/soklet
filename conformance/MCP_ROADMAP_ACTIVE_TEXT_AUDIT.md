@@ -60,7 +60,7 @@ Contract format: 2.
 | COUNT-001 | <code>SECURITY.md</code> | <code>headingSubtree&#124;headingPath=["Security Policy","MCP Deployment Security"]&#124;role=security</code> |
 | COUNT-001 | <code>api/mcp/README.md</code> | <code>wholeFile&#124;role=factualSupport</code> |
 | COUNT-001 | <code>CHANGELOG.md</code> | <code>wholeFile&#124;role=migration</code> |
-| COUNT-001 | <code>CHANGELOG.md</code> | <code>headingSubtree&#124;headingPath=["Changelog","4.0.0 (Unreleased)","Features"]&#124;role=migration</code> |
+| COUNT-001 | <code>CHANGELOG.md</code> | <code>headingSubtree&#124;headingPath=["Changelog","4.0.0 (2026-09-01)","Detailed Implementation Record"]&#124;role=migration</code> |
 | COUNT-001 | <code>release/README.md</code> | <code>wholeFile&#124;role=factualSupport</code> |
 | CACHE-001 | <code>MCP.md</code> | <code>wholeFile&#124;role=factualSupport</code> |
 | CACHE-001 | <code>README.md</code> | <code>wholeFile&#124;role=factualSupport</code> |
@@ -122,8 +122,8 @@ Contract format: 2.
 | COUNT-001 | <code>README.md</code> | <code>"exactly 22 OpenTelemetry instruments"</code> | <code>headingSubtree&#124;headingPath=["What Else Does It Do?","Metrics Collection"]&#124;role=factualSupport</code> |
 | COUNT-001 | <code>README.md</code> | <code>"exactly 23 public final event variants"</code> | <code>headingSubtree&#124;headingPath=["What Else Does It Do?","Metrics Collection"]&#124;role=factualSupport</code> |
 | COUNT-001 | <code>SECURITY.md</code> | <code>"event variants map to exactly 22 downstream"</code> | <code>headingSubtree&#124;headingPath=["Security Policy","MCP Deployment Security"]&#124;role=security</code> |
-| COUNT-001 | <code>CHANGELOG.md</code> | <code>"exactly 23 event-record schemas"</code> | <code>headingSubtree&#124;headingPath=["Changelog","4.0.0 (Unreleased)","Features"]&#124;role=migration</code> |
-| COUNT-001 | <code>CHANGELOG.md</code> | <code>"exactly 22\n  OpenTelemetry instruments"</code> | <code>headingSubtree&#124;headingPath=["Changelog","4.0.0 (Unreleased)","Features"]&#124;role=migration</code> |
+| COUNT-001 | <code>CHANGELOG.md</code> | <code>"exactly 23 event-record schemas"</code> | <code>headingSubtree&#124;headingPath=["Changelog","4.0.0 (2026-09-01)","Detailed Implementation Record"]&#124;role=migration</code> |
+| COUNT-001 | <code>CHANGELOG.md</code> | <code>"exactly 22\n  OpenTelemetry instruments"</code> | <code>headingSubtree&#124;headingPath=["Changelog","4.0.0 (2026-09-01)","Detailed Implementation Record"]&#124;role=migration</code> |
 | CACHE-001 | — | — | — |
 | CACHE-002 | <code>MCP.md</code> | <code>"Protocol cache hints do not turn the HTTP transport into a shared cache"</code> | <code>headingSubtree&#124;headingPath=["Model Context Protocol (MCP)","Resources and pagination"]&#124;role=factualSupport</code> |
 | CACHE-002 | <code>SECURITY.md</code> | <code>"Every MCP HTTP response family—including early parser errors"</code> | <code>headingSubtree&#124;headingPath=["Security Policy","MCP Deployment Security"]&#124;role=security</code> |

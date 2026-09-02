@@ -32,7 +32,7 @@ public interface TransportRuntime {
 	/**
 	 * Binds the transport and returns only after it is ready.
 	 *
-	 * @param context startup timing and cancellation information
+	 * @param context startup timing and cancelation information
 	 */
 	void start(@NonNull StartupContext context);
 
