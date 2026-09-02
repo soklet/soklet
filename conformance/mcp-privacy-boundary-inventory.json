@@ -35340,6 +35340,24 @@
           "sink": "Throwable.IllegalArgumentException"
         },
         {
+          "file": "src/main/java/com/soklet/ShutdownCleanup.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/ShutdownCleanup.java#com.soklet.ShutdownCleanup#ShutdownCleanup(Duration,Action)->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "ShutdownCleanup(Duration,Action)",
+          "occurrence": 1,
+          "owner": "com.soklet.ShutdownCleanup",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/ShutdownCleanup.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/ShutdownCleanup.java#com.soklet.ShutdownCleanup#ShutdownCleanup(Duration,Action)->Throwable.IllegalArgumentException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "ShutdownCleanup(Duration,Action)",
+          "occurrence": 2,
+          "owner": "com.soklet.ShutdownCleanup",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
           "file": "src/main/java/com/soklet/ShutdownIncompleteException.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/ShutdownIncompleteException.java#com.soklet.ShutdownIncompleteException#ShutdownIncompleteException(ShutdownResult,Object,Throwable)->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
@@ -35638,36 +35656,9 @@
         },
         {
           "file": "src/main/java/com/soklet/SokletApplication.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletApplication.java#com.soklet.SokletApplication#cleanupConfiguration(Duration,ShutdownCleanup)->Throwable.IllegalArgumentException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletApplication.java#com.soklet.SokletApplication#runCore(SokletApplicationEnvironment,ShutdownCleanup,Set<ShutdownTrigger>)->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "cleanupConfiguration(Duration,ShutdownCleanup)",
-          "occurrence": 1,
-          "owner": "com.soklet.SokletApplication",
-          "sink": "Throwable.IllegalArgumentException"
-        },
-        {
-          "file": "src/main/java/com/soklet/SokletApplication.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletApplication.java#com.soklet.SokletApplication#cleanupConfiguration(Duration,ShutdownCleanup)->Throwable.IllegalArgumentException@2",
-          "matcherRuleId": "PRIV-MATCH-011",
-          "member": "cleanupConfiguration(Duration,ShutdownCleanup)",
-          "occurrence": 2,
-          "owner": "com.soklet.SokletApplication",
-          "sink": "Throwable.IllegalArgumentException"
-        },
-        {
-          "file": "src/main/java/com/soklet/SokletApplication.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletApplication.java#com.soklet.SokletApplication#cleanupConfiguration(Duration,ShutdownCleanup)->Throwable.IllegalArgumentException@3",
-          "matcherRuleId": "PRIV-MATCH-011",
-          "member": "cleanupConfiguration(Duration,ShutdownCleanup)",
-          "occurrence": 3,
-          "owner": "com.soklet.SokletApplication",
-          "sink": "Throwable.IllegalArgumentException"
-        },
-        {
-          "file": "src/main/java/com/soklet/SokletApplication.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SokletApplication.java#com.soklet.SokletApplication#runCore(SokletApplicationEnvironment)->Throwable.IllegalStateException@1",
-          "matcherRuleId": "PRIV-MATCH-011",
-          "member": "runCore(SokletApplicationEnvironment)",
+          "member": "runCore(SokletApplicationEnvironment,ShutdownCleanup,Set<ShutdownTrigger>)",
           "occurrence": 1,
           "owner": "com.soklet.SokletApplication",
           "sink": "Throwable.IllegalStateException"
@@ -50866,9 +50857,9 @@
         },
         {
           "file": "src/main/java/com/soklet/SokletApplication.java",
-          "key": "PRIV-MATCH-015:src/main/java/com/soklet/SokletApplication.java#com.soklet.SokletApplication#runCore(SokletApplicationEnvironment)->MetricsCollector.invocation.snapshot@1",
+          "key": "PRIV-MATCH-015:src/main/java/com/soklet/SokletApplication.java#com.soklet.SokletApplication#runCore(SokletApplicationEnvironment,ShutdownCleanup,Set<ShutdownTrigger>)->MetricsCollector.invocation.snapshot@1",
           "matcherRuleId": "PRIV-MATCH-015",
-          "member": "runCore(SokletApplicationEnvironment)",
+          "member": "runCore(SokletApplicationEnvironment,ShutdownCleanup,Set<ShutdownTrigger>)",
           "occurrence": 1,
           "owner": "com.soklet.SokletApplication",
           "sink": "MetricsCollector.invocation.snapshot"

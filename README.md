@@ -169,21 +169,20 @@ public class App {
 
 The static `run(...)` methods cover the usual standalone-process lifecycle. If
 the runner also owns bounded application-resource cleanup, configure one
-one-shot application attempt directly:
+one-shot application and supply that cleanup for its run:
 
 ```java
-ShutdownResult result = SokletApplication.withConfig(config)
-    .addShutdownTrigger(ShutdownTrigger.ENTER_KEY)
-    .afterCompleteShutdown(
+ShutdownResult result = SokletApplication.fromConfig(config).run(
+    ShutdownCleanup.fromTimeoutAndAction(
         Duration.ofSeconds(5),
-        shutdownResult -> applicationResources.close())
-    .build()
-    .run();
+        shutdownResult -> applicationResources.close()),
+    ShutdownTrigger.ENTER_KEY);
 ```
 
-The built `SokletApplication` binds its configuration, triggers, and cleanup to
-that single lifecycle attempt. It cannot be run a second time or concurrently.
-Cleanup is eligible only after Soklet has proven core shutdown complete.
+The configured `SokletApplication` is one-shot. After any run attempt begins,
+it cannot be run a second time or concurrently. The cleanup action is eligible
+only after Soklet has proven core shutdown complete; an incomplete core
+shutdown skips it.
 
 Here we use raw `javac` to build and `java` to run.
 

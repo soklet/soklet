@@ -18,18 +18,82 @@ package com.soklet;
 
 import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.ThreadSafe;
+import java.time.Duration;
+
+import static java.util.Objects.requireNonNull;
+
 /**
- * One synchronous cleanup action for an ingress-exclusive application resource.
- * Returning after merely delegating asynchronous work is not proof that the
- * resource was released.
+ * Immutable specification for one bounded, synchronous cleanup action for an
+ * ingress-exclusive application resource. Returning after merely delegating
+ * asynchronous work is not proof that the resource was released.
  */
-@FunctionalInterface
-public interface ShutdownCleanup {
+@ThreadSafe
+public final class ShutdownCleanup {
+	@NonNull
+	private final Duration timeout;
+	@NonNull
+	private final Action action;
+
+	private ShutdownCleanup(@NonNull Duration timeout,
+			@NonNull Action action) {
+		Duration exactTimeout = requireNonNull(timeout);
+		final long timeoutNanos;
+		try {
+			timeoutNanos = exactTimeout.toNanos();
+		} catch (ArithmeticException exception) {
+			throw new IllegalArgumentException(
+					"Shutdown cleanup timeout exceeds signed nanoseconds",
+					exception);
+		}
+		if (timeoutNanos <= 0L)
+			throw new IllegalArgumentException(
+					"Shutdown cleanup timeout must be greater than zero");
+		this.timeout = exactTimeout;
+		this.action = requireNonNull(action);
+	}
+
 	/**
-	 * Cleans up after complete core shutdown.
+	 * Creates a cleanup specification from its deadline budget and synchronous
+	 * action.
 	 *
-	 * @param completeResult exact complete core result
-	 * @throws Exception if cleanup fails
+	 * @param timeout positive cleanup deadline budget representable as signed
+	 * nanoseconds
+	 * @param action synchronous cleanup action
+	 * @return immutable cleanup specification
+	 * @throws IllegalArgumentException if {@code timeout} is non-positive or
+	 * exceeds signed-nanosecond range
 	 */
-	void cleanUp(@NonNull ShutdownResult completeResult) throws Exception;
+	@NonNull
+	public static ShutdownCleanup fromTimeoutAndAction(
+			@NonNull Duration timeout, @NonNull Action action) {
+		return new ShutdownCleanup(timeout, action);
+	}
+
+	/** @return positive cleanup deadline budget */
+	@NonNull
+	public Duration getTimeout() {
+		return this.timeout;
+	}
+
+	@NonNull
+	Action action() {
+		return this.action;
+	}
+
+	/**
+	 * One synchronous cleanup action for an ingress-exclusive application
+	 * resource.
+	 */
+	@FunctionalInterface
+	public interface Action {
+		/**
+		 * Performs cleanup after complete core shutdown.
+		 *
+		 * @param shutdownResult exact complete core shutdown result
+		 * @throws Exception if cleanup fails
+		 */
+		void performCleanup(@NonNull ShutdownResult shutdownResult)
+				throws Exception;
+	}
 }

@@ -30,67 +30,75 @@ import java.util.concurrent.atomic.AtomicReference;
 @Timeout(value = 60, unit = TimeUnit.SECONDS)
 class SokletApplicationTests {
 	@Test
-	void builderRejectsNullConfigAndShutdownTriggerImmediately() {
+	void factoryRejectsNullConfigImmediately() {
 		Assertions.assertThrows(NullPointerException.class,
-				() -> SokletApplication.withConfig(null));
-
-		SokletApplication.Builder builder =
-				SokletApplication.withConfig(config());
-		Assertions.assertThrows(NullPointerException.class,
-				() -> builder.addShutdownTrigger(null));
+				() -> SokletApplication.fromConfig(null));
 	}
 
 	@Test
-	void builderAcceptsDuplicateTriggersAndEveryPositiveNanosecondBoundary() {
-		ShutdownCleanup cleanup = result -> { };
-
+	void cleanupAcceptsEveryPositiveNanosecondBoundary() {
 		for (Duration timeout : List.of(Duration.ofNanos(1),
 				Duration.ofSeconds(1), Duration.ofNanos(Long.MAX_VALUE))) {
-			SokletApplication application = SokletApplication.withConfig(config())
-					.addShutdownTrigger(ShutdownTrigger.ENTER_KEY)
-					.addShutdownTrigger(ShutdownTrigger.ENTER_KEY)
-					.afterCompleteShutdown(timeout, cleanup)
-					.build();
+			ShutdownCleanup cleanup = ShutdownCleanup.fromTimeoutAndAction(
+					timeout, shutdownResult -> { });
 
-			Assertions.assertNotNull(application);
+			Assertions.assertEquals(timeout, cleanup.getTimeout());
 		}
 	}
 
 	@Test
-	void cleanupConfigurationRejectsNullZeroNegativeAndOverflowValues() {
-		ShutdownCleanup cleanup = result -> { };
+	void cleanupRejectsNullZeroNegativeAndOverflowValues() {
+		ShutdownCleanup.Action action = shutdownResult -> { };
 
 		Assertions.assertThrows(NullPointerException.class, () ->
-				SokletApplication.withConfig(config())
-						.afterCompleteShutdown(null, cleanup));
+				ShutdownCleanup.fromTimeoutAndAction(null, action));
 		Assertions.assertThrows(NullPointerException.class, () ->
-				SokletApplication.withConfig(config())
-						.afterCompleteShutdown(Duration.ofSeconds(1), null));
+				ShutdownCleanup.fromTimeoutAndAction(Duration.ofSeconds(1), null));
 		Assertions.assertThrows(NullPointerException.class, () ->
-				SokletApplication.withConfig(config())
-						.afterCompleteShutdown(null, null));
+				ShutdownCleanup.fromTimeoutAndAction(null, null));
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				SokletApplication.withConfig(config())
-						.afterCompleteShutdown(Duration.ZERO, cleanup).build());
+				ShutdownCleanup.fromTimeoutAndAction(Duration.ZERO, action));
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				SokletApplication.withConfig(config())
-						.afterCompleteShutdown(Duration.ofNanos(-1), cleanup)
-						.build());
+				ShutdownCleanup.fromTimeoutAndAction(Duration.ofNanos(-1), action));
 		IllegalArgumentException overflow = Assertions.assertThrows(
 				IllegalArgumentException.class, () ->
-						SokletApplication.withConfig(config())
-								.afterCompleteShutdown(
-										Duration.ofSeconds(Long.MAX_VALUE), cleanup)
-								.build());
+						ShutdownCleanup.fromTimeoutAndAction(
+								Duration.ofSeconds(Long.MAX_VALUE), action));
 		Assertions.assertInstanceOf(ArithmeticException.class,
 				overflow.getCause());
 	}
 
 	@Test
+	void malformedRunArgumentsDoNotConsumeTheApplicationRunClaim() {
+		SokletApplication application = SokletApplication.fromConfig(config());
+		ShutdownCleanup cleanup = ShutdownCleanup.fromTimeoutAndAction(
+				Duration.ofSeconds(1), shutdownResult -> { });
+
+		Assertions.assertThrows(NullPointerException.class,
+				() -> application.run((ShutdownTrigger[]) null));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> application.run(ShutdownTrigger.ENTER_KEY, null));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> application.run((ShutdownCleanup) null,
+						ShutdownTrigger.ENTER_KEY));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> application.run(cleanup, (ShutdownTrigger[]) null));
+		Assertions.assertThrows(NullPointerException.class,
+				() -> application.run(cleanup, ShutdownTrigger.ENTER_KEY, null));
+
+		RuntimeException exactFailure = new RuntimeException("factory failed");
+		RuntimeException firstAttempt = Assertions.assertThrows(
+				RuntimeException.class, () -> application.run(environment(
+						(config, services, publisher) -> { throw exactFailure; }),
+						ShutdownTrigger.ENTER_KEY,
+						ShutdownTrigger.ENTER_KEY));
+		Assertions.assertSame(exactFailure, firstAttempt);
+	}
+
+	@Test
 	void failedAttemptStillConsumesTheApplicationRunClaim() {
 		RuntimeException exactFailure = new RuntimeException("factory failed");
-		SokletApplication application =
-				SokletApplication.withConfig(config()).build();
+		SokletApplication application = SokletApplication.fromConfig(config());
 		SokletApplicationEnvironment environment = environment(
 				(config, services, publisher) -> { throw exactFailure; });
 
@@ -105,8 +113,7 @@ class SokletApplicationTests {
 
 	@Test
 	void invalidInjectedEnvironmentStillConsumesTheApplicationRunClaim() {
-		SokletApplication application =
-				SokletApplication.withConfig(config()).build();
+		SokletApplication application = SokletApplication.fromConfig(config());
 
 		Assertions.assertThrows(NullPointerException.class,
 				() -> application.run((SokletApplicationEnvironment) null));
@@ -122,8 +129,7 @@ class SokletApplicationTests {
 		CountDownLatch factoryEntered = new CountDownLatch(1);
 		CountDownLatch releaseFactory = new CountDownLatch(1);
 		RuntimeException exactFailure = new RuntimeException("factory released");
-		SokletApplication application =
-				SokletApplication.withConfig(config()).build();
+		SokletApplication application = SokletApplication.fromConfig(config());
 		SokletApplicationEnvironment environment = environment(
 				(config, services, publisher) -> {
 					factoryEntered.countDown();

@@ -61,8 +61,9 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 				.resourceMethodResolver(resolver)
 				.internalLifecyclePolicy(immediateShutdownPolicy())
 				.build();
-		RunnerCall call = startRunner(application(config, cleanupCalls),
-				environment(workers, triggers, reporter));
+		RunnerCall call = startRunner(application(config),
+				environment(workers, triggers, reporter), cleanup(cleanupCalls),
+				ShutdownTrigger.ENTER_KEY);
 
 		try {
 			Assertions.assertTrue(resolver.awaitEntered(),
@@ -133,8 +134,9 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 						Set.of(DiagnosticsResource.class)))
 				.internalLifecyclePolicy(immediateShutdownPolicy())
 				.build();
-		RunnerCall call = startRunner(application(config, cleanupCalls),
-				environment(workers, triggers, reporter));
+		RunnerCall call = startRunner(application(config),
+				environment(workers, triggers, reporter), cleanup(cleanupCalls),
+				ShutdownTrigger.ENTER_KEY);
 
 		try {
 			Assertions.assertTrue(leafAttachEntered.await(5, TimeUnit.SECONDS),
@@ -204,13 +206,15 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 	}
 
 	@NonNull
-	private static SokletApplication application(@NonNull SokletConfig config,
+	private static SokletApplication application(@NonNull SokletConfig config) {
+		return SokletApplication.fromConfig(config);
+	}
+
+	@NonNull
+	private static ShutdownCleanup cleanup(
 			@NonNull AtomicInteger cleanupCalls) {
-		return SokletApplication.withConfig(config)
-				.addShutdownTrigger(ShutdownTrigger.ENTER_KEY)
-				.afterCompleteShutdown(CLEANUP_TIMEOUT,
-						result -> requireNonNull(cleanupCalls).incrementAndGet())
-				.build();
+		return ShutdownCleanup.fromTimeoutAndAction(CLEANUP_TIMEOUT,
+				result -> requireNonNull(cleanupCalls).incrementAndGet());
 	}
 
 	@NonNull
@@ -234,11 +238,14 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 
 	@NonNull
 	private static RunnerCall startRunner(@NonNull SokletApplication application,
-			@NonNull SokletApplicationEnvironment environment) {
+			@NonNull SokletApplicationEnvironment environment,
+			@NonNull ShutdownCleanup cleanup,
+			@NonNull ShutdownTrigger... additionalShutdownTriggers) {
 		RunnerCall call = new RunnerCall();
 		Thread thread = new Thread(() -> {
 			try {
-				call.result.set(application.run(environment));
+				call.result.set(application.run(environment, cleanup,
+						additionalShutdownTriggers));
 			} catch (Throwable failure) {
 				call.failure.set(failure);
 			} finally {

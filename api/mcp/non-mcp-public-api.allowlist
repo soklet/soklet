@@ -5,6 +5,7 @@ com.soklet.LifecyclePolicy$Builder
 com.soklet.ResidualActivityEvidence
 com.soklet.ResidualActivityType
 com.soklet.ShutdownCleanup
+com.soklet.ShutdownCleanup$Action
 com.soklet.ShutdownCleanupFailure
 com.soklet.ShutdownComponentDisposition
 com.soklet.ShutdownComponentResult
@@ -18,7 +19,6 @@ com.soklet.SimulatorConfig
 com.soklet.SimulatorConfig$Builder
 com.soklet.Soklet
 com.soklet.SokletApplication
-com.soklet.SokletApplication$Builder
 com.soklet.SokletApplicationCleanupException
 com.soklet.SokletLifecycleException
 com.soklet.SokletSimulator

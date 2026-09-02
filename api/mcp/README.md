@@ -12,7 +12,7 @@ localization-context builder amendment, followed by the 2026-08-17 final
 greenfield API polish amendment and the 2026-08-18 greenfield public-record
 elimination amendment, followed by the 2026-08-18 greenfield typed-request-
 state amendment, the 2026-08-27 lifecycle cutover, the 2026-08-28 pre-G3 API
-correction, and the 2026-09-01 shutdown-component and application-builder
+correction, and the 2026-09-01 shutdown-component, direct-run, and cleanup-value
 amendments. The
 [Phase 5 freeze rationale](phase-5-freeze-rationale.md) and
 [Phase 6 freeze rationale](phase-6-freeze-rationale.md) record their exact
@@ -2045,14 +2045,16 @@ The corresponding Phase 6 values are
 `69b008b685dead8e1ae66691f0e9955688b9e43740281ea0f82497df22a4dda0`
 and
 `d829563b135bae5a0e97559ecf5d1a8dd280c4b7792a74a2f10fcf8d8017d18b`.
-Phase 5 remains byte-identical. The application-runner refinement replaces
-the standalone `SokletApplicationOptions` owner and its nested builder with a
-one-shot `SokletApplication.Builder` nested under the already-owned
-`SokletApplication`. That changes no MCP phase owner or frozen descriptor and
-reduces the non-MCP owner inventory by one. The exact 38-entry non-MCP
-allowlist has
-SHA-256
-`077e568a38d3b63d187fdd4c1989f386145028c5e662c876ea7642e6c9c8aba2`,
+Phase 5 remains byte-identical. The final application-runner shape has no
+application builder: `SokletApplication.fromConfig(...)` returns the
+configured one-shot value, whose `run(...)` overloads accept shutdown triggers
+and an optional immutable `ShutdownCleanup`. `ShutdownCleanup` exposes
+`fromTimeoutAndAction(...)` and `getTimeout()`, while its nested functional
+`ShutdownCleanup.Action` owns the synchronous callback contract. Swapping the
+discarded `SokletApplication.Builder` owner for `ShutdownCleanup.Action`
+changes no MCP phase owner or frozen descriptor and leaves the exact non-MCP
+allowlist at 38 entries with SHA-256
+`f033df8701ffef4718fa0c62858ee02054910a0698503850670e80eafdddd6d6`,
 and the released-3.5.1 compatibility ledger remains 618 records with SHA-256
 `3d9d68bbbdeabae63a78d40a50c9896d3f11f6d0d2305beff0c94bd86476928c`.
 

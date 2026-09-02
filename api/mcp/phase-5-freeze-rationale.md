@@ -260,14 +260,18 @@ sources, and builds the main, sources, and Javadoc artifacts; the maintained
 179-source Java 17 API sketch passes compilation, Javadoc doclint, and its
 localization smoke test.
 
-## 2026-09-01 non-MCP application-builder amendment
+## 2026-09-01 non-MCP direct-run and cleanup-value amendment
 
-The application-runner refinement removes `SokletApplicationOptions` and its
-nested builder and vends the one-shot `SokletApplication.Builder` from the
-already-owned `SokletApplication` type. Phase 5 remains byte-identical at 36
-owners and 179 records. The exact non-MCP allowlist contains 38 owners with
-SHA-256
-`077e568a38d3b63d187fdd4c1989f386145028c5e662c876ea7642e6c9c8aba2`;
+The final application-runner shape uses `SokletApplication.fromConfig(...)`
+to create the configured one-shot value and exposes direct `run(...)`
+overloads for shutdown triggers and optional bounded cleanup.
+`ShutdownCleanup` is an immutable value with `fromTimeoutAndAction(...)`,
+`getTimeout()`, and the nested functional `ShutdownCleanup.Action` callback.
+Swapping the discarded `SokletApplication.Builder` owner for
+`ShutdownCleanup.Action` changes no Phase 5 descriptor; Phase 5 remains
+byte-identical at 36 owners and 179 records. The exact non-MCP allowlist
+remains at 38 owners with SHA-256
+`f033df8701ffef4718fa0c62858ee02054910a0698503850670e80eafdddd6d6`;
 the 233-owner MCP union therefore has 271 current-side owners. The
 released-3.5.1 compatibility ledger remains 618 records with SHA-256
 `3d9d68bbbdeabae63a78d40a50c9896d3f11f6d0d2305beff0c94bd86476928c`.
