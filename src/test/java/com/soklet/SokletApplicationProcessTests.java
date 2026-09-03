@@ -148,13 +148,13 @@ public final class SokletApplicationProcessTests {
 		Assertions.assertSame(runtimeFactory.runtime.notStartedResult,
 				thrown.getInternalShutdownResult());
 		Assertions.assertEquals(1, thrown.getSuppressed().length);
-		SokletApplicationCleanupException suppressed =
+		SokletShutdownCleanupException suppressed =
 				Assertions.assertInstanceOf(
-						SokletApplicationCleanupException.class,
+						SokletShutdownCleanupException.class,
 						thrown.getSuppressed()[0]);
 		Assertions.assertSame(cleanupFailure, suppressed.getCause());
-		Assertions.assertEquals(ShutdownCleanupFailure.FAILED,
-				suppressed.getShutdownCleanupFailure());
+		Assertions.assertEquals(ShutdownCleanupFailureReason.FAILED,
+				suppressed.getShutdownCleanupFailureReason());
 		Assertions.assertEquals(0, runtimeFactory.runtime.startCalls.get());
 	}
 
@@ -288,8 +288,8 @@ public final class SokletApplicationProcessTests {
 		triggers.trigger();
 		call.await();
 
-		ShutdownIncompleteException thrown = Assertions.assertInstanceOf(
-				ShutdownIncompleteException.class, call.failure.get());
+		SokletShutdownIncompleteException thrown = Assertions.assertInstanceOf(
+				SokletShutdownIncompleteException.class, call.failure.get());
 		Assertions.assertSame(incompleteCancellation,
 				thrown.getInternalShutdownResult());
 		Assertions.assertNull(call.result.get());
@@ -397,9 +397,9 @@ public final class SokletApplicationProcessTests {
 
 		Assertions.assertSame(runtimeFactory.runtime.startupFailure, thrown);
 		Assertions.assertEquals(1, thrown.getSuppressed().length);
-		SokletApplicationCleanupException suppressed =
+		SokletShutdownCleanupException suppressed =
 				Assertions.assertInstanceOf(
-						SokletApplicationCleanupException.class,
+						SokletShutdownCleanupException.class,
 						thrown.getSuppressed()[0]);
 		Assertions.assertSame(cleanupFailure, suppressed.getCause());
 	}
@@ -448,8 +448,8 @@ public final class SokletApplicationProcessTests {
 			runtimeFactory.runtime.shutdown();
 
 		call.await();
-		ShutdownIncompleteException thrown = Assertions.assertInstanceOf(
-				ShutdownIncompleteException.class, call.failure.get());
+		SokletShutdownIncompleteException thrown = Assertions.assertInstanceOf(
+				SokletShutdownIncompleteException.class, call.failure.get());
 		Assertions.assertSame(runtimeFactory.runtime.incompleteResult,
 				thrown.getInternalShutdownResult());
 		Assertions.assertEquals(0, cleanupCalls.get());
@@ -469,8 +469,8 @@ public final class SokletApplicationProcessTests {
 				new AdmissionFence(), () -> { }, new LifecycleWorkers());
 		InternalTerminationEvent event = new InternalTerminationEvent(1L,
 				InternalTerminationEvent.Type.FAILURE, group.root(), transportFailure);
-		SokletTerminatedUnexpectedlyException unexpected =
-				new SokletTerminatedUnexpectedlyException(event, incomplete,
+		SokletUnexpectedTerminationException unexpected =
+				new SokletUnexpectedTerminationException(event, incomplete,
 						transportFailure);
 		runtimeFactory.runtime.shutdownResultOverride = incomplete;
 		runtimeFactory.runtime.terminalFailureOverride = unexpected;
@@ -575,14 +575,14 @@ public final class SokletApplicationProcessTests {
 		triggers.trigger();
 		call.await();
 
-		SokletApplicationCleanupException thrown = Assertions.assertInstanceOf(
-				SokletApplicationCleanupException.class, call.failure.get());
+		SokletShutdownCleanupException thrown = Assertions.assertInstanceOf(
+				SokletShutdownCleanupException.class, call.failure.get());
 		Assertions.assertSame(cleanupCause, thrown.getCause());
 		Assertions.assertSame(runtimeFactory.runtime.gracefulResult,
 				thrown.getInternalShutdownResult());
 		Assertions.assertEquals(0, thrown.getSuppressed().length);
-		Assertions.assertEquals(ShutdownCleanupFailure.FAILED,
-				thrown.getShutdownCleanupFailure());
+		Assertions.assertEquals(ShutdownCleanupFailureReason.FAILED,
+				thrown.getShutdownCleanupFailureReason());
 		Assertions.assertEquals(SokletApplicationPrimaryOutcome.EXPECTED,
 				reporter.snapshot.get().primaryOutcome());
 		Assertions.assertEquals(InternalShutdownCleanupDisposition.FAILED,
@@ -605,8 +605,8 @@ public final class SokletApplicationProcessTests {
 				new AdmissionFence(), () -> { }, new LifecycleWorkers());
 		InternalTerminationEvent event = new InternalTerminationEvent(2L,
 				InternalTerminationEvent.Type.FAILURE, group.root(), transportFailure);
-		SokletTerminatedUnexpectedlyException exactUnexpected =
-				new SokletTerminatedUnexpectedlyException(event, completeUnexpected,
+		SokletUnexpectedTerminationException exactUnexpected =
+				new SokletUnexpectedTerminationException(event, completeUnexpected,
 						transportFailure);
 		runtimeFactory.runtime.shutdownResultOverride = completeUnexpected;
 		runtimeFactory.runtime.terminalFailureOverride = exactUnexpected;
@@ -627,8 +627,8 @@ public final class SokletApplicationProcessTests {
 
 		Assertions.assertSame(exactUnexpected, call.failure.get());
 		Assertions.assertEquals(1, exactUnexpected.getSuppressed().length);
-		SokletApplicationCleanupException suppressed = Assertions.assertInstanceOf(
-				SokletApplicationCleanupException.class,
+		SokletShutdownCleanupException suppressed = Assertions.assertInstanceOf(
+				SokletShutdownCleanupException.class,
 				exactUnexpected.getSuppressed()[0]);
 		Assertions.assertSame(cleanupCause, suppressed.getCause());
 		Assertions.assertSame(completeUnexpected,
@@ -659,8 +659,8 @@ public final class SokletApplicationProcessTests {
 		requireNonNull(call.thread).interrupt();
 		call.await();
 
-		SokletApplicationCleanupException thrown = Assertions.assertInstanceOf(
-				SokletApplicationCleanupException.class, call.failure.get());
+		SokletShutdownCleanupException thrown = Assertions.assertInstanceOf(
+				SokletShutdownCleanupException.class, call.failure.get());
 		Assertions.assertSame(cleanupCause, thrown.getCause());
 		Assertions.assertSame(runtimeFactory.runtime.gracefulResult,
 				thrown.getInternalShutdownResult());
@@ -1094,7 +1094,7 @@ public final class SokletApplicationProcessTests {
 					== InternalStartupDisposition.TIMED_OUT)
 				return Optional.of(this.startupFailure);
 			if (!result.isComplete())
-				return Optional.of(new ShutdownIncompleteException(result));
+				return Optional.of(new SokletShutdownIncompleteException(result));
 			return Optional.empty();
 		}
 

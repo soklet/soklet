@@ -370,12 +370,12 @@ final class SokletDirectTransportAliasTests {
 				}
 
 				@Override
-				public void quiesce(@NonNull ShutdownContext context) {
+				public void shutdownGracefully(@NonNull ShutdownContext context) {
 					quiesces.incrementAndGet();
 				}
 
 				@Override
-				public void force(@NonNull ShutdownContext context) {
+				public void shutdownForcibly(@NonNull ShutdownContext context) {
 					forces.incrementAndGet();
 				}
 			};

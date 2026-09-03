@@ -372,7 +372,7 @@ final class SokletDirectLifecycleTests {
 
 	@NonNull
 	private static InternalLifecyclePolicy shortPolicy() {
-		return new InternalLifecyclePolicy(Optional.of(SHORT_PHASE), SHORT_PHASE,
+		return new InternalLifecyclePolicy(SHORT_PHASE, SHORT_PHASE,
 				SHORT_PHASE, SHORT_PHASE);
 	}
 
@@ -566,12 +566,12 @@ final class SokletDirectLifecycleTests {
 				}
 
 				@Override
-				public void quiesce(@NonNull ShutdownContext context) {
+				public void shutdownGracefully(@NonNull ShutdownContext context) {
 					terminate();
 				}
 
 				@Override
-				public void force(@NonNull ShutdownContext context) {
+				public void shutdownForcibly(@NonNull ShutdownContext context) {
 					terminate();
 				}
 			};
@@ -629,12 +629,12 @@ final class SokletDirectLifecycleTests {
 				}
 
 				@Override
-				public void quiesce(@NonNull ShutdownContext context) {
+				public void shutdownGracefully(@NonNull ShutdownContext context) {
 					terminate();
 				}
 
 				@Override
-				public void force(@NonNull ShutdownContext context) {
+				public void shutdownForcibly(@NonNull ShutdownContext context) {
 					terminate();
 				}
 			};

@@ -40,7 +40,9 @@ public final class TransportIdentity {
 	}
 
 	/**
-	 * Creates a fresh identity token distinct from every token previously returned.
+	 * Creates a fresh reference-identity token distinct from every token previously
+	 * returned. Identity tokens intentionally do not have structural equality or
+	 * hash-code semantics.
 	 *
 	 * @return a fresh transport identity
 	 */

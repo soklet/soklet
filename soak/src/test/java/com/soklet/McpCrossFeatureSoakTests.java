@@ -53,7 +53,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Function;
+import java.util.function.Supplier;
 
 import static java.util.Objects.requireNonNull;
 
@@ -82,7 +82,7 @@ public class McpCrossFeatureSoakTests {
 			"soak.simulator-residual";
 	private static final int SIMULATOR_CASE_COUNT = 8;
 	private static final int SIMULATOR_STREAM_ITEM_CAPACITY = 4;
-	private static final int SIMULATOR_MAXIMUM_CAPTURED_BYTES = 4_096;
+	private static final int SIMULATOR_MAXIMUM_CAPTURED_SIZE_IN_BYTES = 4_096;
 	private static final int SIMULATOR_REQUESTS_PER_CASE_SET = 9;
 	private static final int SIMULATOR_STREAMS_PER_CASE_SET = 6;
 	private static final int SIMULATOR_SUBSCRIPTIONS_PER_CASE_SET = 1;
@@ -273,9 +273,9 @@ public class McpCrossFeatureSoakTests {
 				new CountingMcpMetricsCollector();
 		CountingLifecycle lifecycle = new CountingLifecycle(0);
 		AtomicReference<McpServer> mcpServer = new AtomicReference<>();
-		Function<SimulatorConfig.Builder, SimulatorConfig> configFactory =
+		Supplier<SimulatorConfig> configFactory =
 				simulatorConfigFactory(state,
-						publisher, metricsCollector, lifecycle, mcpServer);
+						publisher, metricsCollector, lifecycle);
 		AtomicIntegerArray caseCounts =
 				new AtomicIntegerArray(SIMULATOR_CASE_COUNT);
 		int workloadCycles = PROFILE.concurrentClients()
@@ -299,7 +299,8 @@ public class McpCrossFeatureSoakTests {
 		try {
 			// Warm all deterministic paths and the executor before measuring the
 			// stopped, off-network resource baseline.
-			SokletSimulator.run(configFactory, simulator -> {
+			SokletSimulator.run(configFactory.get(), simulator -> {
+				mcpServer.set(simulator.getMcpServer().orElseThrow());
 				try {
 					for (int caseIndex = 0; caseIndex < SIMULATOR_CASE_COUNT;
 							caseIndex++)
@@ -318,7 +319,8 @@ public class McpCrossFeatureSoakTests {
 			baseline = SoakResourceSnapshot.captureAfterGc();
 
 			AtomicReference<RunResult> runResult = new AtomicReference<>();
-			SokletSimulator.run(configFactory, simulator -> {
+			SokletSimulator.run(configFactory.get(), simulator -> {
+				mcpServer.set(simulator.getMcpServer().orElseThrow());
 				try {
 					runResult.set(runConcurrent(PROFILE.concurrentClients(),
 							PROFILE.cyclesPerClient(), (clientIndex, iteration) -> {
@@ -361,11 +363,11 @@ public class McpCrossFeatureSoakTests {
 					PROFILE.settleTimeout(), PROFILE.resourceTolerance());
 			SoakReport.recordPassedScenario(
 					"MCP off-network simulator churn",
-					"clients=%d, cyclesPerClient=%d, cases=%d, streamItemQueueCapacity=%d, maximumCapturedBytes=%d, residualWaves=1"
+					"clients=%d, cyclesPerClient=%d, cases=%d, streamItemQueueCapacity=%d, maximumCapturedSizeInBytes=%d, residualWaves=1"
 							.formatted(PROFILE.concurrentClients(),
 									PROFILE.cyclesPerClient(), SIMULATOR_CASE_COUNT,
 									SIMULATOR_STREAM_ITEM_CAPACITY,
-									SIMULATOR_MAXIMUM_CAPTURED_BYTES),
+									SIMULATOR_MAXIMUM_CAPTURED_SIZE_IN_BYTES),
 					Duration.ofNanos(System.nanoTime() - startedAt),
 					baseline,
 					finalSnapshot,
@@ -427,20 +429,24 @@ public class McpCrossFeatureSoakTests {
 		return LifecyclePolicy.builder()
 				.startupTimeout(Duration.ofSeconds(30))
 				.startupCancelationTimeout(Duration.ofSeconds(2))
-				.gracefulShutdownDuration(
-						PROFILE.gracefulShutdownDuration())
-				.forcedShutdownDuration(PROFILE.forcedShutdownDuration())
+				.gracefulShutdownTimeout(
+						PROFILE.gracefulShutdownTimeout())
+				.forcedShutdownTimeout(PROFILE.forcedShutdownTimeout())
 				.build();
 	}
 
 	@NonNull
 	private static McpServer mcpServer(@NonNull SoakState state,
 			@NonNull CountingSubscriptionPublisher publisher) {
-		return mcpServer(McpServer.withPort(0), state, publisher);
+		McpEndpoint endpoint = mcpEndpoint(state, publisher);
+		return configureMcpServer(McpServer.withPort(0))
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(McpAdmissionController.acceptAllInstance())
+				.build();
 	}
 
 	@NonNull
-	private static McpServer mcpServer(McpServer.@NonNull Builder builder,
+	private static McpEndpoint mcpEndpoint(
 			@NonNull SoakState state,
 			@NonNull CountingSubscriptionPublisher publisher) {
 		requireNonNull(state);
@@ -614,7 +620,7 @@ public class McpCrossFeatureSoakTests {
 						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED,
 						McpSubscriptionNotificationType.RESOURCE_UPDATED))
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
+		return McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
 						"soklet-mcp-soak", "4.0.0").build())
 				.tool(progressTool)
@@ -626,12 +632,12 @@ public class McpCrossFeatureSoakTests {
 				.resource(resource)
 				.subscriptions(subscriptions)
 				.build();
+	}
 
+	private static McpServer.@NonNull Builder configureMcpServer(
+			McpServer.@NonNull Builder builder) {
 		return builder
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.protectionConfig(McpProtectionConfig.withKeyRing(
@@ -652,23 +658,21 @@ public class McpCrossFeatureSoakTests {
 				.maximumSubscriptionDuration(
 						PROFILE.maximumSubscriptionDuration())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
-				.allowedHosts(Set.of(LOOPBACK))
-				.build();
+				.allowedHosts(Set.of(LOOPBACK));
 	}
 
 	@NonNull
-	private static Function<SimulatorConfig.Builder, SimulatorConfig>
+	private static Supplier<SimulatorConfig>
 			simulatorConfigFactory(
 			@NonNull SoakState state,
 			@NonNull CountingSubscriptionPublisher publisher,
 			@NonNull CountingMcpMetricsCollector metricsCollector,
-			@NonNull CountingLifecycle lifecycle,
-			@NonNull AtomicReference<McpServer> serverReference) {
-		return config -> config.mcpServer(0, mcpServerBuilder -> {
-			McpServer server = mcpServer(mcpServerBuilder, state, publisher);
-			serverReference.set(server);
-			return server;
-		})
+			@NonNull CountingLifecycle lifecycle) {
+		return () -> SimulatorConfig.builder().mcpServer(0,
+				McpEndpointRegistry.fromEndpoints(List.of(
+						mcpEndpoint(state, publisher))),
+				McpAdmissionController.acceptAllInstance(),
+				McpCrossFeatureSoakTests::configureMcpServer)
 					.resourceMethodResolver(
 							ResourceMethodResolver.fromMethods(Set.of()))
 					.metricsCollector(metricsCollector)
@@ -711,8 +715,8 @@ public class McpCrossFeatureSoakTests {
 						null, null), simulatorOptions())) {
 			McpSimulationResponse response = awaitSimulatorResponse(simulation);
 			Assertions.assertEquals(200, response.getStatusCode());
-			Assertions.assertEquals(McpSimulationBodyMode.JSON,
-					response.getBodyMode());
+			Assertions.assertEquals(McpSimulationBodyType.JSON,
+					response.getBodyType());
 			String body = new String(response.getBody().orElseThrow(),
 					StandardCharsets.UTF_8);
 			assertContains(body, "\"id\":" + jsonString(id),
@@ -721,7 +725,7 @@ public class McpCrossFeatureSoakTests {
 					"simulator JSON result");
 			Assertions.assertEquals(McpStreamTerminationReason.COMPLETED,
 					awaitSimulatorCompletion(simulation).getReason());
-			Assertions.assertTrue(simulation.nextStreamItem(ZERO_TIMEOUT).isEmpty());
+			Assertions.assertTrue(simulation.awaitStreamItem(ZERO_TIMEOUT).isEmpty());
 		}
 	}
 
@@ -730,14 +734,14 @@ public class McpCrossFeatureSoakTests {
 		try (McpSimulation simulation = simulator.startMcpRequest(
 				simulatorToolRequest(id, PROGRESS_TOOL, "{}", id + "-token",
 						null, null), simulatorOptions())) {
-			Assertions.assertEquals(McpSimulationBodyMode.SERVER_SENT_EVENTS,
-					awaitSimulatorResponse(simulation).getBodyMode());
+			Assertions.assertEquals(McpSimulationBodyType.SSE,
+					awaitSimulatorResponse(simulation).getBodyType());
 			List<McpSimulationStreamItem> items = new ArrayList<>();
 			for (int index = 0; index < 4; index++)
 				items.add(awaitSimulatorItem(simulation));
 			Assertions.assertEquals(McpStreamTerminationReason.COMPLETED,
 					awaitSimulatorCompletion(simulation).getReason());
-			Assertions.assertTrue(simulation.nextStreamItem(ZERO_TIMEOUT).isEmpty());
+			Assertions.assertTrue(simulation.awaitStreamItem(ZERO_TIMEOUT).isEmpty());
 			Assertions.assertTrue(items.get(0).getMessage().isPresent());
 			Assertions.assertTrue(items.get(3).getMessage().isPresent());
 		}
@@ -749,8 +753,8 @@ public class McpCrossFeatureSoakTests {
 		URI resourceUri = URI.create("soak://simulator/" + id);
 		try (McpSimulation simulation = simulator.startMcpRequest(
 				simulatorSubscriptionRequest(id, resourceUri), simulatorOptions())) {
-			Assertions.assertEquals(McpSimulationBodyMode.SERVER_SENT_EVENTS,
-					awaitSimulatorResponse(simulation).getBodyMode());
+			Assertions.assertEquals(McpSimulationBodyType.SSE,
+					awaitSimulatorResponse(simulation).getBodyType());
 			McpSimulationStreamItem acknowledgment =
 					awaitSimulatorItem(simulation);
 			assertContains(new String(acknowledgment.getEncodedBytes(),
@@ -765,10 +769,10 @@ public class McpCrossFeatureSoakTests {
 					"simulator subscription event");
 			assertContains(eventBytes, resourceUri.toString(),
 					"simulator subscribed resource URI");
-			simulation.cancel();
+			simulation.close();
 			Assertions.assertEquals(McpStreamTerminationReason.CLIENT_DISCONNECTED,
 					awaitSimulatorCompletion(simulation).getReason());
-			Assertions.assertTrue(simulation.nextStreamItem(ZERO_TIMEOUT).isEmpty());
+			Assertions.assertTrue(simulation.awaitStreamItem(ZERO_TIMEOUT).isEmpty());
 		}
 	}
 
@@ -781,8 +785,8 @@ public class McpCrossFeatureSoakTests {
 				simulatorToolRequest(initialId, PROTECTED_TOOL, "{}", null,
 						null, null, capabilities), simulatorOptions())) {
 			McpSimulationResponse response = awaitSimulatorResponse(initial);
-			Assertions.assertEquals(McpSimulationBodyMode.JSON,
-					response.getBodyMode());
+			Assertions.assertEquals(McpSimulationBodyType.JSON,
+					response.getBodyType());
 			initialBody = new String(response.getBody().orElseThrow(),
 					StandardCharsets.UTF_8);
 			assertContains(initialBody, "\"resultType\":\"input_required\"",
@@ -822,10 +826,10 @@ public class McpCrossFeatureSoakTests {
 						id + "-token", null, null), simulatorOptions())) {
 			Assertions.assertTrue(observation.handlerStarted.await(
 					PROFILE.settleTimeout().toMillis(), TimeUnit.MILLISECONDS));
-			Assertions.assertEquals(McpSimulationBodyMode.SERVER_SENT_EVENTS,
-					awaitSimulatorResponse(simulation).getBodyMode());
+			Assertions.assertEquals(McpSimulationBodyType.SSE,
+					awaitSimulatorResponse(simulation).getBodyType());
 			awaitSimulatorItem(simulation);
-			simulation.cancel();
+			simulation.close();
 			observation.awaitCanceledAndExited(PROFILE.settleTimeout(),
 					StreamTerminationReason.CLIENT_DISCONNECTED);
 			Assertions.assertEquals(McpStreamTerminationReason.CLIENT_DISCONNECTED,
@@ -842,14 +846,14 @@ public class McpCrossFeatureSoakTests {
 				simulatorToolRequest(id, SIMULATOR_CAPTURE_TOOL,
 						"{\"mode\":\"item\"}", id + "-token", null, null),
 				simulatorOptions())) {
-			Assertions.assertEquals(McpSimulationBodyMode.SERVER_SENT_EVENTS,
-					awaitSimulatorResponse(simulation).getBodyMode());
+			Assertions.assertEquals(McpSimulationBodyType.SSE,
+					awaitSimulatorResponse(simulation).getBodyType());
 			Assertions.assertEquals(McpStreamTerminationReason
 						.SIMULATOR_CAPTURE_ITEM_LIMIT_EXCEEDED,
 					awaitSimulatorCompletion(simulation).getReason());
 			for (int index = 0; index < SIMULATOR_STREAM_ITEM_CAPACITY; index++)
 				awaitSimulatorItem(simulation);
-			Assertions.assertTrue(simulation.nextStreamItem(ZERO_TIMEOUT).isEmpty());
+			Assertions.assertTrue(simulation.awaitStreamItem(ZERO_TIMEOUT).isEmpty());
 		}
 	}
 
@@ -859,15 +863,15 @@ public class McpCrossFeatureSoakTests {
 				simulatorToolRequest(id, SIMULATOR_CAPTURE_TOOL,
 						"{\"mode\":\"byte\"}", id + "-token", null, null),
 				simulatorOptions())) {
-			Assertions.assertEquals(McpSimulationBodyMode.SERVER_SENT_EVENTS,
-					awaitSimulatorResponse(simulation).getBodyMode());
+			Assertions.assertEquals(McpSimulationBodyType.SSE,
+					awaitSimulatorResponse(simulation).getBodyType());
 			Assertions.assertEquals(McpStreamTerminationReason
 						.SIMULATOR_CAPTURE_BYTE_LIMIT_EXCEEDED,
 					awaitSimulatorCompletion(simulation).getReason());
 			McpSimulationStreamItem retained = awaitSimulatorItem(simulation);
 			Assertions.assertTrue(retained.getEncodedBytes().length
-					<= SIMULATOR_MAXIMUM_CAPTURED_BYTES);
-			Assertions.assertTrue(simulation.nextStreamItem(ZERO_TIMEOUT).isEmpty());
+					<= SIMULATOR_MAXIMUM_CAPTURED_SIZE_IN_BYTES);
+			Assertions.assertTrue(simulation.awaitStreamItem(ZERO_TIMEOUT).isEmpty());
 		}
 	}
 
@@ -890,7 +894,7 @@ public class McpCrossFeatureSoakTests {
 			Thread cancelThread = new Thread(() -> {
 				try {
 					barrier.await();
-					simulation.cancel();
+					simulation.close();
 				} catch (Throwable throwable) {
 					cancelFailure.set(throwable);
 				}
@@ -917,7 +921,7 @@ public class McpCrossFeatureSoakTests {
 					|| reason == McpStreamTerminationReason.CLIENT_DISCONNECTED,
 					"The cancel/terminal race must publish one coherent winner.");
 			int remainingItems = 0;
-			while (simulation.nextStreamItem(ZERO_TIMEOUT).isPresent())
+			while (simulation.awaitStreamItem(ZERO_TIMEOUT).isPresent())
 				remainingItems++;
 			Assertions.assertEquals(
 					reason == McpStreamTerminationReason.COMPLETED ? 1 : 0,
@@ -929,8 +933,7 @@ public class McpCrossFeatureSoakTests {
 	}
 
 	private static void performSimulatorResidualWave(
-			@NonNull Function<SimulatorConfig.Builder, SimulatorConfig>
-					configFactory,
+			@NonNull Supplier<SimulatorConfig> configFactory,
 			@NonNull AtomicReference<McpServer> mcpServer,
 			@NonNull SoakState state,
 			@NonNull CountingMcpMetricsCollector metricsCollector,
@@ -938,10 +941,11 @@ public class McpCrossFeatureSoakTests {
 			throws Exception {
 		AtomicReference<Simulator> escapedSimulator = new AtomicReference<>();
 		AtomicReference<McpSimulation> escapedSimulation = new AtomicReference<>();
-		ShutdownIncompleteException cleanupFailure = Assertions.assertThrows(
-				ShutdownIncompleteException.class,
-				() -> SokletSimulator.run(configFactory,
+		SokletShutdownIncompleteException cleanupFailure = Assertions.assertThrows(
+				SokletShutdownIncompleteException.class,
+				() -> SokletSimulator.run(configFactory.get(),
 						simulator -> {
+							mcpServer.set(simulator.getMcpServer().orElseThrow());
 							escapedSimulator.set(simulator);
 							escapedSimulation.set(simulator.startMcpRequest(
 									simulatorToolRequest("residual", SIMULATOR_RESIDUAL_TOOL,
@@ -986,7 +990,8 @@ public class McpCrossFeatureSoakTests {
 
 		// A new private generation must be available after the retained handler
 		// actually exits; this remains off-network and leaves diagnostics stopped.
-		SokletSimulator.run(configFactory, simulator -> {
+		SokletSimulator.run(configFactory.get(), simulator -> {
+			mcpServer.set(simulator.getMcpServer().orElseThrow());
 			try {
 				performSimulatorJson(simulator, "post-residual-recovery");
 			} catch (Exception e) {
@@ -1003,7 +1008,8 @@ public class McpCrossFeatureSoakTests {
 	private static McpSimulationOptions simulatorOptions() {
 		return McpSimulationOptions.builder()
 				.streamItemQueueCapacity(SIMULATOR_STREAM_ITEM_CAPACITY)
-				.maximumCapturedBytes(SIMULATOR_MAXIMUM_CAPTURED_BYTES)
+				.maximumCapturedSizeInBytes(
+						SIMULATOR_MAXIMUM_CAPTURED_SIZE_IN_BYTES)
 				.build();
 	}
 
@@ -1068,7 +1074,7 @@ public class McpCrossFeatureSoakTests {
 	@NonNull
 	private static McpSimulationStreamItem awaitSimulatorItem(
 			@NonNull McpSimulation simulation) throws InterruptedException {
-		return simulation.nextStreamItem(PROFILE.settleTimeout())
+		return simulation.awaitStreamItem(PROFILE.settleTimeout())
 				.orElseThrow(() -> new AssertionError(
 						"Timed out awaiting an MCP simulator stream item."));
 	}
@@ -1423,8 +1429,8 @@ public class McpCrossFeatureSoakTests {
 
 	private static void joinStopThread(@NonNull Thread stopThread,
 			@NonNull AtomicReference<Throwable> stopFailure) throws Exception {
-		stopThread.join(PROFILE.gracefulShutdownDuration()
-				.plus(PROFILE.forcedShutdownDuration())
+		stopThread.join(PROFILE.gracefulShutdownTimeout()
+				.plus(PROFILE.forcedShutdownTimeout())
 				.plus(PROFILE.settleTimeout()).toMillis());
 		Assertions.assertFalse(stopThread.isAlive(),
 				"MCP server stop thread did not terminate within its bound.");
@@ -2655,8 +2661,8 @@ public class McpCrossFeatureSoakTests {
 			@NonNull Duration settleTimeout,
 			@NonNull Duration metricDeliveryTimeout,
 			int shutdownCycles,
-			@NonNull Duration gracefulShutdownDuration,
-			@NonNull Duration forcedShutdownDuration,
+			@NonNull Duration gracefulShutdownTimeout,
+			@NonNull Duration forcedShutdownTimeout,
 			int streamQueueCapacity,
 			@NonNull Duration writeTimeout) {
 		@NonNull

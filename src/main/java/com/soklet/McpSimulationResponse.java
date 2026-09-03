@@ -44,9 +44,9 @@ public interface McpSimulationResponse {
 	@NonNull
 	Map<@NonNull String, @NonNull Set<@NonNull String>> getHeaders();
 
-	/** @return the captured response-body representation */
+	/** @return the captured response-body type */
 	@NonNull
-	McpSimulationBodyMode getBodyMode();
+	McpSimulationBodyType getBodyType();
 
 	/**
 	 * Returns a fresh copy for successfully captured EMPTY and JSON bodies.

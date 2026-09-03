@@ -20,8 +20,8 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.Optional;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 /**
  * Simulates server behavior of accepting a request and returning a response without touching the network, useful for writing integration tests.
@@ -29,14 +29,18 @@ import java.util.function.Function;
  * <a href="https://www.soklet.com/docs/server-sent-events">Server-Sent Event</a> simulation is also supported.
  * <p>
  * Instances of {@link Simulator} are made available through
- * {@link SokletSimulator#run(Function, SokletSimulator.Body)}.
+ * {@link SokletSimulator#run(SimulatorConfig, SokletSimulator.Simulation)}.
  * <p>
  * Usage example:
  * <pre>{@code @Test
  * public void basicIntegrationTest () {
  *   // With the Simulator, you can issue requests
  *   // and receive responses just like you would with real servers.
- *   SokletSimulator.run(config -> config.httpServer().sseServer().build(),
+ *   SimulatorConfig simulatorConfig = SimulatorConfig.builder()
+ *     .httpServer()
+ *     .sseServer()
+ *     .build();
+ *   SokletSimulator.run(simulatorConfig,
  *     simulator -> {
  *     // Construct a request
  *     Request request = Request.withPath(HttpMethod.GET, "/hello")
@@ -105,6 +109,34 @@ import java.util.function.Function;
  */
 @ThreadSafe
 public interface Simulator {
+	/**
+	 * Returns the simulated HTTP server selected by this run's configuration.
+	 *
+	 * @return HTTP server, or the empty optional when HTTP was not configured
+	 * @throws IllegalStateException if the simulation scope is closed
+	 */
+	@NonNull
+	Optional<@NonNull HttpServer> getHttpServer();
+
+	/**
+	 * Returns the simulated Server-Sent Events server selected by this run's
+	 * configuration.
+	 *
+	 * @return SSE server, or the empty optional when SSE was not configured
+	 * @throws IllegalStateException if the simulation scope is closed
+	 */
+	@NonNull
+	Optional<@NonNull SseServer> getSseServer();
+
+	/**
+	 * Returns the simulated MCP server selected by this run's configuration.
+	 *
+	 * @return MCP server, or the empty optional when MCP was not configured
+	 * @throws IllegalStateException if the simulation scope is closed
+	 */
+	@NonNull
+	Optional<@NonNull McpServer> getMcpServer();
+
 	/**
 	 * Starts an asynchronous, off-network MCP POST simulation using default
 	 * bounded capture options.

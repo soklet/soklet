@@ -964,7 +964,7 @@ const REVIEWED_ORPHAN_HELPERS = checkedReviewMap([
   ]),
 ], 'orphan lifecycle helper');
 
-const LIFECYCLE_SIGNAL_PATTERN = /(?:\bSoklet(?:Application(?:Options)?|Config|Simulator)?\b|\b(?:Http|Sse|Mcp)Server\b|\bMcpHttpServerRuntime\b|\bTransportRuntime\b|\bInternalLifecycleCoordinator\b|\bSimulationSession\b|\bLifecyclePolicy\b|\b(?:startupCancelationTimeout|noStartupTimeout|gracefulShutdownDuration|forcedShutdownDuration)\s*\()/u;
+const LIFECYCLE_SIGNAL_PATTERN = /(?:\bSoklet(?:Application(?:Options)?|Config|Simulator)?\b|\b(?:Http|Sse|Mcp)Server\b|\bMcpHttpServerRuntime\b|\bTransportRuntime\b|\bInternalLifecycleCoordinator\b|\bSimulationSession\b|\bLifecyclePolicy\b|\b(?:startupTimeout|startupCancelationTimeout|gracefulShutdownTimeout|forcedShutdownTimeout)\s*\()/u;
 const LIFECYCLE_EXECUTION_PATTERN = /(?:\bSokletSimulator\s*\.\s*run\s*\(|\bSoklet\s*\.\s*fromConfig\s*\(|\bSokletApplication\s*\.\s*run\s*\(|\.\s*(?:start|shutdown|awaitShutdown|awaitTermination)\s*\(|try\s*\(\s*Soklet\b|\bopenSimulationSession\s*\()/u;
 const UNSCOPED_LIFECYCLE_EXECUTION_PATTERN = /(?:\bSoklet(?:Application|Simulator)\s*\.\s*run\s*\(|\bSoklet\s*\.\s*fromConfig\s*\(|\bnew\s+SokletDirectLifecycle\s*\(|\b(?:SokletConfig|var)\s+[A-Za-z_$][\w$]*\s*=\s*SokletConfig\b|\bopenSimulationSession\s*\(|\.\s*(?:start|beginStart|markReady|runExternallyCoordinatedStart|commitExternallyCoordinatedGeneration|shutdown|stop|requestStop|sealScope|awaitMcpScopeTermination|awaitShutdown|awaitStop|awaitTermination|whenTerminated)\s*\(|::\s*(?:start|openMcpScope|shutdown|stop)\b|try\s*\([^)]*\b(?:Soklet|[A-Za-z_$][\w$]*Harness)\b)/gu;
 const JAVA_FIXED_WAIT_PATTERN = /(?:\.\s*(?:await|join|waitFor)\s*\(|\.\s*get\s*\([^\r\n]*(?:TimeUnit|SECONDS|MILLISECONDS|MINUTES)\b|\bdeadline\b)/iu;
@@ -1686,8 +1686,8 @@ function literalPolicyFromBuilderChain(chain, durationConstants = new Map()) {
   for (const [setter, field] of [
     ['startupTimeout', 'startupMillis'],
     ['startupCancelationTimeout', 'startupCancellationMillis'],
-    ['gracefulShutdownDuration', 'gracefulShutdownMillis'],
-    ['forcedShutdownDuration', 'forcedShutdownMillis'],
+    ['gracefulShutdownTimeout', 'gracefulShutdownMillis'],
+    ['forcedShutdownTimeout', 'forcedShutdownMillis'],
   ]) {
     const setterMatches = [...chain.matchAll(new RegExp(
       `\\.\\s*${setter}\\s*\\(`, 'gu'))];
@@ -1696,19 +1696,13 @@ function literalPolicyFromBuilderChain(chain, durationConstants = new Map()) {
         + setterMatch[0].lastIndexOf('(');
       const end = matchingParenthesisEnd(chain, openParenthesis);
       if (end === null) return null;
-      const duration = resolveDurationExpression(chain.slice(
-        openParenthesis + 1, end - 1),
-        durationConstants);
+      const expression = chain.slice(openParenthesis + 1, end - 1).trim();
+      const duration = expression === 'null' ? DEFAULT_PHASE_POLICY[field]
+        : resolveDurationExpression(expression, durationConstants);
       if (duration === undefined) return null;
       policy[field] = duration;
     }
   }
-  const lastStartupTimeout = [...chain.matchAll(
-    /\.\s*startupTimeout\s*\(/gu)].at(-1)?.index ?? -1;
-  const lastNoStartupTimeout = [...chain.matchAll(
-    /\.\s*noStartupTimeout\s*\(\s*\)/gu)].at(-1)?.index ?? -1;
-  if (lastNoStartupTimeout > lastStartupTimeout)
-    policy.startupMillis = null;
   return policy;
 }
 
@@ -2361,15 +2355,8 @@ function scanInternalPolicies(masked, durationConstants) {
       unresolvedCount += 1;
       continue;
     }
-    let startupMillis;
-    if (/^Optional\s*\.\s*empty\s*\(\s*\)$/u.test(args[0])) {
-      startupMillis = null;
-    } else {
-      const optional = args[0].match(
-        /^Optional\s*\.\s*of\s*\(([\s\S]*)\)$/u);
-      startupMillis = optional === null ? undefined
-        : resolveDurationExpression(optional[1], durationConstants);
-    }
+    const startupMillis = resolveDurationExpression(args[0],
+      durationConstants);
     const phases = args.slice(1).map((argument) =>
       resolveDurationExpression(argument, durationConstants));
     if (startupMillis === undefined
@@ -2720,9 +2707,9 @@ function directLifecycleFacts(method, fieldPolicies, durationConstants,
     fixedControlWaitSites: controlWaitFacts.sites,
     freshGenerationSites: syntacticGenerations,
     hasExecution,
-    hasInlinePolicy: /\.\s*(?:startupTimeout|noStartupTimeout|startupCancelationTimeout|gracefulShutdownDuration|forcedShutdownDuration)\s*\(/u
+    hasInlinePolicy: /\.\s*(?:startupTimeout|startupCancelationTimeout|gracefulShutdownTimeout|forcedShutdownTimeout)\s*\(/u
       .test(body),
-    hasInlineNoStartupTimeout: /\bnoStartupTimeout\s*\(/u.test(body),
+    hasInlineNoStartupTimeout: false,
     lifecycleStartSiteCount,
     inlineCleanupMillis: inlineCleanupDurations.length === 0 ? null
       : Math.max(...inlineCleanupDurations),
@@ -3120,9 +3107,7 @@ function buildLifecycleScopeEvidence(texts) {
         hasInlineNoStartupTimeout: direct[index].hasInlineNoStartupTimeout,
         hasInlinePolicy: direct[index].hasInlinePolicy,
         hasLocalPolicy: facts.observedOperations.includes('CONFIGURE_POLICY'),
-        hasNoStartupTimeout: facts.hasInlineNoStartupTimeout
-          || facts.literalPhasePolicies.some((policy) =>
-            policy.startupMillis === null),
+        hasNoStartupTimeout: false,
         id: stableId('SCOPE', `${method.path}:${method.line}:${method.scopeName}`),
         inlineCleanupMillis: facts.inlineCleanupMillis,
         fieldPolicyProofs: facts.fieldPolicyProofs,
@@ -3195,22 +3180,19 @@ function scopePathBounds(policy) {
   ], 'lifecycle scope phasePolicy');
   if (!['INHERITED_DEFAULT', 'LOCAL_FINITE_REVIEWED',
     'SOURCE_CONFIGURED_FINITE_WITH_PROOF',
-    'SOURCE_CONFIGURED_STANDARD_GUARD',
-    'UNBOUNDED_STARTUP_CONSTRUCTION_ONLY',
-    'UNBOUNDED_STARTUP_WITH_CONTROLLED_PROOF'].includes(policy.mode))
+    'SOURCE_CONFIGURED_STANDARD_GUARD'].includes(policy.mode))
     fail(`Unknown lifecycle scope phasePolicy mode ${policy.mode}.`);
   for (const field of ['forcedShutdownMillis', 'gracefulShutdownMillis',
     'startupCancellationMillis']) {
     if (!Number.isSafeInteger(policy[field]) || policy[field] < 0)
       fail(`lifecycle scope phasePolicy ${field} must be a nonnegative integer.`);
   }
-  for (const field of ['controlledStartupMillis', 'startupMillis']) {
-    if (policy[field] !== null
-        && (!Number.isSafeInteger(policy[field]) || policy[field] < 0))
-      fail(`lifecycle scope phasePolicy ${field} must be null or a nonnegative integer.`);
-  }
-  const startup = policy.startupMillis ?? policy.controlledStartupMillis;
-  if (startup === null) return null;
+  if (policy.controlledStartupMillis !== null)
+    fail('lifecycle scope phasePolicy controlledStartupMillis must be null.');
+  if (!Number.isSafeInteger(policy.startupMillis)
+      || policy.startupMillis < 0)
+    fail('lifecycle scope phasePolicy startupMillis must be a nonnegative integer.');
+  const startup = policy.startupMillis;
   const stop = policy.gracefulShutdownMillis + policy.forcedShutdownMillis;
   const rollback = startup + policy.startupCancellationMillis + stop;
   return {
@@ -3247,10 +3229,8 @@ function conservativeSourcePolicy(source, override) {
       (policy) => policy.gracefulShutdownMillis)),
     startupCancellationMillis: Math.max(...source.literalPhasePolicies.map(
       (policy) => policy.startupCancellationMillis)),
-    startupMillis: source.literalPhasePolicies.some((policy) =>
-      policy.startupMillis === null) ? null
-      : Math.max(...source.literalPhasePolicies.map((policy) =>
-        policy.startupMillis)),
+    startupMillis: Math.max(...source.literalPhasePolicies.map((policy) =>
+      policy.startupMillis)),
   };
 }
 
@@ -3292,10 +3272,8 @@ function emptyLifecycleReview(source, phasePolicy) {
     phasePolicy: {
       controlledStartupMillis: null,
       ...phasePolicy,
-      mode: phasePolicy.startupMillis === null
-        ? 'UNBOUNDED_STARTUP_CONSTRUCTION_ONLY'
-        : source.hasLocalPolicy || source.literalPhasePolicies.length > 0
-          ? 'SOURCE_CONFIGURED_STANDARD_GUARD' : 'INHERITED_DEFAULT',
+      mode: source.hasLocalPolicy || source.literalPhasePolicies.length > 0
+        ? 'SOURCE_CONFIGURED_STANDARD_GUARD' : 'INHERITED_DEFAULT',
     },
     policyProof: null,
     priorCompleteGenerationMultiplier: 0,
@@ -3313,7 +3291,7 @@ function emptyLifecycleReview(source, phasePolicy) {
 
 const REVIEWED_SCOPE_OVERRIDE_KEYS = new Set([
   'applicationCleanupCount', 'applicationCleanupMillis',
-  'controlledLifecycleCoreMillis', 'controlledStartupMillis',
+  'controlledLifecycleCoreMillis',
   'controlComposition', 'controlJoinMillis', 'dynamicNodeCount', 'fileSha256', 'generation',
   'incompleteBranchCleanupCount', 'phasePolicy', 'requiredAction',
   'receiverAliasing', 'scopeSha256', 'terminalReportCount',
@@ -3376,7 +3354,7 @@ function verifyReviewedScopeOverride(override, source) {
         || override.controlJoinMillis !== 0))
     fail(`Reviewed lifecycle nonblocking-precondition composition is invalid: ${source.id}.`);
   for (const field of ['applicationCleanupCount', 'applicationCleanupMillis',
-    'controlledLifecycleCoreMillis', 'controlledStartupMillis',
+    'controlledLifecycleCoreMillis',
     'controlJoinMillis', 'dynamicNodeCount', 'incompleteBranchCleanupCount',
     'terminalReportCount']) {
     if (override[field] !== undefined
@@ -3394,9 +3372,8 @@ function verifyReviewedScopeOverride(override, source) {
           || override.phasePolicy[field] < 0)
         fail(`Reviewed lifecycle phase policy ${field} is invalid: ${source.id}.`);
     }
-    if (override.phasePolicy.startupMillis !== null
-        && (!Number.isSafeInteger(override.phasePolicy.startupMillis)
-          || override.phasePolicy.startupMillis < 0))
+    if (!Number.isSafeInteger(override.phasePolicy.startupMillis)
+        || override.phasePolicy.startupMillis < 0)
       fail(`Reviewed lifecycle phase policy startupMillis is invalid: ${source.id}.`);
   }
   if (override.generation !== undefined)
@@ -3413,10 +3390,6 @@ function verifyReviewedScopeOverride(override, source) {
     fail(`Lifecycle terminal-report override is not source-applicable: ${source.id}.`);
   if (!source.testFactory && override.dynamicNodeCount !== undefined)
     fail(`Lifecycle dynamic-node override is not source-applicable: ${source.id}.`);
-  if (override.controlledStartupMillis !== undefined
-      && !source.hasNoStartupTimeout
-      && override.phasePolicy?.startupMillis !== null)
-    fail(`Lifecycle controlled-startup override is not source-applicable: ${source.id}.`);
   if (!source.hasExecution && !source.disabled
       && ['generation', 'controlJoinMillis', 'controlledLifecycleCoreMillis']
         .some((field) => override[field] !== undefined))
@@ -3554,10 +3527,8 @@ export function buildReviewedLifecycleScopeRows(observations,
       fail(`Non-factory lifecycle scope has dynamic-node guard metadata: ${source.id}.`);
     }
 
-    const sourcePolicy = conservativeSourcePolicy(source, override);
-    if (source.hasNoStartupTimeout && sourcePolicy.startupMillis !== null)
-      fail(`Unbounded source startup policy cannot be replaced by a finite review: ${source.id}.`);
-    if (!source.hasExecution)
+		const sourcePolicy = conservativeSourcePolicy(source, override);
+		if (!source.hasExecution)
       return { review: emptyLifecycleReview(source, sourcePolicy), source };
 
     if (source.scopeKind !== 'TEST' && source.scopeKind !== 'SETUP_TEARDOWN')
@@ -3586,12 +3557,7 @@ export function buildReviewedLifecycleScopeRows(observations,
     const configuredPolicy = source.hasLocalPolicy
       || source.literalPhasePolicies.length > 0
       || override?.phasePolicy !== undefined;
-    const unbounded = sourcePolicy.startupMillis === null;
-    if (unbounded && (override?.controlledStartupMillis === undefined
-        || override?.controlledLifecycleCoreMillis === undefined))
-      fail(`Unbounded lifecycle execution lacks a source-bound controlled-completion override: ${source.id}.`);
-
-    const generation = override?.generation ?? (() => {
+		const generation = override?.generation ?? (() => {
       const count = Math.max(1, source.generationSiteCount);
       return count === 1 ? {
         complete: 1, count: 1, incomplete: 1, mode: 'SINGLE', prior: 0,
@@ -3639,20 +3605,15 @@ export function buildReviewedLifecycleScopeRows(observations,
         && override.generation.count !== generation.count)
       fail(`Lifecycle generation override is internally inconsistent: ${source.id}.`);
 
-    const controlledStartupMillis = unbounded
-      ? override.controlledStartupMillis : null;
     const phasePolicy = {
-      controlledStartupMillis,
+      controlledStartupMillis: null,
       ...sourcePolicy,
-      mode: unbounded ? 'UNBOUNDED_STARTUP_WITH_CONTROLLED_PROOF'
-        : configuredPolicy
-          ? source.hasInlinePolicy ? 'LOCAL_FINITE_REVIEWED'
-            : 'SOURCE_CONFIGURED_FINITE_WITH_PROOF'
+      mode: configuredPolicy
+        ? source.hasInlinePolicy ? 'LOCAL_FINITE_REVIEWED'
+          : 'SOURCE_CONFIGURED_FINITE_WITH_PROOF'
           : 'INHERITED_DEFAULT',
     };
     const bounds = scopePathBounds(phasePolicy);
-    if (bounds === null)
-      fail(`Lifecycle execution scope remains unbounded: ${source.id}.`);
     const completePath = override?.controlledLifecycleCoreMillis
       ?? Math.max(bounds.RUNNING_STOP,
         bounds.NORMAL_START_THEN_RUNNING_STOP);
@@ -3725,7 +3686,7 @@ export function buildReviewedLifecycleScopeRows(observations,
     const total = Math.max(branches.COMPLETE_CORE,
       branches.INCOMPLETE_CORE);
     const reserve = source.effectiveOuterTimeoutMillis - total;
-    const classification = configuredPolicy && !unbounded
+    const classification = configuredPolicy
       ? 'LOCAL_POLICY_STRICT_FIT'
       : 'STANDARD_60_SECOND_DEADLOCK_GUARD';
     const requiredReserveMillis = classification === 'LOCAL_POLICY_STRICT_FIT'
@@ -3767,9 +3728,7 @@ export function buildReviewedLifecycleScopeRows(observations,
         controlTopology: override?.controlComposition
           ?? (controlJoinMillis > 0 || source.fixedControlWaitSites.length > 0
             ? 'CONSERVATIVE_SEQUENTIAL_SUM' : 'NONE'),
-        controlledCompletionProof: unbounded
-          ? sourceProof('The full callable hash binds the deterministic entry, trigger, and completion controls for the unbounded startup path.')
-          : null,
+        controlledCompletionProof: null,
         controlledLifecycleCoreMillis:
           override?.controlledLifecycleCoreMillis ?? null,
         generationCount: generation.count,
@@ -4202,20 +4161,18 @@ export function verifySpecialSourceWiring(texts) {
     /\.startupCancelationTimeout\s*\(\s*Duration\.ofSeconds\s*\(\s*1\s*\)\s*\)/u,
     'official 1-second startup cancellation');
   requirePattern(officialFixture,
-    /\.gracefulShutdownDuration\s*\(\s*Duration\.ofSeconds\s*\(\s*5\s*\)\s*\)/u,
+    /\.gracefulShutdownTimeout\s*\(\s*Duration\.ofSeconds\s*\(\s*5\s*\)\s*\)/u,
     'official 5-second graceful shutdown');
   requirePattern(officialFixture,
-    /\.forcedShutdownDuration\s*\(\s*Duration\.ofSeconds\s*\(\s*1\s*\)\s*\)/u,
+    /\.forcedShutdownTimeout\s*\(\s*Duration\.ofSeconds\s*\(\s*1\s*\)\s*\)/u,
     'official 1-second forced shutdown');
   for (const setter of ['startupCancelationTimeout',
-    'gracefulShutdownDuration', 'forcedShutdownDuration']) {
+    'gracefulShutdownTimeout', 'forcedShutdownTimeout']) {
     requirePolicySetterCount(officialFixture, setter,
       `official unique ${setter}`, 1);
   }
-  requirePolicySetterCount(officialFixture, 'startupTimeout',
-    'official no startup-timeout override', 0);
-  requirePattern(officialFixture, /\.\s*noStartupTimeout\s*\(/u,
-    'official no unbounded-startup override', 0);
+	requirePolicySetterCount(officialFixture, 'startupTimeout',
+		'official no startup-timeout override', 0);
 
   for (const path of [
     'soak/src/test/java/com/soklet/HttpSoakTests.java',
@@ -4225,19 +4182,17 @@ export function verifySpecialSourceWiring(texts) {
     if (rawText === undefined) fail(`Missing ${path}.`);
     const text = maskJavaSource(rawText);
     requirePattern(text,
-      /\.gracefulShutdownDuration\s*\(\s*Duration\.ofSeconds\s*\(\s*3\s*\)\s*\)/u,
+      /\.gracefulShutdownTimeout\s*\(\s*Duration\.ofSeconds\s*\(\s*3\s*\)\s*\)/u,
       `${path} 3-second graceful shutdown`);
     requirePattern(text,
-      /\.forcedShutdownDuration\s*\(\s*Duration\.ZERO\s*\)/u,
+      /\.forcedShutdownTimeout\s*\(\s*Duration\.ZERO\s*\)/u,
       `${path} immediate force boundary`);
-    requirePolicySetterCount(text, 'gracefulShutdownDuration',
+    requirePolicySetterCount(text, 'gracefulShutdownTimeout',
       `${path} unique graceful policy setter`, 1);
-    requirePolicySetterCount(text, 'forcedShutdownDuration',
+    requirePolicySetterCount(text, 'forcedShutdownTimeout',
       `${path} unique forced policy setter`, 1);
-    for (const setter of ['startupTimeout', 'startupCancelationTimeout'])
-      requirePolicySetterCount(text, setter, `${path} no ${setter}`, 0);
-    requirePattern(text, /\.\s*noStartupTimeout\s*\(/u,
-      `${path} no unbounded-startup override`, 0);
+		for (const setter of ['startupTimeout', 'startupCancelationTimeout'])
+			requirePolicySetterCount(text, setter, `${path} no ${setter}`, 0);
   }
 
   for (const path of [
@@ -4254,18 +4209,16 @@ export function verifySpecialSourceWiring(texts) {
       /\.startupCancelationTimeout\s*\(\s*Duration\.ofSeconds\s*\(\s*2\s*\)\s*\)/u,
       `${path} 2-second startup cancellation`);
     requirePattern(text,
-      /\.gracefulShutdownDuration\s*\(\s*PROFILE\.gracefulShutdownDuration\s*\(\s*\)\s*\)/u,
+      /\.gracefulShutdownTimeout\s*\(\s*PROFILE\.gracefulShutdownTimeout\s*\(\s*\)\s*\)/u,
       `${path} profile graceful wiring`);
     requirePattern(text,
-      /\.forcedShutdownDuration\s*\(\s*PROFILE\.forcedShutdownDuration\s*\(\s*\)\s*\)/u,
+      /\.forcedShutdownTimeout\s*\(\s*PROFILE\.forcedShutdownTimeout\s*\(\s*\)\s*\)/u,
       `${path} profile forced wiring`);
-    for (const setter of ['startupTimeout', 'startupCancelationTimeout',
-      'gracefulShutdownDuration', 'forcedShutdownDuration']) {
-      requirePolicySetterCount(text, setter, `${path} unique ${setter}`, 1);
-    }
-    requirePattern(text, /\.\s*noStartupTimeout\s*\(/u,
-      `${path} no unbounded-startup override`, 0);
-  }
+		for (const setter of ['startupTimeout', 'startupCancelationTimeout',
+			'gracefulShutdownTimeout', 'forcedShutdownTimeout']) {
+			requirePolicySetterCount(text, setter, `${path} unique ${setter}`, 1);
+		}
+	}
   const cross = maskJavaSource(texts.get(
     'soak/src/test/java/com/soklet/McpCrossFeatureSoakTests.java'));
   requirePattern(cross,
@@ -4287,7 +4240,7 @@ export function verifySpecialSourceWiring(texts) {
   requirePattern(cross, /\bSokletSimulator\s*\.\s*run\s*\(/u,
     'MCP cross-feature exact simulator lifecycle entries', 4);
   requirePattern(cross,
-    /stopThread\.join\s*\(\s*PROFILE\.gracefulShutdownDuration\s*\(\s*\)\s*\.plus\s*\(\s*PROFILE\.forcedShutdownDuration\s*\(\s*\)\s*\)\s*\.plus\s*\(\s*PROFILE\.settleTimeout\s*\(\s*\)\s*\)\s*\.toMillis\s*\(\s*\)\s*\)/u,
+    /stopThread\.join\s*\(\s*PROFILE\.gracefulShutdownTimeout\s*\(\s*\)\s*\.plus\s*\(\s*PROFILE\.forcedShutdownTimeout\s*\(\s*\)\s*\)\s*\.plus\s*\(\s*PROFILE\.settleTimeout\s*\(\s*\)\s*\)\s*\.toMillis\s*\(\s*\)\s*\)/u,
     'MCP cross-feature stop-thread composed bound');
   const localization = maskJavaSource(texts.get(
     'soak/src/test/java/com/soklet/McpLocalizationSoakTests.java'));

@@ -58,8 +58,8 @@ class McpLocalizationAdversarialTests {
 			LifecyclePolicy.builder()
 					.startupTimeout(Duration.ofSeconds(5))
 					.startupCancelationTimeout(Duration.ofSeconds(2))
-					.gracefulShutdownDuration(Duration.ofSeconds(2))
-					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.gracefulShutdownTimeout(Duration.ofSeconds(2))
+					.forcedShutdownTimeout(Duration.ofSeconds(1))
 					.build();
 
 	@Test
@@ -107,11 +107,11 @@ class McpLocalizationAdversarialTests {
 	@Test
 	void admissionRejectedWorkNeverInvokesTheProvider() {
 		AtomicInteger contexts = new AtomicInteger();
-		Capture capture = call(contexts, null, builder -> builder
-				.admissionController(context -> McpAdmissionDecision
+		Capture capture = call(contexts, null,
+				context -> McpAdmissionDecision
 						.rejected(McpAdmissionRejection.withStatusCodeAndError(403,
 								McpJsonRpcError.fromApplication(-31000, "denied"))
-								.build())),
+								.build()), builder -> {},
 				request("rejected", "server/discover", null, ""));
 
 		assertEquals(403, capture.statusCode(), capture.body());
@@ -126,12 +126,13 @@ class McpLocalizationAdversarialTests {
 		List<String> observedTags = new CopyOnWriteArrayList<>();
 		RecordingMetrics metrics = new RecordingMetrics();
 		int floodSize = 250;
-		SokletSimulator.run(config -> config.mcpServer(0, builder ->
-				serverBuilder(builder, contexts, request -> {
+		SokletSimulator.run(SimulatorConfig.builder().mcpServer(0,
+				endpointRegistry(), McpAdmissionController.acceptAllInstance(),
+				builder -> configureServer(builder, contexts, request -> {
 					request.getLanguageRanges().stream().findFirst()
 							.ifPresent(range -> observedTags.add(range.getRange()));
 					return Locale.CANADA_FRENCH;
-				}).build())
+				}))
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(metrics)
 				.build(), simulator -> {
@@ -167,8 +168,9 @@ class McpLocalizationAdversarialTests {
 		AtomicReference<McpServer> serverReference = new AtomicReference<>();
 		List<String> bodies = new CopyOnWriteArrayList<>();
 
-		SokletSimulator.run(config -> config.mcpServer(0, builder -> {
-			McpServer server = serverBuilder(builder, contexts, request -> {
+		SokletSimulator.run(SimulatorConfig.builder().mcpServer(0,
+				endpointRegistry(), McpAdmissionController.acceptAllInstance(),
+				builder -> configureServer(builder, contexts, request -> {
 				// Every request parks inside the provider so its locale selection
 				// overlaps every peer's, and overlaps the invalidation below.
 				allInside.countDown();
@@ -180,12 +182,10 @@ class McpLocalizationAdversarialTests {
 				String tag = request.getLanguageRanges().stream().findFirst()
 						.map(Locale.LanguageRange::getRange).orElse("und");
 				return Locale.forLanguageTag(tag);
-			}).build();
-			serverReference.set(server);
-			return server;
-		}).resourceMethodResolver(
+			})).resourceMethodResolver(
 				ResourceMethodResolver.fromMethods(Set.of()))
 				.build(), simulator -> {
+			serverReference.set(simulator.getMcpServer().orElseThrow());
 			List<McpSimulation> simulations = new ArrayList<>();
 
 			for (int index = 0; index < concurrency; ++index)
@@ -217,9 +217,7 @@ class McpLocalizationAdversarialTests {
 		Locale select(McpLocalizationRequest request);
 	}
 
-	private static McpServer.Builder serverBuilder(McpServer.Builder builder,
-			AtomicInteger contexts,
-			LocaleSelector selector) {
+	private static McpEndpointRegistry endpointRegistry() {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation
 						.withNameAndVersion("localization-adversarial", "1.0")
@@ -245,10 +243,14 @@ class McpLocalizationAdversarialTests {
 												.build()))
 						.build())
 				.build();
-		return builder
+		return McpEndpointRegistry.fromEndpoints(List.of(endpoint));
+	}
+
+	private static void configureServer(McpServer.Builder builder,
+			AtomicInteger contexts,
+			LocaleSelector selector) {
+		builder
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
@@ -281,13 +283,20 @@ class McpLocalizationAdversarialTests {
 	private static Capture call(AtomicInteger contexts,
 			LocaleSelector selector, BuilderCustomizer customizer,
 			Request request) {
+		return call(contexts, selector,
+				McpAdmissionController.acceptAllInstance(), customizer, request);
+	}
+
+	private static Capture call(AtomicInteger contexts,
+			LocaleSelector selector,
+			McpAdmissionController admissionController,
+			BuilderCustomizer customizer, Request request) {
 		AtomicReference<Capture> captured = new AtomicReference<>();
 
-		SokletSimulator.run(config -> config.mcpServer(0, builder -> {
-			McpServer.Builder configuredBuilder = serverBuilder(builder, contexts,
-					selector);
-			customizer.customize(configuredBuilder);
-			return configuredBuilder.build();
+		SokletSimulator.run(SimulatorConfig.builder().mcpServer(0,
+				endpointRegistry(), admissionController, builder -> {
+			configureServer(builder, contexts, selector);
+			customizer.customize(builder);
 		}).resourceMethodResolver(
 				ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)

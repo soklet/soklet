@@ -62,7 +62,7 @@ final class BuiltInTransportLifecycleAdapter {
 		 * overrides this form so its internal subscription barrier consumes the
 		 * same absolute deadline instead of deriving a transport-local timeout.
 		 */
-		default void quiesce(@NonNull ShutdownContext context) {
+		default void shutdownGracefully(@NonNull ShutdownContext context) {
 			requireNonNull(context);
 			quiesce();
 		}
@@ -71,7 +71,7 @@ final class BuiltInTransportLifecycleAdapter {
 		void force();
 
 		/** Prompt force against the coordinator's already-fixed phase boundary. */
-		default void force(@NonNull ShutdownContext context) {
+		default void shutdownForcibly(@NonNull ShutdownContext context) {
 			requireNonNull(context);
 			force();
 		}
@@ -271,21 +271,21 @@ final class BuiltInTransportLifecycleAdapter {
 		}
 
 		@Override
-		public void quiesce(@NonNull ShutdownContext context) {
+		public void shutdownGracefully(@NonNull ShutdownContext context) {
 			requireNonNull(context);
 			if (this.quiesced.compareAndSet(false, true))
-				this.owner.operations.quiesce(context);
+				this.owner.operations.shutdownGracefully(context);
 			if (this.gracefulObserverStarted.compareAndSet(false, true))
 				startProofObserver(context.absoluteDeadlineNanos(), "graceful");
 		}
 
 		@Override
-		public void force(@NonNull ShutdownContext context) {
+		public void shutdownForcibly(@NonNull ShutdownContext context) {
 			requireNonNull(context);
 			if (this.quiesced.compareAndSet(false, true))
-				this.owner.operations.quiesce(context);
+				this.owner.operations.shutdownGracefully(context);
 			if (this.forced.compareAndSet(false, true))
-				this.owner.operations.force(context);
+				this.owner.operations.shutdownForcibly(context);
 			if (this.forcedObserverStarted.compareAndSet(false, true))
 				startProofObserver(context.absoluteDeadlineNanos(), "forced");
 		}

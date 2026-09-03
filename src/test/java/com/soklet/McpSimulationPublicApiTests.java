@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -51,8 +52,17 @@ public class McpSimulationPublicApiTests {
 				Request.class);
 		assertAbstractNonNullMethod(configuredStart, McpSimulation.class,
 				Request.class, McpSimulationOptions.class);
-		Assertions.assertEquals(6, Simulator.class.getDeclaredMethods().length);
+		assertOptionalMethod(Simulator.class.getMethod("getHttpServer"),
+				HttpServer.class);
+		assertOptionalMethod(Simulator.class.getMethod("getSseServer"),
+				SseServer.class);
+		assertOptionalMethod(Simulator.class.getMethod("getMcpServer"),
+				McpServer.class);
+		Assertions.assertEquals(9, Simulator.class.getDeclaredMethods().length);
 		Assertions.assertEquals(Set.of(
+				"getHttpServer()",
+				"getMcpServer()",
+				"getSseServer()",
 				"onBroadcastError(java.util.function.Consumer)",
 				"onUnicastError(java.util.function.Consumer)",
 				"performHttpRequest(com.soklet.Request)",
@@ -73,16 +83,17 @@ public class McpSimulationPublicApiTests {
 			throws Exception {
 		Assertions.assertTrue(AutoCloseable.class.isAssignableFrom(
 				McpSimulation.class));
-		Assertions.assertEquals(6, McpSimulation.class.getDeclaredMethods().length);
+		Assertions.assertEquals(5, McpSimulation.class.getDeclaredMethods().length);
 		assertOptionalMethod(McpSimulation.class.getMethod("awaitResponse",
 				Duration.class), McpSimulationResponse.class, Duration.class);
-		assertOptionalMethod(McpSimulation.class.getMethod("nextStreamItem",
+		assertOptionalMethod(McpSimulation.class.getMethod("awaitStreamItem",
 				Duration.class), McpSimulationStreamItem.class, Duration.class);
 		assertOptionalMethod(McpSimulation.class.getMethod("awaitCompletion",
 				Duration.class), McpSimulationCompletion.class, Duration.class);
 		assertNonNullMethod(McpSimulation.class.getMethod("isComplete"),
 				Boolean.class);
-		assertVoidMethod(McpSimulation.class.getMethod("cancel"));
+		Assertions.assertThrows(NoSuchMethodException.class,
+				() -> McpSimulation.class.getMethod("cancel"));
 		assertVoidMethod(McpSimulation.class.getMethod("close"));
 
 		Assertions.assertEquals(4,
@@ -90,8 +101,8 @@ public class McpSimulationPublicApiTests {
 		assertNonNullMethod(McpSimulationResponse.class.getMethod("getStatusCode"),
 				Integer.class);
 		assertHeadersMethod(McpSimulationResponse.class.getMethod("getHeaders"));
-		assertNonNullMethod(McpSimulationResponse.class.getMethod("getBodyMode"),
-				McpSimulationBodyMode.class);
+		assertNonNullMethod(McpSimulationResponse.class.getMethod("getBodyType"),
+				McpSimulationBodyType.class);
 		assertOptionalMethod(McpSimulationResponse.class.getMethod("getBody"),
 				byte[].class);
 
@@ -115,11 +126,11 @@ public class McpSimulationPublicApiTests {
 		assertNonNullMethod(McpSimulationStreamItem.class.getMethod(
 				"getEncodedBytes"), byte[].class);
 
-		Assertions.assertArrayEquals(new McpSimulationBodyMode[]{
-				McpSimulationBodyMode.EMPTY,
-				McpSimulationBodyMode.JSON,
-				McpSimulationBodyMode.SERVER_SENT_EVENTS
-		}, McpSimulationBodyMode.values());
+		Assertions.assertArrayEquals(new McpSimulationBodyType[]{
+				McpSimulationBodyType.EMPTY,
+				McpSimulationBodyType.JSON,
+				McpSimulationBodyType.SSE
+		}, McpSimulationBodyType.values());
 		Assertions.assertArrayEquals(new McpSimulationStreamItemType[]{
 				McpSimulationStreamItemType.JSON_MESSAGE,
 				McpSimulationStreamItemType.KEEP_ALIVE_COMMENT
@@ -127,42 +138,53 @@ public class McpSimulationPublicApiTests {
 	}
 
 	@Test
-	public void simulationOptionsUsePositiveFiniteDefaultsAndIndependentBuilderState() {
+	public void simulationOptionsUsePositiveFiniteDefaultsAndIndependentBuilderState()
+			throws Exception {
 		McpSimulationOptions defaults = McpSimulationOptions.defaultInstance();
 		Assertions.assertSame(defaults, McpSimulationOptions.defaultInstance());
 		Assertions.assertEquals(128, defaults.getStreamItemQueueCapacity());
 		Assertions.assertEquals(10 * 1_024 * 1_024,
-				defaults.getMaximumCapturedBytes());
+				defaults.getMaximumCapturedSizeInBytes());
 
 		McpSimulationOptions.Builder firstBuilder = McpSimulationOptions.builder();
 		Assertions.assertSame(firstBuilder,
 				firstBuilder.streamItemQueueCapacity(7));
 		Assertions.assertSame(firstBuilder,
-				firstBuilder.maximumCapturedBytes(4_096));
+				firstBuilder.maximumCapturedSizeInBytes(4_096));
 		McpSimulationOptions first = firstBuilder.build();
 		McpSimulationOptions second = McpSimulationOptions.builder().build();
 		Assertions.assertEquals(7, first.getStreamItemQueueCapacity());
-		Assertions.assertEquals(4_096, first.getMaximumCapturedBytes());
+		Assertions.assertEquals(4_096, first.getMaximumCapturedSizeInBytes());
 		Assertions.assertEquals(defaults.getStreamItemQueueCapacity(),
 				second.getStreamItemQueueCapacity());
-		Assertions.assertEquals(defaults.getMaximumCapturedBytes(),
-				second.getMaximumCapturedBytes());
+		Assertions.assertEquals(defaults.getMaximumCapturedSizeInBytes(),
+				second.getMaximumCapturedSizeInBytes());
 
-		Assertions.assertThrows(NullPointerException.class,
-				() -> McpSimulationOptions.builder().streamItemQueueCapacity(null));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> McpSimulationOptions.builder().maximumCapturedBytes(null));
+		McpSimulationOptions reset = McpSimulationOptions.builder()
+				.streamItemQueueCapacity(1)
+				.maximumCapturedSizeInBytes(1)
+				.streamItemQueueCapacity(null)
+				.maximumCapturedSizeInBytes(null)
+				.build();
+		Assertions.assertEquals(defaults.getStreamItemQueueCapacity(),
+				reset.getStreamItemQueueCapacity());
+		Assertions.assertEquals(defaults.getMaximumCapturedSizeInBytes(),
+				reset.getMaximumCapturedSizeInBytes());
+		assertNullableParameter(McpSimulationOptions.Builder.class.getMethod(
+				"streamItemQueueCapacity", Integer.class));
+		assertNullableParameter(McpSimulationOptions.Builder.class.getMethod(
+				"maximumCapturedSizeInBytes", Integer.class));
 		for (Integer invalid : List.of(0, -1, Integer.MIN_VALUE)) {
 			Assertions.assertThrows(IllegalArgumentException.class,
 					() -> McpSimulationOptions.builder()
 							.streamItemQueueCapacity(invalid).build());
 			Assertions.assertThrows(IllegalArgumentException.class,
 					() -> McpSimulationOptions.builder()
-							.maximumCapturedBytes(invalid).build());
+							.maximumCapturedSizeInBytes(invalid).build());
 		}
 		Assertions.assertDoesNotThrow(() -> McpSimulationOptions.builder()
 				.streamItemQueueCapacity(Integer.MAX_VALUE)
-				.maximumCapturedBytes(Integer.MAX_VALUE)
+				.maximumCapturedSizeInBytes(Integer.MAX_VALUE)
 				.build());
 	}
 
@@ -186,6 +208,12 @@ public class McpSimulationPublicApiTests {
 	private static void assertVoidMethod(@NonNull Method method) {
 		Assertions.assertEquals(void.class, method.getReturnType());
 		Assertions.assertEquals(0, method.getParameterCount());
+	}
+
+	private static void assertNullableParameter(@NonNull Method method) {
+		Assertions.assertEquals(1, method.getParameterCount());
+		Assertions.assertTrue(method.getAnnotatedParameterTypes()[0]
+				.isAnnotationPresent(Nullable.class), method.toString());
 	}
 
 	private static void assertOptionalMethod(@NonNull Method method,

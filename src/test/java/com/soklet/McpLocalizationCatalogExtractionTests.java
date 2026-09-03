@@ -62,8 +62,8 @@ class McpLocalizationCatalogExtractionTests {
 			LifecyclePolicy.builder()
 					.startupTimeout(Duration.ofSeconds(5))
 					.startupCancelationTimeout(Duration.ofSeconds(2))
-					.gracefulShutdownDuration(Duration.ofSeconds(2))
-					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.gracefulShutdownTimeout(Duration.ofSeconds(2))
+					.forcedShutdownTimeout(Duration.ofSeconds(1))
 					.build();
 
 	@Test
@@ -405,12 +405,9 @@ class McpLocalizationCatalogExtractionTests {
 	}
 
 	private static McpServer.Builder wireServerBuilder(
-			McpServer.Builder builder, McpEndpointRegistry registry) {
+			McpServer.Builder builder) {
 		return builder
 				.host(LOOPBACK)
-				.endpointRegistry(registry)
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
 	}
@@ -426,23 +423,22 @@ class McpLocalizationCatalogExtractionTests {
 		AtomicReference<McpServer> serverReference = new AtomicReference<>();
 		AtomicReference<WireResponse> captured = new AtomicReference<>();
 
-		SokletSimulator.run(config -> config.mcpServer(0, builder -> {
-			McpServer.Builder configuredBuilder = wireServerBuilder(builder, registry);
+		SokletSimulator.run(SimulatorConfig.builder().mcpServer(0, registry,
+				McpAdmissionController.acceptAllInstance(), builder -> {
+			McpServer.Builder configuredBuilder = wireServerBuilder(builder);
 			if (localizer != null)
 				configuredBuilder.localizer(localizer);
-			McpServer server = configuredBuilder.build();
-			serverReference.set(server);
-			return server;
 		}).resourceMethodResolver(
 				ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(metrics)
 				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build(), simulator -> {
-			McpServer server = serverReference.get();
+			McpServer server = simulator.getMcpServer().orElseThrow();
+			serverReference.set(server);
 			assertRunningOffNetwork(server);
 			McpSimulation simulation = simulator.startMcpRequest(discoveryRequest());
 			McpSimulationResponse response = awaitSimulatorResponse(simulation);
-			assertEquals(McpSimulationBodyMode.JSON, response.getBodyMode());
+			assertEquals(McpSimulationBodyType.JSON, response.getBodyType());
 			captured.set(new WireResponse(response.getStatusCode(),
 					response.getHeaders(), response.getBody().orElseThrow()));
 			assertEquals(McpStreamTerminationReason.COMPLETED,

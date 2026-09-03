@@ -204,7 +204,7 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 
 			terminalFailure = captureManagedCloseFailure(soklet);
 			assertManagedTerminalFailure(terminalFailure,
-					"com.soklet.ShutdownIncompleteException",
+					"com.soklet.SokletShutdownIncompleteException",
 					"Soklet shutdown could not prove complete termination");
 			Assertions.assertNull(terminalFailure.getCause());
 			Assertions.assertTrue(handlerInterrupted.await(5, TimeUnit.SECONDS));
@@ -302,7 +302,7 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 			Assertions.assertTrue(snapshotReads.get() > 0);
 			terminalFailure = captureManagedCloseFailure(soklet);
 			assertManagedTerminalFailure(terminalFailure,
-					"com.soklet.SokletTerminatedUnexpectedlyException",
+					"com.soklet.SokletUnexpectedTerminationException",
 					"A Soklet transport terminated unexpectedly");
 			Assertions.assertInstanceOf(ClosedSelectorException.class,
 					terminalFailure.getCause());
@@ -417,8 +417,8 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecyclePolicy(LifecyclePolicy.builder()
-						.gracefulShutdownDuration(shutdownTimeout)
-						.forcedShutdownDuration(shutdownTimeout)
+						.gracefulShutdownTimeout(shutdownTimeout)
+						.forcedShutdownTimeout(shutdownTimeout)
 						.build())
 				.build());
 	}

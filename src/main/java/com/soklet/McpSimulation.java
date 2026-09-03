@@ -59,7 +59,7 @@ public interface McpSimulation extends AutoCloseable {
 	 * @throws NullPointerException if {@code timeout} is null
 	 */
 	@NonNull
-	Optional<@NonNull McpSimulationStreamItem> nextStreamItem(
+	Optional<@NonNull McpSimulationStreamItem> awaitStreamItem(
 			@NonNull Duration timeout) throws InterruptedException;
 
 	/**
@@ -86,12 +86,6 @@ public interface McpSimulation extends AutoCloseable {
 	 */
 	@NonNull
 	Boolean isComplete();
-
-	/**
-	 * Simulates a client disconnect if the request remains active. This method is
-	 * idempotent and cannot replace an earlier terminal winner.
-	 */
-	void cancel();
 
 	/**
 	 * Simulates a client disconnect if the request remains active. Closing is

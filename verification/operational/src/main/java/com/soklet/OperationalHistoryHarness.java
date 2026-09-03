@@ -339,8 +339,8 @@ public final class OperationalHistoryHarness {
     return LifecyclePolicy.builder()
         .startupTimeout(Duration.ofSeconds(10))
         .startupCancelationTimeout(Duration.ofSeconds(2))
-        .gracefulShutdownDuration(Duration.ofSeconds(5))
-        .forcedShutdownDuration(Duration.ofSeconds(2))
+        .gracefulShutdownTimeout(Duration.ofSeconds(5))
+        .forcedShutdownTimeout(Duration.ofSeconds(2))
         .build();
   }
 

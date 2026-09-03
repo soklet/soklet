@@ -34,7 +34,7 @@ public final class ShutdownComponentResult {
 	private final ShutdownComponentDisposition
 			shutdownComponentDisposition;
 	@NonNull
-	private final List<@NonNull Throwable> failures;
+	private final List<@NonNull Throwable> throwables;
 	@Nullable
 	private final ResidualActivityEvidence residualActivityEvidence;
 
@@ -42,12 +42,12 @@ public final class ShutdownComponentResult {
 			@NonNull ShutdownComponentType shutdownComponentType,
 			@NonNull ShutdownComponentDisposition
 					shutdownComponentDisposition,
-			@NonNull List<? extends @NonNull Throwable> failures,
+			@NonNull List<? extends @NonNull Throwable> throwables,
 			@Nullable ResidualActivityEvidence residualActivityEvidence) {
 		this.shutdownComponentType = requireNonNull(shutdownComponentType);
 		this.shutdownComponentDisposition = requireNonNull(
 				shutdownComponentDisposition);
-		this.failures = List.copyOf(requireNonNull(failures));
+		this.throwables = List.copyOf(requireNonNull(throwables));
 		this.residualActivityEvidence = residualActivityEvidence;
 	}
 
@@ -65,14 +65,14 @@ public final class ShutdownComponentResult {
 	}
 
 	/**
-	 * Returns failures in deterministic observation order. Throwable instances
+	 * Returns throwables in deterministic observation order. Throwable instances
 	 * retain their exact identities and may contain application-sensitive data.
 	 *
-	 * @return immutable failure list
+	 * @return immutable throwable list
 	 */
 	@NonNull
-	public List<@NonNull Throwable> getFailures() {
-		return this.failures;
+	public List<@NonNull Throwable> getThrowables() {
+		return this.throwables;
 	}
 
 	/** @return residual-activity evidence, otherwise empty */

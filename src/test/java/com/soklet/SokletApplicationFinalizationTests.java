@@ -619,7 +619,7 @@ class SokletApplicationFinalizationTests {
 				"The synchronous action already returned before timeout publication");
 		Assertions.assertInstanceOf(TimeoutException.class,
 				outcome.failure().orElseThrow());
-		SokletApplicationCleanupException callerFailure =
+		SokletShutdownCleanupException callerFailure =
 				SokletApplicationFinalization.cleanupException(notStarted(), outcome);
 		Assertions.assertTrue(callerFailure.getMessage()
 				.contains("daemon action may remain live"));

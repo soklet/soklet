@@ -181,16 +181,6 @@ run('helper policy body drift invalidates full-file proof', () => {
     /override is stale/u);
 });
 
-run('InternalLifecyclePolicy Optional.empty cannot be laundered finite', () => {
-  const document = clone(INVENTORY);
-  const row = rowByName(document,
-    'mixedIncompleteAndNotStartedTerminalTraceIsOrderedAndComplete');
-  row.review.phasePolicy.startupMillis = 1;
-  row.review.phasePolicy.controlledStartupMillis = null;
-  row.review.phasePolicy.mode = 'SOURCE_CONFIGURED_FINITE_WITH_PROOF';
-  expectFailure(() => verifyDocument(document), /semantic closure rows/u);
-});
-
 run('cleanup is complete-branch-only and report is exact', () => {
   const row = INVENTORY.lifecycleScopes.find((candidate) =>
     candidate.source.cleanupConfigured && candidate.source.hasExecution
@@ -278,8 +268,8 @@ run('local strict-fit equality rejected', () => {
       @Test @Timeout(60) void exactEquality() {
         LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(30))
           .startupCancelationTimeout(Duration.ofSeconds(12))
-          .gracefulShutdownDuration(Duration.ofSeconds(15))
-          .forcedShutdownDuration(Duration.ofSeconds(3)).build();
+          .gracefulShutdownTimeout(Duration.ofSeconds(15))
+          .forcedShutdownTimeout(Duration.ofSeconds(3)).build();
         Soklet soklet = Soklet.fromConfig(null); soklet.start(); soklet.close();
       }
     }
@@ -1015,23 +1005,35 @@ run('unresolved controls cannot hide a resolved sequential wait', () => {
   }), /sequential control\/join allowance understates fixed source waits/u);
 });
 
-run('construction-only noStartup differs from execution', () => {
+run('null lifecycle timeout setters restore finite defaults', () => {
   const scopes = syntheticScopes(`
+    import java.time.Duration;
     import org.junit.jupiter.api.Test;
     class SyntheticLifecycleTests {
-      @Test void constructionOnly() { LifecyclePolicy.builder().noStartupTimeout().build(); }
       @Test void executes() {
-        LifecyclePolicy.builder().noStartupTimeout().build();
-        Soklet s = Soklet.fromConfig(null); s.start();
+        LifecyclePolicy policy = LifecyclePolicy.builder()
+          .startupTimeout(Duration.ofSeconds(1)).startupTimeout(null)
+          .startupCancelationTimeout(Duration.ofSeconds(1))
+          .startupCancelationTimeout(null)
+          .gracefulShutdownTimeout(Duration.ofSeconds(1))
+          .gracefulShutdownTimeout(null)
+          .forcedShutdownTimeout(Duration.ofSeconds(1))
+          .forcedShutdownTimeout(null).build();
+        SokletConfig config = SokletConfig.withHttpServer(null)
+          .lifecyclePolicy(policy).build();
+        Soklet s = Soklet.fromConfig(config); s.start(); s.close();
       }
     }
   `);
-  const byName = new Map(scopes.map((scope) => [scope.scopeName, scope]));
-  assert.equal(byName.get('constructionOnly').hasExecution, false);
-  assert.equal(byName.get('constructionOnly').hasNoStartupTimeout, true);
-  assert.equal(byName.get('executes').hasExecution, true);
-  expectFailure(() => buildReviewedLifecycleScopeRows(scopes,
-    { requireRegistryCompleteness: false }), /controlled-completion override/u);
+  assert.equal(scopes[0].hasNoStartupTimeout, false);
+  assert.deepEqual(scopes[0].literalPhasePolicies[0], {
+    forcedShutdownMillis: 3_000,
+    gracefulShutdownMillis: 15_000,
+    startupCancellationMillis: 2_000,
+    startupMillis: 30_000,
+  });
+  assert.equal(buildReviewedLifecycleScopeRows(scopes,
+    { requireRegistryCompleteness: false }).length, 1);
 });
 
 run('zero-argument lifecycle policy accessor is not an installation', () => {
@@ -1060,8 +1062,8 @@ run('duplicate lifecycle setters use the effective last value', () => {
           .startupTimeout(Duration.ofSeconds(1))
           .startupTimeout(Duration.ofSeconds(120))
           .startupCancelationTimeout(Duration.ZERO)
-          .gracefulShutdownDuration(Duration.ZERO)
-          .forcedShutdownDuration(Duration.ZERO).build();
+          .gracefulShutdownTimeout(Duration.ZERO)
+          .forcedShutdownTimeout(Duration.ZERO).build();
         Soklet s = Soklet.fromConfig(null); s.start(); s.close();
       }
     }
@@ -1074,11 +1076,10 @@ run('duplicate lifecycle setters use the effective last value', () => {
 run('InternalLifecyclePolicy field cannot silently inherit defaults', () => {
   const scopes = syntheticScopes(`
     import java.time.Duration;
-    import java.util.Optional;
     import org.junit.jupiter.api.Test;
     class SyntheticLifecycleTests {
       static final InternalLifecyclePolicy POLICY = new InternalLifecyclePolicy(
-        Optional.of(Duration.ofHours(2)), Duration.ZERO, Duration.ZERO, Duration.ZERO);
+        Duration.ofHours(2), Duration.ZERO, Duration.ZERO, Duration.ZERO);
       @Test void internalField() {
         SokletConfig config = SokletConfig.withHttpServer(null)
           .internalLifecyclePolicy(POLICY).build();
@@ -1091,15 +1092,14 @@ run('InternalLifecyclePolicy field cannot silently inherit defaults', () => {
     { requireRegistryCompleteness: false }), /does not fit/u);
 });
 
-run('InternalLifecyclePolicy Optional.empty cannot be overridden finite', () => {
+run('finite startup policy cannot be overridden as unbounded', () => {
   const scopes = syntheticScopes(`
     import java.time.Duration;
-    import java.util.Optional;
     import org.junit.jupiter.api.Test;
     class SyntheticLifecycleTests {
       static final InternalLifecyclePolicy POLICY = new InternalLifecyclePolicy(
-        Optional.empty(), Duration.ZERO, Duration.ZERO, Duration.ZERO);
-      @Test void unboundedInternal() {
+        Duration.ofSeconds(1), Duration.ZERO, Duration.ZERO, Duration.ZERO);
+      @Test void finiteInternal() {
         SokletConfig config = SokletConfig.withHttpServer(null)
           .internalLifecyclePolicy(POLICY).build();
         Soklet s = Soklet.fromConfig(config); s.start();
@@ -1107,15 +1107,15 @@ run('InternalLifecyclePolicy Optional.empty cannot be overridden finite', () => 
     }
   `);
   expectFailure(() => reviewedSyntheticRows(scopes, {
-    unboundedInternal: {
+    finiteInternal: {
       phasePolicy: {
         forcedShutdownMillis: 0,
         gracefulShutdownMillis: 0,
         startupCancellationMillis: 0,
-        startupMillis: 1,
+        startupMillis: null,
       },
     },
-  }), /cannot be replaced by a finite review/u);
+  }), /startupMillis is invalid/u);
 });
 
 for (const nestedFirst of [false, true]) {
@@ -1763,7 +1763,7 @@ run('commented official fixture policy setter is not executable wiring', () => {
     'soak/src/test/java/com/soklet/McpLocalizationSoakTests.java',
     'soak/src/test/java/com/soklet/RealtimeTransportSoakTests.java'];
   const texts = sourceTexts(...paths);
-  const setter = '.gracefulShutdownDuration(Duration.ofSeconds(5))';
+  const setter = '.gracefulShutdownTimeout(Duration.ofSeconds(5))';
   texts.set(fixture, texts.get(fixture).replace(setter, `/* ${setter} */`));
   expectFailure(() => verifySpecialSourceWiring(texts),
     /official 5-second graceful shutdown/u);
@@ -1830,12 +1830,12 @@ run('special harness duplicate policy setters and extra entries fail', () => {
   const realtime = 'soak/src/test/java/com/soklet/RealtimeTransportSoakTests.java';
   const paths = [fixture, http, cross, localization, realtime];
   for (const [path, needle, duplicate] of [
-    [fixture, '.forcedShutdownDuration(Duration.ofSeconds(1))',
-      '.forcedShutdownDuration(Duration.ofSeconds(1))\n        .forcedShutdownDuration(Duration.ofHours(1))'],
-    [http, '.gracefulShutdownDuration(Duration.ofSeconds(3))',
-      '.gracefulShutdownDuration(Duration.ofSeconds(3))\n        .gracefulShutdownDuration(Duration.ofHours(1))'],
-    [realtime, '.gracefulShutdownDuration(Duration.ofSeconds(3))',
-      '.gracefulShutdownDuration(Duration.ofSeconds(3))\n        .gracefulShutdownDuration(Duration.ofHours(1))'],
+    [fixture, '.forcedShutdownTimeout(Duration.ofSeconds(1))',
+      '.forcedShutdownTimeout(Duration.ofSeconds(1))\n        .forcedShutdownTimeout(Duration.ofHours(1))'],
+    [http, '.gracefulShutdownTimeout(Duration.ofSeconds(3))',
+      '.gracefulShutdownTimeout(Duration.ofSeconds(3))\n        .gracefulShutdownTimeout(Duration.ofHours(1))'],
+    [realtime, '.gracefulShutdownTimeout(Duration.ofSeconds(3))',
+      '.gracefulShutdownTimeout(Duration.ofSeconds(3))\n        .gracefulShutdownTimeout(Duration.ofHours(1))'],
     [cross, '.startupTimeout(Duration.ofSeconds(30))',
       '.startupTimeout(Duration.ofSeconds(30))\n        .startupTimeout(Duration.ofHours(1))'],
     [localization, '.startupTimeout(Duration.ofSeconds(30))',

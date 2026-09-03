@@ -315,7 +315,7 @@ public class McpLimitsAndAccountingTests {
 				staticNumber("com.soklet.DefaultMcpServer",
 						"MAXIMUM_AGGREGATE_BASE64_CHARACTERS"));
 		put(values, "simulation-captured-bytes", "BYTES",
-				McpSimulationOptions.defaultInstance().getMaximumCapturedBytes());
+				McpSimulationOptions.defaultInstance().getMaximumCapturedSizeInBytes());
 		put(values, "localization-lookups-default", "LOOKUPS", staticNumber(
 				McpLocalizer.class.getName(),
 				"DEFAULT_MAXIMUM_LOCALIZABLE_TEXT_COUNT_PER_RESPONSE"));

@@ -1284,7 +1284,7 @@ The twenty-first bounded production vertical assigns the shared public
 `startMcpRequest(Request, McpSimulationOptions)` methods. The seven top-level
 public types are `McpSimulation`, `McpSimulationOptions`,
 `McpSimulationResponse`, `McpSimulationCompletion`,
-`McpSimulationStreamItem`, `McpSimulationBodyMode`, and
+`McpSimulationStreamItem`, `McpSimulationBodyType`, and
 `McpSimulationStreamItemType`; the eighth new owner is
 `McpSimulationOptions.Builder`. The reflection gate freezes exact reference
 nullability, enum order, record-free interface shapes, method names, parameter
@@ -1294,7 +1294,7 @@ The API represents an asynchronous off-network MCP POST. Default options bound
 pending SSE capture to 128 items and cumulative response/frame capture to
 10,485,760 bytes. The simulation handle provides repeatable response and
 completion waits, destructive FIFO item reads, boxed `isComplete()`, and
-idempotent cancel/close. Response, item, and completion collections are
+idempotent close. Response, item, and completion collections are
 immutable; returned body/frame arrays are defensive copies. Completion retains
 the exact public stream reason, an optional terminal message, and an immutable
 ordered list of the same Throwable identities.
@@ -1308,10 +1308,10 @@ is allowed, dequeuing refunds only a slot, terminal JSON is one counted item
 and one no-extra-cost completion reference, and exact JSON/SSE overflow retains
 the response head while excluding the offending bytes.
 
-Cancel, close, and scope exit use the existing request terminal reservation and
+`close()` and scope exit use the existing request terminal reservation and
 publish `CLIENT_DISCONNECTED` only when they win. Bounded residual cleanup,
 suppression, restart blocking, overflow-safe waits, interruption without
-cancelation, MRTR continuation, subscription replay, and cancel-versus-terminal
+cancelation, MRTR continuation, subscription replay, and close-versus-terminal
 first-winner behavior are production-tested. These semantics do not make the
 public Request, headers/body, or retained Throwables non-sensitive; disclosure
 remains application-owned.
@@ -1326,7 +1326,7 @@ Representative exact citations from the full 46-test simulator/API gate are
 `#mcpSimulationCompletionRetainsStreamCaptureFailures`,
 `#noncooperativeSimulationCleanupIsBoundedAndPreservesSuppression`,
 `#waitOperationsHandleZeroTimeoutInterruptionAndCompletionIdempotently`, and
-`McpSimulationCaptureRuntimeTests#cancelAndTerminalRacePublishesOneCoherentFirstWinner`.
+`McpSimulationCaptureRuntimeTests#closeAndTerminalRacePublishesOneCoherentFirstWinner`.
 
 At the V21 boundary, `phase-6.includes` had 15 owners,
 `provisional.includes` had 32, and the reviewed union had 219. The canonical

@@ -38,15 +38,15 @@ import java.util.Set;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Function;
 
 import static java.util.Objects.requireNonNull;
 
-/** Owns one fresh, off-network simulation lifecycle. */
+/** Runs single-use, off-network simulation configurations. */
+@ThreadSafe
 public final class SokletSimulator {
 	/** Simulation body with checked-exception transparency. */
 	@FunctionalInterface
-	public interface Body<E extends Throwable> {
+	public interface Simulation<E extends Throwable> {
 		/**
 		 * Executes against the isolated simulator.
 		 *
@@ -60,50 +60,52 @@ public final class SokletSimulator {
 	}
 
 	/**
-	 * Runs one fresh off-network simulation scope. The configuration function is
-	 * invoked exactly once with a builder bound to that scope's fresh transports.
+	 * Runs one prebuilt, single-use off-network simulation configuration.
 	 *
-	 * @param configurer builds the configuration for this simulation scope
-	 * @param body simulation work
-	 * @param <E> checked throwable type selected by the body
+	 * @param simulatorConfig simulator configuration; it is claimed by this call
+	 * before lifecycle work begins and cannot be reused
+	 * @param simulation simulation work
+	 * @param <E> checked throwable type selected by the simulation
 	 * @return the exact immutable scope-shutdown result
-	 * @throws E if the body fails; a teardown failure is then suppressed on it
-	 * @throws ShutdownIncompleteException if successful body execution is followed
+	 * @throws E if the simulation fails; a teardown failure is then suppressed on it
+	 * @throws SokletShutdownIncompleteException if successful simulation execution is followed
 	 * by shutdown that cannot be proven complete
+	 * @throws IllegalStateException if {@code simulatorConfig} was already claimed
 	 */
 	@NonNull
 	public static <E extends Throwable> ShutdownResult run(
-			@NonNull Function<SimulatorConfig.@NonNull Builder,
-					@NonNull SimulatorConfig> configurer,
-			@NonNull Body<E> body) throws E {
-		return ShutdownResult.fromInternal(run(configurer, body,
+			@NonNull SimulatorConfig simulatorConfig,
+			@NonNull Simulation<E> simulation) throws E {
+		return ShutdownResult.fromInternal(run(simulatorConfig, simulation,
 				NanoClock.system(), new LifecycleWorkers()));
 	}
 
 	@NonNull
 	static <E extends Throwable> InternalShutdownResult run(
-			@NonNull Function<SimulatorConfig.@NonNull Builder,
-					@NonNull SimulatorConfig> configurer,
-			@NonNull Body<E> body,
+			@NonNull SimulatorConfig simulatorConfig,
+			@NonNull Simulation<E> simulation,
 			@NonNull NanoClock clock,
 			@NonNull LifecycleWorkers workers) throws E {
 		NanoClock exactClock = requireNonNull(clock);
-		return run(configurer, body, exactClock,
+		return run(simulatorConfig, simulation, exactClock,
 				new DeadlineWaiter(exactClock), workers);
 	}
 
 	@NonNull
 	static <E extends Throwable> InternalShutdownResult run(
-			@NonNull Function<SimulatorConfig.@NonNull Builder,
-					@NonNull SimulatorConfig> configurer,
-			@NonNull Body<E> body,
+			@NonNull SimulatorConfig simulatorConfig,
+			@NonNull Simulation<E> simulation,
 			@NonNull NanoClock clock,
 			@NonNull DeadlineWaiter waiter,
 			@NonNull LifecycleWorkers workers) throws E {
-		return new Scope(requireNonNull(clock),
-				requireNonNull(waiter), requireNonNull(workers)).run(
-				requireNonNull(configurer),
-				requireNonNull(body));
+		SimulatorConfig exactConfig = requireNonNull(simulatorConfig);
+		Simulation<E> exactSimulation = requireNonNull(simulation);
+		NanoClock exactClock = requireNonNull(clock);
+		DeadlineWaiter exactWaiter = requireNonNull(waiter);
+		LifecycleWorkers exactWorkers = requireNonNull(workers);
+		exactConfig.claimForRun();
+		return new Scope(exactConfig, exactClock, exactWaiter, exactWorkers)
+				.run(exactConfig, exactSimulation);
 	}
 
 	@SuppressWarnings("unchecked")
@@ -113,8 +115,8 @@ public final class SokletSimulator {
 	}
 
 	@NotThreadSafe
-	private static final class Scope implements SimulatorMcpBuildRegistrar,
-			SimulatorConfigurationScopeIdentity {
+	private static final class Scope
+			implements SimulatorConfigurationScopeIdentity {
 		@NonNull
 		private final NanoClock clock;
 		@NonNull
@@ -138,45 +140,33 @@ public final class SokletSimulator {
 		private final InternalLifecycleStateMachine stateMachine;
 		@NonNull
 		private final InternalControllingEventElection controllingEventElection;
-		private boolean configurationOpen;
-		private @Nullable DefaultMcpServer mcpServer;
+		private final @Nullable DefaultMcpServer mcpServer;
 		private @Nullable DefaultSimulator simulator;
 
-		private Scope(@NonNull NanoClock clock,
+		private Scope(@NonNull SimulatorConfig simulatorConfig,
+				@NonNull NanoClock clock,
 				@NonNull DeadlineWaiter waiter,
 				@NonNull LifecycleWorkers workers) {
+			SimulatorConfig exactConfig = requireNonNull(simulatorConfig);
 			this.clock = requireNonNull(clock);
 			this.workers = requireNonNull(workers);
 			this.waiter = requireNonNull(waiter);
 			this.callRunner = new TrackedLifecycleCallRunner(workers);
 			this.activeStartupParticipant = new AtomicReference<>();
 			this.startupCancelationRequired = new AtomicBoolean();
-			this.configurationIdentity = new Object();
-			this.httpServer = new MockHttpServer();
-			this.sseServer = new MockSseServer();
+			this.configurationIdentity = exactConfig.configurationIdentity();
+			this.httpServer = exactConfig.simulatedHttpServer();
+			this.sseServer = exactConfig.simulatedSseServer();
+			this.mcpServer = exactConfig.simulatedMcpServer();
 			this.stateMachine = new InternalLifecycleStateMachine();
 			this.controllingEventElection =
 					new InternalControllingEventElection();
-			this.configurationOpen = true;
 		}
 
 		@NonNull
 		private <E extends Throwable> InternalShutdownResult run(
-				@NonNull Function<SimulatorConfig.@NonNull Builder,
-						@NonNull SimulatorConfig> configurer,
-				@NonNull Body<E> body) throws E {
-			SimulatorConfig simulatorConfig;
-			try {
-				SimulatorConfig.Builder builder = new SimulatorConfig.Builder(
-						this.configurationIdentity, this.httpServer, this.sseServer,
-						this::newMcpServerBuilder,
-						this::requireConfigurationOpen);
-				simulatorConfig = requireNonNull(
-						requireNonNull(configurer).apply(builder),
-						"The simulator configuration function returned null");
-			} finally {
-				sealConfiguration();
-			}
+				@NonNull SimulatorConfig simulatorConfig,
+				@NonNull Simulation<E> simulation) throws E {
 			if (!simulatorConfig.belongsTo(this.configurationIdentity))
 				throw new IllegalStateException(
 						"The simulator configuration belongs to a different scope");
@@ -185,9 +175,8 @@ public final class SokletSimulator {
 			ResolvedScopeTransports resolved = validate(config);
 			InternalLifecyclePolicy policy = config.getInternalLifecyclePolicy();
 			long startupBeganNanos = this.clock.nanoTime();
-			Optional<Long> startupDeadline = policy.startupTimeout()
-					.map(duration -> LifecycleDeadlines.after(startupBeganNanos,
-							duration));
+			long startupDeadline = LifecycleDeadlines.after(startupBeganNanos,
+					policy.startupTimeout());
 			StartupBudget startupBudget = new StartupBudget(startupDeadline,
 					policy.startupCancelationTimeout());
 			this.stateMachine.claimStart();
@@ -228,7 +217,7 @@ public final class SokletSimulator {
 				if (!openParticipantAdmission(participants))
 					requestOwnerShutdown();
 				bodyEntered = true;
-				body.run(this.simulator);
+				simulation.run(this.simulator);
 			} catch (Throwable failure) {
 				primaryFailure = failure;
 				if (!bodyEntered
@@ -272,39 +261,6 @@ public final class SokletSimulator {
 			return teardown.result();
 		}
 
-		private synchronized McpServer.@NonNull Builder newMcpServerBuilder(
-				@NonNull Integer port) {
-			verifyBuildAllowed();
-			return McpServer.withPort(requireNonNull(port))
-					.simulatorBuildRegistrar(this);
-		}
-
-		@Override
-		public synchronized void verifyBuildAllowed() {
-			requireConfigurationOpen();
-			if (this.mcpServer != null)
-				throw new IllegalStateException(
-						"A simulator scope may build at most one MCP server");
-		}
-
-		@Override
-		public synchronized void register(@NonNull DefaultMcpServer server) {
-			verifyBuildAllowed();
-			DefaultMcpServer registered = requireNonNull(server);
-			registered.claimSimulatorScope(this);
-			this.mcpServer = registered;
-		}
-
-		private synchronized void sealConfiguration() {
-			this.configurationOpen = false;
-		}
-
-		private synchronized void requireConfigurationOpen() {
-			if (!this.configurationOpen)
-				throw new IllegalStateException(
-						"The simulator configuration scope is closed");
-		}
-
 		@Override
 		@NonNull
 		public Object simulatorConfigurationIdentity() {
@@ -324,10 +280,7 @@ public final class SokletSimulator {
 						"The simulator config contains a foreign SSE transport");
 
 			McpServer configuredMcp = config.getMcpServer().orElse(null);
-			DefaultMcpServer registeredMcp;
-			synchronized (this) {
-				registeredMcp = this.mcpServer;
-			}
+			DefaultMcpServer registeredMcp = this.mcpServer;
 			if (configuredMcp != registeredMcp)
 				throw new IllegalStateException(configuredMcp == null
 						? "The scope-built MCP server was not installed in the simulator config"
@@ -404,7 +357,7 @@ public final class SokletSimulator {
 		private void runStartupCall(@NonNull String name,
 				@NonNull StartupCallParticipant participant,
 				@NonNull Runnable action,
-				@NonNull Optional<Long> startupDeadline) throws Throwable {
+				long startupDeadline) throws Throwable {
 			AtomicReference<Throwable> failure = new AtomicReference<>();
 			StartupCallParticipant exactParticipant = requireNonNull(participant);
 			exactParticipant.beginStartupCall();
@@ -450,7 +403,7 @@ public final class SokletSimulator {
 
 			DeadlineWaiter.Outcome outcome;
 			try {
-				outcome = this.waiter.await(startupDeadline.orElse(Long.MAX_VALUE),
+				outcome = this.waiter.await(startupDeadline,
 						() -> call.isDone()
 								|| this.stateMachine.shutdownRequested());
 			} catch (InterruptedException interrupted) {
@@ -488,10 +441,9 @@ public final class SokletSimulator {
 			return null;
 		}
 
-		private void ensureStartupDeadline(
-				@NonNull Optional<Long> startupDeadline) throws TimeoutException {
-			if (requireNonNull(startupDeadline).filter(deadline ->
-					this.clock.nanoTime() >= deadline).isPresent())
+		private void ensureStartupDeadline(long startupDeadline)
+				throws TimeoutException {
+			if (this.clock.nanoTime() >= startupDeadline)
 				throw new TimeoutException(
 						"Soklet simulator startup deadline was reached");
 		}
@@ -632,6 +584,8 @@ public final class SokletSimulator {
 					}
 				}
 			}
+			if (result.isComplete())
+				requireNonNull(this.simulator).releaseHttpAndSseScopeState();
 
 			Throwable cause = failures.isEmpty() ? null : failures.get(0);
 			for (int index = 1; index < failures.size(); index++) {
@@ -639,8 +593,8 @@ public final class SokletSimulator {
 				if (additional != cause)
 					requireNonNull(cause).addSuppressed(additional);
 			}
-			ShutdownIncompleteException failure = result.isComplete() ? null
-					: new ShutdownIncompleteException(result, this, cause);
+			SokletShutdownIncompleteException failure = result.isComplete() ? null
+					: new SokletShutdownIncompleteException(result, this, cause);
 			if (restoreTeardownInterrupt)
 				Thread.currentThread().interrupt();
 			return new TeardownOutcome(result, failure);
@@ -659,7 +613,7 @@ public final class SokletSimulator {
 					this.callRunner.submit("simulator-cancellation-quiesce-"
 							+ participant.kind().name().toLowerCase(Locale.ROOT),
 							participant.terminationGroup(), () -> {
-								participant.runtime().quiesce(context);
+								participant.runtime().shutdownGracefully(context);
 								return null;
 							});
 				} catch (RuntimeException | Error launchFailure) {
@@ -881,22 +835,20 @@ public final class SokletSimulator {
 
 	@ThreadSafe
 	private static final class StartupBudget {
-		@NonNull
-		private final Optional<Long> startupDeadline;
+		private final long startupDeadline;
 		@NonNull
 		private final Duration cancellationDuration;
 		@NonNull
 		private final AtomicReference<@Nullable Long> cancellationDeadline;
 
-		private StartupBudget(@NonNull Optional<Long> startupDeadline,
+		private StartupBudget(long startupDeadline,
 				@NonNull Duration cancellationDuration) {
-			this.startupDeadline = requireNonNull(startupDeadline);
+			this.startupDeadline = startupDeadline;
 			this.cancellationDuration = requireNonNull(cancellationDuration);
 			this.cancellationDeadline = new AtomicReference<>();
 		}
 
-		@NonNull
-		private Optional<Long> startupDeadline() {
+		private long startupDeadline() {
 			return this.startupDeadline;
 		}
 
@@ -1010,11 +962,11 @@ public final class SokletSimulator {
 				}
 
 				@Override
-				public void quiesce(@NonNull ShutdownContext context) {
+				public void shutdownGracefully(@NonNull ShutdownContext context) {
 				}
 
 				@Override
-				public void force(@NonNull ShutdownContext context) {
+				public void shutdownForcibly(@NonNull ShutdownContext context) {
 				}
 			};
 		}
@@ -1029,7 +981,7 @@ public final class SokletSimulator {
 	@Immutable
 	private record TeardownOutcome(
 			@NonNull InternalShutdownResult result,
-			@Nullable ShutdownIncompleteException failure) {
+			@Nullable SokletShutdownIncompleteException failure) {
 		private TeardownOutcome {
 			requireNonNull(result);
 		}
@@ -1350,12 +1302,12 @@ public final class SokletSimulator {
 			}
 
 			@Override
-			public void quiesce(@NonNull ShutdownContext context) {
+			public void shutdownGracefully(@NonNull ShutdownContext context) {
 				requestShutdownPhase(requireNonNull(context));
 			}
 
 			@Override
-			public void force(@NonNull ShutdownContext context) {
+			public void shutdownForcibly(@NonNull ShutdownContext context) {
 				requestShutdownPhase(requireNonNull(context));
 			}
 		}

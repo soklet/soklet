@@ -468,7 +468,7 @@ public class McpServerPublicRuntimeTests {
 			Assertions.assertNotEquals(McpServerStatus.RUNNING,
 					server.getDiagnostics().getStatus());
 
-			Assertions.assertThrows(SokletTerminatedUnexpectedlyException.class,
+			Assertions.assertThrows(SokletUnexpectedTerminationException.class,
 					owner::close);
 			RuntimeState stopped = bridge.getRuntimeState();
 			Assertions.assertFalse(stopped.started());
@@ -505,7 +505,7 @@ public class McpServerPublicRuntimeTests {
 			Assertions.assertEquals(failedAddress,
 					failed.boundAddress().orElseThrow());
 
-			Assertions.assertThrows(SokletTerminatedUnexpectedlyException.class,
+			Assertions.assertThrows(SokletUnexpectedTerminationException.class,
 					failedOwner::close);
 			RuntimeState normalized = failedBridge.getRuntimeState();
 			Assertions.assertFalse(normalized.started());
@@ -1115,8 +1115,8 @@ public class McpServerPublicRuntimeTests {
 				.lifecyclePolicy(LifecyclePolicy.builder()
 						.startupTimeout(Duration.ofSeconds(5))
 						.startupCancelationTimeout(Duration.ofSeconds(2))
-						.gracefulShutdownDuration(Duration.ofSeconds(2))
-						.forcedShutdownDuration(Duration.ofSeconds(1))
+						.gracefulShutdownTimeout(Duration.ofSeconds(2))
+						.forcedShutdownTimeout(Duration.ofSeconds(1))
 						.build())
 				.build();
 		return Soklet.fromConfig(config);
@@ -1174,7 +1174,7 @@ public class McpServerPublicRuntimeTests {
 			@NonNull Soklet owner) {
 		try {
 			owner.close();
-		} catch (SokletTerminatedUnexpectedlyException expected) {
+		} catch (SokletUnexpectedTerminationException expected) {
 			// Repeated owner shutdown replays the already-asserted terminal evidence.
 		}
 	}

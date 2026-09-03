@@ -342,12 +342,12 @@ final class SokletDirectStartClaimTruthTableTests {
 				}
 
 				@Override
-				public void quiesce(@NonNull ShutdownContext context) {
+				public void shutdownGracefully(@NonNull ShutdownContext context) {
 					terminate();
 				}
 
 				@Override
-				public void force(@NonNull ShutdownContext context) {
+				public void shutdownForcibly(@NonNull ShutdownContext context) {
 					terminate();
 				}
 			};

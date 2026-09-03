@@ -22,7 +22,6 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
-import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
@@ -32,29 +31,40 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class LifecyclePolicy {
-	@Nullable
+	@NonNull
+	private static final Duration DEFAULT_STARTUP_TIMEOUT = Duration.ofSeconds(30);
+	@NonNull
+	private static final Duration DEFAULT_STARTUP_CANCELATION_TIMEOUT =
+			Duration.ofSeconds(2);
+	@NonNull
+	private static final Duration DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT =
+			Duration.ofSeconds(15);
+	@NonNull
+	private static final Duration DEFAULT_FORCED_SHUTDOWN_TIMEOUT =
+			Duration.ofSeconds(3);
+
+	@NonNull
 	private final Duration startupTimeout;
 	@NonNull
 	private final Duration startupCancelationTimeout;
 	@NonNull
-	private final Duration gracefulShutdownDuration;
+	private final Duration gracefulShutdownTimeout;
 	@NonNull
-	private final Duration forcedShutdownDuration;
+	private final Duration forcedShutdownTimeout;
 
 	private LifecyclePolicy(@NonNull Builder builder) {
 		Builder exactBuilder = requireNonNull(builder);
-		this.startupTimeout = exactBuilder.startupTimeout;
-		if (this.startupTimeout != null)
-			validate(this.startupTimeout, "startupTimeout");
+		this.startupTimeout = validate(exactBuilder.startupTimeout,
+				"startupTimeout");
 		this.startupCancelationTimeout = validate(
 				exactBuilder.startupCancelationTimeout,
 				"startupCancelationTimeout");
-		this.gracefulShutdownDuration = validate(
-				exactBuilder.gracefulShutdownDuration,
-				"gracefulShutdownDuration");
-		this.forcedShutdownDuration = validate(
-				exactBuilder.forcedShutdownDuration,
-				"forcedShutdownDuration");
+		this.gracefulShutdownTimeout = validate(
+				exactBuilder.gracefulShutdownTimeout,
+				"gracefulShutdownTimeout");
+		this.forcedShutdownTimeout = validate(
+				exactBuilder.forcedShutdownTimeout,
+				"forcedShutdownTimeout");
 	}
 
 	/** @return the default lifecycle policy */
@@ -69,10 +79,10 @@ public final class LifecyclePolicy {
 		return new Builder();
 	}
 
-	/** @return startup timeout, or empty when startup is unbounded */
+	/** @return startup timeout */
 	@NonNull
-	public Optional<@NonNull Duration> getStartupTimeout() {
-		return Optional.ofNullable(this.startupTimeout);
+	public Duration getStartupTimeout() {
+		return this.startupTimeout;
 	}
 
 	/** @return budget for canceling an in-flight startup call */
@@ -81,39 +91,38 @@ public final class LifecyclePolicy {
 		return this.startupCancelationTimeout;
 	}
 
-	/** @return graceful shutdown phase duration */
+	/** @return graceful shutdown timeout */
 	@NonNull
-	public Duration getGracefulShutdownDuration() {
-		return this.gracefulShutdownDuration;
+	public Duration getGracefulShutdownTimeout() {
+		return this.gracefulShutdownTimeout;
 	}
 
-	/** @return forced shutdown phase duration */
+	/** @return forced shutdown timeout */
 	@NonNull
-	public Duration getForcedShutdownDuration() {
-		return this.forcedShutdownDuration;
+	public Duration getForcedShutdownTimeout() {
+		return this.forcedShutdownTimeout;
 	}
 
 	@NonNull
 	InternalLifecyclePolicy toInternal() {
 		return new InternalLifecyclePolicy(getStartupTimeout(),
-				getStartupCancelationTimeout(), getGracefulShutdownDuration(),
-				getForcedShutdownDuration());
+				getStartupCancelationTimeout(), getGracefulShutdownTimeout(),
+				getForcedShutdownTimeout());
 	}
 
 	@NonNull
 	static LifecyclePolicy fromInternal(
 			@NonNull InternalLifecyclePolicy lifecyclePolicy) {
 		requireNonNull(lifecyclePolicy);
-		Builder builder = builder()
+		return builder()
+				.startupTimeout(lifecyclePolicy.startupTimeout())
 				.startupCancelationTimeout(
 						lifecyclePolicy.startupCancelationTimeout())
-				.gracefulShutdownDuration(
+				.gracefulShutdownTimeout(
 						lifecyclePolicy.gracefulShutdownTimeout())
-				.forcedShutdownDuration(
-						lifecyclePolicy.forcedShutdownTimeout());
-		lifecyclePolicy.startupTimeout().ifPresentOrElse(
-				builder::startupTimeout, builder::noStartupTimeout);
-		return builder.build();
+				.forcedShutdownTimeout(
+						lifecyclePolicy.forcedShutdownTimeout())
+				.build();
 	}
 
 	@NonNull
@@ -136,94 +145,98 @@ public final class LifecyclePolicy {
 	/** Mutable builder for an immutable {@link LifecyclePolicy}. */
 	@NotThreadSafe
 	public static final class Builder {
-		@Nullable
+		@NonNull
 		private Duration startupTimeout;
 		@NonNull
 		private Duration startupCancelationTimeout;
 		@NonNull
-		private Duration gracefulShutdownDuration;
+		private Duration gracefulShutdownTimeout;
 		@NonNull
-		private Duration forcedShutdownDuration;
+		private Duration forcedShutdownTimeout;
 
 		private Builder() {
-			this.startupTimeout = Duration.ofSeconds(30);
-			this.startupCancelationTimeout = Duration.ofSeconds(2);
-			this.gracefulShutdownDuration = Duration.ofSeconds(15);
-			this.forcedShutdownDuration = Duration.ofSeconds(3);
+			this.startupTimeout = DEFAULT_STARTUP_TIMEOUT;
+			this.startupCancelationTimeout =
+					DEFAULT_STARTUP_CANCELATION_TIMEOUT;
+			this.gracefulShutdownTimeout = DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT;
+			this.forcedShutdownTimeout = DEFAULT_FORCED_SHUTDOWN_TIMEOUT;
 		}
 
 		/**
 		 * Sets the startup timeout. Zero means an immediate boundary.
 		 *
-		 * @param duration startup timeout
+		 * Passing {@code null} restores the built-in default.
+		 *
+		 * @param startupTimeout startup timeout, or {@code null} to use the default
 		 * @return this builder
-		 * @throws NullPointerException if {@code duration} is null
 		 * @throws IllegalArgumentException if negative or not representable as
 		 * signed nanoseconds
 		 */
 		@NonNull
-		public Builder startupTimeout(@NonNull Duration duration) {
-			this.startupTimeout = validate(requireNonNull(duration),
-					"startupTimeout");
-			return this;
-		}
-
-		/**
-		 * Removes the startup timeout.
-		 *
-		 * @return this builder
-		 */
-		@NonNull
-		public Builder noStartupTimeout() {
-			this.startupTimeout = null;
+		public Builder startupTimeout(@Nullable Duration startupTimeout) {
+			this.startupTimeout = startupTimeout == null
+					? DEFAULT_STARTUP_TIMEOUT
+					: validate(startupTimeout, "startupTimeout");
 			return this;
 		}
 
 		/**
 		 * Sets the startup-cancelation budget.
 		 *
-		 * @param duration cancelation budget
+		 * Passing {@code null} restores the built-in default.
+		 *
+		 * @param startupCancelationTimeout cancelation budget, or {@code null}
+		 * to use the default
 		 * @return this builder
-		 * @throws NullPointerException if {@code duration} is null
 		 * @throws IllegalArgumentException if negative or not representable as
 		 * signed nanoseconds
 		 */
 		@NonNull
-		public Builder startupCancelationTimeout(@NonNull Duration duration) {
-			this.startupCancelationTimeout = validate(requireNonNull(duration),
-					"startupCancelationTimeout");
+		public Builder startupCancelationTimeout(
+				@Nullable Duration startupCancelationTimeout) {
+			this.startupCancelationTimeout = startupCancelationTimeout == null
+					? DEFAULT_STARTUP_CANCELATION_TIMEOUT
+					: validate(startupCancelationTimeout,
+							"startupCancelationTimeout");
 			return this;
 		}
 
 		/**
-		 * Sets the graceful shutdown duration.
+		 * Sets the graceful shutdown timeout. Passing {@code null} restores the
+		 * built-in default.
 		 *
-		 * @param duration graceful shutdown duration
+		 * @param gracefulShutdownTimeout graceful shutdown timeout, or
+		 * {@code null} to use the default
 		 * @return this builder
-		 * @throws NullPointerException if {@code duration} is null
 		 * @throws IllegalArgumentException if negative or not representable as
 		 * signed nanoseconds
 		 */
 		@NonNull
-		public Builder gracefulShutdownDuration(@NonNull Duration duration) {
-			this.gracefulShutdownDuration = validate(requireNonNull(duration),
-					"gracefulShutdownDuration");
+		public Builder gracefulShutdownTimeout(
+				@Nullable Duration gracefulShutdownTimeout) {
+			this.gracefulShutdownTimeout = gracefulShutdownTimeout == null
+					? DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT
+					: validate(gracefulShutdownTimeout,
+							"gracefulShutdownTimeout");
 			return this;
 		}
 
 		/**
-		 * Sets the forced shutdown duration.
+		 * Sets the forced shutdown timeout. Passing {@code null} restores the
+		 * built-in default.
 		 *
-		 * @param duration forced shutdown duration
+		 * @param forcedShutdownTimeout forced shutdown timeout, or {@code null}
+		 * to use the default
 		 * @return this builder
-		 * @throws NullPointerException if {@code duration} is null
 		 * @throws IllegalArgumentException if negative or not representable as
 		 * signed nanoseconds
 		 */
 		@NonNull
-		public Builder forcedShutdownDuration(@NonNull Duration duration) {
-			this.forcedShutdownDuration = validate(requireNonNull(duration),
-					"forcedShutdownDuration");
+		public Builder forcedShutdownTimeout(
+				@Nullable Duration forcedShutdownTimeout) {
+			this.forcedShutdownTimeout = forcedShutdownTimeout == null
+					? DEFAULT_FORCED_SHUTDOWN_TIMEOUT
+					: validate(forcedShutdownTimeout, "forcedShutdownTimeout");
 			return this;
 		}
 

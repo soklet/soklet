@@ -21,7 +21,6 @@ import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
-import java.util.Optional;
 import java.util.function.BooleanSupplier;
 
 import static java.util.Objects.requireNonNull;
@@ -164,7 +163,7 @@ final class LifecycleDeadlines {
 @Immutable
 final class InternalLifecyclePolicy {
 	@NonNull
-	private final Optional<Duration> startupTimeout;
+	private final Duration startupTimeout;
 	@NonNull
 	private final Duration startupCancelationTimeout;
 	@NonNull
@@ -172,11 +171,11 @@ final class InternalLifecyclePolicy {
 	@NonNull
 	private final Duration forcedShutdownTimeout;
 
-	InternalLifecyclePolicy(@NonNull Optional<Duration> startupTimeout,
-														@NonNull Duration startupCancelationTimeout,
+	InternalLifecyclePolicy(@NonNull Duration startupTimeout,
+												@NonNull Duration startupCancelationTimeout,
 														@NonNull Duration gracefulShutdownTimeout,
 														@NonNull Duration forcedShutdownTimeout) {
-		this.startupTimeout = validateOptional(startupTimeout, "startupTimeout");
+		this.startupTimeout = validate(startupTimeout, "startupTimeout");
 		this.startupCancelationTimeout = validate(startupCancelationTimeout,
 				"startupCancelationTimeout");
 		this.gracefulShutdownTimeout = validate(gracefulShutdownTimeout,
@@ -187,12 +186,12 @@ final class InternalLifecyclePolicy {
 
 	@NonNull
 	static InternalLifecyclePolicy defaults() {
-		return new InternalLifecyclePolicy(Optional.of(Duration.ofSeconds(30)),
+		return new InternalLifecyclePolicy(Duration.ofSeconds(30),
 				Duration.ofSeconds(2), Duration.ofSeconds(15), Duration.ofSeconds(3));
 	}
 
 	@NonNull
-	Optional<Duration> startupTimeout() {
+	Duration startupTimeout() {
 		return this.startupTimeout;
 	}
 
@@ -209,14 +208,6 @@ final class InternalLifecyclePolicy {
 	@NonNull
 	Duration forcedShutdownTimeout() {
 		return this.forcedShutdownTimeout;
-	}
-
-	@NonNull
-	private static Optional<Duration> validateOptional(
-			@NonNull Optional<Duration> duration, @NonNull String name) {
-		requireNonNull(duration);
-		duration.ifPresent(value -> validate(value, name));
-		return duration;
 	}
 
 	@NonNull

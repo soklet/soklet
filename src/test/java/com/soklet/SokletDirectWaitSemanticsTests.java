@@ -26,7 +26,6 @@ import org.junit.jupiter.api.Timeout;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CountDownLatch;
@@ -306,7 +305,7 @@ final class SokletDirectWaitSemanticsTests {
 
 	@NonNull
 	private static InternalLifecyclePolicy testPolicy() {
-		return new InternalLifecyclePolicy(Optional.of(PHASE_BUDGET), PHASE_BUDGET,
+		return new InternalLifecyclePolicy(PHASE_BUDGET, PHASE_BUDGET,
 				PHASE_BUDGET, PHASE_BUDGET);
 	}
 
@@ -398,14 +397,14 @@ final class SokletDirectWaitSemanticsTests {
 				public void start(@NonNull StartupContext context) {}
 
 				@Override
-				public void quiesce(@NonNull ShutdownContext context) {
+				public void shutdownGracefully(@NonNull ShutdownContext context) {
 					quiesceCalls.incrementAndGet();
 					quiesceEntered.countDown();
 					signalIfReleased();
 				}
 
 				@Override
-				public void force(@NonNull ShutdownContext context) {
+				public void shutdownForcibly(@NonNull ShutdownContext context) {
 					forceCalls.incrementAndGet();
 					signalIfReleased();
 				}

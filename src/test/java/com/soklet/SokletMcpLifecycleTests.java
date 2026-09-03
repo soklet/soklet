@@ -135,8 +135,8 @@ public class SokletMcpLifecycleTests {
 				.lifecyclePolicy(LifecyclePolicy.builder()
 						.startupTimeout(Duration.ofSeconds(5))
 						.startupCancelationTimeout(Duration.ofSeconds(2))
-						.gracefulShutdownDuration(shutdownTimeout)
-						.forcedShutdownDuration(Duration.ofSeconds(3))
+						.gracefulShutdownTimeout(shutdownTimeout)
+						.forcedShutdownTimeout(Duration.ofSeconds(3))
 						.build())
 				.build());
 		CompletableFuture<HttpResponse<String>> request = null;
@@ -150,8 +150,8 @@ public class SokletMcpLifecycleTests {
 					"The public MCP handler did not enter.");
 
 			long stopStartedAt = System.nanoTime();
-			ShutdownIncompleteException stopFailure = Assertions.assertThrows(
-					ShutdownIncompleteException.class, soklet::close);
+			SokletShutdownIncompleteException stopFailure = Assertions.assertThrows(
+					SokletShutdownIncompleteException.class, soklet::close);
 			Duration stopDuration = Duration.ofNanos(
 					System.nanoTime() - stopStartedAt);
 			InternalShutdownResult result = stopFailure.getInternalShutdownResult();
@@ -193,8 +193,8 @@ public class SokletMcpLifecycleTests {
 			Assertions.assertSame(result,
 					observedAggregate.internalResult());
 
-			ShutdownIncompleteException repeatedStopFailure = Assertions.assertThrows(
-					ShutdownIncompleteException.class, soklet::close);
+			SokletShutdownIncompleteException repeatedStopFailure = Assertions.assertThrows(
+					SokletShutdownIncompleteException.class, soklet::close);
 			Assertions.assertSame(result,
 					repeatedStopFailure.getInternalShutdownResult());
 			Assertions.assertEquals(1, willStopMcpCallbacks.get(),
@@ -213,8 +213,8 @@ public class SokletMcpLifecycleTests {
 			Assertions.assertEquals(McpServerStatus.RESIDUAL_ACTIVITY,
 					mcpServer.getDiagnostics().getStatus(),
 					"Late cleanup must not rewrite the frozen residual result.");
-			ShutdownIncompleteException lateStopFailure = Assertions.assertThrows(
-					ShutdownIncompleteException.class, soklet::close);
+			SokletShutdownIncompleteException lateStopFailure = Assertions.assertThrows(
+					SokletShutdownIncompleteException.class, soklet::close);
 			Assertions.assertSame(result, lateStopFailure.getInternalShutdownResult(),
 					"Late physical cleanup cannot rewrite an immutable residual result.");
 			Assertions.assertEquals(1, stopResults.size(),
@@ -225,7 +225,7 @@ public class SokletMcpLifecycleTests {
 				request.cancel(true);
 			try {
 				soklet.close();
-			} catch (ShutdownIncompleteException ignored) {
+			} catch (SokletShutdownIncompleteException ignored) {
 				// The immutable residual result remains the expected terminal result.
 			}
 		}
@@ -670,12 +670,12 @@ public class SokletMcpLifecycleTests {
 				}
 
 				@Override
-				public void quiesce(@NonNull ShutdownContext context) {
+				public void shutdownGracefully(@NonNull ShutdownContext context) {
 					signalTermination();
 				}
 
 				@Override
-				public void force(@NonNull ShutdownContext context) {
+				public void shutdownForcibly(@NonNull ShutdownContext context) {
 					signalTermination();
 				}
 
@@ -730,12 +730,12 @@ public class SokletMcpLifecycleTests {
 				}
 
 				@Override
-				public void quiesce(@NonNull ShutdownContext context) {
+				public void shutdownGracefully(@NonNull ShutdownContext context) {
 					stopAndSignal();
 				}
 
 				@Override
-				public void force(@NonNull ShutdownContext context) {
+				public void shutdownForcibly(@NonNull ShutdownContext context) {
 					stopAndSignal();
 				}
 

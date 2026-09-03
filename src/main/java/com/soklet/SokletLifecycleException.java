@@ -19,10 +19,20 @@ package com.soklet;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.NotThreadSafe;
+
 import static java.util.Objects.requireNonNull;
 
-/** Base class for exceptions that carry an immutable lifecycle result. */
-public abstract class SokletLifecycleException extends RuntimeException {
+/**
+ * Sealed base class for exceptions that carry an immutable lifecycle result.
+ * Exception instances retain {@link Throwable}'s mutable state and are not
+ * thread-safe; their {@link ShutdownResult} values remain immutable.
+ */
+@NotThreadSafe
+public abstract sealed class SokletLifecycleException extends RuntimeException
+		permits SokletShutdownCleanupException,
+		SokletShutdownIncompleteException, SokletStartupException,
+		SokletUnexpectedTerminationException {
 	@NonNull
 	private final ShutdownResult shutdownResult;
 

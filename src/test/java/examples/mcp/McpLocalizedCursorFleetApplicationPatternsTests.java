@@ -20,6 +20,7 @@ import com.soklet.CorsAuthorizer;
 import com.soklet.HttpMethod;
 import com.soklet.LifecycleObserver;
 import com.soklet.LifecyclePolicy;
+import com.soklet.McpAdmissionController;
 import com.soklet.McpAdmissionDecision;
 import com.soklet.McpAdmissionIdentity;
 import com.soklet.McpCompleteResult;
@@ -41,7 +42,7 @@ import com.soklet.McpServer;
 import com.soklet.McpServerDiagnostics;
 import com.soklet.McpServerStatus;
 import com.soklet.McpSimulation;
-import com.soklet.McpSimulationBodyMode;
+import com.soklet.McpSimulationBodyType;
 import com.soklet.McpSimulationCompletion;
 import com.soklet.McpSimulationResponse;
 import com.soklet.McpStreamTerminationReason;
@@ -88,7 +89,6 @@ import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -164,81 +164,84 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 		assertTrue(keyRingA.hasSameConfiguration(keyRingB));
 		assertNotSame(nodeA.codec(), nodeB.codec());
 
-		SokletSimulator.run(nodeA.configFactory(), simulatorA ->
-				SokletSimulator.run(nodeB.configFactory(), simulatorB -> {
-					assertNotSame(nodeA.server(), nodeB.server());
-					assertFrameworkProtectionDisabled(nodeA);
-					assertFrameworkProtectionDisabled(nodeB);
-					Capture first = capture(simulatorA, resourceListRequest(
-							"page-a-1", Optional.empty(), PRINCIPAL, "fr-CA"));
-					assertEquals(List.of(), nodeA.applicationFailures(),
-							nodeA.applicationFailures().toString());
-					assertEquals(List.of(), nodeA.observedThrowables(),
-							nodeA.observedThrowables().toString());
-					assertEquals(1, nodeA.providerObservations().size());
-					assertEquals(1, nodeA.handlerInvocations());
-					assertEquals(1, nodeA.successfulPages());
-					assertEquals(1, nodeA.issuedCursors().size());
-					assertSuccessfulPage(first, "fr-CA", List.of("alpha", "bravo"));
-					String cursorA = nextCursor(first.body()).orElseThrow();
-					assertEquals(List.of(cursorA), nodeA.issuedCursors());
-					String cursorPayload = new String(
-							nodeA.codec().payloadBytes(cursorA),
-							StandardCharsets.ISO_8859_1);
-					assertFalse(cursorPayload.contains(PRINCIPAL),
-							"The principal belongs in HMAC AAD, not cursor payload.");
-					assertFalse(cursorPayload.contains("auth:" + PRINCIPAL),
-							"The authorization partition belongs in HMAC AAD, not payload.");
+		SokletSimulator.run(nodeA.config(), simulatorA -> {
+			nodeA.captureServer(simulatorA);
+			SokletSimulator.run(nodeB.config(), simulatorB -> {
+				nodeB.captureServer(simulatorB);
+				assertNotSame(nodeA.server(), nodeB.server());
+				assertFrameworkProtectionDisabled(nodeA);
+				assertFrameworkProtectionDisabled(nodeB);
+				Capture first = capture(simulatorA, resourceListRequest(
+						"page-a-1", Optional.empty(), PRINCIPAL, "fr-CA"));
+				assertEquals(List.of(), nodeA.applicationFailures(),
+						nodeA.applicationFailures().toString());
+				assertEquals(List.of(), nodeA.observedThrowables(),
+						nodeA.observedThrowables().toString());
+				assertEquals(1, nodeA.providerObservations().size());
+				assertEquals(1, nodeA.handlerInvocations());
+				assertEquals(1, nodeA.successfulPages());
+				assertEquals(1, nodeA.issuedCursors().size());
+				assertSuccessfulPage(first, "fr-CA", List.of("alpha", "bravo"));
+				String cursorA = nextCursor(first.body()).orElseThrow();
+				assertEquals(List.of(cursorA), nodeA.issuedCursors());
+				String cursorPayload = new String(
+						nodeA.codec().payloadBytes(cursorA),
+						StandardCharsets.ISO_8859_1);
+				assertFalse(cursorPayload.contains(PRINCIPAL),
+						"The principal belongs in HMAC AAD, not cursor payload.");
+				assertFalse(cursorPayload.contains("auth:" + PRINCIPAL),
+						"The authorization partition belongs in HMAC AAD, not payload.");
 
-					Capture sameNodeReplay = capture(simulatorA, resourceListRequest(
-							"page-a-2-replay", Optional.of(cursorA), PRINCIPAL, "fr"));
-					assertSuccessfulPage(sameNodeReplay, "fr-CA",
-							List.of("charlie", "delta"));
-					String sameNodeNextCursor = nextCursor(sameNodeReplay.body())
-							.orElseThrow();
+				Capture sameNodeReplay = capture(simulatorA, resourceListRequest(
+						"page-a-2-replay", Optional.of(cursorA), PRINCIPAL, "fr"));
+				assertSuccessfulPage(sameNodeReplay, "fr-CA",
+						List.of("charlie", "delta"));
+				String sameNodeNextCursor = nextCursor(sameNodeReplay.body())
+						.orElseThrow();
 
-					Capture second = capture(simulatorB, resourceListRequest(
-							"page-b-2", Optional.of(cursorA), PRINCIPAL, "en"));
-					assertSuccessfulPage(second, "fr-CA",
-							List.of("charlie", "delta"));
-					String cursorB = nextCursor(second.body()).orElseThrow();
-					assertEquals(List.of(cursorB), nodeB.issuedCursors());
-					assertEquals(resourceIds(sameNodeReplay.body()),
-							resourceIds(second.body()));
-					assertEquals(sameNodeNextCursor, cursorB,
-							"Equal claims must replay to one stable cursor across nodes.");
-					assertEquals(List.of(cursorA, cursorB), nodeA.issuedCursors());
+				Capture second = capture(simulatorB, resourceListRequest(
+						"page-b-2", Optional.of(cursorA), PRINCIPAL, "en"));
+				assertSuccessfulPage(second, "fr-CA",
+						List.of("charlie", "delta"));
+				String cursorB = nextCursor(second.body()).orElseThrow();
+				assertEquals(List.of(cursorB), nodeB.issuedCursors());
+				assertEquals(resourceIds(sameNodeReplay.body()),
+						resourceIds(second.body()));
+				assertEquals(sameNodeNextCursor, cursorB,
+						"Equal claims must replay to one stable cursor across nodes.");
+				assertEquals(List.of(cursorA, cursorB), nodeA.issuedCursors());
 
-					Capture third = capture(simulatorA, resourceListRequest(
-							"page-a-3", Optional.of(cursorB), PRINCIPAL, "de"));
-					assertSuccessfulPage(third, "fr-CA", List.of("echo"));
-					assertTrue(nextCursor(third.body()).isEmpty(), third.body());
+				Capture third = capture(simulatorA, resourceListRequest(
+						"page-a-3", Optional.of(cursorB), PRINCIPAL, "de"));
+				assertSuccessfulPage(third, "fr-CA", List.of("echo"));
+				assertTrue(nextCursor(third.body()).isEmpty(), third.body());
 
-					Capture fresh = capture(simulatorB, resourceListRequest(
-							"page-b-fresh", Optional.empty(), PRINCIPAL, "en"));
-					assertSuccessfulPage(fresh, "en", List.of("foxtrot", "golf"));
-					assertTrue(nextCursor(fresh.body()).isEmpty(), fresh.body());
+				Capture fresh = capture(simulatorB, resourceListRequest(
+						"page-b-fresh", Optional.empty(), PRINCIPAL, "en"));
+				assertSuccessfulPage(fresh, "en", List.of("foxtrot", "golf"));
+				assertTrue(nextCursor(fresh.body()).isEmpty(), fresh.body());
 
-					List<String> continued = new ArrayList<>();
-					continued.addAll(resourceIds(first.body()));
-					continued.addAll(resourceIds(second.body()));
-					continued.addAll(resourceIds(third.body()));
-					assertEquals(List.of("alpha", "bravo", "charlie", "delta", "echo"),
-							continued);
-					assertEquals(continued.size(), new LinkedHashSet<>(continued).size(),
-							"Cross-page resource identities must remain unique.");
+				List<String> continued = new ArrayList<>();
+				continued.addAll(resourceIds(first.body()));
+				continued.addAll(resourceIds(second.body()));
+				continued.addAll(resourceIds(third.body()));
+				assertEquals(List.of("alpha", "bravo", "charlie", "delta", "echo"),
+						continued);
+				assertEquals(continued.size(), new LinkedHashSet<>(continued).size(),
+						"Cross-page resource identities must remain unique.");
 
-					assertObservation(nodeA, "page-a-1", Optional.empty(), false, false,
-							Locale.CANADA_FRENCH, "translations-r7");
-					assertObservation(nodeA, "page-a-2-replay", Optional.of(cursorA),
-							true, true, Locale.CANADA_FRENCH, "translations-r7");
-					assertObservation(nodeB, "page-b-2", Optional.of(cursorA), true, true,
-							Locale.CANADA_FRENCH, "translations-r7");
-					assertObservation(nodeA, "page-a-3", Optional.of(cursorB), true, true,
-							Locale.CANADA_FRENCH, "translations-r7");
-					assertObservation(nodeB, "page-b-fresh", Optional.empty(), false, false,
-							Locale.ENGLISH, "translations-r7");
-				}));
+				assertObservation(nodeA, "page-a-1", Optional.empty(), false, false,
+						Locale.CANADA_FRENCH, "translations-r7");
+				assertObservation(nodeA, "page-a-2-replay", Optional.of(cursorA),
+						true, true, Locale.CANADA_FRENCH, "translations-r7");
+				assertObservation(nodeB, "page-b-2", Optional.of(cursorA), true, true,
+						Locale.CANADA_FRENCH, "translations-r7");
+				assertObservation(nodeA, "page-a-3", Optional.of(cursorB), true, true,
+						Locale.CANADA_FRENCH, "translations-r7");
+				assertObservation(nodeB, "page-b-fresh", Optional.empty(), false, false,
+						Locale.ENGLISH, "translations-r7");
+			});
+		});
 
 		assertStopped(nodeA);
 		assertStopped(nodeB);
@@ -388,7 +391,8 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 
 	private static Capture run(ApplicationNode node, Request request) {
 		List<Capture> captures = new ArrayList<>(1);
-		SokletSimulator.run(node.configFactory(), simulator -> {
+		SokletSimulator.run(node.config(), simulator -> {
+			node.captureServer(simulator);
 			assertFrameworkProtectionDisabled(node);
 			captures.add(capture(simulator, request));
 		});
@@ -404,7 +408,7 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 			McpSimulationCompletion completion = simulation.awaitCompletion(WAIT)
 					.orElseThrow(() -> new AssertionError(
 							"Timed out awaiting simulator completion."));
-			assertEquals(McpSimulationBodyMode.JSON, response.getBodyMode());
+			assertEquals(McpSimulationBodyType.JSON, response.getBodyType());
 			assertEquals(McpStreamTerminationReason.COMPLETED,
 					completion.getReason());
 			return new Capture(response.getStatusCode(), response.getHeaders(),
@@ -655,79 +659,81 @@ public class McpLocalizedCursorFleetApplicationPatternsTests {
 			this.now = requireNonNull(now);
 		}
 
-		private Function<SimulatorConfig.Builder, SimulatorConfig> configFactory() {
-			return config -> {
-				McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-						.serverInformation(McpImplementation.withNameAndVersion(
-								"localized-cursor-fixture", "1.0").build())
-						.resource(McpResourceRegistration.withUriTemplateAndName(
-								"app-resource://catalog/{id}", "catalog-resource")
-								.handler((request, resource, features) ->
-										McpCompleteResult.fromResourceOutput(
-												McpResourceOutput.builder()
-														.content(McpTextResourceContents
-																.withUriAndText(
-																		resource.getUri(), "unused")
-																.build())
-														.build()))
-								.build())
-						.resourceListHandler(this::page)
-						.build();
-				McpLocalizer localizer = McpLocalizer
-						.withFallbackLocale(Locale.ENGLISH)
-						.contextProvider(this::localizationContext)
-						.build();
-				return config.mcpServer(0, mcpServerBuilder -> {
-					McpServer server = mcpServerBuilder
-							.host(LOOPBACK)
-							.endpointRegistry(McpEndpointRegistry.fromEndpoints(
-									List.of(endpoint)))
-							.admissionController(context -> {
-								String authorization = context.getRequest()
-										.getHeader("Authorization").orElseThrow();
-								if (!authorization.startsWith("Bearer "))
-									throw new IllegalArgumentException(
-											"A bearer principal is required.");
-								String principal = requireClaimText(
-										authorization.substring("Bearer ".length()));
-								return McpAdmissionDecision.accepted(McpAdmissionIdentity
-										.withRateLimitPartitionKey("rate:" + principal)
-										.authorizationPartitionKey("auth:" + principal)
-										.principal(principal)
-										.build());
-							})
-							.requestRateLimiter(context ->
-									McpRateLimitDecision.allowed())
-							.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
-							.allowedHosts(Set.of(LOOPBACK))
-							.localizer(localizer)
-							.build();
-					if (!this.server.compareAndSet(null, server))
-						throw new IllegalStateException(
-								"An application node may create only one simulator scope.");
-					return server;
-				})
-						.resourceMethodResolver(
-								ResourceMethodResolver.fromMethods(Set.of()))
-						.lifecyclePolicy(LifecyclePolicy.builder()
-								.startupTimeout(Duration.ofSeconds(5))
-								.startupCancelationTimeout(Duration.ofSeconds(2))
-								.gracefulShutdownDuration(Duration.ofSeconds(2))
-								.forcedShutdownDuration(Duration.ofSeconds(1))
-								.build())
-						.lifecycleObservers(List.of(new LifecycleObserver() {
-							@Override
-							public void didFinishMcpRequestHandling(
-									@NonNull McpRequestContext context,
-									@NonNull McpRequestOutcome requestOutcome,
-									@Nullable McpJsonRpcError error,
-									@NonNull Duration duration,
-									@NonNull List<@NonNull Throwable> throwables) {
-								observedThrowables.addAll(throwables);
-							}
-						}))
-						.build();
+		private SimulatorConfig config() {
+			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
+					.serverInformation(McpImplementation.withNameAndVersion(
+							"localized-cursor-fixture", "1.0").build())
+					.resource(McpResourceRegistration.withUriTemplateAndName(
+							"app-resource://catalog/{id}", "catalog-resource")
+							.handler((request, resource, features) ->
+									McpCompleteResult.fromResourceOutput(
+											McpResourceOutput.builder()
+													.content(McpTextResourceContents
+															.withUriAndText(
+																	resource.getUri(), "unused")
+															.build())
+													.build()))
+							.build())
+					.resourceListHandler(this::page)
+					.build();
+			McpLocalizer localizer = McpLocalizer
+					.withFallbackLocale(Locale.ENGLISH)
+					.contextProvider(this::localizationContext)
+					.build();
+			McpEndpointRegistry endpointRegistry =
+					McpEndpointRegistry.fromEndpoints(List.of(endpoint));
+			McpAdmissionController admissionController = context -> {
+				String authorization = context.getRequest()
+						.getHeader("Authorization").orElseThrow();
+				if (!authorization.startsWith("Bearer "))
+					throw new IllegalArgumentException(
+							"A bearer principal is required.");
+				String principal = requireClaimText(
+						authorization.substring("Bearer ".length()));
+				return McpAdmissionDecision.accepted(McpAdmissionIdentity
+						.withRateLimitPartitionKey("rate:" + principal)
+						.authorizationPartitionKey("auth:" + principal)
+						.principal(principal)
+						.build());
 			};
+			return SimulatorConfig.builder()
+					.mcpServer(0, endpointRegistry, admissionController,
+							mcpServerBuilder -> mcpServerBuilder
+						.host(LOOPBACK)
+						.requestRateLimiter(context ->
+								McpRateLimitDecision.allowed())
+						.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+						.allowedHosts(Set.of(LOOPBACK))
+						.localizer(localizer))
+					.resourceMethodResolver(
+							ResourceMethodResolver.fromMethods(Set.of()))
+					.lifecyclePolicy(LifecyclePolicy.builder()
+							.startupTimeout(Duration.ofSeconds(5))
+							.startupCancelationTimeout(Duration.ofSeconds(2))
+							.gracefulShutdownTimeout(Duration.ofSeconds(2))
+							.forcedShutdownTimeout(Duration.ofSeconds(1))
+							.build())
+					.lifecycleObservers(List.of(new LifecycleObserver() {
+						@Override
+						public void didFinishMcpRequestHandling(
+								@NonNull McpRequestContext context,
+								@NonNull McpRequestOutcome requestOutcome,
+								@Nullable McpJsonRpcError error,
+								@NonNull Duration duration,
+								@NonNull List<@NonNull Throwable> throwables) {
+							observedThrowables.addAll(throwables);
+						}
+					}))
+					.build();
+		}
+
+		private void captureServer(Simulator simulator) {
+			McpServer exactServer = simulator.getMcpServer().orElseThrow(() ->
+					new IllegalStateException(
+							"The application node has no simulator MCP server."));
+			if (!this.server.compareAndSet(null, exactServer))
+				throw new IllegalStateException(
+						"An application node may create only one simulator scope.");
 		}
 
 		private McpLocalizationContext localizationContext(

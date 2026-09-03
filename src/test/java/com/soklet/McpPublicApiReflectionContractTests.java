@@ -88,11 +88,11 @@ public class McpPublicApiReflectionContractTests {
 	private static final int PROVISIONAL_TYPE_COUNT = 0;
 	private static final int CURRENT_MCP_TYPE_COUNT = 233;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"dc83138dd80f93c003ec527fec24a9fd7e09633417f0f5a6430ac254421797b1";
+			"7911e7181e1f9a07d9287a6443f23bab7a0573e9dfd55b81f873852b11e299c8";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
 			"6569e3b106ae11e1d30da66c045d1a9bc23aa65016f36052df6b19fc320c06d9";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
-			"d829563b135bae5a0e97559ecf5d1a8dd280c4b7792a74a2f10fcf8d8017d18b";
+			"c59e4af993af7501c63cb79b35e3aa9854fb7962ea89ea60535d97d195b1787e";
 	private static final Map<String, Object> PHASE_FOUR_PRIMITIVE_CONSTANTS =
 			Map.of(
 					"com.soklet.McpAdmissionIdentity#MAXIMUM_PARTITION_KEY_UTF_8_BYTES",
@@ -323,7 +323,7 @@ public class McpPublicApiReflectionContractTests {
 				"com.soklet.McpServerDiagnostics",
 				"com.soklet.McpServerStatus",
 				"com.soklet.McpSimulation",
-				"com.soklet.McpSimulationBodyMode",
+				"com.soklet.McpSimulationBodyType",
 				"com.soklet.McpSimulationCompletion",
 				"com.soklet.McpSimulationOptions",
 				"com.soklet.McpSimulationOptions$Builder",

@@ -244,7 +244,7 @@ final class SokletDirectHttpCompositionTests {
 		OwningHttpDecorator outer = new OwningHttpDecorator("outer", engine,
 				false);
 		SokletConfig config = config(outer, new InternalLifecyclePolicy(
-				Optional.of(Duration.ofSeconds(2)), Duration.ofMillis(100),
+				Duration.ofSeconds(2), Duration.ofMillis(100),
 				Duration.ofMillis(75), Duration.ofSeconds(2)));
 		Soklet soklet = Soklet.fromConfig(config);
 		ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -473,7 +473,7 @@ final class SokletDirectHttpCompositionTests {
 				}
 
 				@Override
-				public void quiesce(@NonNull ShutdownContext context) {
+				public void shutdownGracefully(@NonNull ShutdownContext context) {
 					quiesceCalls.incrementAndGet();
 					try {
 						requestTermination();
@@ -483,7 +483,7 @@ final class SokletDirectHttpCompositionTests {
 				}
 
 				@Override
-				public void force(@NonNull ShutdownContext context) {
+				public void shutdownForcibly(@NonNull ShutdownContext context) {
 					forceCalls.incrementAndGet();
 					if (releaseTerminationOnForce)
 						terminationReleased.set(true);
@@ -829,7 +829,7 @@ final class SokletDirectHttpCompositionTests {
 				upstreamHandler.handleRequest(request, consumer);
 			};
 			TransportDelegateAttachment attachment =
-					context.attachLifecycleOwningDelegate(this.delegate,
+					context.attachTerminationOwningDelegate(this.delegate,
 							wrappedHandler);
 			this.delegateAttachment.set(attachment);
 			attachment.whenTerminated().whenComplete((ignored, failure) -> {
@@ -872,21 +872,21 @@ final class SokletDirectHttpCompositionTests {
 				}
 
 				@Override
-				public void quiesce(@NonNull ShutdownContext context) {
+				public void shutdownGracefully(@NonNull ShutdownContext context) {
 					quiesceCalls.incrementAndGet();
 					try {
-						attachment.getTransportRuntime().quiesce(context);
+						attachment.getTransportRuntime().shutdownGracefully(context);
 					} finally {
 						quiesceReturned.countDown();
 					}
 				}
 
 				@Override
-				public void force(@NonNull ShutdownContext context) {
+				public void shutdownForcibly(@NonNull ShutdownContext context) {
 					forceCalls.incrementAndGet();
 					requestCleanupForce();
 					try {
-						attachment.getTransportRuntime().force(context);
+						attachment.getTransportRuntime().shutdownForcibly(context);
 					} finally {
 						requestCleanupForce();
 						forceReturned.countDown();

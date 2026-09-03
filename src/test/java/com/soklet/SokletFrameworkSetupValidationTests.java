@@ -670,11 +670,11 @@ final class SokletFrameworkSetupValidationTests {
 					started.set(true);
 				}
 
-				@Override public void quiesce(@NonNull ShutdownContext context) {
+				@Override public void shutdownGracefully(@NonNull ShutdownContext context) {
 					stopAndPublish();
 				}
 
-				@Override public void force(@NonNull ShutdownContext context) {
+				@Override public void shutdownForcibly(@NonNull ShutdownContext context) {
 					stopAndPublish();
 				}
 
@@ -736,11 +736,11 @@ final class SokletFrameworkSetupValidationTests {
 					started.set(true);
 				}
 
-				@Override public void quiesce(@NonNull ShutdownContext context) {
+				@Override public void shutdownGracefully(@NonNull ShutdownContext context) {
 					stopAndPublish();
 				}
 
-				@Override public void force(@NonNull ShutdownContext context) {
+				@Override public void shutdownForcibly(@NonNull ShutdownContext context) {
 					stopAndPublish();
 				}
 

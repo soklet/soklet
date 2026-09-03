@@ -25,7 +25,7 @@ import java.util.concurrent.CompletionStage;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Framework-created result of lifecycle-owning unary delegate attachment.
+ * Framework-created result of termination-owning unary delegate attachment.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -57,8 +57,9 @@ public final class TransportDelegateAttachment {
 	 * subtree. The stage is observational and cannot be completed or otherwise
 	 * mutated by callers. A transport must not synchronously wait for it from
 	 * {@code attach}, {@link TransportRuntime#start(StartupContext)},
-	 * {@link TransportRuntime#quiesce(ShutdownContext)},
-	 * {@link TransportRuntime#force(ShutdownContext)}, or any callback/activity
+	 * {@link TransportRuntime#shutdownGracefully(ShutdownContext)},
+	 * {@link TransportRuntime#shutdownForcibly(ShutdownContext)}, or any
+	 * callback/activity
 	 * whose completion is part of that subtree's termination proof.
 	 *
 	 * @return a stage completed only after committed subtree termination proof

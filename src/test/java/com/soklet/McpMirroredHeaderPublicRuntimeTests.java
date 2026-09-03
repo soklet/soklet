@@ -438,8 +438,8 @@ public class McpMirroredHeaderPublicRuntimeTests {
 				.lifecyclePolicy(LifecyclePolicy.builder()
 						.startupTimeout(Duration.ofSeconds(5))
 						.startupCancelationTimeout(Duration.ofSeconds(2))
-						.gracefulShutdownDuration(Duration.ofSeconds(2))
-						.forcedShutdownDuration(Duration.ofSeconds(1))
+						.gracefulShutdownTimeout(Duration.ofSeconds(2))
+						.forcedShutdownTimeout(Duration.ofSeconds(1))
 						.build())
 				.build());
 	}

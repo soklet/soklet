@@ -148,8 +148,8 @@ public class HttpServerLifecycleTests {
 				ShutdownComponentDisposition.UNEXPECTED_TERMINATION,
 				result.getShutdownComponentResult(ShutdownComponentType.HTTP).orElseThrow()
 						.getShutdownComponentDisposition());
-		SokletTerminatedUnexpectedlyException replay = Assertions.assertThrows(
-				SokletTerminatedUnexpectedlyException.class, soklet::close);
+		SokletUnexpectedTerminationException replay = Assertions.assertThrows(
+				SokletUnexpectedTerminationException.class, soklet::close);
 		Assertions.assertSame(result, replay.getShutdownResult());
 	}
 
@@ -355,8 +355,8 @@ public class HttpServerLifecycleTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
 						Set.of(resourceClass)))
 				.lifecyclePolicy(LifecyclePolicy.builder()
-						.gracefulShutdownDuration(Duration.ofSeconds(3))
-						.forcedShutdownDuration(Duration.ofSeconds(1)).build())
+						.gracefulShutdownTimeout(Duration.ofSeconds(3))
+						.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
 				.lifecycleObserver(new QuietLifecycle()).build();
 	}
 
@@ -371,7 +371,7 @@ public class HttpServerLifecycleTests {
 		Assertions.assertEquals(
 				ShutdownComponentDisposition.GRACEFUL_TERMINATION,
 				http.getShutdownComponentDisposition());
-		Assertions.assertTrue(http.getFailures().isEmpty());
+		Assertions.assertTrue(http.getThrowables().isEmpty());
 		Assertions.assertTrue(http.getResidualActivityEvidence().isEmpty());
 	}
 

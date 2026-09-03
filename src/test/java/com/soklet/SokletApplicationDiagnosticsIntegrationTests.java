@@ -73,8 +73,8 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 			SokletApplicationTerminalSnapshot snapshot = reporter.awaitSnapshot();
 			InternalShutdownResult result = snapshot.coreSnapshot().result();
 
-			ShutdownIncompleteException failure = Assertions.assertInstanceOf(
-					ShutdownIncompleteException.class, call.failure());
+			SokletShutdownIncompleteException failure = Assertions.assertInstanceOf(
+					SokletShutdownIncompleteException.class, call.failure());
 			Assertions.assertSame(result, failure.getInternalShutdownResult());
 			Assertions.assertNull(call.result());
 			assertSkippedCleanup(snapshot, cleanupCalls, workers);
@@ -146,8 +146,8 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 			SokletApplicationTerminalSnapshot snapshot = reporter.awaitSnapshot();
 			InternalShutdownResult result = snapshot.coreSnapshot().result();
 
-			ShutdownIncompleteException failure = Assertions.assertInstanceOf(
-					ShutdownIncompleteException.class, call.failure());
+			SokletShutdownIncompleteException failure = Assertions.assertInstanceOf(
+					SokletShutdownIncompleteException.class, call.failure());
 			Assertions.assertSame(result, failure.getInternalShutdownResult());
 			Assertions.assertNull(call.result());
 			assertSkippedCleanup(snapshot, cleanupCalls, workers);
@@ -219,7 +219,7 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 
 	@NonNull
 	private static InternalLifecyclePolicy immediateShutdownPolicy() {
-		return new InternalLifecyclePolicy(Optional.empty(), Duration.ZERO,
+		return new InternalLifecyclePolicy(Duration.ofSeconds(30), Duration.ZERO,
 				Duration.ZERO, Duration.ZERO);
 	}
 
@@ -328,10 +328,10 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 					public void start(@NonNull StartupContext context) { }
 
 					@Override
-					public void quiesce(@NonNull ShutdownContext context) { }
+					public void shutdownGracefully(@NonNull ShutdownContext context) { }
 
 					@Override
-					public void force(@NonNull ShutdownContext context) { }
+					public void shutdownForcibly(@NonNull ShutdownContext context) { }
 				};
 
 		@NonNull
@@ -388,7 +388,7 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 				@NonNull StartupContext startupContext) {
 			try {
 				if (this.delegate != null)
-					return context.attachLifecycleOwningDelegate(this.delegate,
+					return context.attachTerminationOwningDelegate(this.delegate,
 							context.requestHandler()).runtime();
 				requireNonNull(this.attachEntered).countDown();
 				awaitIgnoringInterrupts(requireNonNull(this.releaseAttach));

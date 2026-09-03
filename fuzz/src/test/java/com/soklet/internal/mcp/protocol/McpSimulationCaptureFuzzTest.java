@@ -18,7 +18,7 @@ package com.soklet.internal.mcp.protocol;
 
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.soklet.McpRequestOutcome;
-import com.soklet.McpSimulationBodyMode;
+import com.soklet.McpSimulationBodyType;
 import com.soklet.McpSimulationCompletion;
 import com.soklet.McpSimulationOptions;
 import com.soklet.McpSimulationResponse;
@@ -381,7 +381,7 @@ public class McpSimulationCaptureFuzzTest {
 			this.completionCallbacks = new AtomicInteger();
 			this.runtime = new McpSimulationRuntime(McpSimulationOptions.builder()
 					.streamItemQueueCapacity(itemCapacity)
-					.maximumCapturedBytes(byteCapacity)
+					.maximumCapturedSizeInBytes(byteCapacity)
 					.build(), this.completionCallbacks::incrementAndGet);
 			this.pendingItems = new ArrayDeque<>();
 			this.pendingCoalescingKeys = new HashSet<>();
@@ -442,8 +442,8 @@ public class McpSimulationCaptureFuzzTest {
 			this.responsePublished = true;
 			McpSimulationResponse response = this.runtime.awaitResponse(
 					Duration.ZERO).orElseThrow();
-			Assertions.assertEquals(McpSimulationBodyMode.JSON,
-					response.getBodyMode());
+			Assertions.assertEquals(McpSimulationBodyType.JSON,
+					response.getBodyType());
 			Assertions.assertEquals(List.of("first", "second"),
 					new ArrayList<>(response.getHeaders().get("X-Fuzz")));
 			Assertions.assertThrows(UnsupportedOperationException.class,
@@ -475,8 +475,8 @@ public class McpSimulationCaptureFuzzTest {
 			this.responsePublished = true;
 			McpSimulationResponse response = this.runtime.awaitResponse(
 					Duration.ZERO).orElseThrow();
-			Assertions.assertEquals(McpSimulationBodyMode.SERVER_SENT_EVENTS,
-					response.getBodyMode());
+			Assertions.assertEquals(McpSimulationBodyType.SSE,
+					response.getBodyType());
 			Assertions.assertTrue(response.getBody().isEmpty());
 		}
 
@@ -584,7 +584,7 @@ public class McpSimulationCaptureFuzzTest {
 			if (close)
 				this.runtime.close();
 			else
-				this.runtime.cancel();
+				this.runtime.close();
 			if (!this.requestFinished && this.terminalReason == null) {
 				this.requestFinished = true;
 				this.channelTerminal = this.mode == Mode.SSE;
@@ -611,7 +611,7 @@ public class McpSimulationCaptureFuzzTest {
 		}
 
 		private void poll() throws InterruptedException {
-			Optional<McpSimulationStreamItem> actual = this.runtime.nextStreamItem(
+			Optional<McpSimulationStreamItem> actual = this.runtime.awaitStreamItem(
 					Duration.ZERO);
 			ModelItem expected = this.pendingItems.poll();
 			Assertions.assertEquals(expected != null, actual.isPresent());
@@ -695,7 +695,7 @@ public class McpSimulationCaptureFuzzTest {
 
 			while (!this.pendingItems.isEmpty())
 				poll();
-			Assertions.assertTrue(this.runtime.nextStreamItem(
+			Assertions.assertTrue(this.runtime.awaitStreamItem(
 					Duration.ZERO).isEmpty());
 			if (this.mode == Mode.SSE) {
 				McpRequestSseStream.Frame late = jsonFrame(new byte[] {'z'});
@@ -712,7 +712,7 @@ public class McpSimulationCaptureFuzzTest {
 					Duration.ZERO).orElseThrow();
 			this.runtime.didFinishRequest(McpRequestOutcome.WRITE_FAILED,
 					List.of(new AssertionError("late")));
-			this.runtime.cancel();
+			this.runtime.close();
 			this.runtime.close();
 			Assertions.assertSame(retained, this.runtime.awaitCompletion(
 					Duration.ZERO).orElseThrow());

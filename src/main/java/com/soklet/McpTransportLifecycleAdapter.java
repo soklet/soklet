@@ -366,7 +366,7 @@ final class McpTransportLifecycleAdapter
 		}
 
 		@Override
-		public void quiesce(@NonNull ShutdownContext context) {
+		public void shutdownGracefully(@NonNull ShutdownContext context) {
 			runtime().quiesceLifecycle(
 					requireNonNull(context).absoluteDeadlineNanos());
 		}
@@ -377,7 +377,7 @@ final class McpTransportLifecycleAdapter
 		}
 
 		@Override
-		public void force(@NonNull ShutdownContext context) {
+		public void shutdownForcibly(@NonNull ShutdownContext context) {
 			runtime().forceLifecycle(
 					requireNonNull(context).absoluteDeadlineNanos());
 		}

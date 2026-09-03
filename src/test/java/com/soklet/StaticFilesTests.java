@@ -967,16 +967,16 @@ public class StaticFilesTests {
 		Files.writeString(appJs, "console.log('hi');", StandardCharsets.UTF_8);
 		String appJsLength = String.valueOf(Files.size(appJs));
 
-		SokletSimulator.run(config -> {
-			StaticFiles staticFiles = StaticFiles.withRoot(tempDir)
+		StaticFiles staticFiles = StaticFiles.withRoot(tempDir)
 					.cacheControlResolver((path, attributes) -> Optional.of(path.getFileName().toString().endsWith(".js")
 							? "public, max-age=31536000, immutable"
 							: "no-cache"))
 					.build();
-			StaticAssetResource resource = new StaticAssetResource(staticFiles);
-			InstanceProvider defaultProvider = InstanceProvider.defaultInstance();
+		StaticAssetResource resource = new StaticAssetResource(staticFiles);
+		InstanceProvider defaultProvider = InstanceProvider.defaultInstance();
 
-			return config.httpServer().sseServer()
+		SimulatorConfig simulatorConfig = SimulatorConfig.builder()
+				.httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StaticAssetResource.class)))
 				.instanceProvider(new InstanceProvider() {
 					@Override
@@ -995,7 +995,7 @@ public class StaticFilesTests {
 					}
 				})
 				.build();
-		}, simulator -> {
+		SokletSimulator.run(simulatorConfig, simulator -> {
 			HttpRequestResult result = simulator.performHttpRequest(Request.fromPath(HttpMethod.GET, "/assets/app.js"));
 			Assertions.assertEquals(200, result.getMarshaledResponse().getStatusCode());
 			Assertions.assertEquals(Set.of("public, max-age=31536000, immutable"), result.getMarshaledResponse().getHeaders().get("Cache-Control"));
@@ -1011,7 +1011,7 @@ public class StaticFilesTests {
 
 	@Test
 	public void simulatorStillEmitsDateHeaderAfterHttpDateMigration() {
-		SokletSimulator.run(config -> config.httpServer().sseServer()
+		SokletSimulator.run(SimulatorConfig.builder().httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(DateResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override

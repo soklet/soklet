@@ -51,8 +51,8 @@ class McpLocalizationHttpBoundaryTests {
 			LifecyclePolicy.builder()
 					.startupTimeout(Duration.ofSeconds(5))
 					.startupCancelationTimeout(Duration.ofSeconds(2))
-					.gracefulShutdownDuration(Duration.ofSeconds(2))
-					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.gracefulShutdownTimeout(Duration.ofSeconds(2))
+					.forcedShutdownTimeout(Duration.ofSeconds(1))
 					.build();
 
 	@Test
@@ -296,11 +296,10 @@ class McpLocalizationHttpBoundaryTests {
 				.build();
 		AtomicReference<Capture> captured = new AtomicReference<>();
 
-		SokletSimulator.run(config -> config.mcpServer(0, builder -> {
+		SokletSimulator.run(SimulatorConfig.builder().mcpServer(0,
+				McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
+				admissionController, builder -> {
 			builder.host(LOOPBACK)
-					.endpointRegistry(McpEndpointRegistry.fromEndpoints(
-							List.of(endpoint)))
-					.admissionController(admissionController)
 					.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 					.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 					.corsAuthorizer(corsAuthorizer)
@@ -308,8 +307,6 @@ class McpLocalizationHttpBoundaryTests {
 
 			if (localizer != null)
 				builder.localizer(localizer);
-
-			return builder.build();
 		}).resourceMethodResolver(
 				ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)

@@ -17,6 +17,9 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.NotThreadSafe;
+
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -25,6 +28,7 @@ import static java.util.Objects.requireNonNull;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@NotThreadSafe
 public final class TransportOwnershipException extends IllegalStateException {
 	@NonNull
 	private final ShutdownComponentType shutdownComponentType;

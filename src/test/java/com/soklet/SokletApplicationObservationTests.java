@@ -386,8 +386,8 @@ final class SokletApplicationObservationTests {
 			Assertions.assertTrue(attachEntered.await(5, TimeUnit.SECONDS));
 			triggers.trigger();
 			Assertions.assertTrue(runner.done.await(5, TimeUnit.SECONDS));
-			ShutdownIncompleteException failure = Assertions.assertInstanceOf(
-					ShutdownIncompleteException.class, runner.failure.get());
+			SokletShutdownIncompleteException failure = Assertions.assertInstanceOf(
+					SokletShutdownIncompleteException.class, runner.failure.get());
 			InternalShutdownResult result = failure.getInternalShutdownResult();
 			ShutdownResult publicResult = failure.getShutdownResult();
 			Assertions.assertSame(result, publicResult.internalResult());
@@ -972,7 +972,7 @@ final class SokletApplicationObservationTests {
 
 	@NonNull
 	private static InternalLifecyclePolicy immediateShutdownPolicy() {
-		return new InternalLifecyclePolicy(Optional.empty(), Duration.ZERO,
+		return new InternalLifecyclePolicy(Duration.ofSeconds(30), Duration.ZERO,
 				Duration.ZERO, Duration.ZERO);
 	}
 
@@ -1277,9 +1277,9 @@ final class SokletApplicationObservationTests {
 			this.attachReturned.countDown();
 			return new TransportRuntime() {
 				@Override public void start(@NonNull StartupContext ignored) { }
-				@Override public void quiesce(
+				@Override public void shutdownGracefully(
 						@NonNull ShutdownContext ignored) { }
-				@Override public void force(
+				@Override public void shutdownForcibly(
 						@NonNull ShutdownContext ignored) { }
 			};
 		}
@@ -1322,12 +1322,12 @@ final class SokletApplicationObservationTests {
 					requireNonNull(context);
 				}
 
-				@Override public void quiesce(@NonNull ShutdownContext context) {
+				@Override public void shutdownGracefully(@NonNull ShutdownContext context) {
 					requireNonNull(context);
 					terminate(terminationSignal);
 				}
 
-				@Override public void force(@NonNull ShutdownContext context) {
+				@Override public void shutdownForcibly(@NonNull ShutdownContext context) {
 					requireNonNull(context);
 					terminate(terminationSignal);
 				}

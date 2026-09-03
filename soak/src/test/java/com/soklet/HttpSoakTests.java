@@ -166,8 +166,8 @@ public class HttpSoakTests {
 				.metricsCollector(metricsCollector)
 				.lifecycleObserver(new QuietLifecycle())
 				.lifecyclePolicy(LifecyclePolicy.builder()
-						.gracefulShutdownDuration(Duration.ofSeconds(3))
-						.forcedShutdownDuration(Duration.ZERO)
+						.gracefulShutdownTimeout(Duration.ofSeconds(3))
+						.forcedShutdownTimeout(Duration.ZERO)
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SoakResource.class)))
 				.build();

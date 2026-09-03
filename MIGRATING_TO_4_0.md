@@ -114,7 +114,7 @@ graceful cap.
 
 | Boundary | 3.5.1 default/guidance | 4.0.0 default | Migration effect |
 | --- | ---: | ---: | --- |
-| Normal startup | Unbounded transport-specific behavior | 30 s | Startup now has a shared deadline; use `noStartupTimeout()` only deliberately. |
+| Normal startup | Unbounded transport-specific behavior | 30 s | Startup now always has a finite shared deadline; configure an explicit timeout when the default is unsuitable. |
 | Cancelation of live startup after shutdown intent | Not a shared phase | 2 s | A non-cooperative startup can produce an incomplete result after this boundary. |
 | HTTP graceful shutdown | 5 s default; 30 s production guidance | 15 s | More time than the old default, less than the old guidance. |
 | SSE graceful shutdown | 1 s | 15 s | Idle streams close promptly; outstanding writes, loops, and executors share the 15 s boundary. |
@@ -127,8 +127,8 @@ For example:
 LifecyclePolicy policy = LifecyclePolicy.builder()
     .startupTimeout(Duration.ofSeconds(30))
     .startupCancelationTimeout(Duration.ofSeconds(2))
-    .gracefulShutdownDuration(Duration.ofSeconds(20))
-    .forcedShutdownDuration(Duration.ofSeconds(3))
+    .gracefulShutdownTimeout(Duration.ofSeconds(20))
+    .forcedShutdownTimeout(Duration.ofSeconds(3))
     .build();
 
 SokletConfig config = SokletConfig.withHttpServer(httpServer)
@@ -136,9 +136,16 @@ SokletConfig config = SokletConfig.withHttpServer(httpServer)
     .build();
 ```
 
-Review the builder Javadocs before selecting zero-duration phases or unbounded
-startup. A normal running shutdown with defaults is bounded by 18 seconds;
-shutdown intent during startup is bounded by 20 seconds from that intent.
+Passing `null` to any `LifecyclePolicy` timeout setter restores that timeout's
+built-in default. Passing `null` to either
+`SokletConfig.Builder.lifecyclePolicy(...)` or
+`SimulatorConfig.Builder.lifecyclePolicy(...)` restores the complete default
+policy.
+
+Review the builder Javadocs before selecting zero-duration phases or changing
+the finite startup timeout. A normal running shutdown with defaults is bounded
+by 18 seconds; shutdown intent during startup is bounded by 20 seconds from
+that intent.
 
 ### Kubernetes and orchestrator budget
 
@@ -192,9 +199,29 @@ being independently started and stopped. Migrate custom implementations to
 the current transport identity, attachment/runtime, lifecycle context, and
 termination-proof contracts. A decorator must preserve stable identity and
 must distinguish framework-mediated transparent delegation from a
-lifecycle-owning root. Soklet can validate honest evidence presented through
-those contracts; it cannot detect a custom transport that lies about its own
-attestation or behavior.
+termination-owning delegate. Implement graceful and forced shutdown through
+`TransportRuntime.shutdownGracefully(ShutdownContext)` and
+`TransportRuntime.shutdownForcibly(ShutdownContext)`. The attachment-context
+method for an independently terminating child is
+`attachTerminationOwningDelegate(...)`; transparent delegation remains
+`attachTransparentDelegate(...)`. Soklet can validate honest evidence presented
+through those contracts; it cannot detect a custom transport that lies about
+its own attestation or behavior.
+
+If migrating from an earlier 4.0 snapshot, update lifecycle result and exception
+names as a hard cutover:
+
+| Earlier snapshot | 4.0.0 |
+| --- | --- |
+| `ShutdownComponentResult.getFailures()` | `getThrowables()` |
+| `ShutdownCleanupFailure` | `ShutdownCleanupFailureReason` |
+| `SokletTerminatedUnexpectedlyException` | `SokletUnexpectedTerminationException` |
+| `ShutdownIncompleteException` | `SokletShutdownIncompleteException` |
+| `SokletApplicationCleanupException` | `SokletShutdownCleanupException` |
+
+`SokletLifecycleException` is sealed to its four concrete lifecycle outcomes.
+Lifecycle exception instances and `TransportOwnershipException` are not
+thread-safe; their retained `ShutdownResult` values remain immutable.
 
 `HttpServer` is no longer an injectable resource-method parameter. Remove it
 from resource method signatures and acquire application services through the
@@ -209,36 +236,42 @@ fresh one-shot transports.
 
 ## Simulator migration
 
-`Soklet.runSimulator(...)` is removed. Each simulation now supplies a
-scope-bound `SimulatorConfig.Builder` that installs its fresh, off-network
-transports and builds the application configuration:
+`Soklet.runSimulator(...)` is removed. Build a fresh, single-use
+`SimulatorConfig` for each run, then pass it to `SokletSimulator.run(...)`:
 
 ```java
-ShutdownResult result = SokletSimulator.run(config -> config
+SimulatorConfig simulatorConfig = SimulatorConfig.builder()
         .httpServer()
         .sseServer()
         .resourceMethodResolver(resourceMethods)
-        .build(), simulator -> {
-          HttpRequestResult response = simulator.performHttpRequest(request);
-          // assertions
-        });
+        .build();
+
+ShutdownResult result = SokletSimulator.run(simulatorConfig, simulator -> {
+  HttpRequestResult response = simulator.performHttpRequest(request);
+  // assertions
+});
 ```
 
-For simulated MCP, configure and build the server through the scope-bound MCP
-builder:
+For simulated MCP, supply its required registry and admission controller to
+the outer builder. The optional consumer customizes the MCP builder; the outer
+builder owns the call to `build()`:
 
 ```java
-config.mcpServer(port, mcpServerBuilder -> mcpServerBuilder
-    .endpointRegistry(endpointRegistry)
-    .build())
+SimulatorConfig simulatorConfig = SimulatorConfig.builder()
+    .mcpServer(port, endpointRegistry, admissionController,
+        mcpServerBuilder -> mcpServerBuilder
+            .requestTimeout(requestTimeout))
+    .build();
 ```
 
-The supplied MCP builder belongs to that simulation scope. Do not capture a
-live server or reuse a `SimulatorConfig`, its builder, or a simulated transport
-between scopes.
+Within the body, `Simulator.getHttpServer()`, `getSseServer()`, and
+`getMcpServer()` expose the exact transports selected for that run. The supplied
+MCP builder belongs to its configuration and cannot be built manually. A
+completed `SimulatorConfig` can be claimed by exactly one run; build a new one
+instead of reusing a configuration, builder, or simulated transport.
 `SimulatorOptions` controls materialization and capture behavior and is supplied
-with `config.simulatorOptions(options)`. Set lifecycle deadlines with
-`config.lifecyclePolicy(policy)`.
+with `SimulatorConfig.Builder#simulatorOptions`. Set lifecycle deadlines with
+`SimulatorConfig.Builder#lifecyclePolicy`.
 Simulation is deterministic and off-network, so it does not prove kernel TCP,
 proxy, TLS, or live write-idle behavior.
 

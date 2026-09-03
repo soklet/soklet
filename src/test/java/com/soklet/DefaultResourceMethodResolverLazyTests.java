@@ -22,7 +22,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -192,7 +191,7 @@ class DefaultResourceMethodResolverLazyTests {
 					monitor.wait();
 				});
 		StartupContext startupContext = new StartupContext(
-				NanoClock.system(), Optional.empty(), Long.MAX_VALUE,
+				NanoClock.system(), Long.MAX_VALUE, Long.MAX_VALUE,
 				cancellationRequested::get);
 		Thread owner = publicOwner(lazy, ownerFailure);
 		Thread lifecycleWaiter = new Thread(() -> {
@@ -249,7 +248,7 @@ class DefaultResourceMethodResolverLazyTests {
 					monitor.wait();
 				});
 		StartupContext startupContext = new StartupContext(
-				NanoClock.system(), Optional.empty(), Long.MAX_VALUE, () -> false);
+				NanoClock.system(), Long.MAX_VALUE, Long.MAX_VALUE, () -> false);
 		Thread owner = publicOwner(lazy, ownerFailure);
 		Thread lifecycleWaiter = new Thread(() ->
 				runCapturing(lifecycleFailure, () -> lifecycleSnapshot.set(
@@ -294,7 +293,7 @@ class DefaultResourceMethodResolverLazyTests {
 					monitor.wait();
 				});
 		StartupContext startupContext = new StartupContext(
-				NanoClock.system(), Optional.empty(), Long.MAX_VALUE, () -> false);
+				NanoClock.system(), Long.MAX_VALUE, Long.MAX_VALUE, () -> false);
 		Thread owner = publicOwner(lazy, ownerFailure);
 		Thread lifecycleWaiter = new Thread(() -> {
 			try {
@@ -345,7 +344,7 @@ class DefaultResourceMethodResolverLazyTests {
 					now.addAndGet(remainingNanos);
 				});
 		StartupContext startupContext = new StartupContext(now::get,
-				Optional.of(37L), 90L, () -> false);
+				37L, 90L, () -> false);
 		Thread owner = publicOwner(lazy, ownerFailure);
 
 		owner.start();

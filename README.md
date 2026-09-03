@@ -642,11 +642,10 @@ import org.junit.Test;
 @Test
 public void sseTest() {
   List<SseEvent> events = new ArrayList<>();
-  AtomicReference<SseServer> simulatedSseServer = new AtomicReference<>();
 
-  SokletSimulator.run(config -> config
+  SokletSimulator.run(SimulatorConfig.builder()
       .httpServer()
-      .sseServer(simulatedSseServer::set)
+      .sseServer()
       .resourceMethodResolver(
           ResourceMethodResolver.fromClasses(Set.of(ChatResource.class)))
       .build(), simulator -> {
@@ -656,7 +655,7 @@ public void sseTest() {
     if (result instanceof SseRequestResult.HandshakeAccepted accepted) {
       accepted.registerEventConsumer(events::add);
 
-      SseBroadcaster broadcaster = simulatedSseServer.get()
+      SseBroadcaster broadcaster = simulator.getSseServer().orElseThrow()
         .acquireBroadcaster(ResourcePath.fromPath("/chat")).orElseThrow();
       broadcaster.broadcastEvent(SseEvent.withEvent("message")
         .data("hello")
@@ -1458,7 +1457,7 @@ public void basicIntegrationTest() {
 
   // Configure this scope with its fresh simulated HTTP server instead of
   // reusing a live configuration or transport.
-  SokletSimulator.run(config -> config
+  SokletSimulator.run(SimulatorConfig.builder()
           .httpServer()
           .resourceMethodResolver(resourceMethods)
           .instanceProvider(instances)
@@ -2129,7 +2128,7 @@ pre-response SSE overflow retains the response head and exact item/byte reason.
 The admitted request finishes `CANCELED` with coarse token reason
 `SIMULATOR_LIMIT_EXCEEDED`, not a protocol or transport failure.
 
-Cancel, close, and scope exit publish `CLIENT_DISCONNECTED` only if they win
+`close()` and scope exit publish `CLIENT_DISCONNECTED` only if they win
 the shared terminal reservation. Cleanup is bounded and idempotent; residual
 noncooperative work blocks new simulation and live start until release, while
 escaped handles stay readable. Waits reject null/negative values, support zero
@@ -2152,7 +2151,7 @@ Representative exact citations from the full 46-test simulator/API gate are
 `#mcpSimulationCompletionRetainsStreamCaptureFailures`,
 `#noncooperativeSimulationCleanupIsBoundedAndPreservesSuppression`,
 `#waitOperationsHandleZeroTimeoutInterruptionAndCompletionIdempotently`, and
-`McpSimulationCaptureRuntimeTests#cancelAndTerminalRacePublishesOneCoherentFirstWinner`.
+`McpSimulationCaptureRuntimeTests#closeAndTerminalRacePublishesOneCoherentFirstWinner`.
 
 At the V21 boundary, `phase-6.includes` held 15 owners, the provisional
 inventory held 32, and the reviewed union was 219. The compatibility set was

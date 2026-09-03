@@ -158,8 +158,7 @@ final class DefaultLifecycleTerminalReporter implements LifecycleTerminalReporte
 		InternalLifecyclePolicy policy = snapshot.coreDiagnostics()
 				.lifecyclePolicy();
 		report.append("startupBudgetNanos=")
-				.append(policy.startupTimeout().map(Duration::toNanos)
-						.map(String::valueOf).orElse("unbounded"))
+				.append(policy.startupTimeout().toNanos())
 				.append('\n')
 				.append("startupCancelationBudgetNanos=")
 				.append(policy.startupCancelationTimeout().toNanos()).append('\n')

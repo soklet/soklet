@@ -133,13 +133,13 @@ final class DirectParticipantPhaseGateTests {
 							}
 
 							@Override
-							public void quiesce(
+							public void shutdownGracefully(
 									@NonNull ShutdownContext context) {
 								gate.requestPhase(context);
 							}
 
 							@Override
-							public void force(
+							public void shutdownForcibly(
 									@NonNull ShutdownContext context) {
 								gate.requestPhase(context);
 							}
@@ -198,12 +198,12 @@ final class DirectParticipantPhaseGateTests {
 							}
 
 							@Override
-							public void quiesce(
+							public void shutdownGracefully(
 									@NonNull ShutdownContext context) {
 							}
 
 							@Override
-							public void force(
+							public void shutdownForcibly(
 									@NonNull ShutdownContext context) {
 							}
 						};

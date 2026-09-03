@@ -19,33 +19,37 @@ package com.soklet;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import javax.annotation.concurrent.NotThreadSafe;
+
 import static java.util.Objects.requireNonNull;
 
 /** Indicates that shutdown ended without complete termination proof. */
-public final class ShutdownIncompleteException extends SokletLifecycleException {
+@NotThreadSafe
+public final class SokletShutdownIncompleteException
+		extends SokletLifecycleException {
 	@Nullable
 	private final Object retainedScopeEvidence;
 
-	ShutdownIncompleteException(@NonNull ShutdownResult shutdownResult) {
+	SokletShutdownIncompleteException(@NonNull ShutdownResult shutdownResult) {
 		this(shutdownResult, null, null);
 	}
 
-	ShutdownIncompleteException(@NonNull ShutdownResult shutdownResult,
+	SokletShutdownIncompleteException(@NonNull ShutdownResult shutdownResult,
 			@Nullable Object retainedScopeEvidence, @Nullable Throwable cause) {
 		super("Soklet shutdown could not prove complete termination",
 				requireNonNull(shutdownResult), cause);
 		this.retainedScopeEvidence = retainedScopeEvidence;
 		if (shutdownResult.getShutdownDisposition() != ShutdownDisposition.INCOMPLETE)
 			throw new IllegalArgumentException(
-					"ShutdownIncompleteException requires an incomplete result");
+					"SokletShutdownIncompleteException requires an incomplete result");
 	}
 
-	ShutdownIncompleteException(
+	SokletShutdownIncompleteException(
 			@NonNull InternalShutdownResult shutdownResult) {
 		this(ShutdownResult.fromInternal(requireNonNull(shutdownResult)));
 	}
 
-	ShutdownIncompleteException(
+	SokletShutdownIncompleteException(
 			@NonNull InternalShutdownResult shutdownResult,
 			@Nullable Object retainedScopeEvidence, @Nullable Throwable cause) {
 		this(ShutdownResult.fromInternal(requireNonNull(shutdownResult)),
@@ -55,10 +59,10 @@ public final class ShutdownIncompleteException extends SokletLifecycleException 
 	boolean retainsScopeEvidence(@NonNull Object candidate) {
 		Object exactCandidate = requireNonNull(candidate);
 		return this.retainedScopeEvidence == exactCandidate
-				|| this.retainedScopeEvidence
+				|| (this.retainedScopeEvidence
 						instanceof SimulatorConfigurationScopeIdentity scopeIdentity
-				&& exactCandidate instanceof SimulatorConfig simulatorConfig
-				&& simulatorConfig.belongsTo(
-						scopeIdentity.simulatorConfigurationIdentity());
+						&& exactCandidate instanceof SimulatorConfig simulatorConfig
+						&& simulatorConfig.belongsTo(
+								scopeIdentity.simulatorConfigurationIdentity()));
 	}
 }

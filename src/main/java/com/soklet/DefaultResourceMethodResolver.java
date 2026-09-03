@@ -386,8 +386,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 				return loadAndPublish();
 
 			try {
-				long deadlineNanos = startupContext.activeDeadlineNanos()
-						.orElse(Long.MAX_VALUE);
+				long deadlineNanos = startupContext.activeDeadlineNanos();
 				deadlineWaiter.await(deadlineNanos,
 						() -> terminalStatePublished()
 								|| startupContext.isCancelationRequested());

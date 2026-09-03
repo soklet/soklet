@@ -903,8 +903,8 @@ final class DefaultSseServer implements SseServer {
 		this.activeConnectionCount = new AtomicInteger(0);
 		this.lifecycleAdapter = new BuiltInTransportLifecycleAdapter(
 				InternalLifecycleComponentType.SSE, new SseLifecycleOperations(),
-				this::getGracefulShutdownDuration,
-				this::getForcedShutdownDuration);
+				this::getGracefulShutdownTimeout,
+				this::getForcedShutdownTimeout);
 	}
 
 	@NonNull
@@ -933,13 +933,13 @@ final class DefaultSseServer implements SseServer {
 			}
 
 			@Override
-			public void quiesce(@NonNull ShutdownContext context) {
+			public void shutdownGracefully(@NonNull ShutdownContext context) {
 				requireNonNull(context);
 				observeStop(signal, stopObserverStarted);
 			}
 
 			@Override
-			public void force(@NonNull ShutdownContext context) {
+			public void shutdownForcibly(@NonNull ShutdownContext context) {
 				requireNonNull(context);
 				observeStop(signal, stopObserverStarted);
 			}
@@ -4577,13 +4577,13 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	@NonNull
-	protected Duration getGracefulShutdownDuration() {
-		return this.lifecyclePolicy.getGracefulShutdownDuration();
+	protected Duration getGracefulShutdownTimeout() {
+		return this.lifecyclePolicy.getGracefulShutdownTimeout();
 	}
 
 	@NonNull
-	protected Duration getForcedShutdownDuration() {
-		return this.lifecyclePolicy.getForcedShutdownDuration();
+	protected Duration getForcedShutdownTimeout() {
+		return this.lifecyclePolicy.getForcedShutdownTimeout();
 	}
 
 	@NonNull

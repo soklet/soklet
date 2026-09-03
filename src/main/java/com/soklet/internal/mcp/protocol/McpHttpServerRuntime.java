@@ -1089,7 +1089,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		Throwable failure = null;
 		for (McpSimulationRuntime simulation
 				: requiredGeneration.activeSimulations())
-			failure = runLifecycleStep(failure, simulation::cancel);
+			failure = runLifecycleStep(failure, simulation::close);
 		stopAcceptingSubscriptions();
 		SubscriptionRegistrationCloseBatch closeBatch =
 				beginClosingSubscriptionEventSourceRegistrations(
@@ -1154,7 +1154,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				() -> quiesceSimulationGeneration(requiredGeneration));
 		for (McpSimulationRuntime simulation
 				: requiredGeneration.activeSimulations())
-			failure = runLifecycleStep(failure, simulation::cancel);
+			failure = runLifecycleStep(failure, simulation::close);
 		Set<RequestControl> subscriptions = stopAcceptingSubscriptions();
 		failure = runLifecycleStep(failure,
 				() -> completeSubscriptions(subscriptions));

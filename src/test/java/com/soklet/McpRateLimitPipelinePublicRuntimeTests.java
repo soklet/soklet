@@ -56,8 +56,8 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 			LifecyclePolicy.builder()
 					.startupTimeout(Duration.ofSeconds(5))
 					.startupCancelationTimeout(Duration.ofSeconds(2))
-					.gracefulShutdownDuration(Duration.ofSeconds(2))
-					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.gracefulShutdownTimeout(Duration.ofSeconds(2))
+					.forcedShutdownTimeout(Duration.ofSeconds(1))
 					.build();
 	private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
 			.connectTimeout(Duration.ofSeconds(5))

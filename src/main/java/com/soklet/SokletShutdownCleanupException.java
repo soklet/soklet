@@ -18,45 +18,47 @@ package com.soklet;
 
 import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.NotThreadSafe;
 import java.time.Duration;
 
 import static java.util.Objects.requireNonNull;
 
 /** Indicates that core shutdown completed but bounded application cleanup did not. */
-public final class SokletApplicationCleanupException
+@NotThreadSafe
+public final class SokletShutdownCleanupException
 		extends SokletLifecycleException {
 	@NonNull
-	private final ShutdownCleanupFailure shutdownCleanupFailure;
+	private final ShutdownCleanupFailureReason shutdownCleanupFailureReason;
 	@NonNull
 	private final Duration shutdownCleanupTimeout;
 
-	SokletApplicationCleanupException(
-			@NonNull ShutdownCleanupFailure cleanupFailure,
-			@NonNull Duration cleanupTimeout,
+	SokletShutdownCleanupException(
+			@NonNull ShutdownCleanupFailureReason shutdownCleanupFailureReason,
+			@NonNull Duration shutdownCleanupTimeout,
 			@NonNull ShutdownResult shutdownResult,
 			@NonNull Throwable cause) {
-		super(cleanupFailureMessage(requireNonNull(cleanupFailure)),
+		super(cleanupFailureMessage(requireNonNull(shutdownCleanupFailureReason)),
 				requireNonNull(shutdownResult), requireNonNull(cause));
-		this.shutdownCleanupFailure = cleanupFailure;
-		this.shutdownCleanupTimeout = requireNonNull(cleanupTimeout);
+		this.shutdownCleanupFailureReason = shutdownCleanupFailureReason;
+		this.shutdownCleanupTimeout = requireNonNull(shutdownCleanupTimeout);
 		if (!shutdownResult.isComplete())
 			throw new IllegalArgumentException(
 					"Cleanup failure requires a complete core result");
 	}
 
-	SokletApplicationCleanupException(
-			@NonNull ShutdownCleanupFailure cleanupFailure,
-			@NonNull Duration cleanupTimeout,
+	SokletShutdownCleanupException(
+			@NonNull ShutdownCleanupFailureReason shutdownCleanupFailureReason,
+			@NonNull Duration shutdownCleanupTimeout,
 			@NonNull InternalShutdownResult shutdownResult,
 			@NonNull Throwable cause) {
-		this(cleanupFailure, cleanupTimeout,
+		this(shutdownCleanupFailureReason, shutdownCleanupTimeout,
 				ShutdownResult.fromInternal(requireNonNull(shutdownResult)), cause);
 	}
 
-	/** @return cleanup failure classification */
+	/** @return cleanup failure reason */
 	@NonNull
-	public ShutdownCleanupFailure getShutdownCleanupFailure() {
-		return this.shutdownCleanupFailure;
+	public ShutdownCleanupFailureReason getShutdownCleanupFailureReason() {
+		return this.shutdownCleanupFailureReason;
 	}
 
 	/** @return configured cleanup timeout */
@@ -67,8 +69,8 @@ public final class SokletApplicationCleanupException
 
 	@NonNull
 	private static String cleanupFailureMessage(
-			@NonNull ShutdownCleanupFailure failure) {
-		return switch (requireNonNull(failure)) {
+			@NonNull ShutdownCleanupFailureReason shutdownCleanupFailureReason) {
+		return switch (requireNonNull(shutdownCleanupFailureReason)) {
 			case FAILED -> "Standalone Soklet cleanup failed";
 			case TIMED_OUT -> "Standalone Soklet cleanup timed out; its daemon "
 					+ "action may remain live";

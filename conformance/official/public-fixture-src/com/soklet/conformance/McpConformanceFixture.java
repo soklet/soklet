@@ -86,7 +86,6 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -220,26 +219,26 @@ public final class McpConformanceFixture {
 	}
 
 	static SimulatorConfig simulationConfigForScenario(String scenario,
-			SimulatorConfig.Builder simulatorConfigBuilder,
 			MetricsCollector metricsCollector,
-			LifecycleObserver lifecycleObserver,
-			Consumer<McpServer> mcpServerConsumer) {
-		SimulatorConfig.Builder configured = simulatorConfigBuilder
-				.mcpServer(0, builder -> {
-					McpServer server = mcpServerForScenario(scenario,
-							CorsAuthorizer.fromWhitelistAuthorizer(origin ->
-									origin.equals("http://" + LOOPBACK + ":0")),
-							builder);
-					mcpServerConsumer.accept(server);
-					return server;
-				})
+			LifecycleObserver lifecycleObserver) {
+		requireSupportedScenario(scenario);
+		McpEndpoint endpoint = endpointForScenario(scenario);
+		CorsAuthorizer corsAuthorizer =
+				CorsAuthorizer.fromWhitelistAuthorizer(origin ->
+						origin.equals("http://" + LOOPBACK + ":0"));
+		SimulatorConfig.Builder configured = SimulatorConfig.builder()
+				.mcpServer(0,
+						McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
+						McpAdmissionController.acceptAllInstance(),
+						builder -> configureMcpServerForScenario(
+								scenario, corsAuthorizer, builder))
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(lifecycleObserver)
 				.lifecyclePolicy(LifecyclePolicy.builder()
 						.startupCancelationTimeout(Duration.ofSeconds(1))
-						.gracefulShutdownDuration(Duration.ofSeconds(5))
-						.forcedShutdownDuration(Duration.ofSeconds(1))
+						.gracefulShutdownTimeout(Duration.ofSeconds(5))
+						.forcedShutdownTimeout(Duration.ofSeconds(1))
 						.build());
 		if (metricsCollector != null)
 			configured.metricsCollector(metricsCollector);
@@ -256,8 +255,8 @@ public final class McpConformanceFixture {
 				.lifecycleObserver(lifecycleObserver)
 				.lifecyclePolicy(LifecyclePolicy.builder()
 						.startupCancelationTimeout(Duration.ofSeconds(1))
-						.gracefulShutdownDuration(Duration.ofSeconds(5))
-						.forcedShutdownDuration(Duration.ofSeconds(1))
+						.gracefulShutdownTimeout(Duration.ofSeconds(5))
+						.forcedShutdownTimeout(Duration.ofSeconds(1))
 						.build())
 				.build();
 	}
@@ -265,25 +264,35 @@ public final class McpConformanceFixture {
 	private static McpServer mcpServerForScenario(String scenario,
 			CorsAuthorizer corsAuthorizer,
 			McpServer.Builder mcpServerBuilder) {
-		if (!SUPPORTED_SCENARIOS.contains(scenario))
-			throw new IllegalArgumentException(
-					"Unsupported MCP conformance scenario: " + scenario);
-
+		requireSupportedScenario(scenario);
 		McpEndpoint endpoint = endpointForScenario(scenario);
+		return configureMcpServerForScenario(scenario, corsAuthorizer,
+				mcpServerBuilder)
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.admissionController(McpAdmissionController.acceptAllInstance())
+				.build();
+	}
+
+	private static McpServer.Builder configureMcpServerForScenario(
+			String scenario, CorsAuthorizer corsAuthorizer,
+			McpServer.Builder mcpServerBuilder) {
+		requireSupportedScenario(scenario);
 		McpRateLimiter allowLimiter = context ->
 				McpRateLimitDecision.allowed();
 		return mcpServerBuilder
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.requestRateLimiter(allowLimiter)
 				.toolRateLimiter(allowLimiter)
 				.protectionConfig(REQUEST_STATE_PROTECTION)
 				.corsAuthorizer(corsAuthorizer)
 				.absentOriginPolicy(McpAbsentOriginPolicy.ALLOW)
-				.allowedHosts(Set.of(LOOPBACK))
-				.build();
+				.allowedHosts(Set.of(LOOPBACK));
+	}
+
+	private static void requireSupportedScenario(String scenario) {
+		if (!SUPPORTED_SCENARIOS.contains(scenario))
+			throw new IllegalArgumentException(
+					"Unsupported MCP conformance scenario: " + scenario);
 	}
 
 	static McpEndpoint endpointForScenario(String scenario) {

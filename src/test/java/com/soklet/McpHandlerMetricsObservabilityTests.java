@@ -568,8 +568,8 @@ public class McpHandlerMetricsObservabilityTests {
 							&& metrics.getHandlerQueueDepth() == 1L);
 			assertHandlerDiagnostics(server.getDiagnostics(), 1, 1);
 
-			ShutdownIncompleteException stopFailure = Assertions.assertThrows(
-					ShutdownIncompleteException.class, soklet::close);
+			SokletShutdownIncompleteException stopFailure = Assertions.assertThrows(
+					SokletShutdownIncompleteException.class, soklet::close);
 			InternalShutdownResult shutdownResult =
 					stopFailure.getInternalShutdownResult();
 			Assertions.assertSame(shutdownResult,
@@ -608,12 +608,12 @@ public class McpHandlerMetricsObservabilityTests {
 			Assertions.assertEquals(1,
 					collector.count(McpMetricsEvent.HandlerDequeued.class));
 
-			ShutdownIncompleteException repeatedStop = Assertions.assertThrows(
-					ShutdownIncompleteException.class, soklet::close);
+			SokletShutdownIncompleteException repeatedStop = Assertions.assertThrows(
+					SokletShutdownIncompleteException.class, soklet::close);
 			Assertions.assertSame(shutdownResult,
 					repeatedStop.getInternalShutdownResult());
-			ShutdownIncompleteException secondRepeatedStop = Assertions.assertThrows(
-					ShutdownIncompleteException.class, soklet::close);
+			SokletShutdownIncompleteException secondRepeatedStop = Assertions.assertThrows(
+					SokletShutdownIncompleteException.class, soklet::close);
 			Assertions.assertSame(shutdownResult,
 					secondRepeatedStop.getInternalShutdownResult());
 			Assertions.assertEquals(List.of(ShutdownComponentDisposition.RESIDUAL_ACTIVITY),
@@ -647,8 +647,8 @@ public class McpHandlerMetricsObservabilityTests {
 					lifecycleAdapter(server).result().orElseThrow());
 			Assertions.assertSame(shutdownResult,
 					soklet.getDirectLifecycle().result().orElseThrow());
-			ShutdownIncompleteException lateRepeatedStop = Assertions.assertThrows(
-					ShutdownIncompleteException.class, soklet::close);
+			SokletShutdownIncompleteException lateRepeatedStop = Assertions.assertThrows(
+					SokletShutdownIncompleteException.class, soklet::close);
 			Assertions.assertSame(shutdownResult,
 					lateRepeatedStop.getInternalShutdownResult());
 			Assertions.assertEquals(1,
@@ -842,9 +842,9 @@ public class McpHandlerMetricsObservabilityTests {
 			Assertions.assertEquals(List.of(
 					McpServerStatus.RESIDUAL_ACTIVITY),
 					collector.observedStatuses());
-			SokletTerminatedUnexpectedlyException stopFailure =
+			SokletUnexpectedTerminationException stopFailure =
 					Assertions.assertThrows(
-							SokletTerminatedUnexpectedlyException.class,
+							SokletUnexpectedTerminationException.class,
 							soklet::close);
 			InternalShutdownResult shutdownResult =
 					stopFailure.getInternalShutdownResult();
@@ -904,9 +904,9 @@ public class McpHandlerMetricsObservabilityTests {
 					lifecycleAdapter.result(terminatedGeneration).orElseThrow());
 			Assertions.assertSame(shutdownResult,
 					soklet.getDirectLifecycle().result().orElseThrow());
-			SokletTerminatedUnexpectedlyException repeatedStop =
+			SokletUnexpectedTerminationException repeatedStop =
 					Assertions.assertThrows(
-							SokletTerminatedUnexpectedlyException.class,
+							SokletUnexpectedTerminationException.class,
 							soklet::close);
 			Assertions.assertSame(shutdownResult,
 					repeatedStop.getInternalShutdownResult());
@@ -1211,8 +1211,8 @@ public class McpHandlerMetricsObservabilityTests {
 	private static void stopAfterTerminalFailure(@NonNull Soklet soklet) {
 		try {
 			requireNonNull(soklet).close();
-		} catch (ShutdownIncompleteException
-				| SokletTerminatedUnexpectedlyException ignored) {
+		} catch (SokletShutdownIncompleteException
+				| SokletUnexpectedTerminationException ignored) {
 			// Terminal cleanup replays the immutable owner result by contract.
 		}
 	}
@@ -1243,8 +1243,8 @@ public class McpHandlerMetricsObservabilityTests {
 		return LifecyclePolicy.builder()
 				.startupTimeout(Duration.ofSeconds(5))
 				.startupCancelationTimeout(Duration.ofMillis(100))
-				.gracefulShutdownDuration(Duration.ofMillis(100))
-				.forcedShutdownDuration(Duration.ofMillis(100))
+				.gracefulShutdownTimeout(Duration.ofMillis(100))
+				.forcedShutdownTimeout(Duration.ofMillis(100))
 				.build();
 	}
 
@@ -1253,8 +1253,8 @@ public class McpHandlerMetricsObservabilityTests {
 		return LifecyclePolicy.builder()
 				.startupTimeout(Duration.ofSeconds(5))
 				.startupCancelationTimeout(Duration.ofMillis(100))
-				.gracefulShutdownDuration(Duration.ofMillis(100))
-				.forcedShutdownDuration(Duration.ofSeconds(3))
+				.gracefulShutdownTimeout(Duration.ofMillis(100))
+				.forcedShutdownTimeout(Duration.ofSeconds(3))
 				.build();
 	}
 
@@ -1647,10 +1647,10 @@ public class McpHandlerMetricsObservabilityTests {
 			requireNonNull(server);
 			ShutdownComponentResult exactResult = requireNonNull(result);
 			this.stopOutcomes.add(exactResult.getShutdownComponentDisposition());
-			if (!exactResult.getFailures().isEmpty()) {
+			if (!exactResult.getThrowables().isEmpty()) {
 				this.mcpStopFailures.incrementAndGet();
 				this.globalStopFailure.compareAndSet(null,
-						exactResult.getFailures().get(0));
+						exactResult.getThrowables().get(0));
 			}
 		}
 

@@ -17,25 +17,29 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
+
+import javax.annotation.concurrent.NotThreadSafe;
 
 import static java.util.Objects.requireNonNull;
 
 /** Indicates that a shutdown component terminated unexpectedly after readiness. */
-public final class SokletTerminatedUnexpectedlyException
+@NotThreadSafe
+public final class SokletUnexpectedTerminationException
 		extends SokletLifecycleException {
 	@NonNull
 	private final UnexpectedShutdownComponentTermination
 			unexpectedShutdownComponentTermination;
 	private final InternalTerminationEvent internalUnexpectedTermination;
 
-	SokletTerminatedUnexpectedlyException(
+	SokletUnexpectedTerminationException(
 			@NonNull ShutdownResult shutdownResult,
 			@NonNull Throwable cause) {
 		this(null, shutdownResult, cause);
 	}
 
-	SokletTerminatedUnexpectedlyException(
-			InternalTerminationEvent internalUnexpectedTermination,
+	SokletUnexpectedTerminationException(
+			@Nullable InternalTerminationEvent internalUnexpectedTermination,
 			@NonNull ShutdownResult shutdownResult,
 			@NonNull Throwable cause) {
 		super("A Soklet transport terminated unexpectedly",
@@ -47,7 +51,7 @@ public final class SokletTerminatedUnexpectedlyException
 		this.internalUnexpectedTermination = internalUnexpectedTermination;
 	}
 
-	SokletTerminatedUnexpectedlyException(
+	SokletUnexpectedTerminationException(
 			@NonNull InternalTerminationEvent unexpectedTermination,
 			@NonNull InternalShutdownResult shutdownResult) {
 		this(unexpectedTermination, shutdownResult,
@@ -56,7 +60,7 @@ public final class SokletTerminatedUnexpectedlyException
 								"A transport terminated without a failure cause")));
 	}
 
-	SokletTerminatedUnexpectedlyException(
+	SokletUnexpectedTerminationException(
 			@NonNull InternalTerminationEvent unexpectedTermination,
 			@NonNull InternalShutdownResult shutdownResult,
 			@NonNull Throwable cause) {

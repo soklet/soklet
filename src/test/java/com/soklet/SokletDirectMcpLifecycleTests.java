@@ -577,11 +577,11 @@ final class SokletDirectMcpLifecycleTests {
 
 	private static void assertRepeatedIncompleteStop(@NonNull Soklet soklet,
 			@NonNull InternalShutdownResult result) {
-		ShutdownIncompleteException stopFailure = Assertions.assertThrows(
-				ShutdownIncompleteException.class, soklet::close);
+		SokletShutdownIncompleteException stopFailure = Assertions.assertThrows(
+				SokletShutdownIncompleteException.class, soklet::close);
 		Assertions.assertSame(result, stopFailure.getInternalShutdownResult());
-		ShutdownIncompleteException closeFailure = Assertions.assertThrows(
-				ShutdownIncompleteException.class, soklet::close);
+		SokletShutdownIncompleteException closeFailure = Assertions.assertThrows(
+				SokletShutdownIncompleteException.class, soklet::close);
 		Assertions.assertSame(result, closeFailure.getInternalShutdownResult());
 	}
 
@@ -658,8 +658,8 @@ final class SokletDirectMcpLifecycleTests {
 		return LifecyclePolicy.builder()
 				.startupTimeout(Duration.ofSeconds(1))
 				.startupCancelationTimeout(Duration.ofMillis(150))
-				.gracefulShutdownDuration(Duration.ofMillis(150))
-				.forcedShutdownDuration(Duration.ofMillis(250))
+				.gracefulShutdownTimeout(Duration.ofMillis(150))
+				.forcedShutdownTimeout(Duration.ofMillis(250))
 				.build();
 	}
 
@@ -668,8 +668,8 @@ final class SokletDirectMcpLifecycleTests {
 		return LifecyclePolicy.builder()
 				.startupTimeout(Duration.ofSeconds(10))
 				.startupCancelationTimeout(Duration.ofMillis(150))
-				.gracefulShutdownDuration(Duration.ofMillis(150))
-				.forcedShutdownDuration(Duration.ofMillis(250))
+				.gracefulShutdownTimeout(Duration.ofMillis(150))
+				.forcedShutdownTimeout(Duration.ofMillis(250))
 				.build();
 	}
 
@@ -678,8 +678,8 @@ final class SokletDirectMcpLifecycleTests {
 		return LifecyclePolicy.builder()
 				.startupTimeout(Duration.ofSeconds(5))
 				.startupCancelationTimeout(Duration.ofMillis(250))
-				.gracefulShutdownDuration(Duration.ofSeconds(5))
-				.forcedShutdownDuration(Duration.ofSeconds(1))
+				.gracefulShutdownTimeout(Duration.ofSeconds(5))
+				.forcedShutdownTimeout(Duration.ofSeconds(1))
 				.build();
 	}
 

@@ -74,6 +74,16 @@ public class McpNotificationPublicRuntimeTests {
 				.tool(tool)
 				.build();
 		AtomicReference<McpServer> serverReference = new AtomicReference<>();
+		McpEndpointRegistry endpointRegistry =
+				McpEndpointRegistry.fromEndpoints(List.of(endpoint));
+		McpAdmissionController admissionController = context -> {
+			admissionContexts.add(context);
+			String caseName = caseName(context.getRequest());
+			stageTrace.add("admission:" + caseName);
+			if (caseName.equals("admission-rejected"))
+				return McpAdmissionDecision.rejected(admissionRejection);
+			return McpAdmissionDecision.accepted();
+		};
 		List<InboundCase> cases = List.of(
 				new InboundCase("accepted-cancellation",
 						"notifications/cancelled",
@@ -101,16 +111,9 @@ public class McpNotificationPublicRuntimeTests {
 						Map.of("Cache-Control", Set.of("no-store"),
 								"Retry-After", Set.of("1"))));
 
-		SokletSimulator.run(config -> config.mcpServer(0, builder -> {
-			McpServer server = baseServerBuilder(builder, endpoint)
-					.admissionController(context -> {
-						admissionContexts.add(context);
-						String caseName = caseName(context.getRequest());
-						stageTrace.add("admission:" + caseName);
-						if (caseName.equals("admission-rejected"))
-							return McpAdmissionDecision.rejected(admissionRejection);
-						return McpAdmissionDecision.accepted();
-					})
+		SimulatorConfig simulatorConfig = SimulatorConfig.builder()
+				.mcpServer(0, endpointRegistry, admissionController, builder ->
+					baseServerBuilder(builder)
 					.requestRateLimiter(context -> {
 						limiterCalls.incrementAndGet();
 						String caseName = caseName(context.getRequest());
@@ -122,20 +125,19 @@ public class McpNotificationPublicRuntimeTests {
 					.handlerInterceptor((context, features, continuation) -> {
 						interceptorCalls.incrementAndGet();
 						return continuation.proceed();
-					})
-					.build();
-			serverReference.set(server);
-			return server;
-		}).resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.build(), simulator -> {
+					}))
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.build();
+		SokletSimulator.run(simulatorConfig, simulator -> {
+			serverReference.set(simulator.getMcpServer().orElseThrow());
 			for (InboundCase testCase : cases) {
 				try (McpSimulation simulation = simulator.startMcpRequest(
 						notification(testCase))) {
 					McpSimulationResponse response = awaitResponse(simulation);
 					Assertions.assertEquals(testCase.expectedStatus(),
 							response.getStatusCode(), testCase.name());
-					Assertions.assertEquals(McpSimulationBodyMode.EMPTY,
-							response.getBodyMode(), testCase.name());
+					Assertions.assertEquals(McpSimulationBodyType.EMPTY,
+							response.getBodyType(), testCase.name());
 					byte[] body = response.getBody().orElseThrow();
 					Assertions.assertArrayEquals(new byte[0], body, testCase.name());
 					String text = new String(body, StandardCharsets.UTF_8);
@@ -222,19 +224,20 @@ public class McpNotificationPublicRuntimeTests {
 				.build();
 		AtomicReference<McpServer> serverReference = new AtomicReference<>();
 
-		SokletSimulator.run(config -> config.mcpServer(0, builder -> {
-			McpServer server = baseServerBuilder(builder, endpoint)
-					.admissionController(McpAdmissionController.acceptAllInstance())
+		SimulatorConfig simulatorConfig = SimulatorConfig.builder()
+				.mcpServer(0,
+						McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
+						McpAdmissionController.acceptAllInstance(), builder ->
+					baseServerBuilder(builder)
 					.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 					.handlerInterceptor((context, features, continuation) -> {
 						interceptorCalls.incrementAndGet();
 						return continuation.proceed();
-					})
-					.build();
-			serverReference.set(server);
-			return server;
-		}).resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.build(), simulator -> {
+					}))
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.build();
+		SokletSimulator.run(simulatorConfig, simulator -> {
+			serverReference.set(simulator.getMcpServer().orElseThrow());
 			try (McpSimulation progress = simulator.startMcpRequest(
 					progressRequest(requestId))) {
 				assertSseResponse(awaitResponse(progress));
@@ -310,7 +313,7 @@ public class McpNotificationPublicRuntimeTests {
 								+ "\"io.modelcontextprotocol/subscriptionId\":"
 								+ "\"notification-subscription\"}}}\n\n");
 				assertSubscriptionId(listChanged, "notification-subscription");
-				subscription.cancel();
+				subscription.close();
 				McpSimulationCompletion completion = awaitCompletion(subscription);
 				Assertions.assertEquals(
 						McpStreamTerminationReason.CLIENT_DISCONNECTED,
@@ -328,10 +331,8 @@ public class McpNotificationPublicRuntimeTests {
 	}
 
 	private static McpServer.Builder baseServerBuilder(
-			McpServer.@NonNull Builder builder,
-			@NonNull McpEndpoint endpoint) {
+			McpServer.@NonNull Builder builder) {
 		return builder.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
 				.allowedHosts(Set.of(LOOPBACK));
@@ -418,8 +419,8 @@ public class McpNotificationPublicRuntimeTests {
 				"Content-Type", Set.of("text/event-stream"),
 				"Cache-Control", Set.of("no-store"),
 				"X-Accel-Buffering", Set.of("no")), response.getHeaders());
-		Assertions.assertEquals(McpSimulationBodyMode.SERVER_SENT_EVENTS,
-				response.getBodyMode());
+		Assertions.assertEquals(McpSimulationBodyType.SSE,
+				response.getBodyType());
 		Assertions.assertTrue(response.getBody().isEmpty());
 	}
 
@@ -491,7 +492,7 @@ public class McpNotificationPublicRuntimeTests {
 	private static Optional<McpSimulationStreamItem> nextItem(
 			@NonNull McpSimulation simulation, @NonNull Duration timeout) {
 		try {
-			return simulation.nextStreamItem(timeout);
+			return simulation.awaitStreamItem(timeout);
 		} catch (InterruptedException exception) {
 			Thread.currentThread().interrupt();
 			throw new AssertionError(exception);

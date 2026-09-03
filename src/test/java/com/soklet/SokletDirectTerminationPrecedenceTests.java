@@ -41,7 +41,7 @@ final class SokletDirectTerminationPrecedenceTests {
 	private static final Duration PHASE_BUDGET = Duration.ofSeconds(30);
 	@NonNull
 	private static final InternalLifecyclePolicy POLICY =
-			new InternalLifecyclePolicy(Optional.empty(), PHASE_BUDGET,
+			new InternalLifecyclePolicy(PHASE_BUDGET, PHASE_BUDGET,
 					PHASE_BUDGET, PHASE_BUDGET);
 
 	@Test
@@ -102,12 +102,12 @@ final class SokletDirectTerminationPrecedenceTests {
 			public void start(@NonNull StartupContext context) { }
 
 			@Override
-			public void quiesce(@NonNull ShutdownContext context) {
+			public void shutdownGracefully(@NonNull ShutdownContext context) {
 				group.signalTerminated(group.root());
 			}
 
 			@Override
-			public void force(@NonNull ShutdownContext context) {
+			public void shutdownForcibly(@NonNull ShutdownContext context) {
 				forceCalls.incrementAndGet();
 				throw new AssertionError("Complete proof must not receive force");
 			}
@@ -249,11 +249,11 @@ final class SokletDirectTerminationPrecedenceTests {
 			Throwable failure = new AssertionError("HTTP failed after readiness");
 
 			http.signalFailure(failure);
-			SokletTerminatedUnexpectedlyException first = Assertions.assertThrows(
-					SokletTerminatedUnexpectedlyException.class,
+			SokletUnexpectedTerminationException first = Assertions.assertThrows(
+					SokletUnexpectedTerminationException.class,
 					() -> joinShutdown(harness.owner()));
-			SokletTerminatedUnexpectedlyException second = Assertions.assertThrows(
-					SokletTerminatedUnexpectedlyException.class,
+			SokletUnexpectedTerminationException second = Assertions.assertThrows(
+					SokletUnexpectedTerminationException.class,
 					() -> joinShutdown(harness.owner()));
 
 			InternalShutdownResult result = harness.owner().result().orElseThrow();
@@ -294,11 +294,11 @@ final class SokletDirectTerminationPrecedenceTests {
 			harness.owner().start();
 			http.signalProof();
 
-			SokletTerminatedUnexpectedlyException first = Assertions.assertThrows(
-					SokletTerminatedUnexpectedlyException.class,
+			SokletUnexpectedTerminationException first = Assertions.assertThrows(
+					SokletUnexpectedTerminationException.class,
 					() -> joinShutdown(harness.owner()));
-			SokletTerminatedUnexpectedlyException second = Assertions.assertThrows(
-					SokletTerminatedUnexpectedlyException.class,
+			SokletUnexpectedTerminationException second = Assertions.assertThrows(
+					SokletUnexpectedTerminationException.class,
 					() -> joinShutdown(harness.owner()));
 			InternalShutdownResult result = harness.owner().result().orElseThrow();
 
@@ -333,9 +333,9 @@ final class SokletDirectTerminationPrecedenceTests {
 					"HTTP failed before forced shutdown");
 
 			http.signalFailure(failure);
-			SokletTerminatedUnexpectedlyException unexpected =
+			SokletUnexpectedTerminationException unexpected =
 					Assertions.assertThrows(
-							SokletTerminatedUnexpectedlyException.class,
+							SokletUnexpectedTerminationException.class,
 							() -> joinShutdown(harness.owner()));
 
 			InternalShutdownResult result = harness.owner().result().orElseThrow();
@@ -366,9 +366,9 @@ final class SokletDirectTerminationPrecedenceTests {
 			Throwable failure = new AssertionError("HTTP failure without proof");
 
 			http.signalFailure(failure);
-			SokletTerminatedUnexpectedlyException unexpected =
+			SokletUnexpectedTerminationException unexpected =
 					Assertions.assertThrows(
-							SokletTerminatedUnexpectedlyException.class,
+							SokletUnexpectedTerminationException.class,
 							() -> joinShutdown(harness.owner()),
 							"Unexpected termination precedes incomplete shutdown");
 
@@ -411,7 +411,7 @@ final class SokletDirectTerminationPrecedenceTests {
 			Throwable stopFailure = captureFailure(
 					() -> joinShutdown(harness.owner()));
 			Assertions.assertFalse(stopFailure
-					instanceof SokletTerminatedUnexpectedlyException,
+					instanceof SokletUnexpectedTerminationException,
 					"Only termination after READY may surface as close-unexpected");
 			if (complete) {
 				Assertions.assertNull(stopFailure);
@@ -421,8 +421,8 @@ final class SokletDirectTerminationPrecedenceTests {
 						InternalLifecycleComponentShutdownDisposition.UNEXPECTED_TERMINATION,
 						List.of(failure));
 			} else {
-				ShutdownIncompleteException incomplete = Assertions.assertInstanceOf(
-						ShutdownIncompleteException.class, stopFailure);
+				SokletShutdownIncompleteException incomplete = Assertions.assertInstanceOf(
+						SokletShutdownIncompleteException.class, stopFailure);
 				Assertions.assertSame(result,
 						incomplete.getInternalShutdownResult());
 				Assertions.assertEquals(InternalShutdownDisposition.INCOMPLETE,
@@ -563,7 +563,7 @@ final class SokletDirectTerminationPrecedenceTests {
 				}
 
 				@Override
-				public void quiesce(@NonNull ShutdownContext context) {
+				public void shutdownGracefully(@NonNull ShutdownContext context) {
 					quiesceCalls.incrementAndGet();
 					quiesceEntered.countDown();
 					if (proofPhase == ProofPhase.GRACEFUL
@@ -574,7 +574,7 @@ final class SokletDirectTerminationPrecedenceTests {
 				}
 
 				@Override
-				public void force(@NonNull ShutdownContext context) {
+				public void shutdownForcibly(@NonNull ShutdownContext context) {
 					forceCalls.incrementAndGet();
 					forceEntered.countDown();
 					if (proofPhase == ProofPhase.FORCED)

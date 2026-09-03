@@ -24,7 +24,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import java.time.Duration;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -50,8 +49,8 @@ final class SokletDirectMissingMemberSymmetryTests {
 			soklet.start();
 			assertLifecycleOwningSignals(graph);
 
-			ShutdownIncompleteException failure = Assertions.assertThrows(
-					ShutdownIncompleteException.class, soklet::close);
+			SokletShutdownIncompleteException failure = Assertions.assertThrows(
+					SokletShutdownIncompleteException.class, soklet::close);
 
 			assertBothShutdownPhases(graph);
 			Assertions.assertTrue(graph.rootProofPublished());
@@ -92,8 +91,8 @@ final class SokletDirectMissingMemberSymmetryTests {
 			soklet.start();
 			assertLifecycleOwningSignals(graph);
 
-			ShutdownIncompleteException failure = Assertions.assertThrows(
-					ShutdownIncompleteException.class, soklet::close);
+			SokletShutdownIncompleteException failure = Assertions.assertThrows(
+					SokletShutdownIncompleteException.class, soklet::close);
 
 			assertBothShutdownPhases(graph);
 			Assertions.assertTrue(graph.childProofPublished());
@@ -131,7 +130,7 @@ final class SokletDirectMissingMemberSymmetryTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
 						Set.of(OkResource.class)))
 				.internalLifecyclePolicy(new InternalLifecyclePolicy(
-						Optional.of(Duration.ofSeconds(2)), Duration.ofSeconds(2),
+						Duration.ofSeconds(2), Duration.ofSeconds(2),
 						PHASE_TIMEOUT, PHASE_TIMEOUT))
 				.build();
 	}
@@ -153,7 +152,7 @@ final class SokletDirectMissingMemberSymmetryTests {
 	}
 
 	private static void assertOneUnknownHttpParticipant(@NonNull Soklet soklet,
-			@NonNull ShutdownIncompleteException failure) {
+			@NonNull SokletShutdownIncompleteException failure) {
 		InternalShutdownResult result = soklet.getDirectLifecycle().result()
 				.orElseThrow();
 		Assertions.assertSame(result, failure.getInternalShutdownResult());
@@ -181,7 +180,7 @@ final class SokletDirectMissingMemberSymmetryTests {
 			soklet.close();
 			return new AssertionError(
 					"close() must replay the incomplete one-shot result");
-		} catch (ShutdownIncompleteException ignored) {
+		} catch (SokletShutdownIncompleteException ignored) {
 			// close() replays the already-published immutable incomplete result.
 			return null;
 		} catch (Throwable unexpected) {
@@ -293,7 +292,7 @@ final class SokletDirectMissingMemberSymmetryTests {
 				@NonNull StartupContext startupContext) {
 			this.rootSignal.set(context.getTerminationSignal());
 			TransportDelegateAttachment attachment =
-					context.attachLifecycleOwningDelegate(this.leaf,
+					context.attachTerminationOwningDelegate(this.leaf,
 							context.getAdmissionFencedRequestHandler());
 			attachment.whenTerminated().whenComplete((ignored, failure) -> {
 				if (failure == null)
@@ -306,10 +305,10 @@ final class SokletDirectMissingMemberSymmetryTests {
 				}
 
 				@Override
-				public void quiesce(@NonNull ShutdownContext context) {
+				public void shutdownGracefully(@NonNull ShutdownContext context) {
 					quiesceCalls.incrementAndGet();
 					try {
-						attachment.getTransportRuntime().quiesce(context);
+						attachment.getTransportRuntime().shutdownGracefully(context);
 						publishSelectedRootProof();
 					} finally {
 						quiesceReturned.countDown();
@@ -317,10 +316,10 @@ final class SokletDirectMissingMemberSymmetryTests {
 				}
 
 				@Override
-				public void force(@NonNull ShutdownContext context) {
+				public void shutdownForcibly(@NonNull ShutdownContext context) {
 					forceCalls.incrementAndGet();
 					try {
-						attachment.getTransportRuntime().force(context);
+						attachment.getTransportRuntime().shutdownForcibly(context);
 						publishSelectedRootProof();
 					} finally {
 						forceReturned.countDown();
@@ -404,13 +403,13 @@ final class SokletDirectMissingMemberSymmetryTests {
 				}
 
 				@Override
-				public void quiesce(@NonNull ShutdownContext context) {
+				public void shutdownGracefully(@NonNull ShutdownContext context) {
 					quiesceCalls.incrementAndGet();
 					publishSelectedProof();
 				}
 
 				@Override
-				public void force(@NonNull ShutdownContext context) {
+				public void shutdownForcibly(@NonNull ShutdownContext context) {
 					forceCalls.incrementAndGet();
 					publishSelectedProof();
 				}

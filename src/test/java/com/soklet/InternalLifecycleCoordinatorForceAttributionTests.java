@@ -102,7 +102,7 @@ final class InternalLifecycleCoordinatorForceAttributionTests {
 			}
 
 			@Override
-			public void quiesce(@NonNull ShutdownContext context) {
+			public void shutdownGracefully(@NonNull ShutdownContext context) {
 				quiesceCalls.incrementAndGet();
 				quiesceEntered.countDown();
 				try {
@@ -116,7 +116,7 @@ final class InternalLifecycleCoordinatorForceAttributionTests {
 			}
 
 			@Override
-			public void force(@NonNull ShutdownContext context) {
+			public void shutdownForcibly(@NonNull ShutdownContext context) {
 				forceCalls.incrementAndGet();
 				group.signalTerminated(group.root());
 			}

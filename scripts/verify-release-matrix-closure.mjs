@@ -124,7 +124,7 @@ const ROW_KEYS = Object.freeze([
 ]);
 const FINITE_BOUND_INVENTORY_PATH = 'conformance/mcp-finite-bound-inventory.json';
 const EXPECTED_FINITE_BOUND_SEMANTICS_SHA256 =
-  'ca1d3c4147ff28ec2e25021329d913ee284b734402647741b8a2a9d8164418db';
+  'cc991a9d092cfdb9d3ed13896de5a51ffebc3efd3f90c33fc4029efbdda19282';
 const EXPECTED_FINITE_BOUND_EXCLUSIONS_SHA256 =
   '821bd1913c4a3d05afaf774f2cd1975abcb0530fbff3eea379392c44eea8ce8d';
 const FINITE_BOUND_TOP_LEVEL_KEYS = Object.freeze([
@@ -229,7 +229,7 @@ const BOUND_NAME_PATTERN = /^(?:maximum|minimum)[A-Z].*|^.*(?:Capacity|Concurren
 const PRIVACY_BOUNDARY_INVENTORY_PATH =
   'conformance/mcp-privacy-boundary-inventory.json';
 const EXPECTED_PRIVACY_SEMANTICS_SHA256 =
-  '793798bdb43e23903e9fe090541fd7f734618222103937076686084d4dc66f2d';
+  '6072b455df341f83d331ffc7a26461f28750e746c8776dc9a7f99965022c9166';
 const PRIVACY_TOP_LEVEL_KEYS = Object.freeze([
   'artifactRoots',
   'boundaries',
@@ -2615,7 +2615,7 @@ export function derivePrivacyBoundaryCandidates(root, scanRoots,
     }
     if (/^src\/main\/java\/com\/soklet\/(?:McpSimulation[^/]*|internal\/mcp\/(?:[^/]+\/)*McpSimulation[^/]*)\.java$/u
       .test(file)) {
-      const simulationCapturePattern = /\bnew\s+(DefaultResponse|DefaultStreamItem|CapturedItem|DefaultCompletion)\s*\(|\b(awaitResponse|nextStreamItem|awaitCompletion|getHeaders|getBody|getEncodedBytes|getTerminalMessage|getThrowables)\s*\(/gu;
+      const simulationCapturePattern = /\bnew\s+(DefaultResponse|DefaultStreamItem|CapturedItem|DefaultCompletion)\s*\(|\b(awaitResponse|awaitStreamItem|awaitCompletion|getHeaders|getBody|getEncodedBytes|getTerminalMessage|getThrowables)\s*\(/gu;
       for (const match of structure.matchAll(simulationCapturePattern)) {
         const operation = match[1] ?? match[2];
         addMatch(

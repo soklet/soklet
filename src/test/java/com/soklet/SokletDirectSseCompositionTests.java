@@ -327,7 +327,7 @@ final class SokletDirectSseCompositionTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
 						Set.of(EventResource.class)))
 				.internalLifecyclePolicy(new InternalLifecyclePolicy(
-						Optional.of(Duration.ofSeconds(2)), SHORT_PHASE,
+						Duration.ofSeconds(2), SHORT_PHASE,
 						SHORT_PHASE, requireNonNull(forcePhase)))
 				.build();
 	}
@@ -544,14 +544,14 @@ final class SokletDirectSseCompositionTests {
 				}
 
 				@Override
-				public void quiesce(@NonNull ShutdownContext context) {
+				public void shutdownGracefully(@NonNull ShutdownContext context) {
 					probe.quiesces.add(name);
 					if (proofPhase == ProofPhase.QUIESCE)
 						publishProof();
 				}
 
 				@Override
-				public void force(@NonNull ShutdownContext context) {
+				public void shutdownForcibly(@NonNull ShutdownContext context) {
 					probe.forces.add(name);
 					publishProof();
 				}
@@ -679,7 +679,7 @@ final class SokletDirectSseCompositionTests {
 			this.probe.attached(this.name, context, startupContext);
 			this.signal.set(context.getTerminationSignal());
 			TransportDelegateAttachment attachment =
-					context.attachLifecycleOwningDelegate(this.delegate,
+					context.attachTerminationOwningDelegate(this.delegate,
 							wrappedHandler(context.getAdmissionFencedRequestHandler()));
 			attachment.whenTerminated().thenRun(this::submitOwnedCleanup);
 			TransportRuntime child = attachment.getTransportRuntime();
@@ -697,16 +697,16 @@ final class SokletDirectSseCompositionTests {
 				}
 
 				@Override
-				public void quiesce(@NonNull ShutdownContext phaseContext) {
+				public void shutdownGracefully(@NonNull ShutdownContext phaseContext) {
 					probe.quiesces.add(name);
-					child.quiesce(phaseContext);
+					child.shutdownGracefully(phaseContext);
 				}
 
 				@Override
-				public void force(@NonNull ShutdownContext phaseContext) {
+				public void shutdownForcibly(@NonNull ShutdownContext phaseContext) {
 					probe.forces.add(name);
 					requestCleanupForce();
-					child.force(phaseContext);
+					child.shutdownForcibly(phaseContext);
 				}
 			};
 		}

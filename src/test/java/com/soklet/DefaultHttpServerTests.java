@@ -37,8 +37,8 @@ public class DefaultHttpServerTests {
 			LifecyclePolicy.builder()
 					.startupTimeout(Duration.ofSeconds(5))
 					.startupCancelationTimeout(Duration.ofSeconds(2))
-					.gracefulShutdownDuration(Duration.ofSeconds(2))
-					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.gracefulShutdownTimeout(Duration.ofSeconds(2))
+					.forcedShutdownTimeout(Duration.ofSeconds(1))
 					.build();
 
 	@Test
@@ -307,7 +307,7 @@ public class DefaultHttpServerTests {
 		server.initialize(SokletConfig.forSimulatorTesting()
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecyclePolicy(LifecyclePolicy.builder()
-						.gracefulShutdownDuration(Duration.ofSeconds(5))
+						.gracefulShutdownTimeout(Duration.ofSeconds(5))
 						.build())
 				.lifecycleObserver(new LifecycleObserver() {})
 				.build(), (request, responseConsumer) -> {});

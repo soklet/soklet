@@ -43,7 +43,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Function;
 import java.util.stream.Stream;
 
 /**
@@ -111,7 +110,8 @@ public class McpSimulatorEveryOperationTests {
 				operation.method(), () -> Assertions.assertTimeoutPreemptively(
 						DYNAMIC_TEST_TIMEOUT, () -> {
 							Fixture fixture = new Fixture(1, false);
-							SokletSimulator.run(fixture.configFactory(), simulator -> {
+							SokletSimulator.run(fixture.config(), simulator -> {
+								fixture.captureServer(simulator);
 								String transcript = replay(simulator, fixture, operation);
 								Assertions.assertTrue(transcript.contains(operation.id()), transcript);
 								assertRunningOffNetworkDiagnostics(fixture.server());
@@ -129,7 +129,8 @@ public class McpSimulatorEveryOperationTests {
 		Fixture fixture = new Fixture(2, true);
 
 		try {
-			SokletSimulator.run(fixture.configFactory(), simulator -> {
+			SokletSimulator.run(fixture.config(), simulator -> {
+				fixture.captureServer(simulator);
 				McpSimulation target = simulator.startMcpRequest(
 						request(new OperationCase("tools/call", "cancel-target",
 								TOOL_NAME, ",\"name\":\"" + TOOL_NAME
@@ -141,8 +142,8 @@ public class McpSimulatorEveryOperationTests {
 						cancellationNotification("cancel-target"));
 				McpSimulationResponse response = awaitResponse(notification);
 				Assertions.assertEquals(202, response.getStatusCode());
-				Assertions.assertEquals(McpSimulationBodyMode.EMPTY,
-						response.getBodyMode());
+				Assertions.assertEquals(McpSimulationBodyType.EMPTY,
+						response.getBodyType());
 				Assertions.assertArrayEquals(new byte[0],
 						response.getBody().orElseThrow());
 				Assertions.assertEquals(Map.of("Cache-Control", Set.of("no-store")),
@@ -169,7 +170,7 @@ public class McpSimulatorEveryOperationTests {
 						McpMetricsEvent.CancelationSignaled.class::isInstance),
 						fixture.metrics().events().toString());
 
-				target.cancel();
+				target.close();
 				Assertions.assertTrue(awaitLatch(fixture.cancelObserved()));
 				Assertions.assertEquals(McpStreamTerminationReason.CLIENT_DISCONNECTED,
 						awaitCompletion(target).getReason());
@@ -199,7 +200,8 @@ public class McpSimulatorEveryOperationTests {
 				new CopyOnWriteArrayList<>();
 
 		try {
-			SokletSimulator.run(fixture.configFactory(), simulator -> {
+			SokletSimulator.run(fixture.config(), simulator -> {
+				fixture.captureServer(simulator);
 				for (OperationCase operation : OPERATIONS)
 					futures.add(CompletableFuture.supplyAsync(() -> {
 						ready.countDown();
@@ -254,7 +256,7 @@ public class McpSimulatorEveryOperationTests {
 			return replaySubscription(simulation, response, fixture.publisher(),
 					operation.id());
 
-		Assertions.assertEquals(McpSimulationBodyMode.JSON, response.getBodyMode());
+		Assertions.assertEquals(McpSimulationBodyType.JSON, response.getBodyType());
 		Assertions.assertEquals(Map.of(
 				"Cache-Control", Set.of("no-store"),
 				"Content-Type", Set.of(JSON_MEDIA_TYPE)), response.getHeaders());
@@ -328,8 +330,8 @@ public class McpSimulatorEveryOperationTests {
 			@NonNull McpSimulationResponse response,
 			@NonNull McpLocalSubscriptionEventPublisher publisher,
 			@NonNull String id) {
-		Assertions.assertEquals(McpSimulationBodyMode.SERVER_SENT_EVENTS,
-				response.getBodyMode());
+		Assertions.assertEquals(McpSimulationBodyType.SSE,
+				response.getBodyType());
 		Assertions.assertTrue(response.getBody().isEmpty());
 		Assertions.assertEquals(Map.of(
 				"Content-Type", Set.of("text/event-stream"),
@@ -370,7 +372,7 @@ public class McpSimulatorEveryOperationTests {
 		Assertions.assertEquals(expectedEvent, event);
 		assertCanonicalSseFrame(event);
 
-		simulation.cancel();
+		simulation.close();
 		McpSimulationCompletion completion = awaitCompletion(simulation);
 		Assertions.assertEquals(McpStreamTerminationReason.CLIENT_DISCONNECTED,
 				completion.getReason());
@@ -470,7 +472,7 @@ public class McpSimulatorEveryOperationTests {
 	private static McpSimulationStreamItem nextItem(
 			@NonNull McpSimulation simulation) {
 		try {
-			return simulation.nextStreamItem(WAIT).orElseThrow(() ->
+			return simulation.awaitStreamItem(WAIT).orElseThrow(() ->
 					new AssertionError("Timed out awaiting simulator stream item."));
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
@@ -494,7 +496,7 @@ public class McpSimulatorEveryOperationTests {
 	private static Optional<@NonNull McpSimulationStreamItem> pollNextItem(
 			@NonNull McpSimulation simulation, @NonNull Duration timeout) {
 		try {
-			return simulation.nextStreamItem(timeout);
+			return simulation.awaitStreamItem(timeout);
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 			throw new AssertionError(e);
@@ -557,99 +559,101 @@ public class McpSimulatorEveryOperationTests {
 		}
 
 		@NonNull
-		private Function<SimulatorConfig.Builder, SimulatorConfig> configFactory() {
-			return config -> {
-				McpToolRegistration<McpJsonObject> tool = McpToolRegistration
-					.withName(TOOL_NAME).jsonArguments()
-					.handler((request, arguments, features) -> {
-						this.handlerCalls.incrementAndGet();
-						if (this.blockingTool) {
-							CancelationToken token = features.require(CancelationToken.class);
-							token.onCancel(this.cancelObserved::countDown);
-							this.blockingToolEntered.countDown();
-							awaitLatch(this.releaseBlockingTool);
-						}
-						return McpCompleteResult.fromToolText("matrix tool complete");
-					}).build();
-				McpPromptRegistration prompt = McpPromptRegistration
-					.withName(PROMPT_NAME)
-					.handler((request, get, features) -> {
-						this.handlerCalls.incrementAndGet();
-						return McpCompleteResult.fromPromptOutput(McpPromptOutput.builder()
-								.description("Matrix prompt")
-								.message(McpPromptMessage.fromUserContent(
-										McpTextContent.fromText(
-												"matrix prompt complete")))
-								.build());
-					}).build();
-				McpResourceRegistration exact = McpResourceRegistration
-					.withUriAndName(URI.create(RESOURCE_URI), "Matrix resource")
-					.handler((request, read, features) -> {
-						this.handlerCalls.incrementAndGet();
-						return completeText(read.getUri(), "matrix resource complete");
-					}).build();
-				McpResourceRegistration template = McpResourceRegistration
-					.withUriTemplateAndName(TEMPLATE_URI, "Matrix template")
-					.handler((request, read, features) -> {
-						this.handlerCalls.incrementAndGet();
-						return completeText(read.getUri(), "matrix template complete");
-					}).build();
-				McpSubscriptionConfig subscriptions = McpSubscriptionConfig
-					.withEventPublisher(this.publisher)
-					.notificationTypes(EnumSet.of(
-							McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
-					.build();
-				McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
-					.serverInformation(McpImplementation.withNameAndVersion(
-							"simulator-every-operation-test",
-							"4.0.0").build())
-					.tool(tool)
-					.prompt(prompt)
-					.resource(exact)
-					.resource(template)
-					.subscriptions(subscriptions)
-					.build();
-				return config.mcpServer(0, mcpServerBuilder -> {
-					McpServer server = mcpServerBuilder
-							.host(LOOPBACK)
-							.endpointRegistry(McpEndpointRegistry.fromEndpoints(
-									List.of(endpoint)))
-							.admissionController(context -> {
-								if (this.concurrentAdmissions != null) {
-									this.concurrentAdmissions.countDown();
-									if (this.concurrentAdmissions.getCount() == 0)
-										this.releaseConcurrentAdmissions.countDown();
-									Assertions.assertTrue(awaitLatch(
-											this.releaseConcurrentAdmissions));
-								}
-								return McpAdmissionDecision.accepted();
-							})
-							.requestRateLimiter(context ->
-									McpRateLimitDecision.allowed())
-							.toolRateLimiter(context ->
-									McpRateLimitDecision.allowed())
-							.handlerInterceptor((context, features, continuation) -> {
-								this.interceptorCalls.incrementAndGet();
-								return continuation.proceed();
-							})
-							.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
-							.allowedHosts(Set.of(LOOPBACK))
-							.requestHandlerConcurrency(16)
-							.build();
-					this.server.set(server);
-					return server;
-				})
-					.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-					.metricsCollector(this.metrics)
-					.lifecycleObservers(List.of(this.lifecycle))
-					.lifecyclePolicy(LifecyclePolicy.builder()
-							.startupTimeout(Duration.ofSeconds(30))
-							.startupCancelationTimeout(Duration.ofSeconds(2))
-							.gracefulShutdownDuration(Duration.ZERO)
-							.forcedShutdownDuration(Duration.ofMillis(250))
-							.build())
-					.build();
+		private SimulatorConfig config() {
+			McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName(TOOL_NAME).jsonArguments()
+				.handler((request, arguments, features) -> {
+					this.handlerCalls.incrementAndGet();
+					if (this.blockingTool) {
+						CancelationToken token = features.require(CancelationToken.class);
+						token.onCancel(this.cancelObserved::countDown);
+						this.blockingToolEntered.countDown();
+						awaitLatch(this.releaseBlockingTool);
+					}
+					return McpCompleteResult.fromToolText("matrix tool complete");
+				}).build();
+			McpPromptRegistration prompt = McpPromptRegistration
+				.withName(PROMPT_NAME)
+				.handler((request, get, features) -> {
+					this.handlerCalls.incrementAndGet();
+					return McpCompleteResult.fromPromptOutput(McpPromptOutput.builder()
+							.description("Matrix prompt")
+							.message(McpPromptMessage.fromUserContent(
+									McpTextContent.fromText(
+											"matrix prompt complete")))
+							.build());
+				}).build();
+			McpResourceRegistration exact = McpResourceRegistration
+				.withUriAndName(URI.create(RESOURCE_URI), "Matrix resource")
+				.handler((request, read, features) -> {
+					this.handlerCalls.incrementAndGet();
+					return completeText(read.getUri(), "matrix resource complete");
+				}).build();
+			McpResourceRegistration template = McpResourceRegistration
+				.withUriTemplateAndName(TEMPLATE_URI, "Matrix template")
+				.handler((request, read, features) -> {
+					this.handlerCalls.incrementAndGet();
+					return completeText(read.getUri(), "matrix template complete");
+				}).build();
+			McpSubscriptionConfig subscriptions = McpSubscriptionConfig
+				.withEventPublisher(this.publisher)
+				.notificationTypes(EnumSet.of(
+						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
+				.build();
+			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
+				.serverInformation(McpImplementation.withNameAndVersion(
+						"simulator-every-operation-test",
+						"4.0.0").build())
+				.tool(tool)
+				.prompt(prompt)
+				.resource(exact)
+				.resource(template)
+				.subscriptions(subscriptions)
+				.build();
+			McpEndpointRegistry endpointRegistry =
+					McpEndpointRegistry.fromEndpoints(List.of(endpoint));
+			McpAdmissionController admissionController = context -> {
+				if (this.concurrentAdmissions != null) {
+					this.concurrentAdmissions.countDown();
+					if (this.concurrentAdmissions.getCount() == 0)
+						this.releaseConcurrentAdmissions.countDown();
+					Assertions.assertTrue(awaitLatch(
+							this.releaseConcurrentAdmissions));
+				}
+				return McpAdmissionDecision.accepted();
 			};
+			return SimulatorConfig.builder()
+					.mcpServer(0, endpointRegistry, admissionController,
+							mcpServerBuilder -> mcpServerBuilder
+						.host(LOOPBACK)
+						.requestRateLimiter(context ->
+								McpRateLimitDecision.allowed())
+						.toolRateLimiter(context ->
+								McpRateLimitDecision.allowed())
+						.handlerInterceptor((context, features, continuation) -> {
+							this.interceptorCalls.incrementAndGet();
+							return continuation.proceed();
+						})
+						.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
+						.allowedHosts(Set.of(LOOPBACK))
+						.requestHandlerConcurrency(16))
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.metricsCollector(this.metrics)
+				.lifecycleObservers(List.of(this.lifecycle))
+				.lifecyclePolicy(LifecyclePolicy.builder()
+						.startupTimeout(Duration.ofSeconds(30))
+						.startupCancelationTimeout(Duration.ofSeconds(2))
+						.gracefulShutdownTimeout(Duration.ZERO)
+						.forcedShutdownTimeout(Duration.ofMillis(250))
+						.build())
+				.build();
+		}
+
+		private void captureServer(@NonNull Simulator simulator) {
+			McpServer exactServer = simulator.getMcpServer().orElseThrow(() ->
+					new AssertionError("The simulator MCP server is missing."));
+			if (!this.server.compareAndSet(null, exactServer))
+				throw new AssertionError("The simulator MCP server was captured twice.");
 		}
 
 		@NonNull

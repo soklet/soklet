@@ -58,8 +58,8 @@ class McpLocalizationMrtrRuntimeTests {
 			LifecyclePolicy.builder()
 					.startupTimeout(Duration.ofSeconds(5))
 					.startupCancelationTimeout(Duration.ofSeconds(2))
-					.gracefulShutdownDuration(Duration.ofSeconds(2))
-					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.gracefulShutdownTimeout(Duration.ofSeconds(2))
+					.forcedShutdownTimeout(Duration.ofSeconds(1))
 					.build();
 
 	@Test
@@ -171,9 +171,7 @@ class McpLocalizationMrtrRuntimeTests {
 				.build();
 	}
 
-	private static McpServer server(McpServer.Builder builder,
-			McpLocalizer localizer,
-			AtomicInteger handlerInvocations) {
+	private static McpEndpoint endpoint(AtomicInteger handlerInvocations) {
 		McpInputRequestDeclaration roots = McpInputRequestDeclaration
 				.fromRoots(McpInputRequirement.REQUIRED);
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
@@ -200,14 +198,16 @@ class McpLocalizationMrtrRuntimeTests {
 				.mayRequestInput(roots)
 				.requestStateMode(McpRequestStateMode.FRAMEWORK_PROTECTED)
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
+		return McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation
 						.withNameAndVersion("localization-mrtr", "1.0").build())
 				.tool(tool)
 				.build();
+	}
+
+	private static void configureServer(McpServer.Builder builder,
+			McpLocalizer localizer) {
 		builder.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
@@ -222,8 +222,6 @@ class McpLocalizationMrtrRuntimeTests {
 
 		if (localizer != null)
 			builder.localizer(localizer);
-
-		return builder.build();
 	}
 
 	private record Capture(int statusCode, String body) {}
@@ -231,10 +229,13 @@ class McpLocalizationMrtrRuntimeTests {
 	private static Capture call(McpLocalizer localizer,
 			AtomicInteger handlerInvocations, Request request) {
 		AtomicReference<Capture> captured = new AtomicReference<>();
+		McpEndpoint endpoint = endpoint(handlerInvocations);
 
-		SokletSimulator.run(config -> config
-				.mcpServer(0, builder -> server(builder, localizer,
-						handlerInvocations))
+		SokletSimulator.run(SimulatorConfig.builder()
+				.mcpServer(0,
+						McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
+						McpAdmissionController.acceptAllInstance(),
+						builder -> configureServer(builder, localizer))
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build(), simulator -> {

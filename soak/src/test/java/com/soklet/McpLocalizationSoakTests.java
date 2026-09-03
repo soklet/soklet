@@ -37,7 +37,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Function;
+import java.util.function.Supplier;
 
 import static java.util.Objects.requireNonNull;
 
@@ -65,8 +65,8 @@ class McpLocalizationSoakTests {
 		long startedAt = System.nanoTime();
 		LocalizationState state = new LocalizationState();
 		AtomicReference<McpServer> server = new AtomicReference<>();
-		Function<SimulatorConfig.Builder, SimulatorConfig> configFactory =
-				simulatorConfigFactory(state, server);
+		Supplier<SimulatorConfig> configFactory =
+				simulatorConfigFactory(state);
 		SoakResourceSnapshot baseline;
 		SoakResourceSnapshot finalSnapshot;
 
@@ -130,15 +130,14 @@ class McpLocalizationSoakTests {
 						"Final MCP status",
 						finalServer.getDiagnostics().getStatus().name(),
 						"Lifecycle core shutdown bound",
-						PROFILE.gracefulShutdownDuration()
-								.plus(PROFILE.forcedShutdownDuration())
+						PROFILE.gracefulShutdownTimeout()
+								.plus(PROFILE.forcedShutdownTimeout())
 								.toString(),
 						"Settle timeout", PROFILE.settleTimeout().toString()));
 	}
 
 	private static void runSimulatorWorkload(
-			@NonNull Function<SimulatorConfig.Builder, SimulatorConfig>
-					configFactory,
+			@NonNull Supplier<SimulatorConfig> configFactory,
 			@NonNull AtomicReference<McpServer> server,
 			@NonNull LocalizationState state,
 			int concurrentClients, int revisionWaves, @NonNull String runId) {
@@ -146,9 +145,11 @@ class McpLocalizationSoakTests {
 		requireNonNull(server);
 		requireNonNull(state);
 		requireNonNull(runId);
-		SokletSimulator.run(configFactory, simulator -> {
+		SokletSimulator.run(configFactory.get(), simulator -> {
 			try {
-				performWorkload(simulator, requireNonNull(server.get()), state,
+				McpServer currentServer = simulator.getMcpServer().orElseThrow();
+				server.set(currentServer);
+				performWorkload(simulator, currentServer, state,
 						concurrentClients,
 						revisionWaves, runId);
 			} catch (InterruptedException e) {
@@ -174,8 +175,8 @@ class McpLocalizationSoakTests {
 						",\"notifications\":{\"toolsListChanged\":true}"))) {
 			McpSimulationResponse response = awaitResponse(subscription);
 			Assertions.assertEquals(200, response.getStatusCode());
-			Assertions.assertEquals(McpSimulationBodyMode.SERVER_SENT_EVENTS,
-					response.getBodyMode());
+			Assertions.assertEquals(McpSimulationBodyType.SSE,
+					response.getBodyType());
 			String acknowledgment = awaitItem(subscription);
 			assertContains(acknowledgment,
 					"\"toolsListChanged\":true",
@@ -220,10 +221,10 @@ class McpLocalizationSoakTests {
 				}
 			}
 
-			subscription.cancel();
+			subscription.close();
 			Assertions.assertEquals(McpStreamTerminationReason.CLIENT_DISCONNECTED,
 					awaitCompletion(subscription).getReason());
-			Assertions.assertTrue(subscription.nextStreamItem(Duration.ZERO)
+			Assertions.assertTrue(subscription.awaitStreamItem(Duration.ZERO)
 					.isEmpty());
 		} finally {
 			executor.shutdownNow();
@@ -240,8 +241,8 @@ class McpLocalizationSoakTests {
 				localizationRequest(requestId, "tools/list", ""))) {
 			McpSimulationResponse response = awaitResponse(simulation);
 			Assertions.assertEquals(200, response.getStatusCode());
-			Assertions.assertEquals(McpSimulationBodyMode.JSON,
-					response.getBodyMode());
+			Assertions.assertEquals(McpSimulationBodyType.JSON,
+					response.getBodyType());
 			String body = new String(response.getBody().orElseThrow(),
 					StandardCharsets.UTF_8);
 			assertContains(body,
@@ -249,14 +250,13 @@ class McpLocalizationSoakTests {
 					"localized tools/list title");
 			Assertions.assertEquals(McpStreamTerminationReason.COMPLETED,
 					awaitCompletion(simulation).getReason());
-			Assertions.assertTrue(simulation.nextStreamItem(Duration.ZERO).isEmpty());
+			Assertions.assertTrue(simulation.awaitStreamItem(Duration.ZERO).isEmpty());
 			state.localizedCatalogResponses.incrementAndGet();
 		}
 	}
 
 	@NonNull
-	private static McpServer server(McpServer.@NonNull Builder mcpServerBuilder,
-			@NonNull LocalizationState state) {
+	private static McpEndpoint endpoint() {
 		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
 				.withName(TOOL_NAME)
 				.jsonArguments()
@@ -273,7 +273,7 @@ class McpLocalizationSoakTests {
 										read.getUri(), "unused").build())
 								.build()))
 				.build();
-		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
+		return McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
 						"soklet-mcp-localization-soak", "4.0.0")
 						.title(SERVER_TITLE)
@@ -287,12 +287,14 @@ class McpLocalizationSoakTests {
 								McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
 						.build())
 				.build();
+	}
 
-		return mcpServerBuilder
+	private static void configureMcpServer(
+			McpServer.@NonNull Builder mcpServerBuilder,
+			@NonNull LocalizationState state) {
+		requireNonNull(state);
+		mcpServerBuilder
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(
-						McpAdmissionController.acceptAllInstance())
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.requestHandlerConcurrency(PROFILE.requestHandlerConcurrency())
@@ -307,29 +309,27 @@ class McpLocalizationSoakTests {
 						PROFILE.maximumSubscriptionDuration())
 				.localizer(state.localizer())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
-				.allowedHosts(Set.of(LOOPBACK))
-				.build();
+				.allowedHosts(Set.of(LOOPBACK));
 	}
 
 	@NonNull
-	private static Function<SimulatorConfig.Builder, SimulatorConfig>
-			simulatorConfigFactory(
-			@NonNull LocalizationState state,
-			@NonNull AtomicReference<McpServer> serverReference) {
-		return config -> config.mcpServer(0, mcpServerBuilder -> {
-			McpServer server = server(mcpServerBuilder, state);
-			serverReference.set(server);
-			return server;
-		})
+	private static Supplier<SimulatorConfig> simulatorConfigFactory(
+			@NonNull LocalizationState state) {
+		requireNonNull(state);
+		return () -> SimulatorConfig.builder()
+					.mcpServer(0,
+							McpEndpointRegistry.fromEndpoints(List.of(endpoint())),
+							McpAdmissionController.acceptAllInstance(),
+							builder -> configureMcpServer(builder, state))
 					.resourceMethodResolver(
 							ResourceMethodResolver.fromMethods(Set.of()))
 					.lifecyclePolicy(LifecyclePolicy.builder()
 							.startupTimeout(Duration.ofSeconds(30))
 							.startupCancelationTimeout(Duration.ofSeconds(2))
-							.gracefulShutdownDuration(
-									PROFILE.gracefulShutdownDuration())
-							.forcedShutdownDuration(
-									PROFILE.forcedShutdownDuration())
+							.gracefulShutdownTimeout(
+									PROFILE.gracefulShutdownTimeout())
+							.forcedShutdownTimeout(
+									PROFILE.forcedShutdownTimeout())
 							.build())
 					.build();
 	}
@@ -368,7 +368,7 @@ class McpLocalizationSoakTests {
 	@NonNull
 	private static String awaitItem(@NonNull McpSimulation simulation)
 			throws InterruptedException {
-		return new String(simulation.nextStreamItem(PROFILE.settleTimeout())
+		return new String(simulation.awaitStreamItem(PROFILE.settleTimeout())
 				.orElseThrow(() -> new AssertionError(
 						"Timed out awaiting localization soak stream item."))
 				.getEncodedBytes(), StandardCharsets.UTF_8);
@@ -418,8 +418,8 @@ class McpLocalizationSoakTests {
 			SoakResourceSnapshot.@NonNull ResourceTolerance resourceTolerance,
 			@NonNull Duration runTimeout,
 			@NonNull Duration settleTimeout,
-			@NonNull Duration gracefulShutdownDuration,
-			@NonNull Duration forcedShutdownDuration,
+			@NonNull Duration gracefulShutdownTimeout,
+			@NonNull Duration forcedShutdownTimeout,
 			int streamQueueCapacity,
 			@NonNull Duration writeTimeout) {
 		@NonNull

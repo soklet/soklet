@@ -32,21 +32,22 @@ public interface TransportRuntime {
 	/**
 	 * Binds the transport and returns only after it is ready.
 	 *
-	 * @param context startup timing and cancelation information
+	 * @param startupContext startup timing and cancelation information
 	 */
-	void start(@NonNull StartupContext context);
+	void start(@NonNull StartupContext startupContext);
 
 	/**
 	 * Stops admission and initiates graceful wind-up without waiting for it.
 	 *
-	 * @param context graceful shutdown timing information
+	 * @param shutdownContext graceful shutdown timing information
 	 */
-	void quiesce(@NonNull ShutdownContext context);
+	void shutdownGracefully(@NonNull ShutdownContext shutdownContext);
 
 	/**
-	 * Subsumes quiesce and interrupts or cancels only runtime-owned execution.
+	 * Subsumes graceful shutdown and interrupts or cancels only runtime-owned
+	 * execution.
 	 *
-	 * @param context forced shutdown timing information
+	 * @param shutdownContext forced shutdown timing information
 	 */
-	void force(@NonNull ShutdownContext context);
+	void shutdownForcibly(@NonNull ShutdownContext shutdownContext);
 }

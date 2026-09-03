@@ -24,7 +24,7 @@ import com.soklet.McpServerDiagnostics;
 import com.soklet.McpServerStatus;
 import com.soklet.ShutdownComponentResult;
 import com.soklet.McpSimulation;
-import com.soklet.McpSimulationBodyMode;
+import com.soklet.McpSimulationBodyType;
 import com.soklet.McpSimulationCompletion;
 import com.soklet.McpSimulationResponse;
 import com.soklet.McpSimulationStreamItem;
@@ -192,17 +192,10 @@ public final class McpLocalSimulatorScenarioDriver {
 				expectedSemanticTerminals(row.name()));
 		RecordingLifecycle lifecycle = new RecordingLifecycle();
 		AtomicReference<McpServer> serverReference = new AtomicReference<>();
-		SokletSimulator.run(builder -> {
-			return McpConformanceFixture.simulationConfigForScenario(
-					row.name(), builder, metrics, lifecycle, server -> {
-						assertNotStarted(server);
-						serverReference.set(server);
-					});
-		}, simulator -> {
-			McpServer server = serverReference.get();
-			if (server == null)
-				throw new IllegalStateException(
-						"The simulator configurer did not publish its MCP server.");
+		SokletSimulator.run(McpConformanceFixture.simulationConfigForScenario(
+				row.name(), metrics, lifecycle), simulator -> {
+			McpServer server = simulator.getMcpServer().orElseThrow();
+			serverReference.set(server);
 			assertRunningOffNetwork(server);
 			executeScenario(row, simulator, server);
 			assertRunningOffNetwork(server);
@@ -362,8 +355,8 @@ public final class McpLocalSimulatorScenarioDriver {
 		try {
 			McpSimulationResponse response = awaitResponse(subscription);
 			assertEquals(200, response.getStatusCode(), "Subscription status");
-			assertEquals(McpSimulationBodyMode.SERVER_SENT_EVENTS,
-					response.getBodyMode(), "Subscription body mode");
+			assertEquals(McpSimulationBodyType.SSE,
+					response.getBodyType(), "Subscription body type");
 			assertTrue(response.getBody().isEmpty(), "SSE body must be absent");
 			McpSimulationStreamItem acknowledgment = nextItem(subscription);
 			String frame = frame(acknowledgment);
@@ -371,14 +364,14 @@ public final class McpLocalSimulatorScenarioDriver {
 					"\"io.modelcontextprotocol/subscriptionId\":\""
 							+ subscriptionId + "\"", "resourcesListChanged");
 			assertRunningOffNetwork(server);
-			subscription.cancel();
+			subscription.close();
 			McpSimulationCompletion completion = awaitCompletion(subscription);
 			assertEquals(McpStreamTerminationReason.CLIENT_DISCONNECTED,
-					completion.getReason(), "Subscription cancel reason");
+					completion.getReason(), "Subscription close reason");
 			assertTrue(completion.getTerminalMessage().isEmpty(),
-					"Canceled subscription must not fabricate a terminal message");
+					"Closed subscription must not fabricate a terminal message");
 			assertTrue(completion.getThrowables().isEmpty(),
-					"Canceled subscription must not fabricate failures");
+					"Closed subscription must not fabricate failures");
 			assertTrue(pollItem(subscription).isEmpty(),
 					"Subscription queue must drain exactly");
 		} finally {
@@ -439,8 +432,8 @@ public final class McpLocalSimulatorScenarioDriver {
 			String token, String forbiddenToken) {
 		McpSimulationResponse response = awaitResponse(simulation);
 		assertEquals(200, response.getStatusCode(), "Progress status");
-		assertEquals(McpSimulationBodyMode.SERVER_SENT_EVENTS,
-				response.getBodyMode(), "Progress body mode");
+		assertEquals(McpSimulationBodyType.SSE,
+				response.getBodyType(), "Progress body type");
 		assertTrue(response.getBody().isEmpty(), "Progress SSE body must be absent");
 		StringBuilder transcript = new StringBuilder();
 		for (String progress : List.of("0", "50", "100")) {
@@ -863,7 +856,7 @@ public final class McpLocalSimulatorScenarioDriver {
 					"Fixed responses must not expose failures");
 			assertTrue(pollItem(simulation).isEmpty(),
 					"Fixed responses must not expose stream items");
-			return new FixedExchange(response.getStatusCode(), response.getBodyMode(),
+			return new FixedExchange(response.getStatusCode(), response.getBodyType(),
 					bodyBytes.isPresent(), body, response.getHeaders());
 		} finally {
 			simulation.close();
@@ -872,8 +865,8 @@ public final class McpLocalSimulatorScenarioDriver {
 
 	private static JsonExchange json(Simulator simulator, Request request) {
 		FixedExchange exchange = fixed(simulator, request);
-		assertEquals(McpSimulationBodyMode.JSON, exchange.bodyMode(),
-				"Expected JSON response body mode");
+		assertEquals(McpSimulationBodyType.JSON, exchange.bodyType(),
+				"Expected JSON response body type");
 		assertTrue(exchange.bodyPresent(), "Expected captured JSON response body");
 		assertEquals(Set.of("no-store"), header(exchange.headers(), "Cache-Control"),
 				"JSON Cache-Control header");
@@ -941,7 +934,7 @@ public final class McpLocalSimulatorScenarioDriver {
 
 	private static McpSimulationStreamItem nextItem(McpSimulation simulation) {
 		try {
-			return simulation.nextStreamItem(WAIT).orElseThrow(() ->
+			return simulation.awaitStreamItem(WAIT).orElseThrow(() ->
 					new AssertionError("Timed out awaiting simulator stream item."));
 		} catch (InterruptedException exception) {
 			Thread.currentThread().interrupt();
@@ -953,7 +946,7 @@ public final class McpLocalSimulatorScenarioDriver {
 	private static Optional<McpSimulationStreamItem> pollItem(
 			McpSimulation simulation) {
 		try {
-			return simulation.nextStreamItem(Duration.ZERO);
+			return simulation.awaitStreamItem(Duration.ZERO);
 		} catch (InterruptedException exception) {
 			Thread.currentThread().interrupt();
 			throw new AssertionError("Interrupted polling simulator stream item.",
@@ -996,13 +989,6 @@ public final class McpLocalSimulatorScenarioDriver {
 		McpServerDiagnostics diagnostics = server.getDiagnostics();
 		assertEquals(McpServerStatus.TERMINATED, diagnostics.getStatus(),
 				"Simulator scope must publish terminal MCP evidence");
-		assertOffNetworkDiagnostics(diagnostics);
-	}
-
-	private static void assertNotStarted(McpServer server) {
-		McpServerDiagnostics diagnostics = server.getDiagnostics();
-		assertEquals(McpServerStatus.NOT_STARTED, diagnostics.getStatus(),
-				"Simulator MCP construction must not begin attachment");
 		assertOffNetworkDiagnostics(diagnostics);
 	}
 
@@ -1057,7 +1043,7 @@ public final class McpLocalSimulatorScenarioDriver {
 	private record ScenarioRow(int ordinal, String name) {
 	}
 
-	private record FixedExchange(int status, McpSimulationBodyMode bodyMode,
+	private record FixedExchange(int status, McpSimulationBodyType bodyType,
 			boolean bodyPresent, String body, Map<String, Set<String>> headers) {
 	}
 

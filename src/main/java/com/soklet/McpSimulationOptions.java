@@ -17,11 +17,10 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
-
-import static java.util.Objects.requireNonNull;
 
 /**
  * Bounded capture controls for one simulated MCP response.
@@ -30,16 +29,19 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class McpSimulationOptions {
+	private static final int DEFAULT_STREAM_ITEM_QUEUE_CAPACITY = 128;
+	private static final int DEFAULT_CAPTURED_SIZE_IN_BYTES = 10 * 1024 * 1024;
 	@NonNull
 	private static final McpSimulationOptions DEFAULT_INSTANCE = builder().build();
 	private final int streamItemQueueCapacity;
-	private final int maximumCapturedBytes;
+	private final int maximumCapturedSizeInBytes;
 
 	private McpSimulationOptions(@NonNull Builder builder) {
 		this.streamItemQueueCapacity = requirePositive(
 				builder.streamItemQueueCapacity, "streamItemQueueCapacity");
-		this.maximumCapturedBytes = requirePositive(
-				builder.maximumCapturedBytes, "maximumCapturedBytes");
+		this.maximumCapturedSizeInBytes = requirePositive(
+				builder.maximumCapturedSizeInBytes,
+				"maximumCapturedSizeInBytes");
 	}
 
 	/**
@@ -68,8 +70,8 @@ public final class McpSimulationOptions {
 	 * consuming an SSE item does not refund bytes
 	 */
 	@NonNull
-	public Integer getMaximumCapturedBytes() {
-		return this.maximumCapturedBytes;
+	public Integer getMaximumCapturedSizeInBytes() {
+		return this.maximumCapturedSizeInBytes;
 	}
 
 	private static int requirePositive(int value, @NonNull String name) {
@@ -85,8 +87,9 @@ public final class McpSimulationOptions {
 	 */
 	@NotThreadSafe
 	public static final class Builder {
-		private int streamItemQueueCapacity = 128;
-		private int maximumCapturedBytes = 10 * 1024 * 1024;
+		private int streamItemQueueCapacity =
+				DEFAULT_STREAM_ITEM_QUEUE_CAPACITY;
+		private int maximumCapturedSizeInBytes = DEFAULT_CAPTURED_SIZE_IN_BYTES;
 
 		private Builder() {
 		}
@@ -94,14 +97,15 @@ public final class McpSimulationOptions {
 		/**
 		 * Sets the maximum pending SSE-item count.
 		 *
-		 * @param streamItemQueueCapacity positive queue capacity
+		 * @param streamItemQueueCapacity positive queue capacity, or {@code null}
+		 *                                for the default
 		 * @return this builder
-		 * @throws NullPointerException if {@code streamItemQueueCapacity} is null
 		 */
 		@NonNull
 		public Builder streamItemQueueCapacity(
-				@NonNull Integer streamItemQueueCapacity) {
-			this.streamItemQueueCapacity = requireNonNull(streamItemQueueCapacity);
+				@Nullable Integer streamItemQueueCapacity) {
+			this.streamItemQueueCapacity = streamItemQueueCapacity == null
+					? DEFAULT_STREAM_ITEM_QUEUE_CAPACITY : streamItemQueueCapacity;
 			return this;
 		}
 
@@ -109,14 +113,15 @@ public final class McpSimulationOptions {
 		 * Sets the cumulative captured-byte bound. Consuming items never refunds
 		 * this budget.
 		 *
-		 * @param maximumCapturedBytes positive byte limit
+		 * @param maximumCapturedSizeInBytes positive byte limit, or {@code null}
+		 *                                   for the default
 		 * @return this builder
-		 * @throws NullPointerException if {@code maximumCapturedBytes} is null
 		 */
 		@NonNull
-		public Builder maximumCapturedBytes(
-				@NonNull Integer maximumCapturedBytes) {
-			this.maximumCapturedBytes = requireNonNull(maximumCapturedBytes);
+		public Builder maximumCapturedSizeInBytes(
+				@Nullable Integer maximumCapturedSizeInBytes) {
+			this.maximumCapturedSizeInBytes = maximumCapturedSizeInBytes == null
+					? DEFAULT_CAPTURED_SIZE_IN_BYTES : maximumCapturedSizeInBytes;
 			return this;
 		}
 

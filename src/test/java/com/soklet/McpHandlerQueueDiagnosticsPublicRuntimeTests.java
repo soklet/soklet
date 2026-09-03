@@ -65,8 +65,8 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 	private static final LifecyclePolicy LIFECYCLE_POLICY = LifecyclePolicy.builder()
 			.startupTimeout(Duration.ofSeconds(5))
 			.startupCancelationTimeout(Duration.ofSeconds(2))
-			.gracefulShutdownDuration(Duration.ofSeconds(2))
-			.forcedShutdownDuration(Duration.ofSeconds(1))
+			.gracefulShutdownTimeout(Duration.ofSeconds(2))
+			.forcedShutdownTimeout(Duration.ofSeconds(1))
 			.build();
 	private static final List<String> INTEGER_DIAGNOSTIC_GETTERS = List.of(
 			"getRequestHandlerConcurrency",
@@ -373,8 +373,8 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 					diagnostics -> diagnostics.getActiveHandlerExecutions() == 1
 							&& diagnostics.getQueuedRequests() == 1);
 
-			ShutdownIncompleteException stopFailure = Assertions.assertThrows(
-					ShutdownIncompleteException.class, owner::close);
+			SokletShutdownIncompleteException stopFailure = Assertions.assertThrows(
+					SokletShutdownIncompleteException.class, owner::close);
 			InternalShutdownResult shutdownResult =
 					stopFailure.getInternalShutdownResult();
 			Assertions.assertSame(shutdownResult,
@@ -386,8 +386,8 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 					true, 1, 1, 1, 0);
 			Assertions.assertEquals(1, invocations.get(),
 					"Stop must not promote queued work.");
-			ShutdownIncompleteException repeatedStop = Assertions.assertThrows(
-					ShutdownIncompleteException.class, owner::close);
+			SokletShutdownIncompleteException repeatedStop = Assertions.assertThrows(
+					SokletShutdownIncompleteException.class, owner::close);
 			Assertions.assertSame(shutdownResult,
 					repeatedStop.getInternalShutdownResult());
 
@@ -407,8 +407,8 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 			Assertions.assertSame(shutdownResult,
 					owner.getDirectLifecycle().result().orElseThrow(),
 					"Late physical cleanup cannot rewrite an immutable residual result.");
-			ShutdownIncompleteException lateRepeatedStop = Assertions.assertThrows(
-					ShutdownIncompleteException.class, owner::close);
+			SokletShutdownIncompleteException lateRepeatedStop = Assertions.assertThrows(
+					SokletShutdownIncompleteException.class, owner::close);
 			Assertions.assertSame(shutdownResult,
 					lateRepeatedStop.getInternalShutdownResult());
 			assertDiagnostics(server.getDiagnostics(),
@@ -566,7 +566,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 	private static void stopAfterIncompleteShutdown(@NonNull Soklet owner) {
 		try {
 			requireNonNull(owner).close();
-		} catch (ShutdownIncompleteException ignored) {
+		} catch (SokletShutdownIncompleteException ignored) {
 			// Cleanup replays the immutable incomplete result by contract.
 		}
 	}
@@ -591,8 +591,8 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 		return LifecyclePolicy.builder()
 				.startupTimeout(Duration.ofSeconds(5))
 				.startupCancelationTimeout(Duration.ofMillis(100))
-				.gracefulShutdownDuration(Duration.ofMillis(100))
-				.forcedShutdownDuration(Duration.ofMillis(100))
+				.gracefulShutdownTimeout(Duration.ofMillis(100))
+				.forcedShutdownTimeout(Duration.ofMillis(100))
 				.build();
 	}
 

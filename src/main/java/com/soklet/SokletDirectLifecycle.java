@@ -358,10 +358,10 @@ final class SokletDirectLifecycle {
 				this.terminalUnexpectedTermination;
 		if (exactResult.getStartupDisposition() == StartupDisposition.READY
 				&& unexpected != null)
-			throw new SokletTerminatedUnexpectedlyException(
+			throw new SokletUnexpectedTerminationException(
 					unexpected.event(), exactResult, unexpected.failure());
 		if (!exactResult.isComplete())
-			throw new ShutdownIncompleteException(exactResult);
+			throw new SokletShutdownIncompleteException(exactResult);
 	}
 
 	@NonNull
@@ -739,8 +739,8 @@ final class SokletDirectLifecycle {
 	private CoordinatorOutcome coordinate() {
 		InternalLifecyclePolicy policy = this.config.getInternalLifecyclePolicy();
 		long startupBegan = this.clock.nanoTime();
-		Optional<Long> startupDeadline = policy.startupTimeout()
-				.map(duration -> LifecycleDeadlines.after(startupBegan, duration));
+		long startupDeadline = LifecycleDeadlines.after(startupBegan,
+				policy.startupTimeout());
 		StartupContext startupContext = new StartupContext(
 				this.clock, startupDeadline,
 				() -> startupCancelationDeadlineNanos(policy),
@@ -1294,7 +1294,7 @@ final class SokletDirectLifecycle {
 	private <T> T runStartupCall(@NonNull String name,
 			InternalLifecycleCoordinator.Participant participant,
 			java.util.concurrent.Callable<T> callable,
-			@NonNull Optional<Long> startupDeadline) throws Throwable {
+			long startupDeadline) throws Throwable {
 		AtomicReference<T> value = new AtomicReference<>();
 		AtomicReference<Throwable> failure = new AtomicReference<>();
 		InternalLifecycleCoordinator.Participant exactParticipant =
@@ -1359,10 +1359,9 @@ final class SokletDirectLifecycle {
 			exactParticipant.terminationGroup().recordShutdownIntent();
 			call.cancel();
 		}
-		long deadline = startupDeadline.orElse(Long.MAX_VALUE);
 		DeadlineWaiter.Outcome outcome;
 		try {
-			outcome = this.waiter.await(deadline,
+			outcome = this.waiter.await(startupDeadline,
 					() -> call.isDone() || this.stateMachine.shutdownRequested()
 							|| !syntheticAttempt && failure.get() == null
 							&& (firstInstalledControllingEvent().isPresent()
@@ -1427,11 +1426,9 @@ final class SokletDirectLifecycle {
 	}
 
 	@NonNull
-	private Throwable startupWaitCancelationFailure(
-			@NonNull Optional<Long> startupDeadline) {
+	private Throwable startupWaitCancelationFailure(long startupDeadline) {
 		StartupOutcomeClaim claim = this.startupOutcome.get();
-		if (claim == null && startupDeadline.isPresent()
-				&& this.clock.nanoTime() >= startupDeadline.orElseThrow()) {
+		if (claim == null && this.clock.nanoTime() >= startupDeadline) {
 			requestShutdownIntent(StartupOutcomeKind.TIMED_OUT);
 			claim = this.startupOutcome.get();
 		}
@@ -1468,7 +1465,7 @@ final class SokletDirectLifecycle {
 
 	@NonNull
 	private InternalStartupDisposition classifyStartupFailure(
-			@NonNull Throwable failure, @NonNull Optional<Long> startupDeadline) {
+			@NonNull Throwable failure, long startupDeadline) {
 		if (failure instanceof TimeoutException)
 			return InternalStartupDisposition.TIMED_OUT;
 		if (this.controllingEventElection.firstEvent().isPresent())
@@ -1485,8 +1482,7 @@ final class SokletDirectLifecycle {
 		if (electedOutcome == StartupOutcomeKind.CANCELED
 				|| this.stateMachine.shutdownRequested())
 			return InternalStartupDisposition.CANCELED;
-		if (startupDeadline.isPresent()
-				&& this.clock.nanoTime() >= startupDeadline.orElseThrow())
+		if (this.clock.nanoTime() >= startupDeadline)
 			return InternalStartupDisposition.TIMED_OUT;
 		return InternalStartupDisposition.FAILED;
 	}
@@ -1841,8 +1837,8 @@ final class SokletDirectLifecycle {
 		@Override @NonNull public InternalTransportRuntime runtime() {
 			return new InternalTransportRuntime() {
 				@Override public void start(@NonNull StartupContext context) { }
-				@Override public void quiesce(@NonNull ShutdownContext context) { }
-				@Override public void force(@NonNull ShutdownContext context) { }
+				@Override public void shutdownGracefully(@NonNull ShutdownContext context) { }
+				@Override public void shutdownForcibly(@NonNull ShutdownContext context) { }
 			};
 		}
 		@Override public boolean startupCallActive() { return this.active.get(); }
@@ -1942,9 +1938,9 @@ final class SokletDirectLifecycle {
 
 		private void deliverPhase(@NonNull ShutdownContext context) {
 			if (requireNonNull(context).getShutdownPhase() == ShutdownPhase.FORCED)
-				this.control.runtime().force(context);
+				this.control.runtime().shutdownForcibly(context);
 			else
-				this.control.runtime().quiesce(context);
+				this.control.runtime().shutdownGracefully(context);
 		}
 
 		@Override @NonNull public InternalLifecycleComponentType kind() { return this.control.kind(); }
@@ -1962,10 +1958,10 @@ final class SokletDirectLifecycle {
 				@Override public void start(@NonNull StartupContext context) {
 					control.runtime().start(context);
 				}
-				@Override public void quiesce(@NonNull ShutdownContext context) {
+				@Override public void shutdownGracefully(@NonNull ShutdownContext context) {
 					requestPhase(context);
 				}
-				@Override public void force(@NonNull ShutdownContext context) {
+				@Override public void shutdownForcibly(@NonNull ShutdownContext context) {
 					requestPhase(context);
 				}
 			};

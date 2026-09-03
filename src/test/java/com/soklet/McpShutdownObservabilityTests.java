@@ -402,8 +402,8 @@ public class McpShutdownObservabilityTests {
 		try {
 			soklet.start();
 			long stopStartedAt = System.nanoTime();
-			ShutdownIncompleteException stopFailure = Assertions.assertThrows(
-					ShutdownIncompleteException.class, soklet::close);
+			SokletShutdownIncompleteException stopFailure = Assertions.assertThrows(
+					SokletShutdownIncompleteException.class, soklet::close);
 			InternalShutdownResult result =
 					stopFailure.getInternalShutdownResult();
 			Assertions.assertSame(result,
@@ -431,8 +431,8 @@ public class McpShutdownObservabilityTests {
 					soklet.getDirectLifecycle().result().orElseThrow());
 			assertIncompleteShutdownParity(observer, collector, result);
 
-			ShutdownIncompleteException repeatedStop = Assertions.assertThrows(
-					ShutdownIncompleteException.class, soklet::close);
+			SokletShutdownIncompleteException repeatedStop = Assertions.assertThrows(
+					SokletShutdownIncompleteException.class, soklet::close);
 			Assertions.assertSame(result,
 					repeatedStop.getInternalShutdownResult());
 			Assertions.assertEquals(1, publisher.getCloseAttempts(),
@@ -446,8 +446,8 @@ public class McpShutdownObservabilityTests {
 			Assertions.assertSame(result,
 					soklet.getDirectLifecycle().result().orElseThrow());
 
-			ShutdownIncompleteException finalStop = Assertions.assertThrows(
-					ShutdownIncompleteException.class, soklet::close);
+			SokletShutdownIncompleteException finalStop = Assertions.assertThrows(
+					SokletShutdownIncompleteException.class, soklet::close);
 			Assertions.assertSame(result, finalStop.getInternalShutdownResult());
 			Assertions.assertEquals(1, publisher.getCloseAttempts());
 			assertIncompleteShutdownParity(observer, collector, result);
@@ -478,9 +478,9 @@ public class McpShutdownObservabilityTests {
 			lifecycleAdapter.awaitStop(failedGeneration);
 			Assertions.assertFalse(bridge.getRuntimeState().started());
 
-			SokletTerminatedUnexpectedlyException stopFailure =
+			SokletUnexpectedTerminationException stopFailure =
 					Assertions.assertThrows(
-							SokletTerminatedUnexpectedlyException.class,
+							SokletUnexpectedTerminationException.class,
 							soklet::close);
 			InternalShutdownResult result =
 					stopFailure.getInternalShutdownResult();
@@ -495,9 +495,9 @@ public class McpShutdownObservabilityTests {
 			Assertions.assertEquals(McpServerStatus.TERMINATED,
 					server.getDiagnostics().getStatus());
 
-			SokletTerminatedUnexpectedlyException repeatedStop =
+			SokletUnexpectedTerminationException repeatedStop =
 					Assertions.assertThrows(
-							SokletTerminatedUnexpectedlyException.class,
+							SokletUnexpectedTerminationException.class,
 							soklet::close);
 			Assertions.assertSame(result,
 					repeatedStop.getInternalShutdownResult());
@@ -548,9 +548,9 @@ public class McpShutdownObservabilityTests {
 			terminateUnexpectedly(eventLoop(bridge));
 			lifecycleAdapter.awaitStop(failedGeneration);
 
-			SokletTerminatedUnexpectedlyException stopFailure =
+			SokletUnexpectedTerminationException stopFailure =
 					Assertions.assertThrows(
-							SokletTerminatedUnexpectedlyException.class,
+							SokletUnexpectedTerminationException.class,
 							soklet::close);
 			InternalShutdownResult result =
 					stopFailure.getInternalShutdownResult();
@@ -560,9 +560,9 @@ public class McpShutdownObservabilityTests {
 			assertShutdownParity(observer, collector,
 					List.of(ShutdownComponentDisposition.UNEXPECTED_TERMINATION));
 
-			SokletTerminatedUnexpectedlyException repeatedStop =
+			SokletUnexpectedTerminationException repeatedStop =
 					Assertions.assertThrows(
-							SokletTerminatedUnexpectedlyException.class,
+							SokletUnexpectedTerminationException.class,
 							soklet::close);
 			Assertions.assertSame(result,
 					repeatedStop.getInternalShutdownResult());
@@ -604,9 +604,9 @@ public class McpShutdownObservabilityTests {
 					IllegalStateException.class, soklet::start);
 			Assertions.assertEquals(IllegalStateException.class,
 					restartRejection.getClass());
-			SokletTerminatedUnexpectedlyException stopFailure =
+			SokletUnexpectedTerminationException stopFailure =
 					Assertions.assertThrows(
-							SokletTerminatedUnexpectedlyException.class,
+							SokletUnexpectedTerminationException.class,
 							soklet::close);
 			InternalShutdownResult result =
 					stopFailure.getInternalShutdownResult();
@@ -615,9 +615,9 @@ public class McpShutdownObservabilityTests {
 			assertShutdownParity(observer, collector,
 					List.of(ShutdownComponentDisposition.UNEXPECTED_TERMINATION));
 
-			SokletTerminatedUnexpectedlyException repeatedStop =
+			SokletUnexpectedTerminationException repeatedStop =
 					Assertions.assertThrows(
-							SokletTerminatedUnexpectedlyException.class,
+							SokletUnexpectedTerminationException.class,
 							soklet::close);
 			Assertions.assertSame(result,
 					repeatedStop.getInternalShutdownResult());
@@ -911,8 +911,8 @@ public class McpShutdownObservabilityTests {
 			Assertions.assertTrue(handlerEntered.await(5, TimeUnit.SECONDS),
 					"The residual fixture handler did not enter.");
 
-			ShutdownIncompleteException stopFailure = Assertions.assertThrows(
-					ShutdownIncompleteException.class, soklet::close);
+			SokletShutdownIncompleteException stopFailure = Assertions.assertThrows(
+					SokletShutdownIncompleteException.class, soklet::close);
 			InternalShutdownResult result =
 					stopFailure.getInternalShutdownResult();
 			Assertions.assertSame(result,
@@ -926,8 +926,8 @@ public class McpShutdownObservabilityTests {
 			McpMetricsSnapshot retained = collector.snapshot().orElseThrow()
 					.getMcpMetrics();
 
-			ShutdownIncompleteException repeatedStop = Assertions.assertThrows(
-					ShutdownIncompleteException.class, soklet::close);
+			SokletShutdownIncompleteException repeatedStop = Assertions.assertThrows(
+					SokletShutdownIncompleteException.class, soklet::close);
 			Assertions.assertSame(result,
 					repeatedStop.getInternalShutdownResult());
 			assertIncompleteShutdownParity(observer, collector, result);
@@ -1082,8 +1082,8 @@ public class McpShutdownObservabilityTests {
 			@NonNull Soklet owner) {
 		try {
 			requireNonNull(owner).close();
-		} catch (SokletTerminatedUnexpectedlyException
-				| ShutdownIncompleteException ignored) {
+		} catch (SokletUnexpectedTerminationException
+				| SokletShutdownIncompleteException ignored) {
 			// Preserve the already-asserted immutable terminal result during cleanup.
 		}
 	}
@@ -1127,8 +1127,8 @@ public class McpShutdownObservabilityTests {
 		return LifecyclePolicy.builder()
 				.startupTimeout(Duration.ofSeconds(5))
 				.startupCancelationTimeout(Duration.ofSeconds(2))
-				.gracefulShutdownDuration(Duration.ofSeconds(2))
-				.forcedShutdownDuration(Duration.ofSeconds(1))
+				.gracefulShutdownTimeout(Duration.ofSeconds(2))
+				.forcedShutdownTimeout(Duration.ofSeconds(1))
 				.build();
 	}
 
@@ -1137,8 +1137,8 @@ public class McpShutdownObservabilityTests {
 		return LifecyclePolicy.builder()
 				.startupTimeout(WAIT)
 				.startupCancelationTimeout(Duration.ofMillis(100))
-				.gracefulShutdownDuration(Duration.ofMillis(100))
-				.forcedShutdownDuration(Duration.ofMillis(100))
+				.gracefulShutdownTimeout(Duration.ofMillis(100))
+				.forcedShutdownTimeout(Duration.ofMillis(100))
 				.build();
 	}
 
@@ -1519,7 +1519,7 @@ public class McpShutdownObservabilityTests {
 		@NonNull
 		private List<@NonNull Throwable> getStopFailures() {
 			return this.stopResults.stream()
-					.flatMap(result -> result.getFailures().stream()).toList();
+					.flatMap(result -> result.getThrowables().stream()).toList();
 		}
 
 		@Nullable

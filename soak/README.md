@@ -74,7 +74,7 @@ The mandatory `MCP off-network simulator churn` scenario uses those same
 profile bounds without sockets or sleeps. Concurrent clients within sequential
 simulator scopes rotate deterministically through JSON, progress SSE,
 subscription, MRTR, explicit cancellation, item-limit, byte-limit, and
-cancel-versus-terminal cases. Smoke executes 24 cycles, nightly executes 200,
+close-versus-terminal cases. Smoke executes 24 cycles, nightly executes 200,
 and release executes 1,600. Each run also holds and explicitly releases one
 non-cooperative handler to
 prove bounded scope cleanup, restart exclusion while residual work remains, and

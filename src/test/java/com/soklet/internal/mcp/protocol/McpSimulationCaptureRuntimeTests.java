@@ -17,7 +17,7 @@
 package com.soklet.internal.mcp.protocol;
 
 import com.soklet.McpRequestOutcome;
-import com.soklet.McpSimulationBodyMode;
+import com.soklet.McpSimulationBodyType;
 import com.soklet.McpSimulationCompletion;
 import com.soklet.McpSimulationOptions;
 import com.soklet.McpSimulationResponse;
@@ -72,12 +72,12 @@ public class McpSimulationCaptureRuntimeTests {
 
 		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED,
 				refunded.runtime().offer(first));
-		assertEncodedBytes(first, refunded.runtime().nextStreamItem(
+		assertEncodedBytes(first, refunded.runtime().awaitStreamItem(
 				Duration.ZERO).orElseThrow());
 		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED,
 				refunded.runtime().offer(second),
 				"Removing the first item must release its pending queue slot.");
-		assertEncodedBytes(second, refunded.runtime().nextStreamItem(
+		assertEncodedBytes(second, refunded.runtime().awaitStreamItem(
 				Duration.ZERO).orElseThrow());
 		Assertions.assertTrue(refunded.runtime().fail(
 				StreamTerminationReason.CLIENT_DISCONNECTED, null));
@@ -101,9 +101,9 @@ public class McpSimulationCaptureRuntimeTests {
 				McpStreamTerminationReason.SIMULATOR_CAPTURE_ITEM_LIMIT_EXCEEDED,
 				completion(precedence).getReason(),
 				"The pending-item check must win when both limits are exceeded.");
-		assertEncodedBytes(retained, precedence.runtime().nextStreamItem(
+		assertEncodedBytes(retained, precedence.runtime().awaitStreamItem(
 				Duration.ZERO).orElseThrow());
-		Assertions.assertTrue(precedence.runtime().nextStreamItem(
+		Assertions.assertTrue(precedence.runtime().awaitStreamItem(
 				Duration.ZERO).isEmpty(), "The offending frame must not be retained.");
 
 		SseCapture staged = newSseCapture(options(1, 1_024));
@@ -114,15 +114,15 @@ public class McpSimulationCaptureRuntimeTests {
 		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED,
 				staged.runtime().offerCoalescing(coalesced, coalescingKey));
 		staged.runtime().acceptResponse(staged.runtime().response(List.of()));
-		assertEncodedBytes(coalesced, staged.runtime().nextStreamItem(
+		assertEncodedBytes(coalesced, staged.runtime().awaitStreamItem(
 				Duration.ZERO).orElseThrow());
-		Assertions.assertTrue(staged.runtime().nextStreamItem(
+		Assertions.assertTrue(staged.runtime().awaitStreamItem(
 				Duration.ZERO).isEmpty(),
 				"The staged duplicate must remain coalesced during transfer.");
 		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED,
 				staged.runtime().offerCoalescing(coalesced, coalescingKey),
 				"Dequeuing must release the staged coalescing key.");
-		assertEncodedBytes(coalesced, staged.runtime().nextStreamItem(
+		assertEncodedBytes(coalesced, staged.runtime().awaitStreamItem(
 				Duration.ZERO).orElseThrow());
 	}
 
@@ -137,7 +137,7 @@ public class McpSimulationCaptureRuntimeTests {
 
 		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED,
 				capture.runtime().offer(first));
-		assertEncodedBytes(first, capture.runtime().nextStreamItem(
+		assertEncodedBytes(first, capture.runtime().awaitStreamItem(
 				Duration.ZERO).orElseThrow());
 		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED,
 				capture.runtime().offer(boundary),
@@ -153,9 +153,9 @@ public class McpSimulationCaptureRuntimeTests {
 		Assertions.assertEquals(
 				McpStreamTerminationReason.SIMULATOR_CAPTURE_BYTE_LIMIT_EXCEEDED,
 				completion(capture).getReason());
-		assertEncodedBytes(boundary, capture.runtime().nextStreamItem(
+		assertEncodedBytes(boundary, capture.runtime().awaitStreamItem(
 				Duration.ZERO).orElseThrow());
-		Assertions.assertTrue(capture.runtime().nextStreamItem(
+		Assertions.assertTrue(capture.runtime().awaitStreamItem(
 				Duration.ZERO).isEmpty(), "The byte-overflowing frame must be excluded.");
 	}
 
@@ -170,15 +170,15 @@ public class McpSimulationCaptureRuntimeTests {
 				"A pre-response producer must be allowed to commit the SSE head.");
 		Assertions.assertTrue(capture.runtime().awaitResponse(
 				Duration.ZERO).isEmpty());
-		Assertions.assertTrue(capture.runtime().nextStreamItem(
+		Assertions.assertTrue(capture.runtime().awaitStreamItem(
 				Duration.ZERO).isEmpty());
 		capture.runtime().acceptResponse(capture.runtime().response(List.of(
 				new Header("X-Pre-Response", "published"))));
 
 		McpSimulationResponse response = capture.runtime().awaitResponse(
 				Duration.ZERO).orElseThrow();
-		Assertions.assertEquals(McpSimulationBodyMode.SERVER_SENT_EVENTS,
-				response.getBodyMode());
+		Assertions.assertEquals(McpSimulationBodyType.SSE,
+				response.getBodyType());
 		Assertions.assertEquals(Set.of("published"),
 				response.getHeaders().get("X-Pre-Response"));
 		capture.listener().assertTermination(
@@ -188,7 +188,7 @@ public class McpSimulationCaptureRuntimeTests {
 		Assertions.assertEquals(
 				McpStreamTerminationReason.SIMULATOR_CAPTURE_BYTE_LIMIT_EXCEEDED,
 				completion(capture).getReason());
-		Assertions.assertTrue(capture.runtime().nextStreamItem(
+		Assertions.assertTrue(capture.runtime().awaitStreamItem(
 				Duration.ZERO).isEmpty(), "The offending staged frame must stay absent.");
 	}
 
@@ -216,9 +216,9 @@ public class McpSimulationCaptureRuntimeTests {
 				McpStreamTerminationReason.COMPLETED);
 		capture.runtime().didFinishRequest(McpRequestOutcome.COMPLETE, List.of());
 
-		McpSimulationStreamItem progressItem = capture.runtime().nextStreamItem(
+		McpSimulationStreamItem progressItem = capture.runtime().awaitStreamItem(
 				Duration.ZERO).orElseThrow();
-		McpSimulationStreamItem terminalItem = capture.runtime().nextStreamItem(
+		McpSimulationStreamItem terminalItem = capture.runtime().awaitStreamItem(
 				Duration.ZERO).orElseThrow();
 		Assertions.assertArrayEquals(progressBytes, progressItem.getEncodedBytes());
 		Assertions.assertArrayEquals(terminalBytes, terminalItem.getEncodedBytes());
@@ -253,8 +253,8 @@ public class McpSimulationCaptureRuntimeTests {
 		McpSimulationResponse exactResponse = exact.awaitResponse(
 				Duration.ZERO).orElseThrow();
 		Assertions.assertEquals(201, exactResponse.getStatusCode());
-		Assertions.assertEquals(McpSimulationBodyMode.JSON,
-				exactResponse.getBodyMode());
+		Assertions.assertEquals(McpSimulationBodyType.JSON,
+				exactResponse.getBodyType());
 		byte[] expectedBody = "{\"answer\":42}".getBytes(StandardCharsets.UTF_8);
 		Assertions.assertArrayEquals(expectedBody,
 				exactResponse.getBody().orElseThrow());
@@ -287,8 +287,8 @@ public class McpSimulationCaptureRuntimeTests {
 		Assertions.assertEquals(207, overflowResponse.getStatusCode());
 		Assertions.assertEquals(Map.of("X-Mode", Set.of("overflow")),
 				overflowResponse.getHeaders());
-		Assertions.assertEquals(McpSimulationBodyMode.JSON,
-				overflowResponse.getBodyMode());
+		Assertions.assertEquals(McpSimulationBodyType.JSON,
+				overflowResponse.getBodyType());
 		Assertions.assertTrue(overflowResponse.getBody().isEmpty(),
 				"JSON overflow must retain the head but omit the body bytes.");
 		Assertions.assertEquals(Optional.of(
@@ -306,14 +306,14 @@ public class McpSimulationCaptureRuntimeTests {
 				List.of(), new byte[0]));
 		McpSimulationResponse emptyResponse = empty.awaitResponse(
 				Duration.ZERO).orElseThrow();
-		Assertions.assertEquals(McpSimulationBodyMode.EMPTY,
-				emptyResponse.getBodyMode());
+		Assertions.assertEquals(McpSimulationBodyType.EMPTY,
+				emptyResponse.getBodyType());
 		Assertions.assertArrayEquals(new byte[0],
 				emptyResponse.getBody().orElseThrow());
 	}
 
 	@Test
-	public void cancelPublishesClientDisconnectedAtEverySimulationBoundary()
+	public void closePublishesClientDisconnectedAtEverySimulationBoundary()
 			throws Exception {
 		SseCapture capture = openSse(options(2, 128));
 		AtomicReference<StreamTerminationReason> controllerReason =
@@ -326,7 +326,7 @@ public class McpSimulationCaptureRuntimeTests {
 			return won;
 		});
 
-		capture.runtime().cancel();
+		capture.runtime().close();
 		Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED,
 				controllerReason.get());
 		capture.listener().assertTermination(
@@ -337,7 +337,7 @@ public class McpSimulationCaptureRuntimeTests {
 		Assertions.assertEquals(1, capture.completionCallbacks().get());
 
 		capture.runtime().close();
-		capture.runtime().cancel();
+		capture.runtime().close();
 		Assertions.assertEquals(1, capture.listener().terminationCount());
 		Assertions.assertEquals(1, capture.completionCallbacks().get());
 
@@ -348,7 +348,7 @@ public class McpSimulationCaptureRuntimeTests {
 					McpRequestOutcome.CLIENT_DISCONNECTED, List.of());
 			return won;
 		});
-		beforeResponse.runtime().cancel();
+		beforeResponse.runtime().close();
 		Assertions.assertTrue(beforeResponse.runtime().awaitResponse(
 				Duration.ZERO).isEmpty());
 		beforeResponse.listener().assertTermination(
@@ -359,7 +359,7 @@ public class McpSimulationCaptureRuntimeTests {
 	}
 
 	@Test
-	public void cancelAndTerminalRacePublishesOneCoherentFirstWinner()
+	public void closeAndTerminalRacePublishesOneCoherentFirstWinner()
 			throws Exception {
 		SseCapture capture = newSseCapture(options(2, 1_024));
 		McpRequestSseStream stream = new McpRequestSseStream(
@@ -378,7 +378,7 @@ public class McpSimulationCaptureRuntimeTests {
 		try {
 			Future<?> cancellation = executor.submit(() -> {
 				awaitBarrier(barrier);
-				capture.runtime().cancel();
+				capture.runtime().close();
 			});
 			Future<Boolean> terminal = executor.submit(() -> {
 				awaitBarrier(barrier);
@@ -420,7 +420,7 @@ public class McpSimulationCaptureRuntimeTests {
 		ExecutorService executor = Executors.newSingleThreadExecutor();
 
 		try {
-			Future<?> cancellation = executor.submit(runtime::cancel);
+			Future<?> cancellation = executor.submit(() -> runtime.close());
 			awaitLatch(controllerEntered);
 			byte[] body = "{\"winner\":\"response\"}"
 					.getBytes(StandardCharsets.UTF_8);
@@ -452,7 +452,7 @@ public class McpSimulationCaptureRuntimeTests {
 
 		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED,
 				stream.offerKeepAlive());
-		McpSimulationStreamItem item = capture.runtime().nextStreamItem(
+		McpSimulationStreamItem item = capture.runtime().awaitStreamItem(
 				Duration.ZERO).orElseThrow();
 		Assertions.assertEquals(McpSimulationStreamItemType.KEEP_ALIVE_COMMENT,
 				item.getType());
@@ -575,7 +575,7 @@ public class McpSimulationCaptureRuntimeTests {
 				StreamTerminationReason.RESPONSE_TIMEOUT, null));
 		Assertions.assertFalse(stream.fail(
 				StreamTerminationReason.CLIENT_DISCONNECTED, null));
-		capture.runtime().cancel();
+		capture.runtime().close();
 		capture.runtime().didFinishRequest(McpRequestOutcome.CANCELED, List.of());
 
 		McpSimulationCompletion completion = completion(capture);
@@ -586,7 +586,7 @@ public class McpSimulationCaptureRuntimeTests {
 		Assertions.assertEquals(1, capture.completionCallbacks().get());
 		Assertions.assertEquals(0, writeIdleReservations.get());
 
-		capture.runtime().cancel();
+		capture.runtime().close();
 		capture.runtime().didFinishRequest(McpRequestOutcome.DEADLINE_EXCEEDED,
 				List.of(new AssertionError("late terminal must be ignored")));
 		Assertions.assertSame(completion, completion(capture));
@@ -595,9 +595,9 @@ public class McpSimulationCaptureRuntimeTests {
 		Assertions.assertEquals(0, writeIdleReservations.get());
 
 		for (McpRequestSseStream.Frame retainedFrame : retainedFrames)
-			assertEncodedBytes(retainedFrame, capture.runtime().nextStreamItem(
+			assertEncodedBytes(retainedFrame, capture.runtime().awaitStreamItem(
 					Duration.ZERO).orElseThrow());
-		Assertions.assertTrue(capture.runtime().nextStreamItem(
+		Assertions.assertTrue(capture.runtime().awaitStreamItem(
 				Duration.ZERO).isEmpty(),
 				"The first frame beyond the exact capture limit must be omitted.");
 	}
@@ -607,7 +607,7 @@ public class McpSimulationCaptureRuntimeTests {
 			int byteCapacity) {
 		return McpSimulationOptions.builder()
 				.streamItemQueueCapacity(itemCapacity)
-				.maximumCapturedBytes(byteCapacity)
+				.maximumCapturedSizeInBytes(byteCapacity)
 				.build();
 	}
 
@@ -616,9 +616,9 @@ public class McpSimulationCaptureRuntimeTests {
 			throws Exception {
 		SseCapture capture = newSseCapture(options);
 		capture.runtime().acceptResponse(capture.runtime().response(List.of()));
-		Assertions.assertEquals(McpSimulationBodyMode.SERVER_SENT_EVENTS,
+		Assertions.assertEquals(McpSimulationBodyType.SSE,
 				capture.runtime().awaitResponse(Duration.ZERO).orElseThrow()
-						.getBodyMode());
+						.getBodyType());
 		return capture;
 	}
 

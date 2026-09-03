@@ -38,7 +38,7 @@ public class CorsTests {
 
 	@Test
 	public void preflight_allOrigins_allowed() {
-		SokletSimulator.run(config -> config.httpServer().sseServer()
+		SokletSimulator.run(SimulatorConfig.builder().httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
 				.lifecycleObserver(new LifecycleObserver() {
@@ -68,7 +68,7 @@ public class CorsTests {
 
 	@Test
 	public void preflight_rejected_without_authorizer() {
-		SokletSimulator.run(config -> config.httpServer().sseServer()
+		SokletSimulator.run(SimulatorConfig.builder().httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.lifecycleObserver(new LifecycleObserver() {
@@ -91,7 +91,7 @@ public class CorsTests {
 
 	@Test
 	public void actual_request_includes_cors_headers_when_allowed() {
-		SokletSimulator.run(config -> config.httpServer().sseServer()
+		SokletSimulator.run(SimulatorConfig.builder().httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
 				.lifecycleObserver(new LifecycleObserver() {
@@ -145,7 +145,7 @@ public class CorsTests {
 
 	@Test
 	public void preflight_whitelist_allows_only_listed_origin() {
-		SokletSimulator.run(config -> config.httpServer().sseServer()
+		SokletSimulator.run(SimulatorConfig.builder().httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.fromWhitelistedOrigins(Set.of("https://good.example")))
 				.build(), simulator -> {
@@ -171,7 +171,7 @@ public class CorsTests {
 
 	@Test
 	public void preflight_reflects_requested_headers_and_sets_max_age() {
-		SokletSimulator.run(config -> config.httpServer().sseServer()
+		SokletSimulator.run(SimulatorConfig.builder().httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.fromWhitelistedOrigins(Set.of("https://good.example")))
 				.build(), simulator -> {
@@ -197,7 +197,7 @@ public class CorsTests {
 
 	@Test
 	public void nonpreflight_whitelist_sets_vary_origin_and_allows_credentials() {
-		SokletSimulator.run(config -> config.httpServer().sseServer()
+		SokletSimulator.run(SimulatorConfig.builder().httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.fromWhitelistedOrigins(Set.of("https://good.example")))
 				.build(), simulator -> {
@@ -218,7 +218,7 @@ public class CorsTests {
 
 	@Test
 	public void allorigins_acceptall_echoes_origin_and_reflects_headers() {
-		SokletSimulator.run(config -> config.httpServer().sseServer()
+		SokletSimulator.run(SimulatorConfig.builder().httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.acceptAllInstance())  // permissive: creds ON
 				.build(), simulator -> {
@@ -264,7 +264,7 @@ public class CorsTests {
 
 	@Test
 	public void preflight_whitelist_resolver_true_sets_credentials_true() {
-		SokletSimulator.run(config -> config.httpServer().sseServer()
+		SokletSimulator.run(SimulatorConfig.builder().httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.fromWhitelistedOrigins(Set.of(GOOD), origin -> true))
 				.lifecycleObserver(new LifecycleObserver() {
@@ -291,7 +291,7 @@ public class CorsTests {
 
 	@Test
 	public void preflight_whitelist_resolver_false_disables_credentials_header() {
-		SokletSimulator.run(config -> config.httpServer().sseServer()
+		SokletSimulator.run(SimulatorConfig.builder().httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.fromWhitelistedOrigins(Set.of(GOOD), origin -> false))
 				.build(), simulator -> {
@@ -318,7 +318,7 @@ public class CorsTests {
 
 	@Test
 	public void preflight_whitelist_resolver_null_omits_credentials_header() {
-		SokletSimulator.run(config -> config.httpServer().sseServer()
+		SokletSimulator.run(SimulatorConfig.builder().httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.fromWhitelistedOrigins(Set.of(GOOD), origin -> null))
 				.build(), simulator -> {
@@ -341,7 +341,7 @@ public class CorsTests {
 	@Test
 	public void preflight_resolver_receives_normalized_origin_lowercase_trimmed() {
 		AtomicReference<String> seen = new AtomicReference<>();
-		SokletSimulator.run(config -> config.httpServer().sseServer()
+		SokletSimulator.run(SimulatorConfig.builder().httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.fromWhitelistedOrigins(Set.of(GOOD), origin -> {
 					seen.set(origin); // this is the normalized origin per implementation
@@ -366,7 +366,7 @@ public class CorsTests {
 	@Test
 	public void preflight_dynamic_whitelist_authorizer_with_independent_resolver() {
 		// Authorizer dynamically allows GOOD only; resolver independently says "false"
-		SokletSimulator.run(config -> config.httpServer().sseServer()
+		SokletSimulator.run(SimulatorConfig.builder().httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.fromWhitelistAuthorizer(
 						origin -> origin.equals("https://good.example"),
@@ -398,7 +398,7 @@ public class CorsTests {
 
 	@Test
 	public void nonpreflight_whitelist_resolver_true_sets_credentials_true() {
-		SokletSimulator.run(config -> config.httpServer().sseServer()
+		SokletSimulator.run(SimulatorConfig.builder().httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.fromWhitelistedOrigins(Set.of(GOOD), origin -> true))
 				.build(), simulator -> {
@@ -420,7 +420,7 @@ public class CorsTests {
 
 	@Test
 	public void nonpreflight_whitelist_resolver_false_should_disable_credentials() {
-		SokletSimulator.run(config -> config.httpServer().sseServer()
+		SokletSimulator.run(SimulatorConfig.builder().httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.fromWhitelistedOrigins(Set.of(GOOD), origin -> false))
 				.build(), simulator -> {
@@ -442,7 +442,7 @@ public class CorsTests {
 
 	@Test
 	public void preflight_null_origin_is_rejected_even_with_permissive_resolver() {
-		SokletSimulator.run(config -> config.httpServer().sseServer()
+		SokletSimulator.run(SimulatorConfig.builder().httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(CorsResource.class)))
 				.corsAuthorizer(CorsAuthorizer.fromWhitelistedOrigins(Set.of(GOOD), origin -> true))
 				.build(), simulator -> {

@@ -17,7 +17,7 @@
 package com.soklet;
 
 /** Describes why the standalone runner's bounded cleanup did not complete. */
-public enum ShutdownCleanupFailure {
+public enum ShutdownCleanupFailureReason {
 	/** The cleanup action threw. */
 	FAILED,
 	/** The cleanup action did not return before its deadline. */

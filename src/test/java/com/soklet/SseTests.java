@@ -136,7 +136,7 @@ public class SseTests {
 		List<SseComment> comments = new ArrayList<>();
 		AtomicReference<SseServer> sseServer = new AtomicReference<>();
 
-		SokletSimulator.run(config -> config.httpServer()
+		SokletSimulator.run(SimulatorConfig.builder().httpServer()
 				.sseServer(sseServer::set)
 					.corsAuthorizer(CorsAuthorizer.fromWhitelistedOrigins(Set.of("https://www.revetkn.com")))
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseEventSimulatorResource.class)))
@@ -215,7 +215,7 @@ public class SseTests {
 	public void sseHandshakeRequestExposesTraceContext() {
 		SseTraceContextResource.capturedTraceContext.set(null);
 
-		SokletSimulator.run(config -> config.httpServer().sseServer()
+		SokletSimulator.run(SimulatorConfig.builder().httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseTraceContextResource.class)))
 				.build(), simulator -> {
 			Request request = Request.withPath(HttpMethod.GET, "/trace")
@@ -237,7 +237,7 @@ public class SseTests {
 	public void sseServerSimulator_unicastErrorHandler() {
 		AtomicInteger errorCount = new AtomicInteger();
 
-		SokletSimulator.run(config -> config.httpServer().sseServer()
+		SokletSimulator.run(SimulatorConfig.builder().httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseEventSimulatorResource.class)))
 				.build(), simulator -> {
 			simulator.onUnicastError((throwable) -> errorCount.incrementAndGet());
@@ -273,7 +273,7 @@ public class SseTests {
 		List<LogEvent> logEvents = new ArrayList<>();
 		AtomicReference<SseServer> sseServer = new AtomicReference<>();
 
-		SokletSimulator.run(config -> config.httpServer()
+		SokletSimulator.run(SimulatorConfig.builder().httpServer()
 				.sseServer(sseServer::set)
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseEventSimulatorResource.class)))
 					.lifecycleObserver(new LifecycleObserver() {
@@ -3528,8 +3528,8 @@ public class SseTests {
 		return LifecyclePolicy.builder()
 				.startupTimeout(Duration.ofSeconds(3))
 				.startupCancelationTimeout(Duration.ofSeconds(1))
-				.gracefulShutdownDuration(duration)
-				.forcedShutdownDuration(Duration.ZERO)
+				.gracefulShutdownTimeout(duration)
+				.forcedShutdownTimeout(Duration.ZERO)
 				.build();
 	}
 

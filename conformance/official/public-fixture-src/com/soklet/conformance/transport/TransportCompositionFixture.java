@@ -362,7 +362,7 @@ public final class TransportCompositionFixture {
 				parent.handleRequest(request, consumer);
 			};
 			TransportDelegateAttachment attachment =
-					context.attachLifecycleOwningDelegate(this.delegate, wrapped);
+					context.attachTerminationOwningDelegate(this.delegate, wrapped);
 			OwningRuntime runtime = new OwningRuntime(this.name,
 					attachment.getTransportRuntime(), context.getTerminationSignal(), this.probe);
 			attachment.whenTerminated().thenRun(runtime::submitCleanup);
@@ -397,7 +397,7 @@ public final class TransportCompositionFixture {
 				parent.handleRequest(request, consumer);
 			};
 			TransportDelegateAttachment attachment =
-					context.attachLifecycleOwningDelegate(this.delegate, wrapped);
+					context.attachTerminationOwningDelegate(this.delegate, wrapped);
 			OwningRuntime runtime = new OwningRuntime(this.name,
 					attachment.getTransportRuntime(), context.getTerminationSignal(), this.probe);
 			attachment.whenTerminated().thenRun(runtime::submitCleanup);
@@ -432,14 +432,14 @@ public final class TransportCompositionFixture {
 		}
 
 		@Override
-		public void quiesce(ShutdownContext context) {
+		public void shutdownGracefully(ShutdownContext context) {
 			requireNonNull(context);
 			this.probe.record(this.name + ":quiesce");
 			publishProof();
 		}
 
 		@Override
-		public void force(ShutdownContext context) {
+		public void shutdownForcibly(ShutdownContext context) {
 			requireNonNull(context);
 			this.probe.record(this.name + ":force");
 			publishProof();
@@ -483,18 +483,18 @@ public final class TransportCompositionFixture {
 		}
 
 		@Override
-		public void quiesce(ShutdownContext context) {
+		public void shutdownGracefully(ShutdownContext context) {
 			requireNonNull(context);
 			this.probe.record(this.name + ":quiesce");
-			this.child.quiesce(context);
+			this.child.shutdownGracefully(context);
 		}
 
 		@Override
-		public void force(ShutdownContext context) {
+		public void shutdownForcibly(ShutdownContext context) {
 			requireNonNull(context);
 			this.probe.record(this.name + ":force");
 			this.executor.shutdownNow();
-			this.child.force(context);
+			this.child.shutdownForcibly(context);
 		}
 
 		private void submitCleanup() {

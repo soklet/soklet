@@ -239,8 +239,8 @@ final class DefaultMcpServer implements McpServer {
 				Optional.ofNullable(protectionConfig)
 						.map(this::toRequestStateProtectionPlan);
 		this.lifecycleAdapter = new McpTransportLifecycleAdapter(
-				this::getGracefulShutdownDuration,
-				this::getForcedShutdownDuration);
+				this::getGracefulShutdownTimeout,
+				this::getForcedShutdownTimeout);
 		this.runtimeBridge = new McpServerRuntimeBridge(host, port, endpointPlans,
 				allowedHosts, absentOriginPolicy == McpAbsentOriginPolicy.REQUIRE_ORIGIN,
 				this.corsAuthorizer, corsAuthorizerExplicitlyConfigured,
@@ -679,13 +679,13 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	@NonNull
-	private Duration getGracefulShutdownDuration() {
-		return this.lifecyclePolicy.getGracefulShutdownDuration();
+	private Duration getGracefulShutdownTimeout() {
+		return this.lifecyclePolicy.getGracefulShutdownTimeout();
 	}
 
 	@NonNull
-	private Duration getForcedShutdownDuration() {
-		return this.lifecyclePolicy.getForcedShutdownDuration();
+	private Duration getForcedShutdownTimeout() {
+		return this.lifecyclePolicy.getForcedShutdownTimeout();
 	}
 
 	void installLifecycleExecutionOwner(@NonNull Object ownerToken) {

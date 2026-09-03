@@ -85,8 +85,8 @@ public class AdvancedTests {
 			LifecyclePolicy.builder()
 					.startupTimeout(Duration.ofSeconds(5))
 					.startupCancelationTimeout(Duration.ofSeconds(2))
-					.gracefulShutdownDuration(Duration.ofSeconds(2))
-					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.gracefulShutdownTimeout(Duration.ofSeconds(2))
+					.forcedShutdownTimeout(Duration.ofSeconds(1))
 					.build();
 
 	// ==================== SSE Connection Race Conditions ====================
@@ -473,19 +473,17 @@ public class AdvancedTests {
 				final int scopeId = scopeIndex;
 				scopeExecutor.submit(() -> {
 					try {
-						SokletSimulator.run(config -> {
-							String runtimeCanary = "scope-" + scopeId;
-							RuntimeRequestMetrics metrics = new RuntimeRequestMetrics(runtimeCanary + "-");
-							config.httpServer(simulatorHttpServers::add);
-							simulatorMetrics.put(scopeId, metrics);
-							return config
+						String runtimeCanary = "scope-" + scopeId;
+						RuntimeRequestMetrics metrics = new RuntimeRequestMetrics(runtimeCanary + "-");
+						simulatorMetrics.put(scopeId, metrics);
+						SimulatorConfig simulatorConfig = SimulatorConfig.builder()
+								.httpServer(simulatorHttpServers::add)
 									.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ConcurrentTestResource.class)))
 									.instanceProvider(new ConcurrentInstanceProvider(runtimeCanary))
 									.metricsCollector(metrics)
 									.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 									.build();
-						}, simulator -> {
-							String runtimeCanary = "scope-" + scopeId;
+						SokletSimulator.run(simulatorConfig, simulator -> {
 							ExecutorService requestExecutor = Executors.newFixedThreadPool(threadsPerScope);
 							CountDownLatch requestsDone = new CountDownLatch(threadsPerScope);
 							try {
@@ -1064,7 +1062,7 @@ public class AdvancedTests {
 						.body(largeBody)
 						.build();
 
-				SokletSimulator.run(simulatorConfig -> simulatorConfig.httpServer()
+				SokletSimulator.run(SimulatorConfig.builder().httpServer()
 						.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(LargeBodyTestResource.class)))
 						.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 						.build(), simulator -> {

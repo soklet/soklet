@@ -38,7 +38,18 @@ import java.util.function.Consumer;
 
 import static java.util.Objects.requireNonNull;
 
-/** Configured, one-shot standalone-process adapter for one Soklet lifecycle. */
+/**
+ * Configured, one-shot standalone-process adapter for one Soklet lifecycle.
+ * <p>
+ * Each {@code run(...)} method blocks through finalization. If its calling
+ * thread is interrupted, the runner requests shutdown, joins the lifecycle
+ * uninterruptibly, and restores the calling thread's interrupt status before
+ * returning or throwing. The runner owns its JVM shutdown hook and any
+ * additional shutdown-trigger registrations for the duration of the run.
+ * Application cleanup begins only after a complete core shutdown. A cleanup
+ * timeout bounds the runner's wait and reporting; it does not imply that
+ * arbitrary application cleanup code was forcibly stopped.
+ */
 @ThreadSafe
 public final class SokletApplication {
 	@NonNull
@@ -57,66 +68,76 @@ public final class SokletApplication {
 	@NonNull
 	private final AtomicBoolean runClaimed;
 
-	private SokletApplication(@NonNull SokletConfig config) {
-		this.config = requireNonNull(config);
+	private SokletApplication(@NonNull SokletConfig sokletConfig) {
+		this.config = requireNonNull(sokletConfig);
 		this.runClaimed = new AtomicBoolean();
 	}
 
 	/**
 	 * Runs one standalone Soklet lifecycle with the default runner settings.
+	 * If the calling thread is interrupted, this method requests shutdown, joins
+	 * the lifecycle uninterruptibly, and restores the calling thread's interrupt
+	 * status before returning or throwing.
 	 *
-	 * @param config the one-shot Soklet configuration
+	 * @param sokletConfig the one-shot Soklet configuration
 	 * @return the exact immutable lifecycle result
 	 * @throws SokletStartupException if startup does not reach readiness
-	 * @throws SokletTerminatedUnexpectedlyException if a transport terminates
+	 * @throws SokletUnexpectedTerminationException if a transport terminates
 	 * unexpectedly after readiness
-	 * @throws ShutdownIncompleteException if shutdown cannot be proven complete
+	 * @throws SokletShutdownIncompleteException if shutdown cannot be proven complete
 	 */
 	@NonNull
-	public static ShutdownResult run(@NonNull SokletConfig config) {
-		return fromConfig(config).run();
+	public static ShutdownResult run(@NonNull SokletConfig sokletConfig) {
+		return fromConfig(sokletConfig).run();
 	}
 
 	/**
 	 * Runs one standalone Soklet lifecycle with the default settings plus the
 	 * supplied runner-scoped shutdown triggers.
+	 * If the calling thread is interrupted, this method requests shutdown, joins
+	 * the lifecycle uninterruptibly, and restores the calling thread's interrupt
+	 * status before returning or throwing.
 	 *
-	 * @param config the one-shot Soklet configuration
+	 * @param sokletConfig the one-shot Soklet configuration
 	 * @param additionalShutdownTriggers non-null additional shutdown triggers;
 	 * each element must be non-null
 	 * @return the exact immutable lifecycle result
 	 * @throws SokletStartupException if startup does not reach readiness
-	 * @throws SokletTerminatedUnexpectedlyException if a transport terminates
+	 * @throws SokletUnexpectedTerminationException if a transport terminates
 	 * unexpectedly after readiness
-	 * @throws ShutdownIncompleteException if shutdown cannot be proven complete
+	 * @throws SokletShutdownIncompleteException if shutdown cannot be proven complete
 	 */
 	@NonNull
-	public static ShutdownResult run(@NonNull SokletConfig config,
+	public static ShutdownResult run(@NonNull SokletConfig sokletConfig,
 			@NonNull ShutdownTrigger @NonNull... additionalShutdownTriggers) {
-		return fromConfig(config).run(additionalShutdownTriggers);
+		return fromConfig(sokletConfig).run(additionalShutdownTriggers);
 	}
 
 	/**
 	 * Creates a configured, one-shot standalone application.
 	 *
-	 * @param config the one-shot Soklet configuration
+	 * @param sokletConfig the one-shot Soklet configuration
 	 * @return a configured standalone application
 	 */
 	@NonNull
-	public static SokletApplication fromConfig(@NonNull SokletConfig config) {
-		return new SokletApplication(config);
+	public static SokletApplication fromConfig(
+			@NonNull SokletConfig sokletConfig) {
+		return new SokletApplication(sokletConfig);
 	}
 
 	/**
 	 * Runs this configured application lifecycle with the default runner
 	 * settings. This method may be invoked exactly once on each application
 	 * instance.
+	 * If the calling thread is interrupted, this method requests shutdown, joins
+	 * the lifecycle uninterruptibly, and restores the calling thread's interrupt
+	 * status before returning or throwing.
 	 *
 	 * @return the exact immutable lifecycle result
 	 * @throws SokletStartupException if startup does not reach readiness
-	 * @throws SokletTerminatedUnexpectedlyException if a transport terminates
+	 * @throws SokletUnexpectedTerminationException if a transport terminates
 	 * unexpectedly after readiness
-	 * @throws ShutdownIncompleteException if shutdown cannot be proven complete
+	 * @throws SokletShutdownIncompleteException if shutdown cannot be proven complete
 	 * @throws IllegalStateException if a run was already claimed for this
 	 * application instance
 	 */
@@ -129,14 +150,17 @@ public final class SokletApplication {
 	 * Runs this configured application lifecycle with the supplied
 	 * runner-scoped shutdown triggers. All arguments are validated and
 	 * snapshotted before this application's one run is claimed.
+	 * If the calling thread is interrupted, this method requests shutdown, joins
+	 * the lifecycle uninterruptibly, and restores the calling thread's interrupt
+	 * status before returning or throwing.
 	 *
 	 * @param additionalShutdownTriggers non-null additional shutdown triggers;
 	 * each element must be non-null
 	 * @return the exact immutable lifecycle result
 	 * @throws SokletStartupException if startup does not reach readiness
-	 * @throws SokletTerminatedUnexpectedlyException if a transport terminates
+	 * @throws SokletUnexpectedTerminationException if a transport terminates
 	 * unexpectedly after readiness
-	 * @throws ShutdownIncompleteException if shutdown cannot be proven complete
+	 * @throws SokletShutdownIncompleteException if shutdown cannot be proven complete
 	 * @throws IllegalStateException if a run was already claimed for this
 	 * application instance
 	 */
@@ -153,16 +177,20 @@ public final class SokletApplication {
 	 * supplied runner-scoped shutdown triggers. Cleanup is eligible at most once,
 	 * only after the core shutdown result is complete. All arguments are
 	 * validated and snapshotted before this application's one run is claimed.
+	 * If the calling thread is interrupted, this method requests shutdown, joins
+	 * the lifecycle uninterruptibly, and restores the calling thread's interrupt
+	 * status before returning or throwing. A cleanup timeout does not imply that
+	 * arbitrary application cleanup code was forcibly stopped.
 	 *
 	 * @param shutdownCleanup bounded synchronous cleanup specification
 	 * @param additionalShutdownTriggers non-null additional shutdown triggers;
 	 * each element must be non-null
 	 * @return the exact immutable lifecycle result
 	 * @throws SokletStartupException if startup does not reach readiness
-	 * @throws SokletTerminatedUnexpectedlyException if a transport terminates
+	 * @throws SokletUnexpectedTerminationException if a transport terminates
 	 * unexpectedly after readiness
-	 * @throws ShutdownIncompleteException if shutdown cannot be proven complete
-	 * @throws SokletApplicationCleanupException if eligible cleanup fails or
+	 * @throws SokletShutdownIncompleteException if shutdown cannot be proven complete
+	 * @throws SokletShutdownCleanupException if eligible cleanup fails or
 	 * exceeds its configured deadline
 	 * @throws IllegalStateException if a run was already claimed for this
 	 * application instance
@@ -355,7 +383,7 @@ public final class SokletApplication {
 
 		InternalShutdownCleanupOutcome cleanupOutcome =
 				finalizationResult.cleanupOutcome();
-		SokletApplicationCleanupException cleanupFailure =
+		SokletShutdownCleanupException cleanupFailure =
 				cleanupOutcome.failed()
 						? SokletApplicationFinalization.cleanupException(
 								coreSnapshot.publicResult(), cleanupOutcome)

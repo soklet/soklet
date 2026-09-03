@@ -385,9 +385,9 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 					firstServer.getDiagnostics().getStatus());
 			Assertions.assertTrue(terminatedGeneration.shutdownRequested());
 
-			SokletTerminatedUnexpectedlyException failure =
+			SokletUnexpectedTerminationException failure =
 					Assertions.assertThrows(
-							SokletTerminatedUnexpectedlyException.class,
+							SokletUnexpectedTerminationException.class,
 							firstOwner::close);
 			firstLifecycleAdapter.awaitStop(terminatedGeneration);
 			Assertions.assertSame(failure.getInternalShutdownResult(),
@@ -635,8 +635,8 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 				.lifecyclePolicy(LifecyclePolicy.builder()
 						.startupTimeout(Duration.ofSeconds(5))
 						.startupCancelationTimeout(Duration.ofSeconds(2))
-						.gracefulShutdownDuration(Duration.ofSeconds(2))
-						.forcedShutdownDuration(Duration.ofSeconds(1))
+						.gracefulShutdownTimeout(Duration.ofSeconds(2))
+						.forcedShutdownTimeout(Duration.ofSeconds(1))
 						.build())
 				.build());
 	}
@@ -720,7 +720,7 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 			@NonNull Soklet owner) {
 		try {
 			owner.close();
-		} catch (SokletTerminatedUnexpectedlyException expected) {
+		} catch (SokletUnexpectedTerminationException expected) {
 			// Repeated shutdown replays the already-asserted terminal evidence.
 		}
 	}

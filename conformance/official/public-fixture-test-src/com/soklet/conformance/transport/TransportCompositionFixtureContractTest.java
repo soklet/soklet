@@ -66,8 +66,8 @@ public final class TransportCompositionFixtureContractTest {
 		LifecyclePolicy policy = LifecyclePolicy.builder()
 				.startupTimeout(Duration.ofSeconds(5))
 				.startupCancelationTimeout(Duration.ofSeconds(2))
-				.gracefulShutdownDuration(Duration.ofSeconds(5))
-				.forcedShutdownDuration(Duration.ofSeconds(2))
+				.gracefulShutdownTimeout(Duration.ofSeconds(5))
+				.forcedShutdownTimeout(Duration.ofSeconds(2))
 				.build();
 		SokletConfig config = SokletConfig.withHttpServer(http.outer())
 				.sseServer(sse.outer())
@@ -108,7 +108,7 @@ public final class TransportCompositionFixtureContractTest {
 						"Missing participant result for " + kind));
 		assertEquals(ShutdownComponentDisposition.GRACEFUL_TERMINATION,
 				participant.getShutdownComponentDisposition(), "Participant disposition for " + kind);
-		assertEquals(List.of(), participant.getFailures(),
+		assertEquals(List.of(), participant.getThrowables(),
 				"Participant failures for " + kind);
 	}
 

@@ -59,8 +59,8 @@ class McpLocalizationRenderingRuntimeTests {
 			LifecyclePolicy.builder()
 					.startupTimeout(Duration.ofSeconds(5))
 					.startupCancelationTimeout(Duration.ofSeconds(2))
-					.gracefulShutdownDuration(Duration.ofSeconds(2))
-					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.gracefulShutdownTimeout(Duration.ofSeconds(2))
+					.forcedShutdownTimeout(Duration.ofSeconds(1))
 					.build();
 
 	@Test
@@ -356,8 +356,11 @@ class McpLocalizationRenderingRuntimeTests {
 		McpEndpoint endpoint = richEndpoint();
 		List<String> bodies = new CopyOnWriteArrayList<>();
 
-		SokletSimulator.run(config -> config
-				.mcpServer(0, builder -> server(builder, endpoint, localizer))
+		SokletSimulator.run(SimulatorConfig.builder()
+				.mcpServer(0,
+						McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
+						McpAdmissionController.acceptAllInstance(),
+						builder -> configureServer(builder, localizer))
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build(), simulator -> {
@@ -397,9 +400,11 @@ class McpLocalizationRenderingRuntimeTests {
 				})
 				.build();
 
-		SokletSimulator.run(config -> config
-				.mcpServer(0, builder -> server(builder, richEndpoint(),
-						localizer))
+		SokletSimulator.run(SimulatorConfig.builder()
+				.mcpServer(0,
+						McpEndpointRegistry.fromEndpoints(List.of(richEndpoint())),
+						McpAdmissionController.acceptAllInstance(),
+						builder -> configureServer(builder, localizer))
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build(), simulator -> {
@@ -433,8 +438,11 @@ class McpLocalizationRenderingRuntimeTests {
 		AtomicReference<McpRequestOutcome> outcome = new AtomicReference<>();
 		AtomicReference<Capture> captured = new AtomicReference<>();
 
-		SokletSimulator.run(config -> config
-				.mcpServer(0, builder -> server(builder, endpoint, localizer))
+		SokletSimulator.run(SimulatorConfig.builder()
+				.mcpServer(0,
+						McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
+						McpAdmissionController.acceptAllInstance(),
+						builder -> configureServer(builder, localizer))
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObservers(List.of(new LifecycleObserver() {
 					@Override
@@ -474,12 +482,9 @@ class McpLocalizationRenderingRuntimeTests {
 				capture.body(), outcome.get());
 	}
 
-	private static McpServer server(McpServer.Builder builder,
-			McpEndpoint endpoint,
+	private static void configureServer(McpServer.Builder builder,
 			McpLocalizer localizer) {
 		builder.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
@@ -487,8 +492,6 @@ class McpLocalizationRenderingRuntimeTests {
 
 		if (localizer != null)
 			builder.localizer(localizer);
-
-		return builder.build();
 	}
 
 	private static McpEndpoint richEndpoint() {
@@ -610,15 +613,13 @@ class McpLocalizationRenderingRuntimeTests {
 				.build();
 		AtomicReference<String> captured = new AtomicReference<>();
 
-		SokletSimulator.run(config -> config.mcpServer(0, builder -> builder
-				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(
-						List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
-				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
-				.allowedHosts(Set.of(LOOPBACK))
-				.localizer(localizer)
-				.build())
+		SokletSimulator.run(SimulatorConfig.builder().mcpServer(0,
+				McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
+				McpAdmissionController.acceptAllInstance(), builder -> builder
+						.host(LOOPBACK)
+						.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+						.allowedHosts(Set.of(LOOPBACK))
+						.localizer(localizer))
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)

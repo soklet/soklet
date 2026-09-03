@@ -103,7 +103,7 @@ import static java.util.Objects.requireNonNull;
  *   // Instead of running on a real HTTP server that listens on a port,
  *   // a non-network Simulator is provided against which you can
  *   // issue requests and receive responses.
- *   SokletSimulator.run(config -> config.httpServer().build(), simulator -> {
+ *   SokletSimulator.run(SimulatorConfig.builder().httpServer().build(), simulator -> {
  *     // Construct a request
  *     Request request = Request.withPath(HttpMethod.GET, "/hello")
  *       .queryParameters(Map.of("name", Set.of("Mark")))
@@ -1125,8 +1125,8 @@ public final class Soklet implements AutoCloseable {
 	 * Publishes shutdown intent, joins the lifecycle uninterruptibly, restores
 	 * the caller's interrupt status, and applies the terminal result.
 	 *
-	 * @throws ShutdownIncompleteException if complete termination cannot be proven
-	 * @throws SokletTerminatedUnexpectedlyException if a lifecycle component terminated
+	 * @throws SokletShutdownIncompleteException if complete termination cannot be proven
+	 * @throws SokletUnexpectedTerminationException if a lifecycle component terminated
 	 * unexpectedly after readiness
 	 * @throws IllegalStateException as a best-effort diagnostic when the current
 	 * thread is contributing to the unpublished shutdown barrier
@@ -1398,6 +1398,15 @@ public final class Soklet implements AutoCloseable {
 				rejectedSession.releaseLifecycleEvidence();
 			clearMcpSimulationSession(activeSession);
 			clearRejectedMcpSimulationSession(rejectedSession);
+		}
+
+		void releaseHttpAndSseScopeState() {
+			MockHttpServer httpServer = this.server;
+			MockSseServer serverSentEventsServer = this.sseServer;
+			if (httpServer != null)
+				httpServer.releaseSimulationScopeState();
+			if (serverSentEventsServer != null)
+				serverSentEventsServer.releaseSimulationScopeState();
 		}
 
 		@Nullable
@@ -1919,13 +1928,28 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@NonNull
-		Optional<MockHttpServer> getHttpServer() {
+		@Override
+		public Optional<@NonNull HttpServer> getHttpServer() {
 			requireScopeOpen();
 			return Optional.ofNullable(this.server);
 		}
 
 		@NonNull
-		Optional<MockSseServer> getSseServer() {
+		@Override
+		public Optional<@NonNull SseServer> getSseServer() {
+			requireScopeOpen();
+			return Optional.ofNullable(this.sseServer);
+		}
+
+		@NonNull
+		@Override
+		public Optional<@NonNull McpServer> getMcpServer() {
+			requireScopeOpen();
+			return Optional.ofNullable(this.mcpServer);
+		}
+
+		@NonNull
+		Optional<MockSseServer> getSimulatedSseServer() {
 			requireScopeOpen();
 			return Optional.ofNullable(this.sseServer);
 		}
@@ -2167,8 +2191,8 @@ public final class Soklet implements AutoCloseable {
 		@NonNull
 		private final TransportIdentity transportIdentity = TransportIdentity.create();
 		@Nullable
-		private SokletConfig sokletConfig;
-		private HttpServer.@Nullable RequestHandler requestHandler;
+		private volatile SokletConfig sokletConfig;
+		private volatile HttpServer.@Nullable RequestHandler requestHandler;
 
 		@NonNull
 		@Override
@@ -2194,13 +2218,13 @@ public final class Soklet implements AutoCloseable {
 				}
 
 				@Override
-				public void quiesce(@NonNull ShutdownContext context) {
+				public void shutdownGracefully(@NonNull ShutdownContext context) {
 					requireNonNull(context);
 					signal.signalTerminated();
 				}
 
 				@Override
-				public void force(@NonNull ShutdownContext context) {
+				public void shutdownForcibly(@NonNull ShutdownContext context) {
 					requireNonNull(context);
 					signal.signalTerminated();
 				}
@@ -2220,22 +2244,27 @@ public final class Soklet implements AutoCloseable {
 			return true;
 		}
 
-			public void initialize(@NonNull SokletConfig sokletConfig,
-														 @NonNull RequestHandler requestHandler) {
-				requireNonNull(sokletConfig);
-				requireNonNull(requestHandler);
+		public synchronized void initialize(@NonNull SokletConfig sokletConfig,
+				@NonNull RequestHandler requestHandler) {
+			requireNonNull(sokletConfig);
+			requireNonNull(requestHandler);
 
-				this.sokletConfig = sokletConfig;
-				this.requestHandler = requestHandler;
-			}
+			this.sokletConfig = sokletConfig;
+			this.requestHandler = requestHandler;
+		}
+
+		synchronized void releaseSimulationScopeState() {
+			this.sokletConfig = null;
+			this.requestHandler = null;
+		}
 
 		@NonNull
-		protected Optional<SokletConfig> getSokletConfig() {
+		protected synchronized Optional<SokletConfig> getSokletConfig() {
 			return Optional.ofNullable(this.sokletConfig);
 		}
 
 		@NonNull
-		protected Optional<RequestHandler> getRequestHandler() {
+		protected synchronized Optional<RequestHandler> getRequestHandler() {
 			return Optional.ofNullable(this.requestHandler);
 		}
 	}
@@ -2524,6 +2553,11 @@ public final class Soklet implements AutoCloseable {
 			return this.commentConsumers;
 		}
 
+		void releaseSimulationScopeState() {
+			this.eventConsumers.clear();
+			this.commentConsumers.clear();
+		}
+
 		protected void handleBroadcastError(@NonNull Throwable throwable) {
 			requireNonNull(throwable);
 			Consumer<Throwable> handler = this.broadcastErrorHandler.get();
@@ -2564,8 +2598,8 @@ public final class Soklet implements AutoCloseable {
 		@NonNull
 		private final TransportIdentity transportIdentity;
 		@Nullable
-		private SokletConfig sokletConfig;
-		private SseServer.@Nullable RequestHandler requestHandler;
+		private volatile SokletConfig sokletConfig;
+		private volatile SseServer.@Nullable RequestHandler requestHandler;
 		@NonNull
 		private final ConcurrentHashMap<@NonNull ResourcePath, @NonNull MockSseBroadcaster> broadcastersByResourcePath;
 		@NonNull
@@ -2604,13 +2638,13 @@ public final class Soklet implements AutoCloseable {
 				}
 
 				@Override
-				public void quiesce(@NonNull ShutdownContext context) {
+				public void shutdownGracefully(@NonNull ShutdownContext context) {
 					requireNonNull(context);
 					signal.signalTerminated();
 				}
 
 				@Override
-				public void force(@NonNull ShutdownContext context) {
+				public void shutdownForcibly(@NonNull ShutdownContext context) {
 					requireNonNull(context);
 					signal.signalTerminated();
 				}
@@ -2704,13 +2738,24 @@ public final class Soklet implements AutoCloseable {
 			return broadcaster.unregisterCommentConsumer(commentConsumer);
 		}
 
-		public void initialize(@NonNull SokletConfig sokletConfig,
-													 SseServer.@NonNull RequestHandler requestHandler) {
+		public synchronized void initialize(@NonNull SokletConfig sokletConfig,
+				SseServer.@NonNull RequestHandler requestHandler) {
 			requireNonNull(sokletConfig);
 			requireNonNull(requestHandler);
 
 			this.sokletConfig = sokletConfig;
 			this.requestHandler = requestHandler;
+		}
+
+		synchronized void releaseSimulationScopeState() {
+			this.sokletConfig = null;
+			this.requestHandler = null;
+			for (MockSseBroadcaster broadcaster
+					: this.broadcastersByResourcePath.values())
+				broadcaster.releaseSimulationScopeState();
+			this.broadcastersByResourcePath.clear();
+			this.broadcastErrorHandler.set(null);
+			this.unicastErrorHandler.set(null);
 		}
 
 		public void onBroadcastError(@Nullable Consumer<Throwable> onBroadcastError) {
@@ -2737,12 +2782,12 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@NonNull
-		protected Optional<SokletConfig> getSokletConfig() {
+		protected synchronized Optional<SokletConfig> getSokletConfig() {
 			return Optional.ofNullable(this.sokletConfig);
 		}
 
 		@NonNull
-		protected Optional<SseServer.RequestHandler> getRequestHandler() {
+		protected synchronized Optional<SseServer.RequestHandler> getRequestHandler() {
 			return Optional.ofNullable(this.requestHandler);
 		}
 

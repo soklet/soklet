@@ -460,9 +460,9 @@ final class TransportIdentityClaimRegistry {
 interface InternalTransportRuntime {
 	void start(@NonNull StartupContext context);
 
-	void quiesce(@NonNull ShutdownContext context);
+	void shutdownGracefully(@NonNull ShutdownContext context);
 
-	void force(@NonNull ShutdownContext context);
+	void shutdownForcibly(@NonNull ShutdownContext context);
 }
 
 /** Bridges a public custom runtime into the coordinator's private runtime shape. */
@@ -486,13 +486,13 @@ final class InternalPublicTransportRuntime implements InternalTransportRuntime {
 	}
 
 	@Override
-	public void quiesce(@NonNull ShutdownContext context) {
-		this.runtime.quiesce(requireNonNull(context));
+	public void shutdownGracefully(@NonNull ShutdownContext context) {
+		this.runtime.shutdownGracefully(requireNonNull(context));
 	}
 
 	@Override
-	public void force(@NonNull ShutdownContext context) {
-		this.runtime.force(requireNonNull(context));
+	public void shutdownForcibly(@NonNull ShutdownContext context) {
+		this.runtime.shutdownForcibly(requireNonNull(context));
 	}
 }
 
@@ -1366,7 +1366,7 @@ final class InternalTransportAttachmentContext<H> {
 	}
 
 	@NonNull
-	InternalTransportDelegateAttachment attachLifecycleOwningDelegate(
+	InternalTransportDelegateAttachment attachTerminationOwningDelegate(
 			@NonNull InternalTransportEndpoint<H> delegate,
 			@NonNull H delegateRequestHandler) {
 		return attachDelegate(delegate, delegateRequestHandler, true,

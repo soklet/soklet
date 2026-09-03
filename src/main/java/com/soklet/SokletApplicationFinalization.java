@@ -697,9 +697,9 @@ final class SokletApplicationFinalization {
 	@NonNull
 	private static SokletApplicationPrimaryOutcome primaryOutcome(
 			@NonNull RuntimeException failure) {
-		if (failure instanceof SokletTerminatedUnexpectedlyException)
+		if (failure instanceof SokletUnexpectedTerminationException)
 			return SokletApplicationPrimaryOutcome.UNEXPECTED_TERMINATION;
-		if (failure instanceof ShutdownIncompleteException)
+		if (failure instanceof SokletShutdownIncompleteException)
 			return SokletApplicationPrimaryOutcome.INCOMPLETE_SHUTDOWN;
 		return SokletApplicationPrimaryOutcome.STARTUP_FAILURE;
 	}
@@ -742,24 +742,24 @@ final class SokletApplicationFinalization {
 	}
 
 	@NonNull
-	static SokletApplicationCleanupException cleanupException(
+	static SokletShutdownCleanupException cleanupException(
 			@NonNull InternalShutdownResult result,
 			@NonNull InternalShutdownCleanupOutcome outcome) {
 		return cleanupException(ShutdownResult.fromInternal(result), outcome);
 	}
 
 	@NonNull
-	static SokletApplicationCleanupException cleanupException(
+	static SokletShutdownCleanupException cleanupException(
 			@NonNull ShutdownResult result,
 			@NonNull InternalShutdownCleanupOutcome outcome) {
 		InternalShutdownCleanupOutcome exactOutcome = requireNonNull(outcome);
-		ShutdownCleanupFailure failure = switch (exactOutcome.disposition()) {
-			case FAILED -> ShutdownCleanupFailure.FAILED;
-			case TIMED_OUT -> ShutdownCleanupFailure.TIMED_OUT;
+		ShutdownCleanupFailureReason failure = switch (exactOutcome.disposition()) {
+			case FAILED -> ShutdownCleanupFailureReason.FAILED;
+			case TIMED_OUT -> ShutdownCleanupFailureReason.TIMED_OUT;
 			default -> throw new IllegalArgumentException(
 					"Cleanup outcome is not a failure");
 		};
-		return new SokletApplicationCleanupException(failure,
+		return new SokletShutdownCleanupException(failure,
 				exactOutcome.configuredTimeout().orElseThrow(),
 				requireNonNull(result), exactOutcome.failure().orElseThrow());
 	}

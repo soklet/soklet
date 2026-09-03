@@ -733,9 +733,9 @@
         },
         {
           "file": "src/main/java/com/soklet/McpSimulationOptions.java",
-          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpSimulationOptions.java#com.soklet.McpSimulationOptions.Builder#maximumCapturedBytes(Integer)",
+          "key": "FINITE-MATCH-003:src/main/java/com/soklet/McpSimulationOptions.java#com.soklet.McpSimulationOptions.Builder#maximumCapturedSizeInBytes(Integer)",
           "matcherRuleId": "FINITE-MATCH-003",
-          "member": "maximumCapturedBytes(Integer)",
+          "member": "maximumCapturedSizeInBytes(Integer)",
           "owner": "com.soklet.McpSimulationOptions.Builder"
         },
         {

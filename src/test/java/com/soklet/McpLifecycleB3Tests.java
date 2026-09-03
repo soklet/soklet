@@ -75,8 +75,8 @@ class McpLifecycleB3Tests {
 			LifecyclePolicy.builder()
 					.startupTimeout(Duration.ofSeconds(5))
 					.startupCancelationTimeout(Duration.ofSeconds(2))
-					.gracefulShutdownDuration(Duration.ofSeconds(2))
-					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.gracefulShutdownTimeout(Duration.ofSeconds(2))
+					.forcedShutdownTimeout(Duration.ofSeconds(1))
 					.build();
 
 	@Test
@@ -289,8 +289,8 @@ class McpLifecycleB3Tests {
 			request = callTool(address.getPort(), "residual", tool.getName(), false);
 			Assertions.assertTrue(handlerEntered.await(WAIT.toNanos(),
 					TimeUnit.NANOSECONDS));
-			ShutdownIncompleteException stopFailure = Assertions.assertThrows(
-					ShutdownIncompleteException.class, fixture.soklet()::close);
+			SokletShutdownIncompleteException stopFailure = Assertions.assertThrows(
+					SokletShutdownIncompleteException.class, fixture.soklet()::close);
 			InternalShutdownResult result = stopFailure.getInternalShutdownResult();
 			Assertions.assertSame(result, adapter(server).result().orElseThrow());
 
@@ -315,8 +315,8 @@ class McpLifecycleB3Tests {
 			Assertions.assertEquals(McpServerStatus.RESIDUAL_ACTIVITY,
 					server.getDiagnostics().getStatus(),
 					"Late cleanup must not rewrite the frozen residual result.");
-			ShutdownIncompleteException repeatedStop = Assertions.assertThrows(
-					ShutdownIncompleteException.class, fixture.soklet()::close);
+			SokletShutdownIncompleteException repeatedStop = Assertions.assertThrows(
+					SokletShutdownIncompleteException.class, fixture.soklet()::close);
 			Assertions.assertSame(result,
 					repeatedStop.getInternalShutdownResult());
 			IllegalStateException restartRejection = Assertions.assertThrows(
@@ -359,9 +359,9 @@ class McpLifecycleB3Tests {
 					"Unexpected failure must fence this exact generation.");
 			Assertions.assertEquals(address, boundAddress(server));
 			assertRuntimeEvidenceReleased(fixture.bridge());
-			SokletTerminatedUnexpectedlyException stopFailure =
+			SokletUnexpectedTerminationException stopFailure =
 					Assertions.assertThrows(
-							SokletTerminatedUnexpectedlyException.class,
+							SokletUnexpectedTerminationException.class,
 							fixture.soklet()::close);
 			InternalShutdownResult result = stopFailure.getInternalShutdownResult();
 			Assertions.assertSame(result, adapter(server).result().orElseThrow());
@@ -369,9 +369,9 @@ class McpLifecycleB3Tests {
 					stopFailure.getCause());
 			assertLegacyParity(fixture,
 					ShutdownComponentDisposition.UNEXPECTED_TERMINATION);
-			SokletTerminatedUnexpectedlyException repeatedStop =
+			SokletUnexpectedTerminationException repeatedStop =
 					Assertions.assertThrows(
-							SokletTerminatedUnexpectedlyException.class,
+							SokletUnexpectedTerminationException.class,
 							fixture.soklet()::close);
 			Assertions.assertSame(result,
 					repeatedStop.getInternalShutdownResult());
@@ -495,9 +495,9 @@ class McpLifecycleB3Tests {
 			Assertions.assertTrue(adapter(server).result(firstGeneration)
 					.orElseThrow().isComplete());
 
-			SokletTerminatedUnexpectedlyException firstStop =
+			SokletUnexpectedTerminationException firstStop =
 					Assertions.assertThrows(
-							SokletTerminatedUnexpectedlyException.class,
+							SokletUnexpectedTerminationException.class,
 							fixture.soklet()::close);
 			InternalShutdownResult firstResult = firstStop
 					.getInternalShutdownResult();
@@ -505,9 +505,9 @@ class McpLifecycleB3Tests {
 					.result(firstGeneration).orElseThrow());
 			Assertions.assertSame(firstResult,
 					fixture.soklet().getDirectLifecycle().result().orElseThrow());
-			SokletTerminatedUnexpectedlyException repeatedStop =
+			SokletUnexpectedTerminationException repeatedStop =
 					Assertions.assertThrows(
-							SokletTerminatedUnexpectedlyException.class,
+							SokletUnexpectedTerminationException.class,
 							fixture.soklet()::close);
 			Assertions.assertSame(firstResult,
 					repeatedStop.getInternalShutdownResult());
@@ -577,9 +577,9 @@ class McpLifecycleB3Tests {
 					WAIT.toNanos(), TimeUnit.NANOSECONDS).internalResult());
 			Assertions.assertSame(result,
 					owner.getDirectLifecycle().result().orElseThrow());
-			SokletTerminatedUnexpectedlyException terminalFailure =
+			SokletUnexpectedTerminationException terminalFailure =
 					Assertions.assertThrows(
-							SokletTerminatedUnexpectedlyException.class,
+							SokletUnexpectedTerminationException.class,
 							owner::close);
 			Assertions.assertSame(result,
 					terminalFailure.getInternalShutdownResult());
@@ -1036,9 +1036,9 @@ class McpLifecycleB3Tests {
 			Assertions.assertEquals(1, admittedWork(generation));
 
 			releaseHandler.countDown();
-			SokletTerminatedUnexpectedlyException stopFailure =
+			SokletUnexpectedTerminationException stopFailure =
 					Assertions.assertThrows(
-							SokletTerminatedUnexpectedlyException.class,
+							SokletUnexpectedTerminationException.class,
 							fixture.soklet()::close);
 			InternalShutdownResult result = stopFailure.getInternalShutdownResult();
 			Assertions.assertSame(result,
@@ -1101,9 +1101,9 @@ class McpLifecycleB3Tests {
 			Assertions.assertTrue(handlerEntered.await(
 					WAIT.toNanos(), TimeUnit.NANOSECONDS));
 			terminateUnexpectedly(eventLoop(fixture.bridge()));
-			SokletTerminatedUnexpectedlyException stopFailure =
+			SokletUnexpectedTerminationException stopFailure =
 					Assertions.assertThrows(
-							SokletTerminatedUnexpectedlyException.class,
+							SokletUnexpectedTerminationException.class,
 							fixture.soklet()::close);
 			InternalShutdownResult result = stopFailure.getInternalShutdownResult();
 			Assertions.assertSame(result,
@@ -2046,7 +2046,7 @@ class McpLifecycleB3Tests {
 				.maximumSubscriptionsPerPrincipal(subscriptionCount + 1)
 				.maximumSubscriptionDuration(Duration.ofDays(3_650))
 				.build();
-		Fixture fixture = fixture(server, withGracefulShutdownDuration(
+		Fixture fixture = fixture(server, withGracefulShutdownTimeout(
 				TEST_LIFECYCLE_POLICY, gracefulTimeout));
 		List<HttpResponse<InputStream>> responses = new ArrayList<>();
 
@@ -2178,17 +2178,16 @@ class McpLifecycleB3Tests {
 	}
 
 	@NonNull
-	private static LifecyclePolicy withGracefulShutdownDuration(
+	private static LifecyclePolicy withGracefulShutdownTimeout(
 			@NonNull LifecyclePolicy policy,
-			@NonNull Duration gracefulShutdownDuration) {
-		LifecyclePolicy.Builder builder = LifecyclePolicy.builder()
+			@NonNull Duration gracefulShutdownTimeout) {
+		return LifecyclePolicy.builder()
+				.startupTimeout(policy.getStartupTimeout())
 				.startupCancelationTimeout(
 						policy.getStartupCancelationTimeout())
-				.gracefulShutdownDuration(gracefulShutdownDuration)
-				.forcedShutdownDuration(policy.getForcedShutdownDuration());
-		policy.getStartupTimeout().ifPresentOrElse(
-				builder::startupTimeout, builder::noStartupTimeout);
-		return builder.build();
+				.gracefulShutdownTimeout(gracefulShutdownTimeout)
+				.forcedShutdownTimeout(policy.getForcedShutdownTimeout())
+				.build();
 	}
 
 	@NonNull
@@ -2198,8 +2197,8 @@ class McpLifecycleB3Tests {
 		return LifecyclePolicy.builder()
 				.startupTimeout(WAIT)
 				.startupCancelationTimeout(Duration.ofMillis(100))
-				.gracefulShutdownDuration(gracefulTimeout)
-				.forcedShutdownDuration(forcedTimeout)
+				.gracefulShutdownTimeout(gracefulTimeout)
+				.forcedShutdownTimeout(forcedTimeout)
 				.build();
 	}
 
@@ -2210,8 +2209,8 @@ class McpLifecycleB3Tests {
 	private static void closeAfterTerminalFailure(@NonNull Soklet owner) {
 		try {
 			owner.close();
-		} catch (SokletTerminatedUnexpectedlyException
-				| ShutdownIncompleteException ignored) {
+		} catch (SokletUnexpectedTerminationException
+				| SokletShutdownIncompleteException ignored) {
 			// Cleanup must preserve the already-asserted immutable terminal result.
 		}
 	}

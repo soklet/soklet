@@ -29,7 +29,6 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -71,23 +70,23 @@ class LifecycleFoundationTests {
 				LifecycleDeadlines.after(Long.MAX_VALUE - 1L, Duration.ofNanos(2L)));
 		Assertions.assertEquals(0L, LifecycleDeadlines.remainingNanos(5L, 6L));
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
-				new InternalLifecyclePolicy(Optional.of(Duration.ofSeconds(-1)),
+				new InternalLifecyclePolicy(Duration.ofSeconds(-1),
 						Duration.ZERO, Duration.ZERO, Duration.ZERO));
 
 		AtomicLong now = new AtomicLong(5L);
 		AtomicBoolean cancelationRequested = new AtomicBoolean();
 		StartupContext startup = new StartupContext(now::get,
-				Optional.of(10L), 30L, cancelationRequested::get);
+				10L, 30L, cancelationRequested::get);
 		Assertions.assertSame(Boolean.FALSE, startup.isCancelationRequested());
 		Assertions.assertEquals(Duration.ofNanos(5L),
-				startup.getRemainingTime().orElseThrow());
+				startup.getRemainingTime());
 		cancelationRequested.set(true);
 		Assertions.assertSame(Boolean.TRUE, startup.isCancelationRequested());
 		Assertions.assertEquals(Duration.ofNanos(25L),
-				startup.getRemainingTime().orElseThrow());
+				startup.getRemainingTime());
 		now.set(40L);
 		Assertions.assertEquals(Duration.ZERO,
-				startup.getRemainingTime().orElseThrow());
+				startup.getRemainingTime());
 
 		ShutdownContext shutdown = new ShutdownContext(ShutdownPhase.GRACEFUL,
 				now::get, 50L);
@@ -380,7 +379,7 @@ class LifecycleFoundationTests {
 		InternalTransportIdentity identity = InternalTransportIdentity.create();
 		QueuedLauncher launcher = new QueuedLauncher();
 		LifecycleWorkers workers = new LifecycleWorkers(launcher);
-		StartupContext startup = unboundedStartup();
+		StartupContext startup = startupContext();
 		AdmissionFence fence = new AdmissionFence();
 		AtomicReference<InternalTransportAttachmentContext<String>> captured =
 				new AtomicReference<>();
@@ -392,7 +391,7 @@ class LifecycleFoundationTests {
 		InternalTransportEndpoint<String> outer = endpoint(identity, (context, ignored) -> {
 			captured.set(context);
 			Assertions.assertThrows(IllegalArgumentException.class, () ->
-					context.attachLifecycleOwningDelegate(childRef.get(), "wrapped"));
+					context.attachTerminationOwningDelegate(childRef.get(), "wrapped"));
 			IllegalStateException second = Assertions.assertThrows(IllegalStateException.class,
 					() -> context.attachTransparentDelegate(null, null));
 			Assertions.assertEquals("Transport attachment context already delegated",
@@ -431,7 +430,7 @@ class LifecycleFoundationTests {
 		InternalTransportEndpoint<String> transparent = endpoint(identity,
 				(context, startup) -> {
 					transparentSignal.set(context.terminationSignal());
-					context.attachLifecycleOwningDelegate(leaf, "leaf-handler");
+					context.attachTerminationOwningDelegate(leaf, "leaf-handler");
 					return noopRuntime();
 				});
 		InternalTransportEndpoint<String> outer = endpoint(identity, (context, startup) -> {
@@ -442,7 +441,7 @@ class LifecycleFoundationTests {
 
 		InternalTransportAttachmentSession<String> session =
 				new InternalTransportAttachmentSession<>(new Object(), "root-handler",
-						identity, unboundedStartup(), new AdmissionFence(), () -> {}, workers);
+						identity, startupContext(), new AdmissionFence(), () -> {}, workers);
 		Assertions.assertNotNull(session.attach(outer));
 		Assertions.assertSame(rootSignal.get(), transparentSignal.get());
 		Assertions.assertNotSame(rootSignal.get(), owningSignal.get());
@@ -549,7 +548,7 @@ class LifecycleFoundationTests {
 
 		InternalTransportAttachmentSession<String> session =
 				new InternalTransportAttachmentSession<>(new Object(), "root", identity,
-						unboundedStartup(), new AdmissionFence(), () -> {}, workers);
+						startupContext(), new AdmissionFence(), () -> {}, workers);
 		Assertions.assertNotNull(session.attach(outer));
 		Assertions.assertEquals(1, successfulAttachCalls.get());
 		Assertions.assertEquals(0, secondGetterCalls.get());
@@ -626,7 +625,7 @@ class LifecycleFoundationTests {
 
 		InternalTransportAttachmentSession<String> session =
 				new InternalTransportAttachmentSession<>(new Object(), "root", identity,
-						unboundedStartup(), new AdmissionFence(), () -> {}, workers);
+						startupContext(), new AdmissionFence(), () -> {}, workers);
 		Assertions.assertNotNull(session.attach(outer));
 		Assertions.assertEquals(0, forbiddenGetterCalls.get());
 	}
@@ -658,12 +657,12 @@ class LifecycleFoundationTests {
 			}
 		};
 		InternalTransportEndpoint<String> outer = endpoint(identity, (context, startup) -> {
-			context.attachLifecycleOwningDelegate(child, "child-handler");
+			context.attachTerminationOwningDelegate(child, "child-handler");
 			return noopRuntime();
 		});
 		InternalTransportAttachmentSession<String> session =
 				new InternalTransportAttachmentSession<>(new Object(), "root-handler",
-						identity, unboundedStartup(), new AdmissionFence(), () -> {}, workers);
+						identity, startupContext(), new AdmissionFence(), () -> {}, workers);
 		AtomicReference<Throwable> attachmentFailure = new AtomicReference<>();
 		Thread attachment = new Thread(() -> {
 			try {
@@ -943,7 +942,7 @@ class LifecycleFoundationTests {
 			}
 
 			@Override
-			public void quiesce(@NonNull ShutdownContext context) {
+			public void shutdownGracefully(@NonNull ShutdownContext context) {
 				events.add("quiesce-enter");
 				quiesceEntered.countDown();
 				try {
@@ -955,7 +954,7 @@ class LifecycleFoundationTests {
 			}
 
 			@Override
-			public void force(@NonNull ShutdownContext context) {
+			public void shutdownForcibly(@NonNull ShutdownContext context) {
 				events.add("force-enter");
 				forceObservedInterruption.set(
 						quiesceInterrupted.getCount() == 0L
@@ -1044,11 +1043,11 @@ class LifecycleFoundationTests {
 			}
 
 			@Override
-			public void quiesce(@NonNull ShutdownContext context) {
+			public void shutdownGracefully(@NonNull ShutdownContext context) {
 			}
 
 			@Override
-			public void force(@NonNull ShutdownContext context) {
+			public void shutdownForcibly(@NonNull ShutdownContext context) {
 				forceObservedCancellation.set(Thread.interrupted());
 				group.signalTerminated(group.root());
 			}
@@ -1108,9 +1107,10 @@ class LifecycleFoundationTests {
 	}
 
 	@NonNull
-	private static StartupContext unboundedStartup() {
-		return new StartupContext(NanoClock.system(), Optional.empty(),
-				Long.MAX_VALUE, () -> false);
+	private static StartupContext startupContext() {
+		NanoClock clock = NanoClock.system();
+		return new StartupContext(clock, LifecycleDeadlines.after(clock.nanoTime(),
+				Duration.ofSeconds(30)), Long.MAX_VALUE, () -> false);
 	}
 
 	@NonNull
@@ -1121,11 +1121,11 @@ class LifecycleFoundationTests {
 			}
 
 			@Override
-			public void quiesce(@NonNull ShutdownContext context) {
+			public void shutdownGracefully(@NonNull ShutdownContext context) {
 			}
 
 			@Override
-			public void force(@NonNull ShutdownContext context) {
+			public void shutdownForcibly(@NonNull ShutdownContext context) {
 			}
 		};
 	}
@@ -1212,12 +1212,12 @@ class LifecycleFoundationTests {
 				}
 
 				@Override
-				public void quiesce(@NonNull ShutdownContext context) {
+				public void shutdownGracefully(@NonNull ShutdownContext context) {
 					TestParticipant.this.quiesce.run();
 				}
 
 				@Override
-				public void force(@NonNull ShutdownContext context) {
+				public void shutdownForcibly(@NonNull ShutdownContext context) {
 					TestParticipant.this.quiesce.run();
 				}
 			};

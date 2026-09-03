@@ -39,7 +39,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Function;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -61,7 +61,7 @@ public class McpSimulatorPublicRuntimeTests {
 				LOOPBACK + ":0", Optional.empty());
 		AtomicReference<Simulator> escaped = new AtomicReference<>();
 
-		SokletSimulator.run(config -> config.httpServer().build(), simulator -> {
+		SokletSimulator.run(SimulatorConfig.builder().httpServer().build(), simulator -> {
 			escaped.set(simulator);
 			Assertions.assertThrows(IllegalStateException.class,
 					() -> simulator.startMcpRequest(request));
@@ -86,14 +86,15 @@ public class McpSimulatorPublicRuntimeTests {
 			admittedRequest.set(context.getRequest());
 			return McpAdmissionDecision.accepted();
 		});
-		Function<SimulatorConfig.Builder, SimulatorConfig> configFactory =
-				server.configFactory(metrics, lifecycle);
+		SimulatorConfig simulatorConfig =
+				server.config(metrics, lifecycle);
 		String origin = "https://simulator.example";
 		Request request = request("configured-server", "blocking", null,
 				LOOPBACK + ":0", Optional.of(origin));
 
 		try {
-			SokletSimulator.run(configFactory, simulator -> {
+			SokletSimulator.run(simulatorConfig, simulator -> {
+				server.captureServer(simulator);
 				assertRunningOffNetworkDiagnostics(server.server());
 				McpSimulation missingHost = simulator.startMcpRequest(request(
 						"missing-host", "blocking", null, null, Optional.empty()));
@@ -114,8 +115,8 @@ public class McpSimulatorPublicRuntimeTests {
 				releaseHandler.countDown();
 				McpSimulationResponse response = awaitResponse(simulation);
 				Assertions.assertEquals(200, response.getStatusCode());
-				Assertions.assertEquals(McpSimulationBodyMode.JSON,
-						response.getBodyMode());
+				Assertions.assertEquals(McpSimulationBodyType.JSON,
+						response.getBodyType());
 				Assertions.assertEquals(McpStreamTerminationReason.COMPLETED,
 						awaitCompletion(simulation).getReason());
 			});
@@ -149,7 +150,7 @@ public class McpSimulatorPublicRuntimeTests {
 	public void defaultLoopbackHostPolicyRequiresLiteralConfiguredPortZero() {
 		AtomicInteger handlerCalls = new AtomicInteger();
 		ServerFixture server = new ServerFixture(Duration.ofMillis(250),
-				mcpServerBuilder -> {
+				() -> {
 			McpToolRegistration<McpJsonObject> tool = tool("default-loopback",
 					(request, arguments, features) -> {
 						handlerCalls.incrementAndGet();
@@ -162,22 +163,19 @@ public class McpSimulatorPublicRuntimeTests {
 							"4.0.0").build())
 					.tool(tool)
 					.build();
-			return mcpServerBuilder
+			return List.of(endpoint);
+		}, McpAdmissionController.acceptAllInstance(),
+				mcpServerBuilder -> mcpServerBuilder
 					.host(LOOPBACK)
-					.endpointRegistry(McpEndpointRegistry.fromEndpoints(
-							List.of(endpoint)))
-					.admissionController(
-							McpAdmissionController.acceptAllInstance())
 					.requestRateLimiter(
 							context -> McpRateLimitDecision.allowed())
 					.toolRateLimiter(context -> McpRateLimitDecision.allowed())
-					.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
-					.build();
-		});
+					.corsAuthorizer(CorsAuthorizer.acceptAllInstance()));
 
-		SokletSimulator.run(server.configFactory(
+		SokletSimulator.run(server.config(
 				MetricsCollector.defaultInstance(),
 				LifecycleObserver.defaultInstance()), simulator -> {
+			server.captureServer(simulator);
 			McpSimulation missingConfiguredPort = simulator.startMcpRequest(request(
 					"default-host-no-port", "default-loopback", null, LOOPBACK,
 					Optional.empty()));
@@ -198,7 +196,7 @@ public class McpSimulatorPublicRuntimeTests {
 	}
 
 	@Test
-	public void synchronousJsonSimulationUsesRealProtocolLifecycleMetricsAndBodyMode() {
+	public void synchronousJsonSimulationUsesRealProtocolLifecycleMetricsAndBodyType() {
 		RecordingMetrics metrics = new RecordingMetrics();
 		ServerFixture server = server(() -> List.of(tool("complete",
 				(request, arguments, features) ->
@@ -207,13 +205,14 @@ public class McpSimulatorPublicRuntimeTests {
 				LOOPBACK + ":0", Optional.empty());
 		AtomicInteger exactBodySize = new AtomicInteger();
 
-		SokletSimulator.run(server.configFactory(metrics,
+		SokletSimulator.run(server.config(metrics,
 				LifecycleObserver.defaultInstance()), simulator -> {
+			server.captureServer(simulator);
 			McpSimulation baseline = simulator.startMcpRequest(request);
 			McpSimulationResponse response = awaitResponse(baseline);
 			Assertions.assertEquals(200, response.getStatusCode());
-			Assertions.assertEquals(McpSimulationBodyMode.JSON,
-					response.getBodyMode());
+			Assertions.assertEquals(McpSimulationBodyType.JSON,
+					response.getBodyType());
 			byte[] body = response.getBody().orElseThrow();
 			exactBodySize.set(body.length);
 			Assertions.assertEquals("{\"jsonrpc\":\"2.0\","
@@ -232,7 +231,7 @@ public class McpSimulatorPublicRuntimeTests {
 
 			McpSimulation exact = simulator.startMcpRequest(request,
 					McpSimulationOptions.builder()
-							.maximumCapturedBytes(exactBodySize.get()).build());
+							.maximumCapturedSizeInBytes(exactBodySize.get()).build());
 			Assertions.assertEquals(exactBodySize.get(),
 					awaitResponse(exact).getBody().orElseThrow().length,
 					"The exact JSON-body byte bound must be inclusive.");
@@ -241,11 +240,11 @@ public class McpSimulatorPublicRuntimeTests {
 
 			McpSimulation overflow = simulator.startMcpRequest(request,
 					McpSimulationOptions.builder()
-							.maximumCapturedBytes(exactBodySize.get() - 1).build());
+							.maximumCapturedSizeInBytes(exactBodySize.get() - 1).build());
 			McpSimulationResponse overflowHead = awaitResponse(overflow);
 			Assertions.assertEquals(200, overflowHead.getStatusCode());
-			Assertions.assertEquals(McpSimulationBodyMode.JSON,
-					overflowHead.getBodyMode());
+			Assertions.assertEquals(McpSimulationBodyType.JSON,
+					overflowHead.getBodyType());
 			Assertions.assertTrue(overflowHead.getBody().isEmpty());
 			McpSimulationCompletion overflowCompletion =
 					awaitCompletion(overflow);
@@ -273,8 +272,9 @@ public class McpSimulatorPublicRuntimeTests {
 			return McpAdmissionDecision.rejected(rejection);
 		});
 
-		SokletSimulator.run(server.configFactory(metrics,
+		SokletSimulator.run(server.config(metrics,
 				LifecycleObserver.defaultInstance()), simulator -> {
+			server.captureServer(simulator);
 			McpSimulation malformed = simulator.startMcpRequest(
 					malformedRequest("{"));
 			McpSimulationResponse malformedResponse = awaitResponse(malformed);
@@ -357,14 +357,15 @@ public class McpSimulatorPublicRuntimeTests {
 				.requestStateMode(McpRequestStateMode.APPLICATION_PROTECTED)
 				.build()));
 
-		SokletSimulator.run(server.configFactory(metrics,
+		SokletSimulator.run(server.config(metrics,
 				LifecycleObserver.defaultInstance()), simulator -> {
+			server.captureServer(simulator);
 			McpSimulation initial = simulator.startMcpRequest(request(
 					"mrtr-initial", "multi-round-trip", null, LOOPBACK + ":0",
 					Optional.empty()));
 			McpSimulationResponse initialResponse = awaitResponse(initial);
-			Assertions.assertEquals(McpSimulationBodyMode.JSON,
-					initialResponse.getBodyMode());
+			Assertions.assertEquals(McpSimulationBodyType.JSON,
+					initialResponse.getBodyType());
 			String initialBody = new String(initialResponse.getBody().orElseThrow(),
 					StandardCharsets.UTF_8);
 			Assertions.assertTrue(initialBody.contains("\"id\":\"mrtr-initial\""),
@@ -382,8 +383,8 @@ public class McpSimulatorPublicRuntimeTests {
 			McpSimulation continued = simulator.startMcpRequest(requestWithState(
 					"mrtr-continued", "multi-round-trip", requestState));
 			McpSimulationResponse continuedResponse = awaitResponse(continued);
-			Assertions.assertEquals(McpSimulationBodyMode.JSON,
-					continuedResponse.getBodyMode());
+			Assertions.assertEquals(McpSimulationBodyType.JSON,
+					continuedResponse.getBodyType());
 			String continuedBody = new String(
 					continuedResponse.getBody().orElseThrow(), StandardCharsets.UTF_8);
 			Assertions.assertTrue(continuedBody.contains(
@@ -424,14 +425,15 @@ public class McpSimulatorPublicRuntimeTests {
 		Request request = request("stream-response", "progress",
 				"\"sim-token\"", LOOPBACK + ":0", Optional.empty());
 
-		SokletSimulator.run(server.configFactory(
+		SokletSimulator.run(server.config(
 				MetricsCollector.defaultInstance(),
 				LifecycleObserver.defaultInstance()), simulator -> {
+			server.captureServer(simulator);
 			try (McpSimulation simulation = simulator.startMcpRequest(request)) {
 				McpSimulationResponse response = awaitResponse(simulation);
 				Assertions.assertEquals(200, response.getStatusCode());
-				Assertions.assertEquals(McpSimulationBodyMode.SERVER_SENT_EVENTS,
-						response.getBodyMode());
+				Assertions.assertEquals(McpSimulationBodyType.SSE,
+						response.getBodyType());
 				Assertions.assertTrue(response.getBody().isEmpty());
 
 				McpSimulationStreamItem progress = nextItem(simulation);
@@ -459,7 +461,7 @@ public class McpSimulatorPublicRuntimeTests {
 				Assertions.assertTrue(pollNextItem(simulation,
 						Duration.ZERO).isEmpty());
 				Assertions.assertTrue(simulation.isComplete());
-				simulation.cancel();
+				simulation.close();
 				simulation.close();
 				Assertions.assertEquals(completion.getReason(),
 						awaitCompletion(simulation).getReason());
@@ -489,13 +491,14 @@ public class McpSimulatorPublicRuntimeTests {
 		Request request = request("open-stream", "open-stream",
 				"\"open-token\"", LOOPBACK + ":0", Optional.empty());
 
-		SokletSimulator.run(server.configFactory(
+		SokletSimulator.run(server.config(
 				MetricsCollector.defaultInstance(),
 				LifecycleObserver.defaultInstance()), simulator -> {
+			server.captureServer(simulator);
 			McpSimulation simulation = simulator.startMcpRequest(request);
 			Assertions.assertTrue(awaitLatch(progressEmitted));
-			Assertions.assertEquals(McpSimulationBodyMode.SERVER_SENT_EVENTS,
-					awaitResponse(simulation).getBodyMode());
+			Assertions.assertEquals(McpSimulationBodyType.SSE,
+					awaitResponse(simulation).getBodyType());
 			Assertions.assertTrue(nextItem(simulation).getMessage().isPresent());
 			Assertions.assertFalse(simulation.isComplete());
 			simulation.close();
@@ -505,7 +508,7 @@ public class McpSimulatorPublicRuntimeTests {
 			Assertions.assertEquals(McpStreamTerminationReason.CLIENT_DISCONNECTED,
 					awaitCompletion(simulation).getReason());
 			simulation.close();
-			simulation.cancel();
+			simulation.close();
 		});
 	}
 
@@ -515,7 +518,7 @@ public class McpSimulatorPublicRuntimeTests {
 				McpLocalSubscriptionEventPublisher.fromDefaults();
 		RecordingMetrics metrics = new RecordingMetrics(0, 1);
 		ServerFixture server = new ServerFixture(Duration.ofMillis(250),
-				mcpServerBuilder -> {
+				() -> {
 			McpSubscriptionConfig subscriptions = McpSubscriptionConfig
 					.withEventPublisher(publisher)
 					.notificationTypes(EnumSet.of(
@@ -540,16 +543,17 @@ public class McpSimulatorPublicRuntimeTests {
 							.build())
 					.subscriptions(subscriptions)
 					.build();
-			return baseServerBuilder(mcpServerBuilder, List.of(endpoint),
-					McpAdmissionController.acceptAllInstance()).build();
-		});
+			return List.of(endpoint);
+		}, McpAdmissionController.acceptAllInstance(),
+				McpSimulatorPublicRuntimeTests::configureBaseServer);
 		Request request = subscriptionRequest("subscription-sim");
 
-		SokletSimulator.run(server.configFactory(metrics,
+		SokletSimulator.run(server.config(metrics,
 				LifecycleObserver.defaultInstance()), simulator -> {
+			server.captureServer(simulator);
 			McpSimulation simulation = simulator.startMcpRequest(request);
-			Assertions.assertEquals(McpSimulationBodyMode.SERVER_SENT_EVENTS,
-					awaitResponse(simulation).getBodyMode());
+			Assertions.assertEquals(McpSimulationBodyType.SSE,
+					awaitResponse(simulation).getBodyType());
 			McpSimulationStreamItem acknowledgment = nextItem(simulation);
 			Assertions.assertEquals("data: {\"jsonrpc\":\"2.0\","
 					+ "\"method\":\"notifications/subscriptions/acknowledged\","
@@ -567,7 +571,7 @@ public class McpSimulatorPublicRuntimeTests {
 					+ "\"io.modelcontextprotocol/subscriptionId\":"
 					+ "\"subscription-sim\"}}}\n\n",
 					new String(event.getEncodedBytes(), StandardCharsets.UTF_8));
-			simulation.cancel();
+			simulation.close();
 			Assertions.assertEquals(McpStreamTerminationReason.CLIENT_DISCONNECTED,
 					awaitCompletion(simulation).getReason());
 			Assertions.assertTrue(pollNextItem(simulation,
@@ -576,10 +580,10 @@ public class McpSimulatorPublicRuntimeTests {
 			McpSimulation byteLimited = simulator.startMcpRequest(request,
 					McpSimulationOptions.builder()
 							.streamItemQueueCapacity(2)
-							.maximumCapturedBytes(1)
+							.maximumCapturedSizeInBytes(1)
 							.build());
-			Assertions.assertEquals(McpSimulationBodyMode.SERVER_SENT_EVENTS,
-					awaitResponse(byteLimited).getBodyMode());
+			Assertions.assertEquals(McpSimulationBodyType.SSE,
+					awaitResponse(byteLimited).getBodyType());
 			Assertions.assertEquals(
 					McpStreamTerminationReason.SIMULATOR_CAPTURE_BYTE_LIMIT_EXCEEDED,
 					awaitCompletion(byteLimited).getReason());
@@ -646,8 +650,9 @@ public class McpSimulatorPublicRuntimeTests {
 				LOOPBACK + ":0", Optional.empty());
 
 		try {
-			SokletSimulator.run(server.configFactory(metrics,
+			SokletSimulator.run(server.config(metrics,
 					LifecycleObserver.defaultInstance()), simulator -> {
+				server.captureServer(simulator);
 				McpSimulation simulation = simulator.startMcpRequest(request,
 						McpSimulationOptions.builder()
 								.streamItemQueueCapacity(1).build());
@@ -669,7 +674,7 @@ public class McpSimulatorPublicRuntimeTests {
 						LOOPBACK + ":0", Optional.empty()),
 						McpSimulationOptions.builder()
 								.streamItemQueueCapacity(2)
-								.maximumCapturedBytes(
+								.maximumCapturedSizeInBytes(
 										retained.getEncodedBytes().length)
 								.build());
 				Assertions.assertEquals(
@@ -752,7 +757,7 @@ public class McpSimulatorPublicRuntimeTests {
 		AtomicInteger slowCancelCallbacks = new AtomicInteger();
 		RecordingMetrics metrics = new RecordingMetrics(0, 1, 2, 2);
 		ServerFixture server = new ServerFixture(Duration.ofMillis(250),
-				mcpServerBuilder -> {
+				() -> {
 			McpToolRegistration<McpJsonObject> slow = tool("capture-slow",
 				(request, arguments, features) -> {
 					CancelationToken token = features.require(CancelationToken.class);
@@ -787,18 +792,19 @@ public class McpSimulatorPublicRuntimeTests {
 						"4.0.0").build())
 				.tools(List.of(slow, fast))
 				.build();
-			return baseServerBuilder(mcpServerBuilder, List.of(endpoint),
-					McpAdmissionController.acceptAllInstance())
-					.requestHandlerConcurrency(2)
+			return List.of(endpoint);
+		}, McpAdmissionController.acceptAllInstance(), mcpServerBuilder -> {
+			configureBaseServer(mcpServerBuilder);
+			mcpServerBuilder.requestHandlerConcurrency(2)
 					.requestHandlerQueueCapacity(1)
 					.keepAliveInterval(Duration.ofHours(1))
 					.writeTimeout(Duration.ofHours(2))
-					.requestTimeout(Duration.ofHours(3))
-					.build();
+					.requestTimeout(Duration.ofHours(3));
 		});
 		try {
-			SokletSimulator.run(server.configFactory(metrics,
+			SokletSimulator.run(server.config(metrics,
 					LifecycleObserver.defaultInstance()), simulator -> {
+				server.captureServer(simulator);
 				assertRunningOffNetworkDiagnostics(server.server());
 				McpSimulation slowSimulation = simulator.startMcpRequest(request(
 						"capture-slow", "capture-slow", "\"slow-token\"",
@@ -807,8 +813,8 @@ public class McpSimulatorPublicRuntimeTests {
 								.streamItemQueueCapacity(1).build());
 				try {
 					Assertions.assertTrue(awaitLatch(firstSlowProgress));
-					Assertions.assertEquals(McpSimulationBodyMode.SERVER_SENT_EVENTS,
-							awaitResponse(slowSimulation).getBodyMode());
+					Assertions.assertEquals(McpSimulationBodyType.SSE,
+							awaitResponse(slowSimulation).getBodyType());
 					Assertions.assertTrue(pollCompletion(slowSimulation,
 							Duration.ZERO).isEmpty());
 					allowSlowOverflow.countDown();
@@ -828,7 +834,7 @@ public class McpSimulatorPublicRuntimeTests {
 							StreamTerminationReason.SIMULATOR_LIMIT_EXCEEDED),
 							slowTokenReasons);
 					Assertions.assertEquals(1, slowCancelCallbacks.get());
-					slowSimulation.cancel();
+					slowSimulation.close();
 					slowSimulation.close();
 					Assertions.assertSame(slowCompletion,
 							awaitCompletion(slowSimulation));
@@ -840,8 +846,8 @@ public class McpSimulatorPublicRuntimeTests {
 							LOOPBACK + ":0", Optional.empty()));
 					Assertions.assertTrue(awaitLatch(fastHandlerEntered));
 					McpSimulationResponse fastResponse = awaitResponse(fastSimulation);
-					Assertions.assertEquals(McpSimulationBodyMode.JSON,
-							fastResponse.getBodyMode());
+					Assertions.assertEquals(McpSimulationBodyType.JSON,
+							fastResponse.getBodyType());
 					Assertions.assertTrue(new String(
 							fastResponse.getBody().orElseThrow(),
 							StandardCharsets.UTF_8).contains("unrelated complete"));
@@ -954,9 +960,10 @@ public class McpSimulatorPublicRuntimeTests {
 		Request request = request("scope-cancel", "scope-cancel", null,
 				LOOPBACK + ":0", Optional.empty());
 
-		SokletSimulator.run(server.configFactory(
+		SokletSimulator.run(server.config(
 				MetricsCollector.defaultInstance(),
 				LifecycleObserver.defaultInstance()), simulator -> {
+			server.captureServer(simulator);
 			escapedSimulator.set(simulator);
 			escapedSimulation.set(simulator.startMcpRequest(request));
 			Assertions.assertTrue(awaitLatch(handlerEntered));
@@ -1009,11 +1016,12 @@ public class McpSimulatorPublicRuntimeTests {
 
 		try {
 			RuntimeException thrown = Assertions.assertThrows(RuntimeException.class,
-					() -> SokletSimulator.run(server.configFactory(
+					() -> SokletSimulator.run(server.config(
 							MetricsCollector.defaultInstance(),
 							LifecycleObserver.defaultInstance(),
 							SimulatorOptions.defaultInstance()),
 							simulator -> {
+						server.captureServer(simulator);
 						escapedSimulator.set(simulator);
 						simulator.startMcpRequest(request);
 						Assertions.assertTrue(awaitLatch(handlerEntered));
@@ -1021,8 +1029,8 @@ public class McpSimulatorPublicRuntimeTests {
 					}, NanoClock.system(), lifecycleWorkers));
 			Assertions.assertSame(consumerFailure, thrown);
 			Assertions.assertEquals(1, thrown.getSuppressed().length);
-			ShutdownIncompleteException shutdownFailure = Assertions.assertInstanceOf(
-					ShutdownIncompleteException.class,
+			SokletShutdownIncompleteException shutdownFailure = Assertions.assertInstanceOf(
+					SokletShutdownIncompleteException.class,
 					thrown.getSuppressed()[0]);
 			InternalShutdownResult shutdownResult =
 					shutdownFailure.getInternalShutdownResult();
@@ -1081,14 +1089,15 @@ public class McpSimulatorPublicRuntimeTests {
 				LOOPBACK + ":0", Optional.empty());
 
 		try {
-			SokletSimulator.run(server.configFactory(
+			SokletSimulator.run(server.config(
 					MetricsCollector.defaultInstance(),
 					LifecycleObserver.defaultInstance()), simulator -> {
+				server.captureServer(simulator);
 				McpSimulation simulation = simulator.startMcpRequest(request);
 				Assertions.assertThrows(NullPointerException.class,
 						() -> simulation.awaitResponse(null));
 				Assertions.assertThrows(NullPointerException.class,
-						() -> simulation.nextStreamItem(null));
+						() -> simulation.awaitStreamItem(null));
 				Assertions.assertThrows(NullPointerException.class,
 						() -> simulation.awaitCompletion(null));
 				for (Duration negative : List.of(Duration.ofNanos(-1),
@@ -1096,7 +1105,7 @@ public class McpSimulatorPublicRuntimeTests {
 					Assertions.assertThrows(IllegalArgumentException.class,
 							() -> simulation.awaitResponse(negative));
 					Assertions.assertThrows(IllegalArgumentException.class,
-							() -> simulation.nextStreamItem(negative));
+							() -> simulation.awaitStreamItem(negative));
 					Assertions.assertThrows(IllegalArgumentException.class,
 							() -> simulation.awaitCompletion(negative));
 				}
@@ -1111,7 +1120,7 @@ public class McpSimulatorPublicRuntimeTests {
 				Thread waiter = new Thread(() -> {
 					waiterStarted.countDown();
 					try {
-						simulation.nextStreamItem(Duration.ofSeconds(Long.MAX_VALUE));
+						simulation.awaitStreamItem(Duration.ofSeconds(Long.MAX_VALUE));
 					} catch (Throwable throwable) {
 						interruption.set(throwable);
 					}
@@ -1154,9 +1163,10 @@ public class McpSimulatorPublicRuntimeTests {
 		ExecutorService executor = Executors.newFixedThreadPool(4);
 
 		try {
-			SokletSimulator.run(server.configFactory(
+			SokletSimulator.run(server.config(
 					MetricsCollector.defaultInstance(),
 					LifecycleObserver.defaultInstance()), simulator -> {
+				server.captureServer(simulator);
 				List<CompletableFuture<String>> futures = new ArrayList<>();
 				for (int index = 0; index < requestCount; index++) {
 					int requestIndex = index;
@@ -1219,7 +1229,7 @@ public class McpSimulatorPublicRuntimeTests {
 					toolsFactory,
 			@NonNull McpAdmissionController admissionController,
 			@NonNull Duration shutdownTimeout) {
-		return new ServerFixture(shutdownTimeout, mcpServerBuilder -> {
+		return new ServerFixture(shutdownTimeout, () -> {
 			List<McpToolRegistration<?>> tools = new ArrayList<>();
 			tools.addAll(toolsFactory.get());
 			McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
@@ -1228,19 +1238,14 @@ public class McpSimulatorPublicRuntimeTests {
 							"4.0.0").build())
 					.tools(tools)
 					.build();
-			return baseServerBuilder(mcpServerBuilder, List.of(endpoint),
-					admissionController).build();
-		});
+			return List.of(endpoint);
+		}, admissionController, McpSimulatorPublicRuntimeTests::configureBaseServer);
 	}
 
-	private static McpServer.Builder baseServerBuilder(
-			McpServer.@NonNull Builder mcpServerBuilder,
-			@NonNull List<@NonNull McpEndpoint> endpoints,
-			@NonNull McpAdmissionController admissionController) {
-		return mcpServerBuilder
+	private static void configureBaseServer(
+			McpServer.@NonNull Builder mcpServerBuilder) {
+		mcpServerBuilder
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints))
-				.admissionController(admissionController)
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
@@ -1250,49 +1255,64 @@ public class McpSimulatorPublicRuntimeTests {
 
 	private static final class ServerFixture {
 		@NonNull
-		private final Duration forcedShutdownDuration;
+		private final Duration forcedShutdownTimeout;
 		@NonNull
-		private final Function<McpServer.Builder, McpServer> serverFactory;
+		private final Supplier<List<McpEndpoint>> endpointsFactory;
+		@NonNull
+		private final McpAdmissionController admissionController;
+		@NonNull
+		private final Consumer<McpServer.Builder> mcpServerConfigurer;
 		@NonNull
 		private final AtomicReference<McpServer> server = new AtomicReference<>();
 
 		private ServerFixture(@NonNull Duration shutdownTimeout,
-				@NonNull Function<McpServer.Builder, McpServer> serverFactory) {
-			this.forcedShutdownDuration = shutdownTimeout;
-			this.serverFactory = serverFactory;
+				@NonNull Supplier<List<McpEndpoint>> endpointsFactory,
+				@NonNull McpAdmissionController admissionController,
+				@NonNull Consumer<McpServer.Builder> mcpServerConfigurer) {
+			this.forcedShutdownTimeout = shutdownTimeout;
+			this.endpointsFactory = endpointsFactory;
+			this.admissionController = admissionController;
+			this.mcpServerConfigurer = mcpServerConfigurer;
 		}
 
 		@NonNull
-		private Function<SimulatorConfig.Builder, SimulatorConfig> configFactory(
+		private SimulatorConfig config(
 				@NonNull MetricsCollector metrics,
 				@NonNull LifecycleObserver lifecycle) {
-			return configFactory(metrics, lifecycle,
+			return config(metrics, lifecycle,
 					SimulatorOptions.defaultInstance());
 		}
 
 		@NonNull
-		private Function<SimulatorConfig.Builder, SimulatorConfig> configFactory(
+		private SimulatorConfig config(
 				@NonNull MetricsCollector metrics,
 				@NonNull LifecycleObserver lifecycle,
 				@NonNull SimulatorOptions simulatorOptions) {
-			return config -> config.simulatorOptions(simulatorOptions)
-					.mcpServer(0, mcpServerBuilder -> {
-				McpServer server = this.serverFactory.apply(mcpServerBuilder);
-				this.server.set(server);
-				return server;
-			})
-						.resourceMethodResolver(
-								ResourceMethodResolver.fromMethods(Set.of()))
-						.metricsCollector(metrics)
-						.lifecycleObservers(List.of(lifecycle))
-						.lifecyclePolicy(LifecyclePolicy.builder()
-								.startupTimeout(Duration.ofSeconds(30))
-								.startupCancelationTimeout(Duration.ofSeconds(2))
-								.gracefulShutdownDuration(Duration.ZERO)
-								.forcedShutdownDuration(
-										this.forcedShutdownDuration)
-								.build())
-						.build();
+			McpEndpointRegistry endpointRegistry = McpEndpointRegistry.fromEndpoints(
+					this.endpointsFactory.get());
+			return SimulatorConfig.builder()
+					.simulatorOptions(simulatorOptions)
+					.mcpServer(0, endpointRegistry, this.admissionController,
+							this.mcpServerConfigurer)
+					.resourceMethodResolver(
+							ResourceMethodResolver.fromMethods(Set.of()))
+					.metricsCollector(metrics)
+					.lifecycleObservers(List.of(lifecycle))
+					.lifecyclePolicy(LifecyclePolicy.builder()
+							.startupTimeout(Duration.ofSeconds(30))
+							.startupCancelationTimeout(Duration.ofSeconds(2))
+							.gracefulShutdownTimeout(Duration.ZERO)
+							.forcedShutdownTimeout(
+									this.forcedShutdownTimeout)
+							.build())
+					.build();
+		}
+
+		private void captureServer(@NonNull Simulator simulator) {
+			McpServer exactServer = simulator.getMcpServer().orElseThrow(() ->
+					new AssertionError("The simulator MCP server is missing."));
+			if (!this.server.compareAndSet(null, exactServer))
+				throw new AssertionError("The simulator MCP server was captured twice.");
 		}
 
 		@NonNull
@@ -1418,7 +1438,7 @@ public class McpSimulatorPublicRuntimeTests {
 	private static McpSimulationStreamItem nextItem(
 			@NonNull McpSimulation simulation) {
 		try {
-			return simulation.nextStreamItem(WAIT).orElseThrow(() ->
+			return simulation.awaitStreamItem(WAIT).orElseThrow(() ->
 					new AssertionError("Timed out awaiting simulator stream item."));
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
@@ -1440,7 +1460,7 @@ public class McpSimulatorPublicRuntimeTests {
 	private static Optional<@NonNull McpSimulationStreamItem> pollNextItem(
 			@NonNull McpSimulation simulation, @NonNull Duration timeout) {
 		try {
-			return simulation.nextStreamItem(timeout);
+			return simulation.awaitStreamItem(timeout);
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 			throw new AssertionError(e);

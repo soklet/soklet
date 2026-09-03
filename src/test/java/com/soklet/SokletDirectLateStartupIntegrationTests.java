@@ -780,13 +780,13 @@ final class SokletDirectLateStartupIntegrationTests {
 
 	@NonNull
 	private static InternalLifecyclePolicy phasePolicy() {
-		return new InternalLifecyclePolicy(Optional.of(LONG_STARTUP), Duration.ZERO,
+		return new InternalLifecyclePolicy(LONG_STARTUP, Duration.ZERO,
 				FORCE_DELAY, FORCED_OBSERVATION);
 	}
 
 	@NonNull
 	private static InternalLifecyclePolicy gracefulCatchUpPolicy() {
-		return new InternalLifecyclePolicy(Optional.of(LONG_STARTUP), Duration.ZERO,
+		return new InternalLifecyclePolicy(LONG_STARTUP, Duration.ZERO,
 				GRACEFUL_CATCH_UP_FORCE_DELAY, FORCED_OBSERVATION);
 	}
 
@@ -1027,7 +1027,7 @@ final class SokletDirectLateStartupIntegrationTests {
 		}
 
 		@Override
-		public void quiesce(@NonNull ShutdownContext context) {
+		public void shutdownGracefully(@NonNull ShutdownContext context) {
 			this.firstUnderlyingPhase.compareAndSet(null,
 					context.getShutdownPhase());
 			this.quiesceCalls.incrementAndGet();
@@ -1037,7 +1037,7 @@ final class SokletDirectLateStartupIntegrationTests {
 		}
 
 		@Override
-		public void force(@NonNull ShutdownContext context) {
+		public void shutdownForcibly(@NonNull ShutdownContext context) {
 			if (this.firstUnderlyingPhase.compareAndSet(null,
 					context.getShutdownPhase()))
 				this.forceSubsumedQuiesce.set(true);
@@ -1375,15 +1375,15 @@ final class SokletDirectLateStartupIntegrationTests {
 				}
 
 				@Override
-				public void quiesce(@NonNull ShutdownContext context) {
-					runtime.quiesce(context);
+				public void shutdownGracefully(@NonNull ShutdownContext context) {
+					runtime.shutdownGracefully(context);
 					if (quiesceFailure != null)
 						throw quiesceFailure;
 				}
 
 				@Override
-				public void force(@NonNull ShutdownContext context) {
-					runtime.force(context);
+				public void shutdownForcibly(@NonNull ShutdownContext context) {
+					runtime.shutdownForcibly(context);
 				}
 			};
 		}

@@ -17,10 +17,14 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
+
+import javax.annotation.concurrent.NotThreadSafe;
 
 import static java.util.Objects.requireNonNull;
 
 /** Indicates that the sole startup attempt ended before readiness. */
+@NotThreadSafe
 public final class SokletStartupException extends SokletLifecycleException {
 	@NonNull
 	private final StartupDisposition startupDisposition;
@@ -30,7 +34,7 @@ public final class SokletStartupException extends SokletLifecycleException {
 	}
 
 	SokletStartupException(@NonNull ShutdownResult shutdownResult,
-			Throwable cause) {
+			@Nullable Throwable cause) {
 		super(message(requireNonNull(shutdownResult).getStartupDisposition()),
 				shutdownResult, cause);
 		this.startupDisposition = shutdownResult.getStartupDisposition();

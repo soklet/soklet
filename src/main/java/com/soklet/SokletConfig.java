@@ -370,13 +370,14 @@ public final class SokletConfig {
 		 * Sets the startup and shutdown deadline policy shared by every
 		 * configured lifecycle component.
 		 *
-		 * @param lifecyclePolicy the lifecycle policy
+		 * @param lifecyclePolicy the lifecycle policy, or {@code null} to use the
+		 * default
 		 * @return this builder
 		 */
 		@NonNull
 		public Builder lifecyclePolicy(
-				@NonNull LifecyclePolicy lifecyclePolicy) {
-			this.lifecyclePolicy = requireNonNull(lifecyclePolicy);
+				@Nullable LifecyclePolicy lifecyclePolicy) {
+			this.lifecyclePolicy = lifecyclePolicy;
 			return this;
 		}
 

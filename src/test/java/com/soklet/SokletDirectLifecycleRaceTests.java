@@ -83,7 +83,7 @@ final class SokletDirectLifecycleRaceTests {
 		Throwable startFailure;
 		try {
 			startFailure = start.get(3, TimeUnit.SECONDS);
-			Assertions.assertInstanceOf(ShutdownIncompleteException.class,
+			Assertions.assertInstanceOf(SokletShutdownIncompleteException.class,
 					close.get(3, TimeUnit.SECONDS));
 		} finally {
 			releaseSetup.countDown();
@@ -124,7 +124,7 @@ final class SokletDirectLifecycleRaceTests {
 		InternalShutdownResult terminal;
 		try {
 			startFailure = start.get(3, TimeUnit.SECONDS);
-			Assertions.assertInstanceOf(ShutdownIncompleteException.class,
+			Assertions.assertInstanceOf(SokletShutdownIncompleteException.class,
 					close.get(3, TimeUnit.SECONDS));
 			terminal = soklet.getDirectLifecycle().result().orElseThrow();
 		} finally {
@@ -182,8 +182,8 @@ final class SokletDirectLifecycleRaceTests {
 			Throwable closeFailure = close.get(3, TimeUnit.SECONDS);
 			SokletStartupException startup = Assertions.assertInstanceOf(
 					SokletStartupException.class, startFailure);
-			ShutdownIncompleteException incomplete = Assertions.assertInstanceOf(
-					ShutdownIncompleteException.class, closeFailure);
+			SokletShutdownIncompleteException incomplete = Assertions.assertInstanceOf(
+					SokletShutdownIncompleteException.class, closeFailure);
 			InternalShutdownResult result = startup.getInternalShutdownResult();
 
 			Assertions.assertSame(result, incomplete.getInternalShutdownResult());
@@ -786,7 +786,7 @@ final class SokletDirectLifecycleRaceTests {
 			laterStartReturned.countDown();
 		});
 		InternalLifecyclePolicy policy = new InternalLifecyclePolicy(
-				Optional.of(LONG_STARTUP), SHORT_PHASE, SHORT_PHASE, SHORT_PHASE);
+				LONG_STARTUP, SHORT_PHASE, SHORT_PHASE, SHORT_PHASE);
 		Soklet soklet = Soklet.fromConfig(config(http, completeResolver())
 				.sseServer(sse).internalLifecyclePolicy(policy).build());
 		ExecutorService executor = newExecutor();
@@ -882,13 +882,13 @@ final class SokletDirectLifecycleRaceTests {
 
 	@NonNull
 	private static InternalLifecyclePolicy shortCancellationPolicy() {
-		return new InternalLifecyclePolicy(Optional.of(LONG_STARTUP), SHORT_PHASE,
+		return new InternalLifecyclePolicy(LONG_STARTUP, SHORT_PHASE,
 				SHORT_PHASE, SHORT_PHASE);
 	}
 
 	@NonNull
 	private static InternalLifecyclePolicy shortStartupTimeoutPolicy() {
-		return new InternalLifecyclePolicy(Optional.of(Duration.ofMillis(150)),
+		return new InternalLifecyclePolicy(Duration.ofMillis(150),
 				SHORT_PHASE, SHORT_PHASE, SHORT_PHASE);
 	}
 
@@ -1161,12 +1161,12 @@ final class SokletDirectLifecycleRaceTests {
 				}
 
 				@Override
-				public void quiesce(@NonNull ShutdownContext context) {
+				public void shutdownGracefully(@NonNull ShutdownContext context) {
 					terminate();
 				}
 
 				@Override
-				public void force(@NonNull ShutdownContext context) {
+				public void shutdownForcibly(@NonNull ShutdownContext context) {
 					terminate();
 				}
 			};
@@ -1220,12 +1220,12 @@ final class SokletDirectLifecycleRaceTests {
 				}
 
 				@Override
-				public void quiesce(@NonNull ShutdownContext context) {
+				public void shutdownGracefully(@NonNull ShutdownContext context) {
 					terminate();
 				}
 
 				@Override
-				public void force(@NonNull ShutdownContext context) {
+				public void shutdownForcibly(@NonNull ShutdownContext context) {
 					terminate();
 				}
 			};

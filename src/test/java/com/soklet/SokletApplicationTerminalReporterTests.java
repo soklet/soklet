@@ -166,6 +166,7 @@ class SokletApplicationTerminalReporterTests {
 				"participant-failure", "cleanup-timeout"))
 			Assertions.assertFalse(report.contains(messageCanary), report);
 		Assertions.assertTrue(report.contains("startupBudgetNanos=30000000000\n"));
+		Assertions.assertFalse(report.contains("unbounded"));
 		Assertions.assertTrue(report.contains(
 				"startupCancelationBudgetNanos=2000000000\n"));
 		Assertions.assertTrue(report.contains("gracefulBudgetNanos=15000000000\n"));

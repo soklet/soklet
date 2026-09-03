@@ -55,7 +55,7 @@ final class SokletDirectCompositionIsolationTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
 						Set.of(InertResource.class)))
 				.internalLifecyclePolicy(new InternalLifecyclePolicy(
-						Optional.of(Duration.ofSeconds(2)),
+						Duration.ofSeconds(2),
 						Duration.ofMillis(100), Duration.ofSeconds(2),
 						Duration.ofMillis(500)))
 				.build();
@@ -97,8 +97,8 @@ final class SokletDirectCompositionIsolationTests {
 					"HTTP force must progress after the callback is blocked");
 
 			Throwable stopFailure = stopping.get(5, TimeUnit.SECONDS);
-			ShutdownIncompleteException incomplete = Assertions.assertInstanceOf(
-					ShutdownIncompleteException.class, stopFailure);
+			SokletShutdownIncompleteException incomplete = Assertions.assertInstanceOf(
+					SokletShutdownIncompleteException.class, stopFailure);
 			frozenResult = soklet.getDirectLifecycle().result().orElseThrow();
 			Assertions.assertSame(frozenResult,
 					incomplete.getInternalShutdownResult());
@@ -172,7 +172,7 @@ final class SokletDirectCompositionIsolationTests {
 			soklet.close();
 			failure = new AssertionError(
 					"close() must replay the incomplete one-shot result");
-		} catch (ShutdownIncompleteException expected) {
+		} catch (SokletShutdownIncompleteException expected) {
 			// Expected both after the asserted result and on an early assertion path.
 		} catch (Throwable unexpected) {
 			failure = unexpected;
@@ -344,13 +344,13 @@ final class SokletDirectCompositionIsolationTests {
 				}
 
 				@Override
-				public void quiesce(@NonNull ShutdownContext context) {
+				public void shutdownGracefully(@NonNull ShutdownContext context) {
 					quiesceCalls.incrementAndGet();
 					publishProof();
 				}
 
 				@Override
-				public void force(@NonNull ShutdownContext context) {
+				public void shutdownForcibly(@NonNull ShutdownContext context) {
 					forceCalls.incrementAndGet();
 					try {
 						publishProof();
@@ -453,7 +453,7 @@ final class SokletDirectCompositionIsolationTests {
 			TransportTerminationSignal rootSignal =
 					context.getTerminationSignal();
 			TransportDelegateAttachment attachment = context
-					.attachLifecycleOwningDelegate(this.delegate,
+					.attachTerminationOwningDelegate(this.delegate,
 							context.getAdmissionFencedRequestHandler());
 			CompletionStage<Void> proofStage = attachment.whenTerminated();
 			this.childProofStage.set(proofStage);
@@ -478,21 +478,21 @@ final class SokletDirectCompositionIsolationTests {
 				}
 
 				@Override
-				public void quiesce(@NonNull ShutdownContext context) {
+				public void shutdownGracefully(@NonNull ShutdownContext context) {
 					quiesceCalls.incrementAndGet();
 					try {
-						delegateRuntime.quiesce(context);
+						delegateRuntime.shutdownGracefully(context);
 					} finally {
 						quiesceReturned.countDown();
 					}
 				}
 
 				@Override
-				public void force(@NonNull ShutdownContext context) {
+				public void shutdownForcibly(@NonNull ShutdownContext context) {
 					progressOrder.recordHttpForceAfterCallback();
 					forceCalls.incrementAndGet();
 					try {
-						delegateRuntime.force(context);
+						delegateRuntime.shutdownForcibly(context);
 					} finally {
 						forceReturned.countDown();
 					}
@@ -552,7 +552,7 @@ final class SokletDirectCompositionIsolationTests {
 				}
 
 				@Override
-				public void quiesce(@NonNull ShutdownContext context) {
+				public void shutdownGracefully(@NonNull ShutdownContext context) {
 					progressOrder.recordSseQuiesceAfterCallback();
 					quiesceCalls.incrementAndGet();
 					try {
@@ -563,7 +563,7 @@ final class SokletDirectCompositionIsolationTests {
 				}
 
 				@Override
-				public void force(@NonNull ShutdownContext context) {
+				public void shutdownForcibly(@NonNull ShutdownContext context) {
 					forceCalls.incrementAndGet();
 					publishProof();
 				}

@@ -117,7 +117,7 @@ class McpLocalizationSubscriptionRuntimeTests {
 		List<Integer> statusCodes = new ArrayList<>();
 		List<String> bodies = new ArrayList<>();
 
-		SokletSimulator.run(config -> simulatorConfig(config, localizer, 2),
+		SokletSimulator.run(simulatorConfig(localizer, 2),
 				simulator -> {
 			// With a per-authorization-partition cap of 2, any reservation leak
 			// would turn the third and later attempts into capacity rejections
@@ -159,7 +159,7 @@ class McpLocalizationSubscriptionRuntimeTests {
 			int maximumSubscriptionsPerPrincipal, ResponseProbe probe) {
 		AtomicReference<McpSimulation> escaped = new AtomicReference<>();
 
-		SokletSimulator.run(config -> simulatorConfig(config, localizer,
+		SokletSimulator.run(simulatorConfig(localizer,
 				maximumSubscriptionsPerPrincipal), simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(
 					subscriptionRequest("terminal-render"));
@@ -168,11 +168,11 @@ class McpLocalizationSubscriptionRuntimeTests {
 			try {
 				McpSimulationResponse response = simulation.awaitResponse(WAIT)
 						.orElseThrow(() -> new AssertionError("Timed out."));
-				assertEquals(McpSimulationBodyMode.SERVER_SENT_EVENTS,
-						response.getBodyMode());
+				assertEquals(McpSimulationBodyType.SSE,
+						response.getBodyType());
 				probe.observe(response);
 				// Consume the acknowledgment so shutdown ordering stays exact.
-				simulation.nextStreamItem(WAIT);
+				simulation.awaitStreamItem(WAIT);
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 				throw new AssertionError(e);
@@ -196,7 +196,7 @@ class McpLocalizationSubscriptionRuntimeTests {
 
 		try {
 			Optional<McpSimulationStreamItem> item;
-			while ((item = simulation.nextStreamItem(Duration.ZERO)).isPresent())
+			while ((item = simulation.awaitStreamItem(Duration.ZERO)).isPresent())
 				frames.add(new String(item.orElseThrow().getEncodedBytes(),
 						StandardCharsets.UTF_8));
 		} catch (InterruptedException e) {
@@ -208,9 +208,7 @@ class McpLocalizationSubscriptionRuntimeTests {
 		return frames;
 	}
 
-	private static SimulatorConfig simulatorConfig(
-			SimulatorConfig.Builder config,
-			McpLocalizer localizer,
+	private static SimulatorConfig simulatorConfig(McpLocalizer localizer,
 			int maximumSubscriptionsPerPrincipal) {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation
@@ -238,18 +236,16 @@ class McpLocalizationSubscriptionRuntimeTests {
 										.RESOURCES_LIST_CHANGED))
 						.build())
 				.build();
-		return config.mcpServer(0, builder -> builder
+		return SimulatorConfig.builder().mcpServer(0,
+				McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
+				McpAdmissionController.acceptAllInstance(), builder -> builder
 					.host(LOOPBACK)
-					.endpointRegistry(McpEndpointRegistry.fromEndpoints(
-							List.of(endpoint)))
-					.admissionController(McpAdmissionController.acceptAllInstance())
 					.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 					.allowedHosts(Set.of(LOOPBACK))
 					.maximumSubscriptionsPerPrincipal(
 							maximumSubscriptionsPerPrincipal)
 					.maximumSubscriptionDuration(Duration.ofMillis(300))
-					.localizer(localizer)
-					.build())
+					.localizer(localizer))
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.build();
 	}

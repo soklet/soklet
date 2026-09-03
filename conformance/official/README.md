@@ -63,7 +63,7 @@ official JSON Schema fixture because Soklet intentionally has no public
 hand-authored-schema API. The fixture imports no `com.soklet.internal` type.
 The same candidate-JAR-only build also compiles and runs the published
 `com.soklet.conformance.transport` reference fixture. It exercises independent
-HTTP/SSE engines, transparent decorators, lifecycle-owning decorators, and
+HTTP/SSE engines, transparent decorators, termination-owning decorators, and
 two-level owning stacks entirely outside the `com.soklet` package, including
 stable graph identity, wrapped request dispatch, SSE broadcaster forwarding,
 delegate-subtree proof, decorator-owned cleanup, and complete graceful results.

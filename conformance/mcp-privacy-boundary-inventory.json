@@ -10399,7 +10399,7 @@
       "canaryTests": [
         "fuzz/src/test/java/com/soklet/internal/mcp/protocol/McpSimulationCaptureFuzzTest.java#captureStateMachineRemainsBoundedTerminalAndIdempotent",
         "src/test/java/com/soklet/McpSimulatorPublicRuntimeTests.java#mcpSimulationCompletionRetainsStreamCaptureFailures",
-        "src/test/java/com/soklet/McpSimulatorPublicRuntimeTests.java#synchronousJsonSimulationUsesRealProtocolLifecycleMetricsAndBodyMode"
+        "src/test/java/com/soklet/McpSimulatorPublicRuntimeTests.java#synchronousJsonSimulationUsesRealProtocolLifecycleMetricsAndBodyType"
       ],
       "category": "FIXTURE",
       "classification": "EXACT_FIXTURE_CAPTURE",
@@ -10445,9 +10445,18 @@
         },
         {
           "file": "src/main/java/com/soklet/McpSimulation.java",
-          "key": "PRIV-MATCH-007:src/main/java/com/soklet/McpSimulation.java#com.soklet.McpSimulation#cancel()->McpSimulation.publicOrProtectedSurface@1",
+          "key": "PRIV-MATCH-007:src/main/java/com/soklet/McpSimulation.java#com.soklet.McpSimulation#awaitStreamItem(Duration)->McpSimulation.awaitStreamItem@1",
           "matcherRuleId": "PRIV-MATCH-007",
-          "member": "cancel()",
+          "member": "awaitStreamItem(Duration)",
+          "occurrence": 1,
+          "owner": "com.soklet.McpSimulation",
+          "sink": "McpSimulation.awaitStreamItem"
+        },
+        {
+          "file": "src/main/java/com/soklet/McpSimulation.java",
+          "key": "PRIV-MATCH-007:src/main/java/com/soklet/McpSimulation.java#com.soklet.McpSimulation#awaitStreamItem(Duration)->McpSimulation.publicOrProtectedSurface@1",
+          "matcherRuleId": "PRIV-MATCH-007",
+          "member": "awaitStreamItem(Duration)",
           "occurrence": 1,
           "owner": "com.soklet.McpSimulation",
           "sink": "McpSimulation.publicOrProtectedSurface"
@@ -10466,24 +10475,6 @@
           "key": "PRIV-MATCH-007:src/main/java/com/soklet/McpSimulation.java#com.soklet.McpSimulation#isComplete()->McpSimulation.publicOrProtectedSurface@1",
           "matcherRuleId": "PRIV-MATCH-007",
           "member": "isComplete()",
-          "occurrence": 1,
-          "owner": "com.soklet.McpSimulation",
-          "sink": "McpSimulation.publicOrProtectedSurface"
-        },
-        {
-          "file": "src/main/java/com/soklet/McpSimulation.java",
-          "key": "PRIV-MATCH-007:src/main/java/com/soklet/McpSimulation.java#com.soklet.McpSimulation#nextStreamItem(Duration)->McpSimulation.nextStreamItem@1",
-          "matcherRuleId": "PRIV-MATCH-007",
-          "member": "nextStreamItem(Duration)",
-          "occurrence": 1,
-          "owner": "com.soklet.McpSimulation",
-          "sink": "McpSimulation.nextStreamItem"
-        },
-        {
-          "file": "src/main/java/com/soklet/McpSimulation.java",
-          "key": "PRIV-MATCH-007:src/main/java/com/soklet/McpSimulation.java#com.soklet.McpSimulation#nextStreamItem(Duration)->McpSimulation.publicOrProtectedSurface@1",
-          "matcherRuleId": "PRIV-MATCH-007",
-          "member": "nextStreamItem(Duration)",
           "occurrence": 1,
           "owner": "com.soklet.McpSimulation",
           "sink": "McpSimulation.publicOrProtectedSurface"
@@ -10553,9 +10544,9 @@
         },
         {
           "file": "src/main/java/com/soklet/McpSimulationResponse.java",
-          "key": "PRIV-MATCH-007:src/main/java/com/soklet/McpSimulationResponse.java#com.soklet.McpSimulationResponse#getBodyMode()->McpSimulation.publicOrProtectedSurface@1",
+          "key": "PRIV-MATCH-007:src/main/java/com/soklet/McpSimulationResponse.java#com.soklet.McpSimulationResponse#getBodyType()->McpSimulation.publicOrProtectedSurface@1",
           "matcherRuleId": "PRIV-MATCH-007",
-          "member": "getBodyMode()",
+          "member": "getBodyType()",
           "occurrence": 1,
           "owner": "com.soklet.McpSimulationResponse",
           "sink": "McpSimulation.publicOrProtectedSurface"
@@ -10697,9 +10688,18 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java",
-          "key": "PRIV-MATCH-007:src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java#com.soklet.internal.mcp.protocol.McpSimulationRuntime#cancel()->McpSimulation.publicOrProtectedSurface@1",
+          "key": "PRIV-MATCH-007:src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java#com.soklet.internal.mcp.protocol.McpSimulationRuntime#awaitStreamItem(Duration)->McpSimulation.awaitStreamItem@1",
           "matcherRuleId": "PRIV-MATCH-007",
-          "member": "cancel()",
+          "member": "awaitStreamItem(Duration)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpSimulationRuntime",
+          "sink": "McpSimulation.awaitStreamItem"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java",
+          "key": "PRIV-MATCH-007:src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java#com.soklet.internal.mcp.protocol.McpSimulationRuntime#awaitStreamItem(Duration)->McpSimulation.publicOrProtectedSurface@1",
+          "matcherRuleId": "PRIV-MATCH-007",
+          "member": "awaitStreamItem(Duration)",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpSimulationRuntime",
           "sink": "McpSimulation.publicOrProtectedSurface"
@@ -10817,24 +10817,6 @@
           "key": "PRIV-MATCH-007:src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java#com.soklet.internal.mcp.protocol.McpSimulationRuntime#isTerminalWritten()->McpSimulation.publicOrProtectedSurface@1",
           "matcherRuleId": "PRIV-MATCH-007",
           "member": "isTerminalWritten()",
-          "occurrence": 1,
-          "owner": "com.soklet.internal.mcp.protocol.McpSimulationRuntime",
-          "sink": "McpSimulation.publicOrProtectedSurface"
-        },
-        {
-          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java",
-          "key": "PRIV-MATCH-007:src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java#com.soklet.internal.mcp.protocol.McpSimulationRuntime#nextStreamItem(Duration)->McpSimulation.nextStreamItem@1",
-          "matcherRuleId": "PRIV-MATCH-007",
-          "member": "nextStreamItem(Duration)",
-          "occurrence": 1,
-          "owner": "com.soklet.internal.mcp.protocol.McpSimulationRuntime",
-          "sink": "McpSimulation.nextStreamItem"
-        },
-        {
-          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java",
-          "key": "PRIV-MATCH-007:src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java#com.soklet.internal.mcp.protocol.McpSimulationRuntime#nextStreamItem(Duration)->McpSimulation.publicOrProtectedSurface@1",
-          "matcherRuleId": "PRIV-MATCH-007",
-          "member": "nextStreamItem(Duration)",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpSimulationRuntime",
           "sink": "McpSimulation.publicOrProtectedSurface"
@@ -10967,9 +10949,9 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java",
-          "key": "PRIV-MATCH-007:src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java#com.soklet.internal.mcp.protocol.McpSimulationRuntime.DefaultResponse#getBodyMode()->McpSimulation.publicOrProtectedSurface@1",
+          "key": "PRIV-MATCH-007:src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java#com.soklet.internal.mcp.protocol.McpSimulationRuntime.DefaultResponse#getBodyType()->McpSimulation.publicOrProtectedSurface@1",
           "matcherRuleId": "PRIV-MATCH-007",
-          "member": "getBodyMode()",
+          "member": "getBodyType()",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpSimulationRuntime.DefaultResponse",
           "sink": "McpSimulation.publicOrProtectedSurface"
@@ -40750,9 +40732,9 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java#com.soklet.internal.mcp.protocol.McpSimulationRuntime.DefaultResponse#DefaultResponse(int,Map<String, Set<String>>,McpSimulationBodyMode,byte [])->Throwable.IllegalArgumentException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java#com.soklet.internal.mcp.protocol.McpSimulationRuntime.DefaultResponse#DefaultResponse(int,Map<String, Set<String>>,McpSimulationBodyType,byte [])->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "DefaultResponse(int,Map<String, Set<String>>,McpSimulationBodyMode,byte [])",
+          "member": "DefaultResponse(int,Map<String, Set<String>>,McpSimulationBodyType,byte [])",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpSimulationRuntime.DefaultResponse",
           "sink": "Throwable.IllegalArgumentException"

@@ -210,8 +210,8 @@ public class ResourceLeakTests {
 	@NonNull
 	private static LifecyclePolicy lifecyclePolicy(@NonNull Duration grace) {
 		return LifecyclePolicy.builder()
-				.gracefulShutdownDuration(grace)
-				.forcedShutdownDuration(Duration.ofSeconds(2))
+				.gracefulShutdownTimeout(grace)
+				.forcedShutdownTimeout(Duration.ofSeconds(2))
 				.build();
 	}
 

@@ -314,7 +314,7 @@ public class StreamingResponseTests {
 		AtomicBoolean streamTerminated = new AtomicBoolean(false);
 		AtomicReference<StreamTerminationReason> cancelationReasonRef = new AtomicReference<>();
 		List<String> lifecycleEvents = new java.util.concurrent.CopyOnWriteArrayList<>();
-		SokletSimulator.run(config -> config.httpServer()
+		SokletSimulator.run(SimulatorConfig.builder().httpServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override
@@ -344,7 +344,7 @@ public class StreamingResponseTests {
 
 	@Test
 	public void simulator_streaming_response_context_exposes_originating_request() {
-		SokletSimulator.run(config -> config.httpServer()
+		SokletSimulator.run(SimulatorConfig.builder().httpServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
 				.build(), simulator -> {
 			HttpRequestResult result = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/context-request")
@@ -363,7 +363,7 @@ public class StreamingResponseTests {
 				.build();
 
 		Assertions.assertThrows(IllegalStateException.class, () ->
-				SokletSimulator.run(config -> config.httpServer()
+				SokletSimulator.run(SimulatorConfig.builder().httpServer()
 						.simulatorOptions(simulatorOptions)
 						.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
 						.lifecycleObserver(new LifecycleObserver() {
@@ -382,7 +382,7 @@ public class StreamingResponseTests {
 	public void simulator_preserves_client_disconnected_reason_for_interrupted_producers() {
 		AtomicReference<StreamTerminationReason> cancelationReasonRef = new AtomicReference<>();
 		IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class, () ->
-				SokletSimulator.run(config -> config.httpServer()
+				SokletSimulator.run(SimulatorConfig.builder().httpServer()
 						.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
 						.lifecycleObserver(new LifecycleObserver() {
 							@Override
@@ -406,7 +406,7 @@ public class StreamingResponseTests {
 				.build();
 
 		Assertions.assertThrows(IllegalStateException.class, () ->
-				SokletSimulator.run(config -> config.httpServer()
+				SokletSimulator.run(SimulatorConfig.builder().httpServer()
 						.simulatorOptions(simulatorOptions)
 						.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
 						.lifecycleObserver(new LifecycleObserver() {
@@ -442,7 +442,7 @@ public class StreamingResponseTests {
 		try {
 			ShutdownResult shutdownResult = ShutdownResult.fromInternal(
 					SokletSimulator.run(
-					config -> config.httpServer()
+					SimulatorConfig.builder().httpServer()
 							.resourceMethodResolver(ResourceMethodResolver.fromClasses(
 									Set.of(SealDuringStreamResource.class)))
 							.lifecycleObserver(new LifecycleObserver() {
@@ -523,7 +523,7 @@ public class StreamingResponseTests {
 
 	@Test
 	public void publisher_streams_one_item_at_a_time_in_simulator() {
-		SokletSimulator.run(config -> config.httpServer()
+		SokletSimulator.run(SimulatorConfig.builder().httpServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
 				.build(), simulator -> {
 			HttpRequestResult result = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/publisher").build());

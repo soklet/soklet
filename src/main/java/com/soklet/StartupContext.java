@@ -20,7 +20,6 @@ import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
-import java.util.Optional;
 import java.util.function.BooleanSupplier;
 import java.util.function.LongSupplier;
 
@@ -37,14 +36,13 @@ public final class StartupContext {
 	@NonNull
 	private final NanoClock clock;
 	private final long normalDeadlineNanos;
-	private final boolean normalDeadlinePresent;
 	@NonNull
 	private final LongSupplier cancelationDeadlineNanos;
 	@NonNull
 	private final BooleanSupplier cancelationRequested;
 
 	StartupContext(@NonNull NanoClock clock,
-			@NonNull Optional<Long> normalDeadlineNanos,
+			long normalDeadlineNanos,
 			long cancelationDeadlineNanos,
 			@NonNull BooleanSupplier cancelationRequested) {
 		this(clock, normalDeadlineNanos, () -> cancelationDeadlineNanos,
@@ -52,13 +50,11 @@ public final class StartupContext {
 	}
 
 	StartupContext(@NonNull NanoClock clock,
-			@NonNull Optional<Long> normalDeadlineNanos,
+			long normalDeadlineNanos,
 			@NonNull LongSupplier cancelationDeadlineNanos,
 			@NonNull BooleanSupplier cancelationRequested) {
 		this.clock = requireNonNull(clock);
-		requireNonNull(normalDeadlineNanos);
-		this.normalDeadlinePresent = normalDeadlineNanos.isPresent();
-		this.normalDeadlineNanos = normalDeadlineNanos.orElse(0L);
+		this.normalDeadlineNanos = normalDeadlineNanos;
 		this.cancelationDeadlineNanos = requireNonNull(cancelationDeadlineNanos);
 		this.cancelationRequested = requireNonNull(cancelationRequested);
 	}
@@ -66,17 +62,15 @@ public final class StartupContext {
 	/**
 	 * Acquires the time remaining before the active startup boundary.
 	 *
-	 * @return the remaining time, or empty when ordinary startup is unbounded
+	 * @return the remaining time, clamped to zero once the boundary is reached
 	 */
 	@NonNull
-	public Optional<@NonNull Duration> getRemainingTime() {
+	public Duration getRemainingTime() {
 		if (isCancelationRequested())
-			return Optional.of(LifecycleDeadlines.remaining(
-					this.cancelationDeadlineNanos.getAsLong(), this.clock.nanoTime()));
-		if (!this.normalDeadlinePresent)
-			return Optional.empty();
-		return Optional.of(LifecycleDeadlines.remaining(
-				this.normalDeadlineNanos, this.clock.nanoTime()));
+			return LifecycleDeadlines.remaining(
+					this.cancelationDeadlineNanos.getAsLong(), this.clock.nanoTime());
+		return LifecycleDeadlines.remaining(
+				this.normalDeadlineNanos, this.clock.nanoTime());
 	}
 
 	/**
@@ -89,12 +83,9 @@ public final class StartupContext {
 		return this.cancelationRequested.getAsBoolean();
 	}
 
-	@NonNull
-	Optional<Long> activeDeadlineNanos() {
+	long activeDeadlineNanos() {
 		if (isCancelationRequested())
-			return Optional.of(this.cancelationDeadlineNanos.getAsLong());
-		if (!this.normalDeadlinePresent)
-			return Optional.empty();
-		return Optional.of(this.normalDeadlineNanos);
+			return this.cancelationDeadlineNanos.getAsLong();
+		return this.normalDeadlineNanos;
 	}
 }

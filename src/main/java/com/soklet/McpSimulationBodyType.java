@@ -17,15 +17,15 @@
 package com.soklet;
 
 /**
- * Response-body representation exposed by an MCP simulation.
+ * Response-body type exposed by an MCP simulation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-public enum McpSimulationBodyMode {
+public enum McpSimulationBodyType {
 	/** A successfully captured response with no body bytes. */
 	EMPTY,
 	/** A JSON response body, which may be absent when capture exceeds its bound. */
 	JSON,
 	/** A server-sent-events response whose frames are read as stream items. */
-	SERVER_SENT_EVENTS
+	SSE
 }

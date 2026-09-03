@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -41,7 +42,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Function;
 
 @ThreadSafe
 @Timeout(value = 60, unit = TimeUnit.SECONDS)
@@ -54,40 +54,41 @@ public class SokletSimulatorIsolationTests {
 			LifecyclePolicy.builder()
 					.startupTimeout(Duration.ofSeconds(5))
 					.startupCancelationTimeout(Duration.ofSeconds(2))
-					.gracefulShutdownDuration(Duration.ofSeconds(2))
-					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.gracefulShutdownTimeout(Duration.ofSeconds(2))
+					.forcedShutdownTimeout(Duration.ofSeconds(1))
 					.build();
 
 	@Test
-	public void configurerRunsExactlyOnceAndSequentialScopesUseFreshGraphs()
+	public void prebuiltConfigurationsUseFreshGraphsAndExposeTheirTransports()
 			throws Exception {
-		AtomicInteger configurerCalls = new AtomicInteger();
 		AtomicInteger bodyCalls = new AtomicInteger();
 		List<HttpServer> httpServers = new ArrayList<>();
 		List<SseServer> sseServers = new ArrayList<>();
 		List<McpServer> mcpServers = new ArrayList<>();
-		Function<SimulatorConfig.Builder, SimulatorConfig> configurer = config -> {
-			configurerCalls.incrementAndGet();
-			config.httpServer(httpServers::add);
-			config.sseServer(sseServers::add);
-			config.mcpServer(0, builder -> {
-				McpServer server = mcpBuilder(builder, List.of()).build();
-				mcpServers.add(server);
-				return server;
-			});
-			return httpConfig(config);
-		};
-
 		for (int invocation = 0; invocation < 2; invocation++) {
-			SokletSimulator.run(configurer, simulator -> {
+			int graphIndex = invocation;
+			SimulatorConfig simulatorConfig = SimulatorConfig.builder()
+					.httpServer(httpServers::add)
+					.sseServer(sseServers::add)
+					.mcpServer(0, mcpEndpointRegistry(List.of()),
+							McpAdmissionController.acceptAllInstance(),
+							SokletSimulatorIsolationTests::configureMcpBuilder)
+					.resourceMethodResolver(resourceMethods())
+					.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
+					.build();
+			SokletSimulator.run(simulatorConfig, simulator -> {
 				bodyCalls.incrementAndGet();
+				Assertions.assertSame(httpServers.get(graphIndex),
+						simulator.getHttpServer().orElseThrow());
+				Assertions.assertSame(sseServers.get(graphIndex),
+						simulator.getSseServer().orElseThrow());
+				mcpServers.add(simulator.getMcpServer().orElseThrow());
 				Assertions.assertEquals("isolated", responseBody(
 						simulator.performHttpRequest(Request.withPath(
 								HttpMethod.GET, "/isolation").build())));
 			});
 		}
 
-		Assertions.assertEquals(2, configurerCalls.get());
 		Assertions.assertEquals(2, bodyCalls.get());
 		Assertions.assertEquals(2, httpServers.size());
 		Assertions.assertEquals(2, sseServers.size());
@@ -101,7 +102,7 @@ public class SokletSimulatorIsolationTests {
 	}
 
 	@Test
-	public void defaultParameterProviderBindsEachFreshConfigurerConfig()
+	public void defaultParameterProviderBindsEachFreshConfiguration()
 			throws Exception {
 		ScopedInstanceProvider existingInstances =
 				new ScopedInstanceProvider("existing");
@@ -118,21 +119,19 @@ public class SokletSimulatorIsolationTests {
 
 		for (int invocation = 1; invocation <= 2; invocation++) {
 			String scopeId = "default-" + invocation;
-			SokletSimulator.run(configBuilder -> {
-				ScopedInstanceProvider instances =
-						new ScopedInstanceProvider(scopeId);
-				SimulatorConfig simulatorConfig = configBuilder.httpServer()
+			ScopedInstanceProvider instances =
+					new ScopedInstanceProvider(scopeId);
+			SimulatorConfig simulatorConfig = SimulatorConfig.builder().httpServer()
 						.resourceMethodResolver(providerResourceMethods())
 						.instanceProvider(instances)
 						.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 						.build();
-				SokletConfig config = simulatorConfig.getSokletConfig();
-				freshConfigs.add(config);
-				freshInstances.add(config.getInstanceProvider());
-				freshParameters.add(
-						config.getResourceMethodParameterProvider());
-				return simulatorConfig;
-			}, simulator -> Assertions.assertEquals(scopeId + ":" + scopeId,
+			SokletConfig config = simulatorConfig.getSokletConfig();
+			freshConfigs.add(config);
+			freshInstances.add(config.getInstanceProvider());
+			freshParameters.add(config.getResourceMethodParameterProvider());
+			SokletSimulator.run(simulatorConfig,
+					simulator -> Assertions.assertEquals(scopeId + ":" + scopeId,
 					responseBody(simulator.performHttpRequest(Request.withPath(
 							HttpMethod.GET, "/provider-scope").build()))));
 		}
@@ -152,7 +151,7 @@ public class SokletSimulatorIsolationTests {
 	}
 
 	@Test
-	public void customParameterAndInstanceProvidersAreFreshPerConfigurerScope()
+	public void customParameterAndInstanceProvidersAreFreshPerConfiguration()
 			throws Exception {
 		ScopedInstanceProvider existingInstances =
 				new ScopedInstanceProvider("existing");
@@ -169,25 +168,24 @@ public class SokletSimulatorIsolationTests {
 
 		for (int invocation = 1; invocation <= 2; invocation++) {
 			String scopeId = "custom-" + invocation;
-			SokletSimulator.run(configBuilder -> {
-				ScopedInstanceProvider instances =
-						new ScopedInstanceProvider(scopeId);
-				ScopedParameterProvider parameters =
-						new ScopedParameterProvider(scopeId);
-				SimulatorConfig simulatorConfig = configBuilder.httpServer()
+			ScopedInstanceProvider instances =
+					new ScopedInstanceProvider(scopeId);
+			ScopedParameterProvider parameters =
+					new ScopedParameterProvider(scopeId);
+			SimulatorConfig simulatorConfig = SimulatorConfig.builder().httpServer()
 						.resourceMethodResolver(providerResourceMethods())
 						.instanceProvider(instances)
 						.resourceMethodParameterProvider(parameters)
 						.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 						.build();
-				SokletConfig config = simulatorConfig.getSokletConfig();
-				Assertions.assertSame(instances, config.getInstanceProvider());
-				Assertions.assertSame(parameters,
-						config.getResourceMethodParameterProvider());
-				freshInstances.add(instances);
-				freshParameters.add(parameters);
-				return simulatorConfig;
-			}, simulator -> Assertions.assertEquals(scopeId + ":" + scopeId,
+			SokletConfig config = simulatorConfig.getSokletConfig();
+			Assertions.assertSame(instances, config.getInstanceProvider());
+			Assertions.assertSame(parameters,
+					config.getResourceMethodParameterProvider());
+			freshInstances.add(instances);
+			freshParameters.add(parameters);
+			SokletSimulator.run(simulatorConfig,
+					simulator -> Assertions.assertEquals(scopeId + ":" + scopeId,
 					responseBody(simulator.performHttpRequest(Request.withPath(
 							HttpMethod.GET, "/provider-scope").build()))));
 		}
@@ -241,20 +239,21 @@ public class SokletSimulatorIsolationTests {
 	}
 
 	@Test
-	public void rejectsForeignConfigurationAndExposesNoRawTransportSetters()
+	public void rejectsConfigurationReuseAndExposesNoRawTransportSetters()
 			throws Exception {
 		AtomicInteger bodies = new AtomicInteger();
-		AtomicReference<SimulatorConfig> firstScopeConfig = new AtomicReference<>();
-		SokletSimulator.run(config -> {
-			SimulatorConfig built = httpConfig(config);
-			firstScopeConfig.set(built);
-			return built;
-		}, simulator -> simulator.performHttpRequest(Request.withPath(
+		SimulatorConfig simulatorConfig = httpConfig(SimulatorConfig.builder());
+		SokletSimulator.run(simulatorConfig,
+				simulator -> simulator.performHttpRequest(Request.withPath(
 				HttpMethod.GET, "/isolation").build()));
 
-		Assertions.assertThrows(IllegalStateException.class,
-				() -> SokletSimulator.run(ignored -> firstScopeConfig.get(),
+		IllegalStateException reuse = Assertions.assertThrows(
+				IllegalStateException.class,
+				() -> SokletSimulator.run(simulatorConfig,
 						simulator -> bodies.incrementAndGet()));
+		Assertions.assertEquals(
+				"The simulator configuration has already been claimed by a run",
+				reuse.getMessage());
 		Assertions.assertEquals(0, bodies.get());
 		Assertions.assertEquals(0, SimulatorConfig.class.getConstructors().length);
 		Assertions.assertEquals(0,
@@ -275,37 +274,109 @@ public class SokletSimulatorIsolationTests {
 	}
 
 	@Test
-	public void builderIsOneShotSealedAfterTheConfigurerAndRejectsNullResults() {
-		AtomicReference<SimulatorConfig.Builder> escapedBuilder =
-				new AtomicReference<>();
-		AtomicInteger bodies = new AtomicInteger();
-		SokletSimulator.run(config -> {
-			escapedBuilder.set(config);
-			SimulatorConfig built = httpConfig(config);
-			IllegalStateException secondBuild = Assertions.assertThrows(
-					IllegalStateException.class, config::build);
+	public void concurrentConfigurationReuseLetsExactlyOneRunClaimIt()
+			throws Exception {
+		SimulatorConfig simulatorConfig = httpConfig(SimulatorConfig.builder());
+		CountDownLatch start = new CountDownLatch(1);
+		CountDownLatch bodyEntered = new CountDownLatch(1);
+		CountDownLatch releaseBody = new CountDownLatch(1);
+		AtomicInteger bodyCalls = new AtomicInteger();
+		ExecutorService executor = Executors.newFixedThreadPool(2);
+		try {
+			Callable<Throwable> attempt = () -> {
+				start.await();
+				try {
+					SokletSimulator.run(simulatorConfig, simulator -> {
+						bodyCalls.incrementAndGet();
+						bodyEntered.countDown();
+						if (!releaseBody.await(WAIT.toMillis(),
+								TimeUnit.MILLISECONDS))
+							throw new AssertionError(
+									"Claimed simulator body was not released");
+					});
+					return null;
+				} catch (Throwable failure) {
+					return failure;
+				}
+			};
+			Future<Throwable> first = executor.submit(attempt);
+			Future<Throwable> second = executor.submit(attempt);
+			start.countDown();
+			Assertions.assertTrue(bodyEntered.await(WAIT.toMillis(),
+					TimeUnit.MILLISECONDS));
+			releaseBody.countDown();
+			List<Throwable> failures = java.util.stream.Stream.of(
+					first.get(WAIT.toMillis(), TimeUnit.MILLISECONDS),
+					second.get(WAIT.toMillis(), TimeUnit.MILLISECONDS))
+					.filter(java.util.Objects::nonNull)
+					.toList();
+			Assertions.assertEquals(1, bodyCalls.get());
+			Assertions.assertEquals(1, failures.size());
+			IllegalStateException reuse = Assertions.assertInstanceOf(
+					IllegalStateException.class, failures.get(0));
 			Assertions.assertEquals(
-					"The simulator configuration has already been built",
-					secondBuild.getMessage());
-			return built;
-		}, simulator -> bodies.incrementAndGet());
+					"The simulator configuration has already been claimed by a run",
+					reuse.getMessage());
+		} finally {
+			releaseBody.countDown();
+			executor.shutdownNow();
+			Assertions.assertTrue(executor.awaitTermination(WAIT.toMillis(),
+					TimeUnit.MILLISECONDS));
+		}
+	}
+
+	@Test
+	public void builderIsOneShotAndNullSimulationDoesNotClaimConfiguration() {
+		AtomicInteger bodies = new AtomicInteger();
+		SimulatorConfig.Builder builder = SimulatorConfig.builder();
+		SimulatorConfig simulatorConfig = httpConfig(builder);
+		IllegalStateException secondBuild = Assertions.assertThrows(
+				IllegalStateException.class, builder::build);
+		Assertions.assertEquals(
+				"The simulator configuration has already been built",
+				secondBuild.getMessage());
 
 		IllegalStateException staleMutation = Assertions.assertThrows(
-				IllegalStateException.class, escapedBuilder.get()::httpServer);
-		Assertions.assertEquals("The simulator configuration scope is closed",
-				staleMutation.getMessage());
-		IllegalStateException staleBuild = Assertions.assertThrows(
-				IllegalStateException.class, escapedBuilder.get()::build);
-		Assertions.assertEquals("The simulator configuration scope is closed",
-				staleBuild.getMessage());
-
-		NullPointerException nullResult = Assertions.assertThrows(
-				NullPointerException.class, () -> SokletSimulator.run(
-						config -> null, simulator -> bodies.incrementAndGet()));
+				IllegalStateException.class, builder::httpServer);
 		Assertions.assertEquals(
-				"The simulator configuration function returned null",
-				nullResult.getMessage());
+				"The simulator configuration has already been built",
+				staleMutation.getMessage());
+
+		NullPointerException nullSimulation = Assertions.assertThrows(
+				NullPointerException.class, () -> SokletSimulator.run(
+						simulatorConfig, null));
+		Assertions.assertNull(nullSimulation.getMessage());
+		SokletSimulator.run(simulatorConfig,
+				simulator -> bodies.incrementAndGet());
 		Assertions.assertEquals(1, bodies.get());
+	}
+
+	@Test
+	public void nullableLifecyclePolicyRestoresBuiltInDefault() {
+		LifecyclePolicy customPolicy = LifecyclePolicy.builder()
+				.startupTimeout(Duration.ofSeconds(1))
+				.startupCancelationTimeout(Duration.ofSeconds(1))
+				.gracefulShutdownTimeout(Duration.ofSeconds(1))
+				.forcedShutdownTimeout(Duration.ofSeconds(1))
+				.build();
+		SimulatorConfig simulatorConfig = SimulatorConfig.builder()
+				.httpServer()
+				.lifecyclePolicy(customPolicy)
+				.lifecyclePolicy(null)
+				.resourceMethodResolver(resourceMethods())
+				.build();
+
+		LifecyclePolicy defaults = LifecyclePolicy.fromDefaults();
+		LifecyclePolicy actual = simulatorConfig.getSokletConfig()
+				.getLifecyclePolicy();
+		Assertions.assertEquals(defaults.getStartupTimeout(),
+				actual.getStartupTimeout());
+		Assertions.assertEquals(defaults.getStartupCancelationTimeout(),
+				actual.getStartupCancelationTimeout());
+		Assertions.assertEquals(defaults.getGracefulShutdownTimeout(),
+				actual.getGracefulShutdownTimeout());
+		Assertions.assertEquals(defaults.getForcedShutdownTimeout(),
+				actual.getForcedShutdownTimeout());
 	}
 
 	@Test
@@ -313,7 +384,9 @@ public class SokletSimulatorIsolationTests {
 		LifecycleLaunchCanary httpFailure = new LifecycleLaunchCanary();
 		LifecycleLaunchCanary sseFailure = new LifecycleLaunchCanary();
 
-		SokletSimulator.run(config -> {
+		SimulatorConfig.Builder config = SimulatorConfig.builder();
+		SimulatorConfig simulatorConfig;
+		{
 			Assertions.assertSame(httpFailure, Assertions.assertThrows(
 					LifecycleLaunchCanary.class,
 					() -> config.httpServer(ignored -> {
@@ -324,38 +397,102 @@ public class SokletSimulatorIsolationTests {
 					() -> config.sseServer(ignored -> {
 						throw sseFailure;
 					})));
-			SimulatorConfig built = mcpConfig(config, 0,
-					builder -> mcpBuilder(builder, List.of()).build());
-			Assertions.assertTrue(built.getSokletConfig().getHttpServer().isEmpty());
-			Assertions.assertTrue(built.getSokletConfig().getSseServer().isEmpty());
-			return built;
-		}, simulator -> {
+			simulatorConfig = mcpConfig(config, 0, List.of());
+			Assertions.assertTrue(simulatorConfig.getSokletConfig()
+					.getHttpServer().isEmpty());
+			Assertions.assertTrue(simulatorConfig.getSokletConfig()
+					.getSseServer().isEmpty());
+		}
+		SokletSimulator.run(simulatorConfig, simulator -> {
 		});
 	}
 
 	@Test
-	public void rejectsAnMcpServerThatIgnoredTheSuppliedScopedBuilder() {
-		McpServer foreignServer = mcpBuilder(McpServer.withPort(0), List.of())
-				.build();
-		AtomicInteger bodies = new AtomicInteger();
-
+	public void transportConfigurersCannotBuildOuterConfiguration() {
+		SimulatorConfig.Builder builder = SimulatorConfig.builder();
 		IllegalStateException failure = Assertions.assertThrows(
-				IllegalStateException.class, () -> SokletSimulator.run(
-						config -> mcpConfig(config, 0, ignored -> foreignServer),
-						simulator -> bodies.incrementAndGet()));
+				IllegalStateException.class,
+				() -> builder.httpServer(ignored -> builder.build()));
 
 		Assertions.assertEquals(
-				"The simulator config contains a production or foreign MCP transport",
+				"A simulator configuration cannot be built from a transport configurer",
 				failure.getMessage());
-		Assertions.assertEquals(0, bodies.get());
-		Assertions.assertEquals(McpServerStatus.NOT_STARTED,
-				foreignServer.getDiagnostics().getStatus());
+		SimulatorConfig simulatorConfig = httpConfig(builder);
+		SokletSimulator.run(simulatorConfig, simulator -> {
+		});
+	}
+
+	@Test
+	public void rejectsManualMcpBuildInsideConfigurer() {
+		SimulatorConfig.Builder config = SimulatorConfig.builder();
+		IllegalStateException failure = Assertions.assertThrows(
+				IllegalStateException.class, () -> config.mcpServer(0,
+						mcpEndpointRegistry(List.of()),
+						McpAdmissionController.acceptAllInstance(),
+						builder -> configureMcpBuilder(builder).build()));
+
+		Assertions.assertEquals(
+				"Only SimulatorConfig.Builder may build the simulator MCP server",
+				failure.getMessage());
+	}
+
+	@Test
+	public void mcpRequiredInputsRemainAuthoritativeAfterCustomization()
+			throws Exception {
+		int configuredPort = 43123;
+		AtomicInteger authoritativeAdmissions = new AtomicInteger();
+		AtomicInteger overridingAdmissions = new AtomicInteger();
+		AtomicInteger authoritativeCalls = new AtomicInteger();
+		McpToolRegistration<McpJsonObject> authoritativeTool = McpToolRegistration
+				.withName("authoritative").jsonArguments()
+				.handler((request, arguments, features) -> {
+					authoritativeCalls.incrementAndGet();
+					return McpCompleteResult.fromToolText("authoritative");
+				}).build();
+		McpToolRegistration<McpJsonObject> overridingTool = McpToolRegistration
+				.withName("overriding").jsonArguments()
+				.handler((request, arguments, features) ->
+						McpCompleteResult.fromToolText("overriding"))
+				.build();
+		McpAdmissionController authoritativeAdmission = context -> {
+			authoritativeAdmissions.incrementAndGet();
+			return McpAdmissionDecision.accepted();
+		};
+		SimulatorConfig simulatorConfig = SimulatorConfig.builder()
+				.mcpServer(configuredPort,
+						mcpEndpointRegistry(List.of(authoritativeTool)),
+						authoritativeAdmission,
+						mcp -> configureMcpBuilder(mcp)
+								.port(configuredPort + 1)
+								.endpointRegistry(mcpEndpointRegistry(
+										List.of(overridingTool)))
+								.admissionController(context -> {
+									overridingAdmissions.incrementAndGet();
+									return McpAdmissionDecision.accepted();
+								}))
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
+				.build();
+
+		SokletSimulator.run(simulatorConfig, simulator -> {
+			McpSimulation simulation = simulator.startMcpRequest(mcpRequest(
+					"authoritative-inputs", "authoritative", configuredPort,
+					Optional.empty()));
+			Assertions.assertEquals(200,
+					simulation.awaitResponse(WAIT).orElseThrow().getStatusCode());
+			Assertions.assertEquals(McpStreamTerminationReason.COMPLETED,
+					simulation.awaitCompletion(WAIT).orElseThrow().getReason());
+		});
+		Assertions.assertEquals(1, authoritativeAdmissions.get());
+		Assertions.assertEquals(0, overridingAdmissions.get());
+		Assertions.assertEquals(1, authoritativeCalls.get());
 	}
 
 	@Test
 	public void allSimulatorDispatchRejectsAfterScope() throws Exception {
 		AtomicReference<Simulator> escaped = new AtomicReference<>();
-		SokletSimulator.run(SokletSimulatorIsolationTests::httpConfig,
+		SokletSimulator.run(httpConfig(SimulatorConfig.builder()),
 				escaped::set);
 
 		Simulator simulator = escaped.get();
@@ -375,6 +512,64 @@ public class SokletSimulatorIsolationTests {
 		Assertions.assertThrows(IllegalStateException.class,
 				() -> simulator.onUnicastError(ignored -> {
 				}));
+		Assertions.assertThrows(IllegalStateException.class,
+				simulator::getHttpServer);
+		Assertions.assertThrows(IllegalStateException.class,
+				simulator::getSseServer);
+		Assertions.assertThrows(IllegalStateException.class,
+				simulator::getMcpServer);
+	}
+
+	@Test
+	public void completedRunReleasesConfigOwnedTransportState() {
+		ResourcePath resourcePath = ResourcePath.fromPath("/events");
+		AtomicInteger eventDeliveries = new AtomicInteger();
+		AtomicInteger broadcastErrors = new AtomicInteger();
+		AtomicReference<Soklet.MockSseBroadcaster> retainedBroadcaster =
+				new AtomicReference<>();
+		SimulatorConfig simulatorConfig = SimulatorConfig.builder()
+				.httpServer()
+				.sseServer()
+				.resourceMethodResolver(resourceMethods())
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
+				.build();
+		Soklet.MockHttpServer httpServer = simulatorConfig.simulatedHttpServer();
+		Soklet.MockSseServer sseServer = simulatorConfig.simulatedSseServer();
+
+		SokletSimulator.run(simulatorConfig, simulator -> {
+			Assertions.assertTrue(httpServer.getSokletConfig().isPresent());
+			Assertions.assertTrue(httpServer.getRequestHandler().isPresent());
+			Assertions.assertTrue(sseServer.getSokletConfig().isPresent());
+			Assertions.assertTrue(sseServer.getRequestHandler().isPresent());
+			sseServer.registerEventConsumer(resourcePath,
+					ignored -> eventDeliveries.incrementAndGet());
+			retainedBroadcaster.set((Soklet.MockSseBroadcaster) sseServer
+					.acquireBroadcaster(resourcePath).orElseThrow());
+			simulator.onBroadcastError(
+					ignored -> broadcastErrors.incrementAndGet());
+			simulator.onUnicastError(ignored -> {
+			});
+			Assertions.assertEquals(1L,
+					retainedBroadcaster.get().getClientCount());
+		});
+
+		Assertions.assertTrue(httpServer.getSokletConfig().isEmpty());
+		Assertions.assertTrue(httpServer.getRequestHandler().isEmpty());
+		Assertions.assertTrue(sseServer.getSokletConfig().isEmpty());
+		Assertions.assertTrue(sseServer.getRequestHandler().isEmpty());
+		Assertions.assertTrue(sseServer.getBroadcastersByResourcePath().isEmpty());
+		Assertions.assertNull(sseServer.getUnicastErrorHandler().get());
+		Assertions.assertEquals(0L,
+				retainedBroadcaster.get().getClientCount());
+		retainedBroadcaster.get().broadcastEvent(
+				SseEvent.withData("after-close").build());
+		Assertions.assertEquals(0, eventDeliveries.get());
+		retainedBroadcaster.get().registerEventConsumer(ignored -> {
+			throw new LifecycleLaunchCanary();
+		});
+		retainedBroadcaster.get().broadcastEvent(
+				SseEvent.withData("failure-after-close").build());
+		Assertions.assertEquals(0, broadcastErrors.get());
 	}
 
 	@Test
@@ -382,7 +577,7 @@ public class SokletSimulatorIsolationTests {
 		CheckedCanary failure = new CheckedCanary();
 		CheckedCanary thrown = Assertions.assertThrows(CheckedCanary.class,
 				() -> SokletSimulator.run(
-						SokletSimulatorIsolationTests::httpConfig,
+						httpConfig(SimulatorConfig.builder()),
 						simulator -> {
 							throw failure;
 						}));
@@ -399,16 +594,18 @@ public class SokletSimulatorIsolationTests {
 		LifecycleWorkers failedBodyWorkers =
 				new LifecycleWorkers(failedBodyLauncher::launch);
 		try {
+			SimulatorConfig failedConfig = immediatelyIncompleteConfig(
+					SimulatorConfig.builder());
 			CheckedCanary thrown = Assertions.assertThrows(CheckedCanary.class,
 					() -> SokletSimulator.run(
-							SokletSimulatorIsolationTests::immediatelyIncompleteConfig,
+							failedConfig,
 							simulator -> {
 								throw bodyFailure;
 							}, () -> 0L, failedBodyWorkers));
 			Assertions.assertSame(bodyFailure, thrown);
 			Assertions.assertEquals(1, thrown.getSuppressed().length);
-			ShutdownIncompleteException suppressed = Assertions.assertInstanceOf(
-					ShutdownIncompleteException.class, thrown.getSuppressed()[0]);
+			SokletShutdownIncompleteException suppressed = Assertions.assertInstanceOf(
+					SokletShutdownIncompleteException.class, thrown.getSuppressed()[0]);
 			assertIncompleteLifecycleCall(suppressed);
 			Assertions.assertEquals(2, failedBodyLauncher.queuedTaskCount());
 			Assertions.assertEquals(2, failedBodyWorkers.active(
@@ -424,16 +621,13 @@ public class SokletSimulatorIsolationTests {
 		LifecycleWorkers successfulBodyWorkers =
 				new LifecycleWorkers(successfulBodyLauncher::launch);
 		AtomicReference<SimulatorConfig> retainedScope = new AtomicReference<>();
+		SimulatorConfig successfulConfig = immediatelyIncompleteConfig(
+				SimulatorConfig.builder());
+		retainedScope.set(successfulConfig);
 		try {
-			ShutdownIncompleteException thrown = Assertions.assertThrows(
-					ShutdownIncompleteException.class,
-						() -> SokletSimulator.run(
-								config -> {
-									SimulatorConfig simulatorConfig =
-											immediatelyIncompleteConfig(config);
-									retainedScope.set(simulatorConfig);
-									return simulatorConfig;
-							},
+			SokletShutdownIncompleteException thrown = Assertions.assertThrows(
+					SokletShutdownIncompleteException.class,
+						() -> SokletSimulator.run(successfulConfig,
 							simulator -> {
 							}, () -> 0L, successfulBodyWorkers));
 			assertIncompleteLifecycleCall(thrown);
@@ -529,13 +723,13 @@ public class SokletSimulatorIsolationTests {
 			worker.start();
 		});
 		InternalLifecyclePolicy policy = new InternalLifecyclePolicy(
-				Optional.of(Duration.ofNanos(10L)), Duration.ofNanos(20L),
+				Duration.ofNanos(10L), Duration.ofNanos(20L),
 				Duration.ofNanos(30L), Duration.ofNanos(40L));
 
 		try {
 			SokletStartupException thrown = Assertions.assertThrows(
 					SokletStartupException.class, () -> SokletSimulator.run(
-							config -> config.httpServer()
+							SimulatorConfig.builder().httpServer()
 									.resourceMethodResolver(blocking)
 									.internalLifecyclePolicy(policy)
 									.build(),
@@ -591,7 +785,7 @@ public class SokletSimulatorIsolationTests {
 
 		SokletStartupException thrown = Assertions.assertThrows(
 				SokletStartupException.class, () -> SokletSimulator.run(
-						config -> config.httpServer()
+						SimulatorConfig.builder().httpServer()
 								.resourceMethodResolver(resolver)
 								.build(), simulator -> Assertions.fail(
 								"The body cannot run after setup failure")));
@@ -622,7 +816,7 @@ public class SokletSimulatorIsolationTests {
 
 		SokletStartupException thrown = Assertions.assertThrows(
 				SokletStartupException.class, () -> SokletSimulator.run(
-						SokletSimulatorIsolationTests::httpConfig,
+						httpConfig(SimulatorConfig.builder()),
 						simulator -> bodies.incrementAndGet(), NanoClock.system(),
 						workers));
 
@@ -720,15 +914,17 @@ public class SokletSimulatorIsolationTests {
 			task.run();
 		});
 		InternalLifecyclePolicy policy = new InternalLifecyclePolicy(
-				Optional.of(Duration.ofNanos(10L)), Duration.ofNanos(20L),
+				Duration.ofNanos(10L), Duration.ofNanos(20L),
 				Duration.ofNanos(30L), Duration.ofNanos(40L));
 
 		try {
 			SokletStartupException thrown = Assertions.assertThrows(
 					SokletStartupException.class, () -> SokletSimulator.run(
-							config -> config.mcpServer(0,
-									mcp -> subscriptionServer(mcp, List.of(
-											subscriptionEndpoint("/blocking", publisher))))
+							SimulatorConfig.builder().mcpServer(0,
+									McpEndpointRegistry.fromEndpoints(List.of(
+											subscriptionEndpoint("/blocking", publisher))),
+									McpAdmissionController.acceptAllInstance(),
+									SokletSimulatorIsolationTests::configureSubscriptionBuilder)
 										.resourceMethodResolver(ResourceMethodResolver
 												.fromMethods(Set.of()))
 										.internalLifecyclePolicy(policy)
@@ -838,13 +1034,11 @@ public class SokletSimulatorIsolationTests {
 		CheckedCanary bodyFailure = new CheckedCanary();
 		LifecycleLaunchCanary failedBodyTeardown = new LifecycleLaunchCanary();
 		AtomicReference<SimulatorConfig> failedBodyScope = new AtomicReference<>();
+		SimulatorConfig failedBodyConfig = immediateTeardownConfig(
+				SimulatorConfig.builder());
+		failedBodyScope.set(failedBodyConfig);
 		CheckedCanary thrown = Assertions.assertThrows(CheckedCanary.class,
-				() -> SokletSimulator.run(config -> {
-					SimulatorConfig simulatorConfig =
-							immediateTeardownConfig(config);
-					failedBodyScope.set(simulatorConfig);
-					return simulatorConfig;
-				}, simulator -> {
+				() -> SokletSimulator.run(failedBodyConfig, simulator -> {
 					throw bodyFailure;
 				}, NanoClock.system(), new LifecycleWorkers((name, task) -> {
 					if (isSimulatorStartupCall(name)) {
@@ -855,8 +1049,8 @@ public class SokletSimulatorIsolationTests {
 				})));
 		Assertions.assertSame(bodyFailure, thrown);
 		Assertions.assertEquals(1, thrown.getSuppressed().length);
-		ShutdownIncompleteException suppressed = Assertions.assertInstanceOf(
-				ShutdownIncompleteException.class, thrown.getSuppressed()[0]);
+		SokletShutdownIncompleteException suppressed = Assertions.assertInstanceOf(
+				SokletShutdownIncompleteException.class, thrown.getSuppressed()[0]);
 		Assertions.assertNull(suppressed.getCause());
 		Assertions.assertTrue(suppressed.retainsScopeEvidence(
 				failedBodyScope.get()));
@@ -865,14 +1059,12 @@ public class SokletSimulatorIsolationTests {
 		LifecycleLaunchCanary successfulBodyTeardown = new LifecycleLaunchCanary();
 		AtomicReference<SimulatorConfig> successfulBodyScope =
 				new AtomicReference<>();
-		ShutdownIncompleteException direct = Assertions.assertThrows(
-				ShutdownIncompleteException.class,
-				() -> SokletSimulator.run(config -> {
-					SimulatorConfig simulatorConfig =
-							immediateTeardownConfig(config);
-					successfulBodyScope.set(simulatorConfig);
-					return simulatorConfig;
-				}, simulator -> {
+		SimulatorConfig successfulBodyConfig = immediateTeardownConfig(
+				SimulatorConfig.builder());
+		successfulBodyScope.set(successfulBodyConfig);
+		SokletShutdownIncompleteException direct = Assertions.assertThrows(
+				SokletShutdownIncompleteException.class,
+				() -> SokletSimulator.run(successfulBodyConfig, simulator -> {
 				}, NanoClock.system(), new LifecycleWorkers((name, task) -> {
 					if (isSimulatorStartupCall(name)) {
 						task.run();
@@ -942,7 +1134,7 @@ public class SokletSimulatorIsolationTests {
 			}
 		};
 
-		SokletSimulator.run(config -> config.httpServer()
+		SokletSimulator.run(SimulatorConfig.builder().httpServer()
 				.resourceMethodResolver(resourceMethods())
 				.lifecycleObserver(observer)
 				.build(), simulator ->
@@ -969,11 +1161,10 @@ public class SokletSimulatorIsolationTests {
 					return McpCompleteResult.fromToolText("scope complete");
 				}).build();
 
-		SokletSimulator.run(config -> mcpConfig(config, configuredPort, mcp -> {
-			McpServer server = mcpBuilder(mcp, List.of(tool)).build();
-			escapedServer.set(server);
-			return server;
-		}), simulator -> {
+		SimulatorConfig simulatorConfig = mcpConfig(SimulatorConfig.builder(),
+				configuredPort, List.of(tool));
+		SokletSimulator.run(simulatorConfig, simulator -> {
+			escapedServer.set(simulator.getMcpServer().orElseThrow());
 			McpSimulation accepted = simulator.startMcpRequest(mcpRequest(
 					"accepted", "complete", configuredPort,
 					Optional.of("https://scope.example")));
@@ -1015,66 +1206,80 @@ public class SokletSimulatorIsolationTests {
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("complete"))
 				.build();
-		Assertions.assertThrows(IllegalStateException.class,
-				() -> SokletSimulator.run(config -> {
-					config.mcpServer(0,
-							mcp -> mcpBuilder(mcp, List.of(tool)).build());
-					return config.mcpServer(0,
-							mcp -> mcpBuilder(mcp, List.of(tool)).build())
-							.build();
-				}, simulator -> {
-				}));
+		SimulatorConfig.Builder multipleBuilder = SimulatorConfig.builder();
+		IllegalStateException manualBuildFailure = Assertions.assertThrows(
+				IllegalStateException.class,
+				() -> multipleBuilder.mcpServer(0,
+						mcpEndpointRegistry(List.of(tool)),
+						McpAdmissionController.acceptAllInstance(),
+						mcp -> configureMcpBuilder(mcp).build()));
+		Assertions.assertEquals(
+				"Only SimulatorConfig.Builder may build the simulator MCP server",
+				manualBuildFailure.getMessage());
+
+		multipleBuilder.mcpServer(0, mcpEndpointRegistry(List.of(tool)),
+				McpAdmissionController.acceptAllInstance(),
+				SokletSimulatorIsolationTests::configureMcpBuilder);
+		IllegalStateException secondServerFailure = Assertions.assertThrows(
+				IllegalStateException.class,
+				() -> multipleBuilder.mcpServer(0,
+						mcpEndpointRegistry(List.of(tool)),
+						McpAdmissionController.acceptAllInstance()));
+		Assertions.assertEquals(
+				"A simulator configuration may build at most one MCP server",
+				secondServerFailure.getMessage());
+		SimulatorConfig multipleConfig = multipleBuilder
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.build();
+		SokletSimulator.run(multipleConfig, simulator -> Assertions.assertSame(
+				multipleConfig.simulatedMcpServer(),
+				simulator.getMcpServer().orElseThrow()));
 
 		AtomicReference<McpServer.Builder> escapedBuilder = new AtomicReference<>();
 		LifecycleLaunchCanary configurerFailure = new LifecycleLaunchCanary();
+		SimulatorConfig.Builder failedBuilder = SimulatorConfig.builder();
 		LifecycleLaunchCanary thrown = Assertions.assertThrows(
-				LifecycleLaunchCanary.class, () -> SokletSimulator.run(config -> {
-					config.mcpServer(0, mcp -> {
-						escapedBuilder.set(mcpBuilder(mcp, List.of(tool)));
+				LifecycleLaunchCanary.class, () -> failedBuilder.mcpServer(0,
+						mcpEndpointRegistry(List.of(tool)),
+						McpAdmissionController.acceptAllInstance(), mcp -> {
+						escapedBuilder.set(configureMcpBuilder(mcp));
 						throw configurerFailure;
-					});
-					throw new AssertionError("Unreachable");
-				}, simulator -> Assertions.fail(
-						"The body cannot run after configuration failure")));
+					}));
 		Assertions.assertSame(configurerFailure, thrown);
 		IllegalStateException staleBuilderFailure = Assertions.assertThrows(
 				IllegalStateException.class, () -> escapedBuilder.get().build());
-		Assertions.assertEquals("The simulator configuration scope is closed",
+		Assertions.assertEquals("The simulator MCP builder is no longer active",
 				staleBuilderFailure.getMessage());
 	}
 
 	@Test
-	public void configurationFailureLeavesBuiltMcpServerStoppedAndSimulatorOwned() {
-		AtomicReference<McpServer> builtServer = new AtomicReference<>();
+	public void mcpConfigurerFailureDoesNotPoisonConfigurationBuilder() {
 		AtomicInteger bodies = new AtomicInteger();
 		LifecycleLaunchCanary configurerFailure = new LifecycleLaunchCanary();
+		SimulatorConfig.Builder builder = SimulatorConfig.builder();
 
 		LifecycleLaunchCanary thrown = Assertions.assertThrows(
-				LifecycleLaunchCanary.class, () -> SokletSimulator.run(config -> {
-					config.mcpServer(0, builder -> {
-						McpServer server = mcpBuilder(builder, List.of()).build();
-						builtServer.set(server);
-						return server;
-					});
+				LifecycleLaunchCanary.class, () -> builder.mcpServer(0,
+						mcpEndpointRegistry(List.of()),
+						McpAdmissionController.acceptAllInstance(), mcp -> {
+					configureMcpBuilder(mcp);
 					throw configurerFailure;
-				}, simulator -> bodies.incrementAndGet()));
+				}));
 
 		Assertions.assertSame(configurerFailure, thrown);
-		Assertions.assertEquals(0, bodies.get());
-		McpServer server = builtServer.get();
-		Assertions.assertNotNull(server);
-		Assertions.assertEquals(McpServerStatus.NOT_STARTED,
-				server.getDiagnostics().getStatus());
-		Assertions.assertTrue(server.getDiagnostics().getBoundAddress().isEmpty());
-		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		SimulatorConfig simulatorConfig = builder.mcpServer(0,
+				mcpEndpointRegistry(List.of()),
+				McpAdmissionController.acceptAllInstance(),
+				SokletSimulatorIsolationTests::configureMcpBuilder)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
-		SokletStartupException ownershipFailure = Assertions.assertThrows(
-				SokletStartupException.class, soklet::start);
-		Assertions.assertEquals(
-				"A simulator-owned MCP server cannot bind a listener",
-				ownershipFailure.getCause().getMessage());
+				.build();
+		SokletSimulator.run(simulatorConfig, simulator -> {
+			bodies.incrementAndGet();
+			Assertions.assertTrue(simulator.getMcpServer().isPresent());
+		});
+		Assertions.assertEquals(1, bodies.get());
 	}
 
 	@Test
@@ -1097,13 +1302,15 @@ public class SokletSimulatorIsolationTests {
 		AtomicLong systemOrigin = new AtomicLong(System.nanoTime());
 		NanoClock offsetClock = () -> System.nanoTime() - systemOrigin.get();
 		InternalLifecyclePolicy policy = new InternalLifecyclePolicy(
-				Optional.of(Duration.ofSeconds(2)), Duration.ofSeconds(1),
+				Duration.ofSeconds(2), Duration.ofSeconds(1),
 				Duration.ofSeconds(2), Duration.ofSeconds(2));
 
 		ShutdownResult result = ShutdownResult.fromInternal(SokletSimulator.run(
-				config -> config.mcpServer(0,
-						mcp -> subscriptionServer(mcp, List.of(
-								subscriptionEndpoint("/ready", publisher))))
+				SimulatorConfig.builder().mcpServer(0,
+						McpEndpointRegistry.fromEndpoints(List.of(
+								subscriptionEndpoint("/ready", publisher))),
+						McpAdmissionController.acceptAllInstance(),
+						SokletSimulatorIsolationTests::configureSubscriptionBuilder)
 					.resourceMethodResolver(
 							ResourceMethodResolver.fromMethods(Set.of()))
 					.internalLifecyclePolicy(policy)
@@ -1149,10 +1356,15 @@ public class SokletSimulatorIsolationTests {
 
 		SokletStartupException thrown = Assertions.assertThrows(
 				SokletStartupException.class, () -> SokletSimulator.run(
-						config -> mcpConfig(config, 0,
-								mcp -> subscriptionServer(mcp, List.of(
+						SimulatorConfig.builder().mcpServer(0,
+								McpEndpointRegistry.fromEndpoints(List.of(
 										subscriptionEndpoint("/first", first),
-										subscriptionEndpoint("/failing", failing)))),
+										subscriptionEndpoint("/failing", failing))),
+								McpAdmissionController.acceptAllInstance(),
+								SokletSimulatorIsolationTests::configureSubscriptionBuilder)
+								.resourceMethodResolver(
+										ResourceMethodResolver.fromMethods(Set.of()))
+								.build(),
 						simulator -> bodies.incrementAndGet()));
 
 		Assertions.assertSame(startupFailure, thrown.getCause());
@@ -1189,7 +1401,7 @@ public class SokletSimulatorIsolationTests {
 		return config.httpServer()
 				.resourceMethodResolver(resourceMethods())
 				.internalLifecyclePolicy(new InternalLifecyclePolicy(
-						Optional.of(WAIT), Duration.ZERO,
+						WAIT, Duration.ZERO,
 						Duration.ZERO, Duration.ZERO))
 				.build();
 	}
@@ -1205,13 +1417,13 @@ public class SokletSimulatorIsolationTests {
 		return config.httpServer()
 				.resourceMethodResolver(resourceMethods())
 				.internalLifecyclePolicy(new InternalLifecyclePolicy(
-						Optional.of(WAIT), Duration.ZERO,
+						WAIT, Duration.ZERO,
 						Duration.ZERO, Duration.ZERO))
 				.build();
 	}
 
 	private static void assertIncompleteLifecycleCall(
-			@NonNull ShutdownIncompleteException exception) {
+			@NonNull SokletShutdownIncompleteException exception) {
 		InternalShutdownResult result = exception.getInternalShutdownResult();
 		Assertions.assertEquals(InternalShutdownDisposition.INCOMPLETE,
 				result.disposition());
@@ -1226,7 +1438,7 @@ public class SokletSimulatorIsolationTests {
 	}
 
 	private static void assertUnknownTeardownFailure(
-			@NonNull ShutdownIncompleteException exception,
+			@NonNull SokletShutdownIncompleteException exception,
 			@NonNull Throwable expectedFailure) {
 		InternalShutdownResult result = exception.getInternalShutdownResult();
 		Assertions.assertEquals(InternalShutdownDisposition.INCOMPLETE,
@@ -1248,10 +1460,8 @@ public class SokletSimulatorIsolationTests {
 			@NonNull CountDownLatch releaseScopes,
 			@NonNull ScopeCallbackProbe probe) throws Exception {
 		AtomicReference<String> response = new AtomicReference<>();
-		SokletSimulator.run(config -> {
-			ScopedInstanceProvider instances =
-					new ScopedInstanceProvider(scopeId);
-			return config.httpServer()
+		ScopedInstanceProvider instances = new ScopedInstanceProvider(scopeId);
+		SimulatorConfig simulatorConfig = SimulatorConfig.builder().httpServer()
 					.resourceMethodResolver(providerResourceMethods())
 					.instanceProvider(instances)
 					.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
@@ -1299,7 +1509,7 @@ public class SokletSimulatorIsolationTests {
 						}
 					})
 					.build();
-		}, simulator -> {
+		SokletSimulator.run(simulatorConfig, simulator -> {
 			scopesReady.countDown();
 			Assertions.assertTrue(releaseScopes.await(WAIT.toMillis(),
 					TimeUnit.MILLISECONDS), "Concurrent scope was not released");
@@ -1313,15 +1523,26 @@ public class SokletSimulatorIsolationTests {
 	private static McpServer.Builder mcpBuilder(
 			McpServer.@NonNull Builder builder,
 			@NonNull List<@NonNull McpToolRegistration<?>> tools) {
+		return configureMcpBuilder(builder)
+				.endpointRegistry(mcpEndpointRegistry(tools))
+				.admissionController(McpAdmissionController.acceptAllInstance());
+	}
+
+	@NonNull
+	private static McpEndpointRegistry mcpEndpointRegistry(
+			@NonNull List<@NonNull McpToolRegistration<?>> tools) {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH)
 				.serverInformation(McpImplementation.withNameAndVersion(
 						"isolated-simulator-test", "4.0.0").build())
 				.tools(tools)
 				.build();
+		return McpEndpointRegistry.fromEndpoints(List.of(endpoint));
+	}
+
+	private static McpServer.@NonNull Builder configureMcpBuilder(
+			McpServer.@NonNull Builder builder) {
 		return builder
 				.host(LOOPBACK)
-				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
-				.admissionController(McpAdmissionController.acceptAllInstance())
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
@@ -1348,23 +1569,29 @@ public class SokletSimulatorIsolationTests {
 	private static McpServer subscriptionServer(
 			McpServer.@NonNull Builder builder,
 			@NonNull List<@NonNull McpEndpoint> endpoints) {
-		return builder
-				.host(LOOPBACK)
+		return configureSubscriptionBuilder(builder)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints))
 				.admissionController(McpAdmissionController.acceptAllInstance())
+				.build();
+	}
+
+	private static McpServer.@NonNull Builder configureSubscriptionBuilder(
+			McpServer.@NonNull Builder builder) {
+		return builder
+				.host(LOOPBACK)
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
-				.allowedHosts(Set.of(LOOPBACK))
-				.build();
+				.allowedHosts(Set.of(LOOPBACK));
 	}
 
 	@NonNull
 	private static SimulatorConfig mcpConfig(
 			SimulatorConfig.@NonNull Builder config, @NonNull Integer port,
-			@NonNull Function<McpServer.@NonNull Builder,
-					@NonNull McpServer> mcpServerBuilder) {
-		return config.mcpServer(port, mcpServerBuilder)
+			@NonNull List<@NonNull McpToolRegistration<?>> tools) {
+		return config.mcpServer(port, mcpEndpointRegistry(tools),
+				McpAdmissionController.acceptAllInstance(),
+				SokletSimulatorIsolationTests::configureMcpBuilder)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.build();
 	}
@@ -1548,11 +1775,11 @@ public class SokletSimulatorIsolationTests {
 				@Override public void start(@NonNull StartupContext context) {
 				}
 
-				@Override public void quiesce(@NonNull ShutdownContext context) {
+				@Override public void shutdownGracefully(@NonNull ShutdownContext context) {
 					signal.signalTerminated();
 				}
 
-				@Override public void force(@NonNull ShutdownContext context) {
+				@Override public void shutdownForcibly(@NonNull ShutdownContext context) {
 					signal.signalTerminated();
 				}
 			};

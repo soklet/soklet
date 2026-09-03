@@ -48,7 +48,7 @@ com.soklet.McpRequestOutcome
 com.soklet.McpServerDiagnostics
 com.soklet.McpServerStatus
 com.soklet.McpSimulation
-com.soklet.McpSimulationBodyMode
+com.soklet.McpSimulationBodyType
 com.soklet.McpSimulationCompletion
 com.soklet.McpSimulationOptions
 com.soklet.McpSimulationOptions$Builder

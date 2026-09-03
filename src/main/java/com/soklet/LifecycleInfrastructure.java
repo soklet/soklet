@@ -977,7 +977,7 @@ final class InternalLifecycleCoordinator {
 						"lifecycle-quiesce-"
 								+ participant.kind().name().toLowerCase(Locale.ROOT),
 						participant.terminationGroup(), () -> {
-							participant.runtime().quiesce(gracefulContext);
+							participant.runtime().shutdownGracefully(gracefulContext);
 							return null;
 						});
 				quiesceCalls.put(participant, quiesceCall);
@@ -1013,7 +1013,7 @@ final class InternalLifecycleCoordinator {
 						"lifecycle-force-"
 								+ participant.kind().name().toLowerCase(Locale.ROOT),
 						participant.terminationGroup(), () -> {
-							participant.runtime().force(forcedContext);
+							participant.runtime().shutdownForcibly(forcedContext);
 							return null;
 						});
 				forceCalls.put(participant, forceCall);

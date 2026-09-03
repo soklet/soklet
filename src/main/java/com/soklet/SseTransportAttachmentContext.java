@@ -19,6 +19,8 @@ package com.soklet;
 import com.google.errorprone.annotations.CheckReturnValue;
 import org.jspecify.annotations.NonNull;
 
+import javax.annotation.concurrent.ThreadSafe;
+
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -28,6 +30,7 @@ import static java.util.Objects.requireNonNull;
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
+@ThreadSafe
 public final class SseTransportAttachmentContext {
 	@NonNull
 	private final InternalTransportAttachmentContext<SseServer.RequestHandler>
@@ -80,7 +83,7 @@ public final class SseTransportAttachmentContext {
 	 */
 	@NonNull
 	@CheckReturnValue
-	public TransportDelegateAttachment attachLifecycleOwningDelegate(
+	public TransportDelegateAttachment attachTerminationOwningDelegate(
 			@NonNull SseServer delegate,
 			SseServer.@NonNull RequestHandler delegateRequestHandler) {
 		return this.internalContext.attachLifecycleOwningSseDelegate(delegate,

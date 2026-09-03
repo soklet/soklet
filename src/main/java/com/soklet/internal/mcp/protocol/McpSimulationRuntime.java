@@ -19,7 +19,7 @@ package com.soklet.internal.mcp.protocol;
 import com.soklet.McpJsonValue;
 import com.soklet.McpRequestOutcome;
 import com.soklet.McpSimulation;
-import com.soklet.McpSimulationBodyMode;
+import com.soklet.McpSimulationBodyType;
 import com.soklet.McpSimulationCompletion;
 import com.soklet.McpSimulationOptions;
 import com.soklet.McpSimulationResponse;
@@ -64,7 +64,7 @@ final class McpSimulationRuntime implements McpSimulation,
 	@NonNull
 	private final Object lock;
 	private final int streamItemQueueCapacity;
-	private final int maximumCapturedBytes;
+	private final int maximumCapturedSizeInBytes;
 	@NonNull
 	private final Queue<@NonNull CapturedItem> items;
 	@NonNull
@@ -96,7 +96,8 @@ final class McpSimulationRuntime implements McpSimulation,
 		this.lock = new Object();
 		this.streamItemQueueCapacity =
 				requiredOptions.getStreamItemQueueCapacity();
-		this.maximumCapturedBytes = requiredOptions.getMaximumCapturedBytes();
+		this.maximumCapturedSizeInBytes =
+				requiredOptions.getMaximumCapturedSizeInBytes();
 		this.items = new ArrayDeque<>();
 		this.pendingCoalescingKeys = new LinkedHashSet<>();
 		this.preResponseItems = new ArrayDeque<>();
@@ -136,7 +137,7 @@ final class McpSimulationRuntime implements McpSimulation,
 			if (this.sseResponse) {
 				this.response = new DefaultResponse(requiredResponse.status(),
 						headers(requiredResponse.headers()),
-						McpSimulationBodyMode.SERVER_SENT_EVENTS, null);
+						McpSimulationBodyType.SSE, null);
 				while (!this.preResponseItems.isEmpty())
 					this.items.add(this.preResponseItems.remove());
 				listener = this.streamListener;
@@ -144,18 +145,18 @@ final class McpSimulationRuntime implements McpSimulation,
 				this.pendingPreResponseTermination = null;
 			} else {
 				byte[] body = requiredResponse.body();
-				McpSimulationBodyMode bodyMode = body.length == 0
-						? McpSimulationBodyMode.EMPTY : McpSimulationBodyMode.JSON;
-				if (body.length > this.maximumCapturedBytes) {
+				McpSimulationBodyType bodyType = body.length == 0
+						? McpSimulationBodyType.EMPTY : McpSimulationBodyType.JSON;
+				if (body.length > this.maximumCapturedSizeInBytes) {
 					this.response = new DefaultResponse(requiredResponse.status(),
-							headers(requiredResponse.headers()), bodyMode, null);
+							headers(requiredResponse.headers()), bodyType, null);
 					if (this.pendingReason == null)
 						this.pendingReason = McpStreamTerminationReason
 								.SIMULATOR_CAPTURE_BYTE_LIMIT_EXCEEDED;
 				} else {
 					this.capturedBytes = body.length;
 					this.response = new DefaultResponse(requiredResponse.status(),
-							headers(requiredResponse.headers()), bodyMode, body);
+							headers(requiredResponse.headers()), bodyType, body);
 					if (this.pendingReason == null)
 						this.pendingReason = McpStreamTerminationReason.COMPLETED;
 				}
@@ -217,7 +218,7 @@ final class McpSimulationRuntime implements McpSimulation,
 
 	@Override
 	@NonNull
-	public Optional<@NonNull McpSimulationStreamItem> nextStreamItem(
+	public Optional<@NonNull McpSimulationStreamItem> awaitStreamItem(
 			@NonNull Duration timeout) throws InterruptedException {
 		long timeoutNanos = timeoutNanos(requireNonNull(timeout));
 		synchronized (this.lock) {
@@ -252,7 +253,7 @@ final class McpSimulationRuntime implements McpSimulation,
 	}
 
 	@Override
-	public void cancel() {
+	public void close() {
 		Controller activeController;
 		synchronized (this.lock) {
 			if (this.completion != null || this.pendingReason != null
@@ -281,11 +282,6 @@ final class McpSimulationRuntime implements McpSimulation,
 				this.lock.notifyAll();
 			}
 		}
-	}
-
-	@Override
-	public void close() {
-		cancel();
 	}
 
 	@Override
@@ -448,7 +444,7 @@ final class McpSimulationRuntime implements McpSimulation,
 			limitReason = McpStreamTerminationReason
 					.SIMULATOR_CAPTURE_ITEM_LIMIT_EXCEEDED;
 		else if ((long) this.capturedBytes + encodedBytes.length
-				> this.maximumCapturedBytes)
+				> this.maximumCapturedSizeInBytes)
 			limitReason = McpStreamTerminationReason
 					.SIMULATOR_CAPTURE_BYTE_LIMIT_EXCEEDED;
 		if (limitReason != null) {
@@ -570,19 +566,19 @@ final class McpSimulationRuntime implements McpSimulation,
 		@NonNull
 		private final Map<@NonNull String, @NonNull Set<@NonNull String>> headers;
 		@NonNull
-		private final McpSimulationBodyMode bodyMode;
+		private final McpSimulationBodyType bodyType;
 		private final byte @Nullable [] body;
 
 		private DefaultResponse(int statusCode,
 				@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers,
-				@NonNull McpSimulationBodyMode bodyMode,
+				@NonNull McpSimulationBodyType bodyType,
 				byte @Nullable [] body) {
 			if (statusCode < 100 || statusCode > 599)
 				throw new IllegalArgumentException(
 						"HTTP status must be between 100 and 599.");
 			this.statusCode = statusCode;
 			this.headers = requireNonNull(headers);
-			this.bodyMode = requireNonNull(bodyMode);
+			this.bodyType = requireNonNull(bodyType);
 			this.body = body == null ? null : Arrays.copyOf(body, body.length);
 		}
 
@@ -600,8 +596,8 @@ final class McpSimulationRuntime implements McpSimulation,
 
 		@Override
 		@NonNull
-		public McpSimulationBodyMode getBodyMode() {
-			return this.bodyMode;
+		public McpSimulationBodyType getBodyType() {
+			return this.bodyType;
 		}
 
 		@Override

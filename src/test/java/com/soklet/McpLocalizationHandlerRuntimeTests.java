@@ -56,8 +56,8 @@ class McpLocalizationHandlerRuntimeTests {
 			LifecyclePolicy.builder()
 					.startupTimeout(Duration.ofSeconds(5))
 					.startupCancelationTimeout(Duration.ofSeconds(2))
-					.gracefulShutdownDuration(Duration.ofSeconds(2))
-					.forcedShutdownDuration(Duration.ofSeconds(1))
+					.gracefulShutdownTimeout(Duration.ofSeconds(2))
+					.forcedShutdownTimeout(Duration.ofSeconds(1))
 					.build();
 
 	@Test
@@ -276,12 +276,11 @@ class McpLocalizationHandlerRuntimeTests {
 			List<Throwable> observedThrowables) {
 		AtomicReference<Capture> captured = new AtomicReference<>();
 
-		SokletSimulator.run(config -> config.mcpServer(0, builder -> {
+		SokletSimulator.run(SimulatorConfig.builder().mcpServer(0,
+				McpEndpointRegistry.fromEndpoints(List.of(endpoint)),
+				McpAdmissionController.acceptAllInstance(), builder -> {
 			builder
 					.host(LOOPBACK)
-					.endpointRegistry(McpEndpointRegistry.fromEndpoints(
-							List.of(endpoint)))
-					.admissionController(McpAdmissionController.acceptAllInstance())
 					.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 					.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 					.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
@@ -291,8 +290,6 @@ class McpLocalizationHandlerRuntimeTests {
 				builder.localizer(localizer);
 			if (interceptor != null)
 				builder.handlerInterceptor(interceptor);
-
-			return builder.build();
 		}).resourceMethodResolver(
 				ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObservers(List.of(new LifecycleObserver() {

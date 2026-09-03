@@ -126,10 +126,10 @@ public class SokletConfigTests {
 	@Test
 	public void lifecyclePolicyIsStoredExactlyAndBridgedForInternalCallers() {
 		LifecyclePolicy lifecyclePolicy = LifecyclePolicy.builder()
-				.noStartupTimeout()
+				.startupTimeout(Duration.ofSeconds(4))
 				.startupCancelationTimeout(Duration.ofSeconds(1))
-				.gracefulShutdownDuration(Duration.ofSeconds(2))
-				.forcedShutdownDuration(Duration.ofSeconds(3))
+				.gracefulShutdownTimeout(Duration.ofSeconds(2))
+				.forcedShutdownTimeout(Duration.ofSeconds(3))
 				.build();
 		SokletConfig config = SokletConfig.withMcpServer(newMcpServer())
 				.lifecyclePolicy(lifecyclePolicy)
@@ -138,13 +138,27 @@ public class SokletConfigTests {
 		Assertions.assertSame(lifecyclePolicy, config.getLifecyclePolicy());
 		InternalLifecyclePolicy internalPolicy =
 				config.getInternalLifecyclePolicy();
-		Assertions.assertTrue(internalPolicy.startupTimeout().isEmpty());
+		Assertions.assertEquals(Duration.ofSeconds(4),
+				internalPolicy.startupTimeout());
 		Assertions.assertEquals(Duration.ofSeconds(1),
 				internalPolicy.startupCancelationTimeout());
 		Assertions.assertEquals(Duration.ofSeconds(2),
 				internalPolicy.gracefulShutdownTimeout());
 		Assertions.assertEquals(Duration.ofSeconds(3),
 				internalPolicy.forcedShutdownTimeout());
+	}
+
+	@Test
+	public void nullLifecyclePolicyRestoresTheDefault() {
+		SokletConfig config = SokletConfig.withMcpServer(newMcpServer())
+				.lifecyclePolicy(LifecyclePolicy.builder()
+						.startupTimeout(Duration.ZERO)
+						.build())
+				.lifecyclePolicy(null)
+				.build();
+
+		Assertions.assertEquals(Duration.ofSeconds(30),
+				config.getLifecyclePolicy().getStartupTimeout());
 	}
 
 	@Test

@@ -400,8 +400,8 @@ final class DefaultHttpServer implements HttpServer {
 
 		this.lifecycleAdapter = new BuiltInTransportLifecycleAdapter(
 				InternalLifecycleComponentType.HTTP, new HttpLifecycleOperations(),
-				this::getGracefulShutdownDuration,
-				this::getForcedShutdownDuration);
+				this::getGracefulShutdownTimeout,
+				this::getForcedShutdownTimeout);
 	}
 
 	@NonNull
@@ -430,13 +430,13 @@ final class DefaultHttpServer implements HttpServer {
 			}
 
 			@Override
-			public void quiesce(@NonNull ShutdownContext context) {
+			public void shutdownGracefully(@NonNull ShutdownContext context) {
 				requireNonNull(context);
 				observeStop(signal, stopObserverStarted);
 			}
 
 			@Override
-			public void force(@NonNull ShutdownContext context) {
+			public void shutdownForcibly(@NonNull ShutdownContext context) {
 				requireNonNull(context);
 				observeStop(signal, stopObserverStarted);
 			}
@@ -2078,13 +2078,13 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	@NonNull
-	protected Duration getGracefulShutdownDuration() {
-		return this.lifecyclePolicy.getGracefulShutdownDuration();
+	protected Duration getGracefulShutdownTimeout() {
+		return this.lifecyclePolicy.getGracefulShutdownTimeout();
 	}
 
 	@NonNull
-	protected Duration getForcedShutdownDuration() {
-		return this.lifecyclePolicy.getForcedShutdownDuration();
+	protected Duration getForcedShutdownTimeout() {
+		return this.lifecyclePolicy.getForcedShutdownTimeout();
 	}
 
 	@NonNull

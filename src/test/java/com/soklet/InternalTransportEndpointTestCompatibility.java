@@ -52,13 +52,13 @@ interface InternalHttpTransportEndpoint
 			}
 
 			@Override
-			public void quiesce(@NonNull ShutdownContext context) {
-				exactRuntime.quiesce((ShutdownContext) context);
+			public void shutdownGracefully(@NonNull ShutdownContext context) {
+				exactRuntime.shutdownGracefully((ShutdownContext) context);
 			}
 
 			@Override
-			public void force(@NonNull ShutdownContext context) {
-				exactRuntime.force((ShutdownContext) context);
+			public void shutdownForcibly(@NonNull ShutdownContext context) {
+				exactRuntime.shutdownForcibly((ShutdownContext) context);
 			}
 		};
 	}
@@ -98,13 +98,13 @@ interface InternalSseTransportEndpoint
 			}
 
 			@Override
-			public void quiesce(@NonNull ShutdownContext context) {
-				exactRuntime.quiesce((ShutdownContext) context);
+			public void shutdownGracefully(@NonNull ShutdownContext context) {
+				exactRuntime.shutdownGracefully((ShutdownContext) context);
 			}
 
 			@Override
-			public void force(@NonNull ShutdownContext context) {
-				exactRuntime.force((ShutdownContext) context);
+			public void shutdownForcibly(@NonNull ShutdownContext context) {
+				exactRuntime.shutdownForcibly((ShutdownContext) context);
 			}
 		};
 	}

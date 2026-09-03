@@ -84,7 +84,7 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 			this.resourcePath = resourcePath;
 			this.requestResult = requestResult;
 			this.simulator = simulator;
-			this.unicastErrorHandler = simulator.getSseServer()
+			this.unicastErrorHandler = simulator.getSimulatedSseServer()
 					.map(sseServer -> sseServer.getUnicastErrorHandler())
 					.orElseGet(AtomicReference::new);
 			this.eventConsumer = null;
@@ -169,7 +169,7 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 
 				// Register with the mock SSE server broadcaster, preserving client context
 				Object clientContext = getSseHandshakeResult().getClientContext().orElse(null);
-				getSimulator().getSseServer().get().registerEventConsumer(getResourcePath(), eventConsumer, clientContext);
+				getSimulator().getSimulatedSseServer().get().registerEventConsumer(getResourcePath(), eventConsumer, clientContext);
 			} finally {
 				getLock().unlock();
 			}
@@ -207,7 +207,7 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 
 				// Register with the mock SSE server broadcaster, preserving client context
 				Object clientContext = getSseHandshakeResult().getClientContext().orElse(null);
-				getSimulator().getSseServer().get().registerCommentConsumer(getResourcePath(), commentConsumer, clientContext);
+				getSimulator().getSimulatedSseServer().get().registerCommentConsumer(getResourcePath(), commentConsumer, clientContext);
 			} finally {
 				getLock().unlock();
 			}
@@ -218,10 +218,10 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 
 			try {
 				getEventConsumer().ifPresent((eventConsumer ->
-						getSimulator().getSseServer().get().unregisterEventConsumer(getResourcePath(), eventConsumer)));
+						getSimulator().getSimulatedSseServer().get().unregisterEventConsumer(getResourcePath(), eventConsumer)));
 
 				getCommentConsumer().ifPresent((commentConsumer ->
-						getSimulator().getSseServer().get().unregisterCommentConsumer(getResourcePath(), commentConsumer)));
+						getSimulator().getSimulatedSseServer().get().unregisterCommentConsumer(getResourcePath(), commentConsumer)));
 			} finally {
 				getLock().unlock();
 			}
@@ -290,7 +290,7 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 		private void safelyLog(@NonNull LogEvent logEvent) {
 			requireNonNull(logEvent);
 
-			getSimulator().getSseServer().ifPresent(sseServer -> sseServer.safelyLog(logEvent));
+			getSimulator().getSimulatedSseServer().ifPresent(sseServer -> sseServer.safelyLog(logEvent));
 		}
 
 		@NonNull

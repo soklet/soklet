@@ -418,7 +418,7 @@ public class McpFiniteBoundInventoryTests {
 				"com.soklet.DefaultMcpServer",
 				"MAXIMUM_AGGREGATE_BASE64_CHARACTERS"));
 		put(values, "output.simulation-captured-bytes",
-				simulation.getMaximumCapturedBytes());
+				simulation.getMaximumCapturedSizeInBytes());
 		put(values, "output.localization-lookups.default", staticNumber(
 				McpLocalizer.class.getName(),
 				"DEFAULT_MAXIMUM_LOCALIZABLE_TEXT_COUNT_PER_RESPONSE"));
